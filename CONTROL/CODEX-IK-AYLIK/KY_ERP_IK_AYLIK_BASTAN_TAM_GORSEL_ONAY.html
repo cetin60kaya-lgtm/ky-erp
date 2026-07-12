@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KY ERP – İK Aylık Yönetim Son Onay</title>
+<style>
+:root{
+  --navy:#0c233f; --navy2:#153b66; --blue:#1368d9; --blue-hover:#0c58b8;
+  --bg:#eef3f9; --card:#ffffff; --line:#d8e4f1; --line2:#e9f0f7;
+  --text:#132c48; --muted:#6d7e92; --green:#0b9358; --green-bg:#e9f8ef;
+  --orange:#b96b00; --orange-bg:#fff4df; --red:#ce3e43; --red-bg:#fff0f0;
+  --purple:#7759cf; --purple-bg:#f0ecff; --shadow:0 24px 70px rgba(12,35,63,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+button,input,select,textarea{font:inherit} button{cursor:pointer}
+button:focus,input:focus,select:focus,textarea:focus{outline:2px solid rgba(19,104,217,.24);outline-offset:1px}
+.app{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;background:linear-gradient(180deg,#0b203a,#102a48);color:#d9e8f8;padding:14px 11px;overflow:auto}
+.brand{padding:8px 10px 20px;color:#fff;font-weight:900;font-size:16px;letter-spacing:.3px}
+.brand b{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;background:#1c68bd;margin-right:8px}
+.group{font-size:10px;letter-spacing:.8px;color:#89aad0;margin:14px 8px 7px;font-weight:900}
+.nav{border:0;background:transparent;width:100%;text-align:left;padding:10px 11px;border-radius:7px;margin:2px 0;color:#d9e8f8;font-weight:750;display:flex;align-items:center;gap:9px}
+.nav:hover{background:rgba(255,255,255,.08)}.nav.active{background:#235eaa;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09)}
+.dot{width:7px;height:7px;border:1px solid #b9d2ee;border-radius:2px;opacity:.9}.nav.active .dot{background:#fff}
+.topbar{height:58px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 21px;position:sticky;top:0;z-index:20}
+.topbar-left{font-weight:800;color:#24517e}.user-pill{border:1px solid var(--line);padding:7px 11px;border-radius:7px;color:#35516f;font-weight:700;font-size:12px}
+.page{max-width:1800px;margin:0 auto;padding:16px 20px 36px;width:100%}
+.breadcrumb{font-size:11px;color:#8190a2;margin-bottom:5px}.headrow{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:11px}.headrow h1{font-size:22px;line-height:1.2;margin:0 0 4px}.headrow p{margin:0;color:var(--muted)}
+.banner{border:1px solid var(--line);background:#fff;border-radius:9px;padding:11px 13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.banner strong{font-size:14px}.banner small{color:var(--muted);display:block;margin-top:2px}
+.btn{height:34px;padding:0 11px;border:1px solid #bbcade;border-radius:6px;background:#fff;color:#234363;font-weight:800;white-space:nowrap}
+.btn:hover{background:#f7fbff}.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.primary:hover{background:var(--blue-hover)}.btn.green{background:var(--green-bg);border-color:#addabd;color:var(--green)}.btn.soft{background:#f6f9fc}.btn.red{background:var(--red-bg);border-color:#e9b6b7;color:var(--red)}
+.filters{display:grid;grid-template-columns:100px 120px minmax(260px,540px) 1fr auto;gap:8px;padding:11px;border:1px solid var(--line);background:#fff;border-radius:8px;margin-bottom:10px}
+.control{height:34px;border:1px solid #bdcbdb;border-radius:6px;background:#fff;padding:0 9px;color:var(--text);width:100%}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin-bottom:10px}.kpi{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 11px;min-height:70px}.kpi span{font-size:10px;color:var(--muted);display:block}.kpi b{font-size:19px;margin-top:4px;display:block;letter-spacing:-.25px}.green{color:var(--green)}.orange{color:var(--orange)}.red{color:var(--red)}
+.card{background:#fff;border:1px solid var(--line);border-radius:9px;margin-bottom:10px}.card-head{padding:10px 12px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:8px}.card-head h2{font-size:13px;margin:0}.card-head small{color:var(--muted)}.grow{flex:1}
+.table-wrap{overflow:auto;max-height:360px}.table{width:100%;border-collapse:collapse;min-width:1040px}.table th{position:sticky;top:0;background:#f9fbfe;z-index:1;font-size:10px;text-align:left;color:#708197;font-weight:850}.table td,.table th{padding:8px 10px;border-bottom:1px solid #edf2f7}.table tbody tr:hover{background:#f4f9ff}.person{font-weight:850}.sub{font-size:10px;color:#7f8ca0;margin-top:2px}.amount{font-weight:800;font-variant-numeric:tabular-nums}.right{text-align:right}.center{text-align:center}
+.tag{display:inline-flex;align-items:center;border-radius:12px;padding:3px 7px;font-size:10px;font-weight:900;line-height:1}.tag.green{background:var(--green-bg);color:var(--green)}.tag.orange{background:var(--orange-bg);color:var(--orange)}.tag.red{background:var(--red-bg);color:var(--red)}.tag.blue{background:#eaf3ff;color:#0b62ca}.tag.purple{background:var(--purple-bg);color:var(--purple)}
+.selected-log{padding:12px;display:grid;grid-template-columns:250px 1fr;gap:11px}.person-card{border:1px solid var(--line);border-radius:8px;padding:11px;background:#fbfdff}.person-card h3{margin:0 0 3px;font-size:15px}.mini-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:9px}.mini{padding:7px;border:1px solid var(--line);border-radius:6px;background:#fff}.mini label{display:block;color:var(--muted);font-size:9px}.mini b{font-size:12px;display:block;margin-top:3px}.log-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.tabbtn{height:29px;padding:0 9px;border:1px solid var(--line);border-radius:6px;background:#fff;color:#47627f;font-size:11px;font-weight:800}.tabbtn.active{background:#eaf3ff;border-color:#99c5ff;color:#0a5fc2}
+.screen{display:none}.screen.active{display:block}
+
+/* MODAL STANDARDI */
+.overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:28px;background:rgba(12,28,50,.48);z-index:1000;overflow:auto}.overlay.open{display:flex}
+.modal{width:min(1180px,calc(100vw - 56px));height:min(770px,calc(100vh - 56px));background:#fff;border-radius:12px;box-shadow:var(--shadow);border:1px solid #d6e2ef;display:flex;flex-direction:column;overflow:hidden;position:relative;transform:none!important;zoom:1!important;font-size:14px}
+.modal.secondary{width:min(760px,calc(100vw - 120px));height:auto;max-height:min(620px,calc(100vh - 120px));z-index:1100}
+.modal-header{min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 18px;border-bottom:1px solid var(--line);background:#fff}.modal-header h2{font-size:18px;margin:0}.modal-header p{font-size:11px;margin:4px 0 0;color:var(--muted)}.close{height:34px;border:0;background:transparent;color:#345675;font-weight:900;font-size:12px;padding:0 8px}.modal-body{flex:1;min-height:0;overflow:auto;padding:16px 18px;background:#fff}.modal-footer{padding:11px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;background:#fff}
+.person-modal-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(330px,.85fr);gap:15px}.panel-inner{border:1px solid var(--line);border-radius:9px;background:#fff;padding:13px}.panel-inner h3{font-size:13px;margin:0 0 10px}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.week{font-size:10px;text-align:center;font-weight:900;color:#6f8093;padding:3px 0}.day{min-height:55px;border:1px solid var(--line);border-radius:6px;padding:6px;font-weight:900;background:#fff}.day small{display:block;margin-top:5px;font-size:9px;color:var(--green);font-weight:800}.day.weekend{background:#f6f8fb;color:#728195}.day.weekend small{color:#8390a0}.day.selected{border:2px solid var(--blue);padding:5px}.day.issue{background:#fff0f0;border-color:#efb9bb}.legend{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 10px}.legend .tag{font-size:9px}
+.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.quick{height:40px;border:1px solid #bccde0;background:#fff;border-radius:6px;font-size:11px;font-weight:850;color:#28486a}.quick.selected{background:#eaf3ff;border-color:#89bbf7;color:#075dc0}
+.form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}.field label{display:block;font-size:10px;font-weight:850;color:#60758b;margin-bottom:4px}.field input,.field select,.field textarea{width:100%;border:1px solid #b9c9dc;border-radius:6px;background:#fff;color:var(--text);padding:8px;font:inherit}.field input,.field select{height:35px}.field textarea{min-height:72px;resize:vertical}.span2{grid-column:span 2}.span4{grid-column:span 4}.notice{margin-top:10px;border:1px solid #bcd8fb;background:#f1f7ff;border-radius:6px;padding:9px;color:#3f5d7b;font-size:11px}
+.bottom-log{grid-column:1/-1;border:1px solid var(--line);border-radius:9px;padding:12px;background:#fff}.bottom-log .table-wrap{max-height:180px}
+.action-summary{display:grid;grid-template-columns:1fr 270px;gap:12px}.summary-box{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fbfdff}.summary-box h4{margin:0 0 10px;font-size:13px}.sumline{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line2);padding:7px 0}.sumline:first-of-type{border-top:0;padding-top:0}
+.payout-preview{display:none}
+.toast{position:fixed;right:20px;bottom:20px;background:#153656;color:#fff;border-radius:8px;padding:12px 15px;box-shadow:var(--shadow);z-index:3000;display:none}.toast.show{display:block}
+@media(max-width:1100px){.app{grid-template-columns:66px minmax(0,1fr)}.brand,.group,.nav span{display:none}.nav{justify-content:center;padding:12px}.filters{grid-template-columns:95px 110px 1fr auto}.filters .search{grid-column:span 2}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.selected-log{grid-template-columns:1fr}.person-modal-grid,.action-summary{grid-template-columns:1fr}.modal{width:calc(100vw - 28px);height:calc(100vh - 28px)}.modal.secondary{width:calc(100vw - 40px);max-height:calc(100vh - 48px)}} 
+@media(max-width:650px){.page{padding:11px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.filters{grid-template-columns:1fr 1fr}.filters .search{grid-column:span 2}.form-grid{grid-template-columns:1fr 1fr}.span4{grid-column:span 2}.span2{grid-column:span 2}.modal-body{padding:12px}.calendar{gap:3px}.day{min-height:43px;padding:4px;font-size:11px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><b>KY</b>ERP</div>
+    <div class="group">İK YÖNETİMİ</div>
+    <button class="nav" data-screen="overview"><i class="dot"></i><span>İK Özet</span></button>
+    <button class="nav active" data-screen="personnel"><i class="dot"></i><span>Personel Kartı & Sözleşme</span></button>
+    <button class="nav" data-screen="attendance"><i class="dot"></i><span>Hızlı İzin & Puantaj</span></button>
+    <button class="nav" data-screen="finance"><i class="dot"></i><span>Mesai • Avans • Kesinti</span></button>
+    <button class="nav" data-screen="payroll"><i class="dot"></i><span>Bordro & Ödeme</span></button>
+    <button class="nav" data-screen="control"><i class="dot"></i><span>SGK • Evrak • Ay Sonu Kontrol</span></button>
+    <div class="group">GÜNLÜK PERSONEL</div>
+    <button class="nav"><i class="dot"></i><span>Günlük Giriş</span></button>
+    <button class="nav"><i class="dot"></i><span>Günlük Personel Kartları</span></button>
+    <button class="nav"><i class="dot"></i><span>Haftalık Özet</span></button>
+    <button class="nav"><i class="dot"></i><span>Günlük Ödeme Fişleri</span></button>
+  </aside>
+  <main>
+    <div class="topbar"><div class="topbar-left">KY ERP / İK Aylık Yönetim</div><div class="user-pill">Mecit Hakan ▾</div></div>
+    <div class="page">
+
+      <section class="screen" id="overview">
+        <div class="headrow"><div><div class="breadcrumb">KY ERP / İK</div><h1>İK Özet</h1><p>Aylık personel, puantaj, bordro ve kontrol görünümü.</p></div></div>
+        <div class="banner"><div><strong>Temmuz 2026 İK Durumu</strong><small>Normal gün otomatik kabul edilir; yalnız istisna, mesai, avans ve kontrol gerekir.</small></div><button class="btn primary" onclick="go('attendance')">Puantajı Aç</button></div>
+        <div class="kpis"><div class="kpi"><span>Aktif personel</span><b>23</b></div><div class="kpi"><span>Kart no eksik</span><b class="red">23</b></div><div class="kpi"><span>Kalan izin toplamı</span><b class="green">430 gün</b></div><div class="kpi"><span>Bu ay mesai</span><b>₺1.920</b></div><div class="kpi"><span>Avans</span><b class="orange">₺20.000</b></div><div class="kpi"><span>Ay sonu uyarısı</span><b class="orange">2</b></div></div>
+        <div class="card"><div class="card-head"><h2>İşlem Gerekenler</h2></div><div class="table-wrap"><table class="table"><thead><tr><th>Durum</th><th>Personel</th><th>Açıklama</th><th>İşlem</th></tr></thead><tbody>
+          <tr><td><span class="tag red">Kart eksik</span></td><td class="person">ÇETİN KAYA</td><td>Kart numarası eksik.</td><td><button class="btn" onclick="openPersonCard()">Kartı Aç</button></td></tr>
+          <tr><td><span class="tag orange">Belge bekliyor</span></td><td class="person">FADİME TÜRKYILMAZ</td><td>Yıllık izin formu yok.</td><td><button class="btn" onclick="go('control')">Evrakı Aç</button></td></tr>
+        </tbody></table></div></div>
+      </section>
+
+      <section class="screen active" id="personnel">
+        <div class="headrow"><div><div class="breadcrumb">KY ERP / İK / Personel Kartı & Sözleşme</div><h1>Personel Kartı & Sözleşme</h1><p>Bu ana listede puantaj veya SGK yok. Sadece personel, maaş, yol, banka/elden, toplam plan ve izin görünür.</p></div><button class="btn primary" onclick="openPersonCard('new')">+ Yeni Personel</button></div>
+        <div class="filters"><select class="control"><option>2026</option></select><select class="control"><option>Temmuz</option></select><input class="control search" placeholder="Ad, kod, TC veya kart no ara"><span></span><button class="btn" onclick="openTnf()">↥ TNF / Kart Aktar</button></div>
+        <div class="kpis"><div class="kpi"><span>Aktif personel</span><b>23</b></div><div class="kpi"><span>Kart eksik</span><b class="red">23</b></div><div class="kpi"><span>Sözleşme yenileme</span><b>0</b></div><div class="kpi"><span>Maaş kaydı</span><b>18</b></div><div class="kpi"><span>İşlem logu</span><b>2</b></div><div class="kpi"><span>Evrak</span><b>0</b></div></div>
+        <div class="card"><div class="card-head"><h2>Personel Kartı & Aylık Ödeme Özeti</h2><span class="grow"></span><button class="btn" onclick="openPersonCard()">Kart & Sözleşme</button></div>
+          <div class="table-wrap"><table class="table"><thead><tr><th>Kod</th><th>Personel</th><th>İşe giriş</th><th>Kart no</th><th class="right">Maaş</th><th class="right">Yol</th><th class="right">Banka</th><th class="right">Elden</th><th class="right">Toplam plan</th><th class="center">Kalan izin</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>
+            <tr onclick="selectEmployee('ÇETİN KAYA')"><td>HKN-01</td><td><div class="person">ÇETİN KAYA</div><div class="sub">İMALAT / MAKİNECİ</div></td><td>09.10.2017</td><td><span class="tag red">Eksik</span></td><td class="right amount">₺67.500</td><td class="right amount">₺1.680</td><td class="right amount">₺28.075</td><td class="right amount">₺41.105</td><td class="right amount">₺69.180</td><td class="center"><span class="tag green">20 gün</span></td><td><span class="tag green">AKTİF</span></td><td><button class="btn" onclick="event.stopPropagation();openPersonCard()">Detay</button></td></tr>
+            <tr onclick="selectEmployee('MURAT MİNANZ')"><td>HKN-03</td><td><div class="person">MURAT MİNANZ</div><div class="sub">İMALAT</div></td><td>22.05.2025</td><td><span class="tag red">Eksik</span></td><td class="right amount">₺45.500</td><td class="right amount">₺1.680</td><td class="right amount">₺28.075</td><td class="right amount">₺19.105</td><td class="right amount">₺47.180</td><td class="center"><span class="tag green">20 gün</span></td><td><span class="tag green">AKTİF</span></td><td><button class="btn" onclick="event.stopPropagation();openPersonCard()">Detay</button></td></tr>
+            <tr onclick="selectEmployee('FADİME TÜRKYILMAZ')"><td>HKN-11</td><td><div class="person">FADİME TÜRKYILMAZ</div><div class="sub">İMALAT</div></td><td>08.06.2023</td><td><span class="tag red">Eksik</span></td><td class="right amount">₺30.000</td><td class="right amount">₺1.680</td><td class="right amount">₺28.075</td><td class="right amount">₺3.605</td><td class="right amount">₺31.680</td><td class="center"><span class="tag green">15 gün</span></td><td><span class="tag green">AKTİF</span></td><td><button class="btn" onclick="event.stopPropagation();openPersonCard()">Detay</button></td></tr>
+            <tr onclick="selectEmployee('CUMA ÖZKURT')"><td>HKN-05</td><td><div class="person">CUMA ÖZKURT</div><div class="sub">İMALAT</div></td><td>19.06.2023</td><td><span class="tag red">Eksik</span></td><td class="right amount">₺48.100</td><td class="right amount">₺1.680</td><td class="right amount">₺28.075</td><td class="right amount">₺21.705</td><td class="right amount">₺49.780</td><td class="center"><span class="tag green">20 gün</span></td><td><span class="tag green">AKTİF</span></td><td><button class="btn" onclick="event.stopPropagation();openPersonCard()">Detay</button></td></tr>
+          </tbody></table></div>
+        </div>
+        <div class="card"><div class="card-head"><h2>Seçili Personel Özeti & Log</h2><span class="grow"></span><button class="btn" onclick="openPersonCard()">Detay İşlem Aç</button><button class="btn" onclick="openSecondary('finance')">Mesai / Avans</button><button class="btn" onclick="openPrint('single')">Puantaj / İmza Föyü</button></div>
+          <div class="selected-log"><div class="person-card"><h3 id="selectedPerson">ÇETİN KAYA</h3><div class="sub">HKN-01 · İMALAT / MAKİNECİ</div><div class="mini-grid"><div class="mini"><label>Kalan izin</label><b>20 gün</b></div><div class="mini"><label>Bu ay yol</label><b>₺1.680</b></div><div class="mini"><label>Bu ay mesai</label><b>₺0</b></div><div class="mini"><label>Bu ay avans</label><b>₺0</b></div></div></div>
+            <div><div class="log-tabs"><button class="tabbtn active">Tüm Geçmiş</button><button class="tabbtn">İzin</button><button class="tabbtn">Mesai</button><button class="tabbtn">Avans / Kesinti</button><button class="tabbtn">Maaş</button><button class="tabbtn">Ödeme</button><button class="tabbtn">Evrak</button></div>
+            <div class="table-wrap" style="max-height:175px"><table class="table"><thead><tr><th>Tarih</th><th>İşlem</th><th>Açıklama</th><th>Tutar / Gün</th><th>Kaynak</th><th>Kullanıcı</th></tr></thead><tbody><tr><td>05.07.2026 09:03</td><td><span class="tag blue">Puantaj</span></td><td>Gün otomatik geldi kabul edildi.</td><td>—</td><td>Puantaj & İzin</td><td>Sistem</td></tr><tr><td>03.07.2026 08:33</td><td><span class="tag blue">Puantaj</span></td><td>Gün otomatik geldi kabul edildi.</td><td>—</td><td>Puantaj & İzin</td><td>Sistem</td></tr></tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="attendance">
+        <div class="headrow"><div><div class="breadcrumb">KY ERP / İK / Hızlı İzin & Puantaj</div><h1>Hızlı İzin & Puantaj</h1><p>Normal hafta içi günleri otomatik “geldi” kabul edilir. Sadece istisna için kişiyi aç.</p></div></div>
+        <div class="filters"><select class="control"><option>2026</option></select><select class="control"><option>Temmuz</option></select><input class="control search" placeholder="Ad, kod veya kart no ara"><select class="control"><option>Sadece işlem gerekenler</option><option>Tümü</option></select><button class="btn" onclick="openTnf()">TNF Aktar</button></div>
+        <div class="kpis"><div class="kpi"><span>Hak edilen</span><b>430</b></div><div class="kpi"><span>Kullanılan</span><b class="orange">0</b></div><div class="kpi"><span>Kalan</span><b class="green">430</b></div><div class="kpi"><span>Rapor / mazeret</span><b>0</b></div><div class="kpi"><span>İzinsiz / ücretsiz</span><b class="red">0</b></div><div class="kpi"><span>Eksik evrak</span><b class="green">0</b></div></div>
+        <div class="card"><div class="card-head"><h2>Personel Hızlı İşlem Listesi</h2><span class="grow"></span><div class="legend"><span class="tag green">G Normal geldi</span><span class="tag blue">Y Yıllık izin</span><span class="tag purple">M Mazeret</span><span class="tag orange">R Rapor</span><span class="tag red">İ İzinsiz</span></div></div>
+          <div class="table-wrap"><table class="table"><thead><tr><th>Personel</th><th>Kart</th><th>İstisna</th><th>Kalan izin</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>
+            <tr><td><div class="person">ÇETİN KAYA</div><div class="sub">HKN-01</div></td><td><span class="tag red">Eksik</span></td><td>Y:0 · R:0 · M:0</td><td class="amount green">20 gün</td><td><span class="tag orange">İşlem gerekli</span></td><td><button class="btn primary" onclick="openAttendance()">Aç</button></td></tr>
+            <tr><td><div class="person">FADİME TÜRKYILMAZ</div><div class="sub">HKN-11</div></td><td><span class="tag red">Eksik</span></td><td>Y:5 · R:0 · M:0</td><td class="amount green">15 gün</td><td><span class="tag green">Kontrollü</span></td><td><button class="btn primary" onclick="openAttendance()">Aç</button></td></tr>
+          </tbody></table></div>
+        </div>
+        <div class="card"><div class="card-head"><h2>İzin / Günlük Durum Geçmişi</h2></div><div style="padding:18px;text-align:center;color:var(--muted)">Bu ay istisna/rapor kaydı yok.</div></div>
+      </section>
+
+      <section class="screen" id="finance">
+        <div class="headrow"><div><div class="breadcrumb">KY ERP / İK / Mesai • Avans • Kesinti</div><h1>Mesai • Avans • Kesinti</h1><p>Mesai, hafta sonu çalışma, avans, prim ve kesinti hareketleri buradan bordroya bağlı çalışır.</p></div><button class="btn primary" onclick="openSecondary('finance')">+ Yeni Hareket</button></div>
+        <div class="filters"><select class="control"><option>2026</option></select><select class="control"><option>Temmuz</option></select><input class="control search" placeholder="Personel ara / filtrele"><span></span><button class="btn" onclick="openSecondary('finance')">Mesai Kaydet</button></div>
+        <div class="kpis"><div class="kpi"><span>Personel</span><b>23</b></div><div class="kpi"><span>Mesai / prim</span><b>₺0</b></div><div class="kpi"><span>Avans</span><b class="orange">₺0</b></div><div class="kpi"><span>Kesinti</span><b class="red">₺0</b></div><div class="kpi"><span>Log</span><b>2</b></div><div class="kpi"><span>Hafta sonu</span><b>0</b></div></div>
+        <div class="card"><div class="card-head"><h2>Mesai, Avans ve Kesinti Hareketleri</h2><span class="grow"></span><button class="btn" onclick="openSecondary('finance')">Mesai</button><button class="btn" onclick="openSecondary('finance')">Avans</button><button class="btn" onclick="openSecondary('finance')">Kesinti</button></div><div style="padding:23px;text-align:center;color:var(--muted)">Bu ay mesai, avans veya kesinti hareketi yok.</div></div>
+      </section>
+
+      <section class="screen" id="payroll">
+        <div class="headrow"><div><div class="breadcrumb">KY ERP / İK / Bordro & Ödeme</div><h1>Bordro & Ödeme</h1><p>Bordro tablosunda yalnız mali kalemler bulunur. SGK ve puantaj ayrı kontrol ekranındadır.</p></div><div><button class="btn" onclick="openSecondary('bulk')">Seçililere Toplu Avans</button> <button class="btn primary" onclick="openPrint('multi')">Çıktılar / Yazdır</button></div></div>
+        <div class="filters"><select class="control"><option>2026</option></select><select class="control"><option>Temmuz</option></select><input class="control search" placeholder="Personel ara"><span></span><button class="btn primary" onclick="toast('Bordro hesaplandı, taslak güncellendi.')">Bordro Hesapla</button></div>
+        <div class="kpis"><div class="kpi"><span>Personel</span><b>23</b></div><div class="kpi"><span>Banka</span><b>₺615.578</b></div><div class="kpi"><span>Elden</span><b>₺220.088</b></div><div class="kpi"><span>Toplam</span><b class="green">₺835.666</b></div><div class="kpi"><span>Manuel</span><b class="orange">0</b></div><div class="kpi"><span>Onay bekleyen</span><b>23</b></div></div>
+        <div class="card"><div class="card-head"><h2>Bordro & Ödeme Satırları</h2><span class="grow"></span><button class="btn" onclick="openSecondary('bulk')">Toplu Avans / Hareket</button><button class="btn" onclick="openPrint('single')">Tek Kişi Fişi</button><button class="btn" onclick="openPrint('multi')">Çoklu Fiş / PDF</button></div>
+          <div class="table-wrap"><table class="table"><thead><tr><th>Personel</th><th class="right">Maaş ödeme</th><th class="right">Yol ödeme</th><th class="right">Mesai / Prim</th><th class="right">Avans</th><th class="right">Kesinti</th><th class="right">Banka</th><th class="right">Elden</th><th class="right">Toplam</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>
+            <tr><td><div class="person">ÇETİN KAYA</div><div class="sub">HKN-01</div></td><td class="right amount">₺67.500</td><td class="right amount">₺1.680</td><td class="right amount">₺0</td><td class="right amount">₺0</td><td class="right amount">₺0</td><td class="right amount">₺28.075</td><td class="right amount">₺41.105</td><td class="right amount">₺69.180</td><td><span class="tag green">SİSTEM</span></td><td><button class="btn" onclick="openSecondary('manual')">Elle Düzelt</button></td></tr>
+            <tr><td><div class="person">MURAT MİNANZ</div><div class="sub">HKN-03</div></td><td class="right amount">₺45.500</td><td class="right amount">₺1.680</td><td class="right amount">₺0</td><td class="right amount">₺0</td><td class="right amount">₺0</td><td class="right amount">₺28.075</td><td class="right amount">₺19.105</td><td class="right amount">₺47.180</td><td><span class="tag green">SİSTEM</span></td><td><button class="btn" onclick="openSecondary('manual')">Elle Düzelt</button></td></tr>
+            <tr><td><div class="person">FADİME TÜRKYILMAZ</div><div class="sub">HKN-11</div></td><td class="right amount">₺30.000</td><td class="right amount">₺1.680</td><td class="right amount">₺0</td><td class="right amount">₺0</td><td class="right amount">₺0</td><td class="right amount">₺28.075</td><td class="right amount">₺3.605</td><td class="right amount">₺31.680</td><td><span class="tag green">SİSTEM</span></td><td><button class="btn" onclick="openSecondary('manual')">Elle Düzelt</button></td></tr>
+          </tbody></table></div>
+        </div>
+      </section>
+
+      <section class="screen" id="control">
+        <div class="headrow"><div><div class="breadcrumb">KY ERP / İK / SGK • Evrak • Ay Sonu Kontrol</div><h1>SGK • Evrak • Ay Sonu Kontrol</h1><p>SGK Excel karşılaştırması, personel evrakları ve dönem kapanış kontrolleri burada.</p></div></div>
+        <div class="card"><div class="card-head"><h2>SGK Excel Aktarımı</h2><span class="grow"></span><button class="btn primary" onclick="openTnf('sgk')">SGK Excel Yükle</button></div><div style="padding:15px;color:var(--muted)">Excel önce ön kontrol havuzuna alınır. Eşleştirme: TC → personel kodu → normalize ad soyad. Dış kişiler ana personel listesine girmez.</div></div>
+        <div class="card"><div class="card-head"><h2>Evraklar</h2><span class="grow"></span><button class="btn" onclick="openTnf('docs')">Belge Yükle</button></div><div style="padding:15px;color:var(--muted)">Rapor PDF, yıllık izin formu, sözleşme, kıdem/çıkış belgesi ve diğer belgeler storage alanında saklanır.</div></div>
+        <div class="card"><div class="card-head"><h2>Ay Sonu Kontrolü</h2><span class="grow"></span><button class="btn primary" onclick="toast('Aylık kontrol çalıştırıldı.')">Kontrolü Çalıştır</button></div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Kontrol maddesi</th><th>Durum</th><th>Açıklama</th><th>İşlem</th></tr></thead><tbody>
+          <tr><td>Aktif personelde kart no var mı?</td><td><span class="tag red">Düzelt</span></td><td>23 personelde kart numarası eksik.</td><td><button class="btn" onclick="go('personnel')">Kartları Aç</button></td></tr>
+          <tr><td>SGK Excel</td><td><span class="tag orange">Bekliyor</span></td><td>Temmuz SGK bordro Excel yüklenmedi.</td><td><button class="btn" onclick="openTnf('sgk')">Excel Yükle</button></td></tr>
+          <tr><td>Banka + Elden = Toplam</td><td><span class="tag green">Tamam</span></td><td>Bordro satırları mali olarak dengeli.</td><td>—</td></tr>
+        </tbody></table></div></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ANA KİŞİ PENCERESİ -->
+<div class="overlay" id="personOverlay">
+  <div class="modal">
+    <div class="modal-header"><div><h2 id="modalPersonName">ÇETİN KAYA</h2><p>HKN-01 · Temmuz 2026 · Kart no eksik</p></div><button class="close" onclick="closeMainModal()">Kapat</button></div>
+    <div class="modal-body">
+      <div class="person-modal-grid">
+        <div class="panel-inner">
+          <h3>Kişiye Özel Aylık Takvim</h3>
+          <div class="legend"><span class="tag green">G Geldi</span><span class="tag blue">Y Yıllık izin</span><span class="tag purple">M Mazeret</span><span class="tag orange">R Rapor</span><span class="tag red">İ İzinsiz</span><span class="tag orange">E Erken çıkış</span></div>
+          <div class="calendar" id="calendar"></div>
+          <div class="notice">G görünen normal hafta içi günleri ayrı ayrı kaydedilmez. Sadece değiştirilen istisna durumu işlem kaydı ve log üretir.</div>
+        </div>
+        <div class="panel-inner">
+          <h3>Yeni Hızlı İşlem</h3>
+          <div class="quick-grid" id="quickButtons">
+            <button class="quick selected" data-kind="Yıllık izin">Yıllık izin</button><button class="quick" data-kind="Mazeret">Mazeret</button><button class="quick" data-kind="Rapor">Rapor</button>
+            <button class="quick" data-kind="Ücretsiz izin">Ücretsiz izin</button><button class="quick" data-kind="İzinsiz">İzinsiz</button><button class="quick" data-kind="Erken çıkış">Erken çıkış</button>
+            <button class="quick" data-kind="Geç giriş">Geç giriş</button><button class="quick" data-kind="Kart hareketi yok">Kart hareketi yok</button><button class="quick" data-kind="Hafta sonu geldi">Hafta sonu geldi</button>
+          </div>
+          <div class="form-grid">
+            <div class="field span2"><label>Başlangıç</label><input type="date" value="2026-07-01"></div><div class="field span2"><label>Bitiş</label><input type="date" value="2026-07-01"></div>
+            <div class="field span2"><label>Gün durumu</label><select><option>G - Normal geldi</option><option>Y - Yıllık izin</option><option>R - Rapor</option><option>M - Mazeret</option><option>İ - İzinsiz</option></select></div><div class="field span2"><label>Belge no</label><input placeholder="Rapor için zorunlu"></div>
+            <div class="field span2"><label>Kart giriş</label><input type="time" value="08:30"></div><div class="field span2"><label>Kart çıkış</label><input type="time" value="18:30"></div>
+            <div class="field span4"><label>Belge / açıklama</label><textarea placeholder="İzin, rapor, erken çıkış veya diğer işlem notu"></textarea></div>
+          </div>
+          <div class="notice">Yıllık izin maaştan kesilmez; fiili geliş olmadığı için yol ödemesi gelinen gün / 30 hesabına göre hesaplanır.</div>
+          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" style="flex:1" onclick="toast('Puantaj istisnası kaydedildi. Log ve bordro taslağı güncellendi.')">Kaydet</button><button class="btn" onclick="toast('Seçili gün normale döndürüldü.')">Normale döndür</button></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px"><button class="btn" onclick="openSecondary('finance')">Mesai / Avans</button><button class="btn" onclick="openSecondary('exit')">Kıdem Taslak</button><button class="btn" onclick="openPrint('single')">Ödeme Fişi</button><button class="btn" onclick="openPrint('single')">Puantaj Föyü</button><button class="btn" onclick="openPrint('leave')">İzin Formu</button><button class="btn" onclick="openPrint('exit')">Kıdem Çıktısı</button></div>
+        </div>
+        <div class="bottom-log"><div class="card-head" style="padding:0 0 9px;border:0"><h2>Personel İşlem Logları</h2><span class="grow"></span><div class="log-tabs"><button class="tabbtn active">Tüm işlemler</button><button class="tabbtn">Bu ay</button><button class="tabbtn">İzin</button><button class="tabbtn">Mesai / Avans</button></div></div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Tarih</th><th>İşlem</th><th>Açıklama</th><th>Gün / Saat</th><th>Kaynak</th><th>Kullanıcı</th></tr></thead><tbody><tr><td>05.07.2026 09:03</td><td><span class="tag blue">Puantaj</span></td><td>Gün otomatik geldi kabul edildi.</td><td>—</td><td>Puantaj & İzin</td><td>Sistem</td></tr><tr><td>03.07.2026 08:33</td><td><span class="tag blue">Puantaj</span></td><td>Gün otomatik geldi kabul edildi.</td><td>—</td><td>Puantaj & İzin</td><td>Sistem</td></tr></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- İKİNCİ PENCERE -->
+<div class="overlay" id="secondaryOverlay">
+  <div class="modal secondary">
+    <div class="modal-header"><div><h2 id="secondaryTitle">Mesai / Avans / Kesinti</h2><p id="secondarySub">ÇETİN KAYA · HKN-01</p></div><button class="close" onclick="closeSecondary()">Kapat</button></div>
+    <div class="modal-body" id="secondaryBody"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeSecondary()">Vazgeç</button><button class="btn primary" onclick="saveSecondary()">Hareketi Kaydet</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const employees = ['ÇETİN KAYA','MURAT MİNANZ','FADİME TÜRKYILMAZ','CUMA ÖZKURT'];
+function go(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav[data-screen]').forEach(n=>n.classList.toggle('active',n.dataset.screen===id));window.scrollTo({top:0,behavior:'smooth'})}
+document.querySelectorAll('.nav[data-screen]').forEach(btn=>btn.addEventListener('click',()=>go(btn.dataset.screen)));
+function selectEmployee(name){document.getElementById('selectedPerson').textContent=name;toast(name+' seçildi. Alt log alanı güncellendi.')}
+function toast(message){let e=document.getElementById('toast');e.textContent=message;e.classList.add('show');clearTimeout(window._toast);window._toast=setTimeout(()=>e.classList.remove('show'),3200)}
+function openPersonCard(mode=''){document.getElementById('modalPersonName').textContent=mode==='new'?'Yeni Personel':'ÇETİN KAYA';document.getElementById('personOverlay').classList.add('open');document.body.style.overflow='hidden'}
+function closeMainModal(){document.getElementById('personOverlay').classList.remove('open');document.body.style.overflow=''}
+function openAttendance(){document.getElementById('modalPersonName').textContent='ÇETİN KAYA';document.getElementById('personOverlay').classList.add('open');document.body.style.overflow='hidden'}
+function closeSecondary(){document.getElementById('secondaryOverlay').classList.remove('open')}
+function openSecondary(type){
+  const title=document.getElementById('secondaryTitle'), sub=document.getElementById('secondarySub'), body=document.getElementById('secondaryBody');
+  title.textContent= type==='bulk'?'Seçililere Toplu Avans':type==='manual'?'Bordro Satırı Elle Düzelt':type==='exit'?'Ayrılış / Kıdem Taslağı':'Mesai / Avans / Kesinti';
+  sub.textContent=type==='bulk'?'Seçili personeller · Her kişiye ayrı hareket ve log oluşturulur.':'ÇETİN KAYA · HKN-01 · Ana pencere arka planda açık kalır.';
+  if(type==='bulk') body.innerHTML=bulkForm();
+  else if(type==='manual') body.innerHTML=manualForm();
+  else if(type==='exit') body.innerHTML=exitForm();
+  else body.innerHTML=financeForm();
+  document.getElementById('secondaryOverlay').classList.add('open');
+}
+function financeForm(){return `<div class="form-grid" style="margin-top:0"><div class="field span2"><label>Personel</label><select>${employees.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="field"><label>Tarih</label><input type="date" value="2026-07-01"></div><div class="field"><label>Tür</label><select><option>Mesai</option><option>Hafta sonu çalışma</option><option>Avans</option><option>Prim</option><option>Özel kesinti</option></select></div><div class="field"><label>Saat / Gün</label><input type="number" value="1"></div><div class="field"><label>Tutar</label><input placeholder="0"></div><div class="field"><label>Katsayı</label><input value="1.5"></div><div class="field"><label>Saatlik esas</label><input value="Maaş / 225" readonly></div><div class="field span4"><label>Zorunlu açıklama</label><textarea placeholder="Örn: Pazar üretimi, temmuz avansı veya özel kesinti sebebi"></textarea></div></div><div class="notice">Hafta sonu mesaisi kaydedilince sistem “Hafta sonu geldi” kaydını önerir. İşlem bordro taslağına ve personel loguna anında yansır.</div>`}
+function bulkForm(){return `<div class="form-grid" style="margin-top:0"><div class="field span2"><label>Avans tarihi</label><input type="date" value="2026-07-01"></div><div class="field"><label>Avans tutarı</label><input placeholder="0"></div><div class="field"><label>Seçili kişi sayısı</label><input value="2" readonly></div><div class="field span4"><label>Açıklama</label><textarea placeholder="Örn: Temmuz avansı"></textarea></div></div><div class="notice">Seçili her personele ayrı avans satırı, bordro etkisi ve işlem logu yazılır.</div>`}
+function manualForm(){return `<div class="form-grid" style="margin-top:0"><div class="field"><label>Maaş ödeme</label><input value="67500"></div><div class="field"><label>Yol ödeme</label><input value="1680"></div><div class="field"><label>Mesai / Prim</label><input value="0"></div><div class="field"><label>Avans</label><input value="0"></div><div class="field"><label>Kesinti</label><input value="0"></div><div class="field"><label>Banka</label><input value="28075"></div><div class="field"><label>Elden</label><input value="41105"></div><div class="field"><label>Toplam</label><input value="69180"></div><div class="field span4"><label>Manuel düzeltme sebebi (zorunlu)</label><textarea placeholder="Neden elle değiştirdiğini mutlaka yaz. Eski/yeni değer, kullanıcı ve saat loglanır."></textarea></div></div>`}
+function exitForm(){return `<div class="form-grid" style="margin-top:0"><div class="field"><label>İşe giriş</label><input type="date" value="2017-10-09" readonly></div><div class="field"><label>Çıkış tarihi</label><input type="date"></div><div class="field"><label>Son maaş</label><input value="67500" readonly></div><div class="field"><label>Kalan yıllık izin</label><input value="20 gün" readonly></div><div class="field span2"><label>Kıdem tazminatı taslağı</label><input placeholder="Hesaplama sonrası oluşur" readonly></div><div class="field span2"><label>Kullanılmamış izin ücreti</label><input placeholder="Hesaplama sonrası oluşur" readonly></div><div class="field span4"><label>Açıklama</label><textarea></textarea></div></div><div class="notice">Bu alan taslaktır. Kesin kıdem/izin ücreti işlemi onay ile loglanır ve ilgili çıktısı alınır.</div>`}
+function saveSecondary(){toast('Hareket kaydedildi. Bordro taslağı ve kişi işlem logu güncellendi.');closeSecondary()}
+function openTnf(mode='tnf'){openSecondary('finance');document.getElementById('secondaryTitle').textContent=mode==='sgk'?'SGK Excel Ön Analiz':'TNF / Kart Aktarımı';document.getElementById('secondarySub').textContent=mode==='sgk'?'Excel → ön kontrol → eşleştirme → onay':'Dosya → ön analiz → eşleştirme → puantaja aktarım';document.getElementById('secondaryBody').innerHTML=`<div class="form-grid" style="margin-top:0"><div class="field span4"><label>${mode==='sgk'?'SGK bordro Excel':'TNF dosyası'}</label><input type="file" accept="${mode==='sgk'?'.xlsx,.xls':'.tnf,.txt'}"></div><div class="field"><label>Yıl</label><select><option>2026</option></select></div><div class="field"><label>Ay</label><select><option>Temmuz</option></select></div><div class="field span2"><label>Kaynak</label><select><option>${mode==='sgk'?'SGK Excel':'TNF'}</option><option>Manuel</option></select></div><div class="field span4"><label>Not</label><textarea></textarea></div></div><div class="notice">${mode==='sgk'?'Eşleştirme sırası TC → personel kodu → ad soyad. Şirket dışı kişi ana personele otomatik eklenmez.':'TNF formatı: KOD,dd.MM.yyyy,HH:MM. Dosya doğrudan kalıcı kayda basılmaz; önce ön kontrol havuzuna düşer.'}</div>`}
+function makeCalendar(){
+ const cal=document.getElementById('calendar'); if(!cal)return;
+ ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].forEach(x=>cal.innerHTML+=`<div class="week">${x}</div>`);
+ for(let i=1;i<=31;i++){let weekend=[4,5,11,12,18,19,25,26].includes(i);let cls='day'+(weekend?' weekend':'')+(i===1?' selected':'');cal.innerHTML+=`<div class="${cls}">${i}<small>${weekend?'Tatil':'G geldi'}</small></div>`}
+}
+makeCalendar();
+document.querySelectorAll('#quickButtons .quick').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#quickButtons .quick').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');toast(b.dataset.kind+' işlemi seçildi.')}))
+document.querySelectorAll('.tabbtn').forEach(b=>b.addEventListener('click',()=>{b.parentElement.querySelectorAll('.tabbtn').forEach(x=>x.classList.remove('active'));b.classList.add('active')}))
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('mousedown',e=>{if(e.target===o){if(o.id==='personOverlay')closeMainModal();else closeSecondary()}}));
+function openPrint(kind){
+ const names=['ÇETİN KAYA','MURAT MİNANZ','FADİME TÜRKYILMAZ','CUMA ÖZKURT','AHMET KURT','ERDİNÇ ŞEVİK','ALİ AKKAYA','GÖKHAN YAĞMURLUOĞLU'];
+ const slips=names.map((n,i)=>`<div class="slip"><h3>${n}</h3><div class="line"><span>Maaş ödeme</span><b>₺${i?45500:'67500'}</b></div><div class="line"><span>Yol ödeme</span><b>₺1.680</b></div><div class="line"><span>Mesai / Prim</span><b>₺0</b></div><div class="line"><span>Avans / Kesinti</span><b>₺0</b></div><div class="line"><span>Banka / Elden</span><b>₺28.075 / ₺${i?19105:41105}</b></div><div class="line total"><span>Toplam ödeme</span><b>₺${i?47180:69180}</b></div><div class="line"><span>Puantaj</span><b>30 gün</b></div><div class="sign">Personel imzası: ____________________ &nbsp; Yetkili: ____________________</div></div>`).join('');
+ const win=window.open('','KYERP_PRINT','width=1100,height=900');if(!win){toast('Tarayıcı açılır pencereyi engelledi. İzin verip tekrar dene.');return;}
+ win.document.open();win.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>KY ERP Çıktı</title><style>@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.page{width:194mm;min-height:279mm;margin:0 auto;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}h2{text-align:center;font-size:14px;margin:0 0 3px}.sub{text-align:center;font-size:9px;margin-bottom:7px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:5mm}.slip{border:1px solid #111;min-height:62mm;padding:5mm;break-inside:avoid;page-break-inside:avoid}.slip h3{text-align:center;margin:0 0 7px;font-size:12px}.line{display:flex;justify-content:space-between;border-top:1px solid #222;padding:3px 0;font-size:9px}.total{font-size:10px}.sign{margin-top:16mm;border-top:1px solid #222;padding-top:3px;font-size:8px}</style></head><body><div class="page"><h2>AYLIK PERSONEL ÖDEME FİŞLERİ</h2><div class="sub">Temmuz 2026 · HKN Ana İş Yeri</div><div class="grid">${kind==='single'?slips.split('</div>').slice(0,1).join('</div>'):slips}</div></div></body></html>`);win.document.close();setTimeout(()=>{win.focus();win.print()},650)
+}
+</script>
+</body>
+</html>

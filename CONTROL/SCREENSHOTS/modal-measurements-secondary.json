@@ -1,0 +1,218 @@
+{
+  "open": {
+    "clicked": true,
+    "text": "Ac"
+  },
+  "buttons": [
+    {
+      "i": 0,
+      "text": "Kapat"
+    },
+    {
+      "i": 1,
+      "text": "1G"
+    },
+    {
+      "i": 2,
+      "text": "2G"
+    },
+    {
+      "i": 3,
+      "text": "3G"
+    },
+    {
+      "i": 4,
+      "text": "4-"
+    },
+    {
+      "i": 5,
+      "text": "5-"
+    },
+    {
+      "i": 6,
+      "text": "6G"
+    },
+    {
+      "i": 7,
+      "text": "7G"
+    },
+    {
+      "i": 8,
+      "text": "8G"
+    },
+    {
+      "i": 9,
+      "text": "9G"
+    },
+    {
+      "i": 10,
+      "text": "10G"
+    },
+    {
+      "i": 11,
+      "text": "11-"
+    },
+    {
+      "i": 12,
+      "text": "12-"
+    },
+    {
+      "i": 13,
+      "text": "13G"
+    },
+    {
+      "i": 14,
+      "text": "14G"
+    },
+    {
+      "i": 15,
+      "text": "15-"
+    },
+    {
+      "i": 16,
+      "text": "16G"
+    },
+    {
+      "i": 17,
+      "text": "17G"
+    },
+    {
+      "i": 18,
+      "text": "18-"
+    },
+    {
+      "i": 19,
+      "text": "19-"
+    },
+    {
+      "i": 20,
+      "text": "20G"
+    },
+    {
+      "i": 21,
+      "text": "21G"
+    },
+    {
+      "i": 22,
+      "text": "22G"
+    },
+    {
+      "i": 23,
+      "text": "23G"
+    },
+    {
+      "i": 24,
+      "text": "24G"
+    },
+    {
+      "i": 25,
+      "text": "25-"
+    },
+    {
+      "i": 26,
+      "text": "26-"
+    },
+    {
+      "i": 27,
+      "text": "27G"
+    },
+    {
+      "i": 28,
+      "text": "28G"
+    },
+    {
+      "i": 29,
+      "text": "29G"
+    },
+    {
+      "i": 30,
+      "text": "30G"
+    },
+    {
+      "i": 31,
+      "text": "31G"
+    },
+    {
+      "i": 32,
+      "text": "Y"
+    },
+    {
+      "i": 33,
+      "text": "M"
+    },
+    {
+      "i": 34,
+      "text": "R"
+    },
+    {
+      "i": 35,
+      "text": "U"
+    },
+    {
+      "i": 36,
+      "text": "I"
+    },
+    {
+      "i": 37,
+      "text": "K"
+    },
+    {
+      "i": 38,
+      "text": "W"
+    },
+    {
+      "i": 39,
+      "text": "Kaydet"
+    },
+    {
+      "i": 40,
+      "text": "Normale dondur"
+    },
+    {
+      "i": 41,
+      "text": "Mesai / Avans"
+    },
+    {
+      "i": 42,
+      "text": "Kidem Taslak"
+    },
+    {
+      "i": 43,
+      "text": "Odeme Fisi"
+    },
+    {
+      "i": 44,
+      "text": "Puantaj Foyu"
+    },
+    {
+      "i": 45,
+      "text": "Izin Formu"
+    },
+    {
+      "i": 46,
+      "text": "Kidem Ciktisi"
+    }
+  ],
+  "fin": {
+    "clicked": true,
+    "text": "Mesai / Avans"
+  },
+  "modals": [
+    {
+      "className": "hr-modal hr-modal--primary hr-modal--person-detail",
+      "width": 1180,
+      "height": 760,
+      "left": 362,
+      "top": 113,
+      "parent": "hr-modal-overlay hr-modal-overlay--level-1"
+    },
+    {
+      "className": "hr-modal hr-modal--secondary hr-modal--finance",
+      "width": 760,
+      "height": 397,
+      "left": 572,
+      "top": 294,
+      "parent": "hr-modal-overlay hr-modal-overlay--level-2"
+    }
+  ]
+}

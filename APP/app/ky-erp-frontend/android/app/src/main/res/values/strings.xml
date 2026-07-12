@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KY ERP Mobile</string>
+    <string name="title_activity_main">KY ERP Mobile</string>
+    <string name="package_name">com.kyerp.mobile</string>
+    <string name="custom_url_scheme">com.kyerp.mobile</string>
+</resources>

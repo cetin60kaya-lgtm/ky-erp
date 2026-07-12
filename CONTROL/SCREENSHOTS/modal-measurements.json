@@ -1,0 +1,26 @@
+{
+  "clickOpen": {
+    "clicked": true,
+    "text": "Ac"
+  },
+  "primary": [
+    {
+      "className": "hr-modal hr-modal--primary hr-modal--person-detail",
+      "width": 1180,
+      "height": 760,
+      "left": 362,
+      "top": 113,
+      "parent": "hr-modal-overlay hr-modal-overlay--level-1"
+    }
+  ],
+  "both": [
+    {
+      "className": "hr-modal hr-modal--primary hr-modal--person-detail",
+      "width": 1180,
+      "height": 760,
+      "left": 362,
+      "top": 113,
+      "parent": "hr-modal-overlay hr-modal-overlay--level-1"
+    }
+  ]
+}
