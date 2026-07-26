@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, apiPost } from "../utils/api";
+import { apiFetch, apiGet, apiPatch, apiPost } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -47,16 +47,13 @@ export const createIsnetManualPdfSourceIntake = (payload) => {
 };
 
 export const assignIsnetSourceIntakeModel = (intakeId, payload) =>
-  apiFetch(`/isnet/source-intakes/${encodeURIComponent(intakeId)}/model`, {
-    method: "PATCH",
-    body: payload,
-  }).then(unwrap);
+  apiPatch(`/isnet/source-intakes/${encodeURIComponent(intakeId)}/model`, payload).then(unwrap);
 
 export const linkCustomerDispatchToSourceIntake = (intakeId, payload) =>
-  apiFetch(`/isnet/source-intakes/${encodeURIComponent(intakeId)}/customer-dispatch`, {
-    method: "PATCH",
-    body: payload,
-  }).then(unwrap);
+  apiPatch(`/isnet/source-intakes/${encodeURIComponent(intakeId)}/customer-dispatch`, payload).then(unwrap);
+
+export const updateIsnetSourceIntakeQuantities = (intakeId, payload) =>
+  apiPatch(`/isnet/source-intakes/${encodeURIComponent(intakeId)}/quantities`, payload).then(unwrap);
 
 export const getIsnetSourceIntakeDetail = (intakeId) =>
   apiGet(`/isnet/source-intakes/${encodeURIComponent(intakeId)}`).then(unwrap);
