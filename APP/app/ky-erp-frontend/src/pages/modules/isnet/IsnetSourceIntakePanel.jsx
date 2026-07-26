@@ -94,7 +94,6 @@ export default function IsnetSourceIntakePanel({
   async function submit(event) {
     event.preventDefault();
     if (!form.companyName.trim()) throw new Error("Firma seçilmelidir.");
-    if (!form.modelName.trim()) throw new Error("Model seçilmeli veya yeni model oluşturulmalıdır.");
     if (!(Number(form.quantity) > 0)) throw new Error("Adet sıfırdan büyük olmalıdır.");
     if (form.sourceType === "manual-pdf" && !form.pdfFile) throw new Error("PDF dosyası seçilmelidir.");
     await onSubmit?.(form);
@@ -203,7 +202,7 @@ export default function IsnetSourceIntakePanel({
           </label>
           <label>
             Seçilen model
-            <input value={form.modelName} onChange={(event) => patch({ modelName: event.target.value, modelId: "" })} placeholder="Model yoksa yeni model adı" />
+            <input value={form.modelName} onChange={(event) => patch({ modelName: event.target.value, modelId: "" })} placeholder="Bulunamadıysa model bekleyene alınır" />
           </label>
           <label>
             Adet

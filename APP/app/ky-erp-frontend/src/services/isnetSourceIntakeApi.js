@@ -15,6 +15,8 @@ export const getIsnetSourceIntakes = (params = {}) => {
   if (params.search) search.set("search", params.search);
   if (params.startDate) search.set("startDate", params.startDate);
   if (params.endDate) search.set("endDate", params.endDate);
+  search.set("page", String(params.page || 1));
+  search.set("pageSize", String(params.pageSize || 50));
   return apiGet(`/isnet/source-intakes?${search.toString()}`).then(unwrap);
 };
 
@@ -63,3 +65,15 @@ export const createOutgoingDispatchFromSourceIntake = (intakeId, payload) =>
     ...payload,
     confirmed: true,
   }).then(unwrap);
+
+export const completeOutgoingDispatchFromSourceIntake = (intakeId, draftId, payload) =>
+  apiFetch(
+    `/isnet/source-intakes/${encodeURIComponent(intakeId)}/outgoing-dispatch/${encodeURIComponent(draftId)}/complete`,
+    {
+      method: "PATCH",
+      body: {
+        ...payload,
+        confirmed: true,
+      },
+    },
+  ).then(unwrap);

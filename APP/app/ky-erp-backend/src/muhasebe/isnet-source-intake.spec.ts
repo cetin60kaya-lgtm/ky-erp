@@ -28,7 +28,17 @@ test('manuel PDF kaydını dosya özetiyle tekilleştirir', () => {
     quantity: 1000,
     pdfBuffer: Buffer.from('aynı pdf'),
   };
-  assert.equal(buildIsnetSourceDedupeKey(input), buildIsnetSourceDedupeKey(input));
+  const otherMetadata = {
+    ...input,
+    companyName: 'Başka Firma',
+    customerDispatchNo: 'FARKLI2026001',
+    issueDate: '2026-07-25',
+  };
+  assert.equal(
+    buildIsnetSourceDedupeKey(input),
+    buildIsnetSourceDedupeKey(otherMetadata),
+  );
+  assert.match(buildIsnetSourceDedupeKey(input), /^PDF:[a-f0-9]{64}$/);
 });
 
 test('irsaliyesiz talimatta sahte müşteri irsaliye numarası üretmez', () => {
@@ -59,6 +69,32 @@ test('model seçilmemiş müşteri kaydını model bekleyen yapar', () => {
     quantity: 2500,
   });
   assert.equal(normalized.status, 'MODEL_PENDING');
+});
+
+test('model adı henüz okunmamış müşteri kaydını model bekleyen yapar', () => {
+  const normalized = normalizeIsnetSourceIntake({
+    sourceType: 'PORTAL',
+    companyName: 'Taha Giyim',
+    companyRole: 'CUSTOMER',
+    modelName: '',
+    customerDispatchNo: 'TIA2026002',
+    issueDate: '2026-07-26',
+    quantity: 2500,
+  });
+  assert.equal(normalized.status, 'MODEL_PENDING');
+});
+
+test('takvimde olmayan tarihleri kabul etmez', () => {
+  assert.throws(
+    () => normalizeIsnetSourceIntake({
+      sourceType: 'NO_CUSTOMER_DISPATCH',
+      companyName: 'Taha Giyim',
+      modelName: 'Magic',
+      issueDate: '2026-02-31',
+      quantity: 100,
+    }),
+    /Geçerli bir işlem tarihi/,
+  );
 });
 
 test('tedarikçi kaydını faturalandırılmaz olarak ayırır', () => {

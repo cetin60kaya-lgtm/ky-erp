@@ -127,7 +127,7 @@ function openModal() {
           <label>Tarih<input type="date" name="issueDate" required value="${today()}"></label>
           <label>Müşteri irsaliye no<input name="customerDispatchNo" placeholder="Belge numarası"></label>
           <label>Sipariş / piyon<input name="orderNo"></label>
-          <label>Model adı<input name="modelName" required placeholder="Mevcut veya yeni model"></label>
+          <label>Model adı<input name="modelName" placeholder="Bulunamadıysa model bekleyene alınır"></label>
           <label>Model ID<input name="modelId" placeholder="Seçili model varsa"></label>
           <label>Adet<input type="number" min="1" step="1" name="quantity" required></label>
           <label>Birim<select name="unit"><option value="ADET">Adet</option><option value="KILOGRAM">Kilogram</option><option value="METRE">Metre</option></select></label>

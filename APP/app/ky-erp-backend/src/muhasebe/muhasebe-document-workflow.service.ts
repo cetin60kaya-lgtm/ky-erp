@@ -3091,11 +3091,11 @@ export class MuhasebeDocumentWorkflowService {
       return this.approveSupplierInvoice(company, poolRecord, payload);
     }
     if (poolRecord.belgeTipi === "bizim_kestigimiz_fatura")
-      return this.approveOutgoingInvoice(poolRecord, payload);
+      return this.approveOutgoingInvoice(company, poolRecord, payload);
     if (poolRecord.belgeTipi === "bizim_kestigimiz_irsaliye")
-      return this.approveOutgoingDelivery(poolRecord, payload);
+      return this.approveOutgoingDelivery(company, poolRecord, payload);
     if (poolRecord.belgeTipi === "musteriden_gelen_irsaliye")
-      return this.approveIncomingDelivery(poolRecord, payload);
+      return this.approveIncomingDelivery(company, poolRecord, payload);
     this.approvalError("Bu belge tipi için onay işleyicisi henüz hazır değil.");
   }
 
@@ -3856,37 +3856,286 @@ export class MuhasebeDocumentWorkflowService {
     return next;
   }
 
-  private approveOutgoingInvoice(poolRecord: any, payload: any) {
-    if (!Array.isArray(payload?.modelLinks) || !payload.modelLinks.length) {
-      this.approvalError(
-        "Bizim kestiğimiz fatura modele bağlanmadan işlenemez.",
-      );
+  private approvedPoolModelLinks(
+    company: MainCompany,
+    poolRecord: any,
+    payload: any,
+  ) {
+    const requested = Array.isArray(payload?.modelLinks)
+      ? payload.modelLinks
+      : [];
+    if (!requested.length) {
+      this.approvalError("Belge modele bağlanmadan işlenemez.");
     }
-    this.approvalError(
-      "Bizim kestiğimiz fatura işleme akışı sonraki adımda bağlanacak.",
-    );
+    const links = requested.map((link: any, index: number) => {
+      const modelId = this.cleanText(
+        link.modelId || link.modelKaydiId || link.id,
+      );
+      if (!modelId) {
+        this.approvalError(`${index + 1}. model bağlantısında model ID eksik.`);
+      }
+      const model = this.modelStore.getById(
+        company.slug,
+        company.id,
+        modelId,
+      );
+      if (!model) {
+        this.approvalError(
+          `${index + 1}. model bağlantısındaki model Desen Havuzu'nda bulunamadı.`,
+        );
+      }
+      return {
+        ...link,
+        modelId: model.id,
+        modelKaydiId: model.id,
+        modelAdi: this.cleanText(
+          model.modelAdi || (model as any).modelName || (model as any).name,
+        ),
+      };
+    });
+    const poolLines = Array.isArray(poolRecord?.kalemler)
+      ? poolRecord.kalemler
+      : [];
+    const linkForLine = (line: any, index: number) => {
+      const lineKeys = [
+        line.id,
+        line.lineId,
+        line.lineNo,
+        line.sourceLineNo,
+        index + 1,
+      ]
+        .map((value) => this.cleanText(value))
+        .filter(Boolean);
+      const explicit = links.find((link: any) =>
+        [
+          link.lineId,
+          link.documentLineId,
+          link.sourceLineId,
+          link.lineNo,
+          link.sourceLineNo,
+        ]
+          .map((value) => this.cleanText(value))
+          .filter(Boolean)
+          .some((value) => lineKeys.includes(value)),
+      );
+      return explicit || (links.length === 1 ? links[0] : null);
+    };
+    const lines = poolLines.map((line: any, index: number) => {
+      const link = linkForLine(line, index);
+      if (!link) {
+        this.approvalError(
+          `${index + 1}. belge kalemi için model bağlantısı eksik.`,
+        );
+      }
+      return {
+        ...line,
+        modelId: link.modelId,
+        modelKaydiId: link.modelId,
+        modelAdi: link.modelAdi,
+        matchStatus: "APPROVED",
+        matchConfidence: Number(link.confidence || 100),
+      };
+    });
+    return {
+      links,
+      lines,
+      primary: links[0],
+    };
   }
 
-  private approveOutgoingDelivery(poolRecord: any, payload: any) {
-    if (!Array.isArray(payload?.modelLinks) || !payload.modelLinks.length) {
-      this.approvalError(
-        "Bizim kestiğimiz irsaliye modele bağlanmadan işlenemez.",
-      );
+  private outgoingTargetFromPool(company: MainCompany, poolRecord: any) {
+    if (this.cleanText(poolRecord.targetRecordId)) {
+      try {
+        return this.getOutgoingDocumentById(
+          company.slug,
+          company.id,
+          poolRecord.targetRecordId,
+        );
+      } catch {
+        // Hedef kayıt taşınmışsa belge no ile güvenli upsert yeniden çalıştırılır.
+      }
     }
-    this.approvalError(
-      "Bizim kestiğimiz irsaliye işleme akışı sonraki adımda bağlanacak.",
-    );
+    return this.saveOutgoingFromUpload(company, poolRecord);
   }
 
-  private approveIncomingDelivery(poolRecord: any, payload: any) {
-    if (!Array.isArray(payload?.modelLinks) || !payload.modelLinks.length) {
-      this.approvalError(
-        "Müşteriden gelen irsaliye modele bağlanmadan işlenemez.",
-      );
+  private incomingTargetFromPool(company: MainCompany, poolRecord: any) {
+    if (this.cleanText(poolRecord.targetRecordId)) {
+      try {
+        return this.getIncomingDeliveryById(
+          company.slug,
+          company.id,
+          poolRecord.targetRecordId,
+        );
+      } catch {
+        // Hedef kayıt taşınmışsa belge no ile güvenli upsert yeniden çalıştırılır.
+      }
     }
-    this.approvalError(
-      "Müşteriden gelen irsaliye işleme akışı sonraki adımda bağlanacak.",
-    );
+    return this.saveIncomingFromUpload(company, poolRecord);
+  }
+
+  private approveOutgoingInvoice(
+    company: MainCompany,
+    poolRecord: any,
+    payload: any,
+  ) {
+    this.startLogBuffer();
+    try {
+      const mapping = this.approvedPoolModelLinks(
+        company,
+        poolRecord,
+        payload,
+      );
+      const current = this.outgoingTargetFromPool(company, poolRecord);
+      const document = this.saveOutgoingDocument(company.slug, company.id, {
+        ...current,
+        modelId: mapping.primary.modelId,
+        modelKaydiId: mapping.primary.modelId,
+        modelAdi: mapping.primary.modelAdi,
+        modelLinks: mapping.links,
+        lines: mapping.lines,
+        status: "onaylandi",
+        durum: "onaylandi",
+      });
+      const cariMovement =
+        this.createOrUpdateCariMovementFromOutgoingDocument(company, document);
+      const kdvRecords =
+        this.createOrUpdateKdvRecordsFromOutgoingDocument(company, document);
+      const documentHistory = this.createDocumentHistoryFromPool(
+        company,
+        poolRecord,
+        {
+          sourceType: "outgoing_invoice",
+          sourceId: document.id,
+          belgeNo: document.faturaNo || document.belgeNo,
+          firma: document.firma,
+          tarih: document.tarih,
+          total: document.genelToplam || document.toplamTutar,
+        },
+      );
+      const processedResult = {
+        outgoingInvoiceId: document.id,
+        cariMovementId: cariMovement.id,
+        kdvRecordIds: kdvRecords.map((row) => row.id),
+        documentHistoryId: documentHistory.id,
+        modelIds: mapping.links.map((link: any) => link.modelId),
+      };
+      this.logDocumentActivity(
+        company.slug,
+        "belge-onaylandi",
+        poolRecord.id,
+        "Bizim kestiğimiz fatura işlendi",
+        { processedResult },
+      );
+      return this.markPoolAsProcessed(company, poolRecord, processedResult);
+    } finally {
+      this.flushLogBuffer();
+    }
+  }
+
+  private approveOutgoingDelivery(
+    company: MainCompany,
+    poolRecord: any,
+    payload: any,
+  ) {
+    this.startLogBuffer();
+    try {
+      const mapping = this.approvedPoolModelLinks(
+        company,
+        poolRecord,
+        payload,
+      );
+      const current = this.outgoingTargetFromPool(company, poolRecord);
+      const document = this.saveOutgoingDocument(company.slug, company.id, {
+        ...current,
+        modelId: mapping.primary.modelId,
+        modelKaydiId: mapping.primary.modelId,
+        modelAdi: mapping.primary.modelAdi,
+        modelLinks: mapping.links,
+        lines: mapping.lines,
+        status: "onaylandi",
+        durum: "onaylandi",
+      });
+      const documentHistory = this.createDocumentHistoryFromPool(
+        company,
+        poolRecord,
+        {
+          sourceType: "outgoing_dispatch",
+          sourceId: document.id,
+          belgeNo: document.irsaliyeNo || document.belgeNo,
+          firma: document.firma,
+          tarih: document.tarih,
+          total: 0,
+        },
+      );
+      const processedResult = {
+        outgoingDispatchId: document.id,
+        documentHistoryId: documentHistory.id,
+        modelIds: mapping.links.map((link: any) => link.modelId),
+      };
+      this.logDocumentActivity(
+        company.slug,
+        "belge-onaylandi",
+        poolRecord.id,
+        "Bizim kestiğimiz irsaliye işlendi",
+        { processedResult },
+      );
+      return this.markPoolAsProcessed(company, poolRecord, processedResult);
+    } finally {
+      this.flushLogBuffer();
+    }
+  }
+
+  private approveIncomingDelivery(
+    company: MainCompany,
+    poolRecord: any,
+    payload: any,
+  ) {
+    this.startLogBuffer();
+    try {
+      const mapping = this.approvedPoolModelLinks(
+        company,
+        poolRecord,
+        payload,
+      );
+      const current = this.incomingTargetFromPool(company, poolRecord);
+      const delivery = this.saveIncomingDelivery(company.slug, company.id, {
+        ...current,
+        modelId: mapping.primary.modelId,
+        modelKaydiId: mapping.primary.modelId,
+        modelAdi: mapping.primary.modelAdi,
+        modelLinks: mapping.links,
+        lines: mapping.lines,
+        status: "İrsaliye Geldi / Fatura Kesilmedi",
+        durum: "İrsaliye Geldi / Fatura Kesilmedi",
+      });
+      const documentHistory = this.createDocumentHistoryFromPool(
+        company,
+        poolRecord,
+        {
+          sourceType: "incoming_dispatch",
+          sourceId: delivery.id,
+          belgeNo: delivery.irsaliyeNo || delivery.belgeNo,
+          firma: delivery.firma,
+          tarih: delivery.tarih,
+          total: 0,
+        },
+      );
+      const processedResult = {
+        incomingDispatchId: delivery.id,
+        documentHistoryId: documentHistory.id,
+        modelIds: mapping.links.map((link: any) => link.modelId),
+      };
+      this.logDocumentActivity(
+        company.slug,
+        "belge-onaylandi",
+        poolRecord.id,
+        "Müşteriden gelen irsaliye işlendi",
+        { processedResult },
+      );
+      return this.markPoolAsProcessed(company, poolRecord, processedResult);
+    } finally {
+      this.flushLogBuffer();
+    }
   }
 
   listAvailableModels(

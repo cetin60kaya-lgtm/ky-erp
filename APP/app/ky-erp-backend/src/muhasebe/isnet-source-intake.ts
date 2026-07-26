@@ -63,7 +63,12 @@ function normalizeDate(value: string): string {
     throw new Error('İşlem tarihi YYYY-AA-GG biçiminde olmalıdır.');
   }
   const date = new Date(`${text}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== Number(match[1]) ||
+    date.getMonth() + 1 !== Number(match[2]) ||
+    date.getDate() !== Number(match[3])
+  ) {
     throw new Error('Geçerli bir işlem tarihi girilmelidir.');
   }
   return text;
@@ -103,7 +108,7 @@ export function buildIsnetSourceDedupeKey(input: IsnetSourceIntakeInput): string
 
   if (sourceType === 'MANUAL_PDF') {
     if (!pdfHash) throw new Error('Manuel PDF kaynağında PDF dosyası zorunludur.');
-    return `PDF:${pdfHash}:${company}:${dispatchNo || date}`;
+    return `PDF:${pdfHash}`;
   }
 
   return `NO-DISPATCH:${company}:${model}:${orderNo || '-'}:${date}`;
@@ -121,9 +126,6 @@ export function normalizeIsnetSourceIntake(
   const companyRole = normalizeRole(input.companyRole);
 
   if (!companyName) throw new Error('Firma zorunludur.');
-  if (!modelName && companyRole !== 'SUPPLIER') {
-    throw new Error('Müşteri belgesinde model seçilmeli veya yeni model oluşturulmalıdır.');
-  }
   if (!Number.isFinite(quantity) || quantity <= 0) {
     throw new Error('Adet sıfırdan büyük olmalıdır.');
   }

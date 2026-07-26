@@ -118,9 +118,10 @@ async function openWorkbench() {
     status.className = "ky-isnet-pool-status";
     status.textContent = "Kayıtlar yükleniyor…";
     try {
-      const rows = await getIsnetSourceIntakes({ search: search.value, status: statusFilter.value });
-      renderRows(body, rows || []);
-      const count = (key) => (rows || []).filter((row) => row.workflowStatus === key).length;
+      const result = await getIsnetSourceIntakes({ search: search.value, status: statusFilter.value });
+      const rows = Array.isArray(result) ? result : result?.items || result?.rows || [];
+      renderRows(body, rows);
+      const count = (key) => rows.filter((row) => row.workflowStatus === key).length;
       summary.innerHTML = [
         ["TOPLAM", rows.length], ["MODEL BEKLEYEN", count("MODEL_PENDING")], ["İŞLEME HAZIR", count("READY_FOR_PRODUCTION")], ["KISMİ", count("PARTIAL")], ["FATURA BEKLEYEN", count("READY_FOR_INVOICE")], ["TAMAMLANAN", count("COMPLETED")],
       ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");

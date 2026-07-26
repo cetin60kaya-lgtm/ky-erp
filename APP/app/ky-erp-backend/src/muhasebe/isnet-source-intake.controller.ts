@@ -18,31 +18,40 @@ export class IsnetSourceIntakeController {
 
   @Get()
   list(@Query() query: Record<string, string | undefined>) {
-    return this.service.list(query);
+    return this.service.list(query.mainCompanySlug, query);
   }
 
   @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.service.detail(id);
+  detail(
+    @Param('id') id: string,
+    @Query('mainCompanySlug') mainCompanySlug?: string,
+  ) {
+    return this.service.detail(mainCompanySlug, id);
   }
 
   @Post('portal')
   createPortal(@Body() body: any) {
-    return this.service.create({
-      ...body,
-      sourceType: 'PORTAL',
-      quantity: Number(body.quantity),
-    });
+    return this.service.create(
+      body.mainCompanySlug,
+      {
+        ...body,
+        sourceType: 'PORTAL',
+        quantity: Number(body.quantity),
+      },
+    );
   }
 
   @Post('no-dispatch')
   createNoDispatch(@Body() body: any) {
-    return this.service.create({
-      ...body,
-      sourceType: 'NO_CUSTOMER_DISPATCH',
-      customerDispatchNo: null,
-      quantity: Number(body.quantity),
-    });
+    return this.service.create(
+      body.mainCompanySlug,
+      {
+        ...body,
+        sourceType: 'NO_CUSTOMER_DISPATCH',
+        customerDispatchNo: null,
+        quantity: Number(body.quantity),
+      },
+    );
   }
 
   @Post('manual-pdf')
@@ -55,8 +64,13 @@ export class IsnetSourceIntakeController {
       },
     }),
   )
-  createManualPdf(@Body() body: any, @UploadedFile() pdf: Express.Multer.File) {
+  createManualPdf(
+    @Body() body: any,
+    @UploadedFile() pdf: Express.Multer.File,
+    @Query('mainCompanySlug') queryMainCompanySlug?: string,
+  ) {
     return this.service.create(
+      body.mainCompanySlug || queryMainCompanySlug,
       {
         ...body,
         sourceType: 'MANUAL_PDF',
@@ -68,31 +82,64 @@ export class IsnetSourceIntakeController {
 
   @Patch(':id/model')
   assignModel(@Param('id') id: string, @Body() body: any) {
-    return this.service.assignModel(id, body);
+    return this.service.assignModel(body.mainCompanySlug, id, body);
   }
 
   @Patch(':id/customer-dispatch')
   linkCustomerDispatch(@Param('id') id: string, @Body() body: any) {
-    return this.service.linkCustomerDispatch(id, body);
+    return this.service.linkCustomerDispatch(body.mainCompanySlug, id, body);
   }
 
   @Patch(':id/quantities')
   updateQuantities(@Param('id') id: string, @Body() body: any) {
-    return this.service.updateQuantities(id, {
-      producedNetQuantity: body.producedNetQuantity === undefined ? undefined : Number(body.producedNetQuantity),
-      outgoingDispatchQuantity: body.outgoingDispatchQuantity === undefined ? undefined : Number(body.outgoingDispatchQuantity),
-      invoicedQuantity: body.invoicedQuantity === undefined ? undefined : Number(body.invoicedQuantity),
-      nonBillableQuantity: body.nonBillableQuantity === undefined ? undefined : Number(body.nonBillableQuantity),
+    return this.service.updateQuantities(body.mainCompanySlug, id, {
+      producedNetQuantity:
+        body.producedNetQuantity === undefined
+          ? undefined
+          : Number(body.producedNetQuantity),
+      outgoingDispatchQuantity:
+        body.outgoingDispatchQuantity === undefined
+          ? undefined
+          : Number(body.outgoingDispatchQuantity),
+      invoicedQuantity:
+        body.invoicedQuantity === undefined
+          ? undefined
+          : Number(body.invoicedQuantity),
+      nonBillableQuantity:
+        body.nonBillableQuantity === undefined
+          ? undefined
+          : Number(body.nonBillableQuantity),
       note: body.note,
     });
   }
 
   @Post(':id/outgoing-dispatch')
-  createOutgoingDispatch(@Param('id') id: string, @Body() body: any) {
-    return this.service.createOutgoingDispatch(id, {
-      quantity: Number(body.quantity),
-      note: body.note,
-      confirmed: body.confirmed === true,
-    });
+  prepareOutgoingDispatch(@Param('id') id: string, @Body() body: any) {
+    return this.service.prepareOutgoingDispatch(
+      body.mainCompanySlug,
+      id,
+      {
+        quantity: Number(body.quantity),
+        note: body.note,
+      },
+    );
+  }
+
+  @Patch(':id/outgoing-dispatch/:draftId/complete')
+  completeOutgoingDispatch(
+    @Param('id') id: string,
+    @Param('draftId') draftId: string,
+    @Body() body: any,
+  ) {
+    return this.service.completeOutgoingDispatch(
+      body.mainCompanySlug,
+      id,
+      draftId,
+      {
+        confirmed: body.confirmed === true,
+        documentNo: body.documentNo,
+        ettn: body.ettn,
+      },
+    );
   }
 }
