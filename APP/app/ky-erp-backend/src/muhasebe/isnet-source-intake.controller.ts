@@ -76,11 +76,23 @@ export class IsnetSourceIntakeController {
     return this.service.linkCustomerDispatch(id, body);
   }
 
+  @Patch(':id/quantities')
+  updateQuantities(@Param('id') id: string, @Body() body: any) {
+    return this.service.updateQuantities(id, {
+      producedNetQuantity: body.producedNetQuantity === undefined ? undefined : Number(body.producedNetQuantity),
+      outgoingDispatchQuantity: body.outgoingDispatchQuantity === undefined ? undefined : Number(body.outgoingDispatchQuantity),
+      invoicedQuantity: body.invoicedQuantity === undefined ? undefined : Number(body.invoicedQuantity),
+      nonBillableQuantity: body.nonBillableQuantity === undefined ? undefined : Number(body.nonBillableQuantity),
+      note: body.note,
+    });
+  }
+
   @Post(':id/outgoing-dispatch')
-  prepareOutgoingDispatch(@Param('id') id: string, @Body() body: any) {
-    return this.service.prepareOutgoingDispatch(id, {
+  createOutgoingDispatch(@Param('id') id: string, @Body() body: any) {
+    return this.service.createOutgoingDispatch(id, {
       quantity: Number(body.quantity),
       note: body.note,
+      confirmed: body.confirmed === true,
     });
   }
 }
