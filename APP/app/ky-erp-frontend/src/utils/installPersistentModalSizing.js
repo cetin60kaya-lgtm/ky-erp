@@ -1,4 +1,5 @@
 import { installIsnetSourceIntakeBridge } from "./installIsnetSourceIntakeBridge";
+import { installIsnetSourceWorkbench } from "./installIsnetSourceWorkbench";
 
 const STORAGE_PREFIX = "ky-erp:modal-size:v1:";
 const MIN_WIDTH = 360;
@@ -25,6 +26,7 @@ const PANEL_SELECTOR = [
   ".ik-fast-modal-shell",
   ".mfm-modal-card",
   ".ky-isnet-source-modal",
+  ".ky-isnet-pool-modal",
 ].join(",");
 
 const TRANSIENT_CLASSES = new Set([
@@ -150,6 +152,7 @@ export function installPersistentModalSizing() {
   window.__kyPersistentModalSizingInstalled = true;
 
   installIsnetSourceIntakeBridge();
+  installIsnetSourceWorkbench();
 
   const scan = (root) => collectPanels(root).forEach(makeResizable);
   scan(document);
