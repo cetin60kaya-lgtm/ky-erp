@@ -115,6 +115,28 @@ export class IkService {
     return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
   }
 
+  private isValidDateOnlyString(value: unknown) {
+    const text = this.dateOnlyString(value);
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return false;
+    const parsed = new Date(
+      Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+    );
+    return (
+      parsed.getUTCFullYear() === Number(match[1]) &&
+      parsed.getUTCMonth() + 1 === Number(match[2]) &&
+      parsed.getUTCDate() === Number(match[3])
+    );
+  }
+
+  private requireDateOnlyString(value: unknown, message = "Geçerli tarih seçilmedi.") {
+    const text = this.dateOnlyString(value);
+    if (!this.isValidDateOnlyString(text)) {
+      throw new BadRequestException(message);
+    }
+    return text;
+  }
+
   private number(value: unknown) {
     if (typeof value === "number") return Number.isFinite(value) ? value : 0;
     let cleaned = String(value ?? "0")
@@ -497,6 +519,40 @@ export class IkService {
     }
   }
 
+  private normalizedPersonName(value: unknown) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleUpperCase("tr-TR");
+  }
+
+  private async ensureMonthlyPersonNameAvailable(
+    mainCompanyId: string,
+    fullName: string,
+    excludeId = "",
+  ) {
+    const normalizedName = this.normalizedPersonName(fullName);
+    if (!normalizedName) {
+      throw new BadRequestException("Personel ad soyadı zorunludur.");
+    }
+    const rows = await this.model("hrMonthlyEmployee").findMany({
+      where: { mainCompanyId },
+      select: { id: true, code: true, fullName: true, status: true },
+    });
+    const existing = rows.find(
+      (row: AnyBody) =>
+        row.id !== excludeId &&
+        this.normalizedPersonName(row.fullName) === normalizedName,
+    );
+    if (existing) {
+      throw new BadRequestException(
+        `${existing.fullName} adına ait personel kartı zaten mevcut${
+          existing.code ? ` (${existing.code})` : ""
+        }.`,
+      );
+    }
+  }
+
   private monthlyStatus(value: unknown) {
     const raw = String(value || "Aktif").trim();
     if (raw.toUpperCase() === "ACTIVE") return "Aktif";
@@ -788,7 +844,7 @@ export class IkService {
           : "Elden";
     return {
       code: this.monthlyCode(body.code || body.personnelCode),
-      fullName: body.fullName || body.adSoyad || "Yeni Personel",
+      fullName: String(body.fullName || body.adSoyad || "").replace(/\s+/g, " ").trim(),
       department: body.department || null,
       title: body.title || null,
       workType: body.workType || "Aylık",
@@ -855,7 +911,7 @@ export class IkService {
       fullName: row.full_name,
       department: row.department,
       title: row.title,
-      workType: "AylÄ±k",
+      workType: "Aylık",
       sgkStatus: row.sgk_status || "VAR",
       status: active ? "Aktif" : "Pasif",
       hireDate: row.hire_date ? this.date(row.hire_date) : null,
@@ -918,6 +974,7 @@ export class IkService {
     const payload = this.monthlyPayload(body);
     payload.code = payload.code || (await this.nextMonthlyCode(mainCompanyId));
     await this.ensureMonthlyCodeAvailable(mainCompanyId, payload.code);
+    await this.ensureMonthlyPersonNameAvailable(mainCompanyId, payload.fullName);
     const row = await this.model("hrMonthlyEmployee").create({
       data: {
         mainCompanyId,
@@ -938,13 +995,17 @@ export class IkService {
   async updateMonthlyEmployee(id: string, body: AnyBody = {}) {
     const current = await this.model("hrMonthlyEmployee").findUnique({
       where: { id },
-      select: { mainCompanyId: true },
     });
     if (!current) throw new NotFoundException("Aylık personel bulunamadı.");
-    const payload = this.monthlyPayload(body);
+    const payload = this.monthlyPayload({ ...current, ...body });
     await this.ensureMonthlyCodeAvailable(
       current.mainCompanyId,
       payload.code,
+      id,
+    );
+    await this.ensureMonthlyPersonNameAvailable(
+      current.mainCompanyId,
+      payload.fullName,
       id,
     );
     const row = await this.model("hrMonthlyEmployee").update({
@@ -1852,7 +1913,7 @@ export class IkService {
     );
     return {
       mainCompanyId: mainCompanyId || this.mainCompanyId(body),
-      fullName: String(body.fullName || body.name || "Yeni Personel").trim(),
+      fullName: String(body.fullName || body.name || "").replace(/\s+/g, " ").trim(),
       qualification: qualification || null,
       dayWage: this.number(body.dayWage ?? body.dayRate),
       nightWage: this.number(body.nightWage ?? body.nightRate),
@@ -1866,6 +1927,9 @@ export class IkService {
   }
   async createDailyEmployee(body: AnyBody = {}) {
     const payload = await this.dailyEmployeePayload(body);
+    if (!payload.fullName) {
+      throw new BadRequestException("Günlük personel ad soyadı zorunludur.");
+    }
     const normalizedName = String(payload.fullName || "")
       .trim()
       .toLocaleUpperCase("tr-TR");
@@ -1894,12 +1958,33 @@ export class IkService {
   async updateDailyEmployee(id: string, body: AnyBody = {}) {
     const current = await this.model("hrDailyEmployee").findUnique({
       where: { id },
-      select: { mainCompanyId: true },
     });
     if (!current) throw new NotFoundException("Günlük personel bulunamadı.");
+    const payload = await this.dailyEmployeePayload(
+      { ...current, ...body },
+      current.mainCompanyId,
+    );
+    if (!payload.fullName) {
+      throw new BadRequestException("Günlük personel ad soyadı zorunludur.");
+    }
+    const duplicateRows = await this.model("hrDailyEmployee").findMany({
+      where: { mainCompanyId: current.mainCompanyId },
+      select: { id: true, fullName: true },
+    });
+    const duplicate = duplicateRows.find(
+      (row: AnyBody) =>
+        row.id !== id &&
+        this.normalizedPersonName(row.fullName) ===
+          this.normalizedPersonName(payload.fullName),
+    );
+    if (duplicate) {
+      throw new BadRequestException(
+        `${duplicate.fullName} adına ait günlük personel kartı zaten mevcut.`,
+      );
+    }
     const updated = await this.model("hrDailyEmployee").update({
       where: { id },
-      data: await this.dailyEmployeePayload(body, current.mainCompanyId),
+      data: payload,
     });
     await this.saveDailyEmployeeMeta(id, body);
     return updated;
@@ -1952,10 +2037,18 @@ export class IkService {
 
   async saveDailyRange(body: AnyBody = {}) {
     const rawRows = Array.isArray(body.rows) ? body.rows : [];
+    const enforceCompany =
+      Boolean(body.mainCompanyId) || Boolean(body.mainCompanySlug);
+    const allowedCompanyIds = enforceCompany
+      ? new Set(this.companyIdCandidates(body))
+      : null;
     const rowMap = new Map<string, AnyBody>();
     for (const row of rawRows) {
       const employeeId = String(row.employeeId || "");
-      const workDate = this.dateOnlyString(row.workDate);
+      const workDate = this.requireDateOnlyString(
+        row.workDate,
+        "Günlük girişte geçerli bir çalışma tarihi zorunludur.",
+      );
       if (!employeeId || !workDate) continue;
       const key = `${employeeId}-${workDate}`;
       const current = rowMap.get(key) || {};
@@ -1979,10 +2072,28 @@ export class IkService {
           where: { id: row.employeeId },
         });
         if (!employee) throw new NotFoundException("Günlük personel bulunamadı.");
+        if (
+          allowedCompanyIds &&
+          !allowedCompanyIds.has(String(employee.mainCompanyId))
+        ) {
+          throw new BadRequestException(
+            "Seçilen günlük personel aktif ana firmaya ait değil.",
+          );
+        }
         const dayShift = Boolean(row.dayShift);
         const nightShift = Boolean(row.nightShift);
         const dayWage = this.number(row.dayWage ?? employee.dayWage);
         const nightWage = this.number(row.nightWage ?? employee.nightWage);
+        if (dayShift && dayWage <= 0) {
+          throw new BadRequestException(
+            `${employee.fullName} için gündüz ücreti girilmeden kayıt yapılamaz.`,
+          );
+        }
+        if (nightShift && nightWage <= 0) {
+          throw new BadRequestException(
+            `${employee.fullName} için gece ücreti girilmeden kayıt yapılamaz.`,
+          );
+        }
         const totalAmount =
           (dayShift ? dayWage : 0) + (nightShift ? nightWage : 0);
         if (deleteEmptyRows && !dayShift && !nightShift) {
@@ -2220,8 +2331,8 @@ export class IkService {
       if (numberValue === 0) return { selected: false, ambiguous: false };
       if (Number.isFinite(numberValue)) return { selected: numberValue > 0, ambiguous: false };
     }
-    const selected = ["E", "EVET", "G", "N", "X", "TRUE", "VAR", "AKTIF", "AKTÄ°F"].includes(text);
-    const empty = ["HAYIR", "YOK", "FALSE", "PASIF", "PASÄ°F", "-"].includes(text);
+    const selected = ["E", "EVET", "G", "N", "X", "TRUE", "VAR", "AKTIF", "AKTİF"].includes(text);
+    const empty = ["HAYIR", "YOK", "FALSE", "PASIF", "PASİF", "-"].includes(text);
     return { selected, ambiguous: !selected && !empty, raw: text };
   }
 
@@ -2514,7 +2625,11 @@ export class IkService {
             : this.number(current.nightWage ?? employee.nightWage),
       };
     });
-    const saved = await this.saveDailyRange({ rows, deleteEmptyRows: true });
+    const saved = await this.saveDailyRange({
+      mainCompanyId,
+      rows,
+      deleteEmptyRows: true,
+    });
     for (const entry of entries) {
       const employeeId = String(entry.personelId || entry.employeeId || "");
       await (this.prisma as any).$executeRawUnsafe(
@@ -2849,11 +2964,11 @@ export class IkService {
   }
 
   private async parseFocusedDailyExcel(file: any, body: AnyBody = {}) {
-    if (!file?.buffer) throw new BadRequestException("Excel dosyasÄ± bulunamadÄ±.");
+    if (!file?.buffer) throw new BadRequestException("Excel dosyası bulunamadı.");
     const mainCompanyId = this.mainCompanyId(body);
     const workbook = await this.loadUploadedWorkbook(file.buffer);
-    const sheet = workbook.getWorksheet("GÃ¼nlÃ¼k GiriÅŸ Åablonu") || workbook.worksheets[0];
-    if (!sheet) throw new BadRequestException("Excel sayfasÄ± okunamadÄ±.");
+    const sheet = workbook.getWorksheet("Günlük Giriş Şablonu") || workbook.worksheets[0];
+    if (!sheet) throw new BadRequestException("Excel sayfası okunamadı.");
     const headers = this.excelHeaders(sheet);
     const employees = await this.dailyEmployees({ mainCompanyId, includePassive: true });
     const employeeById = new Map(employees.map((employee: AnyBody) => [String(employee.id), employee]));
@@ -2884,9 +2999,9 @@ export class IkService {
         employeeByPersonnelNo.get(personnelNoText.trim().toUpperCase()) ||
         employeeById.get(employeeIdText) ||
         employeeByName.get(personName.trim().toLocaleUpperCase("tr-TR"));
-      const dayState = this.excelShiftState(this.excelValue(row, headers, ["GÃ¼ndÃ¼z", "Gunduz"]));
+      const dayState = this.excelShiftState(this.excelValue(row, headers, ["Gündüz", "Gunduz"]));
       const nightState = this.excelShiftState(this.excelValue(row, headers, ["Gece"]));
-      const dayNoteRaw = this.excelValue(row, headers, ["GÃ¼ndÃ¼z not", "Gunduz not"]);
+      const dayNoteRaw = this.excelValue(row, headers, ["Gündüz not", "Gunduz not"]);
       const nightNoteRaw = this.excelValue(row, headers, ["Gece not"]);
       if (workDate) dates.push(workDate);
       parsedRows.push({
@@ -2901,10 +3016,10 @@ export class IkService {
         dayShift: dayState.selected,
         nightShift: nightState.selected,
         dayWage: employee
-          ? this.excelNumber(this.excelValue(row, headers, ["GÃ¼ndÃ¼z Ã¼cret", "Gunduz ucret"]), this.number(employee.dayWage))
+          ? this.excelNumber(this.excelValue(row, headers, ["Gündüz ücret", "Gunduz ucret"]), this.number(employee.dayWage))
           : 0,
         nightWage: employee
-          ? this.excelNumber(this.excelValue(row, headers, ["Gece Ã¼cret"]), this.number(employee.nightWage))
+          ? this.excelNumber(this.excelValue(row, headers, ["Gece ücret"]), this.number(employee.nightWage))
           : 0,
         dayNote: typeof dayNoteRaw === "string" ? this.excelCellText(dayNoteRaw) : "",
         nightNote: typeof nightNoteRaw === "string" ? this.excelCellText(nightNoteRaw) : "",
@@ -2917,7 +3032,7 @@ export class IkService {
         ],
       });
     }
-    if (!parsedRows.length) throw new BadRequestException("Excel iÃ§inde okunacak satÄ±r bulunamadÄ±.");
+    if (!parsedRows.length) throw new BadRequestException("Excel içinde okunacak satır bulunamadı.");
     const sortedDates = [...dates].sort();
     const startDate = this.dateOnlyString(body.startDate || body.start) || sortedDates[0];
     const endDate = this.dateOnlyString(body.endDate || body.end) || sortedDates[sortedDates.length - 1] || startDate;
@@ -3030,8 +3145,12 @@ export class IkService {
         dayWage: this.number(row.dayWage),
         nightWage: this.number(row.nightWage),
       }));
-    if (!rows.length) throw new BadRequestException("Uygulanacak Excel satÄ±rÄ± seÃ§ilmedi.");
-    const savedRows = await this.saveDailyRange({ rows, deleteEmptyRows: true });
+    if (!rows.length) throw new BadRequestException("Uygulanacak Excel satırı seçilmedi.");
+    const savedRows = await this.saveDailyRange({
+      mainCompanyId,
+      rows,
+      deleteEmptyRows: true,
+    });
     await this.ensureDailyAttendanceNotesTable();
     const notes = inputRows.filter((row: AnyBody) => row?.enabled !== false && row?.employeeId && row?.workDate);
     for (const note of notes) {
@@ -3121,7 +3240,11 @@ export class IkService {
     const sortedDates = [...dates].sort();
     const startDate = this.dateOnlyString(body.startDate || body.start) || sortedDates[0];
     const endDate = this.dateOnlyString(body.endDate || body.end) || sortedDates[sortedDates.length - 1] || startDate;
-    await this.saveDailyRange({ rows, deleteEmptyRows: true });
+    await this.saveDailyRange({
+      mainCompanyId,
+      rows,
+      deleteEmptyRows: true,
+    });
     await this.ensureDailyAttendanceNotesTable();
     for (const note of notes) {
       for (const shift of ["day", "night"]) {
