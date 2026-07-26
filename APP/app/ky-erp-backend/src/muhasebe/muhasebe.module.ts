@@ -34,6 +34,8 @@ import { DispatchReconciliationController } from "./dispatch-reconciliation.cont
 import { DispatchReconciliationService } from "./dispatch-reconciliation.service";
 import { IsnetOperationsController } from "./isnet-operations.controller";
 import { IsnetOperationsService } from "./isnet-operations.service";
+import { IsnetSourceIntakeController } from "./isnet-source-intake.controller";
+import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -51,6 +53,7 @@ import { IsnetOperationsService } from "./isnet-operations.service";
     AccountingPublicApiController,
     DispatchReconciliationController,
     IsnetOperationsController,
+    IsnetSourceIntakeController,
   ],
   providers: [
     AccountingApiService,
@@ -73,6 +76,7 @@ import { IsnetOperationsService } from "./isnet-operations.service";
     MailTemplateService,
     DispatchReconciliationService,
     IsnetOperationsService,
+    IsnetSourceIntakeService,
   ],
   exports: [
     MuhasebeBelgeService,
