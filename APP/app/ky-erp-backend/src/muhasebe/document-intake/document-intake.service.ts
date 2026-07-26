@@ -8,6 +8,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { lookup as mimeLookup } from "mime-types";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ensureMainCompany } from "../../database/db-company-scope";
 import { safeDecimal, normalizeSearchText } from "../../database/db-normalize";
@@ -100,37 +101,39 @@ export class DocumentIntakeServiceV2 {
     const expanded = await this.expandFiles(mainCompanySlug, batchId, files);
     const items = [];
     const skipped = [];
+    const errors = [];
     const autoApproved = [];
     for (const file of expanded) {
-      const parsed = await this.parser.parseFile(file);
-      const duplicate = await this.findUploadDuplicate(mainCompanySlug, parsed);
-      if (duplicate) {
-        skipped.push({
-          fileName: parsed.originalFileName,
-          duplicate: true,
-          existingId: duplicate.id,
-          status: duplicate.status,
-          reason: duplicate.reason,
+      try {
+        const parsed = await this.parser.parseFile(file);
+        const duplicate = await this.findUploadDuplicate(mainCompanySlug, parsed);
+        if (duplicate) {
+          skipped.push({
+            fileName: parsed.originalFileName,
+            duplicate: true,
+            existingId: duplicate.id,
+            status: duplicate.status,
+            reason: duplicate.reason,
+          });
+          continue;
+        }
+        const classified = this.classifier.classify(parsed);
+        const matched = await this.matcher.enrich(
+          mainCompanySlug,
+          parsed,
+          classified.documentKind,
+        );
+        const item = await this.createIntakeRecord({
+          batchId,
+          mainCompanySlug,
+          mainCompanyId: clean(body.mainCompanyId),
+          parsed,
+          classified,
+          matched,
         });
-        continue;
-      }
-      const classified = this.classifier.classify(parsed);
-      const matched = await this.matcher.enrich(
-        mainCompanySlug,
-        parsed,
-        classified.documentKind,
-      );
-      const item = await this.createIntakeRecord({
-        batchId,
-        mainCompanySlug,
-        mainCompanyId: clean(body.mainCompanyId),
-        parsed,
-        classified,
-        matched,
-      });
-      items.push(item);
-      if (autoApprove) {
-        try {
+        items.push(item);
+        if (autoApprove) {
+          try {
           const approveResult = await this.autoProcess(mainCompanySlug, item.id, {
             confirm: true,
             mainCompanySlug,
@@ -139,17 +142,24 @@ export class DocumentIntakeServiceV2 {
               "XML/PDF yukleme sonrasi kritik olmayan kontrol uyarilari otomatik kabul edildi.",
           });
           autoApproved.push({ id: item.id, ...approveResult });
-        } catch (error: any) {
-          autoApproved.push({
-            id: item.id,
-            ok: false,
-            skipped: true,
-            reason: error?.message || "Toplu otomatik isleme alinamadi.",
-          });
+          } catch (error: any) {
+            autoApproved.push({
+              id: item.id,
+              ok: false,
+              skipped: true,
+              reason: error?.message || "Toplu otomatik isleme alinamadi.",
+            });
+          }
         }
+      } catch (error: any) {
+        errors.push({
+          fileName: file?.fileName || "Dosya",
+          error: true,
+          message: error?.message || "Belge okunamadi veya kaydedilemedi.",
+        });
       }
     }
-    return { ok: true, batchId, items, skipped, autoApproved };
+    return { ok: errors.length === 0, batchId, items, skipped, errors, autoApproved };
   }
 
   async list(query: DocumentIntakeQueryDto) {
@@ -159,6 +169,15 @@ export class DocumentIntakeServiceV2 {
     const rows = await this.readRows(mainCompanySlug);
     const search = clean(query.search).toLocaleLowerCase("tr-TR");
     const statusFilter = clean(query.status).toUpperCase();
+    const requestedLimit = Number(query.limit || query.pageSize || 500);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(500, Math.max(1, Math.trunc(requestedLimit)))
+      : 500;
+    const requestedOffset = Number(query.offset || 0);
+    const offset = Number.isFinite(requestedOffset)
+      ? Math.max(0, Math.trunc(requestedOffset))
+      : 0;
+
     return rows
       .filter((row) => row.status !== "ARCHIVED")
       .filter((row) => {
@@ -190,7 +209,15 @@ export class DocumentIntakeServiceV2 {
           .toLocaleLowerCase("tr-TR")
           .includes(search);
       })
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .slice(offset, offset + limit)
+      .map((row) => {
+        // Liste ekranlari ham belge detayini ayri endpoint'ten aliyor. Ham parser
+        // metni ve tum satirlari her liste isteginde gondermek onlarca MB cevap
+        // uretiyor; listede yalnizca operasyonel ozet alanlari tutulur.
+        const { parseRawJson, lines, firmDraftJson, ...summary } = row;
+        return summary;
+      });
   }
 
   async archive(mainCompanySlug: string, idValue: string, body: any = {}) {
@@ -643,6 +670,15 @@ export class DocumentIntakeServiceV2 {
       body.mainCompanySlug || mainCompanySlug || "mecit-hakan",
     );
     const row = await this.findRow(slug, idValue);
+    if (row.status === "APPROVED" && row.approvedDocumentId) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "Belge daha once onaylanmis.",
+        item: row,
+        documentId: row.approvedDocumentId,
+      };
+    }
     const missing = this.computeMissing(row);
     const manualApproval = body.manualApproval === true;
     const manualBlockers = missing.filter((field) =>
@@ -664,7 +700,9 @@ export class DocumentIntakeServiceV2 {
         "Bu belge daha önce fileHash veya documentNo ile onaylanmış.",
       );
 
-    const approved = await this.prisma.$transaction(async (tx) => {
+    let approved: any;
+    try {
+      approved = await this.prisma.$transaction(async (tx) => {
       const documentType = this.legacyType(row.documentKind);
       const posting = await this.resolveSupplierPosting(tx, slug, row);
       const companyForCategory = row.firmId
@@ -728,6 +766,7 @@ export class DocumentIntakeServiceV2 {
           detectedType: row.documentKind,
           targetType: row.documentKind,
           targetModule: "DOCUMENT_INTAKE",
+          targetRecordId: row.id,
           firmMatchStatus: row.firmMatchStatus,
           raporKategoriId,
           kategoriKaynagi,
@@ -835,6 +874,29 @@ export class DocumentIntakeServiceV2 {
           });
         }
       }
+      if (row.documentKind === "CUSTOMER_DISPATCH") {
+        const linkedModel = row.modelId
+          ? await tx.modelRecord.findFirst({
+              where: { id: row.modelId, mainCompanySlug: slug },
+              select: { modelName: true },
+            })
+          : null;
+        for (const line of row.lines || []) {
+          await tx.customerDispatchLine.create({
+            data: {
+              mainCompanySlug: slug,
+              documentId: document.id,
+              aciklama: clean(line.description || line.rawName) || null,
+              adet: safeDecimal(line.quantity || 0),
+              birim: clean(line.unit) || "ADET",
+              modelId: row.modelId || null,
+              modelAdi: linkedModel?.modelName || null,
+              modelAdiOnerisi: clean(line.modelGuess || row.modelGuess) || null,
+              durum: row.modelId ? "MODELE_BAGLI" : "MODEL_BAGLANTISI_BEKLIYOR",
+            },
+          });
+        }
+      }
       if (
         row.modelId &&
         ["OUR_INVOICE", "OUR_DISPATCH", "CUSTOMER_DISPATCH"].includes(
@@ -874,14 +936,29 @@ export class DocumentIntakeServiceV2 {
       ) {
         const createOpenPayable =
           row.documentKind === "OUR_INVOICE" || posting.type === "OPEN_PAYABLE";
-        const effect =
+        const fullDocumentEffect =
           row.documentKind === "OUR_INVOICE"
             ? Number(row.grandTotal || 0)
             : -Number(row.grandTotal || 0);
+        const vatPercentagePayable =
+          row.documentKind === "SUPPLIER_INVOICE" &&
+          posting.currentAccountPostingMode === "VAT_PERCENTAGE"
+            ? Number(
+                (
+                  (Number(row.vatTotal || 0) *
+                    Number(posting.vatPayablePercentage || 0)) /
+                  100
+                ).toFixed(2),
+              )
+            : 0;
         const company = await tx.company.findFirst({
           where: { id: row.firmId, mainCompanySlug: slug },
         });
-        const cariEffect = createOpenPayable ? effect : 0;
+        const cariEffect = createOpenPayable
+          ? fullDocumentEffect
+          : vatPercentagePayable > 0
+            ? -vatPercentagePayable
+            : 0;
         const balanceAfter = Number(company?.currentBalance || 0) + cariEffect;
         const currentAccountMovement = await tx.currentAccountMovement.create({
           data: {
@@ -891,7 +968,9 @@ export class DocumentIntakeServiceV2 {
             movementType:
               row.documentKind === "OUR_INVOICE"
                 ? "SATIS_FATURA"
-                : "ALIS_FATURA",
+                : posting.currentAccountPostingMode === "VAT_PERCENTAGE"
+                  ? "KDV_PAYI_BORCU"
+                  : "ALIS_FATURA",
             sourceType: "DOCUMENT_INTAKE",
             documentNo: row.documentNo || row.invoiceNo,
             documentId: document.id,
@@ -901,7 +980,13 @@ export class DocumentIntakeServiceV2 {
             amount: safeDecimal(Math.abs(cariEffect)),
             effect: safeDecimal(cariEffect),
             balanceAfter: safeDecimal(balanceAfter),
-            raw: { documentIntakeId: row.id, supplierPostingType: posting.type },
+            raw: {
+              documentIntakeId: row.id,
+              supplierPostingType: posting.type,
+              currentAccountPostingMode: posting.currentAccountPostingMode,
+              vatPayablePercentage: posting.vatPayablePercentage,
+              sourceVatAmount: Number(row.vatTotal || 0),
+            },
           },
         });
         await tx.company.update({
@@ -967,6 +1052,8 @@ export class DocumentIntakeServiceV2 {
           supplierPostingType: posting.type,
           paymentStatus: posting.paymentStatus,
           openPayableEffect: cariEffect,
+          vatPercentagePayable,
+          vatPayablePercentage: posting.vatPayablePercentage,
           expenseEffect:
             createOpenPayable || posting.type === "VAT_ONLY_EXPENSE"
               ? 0
@@ -1042,8 +1129,29 @@ export class DocumentIntakeServiceV2 {
           })
           .catch(() => null);
       }
-      return document;
-    });
+        return document;
+      });
+    } catch (error: any) {
+      if (error?.code === "P2002") {
+        const existing = await this.prisma.document.findFirst({
+          where: {
+            mainCompanySlug: slug,
+            targetModule: "DOCUMENT_INTAKE",
+            targetRecordId: row.id,
+          },
+        });
+        if (existing) {
+          return {
+            ok: true,
+            skipped: true,
+            reason: "Belge es zamanli bir istekte zaten onaylanmis.",
+            item: row,
+            documentId: existing.id,
+          };
+        }
+      }
+      throw error;
+    }
     const next = {
       ...row,
       status: "APPROVED" as DocumentIntakeStatus,
@@ -1183,8 +1291,10 @@ export class DocumentIntakeServiceV2 {
       matched: any;
     };
     const lineRows = matched.lines.map((line: any, index: number) => ({
-      id: line.lineId || id("line"),
-      lineId: line.lineId || id("line"),
+      // UBL satir numaralari farkli belgelerde tekrar eder. Kaynak kimligini
+      // lineId alaninda koru; veritabani anahtarini her zaman benzersiz uret.
+      id: id("line"),
+      lineId: line.lineId || String(index + 1),
       lineNo: line.lineNo || index + 1,
       rawName: line.rawName,
       description: line.description,
@@ -1337,8 +1447,10 @@ export class DocumentIntakeServiceV2 {
         this.moneyNumber(line.unitPrice) <= 0 &&
         !(this.moneyNumber(line.subtotal) > 0 && this.moneyNumber(line.quantity) > 0),
     ).length;
-    let quarantineCode = "READY";
-    if (missingPriceLineCount) quarantineCode = "LINE_PRICE_MISSING";
+    const zeroValueSupplierDocument = this.isZeroValueSupplierDocument(row);
+    let quarantineCode = zeroValueSupplierDocument ? "ZERO_VALUE_DOCUMENT" : "READY";
+    if (missingPriceLineCount && !zeroValueSupplierDocument)
+      quarantineCode = "LINE_PRICE_MISSING";
     else if (!subtotalOk) quarantineCode = "LINE_TOTAL_MISMATCH";
     else if (!grandTotalOk) quarantineCode = "GRAND_TOTAL_MISMATCH";
     else if (vatReview) quarantineCode = "VAT_REVIEW";
@@ -1372,7 +1484,9 @@ export class DocumentIntakeServiceV2 {
       withholdingSubtotals: taxBreakdown.withholdingSubtotals || [],
       allowanceCharges: taxBreakdown.allowanceCharges || [],
       explanation:
-        quarantineCode === "VAT_REVIEW"
+        quarantineCode === "ZERO_VALUE_DOCUMENT"
+          ? "Bedelsiz tedarikci belgesi: firma, urun ve miktar kontrolleri tamamlandi; cari ve KDV tutari olusturulmadan onaylanabilir."
+          : quarantineCode === "VAT_REVIEW"
           ? "Satir matrah toplami belge matrahiyla uyumlu; belge KDV/vergi toplamı satir KDV toplamindan farkli. XML vergi dokumu kontrol edilerek manuel onaylanabilir."
           : quarantineCode === "LINE_TOTAL_MISMATCH"
             ? "Satir matrah toplami belge matrahiyla uyusmuyor."
@@ -1388,12 +1502,15 @@ export class DocumentIntakeServiceV2 {
     const missing = new Set<string>();
     const control = this.buildControlSummary(row);
     row.controlSummary = control;
+    const zeroValueSupplierDocument = this.isZeroValueSupplierDocument(row);
     if (!row.documentNo && !row.invoiceNo && !row.dispatchNo)
       missing.add("DOCUMENT_NO");
     if (!row.firmId) missing.add("FIRM");
     if (["OUR_INVOICE", "SUPPLIER_INVOICE", "EXPENSE_INVOICE"].includes(row.documentKind)) {
-      if (Number(row.subtotal || 0) <= 0) missing.add("SUBTOTAL_ZERO");
-      if (Number(row.grandTotal || 0) <= 0) missing.add("TOTAL_ZERO");
+      if (Number(row.subtotal || 0) <= 0 && !zeroValueSupplierDocument)
+        missing.add("SUBTOTAL_ZERO");
+      if (Number(row.grandTotal || 0) <= 0 && !zeroValueSupplierDocument)
+        missing.add("TOTAL_ZERO");
       if (Number(row.vatTotal || 0) < 0) missing.add("VAT_INVALID");
     }
     if (
@@ -1416,8 +1533,12 @@ export class DocumentIntakeServiceV2 {
           line.priceDerived = true;
           line.priceSource = line.priceSource || "Subtotal/Quantity";
         }
-        if (Number(line.unitPrice || 0) <= 0) missing.add("LINE_PRICE_MISSING");
-        if (Number(line.subtotal || line.total || 0) <= 0)
+        if (Number(line.unitPrice || 0) <= 0 && !zeroValueSupplierDocument)
+          missing.add("LINE_PRICE_MISSING");
+        if (
+          Number(line.subtotal || line.total || 0) <= 0 &&
+          !zeroValueSupplierDocument
+        )
           missing.add("LINE_TOTAL_ZERO");
       }
       if (!control.subtotalOk) missing.add("LINE_TOTAL_MISMATCH");
@@ -1434,18 +1555,40 @@ export class DocumentIntakeServiceV2 {
     return [...missing];
   }
 
+  private isZeroValueSupplierDocument(row: any) {
+    if (row?.documentKind !== "SUPPLIER_INVOICE") return false;
+    const lines = Array.isArray(row?.lines) ? row.lines : [];
+    if (!lines.length || !row?.firmId) return false;
+    if (!clean(row?.documentNo || row?.invoiceNo || row?.dispatchNo)) return false;
+    if (
+      this.moneyNumber(row?.subtotal) !== 0 ||
+      this.moneyNumber(row?.vatTotal) !== 0 ||
+      this.moneyNumber(row?.grandTotal) !== 0
+    ) {
+      return false;
+    }
+    return lines.every(
+      (line: any) =>
+        !!line?.productId &&
+        !!clean(line?.rawName || line?.description) &&
+        this.moneyNumber(line?.quantity) > 0 &&
+        this.moneyNumber(line?.unitPrice) === 0 &&
+        this.moneyNumber(line?.subtotal || line?.total) === 0,
+    );
+  }
+
   private statusForMissing(missing: string[]) {
     return missing.length ? "MISSING_INFO" : "READY";
   }
 
-  private async readRows(mainCompanySlug: string): Promise<any[]> {
+  private async readRows(mainCompanySlug: string, take = 500): Promise<any[]> {
     const rows = await this.prisma.documentIntake.findMany({
       where: { mainCompanySlug },
       include: {
         lines: { orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }] },
       },
       orderBy: { createdAt: "desc" },
-      take: 500,
+      take: Math.min(Math.max(take, 1), 5000),
     });
     return rows.map((row: any) => {
       const meta =
@@ -1598,7 +1741,10 @@ export class DocumentIntakeServiceV2 {
           receiverName: clean(row.receiverName) || null,
           receiverTaxNo: clean(row.receiverTaxNo) || null,
           firmId: clean(row.firmId) || null,
-          firmDraftJson: row.firmDraftJson || undefined,
+          firmDraftJson:
+            row.firmDraftJson === null
+              ? Prisma.DbNull
+              : row.firmDraftJson || undefined,
           modelId: clean(row.modelId) || null,
           modelGuess: clean(row.modelGuess) || null,
           currency: clean(row.currency) || "TRY",
@@ -1611,7 +1757,10 @@ export class DocumentIntakeServiceV2 {
         },
         update: {
           firmId: clean(row.firmId) || null,
-          firmDraftJson: row.firmDraftJson || undefined,
+          firmDraftJson:
+            row.firmDraftJson === null
+              ? Prisma.DbNull
+              : row.firmDraftJson || undefined,
           modelId: clean(row.modelId) || null,
           documentKind,
           subtotal: safeDecimal(row.subtotal || 0),
@@ -1626,9 +1775,20 @@ export class DocumentIntakeServiceV2 {
         where: { documentIntakeId: row.id },
       });
       if (Array.isArray(row.lines) && row.lines.length) {
+        const usedLineIds = new Set<string>();
         await tx.documentIntakeLine.createMany({
-          data: row.lines.map((line: any, index: number) => ({
-            id: clean(line.id || line.lineId) || id("line"),
+          data: row.lines.map((line: any, index: number) => {
+            const requestedId = clean(line.id);
+            const reusableId = requestedId.startsWith("line_")
+              ? requestedId
+              : "";
+            const databaseId =
+              reusableId && !usedLineIds.has(reusableId)
+                ? reusableId
+                : id("line");
+            usedLineIds.add(databaseId);
+            return {
+            id: databaseId,
             documentIntakeId: row.id,
             lineNo: Number(line.lineNo || index + 1),
             rawName: clean(line.rawName) || null,
@@ -1658,14 +1818,15 @@ export class DocumentIntakeServiceV2 {
               priceSource: line.priceSource || "",
               missingFields: line.missingFields || [],
             },
-          })),
+          };
+          }),
         });
       }
     });
   }
 
   private async findRow(mainCompanySlug: string, idValue: string) {
-    const row = (await this.readRows(mainCompanySlug)).find(
+    const row = (await this.readRows(mainCompanySlug, 5000)).find(
       (item) => item.id === idValue,
     );
     if (!row) throw new NotFoundException("Belge intake kaydı bulunamadı.");
@@ -1802,6 +1963,8 @@ export class DocumentIntakeServiceV2 {
         type: "OPEN_PAYABLE",
         paymentStatus: "UNPAID",
         expenseCategory: "",
+        currentAccountPostingMode: "FULL_DOCUMENT",
+        vatPayablePercentage: 0,
       };
     }
     const company = row.firmId
@@ -1826,6 +1989,16 @@ export class DocumentIntakeServiceV2 {
       raw.varsayilanPesinKapama ??
       raw.pesinKapat;
     const configured = clean(raw.defaultSupplierPostingType).toUpperCase();
+    const vatPayablePercentage = Math.min(
+      100,
+      Math.max(
+        0,
+        Number(raw.vatPayablePercentage ?? raw.kdvCariBorcYuzdesi ?? 0) || 0,
+      ),
+    );
+    const configuredCariMode = clean(
+      raw.currentAccountPostingMode || raw.cariKayitModu,
+    ).toUpperCase();
     if (
       [
         "CASH_EXPENSE",
@@ -1848,6 +2021,12 @@ export class DocumentIntakeServiceV2 {
           : "PAID_EXPENSE",
         paymentStatus: clean(raw.defaultPaymentStatus) || "PAID",
         expenseCategory: clean(raw.expenseCategory),
+        currentAccountPostingMode:
+          configuredCariMode === "VAT_PERCENTAGE" ||
+          profile === "VAT_ONLY_EXPENSE"
+            ? "VAT_PERCENTAGE"
+            : "NONE",
+        vatPayablePercentage,
       };
     }
     const type =
@@ -1860,6 +2039,15 @@ export class DocumentIntakeServiceV2 {
         clean(raw.defaultPaymentStatus) ||
         (type === "OPEN_PAYABLE" ? "UNPAID" : "PAID"),
       expenseCategory: clean(raw.expenseCategory),
+      currentAccountPostingMode:
+        configuredCariMode === "NONE"
+          ? "NONE"
+          : configuredCariMode === "VAT_PERCENTAGE"
+            ? "VAT_PERCENTAGE"
+            : type === "OPEN_PAYABLE"
+              ? "FULL_DOCUMENT"
+              : "NONE",
+      vatPayablePercentage,
     };
   }
 

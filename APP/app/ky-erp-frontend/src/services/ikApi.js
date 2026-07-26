@@ -303,6 +303,26 @@ export async function saveIkAdvancedException(payload = {}) {
   return unwrap(await apiPost("/ik/advanced/exception", payload));
 }
 
+export async function saveIkAdvancedLeave(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave", payload));
+}
+
+export async function getIkAdvancedLeaveCenter(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/leave-center", params));
+}
+
+export async function previewIkAdvancedLeave(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave/preview", payload));
+}
+
+export async function saveIkAdvancedLeavePolicy(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave/policy", payload));
+}
+
+export async function cancelIkAdvancedLeave(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave/cancel", payload));
+}
+
 export async function deleteIkAdvancedException(payload = {}) {
   return unwrap(await apiPost("/ik/advanced/exception/delete", payload));
 }

@@ -141,6 +141,8 @@ enum ModuleKey {
   IMALAT
   BOYAHANE
   IK
+  ISNET
+  ASISTAN
   ADMIN
   RAPORLAR
 
@@ -181,6 +183,93 @@ model UserModulePermission {
   @@map("auth_user_module_permissions")
 }
 
+model AiConversation {
+  id              String            @id @default(uuid())
+  userId          String            @map("user_id")
+  mainCompanySlug String?           @map("main_company_slug")
+  title           String
+  moduleContext   Json?             @map("module_context")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+  messages        AiMessage[]
+  pendingActions  AiPendingAction[]
+
+  @@index([userId, updatedAt])
+  @@index([mainCompanySlug])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(uuid())
+  conversationId String         @map("conversation_id")
+  role           String
+  content        String
+  toolName       String?        @map("tool_name")
+  toolPayload    Json?          @map("tool_payload")
+  tokenInput     Int            @default(0) @map("token_input")
+  tokenOutput    Int            @default(0) @map("token_output")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiPendingAction {
+  id                    String         @id @default(uuid())
+  conversationId        String         @map("conversation_id")
+  userId                String         @map("user_id")
+  actionType            String         @map("action_type")
+  actionPayload         Json           @map("action_payload")
+  confirmationTokenHash String         @map("confirmation_token_hash")
+  status                String         @default("PENDING")
+  expiresAt             DateTime       @map("expires_at")
+  approvedAt            DateTime?      @map("approved_at")
+  executedAt            DateTime?      @map("executed_at")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  conversation          AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([conversationId, status])
+  @@map("ai_pending_actions")
+}
+
+model AiAuditLog {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  conversationId String?  @map("conversation_id")
+  operation      String
+  module         String?
+  recordType     String?  @map("record_type")
+  recordId       String?  @map("record_id")
+  beforeData     Json?    @map("before_data")
+  afterData      Json?    @map("after_data")
+  success        Boolean  @default(true)
+  errorMessage   String?  @map("error_message")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([conversationId])
+  @@map("ai_audit_logs")
+}
+
+model AiUsageDaily {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  usageDate     String   @map("usage_date")
+  requestCount  Int      @default(0) @map("request_count")
+  inputTokens   Int      @default(0) @map("input_tokens")
+  outputTokens  Int      @default(0) @map("output_tokens")
+  estimatedCost Decimal  @default(0) @map("estimated_cost")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, usageDate])
+  @@index([usageDate])
+  @@map("ai_usage_daily")
+}
+
 model Company {
   id                        String                   @id @default(uuid())
   mainCompanySlug           String                   @map("main_company_slug")
@@ -188,6 +277,7 @@ model Company {
   name                      String
   normalizedName            String                   @map("normalized_name")
   type                      String                   @default("SATICI")
+  companyType               String                   @default("SUPPLIER") @map("company_type")
   taxNo                     String?                  @map("tax_no")
   taxOffice                 String?                  @map("tax_office")
   phone                     String?
@@ -316,6 +406,7 @@ model Document {
   company         Company?                 @relation(fields: [companyId], references: [id])
   mainCompany     MainCompany              @relation(fields: [mainCompanySlug], references: [slug])
 
+  @@unique([mainCompanySlug, targetModule, targetRecordId])
   @@index([mainCompanySlug])
   @@index([mainCompanySlug, date])
   @@index([mainCompanySlug, fileHash])
@@ -361,15 +452,74 @@ model MuhasebeRaporManuelKalem {
   tutar           Decimal   @default(0)
   kdv             Decimal   @default(0)
   aciklama        String?
+  belgeNo         String?   @map("belge_no")
+  resmiTip        String    @default("GAYRI_RESMI") @map("resmi_tip")
+  kdvOrani        Decimal   @default(0) @map("kdv_orani")
+  raporaDahil     Boolean   @default(true) @map("rapora_dahil")
+  odemeSekli      String?   @map("odeme_sekli")
+  not             String?
+  cariyeEkle      Boolean   @default(false) @map("cariye_ekle")
+  cariHareketId   String?   @map("cari_hareket_id")
+  sabitSablonId   String?   @map("sabit_sablon_id")
+  tahakkukAyi     String?   @map("tahakkuk_ayi")
+  islemTuru       String    @default("GIDER") @map("islem_turu")
   aktifMi         Boolean   @default(true) @map("aktif_mi")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
 
+  @@unique([sabitSablonId, tahakkukAyi])
   @@index([mainCompanySlug])
   @@index([kategoriId])
   @@index([firmaId])
   @@map("muhasebe_rapor_manuel_kalemler")
+}
+
+model MuhasebeSabitGiderSablonu {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  ad              String
+  kategoriId      String?   @map("kategori_id")
+  firmaId         String?   @map("firma_id")
+  tutar           Decimal   @default(0)
+  resmiTip        String    @default("GAYRI_RESMI") @map("resmi_tip")
+  kdvOrani        Decimal   @default(0) @map("kdv_orani")
+  baslangicAyi    String    @map("baslangic_ayi")
+  bitisAyi        String?   @map("bitis_ayi")
+  herAyOtomatik   Boolean   @default(true) @map("her_ay_otomatik")
+  cariyeEkle      Boolean   @default(false) @map("cariye_ekle")
+  aktifMi         Boolean   @default(true) @map("aktif_mi")
+  aciklama        String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug, aktifMi])
+  @@index([kategoriId])
+  @@map("muhasebe_sabit_gider_sablonlari")
+}
+
+model MuhasebeRaporKayitAyari {
+  id                  String   @id @default(uuid())
+  mainCompanySlug     String   @map("main_company_slug")
+  sourceType          String   @map("source_type")
+  sourceId            String   @map("source_id")
+  reportIncluded      Boolean? @map("report_included")
+  reportCategoryId    String?  @map("report_category_id")
+  reportAmount        Decimal? @map("report_amount")
+  reportDescription   String?  @map("report_description")
+  reportOfficialType  String?  @map("report_official_type")
+  reportVatAmount     Decimal? @map("report_vat_amount")
+  reportVatIncluded   Boolean? @map("report_vat_included")
+  reportExpenseStatus String?  @map("report_expense_status")
+  reportNote          String?  @map("report_note")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, sourceType, sourceId])
+  @@index([mainCompanySlug, reportIncluded])
+  @@index([reportCategoryId])
+  @@map("muhasebe_rapor_kayit_ayarlari")
 }
 
 model DocumentFile {
@@ -586,32 +736,41 @@ model DocumentIntake {
 }
 
 model DocumentIntakeLine {
-  id                String         @id @default(uuid())
-  documentIntakeId  String         @map("document_intake_id")
-  lineNo            Int?           @map("line_no")
-  rawName           String?        @map("raw_name")
-  description       String?
-  productId         String?        @map("product_id")
-  productDraftJson  Json?          @map("product_draft_json")
-  quantity          Decimal        @default(0)
-  unit              String?
-  kg                Decimal        @default(0)
-  packageInfo       String?        @map("package_info")
-  unitPrice         Decimal        @default(0) @map("unit_price")
-  discountRate      Decimal        @default(0) @map("discount_rate")
-  discountAmount    Decimal        @default(0) @map("discount_amount")
-  subtotal          Decimal        @default(0)
-  vatRate           Decimal        @default(0) @map("vat_rate")
-  vatAmount         Decimal        @default(0) @map("vat_amount")
-  total             Decimal        @default(0)
-  lotNo             String?        @map("lot_no")
-  modelGuess        String?        @map("model_guess")
-  missingFieldsJson Json?          @map("missing_fields_json")
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
-  documentIntake    DocumentIntake @relation(fields: [documentIntakeId], references: [id], onDelete: Cascade)
+  id                  String         @id @default(uuid())
+  documentIntakeId    String         @map("document_intake_id")
+  lineNo              Int?           @map("line_no")
+  rawName             String?        @map("raw_name")
+  description         String?
+  productId           String?        @map("product_id")
+  productDraftJson    Json?          @map("product_draft_json")
+  quantity            Decimal        @default(0)
+  unit                String?
+  kg                  Decimal        @default(0)
+  packageInfo         String?        @map("package_info")
+  unitPrice           Decimal        @default(0) @map("unit_price")
+  discountRate        Decimal        @default(0) @map("discount_rate")
+  discountAmount      Decimal        @default(0) @map("discount_amount")
+  subtotal            Decimal        @default(0)
+  vatRate             Decimal        @default(0) @map("vat_rate")
+  vatAmount           Decimal        @default(0) @map("vat_amount")
+  total               Decimal        @default(0)
+  lotNo               String?        @map("lot_no")
+  modelGuess          String?        @map("model_guess")
+  modelId             String?        @map("model_id")
+  orderNo             String?        @map("order_no")
+  productCode         String?        @map("product_code")
+  color               String?
+  region              String?
+  matchConfidence     Decimal?       @map("match_confidence")
+  matchStatus         String?        @map("match_status")
+  matchCandidatesJson Json?          @map("match_candidates_json")
+  missingFieldsJson   Json?          @map("missing_fields_json")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  documentIntake      DocumentIntake @relation(fields: [documentIntakeId], references: [id], onDelete: Cascade)
 
   @@index([documentIntakeId])
+  @@index([modelId])
   @@map("document_intake_lines")
 }
 
@@ -698,24 +857,93 @@ model DocumentReadTemplate {
 }
 
 model CustomerDispatchLine {
-  id                String    @id @default(uuid())
-  mainCompanySlug   String    @map("main_company_slug")
-  musteriIrsaliyeId String?   @map("musteri_irsaliye_id")
-  documentId        String?   @map("document_id")
-  aciklama          String?
-  adet              Decimal   @default(0)
-  birim             String?
-  modelId           String?   @map("model_id")
-  modelAdi          String?   @map("model_adi")
-  modelAdiOnerisi   String?   @map("model_adi_onerisi")
-  durum             String?
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  deletedAt         DateTime? @map("deleted_at")
+  id                     String                          @id @default(uuid())
+  mainCompanySlug        String                          @map("main_company_slug")
+  musteriIrsaliyeId      String?                         @map("musteri_irsaliye_id")
+  documentId             String?                         @map("document_id")
+  aciklama               String?
+  adet                   Decimal                         @default(0)
+  birim                  String?
+  modelId                String?                         @map("model_id")
+  modelAdi               String?                         @map("model_adi")
+  modelAdiOnerisi        String?                         @map("model_adi_onerisi")
+  durum                  String?
+  createdAt              DateTime                        @default(now()) @map("created_at")
+  updatedAt              DateTime                        @updatedAt @map("updated_at")
+  deletedAt              DateTime?                       @map("deleted_at")
+  nonBillableAllocations DispatchNonBillableAllocation[]
 
   @@index([mainCompanySlug])
   @@index([documentId])
   @@map("customer_dispatch_lines")
+}
+
+model DispatchNonBillableAllocation {
+  id              String               @id @default(uuid())
+  mainCompanySlug String               @map("main_company_slug")
+  dispatchLineId  String               @map("dispatch_line_id")
+  category        String
+  quantity        Decimal              @default(0)
+  deliveryMethod  String               @default("ELDEN_TESLIM") @map("delivery_method")
+  note            String?
+  createdBy       String?              @map("created_by")
+  updatedBy       String?              @map("updated_by")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  deletedAt       DateTime?            @map("deleted_at")
+  dispatchLine    CustomerDispatchLine @relation(fields: [dispatchLineId], references: [id], onDelete: Cascade)
+
+  @@index([mainCompanySlug, dispatchLineId, deletedAt])
+  @@index([mainCompanySlug, category])
+  @@map("dispatch_non_billable_allocations")
+}
+
+model DispatchInvoiceMatch {
+  id                 String    @id @default(uuid())
+  mainCompanySlug    String    @map("main_company_slug")
+  dispatchId         String?   @map("dispatch_id")
+  dispatchLineId     String    @map("dispatch_line_id")
+  invoiceId          String    @map("invoice_id")
+  invoiceLineId      String    @map("invoice_line_id")
+  dispatchQty        Decimal   @default(0) @map("dispatch_qty")
+  matchedQty         Decimal   @default(0) @map("matched_qty")
+  matchType          String    @map("match_type")
+  confidence         Int       @default(0)
+  status             String    @default("ACTIVE")
+  matchedFieldsJson  Json?     @map("matched_fields_json")
+  mismatchFieldsJson Json?     @map("mismatch_fields_json")
+  isManual           Boolean   @default(false) @map("is_manual")
+  approvedBy         String?   @map("approved_by")
+  approvedAt         DateTime? @map("approved_at")
+  rejectedBy         String?   @map("rejected_by")
+  rejectedAt         DateTime? @map("rejected_at")
+  note               String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, invoiceLineId])
+  @@index([mainCompanySlug, dispatchLineId])
+  @@index([mainCompanySlug, invoiceId])
+  @@index([mainCompanySlug, status])
+  @@map("dispatch_invoice_matches")
+}
+
+model DispatchInvoiceMatchLog {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  matchId         String?  @map("match_id")
+  dispatchLineId  String   @map("dispatch_line_id")
+  action          String
+  oldValueJson    Json?    @map("old_value_json")
+  newValueJson    Json?    @map("new_value_json")
+  description     String?
+  userId          String?  @map("user_id")
+  isAutomatic     Boolean  @default(false) @map("is_automatic")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug, dispatchLineId, createdAt])
+  @@index([matchId])
+  @@map("dispatch_invoice_match_logs")
 }
 
 model ActivityLog {
@@ -746,7 +974,7 @@ model JsonStore {
   fileName        String   @map("file_name")
   data            Json
   createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([scope, mainCompanySlug, fileName])
   @@index([scope])
@@ -1078,23 +1306,23 @@ model InvoiceItem {
 }
 
 model SalesInvoiceState {
-  id                 String   @id @default(uuid())
-  mainCompanySlug    String   @map("main_company_slug")
-  invoiceId          String   @unique @map("invoice_id")
-  companyId          String   @map("company_id")
-  invoiceNo          String   @map("invoice_no")
-  invoiceDate        DateTime @map("invoice_date")
-  documentType       String   @default("SATIS_FATURA") @map("document_type")
-  sourceKind         String   @default("MANUAL") @map("source_kind")
-  cariStatus         String   @default("CARI_PENDING") @map("cari_status")
-  modelStatus        String   @default("MODEL_PENDING") @map("model_status")
-  cariMovementId     String?  @map("cari_movement_id")
-  dispatchNo         String?  @map("dispatch_no")
-  orderNo            String?  @map("order_no")
-  note               String?
-  parserConfidence   Decimal? @map("parser_confidence")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  invoiceId        String   @unique @map("invoice_id")
+  companyId        String   @map("company_id")
+  invoiceNo        String   @map("invoice_no")
+  invoiceDate      DateTime @map("invoice_date")
+  documentType     String   @default("SATIS_FATURA") @map("document_type")
+  sourceKind       String   @default("MANUAL") @map("source_kind")
+  cariStatus       String   @default("CARI_PENDING") @map("cari_status")
+  modelStatus      String   @default("MODEL_PENDING") @map("model_status")
+  cariMovementId   String?  @map("cari_movement_id")
+  dispatchNo       String?  @map("dispatch_no")
+  orderNo          String?  @map("order_no")
+  note             String?
+  parserConfidence Decimal? @map("parser_confidence")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@unique([mainCompanySlug, companyId, invoiceNo, invoiceDate, documentType])
   @@index([mainCompanySlug, invoiceDate])
@@ -1104,18 +1332,18 @@ model SalesInvoiceState {
 }
 
 model SalesInvoiceLineModelLink {
-  id                 String   @id @default(uuid())
-  mainCompanySlug    String   @map("main_company_slug")
-  invoiceId          String   @map("invoice_id")
-  invoiceLineId      String   @map("invoice_line_id")
-  modelId            String   @map("model_id")
-  printRegionId      String?  @map("print_region_id")
-  printRegionName    String?  @map("print_region_name")
-  matchedQuantity    Decimal  @default(0) @map("matched_quantity")
-  note               String?
-  createdBy          String?  @map("created_by")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  invoiceId       String   @map("invoice_id")
+  invoiceLineId   String   @map("invoice_line_id")
+  modelId         String   @map("model_id")
+  printRegionId   String?  @map("print_region_id")
+  printRegionName String?  @map("print_region_name")
+  matchedQuantity Decimal  @default(0) @map("matched_quantity")
+  note            String?
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@unique([invoiceLineId, modelId, printRegionId])
   @@index([mainCompanySlug, invoiceId])
@@ -1450,6 +1678,149 @@ model Setting {
   @@map("settings")
 }
 
+model IsnetDocumentState {
+  id               String    @id @default(uuid())
+  mainCompanySlug  String    @map("main_company_slug")
+  automationKey    String    @map("automation_key")
+  sourceId         String?   @map("source_id")
+  kind             String?
+  direction        String?
+  documentNo       String?   @map("document_no")
+  partnerName      String?   @map("partner_name")
+  dateText         String?   @map("date_text")
+  modelName        String?   @map("model_name")
+  modelLinked      Boolean   @default(false) @map("model_linked")
+  archiveStage     String?   @map("archive_stage")
+  intakeId         String?   @map("intake_id")
+  pdfPath          String?   @map("pdf_path")
+  xmlPath          String?   @map("xml_path")
+  customerDispatch Boolean   @default(false) @map("customer_dispatch")
+  printEligible    Boolean   @default(false) @map("print_eligible")
+  printedAt        DateTime? @map("printed_at")
+  completed        Boolean   @default(false)
+  downloadedAt     DateTime? @map("downloaded_at")
+  markedReadAt     DateTime? @map("marked_read_at")
+  firstSeenAt      DateTime? @map("first_seen_at")
+  newDocument      Boolean   @default(false) @map("new_document")
+  appReadAt        DateTime? @map("app_read_at")
+  error            String?
+  lastAttemptAt    DateTime? @map("last_attempt_at")
+  metadata         Json?     @map("metadata_json")
+  uuid             String?
+  issuerTaxNo      String?   @map("issuer_tax_no")
+  receiverTaxNo    String?   @map("receiver_tax_no")
+  companyId        String?   @map("company_id")
+  companyType      String?   @map("company_type")
+  documentClass    String?   @map("document_class")
+  pdfStatus        String?   @map("pdf_status")
+  xmlStatus        String?   @map("xml_status")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, automationKey])
+  @@index([mainCompanySlug, completed])
+  @@index([mainCompanySlug, printEligible, printedAt])
+  @@index([mainCompanySlug, documentNo])
+  @@map("isnet_document_states")
+}
+
+model IsnetModelAlias {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  companyId       String?   @map("company_id")
+  rawText         String    @map("raw_text")
+  normalizedText  String    @map("normalized_text")
+  orderNo         String?   @map("order_no")
+  productCode     String?   @map("product_code")
+  modelId         String    @map("model_id")
+  confidence      Decimal   @default(100)
+  approved        Boolean   @default(false)
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  usageCount      Int       @default(0) @map("usage_count")
+
+  @@index([mainCompanySlug, companyId, normalizedText])
+  @@index([mainCompanySlug, modelId])
+  @@map("isnet_model_aliases")
+}
+
+model IsnetInvoiceDraftRequest {
+  id                    String                       @id @default(uuid())
+  mainCompanySlug       String                       @map("main_company_slug")
+  idempotencyKey        String                       @map("idempotency_key")
+  sourceId              String?                      @map("source_id")
+  dispatchNo            String?                      @map("dispatch_no")
+  externalId            String                       @map("external_id")
+  status                String                       @default("CREATING")
+  draftNo               String?                      @map("draft_no")
+  portalDraftId         String?                      @map("portal_draft_id")
+  expectedSnapshot      Json?                        @map("expected_snapshot")
+  portalSnapshot        Json?                        @map("portal_snapshot")
+  verificationDiff      Json?                        @map("verification_diff")
+  draftVersion          String?                      @map("draft_version")
+  approvalVersion       String?                      @map("approval_version")
+  approvedAt            DateTime?                    @map("approved_at")
+  approvedBy            String?                      @map("approved_by")
+  submittedAt           DateTime?                    @map("submitted_at")
+  submittedBy           String?                      @map("submitted_by")
+  officialInvoiceNumber String?                      @map("official_invoice_number")
+  officialUuid          String?                      @map("official_uuid")
+  isnetDocumentId       String?                      @map("isnet_document_id")
+  officialStatus        String?                      @map("official_status")
+  portalResponseHash    String?                      @map("portal_response_hash")
+  pdfPath               String?                      @map("pdf_path")
+  xmlPath               String?                      @map("xml_path")
+  salesInvoiceId        String?                      @map("sales_invoice_id")
+  currentMovementId     String?                      @map("current_movement_id")
+  mailPackageId         String?                      @map("mail_package_id")
+  error                 String?
+  completedAt           DateTime?                    @map("completed_at")
+  createdAt             DateTime                     @default(now()) @map("created_at")
+  updatedAt             DateTime                     @updatedAt @map("updated_at")
+  lineAllocations       IsnetInvoiceLineAllocation[]
+
+  @@unique([mainCompanySlug, idempotencyKey])
+  @@unique([mainCompanySlug, externalId])
+  @@unique([mainCompanySlug, portalDraftId])
+  @@unique([mainCompanySlug, officialInvoiceNumber])
+  @@unique([mainCompanySlug, officialUuid])
+  @@index([mainCompanySlug, sourceId])
+  @@index([mainCompanySlug, status])
+  @@map("isnet_invoice_draft_requests")
+}
+
+model IsnetInvoiceLineAllocation {
+  id                   String                   @id @default(uuid())
+  draftRequestId       String                   @map("draft_request_id")
+  sourceLineKey        String                   @map("source_line_key")
+  sourceIntakeLineId   String?                  @map("source_intake_line_id")
+  sourceDocumentLineId String?                  @map("source_document_line_id")
+  salesInvoiceLineId   String?                  @map("sales_invoice_line_id")
+  modelId              String?                  @map("model_id")
+  productName          String?                  @map("product_name")
+  dispatchedQuantity   Decimal                  @default(0) @map("dispatched_quantity")
+  previouslyBilled     Decimal                  @default(0) @map("previously_billed")
+  billedQuantity       Decimal                  @default(0) @map("billed_quantity")
+  nonBillableQuantity  Decimal                  @default(0) @map("non_billable_quantity")
+  totalBilled          Decimal                  @default(0) @map("total_billed")
+  remainingQuantity    Decimal                  @default(0) @map("remaining_quantity")
+  status               String                   @default("FATURALANMADI")
+  raw                  Json?
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  draftRequest         IsnetInvoiceDraftRequest @relation(fields: [draftRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([draftRequestId, sourceLineKey])
+  @@index([sourceIntakeLineId])
+  @@index([sourceDocumentLineId])
+  @@index([salesInvoiceLineId])
+  @@index([modelId])
+  @@map("isnet_invoice_line_allocations")
+}
+
 model QualityRecord {
   id              String    @id @default(uuid())
   mainCompanySlug String    @map("main_company_slug")
@@ -1519,16 +1890,32 @@ model YerlesimRecord {
 }
 
 model DesignFile {
-  id              String   @id @default(uuid())
-  mainCompanySlug String   @map("main_company_slug")
-  designRecordId  String?  @map("design_record_id")
-  filePath        String   @map("file_path")
-  fileName        String   @map("file_name")
-  mimeType        String?  @map("mime_type")
-  raw             Json?
-  createdAt       DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  designRecordId   String?  @map("design_record_id")
+  filePath         String   @map("file_path")
+  fileName         String   @map("file_name")
+  mimeType         String?  @map("mime_type")
+  modelId          String?  @map("model_id")
+  operationId      String?  @map("operation_id")
+  fileRole         String?  @map("file_role")
+  originalFileName String?  @map("original_file_name")
+  storedFileName   String?  @map("stored_file_name")
+  storagePath      String?  @map("storage_path")
+  fileHash         String?  @map("file_hash")
+  fileSize         Int?     @map("file_size")
+  sourceType       String?  @map("source_type")
+  sourceExternalId String?  @map("source_external_id")
+  previewPath      String?  @map("preview_path")
+  status           String   @default("ACTIVE")
+  raw              Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([mainCompanySlug])
+  @@index([modelId])
+  @@index([operationId])
+  @@index([fileHash])
   @@map("design_files")
 }
 
@@ -1542,6 +1929,146 @@ model DesignModelLink {
 
   @@index([mainCompanySlug])
   @@map("design_model_links")
+}
+
+model DesignWorkflowModel {
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  companyId        String?  @map("company_id")
+  modelCode        String?  @map("model_code")
+  modelName        String   @map("model_name")
+  designName       String?  @map("design_name")
+  groundColor      String?  @map("ground_color")
+  mainImageFileId  String?  @map("main_image_file_id")
+  sourceType       String   @default("MANUAL_UPLOAD") @map("source_type")
+  sourceExternalId String?  @map("source_external_id")
+  status           String   @default("NEW_ARRIVAL")
+  notes            String?
+  metadata         Json?
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, sourceType, sourceExternalId])
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@index([modelName])
+  @@index([status])
+  @@map("design_models")
+}
+
+model DesignModelOperation {
+  id                 String   @id @default(uuid())
+  modelId            String   @map("model_id")
+  printAreaCode      String   @map("print_area_code")
+  printAreaName      String   @map("print_area_name")
+  sequence           Int      @default(0)
+  moldType           String?  @map("mold_type")
+  moldWidth          Float?   @map("mold_width")
+  moldHeight         Float?   @map("mold_height")
+  modelImageFileId   String?  @map("model_image_file_id")
+  channelImageFileId String?  @map("channel_image_file_id")
+  placementFileId    String?  @map("placement_file_id")
+  placementStatus    String   @default("WAITING") @map("placement_status")
+  dyehouseStatus     String   @default("WAITING") @map("dyehouse_status")
+  productionReady    Boolean  @default(false) @map("production_ready")
+  notes              String?
+  metadata           Json?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([modelId, printAreaCode])
+  @@index([modelId])
+  @@index([placementStatus])
+  @@index([dyehouseStatus])
+  @@map("design_model_operations")
+}
+
+model DesignOperationChannel {
+  id                String   @id @default(uuid())
+  operationId       String   @map("operation_id")
+  sequence          Int      @default(0)
+  rawName           String   @map("raw_name")
+  normalizedName    String   @map("normalized_name")
+  channelType       String   @default("OTHER") @map("channel_type")
+  colorCode         String?  @map("color_code")
+  colorGroupId      String?  @map("color_group_id")
+  registeredColorId String?  @map("registered_color_id")
+  included          Boolean  @default(true)
+  status            String   @default("PENDING")
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([operationId, sequence])
+  @@index([operationId])
+  @@index([colorGroupId])
+  @@map("design_operation_channels")
+}
+
+model DesignColorGroup {
+  id                String   @id @default(uuid())
+  operationId       String   @map("operation_id")
+  groupKey          String   @map("group_key")
+  displayName       String   @map("display_name")
+  colorCode         String?  @map("color_code")
+  registeredColorId String?  @map("registered_color_id")
+  moldCount         Int      @default(0) @map("mold_count")
+  status            String   @default("UNRESOLVED")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([operationId, groupKey])
+  @@index([operationId])
+  @@index([registeredColorId])
+  @@map("design_color_groups")
+}
+
+model DesignImportQueue {
+  id                 String    @id @default(uuid())
+  mainCompanySlug    String    @map("main_company_slug")
+  sourceType         String    @default("FOLDER_SCAN") @map("source_type")
+  sourceExternalId   String?   @map("source_external_id")
+  originalPath       String    @map("original_path")
+  fileName           String    @map("file_name")
+  fileHash           String?   @map("file_hash")
+  fileSize           Int       @default(0) @map("file_size")
+  modifiedAt         DateTime? @map("modified_at")
+  mimeType           String?   @map("mime_type")
+  suggestedModelName String?   @map("suggested_model_name")
+  suggestedRole      String?   @map("suggested_role")
+  groupKey           String?   @map("group_key")
+  status             String    @default("READY")
+  errorMessage       String?   @map("error_message")
+  metadata           Json?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  processedAt        DateTime? @map("processed_at")
+
+  @@unique([mainCompanySlug, originalPath])
+  @@index([mainCompanySlug])
+  @@index([fileHash])
+  @@index([groupKey])
+  @@index([status])
+  @@map("design_import_queue")
+}
+
+model DesignActionLog {
+  id           String   @id @default(uuid())
+  modelId      String?  @map("model_id")
+  operationId  String?  @map("operation_id")
+  fileId       String?  @map("file_id")
+  userId       String?  @map("user_id")
+  action       String
+  oldValueJson Json?    @map("old_value_json")
+  newValueJson Json?    @map("new_value_json")
+  description  String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([modelId])
+  @@index([operationId])
+  @@index([fileId])
+  @@map("design_action_logs")
 }
 
 model LayoutRecord {
@@ -1569,28 +2096,55 @@ model MoldLayoutRecord {
 }
 
 model DyehouseModel {
-  id              String   @id @default(uuid())
-  mainCompanySlug String   @map("main_company_slug")
-  modelName       String   @map("model_name")
-  status          String   @default("ACTIVE")
-  raw             Json?
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id               String    @id @default(uuid())
+  mainCompanySlug  String    @map("main_company_slug")
+  modelName        String    @map("model_name")
+  modelCardId      String?   @map("model_card_id")
+  designId         String?   @map("design_id")
+  companyId        String?   @map("company_id")
+  orderId          String?   @map("order_id")
+  orderNo          String?   @map("order_no")
+  printRegion      String?   @map("print_region")
+  plannedQuantity  Decimal   @default(0) @map("planned_quantity")
+  channelCount     Int       @default(0) @map("channel_count")
+  uniqueColorCount Int       @default(0) @map("unique_color_count")
+  moldCount        Int       @default(0) @map("mold_count")
+  priority         String    @default("NORMAL")
+  status           String    @default("ACTIVE")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  raw              Json?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([mainCompanySlug])
+  @@index([mainCompanySlug, status])
+  @@index([modelCardId, companyId, orderNo, printRegion, designId])
   @@map("dyehouse_models")
 }
 
 model DyehouseColor {
-  id              String   @id @default(uuid())
-  mainCompanySlug String   @map("main_company_slug")
-  dyehouseModelId String?  @map("dyehouse_model_id")
-  colorName       String   @map("color_name")
-  raw             Json?
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  mainCompanySlug   String    @map("main_company_slug")
+  dyehouseModelId   String?   @map("dyehouse_model_id")
+  registeredColorId String?   @map("registered_color_id")
+  sourceChannelKey  String?   @map("source_channel_key")
+  colorName         String    @map("color_name")
+  pantone           String?
+  paintType         String?   @map("paint_type")
+  recipeId          String?   @map("recipe_id")
+  printRegion       String?   @map("print_region")
+  plannedKg         Decimal   @default(0) @map("planned_kg")
+  status            String    @default("WAITING")
+  completedAt       DateTime? @map("completed_at")
+  raw               Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
 
+  @@unique([mainCompanySlug, dyehouseModelId, sourceChannelKey])
   @@index([mainCompanySlug])
+  @@index([mainCompanySlug, dyehouseModelId])
   @@map("dyehouse_colors")
 }
 
@@ -3240,17 +3794,17 @@ model IkCardImport {
 }
 
 model IkCardImportRow {
-  id        String  @id
-  importId  String  @map("import_id")
+  id         String  @id
+  importId   String  @map("import_id")
   employeeId String? @map("employee_id")
-  fullName  String  @default("") @map("full_name")
-  cardNo    String  @default("") @map("card_no")
-  workDate  String  @default("") @map("work_date")
-  checkIn   String  @default("") @map("check_in")
-  checkOut  String  @default("") @map("check_out")
-  warning   String  @default("")
-  rawLine   String  @default("") @map("raw_line")
-  createdAt String  @default("CURRENT_TIMESTAMP") @map("created_at")
+  fullName   String  @default("") @map("full_name")
+  cardNo     String  @default("") @map("card_no")
+  workDate   String  @default("") @map("work_date")
+  checkIn    String  @default("") @map("check_in")
+  checkOut   String  @default("") @map("check_out")
+  warning    String  @default("")
+  rawLine    String  @default("") @map("raw_line")
+  createdAt  String  @default("CURRENT_TIMESTAMP") @map("created_at")
 
   @@index([importId])
   @@map("ik_card_import_rows")
@@ -3271,33 +3825,33 @@ model IkSgkImport {
 }
 
 model IkSgkRow {
-  id                    String @id
-  importId              String @map("import_id")
-  employeeId            String? @map("employee_id")
-  fullName              String @map("full_name")
-  identityNo            String @default("") @map("identity_no")
-  personCode            String @default("") @map("person_code")
-  hireDate              String @default("") @map("hire_date")
-  exitDate              String @default("") @map("exit_date")
-  sgkDays               Float  @default(0) @map("sgk_days")
-  gross                 Float  @default(0)
-  net                   Float  @default(0)
-  normalEarning         Float  @default(0) @map("normal_earning")
-  otherEarning          Float  @default(0) @map("other_earning")
-  totalEarning          Float  @default(0) @map("total_earning")
-  sgkBase               Float  @default(0) @map("sgk_base")
-  sgkPremium            Float  @default(0) @map("sgk_premium")
-  unemploymentPremium   Float  @default(0) @map("unemployment_premium")
-  incomeTax             Float  @default(0) @map("income_tax")
-  stampTax              Float  @default(0) @map("stamp_tax")
-  specialDeduction      Float  @default(0) @map("special_deduction")
-  employerSgk           Float  @default(0) @map("employer_sgk")
-  employerUnemployment  Float  @default(0) @map("employer_unemployment")
-  sgkIncentive          Float  @default(0) @map("sgk_incentive")
-  employerNetCost       Float  @default(0) @map("employer_net_cost")
-  differenceReason      String @default("") @map("difference_reason")
-  rawJson               String @default("{}") @map("raw_json")
-  createdAt             String @default("CURRENT_TIMESTAMP") @map("created_at")
+  id                   String  @id
+  importId             String  @map("import_id")
+  employeeId           String? @map("employee_id")
+  fullName             String  @map("full_name")
+  identityNo           String  @default("") @map("identity_no")
+  personCode           String  @default("") @map("person_code")
+  hireDate             String  @default("") @map("hire_date")
+  exitDate             String  @default("") @map("exit_date")
+  sgkDays              Float   @default(0) @map("sgk_days")
+  gross                Float   @default(0)
+  net                  Float   @default(0)
+  normalEarning        Float   @default(0) @map("normal_earning")
+  otherEarning         Float   @default(0) @map("other_earning")
+  totalEarning         Float   @default(0) @map("total_earning")
+  sgkBase              Float   @default(0) @map("sgk_base")
+  sgkPremium           Float   @default(0) @map("sgk_premium")
+  unemploymentPremium  Float   @default(0) @map("unemployment_premium")
+  incomeTax            Float   @default(0) @map("income_tax")
+  stampTax             Float   @default(0) @map("stamp_tax")
+  specialDeduction     Float   @default(0) @map("special_deduction")
+  employerSgk          Float   @default(0) @map("employer_sgk")
+  employerUnemployment Float   @default(0) @map("employer_unemployment")
+  sgkIncentive         Float   @default(0) @map("sgk_incentive")
+  employerNetCost      Float   @default(0) @map("employer_net_cost")
+  differenceReason     String  @default("") @map("difference_reason")
+  rawJson              String  @default("{}") @map("raw_json")
+  createdAt            String  @default("CURRENT_TIMESTAMP") @map("created_at")
 
   @@index([importId])
   @@map("ik_sgk_rows")
@@ -4008,25 +4562,79 @@ model DyeRecipeLine {
 }
 
 model ModelDyeExpense {
-  id              String    @id @default(uuid())
-  mainCompanyId   String?   @map("main_company_id")
-  mainCompanySlug String    @map("main_company_slug")
-  modelOrderId    String?   @map("model_order_id")
-  inventoryId     String?   @map("inventory_id")
-  productName     String?   @map("product_name")
-  lotId           String?   @map("lot_id")
-  lotNo           String?   @map("lot_no")
-  amountKg        Decimal   @default(0) @map("amount_kg")
-  expenseDate     DateTime  @default(now()) @map("expense_date")
-  note            String?
-  status          String    @default("ACTIVE")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
+  id                 String    @id @default(uuid())
+  mainCompanyId      String?   @map("main_company_id")
+  mainCompanySlug    String    @map("main_company_slug")
+  modelOrderId       String?   @map("model_order_id")
+  inventoryId        String?   @map("inventory_id")
+  productName        String?   @map("product_name")
+  lotId              String?   @map("lot_id")
+  lotNo              String?   @map("lot_no")
+  amountKg           Decimal   @default(0) @map("amount_kg")
+  expenseDate        DateTime  @default(now()) @map("expense_date")
+  note               String?
+  sourceProductionId String?   @map("source_production_id")
+  productionItemId   String?   @map("production_item_id")
+  estimatedCost      Decimal   @default(0) @map("estimated_cost")
+  snapshot           Json?
+  status             String    @default("ACTIVE")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
 
   @@index([mainCompanySlug])
   @@index([modelOrderId])
+  @@index([mainCompanySlug, sourceProductionId])
   @@map("model_dye_expenses")
+}
+
+model DyeProduction {
+  id                  String   @id @default(uuid())
+  mainCompanySlug     String   @map("main_company_slug")
+  requestId           String   @map("request_id")
+  jobId               String   @map("job_id")
+  jobColorId          String   @map("job_color_id")
+  colorId             String?  @map("color_id")
+  recipeId            String?  @map("recipe_id")
+  pantoneSnapshot     String?  @map("pantone_snapshot")
+  colorNameSnapshot   String   @map("color_name_snapshot")
+  paintTypeSnapshot   String   @map("paint_type_snapshot")
+  versionSnapshot     String   @map("version_snapshot")
+  referenceTotalGram  Decimal  @default(0) @map("reference_total_gram")
+  multiplier          Decimal  @default(1)
+  productionTotalGram Decimal  @default(0) @map("production_total_gram")
+  productionTotalKg   Decimal  @default(0) @map("production_total_kg")
+  jobType             String   @default("PRODUCTION") @map("job_type")
+  modelSnapshot       String   @map("model_snapshot")
+  companySnapshot     String?  @map("company_snapshot")
+  orderSnapshot       String?  @map("order_snapshot")
+  printRegionSnapshot String?  @map("print_region_snapshot")
+  recipeSnapshot      Json     @map("recipe_snapshot")
+  createdBy           String?  @map("created_by")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@unique([mainCompanySlug, requestId])
+  @@index([mainCompanySlug, jobId])
+  @@index([mainCompanySlug, colorId, createdAt])
+  @@map("dye_productions")
+}
+
+model DyeProductionItem {
+  id                  String   @id @default(uuid())
+  productionId        String   @map("production_id")
+  productId           String?  @map("product_id")
+  productNameSnapshot String   @map("product_name_snapshot")
+  referenceGram       Decimal  @default(0) @map("reference_gram")
+  percentage          Decimal  @default(0)
+  productionGram      Decimal  @default(0) @map("production_gram")
+  productionKg        Decimal  @default(0) @map("production_kg")
+  lotId               String   @map("lot_id")
+  lotNoSnapshot       String   @map("lot_no_snapshot")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([productionId])
+  @@index([lotId])
+  @@map("dye_production_items")
 }
 
 model Employee {

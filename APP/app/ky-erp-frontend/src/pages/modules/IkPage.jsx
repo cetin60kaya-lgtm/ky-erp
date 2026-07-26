@@ -1,6 +1,8 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import { useCallback } from "react";
 import {
   BadgeCheck,
+  
   Banknote,
   BriefcaseBusiness,
   CalendarDays,
@@ -12,6 +14,7 @@ import {
   FileSpreadsheet,
   FolderUp,
   LayoutDashboard,
+  ListChecks,
   Minus,
   Moon,
   Pencil,
@@ -21,9 +24,11 @@ import {
   Search,
   Sun,
   Trash2,
+  UserPlus,
   UserRound,
   Users,
   WalletCards,
+  Zap,
   X,
 } from "lucide-react";
 import "./ik.css";
@@ -33,7 +38,6 @@ import { exportRowsToExcelFile } from "../../utils/excelExport";
 import {
   createAylikPersonel,
   createGunlukPersonel,
-  deleteAylikPersonel,
   deleteGunlukPersonel,
   getAylikPersonel,
   getAylikEvraklar,
@@ -42,34 +46,20 @@ import {
   getAylikMesailer,
   getResmiTatiller,
   getAylikSozlesmeler,
-  getIkSkillDuplicates,
   getIkSkills,
   getGunlukPersonel,
   getGunlukPersonelGunKayitlari,
   getGunlukPersonelListe,
-  getGunlukPersonelOzet,
   getGunlukDurum,
   createIkSkill,
-  deleteAylikIzin,
-  deleteAylikMesai,
-  deleteAylikEvrak,
-  mergeIkSkills,
-  saveAylikEvrak,
-  saveAylikIzin,
-  saveAylikMesai,
   saveResmiTatil,
-  saveAylikSozlesme,
   saveGunlukDurum,
   saveGunlukPersonelGunKayitlari,
   saveGunlukPersonelListe,
   applyGunlukPersonelGirisExcel,
   uploadGunlukPersonelExcel,
   uploadGunlukPersonelGirisExcel,
-  updateAylikIzinBakiyeleri,
-  updateAylikIzin,
-  updateAylikMesai,
   updateGunlukPersonel,
-  updateIkSkill,
   updateAylikPersonel,
 } from "../../services/ikApi";
 import { downloadFile } from "../../utils/api";
@@ -129,6 +119,7 @@ const IK_DAILY_DATE_RANGE_KEY = "ikDailyDateRange";
 const IK_DAILY_SELECTED_DATE_KEY = "ikDailySelectedDate";
 const IK_DAILY_FAST_CHECK_KEY = "ikDailyFastCheck";
 const DEFAULT_DAILY_RANGE = { start: "2026-05-13", end: "2026-05-19" };
+const ISO_DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_OFFICIAL_HOLIDAYS_2026 = [
   { date: "2026-01-01", name: "Yılbaşı" },
   { date: "2026-03-19", name: "Ramazan Bayramı Arifesi" },
@@ -155,10 +146,10 @@ function readStoredDailyRange() {
     const parsed = JSON.parse(
       window.localStorage.getItem(IK_DAILY_DATE_RANGE_KEY) || "null",
     );
-    const start = parsed.startDate || parsed.start;
-    const end = parsed.endDate || parsed.end;
-    return createInclusiveDateRange(start, end).length
-       ? { start, end }
+    const start = String(parsed?.startDate || parsed?.start || "").trim();
+    const end = String(parsed?.endDate || parsed?.end || "").trim();
+    return ISO_DATE_ONLY_PATTERN.test(start) && ISO_DATE_ONLY_PATTERN.test(end)
+      ? { start, end }
       : DEFAULT_DAILY_RANGE;
   } catch {
     return DEFAULT_DAILY_RANGE;
@@ -564,7 +555,7 @@ function monthlyPayload(person, activeMainCompany) {
   const paymentTotal = toNumber(person.total) || null;
   const normalized = normalizeMonthlyPaymentAmounts(person, paymentTotal, {
     manual: person.bankAmountManual === true,
-  });
+  }, []);
   return {
     mainCompanyId:
       activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan",
@@ -938,11 +929,6 @@ function personHasWorkOnDate(personId, entries = {}, date) {
   return entryHasWork(entries[`${personId}-${date}`]);
 }
 
-function personHasEntryInRange(personId, entries = {}, start, end) {
-  return daysBetween(start, end).some((date) =>
-    Object.prototype.hasOwnProperty.call(entries, `${personId}-${date}`),
-  );
-}
 
 function normalizeSkillName(value) {
   return String(value || "").trim();
@@ -2058,7 +2044,7 @@ function LeaveScreen({
         annualLeaveCarryover: toNumber(selected.annualLeaveCarryover),
       });
     }
-  }, [editingId, form.personId, selected?.id]);
+  }, [editingId, form.personId, selected?.annualLeaveCarryover, selected?.annualLeaveEntitlement, selected?.id]);
 
   if (!selected) {
     return (
@@ -2129,12 +2115,6 @@ function LeaveScreen({
     selectedEntitlement + selectedCarryover - selectedUsedDays,
     0,
   );
-  const usedDays = leaves
-    .filter(
-      (leave) =>
-        leave.effect === "Yıllık izinden düş" && leaveInYear(leave, year),
-    )
-    .reduce((sum, leave) => sum + toNumber(leave.days), 0);
   const adjustmentLeaveDays = adjustments
     .filter((row) => !year || recordYear(row?.date) === String(year))
     .reduce(
@@ -2617,7 +2597,6 @@ function AdjustmentScreen({
   adjustments,
   setAdjustments,
   leaves,
-  savePerson,
   saveAdjustment,
   updateAdjustment,
   deleteAdjustment,
@@ -2664,6 +2643,9 @@ function AdjustmentScreen({
   const monthOvertime = filteredAdjustments
     .filter((row) => ["Mesai", "Yol farkı", "Maaş farkı"].includes(row?.type))
     .reduce((sum, row) => sum + toNumber(row?.amount), 0);
+  const monthBonus = filteredAdjustments
+    .filter((row) => row.type === "Prim")
+    .reduce((sum, row) => sum + toNumber(row?.amount), 0);
   const monthAdvance = filteredAdjustments
     .filter((row) => row.type === "Avans")
     .reduce((sum, row) => sum + toNumber(row?.amount), 0);
@@ -2683,7 +2665,6 @@ function AdjustmentScreen({
   const baseAdjustments = editingId
      ? filteredAdjustments.filter((row) => row?.id !== editingId)
     : filteredAdjustments;
-  const currentPayroll = calculatePayroll(selected, filteredAdjustments);
   const payrollBeforeThisRecord = calculatePayroll(selected, baseAdjustments);
   const overtimeType = resolveOvertimeType(
     form.date,
@@ -3277,7 +3258,6 @@ function AdjustmentBulkScreen({
   const [formError, setFormError] = useState("");
   const [holidayForm, setHolidayForm] = useState({ date: "", name: "" });
 
-  const monthNumber = Math.max(1, MONTH_NAMES.indexOf(filters.month) + 1);
   const defaultDate = TODAY;
   const filteredAdjustments = adjustments.filter((row) =>
     adjustmentInYearMonth(row, filters.year, filters.month),
@@ -3308,7 +3288,7 @@ function AdjustmentBulkScreen({
 
   const existingForPerson = (personId, type) =>
     filteredAdjustments.filter((row) => row?.personId === personId && row?.type === type);
-  const aggregatePersonDraft = (person) => {
+  const aggregatePersonDraft = useCallback((person) => {
     const own = filteredAdjustments.filter((row) => row?.personId === person.id);
     const mesaiRows = own.filter((row) => row?.type === "Mesai");
     const note = own.map((row) => row?.note).filter(Boolean).join(" / ");
@@ -3328,7 +3308,7 @@ function AdjustmentBulkScreen({
       cashAmount: roundCurrency(currentPayroll.cash),
       note,
     };
-  };
+  }, [defaultDate, filteredAdjustments]);
 
   useEffect(() => {
     setDrafts(() =>
@@ -3342,7 +3322,7 @@ function AdjustmentBulkScreen({
         ? current
         : monthly[0]?.id || "",
     );
-  }, [monthly.length, adjustments.length, filters.year, filters.month]);
+  }, [monthly.length, adjustments.length, filters.year, filters.month, monthly, aggregatePersonDraft]);
 
   if (!monthly.length) {
     return (
@@ -3378,7 +3358,7 @@ function AdjustmentBulkScreen({
         : toNumber(draft.bankAmount) > 0
           ? "Banka"
           : "Elden",
-  });
+  }, []);
   const draftAdjustmentRows = (person, draft) => {
     const payrollPerson = personWithDraft(person, draft);
     const overtimeType = resolveOvertimeType(
@@ -3877,7 +3857,7 @@ function PayrollScreen({
 
   useEffect(() => {
     setSelectedPaymentIds(new Set(monthly.map((person) => person.id)));
-  }, [monthly.length]);
+  }, [monthly, monthly.length]);
 
   if (!selected) {
     return (
@@ -3904,7 +3884,7 @@ function PayrollScreen({
       bankEdits,
       person.id,
     ),
-  });
+  }, []);
   const filteredAdjustments = adjustments.filter((row) =>
     adjustmentInYearMonth(row, filters.year, filters.month),
   );
@@ -4439,7 +4419,7 @@ function DocumentsScreen({ monthly, docs, setDocs, saveDocument, deleteDocument 
     if (!form.personId && monthly[0]?.id) {
       setForm((current) => ({ ...current, personId: monthly[0]?.id || "" }));
     }
-  }, [monthly.length, form.personId]);
+  }, [monthly.length, form.personId, monthly]);
   const rows = docs.map((doc) => ({
     ...doc,
     personName:
@@ -4581,8 +4561,16 @@ function DocumentsScreen({ monthly, docs, setDocs, saveDocument, deleteDocument 
   );
 }
 
-function DailyCards({ daily, setDaily, companyId, skills = [], onCreateSkill }) {
-  const emptyDailyForm = {
+function DailyCards({
+  daily,
+  setDaily,
+  companyId,
+  skills = [],
+  onCreateSkill,
+  range,
+  setRange,
+}) {
+  const emptyDailyForm = useMemo(() => ({
     id: "",
     name: "",
     skillId: "",
@@ -4591,7 +4579,7 @@ function DailyCards({ daily, setDaily, companyId, skills = [], onCreateSkill }) 
     dayRate: 0,
     nightRate: 0,
     active: true,
-  };
+  }), []);
   const [selectedId, setSelectedId] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -4633,7 +4621,7 @@ function DailyCards({ daily, setDaily, companyId, skills = [], onCreateSkill }) 
       nightRate: toNumber(selected.nightRate),
       active: Boolean(selected.active),
     });
-  }, [isNew, selected]);
+  }, [emptyDailyForm, isNew, selected, skills]);
 
   useEffect(() => {
     if (isNew) return;
@@ -4780,6 +4768,32 @@ function DailyCards({ daily, setDaily, companyId, skills = [], onCreateSkill }) 
   return (
     <div className="kyik-workspace with-rail daily-card-layout">
       <main className="kyik-main-stack">
+        <Panel title="Ortak Günlük Tarih Aralığı" icon={CalendarDays}>
+          <div className="kyik-form-grid two compact-filter">
+            <Input label="Başlangıç">
+              <TextInput
+                type="date"
+                value={range.start}
+                onChange={(event) =>
+                  setRange((current) => ({ ...current, start: event?.target.value }))
+                }
+              />
+            </Input>
+            <Input label="Bitiş">
+              <TextInput
+                type="date"
+                value={range.end}
+                onChange={(event) =>
+                  setRange((current) => ({ ...current, end: event?.target.value }))
+                }
+              />
+            </Input>
+          </div>
+          <div className="kyik-save-notice">
+            Bu aralık Günlük Giriş, Haftalık Özet ve Günlük Ödeme Fişleri
+            sekmelerinde ortak kullanılır ve sayfadan çıkınca korunur.
+          </div>
+        </Panel>
         <Panel title="Günlük Personel Kartı" icon={UserRound}>
           {notice ? <div className="kyik-save-notice">{notice}</div> : null}
           <div className="kyik-form-grid four">
@@ -5022,6 +5036,10 @@ function SafeDailyEntry({
   const [personModal, setPersonModal] = useState(null);
   const [excelPreview, setExcelPreview] = useState(null);
   const [fastCheckedKeys, setFastCheckedKeys] = useState(() => new Set(readFastCheckKeys()));
+  const [entryView] = useState("detail");
+  const [quickModalOpen, setQuickModalOpen] = useState(false);
+  const [quickSearch, setQuickSearch] = useState("");
+  const [quickAddPersonId, setQuickAddPersonId] = useState("");
 
   useEffect(() => {
     if (!workDays.length) {
@@ -5114,6 +5132,7 @@ function SafeDailyEntry({
   const activeDateShort = activeDayInfo.short;
   const fastCheckScope = `${companyId}|${range.start}|${range.end}|${selectedDate}|${shiftMode}`;
   const fastCheckKeyFor = (personId) => `${fastCheckScope}|${personId}`;
+  const quickCheckKeyFor = (personId, date, shift = shiftMode) => `${companyId}|${range.start}|${range.end}|${date}|${shift}|${personId}`;
   useEffect(() => {
     setFastCheckedKeys(new Set(readFastCheckKeys()));
   }, [fastCheckScope]);
@@ -5121,6 +5140,19 @@ function SafeDailyEntry({
     setFastCheckedKeys((current) => {
       const next = new Set(current);
       const key = fastCheckKeyFor(personId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      writeFastCheckKeys(next);
+      return next;
+    });
+  };
+
+  const toggleQuickChecked = (personId, date) => {
+    const entry = getDraftEntry(personId, date);
+    if (!entry[shiftMode]) return;
+    setFastCheckedKeys((current) => {
+      const next = new Set(current);
+      const key = quickCheckKeyFor(personId, date);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       writeFastCheckKeys(next);
@@ -5228,13 +5260,184 @@ function SafeDailyEntry({
   const missingNightCount = includedPeople.filter(
     (person) => toNumber(person.nightRate) <= 0,
   ).length;
-  const fastCheckedCount = checkedCount;
   const skillTotals = includedPeople.reduce((acc, person) => {
     if (!getDraftEntry(person.id)[shiftMode]) return acc;
     const skill = personSkillName(person, skills) || "Diğer";
     acc[skill] = (acc[skill] || 0) + 1;
     return acc;
   }, {});
+  const quickSelectedCount = includedPeople.reduce((sum, person) => sum + workDays.filter((date) => Boolean(getDraftEntry(person.id, date)[shiftMode])).length, 0);
+  const quickCheckedCount = includedPeople.reduce((sum, person) => sum + workDays.filter((date) => Boolean(getDraftEntry(person.id, date)[shiftMode]) && fastCheckedKeys.has(quickCheckKeyFor(person.id, date))).length, 0);
+  const quickPersonCount = new Set(includedPeople.filter((person) => workDays.some((date) => Boolean(getDraftEntry(person.id, date)[shiftMode]))).map((person) => person.id)).size;
+  const quickPendingCount = Math.max(0, quickSelectedCount - quickCheckedCount);
+  const quickDayPeople = includedPeople.filter((person) =>
+    Boolean(getDraftEntry(person.id, selectedDate)[shiftMode]),
+  );
+  const quickDayCheckedCount = quickDayPeople.filter((person) =>
+    fastCheckedKeys.has(quickCheckKeyFor(person.id, selectedDate)),
+  ).length;
+  const quickDayPendingCount = Math.max(0, quickDayPeople.length - quickDayCheckedCount);
+  const quickModalGroups = useMemo(() => {
+    const term = quickSearch.trim().toLocaleLowerCase("tr-TR");
+    if (!term) return groupedIncludedPeople;
+    return groupedIncludedPeople
+      .map((group) => ({
+        ...group,
+        people: group.people.filter((person) =>
+          `${person.name || ""} ${person.personnelNo || ""} ${group.label}`
+            .toLocaleLowerCase("tr-TR")
+            .includes(term),
+        ),
+      }))
+      .filter((group) => group.people.length);
+  }, [groupedIncludedPeople, quickSearch]);
+  const quickAvailablePeople = useMemo(
+    () => daily
+      .filter((person) => person.active !== false && !rosterIds.has(person.id))
+      .sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "tr")),
+    [daily, rosterIds],
+  );
+
+  const setQuickCells = (people, dates, active) => {
+    setDraftEntries((entries) => {
+      const next = { ...entries };
+      people.forEach((person) => dates.forEach((date) => {
+        if (shiftMode === "night" && toNumber(person.nightRate) <= 0) return;
+        const key = entryKeyFor(person.id, date);
+        next[key] = { ...(next[key] || {}), [shiftMode]: active };
+      }));
+      return next;
+    });
+    if (!active) {
+      setFastCheckedKeys((current) => {
+        const next = new Set(current);
+        people.forEach((person) => dates.forEach((date) => next.delete(quickCheckKeyFor(person.id, date))));
+        writeFastCheckKeys(next);
+        return next;
+      });
+    }
+    setDirty(true);
+  };
+
+  const toggleQuickCell = (person, date) => {
+    if (shiftMode === "night" && toNumber(person.nightRate) <= 0) {
+      setNotice(`${person.name}: Gece ücreti tanımlı değil.`);
+      return;
+    }
+    const active = Boolean(getDraftEntry(person.id, date)[shiftMode]);
+    setQuickCells([person], [date], !active);
+  };
+
+  const saveQuickMatrix = async () => {
+    const changes = [];
+    workDays.forEach((date) => {
+      const personnelEntries = includedPeople.flatMap((person) => {
+        const key = entryKeyFor(person.id, date);
+        const before = Boolean((dailyEntries[key] || {})[shiftMode]);
+        const after = Boolean((draftEntries[key] || {})[shiftMode]);
+        if (before === after) return [];
+        return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE" }];
+      });
+      if (personnelEntries.length) changes.push({ date, personnelEntries });
+    });
+    if (!changes.length) {
+      setNotice("Hızlı girişte kaydedilecek değişiklik yok.");
+      return;
+    }
+    setSaveBusy(true);
+    try {
+      for (const change of changes) await saveGunlukPersonelGunKayitlari({ date: change.date, shift: shiftMode, mainCompanyId: companyId, personnelEntries: change.personnelEntries });
+      const refreshed = refreshDailyEntries ? await refreshDailyEntries(range) : draftEntries;
+      setDraftEntries(refreshed);
+      setDailyEntries(refreshed);
+      setDirty(false);
+      setNotice(`${changes.length} gün için ${modeLabel} hızlı giriş değişiklikleri kaydedildi.`);
+    } catch (error) {
+      setNotice(error?.message || "Hızlı giriş kayıtları kaydedilemedi.");
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
+  const openQuickModal = () => {
+    if (dirty) {
+      setNotice("Hızlı girişi açmadan önce mevcut değişiklikleri kaydedin veya geri alın.");
+      return;
+    }
+    if (!workDays.length || !selectedDate) {
+      setNotice("Hızlı giriş için geçerli bir tarih aralığı seçin.");
+      return;
+    }
+    setQuickSearch("");
+    setQuickAddPersonId("");
+    setQuickModalOpen(true);
+    setNotice("");
+  };
+
+  const closeQuickModal = () => {
+    if (dirty && !window.confirm("Kaydedilmemiş hızlı giriş seçimleri silinsin mi?")) return;
+    if (dirty) {
+      setDraftEntries(dailyEntries);
+      setDirty(false);
+    }
+    setQuickModalOpen(false);
+    setNotice("");
+  };
+
+  const changeQuickDate = (date) => {
+    if (!date || date === selectedDate) return;
+    if (dirty) {
+      setNotice("Yanlış güne kayıt gitmemesi için önce bu günün değişikliklerini kaydedin.");
+      return;
+    }
+    setSelectedDate(date);
+    writeStoredSelectedDailyDate(date);
+    setNotice("");
+  };
+
+  const saveQuickDay = async (nextDate = "") => {
+    const personnelEntries = includedPeople.flatMap((person) => {
+      const key = entryKeyFor(person.id, selectedDate);
+      const before = Boolean((dailyEntries[key] || {})[shiftMode]);
+      const after = Boolean((draftEntries[key] || {})[shiftMode]);
+      if (before === after) return [];
+      return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE" }];
+    });
+    if (!personnelEntries.length) {
+      setDraftEntries(dailyEntries);
+      setDirty(false);
+      setNotice("Bu gün için kaydedilecek değişiklik yok.");
+      if (nextDate) {
+        setSelectedDate(nextDate);
+        writeStoredSelectedDailyDate(nextDate);
+      }
+      return true;
+    }
+    setSaveBusy(true);
+    try {
+      await saveGunlukPersonelGunKayitlari({
+        date: selectedDate,
+        shift: shiftMode,
+        mainCompanyId: companyId,
+        personnelEntries,
+      });
+      const refreshed = refreshDailyEntries ? await refreshDailyEntries(range) : draftEntries;
+      setDraftEntries(refreshed);
+      setDailyEntries(refreshed);
+      setDirty(false);
+      setNotice(`${activeDayInfo.long} ${modeLabel} hızlı giriş kayıtları kaydedildi.`);
+      if (nextDate) {
+        setSelectedDate(nextDate);
+        writeStoredSelectedDailyDate(nextDate);
+      }
+      return true;
+    } catch (error) {
+      setNotice(error?.message || "Hızlı giriş kayıtları kaydedilemedi.");
+      return false;
+    } finally {
+      setSaveBusy(false);
+    }
+  };
 
   const changeSelectedDate = (date) => {
     if (date === selectedDate) return;
@@ -5279,9 +5482,20 @@ function SafeDailyEntry({
            ? `${person.name || "Personel"} tarih aralığı listesine eklendi.`
           : `${person.name || "Personel"} tarih aralığı listesinden çıkarıldı.`,
       );
+      return true;
     } catch (error) {
       setNotice(error?.message || "Tarih aralığı listesi kaydedilemedi.");
+      return false;
     }
+  };
+
+  const addQuickRosterPerson = async () => {
+    if (!quickAddPersonId) {
+      setNotice("Önce listeden eklenecek personeli seçin.");
+      return;
+    }
+    const saved = await toggleRosterPerson(quickAddPersonId);
+    if (saved) setQuickAddPersonId("");
   };
 
   const reloadDailyAfterSave = async () => {
@@ -5655,7 +5869,7 @@ function SafeDailyEntry({
     }
   };
 
-  const previewRows = excelPreview?.rows || [];
+  const previewRows = useMemo(() => excelPreview?.rows || [], [excelPreview?.rows]);
   const previewEnabledCount = previewRows.filter((row) => row.enabled !== false).length;
   const previewDates = useMemo(
     () => [...new Set(previewRows.map((row) => row.workDate).filter(Boolean))].sort(),
@@ -5688,7 +5902,7 @@ function SafeDailyEntry({
         <div>
           <span className="kyik-safe-kicker">KY ERP / İK / GÜVENLİ GİRİŞ</span>
           <h2>Günlük Personel Girişi</h2>
-          <p>Yanlış güne kayıt riskini önlemek için aynı anda yalnız bir gün ve bir vardiya aktiftir.</p>
+          <p>Detaylı kontrolde tek gün aktiftir; hızlı giriş ise yalnız açılır pencerede ve tek gün üzerinden yapılır.</p>
         </div>
         <div className="kyik-safe-mode">
           <button className={shiftMode === "day" ? "active day" : ""} onClick={() => setShift("day")} type="button">
@@ -5707,6 +5921,7 @@ function SafeDailyEntry({
         <Input label="Bitiş">
           <TextInput type="date" value={range.end} onChange={(event) => setRange({ ...range, end: event?.target.value })} />
         </Input>
+        <Button icon={Zap} tone="primary" onClick={openQuickModal}>Hızlı Giriş</Button>
         <Button icon={Plus} onClick={() => setPersonModal({ mode: "new", form: emptyDailyPersonForm(companyId) })}>Yeni Personel Ekle</Button>
         <Button icon={CheckCircle2} onClick={selectAllForActiveDay}>Tümünü Seç</Button>
         <Button icon={X} onClick={clearActiveDaySelection}>Seçimi Kaldır</Button>
@@ -5726,9 +5941,19 @@ function SafeDailyEntry({
 
       <div className={`kyik-safe-banner ${shiftMode}`}>
         <CircleAlert size={18} />
-        <span>Güvenli giriş modu açık: Yalnız <strong>{activeDayInfo.long} — {modeLabel}</strong> aktif. Diğer günlere yanlışlıkla kayıt girilemez.</span>
+        <span>Güvenli giriş modu: Yalnız <strong>{activeDayInfo.long} — {modeLabel}</strong> aktif. Hızlı girişte de aynı anda yalnız bir gün düzenlenir.</span>
       </div>
       {notice ? <div className="kyik-save-notice">{notice}</div> : null}
+
+      {entryView === "quick" ? <div className={`kyik-quick-entry ${shiftMode}`}>
+        <div className="kyik-quick-head"><div><span>VASIF BAZLI HAFTALIK HIZLI GİRİŞ</span><h3>{modeLabel} Personel Girişi</h3><p>{shortDate(range.start)} – {shortDate(range.end)} aralığında gün gün seçim yapın. Bu ekranda yalnız {modeLabel.toLocaleLowerCase("tr-TR")} vardiyası değişir.</p></div><div className="kyik-quick-actions"><Button onClick={() => setQuickCells(includedPeople, workDays, true)}>Aralığın Tümünü Seç</Button><Button onClick={() => setQuickCells(includedPeople, workDays, false)}>Tüm Seçimi Kaldır</Button><Button icon={Save} tone="primary" disabled={saveBusy || !dirty} onClick={saveQuickMatrix}>{saveBusy ? "Kaydediliyor" : `${modeLabel} Hızlı Kaydet`}</Button></div></div>
+        <div className="kyik-quick-stats"><div className="orange"><span>Seçilen Hücre</span><b>{quickSelectedCount}</b><small>Personel × gün</small></div><div className="blue"><span>Seçilen Personel</span><b>{quickPersonCount}</b><small>{includedPeople.length} kişiden</small></div><div className="green"><span>Kontrol Edildi</span><b>{quickCheckedCount}</b><small>Yeşil hücre</small></div><div className={quickPendingCount ? "red" : "green"}><span>Kontrol Bekleyen</span><b>{quickPendingCount}</b><small>{quickPendingCount ? "İşlem gerekli" : "Tamamlandı"}</small></div><div className="purple"><span>Tarih Aralığı</span><b>{workDays.length} gün</b><small>{modeLabel} ayrı kaydedilir</small></div></div>
+        <div className="kyik-quick-legend"><span className="empty">Boş</span><span className="selected">1 · Seçildi</span><span className="checked">2 · Kontrol edildi</span><span className="saved">Kayıtlı seçim</span>{shiftMode === "night" ? <em>Gece ücreti olmayan personel seçilemez.</em> : null}</div>
+        <div className="kyik-quick-matrix-wrap"><table className="kyik-quick-matrix"><thead><tr><th className="person-col">Personel / Vasıf</th>{workDays.map((date) => { const eligible = includedPeople.filter((person) => shiftMode === "day" || toNumber(person.nightRate) > 0); const allActive = eligible.length > 0 && eligible.every((person) => Boolean(getDraftEntry(person.id, date)[shiftMode])); const selectedForDay = eligible.filter((person) => Boolean(getDraftEntry(person.id, date)[shiftMode])).length; const checkedForDay = eligible.filter((person) => Boolean(getDraftEntry(person.id, date)[shiftMode]) && fastCheckedKeys.has(quickCheckKeyFor(person.id, date))).length; return <th key={date}><button type="button" className={allActive ? "all-active" : ""} onClick={() => setQuickCells(eligible, [date], !allActive)}><small>{focusedDateParts(date, { weekday: "short" })}</small><b>{focusedDateParts(date, { day: "2-digit", month: "2-digit" })}</b><span>{selectedForDay} seçili · {checkedForDay} kontrol</span></button></th>; })}</tr></thead><tbody>{groupedIncludedPeople.map((group) => <React.Fragment key={`quick-${group.label}`}><tr className="quick-skill-row"><td colSpan={workDays.length + 1}><div><strong>{group.label}</strong><span>{group.people.length} personel</span><button type="button" onClick={() => setQuickCells(group.people, workDays, true)}>Vasıfı Tüm Günlere Seç</button><button type="button" onClick={() => setQuickCells(group.people, workDays, false)}>Temizle</button></div></td></tr>{group.people.map((person) => <tr key={`quick-person-${person.id}`}><td className="person-col"><strong>{person.name}</strong><span>{person.personnelNo || "Kod yok"} · {personSkillName(person, skills)}</span><small>G {formatTRY(person.dayRate)} · N {formatTRY(person.nightRate)}</small></td>{workDays.map((date) => { const entry = getDraftEntry(person.id, date); const active = Boolean(entry[shiftMode]); const persisted = Boolean((dailyEntries[entryKeyFor(person.id, date)] || {})[shiftMode]); const checked = active && fastCheckedKeys.has(quickCheckKeyFor(person.id, date)); const blocked = shiftMode === "night" && toNumber(person.nightRate) <= 0; return <td key={`${person.id}-${date}`}><div className={`quick-cell ${blocked ? "blocked" : checked ? "checked" : active ? "selected" : "empty"} ${persisted ? "persisted" : ""}`}><button type="button" className="quick-select" disabled={blocked} onClick={() => toggleQuickCell(person, date)}><b>{blocked ? "—" : modeCode}</b><span>{blocked ? "Ücret yok" : checked ? "Kontrol edildi" : active ? "Seçildi" : "Seç"}</span>{persisted && !checked ? <small>Kayıtlı</small> : null}</button><button type="button" className="quick-check" disabled={!active || blocked} onClick={() => toggleQuickChecked(person.id, date)} title="Kontrol durumunu değiştir">{checked ? <BadgeCheck size={15} /> : <CheckCircle2 size={15} />}</button></div></td>; })}</tr>)}</React.Fragment>)}</tbody></table></div>
+        <div className="kyik-quick-footer"><div><b>{dirty ? "Kaydedilmemiş hızlı giriş değişiklikleri var." : "Hızlı giriş kayıtları veritabanıyla eşleşiyor."}</b><span>Turuncu seçimleri kaydedin; son gözden geçirmede hücreleri yeşil “Kontrol edildi” yapın.</span></div><Button icon={Save} tone="primary" disabled={saveBusy || !dirty} onClick={saveQuickMatrix}>{modeLabel} Değişikliklerini Kaydet</Button></div>
+      </div> : null}
+
+      <div>
 
       <div className="kyik-safe-days">
         {daySummaries.map((day) => (
@@ -5892,6 +6117,121 @@ function SafeDailyEntry({
           <div className="kyik-safe-tips">Tek gün aktif.<br />Gün değişmeden kayıt kontrol edilir.<br />Diğer günlere giriş kapalı.<br />Aktif vardiya dışındaki butonlar pasif.</div>
         </aside>
       </div>
+      </div>
+
+      {quickModalOpen ? (
+        <div className="kyik-modal-backdrop kyik-quick-day-backdrop" role="dialog" aria-modal="true" aria-label="Tek gün hızlı personel girişi">
+          <div className={`kyik-modal kyik-quick-day-modal ${shiftMode}`} data-modal-size-key="ik-gunluk-personel-hizli-giris">
+            <div className="kyik-modal-head kyik-quick-day-head">
+              <div>
+                <span>TEK GÜN GÜVENLİ HIZLI GİRİŞ</span>
+                <h3>{activeDayInfo.long} · {modeLabel}</h3>
+                <p>Bu pencerede yalnız seçili gün ve seçili vardiya değişir.</p>
+              </div>
+              <button type="button" onClick={closeQuickModal} title="Hızlı girişi kapat"><X size={20} /></button>
+            </div>
+
+            <div className="kyik-quick-day-toolbar">
+              <button
+                type="button"
+                disabled={dirty || workDays.indexOf(selectedDate) <= 0}
+                onClick={() => changeQuickDate(workDays[workDays.indexOf(selectedDate) - 1])}
+              >‹ Önceki Gün</button>
+              <label>
+                <span>İşlem yapılacak gün</span>
+                <select value={selectedDate} disabled={dirty} onChange={(event) => changeQuickDate(event?.target.value)}>
+                  {workDays.map((date) => <option key={date} value={date}>{focusedDateParts(date, { day: "numeric", month: "long", year: "numeric", weekday: "long" })}</option>)}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={dirty || workDays.indexOf(selectedDate) >= workDays.length - 1}
+                onClick={() => changeQuickDate(workDays[workDays.indexOf(selectedDate) + 1])}
+              >Sonraki Gün ›</button>
+              <div className="kyik-quick-day-shifts">
+                <button type="button" disabled={dirty} className={shiftMode === "day" ? "active day" : ""} onClick={() => setShift("day")}><Sun size={17} /> Gündüz</button>
+                <button type="button" disabled={dirty} className={shiftMode === "night" ? "active night" : ""} onClick={() => setShift("night")}><Moon size={17} /> Gece</button>
+              </div>
+            </div>
+
+            <div className={`kyik-quick-day-focus ${shiftMode}`}>
+              <CircleAlert size={18} />
+              <div><strong>Yalnız {activeDayInfo.long} — {modeLabel}</strong><span>Başka bir gün veya vardiya bu kayıt sırasında değiştirilemez.</span></div>
+            </div>
+
+            <div className="kyik-quick-day-stats">
+              <div className="orange"><span>Seçilen</span><b>{quickDayPeople.length}</b><small>Bu gün çalışacak</small></div>
+              <div className="green"><span>Kontrol Edildi</span><b>{quickDayCheckedCount}</b><small>Yeşil işaretli</small></div>
+              <div className={quickDayPendingCount ? "red" : "green"}><span>Kontrol Bekleyen</span><b>{quickDayPendingCount}</b><small>{quickDayPendingCount ? "Gözden geçirilecek" : "Tamamlandı"}</small></div>
+              <div className="blue"><span>Toplam Personel</span><b>{includedPeople.length}</b><small>Tarih aralığı listesi</small></div>
+            </div>
+
+            <div className="kyik-quick-day-filter">
+              <div><Search size={16} /><input value={quickSearch} onChange={(event) => setQuickSearch(event?.target.value)} placeholder="Personel, kod veya vasıf ara" /></div>
+              <div className="kyik-quick-person-add">
+                <select value={quickAddPersonId} onChange={(event) => setQuickAddPersonId(event?.target.value)}>
+                  <option value="">Mevcut personelden seç</option>
+                  {quickAvailablePeople.map((person) => <option key={`quick-add-${person.id}`} value={person.id}>{person.name} · {personSkillName(person, skills)}</option>)}
+                </select>
+                <button type="button" disabled={!quickAddPersonId} onClick={addQuickRosterPerson}><Plus size={14} /> Listeye Ekle</button>
+                <button type="button" onClick={() => setPersonModal({ mode: "new", form: emptyDailyPersonForm(companyId) })}><UserPlus size={14} /> Yeni Personel</button>
+              </div>
+              <span><i className="selected" /> Seçildi <i className="checked" /> Kontrol edildi <i className="persisted" /> Kayıtlı</span>
+              {shiftMode === "night" && missingNightCount ? <em>{missingNightCount} personelde gece ücreti yok; seçim kapalıdır.</em> : null}
+            </div>
+
+            <div className="kyik-quick-day-body">
+              {quickModalGroups.map((group) => {
+                const eligible = group.people.filter((person) => shiftMode === "day" || toNumber(person.nightRate) > 0);
+                const selectedInGroup = eligible.filter((person) => Boolean(getDraftEntry(person.id, selectedDate)[shiftMode])).length;
+                const allSelected = eligible.length > 0 && selectedInGroup === eligible.length;
+                return (
+                  <section className={`kyik-quick-day-group ${group.people.length >= 12 ? "dense" : ""}`} key={`quick-modal-${group.label}`}>
+                    <div className="kyik-quick-day-group-head">
+                      <div><strong>{group.label}</strong><span>{selectedInGroup} / {eligible.length} seçildi</span></div>
+                      <button type="button" onClick={() => setQuickCells(eligible, [selectedDate], !allSelected)} disabled={!eligible.length}>{allSelected ? "Vasıf Seçimini Kaldır" : "Vasıfın Tümünü Seç"}</button>
+                    </div>
+                    <div className="kyik-quick-day-people">
+                      {group.people.map((person) => {
+                        const active = Boolean(getDraftEntry(person.id, selectedDate)[shiftMode]);
+                        const persisted = Boolean((dailyEntries[entryKeyFor(person.id, selectedDate)] || {})[shiftMode]);
+                        const checked = active && fastCheckedKeys.has(quickCheckKeyFor(person.id, selectedDate));
+                        const blocked = shiftMode === "night" && toNumber(person.nightRate) <= 0;
+                        return (
+                          <div className={`kyik-quick-day-person ${blocked ? "blocked" : checked ? "checked" : active ? "selected" : ""} ${persisted ? "persisted" : ""}`} key={`quick-modal-person-${person.id}`}>
+                            <button type="button" className="person-select" disabled={blocked} onClick={() => toggleQuickCell(person, selectedDate)}>
+                              <span className="mode-box">{blocked ? "—" : modeCode}</span>
+                              <span className="person-name"><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"} · {group.label}</small></span>
+                              <span className="person-rate">{blocked ? "Gece ücreti yok" : formatTRY(shiftMode === "day" ? person.dayRate : person.nightRate)}</span>
+                              <span className="selection-state">{checked ? "Kontrol edildi" : active ? "Seçildi" : "Seç"}</span>
+                            </button>
+                            <button type="button" className="person-check" disabled={!active || blocked} onClick={() => toggleQuickChecked(person.id, selectedDate)} title="Kontrol durumunu değiştir">
+                              {checked ? <BadgeCheck size={18} /> : <CheckCircle2 size={18} />}<span>{checked ? "Kontrol Edildi" : "Kontrol Et"}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+              {!quickModalGroups.length ? <div className="kyik-empty-cell">Aramaya uygun personel bulunamadı.</div> : null}
+            </div>
+
+            <div className="kyik-quick-day-footer">
+              <div>
+                <b>{dirty ? "Kaydedilmemiş seçimler var." : "Seçili gün kayıtları güncel."}</b>
+                <span>{dirty ? "Gün veya vardiya değiştirmek için önce kaydedin." : `${quickDayPeople.length} personel seçili, ${quickDayCheckedCount} personel kontrol edildi.`}</span>
+              </div>
+              <Button icon={X} onClick={closeQuickModal}>Kapat</Button>
+              <Button icon={Save} tone="primary" disabled={saveBusy || !dirty} onClick={() => saveQuickDay()}>{saveBusy ? "Kaydediliyor" : `${modeLabel} Kaydet`}</Button>
+              {workDays.indexOf(selectedDate) < workDays.length - 1 ? (
+                <Button icon={Save} tone="primary" disabled={saveBusy} onClick={() => saveQuickDay(workDays[workDays.indexOf(selectedDate) + 1])}>Kaydet ve Sonraki Gün</Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {pendingDate ? (
         <div className="kyik-modal-backdrop" role="dialog" aria-modal="true">
@@ -6216,8 +6556,8 @@ function DailyEntry({
     [range.start, range.end],
   );
   const entryKey = (personId, date) => `${personId}-${date}`;
-  const getEntry = (personId, date) =>
-    dailyEntries[entryKey(personId, date)] || { day: false, night: false };
+  const getEntry = useCallback((personId, date) =>
+    dailyEntries[entryKey(personId, date)] || { day: false, night: false }, [dailyEntries]);
   const buildDailyRowsForPeople = (people, clear = false) =>
     people.flatMap((person) =>
       days.map((date) => {
@@ -6270,7 +6610,7 @@ function DailyEntry({
       setPoolSaveBusy(false);
     }
   };
-  const matchesDailyPerson = (person) => {
+  const matchesDailyPerson = useCallback((person) => {
     if (!skillFilterMatches(person, roleFilter, skills)) return false;
     if (wageFilter === "day" && toNumber(person.dayRate) <= 0) return false;
     if (wageFilter === "night" && toNumber(person.nightRate) <= 0) return false;
@@ -6287,10 +6627,10 @@ function DailyEntry({
     return `${person.name} ${person.role} ${person.broker}`
       .toLocaleLowerCase("tr-TR")
       .includes(term);
-  };
+  }, [roleFilter, search, shiftMode, skills, wageFilter]);
   const visiblePeople = useMemo(() => {
     return daily.filter(matchesDailyPerson);
-  }, [daily, roleFilter, wageFilter, search, shiftMode, skills]);
+  }, [daily, matchesDailyPerson]);
   const includedPeople = daily.filter((person) => includedIds.has(person.id));
   const groupedIncludedPeople = useMemo(() => {
     const map = new Map();
@@ -6342,7 +6682,7 @@ function DailyEntry({
           amount,
         };
       }),
-    [days, includedPeople, dailyEntries],
+    [days, includedPeople, getEntry],
   );
   const selected =
     daily.find((person) => person.id === selectedId) ||
@@ -6420,8 +6760,6 @@ function DailyEntry({
         return next;
       });
       setIncludedIds(nextIncludedIds);
-      if (nextIncludedIds.size === 0) {
-      }
       setClearedIds((cleared) => new Set([...cleared, personId]));
       setDailyEntries((entries) => {
         const nextEntries = { ...entries };
@@ -6603,7 +6941,7 @@ function DailyEntry({
       shiftCount: dayCount + nightCount,
       uniqueCount: uniqueIds.size,
     };
-  }, [includedPeople, days, dailyEntries]);
+  }, [includedPeople, days, getEntry]);
   const weeklyListRows = useMemo(
     () =>
       includedPeople.map((person) => {
@@ -6626,7 +6964,7 @@ function DailyEntry({
         row.Tutar = dayTotal * toNumber(person.dayRate) + nightTotal * toNumber(person.nightRate);
         return row;
       }),
-    [includedPeople, days, dailyEntries, skills],
+    [includedPeople, skills, days, getEntry],
   );
 
   const exportWeeklyExcel = () => {
@@ -7826,23 +8164,16 @@ export default function IkPage({
   const [daily, setDaily] = useState([]);
   const [selectedMonthlyId, setSelectedMonthlyId] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [leaves, setLeaves] = useState([]);
+  const [, setNotice] = useState("");
+  const [, setLeaves] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
-  const [docs, setDocs] = useState([]);
+  const [, setDocs] = useState([]);
   const [monthlyLogs, setMonthlyLogs] = useState([]);
   const [dailyEntries, setDailyEntries] = useState({});
   const [dailyWeekOptions, setDailyWeekOptions] = useState([]);
   const [skills, setSkills] = useState([]);
-  const [officialHolidays, setOfficialHolidays] = useState(DEFAULT_OFFICIAL_HOLIDAYS_2026);
+  const [, setOfficialHolidays] = useState(DEFAULT_OFFICIAL_HOLIDAYS_2026);
   const [dailyDateRange, setDailyDateRange] = useState(() => readStoredDailyRange());
-
-  const activeLabel = useMemo(() => {
-    const item = NAV_GROUPS.flatMap((group) => group.items).find(
-      (navItem) => navItem.key === screen,
-    );
-    return item?.label || "İK Yönetim Özeti";
-  }, [screen]);
 
   const companyId =
     activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
@@ -7873,7 +8204,11 @@ export default function IkPage({
           getAylikMesailer({ mainCompanyId: companyId }),
           getAylikEvraklar({ mainCompanyId: companyId }),
           getGunlukPersonel({ mainCompanyId: companyId }),
-          getGunlukDurum({ mainCompanyId: companyId }),
+          getGunlukDurum({
+            mainCompanyId: companyId,
+            start: dailyDateRange.start,
+            end: dailyDateRange.end,
+          }),
           skillRequest,
           holidayRequest,
           getAylikLoglar({ mainCompanyId: companyId, limit: 200 }).catch(() => []),
@@ -7933,7 +8268,7 @@ export default function IkPage({
     return () => {
       cancelled = true;
     };
-  }, [companyId]);
+  }, [companyId, dailyDateRange.end, dailyDateRange.start]);
 
   const updateDailyDateRange = (nextRange) => {
     setDailyDateRange((current) => {
@@ -7944,7 +8279,7 @@ export default function IkPage({
     });
   };
 
-  const refreshDailyEntries = async (rangeOverride = dailyDateRange) => {
+  const refreshDailyEntries = useCallback(async (rangeOverride = dailyDateRange) => {
     const rows = await getGunlukDurum({
       mainCompanyId: companyId,
       start: rangeOverride.start,
@@ -7961,7 +8296,7 @@ export default function IkPage({
       : {};
     setDailyEntries(normalizedEntries);
     return normalizedEntries;
-  };
+  }, [companyId, dailyDateRange]);
 
   const refreshDailyPeople = async () => {
     const rows = await getGunlukPersonel({ mainCompanyId: companyId });
@@ -7986,7 +8321,7 @@ export default function IkPage({
     refreshDailyEntries(dailyDateRange).catch((error) => {
       setNotice(error?.message || "Günlük giriş kayıtları okunamadı.");
     });
-  }, [companyId, dailyDateRange.start, dailyDateRange.end]);
+  }, [companyId, dailyDateRange.start, dailyDateRange.end, refreshDailyEntries, dailyDateRange]);
 
   const createSkillAndRefresh = async (payload) => {
     const saved = await createIkSkill({ ...payload, mainCompanyId: companyId });
@@ -7995,15 +8330,6 @@ export default function IkPage({
     return saved;
   };
 
-  const updateMonthlyPerson = (nextPerson) => {
-    const normalized = normalizeMonthlyPerson(nextPerson);
-    setMonthly((current) =>
-      current.map((person) =>
-        person.id === normalized.id ? normalized : person,
-      ),
-    );
-    setSelectedMonthlyId(normalized.id);
-  };
 
   const saveMonthlyPerson = async (person) => {
     if (!person.id || saveBusy) return null;
@@ -8086,225 +8412,16 @@ export default function IkPage({
     }
   };
 
-  const deleteMonthlyPerson = async (id) => {
-    if (!id || saveBusy) return null;
-    setSaveBusy(true);
-    setNotice("");
-    try {
-      const saved = await deleteAylikPersonel(id);
-      const normalized = normalizeMonthlyPerson(saved);
-      setMonthly((current) =>
-        current.map((item) => (item.id === normalized.id ? normalized : item)),
-      );
-      setSelectedMonthlyId(normalized.id);
-      setNotice("Personel kartı pasife alındı.");
-      refreshMonthlyLogs().catch(() => {});
-      return normalized;
-    } catch (error) {
-      setNotice(error?.message || "Personel pasife alınamadı.");
-      return null;
-    } finally {
-      setSaveBusy(false);
-    }
-  };
 
-  const saveMonthlyLeaveBalancesBulk = async (payload = {}) => {
-    if (saveBusy) return [];
-    setSaveBusy(true);
-    setNotice("");
-    try {
-      const rows = await updateAylikIzinBakiyeleri({
-        mainCompanyId: companyId,
-        ...payload,
-      });
-      const normalized = Array.isArray(rows)
-        ? rows.map(normalizeMonthlyPerson)
-        : [];
-      const byId = new Map(normalized.map((person) => [person.id, person]));
-      setMonthly((current) =>
-        current.map((person) => byId.get(person.id) || person),
-      );
-      setNotice(`${normalized.length} personel izin hak/devir bakiyesi kaydedildi.`);
-      refreshMonthlyLogs().catch(() => {});
-      return normalized;
-    } catch (error) {
-      setNotice(error?.message || "Toplu izin bakiyesi kaydedilemedi.");
-      return [];
-    } finally {
-      setSaveBusy(false);
-    }
-  };
 
-  const saveContractInfo = async (person, contract) => {
-    if (!person.id || saveBusy) return null;
-    setSaveBusy(true);
-    setNotice("");
-    try {
-      const normalizedPerson = normalizeMonthlyPaymentAmounts(person);
-      await updateAylikPersonel(
-        person.id,
-        monthlyPayload(normalizedPerson, activeMainCompany),
-      );
-      await saveAylikSozlesme(person.id, {
-        salary: normalizedPerson.salary,
-        roadAllowance: normalizedPerson.roadAllowance,
-        bankPaymentType: normalizedPerson.paymentChannel,
-        contractStart: contract.startDate,
-        contractEnd: contract.endDate,
-        contractType: contract.contractType,
-        effectiveDate: contract.validDate,
-        note: contract.description,
-      });
-      const rows = await getAylikPersonel({ mainCompanyId: companyId });
-      const normalized = Array.isArray(rows)
-         ? rows.map(normalizeMonthlyPerson)
-        : [];
-      if (normalized.length) setMonthly(normalized);
-      setNotice("Maaş ve sözleşme bilgisi kaydedildi.");
-      refreshMonthlyLogs().catch(() => {});
-    } catch (error) {
-      setNotice(error?.message || "Sözleşme kaydedilemedi.");
-    } finally {
-      setSaveBusy(false);
-    }
-  };
 
-  const saveMonthlyAdjustment = async (row) => {
-    try {
-      const payrollEffect = payrollEffectForType(row?.type, row?.payrollEffect);
-      const saved = await saveAylikMesai({
-        employeeId: row?.personId,
-        date: row?.date,
-        adjustmentType: row?.type,
-        hourOrDay: row?.hours,
-        amount: row?.amount,
-        amountManual: row?.amountManual,
-        overtimeMode: row?.overtimeMode,
-        overtimeMultiplier: row?.overtimeMultiplier,
-        payrollEffect,
-        note: row?.note,
-        status: row?.status,
-      });
-      setNotice("Mesai / kesinti kaydı eklendi.");
-      refreshMonthlyLogs().catch(() => {});
-      return {
-        ...row,
-        payrollEffect,
-        id: saved?.id || row?.id,
-      };
-    } catch (error) {
-      setNotice(error?.message || "Mesai kaydı eklenemedi.");
-      return row;
-    }
-  };
 
-  const updateMonthlyAdjustment = async (id, row) => {
-    try {
-      const payrollEffect = payrollEffectForType(row?.type, row?.payrollEffect);
-      const saved = await updateAylikMesai(id, {
-        employeeId: row?.personId,
-        date: row?.date,
-        adjustmentType: row?.type,
-        hourOrDay: row?.hours,
-        amount: row?.amount,
-        amountManual: row?.amountManual,
-        overtimeMode: row?.overtimeMode,
-        overtimeMultiplier: row?.overtimeMultiplier,
-        payrollEffect,
-        note: row?.note,
-        status: row?.status,
-      });
-      setNotice("Mesai / kesinti kaydı güncellendi.");
-      refreshMonthlyLogs().catch(() => {});
-      return normalizeAdjustment(saved || { ...row, id });
-    } catch (error) {
-      setNotice(error?.message || "Mesai kaydı güncellenemedi.");
-      return { ...row, id };
-    }
-  };
 
-  const deleteMonthlyAdjustment = async (id) => {
-    try {
-      await deleteAylikMesai(id);
-      setNotice("Mesai / kesinti kaydı silindi.");
-      refreshMonthlyLogs().catch(() => {});
-    } catch (error) {
-      setNotice(error?.message || "Mesai kaydı silinemedi.");
-    }
-  };
 
-  const saveMonthlyLeave = async (row) => {
-    try {
-      const saved = await saveAylikIzin({
-        employeeId: row?.personId,
-        recordType: row?.type,
-        effectType: row?.effect,
-        startDate: row?.start,
-        endDate: row?.end,
-        dayCount: row?.days,
-        documentPath: row?.document,
-        note: row?.description,
-      });
-      setNotice("İzin kaydı eklendi.");
-      refreshMonthlyLogs().catch(() => {});
-      return {
-        ...row,
-        id: saved?.id || row?.id,
-      };
-    } catch (error) {
-      setNotice(error?.message || "İzin kaydı eklenemedi.");
-      return row;
-    }
-  };
 
-  const updateMonthlyLeave = async (id, row) => {
-    try {
-      const saved = await updateAylikIzin(id, {
-        employeeId: row?.personId,
-        recordType: row?.type,
-        effectType: row?.effect,
-        startDate: row?.start,
-        endDate: row?.end,
-        dayCount: row?.days,
-        documentPath: row?.document,
-        note: row?.description,
-      });
-      setNotice("İzin kaydı güncellendi.");
-      refreshMonthlyLogs().catch(() => {});
-      return normalizeLeave(saved || { ...row, id });
-    } catch (error) {
-      setNotice(error?.message || "İzin kaydı güncellenemedi.");
-      return { ...row, id };
-    }
-  };
 
-  const deleteMonthlyLeave = async (id) => {
-    try {
-      await deleteAylikIzin(id);
-      setNotice("İzin kaydı silindi.");
-      refreshMonthlyLogs().catch(() => {});
-    } catch (error) {
-      setNotice(error?.message || "İzin kaydı silinemedi.");
-    }
-  };
 
-  const saveMonthlyDocument = async (row) => {
-    const saved = await saveAylikEvrak({
-      employeeId: row?.personId,
-      documentType: row?.type,
-      fileName: row?.file,
-      filePath: row?.file,
-      date: row?.date,
-      status: row?.status,
-    });
-    refreshMonthlyLogs().catch(() => {});
-    return normalizeDocument(saved || row);
-  };
 
-  const deleteMonthlyDocument = async (id) => {
-    await deleteAylikEvrak(id);
-    refreshMonthlyLogs().catch(() => {});
-  };
 
   const renderScreen = () => {
     if (screen === "advanced-puantaj")
@@ -8415,6 +8532,8 @@ export default function IkPage({
           companyId={companyId}
           skills={skills}
           onCreateSkill={createSkillAndRefresh}
+          range={dailyDateRange}
+          setRange={updateDailyDateRange}
         />
       );
     if (screen === "daily-weekly")
@@ -8442,7 +8561,7 @@ export default function IkPage({
   };
 
   return (
-    <div className="kyik-page">
+    <div className="kyik-page notranslate" translate="no">
       <style>{IK_STYLE}</style>
       <main className="kyik-content">
         {renderScreen()}

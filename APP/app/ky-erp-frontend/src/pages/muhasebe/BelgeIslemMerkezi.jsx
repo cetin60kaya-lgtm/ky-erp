@@ -1,24 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
 import {
   CircleDollarSign,
+  Calculator,
   Factory,
   FileText,
   ImageOff,
   Inbox,
+  Link2,
   Layers,
   PackageOpen,
+  Plus,
   ReceiptText,
+  Save,
   UploadCloud,
 } from "lucide-react";
 import { ErpIcon } from "../../components/erp/IconMap";
+import InvoiceUploadReviewModal, {
+  buildInvoiceUploadPreview,
+} from "../../components/muhasebe/InvoiceUploadReviewModal";
 import {
   fetchIncomingDeliveryPool,
+  fetchModelReconciliations,
   fetchMuhasebeModels,
   fetchOutgoingDocumentsPool,
+  completeModelReconciliation,
+  linkIncomingDeliveryLinesToModels,
+  linkIncomingDeliveryToModel,
+  linkOutgoingDocumentToModel,
   saveIncomingDelivery,
   saveOutgoingDocument,
+  uploadDocumentsInChunks,
 } from "../../services/muhasebeService";
-import { updateModel } from "../../services/modelTrackingService";
+import {
+  getModelTrackingItems,
+  updateModel,
+} from "../../services/modelTrackingService";
+import { addUretimGirisi, getMakineVardiya } from "../../services/imalatApi";
 import {
   activePrintRegions,
   normalizePrintRegions,
@@ -42,11 +60,11 @@ import {
 import "./BelgeIslemMerkezi.css";
 
 const SUPPLIER_STATUS_TABS = [
-  ["ALL", "Tum"],
-  ["ISSUE", "Sorunlu"],
-  ["READY", "Hazir"],
-  ["QUARANTINE", "Karantina"],
-  ["APPROVED", "Islenen"],
+  ["ALL", "Tüm Havuz"],
+  ["ISSUE", "Kontrol Gerekli"],
+  ["READY", "İşleme Hazır"],
+  ["QUARANTINE", "Eksik Bilgi"],
+  ["APPROVED", "Tamamlanan"],
 ];
 
 const PROCESSED_STATUSES = new Set([
@@ -80,6 +98,7 @@ const QUARANTINE_REASONS = {
   LINE_QUANTITY_ZERO: "Kalem miktari sifir veya okunamadi.",
   LINE_PRICE_ZERO: "Kalem fiyati sifir veya okunamadi.",
   LINE_TOTAL_ZERO: "Kalem toplami sifir veya okunamadi.",
+  ZERO_VALUE_DOCUMENT: "Bedelsiz ürün belgesi; tutar ve KDV sıfırdır.",
 };
 
 const MANUAL_WARNING_FIELDS = new Set([
@@ -232,7 +251,8 @@ function canApproveRow(row) {
   const lines = Array.isArray(row?.lines) ? row?.lines : [];
   if (!lines.length || isProcessedStatus(row?.status)) return false;
   if (!row?.firmId) return false;
-  if (Number(row?.grandTotal || 0) <= 0) return false;
+  const zeroValueDocument = isZeroValueSupplierDocument(row);
+  if (Number(row?.grandTotal || 0) <= 0 && !zeroValueDocument) return false;
   if (Number(row?.vatTotal || 0) < 0) return false;
   if (approvalBlockersOf(row).length) return false;
   return lines.every(
@@ -240,6 +260,25 @@ function canApproveRow(row) {
       String(line?.rawName || line?.description || "").trim() &&
       (Number(line?.quantity || 0) > 0 ||
         Number(line?.subtotal || line?.total || 0) > 0),
+  );
+}
+
+function isZeroValueSupplierDocument(row) {
+  const lines = Array.isArray(row?.lines) ? row.lines : [];
+  if (!lines.length || !row?.firmId) return false;
+  if (!String(row?.documentNo || row?.invoiceNo || "").trim()) return false;
+  if (
+    Number(row?.subtotal || 0) !== 0 ||
+    Number(row?.vatTotal || 0) !== 0 ||
+    Number(row?.grandTotal || 0) !== 0
+  ) return false;
+  return lines.every(
+    (line) =>
+      !!line?.productId &&
+      String(line?.rawName || line?.description || "").trim() &&
+      Number(line?.quantity || 0) > 0 &&
+      Number(line?.unitPrice || 0) === 0 &&
+      Number(line?.subtotal || line?.total || 0) === 0,
   );
 }
 
@@ -621,19 +660,18 @@ function todayIso() {
 
 const MODEL_TRACK_FILTERS = [
   ["ALL", "Tüm Modeller"],
-  ["NO_DISPATCH", "İrsaliye Yok"],
-  ["INVOICE_WAITING", "Fatura Bekliyor"],
-  ["PARTIAL", "Kısmi Fatura"],
-  ["CLOSED", "Adet ile Kapandı"],
-  ["PRODUCTION_MISSING", "İmalat Eksik"],
-  ["PRICE_WAITING", "Fiyat Bekliyor"],
+  ["POOL", "Havuzda"],
+  ["WAITING", "İşlem Bekliyor"],
+  ["REVIEW", "Fark Kontrolü"],
+  ["READY", "Onaya Hazır"],
+  ["COMPLETED", "Tamamlandı"],
 ];
 
 function parseFlexibleNumber(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const raw = String(value ?? "").trim();
   if (!raw) return 0;
-  const cleaned = raw.replace(/[^\d,.\-]/g, "");
+  const cleaned = raw.replace(/[^\d,.-]/g, "");
   if (!cleaned) return 0;
   const negative = cleaned.startsWith("-");
   const unsigned = cleaned.replace(/-/g, "");
@@ -786,11 +824,30 @@ function modelTrackPrice(model, relatedRows = []) {
 
 function rowBelongsToModel(row, model) {
   const id = modelTrackId(model);
+  const allocations = Array.isArray(row?.modelAllocations)
+    ? row.modelAllocations
+    : Array.isArray(row?.raw?.modelAllocations)
+      ? row.raw.modelAllocations
+      : [];
+  if (id && allocations.some((item) => String(item?.modelId || "") === String(id))) return true;
   const rowId = textOf(row, ["modelId", "modelKaydiId", "model_id", "modelRecordId"]);
   if (id && rowId && String(rowId) === String(id)) return true;
   const rowName = normalizeMatchKey(textOf(row, ["modelAdi", "modelName", "model", "urunAdi"]));
   const modelName = normalizeMatchKey(modelTrackName(model));
   return Boolean(rowName && modelName && rowName === modelName);
+}
+
+function rowQuantityForModel(row, model) {
+  const id = String(modelTrackId(model) || "");
+  const allocations = Array.isArray(row?.modelAllocations)
+    ? row.modelAllocations
+    : Array.isArray(row?.raw?.modelAllocations)
+      ? row.raw.modelAllocations
+      : [];
+  const allocated = allocations
+    .filter((item) => String(item?.modelId || "") === id)
+    .reduce((sum, item) => sum + numberFrom(item, ["quantity", "adet", "miktar"]), 0);
+  return allocated || numberFrom(row, ["gelenAdet", "quantity", "adet", "miktar", "dispatchQty", "plannedQuantity"]);
 }
 
 function isCustomerDispatch(row) {
@@ -813,7 +870,19 @@ function isOurInvoice(row) {
   return Boolean(kind.includes("FATURA") || kind.includes("INVOICE") || textOf(row, ["faturaNo"]));
 }
 
-function buildModelTrackRows(models, incomingRows, outgoingRows) {
+function buildModelTrackRows(
+  models,
+  incomingRows,
+  outgoingRows,
+  productionSummaries = [],
+  reconciliations = [],
+) {
+  const productionByModel = new Map(
+    productionSummaries.map((row) => [String(modelTrackId(row)), row]),
+  );
+  const reconciliationByModel = new Map(
+    reconciliations.map((row) => [String(row?.modelId || ""), row]),
+  );
   return models
     .filter((model) => modelTrackId(model))
     .map((model) => {
@@ -830,15 +899,15 @@ function buildModelTrackRows(models, incomingRows, outgoingRows) {
       const relatedRows = [...dispatches, ...invoices];
       const price = modelTrackPrice(model, relatedRows);
       const dispatchQty = dispatches.reduce(
-        (sum, row) =>
-          sum + numberFrom(row, ["gelenAdet", "quantity", "adet", "miktar", "dispatchQty", "plannedQuantity"]),
+        (sum, row) => sum + rowQuantityForModel(row, model),
         0,
       );
       const invoiceQty = invoices.reduce(
         (sum, row) => sum + numberFrom(row, ["adet", "quantity", "gelenAdet", "miktar", "invoiceQty"]),
         0,
       );
-      const productionQty = numberFrom(model, [
+      const productionSummary = productionByModel.get(String(modelTrackId(model)));
+      const productionQty = numberFrom(productionSummary || model, [
         "imalatAdedi",
         "productionQty",
         "uretimAdedi",
@@ -849,15 +918,18 @@ function buildModelTrackRows(models, incomingRows, outgoingRows) {
       ]);
       const invoiceRemaining = dispatchQty - invoiceQty;
       const productionRemaining = dispatchQty - productionQty;
-      let status = "İrsaliye Yok";
-      if (!price.amount) status = "Fiyat Bekliyor";
-      else if (dispatchQty <= 0) status = "İrsaliye Yok";
-      else if (invoiceQty > dispatchQty) status = "Fatura Fazla";
-      else if (invoiceQty > productionQty) status = "İmalat Eksik";
-      else if (invoiceQty === dispatchQty && dispatchQty > 0) status = "Adet ile Kapandı";
-      else if (invoiceQty > 0) status = "Kısmi Fatura";
-      else if (productionQty > 0 && productionQty < dispatchQty) status = "İmalat Devam Ediyor";
-      else status = "Fatura Bekliyor";
+      const reconciliation = reconciliationByModel.get(String(modelTrackId(model))) || null;
+      const maxDifference = Math.max(
+        Math.abs(dispatchQty - productionQty),
+        Math.abs(dispatchQty - invoiceQty),
+        Math.abs(productionQty - invoiceQty),
+      );
+      let status = "Havuzda";
+      if (reconciliation?.status === "TAMAMLANDI") status = "Tamamlandı";
+      else if (dispatchQty <= 0) status = "Havuzda";
+      else if (productionQty <= 0 || invoiceQty <= 0) status = "İşlem Bekliyor";
+      else if (maxDifference === 0) status = "Onaya Hazır";
+      else status = "Fark Kontrolü";
       return {
         id: modelTrackId(model),
         model,
@@ -867,11 +939,14 @@ function buildModelTrackRows(models, incomingRows, outgoingRows) {
         price,
         dispatches,
         invoices,
+        productionRows: productionSummary?.productionHistory || [],
+        reconciliation,
         dispatchQty,
         productionQty,
         invoiceQty,
         invoiceRemaining,
         productionRemaining,
+        maxDifference,
         remainingAmount: Math.max(0, invoiceRemaining) * price.amount,
         status,
       };
@@ -880,21 +955,220 @@ function buildModelTrackRows(models, incomingRows, outgoingRows) {
 }
 
 function modelTrackFilterKey(row) {
-  if (row.status === "İrsaliye Yok") return "NO_DISPATCH";
-  if (row.status === "Fatura Bekliyor" || row.status === "İmalat Devam Ediyor") return "INVOICE_WAITING";
-  if (row.status === "Kısmi Fatura") return "PARTIAL";
-  if (row.status === "Adet ile Kapandı") return "CLOSED";
-  if (row.status === "İmalat Eksik" || row.status === "Fatura Fazla") return "PRODUCTION_MISSING";
-  if (row.status === "Fiyat Bekliyor") return "PRICE_WAITING";
+  if (row.status === "Havuzda") return "POOL";
+  if (row.status === "İşlem Bekliyor") return "WAITING";
+  if (row.status === "Fark Kontrolü") return "REVIEW";
+  if (row.status === "Onaya Hazır") return "READY";
+  if (row.status === "Tamamlandı") return "COMPLETED";
   return "ALL";
 }
 
 function modelTrackStatusClass(status) {
-  if (status === "Fatura Fazla") return "red";
-  if (status === "İmalat Eksik") return "amber";
-  if (status === "Adet ile Kapandı") return "green";
-  if (status === "Fiyat Bekliyor") return "amber";
+  if (status === "Fark Kontrolü") return "red";
+  if (status === "İşlem Bekliyor") return "amber";
+  if (status === "Onaya Hazır" || status === "Tamamlandı") return "green";
   return statusChipClass(status);
+}
+
+const INCOMING_POOL_STATES = {
+  ALL: "Tüm İrsaliyeler",
+  MATCH_WAITING: "Model Eşleşmesi Bekliyor",
+  PROCESS_WAITING: "İmalat / Fatura Bekliyor",
+  DIFFERENCE: "Fark Kontrolü",
+  READY: "Onaya Hazır",
+  COMPLETED: "Tamamlananlar",
+};
+
+function incomingPoolState(row, modelRows = []) {
+  const status = normalizeMatchKey(
+    textOf(row, ["reconciliationStatus", "status", "durum"], ""),
+  );
+  if (
+    row?.reconciliation?.status === "TAMAMLANDI" ||
+    status.includes("TAMAMLANDI")
+  ) return "COMPLETED";
+  const allocations = Array.isArray(row?.modelAllocations)
+    ? row.modelAllocations
+    : Array.isArray(row?.raw?.modelAllocations)
+      ? row.raw.modelAllocations
+      : [];
+  const modelIds = [...new Set([
+    ...allocations.map((item) => String(item?.modelId || "")),
+    String(textOf(row, ["modelId", "modelKaydiId"], "")),
+  ].filter(Boolean))];
+  if (!modelIds.length) return "MATCH_WAITING";
+  const linkedRows = modelRows.filter((item) => modelIds.includes(String(item.id)));
+  if (linkedRows.some((item) => item.status === "Fark Kontrolü")) return "DIFFERENCE";
+  if (linkedRows.length && linkedRows.every((item) => item.status === "Tamamlandı")) return "COMPLETED";
+  if (linkedRows.length && linkedRows.every((item) => ["Onaya Hazır", "Tamamlandı"].includes(item.status))) return "READY";
+  return "PROCESS_WAITING";
+}
+
+function incomingPoolStateClass(state) {
+  if (state === "COMPLETED" || state === "READY") return "green";
+  if (state === "DIFFERENCE") return "red";
+  if (state === "PROCESS_WAITING") return "amber";
+  return "blue";
+}
+
+function incomingSerialDraft(row, linkedModel) {
+  const price =
+    numericOf(row, ["birimFiyat", "unitPrice", "fiyat"]) ||
+    Number(linkedModel?.price?.amount || 0);
+  return {
+    id: row?.id || "",
+    firma: textOf(row, ["firma", "firmaAdi", "companyName"], "TAHA GİYİM SAN. VE TİC."),
+    irsaliyeNo: textOf(row, ["irsaliyeNo", "belgeNo", "documentNo"], ""),
+    tarih: textOf(row, ["tarih", "date"], todayIso()),
+    modelId: textOf(row, ["modelId", "modelKaydiId"], linkedModel?.id || ""),
+    adet: numberFrom(row, ["poolQty", "gelenAdet", "quantity", "adet", "miktar"]) || "",
+    birimFiyat: price || "",
+    not: textOf(row, ["notes", "not", "aciklama"], ""),
+  };
+}
+
+function emptyIncomingSerialDraft() {
+  return {
+    id: "",
+    firma: "TAHA GİYİM SAN. VE TİC.",
+    irsaliyeNo: "",
+    tarih: todayIso(),
+    modelId: "",
+    adet: "",
+    birimFiyat: "",
+    not: "",
+  };
+}
+
+function xmlNodeText(parent, localName) {
+  if (!parent) return "";
+  const node = Array.from(parent.getElementsByTagNameNS("*", localName) || [])[0];
+  return String(node?.textContent || "").trim();
+}
+
+async function previewIncomingFile(file, index) {
+  const name = String(file?.name || `Dosya ${index + 1}`);
+  const fallbackNo = name.match(/(?:^|[^A-Z0-9])([A-Z]{2,4}\d{8,16})(?=$|[^A-Z0-9])/i)?.[1] || "";
+  const base = {
+    key: `${index}-${name}-${file?.size || 0}`,
+    file,
+    fileName: name,
+    fileType: /\.xml$/i.test(name) ? "XML" : /\.pdf$/i.test(name) ? "PDF" : "",
+    documentNo: fallbackNo,
+    date: "",
+    companyName: "",
+    quantity: 0,
+    valid: false,
+    warning: "",
+  };
+  if (/\.pdf$/i.test(name)) {
+    return {
+      ...base,
+      valid: Boolean(fallbackNo),
+      warning: fallbackNo ? "PDF arşiv/ek dosyası" : "PDF dosya adında irsaliye numarası bulunamadı",
+    };
+  }
+  if (!/\.xml$/i.test(name)) return { ...base, warning: "Desteklenmeyen dosya türü" };
+  try {
+    const xmlText = await file.text();
+    const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+    if (xml.getElementsByTagName("parsererror").length) {
+      return { ...base, warning: "XML yapısı okunamadı" };
+    }
+    const root = xml.documentElement;
+    if (root?.localName !== "DespatchAdvice") {
+      return { ...base, warning: `Belge tipi irsaliye değil: ${root?.localName || "bilinmiyor"}` };
+    }
+    const directText = (localName) =>
+      String(Array.from(root.children || []).find((node) => node.localName === localName)?.textContent || "").trim();
+    const supplier = Array.from(root.getElementsByTagNameNS("*", "DespatchSupplierParty") || [])[0];
+    const quantities = Array.from(root.getElementsByTagNameNS("*", "DeliveredQuantity") || [])
+      .map((node) => Number(String(node.textContent || "0").replace(",", ".")))
+      .filter(Number.isFinite);
+    const documentNo = directText("ID") || fallbackNo;
+    return {
+      ...base,
+      documentNo,
+      date: directText("IssueDate"),
+      companyName: xmlNodeText(supplier, "RegistrationName") || xmlNodeText(supplier, "Name"),
+      quantity: quantities.reduce((sum, value) => sum + value, 0),
+      valid: /^TIA\d+/i.test(documentNo),
+      warning: /^TIA\d+/i.test(documentNo) ? "Kayda hazır" : "Geçerli TIA irsaliye numarası bulunamadı",
+    };
+  } catch (error) {
+    return { ...base, warning: error?.message || "Dosya okunamadı" };
+  }
+}
+
+function allocationId() {
+  return `allocation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function allocationsFromIncoming(row) {
+  const saved = Array.isArray(row?.modelAllocations)
+    ? row.modelAllocations
+    : Array.isArray(row?.raw?.modelAllocations)
+      ? row.raw.modelAllocations
+      : [];
+  if (saved.length) {
+    return saved.map((item) => ({
+      id: item.id || allocationId(),
+      sourceLineId: item.sourceLineId || "",
+      description: textOf(item, ["description", "aciklama", "rawDescription"], "İrsaliye satırı"),
+      quantity: numberFrom(item, ["quantity", "adet", "miktar"]) || "",
+      unitPrice: numberFrom(item, ["unitPrice", "birimFiyat", "fiyat"]) || "",
+      modelId: item.modelId || "",
+      modelName: item.modelName || item.modelAdi || "",
+    }));
+  }
+  const lines = Array.isArray(row?.kalemler)
+    ? row.kalemler
+    : Array.isArray(row?.items)
+      ? row.items
+      : [];
+  if (lines.length) {
+    return lines.map((line) => ({
+      id: allocationId(),
+      sourceLineId: line.id || line.sourceLineId || "",
+      description: textOf(line, ["aciklama", "description", "productName", "rawDescription"], "İrsaliye satırı"),
+      quantity: numberFrom(line, ["adet", "quantity", "miktar"]) || "",
+      unitPrice: numberFrom(line, ["unitPrice", "birimFiyat", "fiyat"]) || "",
+      modelId: line.modelId || "",
+      modelName: line.modelAdi || line.modelName || "",
+    }));
+  }
+  return [{
+    id: allocationId(),
+    sourceLineId: "",
+    description: textOf(row, ["guessedModelName", "modelAdiOnerisi", "aciklama"], "İrsaliye satırı"),
+    quantity: numberFrom(row, ["gelenAdet", "quantity", "adet", "miktar"]) || "",
+    unitPrice: numberFrom(row, ["unitPrice", "birimFiyat", "fiyat"]) || "",
+    modelId: textOf(row, ["modelId", "modelKaydiId"], ""),
+    modelName: textOf(row, ["modelAdi", "modelName"], ""),
+  }];
+}
+
+function emptyPoolProductionDraft() {
+  return {
+    tarih: todayIso(),
+    adet: "",
+    vardiya: "Gündüz",
+    makineNo: "SERİ GİRİŞ",
+    makinaci: "",
+    baskiBolgesi: "Ön",
+    not: "Model Takip seri işlem ekranı",
+  };
+}
+
+function emptyPoolInvoiceDraft(row) {
+  return {
+    faturaNo: "",
+    tarih: todayIso(),
+    adet: row?.poolQty || "",
+    birimFiyat: "",
+    kdv: "20",
+    not: "Model Takip seri işlem ekranı",
+  };
 }
 
 function emptyDispatchDraft(row) {
@@ -936,6 +1210,8 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
   const [incomingRows, setIncomingRows] = useState([]);
   const [outgoingRows, setOutgoingRows] = useState([]);
   const [models, setModels] = useState([]);
+  const [productionSummaries, setProductionSummaries] = useState([]);
+  const [reconciliations, setReconciliations] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -949,33 +1225,100 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
   const [priceDraft, setPriceDraft] = useState(emptyPriceDraft());
   const [regionDraft, setRegionDraft] = useState([]);
   const [newRegionName, setNewRegionName] = useState("");
+  const [matchSearch, setMatchSearch] = useState("");
+  const [selectedDispatchIds, setSelectedDispatchIds] = useState([]);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState([]);
+  const [reconciliationTolerance, setReconciliationTolerance] = useState("0");
+  const [reconciliationNote, setReconciliationNote] = useState("");
+  const [incomingPoolOpen, setIncomingPoolOpen] = useState(false);
+  const [incomingPoolFilter, setIncomingPoolFilter] = useState("ALL");
+  const [incomingPoolSearch, setIncomingPoolSearch] = useState("");
+  const [incomingPoolSelectedId, setIncomingPoolSelectedId] = useState("");
+  const [, setIncomingPoolFiles] = useState([]);
+  const [incomingPoolPreviewRows, setIncomingPoolPreviewRows] = useState([]);
+  const [incomingPoolPreviewSelected, setIncomingPoolPreviewSelected] = useState([]);
+  const [incomingPoolUploadStage, setIncomingPoolUploadStage] = useState("");
+  const [incomingPoolUploadResults, setIncomingPoolUploadResults] = useState([]);
+  const [incomingPoolBusy, setIncomingPoolBusy] = useState(false);
+  const [incomingPoolProgress, setIncomingPoolProgress] = useState({ done: 0, total: 0 });
+  const [incomingPoolMessage, setIncomingPoolMessage] = useState("");
+  const [incomingPoolModelSearch, setIncomingPoolModelSearch] = useState("");
+  const [incomingPoolEntryMode, setIncomingPoolEntryMode] = useState("EDIT");
+  const [incomingPoolDraft, setIncomingPoolDraft] = useState(emptyIncomingSerialDraft());
+  const [incomingPoolProductionDraft, setIncomingPoolProductionDraft] = useState(emptyPoolProductionDraft());
+  const [incomingPoolInvoiceDraft, setIncomingPoolInvoiceDraft] = useState(emptyPoolInvoiceDraft());
+  const [incomingPoolInvoiceId, setIncomingPoolInvoiceId] = useState("");
+  const [incomingPoolMachines, setIncomingPoolMachines] = useState([]);
+  const [incomingPoolUploadOpen, setIncomingPoolUploadOpen] = useState(false);
+  const [incomingPoolAction, setIncomingPoolAction] = useState("");
+  const [incomingPoolSplit, setIncomingPoolSplit] = useState(55);
+  const [incomingPoolHeight, setIncomingPoolHeight] = useState(0);
+  const [incomingPoolAllocations, setIncomingPoolAllocations] = useState([]);
+  const [incomingPoolActiveAllocation, setIncomingPoolActiveAllocation] = useState(0);
+  const incomingPoolInputRef = useRef(null);
+  const incomingPoolWorkspaceRef = useRef(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
     try {
-      const [incoming, outgoing, modelList] = await Promise.all([
+      const [incoming, outgoing, modelList, productionList, reconciliationList, machineList] = await Promise.all([
         fetchIncomingDeliveryPool(activeMainCompany),
         fetchOutgoingDocumentsPool(activeMainCompany),
         fetchMuhasebeModels(activeMainCompany),
+        getModelTrackingItems(activeMainCompany),
+        fetchModelReconciliations(activeMainCompany),
+        getMakineVardiya(activeMainCompany).catch(() => []),
       ]);
       setIncomingRows(Array.isArray(incoming) ? incoming : []);
       setOutgoingRows(Array.isArray(outgoing) ? outgoing : []);
       setModels(Array.isArray(modelList) ? modelList : []);
+      setProductionSummaries(Array.isArray(productionList) ? productionList : []);
+      setReconciliations(Array.isArray(reconciliationList) ? reconciliationList : []);
+      const normalizedMachines = (Array.isArray(machineList) ? machineList : [])
+        .map((machine) => ({
+          id: machine?.id || machine?.makineNo || machine?.makinaNo || machine?.ad || "",
+          no: machine?.makineNo || machine?.makinaNo || machine?.id || machine?.ad || "",
+          name: machine?.makineAdi || machine?.makinaAdi || machine?.ad || machine?.name || "",
+          dayOperator: machine?.gunduzMakinaci || machine?.dayOperator || machine?.operator || machine?.makinaci || "",
+          nightOperator: machine?.geceMakinaci || machine?.nightOperator || machine?.operator || machine?.makinaci || "",
+        }))
+        .filter((machine) => machine.no || machine.name);
+      setIncomingPoolMachines(normalizedMachines);
+      if (normalizedMachines.length) {
+        setIncomingPoolProductionDraft((current) => {
+          const selectedMachine = normalizedMachines.find((machine) => String(machine.no) === String(current.makineNo));
+          if (selectedMachine) return current;
+          const first = normalizedMachines[0];
+          return {
+            ...current,
+            makineNo: first.no || first.id,
+            makinaci: first.dayOperator || "",
+          };
+        });
+      }
+      return { incoming: Array.isArray(incoming) ? incoming : [], outgoing: Array.isArray(outgoing) ? outgoing : [] };
     } catch (error) {
       setMessage(error?.message || "Müşteri model takip verisi yüklenemedi.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeMainCompany]);
 
   useEffect(() => {
     load();
-  }, [activeMainCompany?.id, activeMainCompany?.slug]);
+  }, [activeMainCompany?.id, activeMainCompany?.slug, load]);
 
   const rows = useMemo(
-    () => buildModelTrackRows(models, incomingRows, outgoingRows),
-    [models, incomingRows, outgoingRows],
+    () =>
+      buildModelTrackRows(
+        models,
+        incomingRows,
+        outgoingRows,
+        productionSummaries,
+        reconciliations,
+      ),
+    [models, incomingRows, outgoingRows, productionSummaries, reconciliations],
   );
 
   useEffect(() => {
@@ -992,14 +1335,7 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
     const q = normalizeMatchKey(search);
     return rows.filter((row) => {
       const matchesFilter =
-        filter === "ALL" ||
-        (filter === "NO_DISPATCH" && row?.dispatchQty <= 0) ||
-        (filter === "PRICE_WAITING" && !row?.price.amount) ||
-        (filter === "INVOICE_WAITING" && row?.dispatchQty > 0 && row.invoiceQty === 0) ||
-        (filter === "PARTIAL" && row?.invoiceQty > 0 && row?.invoiceQty < row?.dispatchQty) ||
-        (filter === "CLOSED" && row?.dispatchQty > 0 && row.invoiceQty === row?.dispatchQty) ||
-        (filter === "PRODUCTION_MISSING" && row?.invoiceQty > row?.productionQty) ||
-        modelTrackFilterKey(row) === filter;
+        filter === "ALL" || modelTrackFilterKey(row) === filter;
       const haystack = normalizeMatchKey(`${row?.modelName} ${row?.firm}`);
       return matchesFilter && (!q || haystack.includes(q));
     });
@@ -1011,23 +1347,852 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
     [selected?.model],
   );
 
-  const openDispatch = () => {
+  const incomingPoolItems = useMemo(
+    () =>
+      incomingRows
+        .map((row) => {
+          const lines = Array.isArray(row?.kalemler)
+            ? row.kalemler
+            : Array.isArray(row?.items)
+              ? row.items
+              : [];
+          const state = incomingPoolState(row, rows);
+          const headerQty = numberFrom(row, ["gelenAdet", "quantity", "adet", "miktar"]);
+          const lineQty = lines.reduce(
+            (sum, line) => sum + numberFrom(line, ["adet", "quantity", "miktar"]),
+            0,
+          );
+          const allocations = Array.isArray(row?.modelAllocations)
+            ? row.modelAllocations
+            : Array.isArray(row?.raw?.modelAllocations)
+              ? row.raw.modelAllocations
+              : [];
+          const linkedNames = [...new Set(allocations.map((item) => item?.modelName || item?.modelAdi).filter(Boolean))];
+          return {
+            ...row,
+            poolState: state,
+            poolStateLabel: INCOMING_POOL_STATES[state],
+            poolQty: headerQty || lineQty,
+            poolAllocations: allocations,
+            poolModelNames: linkedNames,
+            poolModelHint:
+              textOf(row, ["modelAdiOnerisi", "guessedModelName"], "") ||
+              textOf(lines[0], ["modelAdiOnerisi", "productName", "aciklama"], ""),
+            poolLineText: lines
+              .map((line) => textOf(line, ["aciklama", "productName", "rawDescription"], ""))
+              .filter(Boolean)
+              .join(" · "),
+          };
+        })
+        .sort((a, b) =>
+          String(textOf(b, ["tarih", "date", "createdAt"], "")).localeCompare(
+            String(textOf(a, ["tarih", "date", "createdAt"], "")),
+          ),
+        ),
+    [incomingRows, rows],
+  );
+
+  const incomingPoolCounts = useMemo(
+    () =>
+      incomingPoolItems.reduce(
+        (counts, row) => {
+          counts.ALL += 1;
+          counts[row.poolState] = (counts[row.poolState] || 0) + 1;
+          return counts;
+        },
+        {
+          ALL: 0,
+          MATCH_WAITING: 0,
+          PROCESS_WAITING: 0,
+          DIFFERENCE: 0,
+          READY: 0,
+          COMPLETED: 0,
+        },
+      ),
+    [incomingPoolItems],
+  );
+
+  const visibleIncomingPoolItems = useMemo(() => {
+    const q = normalizeMatchKey(incomingPoolSearch);
+    return incomingPoolItems.filter((row) => {
+      const filterOk = incomingPoolFilter === "ALL" || row.poolState === incomingPoolFilter;
+      const haystack = normalizeMatchKey(
+        `${textOf(row, ["irsaliyeNo", "belgeNo", "documentNo"], "")} ${textOf(
+          row,
+          ["firma", "firmaAdi", "companyName"],
+          "",
+        )} ${row.poolModelHint} ${row.poolLineText}`,
+      );
+      return filterOk && (!q || haystack.includes(q));
+    });
+  }, [incomingPoolFilter, incomingPoolItems, incomingPoolSearch]);
+
+  const selectedIncomingPoolItem =
+    incomingPoolItems.find((row) => String(row.id) === String(incomingPoolSelectedId)) ||
+    visibleIncomingPoolItems[0] ||
+    null;
+
+  const selectedIncomingPoolModelId =
+    incomingPoolDraft.modelId ||
+    textOf(selectedIncomingPoolItem, ["modelId", "modelKaydiId"], "");
+  const selectedIncomingPoolModelIds = [...new Set([
+    ...incomingPoolAllocations.map((item) => String(item?.modelId || "")),
+    String(selectedIncomingPoolModelId || ""),
+  ].filter(Boolean))];
+  const selectedIncomingPoolModelRows = rows.filter((row) =>
+    selectedIncomingPoolModelIds.includes(String(row.id)),
+  );
+  const selectedIncomingPoolModelRow =
+    selectedIncomingPoolModelRows[0] ||
+    rows.find((row) => String(row.id) === String(selectedIncomingPoolModelId)) || null;
+  const selectedIncomingPoolModel =
+    models.find((model) => String(modelTrackId(model)) === String(selectedIncomingPoolModelId)) ||
+    selectedIncomingPoolModelRow?.model ||
+    null;
+
+  const incomingPoolInvoiceCandidates = useMemo(() => {
+    const firmKey = normalizeMatchKey(incomingPoolDraft.firma);
+    return outgoingRows
+      .filter((invoice) => {
+        const linkedModelId = textOf(invoice, ["modelId", "modelKaydiId"], "");
+        if (linkedModelId && String(linkedModelId) !== String(selectedIncomingPoolModelId)) return false;
+        if (!firmKey) return true;
+        const invoiceFirm = normalizeMatchKey(textOf(invoice, ["firma", "firmaAdi", "companyName"], ""));
+        return !invoiceFirm || invoiceFirm === firmKey || String(linkedModelId) === String(selectedIncomingPoolModelId);
+      })
+      .slice(0, 200);
+  }, [incomingPoolDraft.firma, outgoingRows, selectedIncomingPoolModelId]);
+
+  const incomingPoolSerialTotals = useMemo(() => {
+    const allocationQty = incomingPoolAllocations.reduce(
+      (sum, item) => sum + parseFlexibleNumber(item.quantity),
+      0,
+    );
+    const dispatchQty = allocationQty || parseFlexibleNumber(incomingPoolDraft.adet);
+    const dispatchAmount = incomingPoolAllocations.length
+      ? incomingPoolAllocations.reduce((sum, item) => {
+          const row = rows.find((modelRow) => String(modelRow.id) === String(item.modelId));
+          const price = parseFlexibleNumber(item.unitPrice) || Number(row?.price?.amount || 0);
+          return sum + parseFlexibleNumber(item.quantity) * price;
+        }, 0)
+      : dispatchQty * (parseFlexibleNumber(incomingPoolDraft.birimFiyat) || Number(selectedIncomingPoolModelRow?.price?.amount || 0));
+    const productionQty = selectedIncomingPoolModelRows.reduce((sum, row) => sum + Number(row?.productionQty || 0), 0);
+    const invoiceQty = selectedIncomingPoolModelRows.reduce((sum, row) => sum + Number(row?.invoiceQty || 0), 0);
+    const price = dispatchQty ? dispatchAmount / dispatchQty : 0;
+    return {
+      dispatchQty,
+      price,
+      dispatchAmount,
+      productionQty,
+      productionAmount: productionQty * price,
+      invoiceQty,
+      invoiceAmount: invoiceQty * price,
+      remainingQty: Math.max(0, dispatchQty - invoiceQty),
+      remainingAmount: Math.max(0, dispatchQty - invoiceQty) * price,
+    };
+  }, [incomingPoolAllocations, incomingPoolDraft.adet, incomingPoolDraft.birimFiyat, rows, selectedIncomingPoolModelRow, selectedIncomingPoolModelRows]);
+
+  useEffect(() => {
+    if (!selectedIncomingPoolItem) return;
+    const allocations = allocationsFromIncoming(selectedIncomingPoolItem);
+    const linkedRow = rows.find(
+      (row) =>
+        String(row.id) ===
+        String(textOf(selectedIncomingPoolItem, ["modelId", "modelKaydiId"], "") || allocations[0]?.modelId || ""),
+    );
+    setIncomingPoolEntryMode("EDIT");
+    setIncomingPoolDraft({
+      ...incomingSerialDraft(selectedIncomingPoolItem, linkedRow),
+      modelId:
+        textOf(selectedIncomingPoolItem, ["modelId", "modelKaydiId"], "") ||
+        allocations[0]?.modelId ||
+        "",
+    });
+    setIncomingPoolAllocations(allocations);
+    setIncomingPoolActiveAllocation(0);
+    setIncomingPoolInvoiceDraft(
+      emptyPoolInvoiceDraft({ poolQty: selectedIncomingPoolItem.poolQty }),
+    );
+    setIncomingPoolInvoiceId("");
+  }, [rows, selectedIncomingPoolItem, selectedIncomingPoolItem?.id]);
+
+  const incomingPoolModelCandidates = useMemo(() => {
+    if (!selectedIncomingPoolItem) return [];
+    const explicitQuery = normalizeMatchKey(incomingPoolModelSearch);
+    const hint = normalizeMatchKey(
+      `${selectedIncomingPoolItem.poolModelHint} ${selectedIncomingPoolItem.poolLineText}`,
+    );
+    return models
+      .map((model) => {
+        const name = modelTrackName(model);
+        const firm = modelTrackFirm(model);
+        const nameKey = normalizeMatchKey(name);
+        const firmKey = normalizeMatchKey(firm);
+        let score = 0;
+        if (explicitQuery && nameKey.includes(explicitQuery)) score += 100;
+        if (hint && nameKey && hint.includes(nameKey)) score += 70;
+        if (hint && nameKey && nameKey.split(" ").some((part) => part.length > 3 && hint.includes(part))) score += 25;
+        if (normalizeMatchKey(textOf(selectedIncomingPoolItem, ["firma", "firmaAdi"], "")) === firmKey) score += 10;
+        return { model, id: modelTrackId(model), name, firm, score };
+      })
+      .filter((item) => (explicitQuery ? item.name.toLocaleLowerCase("tr-TR").includes(incomingPoolModelSearch.toLocaleLowerCase("tr-TR")) || item.firm.toLocaleLowerCase("tr-TR").includes(incomingPoolModelSearch.toLocaleLowerCase("tr-TR")) : true))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "tr"))
+      .slice(0, 80);
+  }, [incomingPoolModelSearch, models, selectedIncomingPoolItem]);
+
+  const matchCandidates = useMemo(() => {
+    if (!selected) return { dispatches: [], invoices: [] };
+    const q = normalizeMatchKey(matchSearch);
+    const selectedFirm = normalizeMatchKey(selected.firm);
+    const eligible = (row) => {
+      const linkedModelId = String(
+        textOf(row, ["modelId", "modelKaydiId", "modelRecordId"], ""),
+      );
+      if (linkedModelId && linkedModelId !== String(selected.id)) return false;
+      if (linkedModelId === String(selected.id)) return true;
+      const haystack = normalizeMatchKey(
+        `${textOf(row, ["firma", "firmaAdi", "companyName"], "")} ${textOf(
+          row,
+          ["belgeNo", "irsaliyeNo", "faturaNo", "documentNo"],
+          "",
+        )} ${textOf(row, ["modelAdi", "modelName", "aciklama"], "")}`,
+      );
+      if (q) return haystack.includes(q);
+      const rowFirm = normalizeMatchKey(
+        textOf(row, ["firma", "firmaAdi", "companyName"], ""),
+      );
+      return !selectedFirm || !rowFirm || rowFirm === selectedFirm;
+    };
+    return {
+      dispatches: incomingRows.filter((row) => isCustomerDispatch(row) && eligible(row)),
+      invoices: outgoingRows.filter((row) => isOurInvoice(row) && eligible(row)),
+    };
+  }, [incomingRows, matchSearch, outgoingRows, selected]);
+
+  const selectedMatchTotals = useMemo(() => {
+    const dispatchSet = new Set(selectedDispatchIds.map(String));
+    const invoiceSet = new Set(selectedInvoiceIds.map(String));
+    const dispatchQty = matchCandidates.dispatches
+      .filter((row) => dispatchSet.has(String(row?.id || row?.documentId)))
+      .reduce(
+        (sum, row) =>
+          sum + numberFrom(row, ["gelenAdet", "quantity", "adet", "miktar"]),
+        0,
+      );
+    const invoiceQty = matchCandidates.invoices
+      .filter((row) => invoiceSet.has(String(row?.id || row?.documentId)))
+      .reduce(
+        (sum, row) => sum + numberFrom(row, ["adet", "quantity", "miktar"]),
+        0,
+      );
+    const productionQty = Number(selected?.productionQty || 0);
+    const differences = {
+      dispatchProduction: dispatchQty - productionQty,
+      dispatchInvoice: dispatchQty - invoiceQty,
+      productionInvoice: productionQty - invoiceQty,
+    };
+    return {
+      dispatchQty,
+      productionQty,
+      invoiceQty,
+      differences,
+      maxDifference: Math.max(
+        ...Object.values(differences).map((value) => Math.abs(value)),
+      ),
+    };
+  }, [matchCandidates, selected?.productionQty, selectedDispatchIds, selectedInvoiceIds]);
+
+  const openReconciliation = () => {
     if (!selected) return;
-    setDispatchDraft(emptyDispatchDraft(selected));
-    setModal("dispatch");
+    setMatchSearch("");
+    setSelectedDispatchIds(
+      selected.dispatches.map((row) => String(row?.id || row?.documentId)).filter(Boolean),
+    );
+    setSelectedInvoiceIds(
+      selected.invoices.map((row) => String(row?.id || row?.documentId)).filter(Boolean),
+    );
+    setReconciliationTolerance(String(selected.reconciliation?.tolerance || 0));
+    setReconciliationNote(selected.reconciliation?.note || "");
+    setModal("reconciliation");
   };
 
-  const openInvoice = () => {
-    if (!selected) return;
-    setInvoiceDraft(emptyInvoiceDraft(selected));
-    setModal("invoice");
+  const toggleSelectedDocument = (kind, id) => {
+    const normalizedId = String(id || "");
+    const setter = kind === "dispatch" ? setSelectedDispatchIds : setSelectedInvoiceIds;
+    setter((prev) =>
+      prev.includes(normalizedId)
+        ? prev.filter((item) => item !== normalizedId)
+        : [...prev, normalizedId],
+    );
   };
 
-  const openPrice = () => {
-    if (!selected) return;
-    setPriceDraft(emptyPriceDraft(selected));
-    setModal("price");
+  const ensureSelectedDocumentsLinked = async () => {
+    for (const id of selectedDispatchIds) {
+      const row = incomingRows.find((item) => String(item?.id || item?.documentId) === id);
+      const linkedId = textOf(row, ["modelId", "modelKaydiId"], "");
+      if (row && String(linkedId) !== String(selected.id)) {
+        await linkIncomingDeliveryToModel(activeMainCompany, id, selected.id, selected.model);
+      }
+    }
+    for (const id of selectedInvoiceIds) {
+      const row = outgoingRows.find((item) => String(item?.id || item?.documentId) === id);
+      const linkedId = textOf(row, ["modelId", "modelKaydiId"], "");
+      if (row && String(linkedId) !== String(selected.id)) {
+        await linkOutgoingDocumentToModel(activeMainCompany, id, selected.id, selected.model);
+      }
+    }
   };
+
+  const linkSelectedDocuments = async () => {
+    if (!selected || !selectedDispatchIds.length || !selectedInvoiceIds.length) {
+      setMessage("Kontrol için en az bir irsaliye ve bir kesilen fatura seçin.");
+      return;
+    }
+    if (!window.confirm("Seçilen belgeler bu modele bağlansın mı?")) return;
+    setBusy(true);
+    try {
+      await ensureSelectedDocumentsLinked();
+      setMessage("İrsaliye ve faturalar modele bağlandı. Üçlü adet kontrolü güncellendi.");
+      await load();
+    } catch (error) {
+      setMessage(error?.message || "Belge eşleştirmesi tamamlanamadı.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approveReconciliation = async () => {
+    if (!selected || !selectedDispatchIds.length || !selectedInvoiceIds.length) {
+      setMessage("Onay için irsaliye ve fatura seçimi zorunludur.");
+      return;
+    }
+    const tolerance = Math.max(0, parseFlexibleNumber(reconciliationTolerance));
+    if (selectedMatchTotals.maxDifference > tolerance) {
+      setMessage(
+        `En yüksek adet farkı ${numberText(selectedMatchTotals.maxDifference)}. Onay toleransı artırılmadan işlem beklemede kalır.`,
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        selectedMatchTotals.maxDifference > 0
+          ? "Tolerans içindeki adet farkını onaylayıp irsaliyeyi tamamlamak istiyor musunuz?"
+          : "Üçlü adet kontrolünü onaylayıp irsaliyeyi tamamlamak istiyor musunuz?",
+      )
+    ) return;
+    setBusy(true);
+    try {
+      // Tek onayla: havuzdaki belgeler henüz bağlı değilse önce güvenli biçimde
+      // modele bağlanır, ardından aynı akışta üçlü mutabakat tamamlanır.
+      await ensureSelectedDocumentsLinked();
+      await completeModelReconciliation(activeMainCompany, {
+        modelId: selected.id,
+        modelName: selected.modelName,
+        dispatchIds: selectedDispatchIds,
+        invoiceIds: selectedInvoiceIds,
+        tolerance,
+        note: reconciliationNote,
+      });
+      setModal("");
+      setMessage("Mutabakat tamamlandı; seçilen müşteri irsaliyesi kapatıldı.");
+      await load();
+    } catch (error) {
+      setMessage(error?.message || "Mutabakat onaylanamadı.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openIncomingPool = () => {
+    setIncomingPoolOpen(true);
+    setIncomingPoolHeight((current) => current || Math.max(560, window.innerHeight - 56));
+    setIncomingPoolMessage("");
+    setIncomingPoolSelectedId((current) => current || String(incomingPoolItems[0]?.id || ""));
+  };
+
+  const selectIncomingPoolRow = (row) => {
+    const allocations = allocationsFromIncoming(row);
+    const hasLinkedModel = allocations.some((item) => item.modelId);
+    setIncomingPoolSelectedId(String(row.id));
+    setIncomingPoolEntryMode("EDIT");
+    setIncomingPoolModelSearch("");
+    setIncomingPoolAllocations(allocations);
+    setIncomingPoolActiveAllocation(0);
+    if (!hasLinkedModel) setIncomingPoolAction("MODEL");
+  };
+
+  const setIncomingFiles = async (fileList) => {
+    const files = Array.from(fileList || []).filter((file) =>
+      /\.(xml|pdf)$/i.test(file?.name || ""),
+    );
+    setIncomingPoolFiles(files);
+    setIncomingPoolProgress({ done: 0, total: files.length });
+    setIncomingPoolUploadResults([]);
+    if (!files.length) {
+      setIncomingPoolPreviewRows([]);
+      setIncomingPoolPreviewSelected([]);
+      setIncomingPoolUploadStage("");
+      setIncomingPoolMessage("Yalnızca XML veya PDF seçin.");
+      return;
+    }
+    setIncomingPoolBusy(true);
+    setIncomingPoolMessage(`${files.length} dosya okunuyor; irsaliye ön kontrol listesi hazırlanıyor…`);
+    try {
+      const previews = await Promise.all(files.map(previewIncomingFile));
+      setIncomingPoolPreviewRows(previews);
+      setIncomingPoolPreviewSelected(previews.filter((row) => row.valid).map((row) => row.key));
+      setIncomingPoolUploadStage("PREVIEW");
+      setIncomingPoolMessage(`${previews.length} dosya ön kontrolden geçirildi. Kayıttan önce listeyi onaylayın.`);
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+  const uploadIncomingPoolFiles = async () => {
+    const selectedRows = incomingPoolPreviewRows.filter((row) =>
+      incomingPoolPreviewSelected.includes(row.key),
+    );
+    const selectedFiles = selectedRows.map((row) => row.file);
+    if (!selectedFiles.length) {
+      setIncomingPoolMessage("Önce XML/PDF irsaliye dosyalarını seçin.");
+      return;
+    }
+    setIncomingPoolBusy(true);
+    setIncomingPoolUploadStage("UPLOADING");
+    try {
+      const result = await uploadDocumentsInChunks(
+        activeMainCompany,
+        selectedFiles,
+        {
+          chunkSize: 10,
+          targetType: "MUSTERIDEN_GELEN_IRSALIYE",
+          documentType: "musteriden_gelen_irsaliye",
+          templateCompanyName: "TAHA GİYİM SAN. VE TİC.",
+          notes: "Model Takip müşteri irsaliye toplu havuzu",
+          onProgress: setIncomingPoolProgress,
+        },
+      );
+      const resultRows = Array.isArray(result?.results) ? result.results : [];
+      const duplicateCount = resultRows.filter((row) => row?.routeStatus === "DUPLICATE").length;
+      const failureCount = resultRows.filter((row) => row?.routeStatus === "ERROR").length;
+      const savedIds = [...new Set(resultRows.filter((row) => !["DUPLICATE", "ERROR"].includes(row?.routeStatus)).map((row) => String(row?.id || row?.targetRecordId || "")).filter(Boolean))];
+      setIncomingPoolUploadResults(resultRows);
+      setIncomingPoolFiles([]);
+      setIncomingPoolPreviewRows([]);
+      setIncomingPoolPreviewSelected([]);
+      if (incomingPoolInputRef.current) incomingPoolInputRef.current.value = "";
+      setIncomingPoolFilter("ALL");
+      setIncomingPoolSearch("");
+      const refreshed = await load();
+      const refreshedRows = Array.isArray(refreshed?.incoming) ? refreshed.incoming : [];
+      const firstSaved = savedIds.find((id) => refreshedRows.some((row) => String(row?.id || row?.documentId) === id));
+      setIncomingPoolSelectedId(firstSaved || String(refreshedRows[0]?.id || refreshedRows[0]?.documentId || ""));
+      setIncomingPoolMessage(
+        `${savedIds.length} yeni irsaliye kaydedildi, ${duplicateCount} mükerrer, ${failureCount} hatalı. Havuz doğrulandı: ${refreshedRows.length} irsaliye listeleniyor.`,
+      );
+      setIncomingPoolUploadStage("RESULT");
+    } catch (error) {
+      setIncomingPoolMessage(error?.message || "Toplu irsaliye yüklemesi tamamlanamadı.");
+      setIncomingPoolUploadResults([{ fileName: "Toplu yükleme", routeStatus: "ERROR", routeMessage: error?.message || "Yükleme tamamlanamadı." }]);
+      setIncomingPoolUploadStage("RESULT");
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+  const refreshIncomingPool = async () => {
+    if (loading || incomingPoolBusy) return;
+    setIncomingPoolBusy(true);
+    try {
+      const refreshed = await load();
+      const refreshedRows = Array.isArray(refreshed?.incoming) ? refreshed.incoming : [];
+      setIncomingPoolFilter("ALL");
+      setIncomingPoolSearch("");
+      setIncomingPoolSelectedId((current) => refreshedRows.some((row) => String(row?.id || row?.documentId) === String(current)) ? current : String(refreshedRows[0]?.id || refreshedRows[0]?.documentId || ""));
+      setIncomingPoolMessage(`Havuz yenilendi. ${refreshedRows.length} kayıt gösteriliyor.`);
+    } catch (error) { setIncomingPoolMessage(error?.message || "İrsaliye havuzu yenilenemedi."); }
+    finally { setIncomingPoolBusy(false); }
+  };
+
+
+  const startManualIncomingPoolEntry = () => {
+    setIncomingPoolEntryMode("NEW");
+    setIncomingPoolDraft(emptyIncomingSerialDraft());
+    setIncomingPoolAllocations([]);
+    setIncomingPoolInvoiceDraft(emptyPoolInvoiceDraft());
+    setIncomingPoolInvoiceId("");
+    setIncomingPoolModelSearch("");
+    setIncomingPoolAction("DISPATCH");
+    setIncomingPoolMessage("Yeni manuel irsaliye: firma, model, adet ve fiyatı girip tek seferde kaydedin.");
+  };
+
+  const openIncomingPoolAction = (action) => {
+    if (!selectedIncomingPoolItem && incomingPoolEntryMode !== "NEW") {
+      setIncomingPoolMessage("Önce bir irsaliye seçin.");
+      return;
+    }
+    if (action === "MODEL" && !incomingPoolAllocations.length && selectedIncomingPoolItem) {
+      setIncomingPoolAllocations(allocationsFromIncoming(selectedIncomingPoolItem));
+    }
+    setIncomingPoolAction(action);
+  };
+
+  const updateIncomingPoolAllocation = (index, patch) => {
+    setIncomingPoolAllocations((current) =>
+      current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+    );
+  };
+
+  const assignIncomingPoolAllocationModel = (candidate) => {
+    const modelRow = rows.find((row) => String(row.id) === String(candidate?.id));
+    if (!candidate?.id || !modelRow) return;
+    updateIncomingPoolAllocation(incomingPoolActiveAllocation, {
+      modelId: candidate.id,
+      modelName: candidate.name,
+      unitPrice:
+        incomingPoolAllocations[incomingPoolActiveAllocation]?.unitPrice ||
+        modelRow?.price?.amount ||
+        "",
+    });
+  };
+
+  const addIncomingPoolAllocation = () => {
+    const source = incomingPoolAllocations[incomingPoolActiveAllocation] || {};
+    setIncomingPoolAllocations((current) => [
+      ...current,
+      {
+        id: allocationId(),
+        sourceLineId: source.sourceLineId || "",
+        description: source.description || "Yeni model dağıtım satırı",
+        quantity: "",
+        unitPrice: "",
+        modelId: "",
+        modelName: "",
+      },
+    ]);
+    setIncomingPoolActiveAllocation(incomingPoolAllocations.length);
+  };
+
+  const removeIncomingPoolAllocation = (index) => {
+    if (incomingPoolAllocations.length <= 1) return;
+    setIncomingPoolAllocations((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setIncomingPoolActiveAllocation((current) => Math.max(0, Math.min(current, incomingPoolAllocations.length - 2)));
+  };
+
+  const saveIncomingPoolAllocations = async () => {
+    if (!selectedIncomingPoolItem?.id) return;
+    const normalized = incomingPoolAllocations.map((item) => ({
+      ...item,
+      quantity: parseFlexibleNumber(item.quantity),
+      unitPrice: parseFlexibleNumber(item.unitPrice),
+    }));
+    if (!normalized.length || normalized.some((item) => !item.modelId || item.quantity <= 0)) {
+      setIncomingPoolMessage("Her dağıtım satırında model ve 0'dan büyük adet zorunludur.");
+      return;
+    }
+    const allocatedQty = normalized.reduce((sum, item) => sum + item.quantity, 0);
+    const dispatchQty = Number(selectedIncomingPoolItem.poolQty || 0);
+    if (dispatchQty > 0 && Math.abs(allocatedQty - dispatchQty) > 0.001) {
+      setIncomingPoolMessage(`Dağıtılan ${numberText(allocatedQty)} adet, irsaliye toplamı ${numberText(dispatchQty)} adet ile eşit olmalıdır.`);
+      return;
+    }
+    if (!window.confirm(`${normalized.length} satır ${new Set(normalized.map((item) => item.modelId)).size} modele bağlanıp fiyatları kaydedilsin mi?`)) return;
+    setIncomingPoolBusy(true);
+    try {
+      await linkIncomingDeliveryLinesToModels(
+        activeMainCompany,
+        selectedIncomingPoolItem.id,
+        normalized,
+        {
+          companyName: incomingPoolDraft.firma,
+          documentNo: incomingPoolDraft.irsaliyeNo,
+          date: incomingPoolDraft.tarih,
+        },
+      );
+      await Promise.all(normalized.map(async (item) => {
+        if (!item.unitPrice) return;
+        const modelRow = rows.find((row) => String(row.id) === String(item.modelId));
+        if (!modelRow) return;
+        try {
+          await updateModel(activeMainCompany, modelRow.id, {
+            guncelFiyat: item.unitPrice,
+            activePrice: item.unitPrice,
+            satisFiyati: item.unitPrice,
+            price: item.unitPrice,
+            modelAdi: modelRow.modelName,
+            modelName: modelRow.modelName,
+          });
+        } catch {
+          // Sanal desen modeli ise fiyat dağıtım satırında SQL belge verisi olarak kalır.
+        }
+      }));
+      setIncomingPoolDraft((current) => ({ ...current, modelId: normalized[0].modelId }));
+      setIncomingPoolAction("");
+      setIncomingPoolMessage(`${normalized.length} irsaliye satırı model, adet ve fiyatlarıyla kaydedildi.`);
+      await load();
+    } catch (error) {
+      setIncomingPoolMessage(error?.message || "Çoklu model dağıtımı kaydedilemedi.");
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+  const startIncomingPoolResize = (event) => {
+    event.preventDefault();
+    const workspace = incomingPoolWorkspaceRef.current;
+    if (!workspace) return;
+    const rect = workspace.getBoundingClientRect();
+    const move = (pointerEvent) => {
+      const value = ((pointerEvent.clientX - rect.left) / rect.width) * 100;
+      setIncomingPoolSplit(Math.max(34, Math.min(72, value)));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
+
+  const startIncomingPoolHeightResize = (event) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = incomingPoolHeight || Math.max(560, window.innerHeight - 56);
+    const move = (pointerEvent) => {
+      const next = startHeight + (pointerEvent.clientY - startY);
+      setIncomingPoolHeight(Math.max(520, Math.min(window.innerHeight - 20, next)));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
+
+  const selectIncomingPoolModel = (modelId) => {
+    const modelRow = rows.find((row) => String(row.id) === String(modelId));
+    setIncomingPoolDraft((current) => ({
+      ...current,
+      modelId,
+      firma:
+        current.firma ||
+        modelRow?.firm ||
+        "TAHA GİYİM SAN. VE TİC.",
+      birimFiyat: current.birimFiyat || modelRow?.price?.amount || "",
+    }));
+    setIncomingPoolInvoiceDraft((current) => ({
+      ...current,
+      birimFiyat: current.birimFiyat || modelRow?.price?.amount || "",
+    }));
+  };
+
+  const saveIncomingPoolDraft = async () => {
+    const modelRow = rows.find((row) => String(row.id) === String(incomingPoolDraft.modelId));
+    const quantity = parseFlexibleNumber(incomingPoolDraft.adet);
+    const unitPrice = parseFlexibleNumber(incomingPoolDraft.birimFiyat);
+    if (!incomingPoolDraft.firma.trim() || !modelRow || quantity <= 0) {
+      setIncomingPoolMessage("Firma, model ve 0'dan büyük irsaliye adedi zorunludur.");
+      return;
+    }
+    const actionText = incomingPoolEntryMode === "NEW" ? "oluşturulsun" : "güncellensin";
+    if (!window.confirm(`${modelRow.modelName} irsaliye kaydı ${actionText} mı?`)) return;
+    setIncomingPoolBusy(true);
+    try {
+      const saved = await saveIncomingDelivery(activeMainCompany, {
+        ...(incomingPoolEntryMode === "EDIT" && incomingPoolDraft.id
+          ? { id: incomingPoolDraft.id }
+          : {}),
+        firma: incomingPoolDraft.firma,
+        companyName: incomingPoolDraft.firma,
+        modelId: modelRow.id,
+        modelKaydiId: modelRow.id,
+        modelAdi: modelRow.modelName,
+        modelName: modelRow.modelName,
+        irsaliyeNo: incomingPoolDraft.irsaliyeNo,
+        belgeNo: incomingPoolDraft.irsaliyeNo,
+        tarih: incomingPoolDraft.tarih,
+        date: incomingPoolDraft.tarih,
+        gelenAdet: quantity,
+        quantity,
+        birimFiyat: unitPrice,
+        unitPrice,
+        toplamTutar: quantity * unitPrice,
+        aciklama: incomingPoolDraft.not,
+        notes: incomingPoolDraft.not,
+      });
+      let modelPriceSaved = true;
+      if (String(incomingPoolDraft.birimFiyat).trim()) {
+        try {
+          await updateModel(activeMainCompany, modelRow.id, {
+            guncelFiyat: unitPrice,
+            activePrice: unitPrice,
+            satisFiyati: unitPrice,
+            price: unitPrice,
+            modelAdi: modelRow.modelName,
+            modelName: modelRow.modelName,
+            musteriFirma: incomingPoolDraft.firma,
+            muhasebeModelTakipPrice: {
+              amount: unitPrice,
+              source: "MODEL_TAKIP_SERI_GIRIS",
+              validFrom: incomingPoolDraft.tarih,
+              customer: incomingPoolDraft.firma,
+              note: incomingPoolDraft.not,
+            },
+          });
+        } catch {
+          // Desen deposundan sanal olarak gelen modellerin ayrı bir model kartı
+          // olmayabilir. Fiyat yine SQL irsaliye kaydında kalır ve hesaplarda
+          // kullanılmaya devam eder.
+          modelPriceSaved = false;
+        }
+      }
+      const savedId = saved?.id || saved?.documentId || incomingPoolDraft.id;
+      setIncomingPoolSelectedId(String(savedId || ""));
+      setIncomingPoolEntryMode("EDIT");
+      setSelectedId(String(modelRow.id));
+      setIncomingPoolMessage(
+        modelPriceSaved
+          ? `İrsaliye ve ${unitPrice ? "model fiyatı" : "model bağlantısı"} kaydedildi. Tahmini tutarlar güncellendi.`
+          : "İrsaliye ve fiyatı kaydedildi. Bu desenin ayrı model kartı olmadığı için fiyat irsaliye üzerinden hesaplanıyor.",
+      );
+      setIncomingPoolAction("");
+      await load();
+    } catch (error) {
+      setIncomingPoolMessage(error?.message || "İrsaliye seri kaydı tamamlanamadı.");
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+  const updateIncomingPoolProductionMachine = (makineNo, vardiya = incomingPoolProductionDraft.vardiya) => {
+    const machine = incomingPoolMachines.find(
+      (item) => String(item.no || item.id) === String(makineNo),
+    );
+    const isNight = normalizeMatchKey(vardiya).includes("GECE");
+    setIncomingPoolProductionDraft((current) => ({
+      ...current,
+      makineNo,
+      vardiya,
+      makinaci: isNight
+        ? machine?.nightOperator || machine?.dayOperator || current.makinaci
+        : machine?.dayOperator || machine?.nightOperator || current.makinaci,
+    }));
+  };
+
+  const saveIncomingPoolProduction = async () => {
+    const modelRow = rows.find((row) => String(row.id) === String(incomingPoolDraft.modelId));
+    const quantity = parseFlexibleNumber(incomingPoolProductionDraft.adet);
+    if (!modelRow || quantity <= 0 || !incomingPoolProductionDraft.makineNo) {
+      setIncomingPoolMessage("İmalat için model, kayıtlı makine ve 0'dan büyük adet zorunludur.");
+      return;
+    }
+    if (!window.confirm(`${modelRow.modelName} için ${numberText(quantity)} adet imalat kaydedilsin mi?`)) return;
+    setIncomingPoolBusy(true);
+    try {
+      const machine = incomingPoolMachines.find(
+        (item) => String(item.no || item.id) === String(incomingPoolProductionDraft.makineNo),
+      );
+      await addUretimGirisi(activeMainCompany, modelRow.id, {
+        modelId: modelRow.id,
+        modelKaydiId: modelRow.id,
+        tarih: incomingPoolProductionDraft.tarih,
+        vardiya: incomingPoolProductionDraft.vardiya,
+        makineNo: incomingPoolProductionDraft.makineNo,
+        makineAdi: machine?.name || incomingPoolProductionDraft.makineNo,
+        makinaci: incomingPoolProductionDraft.makinaci,
+        adet: quantity,
+        baskiBolgesi: incomingPoolProductionDraft.baskiBolgesi || "Ön",
+        firma: incomingPoolDraft.firma || modelRow.firm,
+        model: modelRow.modelName,
+        irsaliyeNo: incomingPoolDraft.irsaliyeNo,
+        not: incomingPoolProductionDraft.not,
+      });
+      setIncomingPoolProductionDraft((current) => ({ ...current, adet: "" }));
+      setIncomingPoolMessage(`${numberText(quantity)} adet gerçek imalat kaydına işlendi; Üretim Girişi ekranıyla senkronize edildi.`);
+      setIncomingPoolAction("");
+      await load();
+    } catch (error) {
+      setIncomingPoolMessage(error?.message || "İmalat kaydı oluşturulamadı.");
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+  const linkIncomingPoolInvoice = async () => {
+    const modelRow = rows.find((row) => String(row.id) === String(incomingPoolDraft.modelId));
+    const invoice = outgoingRows.find((row) => String(row?.id || row?.documentId) === String(incomingPoolInvoiceId));
+    if (!modelRow || !invoice) {
+      setIncomingPoolMessage("Önce model ve yüklenmiş kesilen faturayı seçin.");
+      return;
+    }
+    if (!window.confirm(`${textOf(invoice, ["faturaNo", "belgeNo"], "Fatura")} ${modelRow.modelName} modeline bağlansın mı?`)) return;
+    setIncomingPoolBusy(true);
+    try {
+      await linkOutgoingDocumentToModel(activeMainCompany, invoice.id || invoice.documentId, modelRow.id, modelRow.model);
+      if (selectedIncomingPoolItem?.id) {
+        const linkedId = textOf(selectedIncomingPoolItem, ["modelId", "modelKaydiId"], "");
+        if (String(linkedId) !== String(modelRow.id)) {
+          await linkIncomingDeliveryToModel(activeMainCompany, selectedIncomingPoolItem.id, modelRow.id, modelRow.model);
+        }
+      }
+      setIncomingPoolInvoiceId("");
+      setIncomingPoolMessage("Yüklü kesilen fatura modele bağlandı; irsaliye–imalat–fatura hesabı yenilendi.");
+      setIncomingPoolAction("");
+      await load();
+    } catch (error) {
+      setIncomingPoolMessage(error?.message || "Kesilen fatura bağlanamadı.");
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+  const saveIncomingPoolManualInvoice = async () => {
+    const modelRow = rows.find((row) => String(row.id) === String(incomingPoolDraft.modelId));
+    const quantity = parseFlexibleNumber(incomingPoolInvoiceDraft.adet);
+    const unitPrice = parseFlexibleNumber(incomingPoolInvoiceDraft.birimFiyat || incomingPoolDraft.birimFiyat);
+    if (!modelRow || quantity <= 0) {
+      setIncomingPoolMessage("Manuel fatura için model ve 0'dan büyük adet zorunludur.");
+      return;
+    }
+    if (!window.confirm(`${modelRow.modelName} için manuel kesilen fatura kaydı oluşturulsun mu?`)) return;
+    setIncomingPoolBusy(true);
+    try {
+      await saveOutgoingDocument(activeMainCompany, {
+        firma: incomingPoolDraft.firma || modelRow.firm,
+        companyName: incomingPoolDraft.firma || modelRow.firm,
+        modelId: modelRow.id,
+        modelKaydiId: modelRow.id,
+        modelAdi: modelRow.modelName,
+        modelName: modelRow.modelName,
+        faturaNo: incomingPoolInvoiceDraft.faturaNo,
+        belgeNo: incomingPoolInvoiceDraft.faturaNo,
+        tarih: incomingPoolInvoiceDraft.tarih,
+        date: incomingPoolInvoiceDraft.tarih,
+        adet: quantity,
+        quantity,
+        birimFiyat: unitPrice,
+        unitPrice,
+        kdv: parseFlexibleNumber(incomingPoolInvoiceDraft.kdv),
+        vatRate: parseFlexibleNumber(incomingPoolInvoiceDraft.kdv),
+        bagliIrsaliyeNo: incomingPoolDraft.irsaliyeNo,
+        irsaliyeNo: incomingPoolDraft.irsaliyeNo,
+        notes: incomingPoolInvoiceDraft.not,
+      });
+      setIncomingPoolInvoiceDraft(emptyPoolInvoiceDraft({ poolQty: incomingPoolSerialTotals.remainingQty }));
+      setIncomingPoolMessage("Manuel kesilen fatura SQL belge havuzuna kaydedildi ve modele bağlandı.");
+      setIncomingPoolAction("");
+      await load();
+    } catch (error) {
+      setIncomingPoolMessage(error?.message || "Manuel fatura kaydedilemedi.");
+    } finally {
+      setIncomingPoolBusy(false);
+    }
+  };
+
+
+
+
 
   const saveDispatch = async () => {
     if (!selected || !dispatchDraft.irsaliyeNo || !parseFlexibleNumber(dispatchDraft.adet)) {
@@ -1152,10 +2317,6 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
     }
   };
 
-  const openModelPool = () => {
-    if (!selected) return;
-    setModal("modelDetail");
-  };
 
   const openRegionEditor = () => {
     if (!selected) return;
@@ -1239,7 +2400,7 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
 
   return (
     <>
-      <div className="bim-model-track">
+      <div className="bim-model-track reconciliation-layout">
         <section className="bim-card bim-model-list-panel">
           <div className="bim-card-head">
             <h3>Model Listesi</h3>
@@ -1341,22 +2502,38 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
               </section>
 
               <section className="bim-model-dropgrid">
-                <button className="bim-model-drop" type="button" onClick={openDispatch}>
-                  <UploadCloud className="bim-drop-icon" size={28} />
-                  <b>Müşteri İrsaliyesi Bırak</b>
-                  <span>PDF / XML / JPG / PNG kabul edilir. XML varsa ana kaynak kabul edilir.</span>
-                </button>
-                <button className="bim-model-drop invoice" type="button" onClick={openInvoice}>
-                  <ReceiptText className="bim-drop-icon" size={28} />
-                  <b>Bizim Faturayı Bırak</b>
-                  <span>Fatura seçili modele doğrudan bağlanır; bizim irsaliyemiz burada listelenmez.</span>
-                </button>
+                <div className="bim-reconciliation-callout">
+                  <div>
+                    <span className={`bim-pill ${modelTrackStatusClass(selected.status)}`}>
+                      {selected.status}
+                    </span>
+                    <h3>İrsaliye · İmalat · Fatura Mutabakatı</h3>
+                    <p>
+                      Havuzdaki müşteri irsaliyesini ve daha önce yüklediğiniz kesilen faturayı
+                      seçin. İmalat adedi modelden otomatik gelir; sistem üç adedi birlikte denetler.
+                    </p>
+                  </div>
+                  <div className="bim-reconciliation-callout-actions">
+                    <a className="bim-btn" href={`/muhasebe/musteri-irsaliyeleri?modelId=${encodeURIComponent(selected.id)}`}>
+                      <Inbox size={16} /> İrsaliyeleri Aç
+                    </a>
+                    <a className="bim-btn" href={`/muhasebe/irsaliye-fatura-kontrol?modelId=${encodeURIComponent(selected.id)}`}>
+                      <ReceiptText size={16} /> Fatura Kontrolünü Aç
+                    </a>
+                    <button className="bim-btn" type="button" onClick={openIncomingPool}>
+                      <Inbox size={16} /> Müşteri İrsaliye Havuzu
+                    </button>
+                    <button className="bim-btn primary" type="button" onClick={openReconciliation}>
+                      Eşleştirme Ekranını Aç
+                    </button>
+                  </div>
+                </div>
               </section>
 
               <section className="bim-card">
                 <div className="bim-card-head">
                   <h3>Bu Modele Bırakılan Müşteri İrsaliyeleri</h3>
-                  <button className="bim-btn small" type="button" onClick={openDispatch}>Müşteri İrsaliyesi Bırak</button>
+                  <button className="bim-btn small" type="button" onClick={openReconciliation}>Havuzdan Eşleştir</button>
                 </div>
                 <div className="bim-card-body bim-table">
                   <table>
@@ -1378,7 +2555,7 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
               <section className="bim-card">
                 <div className="bim-card-head">
                   <h3>Bu Modele Bırakılan Bizim Faturalar</h3>
-                  <button className="bim-btn small" type="button" onClick={openInvoice}>Bizim Faturayı Bırak</button>
+                  <button className="bim-btn small" type="button" onClick={openReconciliation}>Yüklü Faturadan Seç</button>
                 </div>
                 <div className="bim-card-body bim-table">
                   <table>
@@ -1400,40 +2577,14 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
           )}
         </main>
 
-        <aside className="bim-card bim-model-actions-panel">
-          <div className="bim-card-head">
-            <h3>Hızlı İşlem</h3>
-          </div>
-          <div className="bim-card-body bim-stack">
-            <button className="bim-btn primary full" type="button" onClick={openDispatch} disabled={!selected}>
-              <Inbox size={16} />
-              Müşteri İrsaliyesi Bırak
-            </button>
-            <button className="bim-btn full" type="button" onClick={openInvoice} disabled={!selected}>
-              <ReceiptText size={16} />
-              Bizim Faturayı Bırak
-            </button>
-            <button className="bim-btn full" type="button" onClick={openPrice} disabled={!selected}>
-              <CircleDollarSign size={16} />
-              Fiyat Gir / Güncelle
-            </button>
-            <button className="bim-btn full" type="button" onClick={() => setModal("production")} disabled={!selected}>
-              <Factory size={16} />
-              İmalat Kayıtlarını Gör
-            </button>
-            <button className="bim-btn full" type="button" onClick={openModelPool} disabled={!selected}>
-              <PackageOpen size={16} />
-              Model Kartini Ac
-            </button>
-          </div>
-        </aside>
       </div>
 
       {modal ? (
         <div className="bim-modal-bg" role="presentation" onMouseDown={(event) => event.target === event?.currentTarget && setModal("")}>
-          <div className="bim-modal-panel">
+          <div className={`bim-modal-panel ${modal === "reconciliation" ? "reconciliation" : ""}`}>
             <div className="bim-drawer-head">
               <h3>
+                {modal === "reconciliation" && "Model Belge Eşleştirme ve Mutabakat"}
                 {modal === "dispatch" && "Müşteri İrsaliyesi Bırak"}
                 {modal === "invoice" && "Bizim Faturayı Bırak"}
                 {modal === "price" && "Fiyat Gir / Güncelle"}
@@ -1448,6 +2599,145 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
                 <div className="bim-selected-line">
                   <b>{selected.modelName}</b>
                   <span>{selected.firm}</span>
+                </div>
+              ) : null}
+
+              {modal === "reconciliation" ? (
+                <div className="bim-reconciliation-workspace">
+                  <div className="bim-reconciliation-steps">
+                    <div className={selectedDispatchIds.length ? "done" : "active"}>
+                      <b>1</b><span>İrsaliye seç</span>
+                    </div>
+                    <div className={selectedInvoiceIds.length ? "done" : ""}>
+                      <b>2</b><span>Fatura seç</span>
+                    </div>
+                    <div className={selectedMatchTotals.maxDifference === 0 ? "done" : "active"}>
+                      <b>3</b><span>Üçlü kontrol</span>
+                    </div>
+                    <div className={selected?.reconciliation?.status === "TAMAMLANDI" ? "done" : ""}>
+                      <b>4</b><span>Onayla ve kapat</span>
+                    </div>
+                  </div>
+
+                  <div className="bim-reconciliation-totals">
+                    <div><Inbox size={20} /><span>Gelen irsaliye</span><strong>{numberText(selectedMatchTotals.dispatchQty)}</strong></div>
+                    <div><Factory size={20} /><span>İmalat kaydı</span><strong>{numberText(selectedMatchTotals.productionQty)}</strong></div>
+                    <div><ReceiptText size={20} /><span>Kesilen fatura</span><strong>{numberText(selectedMatchTotals.invoiceQty)}</strong></div>
+                    <div className={selectedMatchTotals.maxDifference > 0 ? "difference" : "balanced"}>
+                      <Layers size={20} /><span>En yüksek fark</span><strong>{numberText(selectedMatchTotals.maxDifference)}</strong>
+                    </div>
+                  </div>
+
+                  <div className={`bim-reconciliation-result ${selectedMatchTotals.maxDifference > 0 ? "warning" : "success"}`}>
+                    {selectedMatchTotals.dispatchQty <= 0 || selectedMatchTotals.invoiceQty <= 0
+                      ? "İrsaliye ve fatura seçimi bekleniyor."
+                      : selectedMatchTotals.productionQty <= 0
+                        ? "Bu modele bağlı imalat kaydı henüz yok; işlem beklemede kalacak."
+                        : selectedMatchTotals.maxDifference === 0
+                          ? "Üç adet birebir eşit. Mutabakat onaya hazır."
+                          : `Adet farkı var. İrsaliye/imalat ${numberText(selectedMatchTotals.differences.dispatchProduction)}, irsaliye/fatura ${numberText(selectedMatchTotals.differences.dispatchInvoice)}, imalat/fatura ${numberText(selectedMatchTotals.differences.productionInvoice)}.`}
+                  </div>
+
+                  <label className="bim-field reconciliation-search">
+                    <span>Havuzda belge ara</span>
+                    <input
+                      value={matchSearch}
+                      onChange={(event) => setMatchSearch(event?.target.value)}
+                      placeholder="Firma, irsaliye no, fatura no veya model ara"
+                    />
+                  </label>
+
+                  <div className="bim-reconciliation-pools">
+                    <section>
+                      <div className="bim-pool-head">
+                        <div><b>Müşteri İrsaliyeleri</b><span>Gelen irsaliye havuzu</span></div>
+                        <span className="bim-pill blue">{matchCandidates.dispatches.length} kayıt</span>
+                      </div>
+                      <div className="bim-document-picker-list">
+                        {matchCandidates.dispatches.length ? matchCandidates.dispatches.map((row) => {
+                          const id = String(row?.id || row?.documentId || "");
+                          const checked = selectedDispatchIds.includes(id);
+                          const linked = String(textOf(row, ["modelId", "modelKaydiId"], "")) === String(selected.id);
+                          return (
+                            <label className={`bim-document-picker ${checked ? "selected" : ""}`} key={id}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleSelectedDocument("dispatch", id)} />
+                              <span>
+                                <b>{textOf(row, ["irsaliyeNo", "belgeNo", "documentNo"], "Numarasız irsaliye")}</b>
+                                <small>{dateText(textOf(row, ["tarih", "date", "createdAt"]))} · {textOf(row, ["firma", "firmaAdi", "companyName"], "Firma yok")}</small>
+                              </span>
+                              <strong>{numberText(numberFrom(row, ["gelenAdet", "quantity", "adet", "miktar"]))}</strong>
+                              <em>{linked ? "Modele bağlı" : "Havuzda"}</em>
+                            </label>
+                          );
+                        }) : <div className="bim-empty">Uygun müşteri irsaliyesi bulunamadı.</div>}
+                      </div>
+                    </section>
+
+                    <section>
+                      <div className="bim-pool-head">
+                        <div><b>Kesilen Faturalar</b><span>Sisteme daha önce yüklenen faturalar</span></div>
+                        <span className="bim-pill blue">{matchCandidates.invoices.length} kayıt</span>
+                      </div>
+                      <div className="bim-document-picker-list">
+                        {matchCandidates.invoices.length ? matchCandidates.invoices.map((row) => {
+                          const id = String(row?.id || row?.documentId || "");
+                          const checked = selectedInvoiceIds.includes(id);
+                          const linked = String(textOf(row, ["modelId", "modelKaydiId"], "")) === String(selected.id);
+                          return (
+                            <label className={`bim-document-picker ${checked ? "selected" : ""}`} key={id}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleSelectedDocument("invoice", id)} />
+                              <span>
+                                <b>{textOf(row, ["faturaNo", "belgeNo", "documentNo"], "Numarasız fatura")}</b>
+                                <small>{dateText(textOf(row, ["tarih", "date", "createdAt"]))} · {textOf(row, ["firma", "firmaAdi", "companyName"], "Firma yok")}</small>
+                              </span>
+                              <strong>{numberText(numberFrom(row, ["adet", "quantity", "miktar"]))}</strong>
+                              <em>{linked ? "Modele bağlı" : "Havuzda"}</em>
+                            </label>
+                          );
+                        }) : <div className="bim-empty">Uygun kesilen fatura bulunamadı.</div>}
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="bim-reconciliation-approval">
+                    <label className="bim-field">
+                      <span>Kabul edilebilir adet farkı</span>
+                      <input
+                        inputMode="decimal"
+                        value={reconciliationTolerance}
+                        onChange={(event) => setReconciliationTolerance(event?.target.value)}
+                      />
+                      <small>0 tam eşitliktir. Yalnızca kontrol ettiğiniz küçük fark için artırın.</small>
+                    </label>
+                    <label className="bim-field">
+                      <span>Onay notu</span>
+                      <input
+                        value={reconciliationNote}
+                        onChange={(event) => setReconciliationNote(event?.target.value)}
+                        placeholder="Fark nedeni veya kontrol notu"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="bim-reconciliation-actions">
+                    <button className="bim-btn" type="button" onClick={linkSelectedDocuments} disabled={busy}>
+                      Seçilenleri Modele Eşleştir
+                    </button>
+                    <button
+                      className="bim-btn primary"
+                      type="button"
+                      onClick={approveReconciliation}
+                      disabled={
+                        busy ||
+                        selectedMatchTotals.dispatchQty <= 0 ||
+                        selectedMatchTotals.productionQty <= 0 ||
+                        selectedMatchTotals.invoiceQty <= 0 ||
+                        selectedMatchTotals.maxDifference > Math.max(0, parseFlexibleNumber(reconciliationTolerance))
+                      }
+                    >
+                      Mutabakatı Onayla ve İrsaliyeyi Tamamla
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
@@ -1594,6 +2884,503 @@ export function ModelMerkezliMusteriTakip({ activeMainCompany }) {
         </div>
       ) : null}
 
+      {incomingPoolOpen ? (
+        <div className="bim-modal-bg incoming-pool-bg" role="presentation">
+          <section className="bim-incoming-pool-modal" style={incomingPoolHeight ? { height: `${incomingPoolHeight}px` } : undefined}>
+            <header className="bim-incoming-pool-head">
+              <div>
+                <h2><Inbox size={20} /> Müşteri İrsaliye Havuzu</h2>
+                <p>Toplu XML/PDF yükleyin, model eşleştirin ve bekleyen/tamamlanan irsaliyeleri tek ekrandan yönetin.</p>
+              </div>
+              <div className="bim-incoming-pool-head-actions">
+                <span className="bim-pill blue">Varsayılan gönderen: TAHA GİYİM</span>
+                <button className={`bim-btn ${incomingPoolUploadOpen ? "primary" : ""}`} type="button" onClick={() => setIncomingPoolUploadOpen((current) => !current)}>
+                  <UploadCloud size={14} /> {incomingPoolUploadOpen ? "Yüklemeyi Gizle" : "Toplu Dosya Yükle"}
+                </button>
+                <button className="bim-btn" type="button" onClick={() => setIncomingPoolOpen(false)}>Kapat</button>
+              </div>
+            </header>
+
+            <div className="bim-incoming-pool-body">
+              {incomingPoolUploadOpen ? <section
+                className="bim-incoming-upload"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIncomingFiles(event.dataTransfer.files);
+                }}
+              >
+                <div className="bim-incoming-upload-icon"><UploadCloud size={25} /></div>
+                <div>
+                  <b>Taha müşteri irsaliyelerini toplu yükle</b>
+                  <span>XML ana kaynaktır. Aynı TIA numaralı PDF belgeye arşiv/önizleme eki olarak bağlanır; mükerrer no ve dosya engellenir.</span>
+                </div>
+                <input
+                  ref={incomingPoolInputRef}
+                  type="file"
+                  multiple
+                  accept=".xml,.pdf,application/xml,text/xml,application/pdf"
+                  onChange={(event) => setIncomingFiles(event.target.files)}
+                  hidden
+                />
+                <button className="bim-btn" type="button" onClick={() => incomingPoolInputRef.current?.click()} disabled={incomingPoolBusy}>
+                  Dosyaları Seç
+                </button>
+                <button className="bim-btn bim-incoming-save-button" type="button" onClick={() => setIncomingPoolUploadStage("PREVIEW")} disabled={incomingPoolBusy || !incomingPoolPreviewRows.length}>
+                  {incomingPoolBusy
+                    ? "Dosyalar okunuyor"
+                    : `Ön Kontrolü Aç (${incomingPoolPreviewRows.length || 0})`}
+                </button>
+              </section> : null}
+
+              {incomingPoolMessage ? <div className="bim-message">{incomingPoolMessage}</div> : null}
+
+              {incomingPoolPreviewRows.length ? (
+                <div className="bim-incoming-save-bar">
+                  <strong>{incomingPoolPreviewRows.length} dosya ön kontrolde</strong>
+                  <span>{incomingPoolPreviewSelected.length} geçerli dosya seçili. Listeyi kontrol edip onaylayın.</span>
+                  <button
+                    className="bim-incoming-save-button large"
+                    type="button"
+                    onClick={() => setIncomingPoolUploadStage("PREVIEW")}
+                    disabled={incomingPoolBusy}
+                  >
+                    <FileText size={17} /> İRSALİYE LİSTESİNİ AÇ VE ONAYLA
+                  </button>
+                </div>
+              ) : null}
+
+              <section className="bim-incoming-pool-kpis">
+                {Object.entries(INCOMING_POOL_STATES).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={`${incomingPoolFilter === key ? "active" : ""} ${incomingPoolStateClass(key)}`}
+                    type="button"
+                    onClick={() => setIncomingPoolFilter(key)}
+                  >
+                    <span>{label}</span>
+                    <strong>{incomingPoolCounts[key] || 0}</strong>
+                  </button>
+                ))}
+              </section>
+
+              <section className="bim-incoming-pool-toolbar">
+                <div>
+                  <b>{INCOMING_POOL_STATES[incomingPoolFilter]}</b>
+                  <span>{visibleIncomingPoolItems.length} irsaliye listeleniyor</span>
+                </div>
+                <input
+                  value={incomingPoolSearch}
+                  onChange={(event) => setIncomingPoolSearch(event.target.value)}
+                  placeholder="İrsaliye no, model açıklaması veya firma ara"
+                />
+                <button className="bim-btn primary" type="button" onClick={startManualIncomingPoolEntry} disabled={incomingPoolBusy}>
+                  <Plus size={14} /> Elle İrsaliye
+                </button>
+                <button className="bim-btn" type="button" onClick={refreshIncomingPool} disabled={loading || incomingPoolBusy}>{incomingPoolBusy ? "Yenileniyor…" : "Yenile"}</button>
+              </section>
+
+              <div
+                className="bim-incoming-pool-workspace"
+                ref={incomingPoolWorkspaceRef}
+                style={{ "--incoming-list-width": `${incomingPoolSplit}%` }}
+              >
+                <section className="bim-incoming-pool-list">
+                  <div className="bim-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Tarih</th>
+                          <th>İrsaliye No</th>
+                          <th>Model / Açıklama</th>
+                          <th>Adet</th>
+                          <th>Bağlı Model</th>
+                          <th>Durum</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleIncomingPoolItems.length ? visibleIncomingPoolItems.map((row) => (
+                          <tr
+                            key={row.id}
+                            className={String(selectedIncomingPoolItem?.id) === String(row.id) ? "selected-row" : ""}
+                            onClick={() => selectIncomingPoolRow(row)}
+                          >
+                            <td>{dateText(textOf(row, ["tarih", "date", "createdAt"], ""))}</td>
+                            <td><b>{textOf(row, ["irsaliyeNo", "belgeNo", "documentNo"], "-")}</b></td>
+                            <td title={row.poolLineText}>{row.poolModelHint || row.poolLineText || "Model açıklaması okunamadı"}</td>
+                            <td className="num"><b>{numberText(row.poolQty)}</b></td>
+                            <td>{row.poolModelNames?.length ? (row.poolModelNames.length > 1 ? `${row.poolModelNames.length} model · ${row.poolModelNames.join(", ")}` : row.poolModelNames[0]) : textOf(row, ["modelAdi", "modelName"], "Eşleşmedi")}</td>
+                            <td><span className={`bim-pill ${incomingPoolStateClass(row.poolState)}`}>{row.poolStateLabel}</span></td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan="6" className="muted">Bu durumda irsaliye bulunamadı.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <button
+                  type="button"
+                  className="bim-pool-resizer"
+                  title="Liste ve detay genişliğini sürükleyerek ayarlayın"
+                  aria-label="Liste ve detay genişliğini ayarla"
+                  onPointerDown={startIncomingPoolResize}
+                ><span /></button>
+
+                <aside className="bim-incoming-pool-detail">
+                  {selectedIncomingPoolItem || incomingPoolEntryMode === "NEW" ? (
+                    <>
+                      <div className="bim-pool-serial-hero">
+                        <div className="bim-pool-model-visual">
+                          <ModelTrackImage
+                            src={selectedIncomingPoolModelRow?.image || modelTrackImage(selectedIncomingPoolModel)}
+                            alt={selectedIncomingPoolModelRow?.modelName || "Model"}
+                          />
+                        </div>
+                        <div className="bim-pool-serial-identity">
+                          <span className={`bim-pill ${incomingPoolEntryMode === "NEW" ? "green" : incomingPoolStateClass(selectedIncomingPoolItem?.poolState)}`}>
+                            {incomingPoolEntryMode === "NEW" ? "Yeni Manuel İrsaliye" : selectedIncomingPoolItem?.poolStateLabel}
+                          </span>
+                          <h3>{selectedIncomingPoolModelRow?.modelName || incomingPoolDraft.irsaliyeNo || "Seri Model İşlemi"}</h3>
+                          <p>{incomingPoolDraft.firma || "Firma seçilmedi"}</p>
+                        </div>
+                        <button className="bim-btn small" type="button" onClick={startManualIncomingPoolEntry} disabled={incomingPoolBusy}>
+                          <Plus size={14} /> Elle İrsaliye Gir
+                        </button>
+                      </div>
+
+                      <div className="bim-pool-serial-totals">
+                        <div><span>İrsaliye</span><b>{numberText(incomingPoolSerialTotals.dispatchQty)}</b><small>{money(incomingPoolSerialTotals.dispatchAmount)}</small></div>
+                        <div><span>İmalat</span><b>{numberText(incomingPoolSerialTotals.productionQty)}</b><small>{money(incomingPoolSerialTotals.productionAmount)}</small></div>
+                        <div><span>Fatura</span><b>{numberText(incomingPoolSerialTotals.invoiceQty)}</b><small>{money(incomingPoolSerialTotals.invoiceAmount)}</small></div>
+                        <div className="remaining"><span>Kesilecek Kalan</span><b>{numberText(incomingPoolSerialTotals.remainingQty)}</b><small>{money(incomingPoolSerialTotals.remainingAmount)}</small></div>
+                      </div>
+
+                      <div className="bim-pool-quick-actions">
+                        <button className="bim-btn primary" type="button" onClick={() => openIncomingPoolAction("MODEL")}><Layers size={15} /> Model(ler)i Bağla</button>
+                        <button className="bim-btn" type="button" onClick={() => openIncomingPoolAction("MODEL")}><Calculator size={15} /> Adet / Fiyat</button>
+                        <button className="bim-btn success" type="button" onClick={() => openIncomingPoolAction("PRODUCTION")} disabled={!selectedIncomingPoolModelIds.length}><Factory size={15} /> İmalat Gir</button>
+                        <button className="bim-btn" type="button" onClick={() => openIncomingPoolAction("INVOICE")} disabled={!selectedIncomingPoolModelIds.length}><ReceiptText size={15} /> Fatura İşle</button>
+                      </div>
+
+                      <section className="bim-pool-serial-section primary-section">
+                        <div className="bim-pool-serial-section-head">
+                          <div><Inbox size={16} /><span><b>İrsaliye ve Model</b><small>Tüm alanlar düzenlenebilir</small></span></div>
+                          {incomingPoolEntryMode === "EDIT" && selectedIncomingPoolItem ? (
+                            <small>{(selectedIncomingPoolItem.files || []).map((file) => String(file.fileType || file.role || "").toUpperCase()).filter(Boolean).join(" + ") || "ELLE"}</small>
+                          ) : null}
+                        </div>
+                        <div className="bim-pool-serial-fields dispatch-fields">
+                          <label><span>Firma</span><input value={incomingPoolDraft.firma} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, firma: event.target.value }))} /></label>
+                          <label><span>İrsaliye No <small>(boşsa otomatik)</small></span><input value={incomingPoolDraft.irsaliyeNo} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, irsaliyeNo: event.target.value }))} /></label>
+                          <label><span>Tarih</span><input type="date" value={incomingPoolDraft.tarih} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, tarih: event.target.value }))} /></label>
+                          <label className="wide"><span>Model</span><select value={incomingPoolDraft.modelId} onChange={(event) => selectIncomingPoolModel(event.target.value)}><option value="">Model seçin</option>{rows.map((row) => <option key={row.id} value={row.id}>{row.modelName} · {row.firm}</option>)}</select></label>
+                          <label><span>İrsaliye Adedi</span><input inputMode="decimal" value={incomingPoolDraft.adet} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, adet: event.target.value }))} /></label>
+                          <label><span>Model Birim Fiyatı</span><input inputMode="decimal" value={incomingPoolDraft.birimFiyat} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, birimFiyat: event.target.value }))} /></label>
+                          <label className="wide"><span>Not</span><input value={incomingPoolDraft.not} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, not: event.target.value }))} placeholder="İsteğe bağlı açıklama" /></label>
+                        </div>
+                        <div className="bim-pool-serial-actionbar">
+                          <div><Calculator size={16} /><span>İrsaliye tutarı</span><b>{money(incomingPoolSerialTotals.dispatchAmount)}</b></div>
+                          <button className="bim-btn primary" type="button" onClick={saveIncomingPoolDraft} disabled={incomingPoolBusy}>
+                            <Save size={15} /> {incomingPoolEntryMode === "NEW" ? "İrsaliyeyi Kaydet" : "Değişiklikleri Kaydet"}
+                          </button>
+                        </div>
+                      </section>
+
+                      <section className="bim-pool-serial-section production-section">
+                        <div className="bim-pool-serial-section-head">
+                          <div><Factory size={16} /><span><b>Direkt İmalat Girişi</b><small>Üretim Girişi ekranına gerçek kayıt atar</small></span></div>
+                          <strong>{numberText(incomingPoolSerialTotals.productionQty)} mevcut</strong>
+                        </div>
+                        <div className="bim-pool-production-row">
+                          <label><span>Üretilen Adet</span><input inputMode="numeric" value={incomingPoolProductionDraft.adet} onChange={(event) => setIncomingPoolProductionDraft((current) => ({ ...current, adet: event.target.value }))} placeholder="0" /></label>
+                          <label><span>Makine</span><select value={incomingPoolProductionDraft.makineNo} onChange={(event) => updateIncomingPoolProductionMachine(event.target.value)}><option value="SERİ GİRİŞ">Seri Giriş</option>{incomingPoolMachines.map((machine) => <option key={machine.id || machine.no} value={machine.no || machine.id}>{machine.no}{machine.name ? ` · ${machine.name}` : ""}</option>)}</select></label>
+                          <label><span>Vardiya</span><select value={incomingPoolProductionDraft.vardiya} onChange={(event) => updateIncomingPoolProductionMachine(incomingPoolProductionDraft.makineNo, event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
+                          <label><span>Makinacı</span><input value={incomingPoolProductionDraft.makinaci} onChange={(event) => setIncomingPoolProductionDraft((current) => ({ ...current, makinaci: event.target.value }))} /></label>
+                          <button className="bim-btn success" type="button" onClick={saveIncomingPoolProduction} disabled={incomingPoolBusy || !incomingPoolDraft.modelId}>
+                            <Factory size={15} /> İmalata İşle
+                          </button>
+                        </div>
+                      </section>
+
+                      <section className="bim-pool-serial-section invoice-section">
+                        <div className="bim-pool-serial-section-head">
+                          <div><ReceiptText size={16} /><span><b>Kesilen Fatura</b><small>Yüklü faturayı seçin veya elle girin</small></span></div>
+                          <strong>{money(incomingPoolSerialTotals.remainingAmount)} kesilecek</strong>
+                        </div>
+                        <div className="bim-pool-invoice-link-row">
+                          <select value={incomingPoolInvoiceId} onChange={(event) => setIncomingPoolInvoiceId(event.target.value)}>
+                            <option value="">Yüklenmiş kesilen faturadan seçin</option>
+                            {incomingPoolInvoiceCandidates.map((invoice) => (
+                              <option key={invoice.id || invoice.documentId} value={invoice.id || invoice.documentId}>
+                                {textOf(invoice, ["faturaNo", "belgeNo"], "Fatura")} · {numberText(numberFrom(invoice, ["adet", "quantity"]))} adet · {money(numberFrom(invoice, ["genelToplam", "toplamTutar"]))}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="bim-btn" type="button" onClick={linkIncomingPoolInvoice} disabled={incomingPoolBusy || !incomingPoolInvoiceId}>
+                            <Link2 size={15} /> Faturayı Bağla
+                          </button>
+                        </div>
+                        <div className="bim-pool-manual-invoice-row">
+                          <label><span>Fatura No <small>(boşsa otomatik)</small></span><input value={incomingPoolInvoiceDraft.faturaNo} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, faturaNo: event.target.value }))} /></label>
+                          <label><span>Tarih</span><input type="date" value={incomingPoolInvoiceDraft.tarih} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, tarih: event.target.value }))} /></label>
+                          <label><span>Adet</span><input inputMode="decimal" value={incomingPoolInvoiceDraft.adet} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, adet: event.target.value }))} /></label>
+                          <label><span>Birim Fiyat</span><input inputMode="decimal" value={incomingPoolInvoiceDraft.birimFiyat || incomingPoolDraft.birimFiyat} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, birimFiyat: event.target.value }))} /></label>
+                          <label><span>KDV %</span><input inputMode="decimal" value={incomingPoolInvoiceDraft.kdv} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, kdv: event.target.value }))} /></label>
+                          <button className="bim-btn primary" type="button" onClick={saveIncomingPoolManualInvoice} disabled={incomingPoolBusy || !incomingPoolDraft.modelId}>
+                            <Plus size={15} /> Elle Fatura Kaydet
+                          </button>
+                        </div>
+                      </section>
+
+                      {incomingPoolEntryMode === "EDIT" && selectedIncomingPoolItem ? (
+                        <details className="bim-pool-source-detail">
+                          <summary>Kaynak belge ve okunan satırlar</summary>
+                          <div className="bim-pool-detail-grid">
+                            <div><span>ETTN / kaynak</span><b>{textOf(selectedIncomingPoolItem?.raw, ["ettn", "uuid"], "Manuel / belge arşivi")}</b></div>
+                            <div><span>Dosyalar</span><b>{(selectedIncomingPoolItem.files || []).map((file) => String(file.fileType || file.role || "").toUpperCase()).filter(Boolean).join(" + ") || "ELLE"}</b></div>
+                          </div>
+                          <div className="bim-pool-line-preview">
+                            {(selectedIncomingPoolItem.kalemler || selectedIncomingPoolItem.items || []).map((line, index) => (
+                              <div key={line.id || index}><span>{textOf(line, ["aciklama", "productName", "rawDescription"], "Satır")}</span><strong>{numberText(numberFrom(line, ["adet", "quantity", "miktar"]))}</strong></div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
+                    </>
+                  ) : <div className="bim-empty">Detay için bir irsaliye seçin.</div>}
+                </aside>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="bim-pool-height-resizer"
+              title="Pencere yüksekliğini alt kenardan sürükleyerek ayarlayın"
+              aria-label="Pencere yüksekliğini ayarla"
+              onPointerDown={startIncomingPoolHeightResize}
+            ><span /></button>
+          </section>
+        </div>
+      ) : null}
+
+      {incomingPoolOpen && ["PREVIEW", "UPLOADING", "RESULT"].includes(incomingPoolUploadStage) ? (
+        <div className="bim-modal-bg bim-upload-review-bg" role="presentation">
+          <section className="bim-upload-review-modal">
+            <header className="bim-upload-review-head">
+              <div>
+                <span className="bim-pill blue">Toplu Müşteri İrsaliyesi</span>
+                <h3>{incomingPoolUploadStage === "RESULT" ? "Yükleme Sonuçları" : "İrsaliyeleri Kontrol Et ve Onayla"}</h3>
+                <p>{incomingPoolUploadStage === "RESULT" ? "Her dosyanın kayıt sonucu aşağıda ayrı ayrı gösterilir." : "Kaydedilecek irsaliyeleri seçin; hatalı dosyalar kayda gönderilmez."}</p>
+              </div>
+              <button className="bim-btn" type="button" disabled={incomingPoolUploadStage === "UPLOADING"} onClick={() => setIncomingPoolUploadStage("")}>Kapat</button>
+            </header>
+
+            {incomingPoolUploadStage === "RESULT" ? (
+              <div className="bim-upload-review-body">
+                <div className="bim-upload-result-summary">
+                  <div className="success"><b>{incomingPoolUploadResults.filter((row) => !["DUPLICATE", "ERROR"].includes(row?.routeStatus)).length}</b><span>Yeni kayıt</span></div>
+                  <div className="duplicate"><b>{incomingPoolUploadResults.filter((row) => row?.routeStatus === "DUPLICATE").length}</b><span>Mükerrer</span></div>
+                  <div className="error"><b>{incomingPoolUploadResults.filter((row) => row?.routeStatus === "ERROR").length}</b><span>Hatalı</span></div>
+                  <div><b>{incomingPoolItems.length}</b><span>Havuz toplamı</span></div>
+                </div>
+                <div className="bim-upload-review-table-wrap">
+                  <table className="bim-upload-review-table">
+                    <thead><tr><th>Dosya</th><th>Sonuç</th><th>Açıklama</th></tr></thead>
+                    <tbody>
+                      {incomingPoolUploadResults.map((row, index) => {
+                        const state = row?.routeStatus === "ERROR" ? "error" : row?.routeStatus === "DUPLICATE" ? "duplicate" : "success";
+                        return <tr key={`${row?.id || row?.fileName || "result"}-${index}`}><td>{row?.fileName || "Dosya"}</td><td><span className={`bim-upload-state ${state}`}>{state === "success" ? "KAYDEDİLDİ" : state === "duplicate" ? "MÜKERRER" : "HATA"}</span></td><td>{row?.routeMessage || (state === "success" ? "Havuza eklendi" : "Daha önce kayıtlı")}</td></tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bim-upload-review-body">
+                <div className="bim-upload-review-toolbar">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={incomingPoolPreviewRows.filter((row) => row.valid).length > 0 && incomingPoolPreviewRows.filter((row) => row.valid).every((row) => incomingPoolPreviewSelected.includes(row.key))}
+                      onChange={(event) => setIncomingPoolPreviewSelected(event.target.checked ? incomingPoolPreviewRows.filter((row) => row.valid).map((row) => row.key) : [])}
+                    />
+                    Tümünü Seç
+                  </label>
+                  <span>{incomingPoolPreviewSelected.length} / {incomingPoolPreviewRows.length} dosya kaydedilecek</span>
+                  {incomingPoolUploadStage === "UPLOADING" ? <strong>{incomingPoolProgress.done}/{incomingPoolProgress.total} yükleniyor…</strong> : null}
+                </div>
+                <div className="bim-upload-review-table-wrap">
+                  <table className="bim-upload-review-table">
+                    <thead><tr><th>Seç</th><th>İrsaliye No</th><th>Tarih</th><th>Firma</th><th>Adet</th><th>Dosya</th><th>Kontrol</th></tr></thead>
+                    <tbody>
+                      {incomingPoolPreviewRows.map((row) => (
+                        <tr key={row.key} className={row.valid ? "" : "invalid"}>
+                          <td><input type="checkbox" disabled={!row.valid || incomingPoolUploadStage === "UPLOADING"} checked={incomingPoolPreviewSelected.includes(row.key)} onChange={(event) => setIncomingPoolPreviewSelected((current) => event.target.checked ? [...new Set([...current, row.key])] : current.filter((key) => key !== row.key))} /></td>
+                          <td><b>{row.documentNo || "Okunamadı"}</b></td>
+                          <td>{row.date || "-"}</td>
+                          <td>{row.companyName || "-"}</td>
+                          <td>{row.quantity ? numberText(row.quantity) : "-"}</td>
+                          <td title={row.fileName}>{row.fileName}</td>
+                          <td><span className={`bim-upload-state ${row.valid ? "success" : "error"}`}>{row.warning}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <footer className="bim-upload-review-actions">
+                  <button className="bim-btn" type="button" disabled={incomingPoolUploadStage === "UPLOADING"} onClick={() => { setIncomingPoolPreviewSelected([]); setIncomingPoolUploadStage(""); }}>Vazgeç</button>
+                  <button className="bim-incoming-save-button large" type="button" disabled={incomingPoolUploadStage === "UPLOADING" || !incomingPoolPreviewSelected.length} onClick={uploadIncomingPoolFiles}>
+                    <UploadCloud size={17} /> {incomingPoolUploadStage === "UPLOADING" ? `${incomingPoolProgress.done}/${incomingPoolProgress.total} YÜKLENİYOR` : `${incomingPoolPreviewSelected.length} İRSALİYEYİ ONAYLA VE KAYDET`}
+                  </button>
+                </footer>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {incomingPoolOpen && incomingPoolAction ? (
+        <div className="bim-modal-bg incoming-action-bg" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setIncomingPoolAction("")}>
+          <section className={`bim-incoming-action-modal ${incomingPoolAction.toLocaleLowerCase("tr-TR")}`}>
+            <header className="bim-incoming-action-head">
+              <div>
+                <span className="bim-pill blue">{incomingPoolDraft.irsaliyeNo || "Yeni kayıt"}</span>
+                <h3>
+                  {incomingPoolAction === "MODEL" ? "İrsaliye Satırlarını Modellere Bağla" : null}
+                  {incomingPoolAction === "DISPATCH" ? "Elle Müşteri İrsaliyesi Gir" : null}
+                  {incomingPoolAction === "PRODUCTION" ? "Direkt İmalat Girişi" : null}
+                  {incomingPoolAction === "INVOICE" ? "Kesilen Fatura İşlemi" : null}
+                </h3>
+                <p>
+                  {incomingPoolAction === "MODEL" ? "Bir irsaliyedeki satırları bir veya birden fazla modele dağıtın; adet ve fiyatı aynı yerden yönetin." : "Seçili model ve irsaliye için işlemi geniş çalışma alanında tamamlayın."}
+                </p>
+              </div>
+              <button className="bim-btn" type="button" onClick={() => setIncomingPoolAction("")}>Kapat</button>
+            </header>
+
+            {incomingPoolAction === "MODEL" ? (
+              <div className="bim-model-allocation-workspace">
+                <div className="bim-allocation-main">
+                  <div className="bim-action-document-fields">
+                    <label><span>Firma</span><input value={incomingPoolDraft.firma} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, firma: event.target.value }))} /></label>
+                    <label><span>İrsaliye No</span><input value={incomingPoolDraft.irsaliyeNo} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, irsaliyeNo: event.target.value }))} /></label>
+                    <label><span>Tarih</span><input type="date" value={incomingPoolDraft.tarih} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, tarih: event.target.value }))} /></label>
+                  </div>
+                  <div className="bim-allocation-toolbar">
+                    <div><b>Model dağıtım satırları</b><span>Bir satırı bölmek için yeni dağıtım satırı ekleyin.</span></div>
+                    <button className="bim-btn primary" type="button" onClick={addIncomingPoolAllocation}><Plus size={14} /> Dağıtım Satırı Ekle</button>
+                  </div>
+                  <div className="bim-allocation-list">
+                    {incomingPoolAllocations.map((item, index) => {
+                      const linked = rows.find((row) => String(row.id) === String(item.modelId));
+                      return (
+                        <article
+                          key={item.id || index}
+                          className={`bim-allocation-card ${incomingPoolActiveAllocation === index ? "active" : ""}`}
+                          onClick={() => setIncomingPoolActiveAllocation(index)}
+                        >
+                          <div className="bim-allocation-index">{index + 1}</div>
+                          <div className="bim-allocation-model-mini">
+                            <ModelTrackImage src={linked?.image || modelTrackImage(linked?.model)} alt={linked?.modelName || "Model"} />
+                          </div>
+                          <div className="bim-allocation-fields">
+                            <label className="wide"><span>Satır açıklaması</span><input value={item.description} onChange={(event) => updateIncomingPoolAllocation(index, { description: event.target.value })} /></label>
+                            <label><span>Adet</span><input inputMode="decimal" value={item.quantity} onChange={(event) => updateIncomingPoolAllocation(index, { quantity: event.target.value })} /></label>
+                            <label><span>Birim fiyat</span><input inputMode="decimal" value={item.unitPrice} onChange={(event) => updateIncomingPoolAllocation(index, { unitPrice: event.target.value })} /></label>
+                            <div className="bim-allocation-linked-model">
+                              <span>Bağlı model</span>
+                              <b>{linked?.modelName || item.modelName || "Model seçilmedi"}</b>
+                            </div>
+                          </div>
+                          <button className="bim-btn small danger" type="button" disabled={incomingPoolAllocations.length <= 1} onClick={(event) => { event.stopPropagation(); removeIncomingPoolAllocation(index); }}>Sil</button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <footer className="bim-allocation-footer">
+                    <div><span>İrsaliye toplamı</span><b>{numberText(selectedIncomingPoolItem?.poolQty || 0)}</b></div>
+                    <div><span>Dağıtılan</span><b>{numberText(incomingPoolAllocations.reduce((sum, item) => sum + parseFlexibleNumber(item.quantity), 0))}</b></div>
+                    <div><span>Dağıtım tutarı</span><b>{money(incomingPoolSerialTotals.dispatchAmount)}</b></div>
+                    <button className="bim-btn primary" type="button" onClick={saveIncomingPoolAllocations} disabled={incomingPoolBusy}><Save size={15} /> Tüm Dağıtımı Kaydet</button>
+                  </footer>
+                </div>
+                <aside className="bim-model-picker">
+                  <div className="bim-model-picker-head">
+                    <div><b>Model seç</b><span>{incomingPoolActiveAllocation + 1}. dağıtım satırına atanır</span></div>
+                    <input value={incomingPoolModelSearch} onChange={(event) => setIncomingPoolModelSearch(event.target.value)} placeholder="Model adı veya firma ara" autoFocus />
+                  </div>
+                  <div className="bim-model-picker-grid">
+                    {incomingPoolModelCandidates.map((candidate) => {
+                      const row = rows.find((item) => String(item.id) === String(candidate.id));
+                      const selectedModel = String(incomingPoolAllocations[incomingPoolActiveAllocation]?.modelId || "") === String(candidate.id);
+                      return (
+                        <button key={candidate.id} className={selectedModel ? "selected" : ""} type="button" onClick={() => assignIncomingPoolAllocationModel(candidate)}>
+                          <span className="bim-model-picker-image"><ModelTrackImage src={row?.image || modelTrackImage(candidate.model)} alt={candidate.name} /></span>
+                          <span><b>{candidate.name}</b><small>{candidate.firm || "Firma tanımsız"}</small><em>{row?.price?.amount ? money(row.price.amount) : "Fiyat girilecek"}</em></span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+              </div>
+            ) : null}
+
+            {incomingPoolAction === "DISPATCH" ? (
+              <div className="bim-action-form-body">
+                <div className="bim-action-form-grid">
+                  <label><span>Firma</span><input value={incomingPoolDraft.firma} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, firma: event.target.value }))} /></label>
+                  <label><span>İrsaliye No <small>(boşsa otomatik)</small></span><input value={incomingPoolDraft.irsaliyeNo} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, irsaliyeNo: event.target.value }))} /></label>
+                  <label><span>Tarih</span><input type="date" value={incomingPoolDraft.tarih} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, tarih: event.target.value }))} /></label>
+                  <label className="wide"><span>Model</span><select value={incomingPoolDraft.modelId} onChange={(event) => selectIncomingPoolModel(event.target.value)}><option value="">Model seçin</option>{rows.map((row) => <option key={row.id} value={row.id}>{row.modelName} · {row.firm}</option>)}</select></label>
+                  <label><span>İrsaliye Adedi</span><input inputMode="decimal" value={incomingPoolDraft.adet} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, adet: event.target.value }))} /></label>
+                  <label><span>Model Birim Fiyatı</span><input inputMode="decimal" value={incomingPoolDraft.birimFiyat} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, birimFiyat: event.target.value }))} /></label>
+                  <label className="wide"><span>Not</span><textarea value={incomingPoolDraft.not} onChange={(event) => setIncomingPoolDraft((current) => ({ ...current, not: event.target.value }))} /></label>
+                </div>
+                <div className="bim-action-submit"><b>Tahmini irsaliye tutarı: {money(parseFlexibleNumber(incomingPoolDraft.adet) * parseFlexibleNumber(incomingPoolDraft.birimFiyat))}</b><button className="bim-btn primary" type="button" onClick={saveIncomingPoolDraft} disabled={incomingPoolBusy}><Save size={15} /> İrsaliyeyi Kaydet</button></div>
+              </div>
+            ) : null}
+
+            {incomingPoolAction === "PRODUCTION" ? (
+              <div className="bim-action-form-body">
+                <div className="bim-selected-model-strip">
+                  <label><span>İmalat yapılacak model</span><select value={incomingPoolDraft.modelId} onChange={(event) => selectIncomingPoolModel(event.target.value)}>{selectedIncomingPoolModelRows.map((row) => <option key={row.id} value={row.id}>{row.modelName} · {numberText(row.productionQty)} mevcut</option>)}</select></label>
+                </div>
+                <div className="bim-action-form-grid production">
+                  <label><span>Üretilen Adet</span><input inputMode="numeric" value={incomingPoolProductionDraft.adet} onChange={(event) => setIncomingPoolProductionDraft((current) => ({ ...current, adet: event.target.value }))} /></label>
+                  <label><span>Makine</span><select value={incomingPoolProductionDraft.makineNo} onChange={(event) => updateIncomingPoolProductionMachine(event.target.value)}><option value="SERİ GİRİŞ">Seri Giriş</option>{incomingPoolMachines.map((machine) => <option key={machine.id || machine.no} value={machine.no || machine.id}>{machine.no}{machine.name ? ` · ${machine.name}` : ""}</option>)}</select></label>
+                  <label><span>Vardiya</span><select value={incomingPoolProductionDraft.vardiya} onChange={(event) => updateIncomingPoolProductionMachine(incomingPoolProductionDraft.makineNo, event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
+                  <label><span>Makinacı</span><input value={incomingPoolProductionDraft.makinaci} onChange={(event) => setIncomingPoolProductionDraft((current) => ({ ...current, makinaci: event.target.value }))} /></label>
+                  <label className="wide"><span>Not</span><textarea value={incomingPoolProductionDraft.not} onChange={(event) => setIncomingPoolProductionDraft((current) => ({ ...current, not: event.target.value }))} /></label>
+                </div>
+                <div className="bim-action-submit"><span>Üretim Girişi ekranına gerçek kayıt gönderilir.</span><button className="bim-btn success" type="button" onClick={saveIncomingPoolProduction} disabled={incomingPoolBusy || !incomingPoolDraft.modelId}><Factory size={15} /> İmalata İşle</button></div>
+              </div>
+            ) : null}
+
+            {incomingPoolAction === "INVOICE" ? (
+              <div className="bim-action-form-body">
+                <div className="bim-selected-model-strip">
+                  <label><span>Faturanın bağlanacağı model</span><select value={incomingPoolDraft.modelId} onChange={(event) => selectIncomingPoolModel(event.target.value)}>{selectedIncomingPoolModelRows.map((row) => <option key={row.id} value={row.id}>{row.modelName}</option>)}</select></label>
+                </div>
+                <div className="bim-invoice-pick-large">
+                  <select value={incomingPoolInvoiceId} onChange={(event) => setIncomingPoolInvoiceId(event.target.value)}><option value="">Sisteme yüklenmiş kesilen faturadan seçin</option>{incomingPoolInvoiceCandidates.map((invoice) => <option key={invoice.id || invoice.documentId} value={invoice.id || invoice.documentId}>{textOf(invoice, ["faturaNo", "belgeNo"], "Fatura")} · {numberText(numberFrom(invoice, ["adet", "quantity"]))} adet · {money(numberFrom(invoice, ["genelToplam", "toplamTutar"]))}</option>)}</select>
+                  <button className="bim-btn primary" type="button" onClick={linkIncomingPoolInvoice} disabled={incomingPoolBusy || !incomingPoolInvoiceId}><Link2 size={15} /> Yüklü Faturayı Bağla</button>
+                </div>
+                <div className="bim-action-divider"><span>veya faturayı elle girin</span></div>
+                <div className="bim-action-form-grid invoice">
+                  <label><span>Fatura No</span><input value={incomingPoolInvoiceDraft.faturaNo} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, faturaNo: event.target.value }))} /></label>
+                  <label><span>Tarih</span><input type="date" value={incomingPoolInvoiceDraft.tarih} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, tarih: event.target.value }))} /></label>
+                  <label><span>Adet</span><input inputMode="decimal" value={incomingPoolInvoiceDraft.adet} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, adet: event.target.value }))} /></label>
+                  <label><span>Birim Fiyat</span><input inputMode="decimal" value={incomingPoolInvoiceDraft.birimFiyat || incomingPoolDraft.birimFiyat} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, birimFiyat: event.target.value }))} /></label>
+                  <label><span>KDV %</span><input inputMode="decimal" value={incomingPoolInvoiceDraft.kdv} onChange={(event) => setIncomingPoolInvoiceDraft((current) => ({ ...current, kdv: event.target.value }))} /></label>
+                </div>
+                <div className="bim-action-submit"><b>Kesilecek kalan: {money(incomingPoolSerialTotals.remainingAmount)}</b><button className="bim-btn primary" type="button" onClick={saveIncomingPoolManualInvoice} disabled={incomingPoolBusy || !incomingPoolDraft.modelId}><Plus size={15} /> Elle Fatura Kaydet</button></div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+
       {detailRow ? (
         <div className="bim-modal-bg" role="presentation" onMouseDown={(event) => event.target === event?.currentTarget && setDetailRow(null)}>
           <div className="bim-modal-panel compact">
@@ -1650,7 +3437,7 @@ function MusteriIsHavuzu({ activeMainCompany }) {
     toplamTutar: "",
   });
 
-  const loadCustomerData = async (preferredId = "") => {
+  const loadCustomerData = useCallback(async (preferredId = "") => {
     if (!activeMainCompany?.slug) {
       setIncomingRows([]);
       setOutgoingRows([]);
@@ -1686,11 +3473,11 @@ function MusteriIsHavuzu({ activeMainCompany }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeMainCompany]);
 
   useEffect(() => {
     loadCustomerData();
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, loadCustomerData]);
 
   const jobs = useMemo(
     () => buildCustomerJobs(incomingRows, outgoingRows, models),
@@ -1740,7 +3527,7 @@ function MusteriIsHavuzu({ activeMainCompany }) {
            ? selectedJob.invoiceRemaining * selectedJob.unitPrice
           : ""),
     }));
-  }, [selectedJob?.id]);
+  }, [selectedJob, selectedJob?.id]);
 
   const metrics = useMemo(() => {
     return jobs.reduce(
@@ -2418,8 +4205,14 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
   const [controlDrawerOpen, setControlDrawerOpen] = useState(false);
   const [supplierTab, setSupplierTab] = useState("preview");
   const [supplierFirmFilter, setSupplierFirmFilter] = useState("");
+  const [uploadReview, setUploadReview] = useState({
+    open: false,
+    rows: [],
+    results: null,
+    progress: "",
+  });
 
-  const loadRows = async (preferredId = "") => {
+  const loadRows = useCallback(async (preferredId = "") => {
     if (!activeMainCompany?.slug) {
       setRows([]);
       setSelectedId("");
@@ -2438,7 +4231,7 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
         const desired = String(preferredId || current || "");
         return supplierRows.some((row) => String(row?.id) === desired)
            ? desired
-          : String(supplierRows[0].id || "");
+          : String(supplierRows[0]?.id || "");
       });
       setMessage("");
     } catch (error) {
@@ -2446,11 +4239,11 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeMainCompany]);
 
   useEffect(() => {
     loadRows();
-  }, [activeMainCompany?.slug, activeMainCompany?.id, refreshKey]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, refreshKey, loadRows]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -2644,34 +4437,49 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
   const uploadFiles = async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    if (uploadRef.current) uploadRef.current.value = "";
+    const previewRows = await buildInvoiceUploadPreview(files, "supplier");
+    setUploadReview({ open: true, rows: previewRows, results: null, progress: "" });
+  };
+
+  const confirmUploadFiles = async (selectedRows) => {
+    const results = [];
+    let preferredId = "";
     setBusy(true);
+    setMessage("");
     try {
-      const result = await uploadBelgeImport(activeMainCompany, files, {
-        autoProcess: true,
-      });
-      await loadRows(result?.items?.[0].id || "");
-      const createdCount = Array.isArray(result?.items)
-         ? result?.items.length
-        : 0;
-      const skippedCount = Array.isArray(result?.skipped)
-         ? result?.skipped.length
-        : 0;
-      const approvedCount = Array.isArray(result?.autoApproved)
-        ? result.autoApproved.filter((item) => item?.ok && !item?.skipped)
-            .length
-        : 0;
-      const quarantinedCount = Array.isArray(result?.autoApproved)
-         ? result.autoApproved.filter((item) => item?.quarantine).length
-        : 0;
-      const waitingCount = Math.max(createdCount - approvedCount, 0);
-      setMessage(
-        `${createdCount} belge kaydedildi, ${approvedCount} belge direkt islendi, ${quarantinedCount} belge karantinada, ${waitingCount} belge kontrolde kaldi${skippedCount ? `, ${skippedCount} duplicate atlandi` : ""}.`,
-      );
-      if (uploadRef.current) uploadRef.current.value = "";
-    } catch (error) {
-      setMessage(error?.message || "Belge yukleme tamamlanamadi.");
+      for (let index = 0; index < selectedRows.length; index += 1) {
+        const row = selectedRows[index];
+        setUploadReview((current) => ({
+          ...current,
+          progress: `${index + 1} / ${selectedRows.length}: ${row.fileName}`,
+        }));
+        try {
+          const response = await uploadBelgeImport(activeMainCompany, [row.file], {
+            autoProcess: false,
+          });
+          const saved = Array.isArray(response?.items) ? response.items : [];
+          const skipped = Array.isArray(response?.skipped) ? response.skipped : [];
+          const failed = Array.isArray(response?.errors) ? response.errors : [];
+          saved.forEach((item) => {
+            preferredId ||= item?.id || "";
+            results.push({ status: "SAVED", fileName: row.fileName, invoiceNo: item?.documentNo || row.invoiceNo, message: "Tedarikçi faturası havuza kaydedildi." });
+          });
+          skipped.forEach((item) => results.push({ status: "DUPLICATE", fileName: row.fileName, invoiceNo: row.invoiceNo, message: item?.reason || "Bu fatura daha önce havuza kaydedilmiş." }));
+          failed.forEach((item) => results.push({ status: "ERROR", fileName: item?.fileName || row.fileName, invoiceNo: row.invoiceNo, message: item?.message || "Fatura kaydedilemedi." }));
+          if (!saved.length && !skipped.length && !failed.length) results.push({ status: "ERROR", fileName: row.fileName, invoiceNo: row.invoiceNo, message: "Sunucu dosya için kayıt sonucu döndürmedi." });
+        } catch (error) {
+          results.push({ status: "ERROR", fileName: row.fileName, invoiceNo: row.invoiceNo, message: error?.message || "Fatura kaydedilemedi." });
+        }
+      }
+      await loadRows(preferredId);
+      const savedCount = results.filter((item) => item.status === "SAVED").length;
+      const duplicateCount = results.filter((item) => item.status === "DUPLICATE").length;
+      const errorCount = results.filter((item) => item.status === "ERROR").length;
+      setMessage(`${savedCount} fatura kaydedildi, ${duplicateCount} mükerrer, ${errorCount} hatalı.`);
     } finally {
       setBusy(false);
+      setUploadReview((current) => ({ ...current, results, progress: "" }));
     }
   };
 
@@ -2790,6 +4598,11 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
 
   const approveSelected = async () => {
     if (!selectedRow.id) return;
+    const nextRow = visibleRows.find(
+      (row) =>
+        String(row?.id) !== String(selectedRow.id) &&
+        !isProcessedStatus(row?.status),
+    );
     setBusy(true);
     try {
       const warnings = warningFieldsOf(selectedRow);
@@ -2806,11 +4619,13 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
         selectedRow.id,
         payload,
       );
-      await loadRows(selectedRow.id);
+      await loadRows(nextRow?.id || selectedRow.id);
       setMessage(
         result?.skipped
            ? result?.reason || "Belge eksik oldugu icin atlandi."
-          : "Belge onaylandi; cari, KDV, urun ve lot etkileri SQL tarafina islendi.",
+          : nextRow
+            ? "Belge işlendi; havuzdaki sıradaki belge açıldı."
+            : "Belge işlendi; havuzda bekleyen başka belge kalmadı.",
       );
       onRefresh?.();
     } catch (error) {
@@ -2846,6 +4661,18 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
 
   return (
     <>
+      <InvoiceUploadReviewModal
+        open={uploadReview.open}
+        title="Tedarikçi Faturalarını Kontrol Et"
+        rows={uploadReview.rows}
+        results={uploadReview.results}
+        busy={busy}
+        progress={uploadReview.progress}
+        onClose={() =>
+          setUploadReview({ open: false, rows: [], results: null, progress: "" })
+        }
+        onConfirm={confirmUploadFiles}
+      />
       <div className="bim-top bim-top-embedded">
         <div className="bim-actions">
           <button
@@ -2854,15 +4681,7 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
             onClick={() => uploadRef.current.click()}
             disabled={busy}
           >
-            <ErpIcon name="yukle" size={15} /> Yükle
-          </button>
-          <button
-            className="bim-btn"
-            type="button"
-            onClick={() => uploadRef.current.click()}
-            disabled={busy}
-          >
-            <ErpIcon name="duzenle" size={15} /> Ekle
+            <ErpIcon name="yukle" size={15} /> Faturaları Havuza Al
           </button>
           <button
             className="bim-btn"
@@ -2870,7 +4689,7 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
             onClick={archiveSelected}
             disabled={busy || !selectedRow.id}
           >
-            <ErpIcon name="sil" size={15} /> Sil
+            <ErpIcon name="sil" size={15} /> Havuzdan Kaldır
           </button>
           <button
             className="bim-btn"
@@ -2891,10 +4710,17 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
         </div>
       </div>
 
+      <div className="bim-workflow" aria-label="Tedarikçi faturası işlem sırası">
+        <div className="active"><b>1</b><span>Havuza Al</span><small>Dosyalar toplu yüklenir</small></div>
+        <div><b>2</b><span>Eşleştir</span><small>Firma ve ürün kontrolü</small></div>
+        <div><b>3</b><span>Kontrol Et</span><small>Tutar, KDV ve lot</small></div>
+        <div><b>4</b><span>Onayla</span><small>Sırayla muhasebeleştir</small></div>
+      </div>
+
       <section className="bim-layout">
       <aside className="bim-card">
         <div className="bim-card-head">
-          <h3>Tedarikci Firma Listesi</h3>
+          <h3>Fatura Havuzu</h3>
           <span className="bim-pill blue">{supplierFirmRows.length} firma</span>
         </div>
         <div className="bim-card-body bim-stack">
@@ -2923,9 +4749,9 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
             }}
           >
             <div>
-              <b>Tedarikci fatura yukle</b>
+              <b>Faturaları toplu havuza alın</b>
               <small>
-                XML, PDF veya ZIP dosyasini buraya surukle-birak ya da dosya sec.
+                XML, PDF veya ZIP dosyalarını sürükleyin. Yükleme yalnızca havuza ekler.
               </small>
             </div>
             <input
@@ -3023,7 +4849,7 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
         <div className="bim-card">
           <div className="bim-card-head">
             <div>
-              <h3>Tedarikci Faturalari</h3>
+              <h3>İşlem Sırasındaki Faturalar</h3>
               <small>
                 {supplierFirmFilter
                   ? supplierFirmRows.find((firm) => firm.id === supplierFirmFilter)?.name
@@ -3084,7 +4910,7 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
         <div className="bim-card">
           <div className="bim-card-head">
             <div>
-              <h3>Tedarikci Belge Detayi</h3>
+              <h3>Seçili Fatura</h3>
             </div>
             <span
               className={`bim-pill ${statusChipClass(selectedRow.status)}`}
@@ -3095,11 +4921,11 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
           <div className="bim-card-body bim-stack">
             <div className="bim-work-tabs">
               {[
-                ["preview", "Belge Önizleme"],
-                ["lines", "Kalem Kontrolü"],
-                ["tax", "KDV / Vergi Detayı"],
-                ["source", "XML / OCR Kaynağı"],
-                ["profile", "Öğrenen Firma Profili"],
+                ["preview", "Genel Bakış"],
+                ["lines", "Ürün Eşleştirme"],
+                ["tax", "KDV ve Vergi"],
+                ["source", "Belge Kaynağı"],
+                ["profile", "Firma ve Alias Ayarları"],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -3314,8 +5140,8 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
               ok={!lotRelevantLines.length || hasAllRelevantLots}
             />
             <CheckLine
-              label="Cari ve KDV hazir mi"
-              ok={Number(selectedRow.grandTotal || 0) > 0}
+              label="Tutar ve KDV kontrolü tamam mı"
+              ok={Number(selectedRow.grandTotal || 0) > 0 || isZeroValueSupplierDocument(selectedRow)}
             />
             <div className="bim-notice blue">
               Eksik alanlar: {translatedReasons(selectedRow).join(" ") || "-"}
@@ -3444,7 +5270,8 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
           </div>
         </div>
 
-        <div className="bim-card compact">
+        <details className="bim-card compact bim-collapsible">
+          <summary>Gelişmiş kontrol ve vergi özeti</summary>
           <div className="bim-card-head">
             <h3>Kontrol Ozeti</h3>
             <span className={`bim-pill ${controlSummary.vatReview ? "amber" : controlSummary.subtotalOk && controlSummary.grandTotalOk ? "green" : "red"}`}>
@@ -3471,9 +5298,10 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
             <SummaryLine label="Sifir Fiyatli Satir" value={numberText(controlSummary.zeroPriceLineCount)} />
             <div className="bim-notice blue">{controlSummary.explanation}</div>
           </div>
-        </div>
+        </details>
 
-        <div className="bim-card compact">
+        <details className="bim-card compact bim-collapsible">
+          <summary>Muhasebe etkileri</summary>
           <div className="bim-card-head">
             <h3>Muhasebe Ozeti</h3>
             <span className="bim-pill blue">Tedarikci</span>
@@ -3518,7 +5346,7 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
               value={accountingEffects.vatRecordId || "-"}
             />
           </div>
-          </div>
+        </details>
         </aside>
       </section>
       <SupplierControlDrawer
@@ -3604,8 +5432,8 @@ function SupplierControlDrawer({
                 ok={!lotRelevantLines.length || hasAllRelevantLots}
               />
               <CheckLine
-                label="Cari ve KDV hazir mi"
-                ok={Number(selectedRow.grandTotal || 0) > 0}
+                label="Tutar ve KDV kontrolü tamam mı"
+                ok={Number(selectedRow.grandTotal || 0) > 0 || isZeroValueSupplierDocument(selectedRow)}
               />
               <div className="bim-notice blue">
                 Eksik alanlar: {translatedReasons(selectedRow).join(" ") || "-"}

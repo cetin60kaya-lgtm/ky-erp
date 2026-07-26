@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { mobileApiGet, mobileApiPost, normalizeList, getField, resolveAssetUrl, safeText } from "./mobileApi";
+import { useCallback } from "react";
 import { mobileUpload } from "./mobileUpload";
 import { MobileLoading, MobileError, MobileEmpty } from "./MobileComponents";
 
@@ -11,7 +12,7 @@ export default function MobileDesen() {
   const [uploadMode, setUploadMode] = useState("desen");
   const fileInputRef = useRef(null);
 
-  async function loadData() {
+  const loadData = useCallback(async function loadData() {
     setLoading(true);
     setError("");
 
@@ -32,11 +33,11 @@ export default function MobileDesen() {
     const merged = [...havuzRows, ...modelRows];
     setItems(merged);
     setLoading(false);
-  }
+  }, [search]);
 
   useEffect(() => {
     loadData();
-  }, [search]); // Search degistikce API'ye sor
+  }, [loadData, search]); // Search degistikce API'ye sor
 
   async function handleImageUpload(e) {
      const file = e.target.files?.[0];

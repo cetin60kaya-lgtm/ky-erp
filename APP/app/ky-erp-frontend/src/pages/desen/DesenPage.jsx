@@ -10,11 +10,11 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
     activeTab === "desen-modeller" ? (
       <DesenModeller activeMainCompany={activeMainCompany} />
     ) : activeTab === "desen-yerlesim-is-akisi" ? (
-      <YerlesimKalipPage />
+      <YerlesimKalipPage activeMainCompany={activeMainCompany} />
     ) : activeTab === "desen-raporlari" ? (
-      <DesenRaporlari />
+      <DesenRaporlari activeMainCompany={activeMainCompany} />
     ) : (
-      <DesenModelMasasi />
+      <DesenModelMasasi activeMainCompany={activeMainCompany} />
     );
 
   const title =
@@ -24,7 +24,7 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
          ? "Yerlesim / Kalip"
         : activeTab === "desen-raporlari"
            ? "Desen Raporlari"
-          : "Yeni Model / Eksik Bilgi";
+          : "Gelen Desenler";
 
   return (
     <div className="clean-workflow-page dw-page">
@@ -33,8 +33,13 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
           <div>
             <h1>{title}</h1>
             <p>
-              Desen, kanal, renk, kalip ve uretime hazirlik bilgileri
-              sikismadan yonetilir.
+              {activeTab === "desen-modeller"
+                ? "Tüm modelleri, baskı bölgelerini ve hazırlık durumlarını tek merkezden yönetin."
+                : activeTab === "desen-yerlesim-is-akisi"
+                  ? "Baskı bölgesi bazlı yerleşim ve kalıp işlerini teknik kuyrukta tamamlayın."
+                  : activeTab === "desen-raporlari"
+                    ? "Desen hazırlık sürecini gerçek kayıtlar ve aynı filtreli Excel çıktısıyla izleyin."
+                    : "Gelen klasördeki model ve kanal görsellerini kontrol ederek model kartına dönüştürün."}
             </p>
           </div>
         </header>

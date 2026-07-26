@@ -85,6 +85,19 @@ function decimalToNumber(
   return Number(value);
 }
 
+function parseUserNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  let text = cleanText(value).replace(/[₺\s]/g, "");
+  if (!text) return 0;
+  if (text.includes(",")) {
+    text = text.replace(/\./g, "").replace(",", ".");
+  } else {
+    text = text.replace(/,(?=\d{3}(?:\D|$))/g, "");
+  }
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function asObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, any>)
@@ -95,9 +108,19 @@ function upper(value: unknown) {
   return cleanText(value).toUpperCase();
 }
 
+function normalizedToken(value: unknown) {
+  return cleanText(value)
+    .toLocaleUpperCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function officialTypeValue(value: unknown) {
   const raw = upper(value);
-  if (["UNOFFICIAL", "GAYRI", "GAYRİ"].includes(raw)) return "GAYRI";
+  if (["UNOFFICIAL", "GAYRI", "GAYRİ", "GAYRI_RESMI", "GAYRİ_RESMİ"].includes(raw))
+    return "GAYRI";
   if (raw === "BOTH") return "BOTH";
   return "RESMI";
 }
@@ -134,6 +157,30 @@ const TRACKABLE_PROFILES = new Set([
   "SUPPLIER",
   "CUSTOMER_SUPPLIER",
 ]);
+
+const CURRENT_ACCOUNT_CREDIT_TYPES = new Set([
+  "ALACAK",
+  "TAHSILAT",
+  "CEK_GIRISI",
+  "CEK_TAHSILATI",
+  "KREDI_KARTI_TAHSILATI",
+  "IADE",
+  "ISKONTO",
+]);
+
+const CURRENT_ACCOUNT_DEBIT_TYPES = new Set([
+  "BORC",
+  "ODEME",
+  "KREDI_KARTI_ODEMESI",
+  "CEK_ODEMESI",
+  "SATIS",
+  "FATURA",
+  "BORCLANDIRMA",
+]);
+
+const CURRENT_ACCOUNT_SUPPLIER_INVOICE_TYPES = new Set(["ALIS", "GELEN_FATURA", "GIDER"]);
+
+const CURRENT_ACCOUNT_SIGNED_TYPES = new Set(["VIRMAN", "DUZELTME", "BAKIYE"]);
 
 const DEFAULT_REPORT_CATEGORIES = [
   ["Kesilen Fatura Geliri", "GELIR"],
@@ -220,12 +267,14 @@ export class FirmaKartlariDbService {
       raw.varsayilanPesinKapama ??
       raw.pesinKapat ??
       undefined;
-    const trackReceivablePayable =
-      explicitTrack === undefined
+    const trackReceivablePayable = normalized === "UNOFFICIAL_EXPENSE"
+      ? true
+      : explicitTrack === undefined
         ? TRACKABLE_PROFILES.has(normalized)
         : explicitTrack !== false && explicitTrack !== "false";
-    const defaultCashSettlement =
-      explicitCash === undefined
+    const defaultCashSettlement = normalized === "UNOFFICIAL_EXPENSE"
+      ? false
+      : explicitCash === undefined
         ? CASH_SETTLED_PROFILES.has(normalized)
         : explicitCash === true || explicitCash === "true";
     return {
@@ -274,6 +323,279 @@ export class FirmaKartlariDbService {
 
   private isVatOnlyExpense(rowOrRaw: any) {
     return this.expenseCalculationMode(rowOrRaw) === "VAT_ONLY";
+  }
+
+  private vatPayablePercentage(rowOrRaw: any) {
+    const raw =
+      rowOrRaw?.raw && typeof rowOrRaw.raw === "object"
+        ? rowOrRaw.raw
+        : rowOrRaw && typeof rowOrRaw === "object"
+          ? rowOrRaw
+          : {};
+    const value = Number(
+      raw.vatPayablePercentage ?? raw.kdvCariBorcYuzdesi ?? 0,
+    );
+    return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
+  }
+
+  private currentAccountPostingMode(rowOrRaw: any) {
+    const raw =
+      rowOrRaw?.raw && typeof rowOrRaw.raw === "object"
+        ? rowOrRaw.raw
+        : rowOrRaw && typeof rowOrRaw === "object"
+          ? rowOrRaw
+          : {};
+    const configured = upper(
+      raw.currentAccountPostingMode || raw.cariKayitModu,
+    );
+    if (["FULL_DOCUMENT", "NONE", "VAT_PERCENTAGE"].includes(configured))
+      return configured;
+    if (this.isVatOnlyExpense(raw)) return "VAT_PERCENTAGE";
+    return raw.trackReceivablePayable === false || raw.cariTakipEdilsin === false
+      ? "NONE"
+      : "FULL_DOCUMENT";
+  }
+
+  private reportBehaviorForCompany(row: any) {
+    const raw = this.rawOf(row);
+    const profile = this.profileFromLegacy(row, raw);
+    const classification = this.classificationFor(row);
+    const vatEnabled = upper(raw.defaultVatType) !== "KDV_YOK";
+    const postingMode = this.currentAccountPostingMode(row);
+    const code = profile === "UNOFFICIAL_EXPENSE"
+      ? "UNOFFICIAL_EXPENSE"
+      : classification.trackReceivablePayable
+        ? vatEnabled
+          ? "OFFICIAL_CARI"
+          : "OFFICIAL_CARI_ONLY"
+        : this.isVatOnlyExpense(row)
+          ? "OFFICIAL_VAT_ONLY"
+          : "OFFICIAL_CASH_VAT";
+    const labels: Record<string, string> = {
+      OFFICIAL_CARI: "KDV + Cari",
+      OFFICIAL_CARI_ONLY: "Sadece Cari / KDV Yok",
+      OFFICIAL_CASH_VAT: "Peşin Gider + KDV",
+      OFFICIAL_VAT_ONLY: "KDV dahil / gider dışı",
+      UNOFFICIAL_EXPENSE: "Gayri Gider",
+    };
+    const configuredReport = upper(raw.defaultReportBehavior || raw.varsayilanRaporDavranisi || "");
+    const configuredExpense = upper(raw.defaultGeneralExpense || raw.genelGiderVarsayilani || "");
+    const defaultIncluded = configuredReport === "DAHIL" || configuredReport === "RAPORA_DAHIL"
+      ? true
+      : configuredReport === "HARIC" || configuredReport === "RAPORDAN_HARIC"
+        ? false
+        : ["UNOFFICIAL_EXPENSE", "OFFICIAL_VAT_ONLY", "OFFICIAL_CASH_VAT"].includes(code)
+          ? true
+          : this.companyDefaultCategoryId(row)
+            ? true
+            : null;
+    const defaultExpenseStatus = configuredExpense === "GENEL_GIDER"
+      ? "GENEL_GIDER"
+      : configuredExpense === "GIDER_DISI" || configuredExpense === "GENEL_GIDER_DEGIL"
+        ? "GENEL_GIDER_DEGIL"
+        : code === "UNOFFICIAL_EXPENSE"
+          ? "GENEL_GIDER"
+          : code === "OFFICIAL_VAT_ONLY"
+            ? "GENEL_GIDER_DEGIL"
+            : code === "OFFICIAL_CASH_VAT" || this.companyDefaultCategoryId(row)
+              ? "GENEL_GIDER"
+              : "KONTROL_BEKLIYOR";
+    return {
+      code,
+      label: labels[code],
+      officialType: code === "UNOFFICIAL_EXPENSE" ? "GAYRI_RESMI" : "RESMI",
+      vatIncluded: vatEnabled && code !== "UNOFFICIAL_EXPENSE",
+      currentAccountIncluded: postingMode !== "NONE",
+      defaultIncluded,
+      defaultExpenseStatus,
+    };
+  }
+
+  private normalizeReportStatus(value: unknown) {
+    const raw = upper(value);
+    if (["DAHIL", "INCLUDED", "RAPORA_DAHIL"].includes(raw)) return "DAHIL";
+    if (["HARIC", "EXCLUDED", "RAPORDAN_HARIC"].includes(raw)) return "HARIC";
+    return "KONTROL_BEKLIYOR";
+  }
+
+  private normalizeExpenseStatus(value: unknown) {
+    const raw = upper(value);
+    if (["GENEL_GIDER", "GENERAL_EXPENSE"].includes(raw)) return "GENEL_GIDER";
+    if (["GENEL_GIDER_DEGIL", "GENERAL_EXPENSE_EXCLUDED", "GIDER_DISI"].includes(raw)) return "GENEL_GIDER_DEGIL";
+    return "KONTROL_BEKLIYOR";
+  }
+
+  private companyDefaultCategoryId(company: any) {
+    return cleanText(
+      company?.varsayilanRaporKategoriId ||
+        company?.raw?.varsayilanRaporKategoriId ||
+        company?.raw?.defaultReportCategoryId,
+    );
+  }
+
+  private explicitCompanyReportStatus(company: any) {
+    return this.normalizeReportStatus(
+      company?.raw?.defaultReportBehavior ||
+        company?.raw?.varsayilanRaporDavranisi,
+    );
+  }
+
+  private explicitCompanyExpenseStatus(company: any) {
+    return this.normalizeExpenseStatus(
+      company?.raw?.defaultGeneralExpense ||
+        company?.raw?.genelGiderVarsayilani,
+    );
+  }
+
+  private categoryBySourceValue(
+    value: unknown,
+    byId: Map<string, any>,
+    byName: Map<string, any>,
+  ) {
+    const key = cleanText(value);
+    if (!key) return null;
+    return byId.get(key) || byName.get(key) || null;
+  }
+
+  resolveCompanyAccountingBehavior(
+    company: any,
+    sourceRecord: Record<string, any>,
+    override: Record<string, any> | null | undefined,
+    categories: any[],
+  ) {
+      const byId = new Map(categories.map((row: any) => [row.id, row]));
+      const byName = new Map(categories.map((row: any) => [row.ad, row]));
+      const isCurrentAccountSource = upper(sourceRecord.sourceType) === "CURRENT_ACCOUNT";
+      const behavior = this.reportBehaviorForCompany(company || {});
+      const overrideCategory = this.categoryBySourceValue(
+        override?.reportCategoryId,
+        byId,
+        byName,
+      );
+      const companyCategory = isCurrentAccountSource
+        ? null
+        : this.categoryBySourceValue(
+            this.companyDefaultCategoryId(company),
+            byId,
+            byName,
+          );
+      const sourceCategory =
+        this.categoryBySourceValue(
+          sourceRecord.sourceCategoryId || sourceRecord.categoryId,
+          byId,
+          byName,
+        ) ||
+        this.categoryBySourceValue(
+          sourceRecord.sourceCategoryName || sourceRecord.categoryName,
+          byId,
+          byName,
+        );
+      const effectiveCategory = overrideCategory || companyCategory || sourceCategory || null;
+  
+      const overrideReportStatus =
+        override?.reportIncluded === null || override?.reportIncluded === undefined
+          ? null
+          : override.reportIncluded
+            ? "DAHIL"
+            : "HARIC";
+      const companyReportStatus = isCurrentAccountSource
+        ? "KONTROL_BEKLIYOR"
+        : this.explicitCompanyReportStatus(company);
+      const sourceReportStatus = this.normalizeReportStatus(sourceRecord.reportStatus);
+      const inferredReportStatus =
+        isCurrentAccountSource
+          ? "HARIC"
+          : sourceRecord.transactionType === "GELIR"
+            ? "DAHIL"
+          : behavior.defaultIncluded === true
+          ? "DAHIL"
+          : behavior.defaultIncluded === false
+            ? "HARIC"
+            : "KONTROL_BEKLIYOR";
+      let reportStatus =
+        overrideReportStatus ||
+        (companyReportStatus !== "KONTROL_BEKLIYOR"
+          ? companyReportStatus
+          : inferredReportStatus !== "KONTROL_BEKLIYOR"
+            ? inferredReportStatus
+            : sourceReportStatus);
+  
+      const overrideExpenseStatus = override?.reportExpenseStatus
+        ? this.normalizeExpenseStatus(override.reportExpenseStatus)
+        : null;
+      const companyExpenseStatus = isCurrentAccountSource
+        ? "KONTROL_BEKLIYOR"
+        : this.explicitCompanyExpenseStatus(company);
+      const sourceExpenseStatus = this.normalizeExpenseStatus(sourceRecord.expenseStatus);
+      const inferredExpenseStatus = isCurrentAccountSource
+        ? "GENEL_GIDER_DEGIL"
+        : sourceRecord.transactionType === "GELIR"
+        ? "GENEL_GIDER_DEGIL"
+        : behavior.defaultExpenseStatus;
+      let expenseStatus =
+        overrideExpenseStatus ||
+        (companyExpenseStatus !== "KONTROL_BEKLIYOR"
+          ? companyExpenseStatus
+          : inferredExpenseStatus !== "KONTROL_BEKLIYOR"
+            ? inferredExpenseStatus
+            : sourceExpenseStatus);
+      const officialType = override?.reportOfficialType
+        ? officialTypeValue(override.reportOfficialType)
+        : behavior.code === "UNOFFICIAL_EXPENSE"
+          ? "GAYRI_RESMI"
+          : officialTypeValue(
+            override?.reportOfficialType ||
+              sourceRecord.officialType ||
+              company?.defaultRecordType ||
+              behavior.officialType,
+          );
+      const vatIncluded =
+        behavior.code === "UNOFFICIAL_EXPENSE"
+          ? false
+          : override?.reportVatIncluded === null || override?.reportVatIncluded === undefined
+          ? behavior.vatIncluded && officialType === "RESMI"
+          : Boolean(override.reportVatIncluded);
+      const cariIncluded = Boolean(behavior.currentAccountIncluded);
+      const sourceOfCategory = overrideCategory ? "RECORD_OVERRIDE" : companyCategory ? "COMPANY_DEFAULT" : sourceCategory ? "SOURCE_RECORD" : "UNRESOLVED";
+      const sourceOfReportStatus = overrideReportStatus ? "RECORD_OVERRIDE" : companyReportStatus !== "KONTROL_BEKLIYOR" ? "COMPANY_DEFAULT" : inferredReportStatus !== "KONTROL_BEKLIYOR" ? "COMPANY_BEHAVIOR" : sourceReportStatus !== "KONTROL_BEKLIYOR" ? "SOURCE_RECORD" : "UNRESOLVED";
+      const sourceOfExpenseStatus = overrideExpenseStatus ? "RECORD_OVERRIDE" : companyExpenseStatus !== "KONTROL_BEKLIYOR" ? "COMPANY_DEFAULT" : inferredExpenseStatus !== "KONTROL_BEKLIYOR" ? "COMPANY_BEHAVIOR" : sourceExpenseStatus !== "KONTROL_BEKLIYOR" ? "SOURCE_RECORD" : "UNRESOLVED";
+      const sourceOfDecision = overrideCategory || overrideReportStatus || overrideExpenseStatus || override?.reportOfficialType
+        ? "RECORD_OVERRIDE"
+        : companyCategory || companyReportStatus !== "KONTROL_BEKLIYOR" || companyExpenseStatus !== "KONTROL_BEKLIYOR"
+          ? "COMPANY_DEFAULT"
+          : sourceCategory || sourceReportStatus !== "KONTROL_BEKLIYOR" || sourceExpenseStatus !== "KONTROL_BEKLIYOR"
+            ? "SOURCE_RECORD"
+            : "UNRESOLVED";
+  
+      return {
+        effectiveCategoryId: effectiveCategory?.id || "",
+        effectiveCategoryName: effectiveCategory?.ad || "Kategorisiz",
+        officialType,
+        cariIncluded,
+        currentAccountIncluded: cariIncluded,
+        vatIncluded,
+        expenseStatus,
+        reportStatus,
+        reportIncluded: reportStatus === "DAHIL" ? true : reportStatus === "HARIC" ? false : null,
+        ledgerIncluded: cariIncluded,
+        incomeIncluded: sourceRecord.transactionType === "GELIR" && reportStatus === "DAHIL",
+        expenseIncluded: sourceRecord.transactionType === "GIDER" && reportStatus === "DAHIL" && expenseStatus === "GENEL_GIDER",
+        sourceOfCategory,
+        sourceOfReportStatus,
+        sourceOfExpenseStatus,
+        unresolvedReasons: [
+          !effectiveCategory ? "CATEGORY_MISSING" : "",
+          reportStatus === "KONTROL_BEKLIYOR" ? "REPORT_STATUS_PENDING" : "",
+          expenseStatus === "KONTROL_BEKLIYOR" ? "EXPENSE_STATUS_PENDING" : "",
+        ].filter(Boolean),
+        sourceOfDecision,
+        companyBehaviorCode: behavior.code,
+        companyBehavior: behavior.label,
+        companyDefaultCategoryId: companyCategory?.id || "",
+        companyDefaultCategoryName: companyCategory?.ad || "Kategorisiz",
+        defaultReportStatus: companyReportStatus,
+        defaultExpenseStatus: companyExpenseStatus,
+      };
   }
 
   private classificationFor(row: any, summary?: Record<string, any>) {
@@ -449,6 +771,12 @@ export class FirmaKartlariDbService {
     );
     const currentBalance = opening + totalDebit - totalCredit;
     const filteredBalance = opening + filteredDebit - filteredCredit;
+    const officialBalance = allActiveRows
+      .filter((row) => this.movementMeta(row).officialType === "RESMI")
+      .reduce((sum, row) => sum + decimalToNumber(row.debit) - decimalToNumber(row.credit), 0);
+    const unofficialBalance = allActiveRows
+      .filter((row) => this.movementMeta(row).officialType === "GAYRI")
+      .reduce((sum, row) => sum + decimalToNumber(row.debit) - decimalToNumber(row.credit), 0);
     const lastMovement = [...allActiveRows].sort((a, b) => {
       const left = new Date(a.movementDate || a.createdAt || 0).getTime();
       const right = new Date(b.movementDate || b.createdAt || 0).getTime();
@@ -468,6 +796,8 @@ export class FirmaKartlariDbService {
       acilisBakiyeSigned: opening,
       toplamBorc: totalDebit,
       toplamAlacak: totalCredit,
+      resmiBakiye: officialBalance,
+      gayriResmiBakiye: unofficialBalance,
       donemBorc: filteredDebit,
       donemAlacak: filteredCredit,
       mevcutBakiye: currentBalance,
@@ -643,8 +973,16 @@ export class FirmaKartlariDbService {
       varsayilanKdvTipi: cleanText(raw.defaultVatType) || "INDIRILECEK_KDV",
       expenseCalculationMode: this.expenseCalculationMode(raw),
       giderHesaplamaTipi: this.expenseCalculationMode(raw),
+      currentAccountPostingMode: this.currentAccountPostingMode(raw),
+      cariKayitModu: this.currentAccountPostingMode(raw),
+      vatPayablePercentage: this.vatPayablePercentage(raw),
+      kdvCariBorcYuzdesi: this.vatPayablePercentage(raw),
       vatOnlyExpense: this.isVatOnlyExpense(raw),
       sadeceKdvKullan: this.isVatOnlyExpense(raw),
+      defaultReportBehavior: cleanText(raw.defaultReportBehavior || raw.varsayilanRaporDavranisi) || "KONTROL_BEKLIYOR",
+      varsayilanRaporDavranisi: cleanText(raw.defaultReportBehavior || raw.varsayilanRaporDavranisi) || "KONTROL_BEKLIYOR",
+      defaultGeneralExpense: cleanText(raw.defaultGeneralExpense || raw.genelGiderVarsayilani) || "KONTROL_BEKLIYOR",
+      genelGiderVarsayilani: cleanText(raw.defaultGeneralExpense || raw.genelGiderVarsayilani) || "KONTROL_BEKLIYOR",
       autoProcessSupplierInvoices: Boolean(raw.autoProcessSupplierInvoices),
       allowManualApprovalWarnings: Boolean(raw.allowManualApprovalWarnings),
       companyTransactionProfile: classification.profile,
@@ -845,6 +1183,26 @@ export class FirmaKartlariDbService {
     const existing = id
       ? await this.prisma.company.findFirst({ where: { id, mainCompanySlug } })
       : null;
+    if (taxNo) {
+      const taxNoOwner = await this.prisma.company.findFirst({
+        where: {
+          mainCompanySlug,
+          taxNo,
+          deletedAt: null,
+          ...(id ? { id: { not: id } } : {}),
+        },
+      });
+      if (taxNoOwner) {
+        throw new ConflictException({
+          message:
+            "Bu vergi numarası başka bir aktif firma kartında kayıtlı. Mevcut firmayı kullanın veya kartları birleştirin.",
+          code: "DUPLICATE_TAX_NO",
+          companyId: taxNoOwner.id,
+          companyName: taxNoOwner.name,
+          taxNo,
+        });
+      }
+    }
     if (!id && cleanText(payload.aliasOfCompanyId)) {
       return this.saveCompanyAlias(mainCompanySlug, cleanText(payload.aliasOfCompanyId), {
         rawName: name,
@@ -986,6 +1344,14 @@ export class FirmaKartlariDbService {
             existingRaw.varsayilanRaporKategoriId ||
             existingRaw.defaultReportCategoryId,
         ) || null,
+      defaultReportBehavior:
+        cleanText(payload.defaultReportBehavior || payload.varsayilanRaporDavranisi || existingRaw.defaultReportBehavior || existingRaw.varsayilanRaporDavranisi) || "KONTROL_BEKLIYOR",
+      varsayilanRaporDavranisi:
+        cleanText(payload.defaultReportBehavior || payload.varsayilanRaporDavranisi || existingRaw.defaultReportBehavior || existingRaw.varsayilanRaporDavranisi) || "KONTROL_BEKLIYOR",
+      defaultGeneralExpense:
+        cleanText(payload.defaultGeneralExpense || payload.genelGiderVarsayilani || existingRaw.defaultGeneralExpense || existingRaw.genelGiderVarsayilani) || "KONTROL_BEKLIYOR",
+      genelGiderVarsayilani:
+        cleanText(payload.defaultGeneralExpense || payload.genelGiderVarsayilani || existingRaw.defaultGeneralExpense || existingRaw.genelGiderVarsayilani) || "KONTROL_BEKLIYOR",
       trackReceivablePayable: classificationDefaults.trackReceivablePayable,
       cariTakipEdilsin: classificationDefaults.trackReceivablePayable,
       defaultCashSettlement: classificationDefaults.defaultCashSettlement,
@@ -997,6 +1363,56 @@ export class FirmaKartlariDbService {
           : inferredPostingType,
       expenseCalculationMode,
       giderHesaplamaTipi: expenseCalculationMode,
+      currentAccountPostingMode:
+        upper(
+          payload.currentAccountPostingMode ||
+            payload.cariKayitModu ||
+            existingRaw.currentAccountPostingMode ||
+            existingRaw.cariKayitModu,
+        ) ||
+        (expenseCalculationMode === "VAT_ONLY"
+          ? "VAT_PERCENTAGE"
+          : classificationDefaults.trackReceivablePayable
+            ? "FULL_DOCUMENT"
+            : "NONE"),
+      cariKayitModu:
+        upper(
+          payload.currentAccountPostingMode ||
+            payload.cariKayitModu ||
+            existingRaw.currentAccountPostingMode ||
+            existingRaw.cariKayitModu,
+        ) ||
+        (expenseCalculationMode === "VAT_ONLY"
+          ? "VAT_PERCENTAGE"
+          : classificationDefaults.trackReceivablePayable
+            ? "FULL_DOCUMENT"
+            : "NONE"),
+      vatPayablePercentage: Math.min(
+        100,
+        Math.max(
+          0,
+          Number(
+            payload.vatPayablePercentage ??
+              payload.kdvCariBorcYuzdesi ??
+              existingRaw.vatPayablePercentage ??
+              existingRaw.kdvCariBorcYuzdesi ??
+              0,
+          ) || 0,
+        ),
+      ),
+      kdvCariBorcYuzdesi: Math.min(
+        100,
+        Math.max(
+          0,
+          Number(
+            payload.vatPayablePercentage ??
+              payload.kdvCariBorcYuzdesi ??
+              existingRaw.vatPayablePercentage ??
+              existingRaw.kdvCariBorcYuzdesi ??
+              0,
+          ) || 0,
+        ),
+      ),
       defaultPaymentStatus:
         cleanText(
           payload.defaultPaymentStatus ||
@@ -1219,8 +1635,9 @@ export class FirmaKartlariDbService {
     payload: Record<string, any>,
   ) {
     const existing = await this.requireCompany(mainCompanySlug, id);
+    const mapped = this.mapCompany(existing);
     const saved = await this.saveCompany(mainCompanySlug, {
-      ...this.mapCompany(existing),
+      ...mapped,
       id,
       name: existing.name,
       companyTransactionProfile:
@@ -1235,6 +1652,24 @@ export class FirmaKartlariDbService {
       defaultPaymentStatus: payload.defaultPaymentStatus,
       expenseCategory: payload.expenseCategory || payload.giderKategorisi,
       defaultVatType: payload.defaultVatType || payload.varsayilanKdvTipi,
+      expenseCalculationMode:
+        payload.expenseCalculationMode || payload.giderHesaplamaTipi || mapped.expenseCalculationMode,
+      currentAccountPostingMode:
+        payload.currentAccountPostingMode ||
+        payload.cariKayitModu ||
+        mapped.currentAccountPostingMode,
+      vatPayablePercentage:
+        payload.vatPayablePercentage ??
+        payload.kdvCariBorcYuzdesi ??
+        mapped.vatPayablePercentage,
+      varsayilanRaporKategoriId:
+        payload.varsayilanRaporKategoriId !== undefined
+          ? payload.varsayilanRaporKategoriId
+          : mapped.varsayilanRaporKategoriId,
+      defaultReportBehavior:
+        payload.defaultReportBehavior || payload.varsayilanRaporDavranisi || mapped.defaultReportBehavior,
+      defaultGeneralExpense:
+        payload.defaultGeneralExpense || payload.genelGiderVarsayilani || mapped.defaultGeneralExpense,
       allowManualApprovalWarnings: payload.allowManualApprovalWarnings,
       autoProcessSupplierInvoices: payload.autoProcessSupplierInvoices,
     });
@@ -1267,6 +1702,14 @@ export class FirmaKartlariDbService {
 
   private manuelKalemClient() {
     return (this.prisma as any).muhasebeRaporManuelKalem;
+  }
+
+  private raporKayitAyariClient() {
+    return (this.prisma as any).muhasebeRaporKayitAyari;
+  }
+
+  private sabitGiderSablonuClient() {
+    return (this.prisma as any).muhasebeSabitGiderSablonu;
   }
 
   private async ensureReportCategories(mainCompanySlug: string) {
@@ -1319,7 +1762,7 @@ export class FirmaKartlariDbService {
     const rows = await this.ensureReportCategories(mainCompanySlug);
     const [companies, documents] = await Promise.all([
       this.prisma.company.findMany({
-        where: { mainCompanySlug, deletedAt: null },
+        where: { mainCompanySlug, deletedAt: null, isActive: true },
         select: { varsayilanRaporKategoriId: true },
       }),
       this.prisma.document.findMany({
@@ -1424,6 +1867,56 @@ export class FirmaKartlariDbService {
     }
     await this.kategoriClient().delete({ where: { id } });
     return { ok: true, data: { deleted: true } };
+  }
+
+  async listReportCategoryCompanies(mainCompanySlug: string, query: Record<string, any> = {}) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const categoryId = cleanText(query.categoryId || query.kategoriId);
+    const search = cleanText(query.search || query.q).toLocaleLowerCase("tr-TR");
+    const companies = await this.prisma.company.findMany({
+      where: {
+        mainCompanySlug,
+        deletedAt: null,
+        isActive: true,
+        ...(categoryId === "UNCATEGORIZED" || categoryId === "KATEGORISIZ"
+          ? { varsayilanRaporKategoriId: null }
+          : categoryId
+            ? { varsayilanRaporKategoriId: categoryId }
+            : {}),
+      },
+      orderBy: { name: "asc" },
+      take: 5000,
+    });
+    const data = companies
+      .map((row: any) => this.mapCompany(row))
+      .filter((row: any) => !search || [row.firmaAdi, row.vergiNo, row.firmaTipi].join(" ").toLocaleLowerCase("tr-TR").includes(search));
+    return { ok: true, data, total: data.length };
+  }
+
+  async assignReportCategoryToCompanies(mainCompanySlug: string, payload: Record<string, any>) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const companyIds = (Array.isArray(payload.companyIds) ? payload.companyIds : [payload.companyId])
+      .map((value: any) => cleanText(value))
+      .filter(Boolean);
+    if (!companyIds.length) throw new BadRequestException("Firma seçimi zorunludur.");
+    const categoryId = cleanText(payload.categoryId || payload.kategoriId) || null;
+    if (categoryId) {
+      const category = await this.kategoriClient().findFirst({ where: { id: categoryId, mainCompanySlug, aktifMi: true } });
+      if (!category) throw new NotFoundException("Aktif kategori bulunamadı.");
+    }
+    const rows = await this.prisma.company.findMany({ where: { id: { in: companyIds }, mainCompanySlug, deletedAt: null } });
+    for (const row of rows) {
+      const raw = this.rawOf(row);
+      await this.prisma.company.update({
+        where: { id: row.id },
+        data: {
+          varsayilanRaporKategoriId: categoryId,
+          raw: { ...raw, varsayilanRaporKategoriId: categoryId, defaultReportCategoryId: categoryId },
+        },
+      });
+      await this.log(mainCompanySlug, "company", row.id, "REPORT_CATEGORY_ASSIGNED", { oldValue: row.varsayilanRaporKategoriId, newValue: categoryId });
+    }
+    return { ok: true, data: { updated: rows.length, categoryId } };
   }
 
   async listMissingCategoryCompanies(mainCompanySlug: string) {
@@ -1571,88 +2064,16 @@ export class FirmaKartlariDbService {
     const kategoriId = cleanText(query.kategoriId || query.raporKategoriId);
     const turFilter = upper(query.tur || "");
     const search = cleanText(query.q || query.search).toLocaleLowerCase("tr-TR");
-    const categories = await this.ensureReportCategories(mainCompanySlug);
-    const companies = await this.prisma.company.findMany({
-      where: { mainCompanySlug, deletedAt: null },
-      take: 5000,
+    const control = await this.buildReportControl(mainCompanySlug, {
+      ...query,
+      startDate: range.dateFrom,
+      endDate: range.dateTo,
+      firmId,
+      categoryId: kategoriId || undefined,
+      search: search || undefined,
     });
-    const companyMap = new Map(companies.map((row: any) => [row.id, row]));
-    const documents = await this.prisma.document.findMany({
-      where: {
-        mainCompanySlug,
-        deletedAt: null,
-        ...(firmId ? { companyId: firmId } : {}),
-        OR: [
-          { date: { gte: range.gte, lte: range.lte } },
-          { processedAt: { gte: range.gte, lte: range.lte } },
-          { createdAt: { gte: range.gte, lte: range.lte } },
-        ],
-      },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: 20000,
-    });
-    const categorySummary = new Map<string, any>();
-    const movements = [];
-    for (const document of documents) {
-      const company = companyMap.get(document.companyId || "");
-      const type = this.documentReportType(document, company);
-      const { category, source } = await this.resolveReportCategory(
-        mainCompanySlug,
-        document,
-        company,
-        categories,
-        type,
-      );
-      const rawAmount = decimalToNumber(document.subtotal);
-      const vat = type === "GAYRI_RESMI" ? 0 : decimalToNumber(document.vatTotal);
-      const vatOnlyExpense =
-        type !== "KESILEN" &&
-        this.isVatOnlyExpense({
-          raw: {
-            ...(company?.raw && typeof company.raw === "object"
-              ? company.raw
-              : {}),
-            ...(document?.raw && typeof document.raw === "object"
-              ? document.raw
-              : {}),
-          },
-        });
-      const amount = vatOnlyExpense ? 0 : rawAmount;
-      const total = vatOnlyExpense
-        ? 0
-        : amount + vat || decimalToNumber(document.grandTotal);
-      const row = {
-        id: document.id,
-        tarih:
-          document.date?.toISOString?.().slice(0, 10) ||
-          document.processedAt?.toISOString?.().slice(0, 10) ||
-          document.createdAt?.toISOString?.().slice(0, 10) ||
-          "",
-        tur: type,
-        turEtiketi: this.reportTypeLabel(type),
-        kategoriId: category?.id || "",
-        kategori: category?.ad || "Diğer Giderler",
-        kategoriKaynagi: document.kategoriKaynagi || source,
-        firmaId: company?.id || "",
-        firma: company?.name || "",
-        belgeNo: document.documentNo || "",
-        aciklama: asObject(document.raw).description || document.routeMessage || "",
-        tutar: amount,
-        kdv: vat,
-        genelToplam: total,
-        hamMatrah: rawAmount,
-        hamGenelToplam: decimalToNumber(document.grandTotal),
-        giderHesabinaDahil: !vatOnlyExpense,
-        kdvHesabinaDahil: type !== "GAYRI_RESMI",
-        giderHesaplamaTipi: vatOnlyExpense ? "VAT_ONLY" : "FULL",
-        hesapNotu: vatOnlyExpense
-          ? "Firma karti: sadece KDV kullanilir, matrah gider hesabina girmez."
-          : "",
-      };
-      this.addSummaryRow(categorySummary, category, amount, vat, total);
-      movements.push(row);
-    }
-
+    const data = (control as any).data || {};
+    const categories = Array.isArray(data.categories) ? data.categories : [];
     const manualRows = await this.manuelKalemClient().findMany({
       where: {
         mainCompanySlug,
@@ -1669,60 +2090,57 @@ export class FirmaKartlariDbService {
       orderBy: [{ tarih: "desc" }, { createdAt: "desc" }],
       take: 5000,
     });
-    const categoryById = new Map<string, any>(
-      categories.map((row: any) => [row.id, row]),
-    );
-    manualRows.forEach((manual: any) => {
-      const category: any = categoryById.get(manual.kategoriId || "") || {
-        id: manual.kategoriId || "manual",
-        ad: manual.ad,
-        kategoriTipi: "DIGER",
+    const sourceRows = (Array.isArray(data.records) ? data.records : [])
+      .filter((row: any) => row.sourceType !== "CURRENT_ACCOUNT")
+      .map((row: any) => ({
+        id: row.sourceId,
+        tarih: row.date,
+        tur: row.transactionType === "GELIR" ? "KESILEN" : row.officialType === "GAYRI_RESMI" ? "GAYRI_RESMI" : "RESMI_GELEN",
+        turEtiketi: row.sourceLabel,
+        kategoriId: row.categoryId || "",
+        kategori: row.category || "Kategorisiz",
+        kategoriKaynagi: row.sourceOfDecision || row.categorySource || "UNRESOLVED",
+        firmaId: row.companyId || "",
+        firma: row.companyName || "",
+        belgeNo: row.documentNo || "",
+        aciklama: row.reportDescription || row.description || "",
+        tutar: Number(row.baseAmount || 0),
+        kdv: Number(row.reportVatAmount ?? row.vat ?? 0),
+        genelToplam: Number(row.reportAmount ?? row.grandTotal ?? 0),
+        hamMatrah: Number(row.baseAmount || 0),
+        hamGenelToplam: Number(row.grandTotal || 0),
+        giderHesabinaDahil: row.expenseStatus === "GENEL_GIDER",
+        kdvHesabinaDahil: Boolean(row.reportVatIncluded),
+        giderHesaplamaTipi: row.expenseStatus === "GENEL_GIDER" ? "FULL" : "EXCLUDED",
+        hesapNotu: row.sourceOfDecision === "UNRESOLVED" ? "Firma kartı veya kayıt override kararı eksik." : "",
+      }))
+      .filter((row: any) => (turFilter && turFilter !== "ALL" ? row.tur === turFilter : true));
+    const categoryById = new Map<string, any>(categories.map((row: any) => [row.id, row]));
+    const categorySummary = new Map<string, any>();
+    sourceRows.forEach((row: any) => {
+      const category = categoryById.get(row.kategoriId) || {
+        id: row.kategoriId || "uncategorized",
+        ad: row.kategori || "Kategorisiz",
+        kategoriTipi: row.tur === "KESILEN" ? "GELIR" : "DIGER",
       };
-      const amount = decimalToNumber(manual.tutar);
-      const vat = decimalToNumber(manual.kdv);
-      this.addSummaryRow(categorySummary, category, amount, vat);
-      movements.push({
-        id: manual.id,
-        tarih:
-          upper(manual.kartTipi) === "AYLIK_SABIT"
-            ? range.dateFrom
-            : manual.tarih?.toISOString?.().slice(0, 10) ||
-          manual.baslangic?.toISOString?.().slice(0, 10) ||
-          range.dateFrom,
-        tur: "MANUEL",
-        turEtiketi: manual.ad,
-        kategoriId: category.id,
-        kategori: category.ad,
-        kategoriKaynagi: "MANUEL",
-        firmaId: manual.firmaId || "",
-        firma: companyMap.get(manual.firmaId || "")?.name || "",
-        belgeNo: "",
-        aciklama: manual.aciklama || "",
-        tutar: amount,
-        kdv: vat,
-        genelToplam: amount + vat,
-        kartTipi: manual.kartTipi || "",
-      });
+      this.addSummaryRow(categorySummary, category, Number(row.tutar || 0), Number(row.kdv || 0), Number(row.genelToplam || 0));
     });
-
-    let hareketler = movements
-      .filter((row) => (kategoriId ? row.kategoriId === kategoriId : true))
-      .filter((row) => (turFilter && turFilter !== "ALL" ? row.tur === turFilter : true))
-      .filter((row) => {
+    const hareketler = sourceRows
+      .filter((row: any) => {
         if (!search) return true;
         return [row.firma, row.kategori, row.belgeNo, row.aciklama]
           .join(" ")
           .toLocaleLowerCase("tr-TR")
           .includes(search);
       })
-      .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih)));
+      .sort((a: any, b: any) => String(b.tarih).localeCompare(String(a.tarih)));
     const kategoriOzetleri = [...categorySummary.values()]
-      .filter((row) => (kategoriId ? row.kategoriId === kategoriId : true))
-      .sort((a, b) => b.genelToplam - a.genelToplam);
+      .filter((row: any) => (kategoriId ? row.kategoriId === kategoriId : true))
+      .sort((a: any, b: any) => b.genelToplam - a.genelToplam);
     const sum = (type: string, key: string) =>
       hareketler
-        .filter((row) => row.tur === type)
-        .reduce((total, row) => total + Number(row[key] || 0), 0);
+        .filter((row: any) => row.tur === type)
+        .reduce((total: number, row: any) => total + Number(row[key] || 0), 0);
     const kesilenToplam = sum("KESILEN", "tutar");
     const kesilenKdv = sum("KESILEN", "kdv");
     const resmiGelenToplam = sum("RESMI_GELEN", "genelToplam");
@@ -1730,59 +2148,23 @@ export class FirmaKartlariDbService {
     const gelenKdv = sum("RESMI_GELEN", "kdv");
     const devreden = decimalToNumber(query.devredenKdv || 0);
     const kdvSonucu = kesilenKdv - gelenKdv - devreden;
-    const personel = kategoriOzetleri
-      .filter((row) => row.kategoriTipi === "PERSONEL")
-      .reduce((total, row) => total + Number(row.genelToplam || 0), 0);
-    const yemek = kategoriOzetleri
-      .filter((row) => /yemek/i.test(row.kategori))
-      .reduce((total, row) => total + Number(row.genelToplam || 0), 0);
-    const haftalik = hareketler
-      .filter((row) => /haftalik|haftalÄ±k/i.test(row.kategori))
-      .reduce((total, row) => total + Number(row.genelToplam || 0), 0);
-    const yevmiyeci = hareketler
-      .filter((row) => /yevmiyeci/i.test(row.kategori))
-      .reduce((total, row) => total + Number(row.genelToplam || 0), 0);
+    const personel = kategoriOzetleri.filter((row: any) => row.kategoriTipi === "PERSONEL").reduce((total: number, row: any) => total + Number(row.genelToplam || 0), 0);
+    const yemek = kategoriOzetleri.filter((row: any) => /yemek/i.test(row.kategori)).reduce((total: number, row: any) => total + Number(row.genelToplam || 0), 0);
+    const haftalik = hareketler.filter((row: any) => /haftalik|haftalÄ±k/i.test(row.kategori)).reduce((total: number, row: any) => total + Number(row.genelToplam || 0), 0);
+    const yevmiyeci = hareketler.filter((row: any) => /yevmiyeci/i.test(row.kategori)).reduce((total: number, row: any) => total + Number(row.genelToplam || 0), 0);
     return {
       ok: true,
       data: {
         anaOzet: {
-          kesilenFatura: {
-            toplam: kesilenToplam,
-            kdv: kesilenKdv,
-            belgeAdedi: hareketler.filter((row) => row.tur === "KESILEN").length,
-          },
-          gelenFaturalar: {
-            resmiToplam: resmiGelenToplam,
-            gayriResmiToplam,
-            toplam: resmiGelenToplam + gayriResmiToplam,
-          },
-          kdvDurumu: {
-            hesaplananKdv: kesilenKdv,
-            gelenKdv,
-            devredenKdv: devreden,
-            sonuc: kdvSonucu,
-            odenecekKdv: Math.max(0, kdvSonucu),
-            devredecekKdv: Math.max(0, -kdvSonucu),
-          },
-          personelIsletme: {
-            personel,
-            yemek,
-            haftalik,
-            yevmiyeci,
-            toplam: personel + yemek + haftalik + yevmiyeci,
-          },
+          kesilenFatura: { toplam: kesilenToplam, kdv: kesilenKdv, belgeAdedi: hareketler.filter((row: any) => row.tur === "KESILEN").length },
+          gelenFaturalar: { resmiToplam: resmiGelenToplam, gayriResmiToplam, toplam: resmiGelenToplam + gayriResmiToplam },
+          kdvDurumu: { hesaplananKdv: kesilenKdv, gelenKdv, devredenKdv: devreden, sonuc: kdvSonucu, odenecekKdv: Math.max(0, kdvSonucu), devredecekKdv: Math.max(0, -kdvSonucu) },
+          personelIsletme: { personel, yemek, haftalik, yevmiyeci, toplam: personel + yemek + haftalik + yevmiyeci },
         },
         kategoriOzetleri,
         hareketler,
         kullaniciKalemleri: manualRows,
-        filtreBilgisi: {
-          baslangic: range.dateFrom,
-          bitis: range.dateTo,
-          firmaId: firmId,
-          kategoriId,
-          tur: turFilter || "ALL",
-          search,
-        },
+        filtreBilgisi: { baslangic: range.dateFrom, bitis: range.dateTo, firmaId: firmId, kategoriId, tur: turFilter || "ALL", search },
       },
     };
   }
@@ -1812,6 +2194,11 @@ export class FirmaKartlariDbService {
   async saveManualReportItem(mainCompanySlug: string, payload: Record<string, any>) {
     await this.ensureMainCompany(mainCompanySlug);
     const id = cleanText(payload.id);
+    const client = this.manuelKalemClient();
+    const existing = id
+      ? await client.findFirst({ where: { id, mainCompanySlug, deletedAt: null } })
+      : null;
+    if (id && !existing) throw new NotFoundException("Manuel gider bulunamadı.");
     const ad = cleanText(payload.ad || payload.name);
     if (!ad) throw new BadRequestException("Kalem adi zorunludur.");
     const kartTipi = upper(payload.kartTipi || payload.cardType || "KUCUK") || "KUCUK";
@@ -1819,29 +2206,45 @@ export class FirmaKartlariDbService {
     const tarihValue = cleanText(payload.tarih || payload.date);
     const baslangicValue = cleanText(payload.baslangic || payload.dateFrom || (aylikSabit ? tarihValue : ""));
     const bitisValue = cleanText(payload.bitis || payload.dateTo || payload.endDate);
+    const reportOnly = payload.reportOnly === undefined ? undefined : Boolean(payload.reportOnly);
+    const postToLedger = payload.postToLedger === undefined ? undefined : Boolean(payload.postToLedger);
+    const currentAccountRequested = reportOnly === true
+      ? false
+      : postToLedger ?? Boolean(payload.cariyeEkle ?? payload.addToCurrentAccount ?? existing?.cariyeEkle ?? false);
     const data = {
       ad,
       kartTipi: aylikSabit ? "AYLIK_SABIT" : kartTipi,
-      kategoriId: cleanText(payload.kategoriId || payload.categoryId) || null,
-      firmaId: cleanText(payload.firmaId || payload.companyId) || null,
+      kategoriId: cleanText(payload.kategoriId || payload.categoryId || existing?.kategoriId) || null,
+      firmaId: cleanText(payload.firmaId || payload.companyId || existing?.firmaId) || null,
       tarih: !aylikSabit && tarihValue
         ? this.parseDate(tarihValue)
-        : null,
+        : existing?.tarih || null,
       baslangic: baslangicValue
         ? this.parseDate(baslangicValue)
-        : null,
+        : existing?.baslangic || null,
       bitis: bitisValue
         ? this.parseDate(bitisValue)
-        : null,
-      tutar: new Prisma.Decimal(Number(payload.tutar || payload.amount || 0) || 0),
-      kdv: new Prisma.Decimal(Number(payload.kdv || payload.vat || 0) || 0),
-      aciklama: cleanText(payload.aciklama || payload.description) || null,
-      aktifMi: payload.aktifMi ?? payload.active ?? true,
+        : existing?.bitis || null,
+      tutar: new Prisma.Decimal(Number(payload.tutar ?? payload.amount ?? existing?.tutar ?? 0) || 0),
+      kdv: new Prisma.Decimal(Number(payload.kdv ?? payload.vat ?? existing?.kdv ?? 0) || 0),
+      aciklama: cleanText(payload.aciklama || payload.description || existing?.aciklama) || null,
+      belgeNo: cleanText(payload.belgeNo || payload.documentNo || existing?.belgeNo) || null,
+      resmiTip: upper(payload.resmiTip || payload.officialType || existing?.resmiTip || "GAYRI_RESMI") || "GAYRI_RESMI",
+      kdvOrani: new Prisma.Decimal(Number(payload.kdvOrani ?? payload.vatRate ?? existing?.kdvOrani ?? 0) || 0),
+      raporaDahil: payload.raporaDahil ?? payload.reportIncluded ?? existing?.raporaDahil ?? true,
+      odemeSekli: cleanText(payload.odemeSekli || payload.paymentType || existing?.odemeSekli) || null,
+      not: cleanText(payload.not || payload.note || existing?.not) || null,
+      cariyeEkle: currentAccountRequested,
+      sabitSablonId: cleanText(payload.sabitSablonId || payload.templateId || existing?.sabitSablonId) || null,
+      tahakkukAyi: cleanText(payload.tahakkukAyi || payload.accrualMonth || existing?.tahakkukAyi) || null,
+      islemTuru: upper(payload.islemTuru || payload.transactionType || existing?.islemTuru || "GIDER") === "GELIR" ? "GELIR" : "GIDER",
+      aktifMi: payload.aktifMi ?? payload.active ?? existing?.aktifMi ?? true,
     };
-    const client = this.manuelKalemClient();
-    const saved = id
+    let saved = id
       ? await client.update({ where: { id }, data })
       : await client.create({ data: { ...data, mainCompanySlug } });
+    const synced = await this.syncManualReportItemLedger(mainCompanySlug, saved);
+    if (synced) saved = synced;
     return { ok: true, data: saved };
   }
 
@@ -1855,7 +2258,521 @@ export class FirmaKartlariDbService {
       where: { id },
       data: { deletedAt: new Date(), aktifMi: false },
     });
+    await this.syncManualReportItemLedger(mainCompanySlug, saved);
     return { ok: true, data: saved };
+  }
+
+  async listFixedExpenseTemplates(mainCompanySlug: string, query: Record<string, any> = {}) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const month = cleanText(query.month || query.ay || new Date().toISOString().slice(0, 7));
+    const [rows, accruals] = await Promise.all([
+      this.sabitGiderSablonuClient().findMany({
+        where: { mainCompanySlug, deletedAt: null, ...(query.all === "true" ? {} : { aktifMi: true }) },
+        orderBy: [{ aktifMi: "desc" }, { ad: "asc" }],
+      }),
+      this.manuelKalemClient().findMany({ where: { mainCompanySlug, deletedAt: null, tahakkukAyi: month }, select: { sabitSablonId: true, id: true } }),
+    ]);
+    const generated = new Map(accruals.map((row: any) => [row.sabitSablonId, row.id]));
+    return {
+      ok: true,
+      data: rows.map((row: any) => {
+        const validationErrors = [
+          ...(decimalToNumber(row.tutar) > 0 ? [] : ["TUTAR_EKSIK"]),
+          ...(cleanText(row.kategoriId) ? [] : ["KATEGORI_EKSIK"]),
+        ];
+        return {
+          ...row,
+          gecerliMi: validationErrors.length === 0,
+          validationErrors,
+          buAyOlusturuldu: generated.has(row.id),
+          tahakkukId: generated.get(row.id) || "",
+        };
+      }),
+    };
+  }
+
+  async saveFixedExpenseTemplate(mainCompanySlug: string, payload: Record<string, any>) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const id = cleanText(payload.id);
+    const existing = id
+      ? await this.sabitGiderSablonuClient().findFirst({
+          where: { id, mainCompanySlug, deletedAt: null },
+        })
+      : null;
+    if (id && !existing)
+      throw new NotFoundException("Sabit gider şablonu bulunamadı.");
+    const ad = cleanText(payload.ad || payload.name);
+    if (!ad) throw new BadRequestException("Gider adı zorunludur.");
+    const kategoriId = cleanText(
+      payload.kategoriId || payload.categoryId || existing?.kategoriId,
+    );
+    if (!kategoriId)
+      throw new BadRequestException("Gider kategorisi zorunludur.");
+    const category = await this.kategoriClient().findFirst({
+      where: { id: kategoriId, mainCompanySlug, aktifMi: true },
+    });
+    if (!category)
+      throw new BadRequestException("Seçilen gider kategorisi bulunamadı veya pasif.");
+    const firmaId = cleanText(
+      payload.firmaId || payload.companyId || existing?.firmaId,
+    );
+    if (firmaId) {
+      const company = await this.prisma.company.findFirst({
+        where: { id: firmaId, mainCompanySlug, deletedAt: null },
+        select: { id: true },
+      });
+      if (!company)
+        throw new BadRequestException("Seçilen firma bu ana firmaya ait değil.");
+    }
+    const amount = parseUserNumber(
+      payload.tutar ?? payload.amount ?? existing?.tutar,
+    );
+    if (amount <= 0)
+      throw new BadRequestException("Sabit gider tutarı sıfırdan büyük olmalıdır.");
+    const startMonth = cleanText(
+      payload.baslangicAyi ||
+        payload.startMonth ||
+        existing?.baslangicAyi ||
+        new Date().toISOString().slice(0, 7),
+    );
+    const endMonth = cleanText(
+      payload.bitisAyi || payload.endMonth || existing?.bitisAyi,
+    );
+    if (!/^\d{4}-\d{2}$/.test(startMonth))
+      throw new BadRequestException("Başlangıç ayı YYYY-AA biçiminde olmalıdır.");
+    if (endMonth && !/^\d{4}-\d{2}$/.test(endMonth))
+      throw new BadRequestException("Bitiş ayı YYYY-AA biçiminde olmalıdır.");
+    if (endMonth && endMonth < startMonth)
+      throw new BadRequestException("Bitiş ayı başlangıç ayından önce olamaz.");
+    const officialType =
+      upper(payload.resmiTip || payload.officialType || existing?.resmiTip || "GAYRI_RESMI") ===
+      "RESMI"
+        ? "RESMI"
+        : "GAYRI_RESMI";
+    const data = {
+      ad,
+      kategoriId,
+      firmaId: firmaId || null,
+      tutar: new Prisma.Decimal(amount),
+      resmiTip: officialType,
+      kdvOrani: new Prisma.Decimal(
+        officialType === "RESMI"
+          ? parseUserNumber(payload.kdvOrani ?? payload.vatRate ?? existing?.kdvOrani)
+          : 0,
+      ),
+      baslangicAyi: startMonth,
+      bitisAyi: endMonth || null,
+      herAyOtomatik:
+        payload.herAyOtomatik ?? payload.autoMonthly ?? existing?.herAyOtomatik ?? true,
+      cariyeEkle: Boolean(
+        payload.cariyeEkle ??
+          payload.addToCurrentAccount ??
+          existing?.cariyeEkle ??
+          false,
+      ),
+      aktifMi: payload.aktifMi ?? payload.active ?? existing?.aktifMi ?? true,
+      aciklama:
+        cleanText(payload.aciklama || payload.description || existing?.aciklama) ||
+        null,
+    };
+    const saved = id
+      ? await this.sabitGiderSablonuClient().update({ where: { id }, data })
+      : await this.sabitGiderSablonuClient().create({ data: { ...data, mainCompanySlug } });
+    return { ok: true, data: saved };
+  }
+
+  async generateFixedExpense(mainCompanySlug: string, id: string, monthValue: string) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const month = cleanText(monthValue || new Date().toISOString().slice(0, 7));
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException("Tahakkuk ayı YYYY-AA biçiminde olmalıdır.");
+    const template = await this.sabitGiderSablonuClient().findFirst({ where: { id, mainCompanySlug, deletedAt: null, aktifMi: true } });
+    if (!template) throw new NotFoundException("Sabit gider şablonu bulunamadı.");
+    if (!cleanText(template.kategoriId))
+      throw new BadRequestException("Sabit gider şablonunda kategori seçilmelidir.");
+    if (decimalToNumber(template.tutar) <= 0)
+      throw new BadRequestException("Sabit gider şablonunda tutar sıfırdan büyük olmalıdır.");
+    if (month < template.baslangicAyi || (template.bitisAyi && month > template.bitisAyi)) throw new BadRequestException("Şablon seçilen ayda geçerli değil.");
+    const existing = await this.manuelKalemClient().findFirst({ where: { mainCompanySlug, sabitSablonId: id, tahakkukAyi: month, deletedAt: null } });
+    if (existing) return { ok: true, data: existing, alreadyGenerated: true };
+    const amount = decimalToNumber(template.tutar);
+    const vat = template.resmiTip === "RESMI" ? amount * decimalToNumber(template.kdvOrani) / 100 : 0;
+    const saved = await this.saveManualReportItem(mainCompanySlug, {
+      ad: template.ad, kartTipi: "SABIT_TAHAKKUK", kategoriId: template.kategoriId, firmaId: template.firmaId,
+      tarih: `${month}-01`, tutar: amount, kdv: vat, kdvOrani: template.kdvOrani, resmiTip: template.resmiTip,
+      raporaDahil: true, aciklama: template.aciklama || `${month} sabit gider tahakkuku`, cariyeEkle: template.cariyeEkle,
+      sabitSablonId: template.id, tahakkukAyi: month,
+    });
+    return { ...saved, alreadyGenerated: false };
+  }
+
+  async generateFixedExpensesForMonth(mainCompanySlug: string, monthValue: string) {
+    const month = cleanText(monthValue || new Date().toISOString().slice(0, 7));
+    const templates = await this.sabitGiderSablonuClient().findMany({
+      where: { mainCompanySlug, deletedAt: null, aktifMi: true, herAyOtomatik: true, baslangicAyi: { lte: month }, OR: [{ bitisAyi: null }, { bitisAyi: { gte: month } }] },
+    });
+    let created = 0;
+    let existing = 0;
+    let skipped = 0;
+    for (const template of templates) {
+      if (!cleanText(template.kategoriId) || decimalToNumber(template.tutar) <= 0) {
+        skipped += 1;
+        continue;
+      }
+      const result = await this.generateFixedExpense(mainCompanySlug, template.id, month);
+      if (result.alreadyGenerated) existing += 1;
+      else created += 1;
+    }
+    return { ok: true, data: { month, templates: templates.length, created, existing, skipped } };
+  }
+
+  async passiveFixedExpenseTemplate(mainCompanySlug: string, id: string) {
+    const existing = await this.sabitGiderSablonuClient().findFirst({ where: { id, mainCompanySlug, deletedAt: null } });
+    if (!existing) throw new NotFoundException("Sabit gider şablonu bulunamadı.");
+    const saved = await this.sabitGiderSablonuClient().update({ where: { id }, data: { aktifMi: false } });
+    return { ok: true, data: saved, pastAccrualsPreserved: true };
+  }
+
+  async copyFixedExpenseTemplate(mainCompanySlug: string, id: string, targetMonth: string) {
+    const existing = await this.sabitGiderSablonuClient().findFirst({ where: { id, mainCompanySlug, deletedAt: null } });
+    if (!existing) throw new NotFoundException("Sabit gider şablonu bulunamadı.");
+    return this.saveFixedExpenseTemplate(mainCompanySlug, { ...existing, id: undefined, ad: `${existing.ad} - ${targetMonth}`, baslangicAyi: targetMonth, bitisAyi: null });
+  }
+
+  async saveReportRecordOverride(mainCompanySlug: string, sourceType: string, sourceId: string, payload: Record<string, any>) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const normalizedSourceType = upper(sourceType);
+    if (!normalizedSourceType || !cleanText(sourceId)) throw new BadRequestException("Kaynak kaydı zorunludur.");
+    if (normalizedSourceType === "MANUEL_GENEL_GIDER") {
+      const existing = await this.manuelKalemClient().findFirst({ where: { id: sourceId, mainCompanySlug, deletedAt: null } });
+      if (!existing) throw new NotFoundException("Manuel gider bulunamadı.");
+      return this.saveManualReportItem(mainCompanySlug, {
+        id: sourceId,
+        ad: existing.ad,
+        kartTipi: existing.kartTipi,
+        kategoriId: payload.reportCategoryId ?? existing.kategoriId,
+        firmaId: existing.firmaId,
+        tarih: existing.tarih?.toISOString?.().slice(0, 10),
+        baslangic: existing.baslangic?.toISOString?.().slice(0, 10),
+        bitis: existing.bitis?.toISOString?.().slice(0, 10),
+        tutar: payload.reportAmount ?? existing.tutar,
+        kdv: payload.reportVatAmount ?? existing.kdv,
+        kdvOrani: existing.kdvOrani,
+        resmiTip: payload.reportOfficialType ?? existing.resmiTip,
+        raporaDahil: payload.reportIncluded ?? existing.raporaDahil,
+        belgeNo: existing.belgeNo,
+        aciklama: payload.reportDescription ?? existing.aciklama,
+        not: payload.reportNote ?? existing.not,
+        odemeSekli: existing.odemeSekli,
+        cariyeEkle: existing.cariyeEkle,
+        islemTuru: existing.islemTuru,
+        aktifMi: existing.aktifMi,
+      });
+    }
+    const data = {
+      reportIncluded: payload.reportIncluded === null || payload.reportIncluded === undefined ? null : Boolean(payload.reportIncluded),
+      reportCategoryId: cleanText(payload.reportCategoryId || payload.categoryId) || null,
+      reportAmount: payload.reportAmount === "" || payload.reportAmount === null || payload.reportAmount === undefined ? null : new Prisma.Decimal(Number(payload.reportAmount) || 0),
+      reportDescription: cleanText(payload.reportDescription || payload.description) || null,
+      reportOfficialType: cleanText(payload.reportOfficialType || payload.officialType) || null,
+      reportVatAmount: payload.reportVatAmount === "" || payload.reportVatAmount === null || payload.reportVatAmount === undefined ? null : new Prisma.Decimal(Number(payload.reportVatAmount) || 0),
+      reportVatIncluded: payload.reportVatIncluded === null || payload.reportVatIncluded === undefined ? null : Boolean(payload.reportVatIncluded),
+      reportExpenseStatus: cleanText(payload.reportExpenseStatus || payload.expenseStatus) || null,
+      reportNote: cleanText(payload.reportNote || payload.note) || null,
+    };
+    const saved = await this.raporKayitAyariClient().upsert({
+      where: { mainCompanySlug_sourceType_sourceId: { mainCompanySlug, sourceType: normalizedSourceType, sourceId } },
+      create: { mainCompanySlug, sourceType: normalizedSourceType, sourceId, ...data },
+      update: data,
+    });
+    return { ok: true, data: saved };
+  }
+
+  async bulkSaveReportRecordOverride(mainCompanySlug: string, payload: Record<string, any>, included: boolean) {
+    const records = Array.isArray(payload.records) ? payload.records : [];
+    if (!records.length) throw new BadRequestException("En az bir rapor kaydı seçmelisiniz.");
+    for (const row of records) {
+      await this.saveReportRecordOverride(mainCompanySlug, row.sourceType, row.sourceId, { reportIncluded: included });
+    }
+    return { ok: true, data: { updated: records.length, reportIncluded: included } };
+  }
+
+  async buildReportControl(mainCompanySlug: string, query: Record<string, any> = {}) {
+    await this.ensureMainCompany(mainCompanySlug);
+    const range = this.reportRange(query);
+    const firmId = cleanText(query.firmaId || query.firmId);
+    const officialFilter = upper(query.officialType || query.resmiTip || "");
+    const categoryId = cleanText(query.categoryId || query.kategoriId);
+    const sourceFilter = upper(query.sourceType || query.islemTuru || "");
+    const statusFilter = upper(query.reportStatus || query.raporDurumu || "");
+    const behaviorFilter = upper(query.companyBehavior || query.firmaDavranisi || "");
+    const search = cleanText(query.search || query.q).toLocaleLowerCase("tr-TR");
+    const [categories, companies, documents, currentMovements, manualRows, overrides] = await Promise.all([
+      this.ensureReportCategories(mainCompanySlug),
+      this.prisma.company.findMany({ where: { mainCompanySlug, deletedAt: null, isActive: true }, take: 5000 }),
+      this.prisma.document.findMany({
+        where: {
+          mainCompanySlug,
+          deletedAt: null,
+          ...(firmId ? { companyId: firmId } : {}),
+          OR: [{ date: { gte: range.gte, lte: range.lte } }, { processedAt: { gte: range.gte, lte: range.lte } }, { createdAt: { gte: range.gte, lte: range.lte } }],
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 20000,
+      }),
+      this.prisma.currentAccountMovement.findMany({
+        where: { mainCompanySlug, ...(firmId ? { companyId: firmId } : {}), movementDate: { gte: range.gte, lte: range.lte }, documentId: null },
+        orderBy: [{ movementDate: "desc" }, { createdAt: "desc" }],
+        take: 10000,
+      }),
+      this.manuelKalemClient().findMany({
+        where: { mainCompanySlug, deletedAt: null, aktifMi: true, ...(firmId ? { firmaId: firmId } : {}), OR: [{ tarih: { gte: range.gte, lte: range.lte } }, { tarih: null, baslangic: { lte: range.lte } }] },
+        orderBy: [{ tarih: "desc" }, { createdAt: "desc" }], take: 5000,
+      }),
+      this.raporKayitAyariClient().findMany({ where: { mainCompanySlug }, take: 50000 }),
+    ]);
+    const standaloneCurrentMovements = currentMovements.filter(
+      (movement: any) =>
+        !cleanText(asObject(movement.raw).reportManualExpenseId),
+    );
+    const companyMap = new Map(companies.map((row: any) => [row.id, row]));
+    const categoryMap = new Map<string, any>(categories.map((row: any) => [row.id, row]));
+    const overrideMap = new Map(overrides.map((row: any) => [`${row.sourceType}:${row.sourceId}`, row]));
+    const applyDecision = (base: any, company: any) => {
+      const override: any = overrideMap.get(`${base.sourceType}:${base.sourceId}`) || null;
+      const decision = this.resolveCompanyAccountingBehavior(company, base, override, categories);
+      return {
+        ...base,
+        categoryId: decision.effectiveCategoryId,
+        category: decision.effectiveCategoryName,
+        categorySource: decision.sourceOfDecision,
+        sourceOfDecision: decision.sourceOfDecision,
+        sourceOfCategory: decision.sourceOfCategory,
+        sourceOfReportStatus: decision.sourceOfReportStatus,
+        sourceOfExpenseStatus: decision.sourceOfExpenseStatus,
+        unresolvedReasons: decision.unresolvedReasons,
+        officialType: decision.officialType,
+        currentAccountIncluded: decision.currentAccountIncluded,
+        cariIncluded: decision.cariIncluded,
+        reportIncluded: decision.reportIncluded,
+        reportStatus: decision.reportStatus,
+        expenseStatus: decision.expenseStatus,
+        reportVatIncluded: decision.vatIncluded,
+        companyBehaviorCode: decision.companyBehaviorCode,
+        companyBehavior: decision.companyBehavior,
+        companyDefaultCategoryId: decision.companyDefaultCategoryId,
+        companyDefaultCategoryName: decision.companyDefaultCategoryName,
+        defaultReportStatus: decision.defaultReportStatus,
+        defaultExpenseStatus: decision.defaultExpenseStatus,
+        reportAmount: override?.reportAmount == null ? base.grandTotal : decimalToNumber(override.reportAmount),
+        reportVatAmount: override?.reportVatAmount == null ? base.vat : decimalToNumber(override.reportVatAmount),
+        reportDescription: override?.reportDescription || base.description || "",
+        reportNote: override?.reportNote || "",
+        hasOverride: Boolean(
+          override &&
+            [
+              override.reportIncluded,
+              override.reportCategoryId,
+              override.reportAmount,
+              override.reportDescription,
+              override.reportOfficialType,
+              override.reportVatAmount,
+              override.reportVatIncluded,
+              override.reportExpenseStatus,
+              override.reportNote,
+            ].some((value) => value !== null && value !== undefined && value !== ""),
+        ),
+      };
+    };
+    const records: any[] = [];
+    for (const document of documents) {
+      if (document.companyId && !companyMap.has(document.companyId)) continue;
+      const company: any = companyMap.get(document.companyId || "");
+      const reportType = this.documentReportType(document, company);
+      const officialType = reportType === "GAYRI_RESMI"
+        ? "GAYRI_RESMI"
+        : officialTypeValue(company?.defaultRecordType || "RESMI");
+      const isSale = reportType === "KESILEN";
+      records.push(applyDecision({
+        sourceType: "DOCUMENT", sourceId: document.id, sourceLabel: isSale ? "Kesilen Fatura" : "Gelen Fatura",
+        date: document.date?.toISOString?.().slice(0, 10) || document.processedAt?.toISOString?.().slice(0, 10) || document.createdAt.toISOString().slice(0, 10),
+        companyId: company?.id || "", companyName: company?.name || "Firma Bilgisi Yok", transactionType: isSale ? "GELIR" : "GIDER",
+        officialType, companyType: company?.firmaTuru || company?.type || "TEDARIKCI",
+        sourceCategoryId: cleanText(document.raporKategoriId || asObject(document.raw).raporKategoriId || asObject(document.metadata).raporKategoriId),
+        sourceCategoryName: cleanText(asObject(document.raw).raporKategoriAdi || asObject(document.metadata).raporKategoriAdi),
+        expenseStatus: isSale ? "GENEL_GIDER_DEGIL" : "KONTROL_BEKLIYOR", categoryId: "", category: "Kategorisiz",
+        documentNo: document.documentNo || "", description: asObject(document.raw).description || document.routeMessage || "",
+        baseAmount: decimalToNumber(document.subtotal), vat: officialType === "RESMI" ? decimalToNumber(document.vatTotal) : 0,
+        vatRate: decimalToNumber(document.subtotal) ? (decimalToNumber(document.vatTotal) / decimalToNumber(document.subtotal)) * 100 : 0,
+        grandTotal: decimalToNumber(document.grandTotal) || decimalToNumber(document.subtotal) + decimalToNumber(document.vatTotal),
+        originalRoute: isSale ? "kesilen-faturalar" : "tedarikci-faturalari",
+      }, company));
+    }
+    standaloneCurrentMovements.forEach((movement: any) => {
+      if (movement.companyId && !companyMap.has(movement.companyId)) return;
+      const company: any = companyMap.get(movement.companyId || "");
+      const movementType = this.canonicalMovementType(movement.movementType);
+      const manualExpense = movementType === "GELEN_FATURA";
+      const manualIncome = movementType === "SATIS";
+      const incoming = decimalToNumber(movement.credit) > decimalToNumber(movement.debit);
+      records.push(applyDecision({
+        sourceType: manualExpense ? "MANUAL_CARI_EXPENSE" : manualIncome ? "MANUAL_CARI_INCOME" : "CURRENT_ACCOUNT", sourceId: movement.id, sourceLabel: manualExpense ? "Gelen Fatura" : manualIncome ? "Giden Fatura" : "Cari Hareket", date: movement.movementDate.toISOString().slice(0, 10),
+        companyId: company?.id || "", companyName: company?.name || "Firma Bilgisi Yok", transactionType: manualExpense ? "GIDER" : manualIncome ? "GELIR" : incoming ? "GELIR" : "GIDER",
+        officialType: upper(asObject(movement.raw).officialType || company?.defaultRecordType) === "GAYRI" ? "GAYRI_RESMI" : officialTypeValue(company?.defaultRecordType || "RESMI"),
+        companyType: company?.firmaTuru || company?.type || "TEDARIKCI",
+        sourceCategoryId: cleanText(asObject(movement.raw).reportCategoryId || asObject(movement.raw).kategoriId),
+        sourceCategoryName: cleanText(asObject(movement.raw).reportCategoryName || asObject(movement.raw).kategori),
+        expenseStatus: manualExpense ? "KONTROL_BEKLIYOR" : "GENEL_GIDER_DEGIL", reportStatus: manualExpense || manualIncome ? "KONTROL_BEKLIYOR" : "HARIC", reportIncluded: manualExpense || manualIncome ? null : false,
+        categoryId: "", category: "Kategorisiz", documentNo: movement.documentNo || "", description: movement.description || "",
+        baseAmount: Math.abs(decimalToNumber(movement.amount) || decimalToNumber(movement.effect)), vat: 0, vatRate: 0,
+        grandTotal: Math.abs(decimalToNumber(movement.amount) || decimalToNumber(movement.effect)), originalRoute: "cari-hareketler",
+      }, company));
+    });
+    manualRows.forEach((manual: any) => {
+      const company: any = companyMap.get(manual.firmaId || "");
+      const category: any = categoryMap.get(manual.kategoriId || "");
+      records.push(applyDecision({
+        sourceType: "MANUEL_GENEL_GIDER", sourceId: manual.id, sourceLabel: "Manuel Genel Gider", date: manual.tarih?.toISOString?.().slice(0, 10) || manual.baslangic?.toISOString?.().slice(0, 10) || range.dateFrom,
+        companyId: company?.id || "", companyName: company?.name || manual.ad || "Firma Bilgisi Yok", transactionType: manual.islemTuru || "GIDER", officialType: manual.resmiTip || "GAYRI_RESMI",
+        companyType: company?.firmaTuru || company?.type || "MANUEL",
+        sourceCategoryId: manual.kategoriId || "",
+        sourceCategoryName: category?.ad || manual.ad || "",
+        expenseStatus: manual.islemTuru === "GELIR" ? "GENEL_GIDER_DEGIL" : "GENEL_GIDER", categoryId: manual.kategoriId || "", category: category?.ad || manual.ad || "Kategorisiz", documentNo: manual.belgeNo || "",
+        description: manual.aciklama || manual.ad || "", baseAmount: decimalToNumber(manual.tutar), vat: decimalToNumber(manual.kdv), vatRate: decimalToNumber(manual.kdvOrani),
+        grandTotal: decimalToNumber(manual.tutar) + decimalToNumber(manual.kdv), reportAmount: decimalToNumber(manual.tutar) + decimalToNumber(manual.kdv), reportVatAmount: decimalToNumber(manual.kdv),
+        reportVatIncluded: manual.resmiTip === "RESMI", reportIncluded: manual.raporaDahil !== false, reportStatus: manual.raporaDahil === false ? "HARIC" : "DAHIL",
+        reportDescription: manual.aciklama || manual.ad || "", reportNote: manual.not || "", originalRoute: "muhasebe-raporlari", manual: true,
+      }, company));
+    });
+    const filtered = records.filter((row) => !officialFilter || officialFilter === "TUMU" || row.officialType === officialFilter)
+      .filter((row) => !behaviorFilter || behaviorFilter === "TUMU" || row.companyBehaviorCode === behaviorFilter)
+      .filter((row) => !categoryId || row.categoryId === categoryId)
+      .filter((row) => !sourceFilter || sourceFilter === "TUMU" || row.sourceType === sourceFilter || upper(row.sourceLabel) === sourceFilter)
+      .filter((row) => !statusFilter || statusFilter === "TUMU" || row.reportStatus === statusFilter)
+      .filter((row) => !search || [row.companyName, row.documentNo, row.description, row.reportDescription, row.category, row.baseAmount, row.grandTotal].join(" ").toLocaleLowerCase("tr-TR").includes(search));
+    const included = filtered.filter((row) => row.reportIncluded === true);
+    const expenses = included.filter((row) => row.transactionType === "GIDER" && row.expenseStatus === "GENEL_GIDER");
+    const incomes = included.filter((row) => row.transactionType === "GELIR");
+    const sum = (rows: any[], key: string) => rows.reduce((total, row) => total + Number(row[key] || 0), 0);
+    const vatInRows = filtered.filter(
+      (row) =>
+        row.transactionType === "GIDER" &&
+        row.officialType === "RESMI" &&
+        row.reportVatIncluded,
+    );
+    const vatOutRows = filtered.filter(
+      (row) =>
+        row.transactionType === "GELIR" &&
+        row.officialType === "RESMI" &&
+        row.reportVatIncluded,
+    );
+    const companyGroups = new Map<string, any>();
+    filtered.forEach((row) => {
+      if (row.sourceType === "CURRENT_ACCOUNT") return;
+      const key = row.companyId || row.companyName;
+      const group = companyGroups.get(key) || { companyId: row.companyId, companyName: row.companyName, companyType: row.companyType, companyBehaviorCode: row.companyBehaviorCode, companyBehavior: row.companyBehavior, officialType: row.officialType, currentAccountIncluded: row.currentAccountIncluded, firstDate: row.date, lastDate: row.date, invoiceCount: 0, officialTotal: 0, unofficialTotal: 0, baseAmount: 0, vat: 0, grandTotal: 0, currentAccountTotal: 0, incomeTotal: 0, includedCount: 0, excludedCount: 0, pendingCount: 0, generalExpenseTotal: 0, companyDefaultCategoryId: row.companyDefaultCategoryId || "", companyDefaultCategoryName: row.companyDefaultCategoryName || "Kategorisiz", defaultReportStatus: row.defaultReportStatus || "KONTROL_BEKLIYOR", defaultExpenseStatus: row.defaultExpenseStatus || "KONTROL_BEKLIYOR", records: [] };
+      const contributesFinancialTotals = row.sourceType !== "CURRENT_ACCOUNT";
+      group.firstDate = group.firstDate < row.date ? group.firstDate : row.date; group.lastDate = group.lastDate > row.date ? group.lastDate : row.date;
+      if (contributesFinancialTotals) {
+        if (row.officialType === "RESMI") group.officialTotal += row.grandTotal; else group.unofficialTotal += row.grandTotal;
+        group.baseAmount += row.baseAmount; group.vat += row.vat; group.grandTotal += row.grandTotal;
+      }
+      if (["DOCUMENT", "MANUAL_CARI_EXPENSE", "MANUAL_CARI_INCOME"].includes(row.sourceType)) group.invoiceCount += 1;
+      if (row.currentAccountIncluded) group.currentAccountTotal += row.grandTotal;
+      if (row.reportIncluded === true) group.includedCount += 1; if (row.reportIncluded === false) group.excludedCount += 1;
+      if (row.reportIncluded == null) group.pendingCount += 1;
+      if (row.reportIncluded === true && row.expenseStatus === "GENEL_GIDER") group.generalExpenseTotal += row.reportAmount;
+      if (row.reportIncluded === true && row.transactionType === "GELIR") group.incomeTotal += row.reportAmount;
+      group.records.push(row); companyGroups.set(key, group);
+    });
+    const companySummary = [...companyGroups.values()].map((group) => ({
+      ...group,
+      categoryId: group.companyDefaultCategoryId,
+      category: group.companyDefaultCategoryName,
+      reportStatus: group.pendingCount > 0 ? "KONTROL_BEKLIYOR" : group.includedCount > 0 ? "DAHIL" : "HARIC",
+      expenseEffect: group.generalExpenseTotal > 0 ? "GENEL_GIDER" : group.pendingCount > 0 ? "KONTROL_BEKLIYOR" : "GENEL_GIDER_DEGIL",
+      currentAccountEffect: group.currentAccountIncluded ? "CARI_DAHIL" : "CARI_DISI",
+    })).sort((a, b) => b.grandTotal - a.grandTotal);
+    const includedExpenseCompanies = companySummary.filter((row) => row.generalExpenseTotal > 0).length;
+    const pendingCompanies = companySummary.filter((row) => row.pendingCount > 0).length;
+    return { ok: true, data: {
+      records: filtered, companySummary,
+      generalExpenses: expenses.filter((row) => row.expenseStatus === "GENEL_GIDER"), vatIn: vatInRows, vatOut: vatOutRows,
+      summary: { totalExpense: sum(expenses, "reportAmount"), totalIncome: sum(incomes, "reportAmount"), netResult: sum(incomes, "reportAmount") - sum(expenses, "reportAmount"), incomingVat: sum(vatInRows, "reportVatAmount"), outgoingVat: sum(vatOutRows, "reportVatAmount"), carryVat: Math.max(0, sum(vatInRows, "reportVatAmount") - sum(vatOutRows, "reportVatAmount")), includedCount: included.length, excludedCount: filtered.filter((row) => row.reportIncluded === false).length, pendingCount: filtered.filter((row) => row.reportIncluded == null).length, includedExpenseCompanies, pendingCompanies },
+      filters: { startDate: range.dateFrom, endDate: range.dateTo }, categories,
+    }};
+  }
+
+  async syncCompanyAccountingRules(mainCompanySlug: string, payload: Record<string, any> = {}) {
+    const companyId = cleanText(payload.companyId);
+    const dryRun = payload.dryRun !== false;
+    const preserveExplicitOverrides = payload.preserveExplicitOverrides !== false;
+    const result: any = await this.buildReportControl(mainCompanySlug, {
+      startDate: "2000-01-01",
+      endDate: "2100-12-31",
+    });
+    const allRecords = (result.data?.records || []).filter((row: any) => !companyId || row.companyId === companyId);
+    const companyRows = (result.data?.companySummary || []).filter((row: any) => !companyId || row.companyId === companyId);
+    const explicitOverrides = allRecords.filter((row: any) => row.sourceOfDecision === "RECORD_OVERRIDE");
+    const resolvablePending = allRecords.filter((row: any) => row.reportStatus !== "KONTROL_BEKLIYOR" && row.expenseStatus !== "KONTROL_BEKLIYOR" && row.sourceOfDecision !== "RECORD_OVERRIDE");
+    const unresolved = allRecords.filter((row: any) => row.reportStatus === "KONTROL_BEKLIYOR" || row.expenseStatus === "KONTROL_BEKLIYOR" || !row.categoryId);
+    const categoriesResolved = allRecords.filter((row: any) => row.categoryId && row.sourceOfCategory === "COMPANY_DEFAULT").length;
+    const reportStatusesResolved = allRecords.filter((row: any) => row.reportStatus !== "KONTROL_BEKLIYOR" && row.sourceOfReportStatus === "COMPANY_BEHAVIOR").length;
+    const expenseStatusesResolved = allRecords.filter((row: any) => row.expenseStatus !== "KONTROL_BEKLIYOR" && row.sourceOfExpenseStatus === "COMPANY_BEHAVIOR").length;
+    const report = {
+      dryRun,
+      companiesProcessed: companyRows.length,
+      recordsProcessed: allRecords.length,
+      categoriesResolved,
+      reportStatusesResolved,
+      expenseStatusesResolved,
+      pendingRecordsResolved: resolvablePending.length,
+      explicitOverridesPreserved: preserveExplicitOverrides ? explicitOverrides.length : 0,
+      unresolvedCompanies: companyRows.filter((row: any) => row.pendingCount > 0 || !row.categoryId).map((row: any) => ({ companyId: row.companyId, companyName: row.companyName, pendingRecordCount: row.pendingCount, reason: !row.categoryId ? "CATEGORY_MISSING" : "COMPANY_DECISION_MISSING" })),
+      unresolvedRecords: unresolved.map((row: any) => ({ sourceType: row.sourceType, sourceId: row.sourceId, companyId: row.companyId, companyName: row.companyName, reasons: row.unresolvedReasons || [] })),
+      synchronizedAt: new Date().toISOString(),
+    };
+    if (!dryRun) {
+      await this.prisma.setting.upsert({
+        where: { scope_mainCompanySlug_key: { scope: "MUHASEBE_RAPOR", mainCompanySlug, key: companyId ? `company_rules_sync_${companyId}` : "company_rules_sync_all" } },
+        create: { scope: "MUHASEBE_RAPOR", mainCompanySlug, key: companyId ? `company_rules_sync_${companyId}` : "company_rules_sync_all", value: report },
+        update: { value: report, deletedAt: null },
+      });
+    }
+    return { ok: true, data: report };
+  }
+
+  async syncHrAccountingExpenses(mainCompanySlug: string, payload: Record<string, any> = {}) {
+    const dryRun = payload.dryRun !== false;
+    const monthText = cleanText(payload.month || payload.period);
+    const year = Number(monthText.slice(0, 4) || payload.year || new Date().getFullYear());
+    const month = Number(monthText.slice(5, 7) || payload.monthNumber || new Date().getMonth() + 1);
+    const categories = await this.ensureReportCategories(mainCompanySlug);
+    const monthlyCategory = categories.find((row: any) => upper(row.ad) === "PERSONEL AYLIK");
+    const weeklyCategory = categories.find((row: any) => /HAFTALIK|YEVM/.test(upper(row.ad)));
+    const payrollRows = await (this.prisma as any).hrPayroll.findMany({ where: { mainCompanyId: mainCompanySlug, year, month } });
+    const payrollAmount = payrollRows.reduce((sum: number, row: any) => sum + decimalToNumber(row.bankAmount) + decimalToNumber(row.cashAmount), 0);
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+    const candidates: any[] = [];
+    if (payrollRows.length) candidates.push({
+      sourceType: "MONTHLY_PAYROLL", sourceKey: `HR_PAYROLL_${year}_${String(month).padStart(2, "0")}`,
+      ad: `İK Aylık Bordro ${monthKey}`, kategoriId: monthlyCategory?.id || null, tarih: new Date(`${monthKey}-01T00:00:00.000Z`),
+      tutar: payrollAmount, resmiTip: "KARMA", aciklama: "İK bordro net toplamı (banka + elden)",
+    });
+    const weeklyRows = await (this.prisma as any).weeklyPaymentSlip.findMany({ where: { mainCompanySlug } });
+    for (const row of weeklyRows) {
+      const raw = asObject(row.raw); const start = cleanText(raw.startDate || row.week?.split("-")?.[0]); const end = cleanText(raw.endDate || row.week?.split("-")?.slice(-1)?.[0]);
+      if (!start.startsWith(monthKey) && !end.startsWith(monthKey)) continue;
+      const sourceKey = `HR_WEEKLY_${monthKey}_${start}_${end}`;
+      candidates.push({ sourceType: "WEEKLY_DAILY_WORKER", sourceKey, ad: `İK Haftalık Gündelikçi ${start} - ${end}`, kategoriId: weeklyCategory?.id || null, tarih: new Date(`${start}T00:00:00.000Z`), tutar: decimalToNumber(row.amount), resmiTip: "GAYRI_RESMI", aciklama: "İK haftalık gündüz + gece toplamı" });
+    }
+    let created = 0, updated = 0, duplicatesPrevented = 0;
+    if (!dryRun) for (const item of candidates) {
+      const existing = await this.manuelKalemClient().findFirst({ where: { mainCompanySlug, belgeNo: item.sourceKey, deletedAt: null } });
+      const data = { ad: item.ad, kategoriId: item.kategoriId, tarih: item.tarih, tutar: item.tutar, kdv: 0, aciklama: item.aciklama, belgeNo: item.sourceKey, resmiTip: item.resmiTip, raporaDahil: true, cariyeEkle: false, islemTuru: "GIDER", aktifMi: true, not: `sourceModule=HR;sourceType=${item.sourceType};sourceKey=${item.sourceKey}` };
+      if (existing) { await this.manuelKalemClient().update({ where: { id: existing.id }, data }); updated++; duplicatesPrevented++; }
+      else { await this.manuelKalemClient().create({ data: { mainCompanySlug, ...data } }); created++; }
+    }
+    return { ok: true, data: { dryRun, period: monthKey, payrollRecords: payrollRows.length, payrollAmount, weeklyRecords: candidates.filter((x) => x.sourceType === "WEEKLY_DAILY_WORKER").length, weeklyAmount: candidates.filter((x) => x.sourceType === "WEEKLY_DAILY_WORKER").reduce((s, x) => s + x.tutar, 0), recordsPlanned: candidates.length, created, updated, duplicatesPrevented, unresolvedCategories: [!monthlyCategory ? "PERSONEL AYLIK" : "", !weeklyCategory ? "HAFTALIK/YEVMİYECİ" : ""].filter(Boolean) } };
   }
 
   private reportRange(query: Record<string, any> = {}) {
@@ -2312,6 +3229,10 @@ export class FirmaKartlariDbService {
         where: { mainCompanySlug, companyId: source.id },
         data: { companyId: target.id },
       });
+      await tx.salesInvoiceState.updateMany({
+        where: { mainCompanySlug, companyId: source.id },
+        data: { companyId: target.id },
+      });
       await tx.company.update({
         where: { id: target.id },
         data: {
@@ -2410,6 +3331,231 @@ export class FirmaKartlariDbService {
     return date;
   }
 
+  private canonicalMovementType(value: unknown) {
+    const token = normalizedToken(value);
+    const aliases: Record<string, string> = {
+      BORC: "BORC",
+      ALACAK: "ALACAK",
+      TAHSILAT: "TAHSILAT",
+      ODEME: "ODEME",
+      CEK_GIRISI: "CEK_GIRISI",
+      KREDI_KARTI_ODEMESI: "KREDI_KARTI_ODEMESI",
+      KREDI_KARTI_TAHSILATI: "KREDI_KARTI_TAHSILATI",
+      CEK_ODEMESI: "CEK_ODEMESI",
+      CEK_TAHSILATI: "CEK_TAHSILATI",
+      GELIR: "GELIR",
+      GIDER: "GIDER",
+      SATIS: "SATIS",
+      FATURA: "FATURA",
+      BORCLANDIRMA: "BORCLANDIRMA",
+      ALIS: "ALIS",
+      GELEN_FATURA: "GELEN_FATURA",
+      IADE: "IADE",
+      ISKONTO: "ISKONTO",
+      VIRMAN: "VIRMAN",
+      DUZELTME: "DUZELTME",
+      BAKIYE: "BAKIYE",
+    };
+    return aliases[token] || token || "BORC";
+  }
+
+  private resolveCurrentAccountDirection(
+    movementType: unknown,
+    companyType: unknown,
+  ) {
+    const token = this.canonicalMovementType(movementType);
+    if (CURRENT_ACCOUNT_SUPPLIER_INVOICE_TYPES.has(token)) return "CREDIT" as const;
+    if (CURRENT_ACCOUNT_CREDIT_TYPES.has(token)) return "CREDIT" as const;
+    if (CURRENT_ACCOUNT_DEBIT_TYPES.has(token)) return "DEBIT" as const;
+    if (token === "GELIR") {
+      return firmTypeValue(companyType) === "SATICI"
+        ? ("CREDIT" as const)
+        : ("DEBIT" as const);
+    }
+    return "DEBIT" as const;
+  }
+
+  private resolveCurrentAccountPosting(
+    company: any,
+    movementType: unknown,
+    amountValue: number,
+  ) {
+    const normalizedType = this.canonicalMovementType(movementType);
+    if (!Number.isFinite(amountValue) || amountValue === 0) {
+      throw new BadRequestException("Tutar zorunludur.");
+    }
+    const absoluteAmount = Math.abs(amountValue);
+    const effect = CURRENT_ACCOUNT_SIGNED_TYPES.has(normalizedType)
+      ? amountValue
+      : this.resolveCurrentAccountDirection(normalizedType, company?.type) ===
+          "CREDIT"
+        ? -absoluteAmount
+        : absoluteAmount;
+    return {
+      movementType: normalizedType,
+      effect,
+      debit: effect > 0 ? effect : 0,
+      credit: effect < 0 ? Math.abs(effect) : 0,
+      amount: Math.abs(effect),
+    };
+  }
+
+  private async findLinkedManualLedgerMovement(
+    client: any,
+    mainCompanySlug: string,
+    manualId: string,
+    linkedMovementId?: string | null,
+  ) {
+    const preferredId = cleanText(linkedMovementId);
+    if (preferredId) {
+      const linked = await client.currentAccountMovement.findFirst({
+        where: { id: preferredId, mainCompanySlug },
+      });
+      if (linked) return linked;
+    }
+    const candidates = await client.currentAccountMovement.findMany({
+      where: { mainCompanySlug, sourceType: "RAPOR_MANUEL_GIDER" },
+      orderBy: [{ movementDate: "desc" }, { createdAt: "desc" }],
+      take: 5000,
+    });
+    return (
+      candidates.find(
+        (row: any) =>
+          cleanText(this.rawOf(row).reportManualExpenseId) === manualId,
+      ) || null
+    );
+  }
+
+  private async syncManualReportItemLedger(
+    mainCompanySlug: string,
+    manual: any,
+  ) {
+    const manualId = cleanText(manual?.id);
+    if (!manualId) return manual;
+    return this.prisma.$transaction(async (tx) => {
+      const latest = await tx.muhasebeRaporManuelKalem.findFirst({
+        where: { id: manualId, mainCompanySlug },
+      });
+      if (!latest) return manual;
+
+      const linked = await this.findLinkedManualLedgerMovement(
+        tx,
+        mainCompanySlug,
+        latest.id,
+        latest.cariHareketId,
+      );
+      const desiredPosting =
+        latest.aktifMi !== false &&
+        !latest.deletedAt &&
+        Boolean(latest.cariyeEkle) &&
+        cleanText(latest.firmaId);
+      const affectedCompanyIds = new Set<string>();
+
+      if (linked) affectedCompanyIds.add(linked.companyId);
+
+      if (!desiredPosting) {
+        if (linked && this.isMovementActive(linked)) {
+          await tx.currentAccountMovement.update({
+            where: { id: linked.id },
+            data: {
+              raw: {
+                ...this.rawOf(linked),
+                source: "RAPOR_MANUEL_GIDER",
+                status: "PASIF",
+                durum: "PASIF",
+                active: false,
+                passiveAt: new Date().toISOString(),
+                reportManualExpenseId: latest.id,
+              },
+            },
+          });
+        }
+        if (latest.cariHareketId) {
+          await tx.muhasebeRaporManuelKalem.update({
+            where: { id: latest.id },
+            data: { cariHareketId: null },
+          });
+        }
+        for (const companyId of affectedCompanyIds) {
+          await this.recalculateCompanyBalance(tx, mainCompanySlug, companyId);
+        }
+        return tx.muhasebeRaporManuelKalem.findUnique({
+          where: { id: latest.id },
+        });
+      }
+
+      const company = await tx.company.findFirst({
+        where: { id: latest.firmaId, mainCompanySlug },
+      });
+      if (!company) {
+        throw new BadRequestException("Cari için seçilen firma bulunamadı.");
+      }
+
+      const total = decimalToNumber(latest.tutar) + decimalToNumber(latest.kdv);
+      if (!(total > 0)) {
+        throw new BadRequestException("Cari hareket için toplam tutar 0'dan büyük olmalıdır.");
+      }
+
+      const posting = this.resolveCurrentAccountPosting(
+        company,
+        latest.islemTuru || "GIDER",
+        total,
+      );
+      affectedCompanyIds.add(company.id);
+
+      const baseData = {
+        mainCompanySlug,
+        companyId: company.id,
+        movementDate: latest.tarih || latest.baslangic || new Date(),
+        movementType: posting.movementType,
+        sourceType: "RAPOR_MANUEL_GIDER",
+        documentNo: latest.belgeNo || null,
+        documentId: null,
+        description: latest.aciklama || latest.ad,
+        debit: new Prisma.Decimal(posting.debit),
+        credit: new Prisma.Decimal(posting.credit),
+        amount: new Prisma.Decimal(posting.amount),
+        effect: new Prisma.Decimal(posting.effect),
+        balanceAfter: new Prisma.Decimal(0),
+        raw: {
+          ...(linked ? this.rawOf(linked) : {}),
+          reportManualExpenseId: latest.id,
+          linkedLedgerMovementId: linked?.id || latest.cariHareketId || "",
+          resmiGayri: officialTypeValue(latest.resmiTip),
+          status: "ISLENDI",
+          durum: "ISLENDI",
+          active: true,
+          source: "RAPOR_MANUEL_GIDER",
+          documentType: latest.islemTuru === "GELIR" ? "MANUEL_GELIR" : "MANUEL_GIDER",
+          postToLedger: true,
+          reportOnly: false,
+        },
+      };
+
+      const movement = linked
+        ? await tx.currentAccountMovement.update({
+            where: { id: linked.id },
+            data: baseData,
+          })
+        : await tx.currentAccountMovement.create({ data: baseData });
+
+      if (latest.cariHareketId !== movement.id) {
+        await tx.muhasebeRaporManuelKalem.update({
+          where: { id: latest.id },
+          data: { cariHareketId: movement.id },
+        });
+      }
+
+      for (const companyId of affectedCompanyIds) {
+        await this.recalculateCompanyBalance(tx, mainCompanySlug, companyId);
+      }
+
+      return tx.muhasebeRaporManuelKalem.findUnique({
+        where: { id: latest.id },
+      });
+    });
+  }
+
   private async addMovement(
     mainCompanySlug: string,
     companyId: string,
@@ -2497,6 +3643,19 @@ export class FirmaKartlariDbService {
     if (!Number.isFinite(target))
       throw new BadRequestException("Hedef bakiye geÃ§ersiz.");
     const effect = target - decimalToNumber(company.currentBalance);
+    if (Math.abs(effect) < 0.005) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "BALANCE_ALREADY_MATCHES",
+        data: {
+          companyId,
+          currentBalance: decimalToNumber(company.currentBalance),
+          targetBalance: target,
+          difference: 0,
+        },
+      };
+    }
     return this.addMovement(mainCompanySlug, companyId, {
       date: payload.date || payload.tarih,
       movementType: "BAKIYE",
@@ -2645,24 +3804,12 @@ export class FirmaKartlariDbService {
       payload.firmId || payload.firmaId || payload.companyId,
     );
     const company = await this.requireCompany(mainCompanySlug, companyId);
-    const movementType = upper(
-      payload.islemTipi || payload.movementType || "BORC",
-    );
     const amountRaw = Number(payload.tutar ?? payload.amount ?? 0);
-    if (!Number.isFinite(amountRaw) || amountRaw === 0) {
-      throw new BadRequestException("Tutar zorunludur.");
-    }
-    const absoluteAmount = Math.abs(amountRaw);
-    let effect = absoluteAmount;
-    if (["ALACAK", "TAHSILAT"].includes(movementType)) {
-      effect = -absoluteAmount;
-    } else if (["ODEME", "Ã–DEME"].includes(movementType)) {
-      effect = absoluteAmount;
-    } else if (
-      ["VIRMAN", "VÄ°RMAN", "DUZELTME", "DÃœZELTME"].includes(movementType)
-    ) {
-      effect = amountRaw;
-    }
+    const posting = this.resolveCurrentAccountPosting(
+      company,
+      payload.islemTipi || payload.movementType || "BORC",
+      amountRaw,
+    );
     const description = cleanText(payload.aciklama || payload.description);
     if (!description) {
       throw new BadRequestException("AÃ§Ä±klama zorunludur.");
@@ -2688,16 +3835,16 @@ export class FirmaKartlariDbService {
           mainCompanySlug,
           companyId,
           movementDate: this.parseDate(payload.tarih || payload.date),
-          movementType,
+          movementType: posting.movementType,
           sourceType:
             cleanText(payload.source || payload.kaynak || "MANUAL") || "MANUAL",
           documentNo: cleanText(payload.documentNo || payload.belgeNo) || null,
           documentId: cleanText(payload.documentId) || null,
           description,
-          debit: new Prisma.Decimal(effect > 0 ? effect : 0),
-          credit: new Prisma.Decimal(effect < 0 ? Math.abs(effect) : 0),
-          amount: new Prisma.Decimal(Math.abs(effect)),
-          effect: new Prisma.Decimal(effect),
+          debit: new Prisma.Decimal(posting.debit),
+          credit: new Prisma.Decimal(posting.credit),
+          amount: new Prisma.Decimal(posting.amount),
+          effect: new Prisma.Decimal(posting.effect),
           balanceAfter: new Prisma.Decimal(0),
           raw,
         },
@@ -2730,12 +3877,6 @@ export class FirmaKartlariDbService {
     if (existing.documentId) {
       throw new BadRequestException("Belgeden gelen hareket dÃ¼zenlenemez.");
     }
-    const movementType = upper(
-      payload.islemTipi ||
-        payload.movementType ||
-        existing.movementType ||
-        "BORC",
-    );
     const amountValue = payload.tutar ?? payload.amount;
     const hasAmount =
       amountValue !== undefined &&
@@ -2744,16 +3885,12 @@ export class FirmaKartlariDbService {
     const parsedAmount = hasAmount
       ? Number(amountValue)
       : decimalToNumber(existing.effect || existing.amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount === 0) {
-      throw new BadRequestException("Tutar zorunludur.");
-    }
-    const absoluteAmount = Math.abs(parsedAmount);
-    let effect = parsedAmount;
-    if (["ALACAK", "TAHSILAT"].includes(movementType)) {
-      effect = -absoluteAmount;
-    } else if (["ODEME", "Ã–DEME", "BORC"].includes(movementType)) {
-      effect = absoluteAmount;
-    }
+    const company = await this.requireCompany(mainCompanySlug, existing.companyId);
+    const posting = this.resolveCurrentAccountPosting(
+      company,
+      payload.islemTipi || payload.movementType || existing.movementType || "BORC",
+      parsedAmount,
+    );
     const nextRaw = {
       ...this.rawOf(existing),
       ...asObject(payload.raw),
@@ -2802,7 +3939,7 @@ export class FirmaKartlariDbService {
             payload.tarih || payload.date
               ? this.parseDate(payload.tarih || payload.date)
               : undefined,
-          movementType,
+          movementType: posting.movementType,
           sourceType:
             cleanText(
               payload.source || payload.kaynak || existing.sourceType,
@@ -2815,10 +3952,10 @@ export class FirmaKartlariDbService {
             payload.aciklama !== undefined || payload.description !== undefined
               ? cleanText(payload.aciklama || payload.description) || null
               : undefined,
-          debit: new Prisma.Decimal(effect > 0 ? effect : 0),
-          credit: new Prisma.Decimal(effect < 0 ? Math.abs(effect) : 0),
-          amount: new Prisma.Decimal(Math.abs(effect)),
-          effect: new Prisma.Decimal(effect),
+          debit: new Prisma.Decimal(posting.debit),
+          credit: new Prisma.Decimal(posting.credit),
+          amount: new Prisma.Decimal(posting.amount),
+          effect: new Prisma.Decimal(posting.effect),
           raw: nextRaw,
         },
       });
@@ -2905,4 +4042,3 @@ export class FirmaKartlariDbService {
     });
   }
 }
-

@@ -38,7 +38,9 @@ function rowStatus(row) {
   if (!row?.productName && !row?.lot) return { label: "Boş", tone: "gray" };
   if (!row?.lot) return { label: "Lot Yok", tone: "red" };
   const product = productByName(row?.productName);
-  const lot = product.lots.find((item) => item.lot === row?.lot);
+  if (!product) return { label: "Ürün Yok", tone: "red" };
+  const lot = (product?.lots || []).find((item) => item.lot === row?.lot);
+  if (!lot) return { label: "Lot Yok", tone: "red" };
   if (lot.status === "Pasif" || lot.note === "Biten") return { label: "Pasif Lot", tone: "red" };
   if (lot.status === "Kritik") return { label: "Kritik Lot", tone: "orange" };
   if (Number(row?.productionGr || 0) !== Number(row?.trial1 || 0) + Number(row?.trial2 || 0) + Number(row?.trial3 || 0)) {
@@ -92,7 +94,7 @@ export default function RenkRecetePage({ activeMainCompany }) {
     return () => {
       alive = false;
     };
-  }, [activeMainCompany?.id, activeMainCompany?.slug]);
+  }, [activeMainCompany, activeMainCompany?.id, activeMainCompany?.slug]);
 
   const models = useMemo(() => {
     const common = new Map(
@@ -111,9 +113,15 @@ export default function RenkRecetePage({ activeMainCompany }) {
   }, [sharedModels]);
 
   const selectedModel = models.find((model) => model.id === selectedModelId) || null;
-  const baseColor = selectedModel?.colors.find((color) => color.id === selectedColorId) || selectedModel?.colors[0] || null;
-  const selectedColor = baseColor ? { ...baseColor, ...convertedColors[baseColor.id] } : null;
-  const rows = selectedColor ? recipeRowsByColor[selectedColor.id] || initialRecipeRows : [];
+  const baseColor = selectedModel?.colors?.find((color) => color.id === selectedColorId) || selectedModel?.colors?.[0] || null;
+  const selectedColor = useMemo(
+    () => baseColor ? { ...baseColor, ...convertedColors[baseColor.id] } : null,
+    [baseColor, convertedColors],
+  );
+  const rows = useMemo(
+    () => selectedColor ? recipeRowsByColor[selectedColor.id] || initialRecipeRows : [],
+    [recipeRowsByColor, selectedColor],
+  );
 
   const filteredModels = models.filter((model) => {
     const haystack = `${model?.modelName} ${model?.company} ${model?.orderNo} ${model?.dispatchNo}`.toLocaleLowerCase("tr-TR");
@@ -140,20 +148,22 @@ export default function RenkRecetePage({ activeMainCompany }) {
   const totalGr = enrichedRows.reduce((sum, row) => sum + row?.totalGr, 0);
   const trialTotal = enrichedRows.reduce((sum, row) => sum + row?.trialTotal, 0);
   const productionTotal = enrichedRows.reduce((sum, row) => sum + Number(row?.productionGr || 0), 0);
-  const multipliedGr = productionTotal * Number(selectedColor.multiplier || 1);
+  const multipliedGr = productionTotal * Number(selectedColor?.multiplier || 1);
   const lotWarnings = enrichedRows.filter((row) => row?.status.label === "Lot Yok" || row?.status.label === "Pasif Lot").length;
-  const undefinedColors = selectedModel?.colors.filter((color) => !(convertedColors[color.id].saved ?? color.saved)) || [];
-  const suggestedProductOptions = productOptions(selectedColor.dyeType);
+  const undefinedColors = selectedModel?.colors?.filter(
+    (color) => !(convertedColors[color.id]?.saved ?? color.saved),
+  ) || [];
+  const suggestedProductOptions = productOptions(selectedColor?.dyeType);
 
   const canSave =
     Boolean(selectedModel?.id) &&
     Boolean(selectedModel?.modelName) &&
     Boolean(selectedModel?.modelOrderId || selectedModel?.orderNo) &&
-    Boolean(selectedColor.id) &&
-    Boolean(selectedColor.colorName) &&
-    Boolean(selectedColor.pantone || selectedColor.customerColorCode) &&
-    Boolean(selectedColor.dyeType) &&
-    Boolean(selectedColor.version) &&
+    Boolean(selectedColor?.id) &&
+    Boolean(selectedColor?.colorName) &&
+    Boolean(selectedColor?.pantone || selectedColor?.customerColorCode) &&
+    Boolean(selectedColor?.dyeType) &&
+    Boolean(selectedColor?.version) &&
     rows.some((row) => row?.productName);
 
   const warningList = [
@@ -162,7 +172,7 @@ export default function RenkRecetePage({ activeMainCompany }) {
     enrichedRows.some((row) => row?.productName && row?.status.label === "Lot Yok") ? "Lot eksik" : "",
     enrichedRows.some((row) => row?.status.label === "Pasif Lot") ? "Pasif lot seçili" : "",
     selectedColor && !selectedColor.saved ? "Kayıtlı renk yok" : "",
-    selectedColor.status === "Gramaj eksik" ? "Gramaj eksik" : "",
+    selectedColor?.status === "Gramaj eksik" ? "Gramaj eksik" : "",
   ].filter(Boolean);
 
   function setRowsForColor(nextRows) {
@@ -177,12 +187,14 @@ export default function RenkRecetePage({ activeMainCompany }) {
         if (row?.id !== id) return row;
         if (key === "productName") {
           const product = productByEntry(value) || productByName(value);
-          return {
-            ...row,
-            productName: product.name || value,
-            dyeType: product.type || row?.dyeType,
-            lot: product.defaultLot || row?.lot,
-          };
+          return product
+            ? {
+                ...row,
+                productName: product.name || value,
+                dyeType: product.type || row?.dyeType,
+                lot: product.defaultLot || row?.lot,
+              }
+            : { ...row, productName: value, lot: "" };
         }
         return { ...row, [key]: ["trial1", "trial2", "trial3", "productionGr"].includes(key) ? Number(value || 0) : value };
       }),
@@ -199,9 +211,9 @@ export default function RenkRecetePage({ activeMainCompany }) {
 
   function selectModel(model) {
     setSelectedModelId(model?.id);
-    const colorId = model?.colors[0].id || "";
+    const colorId = model?.colors?.[0]?.id || "";
     setSelectedColorId(colorId);
-    const firstColor = model?.colors[0];
+    const firstColor = model?.colors?.[0];
     if (firstColor && !firstColor.saved && !recipeRowsByColor[firstColor.id]) {
       setRecipeRowsByColor((current) => ({ ...current, [firstColor.id]: emptyLines(5) }));
     }
@@ -263,12 +275,12 @@ export default function RenkRecetePage({ activeMainCompany }) {
         </div>
         <div className="bh-list">
           {filteredModels.map((model) => (
-            <button key={model?.id} type="button" className={selectedModel.id === model?.id ? "active" : ""} onClick={() => selectModel(model)}>
+            <button key={model?.id} type="button" className={selectedModel?.id === model?.id ? "active" : ""} onClick={() => selectModel(model)}>
               <strong>{model?.modelName}</strong>
               <span>Firma: {model?.company}</span>
               <span>Sipariş: {model?.orderNo}</span>
               <span>İrsaliye: {model?.dispatchNo}</span>
-              <span>Adet: {model?.incomingQty.toLocaleString("tr-TR")}</span>
+              <span>Adet: {Number(model?.incomingQty || 0).toLocaleString("tr-TR")}</span>
               <span>Baskı: {model?.printStructure}</span>
               <span>Renk: {model?.colorCount} / Tanımsız: {model?.undefinedColorCount}</span>
               <Status tone={statusTone(model?.status)}>{model?.status}</Status>
@@ -292,7 +304,7 @@ export default function RenkRecetePage({ activeMainCompany }) {
                   <InfoLine label="Firma" value={selectedModel?.company} />
                   <InfoLine label="Sipariş no" value={selectedModel?.orderNo} />
                   <InfoLine label="Müşteri irsaliye no" value={selectedModel?.dispatchNo} />
-                  <InfoLine label="Gelen adet" value={selectedModel?.incomingQty.toLocaleString("tr-TR")} />
+                  <InfoLine label="Gelen adet" value={Number(selectedModel?.incomingQty || 0).toLocaleString("tr-TR")} />
                   <InfoLine label="Baskı yapısı" value={selectedModel?.printStructure} />
                   <InfoLine label="Model sorumlusu" value={selectedModel?.owner} />
                   <InfoLine label="Desen durumu" value={selectedModel?.designStatus} />
@@ -302,8 +314,8 @@ export default function RenkRecetePage({ activeMainCompany }) {
             </button>
 
             <div className="bh-kpi-row compact">
-              <div className="bh-kpi"><span>Gelen adet</span><strong>{selectedModel?.incomingQty.toLocaleString("tr-TR")}</strong></div>
-              <div className="bh-kpi"><span>Baskı bölgesi sayısı</span><strong>{selectedModel?.printStructure.split("+").length}</strong></div>
+              <div className="bh-kpi"><span>Gelen adet</span><strong>{Number(selectedModel?.incomingQty || 0).toLocaleString("tr-TR")}</strong></div>
+              <div className="bh-kpi"><span>Baskı bölgesi sayısı</span><strong>{selectedModel?.printStructure ? selectedModel.printStructure.split("+").length : 0}</strong></div>
               <div className="bh-kpi"><span>Renk adedi</span><strong>{selectedModel?.colorCount}</strong></div>
               <div className="bh-kpi"><span>Reçetesi tamamlanan renk</span><strong>{selectedModel?.completedColors}</strong></div>
               <div className="bh-kpi"><span>Tanımsız renk</span><strong>{undefinedColors.length}</strong></div>
@@ -312,11 +324,11 @@ export default function RenkRecetePage({ activeMainCompany }) {
 
             <h3 className="bh-section-title">Model Renkleri</h3>
             <div className="bh-model-colors">
-              {selectedModel.colors.map((rawColor) => {
+              {(selectedModel?.colors || []).map((rawColor) => {
                 const color = { ...rawColor, ...convertedColors[rawColor.id] };
                 const isUndefined = !color.saved;
                 return (
-                  <button key={color.id} type="button" className={`bh-model-color ${selectedColor.id === color.id ? "active" : ""} ${isUndefined ? "undefined" : ""}`} onClick={() => openColor(color)}>
+                  <button key={color.id} type="button" className={`bh-model-color ${selectedColor?.id === color.id ? "active" : ""} ${isUndefined ? "undefined" : ""}`} onClick={() => openColor(color)}>
                     <span className="bh-swatch" style={{ background: color.preview }} />
                     <strong>{color.label}</strong>
                     <span>{color.pantone ? `Pantone: ${color.pantone}` : `Müşteri Kod: ${color.customerColorCode || "-"}`}</span>
@@ -402,7 +414,7 @@ export default function RenkRecetePage({ activeMainCompany }) {
                     <td>
                       <select value={row?.lot} onChange={(event) => updateRow(row?.id, "lot", event?.target.value)}>
                         <option value="">Lot seç</option>
-                        {product.lots.map((lot) => <option key={lot.lot} value={lot.lot}>{lot.lot} / {lot.status}{lot.note ? ` / ${lot.note}` : ""}</option>)}
+                        {(product?.lots || []).map((lot) => <option key={lot.lot} value={lot.lot}>{lot.lot} / {lot.status}{lot.note ? ` / ${lot.note}` : ""}</option>)}
                       </select>
                     </td>
                     <td>{row?.dyeType}</td>
@@ -423,16 +435,16 @@ export default function RenkRecetePage({ activeMainCompany }) {
         <InfoLine label="Model adı" value={selectedModel?.modelName || "-"} />
         <InfoLine label="Firma" value={selectedModel?.company || "-"} />
         <InfoLine label="Sipariş no" value={selectedModel?.orderNo || "-"} />
-        <InfoLine label="Gelen adet" value={selectedModel?.incomingQty.toLocaleString("tr-TR") || "-"} />
+        <InfoLine label="Gelen adet" value={selectedModel ? Number(selectedModel?.incomingQty || 0).toLocaleString("tr-TR") : "-"} />
         <InfoLine label="Baskı yapısı" value={selectedModel?.printStructure || "-"} />
         <InfoLine label="Renk adedi" value={selectedModel?.colorCount || "-"} />
         <h3 className="bh-section-title">Seçili renk</h3>
-        <InfoLine label="Renk" value={selectedColor.colorName || "-"} />
-        <InfoLine label="Pantone" value={selectedColor.pantone || "-"} />
-        <InfoLine label="Müşteri renk kodu" value={selectedColor.customerColorCode || "-"} />
-        <InfoLine label="Boya Türü" value={selectedColor.dyeType || "-"} />
-        <InfoLine label="Versiyon" value={selectedColor.version || "-"} />
-        <InfoLine label="Kat Sayısı" value={selectedColor.multiplier || "-"} />
+        <InfoLine label="Renk" value={selectedColor?.colorName || "-"} />
+        <InfoLine label="Pantone" value={selectedColor?.pantone || "-"} />
+        <InfoLine label="Müşteri renk kodu" value={selectedColor?.customerColorCode || "-"} />
+        <InfoLine label="Boya Türü" value={selectedColor?.dyeType || "-"} />
+        <InfoLine label="Versiyon" value={selectedColor?.version || "-"} />
+        <InfoLine label="Kat Sayısı" value={selectedColor?.multiplier || "-"} />
         <InfoLine label="Deneme Toplamı" value={formatGr(trialTotal)} />
         <InfoLine label="İmalat Toplam GR" value={formatGr(productionTotal)} />
         <InfoLine label="Katlı Toplam GR" value={formatGr(multipliedGr)} />

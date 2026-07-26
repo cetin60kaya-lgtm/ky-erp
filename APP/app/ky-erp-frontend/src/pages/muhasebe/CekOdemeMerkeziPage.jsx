@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useCallback } from "react";
 import {
   createOdemeCek,
   createOdemeFirma,
@@ -282,7 +283,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
 
   const selectedFirm = firms.find((firm) => String(firm.id || firm.firmaId) === String(selectedFirmId)) || null;
 
-  const loadFirms = async () => {
+  const loadFirms = useCallback(async () => {
     setLoadError(null);
     const rows = asArray(await getOdemeFirmalar({ ...baseParams, active: "all", limit: 500, _ts: Date.now() }));
     const normalizedRows = dedupeAndSortFirms(rows);
@@ -291,9 +292,9 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       const exists = normalizedRows.some((row) => String(row?.id || row?.firmaId) === String(current));
       return exists ? current : normalizedRows[0].id || normalizedRows[0].firmaId || "";
     });
-  };
+  }, [baseParams]);
 
-  const loadFirmDetail = async (firmId = selectedFirmId) => {
+  const loadFirmDetail = useCallback(async (firmId = selectedFirmId) => {
     if (!firmId) {
       setSummary(null);
       setChecks([]);
@@ -317,7 +318,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
     setCashRows(asArray(nextCashRows).map((row) => normalizeRow(row, "CASH")));
     setMovements(asArray(nextMovements).map((row) => normalizeRow(row, "CARI")));
     setOpenDebts(asArray(nextOpenDebts).map((row) => normalizeRow(row, "CARI")));
-  };
+  }, [baseParams, selectedFirmId]);
 
   useEffect(() => {
     loadFirms().catch((err) => {
@@ -326,14 +327,14 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         message: err.message || "Bilinmeyen hata",
       });
     });
-  }, [baseParams.mainCompanySlug, baseParams.mainCompanyId, refreshKey]);
+  }, [baseParams.mainCompanySlug, baseParams.mainCompanyId, refreshKey, loadFirms]);
 
   useEffect(() => {
     setSelectedItem(null);
     setRightForm(emptyQuickForm());
     setQuickForm((current) => ({ ...current, amount: "", paymentMethod: "" }));
     loadFirmDetail().catch((err) => setError(err.message || "Firma ödeme detayları yüklenemedi."));
-  }, [selectedFirmId, refreshKey]);
+  }, [selectedFirmId, refreshKey, loadFirmDetail]);
 
   const visibleFirms = useMemo(() => {
     const term = filters.search.trim().toLocaleLowerCase("tr-TR");

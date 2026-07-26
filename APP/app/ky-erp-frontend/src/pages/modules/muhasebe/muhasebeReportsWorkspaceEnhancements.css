@@ -1,0 +1,9 @@
+.mrw-metrics{grid-template-columns:repeat(8,minmax(120px,1fr))}
+.mrw-detail-stack{display:grid;gap:10px}
+.mrw-detail-summary{display:grid;grid-template-columns:repeat(8,minmax(120px,1fr));gap:7px;padding:12px}
+.mrw-detail-summary div{border:1px solid #d7e0ea;border-radius:7px;background:#f8fbff;padding:9px}
+.mrw-detail-summary span,.mrw-detail-summary strong{display:block}
+.mrw-detail-summary span{font-size:10px;color:#6b778c}
+.mrw-detail-summary strong{margin-top:5px}
+@media(max-width:1450px){.mrw-detail-summary{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:900px){.mrw-detail-summary{grid-template-columns:1fr}}

@@ -16,23 +16,24 @@ async function bootstrap() {
   const logger = new Logger("Bootstrap");
   const app = await NestFactory.create(AppModule, {
     cors: false,
-    bufferLogs: true,
+    bufferLogs: false,
   });
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, Postman)
+      // Allow requests with no origin (curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
-      // Allow Capacitor native runtime (origin is https://localhost)
-      if (origin === "https://localhost" || origin === "http://localhost") return callback(null, true);
       // Allow any localhost port
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+      if ([
+        "https://kyerp.net",
+        "https://www.kyerp.net",
+        "https://app.kyerp.net",
+      ].includes(origin)) return callback(null, true);
       // Allow the live server itself
       if (origin === "http://178.157.14.87" || origin.startsWith("http://178.157.14.87")) return callback(null, true);
-      // Allow capacitor protocol
-      if (origin.startsWith("capacitor://")) return callback(null, true);
       // Default deny
       callback(new Error("CORS not allowed: " + origin));
     },

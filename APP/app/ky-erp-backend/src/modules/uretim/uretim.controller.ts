@@ -21,7 +21,7 @@ import { LiveDbService } from "../../database/live-db.service";
 import { UretimService } from "./uretim.service";
 import { Public } from "../../auth/public.decorator";
 
-@Controller(["uretim", "imalat", "api/uretim", "api/imalat"])
+@Controller(["uretim", "imalat", "production", "api/uretim", "api/imalat", "api/production"])
 export class UretimController {
   constructor(
     private readonly service: UretimService,
@@ -501,6 +501,30 @@ export class UretimController {
   @Post("hizli-giris")
   hizliGiris(@Body() body: any) {
     return this.service.hizliGiris(body);
+  }
+
+  @Public()
+  @Get("parser-dictionaries")
+  getParserDictionaries(@Query() query: Record<string, any>) {
+    return this.service.getProductionParserDictionaries(query.mainCompanySlug, query.mainCompanyId);
+  }
+
+  @Public()
+  @Post("parse")
+  validateParsedProduction(@Body() body: any) {
+    return this.service.validateParsedProduction(body);
+  }
+
+  @Public()
+  @Post("bulk-create")
+  bulkCreateProduction(@Body() body: any) {
+    return this.service.bulkCreateProduction(body);
+  }
+
+  @Public()
+  @Get("recent")
+  recentProduction(@Query() query: Record<string, any>) {
+    return this.service.getRecentProduction(query.mainCompanySlug, query.mainCompanyId, query);
   }
 
   @Public()

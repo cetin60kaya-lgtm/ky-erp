@@ -22,8 +22,6 @@ import { MuhasebeIntegrationService } from "./muhasebe-integration.service";
 import { MuhasebeFinalService } from "./muhasebe-final.service";
 import { AccountingApiService } from "./accounting-api.service";
 import { AccountingPublicApiController } from "./accounting-public-api.controller";
-import { IsnetTestController } from "./isnet-test.controller";
-import { IsnetTestService } from "./isnet-test.service";
 import { FirmsController } from "./firms/firms.controller";
 import { CariController } from "./cari/cari.controller";
 import { KdvController } from "./kdv/kdv.controller";
@@ -32,6 +30,10 @@ import { MailController } from "./mail/mail.controller";
 import { MailTemplateService } from "./mail/mail-template.service";
 import { StatementController } from "./statement/statement.controller";
 import { SalesInvoicePoolService } from "./sales-invoice-pool.service";
+import { DispatchReconciliationController } from "./dispatch-reconciliation.controller";
+import { DispatchReconciliationService } from "./dispatch-reconciliation.service";
+import { IsnetOperationsController } from "./isnet-operations.controller";
+import { IsnetOperationsService } from "./isnet-operations.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -47,11 +49,11 @@ import { SalesInvoicePoolService } from "./sales-invoice-pool.service";
     MailController,
     StatementController,
     AccountingPublicApiController,
-    IsnetTestController,
+    DispatchReconciliationController,
+    IsnetOperationsController,
   ],
   providers: [
     AccountingApiService,
-    IsnetTestService,
     MuhasebeBelgeService,
     MuhasebeService,
     MuhasebeDocumentWorkflowService,
@@ -69,6 +71,8 @@ import { SalesInvoicePoolService } from "./sales-invoice-pool.service";
     MuhasebeFinalService,
     SalesInvoicePoolService,
     MailTemplateService,
+    DispatchReconciliationService,
+    IsnetOperationsService,
   ],
   exports: [
     MuhasebeBelgeService,
@@ -76,6 +80,9 @@ import { SalesInvoicePoolService } from "./sales-invoice-pool.service";
     MuhasebeDocumentWorkflowService,
     DocumentIntakeService,
     DocumentFolderWatcherService,
+    AccountingApiService,
+    MuhasebeFinalService,
+    FirmaKartlariDbService,
   ],
 })
 export class MuhasebeModule {}

@@ -13,9 +13,14 @@ export class IkAdvancedController {
   @Get("control-matrix") controlMatrix(@Query() query: Record<string, any>) { return this.service.controlMatrix(query); }
   @Get("audit-logs") auditLogs(@Query() query: Record<string, any>) { return this.service.auditLogs(query); }
   @Get("payroll") payroll(@Query() query: Record<string, any>) { return this.service.payrollCalculation(query); }
+  @Get("leave-center") leaveCenter(@Query() query: Record<string, any>) { return this.service.leaveCenter(query); }
   @Post("person-card/:employeeId") personCard(@Param("employeeId") employeeId: string, @Body() body: Record<string, any>) { return this.service.savePersonCard(employeeId, body); }
   @Post("attendance") attendance(@Body() body: Record<string, any>) { return this.service.saveAttendance(body); }
   @Post("exception") exception(@Body() body: Record<string, any>) { return this.service.saveException(body); }
+  @Post("leave") leave(@Body() body: Record<string, any>) { return this.service.saveLeaveRecord(body); }
+  @Post("leave/preview") leavePreview(@Body() body: Record<string, any>) { return this.service.previewLeave(body); }
+  @Post("leave/policy") leavePolicy(@Body() body: Record<string, any>) { return this.service.saveLeavePolicy(body); }
+  @Post("leave/cancel") leaveCancel(@Body() body: Record<string, any>) { return this.service.cancelLeavePlan(body); }
   @Post("exception/delete") deleteException(@Body() body: Record<string, any>) { return this.service.deleteException(body); }
   @Post("bulk-preview") bulkPreview(@Body() body: Record<string, any>) { return this.service.bulkPreview(body); }
   @Post("bulk-confirm") bulkConfirm(@Body() body: Record<string, any>) { return this.service.bulkConfirm(body); }

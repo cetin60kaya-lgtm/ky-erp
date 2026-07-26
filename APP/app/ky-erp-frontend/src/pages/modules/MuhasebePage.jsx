@@ -1,6 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { useCallback, useRef } from "react";
 import {
   apiDelete,
+  
   apiGet,
   apiPatch,
   apiPost,
@@ -14,6 +16,11 @@ import BelgeIslemMerkezi, {
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
 import { fetchBelgeImport } from "../../services/muhasebeDocumentService";
 import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
+import MuhasebeReportsWorkspace from "./muhasebe/MuhasebeReportsWorkspace";
+import ProfitLossWorkspace from "./muhasebe/ProfitLossWorkspace";
+import ExpenseCategoriesWorkspace from "./muhasebe/ExpenseCategoriesWorkspace";
+import MusteriIrsaliyeleriTab from "./muhasebe/MusteriIrsaliyeleriTab";
+import IrsaliyeFaturaKontrolTab from "./muhasebe/IrsaliyeFaturaKontrolTab";
 
 const TAB_CONFIG = [
   {
@@ -22,7 +29,11 @@ const TAB_CONFIG = [
     title: "Muhasebe Yönetim Özeti",
   },
   { key: "firma-kartlari", short: "Firma Kartları", title: "Firma Kartları" },
-  { key: "gider-kategorileri", short: "Gider Kategorileri", title: "Gider Kategorileri" },
+  {
+    key: "gider-kategorileri",
+    short: "Gider Kategorileri",
+    title: "Gider Kategorileri",
+  },
   {
     key: "firma-yetkilileri",
     short: "Firma Yetkilileri",
@@ -38,10 +49,27 @@ const TAB_CONFIG = [
     short: "Kesilen Faturalar",
     title: "Kesilen Faturalar",
   },
-  { key: "kar-zarar", short: "Gelir / Gider", title: "Gelir / Gider ve İş Hacmi" },
-  { key: "model-takip", short: "Model Takip", title: "Model Takip" },
-  
+  {
+    key: "musteri-irsaliyeleri",
+    short: "İrsaliyeler",
+    title: "Müşteri İrsaliyeleri",
+  },
+  {
+    key: "irsaliye-fatura-kontrol",
+    short: "İrsaliye / Fatura",
+    title: "İrsaliye – Fatura Kontrolü",
+  },
+  {
+    key: "model-takip",
+    short: "Model Üretim Takibi",
+    title: "Model Üretim Takibi",
+  },
   { key: "cari-hareketler", short: "Cari Hareket", title: "Cari Hareketler" },
+  {
+    key: "kar-zarar",
+    short: "Gelir / Gider",
+    title: "Gelir / Gider ve İş Hacmi",
+  },
   {
     key: "envanter-urunleri",
     short: "Ürünler",
@@ -70,10 +98,17 @@ const TAB_ALIASES = {
   "tedarikci-faturalar": "tedarikci-faturalar",
   "tedarikci-fatura": "tedarikci-faturalar",
   "kesilen-faturalar": "kesilen-faturalar",
+  "fatura-kesim-yardimcisi": "kesilen-faturalar",
+  "fatura-kesim": "kesilen-faturalar",
+  "fatura-yardimci": "kesilen-faturalar",
   "musteri-belgeleri": "kesilen-faturalar",
+  "musteri-irsaliyeleri": "musteri-irsaliyeleri",
+  "musteri-irsaliye": "musteri-irsaliyeleri",
+  "irsaliye-fatura-kontrol": "irsaliye-fatura-kontrol",
+  "irsaliye-fatura": "irsaliye-fatura-kontrol",
   "kar-zarar": "kar-zarar",
-  "kar": "kar-zarar",
-  "zarar": "kar-zarar",
+  kar: "kar-zarar",
+  zarar: "kar-zarar",
   "gelir-gider": "kar-zarar",
   "is-hacmi": "kar-zarar",
   envanter: "envanter-urunleri",
@@ -166,10 +201,20 @@ function supplierReportReason(row) {
 
 function supplierReportStatusLabel(row) {
   if (isSupplierReportProcessed(row)) return "Islenen";
-  if (supplierReportHasAny(row, ["DUPLICATE_DOCUMENT"])) return "Mukerrer belge";
-  if (supplierReportHasAny(row, ["VAT_REVIEW", "VAT_TOTAL_MISMATCH", "TAX_MISMATCH"])) return "KDV inceleme";
-  if (supplierReportHasAny(row, ["LINE_PRICE_MISSING", "LINE_PRICE_ZERO"])) return "Fiyat eksik";
-  if (String(row.status || "").toUpperCase() === "MISSING_INFO") return "Karantina";
+  if (supplierReportHasAny(row, ["DUPLICATE_DOCUMENT"]))
+    return "Mukerrer belge";
+  if (
+    supplierReportHasAny(row, [
+      "VAT_REVIEW",
+      "VAT_TOTAL_MISMATCH",
+      "TAX_MISMATCH",
+    ])
+  )
+    return "KDV inceleme";
+  if (supplierReportHasAny(row, ["LINE_PRICE_MISSING", "LINE_PRICE_ZERO"]))
+    return "Fiyat eksik";
+  if (String(row.status || "").toUpperCase() === "MISSING_INFO")
+    return "Karantina";
   return row?.status || "Kontrol";
 }
 
@@ -187,7 +232,11 @@ function supplierReportMatchesStatus(row, statusFilter) {
   if (statusFilter === "QUARANTINE")
     return String(row.status || "").toUpperCase() === "MISSING_INFO";
   if (statusFilter === "VAT_REVIEW")
-    return supplierReportHasAny(row, ["VAT_REVIEW", "VAT_TOTAL_MISMATCH", "TAX_MISMATCH"]);
+    return supplierReportHasAny(row, [
+      "VAT_REVIEW",
+      "VAT_TOTAL_MISMATCH",
+      "TAX_MISMATCH",
+    ]);
   if (statusFilter === "PRICE_MISSING")
     return supplierReportHasAny(row, ["LINE_PRICE_MISSING", "LINE_PRICE_ZERO"]);
   if (statusFilter === "DUPLICATE_DOCUMENT")
@@ -244,7 +293,7 @@ function parseMoneyInput(value) {
     const dotCount = (normalized.match(/\./g) || []).length;
     normalized =
       dotCount === 1 && after.length <= 2
-         ? normalized
+        ? normalized
         : normalized.replace(/\./g, "");
   }
   const parsed = Number(`${negative ? "-" : ""}${normalized}`);
@@ -338,6 +387,9 @@ function isProcessedDocumentStatus(value) {
 function useEndpoint(path, activeMainCompany, refreshKey, params = {}) {
   const [state, setState] = useState({ loading: true, error: "", data: null });
   const companyKey = activeMainCompany?.slug || activeMainCompany?.id || "";
+  const paramsKey = JSON.stringify(params || {});
+  const requestRef = useRef({ activeMainCompany, params });
+  requestRef.current = { activeMainCompany, params };
 
   useEffect(() => {
     let alive = true;
@@ -348,7 +400,8 @@ function useEndpoint(path, activeMainCompany, refreshKey, params = {}) {
       };
     }
     setState({ loading: true, error: "", data: null });
-    apiGet(path, companyParams(activeMainCompany, params))
+    const request = requestRef.current;
+    apiGet(path, companyParams(request.activeMainCompany, request.params))
       .then((payload) => {
         if (alive)
           setState({ loading: false, error: "", data: unwrap(payload) });
@@ -364,7 +417,7 @@ function useEndpoint(path, activeMainCompany, refreshKey, params = {}) {
     return () => {
       alive = false;
     };
-  }, [path, companyKey, refreshKey, JSON.stringify(params)]);
+  }, [path, companyKey, refreshKey, paramsKey]);
 
   return state;
 }
@@ -639,7 +692,7 @@ export default function MuhasebePage({
 }) {
   const normalizedTab = TAB_ALIASES[activeTab] || activeTab || "yonetim-ozeti";
   const currentTab = TAB_CONFIG.some((tab) => tab.key === normalizedTab)
-     ? normalizedTab
+    ? normalizedTab
     : "yonetim-ozeti";
   const [refreshKey, setRefreshKey] = useState(0);
   const reloadAll = () => setRefreshKey((value) => value + 1);
@@ -672,13 +725,13 @@ export default function MuhasebePage({
           onClick={() =>
             goTab(
               currentTab === "kesilen-faturalar"
-                 ? "kesilen-faturalar"
+                ? "kesilen-faturalar"
                 : "tedarikci-faturalar",
             )
           }
         >
           {currentTab === "kesilen-faturalar"
-             ? "Yeni Kesilen Fatura"
+            ? "Yeni Kesilen Fatura"
             : "Yeni Belge Yükle"}
         </button>
       </header>
@@ -711,7 +764,10 @@ export default function MuhasebePage({
         />
       ) : null}
       {currentTab === "gider-kategorileri" ? (
-        <ExpenseCategories activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
+        <ExpenseCategories
+          activeMainCompany={activeMainCompany}
+          refreshKey={refreshKey}
+        />
       ) : null}
       {currentTab === "firma-yetkilileri" ? (
         <FirmContacts
@@ -734,6 +790,12 @@ export default function MuhasebePage({
       {currentTab === "kesilen-faturalar" ? (
         <KesilenFaturalarTab activeMainCompany={activeMainCompany} />
       ) : null}
+      {currentTab === "musteri-irsaliyeleri" ? (
+        <MusteriIrsaliyeleriTab activeMainCompany={activeMainCompany} />
+      ) : null}
+      {currentTab === "irsaliye-fatura-kontrol" ? (
+        <IrsaliyeFaturaKontrolTab activeMainCompany={activeMainCompany} />
+      ) : null}
       {currentTab === "kar-zarar" ? (
         <ProfitLossCenter
           activeMainCompany={activeMainCompany}
@@ -744,7 +806,7 @@ export default function MuhasebePage({
       {currentTab === "model-takip" ? (
         <ModelMerkezliMusteriTakip activeMainCompany={activeMainCompany} />
       ) : null}
-      
+
       {currentTab === "cari-hareketler" ? (
         <CariMovements
           activeMainCompany={activeMainCompany}
@@ -795,14 +857,14 @@ function ManagementSummary({ activeMainCompany, refreshKey, goTab }) {
   );
   const summary = state.data || {};
   const workItems = Array.isArray(summary.gunlukIsListesi)
-     ? summary.gunlukIsListesi
+    ? summary.gunlukIsListesi
     : [];
   const payments = Array.isArray(summary.yaklasanOdemeler)
-     ? summary.yaklasanOdemeler
+    ? summary.yaklasanOdemeler
     : [];
   const checkSummary = summary.cekOzet || {};
   const monthlyChecks = Array.isArray(checkSummary.aylikDagilim)
-     ? checkSummary.aylikDagilim
+    ? checkSummary.aylikDagilim
     : [];
   const mailControl = summary.mailDepartmanYetkiKontrol || {};
 
@@ -848,7 +910,7 @@ function ManagementSummary({ activeMainCompany, refreshKey, goTab }) {
               ]}
               rows={workItems}
               renderRow={(row, index) => (
-                <tr key={`${row?.belge || index}-${row?.is}`}>
+                <tr key={`${row?.belge || "kayit"}-${row?.is || "is"}-${row?.hedef || "hedef"}-${index}`}>
                   <td>
                     <Badge tone={row.oncelik === "Yüksek" ? "bad" : "warn"}>
                       {row?.oncelik}
@@ -860,14 +922,20 @@ function ManagementSummary({ activeMainCompany, refreshKey, goTab }) {
                   <td>{row?.belge || "-"}</td>
                   <td>{money(row?.tutar)}</td>
                   <td>
-                    <Badge tone={toneFromStatus(row?.durum)}>{row?.durum}</Badge>
+                    <Badge tone={toneFromStatus(row?.durum)}>
+                      {row?.durum}
+                    </Badge>
                   </td>
                   <td>
                     <button
                       className="mh-btn"
                       type="button"
                       onClick={() =>
-                        goTab(TAB_ALIASES[row?.hedef] || row?.hedef || "tedarikci-faturalar")
+                        goTab(
+                          TAB_ALIASES[row?.hedef] ||
+                            row?.hedef ||
+                            "tedarikci-faturalar",
+                        )
                       }
                     >
                       Aç
@@ -1038,14 +1106,14 @@ function DocumentControl({ activeMainCompany, refreshKey, reloadAll, goTab }) {
   );
   const visibleDocuments =
     listTab === "processed"
-       ? processedDocuments
+      ? processedDocuments
       : listTab === "all"
-         ? documents
+        ? documents
         : pendingDocuments;
   const selectedId = visibleDocuments.some(
     (document) => document.id === selectedDocumentId,
   )
-     ? selectedDocumentId
+    ? selectedDocumentId
     : visibleDocuments[0].id || "";
 
   useEffect(() => {
@@ -1090,7 +1158,7 @@ function DocumentControl({ activeMainCompany, refreshKey, reloadAll, goTab }) {
     return () => {
       alive = false;
     };
-  }, [selectedId, activeMainCompany?.slug, refreshKey]);
+  }, [selectedId, activeMainCompany?.slug, refreshKey, activeMainCompany]);
 
   const detail =
     detailState.data ||
@@ -1168,7 +1236,7 @@ function DocumentControl({ activeMainCompany, refreshKey, reloadAll, goTab }) {
       setUploadState(
         `${approvedCount} belge onaylandı${skippedCount ? `, ${skippedCount} belge atlandı` : ""}.`,
       );
-      clearSelectedDocuments();
+      setSelectedDocumentIds([]);
       reloadAll();
     } finally {
       setBulkApproveBusy(false);
@@ -1259,9 +1327,9 @@ function DocumentControl({ activeMainCompany, refreshKey, reloadAll, goTab }) {
           {!visibleDocuments.length ? (
             <div className="mh-state">
               {listTab === "processed"
-                 ? "İşlenen belge yok."
+                ? "İşlenen belge yok."
                 : listTab === "all"
-                   ? "Belge havuzunda kayıt yok."
+                  ? "Belge havuzunda kayıt yok."
                   : "Bekleyen belge yok."}
             </div>
           ) : null}
@@ -1360,9 +1428,9 @@ function DocumentControl({ activeMainCompany, refreshKey, reloadAll, goTab }) {
             <h3>Gösterilecek belge yok</h3>
             <p>
               {listTab === "pending"
-                 ? "Bekleyen filtresinde kayıt kalmadı. İşlenen sekmesine geçebilir veya yeni belge yükleyebilirsiniz."
+                ? "Bekleyen filtresinde kayıt kalmadı. İşlenen sekmesine geçebilir veya yeni belge yükleyebilirsiniz."
                 : listTab === "processed"
-                   ? "İşlenen sekmesinde kayıt yok."
+                  ? "İşlenen sekmesinde kayıt yok."
                   : "Bu görünümde belge bulunamadı."}
             </p>
           </div>
@@ -1405,7 +1473,7 @@ function DocumentControl({ activeMainCompany, refreshKey, reloadAll, goTab }) {
             disabled={!selectedDocumentIds.length || bulkApproveBusy}
           >
             {bulkApproveBusy
-               ? "Toplu onay çalışıyor..."
+              ? "Toplu onay çalışıyor..."
               : `Seçilenleri Toplu Onayla${selectedDocumentIds.length ? ` (${selectedDocumentIds.length})` : ""}`}
           </button>
           <button
@@ -1495,7 +1563,66 @@ function normalizeMovement(row = {}) {
     tarih: row?.tarih || row?.movementDate || row?.date || "",
     manual: row?.manual ?? !row?.documentId,
     kaynak: row?.kaynak || row?.sourceType || row?.source || "",
+    movementType: row?.movementType || row?.islemTipi || row?.belgeTipi || "",
   };
+}
+
+function movementTypeLabel(value) {
+  const labels = {
+    GELEN_FATURA: "Gelen Fatura",
+    ALIS: "Tedarikçiden Gelen Fatura",
+    GIDER: "Gider Faturası",
+    ODEME: "Tahsilat Yapıldı",
+    KREDI_KARTI_ODEMESI: "Kredi Kartıyla Ödeme",
+    KREDI_KARTI_TAHSILATI: "Kredi Kartından Tahsilat",
+    SATIS: "Giden Fatura",
+    FATURA: "Müşteriye Kesilen Fatura",
+    BORC: "Müşteri Borçlandırma",
+    ALACAK: "Tedarikçi Faturası / Alacak",
+    TAHSILAT: "Tahsilat Geldi",
+    CEK_GIRISI: "Çek Alındı",
+    CEK_TAHSILATI: "Çek Alındı",
+    CEK_ODEMESI: "Çek Verildi",
+    BAKIYE: "Bakiye Düzeltme",
+  };
+  return labels[String(value || "").toUpperCase()] || value || "Diğer Cari İşlem";
+}
+
+function movementTypeHint(value) {
+  const hints = {
+    GELEN_FATURA: "Size gelen alış faturasıdır; firmaya borç ve bir kez gider oluşturur.",
+    ODEME: "Sizin yaptığınız ödemedir; firmaya olan borcu kapatır, yeniden gider oluşturmaz.",
+    SATIS: "Sizin kestiğiniz faturadır; müşteriden alacağınızı artırır.",
+    TAHSILAT: "Size gelen ödemedir; müşteriden alacağınızı azaltır.",
+    CEK_GIRISI: "Size verilen çektir; gelen tahsilat gibi cari bakiyeyi azaltır.",
+    CEK_TAHSILATI: "Size verilen çektir; gelen tahsilat gibi cari bakiyeyi azaltır.",
+    CEK_ODEMESI: "Sizin verdiğiniz çektir; firmaya olan borcu kapatır.",
+    KREDI_KARTI_TAHSILATI: "Kredi kartından size gelen tahsilattır.",
+    KREDI_KARTI_ODEMESI: "Tedarikçiye kredi kartıyla yapılan ödemedir; cari borcu azaltır.",
+  };
+  return hints[String(value || "").toUpperCase()] || "Seçilen işlem cari hesaba kaydedilir.";
+}
+
+function movementPreviewEffect(movementType, amount) {
+  const total = Math.abs(Number(amount || 0));
+  switch (String(movementType || "").toUpperCase()) {
+    case "ODEME":
+    case "KREDI_KARTI_ODEMESI":
+      return total;
+    case "TAHSILAT":
+    case "ALACAK":
+    case "GELEN_FATURA":
+    case "CEK_GIRISI":
+    case "CEK_TAHSILATI":
+    case "KREDI_KARTI_TAHSILATI":
+      return -total;
+    case "CEK_ODEMESI":
+      return total;
+    case "BORC":
+      return total;
+    default:
+      return 0;
+  }
 }
 
 function normalizeCariDocumentDetail(row = {}) {
@@ -1563,7 +1690,11 @@ function normalizeProductMatchLine(row = {}, index = 0) {
     companyName: row?.companyName || row?.firmaAdi || row?.firma || "",
     supplierFirmId: row?.supplierFirmId || row?.companyId || row?.firmaId || "",
     rawProductName:
-      row?.rawProductName || row?.hamUrunAdi || row?.name || row?.aciklama || "",
+      row?.rawProductName ||
+      row?.hamUrunAdi ||
+      row?.name ||
+      row?.aciklama ||
+      "",
     matchedProductName:
       row?.matchedProductName ||
       row?.eslesenUrunAdi ||
@@ -1655,7 +1786,7 @@ function ProductMatchTable({
   const [lineSelections, setLineSelections] = useState({});
   const linesState = useEndpoint(
     documentId
-       ? `/muhasebe/belgeler/${encodeURIComponent(documentId)}/kalemler`
+      ? `/muhasebe/belgeler/${encodeURIComponent(documentId)}/kalemler`
       : null,
     activeMainCompany,
     refreshTick,
@@ -1667,7 +1798,10 @@ function ProductMatchTable({
     { limit: 200, isActive: true },
   );
   const lines = useMemo(() => {
-    if (Array.isArray(linesState.data?.lines) && linesState.data?.lines.length) {
+    if (
+      Array.isArray(linesState.data?.lines) &&
+      linesState.data?.lines.length
+    ) {
       return linesState.data.lines.map((line, index) =>
         normalizeProductMatchLine(line, index),
       );
@@ -1805,7 +1939,9 @@ function ProductMatchTable({
               ) : null}
               {line?.shortCode || line?.groupType ? (
                 <small>
-                  {[line?.shortCode, line?.groupType].filter(Boolean).join(" / ")}
+                  {[line?.shortCode, line?.groupType]
+                    .filter(Boolean)
+                    .join(" / ")}
                 </small>
               ) : null}
             </td>
@@ -1980,7 +2116,7 @@ function ProductQueuePanel({ activeMainCompany, refreshKey, reloadAll }) {
       });
       return next;
     });
-  }, [queueState.data]);
+  }, [queueState.data, rows]);
 
   const reload = () => {
     setLocalRefresh((value) => value + 1);
@@ -2577,7 +2713,10 @@ function ProductUsageReport({ activeMainCompany, refreshKey }) {
           <select
             value={filters.productId}
             onChange={(event) =>
-              setFilters((prev) => ({ ...prev, productId: event?.target.value }))
+              setFilters((prev) => ({
+                ...prev,
+                productId: event?.target.value,
+              }))
             }
           >
             <option value="">Tümü</option>
@@ -2592,7 +2731,10 @@ function ProductUsageReport({ activeMainCompany, refreshKey }) {
           <input
             value={filters.groupType}
             onChange={(event) =>
-              setFilters((prev) => ({ ...prev, groupType: event?.target.value }))
+              setFilters((prev) => ({
+                ...prev,
+                groupType: event?.target.value,
+              }))
             }
           />
         </Field>
@@ -2976,9 +3118,9 @@ function InventoryProducts({ activeMainCompany, refreshKey, reloadAll }) {
               disabled={saveBusy || !form.name.trim()}
             >
               {saveBusy
-                 ? "Kaydediliyor..."
+                ? "Kaydediliyor..."
                 : selectedProduct?.id
-                   ? "Güncelle"
+                  ? "Güncelle"
                   : "Yeni Kayıt"}
             </button>
           </div>
@@ -3075,7 +3217,6 @@ function CariSummaryMetric({ label, value, tone = "blue", hint = "" }) {
 }
 
 function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
-  const defaultMovementRange = useMemo(() => monthRange(0), []);
   const [firmFilters, setFirmFilters] = useState({
     search: "",
     firmType: "",
@@ -3086,8 +3227,8 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
     includeNonTrackable: false,
   });
   const [movementFilters, setMovementFilters] = useState({
-    dateFrom: defaultMovementRange.dateFrom,
-    dateTo: defaultMovementRange.dateTo,
+    dateFrom: "",
+    dateTo: "",
     documentNo: "",
     description: "",
     amountMin: "",
@@ -3099,6 +3240,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
   });
   const [selectedFirmaId, setSelectedFirmaId] = useState("");
   const [selectedMovementId, setSelectedMovementId] = useState("");
+  const [editingMovementId, setEditingMovementId] = useState("");
   const [activeRightTab, setActiveRightTab] = useState("movement");
   const [feedback, setFeedback] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
@@ -3129,7 +3271,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
     .map(normalizeFirm)
     .filter((row) =>
       firmFilters.includeNonTrackable
-         ? true
+        ? true
         : row?.trackReceivablePayable !== false && row?.cariTakipDisi !== true,
     );
 
@@ -3165,27 +3307,28 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
 
   const summaryState = useEndpoint(
     selectedCompany?.id
-       ? `/muhasebe/firmalar/${encodeURIComponent(selectedCompany?.id)}/cari-ozet`
+      ? `/muhasebe/firmalar/${encodeURIComponent(selectedCompany?.id)}/cari-ozet`
       : null,
     activeMainCompany,
     refreshKey,
     movementFilters,
   );
   const summary = unwrap(summaryState.data) || selectedCompany || {};
+  const periodFiltered = Boolean(movementFilters.dateFrom || movementFilters.dateTo);
 
   const movementDetailState = useEndpoint(
     selectedMovementId
-       ? `/muhasebe/cari-hareketler/${encodeURIComponent(selectedMovementId)}`
+      ? `/muhasebe/cari-hareketler/${encodeURIComponent(selectedMovementId)}`
       : null,
     activeMainCompany,
     refreshKey,
   );
   const selectedMovement = movementDetailState.data
-     ? normalizeMovement(unwrap(movementDetailState.data))
+    ? normalizeMovement(unwrap(movementDetailState.data))
     : rows.find((row) => row.id === selectedMovementId) || null;
   const documentDetailState = useEndpoint(
     selectedMovementId
-       ? `/muhasebe/cari-hareketler/${encodeURIComponent(selectedMovementId)}/belge-detay`
+      ? `/muhasebe/cari-hareketler/${encodeURIComponent(selectedMovementId)}/belge-detay`
       : null,
     activeMainCompany,
     refreshKey,
@@ -3195,6 +3338,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
   );
   const invoiceDetail = documentDetail.document || {};
   const isCreateMode = activeRightTab === "new";
+  const isEditingMovement = isCreateMode && Boolean(editingMovementId) && selectedMovement?.id === editingMovementId;
   const currentBalance = Number(
     summary.guncelBakiye ??
       summary.mevcutBakiye ??
@@ -3202,31 +3346,33 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
       0,
   );
   const selectedIsNonTrackable =
-    selectedCompany?.cariTakipDisi || selectedCompany?.trackReceivablePayable === false;
-  const currentBalanceTone =
-    selectedIsNonTrackable
-       ? "gray"
-      : currentBalance > 0
-         ? "red"
-        : currentBalance < 0
-           ? "green"
-          : "blue";
-  const currentBalanceHint =
-    selectedIsNonTrackable
-       ? "Cari takip dışı"
-      : currentBalance > 0
-         ? "BORÇLU"
-        : currentBalance < 0
-           ? "ALACAKLI"
-          : "SIFIR";
+    selectedCompany?.cariTakipDisi ||
+    selectedCompany?.trackReceivablePayable === false;
+  const currentBalanceTone = selectedIsNonTrackable
+    ? "gray"
+    : currentBalance > 0
+      ? "red"
+      : currentBalance < 0
+        ? "green"
+        : "blue";
+  const currentBalanceHint = selectedIsNonTrackable
+    ? "Cari takip dışı"
+    : currentBalance > 0
+      ? "BORÇLU"
+      : currentBalance < 0
+        ? "ALACAKLI"
+        : "SIFIR";
+  const previewAmount = Math.round(parseDecimalInput(form.tutar) * 100) / 100;
+  const previewEffect = movementPreviewEffect(form.islemTipi, previewAmount);
+  const previewBalance = currentBalance + previewEffect;
 
   useEffect(() => {
-    if (isCreateMode) {
+    if (isCreateMode && !isEditingMovement) {
       return;
     }
     if (selectedMovement) {
       setForm({
-        islemTipi: selectedMovement.alacak > 0 ? "ALACAK" : "BORC",
+        islemTipi: selectedMovement.movementType || (selectedMovement.alacak > 0 ? "ALACAK" : "BORC"),
         tutar: decimalInputValue(
           selectedMovement.tutar ||
             selectedMovement.borc ||
@@ -3244,17 +3390,12 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
       return;
     }
     setForm(emptyMovementForm(selectedCompany?.resmiGayri || "RESMI"));
-  }, [
-    isCreateMode,
-    selectedMovementId,
-    selectedMovement?.id,
-    selectedCompany?.id,
-  ]);
+  }, [isCreateMode, selectedMovementId, selectedMovement?.id, selectedCompany?.id, isEditingMovement, selectedMovement, selectedCompany?.resmiGayri]);
 
   const clearMovementFilters = () => {
     setMovementFilters({
-      dateFrom: defaultMovementRange.dateFrom,
-      dateTo: defaultMovementRange.dateTo,
+      dateFrom: "",
+      dateTo: "",
       documentNo: "",
       description: "",
       amountMin: "",
@@ -3266,13 +3407,30 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
     });
   };
 
-  const resetForm = (movementType = "TAHSILAT") => {
+  const setQuickMovementPeriod = (mode) => {
+    if (mode === "ALL") return setMovementFilters((current) => ({ ...current, dateFrom: "", dateTo: "" }));
+    const today = new Date();
+    if (mode === "LAST_6_MONTHS") {
+      const first = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      const iso = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+      return setMovementFilters((current) => ({ ...current, dateFrom: iso(first), dateTo: iso(today) }));
+    }
+    const offset = mode === "PREVIOUS_MONTH" ? -1 : 0;
+    const first = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+    const last = new Date(today.getFullYear(), today.getMonth() + offset + 1, 0);
+    const iso = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+    setMovementFilters((current) => ({ ...current, dateFrom: iso(first), dateTo: iso(last) }));
+  };
+
+  const resetForm = (movementType = "") => {
+    const recommendedType = selectedCompany?.firmaTipi === "MUSTERI" ? "SATIS" : "GELEN_FATURA";
     setSelectedMovementId("");
+    setEditingMovementId("");
     setActiveRightTab("new");
     setFeedback("");
     setForm({
       ...emptyMovementForm(selectedCompany?.resmiGayri || "RESMI"),
-      islemTipi: movementType,
+      islemTipi: movementType || recommendedType,
     });
   };
 
@@ -3298,14 +3456,14 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
       companyId: selectedCompany?.id,
     };
     try {
-      const shouldCreate = isCreateMode || !selectedMovement?.id;
+      const shouldCreate = !isEditingMovement || !selectedMovement?.id;
       let response;
       let savedMovementId = "";
-      if (form.islemTipi === "CEK_GIRISI") {
+      if (["CEK_GIRISI", "CEK_TAHSILATI", "CEK_ODEMESI"].includes(form.islemTipi)) {
         response = await apiPost("/muhasebe/cekler", {
           ...payload,
-          checkType: form.checkType,
-          yon: form.checkType === "TEDARIKCIYE_VERILEN" ? "OUT" : "IN",
+          checkType: form.islemTipi === "CEK_ODEMESI" ? "TEDARIKCIYE_VERILEN" : "MUSTERIDEN_ALINAN",
+          yon: form.islemTipi === "CEK_ODEMESI" ? "OUT" : "IN",
           checkNo: form.belgeNo,
           dueDate: form.vade || form.tarih,
           vadeTarihi: form.vade || form.tarih,
@@ -3369,7 +3527,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
         }
       } else {
         response = shouldCreate
-           ? await apiPost("/muhasebe/cari-hareketler", payload)
+          ? await apiPost("/muhasebe/cari-hareketler", payload)
           : await apiPatch(
               `/muhasebe/cari-hareketler/${encodeURIComponent(selectedMovement?.id)}`,
               payload,
@@ -3382,6 +3540,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
       );
       if (savedMovementId) setSelectedMovementId(savedMovementId);
       setActiveRightTab("movement");
+      setEditingMovementId("");
       setForm(emptyMovementForm(selectedCompany?.resmiGayri || "RESMI"));
       reloadAll();
     } catch (error) {
@@ -3403,10 +3562,10 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
   };
 
   const previewPdfUrl = invoiceDetail?.pdfUrl
-     ? buildApiUrl(invoiceDetail?.pdfUrl)
+    ? buildApiUrl(invoiceDetail?.pdfUrl)
     : "";
   const previewXmlUrl = invoiceDetail?.xmlUrl
-     ? buildApiUrl(invoiceDetail?.xmlUrl)
+    ? buildApiUrl(invoiceDetail?.xmlUrl)
     : "";
 
   return (
@@ -3454,7 +3613,10 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
             <select
               value={firmFilters.firmType}
               onChange={(event) =>
-                setFirmFilters({ ...firmFilters, firmType: event?.target.value })
+                setFirmFilters({
+                  ...firmFilters,
+                  firmType: event?.target.value,
+                })
               }
             >
               <option value="">Müşteri / satıcı</option>
@@ -3512,18 +3674,16 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
         <div className="mh-cari-main">
           <div className="mh-summary-grid four compact-cards mh-cari-summary-grid">
             <CariSummaryMetric
-              label="Açılış"
-              value={money(summary.acilisBakiyesi)}
-            />
-            <CariSummaryMetric
-              label="Dönem Borç"
-              value={money(summary.donemBorc)}
+              label="Bakiye Artıran İşlemler"
+              value={money(periodFiltered ? summary.donemBorc : summary.toplamBorc)}
               tone="yellow"
+              hint={periodFiltered ? "Seçili dönem" : "Tüm zamanlar"}
             />
             <CariSummaryMetric
-              label="Dönem Alacak"
-              value={money(summary.donemAlacak)}
+              label="Bakiye Azaltan İşlemler"
+              value={money(periodFiltered ? summary.donemAlacak : summary.toplamAlacak)}
               tone="green"
+              hint={periodFiltered ? "Seçili dönem" : "Tüm zamanlar"}
             />
             <CariSummaryMetric
               label="Güncel Bakiye"
@@ -3532,18 +3692,21 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
               hint={currentBalanceHint}
             />
             <CariSummaryMetric
-              label="Vadesi Geçen"
-              value={money(summary.vadesiGecen)}
-              tone="red"
+              label="Resmi Bakiye"
+              value={money(summary.resmiBakiye)}
+              tone="blue"
             />
             <CariSummaryMetric
-              label="Son İşlem"
-              value={date(summary.sonIslemTarihi)}
+              label="Gayri Resmi Bakiye"
+              value={money(summary.gayriResmiBakiye)}
+              tone="yellow"
             />
+            {periodFiltered ? <CariSummaryMetric label="Seçili Dönem Net Etkisi" value={money(Number(summary.donemBorc || 0) - Number(summary.donemAlacak || 0))} tone="blue" hint={`${movementFilters.dateFrom || "…"} / ${movementFilters.dateTo || "…"}`} /> : null}
           </div>
           <div className="mh-action-stack mh-cari-filters">
+            <div className="mh-cari-period-actions"><span>Hızlı Dönem</span><button className="mh-btn" type="button" onClick={() => setQuickMovementPeriod("CURRENT_MONTH")}>Bu Ay</button><button className="mh-btn" type="button" onClick={() => setQuickMovementPeriod("PREVIOUS_MONTH")}>Geçen Ay</button><button className="mh-btn" type="button" onClick={() => setQuickMovementPeriod("LAST_6_MONTHS")}>Son 6 Ay</button><button className="mh-btn" type="button" onClick={() => setQuickMovementPeriod("ALL")}>Tümü</button></div>
             <div className="mh-form-grid mh-cari-filter-grid mh-cari-filter-grid-top">
-              <Field label="Bağlangıç Tarihi">
+              <Field label="Başlangıç Tarihi">
                 <input
                   type="date"
                   value={movementFilters.dateFrom}
@@ -3602,8 +3765,8 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                   }
                 >
                   <option value="">Tümü</option>
-                  <option value="BORC">Borç</option>
-                  <option value="ALACAK">Alacak</option>
+                  <option value="BORC">Bakiye artıran işlemler</option>
+                  <option value="ALACAK">Bakiye azaltan işlemler</option>
                 </select>
               </Field>
               <Field label="Durum">
@@ -3652,8 +3815,9 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                 "Tarih",
                 "Belge No",
                 "Açıklama",
-                "Borç",
-                "Alacak",
+                "İşlem Türü",
+                "Bakiye Artışı (+)",
+                "Bakiye Azalışı (-)",
                 "Bakiye",
                 "Vade",
                 "Durum",
@@ -3697,12 +3861,15 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                         .join(" / ")}
                     </small>
                   </td>
+                  <td>{movementTypeLabel(row?.movementType)}</td>
                   <td>{money(row?.borc)}</td>
                   <td>{money(row?.alacak)}</td>
                   <td>{money(row?.bakiye)}</td>
                   <td>{date(row?.vade)}</td>
                   <td>
-                    <Badge tone={toneFromStatus(row?.durum)}>{row?.durum}</Badge>
+                    <Badge tone={toneFromStatus(row?.durum)}>
+                      {row?.durum}
+                    </Badge>
                   </td>
                   <td>{row?.kaynak || "-"}</td>
                 </tr>
@@ -3733,7 +3900,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
             <button
               className={`mh-tab-btn ${activeRightTab === "new" ? "active" : ""}`}
               type="button"
-              onClick={() => resetForm("TAHSILAT")}
+              onClick={() => resetForm()}
             >
               Yeni Cari İşlem
             </button>
@@ -3760,19 +3927,15 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                       value={date(selectedMovement.tarih)}
                     />
                     <SideLine
-                      label="İşlem tipi"
-                      value={
-                        selectedMovement.belgeTipi ||
-                        selectedMovement.movementType ||
-                        "-"
-                      }
+                      label="İşlem türü"
+                      value={movementTypeLabel(selectedMovement.movementType || selectedMovement.belgeTipi)}
                     />
                     <SideLine
-                      label="Borç"
+                      label="Bakiye artışı (+)"
                       value={money(selectedMovement.borc)}
                     />
                     <SideLine
-                      label="Alacak"
+                      label="Bakiye azalışı (-)"
                       value={money(selectedMovement.alacak)}
                     />
                     <SideLine
@@ -3813,7 +3976,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                     <button
                       className="mh-btn"
                       type="button"
-                      onClick={() => resetForm("TAHSILAT")}
+                      onClick={() => resetForm()}
                     >
                       Yeni İşlem
                     </button>
@@ -3824,6 +3987,14 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                       onClick={() => setActiveRightTab("invoice")}
                     >
                       Fatura Detayı
+                    </button>
+                    <button
+                      className="mh-btn"
+                      type="button"
+                      disabled={!selectedMovement?.id || selectedMovement?.manual === false || Boolean(selectedMovement.documentId)}
+                      onClick={() => { setEditingMovementId(selectedMovement.id); setActiveRightTab("new"); }}
+                    >
+                      Düzenle
                     </button>
                     <button
                       className="mh-btn"
@@ -4014,25 +4185,24 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
 
             {activeRightTab === "new" ? (
               <form className="mh-action-stack" onSubmit={submit}>
-                <div className="mh-cari-quick-row">
-                  {[
-                    ["TAHSILAT", "Tahsilat"],
-                    ["ODEME", "Ödeme"],
-                    ["BORC", "Borç"],
-                    ["ALACAK", "Alacak"],
-                    ["CEK_GIRISI", "Çek Girişi"],
-                    ["KREDI_KARTI_ODEMESI", "Kredi Kartı Ödemesi"],
-                  ].map(([value, label]) => (
-                    <button
-                      className={`mh-btn ${form.islemTipi === value ? "primary" : ""}`}
-                      type="button"
-                      key={value}
-                      onClick={() => setForm({ ...form, islemTipi: value })}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <div className="mh-cari-new-head"><div><strong>{isEditingMovement ? "Cari İşlemi Düzenle" : "Yeni Cari İşlem"}</strong><span>{selectedCompany?.firmaAdi || "Firma seçilmedi"}</span></div></div>
+                <Field label="İşlem Türü">
+                  <select value={form.islemTipi} onChange={(event) => setForm({ ...form, islemTipi: event.target.value })}>
+                    <optgroup label="GELEN İŞLEMLER">
+                      <option value="GELEN_FATURA">Gelen Fatura</option>
+                      <option value="TAHSILAT">Tahsilat Geldi</option>
+                      <option value="CEK_TAHSILATI">Çek Alındı</option>
+                      <option value="KREDI_KARTI_TAHSILATI">Kredi Kartından Tahsilat</option>
+                    </optgroup>
+                    <optgroup label="GİDEN İŞLEMLER">
+                      <option value="SATIS">Giden Fatura</option>
+                      <option value="ODEME">Tahsilat Yapıldı</option>
+                      <option value="CEK_ODEMESI">Çek Verildi</option>
+                      <option value="KREDI_KARTI_ODEMESI">Kredi Kartıyla Ödeme</option>
+                    </optgroup>
+                  </select>
+                </Field>
+                <div className="mh-cari-type-hint"><strong>{movementTypeLabel(form.islemTipi)}</strong><span>{movementTypeHint(form.islemTipi)}</span></div>
                 <Field label="Tutar">
                   <input
                     type="text"
@@ -4089,27 +4259,21 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                     }
                   />
                 </Field>
-                {form.islemTipi === "CEK_GIRISI" ? (
+                {form.islemTipi === "ODEME" ? (
+                  <div className="mh-state">
+                    Tedarikçiye yapılan ödeme bakiyeyi azaltır.
+                  </div>
+                ) : null}
+                <Field label="Hesap Önizlemesi">
+                  <div className="mh-state">
+                    <div>Mevcut bakiye: {money(currentBalance)}</div>
+                    <div>İşlem etkisi: {money(previewEffect)}</div>
+                    <div>Yeni bakiye: {money(previewBalance)}</div>
+                  </div>
+                </Field>
+                {["CEK_GIRISI", "CEK_TAHSILATI", "CEK_ODEMESI"].includes(form.islemTipi) ? (
                   <>
-                    <Field label="Çek Türü">
-                      <div className="mh-cari-quick-row two">
-                        {[
-                          ["MUSTERIDEN_ALINAN", "Müşteriden Alınan"],
-                          ["TEDARIKCIYE_VERILEN", "Tedarikçiye Verilen"],
-                        ].map(([value, label]) => (
-                          <button
-                            key={value}
-                            className={`mh-btn ${form.checkType === value ? "primary" : ""}`}
-                            type="button"
-                            onClick={() =>
-                              setForm({ ...form, checkType: value })
-                            }
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </Field>
+                    <div className="mh-state">{form.islemTipi === "CEK_ODEMESI" ? "Çek Verildi: firmaya olan borcu azaltır." : "Çek Alındı: müşteriden olan alacağı azaltır."}</div>
                     <Field label="Banka">
                       <input
                         value={form.bankName}
@@ -4174,7 +4338,10 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                       <select
                         value={form.creditCardId}
                         onChange={(event) =>
-                          setForm({ ...form, creditCardId: event?.target.value })
+                          setForm({
+                            ...form,
+                            creditCardId: event?.target.value,
+                          })
                         }
                       >
                         <option value="">Kart seç</option>
@@ -4233,7 +4400,7 @@ function CariMovements({ activeMainCompany, refreshKey, reloadAll }) {
                     type="submit"
                     disabled={!selectedCompany?.id || saveBusy}
                   >
-                    {saveBusy ? "Kaydediliyor..." : "Kaydet"}
+                    {saveBusy ? "Kaydediliyor..." : isEditingMovement ? "Değişiklikleri Kaydet" : "Kaydet"}
                   </button>
                 </div>
               </form>
@@ -4254,7 +4421,9 @@ function KdvControl({ activeMainCompany, refreshKey }) {
   const [selectedFirmId, setSelectedFirmId] = useState("");
   const [filters, setFilters] = useState({
     fromDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
-    toDate: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10),
+    toDate: new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      .toISOString()
+      .slice(0, 10),
     query: "",
     direction: "ALL",
   });
@@ -4292,7 +4461,7 @@ function KdvControl({ activeMainCompany, refreshKey }) {
     {};
   const detailState = useEndpoint(
     selected.firmId
-       ? `/api/vat/firms/${encodeURIComponent(selected.firmId)}/detail`
+      ? `/api/vat/firms/${encodeURIComponent(selected.firmId)}/detail`
       : "/api/vat/firms/_none/detail",
     activeMainCompany,
     `${refreshKey}-${localRefresh}`,
@@ -4342,7 +4511,7 @@ function KdvControl({ activeMainCompany, refreshKey }) {
     documentDecisions[documentKey(row, index)] ||
     firmDecisions[selected.firmId] ||
     "INCLUDED";
-  const filteredDocuments = documents.filter((row, index) => {
+  const filteredDocuments = documents.filter((row) => {
     const docDate = String(row?.documentDate || row?.date || "").slice(0, 10);
     if (filters.fromDate && docDate && docDate < filters.fromDate) return false;
     if (filters.toDate && docDate && docDate > filters.toDate) return false;
@@ -4380,9 +4549,12 @@ function KdvControl({ activeMainCompany, refreshKey }) {
     const manual = manualByFirm.get(row?.firmId) || {};
     const gelenKdv = Number(row?.gelenKdv || 0) + Number(manual.gelenKdv || 0);
     const gidenKdv = Number(row?.gidenKdv || 0) + Number(manual.gidenKdv || 0);
-    const gelenMatrah = Number(row?.gelenMatrah || 0) + Number(manual.gelenMatrah || 0);
-    const gidenMatrah = Number(row?.gidenMatrah || 0) + Number(manual.gidenMatrah || 0);
-    const belgeSayisi = Number(row?.belgeSayisi || 0) + Number(manual.belgeSayisi || 0);
+    const gelenMatrah =
+      Number(row?.gelenMatrah || 0) + Number(manual.gelenMatrah || 0);
+    const gidenMatrah =
+      Number(row?.gidenMatrah || 0) + Number(manual.gidenMatrah || 0);
+    const belgeSayisi =
+      Number(row?.belgeSayisi || 0) + Number(manual.belgeSayisi || 0);
     return {
       ...row,
       gelenKdv,
@@ -4413,17 +4585,15 @@ function KdvControl({ activeMainCompany, refreshKey }) {
       (adjustment.adjustmentType === "EKSI" ? -1 : 1);
   const excludedKdv = firmRows
     .filter((row) => row.decision !== "INCLUDED")
-    .reduce((sum, row) => sum + Number(row?.gelenKdv || 0) + Number(row?.gidenKdv || 0), 0);
+    .reduce(
+      (sum, row) =>
+        sum + Number(row?.gelenKdv || 0) + Number(row?.gidenKdv || 0),
+      0,
+    );
   const netKdv = hesaplananKdv - indirilecekKdv - devredenKdv + duzeltmeKdv;
   const sonucLabel =
     netKdv > 0 ? "Ödenecek KDV" : netKdv < 0 ? "Devreden KDV" : "Net KDV";
   const sonucValue = netKdv === 0 ? 0 : Math.abs(netKdv);
-  const rowResultText = (row) => {
-    const value = Number(row?.netKdv || 0);
-    if (value > 0) return `Ödenecek ${money(value)}`;
-    if (value < 0) return `Devreden ${money(Math.abs(value))}`;
-    return money(0);
-  };
   const updateMonth = (month) => {
     const nextMonth = Number(month || 1);
     const nextYear = Number(period.year || new Date().getFullYear());
@@ -4464,7 +4634,11 @@ function KdvControl({ activeMainCompany, refreshKey }) {
     });
   };
   const parseAmount = (value) =>
-    Number(String(value || "0").replace(/\./g, "").replace(",", ".")) || 0;
+    Number(
+      String(value || "0")
+        .replace(/\./g, "")
+        .replace(",", "."),
+    ) || 0;
   const addManualKdvRow = () => {
     if (!selected.firmId) return;
     const baseAmount = parseAmount(manualForm.baseAmount);
@@ -4593,9 +4767,17 @@ function KdvControl({ activeMainCompany, refreshKey }) {
         {[
           ["Giden / Hesaplanan KDV", money(hesaplananKdv), "blue"],
           ["Gelen / İndirilecek KDV", money(indirilecekKdv), "green"],
-          ["Devreden + Düzeltme", `${money(devredenKdv)} / ${money(duzeltmeKdv)}`, "yellow"],
+          [
+            "Devreden + Düzeltme",
+            `${money(devredenKdv)} / ${money(duzeltmeKdv)}`,
+            "yellow",
+          ],
           ["KDV dışı / bekleyen", money(excludedKdv), "red"],
-          ["KDV'ye girmeyen firma", rows.filter((row) => !Number(row?.belgeSayisi || 0)).length, "yellow"],
+          [
+            "KDV'ye girmeyen firma",
+            rows.filter((row) => !Number(row?.belgeSayisi || 0)).length,
+            "yellow",
+          ],
           [sonucLabel, money(sonucValue), "dark"],
         ].map(([label, value, tone]) => (
           <div className={`mh-summary ${tone}`} key={label}>
@@ -4651,24 +4833,72 @@ function KdvControl({ activeMainCompany, refreshKey }) {
                 {filteredDocuments.length ? (
                   filteredDocuments.map((row, index) => {
                     const decision = decisionOf(row, index);
-                    const vatAmount = Number(row?.vatAmount || row?.incomingVat || row?.outgoingVat || 0);
-                    const baseAmount = Number(row?.baseAmount || row?.subtotal || 0);
+                    const vatAmount = Number(
+                      row?.vatAmount ||
+                        row?.incomingVat ||
+                        row?.outgoingVat ||
+                        0,
+                    );
+                    const baseAmount = Number(
+                      row?.baseAmount || row?.subtotal || 0,
+                    );
                     const vatRate =
                       Number(row?.vatRate || row?.kdvRate || 0) ||
-                      (baseAmount ? Number(((vatAmount / baseAmount) * 100).toFixed(2)) : 0);
-                    const totalAmount = Number(row?.grandTotal || row?.totalAmount || row?.payableTotal || baseAmount + vatAmount);
+                      (baseAmount
+                        ? Number(((vatAmount / baseAmount) * 100).toFixed(2))
+                        : 0);
+                    const totalAmount = Number(
+                      row?.grandTotal ||
+                        row?.totalAmount ||
+                        row?.payableTotal ||
+                        baseAmount + vatAmount,
+                    );
                     return (
                       <tr key={documentKey(row, index)}>
-                        <td><b>{row?.documentNo || row?.documentId || "-"}</b></td>
+                        <td>
+                          <b>{row?.documentNo || row?.documentId || "-"}</b>
+                        </td>
                         <td>{money(totalAmount)}</td>
-                        <td>%{vatRate.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}</td>
-                        <td><b>{money(vatAmount)}</b></td>
-                        <td><Badge tone={decisionTone(decision)}>{decisionText(decision)}</Badge></td>
+                        <td>
+                          %
+                          {vatRate.toLocaleString("tr-TR", {
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td>
+                          <b>{money(vatAmount)}</b>
+                        </td>
+                        <td>
+                          <Badge tone={decisionTone(decision)}>
+                            {decisionText(decision)}
+                          </Badge>
+                        </td>
                         <td>
                           <div className="kdv-live-actions">
-                            <button type="button" onClick={() => setDocumentDecision(row, index, "INCLUDED")}>Ekle</button>
-                            <button type="button" onClick={() => setDocumentDecision(row, index, "EXCLUDED")}>Çıkar</button>
-                            <button type="button" onClick={() => setDocumentDecision(row, index, "HELD")}>Beklet</button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDocumentDecision(row, index, "INCLUDED")
+                              }
+                            >
+                              Ekle
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDocumentDecision(row, index, "EXCLUDED")
+                              }
+                            >
+                              Çıkar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDocumentDecision(row, index, "HELD")
+                              }
+                            >
+                              Beklet
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -4677,7 +4907,8 @@ function KdvControl({ activeMainCompany, refreshKey }) {
                 ) : (
                   <tr>
                     <td colSpan="6">
-                      Seçili firmada bu tarih aralığında gelen/giden KDV belgesi yok.
+                      Seçili firmada bu tarih aralığında gelen/giden KDV belgesi
+                      yok.
                     </td>
                   </tr>
                 )}
@@ -4692,8 +4923,14 @@ function KdvControl({ activeMainCompany, refreshKey }) {
             label="Matrah toplamı"
             value={money(detail?.matrahToplami)}
           />
-          <SideLine label="Kesilen fatura KDV" value={money(detail?.hesaplananKdv)} />
-          <SideLine label="Alış / indirilecek KDV" value={money(detail?.indirilecekKdv)} />
+          <SideLine
+            label="Kesilen fatura KDV"
+            value={money(detail?.hesaplananKdv)}
+          />
+          <SideLine
+            label="Alış / indirilecek KDV"
+            value={money(detail?.indirilecekKdv)}
+          />
           <SideLine label="Devreden KDV" value={money(detail?.devredenKdv)} />
           <SideLine label="Düzeltme" value={money(detail?.duzeltmeKdv)} />
           <div className="kdv-live-actions wide">
@@ -4726,7 +4963,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
               <input
                 value={manualForm.documentNo}
                 onChange={(event) =>
-                  setManualForm({ ...manualForm, documentNo: event?.target.value })
+                  setManualForm({
+                    ...manualForm,
+                    documentNo: event?.target.value,
+                  })
                 }
                 placeholder="Fatura no"
               />
@@ -4735,7 +4975,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
               <select
                 value={manualForm.direction}
                 onChange={(event) =>
-                  setManualForm({ ...manualForm, direction: event?.target.value })
+                  setManualForm({
+                    ...manualForm,
+                    direction: event?.target.value,
+                  })
                 }
               >
                 <option value="IN">Gelen / İndirilecek KDV</option>
@@ -4747,7 +4990,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
                 <input
                   value={manualForm.quantity}
                   onChange={(event) =>
-                    setManualForm({ ...manualForm, quantity: event?.target.value })
+                    setManualForm({
+                      ...manualForm,
+                      quantity: event?.target.value,
+                    })
                   }
                 />
               </Field>
@@ -4755,7 +5001,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
                 <input
                   value={manualForm.vatRate}
                   onChange={(event) =>
-                    setManualForm({ ...manualForm, vatRate: event?.target.value })
+                    setManualForm({
+                      ...manualForm,
+                      vatRate: event?.target.value,
+                    })
                   }
                 />
               </Field>
@@ -4764,7 +5013,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
               <input
                 value={manualForm.baseAmount}
                 onChange={(event) =>
-                  setManualForm({ ...manualForm, baseAmount: event?.target.value })
+                  setManualForm({
+                    ...manualForm,
+                    baseAmount: event?.target.value,
+                  })
                 }
                 placeholder="1000,00"
               />
@@ -4773,7 +5025,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
               <input
                 value={manualForm.vatAmount}
                 onChange={(event) =>
-                  setManualForm({ ...manualForm, vatAmount: event?.target.value })
+                  setManualForm({
+                    ...manualForm,
+                    vatAmount: event?.target.value,
+                  })
                 }
                 placeholder="Boşsa orandan hesaplanır"
               />
@@ -4782,7 +5037,10 @@ function KdvControl({ activeMainCompany, refreshKey }) {
               <input
                 value={manualForm.totalAmount}
                 onChange={(event) =>
-                  setManualForm({ ...manualForm, totalAmount: event?.target.value })
+                  setManualForm({
+                    ...manualForm,
+                    totalAmount: event?.target.value,
+                  })
                 }
                 placeholder="Boşsa matrah + KDV"
               />
@@ -4850,996 +5108,6 @@ function CheckPayment({ activeMainCompany, refreshKey, reloadAll }) {
       refreshKey={refreshKey}
       reloadAll={reloadAll}
     />
-  );
-  const companyParamsBase = companyParams(activeMainCompany);
-  const todayText = new Date().toISOString().slice(0, 10);
-  const emptyCheckForm = () => ({
-    companyId: "",
-    checkNo: "",
-    bankName: "",
-    branchName: "",
-    dueDate: todayText,
-    amount: "",
-    status: "PORTFOYDE",
-    checkType: "MUSTERIDEN_ALINAN",
-    description: "",
-    frontImageFile: null,
-    backImageFile: null,
-  });
-  const emptyCardForm = () => ({
-    cardName: "",
-    bankName: "",
-    lastFourDigits: "",
-    period: "",
-    totalDebt: "",
-    minimumPayment: "",
-    dueDate: "",
-    statementDay: "",
-    dueDay: "",
-    note: "",
-  });
-  const emptyMovementForm = () => ({
-    paymentMode: "FIRMA_ODEMESI",
-    companyId: "",
-    creditCardId: "",
-    amount: "",
-    date: todayText,
-    documentNo: "",
-    description: "",
-    installmentCount: "1",
-    paymentSource: "BANKA",
-    slipFile: null,
-  });
-  const [subTab, setSubTab] = useState("checks");
-  const [feedback, setFeedback] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [selectedCheckId, setSelectedCheckId] = useState("");
-  const [selectedCardId, setSelectedCardId] = useState("");
-  const [selectedMovementId, setSelectedMovementId] = useState("");
-  const [checkForm, setCheckForm] = useState(emptyCheckForm());
-  const [cardForm, setCardForm] = useState(emptyCardForm());
-  const [movementForm, setMovementForm] = useState(emptyMovementForm());
-
-  const companiesState = useEndpoint(
-    "/muhasebe/firmalar",
-    activeMainCompany,
-    refreshKey,
-    { limit: 500, active: "active" },
-  );
-  const checksState = useEndpoint(
-    "/muhasebe/cekler",
-    activeMainCompany,
-    refreshKey,
-    { limit: 500 },
-  );
-  const cardsState = useEndpoint(
-    "/muhasebe/kredi-kartlari",
-    activeMainCompany,
-    refreshKey,
-    { limit: 500 },
-  );
-  const movementsState = useEndpoint(
-    "/muhasebe/kredi-kart-hareketleri",
-    activeMainCompany,
-    refreshKey,
-    { limit: 500 },
-  );
-
-  const companies = asArray(companiesState.data).map(normalizeFirm);
-  const checks = asArray(checksState.data).filter(
-    (row) => row?.raw.active !== false && row?.durum !== "IPTAL",
-  );
-  const cards = asArray(cardsState.data).filter(
-    (row) => row?.isActive !== false,
-  );
-  const movements = asArray(movementsState.data).filter(
-    (row) => row?.active !== false,
-  );
-  const selectedCheck =
-    checks.find((row) => row.id === (selectedCheckId || checks[0].id)) || null;
-  const selectedCard =
-    cards.find((row) => row.id === (selectedCardId || cards[0].id)) || null;
-  const selectedMovement =
-    movements.find(
-      (row) => row.id === (selectedMovementId || movements[0].id),
-    ) || null;
-
-  useEffect(() => {
-    if (!checks.length) {
-      setSelectedCheckId("");
-      setCheckForm(emptyCheckForm());
-      return;
-    }
-    const active = selectedCheck || checks[0];
-    if (!active) return;
-    setSelectedCheckId(active.id);
-    setCheckForm({
-      companyId: active.companyId || "",
-      checkNo: active.cekNo || active.checkNo || "",
-      bankName: active.banka || active.bankName || "",
-      branchName: active.sube || active.branchName || "",
-      dueDate: String(active.vadeTarihi || active.dueDate || "").slice(0, 10),
-      amount: decimalInputValue(active.tutar || active.amount),
-      status: active.durum || active.status || "PORTFOYDE",
-      checkType:
-        String(active.yon || active.direction || "IN").toUpperCase() === "OUT"
-           ? "TEDARIKCIYE_VERILEN"
-          : "MUSTERIDEN_ALINAN",
-      description: active.aciklama || active.description || "",
-      frontImageFile: null,
-      backImageFile: null,
-    });
-  }, [selectedCheck?.id, checksState.data]);
-
-  useEffect(() => {
-    if (!cards.length) {
-      setSelectedCardId("");
-      setCardForm(emptyCardForm());
-      return;
-    }
-    const active = selectedCard || cards[0];
-    if (!active) return;
-    setSelectedCardId(active.id);
-    setCardForm({
-      cardName: active.kartAdi || active.cardName || "",
-      bankName: active.banka || active.bankName || "",
-      lastFourDigits: active.son4Hane || active.lastFourDigits || "",
-      period: active.period || "",
-      totalDebt: decimalInputValue(active.totalDebt),
-      minimumPayment: decimalInputValue(active.minimumPayment),
-      dueDate: String(active.sonOdemeTarihi || active.dueDate || "").slice(
-        0,
-        10,
-      ),
-      statementDay: String(
-        active.statementDay || active.raw.statementDay || "",
-      ),
-      dueDay: String(active.dueDay || active.raw.dueDay || ""),
-      note: active.not || active.note || "",
-    });
-  }, [selectedCard?.id, cardsState.data]);
-
-  useEffect(() => {
-    if (!movements.length) {
-      setSelectedMovementId("");
-    }
-  }, [movements.length]);
-
-  const calendarRows = useMemo(() => {
-    const checkRows = checks.map((row) => ({
-      id: `check-${row?.id}`,
-      tip: "Çek",
-      tarih: row?.vadeTarihi || row?.dueDate || "",
-      baslik: row?.cekNo || row?.checkNo || "Çek",
-      firma: row?.firma || "-",
-      tutar: row?.tutar || row?.amount || 0,
-      durum: row?.durum || row?.status || "-",
-    }));
-    const cardRows = cards.map((row) => ({
-      id: `card-${row?.id}`,
-      tip: "Kart Ekstresi",
-      tarih: row?.sonOdemeTarihi || row?.dueDate || "",
-      baslik: `${row?.kartAdi || row?.cardName || "Kart"} ****${row?.son4Hane || row?.lastFourDigits || ""}`,
-      firma: row?.banka || row?.bankName || "-",
-      tutar: row?.totalDebt || 0,
-      durum: row.isActive === false ? "PASIF" : "AKTIF",
-    }));
-    return [...checkRows, ...cardRows].sort((a, b) =>
-      String(a.tarih || "").localeCompare(String(b.tarih || "")),
-    );
-  }, [cards, checks]);
-
-  const resetCheckForm = () => {
-    setSelectedCheckId("");
-    setCheckForm(emptyCheckForm());
-  };
-  const resetCardForm = () => {
-    setSelectedCardId("");
-    setCardForm(emptyCardForm());
-  };
-  const resetMovementForm = () => {
-    setSelectedMovementId("");
-    setMovementForm(emptyMovementForm());
-  };
-
-  const saveCheck = async (event) => {
-    event?.preventDefault();
-    const amount = Math.round(parseDecimalInput(checkForm.amount) * 100) / 100;
-    if (!checkForm.companyId) {
-      setFeedback("Çek için firma seçin.");
-      return;
-    }
-    if (!checkForm.checkNo.trim() || amount <= 0) {
-      setFeedback("Çek no ve tutar zorunlu.");
-      return;
-    }
-    setBusy(true);
-    setFeedback("");
-    try {
-      const payload = {
-        ...companyParamsBase,
-        companyId: checkForm.companyId,
-        firmId: checkForm.companyId,
-        checkNo: checkForm.checkNo,
-        bankName: checkForm.bankName,
-        branchName: checkForm.branchName,
-        dueDate: checkForm.dueDate,
-        amount,
-        status: checkForm.status,
-        checkType: checkForm.checkType,
-        description: checkForm.description,
-      };
-      const response = selectedCheckId
-        ? await apiPatch(
-            `/muhasebe/cekler/${encodeURIComponent(selectedCheckId)}`,
-            payload,
-          )
-        : await apiPost("/muhasebe/cekler", payload);
-      const saved = unwrap(response) || {};
-      if (saved?.id && checkForm.frontImageFile) {
-        const formData = new FormData();
-        formData.append("file", checkForm.frontImageFile);
-        formData.append(
-          "mainCompanySlug",
-          companyParamsBase.mainCompanySlug || "",
-        );
-        await apiUpload(
-          `/muhasebe/cheques/${encodeURIComponent(saved?.id)}/front-image`,
-          formData,
-        );
-      }
-      if (saved?.id && checkForm.backImageFile) {
-        const formData = new FormData();
-        formData.append("file", checkForm.backImageFile);
-        formData.append(
-          "mainCompanySlug",
-          companyParamsBase.mainCompanySlug || "",
-        );
-        await apiUpload(
-          `/muhasebe/cheques/${encodeURIComponent(saved?.id)}/back-image`,
-          formData,
-        );
-      }
-      setFeedback(
-        selectedCheckId ? "Çek kaydı güncellendi." : "Çek kaydı oluşturuldu.",
-      );
-      setSelectedCheckId(saved?.id || "");
-      reloadAll();
-    } catch (error) {
-      setFeedback(error?.message || "Çek kaydı yapılamadı.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const passiveCheck = async () => {
-    if (!selectedCheckId) return;
-    setBusy(true);
-    setFeedback("");
-    try {
-      await apiDelete(
-        `/muhasebe/cekler/${encodeURIComponent(selectedCheckId)}`,
-        companyParamsBase,
-      );
-      setFeedback("Çek pasife alındı.");
-      resetCheckForm();
-      reloadAll();
-    } catch (error) {
-      setFeedback(error?.message || "Çek pasife alınamadı.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveCard = async (event) => {
-    event?.preventDefault();
-    if (!cardForm.cardName.trim() || !String(cardForm.lastFourDigits).trim()) {
-      setFeedback("Kart adı ve son 4 hane zorunlu.");
-      return;
-    }
-    setBusy(true);
-    setFeedback("");
-    try {
-      const payload = {
-        ...companyParamsBase,
-        cardName: cardForm.cardName,
-        bankName: cardForm.bankName,
-        lastFourDigits: String(cardForm.lastFourDigits).slice(-4),
-        period: cardForm.period,
-        totalDebt: parseDecimalInput(cardForm.totalDebt),
-        minimumPayment: parseDecimalInput(cardForm.minimumPayment),
-        dueDate: cardForm.dueDate,
-        note: cardForm.note,
-        statementDay: cardForm.statementDay,
-        dueDay: cardForm.dueDay,
-      };
-      const response = selectedCardId
-        ? await apiPatch(
-            `/muhasebe/kredi-kartlari/${encodeURIComponent(selectedCardId)}`,
-            payload,
-          )
-        : await apiPost("/muhasebe/kredi-kartlari", payload);
-      const saved = unwrap(response) || {};
-      setFeedback(
-        selectedCardId ? "Kart güncellendi." : "Kart kaydı oluşturuldu.",
-      );
-      setSelectedCardId(saved?.id || "");
-      reloadAll();
-    } catch (error) {
-      setFeedback(error?.message || "Kart kaydı yapılamadı.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const passiveCard = async () => {
-    if (!selectedCardId) return;
-    setBusy(true);
-    setFeedback("");
-    try {
-      await apiPost(
-        `/muhasebe/kredi-kartlari/${encodeURIComponent(selectedCardId)}/pasife-al`,
-        companyParamsBase,
-      );
-      setFeedback("Kart pasife alındı.");
-      resetCardForm();
-      reloadAll();
-    } catch (error) {
-      setFeedback(error?.message || "Kart pasife alınamadı.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveMovement = async (event) => {
-    event?.preventDefault();
-    const amount =
-      Math.round(parseDecimalInput(movementForm.amount) * 100) / 100;
-    if (!movementForm.creditCardId || amount <= 0) {
-      setFeedback("Kart ve tutar zorunlu.");
-      return;
-    }
-    if (
-      movementForm.paymentMode === "FIRMA_ODEMESI" &&
-      !movementForm.companyId
-    ) {
-      setFeedback("Firma ödemesi için firma seçin.");
-      return;
-    }
-    setBusy(true);
-    setFeedback("");
-    try {
-      const payload = {
-        ...companyParamsBase,
-        creditCardId: movementForm.creditCardId,
-        amount,
-        tarih: movementForm.date,
-        belgeNo: movementForm.documentNo,
-        aciklama: movementForm.description,
-        companyId: movementForm.companyId,
-        firmId: movementForm.companyId,
-        installmentCount: Number(movementForm.installmentCount || 1),
-        paymentSource: movementForm.paymentSource,
-      };
-      const response =
-        movementForm.paymentMode === "FIRMA_ODEMESI"
-          ? await apiPost(
-              "/muhasebe/kredi-kart-hareketleri/firma-odemesi",
-              payload,
-            )
-          : await apiPost(
-              "/muhasebe/kredi-kart-hareketleri/ekstre-odemesi",
-              payload,
-            );
-      const saved = unwrap(response) || {};
-      const movement = saved?.creditCardMovement || saved;
-      if (movement.id && movementForm.slipFile) {
-        const formData = new FormData();
-        formData.append("file", movementForm.slipFile);
-        formData.append(
-          "mainCompanySlug",
-          companyParamsBase.mainCompanySlug || "",
-        );
-        await apiUpload(
-          `/muhasebe/kredi-kart-hareketleri/${encodeURIComponent(movement.id)}/gorsel`,
-          formData,
-        );
-      }
-      setFeedback(
-        movementForm.paymentMode === "FIRMA_ODEMESI"
-           ? "Kart firma ödemesi kaydedildi."
-          : "Ekstre ödemesi kaydedildi.",
-      );
-      setSelectedMovementId(movement.id || "");
-      resetMovementForm();
-      reloadAll();
-    } catch (error) {
-      setFeedback(error?.message || "Kart hareketi kaydedilemedi.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mh-action-stack">
-      <div className="mh-cari-tabs">
-        {[
-          ["checks", "Çekler"],
-          ["cards", "Kredi Kartları"],
-          ["movements", "Kart Hareketleri"],
-          ["calendar", "Ödeme Takvimi"],
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            className={`mh-tab-btn ${subTab === value ? "active" : ""}`}
-            type="button"
-            onClick={() => setSubTab(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {feedback ? <div className="mh-state">{feedback}</div> : null}
-
-      {subTab === "checks" ? (
-        <div className="mh-layout-2">
-          <Card title="Çek Listesi">
-            <StatusBlock state={checksState} emptyText="Çek kaydı yok." />
-            <DataTable
-              columns={["Firma", "Çek No", "Banka", "Vade", "Tutar", "Durum"]}
-              rows={checks}
-              renderRow={(row) => (
-                <tr key={row?.id} onClick={() => setSelectedCheckId(row?.id)}>
-                  <td>{row?.firma || "-"}</td>
-                  <td>{row?.cekNo || row?.checkNo || "-"}</td>
-                  <td>{row?.banka || row?.bankName || "-"}</td>
-                  <td>{date(row?.vadeTarihi || row?.dueDate)}</td>
-                  <td>{money(row?.tutar || row?.amount)}</td>
-                  <td>
-                    <Badge tone={toneFromStatus(row?.durum || row?.status)}>
-                      {row?.durum || row?.status || "-"}
-                    </Badge>
-                  </td>
-                </tr>
-              )}
-            />
-          </Card>
-          <Card title={selectedCheckId ? "Çek Detayı" : "Yeni Çek Girişi"}>
-            <form className="mh-action-stack" onSubmit={saveCheck}>
-              <SearchableFirmField
-                label="Firma Arama"
-                selectedCompanyId={checkForm.companyId}
-                companies={companies}
-                onSelect={(companyId) =>
-                  setCheckForm({ ...checkForm, companyId })
-                }
-              />
-              <Field label="Çek Türü">
-                <div className="mh-cari-quick-row two">
-                  {[
-                    ["MUSTERIDEN_ALINAN", "Müşteriden Alınan"],
-                    ["TEDARIKCIYE_VERILEN", "Tedarikçiye Verilen"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={`mh-btn ${checkForm.checkType === value ? "primary" : ""}`}
-                      type="button"
-                      onClick={() =>
-                        setCheckForm({ ...checkForm, checkType: value })
-                      }
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="Çek No">
-                <input
-                  value={checkForm.checkNo}
-                  onChange={(event) =>
-                    setCheckForm({ ...checkForm, checkNo: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Banka">
-                <input
-                  value={checkForm.bankName}
-                  onChange={(event) =>
-                    setCheckForm({ ...checkForm, bankName: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Şube">
-                <input
-                  value={checkForm.branchName}
-                  onChange={(event) =>
-                    setCheckForm({
-                      ...checkForm,
-                      branchName: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Vade">
-                <input
-                  type="date"
-                  value={checkForm.dueDate}
-                  onChange={(event) =>
-                    setCheckForm({ ...checkForm, dueDate: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Tutar">
-                <input
-                  value={checkForm.amount}
-                  onChange={(event) =>
-                    setCheckForm({ ...checkForm, amount: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Durum">
-                <select
-                  value={checkForm.status}
-                  onChange={(event) =>
-                    setCheckForm({ ...checkForm, status: event?.target.value })
-                  }
-                >
-                  <option value="PORTFOYDE">Portföyde</option>
-                  <option value="BANKADA">Bankada</option>
-                  <option value="TAHSIL">Tahsil</option>
-                  <option value="IADE">İade</option>
-                  <option value="IPTAL">İptal</option>
-                </select>
-              </Field>
-              <Field label="Açıklama">
-                <textarea
-                  value={checkForm.description}
-                  onChange={(event) =>
-                    setCheckForm({
-                      ...checkForm,
-                      description: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Ön Yüz Görseli">
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(event) =>
-                    setCheckForm({
-                      ...checkForm,
-                      frontImageFile: event?.target.files?.[0] || null,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Arka Yüz Görseli">
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(event) =>
-                    setCheckForm({
-                      ...checkForm,
-                      backImageFile: event?.target.files?.[0] || null,
-                    })
-                  }
-                />
-              </Field>
-              <div className="mh-button-row">
-                <button
-                  className="mh-btn"
-                  type="button"
-                  onClick={resetCheckForm}
-                >
-                  Yeni Kayıt
-                </button>
-                <button
-                  className="mh-btn primary"
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy
-                     ? "Kaydediliyor..."
-                    : selectedCheckId
-                       ? "Güncelle"
-                      : "Kaydet"}
-                </button>
-                <button
-                  className="mh-btn"
-                  type="button"
-                  disabled={!selectedCheckId || busy}
-                  onClick={passiveCheck}
-                >
-                  Pasife Al
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      ) : null}
-
-      {subTab === "cards" ? (
-        <div className="mh-layout-2">
-          <Card title="Kredi Kartları">
-            <StatusBlock state={cardsState} emptyText="Kart kaydı yok." />
-            <DataTable
-              columns={["Kart", "Banka", "Son 4", "Borç", "Son Ödeme"]}
-              rows={cards}
-              renderRow={(row) => (
-                <tr key={row?.id} onClick={() => setSelectedCardId(row?.id)}>
-                  <td>{row?.kartAdi || row?.cardName || "-"}</td>
-                  <td>{row?.banka || row?.bankName || "-"}</td>
-                  <td>****{row?.son4Hane || row?.lastFourDigits || ""}</td>
-                  <td>{money(row?.totalDebt)}</td>
-                  <td>{date(row?.sonOdemeTarihi || row?.dueDate)}</td>
-                </tr>
-              )}
-            />
-          </Card>
-          <Card title={selectedCardId ? "Kart Detayı" : "Yeni Kart"}>
-            <form className="mh-action-stack" onSubmit={saveCard}>
-              <Field label="Kart Adı">
-                <input
-                  value={cardForm.cardName}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, cardName: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Banka">
-                <input
-                  value={cardForm.bankName}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, bankName: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Son 4 Hane">
-                <input
-                  maxLength="4"
-                  value={cardForm.lastFourDigits}
-                  onChange={(event) =>
-                    setCardForm({
-                      ...cardForm,
-                      lastFourDigits: event?.target.value
-                        .replace(/\D/g, "")
-                        .slice(-4),
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Dönem">
-                <input
-                  value={cardForm.period}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, period: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Ekstre Günü">
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={cardForm.statementDay}
-                  onChange={(event) =>
-                    setCardForm({
-                      ...cardForm,
-                      statementDay: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Son Ödeme Günü">
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={cardForm.dueDay}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, dueDay: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Toplam Borç">
-                <input
-                  value={cardForm.totalDebt}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, totalDebt: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Minimum Ödeme">
-                <input
-                  value={cardForm.minimumPayment}
-                  onChange={(event) =>
-                    setCardForm({
-                      ...cardForm,
-                      minimumPayment: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Son Ödeme Tarihi">
-                <input
-                  type="date"
-                  value={cardForm.dueDate}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, dueDate: event?.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Not">
-                <textarea
-                  value={cardForm.note}
-                  onChange={(event) =>
-                    setCardForm({ ...cardForm, note: event?.target.value })
-                  }
-                />
-              </Field>
-              <div className="mh-button-row">
-                <button
-                  className="mh-btn"
-                  type="button"
-                  onClick={resetCardForm}
-                >
-                  Yeni Kayıt
-                </button>
-                <button
-                  className="mh-btn primary"
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy
-                     ? "Kaydediliyor..."
-                    : selectedCardId
-                       ? "Güncelle"
-                      : "Kaydet"}
-                </button>
-                <button
-                  className="mh-btn"
-                  type="button"
-                  disabled={!selectedCardId || busy}
-                  onClick={passiveCard}
-                >
-                  Pasife Al
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      ) : null}
-
-      {subTab === "movements" ? (
-        <div className="mh-layout-2">
-          <Card title="Kart Hareketleri">
-            <StatusBlock
-              state={movementsState}
-              emptyText="Kart hareketi yok."
-            />
-            <DataTable
-              columns={["Tarih", "Kart", "Firma", "Belge", "Tutar", "Tip"]}
-              rows={movements}
-              renderRow={(row) => (
-                <tr key={row?.id} onClick={() => setSelectedMovementId(row?.id)}>
-                  <td>{date(row?.date)}</td>
-                  <td>
-                    {row?.cardName || "Kart"} ****{row?.lastFourDigits || ""}
-                  </td>
-                  <td>{row?.firmName || "-"}</td>
-                  <td>{row?.documentNo || "-"}</td>
-                  <td>{money(row?.amount)}</td>
-                  <td>{row?.movementType || "-"}</td>
-                </tr>
-              )}
-            />
-            {selectedMovement.slipImageUrl ? (
-              <Impact title="Seçili Hareket Görseli">
-                <a
-                  href={buildApiUrl(selectedMovement.slipImageUrl)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Görseli Aç
-                </a>
-              </Impact>
-            ) : null}
-          </Card>
-          <Card title="Yeni Kart Hareketi">
-            <form className="mh-action-stack" onSubmit={saveMovement}>
-              <Field label="İşlem Tipi">
-                <div className="mh-cari-quick-row two">
-                  {[
-                    ["FIRMA_ODEMESI", "Firma Ödemesi"],
-                    ["EKSTRE_ODEMESI", "Ekstre Ödemesi"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={`mh-btn ${movementForm.paymentMode === value ? "primary" : ""}`}
-                      type="button"
-                      onClick={() =>
-                        setMovementForm({ ...movementForm, paymentMode: value })
-                      }
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="Kart">
-                <select
-                  value={movementForm.creditCardId}
-                  onChange={(event) =>
-                    setMovementForm({
-                      ...movementForm,
-                      creditCardId: event?.target.value,
-                    })
-                  }
-                >
-                  <option value="">Kart seç</option>
-                  {cards.map((row) => (
-                    <option key={row?.id} value={row?.id}>
-                      {row?.kartAdi || row?.cardName || "Kart"} /{" "}
-                      {row?.banka || row?.bankName || ""} ****
-                      {row?.son4Hane || row?.lastFourDigits || ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              {movementForm.paymentMode === "FIRMA_ODEMESI" ? (
-                <SearchableFirmField
-                  label="Firma Arama"
-                  selectedCompanyId={movementForm.companyId}
-                  companies={companies}
-                  onSelect={(companyId) =>
-                    setMovementForm({ ...movementForm, companyId })
-                  }
-                />
-              ) : null}
-              <Field label="Tutar">
-                <input
-                  value={movementForm.amount}
-                  onChange={(event) =>
-                    setMovementForm({
-                      ...movementForm,
-                      amount: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Tarih">
-                <input
-                  type="date"
-                  value={movementForm.date}
-                  onChange={(event) =>
-                    setMovementForm({
-                      ...movementForm,
-                      date: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Belge No">
-                <input
-                  value={movementForm.documentNo}
-                  onChange={(event) =>
-                    setMovementForm({
-                      ...movementForm,
-                      documentNo: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              {movementForm.paymentMode === "FIRMA_ODEMESI" ? (
-                <Field label="Taksit Sayısı">
-                  <input
-                    type="number"
-                    min="1"
-                    value={movementForm.installmentCount}
-                    onChange={(event) =>
-                      setMovementForm({
-                        ...movementForm,
-                        installmentCount: event?.target.value,
-                      })
-                    }
-                  />
-                </Field>
-              ) : (
-                <Field label="Ödeme Kaynağı">
-                  <select
-                    value={movementForm.paymentSource}
-                    onChange={(event) =>
-                      setMovementForm({
-                        ...movementForm,
-                        paymentSource: event?.target.value,
-                      })
-                    }
-                  >
-                    <option value="BANKA">Banka</option>
-                    <option value="KASA">Kasa</option>
-                  </select>
-                </Field>
-              )}
-              <Field label="Açıklama">
-                <textarea
-                  value={movementForm.description}
-                  onChange={(event) =>
-                    setMovementForm({
-                      ...movementForm,
-                      description: event?.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Slip / Görsel">
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(event) =>
-                    setMovementForm({
-                      ...movementForm,
-                      slipFile: event?.target.files?.[0] || null,
-                    })
-                  }
-                />
-              </Field>
-              <div className="mh-button-row">
-                <button
-                  className="mh-btn"
-                  type="button"
-                  onClick={resetMovementForm}
-                >
-                  Temizle
-                </button>
-                <button
-                  className="mh-btn primary"
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy ? "Kaydediliyor..." : "Kaydet"}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      ) : null}
-
-      {subTab === "calendar" ? (
-        <Card title="Ödeme Takvimi">
-          <div className="mh-chip-row">
-            <span className="mh-chip">
-              Yaklaşan kayıt: {calendarRows.length}
-            </span>
-            <span className="mh-chip">Çek: {checks.length}</span>
-            <span className="mh-chip">Kart: {cards.length}</span>
-          </div>
-          <DataTable
-            columns={[
-              "Tip",
-              "Tarih",
-              "Bağlık",
-              "Firma / Banka",
-              "Tutar",
-              "Durum",
-            ]}
-            rows={calendarRows}
-            renderRow={(row) => (
-              <tr key={row?.id}>
-                <td>{row?.tip}</td>
-                <td>{date(row?.tarih)}</td>
-                <td>{row?.baslik}</td>
-                <td>{row?.firma}</td>
-                <td>{money(row?.tutar)}</td>
-                <td>
-                  <Badge tone={toneFromStatus(row?.durum)}>{row?.durum}</Badge>
-                </td>
-              </tr>
-            )}
-          />
-        </Card>
-      ) : null}
-    </div>
   );
 }
 
@@ -6018,8 +5286,10 @@ function normalizeFirm(row = {}) {
     adres: row?.adres || row?.address || "",
     varsayilanKdv: row?.varsayilanKdv ?? row?.defaultVatRate ?? 20,
     acilisBakiyesi: row?.acilisBakiyesi ?? row?.openingBalance ?? 0,
-    acilisBakiyeTarihi: row?.acilisBakiyeTarihi || row?.openingBalanceDate || "",
-    borcAlacakYonu: row?.borcAlacakYonu || row?.openingBalanceDirection || "BORC",
+    acilisBakiyeTarihi:
+      row?.acilisBakiyeTarihi || row?.openingBalanceDate || "",
+    borcAlacakYonu:
+      row?.borcAlacakYonu || row?.openingBalanceDirection || "BORC",
     devredenKdv: row?.devredenKdv ?? row?.openingVatAmount ?? 0,
     devredenKdvAyi: row?.devredenKdvAyi || row?.openingVatPeriod || "",
     vadeGunu: row?.vadeGunu ?? row?.dueDay ?? "",
@@ -6035,20 +5305,46 @@ function normalizeFirm(row = {}) {
       row?.companyTransactionProfile || row?.calismaProfili || "SUPPLIER",
     expenseCalculationMode:
       row?.expenseCalculationMode || row?.giderHesaplamaTipi || "FULL",
+    defaultVatType:
+      row?.defaultVatType || row?.varsayilanKdvTipi || "INDIRILECEK_KDV",
+    currentAccountPostingMode:
+      row?.currentAccountPostingMode ||
+      row?.cariKayitModu ||
+      (row?.expenseCalculationMode === "VAT_ONLY" || row?.vatOnlyExpense
+        ? "VAT_PERCENTAGE"
+        : row?.trackReceivablePayable === false
+          ? "NONE"
+          : "FULL_DOCUMENT"),
+    vatPayablePercentage: Number(
+      row?.vatPayablePercentage ?? row?.kdvCariBorcYuzdesi ?? 0,
+    ),
     vatOnlyExpense: Boolean(row?.vatOnlyExpense || row?.sadeceKdvKullan),
     trackReceivablePayable: row?.trackReceivablePayable !== false,
     defaultCashSettlement: Boolean(row?.defaultCashSettlement),
-    cariTakipDisi: Boolean(row?.cariTakipDisi || row?.trackReceivablePayable === false),
+    cariTakipDisi: Boolean(
+      row?.cariTakipDisi || row?.trackReceivablePayable === false,
+    ),
     cariBakiyesiBilgiAmacli: Boolean(row?.cariBakiyesiBilgiAmacli),
+    defaultReportBehavior:
+      row?.defaultReportBehavior ||
+      row?.varsayilanRaporDavranisi ||
+      "KONTROL_BEKLIYOR",
+    defaultGeneralExpense:
+      row?.defaultGeneralExpense ||
+      row?.genelGiderVarsayilani ||
+      "KONTROL_BEKLIYOR",
     mevcutBakiye,
     bakiye: mevcutBakiye,
-    gercekCariBakiye: Number(row?.gercekCariBakiye ?? row?.rawCariBakiye ?? mevcutBakiye),
+    gercekCariBakiye: Number(
+      row?.gercekCariBakiye ?? row?.rawCariBakiye ?? mevcutBakiye,
+    ),
     toplamBorc: Number(row?.toplamBorc ?? row?.borc ?? 0),
     toplamAlacak: Number(row?.toplamAlacak ?? row?.alacak ?? 0),
-    sonIslemTarihi: row?.sonIslemTarihi || row?.sonIslem || row?.updatedAt || "",
+    sonIslemTarihi:
+      row?.sonIslemTarihi || row?.sonIslem || row?.updatedAt || "",
     bakiyeYonu:
       row?.cariTakipDisi || row?.trackReceivablePayable === false
-         ? "CARI_TAKIP_DISI"
+        ? "CARI_TAKIP_DISI"
         : row?.bakiyeYonu || balanceDirectionValue(mevcutBakiye),
     mailKisileri: row?.mailKisileri || row?.contacts || [],
   };
@@ -6060,7 +5356,10 @@ function normalizeCompanyMatchText(value) {
     .replace(/ı/g, "i")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\u011f\u00fc\u015f\u0131\u00f6\u00e7\u0130\u011e\u00dc\u015e\u00d6\u00c7]+/gi, " ")
+    .replace(
+      /[^a-z0-9\u011f\u00fc\u015f\u0131\u00f6\u00e7\u0130\u011e\u00dc\u015e\u00d6\u00c7]+/gi,
+      " ",
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -6128,8 +5427,13 @@ function emptyCompanyForm() {
     varsayilanRaporKategoriId: "",
     companyTransactionProfile: "SUPPLIER",
     expenseCalculationMode: "FULL",
+    defaultVatType: "INDIRILECEK_KDV",
+    currentAccountPostingMode: "FULL_DOCUMENT",
+    vatPayablePercentage: 0,
     trackReceivablePayable: true,
     defaultCashSettlement: false,
+    defaultReportBehavior: "KONTROL_BEKLIYOR",
+    defaultGeneralExpense: "KONTROL_BEKLIYOR",
   };
 }
 
@@ -6146,7 +5450,14 @@ function accountingModeOf(form) {
   ) {
     return "SADECE_KDV";
   }
-  if (form.companyTransactionProfile === "UNOFFICIAL_EXPENSE") return "GAYRI_GIDER";
+  if (
+    form.trackReceivablePayable !== false &&
+    form.defaultVatType === "KDV_YOK"
+  ) {
+    return "SADECE_CARI";
+  }
+  if (form.companyTransactionProfile === "UNOFFICIAL_EXPENSE")
+    return "GAYRI_GIDER";
   if (
     form.companyTransactionProfile === "CASH_EXPENSE" ||
     form.trackReceivablePayable === false ||
@@ -6159,7 +5470,11 @@ function accountingModeOf(form) {
 
 function officialAccountingModeOf(form) {
   if (accountingModeOf(form) === "SADECE_KDV") return "RESMI_SADECE_KDV";
-  if (form.companyTransactionProfile === "UNOFFICIAL_EXPENSE" || form.resmiGayri === "GAYRI") {
+  if (accountingModeOf(form) === "SADECE_CARI") return "RESMI_SADECE_CARI";
+  if (
+    form.companyTransactionProfile === "UNOFFICIAL_EXPENSE" ||
+    form.resmiGayri === "GAYRI"
+  ) {
     return "GAYRI_GIDER";
   }
   if (accountingModeOf(form) === "PESIN_KDV") return "RESMI_PESIN_KDV";
@@ -6174,9 +5489,13 @@ function applyAccountingMode(current, mode) {
       expenseCalculationMode: "VAT_ONLY",
       trackReceivablePayable: false,
       defaultCashSettlement: true,
+      defaultVatType: "INDIRILECEK_KDV",
+      currentAccountPostingMode: "VAT_PERCENTAGE",
+      defaultReportBehavior: "DAHIL",
+      defaultGeneralExpense: "GIDER_DISI",
       firmaTuru:
         current?.firmaTuru && current?.firmaTuru !== "TEDARIKCI"
-           ? current?.firmaTuru
+          ? current?.firmaTuru
           : "HIZMET_SAGLAYICI",
     };
   }
@@ -6187,9 +5506,11 @@ function applyAccountingMode(current, mode) {
       expenseCalculationMode: "FULL",
       trackReceivablePayable: false,
       defaultCashSettlement: true,
+      defaultVatType: "INDIRILECEK_KDV",
+      currentAccountPostingMode: "NONE",
       firmaTuru:
         current?.firmaTuru && current?.firmaTuru !== "TEDARIKCI"
-           ? current?.firmaTuru
+          ? current?.firmaTuru
           : "HIZMET_SAGLAYICI",
     };
   }
@@ -6198,8 +5519,28 @@ function applyAccountingMode(current, mode) {
       ...current,
       companyTransactionProfile: "UNOFFICIAL_EXPENSE",
       expenseCalculationMode: "FULL",
-      trackReceivablePayable: false,
-      defaultCashSettlement: true,
+      trackReceivablePayable: true,
+      defaultCashSettlement: false,
+      defaultVatType: "KDV_YOK",
+      currentAccountPostingMode: "FULL_DOCUMENT",
+      resmiGayri: "GAYRI",
+      varsayilanKdv: 0,
+      devredenKdv: 0,
+    };
+  }
+  if (mode === "SADECE_CARI") {
+    return {
+      ...current,
+      companyTransactionProfile: profileForFirmType(current?.firmaTipi),
+      expenseCalculationMode: "FULL",
+      trackReceivablePayable: true,
+      defaultCashSettlement: false,
+      defaultVatType: "KDV_YOK",
+      currentAccountPostingMode: "FULL_DOCUMENT",
+      varsayilanKdv: 0,
+      devredenKdv: 0,
+      defaultReportBehavior: "HARIC",
+      defaultGeneralExpense: "GIDER_DISI",
     };
   }
   return {
@@ -6208,6 +5549,8 @@ function applyAccountingMode(current, mode) {
     expenseCalculationMode: "FULL",
     trackReceivablePayable: true,
     defaultCashSettlement: false,
+    defaultVatType: "INDIRILECEK_KDV",
+    currentAccountPostingMode: "FULL_DOCUMENT",
   };
 }
 
@@ -6221,6 +5564,12 @@ function applyOfficialAccountingMode(current, mode) {
   if (mode === "RESMI_PESIN_KDV") {
     return {
       ...applyAccountingMode(current, "PESIN_KDV"),
+      resmiGayri: "RESMI",
+    };
+  }
+  if (mode === "RESMI_SADECE_CARI") {
+    return {
+      ...applyAccountingMode(current, "SADECE_CARI"),
       resmiGayri: "RESMI",
     };
   }
@@ -6240,6 +5589,7 @@ function officialAccountingLabel(form) {
   const mode = officialAccountingModeOf(form);
   if (mode === "RESMI_SADECE_KDV") return "Resmi - sadece KDV / gider dışı";
   if (mode === "RESMI_PESIN_KDV") return "Resmi - peşin alış / KDV";
+  if (mode === "RESMI_SADECE_CARI") return "Resmi - sadece cari / KDV yok";
   if (mode === "GAYRI_GIDER") return "Gayri resmi gider";
   return "Resmi - cari takip";
 }
@@ -6280,6 +5630,17 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
   const [savingFirm, setSavingFirm] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [hiddenFirmIds, setHiddenFirmIds] = useState([]);
+  const [selectedFirmIds, setSelectedFirmIds] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    mode: "RESMI_PESIN_KDV",
+    categoryId: "",
+    reportBehavior: "DAHIL",
+    generalExpense: "GENEL_GIDER",
+    vatPayablePercentage: 0,
+  });
   const visibleCompanies = useMemo(
     () =>
       companies.filter((row) => {
@@ -6291,7 +5652,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
     [companies, filters.active, hiddenFirmIds],
   );
   const selected = isNewFirm
-     ? {}
+    ? {}
     : visibleCompanies.find(
         (row) => row.id === (selectedId || visibleCompanies[0].id),
       ) ||
@@ -6325,7 +5686,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
       .filter((row) => row?.score >= 72)
       .sort((a, b) => b.score - a.score)
       .slice(0, 4);
-  }, [visibleCompanies, form.firmaAdi, form.vergiNo, selected.id]);
+  }, [visibleCompanies, form.firmaAdi, form.vergiNo, selected?.id]);
 
   useEffect(() => {
     if (isNewFirm) return;
@@ -6379,13 +5740,37 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
         selected.expenseCalculationMode ||
         selected.giderHesaplamaTipi ||
         (selected.vatOnlyExpense ? "VAT_ONLY" : "FULL"),
+      defaultVatType:
+        selected.defaultVatType ||
+        selected.varsayilanKdvTipi ||
+        (selected.resmiGayri === "GAYRI" ? "KDV_YOK" : "INDIRILECEK_KDV"),
+      currentAccountPostingMode:
+        selected.currentAccountPostingMode ||
+        selected.cariKayitModu ||
+        (selected.vatOnlyExpense
+          ? "VAT_PERCENTAGE"
+          : selected.trackReceivablePayable === false
+            ? "NONE"
+            : "FULL_DOCUMENT"),
+      vatPayablePercentage: Number(
+        selected.vatPayablePercentage ?? selected.kdvCariBorcYuzdesi ?? 0,
+      ),
       trackReceivablePayable:
-        selected.trackReceivablePayable !== false && selected.cariTakipDisi !== true,
+        selected.trackReceivablePayable !== false &&
+        selected.cariTakipDisi !== true,
       defaultCashSettlement: Boolean(
         selected.defaultCashSettlement || selected.varsayilanPesinKapama,
       ),
+      defaultReportBehavior:
+        selected.defaultReportBehavior ||
+        selected.varsayilanRaporDavranisi ||
+        "KONTROL_BEKLIYOR",
+      defaultGeneralExpense:
+        selected.defaultGeneralExpense ||
+        selected.genelGiderVarsayilani ||
+        "KONTROL_BEKLIYOR",
     });
-  }, [isNewFirm, selected.id]);
+  }, [isNewFirm, selected.acilisBakiyeTarihi, selected.acilisBakiyesi, selected.adres, selected.aktif, selected.bakiye, selected.borcAlacakYonu, selected.calismaProfili, selected.cariKayitModu, selected.cariTakipDisi, selected.companyTransactionProfile, selected.currentAccountPostingMode, selected.defaultCashSettlement, selected.defaultGeneralExpense, selected.defaultReportBehavior, selected.defaultVatType, selected.devredenKdv, selected.devredenKdvAyi, selected.email, selected.expenseCalculationMode, selected.firmaAdi, selected.firmaTipi, selected.firmaTuru, selected.genelGiderVarsayilani, selected.giderHesaplamaTipi, selected.id, selected.kdvCariBorcYuzdesi, selected.kisaAd, selected.mevcutBakiye, selected.not, selected.raporKategorisiId, selected.resmiGayri, selected.riskLimiti, selected.telefon, selected.trackReceivablePayable, selected.vadeGunu, selected.varsayilanKdv, selected.varsayilanKdvTipi, selected.varsayilanPesinKapama, selected.varsayilanRaporDavranisi, selected.varsayilanRaporKategoriId, selected.vatOnlyExpense, selected.vatPayablePercentage, selected.vergiDairesi, selected.vergiNo]);
 
   const payload = {
     ...companyParams(activeMainCompany),
@@ -6428,34 +5813,42 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
     firmaTuru: form.firmaTuru,
     varsayilanRaporKategoriId: form.varsayilanRaporKategoriId || null,
     raporKategoriId: form.varsayilanRaporKategoriId || null,
+    defaultReportBehavior: form.defaultReportBehavior,
+    varsayilanRaporDavranisi: form.defaultReportBehavior,
+    defaultGeneralExpense: form.defaultGeneralExpense,
+    genelGiderVarsayilani: form.defaultGeneralExpense,
     companyTransactionProfile: form.companyTransactionProfile,
     calismaProfili: form.companyTransactionProfile,
     expenseCalculationMode: form.expenseCalculationMode || "FULL",
     giderHesaplamaTipi: form.expenseCalculationMode || "FULL",
+    currentAccountPostingMode: form.currentAccountPostingMode,
+    cariKayitModu: form.currentAccountPostingMode,
+    vatPayablePercentage: Math.min(
+      100,
+      Math.max(0, Number(form.vatPayablePercentage || 0)),
+    ),
+    kdvCariBorcYuzdesi: Math.min(
+      100,
+      Math.max(0, Number(form.vatPayablePercentage || 0)),
+    ),
     trackReceivablePayable: Boolean(form.trackReceivablePayable),
     cariTakipEdilsin: Boolean(form.trackReceivablePayable),
     defaultCashSettlement: Boolean(form.defaultCashSettlement),
     varsayilanPesinKapama: Boolean(form.defaultCashSettlement),
     defaultSupplierPostingType: form.trackReceivablePayable
-       ? "OPEN_PAYABLE"
+      ? "OPEN_PAYABLE"
       : form.expenseCalculationMode === "VAT_ONLY"
         ? "VAT_ONLY_EXPENSE"
-      : "PAID_EXPENSE",
+        : "PAID_EXPENSE",
     varsayilanTedarikciIslemTipi: form.trackReceivablePayable
-       ? "OPEN_PAYABLE"
+      ? "OPEN_PAYABLE"
       : form.expenseCalculationMode === "VAT_ONLY"
         ? "VAT_ONLY_EXPENSE"
-      : "PAID_EXPENSE",
+        : "PAID_EXPENSE",
     defaultPaymentStatus: form.defaultCashSettlement ? "PAID" : "UNPAID",
     varsayilanOdemeDurumu: form.defaultCashSettlement ? "PAID" : "UNPAID",
-    defaultVatType:
-      form.companyTransactionProfile === "UNOFFICIAL_EXPENSE"
-         ? "KDV_YOK"
-        : "INDIRILECEK_KDV",
-    varsayilanKdvTipi:
-      form.companyTransactionProfile === "UNOFFICIAL_EXPENSE"
-         ? "KDV_YOK"
-        : "INDIRILECEK_KDV",
+    defaultVatType: form.defaultVatType,
+    varsayilanKdvTipi: form.defaultVatType,
   };
 
   const save = async (event) => {
@@ -6476,6 +5869,14 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
             )
           : await apiPost("/muhasebe/firmalar", payload);
       const saved = unwrap(response);
+      if (saved?.id) {
+        await apiPost("/muhasebe/accounting/sync/company-rules", {
+          ...companyParams(activeMainCompany),
+          companyId: saved.id,
+          dryRun: false,
+          preserveExplicitOverrides: true,
+        });
+      }
       if (!isNewFirm && selected.id) {
         const currentBalance = parseMoneyInput(selected.mevcutBakiye ?? 0);
         const targetBalance = parseMoneyInput(form.mevcutBakiye);
@@ -6498,7 +5899,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
       const candidates = error?.payload.candidates || [];
       setFeedback(
         candidates.length
-           ? "Backend de benzer firma yakaladı. Önerilen kayıtla eşleştirin."
+          ? "Backend de benzer firma yakaladı. Önerilen kayıtla eşleştirin."
           : error?.message || "Firma kaydedilemedi.",
       );
     } finally {
@@ -6541,7 +5942,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
       }));
       setFeedback(
         selected.id && !isNewFirm
-           ? `"${form.firmaAdi}" kaydı "${targetCompany.firmaAdi}" firmasına birleştirildi. Hareketler tek firmaya taşındı.`
+          ? `"${form.firmaAdi}" kaydı "${targetCompany.firmaAdi}" firmasına birleştirildi. Hareketler tek firmaya taşındı.`
           : `"${form.firmaAdi}" adı "${targetCompany.firmaAdi}" firmasına eşleştirildi. Yeni firma açılmadı.`,
       );
       reloadAll();
@@ -6575,8 +5976,61 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
     setForm(emptyCompanyForm());
   };
 
+  const applyBulk = async () => {
+    if (!selectedFirmIds.length)
+      return setFeedback("Seri işlem için en az bir firma seçin.");
+    const modeForm = applyOfficialAccountingMode(
+      emptyCompanyForm(),
+      bulkForm.mode,
+    );
+    setBulkSaving(true);
+    try {
+      await apiPost("/muhasebe/firmalar/toplu-siniflandirma", {
+        ...companyParams(activeMainCompany),
+        ids: selectedFirmIds,
+        companyTransactionProfile: modeForm.companyTransactionProfile,
+        expenseCalculationMode: modeForm.expenseCalculationMode,
+        trackReceivablePayable: modeForm.trackReceivablePayable,
+        defaultCashSettlement: modeForm.defaultCashSettlement,
+        defaultSupplierPostingType: modeForm.trackReceivablePayable
+          ? "OPEN_PAYABLE"
+          : modeForm.expenseCalculationMode === "VAT_ONLY"
+            ? "VAT_ONLY_EXPENSE"
+            : "PAID_EXPENSE",
+        defaultPaymentStatus: modeForm.defaultCashSettlement
+          ? "PAID"
+          : "UNPAID",
+        defaultVatType:
+          ["GAYRI_GIDER", "RESMI_SADECE_CARI"].includes(bulkForm.mode)
+            ? "KDV_YOK"
+            : "INDIRILECEK_KDV",
+        currentAccountPostingMode:
+          bulkForm.mode === "RESMI_SADECE_KDV"
+            ? "VAT_PERCENTAGE"
+            : modeForm.trackReceivablePayable
+              ? "FULL_DOCUMENT"
+              : "NONE",
+        vatPayablePercentage:
+          bulkForm.mode === "RESMI_SADECE_KDV"
+            ? Math.min(100, Math.max(0, Number(bulkForm.vatPayablePercentage || 0)))
+            : 0,
+        varsayilanRaporKategoriId: bulkForm.categoryId || undefined,
+        defaultReportBehavior: bulkForm.reportBehavior,
+        defaultGeneralExpense: bulkForm.generalExpense,
+      });
+      setFeedback(`${selectedFirmIds.length} firma seri işlemle güncellendi.`);
+      setSelectedFirmIds([]);
+      setBulkOpen(false);
+      reloadAll();
+    } catch (error) {
+      setFeedback(error?.message || "Seri işlem uygulanamadı.");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   return (
-    <div className="mh-layout-3 contact">
+    <div className="mh-layout-3 contact mh-company-cards-page">
       <Card title="Firma Listesi">
         <div className="mh-action-stack">
           <input
@@ -6640,19 +6094,168 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
               <option value="BOTH">İkisi</option>
             </select>
           </div>
+          <div className="mh-company-bulk-bar">
+            {selectionMode ? <label>
+              <input
+                type="checkbox"
+                checked={
+                  visibleCompanies.length > 0 &&
+                  selectedFirmIds.length === visibleCompanies.length
+                }
+                onChange={(event) =>
+                  setSelectedFirmIds(
+                    event.target.checked
+                      ? visibleCompanies.map((row) => row.id)
+                      : [],
+                  )
+                }
+              />{" "}
+              Tümünü seç
+            </label> : null}
+            <button
+              className={`mh-btn ${selectionMode ? "" : "primary"}`}
+              type="button"
+              onClick={() => {
+                if (!selectionMode) setSelectionMode(true);
+                else if (selectedFirmIds.length) setBulkOpen(true);
+                else { setSelectionMode(false); setSelectedFirmIds([]); }
+              }}
+            >
+              {selectionMode ? selectedFirmIds.length ? `Ayarları Aç (${selectedFirmIds.length})` : "Seri İşlemi Kapat" : "Seri İşlem Modu"}
+            </button>
+          </div>
         </div>
+        {bulkOpen ? (
+          <div className="mh-company-bulk-panel">
+            <div className="mh-company-bulk-title"><div><strong>Seçili Firmaları Toplu Düzenle</strong><span>{selectedFirmIds.length} firma seçildi</span></div><button type="button" onClick={() => setBulkOpen(false)} aria-label="Kapat">×</button></div>
+            <label>
+              İşlem davranışı
+              <select
+                value={bulkForm.mode}
+                onChange={(event) => {
+                  const mode = event.target.value;
+                  setBulkForm({
+                    ...bulkForm,
+                    mode,
+                    reportBehavior:
+                      mode === "RESMI_SADECE_CARI"
+                        ? "HARIC"
+                        : bulkForm.reportBehavior,
+                    generalExpense:
+                      ["RESMI_SADECE_CARI", "RESMI_SADECE_KDV"].includes(mode)
+                        ? "GIDER_DISI"
+                        : bulkForm.generalExpense,
+                  });
+                }}
+              >
+                <option value="RESMI_PESIN_KDV">
+                  Peşin gider + indirilecek KDV (cari borç yok)
+                </option>
+                <option value="RESMI_CARI">Vadeli alış / cari borç</option>
+                <option value="RESMI_SADECE_KDV">
+                  Sadece KDV / gider dışı
+                </option>
+                <option value="RESMI_SADECE_CARI">
+                  Sadece cari / KDV yok
+                </option>
+                <option value="GAYRI_GIDER">Gayri resmi gider</option>
+              </select>
+            </label>
+            {bulkForm.mode === "RESMI_SADECE_KDV" ? (
+              <label>
+                KDV'den cari borç oranı (%)
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={bulkForm.vatPayablePercentage}
+                  onChange={(event) =>
+                    setBulkForm({
+                      ...bulkForm,
+                      vatPayablePercentage: event.target.value,
+                    })
+                  }
+                />
+              </label>
+            ) : null}
+            <label>
+              Rapor kategorisi
+              <select
+                value={bulkForm.categoryId}
+                onChange={(event) =>
+                  setBulkForm({ ...bulkForm, categoryId: event.target.value })
+                }
+              >
+                <option value="">Kategori değişmesin</option>
+                {filteredReportCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.ad}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Rapor
+              <select
+                value={bulkForm.reportBehavior}
+                onChange={(event) =>
+                  setBulkForm({
+                    ...bulkForm,
+                    reportBehavior: event.target.value,
+                  })
+                }
+              >
+                <option value="DAHIL">Rapora dahil</option>
+                <option value="KONTROL_BEKLIYOR">Kontrol bekliyor</option>
+                <option value="HARIC">Hariç</option>
+              </select>
+            </label>
+            <label>
+              Gider
+              <select
+                value={bulkForm.generalExpense}
+                onChange={(event) =>
+                  setBulkForm({
+                    ...bulkForm,
+                    generalExpense: event.target.value,
+                  })
+                }
+              >
+                <option value="GENEL_GIDER">Genel gider</option>
+                <option value="KONTROL_BEKLIYOR">Kontrol bekliyor</option>
+                <option value="GIDER_DISI">Gider dışı</option>
+              </select>
+            </label>
+            <div className="mh-company-bulk-footer"><button className="mh-btn" type="button" onClick={() => setBulkOpen(false)}>Vazgeç</button><button className="mh-btn primary" type="button" disabled={bulkSaving || !selectedFirmIds.length} onClick={applyBulk}>{bulkSaving ? "Uygulanıyor..." : "Seçilen Firmalara Uygula"}</button></div>
+          </div>
+        ) : null}
         <StatusBlock state={state} emptyText="Firma kartı bulunamadı." />
         <div className="mh-doc-list">
           {visibleCompanies.map((row) => (
-            <FirmListButton
-              key={row?.id}
-              row={row}
-              active={selected.id === row?.id}
-              onClick={() => {
-                setIsNewFirm(false);
-                setSelectedId(row?.id);
-              }}
-            />
+            <div className={`mh-company-select-row ${selectionMode ? "selecting" : ""}`} key={row?.id}>
+              {selectionMode ? <input
+                type="checkbox"
+                checked={selectedFirmIds.includes(row.id)}
+                onChange={() =>
+                  setSelectedFirmIds((current) =>
+                    current.includes(row.id)
+                      ? current.filter((id) => id !== row.id)
+                      : [...current, row.id],
+                  )
+                }
+                aria-label={`${row.firmaAdi} seç`}
+              /> : null}
+              <FirmListButton
+                key={row?.id}
+                row={row}
+                active={selected.id === row?.id}
+                onClick={() => {
+                  setIsNewFirm(false);
+                  setSelectedId(row?.id);
+                }}
+              />
+            </div>
           ))}
         </div>
       </Card>
@@ -6677,7 +6280,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
                     firmaTipi: event?.target.value,
                     companyTransactionProfile:
                       officialAccountingModeOf(current) === "RESMI_CARI"
-                         ? profileForFirmType(event?.target.value)
+                        ? profileForFirmType(event?.target.value)
                         : current?.companyTransactionProfile,
                   }))
                 }
@@ -6697,8 +6300,15 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
                 }
               >
                 <option value="RESMI_CARI">Resmi - cari takip</option>
-                <option value="RESMI_PESIN_KDV">Resmi - peşin alış / KDV</option>
-                <option value="RESMI_SADECE_KDV">Resmi - sadece KDV / gider dışı</option>
+                <option value="RESMI_PESIN_KDV">
+                  Resmi - peşin alış / KDV
+                </option>
+                <option value="RESMI_SADECE_KDV">
+                  Resmi - sadece KDV / gider dışı
+                </option>
+                <option value="RESMI_SADECE_CARI">
+                  Resmi - sadece cari / KDV yok
+                </option>
                 <option value="GAYRI_GIDER">Gayri resmi gider</option>
               </select>
               {officialAccountingModeOf(form) === "RESMI_PESIN_KDV" ? (
@@ -6708,7 +6318,8 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
               ) : null}
               {officialAccountingModeOf(form) === "RESMI_SADECE_KDV" ? (
                 <div className="muted-small">
-                  Belge gider listesinde görünür; matrah gider hesabına girmez, KDV kalır.
+                  Matrah gider olmaz; KDV kaydı kalır. Aşağıdaki yüzde kadar
+                  firma borcu otomatik oluşur.
                 </div>
               ) : null}
             </Field>
@@ -6735,6 +6346,57 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
                 ))}
               </select>
             </Field>
+            <Field label="Varsayılan Rapor Davranışı">
+              <select
+                value={form.defaultReportBehavior}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    defaultReportBehavior: event.target.value,
+                  })
+                }
+              >
+                <option value="KONTROL_BEKLIYOR">Kontrol Bekliyor</option>
+                <option value="DAHIL">Rapora Dahil</option>
+                <option value="HARIC">Rapordan Hariç</option>
+              </select>
+            </Field>
+            <Field label="Genel Gider Varsayılanı">
+              <select
+                value={form.defaultGeneralExpense}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    defaultGeneralExpense: event.target.value,
+                  })
+                }
+              >
+                <option value="KONTROL_BEKLIYOR">Kontrol Bekliyor</option>
+                <option value="GENEL_GIDER">Genel Gider</option>
+                <option value="GIDER_DISI">Gider Dışı</option>
+              </select>
+            </Field>
+            {officialAccountingModeOf(form) === "RESMI_SADECE_KDV" ? (
+              <Field label="KDV'den Cari Borç Oranı (%)">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.vatPayablePercentage}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      vatPayablePercentage: event.target.value,
+                    })
+                  }
+                />
+                <span className="muted-small">
+                  Örnek: Gelen KDV 100.000 TL, oran %30 ise firmaya 30.000 TL
+                  borç yazılır.
+                </span>
+              </Field>
+            ) : null}
             <Field label="Vergi No">
               <input
                 value={form.vergiNo}
@@ -6747,6 +6409,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
               <input
                 type="number"
                 value={form.varsayilanKdv}
+                disabled={form.companyTransactionProfile === "UNOFFICIAL_EXPENSE"}
                 onChange={(event) =>
                   setForm({ ...form, varsayilanKdv: event?.target.value })
                 }
@@ -6770,6 +6433,7 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
               <input
                 type="number"
                 value={form.devredenKdv}
+                disabled={form.companyTransactionProfile === "UNOFFICIAL_EXPENSE"}
                 onChange={(event) =>
                   setForm({ ...form, devredenKdv: event?.target.value })
                 }
@@ -6781,8 +6445,8 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
               <strong>Kayıtlı firma olabilir</strong>
               <p>
                 Bu isim kayıtlı firmaya benziyor. Tek firma kalması için yeni
-                kart açmak yerine eşleştirme yapın; mevcut çift kayıtta hareketler
-                hedef firmaya taşınır.
+                kart açmak yerine eşleştirme yapın; mevcut çift kayıtta
+                hareketler hedef firmaya taşınır.
               </p>
               <div className="mh-duplicate-list">
                 {similarCompanies.map((company) => (
@@ -6834,7 +6498,9 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
             <button
               className="mh-btn primary"
               type="submit"
-              disabled={savingFirm || (isNewFirm && similarCompanies.length > 0)}
+              disabled={
+                savingFirm || (isNewFirm && similarCompanies.length > 0)
+              }
             >
               {savingFirm ? "Kaydediliyor..." : "Firma Kaydet"}
             </button>
@@ -6844,24 +6510,36 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
       <Card title="Firma Özeti">
         <Impact title="Firma Özeti">
           <SideLine label="Firma" value={selected.firmaAdi || "-"} />
-          <SideLine
-            label="Resmi/Gayri"
-            value={officialAccountingLabel(form)}
-          />
+          <SideLine label="Resmi/Gayri" value={officialAccountingLabel(form)} />
           <SideLine
             label="Mevcut bakiye"
             value={money(selected.mevcutBakiye)}
           />
           <SideLine
             label="Bakiye durumu"
-            value={balanceDirectionLabel(selected.bakiyeYonu || selected.borcAlacakYonu)}
+            value={balanceDirectionLabel(
+              selected.bakiyeYonu || selected.borcAlacakYonu,
+            )}
           />
-          {selected.cariTakipDisi ? (
-            <SideLine label="Cari ayrımı" value="Peşin alış / KDV için bilgi" />
+          {form.trackReceivablePayable === false ? (
+            <SideLine
+              label="Cari ayrımı"
+              value={
+                form.currentAccountPostingMode === "VAT_PERCENTAGE"
+                  ? `Gelen KDV'nin %${Number(form.vatPayablePercentage || 0)} kadarı borç`
+                  : "Peşin alış / KDV için bilgi"
+              }
+            />
           ) : null}
           <SideLine
             label="Cari takip"
-            value={selected.cariTakipDisi ? "Kapalı" : "Açık"}
+            value={
+              form.currentAccountPostingMode === "VAT_PERCENTAGE"
+                ? "KDV yüzdesi kadar"
+                : form.trackReceivablePayable === false
+                  ? "Kapalı"
+                  : "Açık"
+            }
           />
           <SideLine label="Devreden KDV" value={money(selected.devredenKdv)} />
         </Impact>
@@ -6879,7 +6557,8 @@ function mapContact(row = {}) {
     email: row?.email || "",
     telefon: row?.phone || row?.telefon || "",
     faturaYetkilisi: row?.canReceiveInvoice ?? row?.faturaYetkilisi ?? false,
-    irsaliyeYetkilisi: row?.canReceiveDispatch ?? row?.irsaliyeYetkilisi ?? false,
+    irsaliyeYetkilisi:
+      row?.canReceiveDispatch ?? row?.irsaliyeYetkilisi ?? false,
     ekstreYetkilisi: row?.canReceiveStatement ?? row?.ekstreYetkilisi ?? false,
     odemeYetkilisi:
       row?.canReceivePaymentReminder ?? row?.odemeYetkilisi ?? false,
@@ -6916,14 +6595,14 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
     visibleFirms[0] ||
     {};
   const contacts = selectedFirm.id
-     ? asArray(selectedFirm.mailKisileri).map(mapContact)
+    ? asArray(selectedFirm.mailKisileri).map(mapContact)
     : [];
   const contactListState = {
     loading: firmState.loading,
     error: firmState.error,
     data: contacts,
   };
-  const emptyContact = {
+  const emptyContact = useMemo(() => ({
     id: "",
     adSoyad: "",
     departman: "",
@@ -6938,7 +6617,7 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
     modelSorumlusuOlabilir: false,
     aktif: true,
     not: "",
-  };
+  }), []);
   const [form, setForm] = useState(emptyContact);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -6946,7 +6625,7 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
   useEffect(() => {
     setForm(emptyContact);
     setMessage("");
-  }, [selectedFirm.id]);
+  }, [emptyContact, selectedFirm?.id]);
 
   const saveContact = async (event) => {
     event?.preventDefault();
@@ -7009,7 +6688,8 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
 
   const passiveContact = async (row) => {
     if (!selectedFirm.id || !row?.id) return;
-    if (!window.confirm(`${row?.adSoyad || "Secili kisi"} pasife alinsin mi`)) return;
+    if (!window.confirm(`${row?.adSoyad || "Secili kisi"} pasife alinsin mi`))
+      return;
     setBusy(true);
     setMessage("");
     try {
@@ -7047,7 +6727,8 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
               <strong>{firm.firmaAdi}</strong>
               <span>{firm.kisaAd || firm.vergiNo || "Kod / vergi no yok"}</span>
               <small>
-                {firm.firmaTipi || "-"}  - {asArray(firm.mailKisileri).length} yetkili
+                {firm.firmaTipi || "-"} - {asArray(firm.mailKisileri).length}{" "}
+                yetkili
               </small>
             </button>
           ))}
@@ -7065,22 +6746,52 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
           {message ? <div className="mh-info-line">{message}</div> : null}
           <form className="mh-contact-form" onSubmit={saveContact}>
             <Field label="Kisi Adi Soyadi">
-              <input value={form.adSoyad} onChange={(event) => setForm({ ...form, adSoyad: event?.target.value })} />
+              <input
+                value={form.adSoyad}
+                onChange={(event) =>
+                  setForm({ ...form, adSoyad: event?.target.value })
+                }
+              />
             </Field>
             <Field label="Departman">
-              <input value={form.departman} onChange={(event) => setForm({ ...form, departman: event?.target.value })} />
+              <input
+                value={form.departman}
+                onChange={(event) =>
+                  setForm({ ...form, departman: event?.target.value })
+                }
+              />
             </Field>
             <Field label="Gorev / Unvan">
-              <input value={form.gorev} onChange={(event) => setForm({ ...form, gorev: event?.target.value })} />
+              <input
+                value={form.gorev}
+                onChange={(event) =>
+                  setForm({ ...form, gorev: event?.target.value })
+                }
+              />
             </Field>
             <Field label="E-posta">
-              <input value={form.email} onChange={(event) => setForm({ ...form, email: event?.target.value })} />
+              <input
+                value={form.email}
+                onChange={(event) =>
+                  setForm({ ...form, email: event?.target.value })
+                }
+              />
             </Field>
             <Field label="Telefon">
-              <input value={form.telefon} onChange={(event) => setForm({ ...form, telefon: event?.target.value })} />
+              <input
+                value={form.telefon}
+                onChange={(event) =>
+                  setForm({ ...form, telefon: event?.target.value })
+                }
+              />
             </Field>
             <Field label="Not">
-              <textarea value={form.not} onChange={(event) => setForm({ ...form, not: event?.target.value })} />
+              <textarea
+                value={form.not}
+                onChange={(event) =>
+                  setForm({ ...form, not: event?.target.value })
+                }
+              />
             </Field>
             <div className="mh-chip-row mh-contact-permissions">
               {[
@@ -7096,29 +6807,68 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
                   <input
                     type="checkbox"
                     checked={Boolean(form[key])}
-                    onChange={(event) => setForm({ ...form, [key]: event?.target.checked })}
+                    onChange={(event) =>
+                      setForm({ ...form, [key]: event?.target.checked })
+                    }
                   />
                   {label}
                 </label>
               ))}
             </div>
             <div className="mh-button-row">
-              <button className="mh-btn" type="button" onClick={() => setForm(emptyContact)} disabled={busy}>Temizle</button>
-              <button className="mh-btn" type="button" onClick={() => goTab("mail-ekstre")} disabled={busy}>Mail / Ekstreye Git</button>
-              <button className="mh-btn primary" type="submit" disabled={!selectedFirm.id || busy}>
+              <button
+                className="mh-btn"
+                type="button"
+                onClick={() => setForm(emptyContact)}
+                disabled={busy}
+              >
+                Temizle
+              </button>
+              <button
+                className="mh-btn"
+                type="button"
+                onClick={() => goTab("mail-ekstre")}
+                disabled={busy}
+              >
+                Mail / Ekstreye Git
+              </button>
+              <button
+                className="mh-btn primary"
+                type="submit"
+                disabled={!selectedFirm.id || busy}
+              >
                 {form.id ? "Kisiyi Guncelle" : "Kisi Kaydet"}
               </button>
             </div>
           </form>
         </Card>
         <Card title="Secili Firmanin Yetkilileri">
-          <StatusBlock state={contactListState} emptyText="Yetkili kisi bulunamadi." />
+          <StatusBlock
+            state={contactListState}
+            emptyText="Yetkili kisi bulunamadi."
+          />
           <DataTable
-            columns={["Kisi", "Departman", "Gorev", "E-posta", "Telefon", "Fatura", "Irsaliye", "Ekstre", "Odeme", "Genel CC", "Model", "Durum", "Islem"]}
+            columns={[
+              "Kisi",
+              "Departman",
+              "Gorev",
+              "E-posta",
+              "Telefon",
+              "Fatura",
+              "Irsaliye",
+              "Ekstre",
+              "Odeme",
+              "Genel CC",
+              "Model",
+              "Durum",
+              "Islem",
+            ]}
             rows={contacts}
             renderRow={(row) => (
               <tr key={row?.id}>
-                <td><strong>{row?.adSoyad}</strong></td>
+                <td>
+                  <strong>{row?.adSoyad}</strong>
+                </td>
                 <td>{row?.departman || "-"}</td>
                 <td>{row?.gorev || "-"}</td>
                 <td>{row?.email || "-"}</td>
@@ -7131,8 +6881,22 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
                 <td>{row?.modelSorumlusuOlabilir ? "Var" : "-"}</td>
                 <td>{row?.aktif ? "Aktif" : "Pasif"}</td>
                 <td>
-                  <button className="mh-btn" type="button" onClick={() => setForm(row)} disabled={busy}>Duzenle</button>
-                  <button className="mh-btn" type="button" onClick={() => passiveContact(row)} disabled={busy}>Pasife Al</button>
+                  <button
+                    className="mh-btn"
+                    type="button"
+                    onClick={() => setForm(row)}
+                    disabled={busy}
+                  >
+                    Duzenle
+                  </button>
+                  <button
+                    className="mh-btn"
+                    type="button"
+                    onClick={() => passiveContact(row)}
+                    disabled={busy}
+                  >
+                    Pasife Al
+                  </button>
                 </td>
               </tr>
             )}
@@ -7142,7 +6906,11 @@ function FirmContacts({ activeMainCompany, refreshKey, reloadAll, goTab }) {
     </div>
   );
 }
-function ExpenseCategories({ activeMainCompany, refreshKey }) {
+function ExpenseCategories({ activeMainCompany }) {
+  return <ExpenseCategoriesWorkspace activeMainCompany={activeMainCompany} />;
+}
+
+function LegacyExpenseCategories({ activeMainCompany, refreshKey }) {
   const [localRefresh, setLocalRefresh] = useState(0);
   const [form, setForm] = useState({
     ad: "",
@@ -7169,22 +6937,35 @@ function ExpenseCategories({ activeMainCompany, refreshKey }) {
         mainCompanyId: activeMainCompany?.id,
       };
       if (form.id) {
-        await apiPatch(`/muhasebe/rapor-kategorileri/${encodeURIComponent(form.id)}`, payload);
+        await apiPatch(
+          `/muhasebe/rapor-kategorileri/${encodeURIComponent(form.id)}`,
+          payload,
+        );
       } else {
         await apiPost("/muhasebe/rapor-kategorileri", payload);
       }
       setFeedback("Kategori kaydedildi.");
-      setForm({ ad: "", kategoriTipi: "GIDER", anaKategoriId: "", sira: 0, aciklama: "", aktifMi: true });
+      setForm({
+        ad: "",
+        kategoriTipi: "GIDER",
+        anaKategoriId: "",
+        sira: 0,
+        aciklama: "",
+        aktifMi: true,
+      });
       setLocalRefresh((value) => value + 1);
     } catch (error) {
       setFeedback(error?.message || "Kategori kaydedilemedi.");
     }
   };
   const remove = async (row) => {
-    await apiDelete(`/muhasebe/rapor-kategorileri/${encodeURIComponent(row?.id)}`, {
-      mainCompanySlug: activeMainCompany?.slug,
-      mainCompanyId: activeMainCompany?.id,
-    });
+    await apiDelete(
+      `/muhasebe/rapor-kategorileri/${encodeURIComponent(row?.id)}`,
+      {
+        mainCompanySlug: activeMainCompany?.slug,
+        mainCompanyId: activeMainCompany?.id,
+      },
+    );
     setLocalRefresh((value) => value + 1);
   };
   return (
@@ -7193,10 +6974,20 @@ function ExpenseCategories({ activeMainCompany, refreshKey }) {
         <form className="mh-stack" onSubmit={save}>
           <div className="mh-form-grid two">
             <Field label="Kategori Adı">
-              <input value={form.ad} onChange={(event) => setForm({ ...form, ad: event?.target.value })} />
+              <input
+                value={form.ad}
+                onChange={(event) =>
+                  setForm({ ...form, ad: event?.target.value })
+                }
+              />
             </Field>
             <Field label="Kategori Tipi">
-              <select value={form.kategoriTipi} onChange={(event) => setForm({ ...form, kategoriTipi: event?.target.value })}>
+              <select
+                value={form.kategoriTipi}
+                onChange={(event) =>
+                  setForm({ ...form, kategoriTipi: event?.target.value })
+                }
+              >
                 <option value="GELIR">Gelir</option>
                 <option value="GIDER">Gider</option>
                 <option value="PERSONEL">Personel</option>
@@ -7205,27 +6996,68 @@ function ExpenseCategories({ activeMainCompany, refreshKey }) {
               </select>
             </Field>
             <Field label="Ana Kategori">
-              <select value={form.anaKategoriId} onChange={(event) => setForm({ ...form, anaKategoriId: event?.target.value })}>
+              <select
+                value={form.anaKategoriId}
+                onChange={(event) =>
+                  setForm({ ...form, anaKategoriId: event?.target.value })
+                }
+              >
                 <option value="">Yok</option>
                 {rows.map((row) => (
-                  <option key={row?.id} value={row?.id}>{row?.ad}</option>
+                  <option key={row?.id} value={row?.id}>
+                    {row?.ad}
+                  </option>
                 ))}
               </select>
             </Field>
             <Field label="Sıra">
-              <input type="number" value={form.sira} onChange={(event) => setForm({ ...form, sira: event?.target.value })} />
+              <input
+                type="number"
+                value={form.sira}
+                onChange={(event) =>
+                  setForm({ ...form, sira: event?.target.value })
+                }
+              />
             </Field>
             <Field label="Açıklama">
-              <input value={form.aciklama} onChange={(event) => setForm({ ...form, aciklama: event?.target.value })} />
+              <input
+                value={form.aciklama}
+                onChange={(event) =>
+                  setForm({ ...form, aciklama: event?.target.value })
+                }
+              />
             </Field>
             <label className="mh-chip">
-              <input type="checkbox" checked={form.aktifMi} onChange={(event) => setForm({ ...form, aktifMi: event?.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.aktifMi}
+                onChange={(event) =>
+                  setForm({ ...form, aktifMi: event?.target.checked })
+                }
+              />
               Aktif
             </label>
           </div>
           <div className="mh-actions">
-            <button className="mh-btn primary" type="submit">Kaydet</button>
-            <button className="mh-btn" type="button" onClick={() => setForm({ ad: "", kategoriTipi: "GIDER", anaKategoriId: "", sira: 0, aciklama: "", aktifMi: true })}>Yeni</button>
+            <button className="mh-btn primary" type="submit">
+              Kaydet
+            </button>
+            <button
+              className="mh-btn"
+              type="button"
+              onClick={() =>
+                setForm({
+                  ad: "",
+                  kategoriTipi: "GIDER",
+                  anaKategoriId: "",
+                  sira: 0,
+                  aciklama: "",
+                  aktifMi: true,
+                })
+              }
+            >
+              Yeni
+            </button>
           </div>
           {feedback ? <div className="mh-state">{feedback}</div> : null}
         </form>
@@ -7233,7 +7065,15 @@ function ExpenseCategories({ activeMainCompany, refreshKey }) {
       <Card title="Kategori Listesi">
         <StatusBlock state={state} />
         <DataTable
-          columns={["Kategori", "Tip", "Aktif", "Sıra", "Firma", "Belge", "İşlem"]}
+          columns={[
+            "Kategori",
+            "Tip",
+            "Aktif",
+            "Sıra",
+            "Firma",
+            "Belge",
+            "İşlem",
+          ]}
           rows={rows}
           renderRow={(row) => (
             <tr key={row?.id}>
@@ -7244,8 +7084,20 @@ function ExpenseCategories({ activeMainCompany, refreshKey }) {
               <td>{row?.firmaSayisi || 0}</td>
               <td>{row?.belgeSayisi || 0}</td>
               <td>
-                <button className="mh-btn" type="button" onClick={() => setForm(row)}>Düzenle</button>
-                <button className="mh-btn" type="button" onClick={() => remove(row)}>Sil / Pasife Al</button>
+                <button
+                  className="mh-btn"
+                  type="button"
+                  onClick={() => setForm(row)}
+                >
+                  Düzenle
+                </button>
+                <button
+                  className="mh-btn"
+                  type="button"
+                  onClick={() => remove(row)}
+                >
+                  Sil / Pasife Al
+                </button>
               </td>
             </tr>
           )}
@@ -7255,8 +7107,15 @@ function ExpenseCategories({ activeMainCompany, refreshKey }) {
   );
 }
 
-function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
-  const companyKey = activeMainCompany?.slug || activeMainCompany?.id || "default";
+function ProfitLossCenter({ activeMainCompany, goTab }) {
+  return (
+    <ProfitLossWorkspace activeMainCompany={activeMainCompany} goTab={goTab} />
+  );
+}
+
+function LegacyProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
+  const companyKey =
+    activeMainCompany?.slug || activeMainCompany?.id || "default";
   const fallbackRange = useMemo(() => {
     const today = new Date();
     return today.getDate() <= 3 ? monthRange(-1) : monthRange(0);
@@ -7307,9 +7166,13 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     activeMainCompany,
     `${refreshKey || 0}-${reportRefreshKey}`,
   );
-  const categories = asArray(categoryState.data).filter((category) => category?.aktifMi !== false);
+  const categories = asArray(categoryState.data).filter(
+    (category) => category?.aktifMi !== false,
+  );
   const expenseCategoryOptions = categories.filter((category) =>
-    ["GIDER", "DIGER", "PERSONEL"].includes(String(category?.kategoriTipi || "").toUpperCase()),
+    ["GIDER", "DIGER", "PERSONEL"].includes(
+      String(category?.kategoriTipi || "").toUpperCase(),
+    ),
   );
   useEffect(() => {
     try {
@@ -7331,12 +7194,26 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
   useEffect(() => {
     setStorageReady(false);
     const applySavedSettings = (value = {}) => {
-      setExcludedExpenseFirms(value.excludedExpenseFirms && typeof value.excludedExpenseFirms === "object" ? value.excludedExpenseFirms : {});
-      setCategoryAssignments(value.categoryAssignments && typeof value.categoryAssignments === "object" ? value.categoryAssignments : {});
-      setActiveBreakdownKey((current) => current || value.activeBreakdownKey || "");
+      setExcludedExpenseFirms(
+        value.excludedExpenseFirms &&
+          typeof value.excludedExpenseFirms === "object"
+          ? value.excludedExpenseFirms
+          : {},
+      );
+      setCategoryAssignments(
+        value.categoryAssignments &&
+          typeof value.categoryAssignments === "object"
+          ? value.categoryAssignments
+          : {},
+      );
+      setActiveBreakdownKey(
+        (current) => current || value.activeBreakdownKey || "",
+      );
     };
     try {
-      const cached = JSON.parse(localStorage.getItem(reportSettingsStorageKey) || "{}");
+      const cached = JSON.parse(
+        localStorage.getItem(reportSettingsStorageKey) || "{}",
+      );
       applySavedSettings(cached);
     } catch {
       applySavedSettings({});
@@ -7347,7 +7224,10 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         if (!alive) return;
         const rows = asArray(payload);
         const setting = rows.find((row) => row?.key === reportSettingsKey);
-        const value = setting?.value && typeof setting.value === "object" ? setting.value : {};
+        const value =
+          setting?.value && typeof setting.value === "object"
+            ? setting.value
+            : {};
         applySavedSettings(value);
       })
       .catch(() => {
@@ -7359,7 +7239,7 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     return () => {
       alive = false;
     };
-  }, [activeMainCompany?.slug, activeMainCompany?.id, reportSettingsKey, reportSettingsStorageKey]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, reportSettingsKey, reportSettingsStorageKey, activeMainCompany]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -7404,18 +7284,32 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
   );
   const reportData = unwrap(state.data) || {};
   const ana = reportData.anaOzet || {};
-  const movementRows = Array.isArray(reportData.hareketler) ? reportData.hareketler : [];
-  const manualItems = Array.isArray(reportData.kullaniciKalemleri) ? reportData.kullaniciKalemleri : [];
+  const movementRows = Array.isArray(reportData.hareketler)
+    ? reportData.hareketler
+    : [];
+  const manualItems = Array.isArray(reportData.kullaniciKalemleri)
+    ? reportData.kullaniciKalemleri
+    : [];
 
   const rowText = (row) =>
-    [row?.tur, row?.turEtiketi, row?.kategori, row?.firma, row?.belgeNo, row?.aciklama]
+    [
+      row?.tur,
+      row?.turEtiketi,
+      row?.kategori,
+      row?.firma,
+      row?.belgeNo,
+      row?.aciklama,
+    ]
       .join(" ")
       .toLocaleLowerCase("tr-TR");
-  const hasAny = (row, words) => words.some((word) => rowText(row).includes(word));
-  const categoryByName = (name) => {
+  const hasAny = (row, words) =>
+    words.some((word) => rowText(row).includes(word));
+  const categoryByName = useCallback((name) => {
     const target = normalizeCompanyMatchText(name);
-    return categories.find((category) => normalizeCompanyMatchText(category?.ad) === target);
-  };
+    return categories.find(
+      (category) => normalizeCompanyMatchText(category?.ad) === target,
+    );
+  }, [categories]);
   const ensureExpenseCategory = async (name) => {
     const cleanName = String(name || "").trim();
     if (!cleanName) throw new Error("Kategori adı yazmalısınız.");
@@ -7433,26 +7327,43 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     return saved;
   };
   const suggestedCategoryName = (row) => {
-    const text = normalizeCompanyMatchText([row?.kategori, row?.turEtiketi, row?.firma, row?.aciklama].join(" "));
+    const text = normalizeCompanyMatchText(
+      [row?.kategori, row?.turEtiketi, row?.firma, row?.aciklama].join(" "),
+    );
     if (/(selvi|kimya|boya|tiner|solvent)/.test(text)) return "Boya / Kimyasal";
-    if (/(personel|maas|maaş|ucret|ücret|sgk|haftalik|haftalık|yevmiye|yevmiyeci)/.test(text)) return "Sabit Giderler";
-    if (/(can yemek|yemek|lokanta|restoran|multinet|ticket|sodexo)/.test(text)) return "Yemek Gideri";
+    if (
+      /(personel|maas|maaş|ucret|ücret|sgk|haftalik|haftalık|yevmiye|yevmiyeci)/.test(
+        text,
+      )
+    )
+      return "Sabit Giderler";
+    if (/(can yemek|yemek|lokanta|restoran|multinet|ticket|sodexo)/.test(text))
+      return "Yemek Gideri";
     if (/(ambalaj|koli)/.test(text)) return "Ambalaj Gideri";
     if (/(kira|rent)/.test(text)) return "Kira Gideri";
     return row?.kategori || row?.turEtiketi || "Diğer Giderler";
   };
-  const effectiveCategoryName = (row) =>
-    categoryAssignments[firmKey(row)]?.categoryName || suggestedCategoryName(row);
-  const categoryKeyForName = (name) => categoryByName(name)?.id || name || "kategori-yok";
+  const effectiveCategoryName = useCallback((row) =>
+    categoryAssignments[firmKey(row)]?.categoryName ||
+    suggestedCategoryName(row), [categoryAssignments]);
+  const categoryKeyForName = useCallback((name) =>
+    categoryByName(name)?.id || name || "kategori-yok", [categoryByName]);
   const dominantCategoryName = (rows = []) => {
     const totals = new Map();
     rows.forEach((row) => {
       const name = effectiveCategoryName(row);
       totals.set(name, (totals.get(name) || 0) + Number(row?.genelToplam || 0));
     });
-    return [...totals.entries()].sort((a, b) => b[1] - a[1])?.[0]?.[0] || "Diğer Giderler";
+    return (
+      [...totals.entries()].sort((a, b) => b[1] - a[1])?.[0]?.[0] ||
+      "Diğer Giderler"
+    );
   };
-  const assignSuggestedManualExpense = async (name, categoryName, options = {}) => {
+  const assignSuggestedManualExpense = async (
+    name,
+    categoryName,
+    options = {},
+  ) => {
     let category = categoryByName(categoryName);
     if (!category?.id && categoryName) {
       setCategoryBusy(true);
@@ -7475,7 +7386,8 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
       date: form.date || dateFrom,
     }));
   };
-  const isSalesRow = (row) => String(row?.tur || "").toUpperCase() === "KESILEN";
+  const isSalesRow = (row) =>
+    String(row?.tur || "").toUpperCase() === "KESILEN";
   const isPersonnelRow = (row) =>
     String(row?.tur || "").toUpperCase() === "PERSONEL" ||
     hasAny(row, ["personel", "maaş", "maas", "ücret", "ucret", "sgk"]);
@@ -7493,11 +7405,13 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     String(row?.giderHesaplamaTipi || "").toUpperCase() === "VAT_ONLY" ||
     row?.vatOnlyExpense === true ||
     row?.sadeceKdvKullan === true;
-  const rowKey = (row) => row?.id || `${row?.tur || ""}-${row?.tarih || ""}-${row?.belgeNo || ""}-${row?.firma || ""}`;
+  const rowKey = (row) =>
+    row?.id ||
+    `${row?.tur || ""}-${row?.tarih || ""}-${row?.belgeNo || ""}-${row?.firma || ""}`;
   const firmKey = (row) => row?.firmaId || row?.firma || "firma-yok";
   const sumRows = (rows, key = "genelToplam") =>
     rows.reduce((total, row) => total + Number(row?.[key] || 0), 0);
-  const groupByFirm = (rows) => {
+  const groupByFirm = useCallback((rows) => {
     const grouped = new Map();
     rows.forEach((row) => {
       const key = firmKey(row);
@@ -7519,19 +7433,35 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
       grouped.set(key, current);
     });
     return [...grouped.values()].sort((a, b) => b.genelToplam - a.genelToplam);
-  };
+  }, []);
 
   const salesRows = movementRows.filter(isSalesRow);
   const expenseRows = movementRows.filter((row) => !isSalesRow(row));
   const incomeFirmRows = groupByFirm(salesRows);
   const expenseFirmRows = groupByFirm(expenseRows);
-  const includedExpenseRows = expenseRows.filter((row) => !excludedExpenseFirms[firmKey(row)]);
-  const excludedExpenseRows = expenseRows.filter((row) => excludedExpenseFirms[firmKey(row)]);
-  const vatExpenseRows = expenseRows.filter((row) => row?.kdvHesabinaDahil !== false);
+  const includedExpenseRows = expenseRows.filter(
+    (row) => !excludedExpenseFirms[firmKey(row)],
+  );
+  const excludedExpenseRows = expenseRows.filter(
+    (row) => excludedExpenseFirms[firmKey(row)],
+  );
+  const vatExpenseRows = expenseRows.filter(
+    (row) => row?.kdvHesabinaDahil !== false,
+  );
   const personnelRows = includedExpenseRows.filter(isPersonnelRow);
-  const mealRows = includedExpenseRows.filter((row) => !isPersonnelRow(row) && isMealRow(row));
-  const weeklyRows = includedExpenseRows.filter((row) => !isPersonnelRow(row) && !isMealRow(row) && isWeeklyRow(row));
-  const workerRows = includedExpenseRows.filter((row) => !isPersonnelRow(row) && !isMealRow(row) && !isWeeklyRow(row) && isWorkerRow(row));
+  const mealRows = includedExpenseRows.filter(
+    (row) => !isPersonnelRow(row) && isMealRow(row),
+  );
+  const weeklyRows = includedExpenseRows.filter(
+    (row) => !isPersonnelRow(row) && !isMealRow(row) && isWeeklyRow(row),
+  );
+  const workerRows = includedExpenseRows.filter(
+    (row) =>
+      !isPersonnelRow(row) &&
+      !isMealRow(row) &&
+      !isWeeklyRow(row) &&
+      isWorkerRow(row),
+  );
   const rentRows = includedExpenseRows.filter(
     (row) =>
       !isPersonnelRow(row) &&
@@ -7541,14 +7471,23 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
       isRentRow(row),
   );
   const namedExpenseIds = new Set(
-    [...personnelRows, ...mealRows, ...weeklyRows, ...workerRows, ...rentRows].map(rowKey),
+    [
+      ...personnelRows,
+      ...mealRows,
+      ...weeklyRows,
+      ...workerRows,
+      ...rentRows,
+    ].map(rowKey),
   );
-  const otherExpenseRows = includedExpenseRows.filter((row) => !namedExpenseIds.has(rowKey(row)));
+  const otherExpenseRows = includedExpenseRows.filter(
+    (row) => !namedExpenseIds.has(rowKey(row)),
+  );
 
-  const salesNet = sumRows(salesRows, "tutar") || Number(ana?.kesilenFatura?.toplam || 0);
-  const salesVat = sumRows(salesRows, "kdv") || Number(ana?.kesilenFatura?.kdv || 0);
+  const salesNet =
+    sumRows(salesRows, "tutar") || Number(ana?.kesilenFatura?.toplam || 0);
+  const salesVat =
+    sumRows(salesRows, "kdv") || Number(ana?.kesilenFatura?.kdv || 0);
   const salesGross = sumRows(salesRows, "genelToplam") || salesNet + salesVat;
-  const expenseNet = sumRows(includedExpenseRows, "tutar");
   const expenseVat = sumRows(vatExpenseRows, "kdv");
   const expenseGross = sumRows(includedExpenseRows, "genelToplam");
   const excludedExpenseGross = sumRows(excludedExpenseRows, "genelToplam");
@@ -7588,14 +7527,57 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
   ];
 
   const statementRows = [
-    { label: "Kesilen faturalar / yapılan iş", amount: salesGross, count: salesRows.length, tone: "income" },
-    { label: "Gelen faturalar ve diğer giderler", amount: -sumRows(otherExpenseRows, "genelToplam"), count: otherExpenseRows.length, tone: "expense" },
-    { label: "Personel gideri", amount: -sumRows(personnelRows, "genelToplam"), count: personnelRows.length, tone: "expense" },
-    { label: "Yemek gideri", amount: -sumRows(mealRows, "genelToplam"), count: mealRows.length, tone: "expense" },
-    { label: "Haftalık / yevmiyeci", amount: -(sumRows(weeklyRows, "genelToplam") + sumRows(workerRows, "genelToplam")), count: weeklyRows.length + workerRows.length, tone: "expense" },
-    { label: "Kira gideri", amount: -sumRows(rentRows, "genelToplam"), count: rentRows.length, tone: "expense" },
-    { label: "Giderden çıkarılan firmalar", amount: excludedExpenseGross, count: excludedExpenseRows.length, tone: "neutral" },
-    { label: "Cari bazlı dönem sonucu", amount: cariResult, count: salesRows.length + includedExpenseRows.length, tone: cariResult >= 0 ? "income" : "expense", total: true },
+    {
+      label: "Kesilen faturalar / yapılan iş",
+      amount: salesGross,
+      count: salesRows.length,
+      tone: "income",
+    },
+    {
+      label: "Gelen faturalar ve diğer giderler",
+      amount: -sumRows(otherExpenseRows, "genelToplam"),
+      count: otherExpenseRows.length,
+      tone: "expense",
+    },
+    {
+      label: "Personel gideri",
+      amount: -sumRows(personnelRows, "genelToplam"),
+      count: personnelRows.length,
+      tone: "expense",
+    },
+    {
+      label: "Yemek gideri",
+      amount: -sumRows(mealRows, "genelToplam"),
+      count: mealRows.length,
+      tone: "expense",
+    },
+    {
+      label: "Haftalık / yevmiyeci",
+      amount: -(
+        sumRows(weeklyRows, "genelToplam") + sumRows(workerRows, "genelToplam")
+      ),
+      count: weeklyRows.length + workerRows.length,
+      tone: "expense",
+    },
+    {
+      label: "Kira gideri",
+      amount: -sumRows(rentRows, "genelToplam"),
+      count: rentRows.length,
+      tone: "expense",
+    },
+    {
+      label: "Giderden çıkarılan firmalar",
+      amount: excludedExpenseGross,
+      count: excludedExpenseRows.length,
+      tone: "neutral",
+    },
+    {
+      label: "Cari bazlı dönem sonucu",
+      amount: cariResult,
+      count: salesRows.length + includedExpenseRows.length,
+      tone: cariResult >= 0 ? "income" : "expense",
+      total: true,
+    },
   ];
   const expenseCategoryRows = useMemo(() => {
     const grouped = new Map();
@@ -7612,12 +7594,16 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         genelToplam: 0,
         firms: new Map(),
       };
-      const firmName = row?.firma || row?.turEtiketi || row?.aciklama || "Elle girilen gider";
+      const firmName =
+        row?.firma || row?.turEtiketi || row?.aciklama || "Elle girilen gider";
       current.belgeAdedi += 1;
       current.tutar += Number(row?.tutar || 0);
       current.kdv += Number(row?.kdv || 0);
       current.genelToplam += Number(row?.genelToplam || 0);
-      current.firms.set(firmName, (current.firms.get(firmName) || 0) + Number(row?.genelToplam || 0));
+      current.firms.set(
+        firmName,
+        (current.firms.get(firmName) || 0) + Number(row?.genelToplam || 0),
+      );
       grouped.set(key, current);
     });
     const rows = [...grouped.values()];
@@ -7642,8 +7628,15 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
           .slice(0, 3)
           .map(([name]) => name),
       }))
-      .sort((a, b) => b.genelToplam - a.genelToplam || String(a.kategori || "").localeCompare(String(b.kategori || ""), "tr"));
-  }, [includedExpenseRows, expenseGross, categories, categoryAssignments, expenseCategoryOptions]);
+      .sort(
+        (a, b) =>
+          b.genelToplam - a.genelToplam ||
+          String(a.kategori || "").localeCompare(
+            String(b.kategori || ""),
+            "tr",
+          ),
+      );
+  }, [includedExpenseRows, expenseCategoryOptions, effectiveCategoryName, categoryByName, categoryKeyForName, expenseGross]);
 
   const activeCategoryRow =
     expenseCategoryRows.find((row) => row.key === activeBreakdownKey) ||
@@ -7654,26 +7647,36 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
   const activeCategoryExpenseRows = useMemo(
     () =>
       activeCategoryKey
-        ? includedExpenseRows.filter((row) => categoryKeyForName(effectiveCategoryName(row)) === activeCategoryKey)
+        ? includedExpenseRows.filter(
+            (row) =>
+              categoryKeyForName(effectiveCategoryName(row)) ===
+              activeCategoryKey,
+          )
         : [],
-    [includedExpenseRows, activeCategoryKey, categoryAssignments, categories],
+    [activeCategoryKey, includedExpenseRows, categoryKeyForName, effectiveCategoryName],
   );
   const activeCategoryFirmRows = useMemo(
     () =>
       groupByFirm(activeCategoryExpenseRows).map((firm) => ({
         ...firm,
-        oran: activeCategoryRow?.genelToplam ? (firm.genelToplam / activeCategoryRow.genelToplam) * 100 : 0,
+        oran: activeCategoryRow?.genelToplam
+          ? (firm.genelToplam / activeCategoryRow.genelToplam) * 100
+          : 0,
       })),
-    [activeCategoryExpenseRows, activeCategoryRow?.genelToplam],
+    [activeCategoryExpenseRows, activeCategoryRow.genelToplam, groupByFirm],
   );
   const otherCategoryFirmRows = useMemo(
     () =>
       activeCategoryKey
         ? groupByFirm(
-            includedExpenseRows.filter((row) => categoryKeyForName(effectiveCategoryName(row)) !== activeCategoryKey),
+            includedExpenseRows.filter(
+              (row) =>
+                categoryKeyForName(effectiveCategoryName(row)) !==
+                activeCategoryKey,
+            ),
           ).slice(0, 30)
         : [],
-    [includedExpenseRows, activeCategoryKey, categoryAssignments, categories],
+    [activeCategoryKey, groupByFirm, includedExpenseRows, categoryKeyForName, effectiveCategoryName],
   );
   const selectedCategoryFirmToAdd =
     otherCategoryFirmRows.find((firm) => firm.key === categoryFirmToAddKey) ||
@@ -7698,7 +7701,11 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     setExcludedExpenseFirms((current) => {
       const next = { ...current };
       if (next[firm.key]) delete next[firm.key];
-      else next[firm.key] = { firma: firm.firma, updatedAt: new Date().toISOString() };
+      else
+        next[firm.key] = {
+          firma: firm.firma,
+          updatedAt: new Date().toISOString(),
+        };
       return next;
     });
   };
@@ -7777,10 +7784,13 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     setCategoryBusy(true);
     setFeedback("");
     try {
-      await apiDelete(`/muhasebe/rapor-kategorileri/${encodeURIComponent(category.id)}`, {
-        mainCompanySlug: activeMainCompany?.slug,
-        mainCompanyId: activeMainCompany?.id,
-      });
+      await apiDelete(
+        `/muhasebe/rapor-kategorileri/${encodeURIComponent(category.id)}`,
+        {
+          mainCompanySlug: activeMainCompany?.slug,
+          mainCompanyId: activeMainCompany?.id,
+        },
+      );
       setCategoryAssignments((current) => {
         const next = {};
         Object.entries(current).forEach(([key, value]) => {
@@ -7814,7 +7824,9 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
   };
 
   const editManualItem = (item) => {
-    const monthlyFixed = String(item?.kartTipi || item?.cardType || "").toUpperCase() === "AYLIK_SABIT";
+    const monthlyFixed =
+      String(item?.kartTipi || item?.cardType || "").toUpperCase() ===
+      "AYLIK_SABIT";
     setManualForm({
       id: item?.id || "",
       name: item?.ad || item?.name || "Gider Kalemi",
@@ -7822,7 +7834,8 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
       newCategoryName: "",
       date: String(item?.tarih || item?.baslangic || dateFrom).slice(0, 10),
       repeatMonthly: monthlyFixed,
-      endDate: monthlyFixed && item?.bitis ? String(item.bitis).slice(0, 10) : "",
+      endDate:
+        monthlyFixed && item?.bitis ? String(item.bitis).slice(0, 10) : "",
       amount: decimalInputValue(item?.tutar || item?.amount || 0),
       vat: decimalInputValue(item?.kdv || item?.vat || 0),
       description: item?.aciklama || item?.description || "",
@@ -7863,20 +7876,32 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         ad: manualForm.name,
         kategoriId: categoryId || null,
         tarih: manualForm.repeatMonthly ? null : manualForm.date || dateFrom,
-        baslangic: manualForm.repeatMonthly ? manualForm.date || dateFrom : null,
-        bitis: manualForm.repeatMonthly && manualForm.endDate ? manualForm.endDate : null,
+        baslangic: manualForm.repeatMonthly
+          ? manualForm.date || dateFrom
+          : null,
+        bitis:
+          manualForm.repeatMonthly && manualForm.endDate
+            ? manualForm.endDate
+            : null,
         tutar: amount,
         kdv: vat,
         aciklama: manualForm.description,
         kartTipi: manualForm.repeatMonthly ? "AYLIK_SABIT" : "BUYUK",
       };
       if (manualForm.id) {
-        await apiPatch(`/muhasebe/rapor-manuel-kalemler/${manualForm.id}`, payload);
+        await apiPatch(
+          `/muhasebe/rapor-manuel-kalemler/${manualForm.id}`,
+          payload,
+        );
       } else {
         await apiPost("/muhasebe/rapor-manuel-kalemler", payload);
       }
       resetManualForm();
-      setFeedback(manualForm.id ? "Gider kalemi güncellendi." : "Gider kalemi rapora eklendi.");
+      setFeedback(
+        manualForm.id
+          ? "Gider kalemi güncellendi."
+          : "Gider kalemi rapora eklendi.",
+      );
       setReportRefreshKey((value) => value + 1);
     } catch (error) {
       setFeedback(error?.message || "Gider kalemi eklenemedi.");
@@ -7904,31 +7929,34 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
     }
   };
 
-  const renderInvoiceRow = (row) => (
-    <tr key={row?.id || `${row?.tur}-${row?.tarih}-${row?.belgeNo}`}>
-      <td>{date(row?.tarih)}</td>
-      <td>{row?.belgeNo || "-"}</td>
-      <td>{row?.firma || "-"}</td>
-      <td>{row?.kategori || row?.turEtiketi || "-"}</td>
-      <td>{money(row?.tutar)}</td>
-      <td>{money(row?.kdv)}</td>
-      <td>{money(row?.genelToplam)}</td>
-    </tr>
-  );
   const ledgerRows = activeLedgerTab === "income" ? salesRows : expenseRows;
   const renderLedgerRow = (row) => {
-    const excluded = activeLedgerTab === "expense" && Boolean(excludedExpenseFirms[firmKey(row)]);
+    const excluded =
+      activeLedgerTab === "expense" &&
+      Boolean(excludedExpenseFirms[firmKey(row)]);
     return (
       <tr key={row?.id || `${row?.tur}-${row?.tarih}-${row?.belgeNo}`}>
         <td>{date(row?.tarih)}</td>
         <td>{row?.belgeNo || "-"}</td>
         <td>{row?.firma || "-"}</td>
-        <td>{activeLedgerTab === "expense" ? effectiveCategoryName(row) : row?.kategori || row?.turEtiketi || "-"}</td>
+        <td>
+          {activeLedgerTab === "expense"
+            ? effectiveCategoryName(row)
+            : row?.kategori || row?.turEtiketi || "-"}
+        </td>
         <td>{money(row?.tutar)}</td>
         <td>{money(row?.kdv)}</td>
-      <td>{money(row?.genelToplam)}</td>
-      <td>
-          <Badge tone={activeLedgerTab === "income" ? "ok" : excluded || isVatOnlyExpenseRow(row) ? "warn" : "ok"}>
+        <td>{money(row?.genelToplam)}</td>
+        <td>
+          <Badge
+            tone={
+              activeLedgerTab === "income"
+                ? "ok"
+                : excluded || isVatOnlyExpenseRow(row)
+                  ? "warn"
+                  : "ok"
+            }
+          >
             {activeLedgerTab === "income"
               ? "Gelir"
               : isVatOnlyExpenseRow(row)
@@ -7937,7 +7965,9 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
                   ? "Gider Hariç / KDV Dahil"
                   : "Dahil"}
           </Badge>
-          {row?.hesapNotu ? <small className="muted-small">{row.hesapNotu}</small> : null}
+          {row?.hesapNotu ? (
+            <small className="muted-small">{row.hesapNotu}</small>
+          ) : null}
         </td>
         <td>
           {activeLedgerTab === "expense" ? (
@@ -7960,7 +7990,10 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
                   type="button"
                   onClick={() =>
                     moveFirmToCategory(
-                      { key: firmKey(row), firma: row?.firma || "Firma bilgisi yok" },
+                      {
+                        key: firmKey(row),
+                        firma: row?.firma || "Firma bilgisi yok",
+                      },
                       activeCategoryName,
                     )
                   }
@@ -7984,13 +8017,25 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         subtitle={`${dateFrom} - ${dateTo} aralığında müşteri gelirleri, tedarikçi giderleri ve dönem sonucu`}
         action={
           <div className="mh-actions">
-            <button className="mh-btn" type="button" onClick={() => setRange(-1)}>
+            <button
+              className="mh-btn"
+              type="button"
+              onClick={() => setRange(-1)}
+            >
               Geçen Ay
             </button>
-            <button className="mh-btn" type="button" onClick={() => setRange(0)}>
+            <button
+              className="mh-btn"
+              type="button"
+              onClick={() => setRange(0)}
+            >
               Bu Ay
             </button>
-            <button className="mh-btn" type="button" onClick={() => goTab?.("muhasebe-raporlari")}>
+            <button
+              className="mh-btn"
+              type="button"
+              onClick={() => goTab?.("muhasebe-raporlari")}
+            >
               Detay Rapor
             </button>
           </div>
@@ -7998,10 +8043,18 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
       >
         <div className="profit-loss-filterbar">
           <Field label="Başlangıç">
-            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+            />
           </Field>
           <Field label="Bitiş">
-            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+            />
           </Field>
           <Field label="Firma / belge / açıklama ara">
             <input
@@ -8033,7 +8086,10 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
       </Card>
 
       <div className="profit-loss-firm-ledger">
-        <Card title="Gelir / Müşteriler" subtitle="Kesilen faturaya göre müşteri iş hacmi">
+        <Card
+          title="Gelir / Müşteriler"
+          subtitle="Kesilen faturaya göre müşteri iş hacmi"
+        >
           <div className="profit-loss-firm-list">
             {incomeFirmRows.map((firm) => (
               <button
@@ -8047,16 +8103,26 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
               >
                 <span>
                   <strong>{firm.firma}</strong>
-                  <small>{firm.belgeAdedi} fatura / Matrah {money(firm.tutar)} / KDV {money(firm.kdv)}</small>
+                  <small>
+                    {firm.belgeAdedi} fatura / Matrah {money(firm.tutar)} / KDV{" "}
+                    {money(firm.kdv)}
+                  </small>
                 </span>
                 <b>{money(firm.genelToplam)}</b>
               </button>
             ))}
-            {!incomeFirmRows.length ? <div className="mh-state">Bu tarih aralığında müşteri geliri yok.</div> : null}
+            {!incomeFirmRows.length ? (
+              <div className="mh-state">
+                Bu tarih aralığında müşteri geliri yok.
+              </div>
+            ) : null}
           </div>
         </Card>
 
-        <Card title="Gider / Tedarikçiler" subtitle="Dahil edilen firmalar gider hesabına girer">
+        <Card
+          title="Gider / Tedarikçiler"
+          subtitle="Dahil edilen firmalar gider hesabına girer"
+        >
           <div className="profit-loss-firm-list">
             {expenseFirmRows.map((firm) => {
               const excluded = Boolean(excludedExpenseFirms[firm.key]);
@@ -8075,8 +8141,12 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
                     <span>
                       <strong>{firm.firma}</strong>
                       <small>
-                        {dominantCategoryName(firm.rows)} / {firm.belgeAdedi} belge / Matrah {money(firm.tutar)} / KDV {money(firm.kdv)}
-                        {firm.rows.some(isVatOnlyExpenseRow) ? " / Sadece KDV kuralı var" : ""}
+                        {dominantCategoryName(firm.rows)} / {firm.belgeAdedi}{" "}
+                        belge / Matrah {money(firm.tutar)} / KDV{" "}
+                        {money(firm.kdv)}
+                        {firm.rows.some(isVatOnlyExpenseRow)
+                          ? " / Sadece KDV kuralı var"
+                          : ""}
                       </small>
                     </span>
                     <b>{money(firm.genelToplam)}</b>
@@ -8091,13 +8161,20 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
                 </div>
               );
             })}
-            {!expenseFirmRows.length ? <div className="mh-state">Bu tarih aralığında tedarikçi gideri yok.</div> : null}
+            {!expenseFirmRows.length ? (
+              <div className="mh-state">
+                Bu tarih aralığında tedarikçi gideri yok.
+              </div>
+            ) : null}
           </div>
         </Card>
       </div>
 
       <div className="profit-loss-layout">
-        <Card title="Gelir / Gider Hesabı" subtitle="Giderden çıkarılan firmalar bu hesaba dahil edilmez">
+        <Card
+          title="Gelir / Gider Hesabı"
+          subtitle="Giderden çıkarılan firmalar bu hesaba dahil edilmez"
+        >
           <div className="profit-loss-statement">
             {statementRows.map((row) => (
               <div
@@ -8112,7 +8189,10 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
           </div>
         </Card>
 
-        <Card title="Gider Kırılımı" subtitle="Sadece dahil edilen gider firmaları">
+        <Card
+          title="Gider Kırılımı"
+          subtitle="Sadece dahil edilen gider firmaları"
+        >
           <div className="profit-loss-breakdown">
             {expenseCategoryRows.map((row) => (
               <button
@@ -8126,14 +8206,29 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
               >
                 <span>
                   <b>{row?.kategori || row?.firma || "-"}</b>
-                  <em>{row?.firmalar?.length ? row.firmalar.join(", ") : "Firma eşleşmesi yok"}</em>
+                  <em>
+                    {row?.firmalar?.length
+                      ? row.firmalar.join(", ")
+                      : "Firma eşleşmesi yok"}
+                  </em>
                 </span>
-                <small>{row?.belgeAdedi || 0} belge / %{Number(row?.oran || 0).toFixed(1)} / Detay</small>
+                <small>
+                  {row?.belgeAdedi || 0} belge / %
+                  {Number(row?.oran || 0).toFixed(1)} / Detay
+                </small>
                 <strong>{money(row?.genelToplam)}</strong>
-                <i style={{ width: `${Math.max(2, Math.min(100, Number(row?.oran || 0)))}%` }} />
+                <i
+                  style={{
+                    width: `${Math.max(2, Math.min(100, Number(row?.oran || 0)))}%`,
+                  }}
+                />
               </button>
             ))}
-            {!expenseCategoryRows.length ? <div className="mh-state">Bu tarih aralığında dahil edilen gider yok.</div> : null}
+            {!expenseCategoryRows.length ? (
+              <div className="mh-state">
+                Bu tarih aralığında dahil edilen gider yok.
+              </div>
+            ) : null}
           </div>
           <div className="profit-loss-category-editor">
             <input
@@ -8141,10 +8236,18 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
               onChange={(event) => setBreakdownCategoryName(event.target.value)}
               placeholder="Yeni gider kategorisi"
             />
-            <button type="button" onClick={createBreakdownCategory} disabled={categoryBusy}>
+            <button
+              type="button"
+              onClick={createBreakdownCategory}
+              disabled={categoryBusy}
+            >
               Kategori Ekle
             </button>
-            <button type="button" onClick={deleteActiveBreakdownCategory} disabled={categoryBusy || !activeCategoryName}>
+            <button
+              type="button"
+              onClick={deleteActiveBreakdownCategory}
+              disabled={categoryBusy || !activeCategoryName}
+            >
               Seçileni Çıkar
             </button>
           </div>
@@ -8157,15 +8260,21 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         onToggle={(event) => setShowBreakdownDetail(event.currentTarget.open)}
       >
         <summary>
-          <span>{activeCategoryName ? `${activeCategoryName} Detayı` : "Kategori Detayı"}</span>
+          <span>
+            {activeCategoryName
+              ? `${activeCategoryName} Detayı`
+              : "Kategori Detayı"}
+          </span>
           <small>{activeCategoryFirmRows.length} firma</small>
         </summary>
         <div className="profit-loss-category-total">
           <span>
             <strong>{activeCategoryName || "Kategori seçilmedi"}</strong>
             <small>
-              {activeCategoryFirmRows.length} firma / {activeCategoryRow?.belgeAdedi || 0} belge / Matrah{" "}
-              {money(activeCategoryRow?.tutar || 0)} / KDV {money(activeCategoryRow?.kdv || 0)}
+              {activeCategoryFirmRows.length} firma /{" "}
+              {activeCategoryRow?.belgeAdedi || 0} belge / Matrah{" "}
+              {money(activeCategoryRow?.tutar || 0)} / KDV{" "}
+              {money(activeCategoryRow?.kdv || 0)}
             </small>
           </span>
           <b>{money(activeCategoryRow?.genelToplam || 0)}</b>
@@ -8176,22 +8285,30 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
               <span>
                 <strong>{firm.firma}</strong>
                 <small>
-                  {firm.belgeAdedi} belge / Matrah {money(firm.tutar)} / KDV {money(firm.kdv)} / %
-                  {Number(firm.oran || 0).toFixed(1)}
+                  {firm.belgeAdedi} belge / Matrah {money(firm.tutar)} / KDV{" "}
+                  {money(firm.kdv)} / %{Number(firm.oran || 0).toFixed(1)}
                 </small>
               </span>
               <b>{money(firm.genelToplam)}</b>
-              <button type="button" onClick={() => removeFirmFromCategory(firm)}>
+              <button
+                type="button"
+                onClick={() => removeFirmFromCategory(firm)}
+              >
                 Kategoriden Çıkar
               </button>
               {categoryAssignments[firm.key] ? (
-                <button type="button" onClick={() => clearFirmCategoryOverride(firm)}>
+                <button
+                  type="button"
+                  onClick={() => clearFirmCategoryOverride(firm)}
+                >
                   Varsayılana Dön
                 </button>
               ) : null}
             </div>
           ))}
-          {!activeCategoryFirmRows.length ? <div className="mh-state">Bu kategoride firma yok.</div> : null}
+          {!activeCategoryFirmRows.length ? (
+            <div className="mh-state">Bu kategoride firma yok.</div>
+          ) : null}
         </div>
         {otherCategoryFirmRows.length ? (
           <div className="profit-loss-category-add-list">
@@ -8199,15 +8316,21 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
             <div className="profit-loss-category-add-control">
               <select
                 value={selectedCategoryFirmToAdd?.key || ""}
-                onChange={(event) => setCategoryFirmToAddKey(event.target.value)}
+                onChange={(event) =>
+                  setCategoryFirmToAddKey(event.target.value)
+                }
               >
                 {otherCategoryFirmRows.map((firm) => (
                   <option key={firm.key} value={firm.key}>
-                    {firm.firma} - {dominantCategoryName(firm.rows)} - {money(firm.genelToplam)}
+                    {firm.firma} - {dominantCategoryName(firm.rows)} -{" "}
+                    {money(firm.genelToplam)}
                   </option>
                 ))}
               </select>
-              <button type="button" onClick={() => moveFirmToCategory(selectedCategoryFirmToAdd)}>
+              <button
+                type="button"
+                onClick={() => moveFirmToCategory(selectedCategoryFirmToAdd)}
+              >
                 Ekle
               </button>
             </div>
@@ -8220,162 +8343,264 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         subtitle="Kira, yemek, personel veya aylık sabit giderleri buradan gir"
         action={
           <div className="profit-loss-category-presets">
-            <button type="button" onClick={() => assignSuggestedManualExpense("Kira Gideri", "Kira Gideri", { repeatMonthly: true })}>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense("Kira Gideri", "Kira Gideri", {
+                  repeatMonthly: true,
+                })
+              }
+            >
               Kira
             </button>
-            <button type="button" onClick={() => assignSuggestedManualExpense("Yemek Gideri", "Yemek Gideri")}>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense("Yemek Gideri", "Yemek Gideri")
+              }
+            >
               Yemek
             </button>
-            <button type="button" onClick={() => assignSuggestedManualExpense("Personel Gideri", "Sabit Giderler", { repeatMonthly: true })}>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense(
+                  "Personel Gideri",
+                  "Sabit Giderler",
+                  { repeatMonthly: true },
+                )
+              }
+            >
               Personel
             </button>
           </div>
         }
       >
-          <div className="profit-loss-manual-form">
-            <Field label="Kalem Adı">
-              <input
-                value={manualForm.name}
-                onChange={(event) => setManualForm((form) => ({ ...form, name: event.target.value }))}
-                placeholder="Kira Gideri, Personel Gideri..."
-              />
-            </Field>
-            <Field label="Kategori">
-              <select
-                value={manualForm.categoryId}
-                onChange={(event) =>
-                  setManualForm((form) => ({
-                    ...form,
-                    categoryId: event.target.value,
-                    newCategoryName: event.target.value ? "" : form.newCategoryName,
-                  }))
-                }
-              >
-                <option value="">Kategori seçilmedi</option>
-                {expenseCategoryOptions.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.ad}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Yeni Kategori">
-              <input
-                value={manualForm.newCategoryName}
-                onChange={(event) =>
-                  setManualForm((form) => ({
-                    ...form,
-                    newCategoryName: event.target.value,
-                    categoryId: event.target.value.trim() ? "" : form.categoryId,
-                  }))
-                }
-                placeholder="Boya / Kimyasal, Yemek Gideri..."
-              />
-            </Field>
-            <div className="profit-loss-category-presets full">
-              <button type="button" onClick={() => assignSuggestedManualExpense("Selvi Boya Gideri", "Boya / Kimyasal")}>
-                Selvi Boya
-              </button>
-              <button type="button" onClick={() => assignSuggestedManualExpense("Can Yemek Gideri", "Yemek Gideri")}>
-                Can Yemek
-              </button>
-              <button type="button" onClick={() => assignSuggestedManualExpense("Ambalaj Gideri", "Ambalaj Gideri")}>
-                Ambalaj
-              </button>
-              <button type="button" onClick={() => assignSuggestedManualExpense("Kira Gideri", "Kira Gideri", { repeatMonthly: true })}>
-                Aylık Kira
-              </button>
-              <button type="button" onClick={() => assignSuggestedManualExpense("Personel Sabit Gideri", "Sabit Giderler", { repeatMonthly: true })}>
-                Sabit Personel
-              </button>
-            </div>
-            <label className="mh-chip profit-loss-repeat-toggle">
-              <input
-                type="checkbox"
-                checked={manualForm.repeatMonthly}
-                onChange={(event) =>
-                  setManualForm((form) => ({
-                    ...form,
-                    repeatMonthly: event.target.checked,
-                    date: form.date || dateFrom,
-                  }))
-                }
-              />
-              Her ay sabit gider olarak işle
-            </label>
-            <Field label={manualForm.repeatMonthly ? "İlk Ay" : "Tarih"}>
+        <div className="profit-loss-manual-form">
+          <Field label="Kalem Adı">
+            <input
+              value={manualForm.name}
+              onChange={(event) =>
+                setManualForm((form) => ({ ...form, name: event.target.value }))
+              }
+              placeholder="Kira Gideri, Personel Gideri..."
+            />
+          </Field>
+          <Field label="Kategori">
+            <select
+              value={manualForm.categoryId}
+              onChange={(event) =>
+                setManualForm((form) => ({
+                  ...form,
+                  categoryId: event.target.value,
+                  newCategoryName: event.target.value
+                    ? ""
+                    : form.newCategoryName,
+                }))
+              }
+            >
+              <option value="">Kategori seçilmedi</option>
+              {expenseCategoryOptions.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.ad}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Yeni Kategori">
+            <input
+              value={manualForm.newCategoryName}
+              onChange={(event) =>
+                setManualForm((form) => ({
+                  ...form,
+                  newCategoryName: event.target.value,
+                  categoryId: event.target.value.trim() ? "" : form.categoryId,
+                }))
+              }
+              placeholder="Boya / Kimyasal, Yemek Gideri..."
+            />
+          </Field>
+          <div className="profit-loss-category-presets full">
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense(
+                  "Selvi Boya Gideri",
+                  "Boya / Kimyasal",
+                )
+              }
+            >
+              Selvi Boya
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense("Can Yemek Gideri", "Yemek Gideri")
+              }
+            >
+              Can Yemek
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense("Ambalaj Gideri", "Ambalaj Gideri")
+              }
+            >
+              Ambalaj
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense("Kira Gideri", "Kira Gideri", {
+                  repeatMonthly: true,
+                })
+              }
+            >
+              Aylık Kira
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                assignSuggestedManualExpense(
+                  "Personel Sabit Gideri",
+                  "Sabit Giderler",
+                  { repeatMonthly: true },
+                )
+              }
+            >
+              Sabit Personel
+            </button>
+          </div>
+          <label className="mh-chip profit-loss-repeat-toggle">
+            <input
+              type="checkbox"
+              checked={manualForm.repeatMonthly}
+              onChange={(event) =>
+                setManualForm((form) => ({
+                  ...form,
+                  repeatMonthly: event.target.checked,
+                  date: form.date || dateFrom,
+                }))
+              }
+            />
+            Her ay sabit gider olarak işle
+          </label>
+          <Field label={manualForm.repeatMonthly ? "İlk Ay" : "Tarih"}>
+            <input
+              type="date"
+              value={manualForm.date}
+              onChange={(event) =>
+                setManualForm((form) => ({ ...form, date: event.target.value }))
+              }
+            />
+          </Field>
+          {manualForm.repeatMonthly ? (
+            <Field label="Bitiş">
               <input
                 type="date"
-                value={manualForm.date}
-                onChange={(event) => setManualForm((form) => ({ ...form, date: event.target.value }))}
+                value={manualForm.endDate}
+                onChange={(event) =>
+                  setManualForm((form) => ({
+                    ...form,
+                    endDate: event.target.value,
+                  }))
+                }
               />
             </Field>
-            {manualForm.repeatMonthly ? (
-              <Field label="Bitiş">
-                <input
-                  type="date"
-                  value={manualForm.endDate}
-                  onChange={(event) => setManualForm((form) => ({ ...form, endDate: event.target.value }))}
-                />
-              </Field>
-            ) : null}
-            <Field label="Tutar">
-              <input
-                value={manualForm.amount}
-                onChange={(event) => setManualForm((form) => ({ ...form, amount: event.target.value }))}
-                placeholder="10000"
-              />
-            </Field>
-            <Field label="KDV Tutarı">
-              <input
-                value={manualForm.vat}
-                onChange={(event) => setManualForm((form) => ({ ...form, vat: event.target.value }))}
-                placeholder="0"
-              />
-            </Field>
-            <Field label="Açıklama">
-              <textarea
-                value={manualForm.description}
-                onChange={(event) => setManualForm((form) => ({ ...form, description: event.target.value }))}
-                placeholder="Aylık kira, personel avansı, ek gider..."
-              />
-            </Field>
-            <button className="mh-btn primary" type="button" onClick={saveManualExpense} disabled={saveBusy}>
-              {saveBusy ? "Kaydediliyor..." : manualForm.id ? "Gider Kalemi Güncelle" : "Gider Kalemi Ekle"}
+          ) : null}
+          <Field label="Tutar">
+            <input
+              value={manualForm.amount}
+              onChange={(event) =>
+                setManualForm((form) => ({
+                  ...form,
+                  amount: event.target.value,
+                }))
+              }
+              placeholder="10000"
+            />
+          </Field>
+          <Field label="KDV Tutarı">
+            <input
+              value={manualForm.vat}
+              onChange={(event) =>
+                setManualForm((form) => ({ ...form, vat: event.target.value }))
+              }
+              placeholder="0"
+            />
+          </Field>
+          <Field label="Açıklama">
+            <textarea
+              value={manualForm.description}
+              onChange={(event) =>
+                setManualForm((form) => ({
+                  ...form,
+                  description: event.target.value,
+                }))
+              }
+              placeholder="Aylık kira, personel avansı, ek gider..."
+            />
+          </Field>
+          <button
+            className="mh-btn primary"
+            type="button"
+            onClick={saveManualExpense}
+            disabled={saveBusy}
+          >
+            {saveBusy
+              ? "Kaydediliyor..."
+              : manualForm.id
+                ? "Gider Kalemi Güncelle"
+                : "Gider Kalemi Ekle"}
+          </button>
+          {manualForm.id ? (
+            <button className="mh-btn" type="button" onClick={resetManualForm}>
+              Yeni Kalem
             </button>
-            {manualForm.id ? (
-              <button className="mh-btn" type="button" onClick={resetManualForm}>
-                Yeni Kalem
-              </button>
-            ) : null}
-            <button className="mh-btn" type="button" onClick={() => goTab?.("gider-kategorileri")}>
-              Kategori Yönet
-            </button>
-            {manualItems.length ? (
-              <div className="profit-loss-manual-list">
-                {manualItems.slice(0, 8).map((item) => (
-                  <div key={item.id} className="profit-loss-manual-row">
-                    <span>
-                      <strong>{item.ad}</strong>
-                      <small>
-                        {String(item.kartTipi || "").toUpperCase() === "AYLIK_SABIT" ? "Her ay" : date(item.tarih || item.baslangic)}
-                        {" / "}
-                        {money(item.tutar)} + KDV {money(item.kdv)}
-                      </small>
-                    </span>
-                    <button type="button" onClick={() => editManualItem(item)}>Düzenle</button>
-                    <button type="button" onClick={() => deleteManualItem(item)}>Çıkar</button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {feedback ? <div className="mh-state">{feedback}</div> : null}
-          </div>
-        </Card>
+          ) : null}
+          <button
+            className="mh-btn"
+            type="button"
+            onClick={() => goTab?.("gider-kategorileri")}
+          >
+            Kategori Yönet
+          </button>
+          {manualItems.length ? (
+            <div className="profit-loss-manual-list">
+              {manualItems.slice(0, 8).map((item) => (
+                <div key={item.id} className="profit-loss-manual-row">
+                  <span>
+                    <strong>{item.ad}</strong>
+                    <small>
+                      {String(item.kartTipi || "").toUpperCase() ===
+                      "AYLIK_SABIT"
+                        ? "Her ay"
+                        : date(item.tarih || item.baslangic)}
+                      {" / "}
+                      {money(item.tutar)} + KDV {money(item.kdv)}
+                    </small>
+                  </span>
+                  <button type="button" onClick={() => editManualItem(item)}>
+                    Düzenle
+                  </button>
+                  <button type="button" onClick={() => deleteManualItem(item)}>
+                    Çıkar
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {feedback ? <div className="mh-state">{feedback}</div> : null}
+        </div>
+      </Card>
 
       <Card
         title="Gelir / Gider Detayları"
-        subtitle={activeLedgerTab === "income" ? "Müşteri gelirleri ve kesilen faturalar" : "Tedarikçi giderleri, manuel giderler ve dahil/çıkar durumu"}
+        subtitle={
+          activeLedgerTab === "income"
+            ? "Müşteri gelirleri ve kesilen faturalar"
+            : "Tedarikçi giderleri, manuel giderler ve dahil/çıkar durumu"
+        }
         action={
           <div className="profit-loss-ledger-tabs">
             <button
@@ -8396,9 +8621,23 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
         }
       >
         <DataTable
-          columns={["Tarih", "Belge No", "Firma", "Kategori", "Matrah", "KDV", "Toplam", "Durum", "İşlem"]}
+          columns={[
+            "Tarih",
+            "Belge No",
+            "Firma",
+            "Kategori",
+            "Matrah",
+            "KDV",
+            "Toplam",
+            "Durum",
+            "İşlem",
+          ]}
           rows={ledgerRows}
-          emptyText={activeLedgerTab === "income" ? "Bu tarih aralığında gelir yok." : "Bu tarih aralığında gider yok."}
+          emptyText={
+            activeLedgerTab === "income"
+              ? "Bu tarih aralığında gelir yok."
+              : "Bu tarih aralığında gider yok."
+          }
           renderRow={renderLedgerRow}
         />
       </Card>
@@ -8406,7 +8645,16 @@ function ProfitLossCenter({ activeMainCompany, refreshKey, goTab }) {
   );
 }
 
-function Reports({ activeMainCompany, refreshKey, goTab }) {
+function Reports({ activeMainCompany, goTab }) {
+  return (
+    <MuhasebeReportsWorkspace
+      activeMainCompany={activeMainCompany}
+      goTab={goTab}
+    />
+  );
+}
+
+function LegacyReports({ activeMainCompany, refreshKey, goTab }) {
   const defaultRange = useMemo(() => monthRange(0), []);
   const [dateFrom, setDateFrom] = useState(defaultRange.dateFrom);
   const [dateTo, setDateTo] = useState(defaultRange.dateTo);
@@ -8416,9 +8664,18 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
   const [search, setSearch] = useState("");
   const [reportRefreshKey, setReportRefreshKey] = useState(0);
   const [showAllCategories, setShowAllCategories] = useState(false);
-  const companyState = useEndpoint("/muhasebe/firmalar", activeMainCompany, refreshKey, { limit: 500 });
+  const companyState = useEndpoint(
+    "/muhasebe/firmalar",
+    activeMainCompany,
+    refreshKey,
+    { limit: 500 },
+  );
   const companies = asArray(companyState.data).map(normalizeFirm);
-  const categoryState = useEndpoint("/muhasebe/rapor-kategorileri", activeMainCompany, refreshKey);
+  const categoryState = useEndpoint(
+    "/muhasebe/rapor-kategorileri",
+    activeMainCompany,
+    refreshKey,
+  );
   const categories = asArray(categoryState.data).filter(
     (category) => category.aktifMi !== false,
   );
@@ -8439,9 +8696,10 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
   );
   const reportData = unwrap(state.data) || {};
   const ana = reportData.anaOzet || {};
-  const summaryRows = Array.isArray(reportData.kategoriOzetleri)
-     ? reportData.kategoriOzetleri
-    : [];
+  const summaryRows = useMemo(
+    () => Array.isArray(reportData.kategoriOzetleri) ? reportData.kategoriOzetleri : [],
+    [reportData.kategoriOzetleri],
+  );
   const categoryRows = useMemo(() => {
     const summaryById = new Map(
       summaryRows.map((row) => [row?.kategoriId, row]),
@@ -8468,7 +8726,7 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
     return rows;
   }, [categories, showAllCategories, summaryRows]);
   const movementRows = Array.isArray(reportData.hareketler)
-     ? reportData.hareketler
+    ? reportData.hareketler
     : [];
   const totals = movementRows.reduce(
     (acc, row) => {
@@ -8505,10 +8763,18 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
         subtitle="Firma kartı rapor kategorilerine göre dönem özeti"
         action={
           <div className="mh-actions">
-            <button className="mh-btn" type="button" onClick={() => goTab?.("gider-kategorileri")}>
+            <button
+              className="mh-btn"
+              type="button"
+              onClick={() => goTab?.("gider-kategorileri")}
+            >
               Kategori Yönet
             </button>
-            <button className="mh-btn" type="button" onClick={downloadExcelPackage}>
+            <button
+              className="mh-btn"
+              type="button"
+              onClick={downloadExcelPackage}
+            >
               Excel'e Aktar
             </button>
           </div>
@@ -8530,23 +8796,36 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
             />
           </Field>
           <Field label="Firma">
-            <select value={firmId} onChange={(event) => setFirmId(event?.target.value)}>
+            <select
+              value={firmId}
+              onChange={(event) => setFirmId(event?.target.value)}
+            >
               <option value="">Tüm firmalar</option>
               {companies.map((company) => (
-                <option key={company?.id} value={company?.id}>{company?.firmaAdi}</option>
+                <option key={company?.id} value={company?.id}>
+                  {company?.firmaAdi}
+                </option>
               ))}
             </select>
           </Field>
           <Field label="Kategori">
-            <select value={categoryId} onChange={(event) => setCategoryId(event?.target.value)}>
+            <select
+              value={categoryId}
+              onChange={(event) => setCategoryId(event?.target.value)}
+            >
               <option value="">Tüm kategoriler</option>
               {categories.map((category) => (
-                <option key={category.id} value={category.id}>{category.ad}</option>
+                <option key={category.id} value={category.id}>
+                  {category.ad}
+                </option>
               ))}
             </select>
           </Field>
           <Field label="Tür">
-            <select value={typeFilter} onChange={(event) => setTypeFilter(event?.target.value)}>
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event?.target.value)}
+            >
               <option value="">Tümü</option>
               <option value="KESILEN">Kesilen</option>
               <option value="RESMI_GELEN">Resmi Gelen</option>
@@ -8590,7 +8869,11 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
           <CariSummaryMetric
             label="KDV Durumu"
             value={money(ana?.kdvDurumu?.sonuc)}
-            hint={Number(ana?.kdvDurumu?.sonuc || 0) >= 0 ? "Ödenecek KDV" : "Devredecek KDV"}
+            hint={
+              Number(ana?.kdvDurumu?.sonuc || 0) >= 0
+                ? "Ödenecek KDV"
+                : "Devredecek KDV"
+            }
             tone={Number(ana?.kdvDurumu?.sonuc || 0) >= 0 ? "red" : "green"}
           />
           <CariSummaryMetric
@@ -8620,20 +8903,36 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
               key={row?.kategoriId}
               className={`mh-report-tile ${categoryId === row?.kategoriId ? "active" : ""}`}
               type="button"
-              onClick={() => setCategoryId(categoryId === row?.kategoriId ? "" : row?.kategoriId)}
+              onClick={() =>
+                setCategoryId(
+                  categoryId === row?.kategoriId ? "" : row?.kategoriId,
+                )
+              }
             >
               <strong>{row?.kategori}</strong>
               <span>{money(row?.genelToplam)}</span>
               <small>{row?.belgeAdedi} belge</small>
             </button>
           ))}
-          {!categoryRows.length ? <div className="mh-state">Kayıt bulunamadı.</div> : null}
+          {!categoryRows.length ? (
+            <div className="mh-state">Kayıt bulunamadı.</div>
+          ) : null}
         </div>
       </Card>
 
       <Card title="Hareket Listesi" subtitle={`${dateFrom} - ${dateTo}`}>
         <DataTable
-          columns={["Tarih", "Tür", "Kategori", "Firma", "Belge No", "Açıklama", "Tutar", "KDV", "Genel Toplam"]}
+          columns={[
+            "Tarih",
+            "Tür",
+            "Kategori",
+            "Firma",
+            "Belge No",
+            "Açıklama",
+            "Tutar",
+            "KDV",
+            "Genel Toplam",
+          ]}
           rows={movementRows}
           emptyText="Bu tarih aralığında kayıt yok."
           renderRow={(row) => (
@@ -8653,8 +8952,14 @@ function Reports({ activeMainCompany, refreshKey, goTab }) {
         <div className="mh-summary-grid four compact-cards">
           <CariSummaryMetric label="Toplam Tutar" value={money(totals.tutar)} />
           <CariSummaryMetric label="Toplam KDV" value={money(totals.kdv)} />
-          <CariSummaryMetric label="Genel Toplam" value={money(totals.genelToplam)} />
-          <CariSummaryMetric label="Satır" value={String(movementRows.length)} />
+          <CariSummaryMetric
+            label="Genel Toplam"
+            value={money(totals.genelToplam)}
+          />
+          <CariSummaryMetric
+            label="Satır"
+            value={String(movementRows.length)}
+          />
         </div>
       </Card>
     </div>
@@ -8675,7 +8980,7 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
   const setFilter = (key, value) =>
     setFilters((previous) => ({ ...previous, [key]: value }));
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!activeMainCompany?.slug) {
       setState({
         loading: false,
@@ -8701,11 +9006,11 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
         rows: [],
       });
     }
-  };
+  }, [activeMainCompany]);
 
   useEffect(() => {
     loadRows();
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, loadRows]);
 
   const visibleRows = useMemo(() => {
     const supplierQuery = filters.supplier.trim().toLocaleLowerCase("tr-TR");
@@ -8720,7 +9025,10 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
       })
       .filter((row) => supplierReportMatchesStatus(row, filters.status))
       .filter((row) => {
-        const issueDate = String(row?.issueDate || row?.createdAt || "").slice(0, 10);
+        const issueDate = String(row?.issueDate || row?.createdAt || "").slice(
+          0,
+          10,
+        );
         if (filters.dateFrom && issueDate < filters.dateFrom) return false;
         if (filters.dateTo && issueDate > filters.dateTo) return false;
         return true;
@@ -8733,16 +9041,24 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
       })
       .filter((row) => {
         if (!userQuery) return true;
-        return supplierReportUser(row).toLocaleLowerCase("tr-TR").includes(userQuery);
+        return supplierReportUser(row)
+          .toLocaleLowerCase("tr-TR")
+          .includes(userQuery);
       });
   }, [filters, state.rows]);
 
   const summary = useMemo(
     () => ({
       total: visibleRows.length,
-      processed: visibleRows.filter((row) => isSupplierReportProcessed(row)).length,
-      quarantine: visibleRows.filter((row) => supplierReportMatchesStatus(row, "QUARANTINE")).length,
-      amount: visibleRows.reduce((sum, row) => sum + Number(row?.grandTotal || 0), 0),
+      processed: visibleRows.filter((row) => isSupplierReportProcessed(row))
+        .length,
+      quarantine: visibleRows.filter((row) =>
+        supplierReportMatchesStatus(row, "QUARANTINE"),
+      ).length,
+      amount: visibleRows.reduce(
+        (sum, row) => sum + Number(row?.grandTotal || 0),
+        0,
+      ),
     }),
     [visibleRows],
   );
@@ -8751,9 +9067,21 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
     <div className="mh-stack">
       <div className="mh-summary-grid four compact-cards">
         <CariSummaryMetric label="Belge" value={String(summary.total)} />
-        <CariSummaryMetric label="Islenen" value={String(summary.processed)} tone="green" />
-        <CariSummaryMetric label="Karantina" value={String(summary.quarantine)} tone="red" />
-        <CariSummaryMetric label="Toplam" value={money(summary.amount)} tone="yellow" />
+        <CariSummaryMetric
+          label="Islenen"
+          value={String(summary.processed)}
+          tone="green"
+        />
+        <CariSummaryMetric
+          label="Karantina"
+          value={String(summary.quarantine)}
+          tone="red"
+        />
+        <CariSummaryMetric
+          label="Toplam"
+          value={money(summary.amount)}
+          tone="yellow"
+        />
       </div>
 
       <div className="mh-form-grid three">
@@ -8837,7 +9165,12 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
                 <b>{row?.documentNo || row?.invoiceNo || "-"}</b>
                 <small>{row?.sourceType || row?.originalFileName || "-"}</small>
               </td>
-              <td>{row?.issuerName || row?.companyName || row?.receiverName || "-"}</td>
+              <td>
+                {row?.issuerName ||
+                  row?.companyName ||
+                  row?.receiverName ||
+                  "-"}
+              </td>
               <td>{date(row?.issueDate || row?.createdAt)}</td>
               <td>{money(row?.subtotal)}</td>
               <td>{money(row?.vatTotal)}</td>
@@ -8850,7 +9183,10 @@ function SupplierInvoiceArchiveReport({ activeMainCompany }) {
               <td>{supplierReportReason(row)}</td>
               <td>{supplierReportUser(row)}</td>
               <td>
-                Cari: {effects.currentAccountMovementId || effects.cariMovementId || "-"}
+                Cari:{" "}
+                {effects.currentAccountMovementId ||
+                  effects.cariMovementId ||
+                  "-"}
                 <br />
                 KDV: {effects.vatRecordId || "-"}
               </td>
@@ -8928,7 +9264,7 @@ const styles = `
 }
 .mh-page-head h1 { margin: 0; font-size: 20px; letter-spacing: 0; }
 .mh-page-head p { margin: 4px 0 0; color: var(--mh-muted); }
-.mh-tabs { display: flex; gap: 7px; flex-wrap: wrap; padding: 8px; margin-bottom: 10px; }
+.mh-tabs { display: flex; gap: 7px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding: 8px; margin-bottom: 10px; }
 .mh-tab-btn,
 .mh-btn {
   border: 1px solid #c8d7eb;
@@ -8939,10 +9275,10 @@ const styles = `
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
-  white-space: normal;
+  white-space: nowrap;
   line-height: 1.25;
   text-align: center;
-  overflow-wrap: anywhere;
+  flex: 0 0 auto;
 }
 .mh-tab-btn { background: #f8fbff; }
 .mh-tab-btn.active,
@@ -8979,6 +9315,10 @@ const styles = `
 .mh-layout-3.compact.mh-cari-layout { grid-template-columns: 310px minmax(0, 1fr) 480px; align-items: stretch; }
 .mh-layout-3.mail { grid-template-columns: 320px minmax(640px, 1fr) 350px; }
 .mh-layout-3.contact { grid-template-columns: 320px minmax(580px, 1fr) 340px; }
+.mh-layout-3.mh-company-cards-page { grid-template-columns: 360px minmax(620px, 1fr) 300px; align-items: stretch; }
+.mh-company-cards-page > .mh-card { min-height: calc(100vh - 330px); }
+.mh-company-cards-page .mh-doc-list { max-height: calc(100vh - 565px); padding: 8px 0 0; scrollbar-gutter: stable; }
+.mh-company-cards-page .mh-card-body { min-height: 0; }
 .mh-layout-2 { display: grid; grid-template-columns: minmax(760px, 1fr) 350px; gap: 10px; align-items: start; }
 .mh-stack { display: grid; gap: 12px; align-items: start; }
 .mh-sub-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -9132,7 +9472,7 @@ const styles = `
   background: white;
   color: #14304f;
 }
-.mh-doc-item?.active { border-color: var(--mh-blue); background: #eef6ff; }
+.mh-doc-item.active { border-color: var(--mh-blue); background: #eef6ff; box-shadow: inset 3px 0 0 var(--mh-blue); }
 .mh-doc-item strong,
 .mh-doc-item span { display: block; }
 .mh-doc-item strong { margin-bottom: 4px; }
@@ -9329,6 +9669,9 @@ const styles = `
 .mh-side-line b { text-align: right; }
 .mh-action-stack { display: grid; gap: 7px; margin-top: 10px; }
 .mh-action-stack .mh-btn { width: 100%; }
+.mh-action-stack .mh-cari-period-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.mh-action-stack .mh-cari-period-actions > span { margin-right: 4px; color: #64748b; font-size: 11px; font-weight: 900; white-space: nowrap; }
+.mh-action-stack .mh-cari-period-actions .mh-btn { width: auto; min-width: 82px; padding: 7px 12px; flex: 0 0 auto; }
 .mh-form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
 .mh-form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mh-form-grid.three { grid-template-columns: repeat(3, 1fr); }
@@ -9390,16 +9733,29 @@ const styles = `
   .mh-package-summary .mh-summary:first-child { grid-column: 1 / -1; }
   .mh-invoice-meta { grid-template-columns: repeat(3, 1fr); }
 }
-@media (max-width: 1360px) {
-  .mh-doc-item?.firm-card {
+.mh-doc-item.firm-card {
     padding: 11px 12px;
     border-radius: 12px;
     display: grid;
     gap: 7px;
+}
+.mh-doc-item.firm-card strong,
+.mh-doc-item.firm-card span,
+.mh-doc-item.firm-card small { margin: 0; }
+.mh-firm-card-title-row { display:grid;gap:4px;min-width:0 }
+.mh-firm-card-title-row strong { font-size:13px;font-weight:900;line-height:1.35;color:#0f2745;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden }
+.mh-firm-card-title-row small { font-size:11px;line-height:1.3;color:#6b7d93;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+.mh-firm-card-badges { display:flex;flex-wrap:wrap;gap:6px }
+.mh-firm-card-meta { display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap }
+.mh-doc-item.firm-card .mh-firm-card-meta span { font-size:11px;line-height:1.35;color:#60728c;min-width:0 }
+.mh-firm-card-balance strong { font-size:14px;font-weight:900;line-height:1.2;color:#0b3768 }
+@media (max-width: 1360px) {
+  .mh-doc-item.firm-card {
+    padding: 10px;
   }
-  .mh-doc-item?.firm-card strong,
-  .mh-doc-item?.firm-card span,
-  .mh-doc-item?.firm-card small { margin: 0; }
+  .mh-doc-item.firm-card strong,
+  .mh-doc-item.firm-card span,
+  .mh-doc-item.firm-card small { margin: 0; }
   .mh-firm-card-title-row {
     display: grid;
     gap: 4px;
@@ -9436,7 +9792,7 @@ const styles = `
     gap: 8px;
     flex-wrap: wrap;
   }
-  .mh-doc-item?.firm-card .mh-firm-card-meta span {
+  .mh-doc-item.firm-card .mh-firm-card-meta span {
     font-size: 11px;
     line-height: 1.35;
     color: #60728c;

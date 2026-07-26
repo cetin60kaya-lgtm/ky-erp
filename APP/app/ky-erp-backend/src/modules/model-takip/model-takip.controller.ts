@@ -295,7 +295,9 @@ export class ModelTakipSummaryController {
         imageUrl: this.cleanText(model.imageUrl || model.desenGorseli || model.thumbnail),
         images: Array.isArray(model.images) ? model.images : [],
         musteriIrsaliyeAdedi: 0,
-        uretimAdedi: this.parseNumber(model.uretimAdedi || model.productionQty || model.toplamUretimAdedi),
+        // Üretim toplamı aşağıda doğrudan uretim.kayitlar kaynağından hesaplanır.
+        // Model kartındaki özet alanını tekrar toplamak çift sayım oluşturuyordu.
+        uretimAdedi: 0,
         bizimIrsaliyeAdedi: 0,
         kesilenFaturaAdedi: 0,
         toplamFaturaTutari: 0,
@@ -358,7 +360,9 @@ export class ModelTakipSummaryController {
     const company = this.resolveCompany(mainCompanySlug, mainCompanyId);
     const modelResult = await this.modelService.list({
       mainCompanySlug: company.slug,
-      pageSize: 100,
+      pageSize: 5000,
+      limit: 5000,
+      customerOnly: true,
     });
     const models = Array.isArray(modelResult)
       ? modelResult
@@ -368,7 +372,7 @@ export class ModelTakipSummaryController {
 
     for (const row of this.listMonthRows(company.slug, "incoming-deliveries")) {
       const modelId = this.cleanText(row.modelId || row.modelKaydiId);
-      const bucket = this.ensureBucket(byModel, { ...row, id: modelId });
+      const bucket = modelId ? byModel.get(modelId) : null;
       if (!bucket) continue;
       bucket.musteriIrsaliyeAdedi += this.parseNumber(row.gelenAdet || row.quantity);
       bucket.musteriIrsaliyeleri.push(row);
@@ -380,7 +384,7 @@ export class ModelTakipSummaryController {
       [],
     )) {
       const modelId = this.cleanText(row.modelId || row.modelKaydiId);
-      const bucket = this.ensureBucket(byModel, { ...row, id: modelId });
+      const bucket = modelId ? byModel.get(modelId) : null;
       if (!bucket) continue;
       bucket.uretimAdedi += this.parseNumber(row.netAdet || row.uretimAdedi);
       bucket.imalatKayitlari.push(row);
@@ -388,7 +392,7 @@ export class ModelTakipSummaryController {
 
     for (const row of this.listMonthRows(company.slug, "outgoing-documents")) {
       const modelId = this.cleanText(row.modelId || row.modelKaydiId);
-      const bucket = this.ensureBucket(byModel, { ...row, id: modelId });
+      const bucket = modelId ? byModel.get(modelId) : null;
       if (!bucket) continue;
       const type = this.cleanText(row.belgeTipi || row.belgeTuru || row.documentType).toLocaleUpperCase("tr-TR");
       const adet = this.parseNumber(
@@ -415,7 +419,7 @@ export class ModelTakipSummaryController {
       [],
     )) {
       const modelId = this.cleanText(row.modelId || row.modelKaydiId);
-      const bucket = this.ensureBucket(byModel, { ...row, id: modelId });
+      const bucket = modelId ? byModel.get(modelId) : null;
       if (!bucket) continue;
       bucket.odenenTutar += this.parseNumber(row.alacak || row.credit || row.odenenTutar);
       bucket.cariHareketler.push(row);

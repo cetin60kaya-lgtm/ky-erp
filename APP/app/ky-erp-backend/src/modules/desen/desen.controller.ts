@@ -18,6 +18,7 @@ import { memoryStorage } from "multer";
 import { apiSuccess } from "../../common/api-helpers";
 import { LiveDbService } from "../../database/live-db.service";
 import { ModelService } from "../models/model.service";
+import { DesenWorkflowService } from "./desen-workflow.service";
 import { DesenService } from "./desen.service";
 
 @Controller("models")
@@ -96,11 +97,236 @@ export class SharedModelsController {
 
 @Controller(["desen", "api/desen"])
 export class DesenController {
+  private readonly legacySyncInFlight = new Map<string, Promise<any>>();
+  private readonly legacySyncedAt = new Map<string, number>();
+
   constructor(
     private readonly service: DesenService,
+    private readonly workflow: DesenWorkflowService,
     private readonly liveDb: LiveDbService,
     private readonly modelService: ModelService,
   ) {}
+
+  private async ensureLegacyHavuz(query: Record<string, any>) {
+    const mainCompanySlug = String(query?.mainCompanySlug || query?.mainCompanyId || "").trim();
+    if (!mainCompanySlug) return;
+    const lastSync = this.legacySyncedAt.get(mainCompanySlug) || 0;
+    if (query?.syncLegacy !== "true" && Date.now() - lastSync < 60_000) return;
+    const running = this.legacySyncInFlight.get(mainCompanySlug);
+    if (running) return running;
+    const task = (async () => {
+      const rows = await this.service.listHavuz({
+        ...query,
+        mainCompanySlug,
+        skipAutoOcr: "true",
+      });
+      const result = await this.workflow.importLegacyHavuz({ mainCompanySlug }, rows);
+      this.legacySyncedAt.set(mainCompanySlug, Date.now());
+      return result;
+    })();
+    this.legacySyncInFlight.set(mainCompanySlug, task);
+    try {
+      return await task;
+    } finally {
+      this.legacySyncInFlight.delete(mainCompanySlug);
+    }
+  }
+
+  @Get("workflow/inbox")
+  async workflowInbox(@Query() query: Record<string, any>) {
+    return apiSuccess(await this.workflow.listInbox(query));
+  }
+
+  @Post("workflow/inbox/scan")
+  async workflowInboxScan(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.scanInbox(body ?? {}), "Gelen klasör tarandı");
+  }
+
+  @Get("workflow/inbox/:id/preview")
+  async workflowInboxPreview(
+    @Param("id") id: string,
+    @Query() query: Record<string, any>,
+    @Res() res: any,
+  ) {
+    return res.sendFile(await this.workflow.resolveInboxFile(id, query));
+  }
+
+  @Post("workflow/inbox/process")
+  async workflowInboxProcess(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.processInbox(body ?? {}), "Model ve dosyaları kaydedildi");
+  }
+
+  @Post("workflow/inbox/process-bulk")
+  async workflowInboxProcessBulk(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.processInboxBulk(body ?? {}), "Seçili desenler toplu kaydedildi");
+  }
+
+  @Post("workflow/inbox/ignore")
+  async workflowInboxIgnore(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.ignoreInbox(body ?? {}), "Dosyalar yok sayıldı");
+  }
+
+  @Post("workflow/inbox/move-to-error")
+  async workflowInboxMoveToError(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.moveInboxToError(body ?? {}), "Dosyalar işlenemeyen klasörüne taşındı");
+  }
+
+  @Get("workflow/models")
+  async workflowModels(@Query() query: Record<string, any>) {
+    await this.ensureLegacyHavuz(query);
+    return apiSuccess(await this.workflow.listModels(query));
+  }
+
+  @Get("workflow/analysis/status")
+  async workflowAnalysisStatus(@Query() query: Record<string, any>) {
+    return apiSuccess(await this.workflow.analysisStatus(query));
+  }
+
+  @Post("workflow/analyze")
+  async workflowAnalyze(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.analyzeModels(body ?? {}), "Desen arama indeksi güncellendi");
+  }
+
+  @Post("workflow/models/:id/analyze")
+  async workflowAnalyzeModel(@Param("id") id: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.analyzeModel(id, body ?? {}), "Desen özellikleri okundu");
+  }
+
+  @Get("workflow/models/:id")
+  async workflowModel(@Param("id") id: string, @Query() query: Record<string, any>) {
+    return apiSuccess(await this.workflow.getModel(id, query));
+  }
+
+  @Post("workflow/models")
+  async workflowCreateModel(@Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.createModel(body ?? {}), "Desen modeli oluşturuldu");
+  }
+
+  @Post("workflow/models/:id/files")
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
+  async workflowUploadFile(
+    @Param("id") id: string,
+    @UploadedFile() file: any,
+    @Body() body: Record<string, any>,
+  ) {
+    if (!file) throw new BadRequestException("Dosya zorunludur.");
+    return apiSuccess(await this.workflow.uploadWorkflowFile(id, file, body ?? {}), "Desen dosyası yüklendi");
+  }
+
+  @Put("workflow/models/:id")
+  async workflowUpdateModel(@Param("id") id: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.updateModel(id, body ?? {}), "Desen modeli güncellendi");
+  }
+
+  @Post("workflow/models/:id/archive")
+  async workflowArchiveModel(@Param("id") id: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.archiveModel(id, body ?? {}), "Desen modeli arşivlendi");
+  }
+
+  @Post("workflow/models/:id/operations")
+  async workflowCreateOperation(@Param("id") id: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.createOperation(id, body ?? {}), "Baskı bölgesi eklendi");
+  }
+
+  @Put("workflow/operations/:operationId")
+  async workflowUpdateOperation(@Param("operationId") operationId: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.updateOperation(operationId, body ?? {}), "Baskı bölgesi güncellendi");
+  }
+
+  @Delete("workflow/operations/:operationId")
+  async workflowDeleteOperation(
+    @Param("operationId") operationId: string,
+    @Query() query: Record<string, any>,
+    @Body() body: Record<string, any>,
+  ) {
+    return apiSuccess(await this.workflow.deleteOperation(operationId, { ...(query ?? {}), ...(body ?? {}) }), "Baskı bölgesi kaldırıldı");
+  }
+
+  @Post("workflow/operations/:operationId/channels")
+  async workflowReplaceChannels(@Param("operationId") operationId: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.replaceChannels(operationId, body ?? {}), "Kanal listesi kaydedildi");
+  }
+
+  @Post("workflow/operations/:operationId/channels/parse")
+  workflowParseChannels(@Param("operationId") operationId: string, @Body() body: Record<string, any>) {
+    return apiSuccess({ operationId, channels: this.workflow.parseChannels(body ?? {}) });
+  }
+
+  @Post("workflow/operations/:operationId/channels/reorder")
+  async workflowReorderChannels(@Param("operationId") operationId: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.reorderChannels(operationId, body ?? {}), "Kanal sırası güncellendi");
+  }
+
+  @Put("workflow/channels/:channelId")
+  async workflowUpdateChannel(@Param("channelId") channelId: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.updateChannel(channelId, body ?? {}), "Kanal güncellendi");
+  }
+
+  @Delete("workflow/channels/:channelId")
+  async workflowDeleteChannel(
+    @Param("channelId") channelId: string,
+    @Query() query: Record<string, any>,
+    @Body() body: Record<string, any>,
+  ) {
+    return apiSuccess(await this.workflow.deleteChannel(channelId, { ...(query ?? {}), ...(body ?? {}) }), "Kanal kaldırıldı");
+  }
+
+  @Post("workflow/operations/:operationId/color-groups")
+  async workflowSaveColorGroup(@Param("operationId") operationId: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.upsertColorGroup(operationId, body ?? {}), "Renk grubu kaydedildi");
+  }
+
+  @Put("workflow/color-groups/:groupId")
+  async workflowUpdateColorGroup(@Param("groupId") groupId: string, @Body() body: Record<string, any>) {
+    if (!body?.operationId) throw new BadRequestException("operationId zorunludur.");
+    return apiSuccess(await this.workflow.upsertColorGroup(body.operationId, body, groupId), "Renk grubu güncellendi");
+  }
+
+  @Post("workflow/color-groups/:groupId/link-registered-color")
+  async workflowLinkRegisteredColor(@Param("groupId") groupId: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.linkRegisteredColor(groupId, body ?? {}), "Kayıtlı renk bağlantısı güncellendi");
+  }
+
+  @Get("workflow/registered-colors")
+  async workflowRegisteredColors(@Query() query: Record<string, any>) {
+    return apiSuccess(await this.workflow.searchRegisteredColors(query));
+  }
+
+  @Get("workflow/operations/:operationId/totals")
+  async workflowOperationTotals(@Param("operationId") operationId: string) {
+    return apiSuccess(await this.workflow.calculateTotals(operationId));
+  }
+
+  @Post("workflow/models/:id/sync-dyehouse")
+  async workflowSyncDyehouse(@Param("id") id: string, @Body() body: Record<string, any>) {
+    return apiSuccess(await this.workflow.syncDyehouse(id, body ?? {}), "Boyahane işi güncellendi");
+  }
+
+  @Get("workflow/models/:id/production-summary")
+  async workflowProductionSummary(@Param("id") id: string, @Query() query: Record<string, any>) {
+    return apiSuccess(await this.workflow.getProductionSummary(id, query));
+  }
+
+  @Get("workflow/reports")
+  async workflowReports(@Query() query: Record<string, any>) {
+    await this.ensureLegacyHavuz(query);
+    return apiSuccess(await this.workflow.reports(query));
+  }
+
+  @Get("workflow/reports/export")
+  async workflowReportsExport(@Query() query: Record<string, any>, @Res() res: any) {
+    await this.ensureLegacyHavuz(query);
+    const buffer = await this.workflow.exportReports(query);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=desen-raporu-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    return res.send(buffer);
+  }
+
+  @Get("workflow/files/:id/preview")
+  async workflowFilePreview(@Param("id") id: string, @Res() res: any) {
+    const resolved = await this.workflow.resolveWorkflowFile(id);
+    return res.sendFile(resolved.filePath);
+  }
 
   @Get()
   liveRecords(@Query() query: Record<string, any>) {

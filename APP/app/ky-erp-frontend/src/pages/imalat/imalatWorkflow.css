@@ -1172,3 +1172,724 @@
     grid-template-columns: 1fr;
   }
 }
+
+.smart-mode-tabs { display:flex; gap:8px; padding:8px; margin-bottom:10px; }
+.smart-mode-tabs button { border:1px solid #cbd5e1; background:#fff; border-radius:8px; padding:9px 16px; font-weight:800; cursor:pointer; }
+.smart-mode-tabs button.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+.smart-entry { display:grid; gap:10px; }
+.smart-defaults { display:grid; grid-template-columns:180px 180px minmax(260px,1fr); gap:8px; margin-bottom:8px; }
+.smart-defaults label { font-size:11px; font-weight:800; color:#475569; }
+.smart-defaults input,.smart-defaults select { display:block; width:100%; min-height:36px; margin-top:4px; border:1px solid #cbd5e1; border-radius:7px; padding:6px 8px; }
+.smart-textarea { width:100%; min-height:150px; resize:vertical; border:1px solid #93c5fd; border-radius:9px; padding:12px; font:600 14px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; background:#f8fbff; }
+.smart-summary { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+.smart-table { max-height:520px; }
+.smart-table table { min-width:1650px; }
+.smart-table tr.smart-ready { background:#f0fdf4; }.smart-table tr.smart-review { background:#fffbeb; }.smart-table tr.smart-error { background:#fff1f2; }.smart-table tr.smart-context { background:#f8fafc; }
+.smart-table input,.smart-table select { min-width:120px; width:100%; min-height:31px; border:1px solid #cbd5e1; border-radius:6px; padding:5px; background:#fff; }
+.smart-thumb { width:58px; height:42px; object-fit:contain; border-radius:5px; border:1px solid #dbe3ef; }
+@media(max-width:800px){.smart-defaults,.smart-summary{grid-template-columns:1fr;}}
+
+/* Tek ekranli imalat merkezi */
+.imalat-workspace {
+  display: grid;
+  gap: 10px;
+}
+
+.imalat-command-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  overflow: visible;
+  background: linear-gradient(135deg, #ffffff 0%, #f2f7ff 64%, #eaf2ff 100%);
+  border-color: #c9daf4;
+}
+
+.imalat-command-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.imalat-command-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(145deg, #1d4ed8, #2563eb);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, .22);
+}
+
+.imalat-command-copy h1 {
+  margin: 0;
+  color: #102a50;
+  font-size: 20px;
+  letter-spacing: -.02em;
+}
+
+.imalat-command-copy p {
+  margin: 3px 0 0;
+  color: #5d6f89;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.imalat-view-picker {
+  width: min(430px, 44vw);
+  display: grid;
+  grid-template-columns: 112px minmax(220px, 1fr);
+  align-items: center;
+  gap: 3px 10px;
+}
+
+.imalat-view-picker > span,
+.imalat-entry-mode-picker > span {
+  color: #334e73;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.imalat-view-picker > small {
+  grid-column: 2;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.imalat-view-select {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid #adc7ed;
+  border-radius: 9px;
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 5px 14px rgba(43, 83, 142, .08);
+}
+
+.imalat-view-select select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background: transparent;
+  color: #183b68;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.imalat-workspace-content {
+  min-width: 0;
+  animation: imalat-view-in .18s ease-out;
+}
+
+@keyframes imalat-view-in {
+  from { opacity: .35; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.imalat-entry-mode-card {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  overflow: visible;
+  background: #fbfdff;
+}
+
+.imalat-entry-mode-picker {
+  display: grid;
+  grid-template-columns: 120px minmax(260px, 390px) minmax(260px, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.imalat-entry-mode-picker select {
+  min-height: 38px;
+  border: 1px solid #b8cbe6;
+  border-radius: 8px;
+  padding: 7px 34px 7px 10px;
+  background: #fff;
+  color: #173b68;
+  font-weight: 850;
+}
+
+.imalat-entry-mode-picker small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.smart-capture-card,
+.smart-review-card {
+  border-color: #cad9ed;
+}
+
+.smart-shortcut {
+  padding: 5px 8px;
+  border: 1px solid #d5dfed;
+  border-radius: 6px;
+  background: #fff;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.smart-defaults {
+  grid-template-columns: 155px 155px minmax(250px, 1fr) minmax(190px, .7fr);
+  align-items: end;
+}
+
+.smart-operator-value {
+  min-height: 36px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid #bbd8c9;
+  border-radius: 7px;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.smart-operator-value strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-machine-warning {
+  margin: 0 0 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid #f1cf8a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #854d0e;
+  font-size: 11px;
+}
+
+.smart-machine-warning > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.smart-primary-actions {
+  margin-top: 9px;
+}
+
+.smart-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+}
+
+.smart-review-head {
+  min-height: 58px;
+}
+
+.smart-review-head .seri-actions {
+  justify-content: flex-end;
+}
+
+.iw-btn.active-filter {
+  border-color: #d97706;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.smart-summary-body {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #d8e2ef;
+}
+
+.smart-table {
+  max-height: 540px;
+}
+
+.smart-table table {
+  min-width: 1780px;
+}
+
+.smart-table th:first-child,
+.smart-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+.smart-table th:nth-child(2),
+.smart-table td:nth-child(2) {
+  position: sticky;
+  left: 45px;
+  z-index: 2;
+}
+
+.smart-table th:first-child,
+.smart-table th:nth-child(2) {
+  z-index: 4;
+}
+
+.smart-table td:first-child,
+.smart-table td:nth-child(2) {
+  background: inherit;
+}
+
+.smart-row-number {
+  width: 45px;
+  color: #64748b;
+  font-weight: 900;
+  text-align: center;
+}
+
+.smart-validation-cell {
+  min-width: 220px;
+  display: grid;
+  gap: 3px;
+  color: #9f1239;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.smart-validation-cell span::before {
+  content: "•";
+  margin-right: 5px;
+}
+
+.smart-validation-cell strong {
+  color: #15803d;
+}
+
+@media (max-width: 1050px) {
+  .imalat-command-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .imalat-view-picker {
+    width: 100%;
+  }
+
+  .imalat-entry-mode-picker {
+    grid-template-columns: 110px minmax(220px, 1fr);
+  }
+
+  .imalat-entry-mode-picker small {
+    grid-column: 2;
+  }
+
+  .smart-defaults {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .imalat-view-picker,
+  .imalat-entry-mode-picker,
+  .smart-defaults {
+    grid-template-columns: 1fr;
+  }
+
+  .imalat-view-picker > small,
+  .imalat-entry-mode-picker small {
+    grid-column: 1;
+  }
+
+  .smart-review-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+/* Üretim girişi: tek başlık, tek işlem seçimi */
+.imalat-entry-page,
+.imalat-control-center,
+.imalat-report-analysis {
+  display: grid;
+  gap: 10px;
+}
+
+.imalat-entry-head {
+  min-height: 62px;
+  margin-bottom: 10px;
+  padding: 10px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  overflow: visible;
+  background: linear-gradient(135deg, #fff 0%, #f4f8ff 100%);
+  border-color: #c9daf4;
+}
+
+.imalat-entry-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #15345e;
+  font-size: 15px;
+}
+
+.imalat-entry-head small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.imalat-entry-operation-select {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.imalat-entry-operation-select span,
+.imalat-control-actions label span {
+  color: #526780;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.imalat-entry-operation-select select,
+.imalat-control-actions select {
+  min-width: 250px;
+  min-height: 38px;
+  border: 1px solid #9fbae2;
+  border-radius: 8px;
+  padding: 6px 34px 6px 10px;
+  background: #fff;
+  color: #153f76;
+  font-weight: 850;
+}
+
+.imalat-smart-open-button {
+  min-width: 210px;
+  justify-content: center;
+}
+
+.smart-production-backdrop {
+  z-index: 95;
+  padding: 18px;
+  align-items: stretch;
+}
+
+.smart-production-modal {
+  width: min(1720px, 98vw);
+  height: calc(100vh - 36px);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #b9cce7;
+  border-radius: 14px;
+  background: #f4f7fb;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .32);
+}
+
+.smart-production-modal-head {
+  flex: 0 0 auto;
+  min-height: 68px;
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #ccd9ea;
+  background: linear-gradient(135deg, #fff, #edf4ff);
+}
+
+.smart-production-modal-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #143968;
+  font-size: 17px;
+}
+
+.smart-production-modal-head p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.smart-production-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.smart-production-modal-body .smart-entry {
+  align-content: start;
+}
+
+/* Ortak denetim ve rapor ekrani */
+.imalat-control-head {
+  overflow: visible;
+  border-color: #c9d8ec;
+}
+
+.imalat-control-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.imalat-control-actions label {
+  display: grid;
+  gap: 4px;
+}
+
+.imalat-shared-filters {
+  display: grid;
+  grid-template-columns: 145px 145px repeat(4, minmax(135px, 1fr)) 140px 150px 150px;
+  gap: 8px;
+  align-items: end;
+}
+
+.imalat-filter-buttons {
+  grid-column: span 2;
+  display: flex;
+  gap: 7px;
+}
+
+.imalat-filter-buttons .iw-btn.primary {
+  flex: 1;
+}
+
+.imalat-control-metrics {
+  margin-bottom: 0;
+}
+
+.imalat-control-table {
+  max-height: calc(100vh - 430px);
+  min-height: 220px;
+}
+
+.imalat-control-table table {
+  min-width: 1420px;
+}
+
+.imalat-cell-subtitle {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.imalat-number-danger {
+  color: #b91c1c;
+  font-weight: 900;
+  background: #fff1f2;
+}
+
+/* Makine ve vardiya/makinaci kayit penceresi */
+.iw-modal-box.machine-registry-modal {
+  width: min(1180px, 96vw);
+  max-height: 88vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.machine-registry-body {
+  min-height: 0;
+  overflow: auto;
+  background: #f6f9fd;
+}
+
+.machine-registry-guide {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #bcd2f2;
+  border-radius: 9px;
+  background: #eef5ff;
+  color: #1d4ed8;
+}
+
+.machine-registry-guide div {
+  min-width: 0;
+}
+
+.machine-registry-guide strong,
+.machine-registry-guide span {
+  display: block;
+}
+
+.machine-registry-guide strong {
+  font-size: 12px;
+}
+
+.machine-registry-guide span {
+  margin-top: 2px;
+  color: #4e6480;
+  font-size: 10px;
+}
+
+.machine-registry-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.machine-registry-row {
+  display: grid;
+  grid-template-columns: 62px 110px minmax(160px, .8fr) minmax(180px, 1fr) minmax(180px, 1fr) 110px;
+  align-items: end;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #d5e0ee;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, .04);
+}
+
+.machine-registry-row.inactive {
+  opacity: .68;
+  background: #f8fafc;
+}
+
+.machine-registry-index {
+  min-height: 53px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-radius: 8px;
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.machine-registry-index span {
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.machine-registry-index small {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.machine-registry-row .iw-field input {
+  min-height: 38px;
+  background: #fff;
+}
+
+.machine-registry-row-actions {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.machine-active-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #f8fafc;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.machine-active-switch input {
+  width: 16px;
+  height: 16px;
+}
+
+.machine-registry-footer {
+  position: sticky;
+  bottom: -12px;
+  margin: 12px -12px -12px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #d7e1ee;
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(8px);
+}
+
+.machine-registry-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.machine-registry-footer span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+@media (max-width: 1450px) {
+  .imalat-shared-filters {
+    grid-template-columns: repeat(5, minmax(130px, 1fr));
+  }
+
+  .machine-registry-row {
+    grid-template-columns: 56px 100px repeat(2, minmax(170px, 1fr));
+  }
+
+  .machine-registry-row .iw-field:nth-of-type(3),
+  .machine-registry-row .iw-field:nth-of-type(4) {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 800px) {
+  .imalat-entry-head,
+  .imalat-control-head .iw-card-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .imalat-entry-operation-select,
+  .imalat-control-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .imalat-entry-operation-select select,
+  .imalat-control-actions select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .imalat-shared-filters,
+  .machine-registry-row {
+    grid-template-columns: 1fr;
+  }
+
+  .imalat-filter-buttons {
+    grid-column: 1;
+  }
+}

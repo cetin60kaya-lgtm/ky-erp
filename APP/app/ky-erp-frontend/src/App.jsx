@@ -1,5 +1,6 @@
 ﻿import { Suspense, useEffect, useMemo, useState } from "react";
 import "./App.css";
+import { useCallback } from "react";
 import React from "react";
 import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
@@ -25,6 +26,14 @@ const DesenPage = lazyWithRetry(
   () => import("./pages/modules/DesenPage"),
   "desen",
 );
+const IsnetPage = lazyWithRetry(
+  () => import("./pages/modules/IsnetPage"),
+  "isnet",
+);
+const AiAssistantPage = lazyWithRetry(
+  () => import("./pages/modules/AiAssistantPage"),
+  "asistan",
+);
 
 const MODULE_LOADERS = {
   muhasebe: () => {},
@@ -33,6 +42,8 @@ const MODULE_LOADERS = {
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
+  isnet: () => import("./pages/modules/IsnetPage"),
+  asistan: () => import("./pages/modules/AiAssistantPage"),
 };
 
 function preloadModule(moduleKey) {
@@ -51,7 +62,7 @@ function ModuleLoadingFallback({ label }) {
 class ModuleErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null };
+    this.state = { error: null, recoveryKey: 0 };
   }
 
   static getDerivedStateFromError(error) {
@@ -71,14 +82,23 @@ class ModuleErrorBoundary extends React.Component {
           <button
             className="primary-btn"
             type="button"
-            onClick={() => this.setState({ error: null })}
+            onClick={() =>
+              this.setState((current) => ({
+                error: null,
+                recoveryKey: current.recoveryKey + 1,
+              }))
+            }
           >
             Tekrar Dene
           </button>
         </div>
       );
     }
-    return this.props.children;
+    return (
+      <React.Fragment key={this.state.recoveryKey}>
+        {this.props.children}
+      </React.Fragment>
+    );
   }
 }
 
@@ -109,11 +129,29 @@ const MODULES = [
         label: "Gider Kategorileri",
         icon: "raporlar",
       },
-      { key: "tedarikci-faturalar", label: "Tedarikçi Faturaları", icon: "tedarikci-fatura" },
+      {
+        key: "tedarikci-faturalar",
+        label: "Tedarikçi Faturaları",
+        icon: "tedarikci-fatura",
+      },
       { key: "kesilen-faturalar", label: "Kesilen Faturalar", icon: "dosya" },
-      { key: "kar-zarar", label: "Gelir / Gider", icon: "raporlar" },
-      { key: "model-takip", label: "Model Takip", icon: "model-takip-merkezi" },
+      {
+        key: "musteri-irsaliyeleri",
+        label: "İrsaliyeler",
+        icon: "musteri-irsaliye",
+      },
+      {
+        key: "irsaliye-fatura-kontrol",
+        label: "İrsaliye / Fatura",
+        icon: "dosya",
+      },
+      {
+        key: "model-takip",
+        label: "Model Üretim Takibi",
+        icon: "model-takip-merkezi",
+      },
       { key: "cari-hareketler", label: "Cari Hareketler", icon: "cari-kasa" },
+      { key: "kar-zarar", label: "Gelir / Gider", icon: "raporlar" },
       { key: "envanter-urunleri", label: "Ürünler", icon: "dosya" },
       { key: "kdv-kontrol", label: "KDV Kontrol", icon: "kdv" },
       { key: "cek-odeme", label: "Çek / Ödeme", icon: "cekler" },
@@ -133,8 +171,8 @@ const MODULES = [
     label: "Desen",
     tabs: [
       {
-        key: "desen-yonetim-ozeti",
-        label: "Yeni Model / Eksik Bilgi",
+        key: "gelen-desenler",
+        label: "Gelen Desenler",
         icon: "dashboard",
       },
       {
@@ -157,25 +195,21 @@ const MODULES = [
     label: "Boyahane",
     tabs: [
       {
-        key: "boyahane-yonetim-ozeti",
-        label: "Yönetim Özeti",
+        key: "is-akisi",
+        label: "İş Akışı",
         icon: "dashboard",
       },
       {
-        key: "renk-recete-is-akisi",
-        label: "Renk & Reçete",
-        icon: "file-check",
+        key: "kayitli-renkler",
+        label: "Kayıtlı Renkler",
+        icon: "renk",
       },
-      { key: "kayitli-renkler", label: "Kayıtlı Renkler", icon: "renk" },
-      { key: "hammadde-lot", label: "Hammadde / Lot", icon: "urunler" },
-      { key: "onayli-envanter", label: "Onaylı Envanter", icon: "file-check" },
+      { key: "receteler", label: "Reçeteler", icon: "file-check" },
+      { key: "urun-lotlar", label: "Ürün ve Lotlar", icon: "urunler" },
+      { key: "uretim-gecmisi", label: "Üretim Geçmişi", icon: "dosya" },
+      { key: "boya-giderleri", label: "Boya Giderleri", icon: "odeme" },
       {
-        key: "evraklar-denetim",
-        label: "Evraklar / Denetim",
-        icon: "file-check",
-      },
-      {
-        key: "boyahane-raporlari",
+        key: "raporlar",
         label: "Raporlar",
         icon: "raporlar",
       },
@@ -249,9 +283,43 @@ const MODULES = [
     label: "İmalat",
     tabs: [
       { key: "uretim-girisi", label: "Üretim Girişi" },
-      { key: "imalat-denetim", label: "İmalat Denetim" },
-      { key: "uretim-raporu", label: "Üretim Raporu" },
+      { key: "imalat-kontrol-rapor", label: "Denetim ve Rapor" },
     ],
+  },
+  {
+    key: "isnet",
+    permissionKey: "ISNET",
+    short: "İŞ",
+    label: "İşNet",
+    icon: "eposta",
+    tabs: [
+      {
+        key: "yonetim-merkezi",
+        label: "Analiz ve Eşleştirme",
+        icon: "dashboard",
+      },
+      {
+        key: "belge-akisi",
+        label: "Gelen / Giden Belgeler",
+        icon: "dosya",
+      },
+      {
+        key: "irsaliyeden-faturaya",
+        label: "Fatura Kesme Yardımcısı",
+        icon: "file-check",
+      },
+      { key: "kesilen-belgeler", label: "Yerel Belge Arşivi", icon: "dosya" },
+      { key: "cikti-kuyrugu", label: "Çıktı ve Mail", icon: "file-check" },
+      { key: "ayarlar", label: "Ayarlar", icon: "ayarlar" },
+    ],
+  },
+  {
+    key: "asistan",
+    permissionKey: "ASISTAN",
+    short: "AI",
+    label: "KY ERP Asistan",
+    icon: "dashboard",
+    tabs: [{ key: "sohbet", label: "Asistan Sohbeti", icon: "dashboard" }],
   },
   {
     key: "admin",
@@ -276,6 +344,10 @@ const MUHASEBE_ROUTE_TABS = new Set([
   "model-takip",
   "tedarikci-faturalar",
   "kesilen-faturalar",
+  "musteri-irsaliyeleri",
+  "musteri-irsaliye",
+  "irsaliye-fatura-kontrol",
+  "irsaliye-fatura",
   "kar-zarar",
   "kar",
   "zarar",
@@ -318,6 +390,9 @@ const MUHASEBE_ROUTE_TABS = new Set([
 const LEGACY_ROUTE_TABS = {
   desen: ["desen", "yerlesim", "kalip-yerlesim"],
   boyahane: [
+    "boyahane-yonetim-ozeti",
+    "renk-recete-is-akisi",
+    "boyahane-raporlari",
     "renk-gramaj",
     "kayitli-renkler",
     "hammadde-lot",
@@ -357,6 +432,8 @@ const LEGACY_ROUTE_TABS = {
     "gunluk-odeme-fisleri",
   ],
   uretim: [
+    "imalat-denetim",
+    "uretim-raporu",
     "genel",
     "makinalar",
     "uretim-kayit",
@@ -406,7 +483,9 @@ function shouldRedirectSupplierArchiveRoute(parts, searchParams) {
   if (moduleKey !== "muhasebe") return false;
   const tab = String(tabKey || "").toLocaleLowerCase("tr-TR");
   const extra = String(extraKey || "").toLocaleLowerCase("tr-TR");
-  const center = String(searchParams.get("center") || "").toLocaleLowerCase("tr-TR");
+  const center = String(searchParams.get("center") || "").toLocaleLowerCase(
+    "tr-TR",
+  );
   const tip = String(searchParams.get("tip") || "").toLocaleLowerCase("tr-TR");
   if (tip === "tedarikci-fatura-kontrol-arsiv") return false;
   if (tab === "kontrol-arsiv" || tab === "kontrol-arsivi") return true;
@@ -426,6 +505,15 @@ function getInitialRouteState() {
   }
   const moduleKey = parts[0];
   const tabKey = parts[1];
+  if (
+    moduleKey === "muhasebe" &&
+    ["fatura-kesim-yardimcisi", "fatura-kesim", "fatura-yardimci"].includes(
+      tabKey,
+    )
+  ) {
+    window.history.replaceState({}, "", "/muhasebe/kesilen-faturalar");
+    return { module: "muhasebe", tab: "kesilen-faturalar" };
+  }
   if (moduleKey === "muhasebe" && tabKey === "belge-kontrol") {
     window.history.replaceState({}, "", "/muhasebe/tedarikci-faturalar");
     return { module: "muhasebe", tab: "tedarikci-faturalar" };
@@ -437,6 +525,48 @@ function getInitialRouteState() {
       "/muhasebe/muhasebe-raporlaritip=yonetici-ozet",
     );
     return { module: "muhasebe", tab: "muhasebe-raporlari" };
+  }
+  if (
+    moduleKey === "uretim" &&
+    ["imalat-denetim", "uretim-raporu"].includes(tabKey)
+  ) {
+    window.history.replaceState({}, "", "/uretim/imalat-kontrol-rapor");
+    return { module: "uretim", tab: "imalat-kontrol-rapor" };
+  }
+  if (
+    moduleKey === "desen" &&
+    ["desen-yonetim-ozeti", "gelen-desenler"].includes(tabKey)
+  ) {
+    window.history.replaceState({}, "", "/desen/gelen-desenler");
+    return { module: "desen", tab: "gelen-desenler" };
+  }
+  if (
+    moduleKey === "boyahane" &&
+    ["boyahane-yonetim-ozeti", "renk-recete-is-akisi", "renk-gramaj"].includes(
+      tabKey,
+    )
+  ) {
+    window.history.replaceState({}, "", "/boyahane/is-akisi");
+    return { module: "boyahane", tab: "is-akisi" };
+  }
+  if (
+    moduleKey === "boyahane" &&
+    ["hammadde-lot", "onayli-envanter"].includes(tabKey)
+  ) {
+    window.history.replaceState({}, "", "/boyahane/urun-lotlar");
+    return { module: "boyahane", tab: "urun-lotlar" };
+  }
+  if (
+    moduleKey === "boyahane" &&
+    [
+      "boyahane-raporlari",
+      "evraklar-denetim",
+      "evrak-denetim",
+      "evraklar",
+    ].includes(tabKey)
+  ) {
+    window.history.replaceState({}, "", "/boyahane/raporlar");
+    return { module: "boyahane", tab: "raporlar" };
   }
   if (moduleKey && tabKey && MODULE_ROUTE_TABS[moduleKey].has(tabKey)) {
     if (moduleKey === "muhasebe" && tabKey === "model-muhasebe") {
@@ -466,6 +596,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => getInitialRouteState().tab);
   const [moduleActionContext, setModuleActionContext] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [assistantDialogContext, setAssistantDialogContext] = useState(null);
 
   const visibleModules = useMemo(() => {
     return MODULES.filter((item) => hasModule(item?.permissionKey));
@@ -481,6 +612,57 @@ export default function App() {
     return hasModule(moduleConfig?.permissionKey);
   }, [moduleConfig, hasModule]);
 
+  const openModule = useCallback(
+    (moduleKey, options = {}) => {
+      if (moduleKey === "asistan") {
+        preloadModule("asistan");
+        setAssistantDialogContext((previous) => ({
+          ...(options.actionContext || {}),
+          sourceModule: options.actionContext?.sourceModule || activeModule,
+          sourceRoute: options.actionContext?.sourceRoute || window.location.pathname,
+          nonce: String(Number(previous?.nonce || 0) + 1),
+        }));
+        setIsMobileMenuOpen(false);
+        return;
+      }
+      const found = visibleModules.find((item) => item.key === moduleKey);
+      if (!found) return;
+      preloadModule(found.key);
+      setActiveModule(found.key);
+      if (options.actionContext) {
+        setModuleActionContext((previous) => ({
+          ...options.actionContext,
+          targetModule: found.key,
+          targetTab: options.tabKey || options.actionContext.targetTab || "",
+          nonce: String(Number(previous?.nonce || 0) + 1),
+        }));
+      }
+
+      if (options.tabKey) {
+        setActiveTab(options.tabKey);
+      } else if (found.tabGroups && found.tabGroups.length > 0) {
+        setActiveTab(found.tabGroups[0].tabs[0].key ?? "");
+      } else if (found.tabs && found.tabs.length > 0) {
+        setActiveTab(found.tabs[0].key ?? "");
+      } else {
+        setActiveTab("");
+      }
+      const nextTab =
+        options.tabKey ||
+        (found.tabGroups && found.tabGroups.length > 0
+          ? found.tabGroups[0].tabs[0].key
+          : found.tabs?.[0].key);
+      if (nextTab && MODULE_ROUTE_TABS[found.key].has(nextTab)) {
+        const nextPath = `/${found.key}/${nextTab}`;
+        if (window.location.pathname !== nextPath) {
+          window.history.pushState({}, "", nextPath);
+        }
+      }
+      setIsMobileMenuOpen(false);
+    },
+    [activeModule, visibleModules],
+  );
+
   useEffect(() => {
     if (!isAuthenticated || !visibleModules.length) return;
     const stillVisible = visibleModules.some(
@@ -490,7 +672,7 @@ export default function App() {
 
     const fallback = visibleModules[0];
     openModule(fallback.key);
-  }, [isAuthenticated, visibleModules, activeModule]);
+  }, [isAuthenticated, visibleModules, activeModule, openModule]);
 
   const selectableCompanies = useMemo(() => {
     const activeRows = companies.filter((item) => item?.isActive !== false);
@@ -546,45 +728,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [activeModule, activeTab]);
 
-  function openModule(moduleKey, options = {}) {
-    const found = visibleModules.find((item) => item.key === moduleKey);
-    if (!found) return;
-    preloadModule(found.key);
-    setActiveModule(found.key);
-    if (options.actionContext) {
-      setModuleActionContext((previous) => ({
-        ...options.actionContext,
-        targetModule: found.key,
-        targetTab: options.tabKey || options.actionContext.targetTab || "",
-        nonce: String(Number(previous?.nonce || 0) + 1),
-      }));
-    }
-
-    // tabGroups varsa ilk group'ın ilk tab'ını seç, yoksa ilk tab'ı seç
-    if (options.tabKey) {
-      setActiveTab(options.tabKey);
-    } else if (found.tabGroups && found.tabGroups.length > 0) {
-      const firstTab = found.tabGroups[0].tabs[0];
-      setActiveTab(firstTab.key ?? "");
-    } else if (found.tabs && found.tabs.length > 0) {
-      setActiveTab(found.tabs[0].key ?? "");
-    } else {
-      setActiveTab("");
-    }
-    const nextTab =
-      options.tabKey ||
-      (found.tabGroups && found.tabGroups.length > 0
-         ? found.tabGroups[0].tabs[0].key
-        : found.tabs?.[0].key);
-    if (nextTab && MODULE_ROUTE_TABS[found.key].has(nextTab)) {
-      const nextPath = `/${found.key}/${nextTab}`;
-      if (window.location.pathname !== nextPath) {
-        window.history.pushState({}, "", nextPath);
-      }
-    }
-    setIsMobileMenuOpen(false);
-  }
-
   function setActiveTabWithRoute(tabKey) {
     setActiveTab(tabKey);
     if (MODULE_ROUTE_TABS[activeModule].has(tabKey)) {
@@ -615,6 +758,10 @@ export default function App() {
     };
     if (activeModule === "muhasebe")
       return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule === "isnet")
+      return <IsnetPage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule === "asistan")
+      return <AiAssistantPage {...sharedProps} />;
     if (activeModule === "desen")
       return <DesenPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule === "boyahane")
@@ -633,7 +780,7 @@ export default function App() {
   const activeTabLabel =
     activeTabs.find((item) => item.key === activeTab)?.label || "";
 
-  const hideGlobalTopbar = ["ik", "boyahane", "desen"].includes(activeModule);
+  const hideGlobalTopbar = ["ik", "boyahane"].includes(activeModule);
 
   if (authLoading) {
     return (
@@ -660,9 +807,12 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+    <div className={`app-shell ${isMobileMenuOpen ? "mobile-open" : ""}`}>
       {isMobileMenuOpen && (
-        <div className="mobile-overlay" onClick={() => setIsMobileMenuOpen(false)}></div>
+        <div
+          className="mobile-overlay"
+          onClick={() => setIsMobileMenuOpen(false)}
+        ></div>
       )}
       <aside className="sidebar-thin">
         <div className="kyerp-rail-logo">
@@ -676,7 +826,10 @@ export default function App() {
             onMouseEnter={() => preloadModule(item?.key)}
           >
             <div className="thin-nav-icon">
-              <ErpIcon name={item?.icon || item?.tabs?.[0]?.icon || "dashboard"} size={18} />
+              <ErpIcon
+                name={item?.icon || item?.tabs?.[0]?.icon || "dashboard"}
+                size={18}
+              />
             </div>
             <div className="thin-nav-label">{item?.label}</div>
           </button>
@@ -745,7 +898,10 @@ export default function App() {
 
       <main className="main-content">
         <div className="kyerp-global-topbar">
-          <button className="mobile-menu-toggle" onClick={() => setIsMobileMenuOpen(true)}>
+          <button
+            className="mobile-menu-toggle"
+            onClick={() => setIsMobileMenuOpen(true)}
+          >
             <ErpIcon name="dashboard" size={20} />
           </button>
           <div className="kyerp-global-crumb">
@@ -814,6 +970,41 @@ export default function App() {
           </Suspense>
         </ModuleErrorBoundary>
       </main>
+      {hasModule("ASISTAN") ? (
+        <button
+          type="button"
+          className="kyerp-ai-fab"
+          onClick={() =>
+            openModule("asistan", {
+              tabKey: "sohbet",
+              actionContext: {
+                sourceModule: activeModule,
+                sourceRoute: window.location.pathname,
+              },
+            })
+          }
+        >
+          <ErpIcon name="dashboard" size={18} /> <span>Asistana Sor</span>
+        </button>
+      ) : null}
+      {assistantDialogContext && hasModule("ASISTAN") ? (
+        <div
+          className="ai-dialog-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setAssistantDialogContext(null);
+          }}
+        >
+          <div className="ai-dialog" role="dialog" aria-modal="true" aria-label="KY ERP Asistan">
+            <AiAssistantPage
+              activeMainCompany={normalizedActiveMainCompany}
+              moduleActionContext={assistantDialogContext}
+              modal
+              onClose={() => setAssistantDialogContext(null)}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2175,6 +2175,7 @@ export class UretimService {
         firma: entry.firma || model.firma || "",
         model: entry.model || model.model || "",
         modelId: entry.modelId,
+        modelImageUrl: model.modelImageUrl || model.desenImageThumb || model.imageUrl || model.thumbnail || model.raw?.desenImageThumb || "",
         partiNo: entry.partiNo || entry.siparisNo || entry.irsaliyeNo || "GENEL",
         baskiBolgesi: entry.baskiBolgesi || "Ön",
         planlanan,
@@ -2274,7 +2275,7 @@ export class UretimService {
     ).map((row) => ({ ...row, basilanBolgeAdedi: row.operasyonAdedi }));
     const modelRows = group(
       (row) => `${row.firma}|${row.model}|${row.baskiBolgesi}`,
-      (row) => ({ firma: row.firma, model: row.model, baskiBolgesi: row.baskiBolgesi, operasyonAdedi: 0, tamamlananModelAdedi: 0, eksik: 0, durum: "Tamam" }),
+      (row) => ({ firma: row.firma, model: row.model, modelImageUrl: row.modelImageUrl || "", baskiBolgesi: row.baskiBolgesi, operasyonAdedi: 0, tamamlananModelAdedi: 0, eksik: 0, durum: "Tamam" }),
     ).map((row) => {
       const completed = this.parseNumber(completedByModel.get(this.normalizeKey(`${row.firma}|${row.model}`)));
       return { ...row, tamamlananModelAdedi: completed, durum: row.eksik > 0 ? "Eksik Operasyon" : "Tamam" };
@@ -2476,8 +2477,88 @@ export class UretimService {
       partiNo: this.cleanText(payload.partiNo || payload.batchNo || payload.seriNo),
       zemin: this.cleanText(payload.zemin || payload.zeminRenk),
       not: this.cleanText(payload.not),
+      rawText: this.cleanText(payload.rawText),
+      parseWarnings: Array.isArray(payload.parseWarnings) ? payload.parseWarnings : [],
+      parseConfidence: this.parseNumber(payload.parseConfidence),
+      requestId: this.cleanText(payload.requestId),
+      clientId: this.cleanText(payload.clientId),
       ...(payload.birimFiyat !== undefined ? { birimFiyat: this.parseNumber(payload.birimFiyat) } : {}),
     } as any);
+  }
+
+  async getProductionParserDictionaries(mainCompanySlug?: string, mainCompanyId?: string) {
+    const slug = this.resolveSeriCompanySlug(mainCompanySlug, mainCompanyId);
+    const [models, machines] = await Promise.all([
+      this.getModelKayitlari(slug, { activeOnly: true }),
+      Promise.resolve(this.getImalatMachineRows(slug)),
+    ]);
+    const operators = new Map<string, any>();
+    for (const machine of machines) {
+      for (const name of [machine.gunduzMakinaci, machine.geceMakinaci]) {
+        const clean = this.cleanText(name);
+        if (clean) operators.set(this.normalizeKey(clean), { id: clean, name: clean, defaultMachineId: machine.id, defaultShift: clean === machine.geceMakinaci ? "Gece" : "Gündüz" });
+      }
+    }
+    return { ok: true, data: {
+      models: models.map((model: any) => ({ id: model.id, modelName: model.modelAdi || model.modelName, ground: model.zemin || model.zeminRenk || "", companyName: model.firma || model.firmaAdi || "", imageUrl: model.desenImageThumb || model.imageUrl || model.thumbnail || "", printRegions: this.regionNamesFromModel(model).map((regionName) => ({ regionName })) })),
+      machines: machines.map((machine) => ({ id: machine.id, machineNo: machine.makineNo, machineName: machine.makineAdi, dayOperator: machine.gunduzMakinaci, nightOperator: machine.geceMakinaci })),
+      operators: Array.from(operators.values()),
+      regionAliases: { on: "Ön", "ön": "Ön", arka: "Arka", kol: "Kol", ense: "Ense", etek: "Etek", ust: "Üst", alt: "Alt", diger: "Diğer" },
+      shiftAliases: { gunduz: "Gündüz", gun: "Gündüz", gece: "Gece", gec: "Gece" },
+    }};
+  }
+
+  validateParsedProduction(payload: Record<string, any>) {
+    const entry = payload.entry || payload;
+    const errors: string[] = [];
+    if (!this.cleanText(entry.date || entry.tarih)) errors.push("Tarih zorunludur.");
+    if (!this.cleanText(entry.modelId)) errors.push("Model zorunludur.");
+    if (!this.cleanText(entry.printRegion || entry.baskiBolgesi)) errors.push("Baskı bölgesi zorunludur.");
+    if (this.parseNumber(entry.quantity || entry.adet) <= 0) errors.push("Adet 0'dan büyük olmalıdır.");
+    if (!this.cleanText(entry.shift || entry.vardiya)) errors.push("Vardiya zorunludur.");
+    if (!this.cleanText(entry.machineId || entry.machineName || entry.makineNo)) errors.push("Makine zorunludur.");
+    if (!this.cleanText(entry.operatorId || entry.operatorName || entry.makinaci)) errors.push("Makinacı zorunludur.");
+    return { ok: !errors.length, data: { valid: !errors.length, errors } };
+  }
+
+  async bulkCreateProduction(payload: Record<string, any>) {
+    const slug = this.resolveSeriCompanySlug(payload.mainCompanySlug, payload.mainCompanyId);
+    const requestId = this.cleanText(payload.requestId);
+    if (!requestId) throw new BadRequestException("Toplu kayıt için requestId zorunludur.");
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    if (!entries.length) throw new BadRequestException("En az bir üretim satırı gönderin.");
+    const existing = await (this.prisma as any).productionRecord.findMany({ where: { mainCompanySlug: slug }, orderBy: { createdAt: "desc" }, take: 1000, select: { id: true, raw: true } });
+    const existingKeys = new Set(existing.map((row: any) => `${row.raw?.requestId || ""}:${row.raw?.clientId || ""}`));
+    const success: any[] = []; const failed: any[] = []; const payloadKeys = new Set<string>();
+    for (const entry of entries) {
+      const clientId = this.cleanText(entry.clientId || entry.id);
+      try {
+        if (existingKeys.has(`${requestId}:${clientId}`)) { success.push({ clientId, duplicate: true }); continue; }
+        const validation: any = this.validateParsedProduction(entry);
+        if (!validation.data.valid) throw new BadRequestException(validation.data.errors.join(" "));
+        const payloadKey = [entry.date, entry.modelId, entry.printRegion, entry.quantity, entry.shift, entry.machineId || entry.machineName, entry.operatorName || entry.operatorId]
+          .map((value) => this.normalizeKey(value))
+          .join("|");
+        if (payloadKeys.has(payloadKey)) throw new BadRequestException("Aynı üretim satırı bu fişte birden fazla kez gönderildi.");
+        payloadKeys.add(payloadKey);
+        const saved: any = await this.hizliGiris({
+          mainCompanySlug: slug, requestId, clientId, rawText: entry.rawText,
+          parseWarnings: entry.warnings || entry.parseWarnings, parseConfidence: entry.confidence ?? entry.parseConfidence,
+          tarih: entry.date, modelId: entry.modelId, model: entry.modelName, zemin: entry.ground,
+          baskiBolgesi: entry.printRegion, adet: entry.quantity, vardiya: entry.shift,
+          makineNo: entry.machineId || entry.machineName, makineAdi: entry.machineName,
+          makinaci: entry.operatorName || entry.operatorId, irsaliyeNo: entry.dispatchNo || entry.irsaliyeNo,
+        });
+        success.push({ clientId, id: saved?.kayit?.id || saved?.id });
+      } catch (error: any) { failed.push({ clientId, error: error?.message || "Kayıt reddedildi." }); }
+    }
+    return { ok: true, data: { requestId, success, failed } };
+  }
+
+  async getRecentProduction(mainCompanySlug?: string, mainCompanyId?: string, query: Record<string, any> = {}) {
+    const slug = this.resolveSeriCompanySlug(mainCompanySlug, mainCompanyId);
+    const rows = await this.getSeriProductionEntries(slug);
+    return { ok: true, data: rows.slice(0, Math.min(100, Math.max(1, Number(query.limit || 20)))) };
   }
 
   async getModelGecmisi(id: string, mainCompanySlug?: string, mainCompanyId?: string) {
@@ -2841,6 +2922,11 @@ export class UretimService {
     (newRow as any).makineNo = this.cleanText(payload.makina);
     (newRow as any).makineAdi = this.cleanText((payload as any).makinaAdi || payload.makina);
     (newRow as any).baskiBolgesi = cleanPrintArea;
+    (newRow as any).rawText = this.cleanText((payload as any).rawText);
+    (newRow as any).parseWarnings = Array.isArray((payload as any).parseWarnings) ? (payload as any).parseWarnings : [];
+    (newRow as any).parseConfidence = this.parseNumber((payload as any).parseConfidence);
+    (newRow as any).requestId = this.cleanText((payload as any).requestId);
+    (newRow as any).clientId = this.cleanText((payload as any).clientId);
 
     const existingRows = await (this.prisma as any).productionRecord.findMany({
       where: {

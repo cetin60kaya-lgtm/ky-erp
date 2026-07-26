@@ -1,0 +1,51 @@
+MECT HAKAN GÜRSU
+BALAR MAH.19.SK. NO:4/11 BACILAR/ST. No:
+0 Bacilar/ stanbul
+Tel: 5324284018 Fax:
+Web Sitesi:
+E­Posta: hkngursu@hotmail.com
+Vergi Dairesi: GÜNEL VERG DARES
+TCKN: 47254313470
+
+                                                              e­FATURA
+
+SAYIN                                                                                              Özelletirme No:    TR1.2
+TAHA GYM SAN.VE TC. A.                                                                             Senaryo:           TICARIFATURA
+                                                                                                   Fatura Tipi:       SATIS
+15 TEMMUZ MAH. GÜLBAHAR CAD. ISHANI No:96                                                          Fatura No:         HKN2026000000432
+34212 Bacilar/ stanbul                                                                             Fatura Tarihi:     20­05­2026
+Web Sitesi:                                                                                        Düzenleme Tarihi:  20­05­2026
+E­Posta:                                                                                           rsaliye No:        DDM2026000000431
+Tel: Fax:                                                                                          rsaliye Tarihi:    20­05­2026
+Vergi Dairesi: MARMARA KURUMLAR VERG DARES                                                         Son Ödeme Tarihi   20­05­2026
+VKN: 8160150864
+
+ETTN: 92abed2a­05fc­4360­a7c8­262887c483f5
+
+Sira Mal Hizmet           Açiklama          Miktar Birim Fiyat skonto skonto                 KDV    KDV               Dier Vergiler  Mal Hizmet
+No                                                                            Orani Tutari  Orani  Tutari                               Tutari
+
+        165 DINOSW6                         2.750Adet  12 TL  %0                            %20,00 6.600,00                            33.000,00 TL
+1 1010084463                                                                                                      TL
+                                                                                                                                              0,00 TL
+       LACVERT                              10Adet     0 TL   %0                            %0,00 0,00 TL
+       DINOSW6UUÜST, 26K
+
+2 TEST NUMUNES
+
+                                                                                                     Mal Hizmet Toplam Tutari        33.000,00 TL
+                                                                                                                    Toplam skonto           0,00 TL
+
+                                                                                                                  KDV Matrahi %20    33.000,00 TL
+                                                                                                                    KDV Matrahi %0          0,00 TL
+
+                                                                                                          Hesaplanan KDV(%20)         6.600,00 TL
+                                                                                                            Hesaplanan KDV(%0)              0,00 TL
+
+                                                                                                   Vergiler Dahil Toplam Tutar       39.600,00 TL
+                                                                                                                    Ödenecek Tutar   39.600,00 TL
+
+Vergi stisna Muafiyet Sebebi: 351­TEST NUMUNELER ELDEN TESLM EDLMTR
+Not: Yalniz OTUZDOKUZBNALTIYÜZ TL'dir
+
+Bu belge, Net­NetteFatura sistemi araciliiyla elektronik ortamda oluturulmutur.

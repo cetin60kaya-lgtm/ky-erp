@@ -504,15 +504,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 28px;
   z-index: 5000;
   font-family: Arial, Helvetica, sans-serif;
   color: var(--text);
 }
 
 .modal-bg .modal {
-  width: min(1120px, 96vw);
-  max-height: 92vh;
+  width: min(1460px, calc(100vw - 56px));
+  height: min(880px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -523,16 +524,96 @@
 }
 
 .modal-bg .modal.small {
-  width: min(760px, 94vw);
+  width: min(1080px, calc(100vw - 72px));
+  height: min(780px, calc(100vh - 72px));
 }
 
 .modal-bg .modal.medium {
-  width: min(940px, 95vw);
+  width: min(1380px, calc(100vw - 64px));
+  height: min(840px, calc(100vh - 64px));
+}
+
+.modal-bg .modal.wide {
+  width: calc(100vw - 40px);
+  height: calc(100vh - 40px);
+  max-height: calc(100vh - 40px);
+}
+
+.ik-html .ik-section-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 7px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ik-html .ik-section-tabs button {
+  min-height: 38px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ik-html .ik-section-tabs button.active {
+  border-color: #bfd3f3;
+  background: var(--blue2);
+  color: var(--blue);
+}
+
+.modal-bg .import-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.modal-bg .import-summary div {
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.modal-bg .import-summary span,
+.modal-bg .import-summary b {
+  display: block;
+}
+
+.modal-bg .import-summary span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.modal-bg .import-summary b {
+  margin-top: 7px;
+  font-size: 18px;
+}
+
+.modal-bg .import-table {
+  max-height: calc(94vh - 250px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.modal-bg .import-table table {
+  min-width: 1320px;
+}
+
+.ik-html .sgk-payroll-card {
+  margin-bottom: 10px;
 }
 
 .modal-bg .mh {
-  height: 56px;
-  padding: 0 14px;
+  min-height: 72px;
+  padding: 0 22px;
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
@@ -541,7 +622,7 @@
 }
 
 .modal-bg .mh b {
-  font-size: 18px;
+  font-size: 21px;
 }
 
 .modal-bg .mh small {
@@ -551,12 +632,21 @@
 }
 
 .modal-bg .mb {
-  padding: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px 22px 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-bg .mf {
-  padding: 12px 14px;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  min-height: 64px;
+  margin: auto -22px 0;
+  padding: 12px 22px;
   border-top: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
@@ -571,6 +661,63 @@
   gap: 10px;
 }
 
+.modal-bg .modal-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.modal-bg .modal-section {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.modal-bg .modal-section:last-child {
+  grid-column: 1 / -1;
+}
+
+.modal-bg .modal-section h3 {
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5edf6;
+  color: #12345a;
+  font-size: 15px;
+}
+
+.modal-bg .payment-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.modal-bg .payment-preview {
+  max-height: 480px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.modal-bg .audit-reason,
+.modal-bg .audit-json-grid > div {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.modal-bg .audit-json-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.modal-bg .audit-json-grid pre {
+  max-height: 430px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #334155;
+}
+
 .modal-bg .form .wide,
 .modal-bg .wide {
   grid-column: 1 / -1;
@@ -583,8 +730,9 @@
 
 .modal-bg .drawer-grid {
   display: grid;
-  grid-template-columns: 330px 1fr;
-  gap: 12px;
+  grid-template-columns: minmax(460px, .9fr) minmax(560px, 1.35fr);
+  gap: 20px;
+  align-items: start;
 }
 
 .modal-bg .steps {
@@ -633,11 +781,12 @@
 .modal-bg .daygrid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 7px;
+  gap: 9px;
 }
 
 .modal-bg .day {
-  height: 54px;
+  min-width: 0;
+  height: 62px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
@@ -1667,6 +1816,112 @@
   }
 }
 
+.modal-bg .modal.leave-dialog {
+  width: min(1500px, calc(100vw - 80px));
+  height: min(900px, calc(100vh - 60px));
+}
+
+.modal-bg .modal.form-dialog {
+  width: min(1260px, calc(100vw - 100px));
+  height: min(860px, calc(100vh - 70px));
+}
+
+.modal-bg .leave-dialog .mb,
+.modal-bg .form-dialog .mb { padding: 14px 16px 0; }
+.modal-bg .leave-dialog .mf,
+.modal-bg .form-dialog .mf { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
+.modal-bg .leave-dialog .leave-modal-layout {
+  grid-template-columns: minmax(620px, 1.55fr) minmax(330px, .65fr);
+  gap: 12px;
+  min-height: 0;
+}
+.modal-bg .leave-dialog .leave-modal-main { gap: 8px; }
+.modal-bg .leave-dialog .modal-section { padding: 10px 12px; }
+.modal-bg .leave-dialog .modal-section h3 { margin-bottom: 8px; padding-bottom: 7px; }
+.modal-bg .leave-dialog .form { gap: 7px; }
+.modal-bg .leave-dialog .form textarea { min-height: 48px; }
+.modal-bg .leave-dialog .leave-preview-panel { max-height: 272px; padding: 12px; }
+.modal-bg .leave-dialog .preview-placeholder { padding: 20px 10px; }
+.modal-bg .leave-dialog .leave-preview-button { min-height: 38px; }
+
+.modal-bg .leave-range-calendar {
+  margin-top: 10px;
+  padding: 11px 13px;
+  border: 1px solid #cbd9e8;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+.modal-bg .leave-calendar-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.modal-bg .leave-calendar-head > div:first-child b,
+.modal-bg .leave-calendar-head > div:first-child span { display: block; }
+.modal-bg .leave-calendar-head > div:first-child b { color: #173b66; font-size: 14px; }
+.modal-bg .leave-calendar-head > div:first-child span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.modal-bg .leave-calendar-head .group { align-items: center; }
+.modal-bg .leave-calendar-head strong { min-width: 145px; text-align: center; color: #173b66; }
+.modal-bg .leave-calendar-weekdays,
+.modal-bg .leave-calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.modal-bg .leave-calendar-weekdays b { padding: 4px; text-align: center; color: #62768c; font-size: 10px; }
+.modal-bg .leave-calendar-days > button,
+.modal-bg .leave-calendar-days > .blank { min-height: 48px; }
+.modal-bg .leave-calendar-days > button {
+  position: relative;
+  padding: 5px 7px;
+  border: 1px solid #d8e3ef;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.modal-bg .leave-calendar-days > button:hover { border-color: #4b86e5; box-shadow: 0 3px 10px rgba(34, 102, 196, .12); }
+.modal-bg .leave-calendar-days > button.in-range { border-color: #8db6f2; background: #eaf3ff; }
+.modal-bg .leave-calendar-days > button.range-edge { border-color: #2468d4; background: #2468d4; color: #fff; }
+.modal-bg .leave-calendar-days > button.today::after { content: "Bugun"; position: absolute; top: 5px; right: 6px; color: #d17516; font-size: 8px; font-weight: 800; }
+.modal-bg .leave-calendar-days > button.range-edge.today::after { color: #fff; }
+.modal-bg .leave-calendar-days button > span { display: flex; gap: 3px; margin-top: 5px; overflow: hidden; }
+.modal-bg .leave-calendar-days button i { max-width: 48%; padding: 2px 4px; border-radius: 5px; background: #ffe4bd; color: #965713; font-size: 8px; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-bg .leave-calendar-days button.range-edge i { background: rgba(255,255,255,.22); color: #fff; }
+.modal-bg .leave-calendar-legend { display: flex; align-items: center; gap: 18px; margin-top: 8px; color: var(--muted); font-size: 10px; }
+.modal-bg .leave-calendar-legend span { display: flex; align-items: center; gap: 5px; }
+.modal-bg .leave-calendar-legend i { width: 13px; height: 13px; border-radius: 4px; }
+.modal-bg .leave-calendar-legend i.selected { background: #2468d4; }
+.modal-bg .leave-calendar-legend i.occupied { background: #ffe4bd; }
+.modal-bg .leave-calendar-legend > b { margin-left: auto; color: #173b66; font-size: 11px; }
+
+.modal-bg .form-dialog .form-modal-layout { grid-template-columns: 255px minmax(500px, 1fr); gap: 18px; }
+.modal-bg .form-dialog .form-control-panel { padding: 12px; }
+.modal-bg .form-dialog .a5-leave-sheet { width: 520px; min-height: 660px; padding: 20px; }
+.modal-bg .a5-leave-sheet.editable .a5-edit-head {
+  display: grid;
+  grid-template-columns: 65px 1fr 130px;
+  gap: 8px;
+  min-height: 58px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #17263a;
+  align-items: center;
+}
+.modal-bg .a5-edit-head .a5-logo { font-weight: 900; }
+.modal-bg .a5-edit-head .document-title { border: 0; font-size: 18px; font-weight: 900; text-align: center; }
+.modal-bg .a5-edit-head label { display: grid; grid-template-columns: 48px 1fr; align-items: center; font-size: 8px; }
+.modal-bg .a5-edit-head label input { min-width: 0; height: 22px; padding: 2px 3px; border: 0; border-bottom: 1px dashed #9cabbc; font-size: 8px; }
+.modal-bg .a5-leave-sheet.editable > div:not(.a5-signatures):not(.a5-edit-head) { grid-template-columns: 190px 1fr; min-height: 34px; }
+.modal-bg .a5-leave-sheet.editable > div > b { padding-right: 8px; font-size: 10px; }
+.modal-bg .a5-leave-sheet.editable > div > input,
+.modal-bg .a5-leave-sheet.editable > div > select { width: 100%; min-height: 31px; border: 0; background: #fffdf2; font-size: 10px; }
+.modal-bg .a5-leave-sheet.editable > div > input:focus,
+.modal-bg .a5-leave-sheet.editable > div > select:focus,
+.modal-bg .a5-edit-head input:focus { outline: 2px solid #8eb8f5; background: #fff; }
+.modal-bg .a5-form-note { width: 100%; min-height: 58px; margin-top: 9px; padding: 7px; border: 1px solid #9cabbc; font-size: 9px; resize: vertical; }
+.modal-bg .a5-signatures.editable-signatures { margin-top: 40px; }
+.modal-bg .a5-signatures.editable-signatures input { width: 100%; padding: 9px 3px 3px; border: 0; border-top: 1px solid #17263a; text-align: center; font-size: 9px; }
+
+@media (max-width: 1100px) {
+  .modal-bg .modal.leave-dialog,
+  .modal-bg .modal.form-dialog { width: calc(100vw - 30px); height: calc(100vh - 30px); }
+  .modal-bg .leave-dialog .leave-modal-layout,
+  .modal-bg .form-dialog .form-modal-layout { grid-template-columns: 1fr; }
+  .modal-bg .form-dialog .a5-leave-sheet { width: min(100%, 520px); }
+}
+
 @media (max-width: 980px) {
   .ik-adv-workspace {
     grid-template-columns: 1fr;
@@ -1962,4 +2217,141 @@
   .hr-person-log-card {
     grid-column: auto !important;
   }
+}
+
+/* Annual leave planning and official A5 document */
+.ik-html .annual-subtabs {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7faff;
+}
+
+.ik-html .annual-subtabs button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid #d7e2ef;
+  border-radius: 9px;
+  background: #fff;
+  color: #51657c;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ik-html .annual-subtabs button.active {
+  border-color: #3979df;
+  background: #eaf2ff;
+  color: #1758bd;
+  box-shadow: 0 3px 10px rgba(27, 94, 190, .12);
+}
+
+.ik-html .leave-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ik-html .leave-card-list { padding: 10px; }
+.ik-html .leave-person-card {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 62px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5edf6;
+}
+.ik-html .leave-person-card > div > span,
+.ik-html .leave-person-card > div > strong { display: block; margin-top: 4px; }
+.ik-html .leave-person-card span { color: var(--muted); font-size: 11px; }
+.ik-html .empty-panel { padding: 35px 16px; text-align: center; color: var(--muted); }
+.ik-html .row-actions { display: flex; gap: 5px; }
+
+.ik-html .leave-year-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+.ik-html .leave-month { min-height: 170px; padding: 10px; border: 1px solid #dce6f2; border-radius: 10px; background: #f9fbfe; }
+.ik-html .leave-month h3 { display: flex; justify-content: space-between; margin: 0 0 8px; color: #183b66; }
+.ik-html .leave-month h3 span { padding: 2px 7px; border-radius: 10px; background: #e3edfb; font-size: 11px; }
+.ik-html .leave-month button { width: 100%; margin-bottom: 6px; padding: 8px; border: 1px solid #cbdced; border-left: 4px solid #3979df; border-radius: 7px; background: #fff; text-align: left; cursor: pointer; }
+.ik-html .leave-month button b,
+.ik-html .leave-month button span,
+.ik-html .leave-month button small { display: block; }
+.ik-html .leave-month button span { margin: 3px 0; color: #254a73; }
+.ik-html .leave-month button small,
+.ik-html .leave-month em { color: var(--muted); font-style: normal; }
+
+.ik-html .leave-policy-grid {
+  display: grid;
+  grid-template-columns: minmax(600px, 1.5fr) minmax(300px, .7fr);
+  gap: 20px;
+  padding: 20px;
+}
+.ik-html .weekday-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 15px; }
+.ik-html .weekday-picker label { padding: 13px; border: 1px solid #d7e2ef; border-radius: 10px; background: #fff; cursor: pointer; }
+.ik-html .weekday-picker label.checked { border-color: #4d8ce8; background: #edf5ff; }
+.ik-html .weekday-picker b,
+.ik-html .weekday-picker span { display: block; margin-top: 5px; }
+.ik-html .weekday-picker span { color: var(--muted); font-size: 11px; }
+.ik-html .policy-side { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 12px; background: #f4f8fd; }
+
+.modal-bg .leave-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(650px, 1.5fr) minmax(380px, .8fr);
+  gap: 18px;
+  min-height: 620px;
+}
+.modal-bg .leave-modal-main { display: flex; flex-direction: column; gap: 14px; }
+.modal-bg .leave-preview-button { min-height: 48px; font-size: 14px; }
+.modal-bg .leave-preview-panel { padding: 18px; border: 1px solid #cbd9e8; border-radius: 12px; background: #f7faff; overflow: auto; }
+.modal-bg .leave-preview-panel h3 { margin: 0 0 14px; color: #173b66; }
+.leave-balance-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.leave-balance-strip div { padding: 10px; border: 1px solid #d9e4f0; border-radius: 9px; background: #fff; }
+.leave-balance-strip span,
+.leave-balance-strip b { display: block; }
+.leave-balance-strip span { color: var(--muted); font-size: 10px; font-weight: 800; }
+.leave-balance-strip b { margin-top: 5px; font-size: 19px; }
+.modal-bg .preview-numbers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+.modal-bg .preview-numbers div { padding: 10px; border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; }
+.modal-bg .preview-numbers span,
+.modal-bg .preview-numbers b { display: block; }
+.modal-bg .preview-numbers span { color: var(--muted); font-size: 10px; }
+.modal-bg .preview-numbers b { margin-top: 5px; }
+.success-text { color: #11824b; }
+.danger-text { color: #c52c42; }
+.modal-bg .warnline.danger { background: #ffe8eb; color: #a81e34; }
+.modal-bg .excluded-list { margin-top: 12px; padding: 12px; border-radius: 9px; background: #fff; }
+.modal-bg .excluded-list > b { display: block; margin-bottom: 7px; }
+.modal-bg .excluded-list > span { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #edf1f6; font-size: 11px; }
+.modal-bg .excluded-list em { color: #b16618; font-style: normal; }
+.modal-bg .conflict-list > div { margin-top: 8px; padding: 9px; border-left: 4px solid #8197ae; border-radius: 7px; background: #fff; }
+.modal-bg .conflict-list > div.critical { border-color: #d9364f; }
+.modal-bg .conflict-list > div.warning { border-color: #e39525; }
+.modal-bg .conflict-list b,
+.modal-bg .conflict-list span,
+.modal-bg .conflict-list small { display: block; margin-top: 3px; }
+.modal-bg .preview-placeholder { padding: 50px 20px; text-align: center; color: var(--muted); }
+
+.modal-bg .form-modal-layout { display: grid; grid-template-columns: 340px minmax(480px, 1fr); gap: 28px; align-items: start; }
+.modal-bg .form-control-panel { display: flex; flex-direction: column; gap: 15px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #f7faff; }
+.modal-bg .a5-leave-sheet { width: min(100%, 560px); min-height: 700px; margin: auto; padding: 28px; border: 1.5px solid #17263a; background: #fff; box-shadow: 0 8px 28px rgba(17, 42, 73, .12); }
+.modal-bg .a5-leave-sheet h2 { margin: 0 0 20px; padding-bottom: 14px; border-bottom: 2px solid #17263a; text-align: center; }
+.modal-bg .a5-leave-sheet > div:not(.a5-signatures) { display: grid; grid-template-columns: 210px 1fr; min-height: 42px; border-bottom: 1px solid #9cabbc; align-items: center; }
+.modal-bg .a5-signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 90px; text-align: center; }
+.modal-bg .a5-signatures span { padding-top: 12px; border-top: 1px solid #17263a; }
+
+@media (max-width: 1100px) {
+  .ik-html .leave-control-grid,
+  .modal-bg .leave-modal-layout,
+  .modal-bg .form-modal-layout,
+  .ik-html .leave-policy-grid { grid-template-columns: 1fr; }
+  .ik-html .leave-year-board { grid-template-columns: repeat(2, 1fr); }
+  .ik-html .weekday-picker { grid-template-columns: repeat(2, 1fr); }
 }

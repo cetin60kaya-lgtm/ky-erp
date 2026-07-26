@@ -2025,6 +2025,40 @@ export class MuhasebeFinalService {
       .filter((doc: any) => normalizeType(doc.belgeTuru) !== "SATIS")
       .reduce((sum: number, doc: any) => sum + number(doc.tutar), 0);
     const cekOzet = buildCheckDashboard(cekOdeme.liste);
+    const gunlukIsListesi = [
+      ...documents.slice(0, 10).map((doc: any) => ({
+        oncelik: doc.durum === "islendi" ? "Normal" : "Yüksek",
+        is: "Belge kontrolü",
+        firma: doc.firma,
+        model: doc.modelName,
+        belge: doc.belgeNo,
+        tutar: doc.tutar,
+        durum: doc.durum,
+        hedef: "belge-kontrol",
+      })),
+      ...mail.liste
+        .filter((row: any) => row.status === "alici_eksik")
+        .slice(0, 5)
+        .map((row: any) => ({
+          oncelik: "Yüksek",
+          is: "Mail kişi/departman yetkisi eksik",
+          firma: row.firma,
+          model: row.model,
+          belge: row.faturaNo,
+          tutar: row.tutar,
+          durum: "Alıcı eksik",
+          hedef: "firma-kartlari",
+        })),
+    ].filter((row, index, rows) =>
+      index === rows.findIndex((candidate) =>
+        [candidate.is, candidate.firma, candidate.belge, candidate.hedef]
+          .map((value) => text(value))
+          .join("|") ===
+        [row.is, row.firma, row.belge, row.hedef]
+          .map((value) => text(value))
+          .join("|"),
+      ),
+    );
     return {
       onayBekleyenBelge: documents.filter(
         (doc: any) =>
@@ -2049,31 +2083,7 @@ export class MuhasebeFinalService {
       odemeBekleyen: cari
         .filter((row: any) => row.bakiye < 0)
         .reduce((sum: number, row: any) => sum + Math.abs(row.bakiye), 0),
-      gunlukIsListesi: [
-        ...documents.slice(0, 10).map((doc: any) => ({
-          oncelik: doc.durum === "islendi" ? "Normal" : "Yüksek",
-          is: "Belge kontrolü",
-          firma: doc.firma,
-          model: doc.modelName,
-          belge: doc.belgeNo,
-          tutar: doc.tutar,
-          durum: doc.durum,
-          hedef: "belge-kontrol",
-        })),
-        ...mail.liste
-          .filter((row: any) => row.status === "alici_eksik")
-          .slice(0, 5)
-          .map((row: any) => ({
-            oncelik: "Yüksek",
-            is: "Mail kişi/departman yetkisi eksik",
-            firma: row.firma,
-            model: row.model,
-            belge: row.faturaNo,
-            tutar: row.tutar,
-            durum: "Alıcı eksik",
-            hedef: "firma-kartlari",
-          })),
-      ],
+      gunlukIsListesi,
       yaklasanOdemeler: cekOzet.yaklasanListe,
       cekOzet,
       mailDepartmanYetkiKontrol: {

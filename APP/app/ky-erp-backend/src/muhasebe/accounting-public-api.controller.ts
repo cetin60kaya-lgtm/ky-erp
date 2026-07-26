@@ -17,6 +17,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AccountingApiService } from "./accounting-api.service";
 import { DocumentIntakeServiceV2 } from "./document-intake/document-intake.service";
 import { MuhasebeFinalService } from "./muhasebe-final.service";
+import { FirmaKartlariDbService } from "./firma-kartlari-db.service";
 import { Public } from "../auth/public.decorator";
 
 function slug(input: Record<string, any> = {}) {
@@ -30,7 +31,18 @@ export class AccountingPublicApiController {
     private readonly documents: DocumentIntakeServiceV2,
     private readonly finalService: MuhasebeFinalService,
     private readonly prisma: PrismaService,
+    private readonly companyRules: FirmaKartlariDbService,
   ) {}
+
+  @Post("accounting/sync/company-rules")
+  syncCompanyRules(@Body() body: any) {
+    return this.companyRules.syncCompanyAccountingRules(slug(body), body);
+  }
+
+  @Post("accounting/sync/hr-expenses")
+  syncHrExpenses(@Body() body: any) {
+    return this.companyRules.syncHrAccountingExpenses(slug(body), body);
+  }
 
   @Get("health")
   @Public()

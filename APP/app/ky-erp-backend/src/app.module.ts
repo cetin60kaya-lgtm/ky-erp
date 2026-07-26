@@ -17,6 +17,7 @@ import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/jwt-auth.guard";
 import { ModulePermissionGuard } from "./auth/module-permission.guard";
 import { MobileCompatModule } from "./mobile-compat/mobile-compat.module";
+import { AiModule } from "./ai/ai.module";
 
 @Module({
   controllers: [HealthController],
@@ -35,6 +36,7 @@ import { MobileCompatModule } from "./mobile-compat/mobile-compat.module";
     IkModule,
     BackboneApiModule,
     MobileCompatModule,
+    AiModule,
   ],
   providers: [
     {

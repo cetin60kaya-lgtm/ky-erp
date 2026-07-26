@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
 import {
   CircleAlert,
   CircleCheck,
@@ -17,10 +18,14 @@ import {
 import {
   apiDelete,
   apiGet,
+  apiPatch,
   apiPost,
   apiUpload,
   buildApiUrl,
 } from "../../../utils/api";
+import InvoiceUploadReviewModal, {
+  buildInvoiceUploadPreview,
+} from "../../../components/muhasebe/InvoiceUploadReviewModal";
 import "./KesilenFaturalarTab.css";
 
 const money = (value) =>
@@ -39,7 +44,7 @@ const date = (value) =>
 
 const cariLabel = {
   CARI_PENDING: "Cari işlenmedi",
-  CARI_PROCESSED: "Cari işlendi",
+  CARI_PROCESSED: "Otomatik cari işlendi",
   CARI_ERROR: "Cari hata",
   CARI_MANUAL_REVIEW: "Cari kontrolü",
 };
@@ -69,31 +74,8 @@ function normalizePool(value) {
   };
 }
 
-function uploadSummary(items, fallbackCount) {
-  const list = Array.isArray(items) ? items : [];
-  const imported = list.filter((item) => item && !item.duplicate && !item.error).length;
-  const duplicate = list.filter((item) => item?.duplicate).length;
-  const failed = list.filter((item) => item?.error).length;
-  const parts = [];
-  if (imported) parts.push(`${imported} fatura yüklendi`);
-  if (duplicate) parts.push(`${duplicate} mükerrer kayıt bulundu`);
-  if (failed) parts.push(`${failed} dosya okunamadı`);
-  return parts.length ? `${parts.join(", ")}.` : `${fallbackCount} dosya işlendi.`;
-}
 
-function dateInput(value) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
-}
 
-function savedFilter(key) {
-  try {
-    return localStorage.getItem(`ky-sales-invoices:${key}`) || "";
-  } catch {
-    return "";
-  }
-}
 
 function Badge({ tone = "blue", children }) {
   return <span className={`sales-badge ${tone}`}>{children}</span>;
@@ -121,9 +103,10 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
   const [search, setSearch] = useState("");
   const [modelStatus, setModelStatus] = useState("");
   const [cariStatus, setCariStatus] = useState("");
-  const [dateFrom, setDateFrom] = useState(() => savedFilter("dateFrom"));
-  const [dateTo, setDateTo] = useState(() => savedFilter("dateTo"));
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
+  const [poolStage, setPoolStage] = useState("ALL");
   const [detailOpen, setDetailOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [picker, setPicker] = useState(null);
@@ -133,6 +116,13 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
   const [regions, setRegions] = useState([]);
   const [regionId, setRegionId] = useState("");
   const [matchQuantity, setMatchQuantity] = useState("");
+  const [lineEditor, setLineEditor] = useState(null);
+  const [uploadReview, setUploadReview] = useState({
+    open: false,
+    rows: [],
+    results: null,
+    progress: "",
+  });
 
   const params = useMemo(
     () => ({
@@ -142,7 +132,7 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
     [activeMainCompany?.slug, activeMainCompany?.id],
   );
 
-  const loadPool = async (keepSelection = true) => {
+  const loadPool = useCallback(async (keepSelection = true) => {
     setLoading(true);
     setError("");
     try {
@@ -169,9 +159,9 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [cariStatus, dateFrom, dateTo, modelStatus, params, search, selectedId]);
 
-  const loadDetail = async (invoiceId) => {
+  const loadDetail = useCallback(async (invoiceId) => {
     if (!invoiceId) return;
     try {
       const result = await apiGet(
@@ -182,7 +172,7 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
     } catch (requestError) {
       setError(requestError?.message || "Fatura detayı alınamadı.");
     }
-  };
+  }, [params]);
 
   useEffect(() => {
     loadPool(false);
@@ -194,6 +184,7 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
     cariStatus,
     dateFrom,
     dateTo,
+    loadPool,
   ]);
 
   useEffect(() => {
@@ -207,14 +198,14 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
 
   useEffect(() => {
     loadDetail(selectedId);
-  }, [selectedId]);
+  }, [loadDetail, selectedId]);
 
   useEffect(() => {
     if (!detail || models.length) return;
     apiGet("/desen/modeller", { ...params, sort: "newest", limit: 200, _ts: Date.now() })
       .then((result) => setModels(rows(result)))
       .catch(() => undefined);
-  }, [detail?.id, models.length]);
+  }, [detail, detail?.id, models.length, params]);
 
   const refresh = async (invoice) => {
     if (invoice) setDetail(invoice);
@@ -238,36 +229,59 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
     const selectedFiles = Array.from(event?.target.files || []);
     event.target.value = "";
     if (!selectedFiles.length) return;
-    const form = new FormData();
-    selectedFiles.forEach((file) => form.append("files", file));
-    if (params.mainCompanySlug)
-      form.append("mainCompanySlug", params.mainCompanySlug);
-    if (params.mainCompanyId) form.append("mainCompanyId", params.mainCompanyId);
+    const previewRows = await buildInvoiceUploadPreview(selectedFiles, "sales");
+    setUploadReview({ open: true, rows: previewRows, results: null, progress: "" });
+  };
+
+  const confirmUploadFiles = async (selectedRows) => {
+    const results = [];
+    let firstInvoiceId = "";
     setBusy(true);
     setMessage("");
     setError("");
     try {
-      const result = await apiUpload("/muhasebe/kesilen-faturalar/yukle", form);
-      const uploadItems = Array.isArray(result?.items) ? result.items : [];
-      const first = {
-        ...(uploadItems[0] || {}),
-        message: uploadSummary(uploadItems, selectedFiles.length),
-      };
-      setMessage(
-        first.message ||
-          `${result?.items.length || selectedFiles.length} dosya işlendi.`,
-      );
-      if (first?.invoice?.id) setSelectedId(first.invoice.id);
+      for (let index = 0; index < selectedRows.length; index += 1) {
+        const row = selectedRows[index];
+        setUploadReview((current) => ({ ...current, progress: `${index + 1} / ${selectedRows.length}: ${row.fileName}` }));
+        const form = new FormData();
+        form.append("files", row.file);
+        if (params.mainCompanySlug) form.append("mainCompanySlug", params.mainCompanySlug);
+        if (params.mainCompanyId) form.append("mainCompanyId", params.mainCompanyId);
+        try {
+          const response = await apiUpload("/muhasebe/kesilen-faturalar/yukle", form);
+          const items = Array.isArray(response?.items) ? response.items : [];
+          if (!items.length) results.push({ status: "ERROR", fileName: row.fileName, invoiceNo: row.invoiceNo, message: "Sunucu dosya için kayıt sonucu döndürmedi." });
+          items.forEach((item) => {
+            if (item?.error) {
+              results.push({ status: "ERROR", fileName: item?.fileName || row.fileName, invoiceNo: row.invoiceNo, message: item?.message || "Fatura kaydedilemedi." });
+            } else if (item?.duplicate) {
+              results.push({ status: "DUPLICATE", fileName: row.fileName, invoiceNo: item?.invoice?.invoiceNo || row.invoiceNo, message: item?.message || "Bu fatura daha önce kaydedilmiş." });
+            } else {
+              firstInvoiceId ||= item?.invoice?.id || "";
+              results.push({ status: "SAVED", fileName: row.fileName, invoiceNo: item?.invoice?.invoiceNo || row.invoiceNo, message: item?.message || "Kesilen fatura havuza kaydedildi." });
+            }
+          });
+        } catch (requestError) {
+          results.push({ status: "ERROR", fileName: row.fileName, invoiceNo: row.invoiceNo, message: requestError?.message || "Fatura kaydedilemedi." });
+        }
+      }
+      if (firstInvoiceId) setSelectedId(firstInvoiceId);
       await loadPool(false);
-    } catch (requestError) {
-      setError(requestError?.message || "Fatura yüklenemedi.");
+      const savedCount = results.filter((item) => item.status === "SAVED").length;
+      const duplicateCount = results.filter((item) => item.status === "DUPLICATE").length;
+      const errorCount = results.filter((item) => item.status === "ERROR").length;
+      setMessage(`${savedCount} fatura kaydedildi, ${duplicateCount} mükerrer, ${errorCount} hatalı.`);
     } finally {
       setBusy(false);
+      setUploadReview((current) => ({ ...current, results, progress: "" }));
     }
   };
 
   const processCari = async () => {
     if (!detail) return;
+    const nextInvoice = displayedInvoices.find(
+      (invoice) => invoice?.id !== detail?.id && invoice?.cariStatus !== "CARI_PROCESSED",
+    );
     setBusy(true);
     setError("");
     try {
@@ -277,11 +291,59 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
       );
       setMessage(result?.message);
       await refresh(result?.invoice);
+      if (nextInvoice?.id) setSelectedId(nextInvoice.id);
     } catch (requestError) {
       setError(requestError?.message || "Cari işlem oluşturulamadı.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveLine = async () => {
+    if (!detail?.id || !lineEditor?.id) return;
+    setBusy(true);
+    setError("");
+    try {
+      const payload = detail?.cariStatus === "CARI_PROCESSED"
+        ? {
+            ...params,
+            description: lineEditor.description,
+            lineType: lineEditor.lineType,
+          }
+        : { ...params, ...lineEditor };
+      const result = await apiPatch(
+        `/muhasebe/kesilen-faturalar/${encodeURIComponent(detail.id)}/kalemler/${encodeURIComponent(lineEditor.id)}`,
+        payload,
+      );
+      setLineEditor(null);
+      setMessage("Fatura kalemi güncellendi.");
+      await refresh(result);
+    } catch (requestError) {
+      setError(requestError?.message || "Fatura kalemi güncellenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setDateRange = (range) => {
+    const today = new Date();
+    const iso = (value) => value.toISOString().slice(0, 10);
+    if (range === "ALL") {
+      setDateFrom("");
+      setDateTo("");
+      return;
+    }
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    if (range === "LAST_MONTH") {
+      start.setMonth(start.getMonth() - 1);
+      const end = new Date(today.getFullYear(), today.getMonth(), 0);
+      setDateFrom(iso(start));
+      setDateTo(iso(end));
+      return;
+    }
+    if (range === "SIX_MONTHS") start.setMonth(start.getMonth() - 5);
+    setDateFrom(iso(start));
+    setDateTo(iso(today));
   };
 
   const openPicker = async (line) => {
@@ -391,9 +453,16 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
   );
 
   const summary = pool.summary || {};
-  const displayedInvoices = (pool.items || []).filter(
-    (invoice) => !companyFilter || invoice?.companyId === companyFilter,
-  );
+  const displayedInvoices = (pool.items || [])
+    .filter((invoice) => !companyFilter || invoice?.companyId === companyFilter)
+    .filter((invoice) => {
+      if (poolStage === "ALL") return true;
+      if (poolStage === "PROCESSED") return invoice?.cariStatus === "CARI_PROCESSED";
+      if (poolStage === "ISSUE")
+        return ["CARI_ERROR", "CARI_MANUAL_REVIEW"].includes(invoice?.cariStatus) ||
+          invoice?.modelStatus === "MODEL_REVIEW_REQUIRED";
+      return invoice?.cariStatus !== "CARI_PROCESSED";
+    });
   const firmRows = Array.from(
     (pool.items || [])
       .reduce((map, invoice) => {
@@ -426,6 +495,16 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
 
   return (
     <div className="sales-pool">
+      <InvoiceUploadReviewModal
+        open={uploadReview.open}
+        title="Kesilen Faturaları Kontrol Et"
+        rows={uploadReview.rows}
+        results={uploadReview.results}
+        busy={busy}
+        progress={uploadReview.progress}
+        onClose={() => setUploadReview({ open: false, rows: [], results: null, progress: "" })}
+        onConfirm={confirmUploadFiles}
+      />
       <section className="sales-head">
         <div>
           <div className="sales-title">
@@ -433,8 +512,8 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
             <h2>Kesilen Fatura Havuzu</h2>
           </div>
           <p>
-            Fatura önce müşteri carisine işlenir. Model eşleştirme yalnızca
-            üretim ve adet takibi içindir.
+            Faturalar havuza alınır. Eşleşen XML faturaların müşteri carisi otomatik
+            işlenir; model eşleştirme üretim ve adet takibi içindir.
           </p>
         </div>
         <button
@@ -450,9 +529,16 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
           hidden
           multiple
           type="file"
-          accept=".xml,application/xml,text/xml,.zip,application/zip"
+          accept=".xml,application/xml,text/xml,.pdf,application/pdf,.zip,application/zip"
           onChange={uploadFiles}
         />
+      </section>
+
+      <section className="sales-workflow" aria-label="Kesilen fatura işlem sırası">
+        <div className="active"><b>1</b><span>Havuza Al</span><small>XML, PDF veya ZIP yükle</small></div>
+        <div><b>2</b><span>Kontrol Et</span><small>Müşteri ve fatura bilgileri</small></div>
+        <div><b>3</b><span>Kalemleri Düzenle</span><small>Model ve miktar eşleştirme</small></div>
+        <div><b>4</b><span>Cari Kaydı</span><small>XML eşleşirse otomatik işlenir</small></div>
       </section>
 
       {message ? <div className="sales-message success">{message}</div> : null}
@@ -518,6 +604,12 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
                 />
               </label>
             </div>
+            <div className="sales-quick-dates">
+              <button type="button" onClick={() => setDateRange("MONTH")}>Bu Ay</button>
+              <button type="button" onClick={() => setDateRange("LAST_MONTH")}>Geçen Ay</button>
+              <button type="button" onClick={() => setDateRange("SIX_MONTHS")}>Son 6 Ay</button>
+              <button type="button" onClick={() => setDateRange("ALL")}>Tüm Tarihler</button>
+            </div>
             <div className="sales-filter-grid">
               <select
                 value={cariStatus}
@@ -579,33 +671,6 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
                   Gerçek veride kesilen fatura bulunamadı.
                 </div>
               ) : null}
-              {false && (pool.items || []).map((invoice) => (
-                <button
-                  key={invoice?.id}
-                  className={`sales-list-item ${selectedId === invoice?.id ? "selected" : ""}`}
-                  type="button"
-                  onClick={() => setSelectedId(invoice?.id)}
-                >
-                  <div className="sales-row">
-                    <strong>{invoice?.invoiceNo}</strong>
-                    <Badge tone={statusTone(invoice?.modelStatus)}>
-                      {modelLabel[invoice?.modelStatus] || invoice?.modelStatus}
-                    </Badge>
-                  </div>
-                  <b>{invoice?.companyName}</b>
-                  <span>
-                    {date(invoice?.invoiceDate)} · {invoice?.documentType}
-                  </span>
-                  <div className="sales-row">
-                    <strong>{money(invoice?.grandTotal)}</strong>
-                    <small>
-                      {invoice?.pendingLineCount
-                         ? `${invoice?.pendingLineCount} kalem bekliyor`
-                        : cariLabel[invoice?.cariStatus]}
-                    </small>
-                  </div>
-                </button>
-              ))}
             </div>
             <div className="sales-model-preview">
               {linkedModelImage ? (
@@ -637,8 +702,20 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
 
         <main className="sales-card sales-detail">
           <div className="sales-card-head">
-            <strong>Kesilen Faturalar</strong>
+            <strong>Kesilen Fatura İşlem Havuzu</strong>
             <Badge>{displayedInvoices.length} kayıt</Badge>
+          </div>
+          <div className="sales-stage-tabs">
+            {[
+              ["PENDING", "İşlem Bekleyen"],
+              ["PROCESSED", "Otomatik İşlenen"],
+              ["ISSUE", "Kontrol Gereken"],
+              ["ALL", "Tümü"],
+            ].map(([key, label]) => (
+              <button key={key} type="button" className={poolStage === key ? "active" : ""} onClick={() => setPoolStage(key)}>
+                {label}
+              </button>
+            ))}
           </div>
           <div className="sales-table-wrap invoice-list">
             <table>
@@ -786,6 +863,21 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
                         <td>{number(line?.remainingQuantity)}</td>
                         <td>
                           <div className="sales-line-actions">
+                            <button
+                              className="sales-btn small"
+                              type="button"
+                              onClick={() => setLineEditor({
+                                id: line.id,
+                                description: line.description || "",
+                                quantity: line.quantity || 0,
+                                unit: line.unit || "ADET",
+                                unitPrice: line.unitPrice || 0,
+                                vatRate: line.vatRate || 0,
+                                lineType: line.lineType || "MODEL",
+                              })}
+                            >
+                              Düzenle
+                            </button>
                             {!line?.modelOutside && line?.remainingQuantity > 0 ? (
                               <button
                                 className="sales-btn small"
@@ -985,6 +1077,21 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
                       </td>
                       <td>
                         <div className="sales-line-actions">
+                          <button
+                            className="sales-btn small"
+                            type="button"
+                            onClick={() => setLineEditor({
+                              id: line.id,
+                              description: line.description || "",
+                              quantity: line.quantity || 0,
+                              unit: line.unit || "ADET",
+                              unitPrice: line.unitPrice || 0,
+                              vatRate: line.vatRate || 0,
+                              lineType: line.lineType || "MODEL",
+                            })}
+                          >
+                            Düzenle
+                          </button>
                           {!line?.modelOutside && line?.remainingQuantity > 0 ? (
                             <button className="sales-btn small" type="button" onClick={() => openPicker(line)}>
                               <Link2 size={14} /> Desen Havuzundan Bağla
@@ -1002,6 +1109,27 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {lineEditor ? (
+        <div className="sales-modal-backdrop" onMouseDown={() => setLineEditor(null)}>
+          <div className="sales-modal sales-line-editor" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="sales-modal-head">
+              <div><strong>Fatura Kalemini Düzenle</strong><span>Değişiklikler kaydedildikten sonra model durumu yeniden hesaplanır.</span></div>
+              <button className="sales-btn icon" type="button" onClick={() => setLineEditor(null)}><X size={18} /></button>
+            </div>
+            <div className="sales-edit-grid">
+              <label className="wide"><span>Kalem Açıklaması</span><input value={lineEditor.description} onChange={(event) => setLineEditor((prev) => ({ ...prev, description: event.target.value }))} /></label>
+              <label><span>Miktar</span><input disabled={detail?.cariStatus === "CARI_PROCESSED"} type="number" step="0.001" value={lineEditor.quantity} onChange={(event) => setLineEditor((prev) => ({ ...prev, quantity: event.target.value }))} /></label>
+              <label><span>Birim</span><input value={lineEditor.unit} onChange={(event) => setLineEditor((prev) => ({ ...prev, unit: event.target.value }))} /></label>
+              <label><span>Birim Fiyat</span><input disabled={detail?.cariStatus === "CARI_PROCESSED"} type="number" step="0.01" value={lineEditor.unitPrice} onChange={(event) => setLineEditor((prev) => ({ ...prev, unitPrice: event.target.value }))} /></label>
+              <label><span>KDV Oranı</span><input disabled={detail?.cariStatus === "CARI_PROCESSED"} type="number" step="0.01" value={lineEditor.vatRate} onChange={(event) => setLineEditor((prev) => ({ ...prev, vatRate: event.target.value }))} /></label>
+              <label><span>Kalem Türü</span><select value={lineEditor.lineType} onChange={(event) => setLineEditor((prev) => ({ ...prev, lineType: event.target.value }))}><option value="MODEL">Model Takipli</option><option value="OTHER">Model Dışı</option></select></label>
+            </div>
+            {detail?.cariStatus === "CARI_PROCESSED" ? <div className="sales-message success">Cari kaydı oluştuğu için finansal alanlar korunur; açıklama ve kalem türü düzenlenebilir.</div> : null}
+            <div className="sales-modal-actions"><button className="sales-btn" type="button" onClick={() => setLineEditor(null)}>Vazgeç</button><button className="sales-btn primary" type="button" disabled={busy} onClick={saveLine}>Değişiklikleri Kaydet</button></div>
           </div>
         </div>
       ) : null}

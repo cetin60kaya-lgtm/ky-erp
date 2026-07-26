@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, OnModuleInit } from "@nestjs/common";
 import * as ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -32,7 +33,7 @@ export class IkAdvancedService implements OnModuleInit {
   }
   private safeDate(value: any) { const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d; }
   private norm(value: any) {
-    return this.text(value).toLocaleUpperCase("tr-TR").replace(/[İIı]/g, "I").replace(/\s+/g, " ");
+    return this.text(value).toLocaleUpperCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[İIı]/g, "I").replace(/Ç/g, "C").replace(/Ğ/g, "G").replace(/Ö/g, "O").replace(/Ş/g, "S").replace(/Ü/g, "U").replace(/\s+/g, " ");
   }
   private normalizeAdjustmentType(value: any) {
     const raw = this.text(value || "Avans");
@@ -244,6 +245,33 @@ export class IkAdvancedService implements OnModuleInit {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_ik_settlement_drafts_employee ON ik_settlement_drafts(main_company_id, employee_id, exit_date)`);
+    await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS ik_leave_counting_policy (
+      main_company_id TEXT PRIMARY KEY,
+      counted_weekdays_json TEXT NOT NULL DEFAULT '[1,2,3,4,5,6]',
+      exclude_official_holidays INTEGER NOT NULL DEFAULT 1,
+      max_concurrent_department INTEGER NOT NULL DEFAULT 1,
+      updated_by TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS ik_leave_plans (
+      id TEXT PRIMARY KEY,
+      main_company_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      record_type TEXT NOT NULL DEFAULT 'Yillik izin',
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      return_date TEXT NOT NULL,
+      counted_days REAL NOT NULL DEFAULT 0,
+      excluded_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'PLANNED',
+      document_no TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_ik_leave_plans_period ON ik_leave_plans(main_company_id, start_date, end_date, status)`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_ik_leave_plans_employee ON ik_leave_plans(employee_id, start_date, end_date)`);
     await this.ensureColumn("ik_person_card_settings", "personel_kodu", "TEXT NOT NULL DEFAULT ''");
     await this.ensureColumn("ik_person_card_settings", "exit_date", "TEXT");
     await this.ensureColumn("ik_person_card_settings", "active_passive", "TEXT NOT NULL DEFAULT 'AKTIF'");
@@ -495,7 +523,10 @@ export class IkAdvancedService implements OnModuleInit {
     ) as AnyRow[] : [];
     const sgkByEmployee = new Map<string, AnyRow>();
     sgkRows.forEach((row) => { if (row.employee_id) sgkByEmployee.set(String(row.employee_id), row); });
-    const normalizedEmployees = employees.map((employee) => ({ ...employee, sgkDays: this.number(sgkByEmployee.get(employee.id)?.sgk_days) }));
+    const normalizedEmployees = employees.map((employee) => {
+      const sgk = sgkByEmployee.get(employee.id);
+      return { ...employee, sgkDays: this.number(sgk?.sgk_days), sgkGross: this.number(sgk?.gross), sgkNet: this.number(sgk?.net), sgkHireDate: this.text(sgk?.hire_date), sgkExitDate: this.text(sgk?.exit_date) };
+    });
     const employeeIds = employees.map((employee) => employee.id);
     const placeholders = employeeIds.map(() => "?").join(",");
     const periodStart = new Date(year, month - 1, 1);
@@ -549,7 +580,8 @@ export class IkAdvancedService implements OnModuleInit {
       attendance: normalizedAttendance,
       resolvedDays,
       quickRows,
-      sgkRows: sgkRows.map((row) => ({ id: row.id, employeeId: row.employee_id, fullName: row.full_name, identityNo: row.identity_no, personCode: row.person_code, sgkDays: this.number(row.sgk_days), gross: this.number(row.gross), net: this.number(row.net), employerNetCost: this.number(row.employer_net_cost), differenceReason: row.difference_reason || "" })),
+      sgkImport: latestImport ? { id: latestImport.id, fileName: latestImport.file_name, versionNo: this.number(latestImport.version_no), status: latestImport.status, createdAt: latestImport.created_at } : null,
+      sgkRows: sgkRows.map((row) => ({ id: row.id, employeeId: row.employee_id, fullName: row.full_name, identityNo: row.identity_no, personCode: row.person_code, hireDate: row.hire_date, exitDate: row.exit_date, sgkDays: this.number(row.sgk_days), normalEarning: this.number(row.normal_earning), otherEarning: this.number(row.other_earning), gross: this.number(row.gross), sgkBase: this.number(row.sgk_base), sgkPremium: this.number(row.sgk_premium), unemploymentPremium: this.number(row.unemployment_premium), incomeTax: this.number(row.income_tax), stampTax: this.number(row.stamp_tax), specialDeduction: this.number(row.special_deduction), net: this.number(row.net), employerNetCost: this.number(row.employer_net_cost), differenceReason: row.difference_reason || "", source: (() => { try { return JSON.parse(row.raw_json || "{}"); } catch { return {}; } })() })),
       leaves: leaves.map((row) => ({ id: row.id, employeeId: row.employee_id, recordType: row.record_type, effectType: row.effect_type, startDate: this.dateOnly(row.start_date), endDate: this.dateOnly(row.end_date), dayCount: this.number(row.day_count), documentPath: row.document_path, note: row.note })),
       adjustments: adjustments.map((row) => ({ id: row.id, employeeId: row.employee_id, date: this.dateOnly(row.raw_date), adjustmentType: row.adjustment_type, hourOrDay: this.number(row.hour_or_day), amount: this.number(row.amount), payrollEffect: row.payroll_effect, note: row.note, status: row.status })),
       payroll: payroll.map((row) => ({ id: row.id, employeeId: row.employee_id, salary: this.number(row.salary), roadAllowance: this.number(row.road_allowance), overtimeAmount: this.number(row.overtime_amount), premiumAmount: this.number(row.premium_amount), deductionAmount: this.number(row.deduction_amount), advanceAmount: this.number(row.advance_amount), bankAmount: this.number(row.bank_amount), cashAmount: this.number(row.cash_amount), totalAmount: this.number(row.total_amount), status: row.status })),
@@ -582,6 +614,26 @@ export class IkAdvancedService implements OnModuleInit {
       this.text(body.workType || employee.workType || "AYLIK"), body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1,
       this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"), this.text(body.note || employee.note || ""),
     );
+    const hireDate = this.dateOnly(body.hireDate || body.startDate || employee.hireDate);
+    await (this.prisma as any).hrMonthlyEmployee.update({
+      where: { id: employeeId },
+      data: {
+        fullName: this.text(body.fullName || employee.fullName),
+        code: this.text(body.personelKodu || body.code || employee.code) || null,
+        title: this.text(body.title ?? employee.title) || null,
+        department: this.text(body.department ?? employee.department) || null,
+        hireDate: hireDate ? new Date(`${hireDate}T00:00:00.000Z`) : null,
+        salary: this.number(body.salary ?? employee.salary),
+        roadAllowance: this.number(body.roadAllowance ?? employee.roadAllowance),
+        bankAmount: this.number(body.bankAmount ?? employee.bankAmount),
+        cashAmount: this.number(body.cashAmount ?? employee.cashAmount),
+        annualLeaveEntitlement: this.number(body.annualLeaveEntitlement ?? employee.annualLeaveEntitlement),
+        annualLeaveCarryover: this.number(body.annualLeaveCarryover ?? employee.annualLeaveCarryover),
+        bankPaymentType: this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"),
+        status: this.text(body.activePassive || employee.status || "AKTIF"),
+        note: this.text(body.note ?? employee.note) || null,
+      },
+    });
     await this.writeAuditLog({
       ...body,
       employeeId,
@@ -666,6 +718,112 @@ export class IkAdvancedService implements OnModuleInit {
     return this.saveAttendance({ ...body, status, source: this.text(body.source || "MANUAL") });
   }
 
+  private async getLeavePolicy(query: AnyRow = {}) {
+    const companyId = this.companyCandidates(query)[0];
+    const row = (await (this.prisma as any).$queryRawUnsafe(`SELECT * FROM ik_leave_counting_policy WHERE main_company_id=? LIMIT 1`, companyId) as AnyRow[])[0];
+    let countedWeekdays = [1,2,3,4,5,6];
+    try { const parsed = JSON.parse(row?.counted_weekdays_json || "[]"); if (Array.isArray(parsed) && parsed.length) countedWeekdays = parsed.map(Number).filter((day) => day >= 0 && day <= 6); } catch {}
+    return { mainCompanyId: companyId, countedWeekdays, excludeOfficialHolidays: row ? Boolean(row.exclude_official_holidays) : true, maxConcurrentDepartment: Math.max(1, this.number(row?.max_concurrent_department || 1)), updatedAt: row?.updated_at || null };
+  }
+
+  async saveLeavePolicy(body: AnyRow = {}) {
+    await this.ensureSchema();
+    const companyId = this.companyCandidates(body)[0];
+    const countedWeekdays = [...new Set((Array.isArray(body.countedWeekdays) ? body.countedWeekdays : [1,2,3,4,5,6]).map(Number).filter((day) => day >= 0 && day <= 6))].sort();
+    if (!countedWeekdays.length) throw new BadRequestException("En az bir haftalik izin sayim gunu secilmelidir.");
+    await (this.prisma as any).$executeRawUnsafe(`INSERT INTO ik_leave_counting_policy (main_company_id,counted_weekdays_json,exclude_official_holidays,max_concurrent_department,updated_by,updated_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(main_company_id) DO UPDATE SET counted_weekdays_json=excluded.counted_weekdays_json,exclude_official_holidays=excluded.exclude_official_holidays,max_concurrent_department=excluded.max_concurrent_department,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`, companyId, JSON.stringify(countedWeekdays), body.excludeOfficialHolidays === false ? 0 : 1, Math.max(1, this.number(body.maxConcurrentDepartment || 1)), this.text(body.userName || "Sistem"));
+    await this.writeAuditLog({ ...body, mainCompanyId: companyId, actionType: "IZIN_GUN_POLITIKASI", sourceScreen: "Yillik Izin Genel Kontrol", newValue: { countedWeekdays, excludeOfficialHolidays: body.excludeOfficialHolidays !== false, maxConcurrentDepartment: Math.max(1, this.number(body.maxConcurrentDepartment || 1)) }, reason: this.text(body.reason || "Izin gun sayim politikasi guncellendi") });
+    return { ok: true, policy: await this.getLeavePolicy(body) };
+  }
+
+  private leaveDateList(startDate: string, endDate: string) {
+    const rows: string[] = [];
+    const cursor = new Date(`${startDate}T00:00:00.000Z`), end = new Date(`${endDate}T00:00:00.000Z`);
+    while (cursor <= end && rows.length <= 370) { rows.push(cursor.toISOString().slice(0,10)); cursor.setUTCDate(cursor.getUTCDate()+1); }
+    return rows;
+  }
+
+  async previewLeave(body: AnyRow = {}) {
+    await this.ensureSchema();
+    const companyId = this.companyCandidates(body)[0], employeeId = this.text(body.employeeId), startDate = this.dateOnly(body.startDate), endDate = this.dateOnly(body.endDate || body.startDate);
+    if (!employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate) throw new BadRequestException("Personel ile gecerli baslangic ve bitis tarihleri zorunludur.");
+    const allDates = this.leaveDateList(startDate,endDate); if (!allDates.length || allDates.length > 370) throw new BadRequestException("Izin araligi en fazla 370 gun olabilir.");
+    const employees = await this.employees(body), employee = employees.find((row: AnyRow) => row.id === employeeId); if (!employee) throw new BadRequestException("Personel bulunamadi.");
+    const policy = await this.getLeavePolicy(body), holidays = new Set<string>();
+    for (const year of [...new Set(allDates.map((date)=>Number(date.slice(0,4))))]) { const rows = await this.holidaysForYear(year); rows.forEach((date)=>holidays.add(date)); }
+    const countedDates: string[] = [], excludedDates: AnyRow[] = [];
+    for (const date of allDates) { const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay(); if (!policy.countedWeekdays.includes(weekday)) excludedDates.push({ date, reason: weekday===0?"Pazar / haftalik tatil":"Sirket izin sayim gunu degil" }); else if (policy.excludeOfficialHolidays && holidays.has(date)) excludedDates.push({ date, reason:"Resmi tatil" }); else countedDates.push(date); }
+    let returnDate = endDate; for(let i=0;i<14;i++){ const next=new Date(`${returnDate}T00:00:00.000Z`); next.setUTCDate(next.getUTCDate()+1); returnDate=next.toISOString().slice(0,10); const weekday=next.getUTCDay(); if(policy.countedWeekdays.includes(weekday)&&(!policy.excludeOfficialHolidays||!holidays.has(returnDate))) break; }
+    const overlaps = await (this.prisma as any).$queryRawUnsafe(`SELECT id,employee_id,start_date,end_date,status,record_type FROM ik_leave_plans WHERE main_company_id=? AND status<>'CANCELLED' AND start_date<=? AND end_date>=? AND id<>?`, companyId,endDate,startDate,this.text(body.id || "")) as AnyRow[];
+    const employeeMap = new Map(employees.map((row: AnyRow)=>[row.id,row]));
+    const sameDepartmentCount = overlaps.filter((row) => { const other: any = employeeMap.get(row.employee_id); return row.employee_id !== employeeId && other?.department && other.department === employee.department; }).length;
+    const departmentLimitExceeded = sameDepartmentCount + 1 > policy.maxConcurrentDepartment;
+    const conflicts: AnyRow[] = overlaps.map((row)=>{ const other:any=employeeMap.get(row.employee_id); const same=row.employee_id===employeeId, sameDepartment=other?.department&&other.department===employee.department; return { id:row.id,employeeId:row.employee_id,fullName:other?.fullName||"-",department:other?.department||"",startDate:this.dateOnly(row.start_date),endDate:this.dateOnly(row.end_date),status:row.status,severity:same?"CRITICAL":sameDepartment&&departmentLimitExceeded?"WARNING":"INFO",message:same?"Personelin ayni tarihlerde baska izin kaydi var.":sameDepartment&&departmentLimitExceeded?`${employee.department} bolumunde ayni anda izinli personel siniri asiliyor.`:"Baska personelin izin planiyla tarih kesisiyor."}; });
+    const annualUsedRows = await (this.prisma as any).$queryRawUnsafe(`SELECT COALESCE(SUM(day_count),0) as total FROM hr_leave_records_v2 WHERE employee_id=? AND UPPER(record_type) LIKE '%YILLIK%'`,employeeId) as AnyRow[];
+    const annualRight=this.number(employee.annualLeaveEntitlement)+this.number(employee.annualLeaveCarryover), annualUsed=this.number(annualUsedRows[0]?.total), balanceBefore=annualRight-annualUsed, balanceAfter=balanceBefore-countedDates.length;
+    return { ok:true,employee,policy,startDate,endDate,returnDate,calendarDays:allDates.length,countedDays:countedDates.length,countedDates,excludedDates,conflicts,hasCriticalConflict:conflicts.some((row)=>row.severity==="CRITICAL"),hasDepartmentWarning:conflicts.some((row)=>row.severity==="WARNING"),annualRight,annualUsed,balanceBefore,balanceAfter };
+  }
+
+  async saveLeaveRecord(body: AnyRow = {}) {
+    await this.ensureSchema();
+    const preview = await this.previewLeave(body);
+    if (preview.hasCriticalConflict) throw new BadRequestException("Personelin secilen tarihlerde baska bir izin kaydi var.");
+    if (preview.hasDepartmentWarning && body.allowDepartmentConflict !== true) throw new BadRequestException("Ayni bolumde izin cakismasi var. Kontrol edip onaylayiniz.");
+    const employeeId = this.text(body.employeeId), startDate = preview.startDate, endDate = preview.endDate;
+    const companyId = this.companyCandidates(body)[0];
+    const recordType = this.text(body.recordType || "Yillik izin");
+    const requestedStatus = this.text(body.status || (startDate > new Date().toISOString().slice(0, 10) ? "PLANNED" : "TAKEN")).toUpperCase();
+    const planStatus = ["PLANNED", "APPROVED", "TAKEN"].includes(requestedStatus) ? requestedStatus : "PLANNED";
+    const planId = this.text(body.id) || randomUUID(), marker = `ik-leave-plan:${planId}`;
+    const attendanceStatus = this.norm(recordType).includes("YILLIK") ? "Y" : this.norm(recordType).includes("RAPOR") ? "R" : this.norm(recordType).includes("UCRETSIZ") ? "U" : "M";
+    await (this.prisma as any).$executeRawUnsafe(`DELETE FROM hr_leave_records_v2 WHERE document_path=?`, marker);
+    await (this.prisma as any).$executeRawUnsafe(`DELETE FROM ik_monthly_attendance WHERE main_company_id=? AND employee_id=? AND document_id=?`, companyId, employeeId, planId);
+    await (this.prisma as any).$executeRawUnsafe(
+      `INSERT INTO ik_leave_plans (id,main_company_id,employee_id,record_type,start_date,end_date,return_date,counted_days,excluded_json,status,document_no,note,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id,record_type=excluded.record_type,start_date=excluded.start_date,end_date=excluded.end_date,return_date=excluded.return_date,counted_days=excluded.counted_days,excluded_json=excluded.excluded_json,status=excluded.status,document_no=excluded.document_no,note=excluded.note,updated_at=CURRENT_TIMESTAMP`,
+      planId, companyId, employeeId, recordType, startDate, endDate, preview.returnDate, preview.countedDays, JSON.stringify(preview.excludedDates), planStatus, this.text(body.documentNo), this.text(body.note), this.text(body.userName || "Sistem"),
+    );
+    let recordId: string | null = null;
+    if (planStatus !== "PLANNED") {
+      for (const period of [...new Set(preview.countedDates.map((date: string) => date.slice(0, 7)))]) await this.ensurePeriodWritable(companyId, Number(period.slice(0, 4)), Number(period.slice(5, 7)));
+      recordId = randomUUID();
+      await (this.prisma as any).$executeRawUnsafe(
+        `INSERT INTO hr_leave_records_v2 (id,employee_id,record_type,effect_type,start_date,end_date,day_count,document_path,note,created_at) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+        recordId, employeeId, recordType, this.text(body.effectType || body.wageEffect || "Ucretli"), `${startDate}T00:00:00.000Z`, `${endDate}T00:00:00.000Z`, preview.countedDays, marker, this.text(body.note),
+      );
+      for (const workDate of preview.countedDates) await this.saveAttendance({ ...body, mainCompanyId: companyId, employeeId, workDate, status: attendanceStatus, documentId: planId, source: "LEAVE_PLAN" });
+    }
+    await this.writeAuditLog({ ...body, mainCompanyId: companyId, employeeId, period: startDate.slice(0, 7), actionType: planStatus === "PLANNED" ? "IZIN_PLAN_KAYDI" : "IZIN_ONAY_KAYDI", sourceScreen: "Yillik Izin Genel Kontrol", newValue: { planId, recordId, recordType, status: planStatus, startDate, endDate, countedDays: preview.countedDays }, reason: this.text(body.note || `${recordType} kaydi`) });
+    return { ok: true, planId, recordId, status: planStatus, ...preview, message: planStatus === "PLANNED" ? "Izin plani kaydedildi." : `${recordType} resmi izin kaydi olusturuldu.` };
+  }
+
+  async cancelLeavePlan(body: AnyRow = {}) {
+    await this.ensureSchema();
+    const companyId = this.companyCandidates(body)[0], id = this.text(body.id);
+    if (!id) throw new BadRequestException("Izin kaydi secilmelidir.");
+    const plan = (await (this.prisma as any).$queryRawUnsafe(`SELECT * FROM ik_leave_plans WHERE id=? AND main_company_id=? LIMIT 1`, id, companyId) as AnyRow[])[0];
+    if (!plan) throw new BadRequestException("Izin kaydi bulunamadi.");
+    await (this.prisma as any).$executeRawUnsafe(`UPDATE ik_leave_plans SET status='CANCELLED',note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, this.text(body.reason || plan.note || "Iptal edildi"), id);
+    await (this.prisma as any).$executeRawUnsafe(`DELETE FROM hr_leave_records_v2 WHERE document_path=?`, `ik-leave-plan:${id}`);
+    await (this.prisma as any).$executeRawUnsafe(`DELETE FROM ik_monthly_attendance WHERE main_company_id=? AND employee_id=? AND document_id=?`, companyId, plan.employee_id, id);
+    await this.writeAuditLog({ ...body, mainCompanyId: companyId, employeeId: plan.employee_id, period: this.dateOnly(plan.start_date).slice(0, 7), actionType: "IZIN_IPTAL", sourceScreen: "Yillik Izin Genel Kontrol", oldValue: plan, reason: this.text(body.reason || "Izin kaydi iptal edildi") });
+    return { ok: true, message: "Izin kaydi iptal edildi ve puantaj etkisi geri alindi." };
+  }
+
+  async leaveCenter(query: AnyRow = {}) {
+    await this.ensureSchema();
+    const companyId = this.companyCandidates(query)[0], now = new Date(), defaultFrom = `${now.getFullYear() - 1}-01-01`, defaultTo = `${now.getFullYear() + 1}-12-31`;
+    const from = this.dateOnly(query.from || defaultFrom), to = this.dateOnly(query.to || defaultTo), employees = await this.employees(query), policy = await this.getLeavePolicy(query);
+    const rows = await (this.prisma as any).$queryRawUnsafe(`SELECT * FROM ik_leave_plans WHERE main_company_id=? AND start_date<=? AND end_date>=? ORDER BY start_date ASC`, companyId, to, from) as AnyRow[];
+    const employeeMap = new Map(employees.map((row: AnyRow) => [row.id, row]));
+    const managedPlans = rows.map((row) => { const employee: any = employeeMap.get(row.employee_id); let excludedDates: AnyRow[] = []; try { excludedDates = JSON.parse(row.excluded_json || "[]"); } catch {} return { id: row.id, employeeId: row.employee_id, fullName: employee?.fullName || "-", code: employee?.code || "", department: employee?.department || "", title: employee?.title || "", recordType: row.record_type, startDate: this.dateOnly(row.start_date), endDate: this.dateOnly(row.end_date), returnDate: this.dateOnly(row.return_date), countedDays: this.number(row.counted_days), excludedDates, status: row.status, documentNo: row.document_no || "", note: row.note || "", createdAt: row.created_at, updatedAt: row.updated_at, legacy: false }; });
+    const legacyRows = await (this.prisma as any).$queryRawUnsafe(`SELECT * FROM hr_leave_records_v2 WHERE date(start_date)<=date(?) AND date(end_date)>=date(?) AND (document_path IS NULL OR document_path NOT LIKE 'ik-leave-plan:%') ORDER BY start_date ASC`, to, from) as AnyRow[];
+    const legacyPlans = legacyRows.filter((row) => employeeMap.has(row.employee_id)).map((row) => { const employee: any = employeeMap.get(row.employee_id), endDate = this.dateOnly(row.end_date), returnDateValue = new Date(`${endDate}T00:00:00.000Z`); returnDateValue.setUTCDate(returnDateValue.getUTCDate() + 1); return { id: `legacy:${row.id}`, employeeId: row.employee_id, fullName: employee?.fullName || "-", code: employee?.code || "", department: employee?.department || "", title: employee?.title || "", recordType: row.record_type, startDate: this.dateOnly(row.start_date), endDate, returnDate: returnDateValue.toISOString().slice(0, 10), countedDays: this.number(row.day_count), excludedDates: [], status: "TAKEN", documentNo: "", note: row.note || "", createdAt: row.created_at, updatedAt: row.created_at, legacy: true }; });
+    const plans = [...managedPlans, ...legacyPlans].sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const active = plans.filter((row) => row.status !== "CANCELLED"), conflicts: AnyRow[] = [];
+    for (let i = 0; i < active.length; i += 1) for (let j = i + 1; j < active.length; j += 1) { const a = active[i], b = active[j], overlapStart = a.startDate > b.startDate ? a.startDate : b.startDate, overlapEnd = a.endDate < b.endDate ? a.endDate : b.endDate; if (overlapStart <= overlapEnd && (a.employeeId === b.employeeId || (a.department && a.department === b.department))) { const departmentCount = active.filter((item) => item.department === a.department && item.startDate <= overlapEnd && item.endDate >= overlapStart).length; if (a.employeeId === b.employeeId || departmentCount > policy.maxConcurrentDepartment) conflicts.push({ id: `${a.id}:${b.id}`, severity: a.employeeId === b.employeeId ? "CRITICAL" : "WARNING", department: a.department || b.department, startDate: overlapStart, endDate: overlapEnd, people: [a.fullName, b.fullName], message: a.employeeId === b.employeeId ? "Ayni personelin cakisik izin kayitlari var." : `${a.department} bolumunde ayni anda izinli personel siniri asiliyor.` }); } }
+    return { policy, employees, plans, conflicts, range: { from, to } };
+  }
+
   async quickList(query: AnyRow = {}) {
     const data = await this.month(query);
     const filter = this.text(query.filter || "action");
@@ -739,40 +897,86 @@ export class IkAdvancedService implements OnModuleInit {
     return -1;
   }
 
+  private payrollWorkbook(file: any) {
+    try {
+      const workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: true, raw: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+      if (!sheet) throw new Error("Ilk sayfa bulunamadi.");
+      const values = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: "", raw: true });
+      return values.map((row) => Array.isArray(row) ? row : []);
+    } catch (error: any) {
+      throw new BadRequestException(`Bordro dosyasi okunamadi. XLS veya XLSX dosyasi secin. ${this.text(error?.message)}`);
+    }
+  }
+
+  private payrollDate(value: any) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+    const match = this.text(value).match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);
+    return match ? `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}` : "";
+  }
+
+  private payrollPeriod(values: any[][], fallbackYear: number, fallbackMonth: number) {
+    const heading = this.norm(values.slice(0, 12).flat().map((value) => this.text(value)).join(" "));
+    const months = ["OCAK", "SUBAT", "MART", "NISAN", "MAYIS", "HAZIRAN", "TEMMUZ", "AGUSTOS", "EYLUL", "EKIM", "KASIM", "ARALIK"];
+    const monthIndex = months.findIndex((name) => heading.includes(name));
+    const yearMatch = heading.match(/\b(20\d{2})\b/);
+    return { year: yearMatch ? Number(yearMatch[1]) : fallbackYear, month: monthIndex >= 0 ? monthIndex + 1 : fallbackMonth };
+  }
+
   async previewSgk(file: any, body: AnyRow = {}) {
     await this.ensureSchema();
-    if (!file?.buffer) throw new BadRequestException("SGK Excel dosyası seçilmedi.");
-    const year = Number(body.year || new Date().getFullYear()), month = Number(body.month || new Date().getMonth() + 1), companyId = this.companyCandidates(body)[0];
-    const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(file.buffer);
-    const sheet = workbook.worksheets[0]; if (!sheet) throw new BadRequestException("Excel sayfası bulunamadı.");
+    if (!file?.buffer) throw new BadRequestException("SGK bordro dosyasi secilmedi.");
+    const requestedYear = Number(body.year || new Date().getFullYear()), requestedMonth = Number(body.month || new Date().getMonth() + 1), companyId = this.companyCandidates(body)[0];
+    const values = this.payrollWorkbook(file);
+    const detectedPeriod = this.payrollPeriod(values, requestedYear, requestedMonth);
+    const year = detectedPeriod.year, month = detectedPeriod.month;
     let headerRow = 0, headers: string[] = [];
-    for (let r = 1; r <= Math.min(30, sheet.rowCount); r++) {
-      const values = (sheet.getRow(r).values as any[]).slice(1).map((value) => this.norm(value?.text ?? value));
-      if (values.some((item) => item.includes("ADI SOYADI")) && values.some((item) => item.includes("GUN"))) { headerRow = r; headers = values; break; }
+    for (let r = 0; r < Math.min(30, values.length); r++) {
+      const row = values[r].map((value) => this.norm(value?.text ?? value));
+      if (row.some((item) => item.includes("ADI SOYADI")) && row.some((item) => item.includes("GUN"))) { headerRow = r; headers = row; break; }
     }
-    if (!headerRow) throw new BadRequestException("Bordro başlık satırı bulunamadı. 'ADI SOYADI' ve 'GÜN' kolonları olmalı.");
-    const nameCol = this.headerIndex(headers,["ADI SOYADI"]), tcCol=this.headerIndex(headers,["T.C. KIMLIK","TC KIMLIK"]), codeCol=this.headerIndex(headers,["SICIL","KOD"]), dayCol=this.headerIndex(headers,["GUN"]), grossCol=this.headerIndex(headers,["TOPLAM KAZANC","NORMAL KAZANC"]), netCol=this.headerIndex(headers,["NET ISTIHKAK"]);
-    if (nameCol < 0 || dayCol < 0) throw new BadRequestException("Ad Soyad veya Gün kolonu bulunamadı.");
+    if (!headers.length) throw new BadRequestException("Bordro baslik satiri bulunamadi. 'ADI SOYADI' ve 'GUN' kolonlari olmali.");
+    const nameCol=this.headerIndex(headers,["ADI SOYADI"]),hireCol=this.headerIndex(headers,["GIRIS TARIHI"]),exitCol=this.headerIndex(headers,["CIKIS TARIHI"]),tcCol=this.headerIndex(headers,["T.C. KIMLIK","TC KIMLIK"]),codeCol=this.headerIndex(headers,["SSK SICIL","SICIL NO","PERSONEL KOD"]),dayCol=this.headerIndex(headers,["GUN"]),normalCol=this.headerIndex(headers,["NORMAL KAZANC"]),otherCol=this.headerIndex(headers,["DIGER KAZANC"]),grossCol=this.headerIndex(headers,["TOPLAM KAZANC"]),sgkBaseCol=this.headerIndex(headers,["SSK MATRAH","SGK MATRAH"]),sgkPremiumCol=this.headerIndex(headers,["SSK PRIMI","SGK PRIMI"]),unemploymentCol=this.headerIndex(headers,["ISSIZLIK PRIMI"]),incomeTaxCol=this.headerIndex(headers,["GELIR VERGISI"]),stampTaxCol=this.headerIndex(headers,["DAMGA VERGISI"]),specialDeductionCol=this.headerIndex(headers,["OZEL KESINTI"]),netCol=this.headerIndex(headers,["NET ISTIHKAK"]);
+    if (nameCol < 0 || dayCol < 0) throw new BadRequestException("Ad Soyad veya Gun kolonu bulunamadi.");
     const employees = await this.employees(body);
     const rows: AnyRow[] = [];
     let matched=0, excluded=0;
-    for(let r=headerRow+1;r<=sheet.rowCount;r++){
-      const vals=(sheet.getRow(r).values as any[]).slice(1);
+    const metaText=values.slice(0,10).flat().map((value)=>this.text(value));
+    const workplace=this.text(metaText.find((value)=>this.norm(value).startsWith("ISYERI:"))||"").replace(/^.*?:\s*/,"");
+    const workplaceNo=this.text(metaText.find((value)=>this.norm(value).includes("ISYERI S.NO"))||"").replace(/^.*?:\s*/,"");
+    for(let r=headerRow+1;r<values.length;r++){
+      const vals=values[r];
       const fullName=this.text(vals[nameCol]); const sgkDays=this.number(vals[dayCol]);
-      if(!fullName || !sgkDays || this.norm(fullName).includes("LISTELENEN")) continue;
-      const identityNo=this.text(vals[tcCol]); const personCode=this.text(vals[codeCol]);
+      const identityNo=this.text(vals[tcCol]).replace(/\D/g,"");
+      if(!fullName || identityNo.length!==11 || this.norm(fullName).includes("LISTELENEN")) continue;
+      const personCode=this.text(vals[codeCol]);
       const found=employees.find((employee)=> (identityNo && employee.identityNo===identityNo) || (personCode && employee.code===personCode) || this.norm(employee.fullName)===this.norm(fullName));
       const employeeId=found?.payrollIncluded===false ? null : found?.id || null;
       if(employeeId) matched++; else excluded++;
-      rows.push({ rowNumber:r, employeeId, fullName, identityNo, personCode, sgkDays, gross:this.number(vals[grossCol]), net:this.number(vals[netCol]), status: found?.payrollIncluded===false ? "DIS_HARIC" : employeeId ? "ESLESTI" : "ESLESMEDI" });
+      rows.push({ sourceFile:this.text(file.originalname),workplace,workplaceNo,rowNumber:r+1,selected:Boolean(employeeId),employeeId,fullName,identityNo,personCode,hireDate:this.payrollDate(vals[hireCol]),exitDate:this.payrollDate(vals[exitCol]),sgkDays,normalEarning:this.number(vals[normalCol]),otherEarning:this.number(vals[otherCol]),gross:this.number(vals[grossCol>=0?grossCol:normalCol]),sgkBase:this.number(vals[sgkBaseCol]),sgkPremium:this.number(vals[sgkPremiumCol]),unemploymentPremium:this.number(vals[unemploymentCol]),incomeTax:this.number(vals[incomeTaxCol]),stampTax:this.number(vals[stampTaxCol]),specialDeduction:this.number(vals[specialDeductionCol]),net:this.number(vals[netCol]),status:found?.payrollIncluded===false?"DIS_HARIC":employeeId?"ESLESTI":"ESLESMEDI" });
     }
-    return { ok:true, preview:true, year, month, mainCompanyId:companyId, fileName:this.text(file.originalname), rows, count: rows.length, matched, excluded, message:`${rows.length} SGK satırı ön analiz havuzuna alındı. ${matched} şirket personeli eşleşti; ${excluded} satır dış/eşleşmeyen havuzda.` };
+    return {ok:true,preview:true,year,month,requestedYear,requestedMonth,periodMatches:year===requestedYear&&month===requestedMonth,workplace,workplaceNo,mainCompanyId:companyId,fileName:this.text(file.originalname),rows,count:rows.length,matched,excluded,message:`${rows.length} SGK satiri okundu. ${matched} sirket personeli eslesti; ${excluded} satir haric/eslesmeyen havuzda.`};
   }
 
   async confirmSgk(body: AnyRow = {}) {
     await this.ensureSchema();
     const year = Number(body.year || new Date().getFullYear()), month = Number(body.month || new Date().getMonth() + 1), companyId = this.companyCandidates(body)[0];
-    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const rawRows = Array.isArray(body.rows) ? body.rows.filter((row: AnyRow) => row.selected !== false) : [];
+    const grouped = new Map<string, AnyRow>();
+    for (const row of rawRows) {
+      const key = this.text(row.employeeId) || `DIS|${this.text(row.identityNo)}|${this.norm(row.fullName)}`;
+      const current = grouped.get(key);
+      if (!current) { grouped.set(key, { ...row, sourceRows: [row] }); continue; }
+      ["sgkDays","normalEarning","otherEarning","gross","sgkBase","sgkPremium","unemploymentPremium","incomeTax","stampTax","specialDeduction","employerSgk","employerUnemployment","sgkIncentive","employerNetCost","net"].forEach((field) => {
+        current[field] = this.number(current[field]) + this.number(row[field]);
+      });
+      current.sourceRows.push(row);
+      current.sourceFile = [...new Set(current.sourceRows.map((item: AnyRow) => this.text(item.sourceFile)).filter(Boolean))].join(" + ");
+      current.workplace = [...new Set(current.sourceRows.map((item: AnyRow) => this.text(item.workplace)).filter(Boolean))].join(" + ");
+      current.workplaceNo = [...new Set(current.sourceRows.map((item: AnyRow) => this.text(item.workplaceNo)).filter(Boolean))].join(" + ");
+    }
+    const rows = [...grouped.values()];
     if (!rows.length) throw new BadRequestException("Onaylanacak SGK ön analiz satırı bulunamadı.");
     const importId=randomUUID();
     const versionRows = await (this.prisma as any).$queryRawUnsafe(`SELECT COUNT(*) as count FROM ik_sgk_imports WHERE main_company_id=? AND period_year=? AND period_month=?`, companyId, year, month) as AnyRow[];
@@ -783,8 +987,8 @@ export class IkAdvancedService implements OnModuleInit {
       const employeeId=this.text(row.employeeId) || null;
       if(employeeId) matched++; else excluded++;
       await (this.prisma as any).$executeRawUnsafe(
-        `INSERT INTO ik_sgk_rows (id,import_id,employee_id,full_name,identity_no,person_code,sgk_days,gross,net,employer_net_cost,difference_reason,raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        randomUUID(),importId,employeeId,this.text(row.fullName),this.text(row.identityNo),this.text(row.personCode),this.number(row.sgkDays),this.number(row.gross),this.number(row.net),this.number(row.employerNetCost),this.text(row.differenceReason),JSON.stringify(row),
+        `INSERT INTO ik_sgk_rows (id,import_id,employee_id,full_name,identity_no,person_code,hire_date,exit_date,sgk_days,normal_earning,other_earning,total_earning,sgk_base,sgk_premium,unemployment_premium,income_tax,stamp_tax,special_deduction,employer_sgk,employer_unemployment,sgk_incentive,gross,net,employer_net_cost,difference_reason,raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        randomUUID(),importId,employeeId,this.text(row.fullName),this.text(row.identityNo),this.text(row.personCode),this.text(row.hireDate),this.text(row.exitDate),this.number(row.sgkDays),this.number(row.normalEarning),this.number(row.otherEarning),this.number(row.gross),this.number(row.sgkBase),this.number(row.sgkPremium),this.number(row.unemploymentPremium),this.number(row.incomeTax),this.number(row.stampTax),this.number(row.specialDeduction),this.number(row.employerSgk),this.number(row.employerUnemployment),this.number(row.sgkIncentive),this.number(row.gross),this.number(row.net),this.number(row.employerNetCost),this.text(row.differenceReason),JSON.stringify(row),
       );
     }
     return { ok:true, importId, versionNo, count: rows.length, matched, excluded, message:`${rows.length} SGK satırı ${versionNo}. versiyon olarak onaylandı.` };
@@ -893,10 +1097,11 @@ export class IkAdvancedService implements OnModuleInit {
       const advanceAmount = ownAdjustments.filter((row) => this.isAdvanceType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
       const deductionAmount = ownAdjustments.filter((row) => this.isDeductionType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
       const grossPay = Math.max(0, salaryPay + roadPay + overtimeAmount + premiumAmount - advanceAmount - deductionAmount);
-      const plannedBank = this.number(employee.bankAmount);
+      const officialPayrollNet = followsSgk ? this.number(employee.sgkNet) : 0;
+      const plannedBank = officialPayrollNet > 0 ? officialPayrollNet : this.number(employee.bankAmount);
       const plannedCash = this.number(employee.cashAmount);
       const paymentType = this.norm(employee.paymentType || "BANKA_ELDEN");
-      const onlyCash = paymentType.includes("SADECE ELDEN") || paymentType.includes("SADECE_ELDEN") || (paymentType.includes("ELDEN") && !paymentType.includes("BANKA"));
+      const onlyCash = officialPayrollNet <= 0 && (paymentType.includes("SADECE ELDEN") || paymentType.includes("SADECE_ELDEN") || (paymentType.includes("ELDEN") && !paymentType.includes("BANKA")));
       const onlyBank = paymentType.includes("SADECE BANKA") || paymentType.includes("SADECE_BANKA") || (paymentType.includes("BANKA") && !paymentType.includes("ELDEN"));
       let bank = onlyCash
         ? 0
@@ -919,6 +1124,7 @@ export class IkAdvancedService implements OnModuleInit {
         salary, roadAllowance: road, salaryPay, salaryCut, roadPay, roadCut,
         overtimeAmount, premiumAmount, advanceAmount, deductionAmount,
         bank, cash, total: grossPay + advanceAmount,
+        officialPayrollNet, bankSource: officialPayrollNet > 0 ? "SGK_BORDRO_NET_ISTIHKAK" : "PERSONEL_ODEME_PLANI",
       };
       const override = overrides.get(employee.id);
       const manual = override ? JSON.parse(override.override_json || "{}") : null;

@@ -112,12 +112,18 @@ export async function createProductAlias(activeMainCompany, payload) {
   );
 }
 
-export async function uploadDocuments(activeMainCompany, files) {
+export async function uploadDocuments(activeMainCompany, files, options = {}) {
   const company = requireCompany(activeMainCompany);
   const formData = new FormData();
   Array.from(files || []).forEach((file) => formData.append("files", file));
   formData.set("mainCompanySlug", company?.mainCompanySlug);
   formData.set("mainCompanyId", company?.mainCompanyId);
+  if (options.targetType) formData.set("targetType", options.targetType);
+  if (options.documentType) formData.set("documentType", options.documentType);
+  if (options.templateCompanyName) {
+    formData.set("templateCompanyName", options.templateCompanyName);
+  }
+  if (options.notes) formData.set("notes", options.notes);
   return unwrap(await apiUpload("/muhasebe/document-upload", formData));
 }
 
@@ -129,19 +135,51 @@ export async function uploadDocumentsInChunks(
   const chunkSize = Number(options.chunkSize || 20);
   const allFiles = Array.from(files || []);
   const results = [];
+  const records = [];
+  const failures = [];
+  let processed = 0;
+  const appendResponse = (response) => {
+    results.push(...(Array.isArray(response?.results) ? response.results : []));
+    records.push(...(Array.isArray(response?.records) ? response.records : []));
+  };
+  const appendFailure = (file, error) => {
+    const failure = {
+      fileName: file?.name || "Dosya",
+      status: "ERROR",
+      routeStatus: "ERROR",
+      routeMessage: error?.message || "Dosya yüklenemedi.",
+    };
+    failures.push(failure);
+    results.push(failure);
+  };
   for (let index = 0; index < allFiles.length; index += chunkSize) {
     const chunk = allFiles.slice(index, index + chunkSize);
-    const response = await uploadDocuments(activeMainCompany, chunk);
-    results.push(...(Array.isArray(response.results) ? response.results : []));
-    if (typeof options.onProgress === "function") {
-      options.onProgress({
-        done: Math.min(index + chunk.length, allFiles.length),
-        total: allFiles.length,
-        response,
-      });
+    try {
+      const response = await uploadDocuments(activeMainCompany, chunk, options);
+      appendResponse(response);
+      processed += chunk.length;
+      if (typeof options.onProgress === "function") {
+        options.onProgress({ done: processed, total: allFiles.length, response });
+      }
+    } catch (chunkError) {
+      // Bir dosyanin hatasi ayni parcadaki diger dosyalari sessizce atlamasin.
+      // Parcayi dosya bazinda tekrar dene ve her sonucu ayri raporla.
+      for (const file of chunk) {
+        try {
+          const response = await uploadDocuments(activeMainCompany, [file], options);
+          appendResponse(response);
+        } catch (fileError) {
+          appendFailure(file, fileError || chunkError);
+        } finally {
+          processed += 1;
+          if (typeof options.onProgress === "function") {
+            options.onProgress({ done: processed, total: allFiles.length });
+          }
+        }
+      }
     }
   }
-  return { ok: true, results };
+  return { ok: failures.length === 0, results, records, failures };
 }
 
 export async function fetchUploadHistory(activeMainCompany) {
@@ -174,11 +212,17 @@ export async function fetchIncomingDeliveryPool(activeMainCompany) {
 }
 
 export async function saveIncomingDelivery(activeMainCompany, payload) {
+  const id = payload?.id || payload?.documentId;
   return unwrap(
-    await apiPost("/muhasebe/incoming-deliveries", {
-      ...payload,
-      ...requireCompany(activeMainCompany),
-    }),
+    id
+      ? await apiPatch(`/muhasebe/incoming-deliveries/${encodeURIComponent(id)}`, {
+          ...payload,
+          ...requireCompany(activeMainCompany),
+        })
+      : await apiPost("/muhasebe/incoming-deliveries", {
+          ...payload,
+          ...requireCompany(activeMainCompany),
+        }),
   );
 }
 
@@ -201,6 +245,24 @@ export async function linkIncomingDeliveryToModel(
   );
 }
 
+export async function linkIncomingDeliveryLinesToModels(
+  activeMainCompany,
+  id,
+  allocations,
+  details = {},
+) {
+  return unwrap(
+    await apiPost(
+      `/muhasebe/incoming-deliveries/${encodeURIComponent(id)}/link-models`,
+      {
+        allocations,
+        ...details,
+        ...requireCompany(activeMainCompany),
+      },
+    ),
+  );
+}
+
 export async function fetchOutgoingDocumentsPool(activeMainCompany) {
   return normalizeList(
     unwrap(
@@ -213,11 +275,17 @@ export async function fetchOutgoingDocumentsPool(activeMainCompany) {
 }
 
 export async function saveOutgoingDocument(activeMainCompany, payload) {
+  const id = payload?.id || payload?.documentId;
   return unwrap(
-    await apiPost("/muhasebe/outgoing-documents", {
-      ...payload,
-      ...requireCompany(activeMainCompany),
-    }),
+    id
+      ? await apiPatch(`/muhasebe/outgoing-documents/${encodeURIComponent(id)}`, {
+          ...payload,
+          ...requireCompany(activeMainCompany),
+        })
+      : await apiPost("/muhasebe/outgoing-documents", {
+          ...payload,
+          ...requireCompany(activeMainCompany),
+        }),
   );
 }
 
@@ -249,6 +317,30 @@ export async function linkOutgoingDocumentToModel(
         ...requireCompany(activeMainCompany),
       },
     ),
+  );
+}
+
+export async function fetchModelReconciliations(activeMainCompany) {
+  return normalizeList(
+    unwrap(
+      await apiGet(
+        "/muhasebe/model-reconciliation",
+        requireCompany(activeMainCompany),
+      ),
+    ),
+  );
+}
+
+export async function completeModelReconciliation(
+  activeMainCompany,
+  payload,
+) {
+  return unwrap(
+    await apiPost("/muhasebe/model-reconciliation/complete", {
+      ...payload,
+      confirm: true,
+      ...requireCompany(activeMainCompany),
+    }),
   );
 }
 

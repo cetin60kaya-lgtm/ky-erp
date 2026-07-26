@@ -49,6 +49,18 @@ export async function postUretimHizliGiris(activeMainCompany, payload = {}) {
   );
 }
 
+export async function getProductionParserDictionaries(activeMainCompany) {
+  return unwrap(await apiGet("/production/parser-dictionaries", withCompany(activeMainCompany)));
+}
+
+export async function bulkCreateProduction(activeMainCompany, payload = {}) {
+  return unwrap(await apiPost("/production/bulk-create", withCompany(activeMainCompany, payload)));
+}
+
+export async function getRecentProductionEntries(activeMainCompany, params = {}) {
+  return unwrap(await apiGet("/production/recent", withCompany(activeMainCompany, params)));
+}
+
 export async function getUretimModelGecmisi(activeMainCompany, modelId) {
   return unwrap(
     await apiGet(

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { mobileApiGet, mobileApiPost, normalizeList, getField } from "./mobileApi";
 import { MobileLoading, MobileError, MobileEmpty } from "./MobileComponents";
 
@@ -44,9 +44,13 @@ export default function MobileIKGunlukGiris() {
     return dates;
   }
 
-  const days = startDate && endDate && new Date(startDate) <= new Date(endDate) 
-     ? getDaysArray(startDate, endDate) 
-    : [];
+  const days = useMemo(
+    () =>
+      startDate && endDate && new Date(startDate) <= new Date(endDate)
+        ? getDaysArray(startDate, endDate)
+        : [],
+    [startDate, endDate],
+  );
 
   function addEmployee(emp) {
     if (selectedEmployees.find(e => e.personelId === emp.id)) return;
@@ -87,7 +91,7 @@ export default function MobileIKGunlukGiris() {
       });
       return { ...emp, gunler: newGunler };
     }));
-  }, [startDate, endDate]);
+  }, [startDate, endDate, days]);
 
   async function handleSave() {
     if (!selectedEmployees.length) {

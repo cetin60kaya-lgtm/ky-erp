@@ -238,6 +238,30 @@ export function extractInvoiceLines(text: string): ParsedDocumentLine[] {
     line.status = lineStatus(line);
     result.push(line);
   }
+  // PDF kolonlari kimi IsNet ciktilarinda satir sirasini bozabiliyor. Bedelsiz
+  // numune/sakat/fire satirlari parasal toplami degistirmese de adet toplaminda
+  // mutlaka yer almalidir.
+  const exceptionPattern =
+    /(\d{1,3}(?:\.\d{3})+|\d+(?:,\d+)?)\s*Adet\s+0(?:[,.]0+)?\s*TL[\s\S]{0,220}?\b(TEST\s*NUMUNE\w*|KUMA[SŞ]\s*SAKATI\w*|BASKI\s*SAKATI\w*|SAKAT\w*|HATALI\w*|F[Iİ]RE\w*|DEFOLU\w*|BOZUK\w*|ISKARTA\w*)/gi;
+  for (const match of normalized.matchAll(exceptionPattern)) {
+    const quantity = parseTurkishNumber(match[1]);
+    if (!quantity) continue;
+    const productName = cleanProductName(match[2]);
+    if (result.some((line) => line.quantity === quantity && line.productName === productName)) continue;
+    result.push({
+      rowNo: result.length + 1,
+      rawName: match[0].trim(),
+      productName,
+      quantity,
+      unit: "Adet",
+      unitPrice: 0,
+      vatRate: 0,
+      vatAmount: 0,
+      lineTotal: 0,
+      isTestSample: /TEST\s*NUMUNE/i.test(productName),
+      status: "MODEL_BAGLANTISI_BEKLIYOR",
+    });
+  }
   return result;
 }
 

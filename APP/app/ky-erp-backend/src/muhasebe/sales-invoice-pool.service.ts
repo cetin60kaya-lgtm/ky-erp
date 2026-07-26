@@ -37,6 +37,14 @@ function normalize(value: unknown) {
     .trim();
 }
 
+function companyMatchKey(value: unknown) {
+  return normalize(value)
+    .replace(/\b(ANONIM|LIMITED|SIRKETI|SIRKET|A S|LTD STI|LTD|STI)\b/g, " ")
+    .replace(/\b(SANAYI|SAN|TICARET|TIC)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function fixMojibake(value: unknown) {
   const raw = clean(value);
   if (!/[\u00c4\u00c3\u00c5\u00c2\u00b0]/.test(raw)) return raw;
@@ -186,13 +194,46 @@ export class SalesInvoicePoolService {
       : null;
     if (!company && name) {
       const target = normalize(name);
+      const targetMatchKey = companyMatchKey(name);
       const rows = await this.prisma.company.findMany({
         where: { mainCompanySlug: slug, deletedAt: null },
         take: 1000,
       });
-      company = rows.find((row) => normalize(row.name) === target) || null;
+      company =
+        rows.find((row) => normalize(row.name) === target) ||
+        rows.find(
+          (row) =>
+            targetMatchKey.length >= 5 &&
+            companyMatchKey(row.name) === targetMatchKey &&
+            (!row.taxNo || !taxNo || clean(row.taxNo) === taxNo),
+        ) ||
+        null;
+      if (company && taxNo && !clean(company.taxNo)) {
+        company = await this.prisma.company.update({
+          where: { id: company.id },
+          data: { taxNo },
+        });
+      }
     }
     if (company) return company;
+    if (taxNo) {
+      const deletedTaxMatch = await this.prisma.company.findFirst({
+        where: { mainCompanySlug: slug, taxNo, deletedAt: { not: null } },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (deletedTaxMatch) {
+        return this.prisma.company.update({
+          where: { id: deletedTaxMatch.id },
+          data: {
+            deletedAt: null,
+            deletedBy: null,
+            deleteReason: null,
+            isActive: true,
+            name: name || deletedTaxMatch.name,
+          },
+        });
+      }
+    }
     const normalizedName =
       normalize(name).toLocaleLowerCase("tr-TR").replace(/\s+/g, "-") ||
       `musteri-${taxNo}`;
@@ -789,15 +830,36 @@ export class SalesInvoicePoolService {
         ? "XML ana veri kaynağı olarak fatura içe aktarıldı."
         : "PDF okundu; cari işlem kullanıcı onayı bekliyor.",
     );
+    let cariWarning = "";
     if (sourceKind === "XML") {
-      await this.processCari(slug, document.id);
+      try {
+        await this.processCari(slug, document.id);
+      } catch (error: any) {
+        cariWarning = clean(
+          error?.response?.message || error?.message || "Cari kaydı oluşturulamadı.",
+        );
+        await (this.prisma as any).salesInvoiceState.update({
+          where: { invoiceId: document.id },
+          data: { cariStatus: "CARI_ERROR" },
+        });
+        await this.history(
+          slug,
+          document.id,
+          "CARI_ERROR",
+          `Fatura kaydedildi; cari işlem tamamlanamadı: ${cariWarning}`,
+        );
+      }
     }
     return {
       duplicate: false,
+      warning: Boolean(cariWarning),
+      cariWarning: cariWarning || undefined,
       message:
-        sourceKind === "XML"
-          ? "Fatura müşteri carisine işlendi."
-          : "PDF okundu. Cari işlem için kontrol gerekiyor.",
+        cariWarning
+          ? `Fatura havuza alındı; cari işlem kontrol bekliyor: ${cariWarning}`
+          : sourceKind === "XML"
+          ? "Fatura havuza alındı ve müşteri carisine otomatik işlendi."
+          : "Fatura havuza alındı; cari işlem kullanıcı kontrolü bekliyor.",
       invoice: await this.detail(slug, document.id),
     };
   }
@@ -806,9 +868,20 @@ export class SalesInvoicePoolService {
     return path.basename(fixMojibake(name)).replace(/[<>:"/\\|?*]/g, "_");
   }
 
-  private uploadError(fileName: string, error: any) {
+  private validateParsedCandidate(parsed: any, fileName: string) {
+    const invoiceNo = clean(parsed?.invoiceNo || parsed?.documentNo);
+    if (!invoiceNo) {
+      throw new BadRequestException(`${fileName}: Fatura numarası okunamadı.`);
+    }
+    if (!Array.isArray(parsed?.lines) || !parsed.lines.length) {
+      throw new BadRequestException(`${invoiceNo}: Fatura kalemi okunamadı.`);
+    }
+  }
+
+  private uploadError(fileName: string, error: any, stage = "READ") {
     return {
       error: true,
+      stage,
       fileName,
       message:
         error?.response?.message ||
@@ -833,7 +906,7 @@ export class SalesInvoicePoolService {
         try {
           zip = new AdmZip(file.path);
         } catch (error: any) {
-          failedItems.push(this.uploadError(zipFileName, error));
+          failedItems.push(this.uploadError(zipFileName, error, "ZIP_READ"));
           continue;
         }
         for (const entry of zip.getEntries().filter((item) => !item.isDirectory)) {
@@ -856,6 +929,7 @@ export class SalesInvoicePoolService {
               fileHash: crypto.createHash("sha256").update(buffer).digest("hex"),
               mimeType: entryExt === ".xml" ? "application/xml" : "application/pdf",
             });
+            this.validateParsedCandidate(parsed, entryFileName);
             candidates.push({
               parsed,
               attachment: {
@@ -867,7 +941,7 @@ export class SalesInvoicePoolService {
               },
             });
           } catch (error: any) {
-            failedItems.push(this.uploadError(entryFileName, error));
+            failedItems.push(this.uploadError(entryFileName, error, "PARSE"));
           }
         }
       } else {
@@ -881,6 +955,7 @@ export class SalesInvoicePoolService {
             fileHash: crypto.createHash("sha256").update(buffer).digest("hex"),
             mimeType: file.mimetype,
           });
+          this.validateParsedCandidate(parsed, originalName);
           candidates.push({
             parsed,
             attachment: {
@@ -892,7 +967,7 @@ export class SalesInvoicePoolService {
             },
           });
         } catch (error: any) {
-          failedItems.push(this.uploadError(originalName, error));
+          failedItems.push(this.uploadError(originalName, error, "PARSE"));
         }
       }
     }
@@ -916,7 +991,9 @@ export class SalesInvoicePoolService {
       try {
         results.push(await this.saveParsedInvoice(slug, row.parsed, attachments));
       } catch (error: any) {
-        failedItems.push(this.uploadError(row.attachment?.fileName || invoiceNo, error));
+        failedItems.push(
+          this.uploadError(row.attachment?.fileName || invoiceNo, error, "SAVE"),
+        );
       }
     }
     if (!results.length && failedItems.length) {
@@ -1046,7 +1123,27 @@ export class SalesInvoicePoolService {
       where: { id: lineId, documentId: invoiceId, mainCompanySlug: slug },
     });
     if (!line) throw new NotFoundException("Fatura kalemi bulunamadı.");
+    const state = await (this.prisma as any).salesInvoiceState.findFirst({
+      where: { invoiceId, mainCompanySlug: slug },
+    });
+    const financialEditRequested =
+      body.quantity !== undefined ||
+      body.unitPrice !== undefined ||
+      body.vatRate !== undefined;
+    if (state?.cariStatus === "CARI_PROCESSED" && financialEditRequested) {
+      throw new BadRequestException(
+        "Cari kaydı oluşmuş faturada miktar, fiyat ve KDV değiştirilemez. Önce muhasebe düzeltme işlemi yapılmalıdır.",
+      );
+    }
     const raw = this.raw(line.raw);
+    const nextQuantity =
+      body.quantity !== undefined ? num(body.quantity) : num(line.quantity);
+    const nextUnitPrice =
+      body.unitPrice !== undefined ? num(body.unitPrice) : num(line.unitPrice);
+    const nextVatRate =
+      body.vatRate !== undefined ? num(body.vatRate) : num(line.vatRate);
+    const nextLineTotal = nextQuantity * nextUnitPrice;
+    const nextVatAmount = nextLineTotal * (nextVatRate / 100);
     await this.prisma.invoiceItem.update({
       where: { id: lineId },
       data: {
@@ -1059,13 +1156,37 @@ export class SalesInvoicePoolService {
         unitPrice:
           body.unitPrice !== undefined ? decimal(body.unitPrice) : undefined,
         vatRate: body.vatRate !== undefined ? decimal(body.vatRate) : undefined,
+        lineTotal: decimal(nextLineTotal),
+        vatAmount: decimal(nextVatAmount),
         raw: {
           ...raw,
           lineType: clean(body.lineType || raw.lineType || "MODEL"),
         },
       },
     });
+    if (financialEditRequested) {
+      const updatedLines = await this.prisma.invoiceItem.findMany({
+        where: { documentId: invoiceId, mainCompanySlug: slug },
+      });
+      const subtotal = updatedLines.reduce(
+        (sum, item) => sum + num(item.lineTotal),
+        0,
+      );
+      const vatTotal = updatedLines.reduce(
+        (sum, item) => sum + num(item.vatAmount),
+        0,
+      );
+      await this.prisma.document.update({
+        where: { id: invoiceId },
+        data: {
+          subtotal: decimal(subtotal),
+          vatTotal: decimal(vatTotal),
+          grandTotal: decimal(subtotal + vatTotal),
+        },
+      });
+    }
     await this.refreshModelStatus(invoiceId);
+    await this.history(slug, invoiceId, "LINE_UPDATED", "Fatura kalemi düzenlendi.");
     return this.detail(slug, invoiceId);
   }
 

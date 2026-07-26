@@ -53,6 +53,8 @@ const MODULE_PREFIXES = [
   "/models",
   "/model-takip",
   "/auth",
+  "/ai",
+  "/isnet",
   "/health",
   "/erp",
 ];
@@ -94,7 +96,7 @@ export function setApiAuthHandlers(handlers = {}) {
     typeof handlers.getToken === "function" ? handlers.getToken : () => "";
   onUnauthorized =
     typeof handlers.onUnauthorized === "function"
-       ? handlers.onUnauthorized
+      ? handlers.onUnauthorized
       : () => {};
 }
 
@@ -198,7 +200,8 @@ function createTimeoutSignal(timeoutMs, existingSignal) {
   };
 }
 
-async function parseResponsePayload(response) {
+async function parseResponsePayload(response, responseType = "auto") {
+  if (responseType === "blob") return response.blob();
   const text = await response.text();
   try {
     return text ? JSON.parse(text) : null;
@@ -267,6 +270,8 @@ export async function apiFetch(path, options = {}) {
     headers,
     body,
     skipAuth = false,
+    suppressUnauthorized = false,
+    responseType = "auto",
     ...fetchOptions
   } = options;
 
@@ -304,9 +309,9 @@ export async function apiFetch(path, options = {}) {
       signal,
     });
 
-    const payload = await parseResponsePayload(response);
+    const payload = await parseResponsePayload(response, responseType);
 
-    if (response.status === 401) {
+    if (response.status === 401 && !suppressUnauthorized) {
       onUnauthorized?.();
     }
 
@@ -386,11 +391,16 @@ function clearApiGetCache() {
   apiGetInFlight.clear();
 }
 
-export async function apiPost(path, body, { timeoutMs } = {}) {
+export async function apiPost(
+  path,
+  body,
+  { timeoutMs, suppressUnauthorized = false } = {},
+) {
   const payload = await apiFetch(path, {
     method: "POST",
     body,
     ...(timeoutMs ? { timeoutMs } : {}),
+    suppressUnauthorized,
   });
   clearApiGetCache();
   return payload;

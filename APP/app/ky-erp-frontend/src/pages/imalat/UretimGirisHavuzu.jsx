@@ -32,6 +32,7 @@ import {
 } from "../../services/modelPrintRegionService";
 import { calcProduction, formatQty, toneForStatus } from "./imalatData";
 import { Field, InfoLine, Status, VisualBox } from "./ImalatShared";
+import SmartProductionEntry from "./smart/SmartProductionEntry";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -91,7 +92,7 @@ function sortJobsNewestFirst(rows = []) {
   });
 }
 
-export default function UretimGirisHavuzu({ activeMainCompany }) {
+export function DetailedProductionEntry({ activeMainCompany, initialMachineSettingsOpen = false }) {
   const [jobs, setJobs] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [machines, setMachines] = useState([]);
@@ -122,8 +123,9 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
   const [newRegionType, setNewRegionType] = useState("");
   const [showRegionsEditor, setShowRegionsEditor] = useState(false);
   const [editingRegions, setEditingRegions] = useState([]);
-  const [showMachineSettings, setShowMachineSettings] = useState(false);
+  const [showMachineSettings, setShowMachineSettings] = useState(initialMachineSettingsOpen);
   const [machineDrafts, setMachineDrafts] = useState([]);
+  const [machineSettingsMessage, setMachineSettingsMessage] = useState("");
 
   const STANDARD_REGIONS = [
     "Ön",
@@ -207,7 +209,7 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
               }))
               .filter((m) => (m.no || m.ad) && m.isActive !== false);
           }
-        } catch (e) {
+        } catch {
           // ignore and fallback
         }
         if (!machinesData.length && Array.isArray(machineRows)) {
@@ -237,7 +239,30 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
             .filter((m) => m.no || m.ad);
         }
         setMachines(machinesData);
+        if (initialMachineSettingsOpen) {
+          setMachineDrafts(
+            machinesData.length
+              ? machinesData.map((machine, index) => ({
+                  id: machine.id || machine.no,
+                  makineNo: machine.no || machine.id || "",
+                  makineAdi: machine.ad || "",
+                  gunduzMakinaci: machine.dayOperator || machine.operator || "",
+                  geceMakinaci: machine.nightOperator || machine.operator || "",
+                  isActive: machine.isActive !== false,
+                  sortOrder: machine.sortOrder || index + 1,
+                }))
+              : [{ id: "", makineNo: "", makineAdi: "", gunduzMakinaci: "", geceMakinaci: "", isActive: true, sortOrder: 1 }],
+          );
+        }
         setJobs(normalized);
+        const firstMachine = machinesData[0];
+        const firstRegion = activePrintRegions(normalized[0])[0]?.regionName || normalized[0]?.baskiBolgesi || "Ön";
+        setDraft((current) => ({
+          ...current,
+          makineNo: firstMachine?.no || firstMachine?.id || firstMachine?.ad || current.makineNo,
+          makinaci: firstMachine?.dayOperator || firstMachine?.operator || current.makinaci,
+          baskiBolgesi: firstRegion,
+        }));
         setSelectedId((current) =>
           normalized.some((job) => job.id === current)
              ? current
@@ -251,7 +276,7 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
     return () => {
       cancelled = true;
     };
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [activeMainCompany, initialMachineSettingsOpen]);
 
   const filteredJobs = useMemo(() => {
     const q = String(search || "").toLocaleLowerCase("tr-TR").trim();
@@ -279,27 +304,6 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
   const calc = useMemo(() => calcProduction(selected), [selected]);
   const selectedRegions = useMemo(() => activePrintRegions(selected), [selected]);
   const selectedView = selected || {};
-
-  useEffect(() => {
-    if (!machines.length) return;
-    setDraft((prev) => {
-      if (prev?.makineNo && prev?.makineNo !== "GENEL") return prev;
-      const first = machines[0];
-      return {
-        ...prev,
-        makineNo: first.no || first.id || first.ad || "GENEL",
-        makinaci: prev?.makinaci || first.dayOperator || first.operator || "",
-      };
-    });
-  }, [machines]);
-
-  useEffect(() => {
-    const firstRegion = selectedRegions[0]?.regionName || selected?.baskiBolgesi || "Ön";
-    setDraft((prev) => ({
-      ...prev,
-      baskiBolgesi: firstRegion,
-    }));
-  }, [selected?.id, selectedRegions]);
 
   const getMachineName = (machineNo) => {
     const machine = machines.find((m) =>
@@ -343,6 +347,17 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
     }));
   };
 
+  const validateEntryDraft = () => {
+    const errors = [];
+    if (!draft.tarih) errors.push("Tarih seçilmelidir.");
+    if (!draft.vardiya) errors.push("Vardiya seçilmelidir.");
+    if (!draft.makineNo || draft.makineNo === "GENEL") errors.push("Kayıtlı makine seçilmelidir.");
+    if (!String(draft.makinaci || "").trim()) errors.push("Makinacı seçilmelidir.");
+    if (!parseQty(draft.adet)) errors.push("Üretilen adet 0'dan büyük olmalıdır.");
+    if (!String(draft.baskiBolgesi || "").trim()) errors.push("Baskı bölgesi seçilmelidir.");
+    return errors;
+  };
+
   const addManualJob = async () => {
     if (!manualJob.model.trim()) {
       setMessage("Manuel iş için model adı girin.");
@@ -352,6 +367,7 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
       setMessage("Manuel iş için beklenen adet girin.");
       return;
     }
+    if (!window.confirm(`${manualJob.model.trim()} modeli için manuel üretim işi oluşturulsun mu?`)) return;
     try {
       const saved = await createManuelIs(activeMainCompany, manualJob);
       const normalized = normalizeJob(saved?.data || saved);
@@ -399,6 +415,11 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
       setMessage("Bu model için aktif baskı bölgesi tanımlanmamış. Baskı bölgelerini düzenleyerek devam edin.");
       return;
     }
+    const validationErrors = validateEntryDraft();
+    if (validationErrors.length) {
+      setMessage(`Kayıt denetimi: ${validationErrors.join(" ")}`);
+      return;
+    }
     const qty = parseQty(draft.adet);
     const baskiHatasiAdet = parseQty(draft.baskiHatasiAdet);
     const kumasHatasiAdet = parseQty(draft.kumasHatasiAdet);
@@ -408,10 +429,7 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
       selectedRegions[0].regionName ||
       selected.baskiBolgesi ||
       "Ön";
-    if (!qty) {
-      setMessage("Üretilen adet girin.");
-      return;
-    }
+    if (!window.confirm(`${selected.model} için ${qty.toLocaleString("tr-TR")} adet üretim girişi kaydedilsin mi?`)) return;
     try {
       const saved = await addUretimGirisi(activeMainCompany, selected.id, {
         tarih: draft.tarih,
@@ -488,11 +506,17 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
 
   const saveEdit = async () => {
     if (!editingEntry.id) return;
+    const validationErrors = validateEntryDraft();
+    if (validationErrors.length) {
+      setMessage(`Güncelleme denetimi: ${validationErrors.join(" ")}`);
+      return;
+    }
     const effectiveRegion =
       draft.baskiBolgesi ||
       selectedRegions[0].regionName ||
       selected.baskiBolgesi ||
       "Ön";
+    if (!window.confirm(`${editingEntry.no || "Seçili"}. üretim satırı güncellensin mi?`)) return;
     try {
       const baskiHatasiAdet = parseQty(draft.baskiHatasiAdet);
       const kumasHatasiAdet = parseQty(draft.kumasHatasiAdet);
@@ -669,6 +693,7 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
       setMessage("Modelde en az bir aktif baskı bölgesi kalmalı.");
       return;
     }
+    if (!window.confirm(`${selected?.model || "Seçili model"} baskı bölgeleri güncellensin mi?`)) return;
     try {
       if (targetId && !String(targetId).startsWith("manual-")) {
         await saveModelPrintRegions(activeMainCompany, targetId, editingRegions);
@@ -713,6 +738,7 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
   };
 
   const openMachineSettings = () => {
+    setMachineSettingsMessage("");
     setMachineDrafts(
       machines.length
         ? machines.map((machine, index) => ({
@@ -762,19 +788,36 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
     ]);
   };
 
+  const removeMachineDraft = (index) => {
+    setMachineDrafts((current) => current.filter((_, rowIndex) => rowIndex !== index));
+  };
+
   const saveMachineSettings = async () => {
-    const validRows = machineDrafts
+    const preparedRows = machineDrafts
       .map((row, index) => ({
         ...row,
         makineNo: String(row?.makineNo || "").trim(),
         makineAdi: String(row?.makineAdi || "").trim(),
+        gunduzMakinaci: String(row?.gunduzMakinaci || "").trim(),
+        geceMakinaci: String(row?.geceMakinaci || row?.gunduzMakinaci || "").trim(),
         sortOrder: index + 1,
-      }))
-      .filter((row) => row?.makineNo && row?.makineAdi);
-    if (!validRows.length) {
-      setMessage("Kaydedilecek makine satırı bulunamadı.");
+      }));
+    if (!preparedRows.length) {
+      setMachineSettingsMessage("Kaydedilecek makine bulunamadı.");
       return;
     }
+    const incompleteRow = preparedRows.find((row) => !row.makineNo || !row.makineAdi || !row.gunduzMakinaci);
+    if (incompleteRow) {
+      setMachineSettingsMessage("Her makine için makine no, makine adı ve gündüz makinacısı zorunludur.");
+      return;
+    }
+    const uniqueMachineNos = new Set(preparedRows.map((row) => row.makineNo.toLocaleLowerCase("tr-TR")));
+    if (uniqueMachineNos.size !== preparedRows.length) {
+      setMachineSettingsMessage("Aynı makine no birden fazla kez kullanılamaz.");
+      return;
+    }
+    const validRows = preparedRows;
+    if (!window.confirm(`${validRows.length} makine ve vardiya/makinacı ayarı kaydedilsin mi?`)) return;
     try {
       const savedRows = [];
       for (const row of validRows) {
@@ -793,9 +836,10 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
       }));
       setMachines(nextMachines.filter((machine) => machine.isActive !== false));
       setShowMachineSettings(false);
+      setMachineSettingsMessage("");
       setMessage("Makine ayarları kaydedildi.");
     } catch (error) {
-      setMessage(error?.message || "Makine ayarları kaydedilemedi.");
+      setMachineSettingsMessage(error?.message || "Makine ayarları kaydedilemedi.");
     }
   };
 
@@ -821,7 +865,13 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
                 <button
                   key={job.id}
                   className={job.id === selectedId ? "active" : ""}
-                  onClick={() => setSelectedId(job.id)}
+                  onClick={() => {
+                    setSelectedId(job.id);
+                    setDraft((current) => ({
+                      ...current,
+                      baskiBolgesi: activePrintRegions(job)[0]?.regionName || job.baskiBolgesi || "Ön",
+                    }));
+                  }}
                 >
                   <div className="iw-list-thumb">
                     {job.imageUrl ? (
@@ -1016,77 +1066,45 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
 
           {showMachineSettings ? (
             <div className="iw-modal-backdrop">
-              <div className="iw-modal-box machine-modal">
+              <div className="iw-modal-box machine-modal machine-registry-modal">
                 <div className="iw-card-head">
                   <div>
                     <h2>
-                      <Settings size={18} /> Makine Ayarları
+                      <Settings size={18} /> Makine ve Makinacı Kayıtları
                     </h2>
-                    <small>Makine no, adı ve vardiyaya göre varsayılan makinacı tanımlayın.</small>
+                    <small>Her makine için gündüz ve gece vardiyasına atanacak makinacıyı belirleyin.</small>
                   </div>
                   <button className="iw-btn" type="button" onClick={() => setShowMachineSettings(false)}>
                     Kapat
                   </button>
                 </div>
-                <div className="iw-card-body">
-                  <div className="iw-table-wrap compact machine-settings-table">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Makine No</th>
-                          <th>Makine Adı</th>
-                          <th>Gündüz Makinacı</th>
-                          <th>Gece Makinacı</th>
-                          <th>Aktif</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {machineDrafts.map((row, index) => (
-                          <tr key={`${row?.id || "new"}-${index}`}>
-                            <td>
-                              <input
-                                className="iw-cell-input"
-                                value={row?.makineNo}
-                                onChange={(e) => updateMachineDraft(index, "makineNo", e.target.value)}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                value={row?.makineAdi}
-                                onChange={(e) => updateMachineDraft(index, "makineAdi", e.target.value)}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                value={row?.gunduzMakinaci}
-                                onChange={(e) => updateMachineDraft(index, "gunduzMakinaci", e.target.value)}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                value={row?.geceMakinaci}
-                                onChange={(e) => updateMachineDraft(index, "geceMakinaci", e.target.value)}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="checkbox"
-                                checked={row?.isActive !== false}
-                                onChange={(e) => updateMachineDraft(index, "isActive", e.target.checked)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="iw-card-body machine-registry-body">
+                  <div className="machine-registry-guide">
+                    <Factory size={20} />
+                    <div><strong>Otomatik atama kuralı</strong><span>Fişte “gündüz 1” yazılırsa Makine 1'in gündüz makinacısı; “gece 1” yazılırsa gece makinacısı otomatik gelir.</span></div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 10 }}>
-                    <button className="iw-btn" type="button" onClick={addMachineDraft}>
-                      + Makine Ekle
-                    </button>
-                    <button className="iw-btn primary" type="button" onClick={saveMachineSettings}>
-                      Kaydet
-                    </button>
+
+                  <div className="machine-registry-list">
+                    {machineDrafts.map((row, index) => (
+                      <section className={`machine-registry-row ${row?.isActive === false ? "inactive" : ""}`} key={`${row?.id || "new"}-${index}`}>
+                        <div className="machine-registry-index"><span>{index + 1}</span><small>Makine</small></div>
+                        <Field label="Makine No *"><input value={row?.makineNo} placeholder="Örn. 1" onChange={(event) => updateMachineDraft(index, "makineNo", event.target.value)} /></Field>
+                        <Field label="Makine Adı *"><input value={row?.makineAdi} placeholder="Örn. Oval Baskı 1" onChange={(event) => updateMachineDraft(index, "makineAdi", event.target.value)} /></Field>
+                        <Field label="Gündüz Makinacısı *"><input value={row?.gunduzMakinaci} placeholder="Ad soyad" onChange={(event) => updateMachineDraft(index, "gunduzMakinaci", event.target.value)} /></Field>
+                        <Field label="Gece Makinacısı"><input value={row?.geceMakinaci} placeholder="Boşsa gündüz kullanılır" onChange={(event) => updateMachineDraft(index, "geceMakinaci", event.target.value)} /></Field>
+                        <div className="machine-registry-row-actions">
+                          <label className="machine-active-switch"><input type="checkbox" checked={row?.isActive !== false} onChange={(event) => updateMachineDraft(index, "isActive", event.target.checked)} /><span>{row?.isActive === false ? "Pasif" : "Aktif"}</span></label>
+                          {!row?.id ? <button className="iw-btn danger" type="button" onClick={() => removeMachineDraft(index)}>Kaldır</button> : null}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+
+                  {machineSettingsMessage ? <div className="iw-notice red"><span>{machineSettingsMessage}</span></div> : null}
+
+                  <div className="machine-registry-footer">
+                    <button className="iw-btn" type="button" onClick={addMachineDraft}>+ Yeni Makine</button>
+                    <div><span>{machineDrafts.length} makine kaydı</span><button className="iw-btn primary" type="button" onClick={saveMachineSettings}>Tüm Ayarları Kaydet</button></div>
                   </div>
                 </div>
               </div>
@@ -1398,6 +1416,51 @@ export default function UretimGirisHavuzu({ activeMainCompany }) {
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+export default function UretimGirisHavuzu({ activeMainCompany }) {
+  const [smartEntryOpen, setSmartEntryOpen] = useState(false);
+  const [openMachineSettingsOnLoad, setOpenMachineSettingsOnLoad] = useState(false);
+  const [detailedInstance, setDetailedInstance] = useState(0);
+
+  const openMachineSettingsFromSmart = () => {
+    setSmartEntryOpen(false);
+    setOpenMachineSettingsOnLoad(true);
+    setDetailedInstance((current) => current + 1);
+  };
+
+  return (
+    <div className="imalat-entry-page">
+      <section className="iw-card imalat-entry-head">
+        <div>
+          <h2><ClipboardList size={18} /> Üretim Girişi</h2>
+          <small>İş kuyruğundan ayrıntılı kayıt oluşturun veya seri fişleri tek açılır çalışma ekranında işleyin.</small>
+        </div>
+        <button className="iw-btn primary imalat-smart-open-button" type="button" onClick={() => setSmartEntryOpen(true)}>
+          <ClipboardList size={16} /> Akıllı Seri Üretimi Aç
+        </button>
+      </section>
+      <DetailedProductionEntry
+        key={detailedInstance}
+        activeMainCompany={activeMainCompany}
+        initialMachineSettingsOpen={openMachineSettingsOnLoad}
+      />
+
+      {smartEntryOpen ? (
+        <div className="iw-modal-backdrop smart-production-backdrop">
+          <section className="smart-production-modal">
+            <header className="smart-production-modal-head">
+              <div><h2><ClipboardList size={19} /> Akıllı Seri Üretim</h2><p>Fişi çözümleyin, sorunlu satırları düzeltin ve yalnız denetimden geçen kayıtları kaydedin.</p></div>
+              <button className="iw-btn" type="button" onClick={() => setSmartEntryOpen(false)}>Kapat</button>
+            </header>
+            <div className="smart-production-modal-body">
+              <SmartProductionEntry activeMainCompany={activeMainCompany} onConfigureMachines={openMachineSettingsFromSmart} />
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -30,6 +30,9 @@ export class DocumentIntakeQueryDto {
   search?: string;
   mainCompanySlug?: string;
   mainCompanyId?: string;
+  limit?: string;
+  pageSize?: string;
+  offset?: string;
 }
 
 export class DocumentIntakeFixDto {
@@ -87,6 +90,12 @@ export type ParsedDocumentLine = {
   sellerItemId?: string;
   manufacturerItemId?: string;
   standardItemId?: string;
+  additionalItemIds?: string[];
+  orderNo?: string;
+  productCode?: string;
+  color?: string;
+  region?: string;
+  sourceNote?: string;
   productId?: string | null;
   productDraftJson?: Record<string, unknown> | null;
   productMatchStatus?: MatchStatus;

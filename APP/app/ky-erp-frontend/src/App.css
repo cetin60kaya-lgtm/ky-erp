@@ -897,6 +897,11 @@ button {
   color: var(--primary-strong);
 }
 
+/* Firma kartlari okunabilir menu ve tipografi dengesi */
+.mh-cari-period-actions{display:flex;gap:7px;align-items:center}.mh-cari-period-actions .mh-btn{min-width:105px}.mh-cari-table-area td:nth-child(4){font-weight:800;color:#334155}
+.mh-cari-new-head{padding:12px 14px;border:1px solid #d8e4f3;border-radius:10px;background:linear-gradient(135deg,#f8fbff,#eef5ff)}.mh-cari-new-head strong,.mh-cari-new-head span{display:block}.mh-cari-new-head strong{font-size:15px;color:#12365f}.mh-cari-new-head span{margin-top:3px;color:#64748b;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mh-cari-type-hint{display:grid;gap:4px;padding:10px 12px;border-left:4px solid #2563eb;border-radius:8px;background:#eff6ff}.mh-cari-type-hint strong{color:#1d4ed8;font-size:12px}.mh-cari-type-hint span{color:#52657d;font-size:11px;line-height:1.4}.mh-cari-side-panel form .mh-field{gap:5px}.mh-cari-side-panel form select,.mh-cari-side-panel form input{min-height:38px}.mh-cari-side-panel form textarea{min-height:72px}.mh-cari-side-panel form>.mh-button-row{position:sticky;bottom:0;padding:10px 0 0;background:#fff;border-top:1px solid #e5edf7}
+.mh-company-bulk-bar{justify-content:flex-end}.mh-company-bulk-bar label{margin-right:auto;white-space:nowrap}.mh-company-bulk-bar .mh-btn{min-width:150px;white-space:nowrap}.mh-company-cards-page .mh-card-head h2,.mh-company-cards-page .mh-card-head h3{font-size:15px}.mh-company-cards-page .mh-field>span,.mh-company-cards-page label>span{font-size:11px}.mh-company-cards-page input,.mh-company-cards-page select{font-size:12px}.mh-company-cards-page .mh-doc-item.firm-card strong{font-size:13px}.mh-company-cards-page .mh-doc-item.firm-card{padding:12px 13px;margin-bottom:7px}.mh-tabs .mh-tab-btn{font-size:12px;padding:8px 12px;line-height:1.2}.mh-company-cards-page .mh-card-head{min-height:44px;display:flex;align-items:center}.mh-company-cards-page .mh-button-row .mh-btn{font-size:12px;padding:8px 13px}
+
 .kyerp-badge-neutral,
 .badge-neutral {
   background: #f1f5f9;
@@ -13008,6 +13013,8 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   border-color: #fecdd3;
 }
 
+.mh-company-bulk-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0 0;border-top:1px solid #e5edf7}.mh-company-bulk-bar label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800}.mh-company-bulk-bar input{width:auto}.mh-company-bulk-panel{position:fixed;z-index:10020;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:1fr 1fr;gap:14px;width:min(720px,calc(100vw - 40px));padding:22px;border:1px solid #bfdbfe;border-radius:16px;background:#fff;box-shadow:0 30px 90px rgba(15,23,42,.32)}.mh-company-bulk-panel::before{content:"";position:fixed;z-index:-1;inset:-100vh -100vw;background:rgba(15,23,42,.42)}.mh-company-bulk-title{grid-column:1/-1;display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid #e5edf7}.mh-company-bulk-title strong,.mh-company-bulk-title span{display:block}.mh-company-bulk-title strong{font-size:17px;color:#0f2745}.mh-company-bulk-title span{margin-top:4px;color:#64748b}.mh-company-bulk-title button{border:0;background:#f1f5f9;width:32px;height:32px;border-radius:50%;font-size:20px;cursor:pointer}.mh-company-bulk-panel>label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#334155}.mh-company-bulk-panel select{background:#fff;height:40px}.mh-company-bulk-footer{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;padding-top:8px;border-top:1px solid #e5edf7}.mh-company-select-row{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch}.mh-company-select-row.selecting{grid-template-columns:30px minmax(0,1fr);gap:6px}.mh-company-select-row>input{width:auto;margin:0;justify-self:center;align-self:center}.mh-company-select-row>button{min-width:0;width:100%}.mh-company-select-row:not(.selecting) .mh-doc-item{margin-left:0}
+
 .mh-badge.gray {
   background: #f1f5f9;
   color: #475569;
@@ -14230,5 +14237,53 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   
   input, select, textarea {
     font-size: 16px !important; /* prevent ios zoom */
+  }
+}
+.ky-persistent-modal {
+  min-width: min(360px, calc(100vw - 20px)) !important;
+  min-height: min(240px, calc(100vh - 20px)) !important;
+  max-width: calc(100vw - 20px) !important;
+  max-height: calc(100vh - 20px) !important;
+  resize: both !important;
+  overflow: auto !important;
+  box-sizing: border-box !important;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+  .ky-persistent-modal {
+    resize: none !important;
+    width: min(100%, calc(100vw - 12px)) !important;
+    max-width: calc(100vw - 12px) !important;
+    max-height: calc(100vh - 12px) !important;
+  }
+}
+.kyerp-ai-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 50;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 800;
+  box-shadow: 0 14px 32px rgba(15, 118, 110, 0.3);
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .kyerp-ai-fab {
+    right: 12px;
+    bottom: 12px;
+    padding: 12px;
+  }
+
+  .kyerp-ai-fab span {
+    display: none;
   }
 }

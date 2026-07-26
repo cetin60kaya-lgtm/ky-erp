@@ -1,6 +1,7 @@
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { CircleAlert, CircleCheck, FileSpreadsheet, Search } from "lucide-react";
 import { getImalatDenetim } from "../../services/imalatApi";
 import { Field, Status } from "./ImalatShared";
@@ -41,7 +42,7 @@ export default function UretimDenetim({ activeMainCompany }) {
   const [rows, setRows] = useState([]);
   const [message, setMessage] = useState("");
 
-  async function loadData(nextFilters = filters) {
+  const loadData = useCallback(async function loadData(nextFilters = filters) {
     try {
       const result = await getImalatDenetim(activeMainCompany, nextFilters);
       setSummary(result?.summary || {});
@@ -50,11 +51,11 @@ export default function UretimDenetim({ activeMainCompany }) {
     } catch (error) {
       setMessage(error?.message || "İmalat denetim verisi yüklenemedi.");
     }
-  }
+  }, [activeMainCompany, filters]);
 
   useEffect(() => {
     loadData(initialFilters);
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, loadData]);
 
   return (
     <div className="iw-page">
@@ -144,6 +145,7 @@ export default function UretimDenetim({ activeMainCompany }) {
           <table>
             <thead>
               <tr>
+                <th>Görsel</th>
                 <th>Model</th>
                 <th>Firma</th>
                 <th>Parti</th>
@@ -163,6 +165,7 @@ export default function UretimDenetim({ activeMainCompany }) {
               {rows.length ? (
                 rows.map((row) => (
                   <tr key={row?.id || `${row?.model}-${row?.partiNo}-${row?.baskiBolgesi}`}>
+                    <td>{row?.modelImageUrl ? <img className="smart-thumb" src={row.modelImageUrl} alt={row?.model || "Model görseli"} /> : "-"}</td>
                     <td>{row?.model || "-"}</td>
                     <td>{row?.firma || "-"}</td>
                     <td>{row?.partiNo || "-"}</td>

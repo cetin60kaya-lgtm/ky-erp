@@ -28,6 +28,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PdfExtractionService } from "./pdf-extraction.service";
 import { ModelService } from "../modules/models/model.service";
 import { classifyDocument as classifyDocumentFlow } from "../common/helpers/document-flow.helper";
+import { SqlStoreService } from "../kyerp-core/sql-store.service";
 
 type Query = Record<string, any>;
 
@@ -37,6 +38,7 @@ export class MuhasebeDbService {
     private readonly prisma: PrismaService,
     private readonly pdfExtraction: PdfExtractionService,
     private readonly modelService: ModelService,
+    private readonly sqlStore: SqlStoreService,
   ) {}
 
   private asObject(value: unknown) {
@@ -759,7 +761,11 @@ export class MuhasebeDbService {
     };
   }
 
-  private mapDocument(row: any, invoiceItems: any[] = []) {
+  private mapDocument(
+    row: any,
+    invoiceItems: any[] = [],
+    customerDispatchLines: any[] = [],
+  ) {
     const raw = this.documentRaw(row);
     const status = this.documentStatus(row);
     const normalizedType = this.normalizeDocumentType(
@@ -781,7 +787,28 @@ export class MuhasebeDbService {
       raw.xmlItems ||
       raw.faturaKalemleri ||
       [];
-    let kalemler = normalizedItems.length ? normalizedItems : rawItems;
+    const normalizedDispatchLines = customerDispatchLines.map((item) => ({
+      id: item.id,
+      sourceLineId: item.id,
+      documentId: item.documentId,
+      aciklama: item.aciklama || item.modelAdi || "",
+      description: item.aciklama || item.modelAdi || "",
+      productName: item.modelAdi || item.aciklama || "",
+      rawDescription: item.aciklama || item.modelAdi || "",
+      adet: decimalToNumber(item.adet),
+      quantity: decimalToNumber(item.adet),
+      birim: item.birim || "ADET",
+      unit: item.birim || "ADET",
+      modelId: item.modelId || "",
+      modelAdi: item.modelAdi || "",
+      modelAdiOnerisi: item.modelAdiOnerisi || "",
+      durum: item.durum || "",
+    }));
+    let kalemler = normalizedItems.length
+      ? normalizedItems
+      : normalizedDispatchLines.length
+        ? normalizedDispatchLines
+        : rawItems;
     const dispatchNo = normalizeText(
       row.documentNo ||
         raw.taslakAlanlar?.irsaliyeNo ||
@@ -864,6 +891,10 @@ export class MuhasebeDbService {
         "",
       modelId: raw.modelId || raw.modelKaydiId || "",
       modelKaydiId: raw.modelId || raw.modelKaydiId || "",
+      modelIds: Array.isArray(raw.modelIds) ? raw.modelIds : [],
+      modelAllocations: Array.isArray(raw.modelAllocations)
+        ? raw.modelAllocations
+        : [],
       modelAdi:
         raw.modelName || raw.modelAdi || raw.taslakAlanlar?.modelAdi || "",
       modelPath: raw.modelPath || "",
@@ -925,6 +956,18 @@ export class MuhasebeDbService {
       gelenAdet: Number(
         raw.taslakAlanlar?.gelenAdet || raw.taslakAlanlar?.adet || 0,
       ),
+      birimFiyat: Number(
+        raw.taslakAlanlar?.birimFiyat ??
+          raw.birimFiyat ??
+          normalizedItems?.[0]?.unitPrice ??
+          0,
+      ),
+      unitPrice: Number(
+        raw.taslakAlanlar?.birimFiyat ??
+          raw.birimFiyat ??
+          normalizedItems?.[0]?.unitPrice ??
+          0,
+      ),
       araToplam: decimalToNumber(row.subtotal),
       kdv: decimalToNumber(row.vatTotal),
       genelToplam: decimalToNumber(row.grandTotal),
@@ -943,9 +986,13 @@ export class MuhasebeDbService {
         genelToplam: decimalToNumber(row.grandTotal),
       },
       invoiceItems: normalizedItems,
+      customerDispatchLines: normalizedDispatchLines,
       items: kalemler,
       kalemler,
       processedResult: raw.processedResult || null,
+      reconciliation: raw.reconciliation || null,
+      reconciliationStatus:
+        raw.reconciliationStatus || raw.reconciliation?.status || "",
       uyarilar: raw.uyarilar || raw.warnings || [],
       dosyalar: files,
       files,
@@ -2145,7 +2192,12 @@ export class MuhasebeDbService {
 
   private fileNameDocumentHints(fileName: string) {
     const base = normalizeText(path.parse(fileName || "").name);
-    const documentNo = base.match(/\b([A-Z]{2,4}\d{8,16})\b/i)?.[1] || "";
+    // Dosya adlarinda belge numarasini genellikle alt cizgi takip ediyor.
+    // `\b` alt cizgiyi kelime karakteri saydigi icin
+    // TIA2026000147227_816... bicimindeki gercek e-Irsaliye adlarini kaciriyordu.
+    const documentNo =
+      base.match(/(?:^|[^A-Z0-9])([A-Z]{2,4}\d{8,16})(?=$|[^A-Z0-9])/i)?.[1] ||
+      "";
     const modelSuggestion =
       documentNo && /^(HKN|DDM)/i.test(documentNo)
         ? normalizeText(base.replace(documentNo, "").replace(/^[-_\s]+/, ""))
@@ -3170,6 +3222,44 @@ export class MuhasebeDbService {
       newValue: this.mapProduct(saved),
     });
     return dbSuccess(this.mapProduct(saved));
+  }
+
+  private supplierAccountingRule(company: any) {
+    const raw = this.asObject(company?.raw);
+    const profile = normalizeText(
+      raw.companyTransactionProfile || raw.calismaProfili,
+    ).toUpperCase();
+    const expenseMode = normalizeText(
+      raw.expenseCalculationMode || raw.giderHesaplamaTipi,
+    ).toUpperCase();
+    const configuredMode = normalizeText(
+      raw.currentAccountPostingMode || raw.cariKayitModu,
+    ).toUpperCase();
+    const vatOnly =
+      profile === "VAT_ONLY_EXPENSE" ||
+      expenseMode === "VAT_ONLY" ||
+      normalizeText(raw.defaultSupplierPostingType).toUpperCase() ===
+        "VAT_ONLY_EXPENSE";
+    const trackFullCari =
+      raw.trackReceivablePayable !== false &&
+      raw.cariTakipEdilsin !== false &&
+      !vatOnly;
+    const currentAccountPostingMode =
+      configuredMode === "VAT_PERCENTAGE" || vatOnly
+        ? "VAT_PERCENTAGE"
+        : configuredMode === "NONE" || !trackFullCari
+          ? "NONE"
+          : "FULL_DOCUMENT";
+    const percentage = Number(
+      raw.vatPayablePercentage ?? raw.kdvCariBorcYuzdesi ?? 0,
+    );
+    return {
+      currentAccountPostingMode,
+      vatPayablePercentage: Number.isFinite(percentage)
+        ? Math.min(100, Math.max(0, percentage))
+        : 0,
+      vatOnly,
+    };
   }
 
   async listProductAliases(query: Query) {
@@ -4404,15 +4494,36 @@ export class MuhasebeDbService {
           orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }],
         })
       : [];
+    const dispatchLines = rows.length
+      ? await this.prisma.customerDispatchLine.findMany({
+          where: {
+            mainCompanySlug,
+            documentId: { in: rows.map((row) => row.id) },
+            deletedAt: null,
+          },
+          orderBy: [{ createdAt: "asc" }],
+        })
+      : [];
     const invoiceItemsByDocument = new Map<string, any[]>();
     for (const item of invoiceItems) {
       const list = invoiceItemsByDocument.get(item.documentId) || [];
       list.push(item);
       invoiceItemsByDocument.set(item.documentId, list);
     }
+    const dispatchLinesByDocument = new Map<string, any[]>();
+    for (const item of dispatchLines) {
+      if (!item.documentId) continue;
+      const list = dispatchLinesByDocument.get(item.documentId) || [];
+      list.push(item);
+      dispatchLinesByDocument.set(item.documentId, list);
+    }
     return makePaginatedResponse(
       rows.map((row) =>
-        this.mapDocument(row, invoiceItemsByDocument.get(row.id) || []),
+        this.mapDocument(
+          row,
+          invoiceItemsByDocument.get(row.id) || [],
+          dispatchLinesByDocument.get(row.id) || [],
+        ),
       ),
       page,
       limit,
@@ -4431,7 +4542,18 @@ export class MuhasebeDbService {
       where: { slug },
     });
     if (!company) throw new BadRequestException("Ana firma zorunludur.");
-    const safeFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+    // Aynı irsaliyenin PDF ve XML'i birlikte geldiğinde PDF önce arşivlenir,
+    // XML en son işlenerek belge alanlarında ana/doğru kaynak olarak kalır.
+    const roleRank: Record<string, number> = { archive: 0, pdf: 1, xml: 2 };
+    const safeFiles = Array.isArray(files)
+      ? files
+          .filter(Boolean)
+          .sort(
+            (a, b) =>
+              (roleRank[this.detectFileRole(a)] || 0) -
+              (roleRank[this.detectFileRole(b)] || 0),
+          )
+      : [];
     if (!safeFiles.length)
       throw new BadRequestException("Yuklenecek dosya bulunamadi.");
 
@@ -4455,10 +4577,26 @@ export class MuhasebeDbService {
 
     for (const file of safeFiles) {
       const checksum = this.computeChecksum(file.path);
-      const duplicateByChecksum = await this.prisma.document.findFirst({
-        where: { mainCompanySlug: slug, fileHash: checksum, deletedAt: null },
-        include: { files: true, company: true },
+      // Belgenin fileHash alani PDF+XML eslesmesinde son ana kaynagin hash'ine
+      // donusebilir. Daha once eklenen diger eki de document_files uzerinden
+      // denetleyerek ayni PDF/XML dosyasinin tekrar arsivlenmesini engelle.
+      const duplicateFile = await this.prisma.documentFile.findFirst({
+        where: {
+          mainCompanySlug: slug,
+          checksum,
+          deletedAt: null,
+          document: { deletedAt: null },
+        },
+        include: {
+          document: { include: { files: true, company: true } },
+        },
       });
+      const duplicateByChecksum =
+        duplicateFile?.document ||
+        (await this.prisma.document.findFirst({
+          where: { mainCompanySlug: slug, fileHash: checksum, deletedAt: null },
+          include: { files: true, company: true },
+        }));
       if (duplicateByChecksum) {
         const duplicate = await this.prisma.document.update({
           where: { id: duplicateByChecksum.id },
@@ -4506,8 +4644,7 @@ export class MuhasebeDbService {
         options,
       );
       fields = this.applyReadTemplateToFields(readTemplate, parsed, fields);
-      let classification = this.detectDocumentDirection(kind, fields, company);
-      const explicitTarget = options.targetType
+      const requestedTarget = options.targetType
         ? normalizeText(options.targetType).toLocaleUpperCase("tr-TR")
         : options.documentType
           ? this.documentTypeToTargetType(options.documentType)
@@ -4516,6 +4653,15 @@ export class MuhasebeDbService {
                 "tr-TR",
               )
             : "";
+      if (
+        requestedTarget === "MUSTERIDEN_GELEN_IRSALIYE" &&
+        normalizeText(options.templateCompanyName)
+      ) {
+        fields.sellerName =
+          fields.sellerName || normalizeText(options.templateCompanyName);
+      }
+      let classification = this.detectDocumentDirection(kind, fields, company);
+      const explicitTarget = requestedTarget;
       if (
         explicitTarget &&
         explicitTarget !== "UNKNOWN" &&
@@ -4546,13 +4692,41 @@ export class MuhasebeDbService {
       const documentType = this.targetTypeToDocumentType(
         classification.targetType,
       );
-      const isTiaCustomerDispatch =
-        classification.targetType === "MUSTERIDEN_GELEN_IRSALIYE" &&
-        /^TIA\d+/i.test(fields.documentNo || fields.dispatchNo || "");
-      if (isTiaCustomerDispatch) {
-        fields.items = this.extractCustomerDispatchLines(
-          fields.rawText || parsed.extractedText || "",
-        );
+      const isCustomerDispatch =
+        classification.targetType === "MUSTERIDEN_GELEN_IRSALIYE";
+      if (isCustomerDispatch) {
+        const parsedItems = Array.isArray(fields.items) ? fields.items : [];
+        // UBL XML satirlari extractDocumentFields icinde zaten okunuyor.
+        // Bunlari PDF goruntu metni icin yazilmis regex ile tekrar okuyup bos
+        // listeyle ezmek, belgeyi kaydedip satirlarini kaybetmemize yol aciyordu.
+        fields.items = parsed.role === "xml" && parsedItems.length
+          ? parsedItems.map((item: any, index: number) => ({
+              ...item,
+              lineNo: Number(item.lineNo || index + 1),
+              aciklama: item.aciklama || item.rawDescription || item.productName || `Satir ${index + 1}`,
+              adet: Number(item.adet || item.quantity || 0),
+              birim: item.birim || item.unit || "ADET",
+              modelAdiOnerisi: item.modelAdiOnerisi || this.modelSuggestionFromDescription(
+                item.aciklama || item.rawDescription || item.productName,
+              ),
+              durum: item.durum || "MODEL_BAGLANTISI_BEKLIYOR",
+            }))
+          : this.extractCustomerDispatchLines(
+              fields.rawText || parsed.extractedText || "",
+            );
+        if (!fields.items.length && Number(fields.quantity || 0) > 0) {
+          fields.items = [{
+            lineNo: 1,
+            aciklama:
+              fields.description ||
+              fields.rawDescription ||
+              fields.modelSuggestion ||
+              "Müşteri irsaliyesi ürün kalemi",
+            adet: Number(fields.quantity || 0),
+            birim: fields.unit || "ADET",
+            durum: "MODEL_BAGLANTISI_BEKLIYOR",
+          }];
+        }
         fields.quantity =
           fields.items.reduce(
             (sum: number, item: any) =>
@@ -4567,7 +4741,7 @@ export class MuhasebeDbService {
         classification.targetType === "EKSTRE_DOSYASI"
           ? { company: null, status: "", candidates: [] }
           : await this.resolveOrCreateFirm(slug, fields, classification);
-      const modelSuggestion = isTiaCustomerDispatch
+      const modelSuggestion = isCustomerDispatch
         ? ""
         : fields.modelSuggestion || "";
       const needsModel =
@@ -4587,7 +4761,7 @@ export class MuhasebeDbService {
       const status =
         classification.targetType === "UNKNOWN"
           ? "tasnif_bekliyor"
-          : isTiaCustomerDispatch
+          : isCustomerDispatch
             ? "SATIR_MODEL_BAGLANTISI_BEKLIYOR"
             : routeStatus === "ROUTED_NEEDS_MODEL"
               ? "model_baglantisi_bekliyor"
@@ -4657,7 +4831,7 @@ export class MuhasebeDbService {
           kdv: fields.vatTotal,
           genelToplam: fields.grandTotal,
           modelAdiOnerisi: modelSuggestion,
-          satirlar: isTiaCustomerDispatch ? fields.items || [] : [],
+          satirlar: isCustomerDispatch ? fields.items || [] : [],
           mailEkiOlarakKullan:
             classification.targetType === "BIZIM_GIDEN_IRSALIYE",
           resmiDurum: classification.detectedKind === "FATURA" ? "RESMI" : "",
@@ -4823,7 +4997,7 @@ export class MuhasebeDbService {
         }
         if (
           classification.targetType === "MUSTERIDEN_GELEN_IRSALIYE" &&
-          isTiaCustomerDispatch
+          isCustomerDispatch
         ) {
           await tx.customerDispatchLine.deleteMany({
             where: { mainCompanySlug: slug, documentId: saved.id },
@@ -5300,13 +5474,38 @@ export class MuhasebeDbService {
       fields,
       mainCompany,
     );
-    const isTiaCustomerDispatch =
-      classification.targetType === "MUSTERIDEN_GELEN_IRSALIYE" &&
-      /^TIA\d+/i.test(fields.documentNo || fields.dispatchNo || "");
-    if (isTiaCustomerDispatch) {
-      fields.items = this.extractCustomerDispatchLines(
-        fields.rawText || parsed.extractedText || "",
-      );
+    const isCustomerDispatch =
+      classification.targetType === "MUSTERIDEN_GELEN_IRSALIYE";
+    if (isCustomerDispatch) {
+      const parsedItems = Array.isArray(fields.items) ? fields.items : [];
+      fields.items = parsed.role === "xml" && parsedItems.length
+        ? parsedItems.map((item: any, index: number) => ({
+            ...item,
+            lineNo: Number(item.lineNo || index + 1),
+            aciklama: item.aciklama || item.rawDescription || item.productName || `Satir ${index + 1}`,
+            adet: Number(item.adet || item.quantity || 0),
+            birim: item.birim || item.unit || "ADET",
+            modelAdiOnerisi: item.modelAdiOnerisi || this.modelSuggestionFromDescription(
+              item.aciklama || item.rawDescription || item.productName,
+            ),
+            durum: item.durum || "MODEL_BAGLANTISI_BEKLIYOR",
+          }))
+        : this.extractCustomerDispatchLines(
+            fields.rawText || parsed.extractedText || "",
+          );
+      if (!fields.items.length && Number(fields.quantity || 0) > 0) {
+        fields.items = [{
+          lineNo: 1,
+          aciklama:
+            (fields as any).description ||
+            (fields as any).rawDescription ||
+            fields.modelSuggestion ||
+            "Müşteri irsaliyesi ürün kalemi",
+          adet: Number(fields.quantity || 0),
+          birim: (fields as any).unit || "ADET",
+          durum: "MODEL_BAGLANTISI_BEKLIYOR",
+        }];
+      }
       fields.quantity =
         fields.items.reduce(
           (sum: number, item: any) =>
@@ -5363,7 +5562,7 @@ export class MuhasebeDbService {
         kdv: fields.vatTotal,
         genelToplam: fields.grandTotal,
         modelAdiOnerisi: fields.modelSuggestion || "",
-        satirlar: isTiaCustomerDispatch ? fields.items || [] : [],
+        satirlar: isCustomerDispatch ? fields.items || [] : [],
         urunEslestirmeDurumu:
           classification.targetType === "TEDARIKCI_GELEN_FATURA"
             ? "ESLESME_BEKLIYOR"
@@ -5425,7 +5624,7 @@ export class MuhasebeDbService {
     }
     if (
       classification.targetType === "MUSTERIDEN_GELEN_IRSALIYE" &&
-      isTiaCustomerDispatch
+      isCustomerDispatch
     ) {
       await this.prisma.customerDispatchLine.deleteMany({
         where: { mainCompanySlug: slug, documentId: saved.id },
@@ -5487,6 +5686,222 @@ export class MuhasebeDbService {
     return dbSuccess({ count: results.length, results });
   }
 
+  listModelReconciliations(mainCompanySlug: string) {
+    const slug = requireMainCompanySlug(mainCompanySlug);
+    return dbSuccess(
+      this.sqlStore.readMainCompanyStore<any[]>(
+        slug,
+        "model-reconciliations",
+        [],
+      ),
+    );
+  }
+
+  async completeModelReconciliation(
+    mainCompanySlug: string,
+    payload: Query = {},
+  ) {
+    const slug = await this.scope(
+      requireMainCompanySlug(payload.mainCompanySlug || mainCompanySlug),
+    );
+    if (payload.confirm !== true) {
+      throw new BadRequestException("Mutabakat onayı için confirm=true zorunludur.");
+    }
+
+    const modelId = normalizeText(payload.modelId || payload.modelKaydiId);
+    const modelName = normalizeText(payload.modelName || payload.modelAdi);
+    const dispatchIds = [...new Set(
+      (Array.isArray(payload.dispatchIds) ? payload.dispatchIds : [])
+        .map((value: any) => normalizeText(value))
+        .filter(Boolean),
+    )];
+    const invoiceIds = [...new Set(
+      (Array.isArray(payload.invoiceIds) ? payload.invoiceIds : [])
+        .map((value: any) => normalizeText(value))
+        .filter(Boolean),
+    )];
+    const tolerance = Math.max(0, Number(payload.tolerance || 0) || 0);
+    if (!modelId || !modelName) {
+      throw new BadRequestException("Mutabakat için model seçimi zorunludur.");
+    }
+    if (!dispatchIds.length || !invoiceIds.length) {
+      throw new BadRequestException(
+        "En az bir müşteri irsaliyesi ve bir kesilen fatura seçilmelidir.",
+      );
+    }
+
+    const model = await this.prisma.modelRecord.findFirst({
+      where: { id: modelId, mainCompanySlug: slug },
+    });
+    if (!model) throw new NotFoundException("Mutabakat modeli bulunamadı.");
+
+    const documentIds = [...dispatchIds, ...invoiceIds];
+    const documents = await this.prisma.document.findMany({
+      where: { id: { in: documentIds }, mainCompanySlug: slug, deletedAt: null },
+    });
+    if (documents.length !== documentIds.length) {
+      throw new NotFoundException("Seçilen irsaliye veya faturanın bir kısmı bulunamadı.");
+    }
+
+    const invoiceItems = await this.prisma.invoiceItem.findMany({
+      where: { mainCompanySlug: slug, documentId: { in: documentIds } },
+    });
+    const itemsByDocument = new Map<string, any[]>();
+    invoiceItems.forEach((item) => {
+      itemsByDocument.set(item.documentId, [
+        ...(itemsByDocument.get(item.documentId) || []),
+        item,
+      ]);
+    });
+    const quantityOf = (document: any) => {
+      const raw = this.documentRaw(document);
+      const draft = this.asObject(raw.taslakAlanlar);
+      const direct = Number(
+        draft.gelenAdet ??
+          draft.adet ??
+          raw.gelenAdet ??
+          raw.adet ??
+          raw.quantity ??
+          0,
+      );
+      if (Number.isFinite(direct) && direct > 0) return direct;
+      const itemTotal = (itemsByDocument.get(document.id) || []).reduce(
+        (sum: number, item: any) => sum + decimalToNumber(item.quantity),
+        0,
+      );
+      if (itemTotal > 0) return itemTotal;
+      const rawLines = Array.isArray(raw.kalemler)
+        ? raw.kalemler
+        : Array.isArray(raw.lines)
+          ? raw.lines
+          : [];
+      return rawLines.reduce(
+        (sum: number, item: any) =>
+          sum + Number(item.adet ?? item.quantity ?? item.miktar ?? 0),
+        0,
+      );
+    };
+    const requireModelLink = (document: any) => {
+      const raw = this.documentRaw(document);
+      if (normalizeText(raw.modelId || raw.modelKaydiId) !== modelId) {
+        throw new BadRequestException(
+          `${document.documentNo || document.id} önce seçili modele eşleştirilmelidir.`,
+        );
+      }
+    };
+    documents.forEach(requireModelLink);
+
+    const dispatchSet = new Set(dispatchIds);
+    const invoiceSet = new Set(invoiceIds);
+    const dispatchQty = documents
+      .filter((row) => dispatchSet.has(row.id))
+      .reduce((sum, row) => sum + quantityOf(row), 0);
+    const invoiceQty = documents
+      .filter((row) => invoiceSet.has(row.id))
+      .reduce((sum, row) => sum + quantityOf(row), 0);
+    const productionQty = this.sqlStore
+      .readMainCompanyStore<any[]>(slug, "uretim.kayitlar", [])
+      .filter(
+        (row) =>
+          normalizeText(row.modelId || row.modelKaydiId) === modelId,
+      )
+      .reduce(
+        (sum, row) =>
+          sum +
+          Number(
+            row.netAdet ??
+              row.uretimAdedi ??
+              row.adet ??
+              row.quantity ??
+              0,
+          ),
+        0,
+      );
+    if (dispatchQty <= 0 || invoiceQty <= 0 || productionQty <= 0) {
+      throw new BadRequestException(
+        "İrsaliye, imalat ve fatura adetleri sıfırdan büyük olmadan mutabakat tamamlanamaz.",
+      );
+    }
+
+    const differences = {
+      irsaliyeFatura: dispatchQty - invoiceQty,
+      imalatFatura: productionQty - invoiceQty,
+      irsaliyeImalat: dispatchQty - productionQty,
+    };
+    const maxDifference = Math.max(
+      ...Object.values(differences).map((value) => Math.abs(value)),
+    );
+    if (maxDifference > tolerance) {
+      throw new BadRequestException(
+        `En yüksek adet farkı ${maxDifference}. Onay toleransı ${tolerance} olduğu için işlem beklemede bırakıldı.`,
+      );
+    }
+
+    const now = new Date();
+    const reconciliation = {
+      id: normalizeText(payload.id) || crypto.randomUUID(),
+      mainCompanySlug: slug,
+      modelId,
+      modelName,
+      dispatchIds,
+      invoiceIds,
+      dispatchQty,
+      productionQty,
+      invoiceQty,
+      differences,
+      tolerance,
+      toleranceUsed: maxDifference > 0,
+      note: normalizeText(payload.note || payload.aciklama),
+      status: "TAMAMLANDI",
+      approvedBy: normalizeText(payload.actor) || "system",
+      approvedAt: now.toISOString(),
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const document of documents) {
+        const raw = this.documentRaw(document);
+        const isDispatch = dispatchSet.has(document.id);
+        await tx.document.update({
+          where: { id: document.id },
+          data: {
+            status: isDispatch ? "irsaliye_tamamlandi" : document.status,
+            raw: {
+              ...raw,
+              durum: isDispatch ? "irsaliye_tamamlandi" : raw.durum,
+              reconciliation,
+              reconciliationStatus: "TAMAMLANDI",
+            },
+          },
+        });
+      }
+      await tx.activityLog.create({
+        data: {
+          mainCompanySlug: slug,
+          module: "muhasebe",
+          action: "model_mutabakat_tamamla",
+          entityType: "model_reconciliation",
+          entityId: reconciliation.id,
+          actionType: "model_mutabakat_tamamla",
+          description: `${modelName} için irsaliye, imalat ve fatura mutabakatı tamamlandı`,
+          newValue: reconciliation,
+          actor: reconciliation.approvedBy,
+        },
+      });
+    });
+
+    const rows = this.sqlStore.readMainCompanyStore<any[]>(
+      slug,
+      "model-reconciliations",
+      [],
+    );
+    const next = [
+      reconciliation,
+      ...rows.filter((row) => normalizeText(row.modelId) !== modelId),
+    ];
+    this.sqlStore.writeMainCompanyStore(slug, "model-reconciliations", next);
+    return dbSuccess(reconciliation);
+  }
+
   async getDocument(mainCompanySlug: string, id: string) {
     const slug = await this.scope(mainCompanySlug);
     const row = await this.prisma.document.findFirst({
@@ -5498,7 +5913,304 @@ export class MuhasebeDbService {
       where: { mainCompanySlug: slug, documentId: row.id },
       orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }],
     });
-    return dbSuccess(this.mapDocument(row, invoiceItems));
+    const dispatchLines = await this.prisma.customerDispatchLine.findMany({
+      where: {
+        mainCompanySlug: slug,
+        documentId: row.id,
+        deletedAt: null,
+      },
+      orderBy: [{ createdAt: "asc" }],
+    });
+    return dbSuccess(this.mapDocument(row, invoiceItems, dispatchLines));
+  }
+
+  private async resolveModelForDocument(slug: string, modelId: string) {
+    if (!modelId) return null;
+    const persisted = await this.prisma.modelRecord.findFirst({
+      where: { id: modelId, mainCompanySlug: slug },
+    });
+    if (persisted) return persisted;
+    const shared = await this.modelService.list({
+      mainCompanySlug: slug,
+      page: 1,
+      pageSize: 5000,
+    });
+    return (shared?.rows || []).find(
+      (row: any) => String(row?.id || row?.modelId) === String(modelId),
+    ) || null;
+  }
+
+  async saveManualModelDocument(
+    mainCompanySlug: string,
+    id: string | undefined,
+    payload: Query = {},
+    requestedTarget = "MUSTERIDEN_GELEN_IRSALIYE",
+  ) {
+    const slug = await this.scope(
+      requireMainCompanySlug(payload.mainCompanySlug || mainCompanySlug),
+    );
+    const isInvoice = requestedTarget === "BIZIM_GIDEN_FATURA";
+    const documentType = isInvoice
+      ? "bizim_kestigimiz_fatura"
+      : "musteriden_gelen_irsaliye";
+    const detectedType = isInvoice ? "FATURA" : "IRSALIYE";
+    const quantity = Number(
+      payload.quantity ?? payload.adet ?? payload.gelenAdet ?? 0,
+    );
+    const unitPrice = Number(
+      payload.unitPrice ?? payload.birimFiyat ?? payload.fiyat ?? 0,
+    );
+    const vatRate = isInvoice
+      ? Number(payload.vatRate ?? payload.kdvOrani ?? payload.kdv ?? 0)
+      : 0;
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new BadRequestException("Adet 0'dan büyük olmalıdır.");
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new BadRequestException("Birim fiyat 0 veya daha büyük olmalıdır.");
+    }
+
+    const existing = id
+      ? await this.prisma.document.findFirst({
+          where: { id, mainCompanySlug: slug, deletedAt: null },
+          include: { company: true, files: true },
+        })
+      : null;
+    if (id && !existing) throw new NotFoundException("Belge bulunamadı.");
+
+    const modelId = normalizeText(payload.modelId || payload.modelKaydiId);
+    const model = modelId
+      ? await this.resolveModelForDocument(slug, modelId)
+      : null;
+    if (modelId && !model) {
+      throw new NotFoundException("Bağlanacak model bulunamadı.");
+    }
+    const modelName = normalizeText(
+      model?.modelName || payload.modelName || payload.modelAdi,
+    );
+    const companyName = normalizeText(
+      payload.companyName || payload.firmaAdi || payload.firma,
+    );
+    if (!companyName) throw new BadRequestException("Firma zorunludur.");
+    if (!modelName) throw new BadRequestException("Model adı zorunludur.");
+
+    const dateText =
+      normalizeText(payload.date || payload.tarih) ||
+      new Date().toISOString().slice(0, 10);
+    const generatedPrefix = isInvoice ? "MANUEL-FAT" : "MANUEL-IRS";
+    const generatedNo = `${generatedPrefix}-${new Date()
+      .toISOString()
+      .replace(/\D/g, "")
+      .slice(0, 14)}`;
+    const documentNo =
+      normalizeText(
+        payload.documentNo ||
+          payload.belgeNo ||
+          (isInvoice ? payload.faturaNo : payload.irsaliyeNo),
+      ) || existing?.documentNo || generatedNo;
+    const duplicate = await this.prisma.document.findFirst({
+      where: {
+        mainCompanySlug: slug,
+        documentType,
+        documentNo,
+        deletedAt: null,
+        ...(existing?.id ? { id: { not: existing.id } } : {}),
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new BadRequestException("Bu belge numarası daha önce kaydedildi.");
+    }
+
+    const subtotal = Number((quantity * unitPrice).toFixed(2));
+    const vatTotal = Number(((subtotal * vatRate) / 100).toFixed(2));
+    const grandTotal = Number((subtotal + vatTotal).toFixed(2));
+    const oldRaw = existing ? this.documentRaw(existing) : {};
+    const note = normalizeText(payload.notes || payload.not || payload.aciklama);
+    const line = {
+      lineNo: 1,
+      aciklama: modelName,
+      productName: modelName,
+      rawDescription: modelName,
+      adet: quantity,
+      quantity,
+      birim: "ADET",
+      unit: "ADET",
+      birimFiyat: unitPrice,
+      unitPrice,
+      lineTotal: subtotal,
+      modelId: model?.id || modelId,
+      modelAdi: modelName,
+      durum: modelId ? "MODELE_BAGLI" : "MODEL_BAGLANTISI_BEKLIYOR",
+    };
+    const taslakAlanlar = {
+      ...(oldRaw.taslakAlanlar || {}),
+      belgeNo: documentNo,
+      faturaNo: isInvoice ? documentNo : "",
+      irsaliyeNo: isInvoice
+        ? normalizeText(payload.bagliIrsaliyeNo || payload.irsaliyeNo)
+        : documentNo,
+      bagliIrsaliyeNo: isInvoice
+        ? normalizeText(payload.bagliIrsaliyeNo || payload.irsaliyeNo)
+        : "",
+      tarih: dateText,
+      firmaAdi: companyName,
+      saticiUnvan: isInvoice ? "" : companyName,
+      aliciUnvan: isInvoice ? companyName : "",
+      adet: quantity,
+      gelenAdet: quantity,
+      birimFiyat: unitPrice,
+      fiyat: unitPrice,
+      araToplam: subtotal,
+      kdvOrani: vatRate,
+      kdvToplam: vatTotal,
+      genelToplam: grandTotal,
+      modelId: model?.id || modelId,
+      modelAdi: modelName,
+      aciklama: note,
+    };
+    const status = modelId ? "islem_bekliyor" : "model_baglantisi_bekliyor";
+    const raw = {
+      ...oldRaw,
+      source: "MODEL_TAKIP_SERI_GIRIS",
+      manualEntry: true,
+      targetType: requestedTarget,
+      targetModule: "MUHASEBE_MODEL_TAKIP",
+      routeStatus: modelId ? "ROUTED" : "ROUTED_NEEDS_MODEL",
+      routeMessage: modelId
+        ? "Seri girişten modele bağlı kaydedildi"
+        : "Seri giriş kaydı model bağlantısı bekliyor",
+      durum: status,
+      modelId: model?.id || modelId,
+      modelKaydiId: model?.id || modelId,
+      modelName,
+      modelAdi: modelName,
+      unitPrice,
+      birimFiyat: unitPrice,
+      quantity,
+      notes: note,
+      taslakAlanlar,
+      kalemler: [line],
+      needsReview: !modelId,
+      parseConfidence: 1,
+    };
+
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const document = existing
+        ? await tx.document.update({
+            where: { id: existing.id },
+            data: {
+              documentNo,
+              documentType,
+              sourceType: "MANUAL",
+              date: this.optionalDate(dateText),
+              subtotal: safeDecimal(subtotal),
+              vatTotal: safeDecimal(vatTotal),
+              grandTotal: safeDecimal(grandTotal),
+              status,
+              detectedType,
+              targetType: requestedTarget,
+              targetModule: "MUHASEBE_MODEL_TAKIP",
+              confidence: safeDecimal(100),
+              routeStatus: modelId ? "ROUTED" : "ROUTED_NEEDS_MODEL",
+              routeMessage: raw.routeMessage,
+              raw,
+              metadata: raw,
+            },
+          })
+        : await tx.document.create({
+            data: {
+              mainCompanySlug: slug,
+              documentNo,
+              documentType,
+              sourceType: "MANUAL",
+              date: this.optionalDate(dateText),
+              subtotal: safeDecimal(subtotal),
+              vatTotal: safeDecimal(vatTotal),
+              grandTotal: safeDecimal(grandTotal),
+              status,
+              detectedType,
+              targetType: requestedTarget,
+              targetModule: "MUHASEBE_MODEL_TAKIP",
+              confidence: safeDecimal(100),
+              routeStatus: modelId ? "ROUTED" : "ROUTED_NEEDS_MODEL",
+              routeMessage: raw.routeMessage,
+              raw,
+              metadata: raw,
+            },
+          });
+      const finalRaw = { ...raw, targetRecordId: document.id };
+      await tx.document.update({
+        where: { id: document.id },
+        data: { targetRecordId: document.id, raw: finalRaw, metadata: finalRaw },
+      });
+
+      if (isInvoice) {
+        await tx.invoiceItem.deleteMany({
+          where: { mainCompanySlug: slug, documentId: document.id },
+        });
+        await tx.invoiceItem.create({
+          data: {
+            mainCompanySlug: slug,
+            documentId: document.id,
+            lineNo: 1,
+            productName: modelName,
+            normalizedProductName: normalizeSearchText(modelName),
+            description: modelName,
+            quantity: safeDecimal(quantity),
+            unit: "ADET",
+            unitPrice: safeDecimal(unitPrice),
+            vatRate: safeDecimal(vatRate),
+            vatAmount: safeDecimal(vatTotal),
+            lineTotal: safeDecimal(subtotal),
+            raw: line,
+          },
+        });
+      } else {
+        await tx.customerDispatchLine.deleteMany({
+          where: { mainCompanySlug: slug, documentId: document.id },
+        });
+        await tx.customerDispatchLine.create({
+          data: {
+            mainCompanySlug: slug,
+            musteriIrsaliyeId: document.id,
+            documentId: document.id,
+            aciklama: modelName,
+            adet: safeDecimal(quantity),
+            birim: "ADET",
+            modelId: model?.id || modelId || null,
+            modelAdi: modelName,
+            modelAdiOnerisi: modelName,
+            durum: modelId ? "MODELE_BAGLI" : "MODEL_BAGLANTISI_BEKLIYOR",
+          },
+        });
+      }
+      await tx.activityLog.create({
+        data: {
+          mainCompanySlug: slug,
+          module: "muhasebe",
+          entityType: "document",
+          entityId: document.id,
+          actionType: existing ? "UPDATED" : "CREATED",
+          action: "model_takip_seri_giris",
+          description: `${documentNo} seri işlem ekranından ${existing ? "güncellendi" : "kaydedildi"}`,
+          oldValue: existing || undefined,
+          newValue: finalRaw,
+        },
+      });
+      return tx.document.findFirst({
+        where: { id: document.id },
+        include: { company: true, files: true },
+      });
+    });
+    if (!saved) throw new NotFoundException("Belge kaydedilemedi.");
+    const invoiceItems = isInvoice
+      ? await this.prisma.invoiceItem.findMany({
+          where: { mainCompanySlug: slug, documentId: saved.id },
+          orderBy: { lineNo: "asc" },
+        })
+      : [];
+    return dbSuccess(this.mapDocument(saved, invoiceItems));
   }
 
   async updateDocument(
@@ -5730,6 +6442,270 @@ export class MuhasebeDbService {
     );
   }
 
+  async linkDocumentToModel(
+    mainCompanySlug: string,
+    id: string,
+    payload: Query = {},
+  ) {
+    const slug = await this.scope(
+      requireMainCompanySlug(payload.mainCompanySlug || mainCompanySlug),
+    );
+    const modelId = normalizeText(payload.modelId || payload.modelKaydiId);
+    const modelName = normalizeText(payload.modelName || payload.modelAdi);
+    if (!modelId || !modelName) {
+      throw new BadRequestException("Belge bağlantısı için model zorunludur.");
+    }
+    const model = await this.resolveModelForDocument(slug, modelId);
+    if (!model) throw new NotFoundException("Bağlanacak model bulunamadı.");
+
+    return this.prisma.$transaction(async (tx) => {
+      const document = await tx.document.findFirst({
+        where: { id, mainCompanySlug: slug, deletedAt: null },
+        include: { company: true, files: true },
+      });
+      if (!document) throw new NotFoundException("Belge bulunamadı.");
+      const documentType = this.normalizeDocumentType(
+        document.documentType || this.documentRaw(document).belgeTipi,
+      );
+      if (
+        ![
+          "bizim_kestigimiz_fatura",
+          "bizim_kestigimiz_irsaliye",
+          "musteriden_gelen_irsaliye",
+        ].includes(documentType)
+      ) {
+        throw new BadRequestException(
+          "Yalnızca müşteri irsaliyesi veya bizim kestiğimiz belge modele bağlanabilir.",
+        );
+      }
+      return dbSuccess(
+        await this.approveModelLinkedDocument(tx, slug, document, {
+          ...payload,
+          modelId,
+          modelName,
+        }),
+      );
+    });
+  }
+
+  async linkIncomingDeliveryLinesToModels(
+    mainCompanySlug: string,
+    id: string,
+    payload: Query = {},
+  ) {
+    const slug = await this.scope(
+      requireMainCompanySlug(payload.mainCompanySlug || mainCompanySlug),
+    );
+    const requested = Array.isArray(payload.allocations)
+      ? payload.allocations
+      : [];
+    if (!requested.length) {
+      throw new BadRequestException("En az bir model dağıtım satırı zorunludur.");
+    }
+
+    const allocations: any[] = [];
+    for (let index = 0; index < requested.length; index += 1) {
+      const item = requested[index] || {};
+      const modelId = normalizeText(item.modelId || item.modelKaydiId);
+      const quantity = Number(item.quantity ?? item.adet ?? 0);
+      const unitPrice = Number(item.unitPrice ?? item.birimFiyat ?? 0);
+      if (!modelId || !Number.isFinite(quantity) || quantity <= 0) {
+        throw new BadRequestException(
+          `${index + 1}. dağıtım satırında model ve 0'dan büyük adet zorunludur.`,
+        );
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        throw new BadRequestException(
+          `${index + 1}. dağıtım satırında birim fiyat geçersizdir.`,
+        );
+      }
+      const model = await this.resolveModelForDocument(slug, modelId);
+      if (!model) {
+        throw new NotFoundException(
+          `${index + 1}. satır için bağlanacak model bulunamadı.`,
+        );
+      }
+      const modelName = normalizeText(
+        item.modelName ||
+          item.modelAdi ||
+          model.modelName ||
+          model.modelAdi ||
+          model.name,
+      );
+      allocations.push({
+        id: normalizeText(item.id) || `allocation-${index + 1}`,
+        sourceLineId: normalizeText(item.sourceLineId),
+        description: normalizeText(
+          item.description || item.aciklama || item.rawDescription || modelName,
+        ),
+        quantity,
+        unitPrice,
+        modelId,
+        modelName,
+      });
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const document = await tx.document.findFirst({
+        where: { id, mainCompanySlug: slug, deletedAt: null },
+        include: { company: true, files: true },
+      });
+      if (!document) throw new NotFoundException("İrsaliye bulunamadı.");
+      const documentType = this.normalizeDocumentType(
+        document.documentType || this.documentRaw(document).belgeTipi,
+      );
+      if (documentType !== "musteriden_gelen_irsaliye") {
+        throw new BadRequestException(
+          "Çoklu model dağıtımı yalnızca müşteriden gelen irsaliyelerde yapılabilir.",
+        );
+      }
+
+      const previousRaw = this.documentRaw(document);
+      const uniqueModels = Array.from(
+        new Map(
+          allocations.map((item) => [
+            item.modelId,
+            { modelId: item.modelId, modelName: item.modelName },
+          ]),
+        ).values(),
+      );
+      const totalQuantity = allocations.reduce(
+        (sum, item) => sum + item.quantity,
+        0,
+      );
+      const subtotal = allocations.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0,
+      );
+      const singleModel = uniqueModels.length === 1 ? uniqueModels[0] : null;
+      const nextDocumentNo =
+        normalizeText(payload.documentNo || payload.irsaliyeNo) ||
+        document.documentNo;
+      const nextCompanyName = normalizeText(
+        payload.companyName || payload.firma || payload.firmaAdi,
+      );
+      const nextDate = normalizeText(payload.date || payload.tarih);
+      const nextRaw = {
+        ...previousRaw,
+        durum: "islem_bekliyor",
+        routeStatus: "ROUTED",
+        routeMessage:
+          uniqueModels.length > 1
+            ? `${uniqueModels.length} modele satır bazında bağlandı`
+            : "İrsaliye modele bağlandı",
+        modelId: singleModel?.modelId || "",
+        modelKaydiId: singleModel?.modelId || "",
+        modelName: singleModel?.modelName || "",
+        modelAdi: singleModel?.modelName || "",
+        modelIds: uniqueModels.map((item) => item.modelId),
+        modelNames: uniqueModels.map((item) => item.modelName),
+        modelAllocations: allocations,
+        quantity: totalQuantity,
+        unitPrice:
+          allocations.length === 1 ? allocations[0].unitPrice : 0,
+        birimFiyat:
+          allocations.length === 1 ? allocations[0].unitPrice : 0,
+        needsReview: false,
+        taslakAlanlar: {
+          ...(previousRaw.taslakAlanlar || {}),
+          belgeNo: nextDocumentNo,
+          irsaliyeNo: nextDocumentNo,
+          tarih:
+            nextDate ||
+            document.date?.toISOString?.().slice(0, 10) ||
+            "",
+          firmaAdi:
+            nextCompanyName ||
+            previousRaw.taslakAlanlar?.firmaAdi ||
+            "",
+          adet: totalQuantity,
+          gelenAdet: totalQuantity,
+          modelId: singleModel?.modelId || "",
+          modelAdi:
+            singleModel?.modelName || `${uniqueModels.length} model bağlı`,
+          araToplam: Number(subtotal.toFixed(2)),
+          genelToplam: Number(subtotal.toFixed(2)),
+        },
+      };
+
+      await tx.customerDispatchLine.deleteMany({
+        where: { mainCompanySlug: slug, documentId: document.id },
+      });
+      for (const item of allocations) {
+        await tx.customerDispatchLine.create({
+          data: {
+            mainCompanySlug: slug,
+            musteriIrsaliyeId: document.id,
+            documentId: document.id,
+            aciklama: item.description || item.modelName,
+            adet: safeDecimal(item.quantity),
+            birim: "ADET",
+            modelId: item.modelId,
+            modelAdi: item.modelName,
+            modelAdiOnerisi: item.description || item.modelName,
+            durum: "MODELE_BAGLI",
+          },
+        });
+      }
+
+      await tx.modelDocumentLink.deleteMany({
+        where: { mainCompanySlug: slug, documentId: document.id },
+      });
+      for (const item of uniqueModels) {
+        await tx.modelDocumentLink.create({
+          data: {
+            mainCompanySlug: slug,
+            modelId: item.modelId,
+            documentId: document.id,
+            raw: {
+              source: "incoming_dispatch_allocation",
+              documentType,
+              modelName: item.modelName,
+            },
+          },
+        });
+      }
+
+      const saved = await tx.document.update({
+        where: { id: document.id },
+        data: {
+          documentNo: nextDocumentNo,
+          ...(nextDate ? { date: this.optionalDate(nextDate) } : {}),
+          status: "islem_bekliyor",
+          routeStatus: "ROUTED",
+          routeMessage: nextRaw.routeMessage,
+          subtotal: safeDecimal(subtotal),
+          grandTotal: safeDecimal(subtotal),
+          raw: nextRaw,
+          metadata: nextRaw,
+        },
+        include: { company: true, files: true },
+      });
+      await tx.activityLog.create({
+        data: {
+          mainCompanySlug: slug,
+          module: "muhasebe",
+          entityType: "document",
+          entityId: document.id,
+          actionType: "UPDATED",
+          action: "irsaliye_coklu_model_dagitimi",
+          description: `${document.documentNo || document.id} ${uniqueModels.length} modele dağıtıldı`,
+          oldValue: previousRaw,
+          newValue: nextRaw,
+        },
+      });
+      const savedLines = await tx.customerDispatchLine.findMany({
+        where: {
+          mainCompanySlug: slug,
+          documentId: document.id,
+          deletedAt: null,
+        },
+        orderBy: [{ createdAt: "asc" }],
+      });
+      return dbSuccess(this.mapDocument(saved, [], savedLines));
+    });
+  }
+
   private async resolveApprovalCompany(
     tx: any,
     slug: string,
@@ -5783,6 +6759,16 @@ export class MuhasebeDbService {
     const vatTotal =
       draft.vatTotal || lines.reduce((sum, line) => sum + line.vatAmount, 0);
     const grandTotal = draft.grandTotal || subtotal + vatTotal;
+    const accountingRule = this.supplierAccountingRule(company);
+    const vatPercentagePayable = Number(
+      ((vatTotal * accountingRule.vatPayablePercentage) / 100).toFixed(2),
+    );
+    const cariAmount =
+      accountingRule.currentAccountPostingMode === "FULL_DOCUMENT"
+        ? grandTotal
+        : accountingRule.currentAccountPostingMode === "VAT_PERCENTAGE"
+          ? vatPercentagePayable
+          : 0;
     const now = new Date();
 
     await tx.invoiceItem.deleteMany({
@@ -5902,22 +6888,28 @@ export class MuhasebeDbService {
       }
     }
 
-    const movement = await this.createLinkedMovement(tx, {
+    const movement = cariAmount > 0 ? await this.createLinkedMovement(tx, {
       mainCompanySlug: slug,
       companyId: company.id,
       date: draft.documentDate,
-      movementType: "fatura",
+      movementType:
+        accountingRule.currentAccountPostingMode === "VAT_PERCENTAGE"
+          ? "KDV_PAYI_BORCU"
+          : "fatura",
       sourceType: "tedarikci_gelen_fatura",
       documentNo: draft.documentNo,
       documentId: document.id,
       description: draft.note || `Tedarikçi gelen fatura ${draft.documentNo}`,
-      effect: grandTotal,
+      effect: -cariAmount,
       raw: {
         source: "document_approval",
         documentId: document.id,
         documentType: "tedarikci_gelen_fatura",
+        currentAccountPostingMode: accountingRule.currentAccountPostingMode,
+        vatPayablePercentage: accountingRule.vatPayablePercentage,
+        sourceVatAmount: vatTotal,
       },
-    });
+    }) : null;
 
     await tx.vatRecord.deleteMany({
       where: {
@@ -5958,8 +6950,11 @@ export class MuhasebeDbService {
       supplierInvoiceLineIds: createdInvoiceItems,
       createdInvoiceItems,
       createdVatRecords,
-      createdMovementId: movement.id,
-      cariMovementId: movement.id,
+      createdMovementId: movement?.id || "",
+      cariMovementId: movement?.id || "",
+      currentAccountPostingMode: accountingRule.currentAccountPostingMode,
+      vatPayablePercentage: accountingRule.vatPayablePercentage,
+      vatPercentagePayable,
       kdvRecordIds: createdVatRecords,
       rawMaterialLotIds,
       lotWarnings,
@@ -6023,7 +7018,7 @@ export class MuhasebeDbService {
       ...saved,
       company,
       files: document.files || [],
-      movements: [movement],
+      movements: movement ? [movement] : [],
     });
   }
 

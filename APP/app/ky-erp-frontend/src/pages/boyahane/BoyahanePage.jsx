@@ -1,52 +1,29 @@
 import "../modules/cleanWorkflow.css";
 import "./boyahaneWorkflow.css";
-import BoyahaneOzet from "./BoyahaneOzet";
-import RenkRecetePage from "./RenkRecetePage";
-import KayitliRenklerPage from "./KayitliRenklerPage";
-import HammaddeLotPage from "./HammaddeLotPage";
-import OnayliEnvanterPage from "./OnayliEnvanterPage";
-import EvrakDenetimPage from "./EvrakDenetimPage";
-import BoyahaneRaporlari from "./BoyahaneRaporlari";
+import BoyahaneIsAkisiPage from "./workflow/BoyahaneIsAkisiPage";
+import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
+import UrunLotlarPage from "./workflow/UrunLotlarPage";
+import { BoyaGiderleriPage, BoyahaneRaporlarPage, UretimGecmisiPage } from "./workflow/BoyahaneRecordPages";
 
 const titles = {
-  "boyahane-yonetim-ozeti": "Yönetim Özeti",
-  "renk-recete-is-akisi": "Renk & Reçete",
+  "is-akisi": "İş Akışı",
   "kayitli-renkler": "Kayıtlı Renkler",
-  "hammadde-lot": "Hammadde / Lot",
-  "urun-lot-takibi": "Hammadde / Lot",
-  "onayli-envanter": "Onaylı Envanter",
-  "evraklar-denetim": "Evraklar / Denetim",
-  "boyahane-raporlari": "Raporlar",
+  receteler: "Reçeteler",
+  "urun-lotlar": "Ürün ve Lotlar",
+  "uretim-gecmisi": "Üretim Geçmişi",
+  "boya-giderleri": "Boya Giderleri",
+  raporlar: "Raporlar",
 };
 
 export default function BoyahanePage({ activeTab, activeMainCompany }) {
-  const normalizedTab = activeTab === "urun-lot-takibi" ? "hammadde-lot" : activeTab;
-  const page =
-    normalizedTab === "renk-recete-is-akisi" || normalizedTab === "renk-gramaj"
-       ? <RenkRecetePage activeMainCompany={activeMainCompany} />
-      : normalizedTab === "kayitli-renkler"
-         ? <KayitliRenklerPage />
-        : normalizedTab === "hammadde-lot"
-           ? <HammaddeLotPage />
-          : normalizedTab === "onayli-envanter"
-             ? <OnayliEnvanterPage />
-            : normalizedTab === "evraklar-denetim" || normalizedTab === "evraklar"
-               ? <EvrakDenetimPage />
-              : normalizedTab === "boyahane-raporlari" || normalizedTab === "raporlar"
-                 ? <BoyahaneRaporlari />
-                : <BoyahaneOzet />;
+  const tab = activeTab === "renk-recete-is-akisi" || activeTab === "boyahane-yonetim-ozeti" ? "is-akisi" : activeTab;
+  const page = tab === "kayitli-renkler" ? <KayitliRenklerWorkspace activeMainCompany={activeMainCompany} />
+    : tab === "receteler" ? <KayitliRenklerWorkspace activeMainCompany={activeMainCompany} recipesOnly />
+      : tab === "urun-lotlar" ? <UrunLotlarPage activeMainCompany={activeMainCompany} />
+        : tab === "uretim-gecmisi" ? <UretimGecmisiPage activeMainCompany={activeMainCompany} />
+          : tab === "boya-giderleri" ? <BoyaGiderleriPage activeMainCompany={activeMainCompany} />
+            : tab === "raporlar" ? <BoyahaneRaporlarPage activeMainCompany={activeMainCompany} />
+              : <BoyahaneIsAkisiPage activeMainCompany={activeMainCompany} />;
 
-  return (
-    <div className="clean-workflow-page bh-page">
-      <section className="cw-screen">
-        <header className="cw-card bh-header">
-          <div>
-            <h1>{titles[normalizedTab] || "Yönetim Özeti"}</h1>
-            <p>Renk reçetesi, lot, onaylı envanter ve denetim evrakları ayrı ekranlarda seri kullanıma hazırlanır.</p>
-          </div>
-        </header>
-        {page}
-      </section>
-    </div>
-  );
+  return <div className="clean-workflow-page bh-page"><section className="cw-screen"><header className="cw-card bh-header"><div><h1>{titles[tab] || "İş Akışı"}</h1><p>Desen’den gönderilen gerçek işler; kayıtlı reçete, onaylı ürün/lot, üretim snapshotı ve muhasebe gideriyle tek akışta ilerler.</p></div></header>{page}</section></div>;
 }

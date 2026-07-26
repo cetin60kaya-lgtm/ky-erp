@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import {
   createMailTemplate,
   createMailTemplateDraft,
@@ -82,10 +83,6 @@ export default function MailSablonlariPage({ activeMainCompany }) {
   const selected = templates.find((item) => item.id === selectedId) || null;
 
   useEffect(() => {
-    loadAll();
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
-
-  useEffect(() => {
     if (!selected) return;
     setForm({
       code: selected.code || "",
@@ -95,9 +92,9 @@ export default function MailSablonlariPage({ activeMainCompany }) {
       body: selected.body || "",
     });
     setPreview(null);
-  }, [selected?.id]);
+  }, [selected, selected?.id]);
 
-  async function loadAll(nextSelectedId = selectedId) {
+  const loadAll = useCallback(async (nextSelectedId = selectedId) => {
     try {
       const [templatePayload, draftPayload] = await Promise.all([
         getMailTemplates(activeMainCompany || {}),
@@ -117,7 +114,11 @@ export default function MailSablonlariPage({ activeMainCompany }) {
     } catch (error) {
       setMessage(error?.message);
     }
-  }
+  }, [activeMainCompany, selectedId]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
 
   async function handleSeed() {
     try {

@@ -1,6 +1,7 @@
 import "../modules/cleanWorkflow.css";
 import "./imalatWorkflow.css";
 import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { ChartColumn, FileSpreadsheet, Search } from "lucide-react";
 import { getImalatOperasyonRaporu } from "../../services/imalatApi";
 import { Field, Status } from "./ImalatShared";
@@ -45,7 +46,7 @@ export default function UretimRaporlari({ activeMainCompany }) {
   });
   const [message, setMessage] = useState("");
 
-  async function loadReport(nextFilters = filters) {
+  const loadReport = useCallback(async function loadReport(nextFilters = filters) {
     try {
       const result = await getImalatOperasyonRaporu(activeMainCompany, nextFilters);
       setReport({
@@ -59,11 +60,11 @@ export default function UretimRaporlari({ activeMainCompany }) {
     } catch (error) {
       setMessage(error?.message || "Üretim raporu okunamadı.");
     }
-  }
+  }, [activeMainCompany, filters]);
 
   useEffect(() => {
     loadReport(initialFilters);
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, loadReport]);
 
   return (
     <div className="iw-page">
@@ -174,6 +175,7 @@ export default function UretimRaporlari({ activeMainCompany }) {
           <table>
             <thead>
               <tr>
+                <th>Görsel</th>
                 <th>Model</th>
                 <th>Firma</th>
                 <th>Baskı Bölgesi</th>
@@ -187,6 +189,7 @@ export default function UretimRaporlari({ activeMainCompany }) {
               {report.modelRows.length ? (
                 report.modelRows.map((row) => (
                   <tr key={`${row?.model}-${row?.firma}-${row?.baskiBolgesi}`}>
+                    <td>{row?.modelImageUrl ? <img className="smart-thumb" src={row.modelImageUrl} alt={row?.model || "Model görseli"} /> : "-"}</td>
                     <td>{row?.model}</td>
                     <td>{row?.firma}</td>
                     <td>{row?.baskiBolgesi}</td>

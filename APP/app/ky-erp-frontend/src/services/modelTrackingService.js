@@ -170,7 +170,7 @@ function normalizeModelRow(row, index = 0) {
       "",
   );
   const images = normalizeModelImages(row?.images, thumbnail);
-  const cover = images[0].url || thumbnail;
+  const cover = images[0]?.url || thumbnail || "";
 
   const status = normalizeStatus(row?.durum || row?.aktifDurum || row?.status);
   const emptyDocumentState =
@@ -244,7 +244,9 @@ function normalizeModelRow(row, index = 0) {
       : [],
     productionHistory: Array.isArray(row?.productionHistory)
        ? row?.productionHistory
-      : [],
+      : Array.isArray(row?.imalatKayitlari)
+         ? row?.imalatKayitlari
+        : [],
   };
 }
 

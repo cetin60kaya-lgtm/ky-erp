@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, setApiAuthHandlers } from "../utils/api";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
@@ -16,6 +16,8 @@ const MODULE_KEYS = [
   "IMALAT",
   "BOYAHANE",
   "IK",
+  "ISNET",
+  "ASISTAN",
   "ADMIN",
   "RAPORLAR",
 ];
@@ -87,8 +89,10 @@ export function AuthProvider({ children }) {
     readStoredAuth(),
   );
   const [loading, setLoading] = useState(true);
+  const authSnapshotRef = useRef({ user, permissions });
+  authSnapshotRef.current = { user, permissions };
 
-  const clearAuth = () => {
+  const clearAuth = useCallback(() => {
     setAuthState({ token: "", user: null, permissions: [] });
     setApiAuthHandlers({
       getToken: () => "",
@@ -103,9 +107,9 @@ export function AuthProvider({ children }) {
     } catch {
       // noop
     }
-  };
+  }, []);
 
-  const saveAuth = (nextToken, nextUser, nextPermissions) => {
+  const saveAuth = useCallback((nextToken, nextUser, nextPermissions) => {
     const normalizedPermissions = normalizePermissionRows(nextPermissions);
     const payload = {
       token: String(nextToken || ""),
@@ -123,14 +127,14 @@ export function AuthProvider({ children }) {
     } catch {
       // noop
     }
-  };
+  }, [clearAuth]);
 
   useEffect(() => {
     setApiAuthHandlers({
       getToken: () => token,
       onUnauthorized: () => clearAuth(),
     });
-  }, [token]);
+  }, [clearAuth, token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,10 +156,11 @@ export function AuthProvider({ children }) {
       try {
         const response = await apiFetch("/auth/me");
         if (cancelled) return;
+        const snapshot = authSnapshotRef.current;
         saveAuth(
           token,
-          response.user || user,
-          response.user.permissions || permissions,
+          response.user || snapshot.user,
+          response.user?.permissions || snapshot.permissions,
         );
       } catch {
         if (!cancelled) {
@@ -173,9 +178,9 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [clearAuth, saveAuth, token]);
 
-  async function login(username, password) {
+  const login = useCallback(async function login(username, password) {
     const response = await apiFetch("/auth/login", {
       method: "POST",
       body: { username, password },
@@ -189,21 +194,21 @@ export function AuthProvider({ children }) {
     );
 
     return response;
-  }
+  }, [saveAuth]);
 
-  function logout() {
+  const logout = useCallback(function logout() {
     clearAuth();
-  }
+  }, [clearAuth]);
 
-  function hasModule(moduleKey) {
+  const hasModule = useCallback(function hasModule(moduleKey) {
     const key = String(moduleKey || "").toUpperCase();
     if (!key) return false;
     if (String(user?.role || "").toUpperCase() === "ADMIN") return true;
     const permission = permissions.find((row) => row.moduleKey === key);
     return Boolean(permission?.canView);
-  }
+  }, [permissions, user?.role]);
 
-  function can(moduleKey, action) {
+  const can = useCallback(function can(moduleKey, action) {
     const key = String(moduleKey || "").toUpperCase();
     const actionKey = {
       view: "canView",
@@ -218,7 +223,7 @@ export function AuthProvider({ children }) {
 
     const permission = permissions.find((row) => row.moduleKey === key);
     return Boolean(permission?.[actionKey]);
-  }
+  }, [permissions, user?.role]);
 
   const value = useMemo(
     () => ({
@@ -232,7 +237,7 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token && user),
       loading,
     }),
-    [token, user, permissions, loading],
+    [token, user, permissions, login, logout, hasModule, can, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

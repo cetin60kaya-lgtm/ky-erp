@@ -23,6 +23,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { Response } from "express";
 import ExcelJS from "exceljs";
+import AdmZip from "adm-zip";
 import { AdminService } from "../admin/admin.service";
 import { apiSuccess } from "../common/api-helpers";
 import { DocumentIntakeService } from "./document-intake.service";
@@ -40,6 +41,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { parseKyDocumentFromPdfText } from "./pdf/kyerp-pdf-parser";
 import { SalesInvoicePoolService } from "./sales-invoice-pool.service";
 import { getStorageRoot } from "../storage/storage-path.util";
+import { DispatchReconciliationService } from "./dispatch-reconciliation.service";
 
 function ensureDir(dirPath: string) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -74,6 +76,7 @@ export class MuhasebeController {
     private readonly modelService: ModelService,
     private readonly prisma: PrismaService,
     private readonly salesInvoicePool: SalesInvoicePoolService,
+    private readonly dispatchReconciliation: DispatchReconciliationService,
   ) {}
 
   private resolveSlug(mainCompanySlug?: string, mainCompanyId?: string) {
@@ -602,6 +605,7 @@ export class MuhasebeController {
         if (
           ext === ".xml" ||
           ext === ".pdf" ||
+          ext === ".zip" ||
           ext === ".xlsx" ||
           ext === ".csv" ||
           ext === ".jpg" ||
@@ -610,6 +614,8 @@ export class MuhasebeController {
           mimeType === "application/xml" ||
           mimeType === "text/xml" ||
           mimeType === "application/pdf" ||
+          mimeType === "application/zip" ||
+          mimeType === "application/x-zip-compressed" ||
           mimeType ===
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
           mimeType === "text/csv" ||
@@ -623,7 +629,7 @@ export class MuhasebeController {
         }
         cb(
           new Error(
-            "Sadece XML, PDF, XLSX, CSV, JPEG ve PNG dosyalarÄ± yÃ¼kleyebilirsiniz.",
+            "Sadece XML, PDF, ZIP, XLSX, CSV, JPEG ve PNG dosyaları yükleyebilirsiniz.",
           ),
           false,
         );
@@ -650,9 +656,64 @@ export class MuhasebeController {
     }),
   )
   async uploadDocuments(@UploadedFiles() files: any[], @Body() body: any) {
-    const safeFiles = Array.isArray(files) ? files : [];
+    const uploadedFiles = Array.isArray(files) ? files : [];
+    const safeFiles: any[] = [];
+    const supportedZipExtensions = new Set([
+      ".xml",
+      ".pdf",
+      ".xlsx",
+      ".csv",
+      ".jpg",
+      ".jpeg",
+      ".png",
+    ]);
+    const mimeByExtension: Record<string, string> = {
+      ".xml": "application/xml",
+      ".pdf": "application/pdf",
+      ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ".csv": "text/csv",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+    };
+    for (const file of uploadedFiles) {
+      if (String(path.extname(file?.originalname || "")).toLowerCase() !== ".zip") {
+        safeFiles.push(file);
+        continue;
+      }
+      const archive = new AdmZip(file.path);
+      const entries = archive
+        .getEntries()
+        .filter((entry) => !entry.isDirectory)
+        .filter((entry) => supportedZipExtensions.has(path.extname(entry.entryName).toLowerCase()));
+      if (safeFiles.length + entries.length > 500) {
+        throw new BadRequestException("Bir yüklemede en fazla 500 belge işlenebilir.");
+      }
+      for (const entry of entries) {
+        if (Number(entry.header?.size || 0) > 50 * 1024 * 1024) {
+          throw new BadRequestException(`${path.basename(entry.entryName)} 50 MB sınırını aşıyor.`);
+        }
+        const extension = path.extname(entry.entryName).toLowerCase();
+        const originalName = sanitizeFilePart(path.basename(entry.entryName));
+        const buffer = entry.getData();
+        const targetPath = path.join(
+          path.dirname(file.path),
+          `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${originalName}`,
+        );
+        fs.writeFileSync(targetPath, buffer);
+        safeFiles.push({
+          ...file,
+          originalname: originalName,
+          filename: path.basename(targetPath),
+          path: targetPath,
+          size: buffer.length,
+          mimetype: mimeByExtension[extension] || "application/octet-stream",
+          buffer,
+        });
+      }
+    }
     if (!safeFiles.length) {
-      throw new BadRequestException("YÃ¼klenecek dosya bulunamadÄ±.");
+      throw new BadRequestException("Yüklenecek desteklenen dosya bulunamadı.");
     }
     const slug = this.requireMainCompanySlug(
       this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
@@ -664,12 +725,21 @@ export class MuhasebeController {
       templateCompanyName: body.templateCompanyName,
       notes: body.notes,
     };
-    return this.muhasebeDb.uploadAndClassifyDocuments(
+    const result = await this.muhasebeDb.uploadAndClassifyDocuments(
       safeFiles,
       slug,
       body.mainCompanyId,
       options,
     );
+    if (String(options.targetType || "").toUpperCase() === "MUSTERIDEN_GELEN_IRSALIYE") {
+      try {
+        const reconciliation = await this.dispatchReconciliation.recalculate(slug, "document-upload");
+        return { ...result, reconciliation: reconciliation.data };
+      } catch (error: any) {
+        return { ...result, reconciliationWarning: error?.message || "Fatura eşleştirmesi daha sonra yenilenecek." };
+      }
+    }
+    return result;
   }
 
   @Get("document-upload/history")
@@ -946,11 +1016,20 @@ export class MuhasebeController {
       }),
     }),
   )
-  uploadSalesInvoices(
+  async uploadSalesInvoices(
     @UploadedFiles() files: any[],
     @Body() body: any,
   ) {
-    return this.salesInvoicePool.upload(body, files);
+    const result = await this.salesInvoicePool.upload(body, files);
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    try {
+      const reconciliation = await this.dispatchReconciliation.recalculate(slug, "sales-invoice-upload");
+      return { ...result, reconciliation: reconciliation.data };
+    } catch (error: any) {
+      return { ...result, reconciliationWarning: error?.message || "İrsaliye eşleştirmesi daha sonra yenilenecek." };
+    }
   }
 
   @Get("kesilen-faturalar/:invoiceId")
@@ -1220,12 +1299,362 @@ export class MuhasebeController {
     return this.firmaKartlariDb.listMissingCategoryCompanies(slug);
   }
 
+  @Get("rapor-kategori-firmalari")
+  getRaporKategoriFirmalari(@Query() query: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId));
+    return this.firmaKartlariDb.listReportCategoryCompanies(slug, query);
+  }
+
+  @Post("rapor-kategori-firmalari/ata")
+  postRaporKategoriFirmaAta(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.assignReportCategoryToCompanies(slug, body);
+  }
+
   @Get("rapor-ozet")
   getRaporOzet(@Query() query: any) {
     const slug = this.requireMainCompanySlug(
       this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId),
     );
     return this.firmaKartlariDb.buildPeriodReport(slug, query);
+  }
+
+  @Get("accounting/reports/records")
+  getAccountingReportRecords(@Query() query: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId));
+    return this.firmaKartlariDb.buildReportControl(slug, query);
+  }
+
+  @Post("accounting/sync/company-rules")
+  syncAccountingCompanyRules(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.syncCompanyAccountingRules(slug, body);
+  }
+
+  @Post("accounting/sync/hr-expenses")
+  syncAccountingHrExpenses(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.syncHrAccountingExpenses(slug, body);
+  }
+
+  @Get("accounting/reports/summary")
+  async getAccountingReportSummary(@Query() query: any) {
+    const report = await this.getAccountingReportRecords(query);
+    return apiSuccess((report as any).data?.summary || {});
+  }
+
+  @Get("accounting/reports/company-summary")
+  async getAccountingReportCompanySummary(@Query() query: any) {
+    const report = await this.getAccountingReportRecords(query);
+    return apiSuccess((report as any).data?.companySummary || []);
+  }
+
+  @Get("accounting/reports/general-expenses")
+  async getAccountingReportGeneralExpenses(@Query() query: any) {
+    const report = await this.getAccountingReportRecords(query);
+    return apiSuccess((report as any).data?.generalExpenses || []);
+  }
+
+  @Get("accounting/reports/vat-in")
+  async getAccountingReportVatIn(@Query() query: any) {
+    const report = await this.getAccountingReportRecords(query);
+    return apiSuccess((report as any).data?.vatIn || []);
+  }
+
+  @Get("accounting/reports/vat-out")
+  async getAccountingReportVatOut(@Query() query: any) {
+    const report = await this.getAccountingReportRecords(query);
+    return apiSuccess((report as any).data?.vatOut || []);
+  }
+
+  @Put("accounting/reports/record/:sourceType/:sourceId")
+  putAccountingReportRecord(@Param("sourceType") sourceType: string, @Param("sourceId") sourceId: string, @Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.saveReportRecordOverride(slug, sourceType, sourceId, body);
+  }
+
+  @Post("accounting/reports/bulk-include")
+  postAccountingReportBulkInclude(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.bulkSaveReportRecordOverride(slug, body, true);
+  }
+
+  @Post("accounting/reports/bulk-exclude")
+  postAccountingReportBulkExclude(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.bulkSaveReportRecordOverride(slug, body, false);
+  }
+
+  @Post("accounting/reports/manual-expense")
+  postAccountingReportManualExpense(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.saveManualReportItem(slug, body);
+  }
+
+  @Put("accounting/reports/manual-expense/:id")
+  putAccountingReportManualExpense(@Param("id") id: string, @Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.saveManualReportItem(slug, { ...body, id });
+  }
+
+  @Delete("accounting/reports/manual-expense/:id")
+  deleteAccountingReportManualExpense(@Param("id") id: string, @Query() query: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId));
+    return this.firmaKartlariDb.deleteManualReportItem(slug, id);
+  }
+
+  @Get("accounting/fixed-expenses")
+  getFixedExpenseTemplates(@Query() query: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId));
+    return this.firmaKartlariDb.listFixedExpenseTemplates(slug, query);
+  }
+
+  @Post("accounting/fixed-expenses")
+  postFixedExpenseTemplate(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.saveFixedExpenseTemplate(slug, body);
+  }
+
+  @Put("accounting/fixed-expenses/:id")
+  putFixedExpenseTemplate(@Param("id") id: string, @Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.saveFixedExpenseTemplate(slug, { ...body, id });
+  }
+
+  @Post("accounting/fixed-expenses/:id/generate")
+  generateFixedExpense(@Param("id") id: string, @Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.generateFixedExpense(slug, id, body.month);
+  }
+
+  @Post("accounting/fixed-expenses-generate-month")
+  generateFixedExpensesForMonth(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.generateFixedExpensesForMonth(slug, body.month);
+  }
+
+  @Post("accounting/fixed-expenses/:id/copy")
+  copyFixedExpenseTemplate(@Param("id") id: string, @Body() body: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId));
+    return this.firmaKartlariDb.copyFixedExpenseTemplate(slug, id, body.targetMonth);
+  }
+
+  @Delete("accounting/fixed-expenses/:id")
+  passiveFixedExpenseTemplate(@Param("id") id: string, @Query() query: any) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId));
+    return this.firmaKartlariDb.passiveFixedExpenseTemplate(slug, id);
+  }
+
+  @Get("accounting/reports/export")
+  async exportAccountingReportControl(@Query() query: any, @Res() res: Response) {
+    const slug = this.requireMainCompanySlug(this.resolveDbSlug(query.mainCompanySlug, query.mainCompanyId));
+    const result: any = await this.firmaKartlariDb.buildReportControl(slug, query);
+    const data = result.data || {};
+    const workbook = new ExcelJS.Workbook();
+    const moneyFormat = '₺#,##0.00;[Red]-₺#,##0.00';
+    const styleSheet = (sheet: ExcelJS.Worksheet) => {
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+      sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: Math.max(1, sheet.columnCount) } };
+      sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
+      sheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+      sheet.getRow(1).height = 24;
+      sheet.columns.forEach((column) => { column.width = Math.min(42, Math.max(12, Number(column.width || 12))); });
+      sheet.eachRow((row, rowNumber) => { if (rowNumber > 1) { if (rowNumber % 2 === 0) row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F7FC" } }; row.eachCell((cell) => { if (typeof cell.value === "number") cell.numFmt = moneyFormat; cell.border = { bottom: { style: "hair", color: { argb: "FFD9E2F3" } } }; }); } });
+      sheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+    };
+    const tabColors = ["FF4472C4", "FF70AD47", "FFFFC000", "FFED7D31", "FF5B9BD5", "FFA5A5A5", "FF7030A0", "FFC00000"];
+    const addRows = (name: string, columns: any[], rows: any[]) => {
+      const sheet = workbook.addWorksheet(name);
+      sheet.properties.tabColor = { argb: tabColors[workbook.worksheets.length % tabColors.length] };
+      sheet.columns = columns;
+      rows.forEach((row) => sheet.addRow(row));
+      styleSheet(sheet);
+      return sheet;
+    };
+    const summary = data.summary || {};
+    const summarySheet = workbook.addWorksheet("Genel Özet");
+    summarySheet.properties.tabColor = { argb: "FF17365D" };
+    summarySheet.columns = Array.from({ length: 8 }, () => ({ width: 18 }));
+    summarySheet.mergeCells("A1:H2");
+    summarySheet.getCell("A1").value = "KY ERP MUHASEBE YÖNETİCİ ÖZETİ";
+    summarySheet.getCell("A1").font = { bold: true, size: 20, color: { argb: "FFFFFFFF" } };
+    summarySheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17365D" } };
+    summarySheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+    summarySheet.mergeCells("A3:H3");
+    summarySheet.getCell("A3").value = `Dönem: ${data.filters?.startDate || ""} - ${data.filters?.endDate || ""}   |   Hazırlanma: ${new Date().toLocaleString("tr-TR")}`;
+    summarySheet.getCell("A3").alignment = { horizontal: "center" };
+
+    const addCard = (range: string, label: string, value: number, color: string, currency = true) => {
+      summarySheet.mergeCells(range);
+      const cell = summarySheet.getCell(range.split(":")[0]);
+      cell.value = { richText: [
+        { text: `${label}\n`, font: { bold: true, size: 10, color: { argb: "FFFFFFFF" } } },
+        { text: currency ? Number(value || 0).toLocaleString("tr-TR", { style: "currency", currency: "TRY" }) : Number(value || 0).toLocaleString("tr-TR"), font: { bold: true, size: 16, color: { argb: "FFFFFFFF" } } },
+      ] };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    };
+    addCard("A5:B7", "TOPLAM GELİR", summary.totalIncome, "FF2E7D32");
+    addCard("C5:D7", "TOPLAM GİDER", summary.totalExpense, "FFC62828");
+    addCard("E5:F7", "NET KÂR / ZARAR", summary.netResult, Number(summary.netResult || 0) >= 0 ? "FF1565C0" : "FFC62828");
+    addCard("G5:H7", "DEVREDEN KDV", summary.carryVat, "FF6A1B9A");
+    addCard("A9:B11", "GELEN KDV", summary.incomingVat, "FF0277BD");
+    addCard("C9:D11", "GİDEN KDV", summary.outgoingVat, "FFEF6C00");
+    addCard("E9:F11", "RAPORDAKİ FİRMA", (data.companySummary || []).filter((row: any) => row.reportStatus === "DAHIL").length, "FF455A64", false);
+    addCard("G9:H11", "TOPLAM FİRMA", (data.companySummary || []).length, "FF455A64", false);
+
+    const incomeFirms = (data.companySummary || []).filter((row: any) => Number(row.incomeTotal || 0) > 0)
+      .sort((a: any, b: any) => Number(b.incomeTotal || 0) - Number(a.incomeTotal || 0)).slice(0, 8);
+    const expenseCategoryMap = new Map<string, any>();
+    (data.generalExpenses || []).forEach((row: any) => {
+      const key = row.categoryId || row.category || "Kategorisiz";
+      const item = expenseCategoryMap.get(key) || {
+        category: row.category || "Kategorisiz",
+        recordCount: 0,
+        baseAmount: 0,
+        vat: 0,
+        total: 0,
+        firms: new Set<string>(),
+      };
+      item.recordCount += 1;
+      item.baseAmount += Number(row.baseAmount || 0);
+      item.vat += Number(row.reportVatAmount || 0);
+      item.total += Number(row.reportAmount || 0);
+      item.firms.add(row.companyName || "Genel / firmasız gider");
+      expenseCategoryMap.set(key, item);
+    });
+    const expenseCategories = [...expenseCategoryMap.values()].sort(
+      (a: any, b: any) => b.total - a.total,
+    );
+    const writeRanking = (startColumn: number, title: string, rows: any[], valueKey: string, color: string) => {
+      summarySheet.mergeCells(13, startColumn, 13, startColumn + 3);
+      const titleCell = summarySheet.getCell(13, startColumn);
+      titleCell.value = title;
+      titleCell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+      summarySheet.mergeCells(14, startColumn, 14, startColumn + 1);
+      summarySheet.getCell(14, startColumn).value = "Firma";
+      summarySheet.getCell(14, startColumn + 2).value = "Tutar";
+      summarySheet.getCell(14, startColumn + 3).value = "Gelire Oranı";
+      rows.forEach((row: any, index: number) => {
+        const line = 15 + index;
+        summarySheet.mergeCells(line, startColumn, line, startColumn + 1);
+        summarySheet.getCell(line, startColumn).value = row.companyName || "Firma bilgisi yok";
+        summarySheet.getCell(line, startColumn + 2).value = Number(row[valueKey] || 0);
+        summarySheet.getCell(line, startColumn + 2).numFmt = moneyFormat;
+        summarySheet.getCell(line, startColumn + 3).value = Number(summary.totalIncome || 0) ? Number(row[valueKey] || 0) / Number(summary.totalIncome) : 0;
+        summarySheet.getCell(line, startColumn + 3).numFmt = "0.0%";
+      });
+    };
+    writeRanking(1, "NE GELDİ? - EN YÜKSEK GELİRLER", incomeFirms, "incomeTotal", "FF2E7D32");
+    writeRanking(
+      5,
+      "NE GİTTİ? - GİDER KATEGORİLERİ",
+      expenseCategories.slice(0, 8).map((row: any) => ({
+        companyName: row.category,
+        total: row.total,
+      })),
+      "total",
+      "FFC62828",
+    );
+    summarySheet.views = [{ state: "frozen", ySplit: 3 }];
+    summarySheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1 };
+    summarySheet.getRow(1).height = 28;
+    summarySheet.getRow(2).height = 28;
+    addRows("Firma Bazlı Rapor", [
+      { header: "Firma Adı", key: "companyName", width: 38 }, { header: "Firma Davranışı", key: "companyBehavior", width: 24 }, { header: "Resmi / Gayri", key: "officialType" },
+      { header: "İlk Tarih", key: "firstDate" }, { header: "Son Tarih", key: "lastDate" }, { header: "Fatura Sayısı", key: "invoiceCount" },
+      { header: "Matrah", key: "baseAmount" }, { header: "KDV", key: "vat" }, { header: "Genel Toplam", key: "grandTotal" },
+      { header: "Genel Gidere Dahil", key: "generalExpenseTotal" }, { header: "Gelire Oranı", key: "expenseIncomeRatio" }, { header: "Rapor Durumu", key: "reportStatus" },
+    ], (data.companySummary || []).map((row: any) => ({ ...row, expenseIncomeRatio: Number(summary.totalIncome || 0) ? Number(row.generalExpenseTotal || 0) / Number(summary.totalIncome) : 0 })));
+    const companySheet = workbook.getWorksheet("Firma Bazlı Rapor");
+    if (companySheet) { companySheet.getColumn("expenseIncomeRatio").numFmt = "0.0%"; companySheet.getColumn("invoiceCount").numFmt = "0"; }
+    const detailColumns = [
+      { header: "Tarih", key: "date" }, { header: "Firma", key: "companyName", width: 38 }, { header: "İşlem Türü", key: "sourceLabel" },
+      { header: "Resmi / Gayri", key: "officialType" }, { header: "Kategori", key: "category", width: 24 }, { header: "Belge No", key: "documentNo", width: 20 },
+      { header: "Açıklama", key: "reportDescription", width: 42 }, { header: "Matrah", key: "baseAmount" }, { header: "KDV", key: "reportVatAmount" },
+      { header: "Genel Toplam", key: "grandTotal" }, { header: "Rapora Giren", key: "reportAmount" },
+    ];
+    const expenseCompanyMap = new Map<string, any>();
+    (data.generalExpenses || []).forEach((row: any) => {
+      const key = row.companyId || row.companyName || "Genel / firmasız gider";
+      const item = expenseCompanyMap.get(key) || {
+        companyName: row.companyName || "Genel / firmasız gider",
+        categories: new Set<string>(),
+        recordCount: 0,
+        baseAmount: 0,
+        vat: 0,
+        total: 0,
+      };
+      item.recordCount += 1;
+      item.baseAmount += Number(row.baseAmount || 0);
+      item.vat += Number(row.reportVatAmount || 0);
+      item.total += Number(row.reportAmount || 0);
+      item.categories.add(row.category || "Kategorisiz");
+      expenseCompanyMap.set(key, item);
+    });
+    const expenseCompanyRows = [...expenseCompanyMap.values()]
+      .sort((a: any, b: any) => b.total - a.total)
+      .map((row: any) => ({
+        ...row,
+        categories: [...row.categories].sort((a, b) => a.localeCompare(b, "tr")).join(", "),
+        incomeRatio: Number(summary.totalIncome || 0)
+          ? row.total / Number(summary.totalIncome)
+          : 0,
+      }));
+    const expenseCompanySheet = addRows(
+      "Gider - Firma Bazlı",
+      [
+        { header: "Firma", key: "companyName", width: 40 },
+        { header: "Kategoriler", key: "categories", width: 38 },
+        { header: "Gider Kaydı", key: "recordCount" },
+        { header: "Matrah", key: "baseAmount" },
+        { header: "KDV", key: "vat" },
+        { header: "Toplam Gider", key: "total" },
+        { header: "Toplam Gelire Oranı", key: "incomeRatio", width: 20 },
+      ],
+      expenseCompanyRows,
+    );
+    expenseCompanySheet.getColumn("recordCount").numFmt = "0";
+    expenseCompanySheet.getColumn("incomeRatio").numFmt = "0.0%";
+
+    const expenseCategoryRows = expenseCategories.map((row: any) => ({
+      ...row,
+      firms: [...row.firms].sort((a, b) => a.localeCompare(b, "tr")).join(", "),
+      firmCount: row.firms.size,
+      incomeRatio: Number(summary.totalIncome || 0)
+        ? row.total / Number(summary.totalIncome)
+        : 0,
+    }));
+    const expenseCategorySheet = addRows(
+      "Gider - Kategori Bazlı",
+      [
+        { header: "Kategori", key: "category", width: 34 },
+        { header: "Firmalar", key: "firms", width: 48 },
+        { header: "Firma Sayısı", key: "firmCount" },
+        { header: "Gider Kaydı", key: "recordCount" },
+        { header: "Matrah", key: "baseAmount" },
+        { header: "KDV", key: "vat" },
+        { header: "Toplam Gider", key: "total" },
+        { header: "Toplam Gelire Oranı", key: "incomeRatio", width: 20 },
+      ],
+      expenseCategoryRows,
+    );
+    expenseCategorySheet.getColumn("firmCount").numFmt = "0";
+    expenseCategorySheet.getColumn("recordCount").numFmt = "0";
+    expenseCategorySheet.getColumn("incomeRatio").numFmt = "0.0%";
+
+    addRows("Firma Fatura Detayları", detailColumns, data.records || []);
+    addRows("Genel Giderler", detailColumns, data.generalExpenses || []);
+    addRows("Gelirler", detailColumns, (data.records || []).filter((row: any) => row.transactionType === "GELIR" && row.reportIncluded === true));
+    addRows("Gelen KDV", detailColumns, data.vatIn || []);
+    addRows("Giden KDV", detailColumns, data.vatOut || []);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const period = String(data.filters?.startDate || new Date().toISOString().slice(0, 7)).slice(0, 7).replace("-", "_");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="KY_ERP_Muhasebe_Raporu_${period}.xlsx"`);
+    res.send(Buffer.from(buffer));
   }
 
   @Get("rapor-manuel-kalemler")
@@ -1322,6 +1751,69 @@ export class MuhasebeController {
     const report = payload?.data || payload;
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "KY ERP";
+    workbook.company = "KY ERP";
+    workbook.subject = "Muhasebe Dönem Özeti";
+    const moneyFormat = '₺#,##0.00;[Red]-₺#,##0.00';
+    const applyHeaderStyle = (sheet: ExcelJS.Worksheet, row = 1) => {
+      const header = sheet.getRow(row);
+      header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      header.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1F4E78" },
+      };
+      header.alignment = { vertical: "middle", horizontal: "center" };
+    };
+    const applyTableStyle = (sheet: ExcelJS.Worksheet, moneyColumns: number[] = []) => {
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: Math.max(1, sheet.columnCount) },
+      };
+      applyHeaderStyle(sheet);
+      moneyColumns.forEach((index) => {
+        sheet.getColumn(index).numFmt = moneyFormat;
+      });
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD9E2F3" } },
+            left: { style: "thin", color: { argb: "FFD9E2F3" } },
+            bottom: { style: "thin", color: { argb: "FFD9E2F3" } },
+            right: { style: "thin", color: { argb: "FFD9E2F3" } },
+          };
+        });
+        if (rowNumber % 2 === 0) {
+          row.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF7FAFC" },
+          };
+        }
+      });
+    };
+    const addKpiCard = (
+      sheet: ExcelJS.Worksheet,
+      title: string,
+      value: number | string,
+      row: number,
+      column: number,
+      color: string,
+    ) => {
+      sheet.mergeCells(row, column, row, column + 2);
+      sheet.mergeCells(row + 1, column, row + 2, column + 2);
+      const titleCell = sheet.getCell(row, column);
+      const valueCell = sheet.getCell(row + 1, column);
+      titleCell.value = title;
+      valueCell.value = value;
+      [titleCell, valueCell].forEach((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: cell === valueCell ? 16 : 10 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      });
+      if (typeof value === "number") valueCell.numFmt = moneyFormat;
+    };
     const summary = workbook.addWorksheet("DONEM OZETI");
     summary.columns = [
       { header: "Alan", key: "alan", width: 34 },
@@ -1366,13 +1858,59 @@ export class MuhasebeController {
       { header: "Genel Toplam", key: "genelToplam", width: 18 },
     ];
     (report.hareketler || []).forEach((row: any) => movementSheet.addRow(row));
-    workbook.worksheets.forEach((sheet) => {
-      sheet.getRow(1).font = { bold: true };
-      sheet.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: sheet.columnCount },
-      };
-    });
+    const dashboard = workbook.addWorksheet("DASHBOARD");
+    dashboard.views = [{ state: "frozen", ySplit: 4 }];
+    dashboard.columns = [
+      { width: 18 }, { width: 18 }, { width: 18 }, { width: 4 }, { width: 26 }, { width: 16 }, { width: 16 },
+    ];
+    dashboard.mergeCells("A1:G1");
+    dashboard.getCell("A1").value = "Muhasebe Dönem Dashboard";
+    dashboard.getCell("A1").font = { bold: true, size: 18, color: { argb: "FF0F172A" } };
+    dashboard.getCell("A1").alignment = { horizontal: "center" };
+    dashboard.mergeCells("A2:G2");
+    dashboard.getCell("A2").value = `${report.filtreBilgisi?.baslangic || ""} - ${report.filtreBilgisi?.bitis || ""}`;
+    dashboard.getCell("A2").alignment = { horizontal: "center" };
+    addKpiCard(dashboard, "Toplam Gider", ana.gelenFaturalar?.toplam || 0, 4, 1, "FFE11D48");
+    addKpiCard(dashboard, "Toplam Gelir", ana.kesilenFatura?.toplam || 0, 4, 5, "FF0F766E");
+    addKpiCard(dashboard, "Gelen KDV", ana.kdvDurumu?.gelenKdv || 0, 8, 1, "FF2563EB");
+    addKpiCard(dashboard, "Ödenecek KDV", ana.kdvDurumu?.odenecekKdv || 0, 8, 5, "FFF59E0B");
+    dashboard.getCell("A13").value = "En Büyük 10 Gider Kategorisi";
+    dashboard.getCell("E13").value = "En Büyük 10 Firma";
+    dashboard.getCell("A13").font = dashboard.getCell("E13").font = { bold: true, size: 12, color: { argb: "FF1F2937" } };
+    applyHeaderStyle(dashboard, 14);
+    dashboard.getRow(14).values = ["Kategori", "Belge", "Matrah", "Genel Toplam", "Firma", "Belge", "Genel Toplam"];
+    const topCategories = [...(report.kategoriOzetleri || [])].sort((a: any, b: any) => Number(b.genelToplam || 0) - Number(a.genelToplam || 0)).slice(0, 10);
+    const topFirmsMap = new Map<string, { firma: string; belge: number; toplam: number }>();
+    for (const row of report.hareketler || []) {
+      const key = String(row.firma || "Firma Yok");
+      const current = topFirmsMap.get(key) || { firma: key, belge: 0, toplam: 0 };
+      current.belge += 1;
+      current.toplam += Number(row.genelToplam || 0);
+      topFirmsMap.set(key, current);
+    }
+    const topFirms = [...topFirmsMap.values()].sort((a, b) => b.toplam - a.toplam).slice(0, 10);
+    const maxRows = Math.max(topCategories.length, topFirms.length, 1);
+    for (let i = 0; i < maxRows; i += 1) {
+      const left = topCategories[i];
+      const right = topFirms[i];
+      dashboard.addRow([
+        left?.kategori || "",
+        Number(left?.belgeAdedi || 0),
+        Number(left?.matrah || 0),
+        Number(left?.genelToplam || 0),
+        right?.firma || "",
+        Number(right?.belge || 0),
+        Number(right?.toplam || 0),
+      ]);
+    }
+    dashboard.getColumn(3).numFmt = moneyFormat;
+    dashboard.getColumn(4).numFmt = moneyFormat;
+    dashboard.getColumn(7).numFmt = moneyFormat;
+    summary.getColumn(2).numFmt = moneyFormat;
+    applyTableStyle(summary, [2]);
+    applyTableStyle(categorySheet, [3, 4, 5]);
+    applyTableStyle(movementSheet, [7, 8, 9]);
+    applyTableStyle(dashboard, [3, 4, 7]);
     const buffer = await workbook.xlsx.writeBuffer();
     res
       ?.setHeader(
@@ -2560,7 +3098,12 @@ export class MuhasebeController {
     const slug = this.requireMainCompanySlug(
       this.resolveDbSlug(mainCompanySlug, mainCompanyId),
     );
-    return this.documentListForUi(slug, ["musteriden_gelen_irsaliye"]);
+    // Eski kayitlar `musteri_irsaliye`, yeni XML akisi ise
+    // `musteriden_gelen_irsaliye` tipini kullaniyor. Havuz ikisini de gostermeli.
+    return this.documentListForUi(slug, [
+      "musteriden_gelen_irsaliye",
+      "musteri_irsaliye",
+    ]);
   }
 
   @Get("incoming-deliveries/:id")
@@ -2577,10 +3120,14 @@ export class MuhasebeController {
 
   @Post("incoming-deliveries")
   saveIncomingDelivery(@Body() body: any) {
-    return this.documentWorkflowService.saveIncomingDelivery(
-      body.mainCompanySlug,
-      body.mainCompanyId,
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    return this.muhasebeDb.saveManualModelDocument(
+      slug,
+      undefined,
       body,
+      "MUSTERIDEN_GELEN_IRSALIYE",
     );
   }
 
@@ -2594,7 +3141,15 @@ export class MuhasebeController {
         }),
       ),
     );
-    return lists.flatMap((list: any) => list?.data || []);
+    const unique = new Map<string, any>();
+    lists
+      .flatMap((list: any) => list?.data || [])
+      .forEach((row: any) => unique.set(String(row?.id || row?.documentId), row));
+    return [...unique.values()].sort((a: any, b: any) =>
+      String(b?.tarih || b?.date || b?.createdAt || "").localeCompare(
+        String(a?.tarih || a?.date || a?.createdAt || ""),
+      ),
+    );
   }
 
   @Get("musteri-irsaliye")
@@ -2607,19 +3162,19 @@ export class MuhasebeController {
 
   @Post("musteri-irsaliye")
   saveMusteriIrsaliye(@Body() body: any) {
-    return this.documentWorkflowService.saveIncomingDelivery(
-      body.mainCompanySlug,
-      body.mainCompanyId,
-      body,
-    );
+    return this.saveIncomingDelivery(body);
   }
 
   @Patch("musteri-irsaliye/:id")
   patchMusteriIrsaliye(@Param("id") id: string, @Body() body: any) {
-    return this.documentWorkflowService.saveIncomingDelivery(
-      body.mainCompanySlug,
-      body.mainCompanyId,
-      { ...body, id },
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    return this.muhasebeDb.saveManualModelDocument(
+      slug,
+      id,
+      body,
+      "MUSTERIDEN_GELEN_IRSALIYE",
     );
   }
 
@@ -2630,11 +3185,7 @@ export class MuhasebeController {
 
   @Patch("incoming-deliveries/:id")
   patchIncomingDelivery(@Param("id") id: string, @Body() body: any) {
-    return this.documentWorkflowService.saveIncomingDelivery(
-      body.mainCompanySlug,
-      body.mainCompanyId,
-      { ...body, id },
-    );
+    return this.patchMusteriIrsaliye(id, body);
   }
 
   @Post("incoming-deliveries/:id/link-model")
@@ -2645,10 +3196,37 @@ export class MuhasebeController {
     const slug = this.requireMainCompanySlug(
       this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
     );
-    return this.muhasebeDb.approveDocument(slug, id, {
-      ...body,
-      confirm: true,
-    });
+    return this.muhasebeDb.linkDocumentToModel(slug, id, body);
+  }
+
+  @Post("incoming-deliveries/:id/link-models")
+  async linkIncomingDeliveryLinesToModels(
+    @Param("id") id: string,
+    @Body() body: any,
+  ) {
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    return this.muhasebeDb.linkIncomingDeliveryLinesToModels(slug, id, body);
+  }
+
+  @Get("model-reconciliation")
+  getModelReconciliations(
+    @Query("mainCompanySlug") mainCompanySlug?: string,
+    @Query("mainCompanyId") mainCompanyId?: string,
+  ) {
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(mainCompanySlug, mainCompanyId),
+    );
+    return this.muhasebeDb.listModelReconciliations(slug);
+  }
+
+  @Post("model-reconciliation/complete")
+  completeModelReconciliation(@Body() body: any) {
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    return this.muhasebeDb.completeModelReconciliation(slug, body);
   }
 
   @Get("outgoing-documents/pool")
@@ -2676,10 +3254,14 @@ export class MuhasebeController {
 
   @Post("outgoing-documents")
   saveOutgoingDocument(@Body() body: any) {
-    return this.documentWorkflowService.saveOutgoingDocument(
-      body.mainCompanySlug,
-      body.mainCompanyId,
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    return this.muhasebeDb.saveManualModelDocument(
+      slug,
+      undefined,
       body,
+      "BIZIM_GIDEN_FATURA",
     );
   }
 
@@ -2693,19 +3275,19 @@ export class MuhasebeController {
 
   @Post("bizim-belgeler")
   saveBizimBelgeler(@Body() body: any) {
-    return this.documentWorkflowService.saveOutgoingDocument(
-      body.mainCompanySlug,
-      body.mainCompanyId,
-      body,
-    );
+    return this.saveOutgoingDocument(body);
   }
 
   @Patch("bizim-belgeler/:id")
   patchBizimBelgeler(@Param("id") id: string, @Body() body: any) {
-    return this.documentWorkflowService.saveOutgoingDocument(
-      body.mainCompanySlug,
-      body.mainCompanyId,
-      { ...body, id },
+    const slug = this.requireMainCompanySlug(
+      this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
+    );
+    return this.muhasebeDb.saveManualModelDocument(
+      slug,
+      id,
+      body,
+      "BIZIM_GIDEN_FATURA",
     );
   }
 
@@ -2716,11 +3298,7 @@ export class MuhasebeController {
 
   @Patch("outgoing-documents/:id")
   patchOutgoingDocument(@Param("id") id: string, @Body() body: any) {
-    return this.documentWorkflowService.saveOutgoingDocument(
-      body.mainCompanySlug,
-      body.mainCompanyId,
-      { ...body, id },
-    );
+    return this.patchBizimBelgeler(id, body);
   }
 
   @Post("outgoing-documents/:id/link-model")
@@ -2731,10 +3309,7 @@ export class MuhasebeController {
     const slug = this.requireMainCompanySlug(
       this.resolveDbSlug(body.mainCompanySlug, body.mainCompanyId),
     );
-    return this.muhasebeDb.approveDocument(slug, id, {
-      ...body,
-      confirm: true,
-    });
+    return this.muhasebeDb.linkDocumentToModel(slug, id, body);
   }
 
   @Post("outgoing-documents/:id/create-model")

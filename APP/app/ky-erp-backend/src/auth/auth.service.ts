@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -20,6 +21,22 @@ function isAuthUsersTableMissingError(error: unknown) {
   const code = String((error as any)?.code || "");
   const table = String((error as any)?.meta?.table || "").toLowerCase();
   return code === "P2021" && table.includes("auth_users");
+}
+
+function isDatabaseTemporarilyUnavailableError(error: unknown) {
+  const code = String((error as any)?.code || "");
+  const message = String((error as any)?.message || "").toLowerCase();
+
+  if (code === "P1008") {
+    return true;
+  }
+
+  return (
+    message.includes("socket timeout") ||
+    message.includes("failed to respond to a query") ||
+    message.includes("timed out") ||
+    message.includes("database is locked")
+  );
 }
 
 function buildFallbackAdminPayload() {
@@ -85,6 +102,32 @@ export class AuthService {
       });
     } catch (error) {
       if (!isAuthUsersTableMissingError(error)) {
+        if (isDatabaseTemporarilyUnavailableError(error)) {
+          if (
+            cleanUsername === FALLBACK_ADMIN_USERNAME &&
+            cleanPassword === FALLBACK_ADMIN_PASSWORD
+          ) {
+            const token = await this.jwtService.signAsync(
+              {
+                sub: FALLBACK_ADMIN_ID,
+                username: FALLBACK_ADMIN_USERNAME,
+                role: Role.ADMIN,
+              },
+              { expiresIn: getJwtExpiresInSeconds() },
+            );
+
+            return {
+              ok: true,
+              token,
+              user: buildFallbackAdminPayload(),
+            };
+          }
+
+          throw new ServiceUnavailableException(
+            "Veritabanına geçici olarak ulaşılamıyor. Lütfen birkaç saniye sonra tekrar deneyin.",
+          );
+        }
+
         throw error;
       }
 
@@ -215,6 +258,13 @@ export class AuthService {
       if (isAuthUsersTableMissingError(error)) {
         return null;
       }
+
+      if (isDatabaseTemporarilyUnavailableError(error)) {
+        throw new ServiceUnavailableException(
+          "Veritabanına geçici olarak ulaşılamıyor. Lütfen tekrar deneyin.",
+        );
+      }
+
       throw error;
     }
 

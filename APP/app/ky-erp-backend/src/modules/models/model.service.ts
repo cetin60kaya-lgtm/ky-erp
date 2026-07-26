@@ -644,7 +644,8 @@ export class ModelService {
       5000,
       Math.max(1, Number(query.pageSize || query.limit || 50) || 50),
     );
-    const [rows, archivedRows] = await Promise.all([
+    const customerOnly = String(query.customerOnly || "").toLowerCase() === "true";
+    const [rows, archivedRows, customerCompanies] = await Promise.all([
       (this.prisma as any).modelRecord.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { updatedAt: "desc" }, { modelName: "asc" }],
@@ -655,7 +656,19 @@ export class ModelService {
         select: { modelName: true, modelCode: true, orderNo: true, raw: true },
         take: 5000,
       }),
+      customerOnly
+        ? (this.prisma as any).company.findMany({
+            where: { mainCompanySlug, isActive: true, deletedAt: null, companyType: { in: ["CUSTOMER", "BOTH"] } },
+            select: { id: true, name: true, normalizedName: true },
+          })
+        : Promise.resolve([]),
     ]);
+    const customerIds = new Set(customerCompanies.map((company: any) => String(company.id)));
+    const customerNames = new Set(customerCompanies.flatMap((company: any) =>
+      [company.name, company.normalizedName]
+        .map((value: any) => this.normalizeModelName(value))
+        .filter(Boolean),
+    ));
     const firmaId = this.cleanText(
       query.firmaId || query.firmId || query.companyId,
     );
@@ -667,6 +680,11 @@ export class ModelService {
       .map((row: any) => this.map(row))
       .filter((row: any) => {
         if (row.deletedAt) return false;
+        if (customerOnly) {
+          const companyId = String(row.firmaId || row.companyId || row.firmId || "");
+          const companyName = this.normalizeModelName(row.firmaAdi || row.musteriFirma || row.firma || row.companyName);
+          if (!customerIds.has(companyId) && !customerNames.has(companyName)) return false;
+        }
         if (firmaId && String(row.firmaId || "") !== firmaId) return false;
         if (firma && row.firmaAdi !== firma && row.musteriFirma !== firma)
           return false;
@@ -691,7 +709,7 @@ export class ModelService {
     );
     const combinedRows = [
       ...mappedRows,
-      ...(!firmaId && !firma
+      ...(!firmaId && !firma && !customerOnly
         ? storedModelRows.filter(
             (row: any) => {
               const normalizedName = this.normalizeModelName(row.modelName);

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useCallback } from "react";
 import {
   activateUser,
   createUser,
@@ -21,6 +22,8 @@ const MODULE_KEYS = [
   "IMALAT",
   "BOYAHANE",
   "IK",
+  "ISNET",
+  "ASISTAN",
   "ADMIN",
   "RAPORLAR",
 ];
@@ -92,7 +95,7 @@ export default function AdminUsersPanel() {
     [users, selectedUserId],
   );
 
-  async function loadUsers(preserveSelected = true) {
+  const loadUsers = useCallback(async function loadUsers(preserveSelected = true) {
     try {
       setBusy(true);
       const data = await listUsers();
@@ -120,11 +123,11 @@ export default function AdminUsersPanel() {
     } finally {
       setBusy(false);
     }
-  }
+  }, [selectedUserId]);
 
   useEffect(() => {
     loadUsers(false);
-  }, []);
+  }, [loadUsers]);
 
   useEffect(() => {
     if (!selectedUser) return;

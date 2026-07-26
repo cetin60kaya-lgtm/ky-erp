@@ -61,7 +61,17 @@ function firstMatch(text: string, patterns: RegExp[]) {
 function modelGuessFromText(value: string) {
   const known = ["PONYKA", "HAKITO", "MARAL", "FINKIY", "EMAVIM"];
   const upper = value.toLocaleUpperCase("tr-TR");
-  return known.find((item) => upper.includes(item)) || "";
+  const knownMatch = known.find((item) => upper.includes(item));
+  if (knownMatch) return knownMatch;
+  const explicit = value.match(
+    /(?:MODEL|MODEL ADI|MODEL KODU)\s*[:#-]?\s*([A-Z0-9ÇĞİÖŞÜ][A-Z0-9ÇĞİÖŞÜ ._/-]{2,80})/i,
+  )?.[1];
+  if (explicit) return clean(explicit).replace(/\s{2,}.*/, "");
+  const candidate = clean(value)
+    .replace(/\b(?:ADET|AD|KG|KİLOGRAM|KILOGRAM|SEVK|İRSALİYE|IRSALIYE)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return candidate.length >= 2 && candidate.length <= 100 ? candidate : "";
 }
 
 function lotFromText(value: string) {
@@ -72,11 +82,79 @@ function lotFromText(value: string) {
   ]);
 }
 
+function lotFromUblItem(item: any, line: any, supplierTaxNo: string) {
+  const standardLot = clean(
+    pick(item, "ItemInstance.LotIdentification.LotNumberID") ||
+      pick(item, "ItemInstance.LotIdentification.ID") ||
+      pick(item, "ItemInstance.SerialID") ||
+      pick(line, "ItemInstance.LotIdentification.LotNumberID"),
+  );
+  if (standardLot) return standardLot;
+
+  const lotProperty = arr(item?.AdditionalItemProperty).find((property: any) =>
+    /^(LOT|LOT NO|LOT NUMARASI|PARTI|PARTI NO|BATCH)$/i.test(
+      clean(property?.Name).replace(/[İIı]/g, "I"),
+    ),
+  );
+  const propertyLot = clean(lotProperty?.Value || lotProperty?.ValueQualifier);
+  if (propertyLot) return propertyLot;
+
+  const combinedText = `${clean(line?.Note)} ${clean(item?.Description)} ${clean(item?.Name)}`;
+  const labeledLot = lotFromText(combinedText);
+  if (labeledLot) return labeledLot;
+
+  // Selvi Kimya lot kodunu UBL Item/Description alaninda etiketsiz olarak
+  // gonderiyor (or. 260704022-K11 veya 260618001).
+  const itemDescription = clean(item?.Description);
+  if (
+    clean(supplierTaxNo) === "7600500357" &&
+    /^\d{9}(?:-K\d+)?$/i.test(itemDescription)
+  ) {
+    return itemDescription.toUpperCase();
+  }
+  return "";
+}
+
 function unitCode(value: any, fallback = "ADET") {
   if (value && typeof value === "object") {
     return clean(value.unitCode || value.unit || value.UnitCode || fallback);
   }
   return clean(fallback);
+}
+
+function textList(value: any): string[] {
+  return arr(value).map(clean).filter(Boolean);
+}
+
+function extractLineMeta(line: any, item: any) {
+  const ids = [
+    ...textList(pick(item, "BuyersItemIdentification.ID")),
+    ...textList(pick(item, "SellersItemIdentification.ID")),
+    ...textList(pick(item, "ManufacturersItemIdentification.ID")),
+    ...textList(pick(item, "AdditionalItemIdentification.ID")),
+  ];
+  const notes = textList([line.Note, item.Note, pick(line, "DocumentReference.ID"), pick(line, "OrderLineReference.LineID")]);
+  const combined = `${notes.join(" ")} ${clean(item.Name)} ${clean(item.Description)}`;
+  const orderNo = clean(
+    pick(line, "OrderReference.ID") ||
+      pick(line, "OrderLineReference.LineID") ||
+      pick(line, "DocumentReference.ID"),
+  );
+  const color = firstMatch(combined, [/\b(?:RENK|COLOR)\s*[:#-]?\s*([^,;/]+)/i]);
+  const region = firstMatch(combined, [/\b(ÜST ALT|ÜST|ALT|ÖN|ARKA|KOL|ENSE|TOP|POLO|REPETE)\b/i]);
+  return { ids: [...new Set(ids)], orderNo, color, region, note: notes.join(" ") };
+}
+
+function partyName(party: any, legalEntity: any) {
+  const person = arr(party?.Person)[0] || {};
+  return clean(
+    legalEntity?.RegistrationName ||
+      party?.PartyName?.Name ||
+      [person.FirstName, person.MiddleName, person.FamilyName]
+        .map(clean)
+        .filter(Boolean)
+        .join(" "),
+  );
 }
 
 @Injectable()
@@ -247,6 +325,7 @@ export class DocumentParserService {
       const sellerItemId = clean(pick(item, "SellersItemIdentification.ID"));
       const manufacturerItemId = clean(pick(item, "ManufacturersItemIdentification.ID"));
       const standardItemId = clean(pick(item, "StandardItemIdentification.ID"));
+      const lineMeta = extractLineMeta(line, item);
       return {
         lineId: `${args.fileHash}-${index + 1}`,
         lineNo: Number(line.ID || index + 1),
@@ -261,11 +340,19 @@ export class DocumentParserService {
         vatRate,
         vatAmount,
         total: grossLineAmount || subtotal + vatAmount,
-        lotNo: lotFromText(`${rawName} ${item.Description || ""}`),
-        modelGuess: modelGuessFromText(`${rawName} ${item.Description || ""}`),
+        lotNo: lotFromUblItem(item, line, clean(supplierTax)),
+        modelGuess: modelGuessFromText(
+          `${manufacturerItemId} ${sellerItemId} ${rawName} ${item.Description || ""}`,
+        ),
         sellerItemId,
         manufacturerItemId,
         standardItemId,
+        additionalItemIds: lineMeta.ids,
+        orderNo: lineMeta.orderNo,
+        productCode: sellerItemId || manufacturerItemId || standardItemId || lineMeta.ids[0] || "",
+        color: lineMeta.color,
+        region: lineMeta.region,
+        sourceNote: lineMeta.note,
         missingFields: [],
       };
     });
@@ -287,15 +374,17 @@ export class DocumentParserService {
       documentType: isDispatch ? "DespatchAdvice" : "Invoice",
       issueDate: clean(root.IssueDate),
       dueDate: clean(root.DueDate),
-      issuerName: clean(legalSupplier.RegistrationName || supplier.PartyName?.Name || ""),
+      issuerName: partyName(supplier, legalSupplier),
       issuerTaxNo: clean(supplierTax),
-      receiverName: clean(legalCustomer.RegistrationName || customer.PartyName?.Name || ""),
+      receiverName: partyName(customer, legalCustomer),
       receiverTaxNo: clean(customerTax),
       currency: clean(root.DocumentCurrencyCode || "TRY"),
       subtotal: money(monetaryTotal.TaxExclusiveAmount) || money(monetaryTotal.LineExtensionAmount),
       vatTotal: taxBreakdown.documentTaxTotal || money(root.TaxTotal?.TaxAmount),
       grandTotal: money(monetaryTotal.PayableAmount || monetaryTotal.TaxInclusiveAmount),
-      modelGuess: modelGuessFromText(`${args.fileName} ${lines.map((line) => line.rawName).join(" ")}`),
+      modelGuess:
+        lines.map((line) => line.modelGuess).find(Boolean) ||
+        modelGuessFromText(`${args.fileName} ${lines.map((line) => line.rawName).join(" ")}`),
       lines,
       taxBreakdown,
       parseRawJson: { xmlRoot: isDispatch ? "DespatchAdvice" : "Invoice", parsed, taxBreakdown },
@@ -418,7 +507,25 @@ export class DocumentParserService {
 
   private parsePdfLines(text: string, fileHash: string): ParsedDocumentLine[] {
     const tableRows = this.parseGenericPdfTableLines(text, fileHash);
-    if (tableRows.length) return tableRows;
+    const paidFallbackRows = tableRows.length
+      ? []
+      : this.parsePaidQuantityLines(text, fileHash);
+    const primaryRows = [...tableRows, ...paidFallbackRows];
+    const zeroValueRows = this.parseZeroValueQuantityLines(
+      text,
+      fileHash,
+      primaryRows.length,
+    ).filter(
+      (zeroRow) =>
+        !primaryRows.some(
+          (row) =>
+            Number(row.unitPrice || 0) === 0 &&
+            Math.abs(Number(row.quantity || 0) - Number(zeroRow.quantity || 0)) < 0.0001,
+        ),
+    );
+    if (tableRows.length || paidFallbackRows.length) {
+      return [...primaryRows, ...zeroValueRows];
+    }
     const knownProducts = [
       "S 20 WHITE",
       "RETARDER GEL",
@@ -470,6 +577,109 @@ export class DocumentParserService {
         missingFields: [],
       });
     }
+    return [...rows, ...this.parseZeroValueQuantityLines(text, fileHash, rows.length)];
+  }
+
+  /**
+   * Bazı İşNet PDF şablonları ürün kodunu ve satır numarasını miktarın altına
+   * taşır. Bu durumda tablo regex'i çalışmaz; ücretli satır miktar + birim fiyat
+   * üzerinden güvenli biçimde geri kazanılır.
+   */
+  private parsePaidQuantityLines(text: string, fileHash: string): ParsedDocumentLine[] {
+    const rows: ParsedDocumentLine[] = [];
+    const quantityPattern =
+      /(\d{1,3}(?:\.\d{3})+|\d+(?:,\d+)?)\s*(?:Adet|ADET|Ad|AD)\b/gi;
+    for (const match of text.matchAll(quantityPattern)) {
+      const qty = quantity(match[1]);
+      if (qty <= 0) continue;
+      const index = match.index || 0;
+      const afterQuantity = clean(text.slice(index + match[0].length, index + match[0].length + 90));
+      const firstPriceText = afterQuantity.match(/^(?:\s*)([0-9.,]+)\s*TL\b/i)?.[1] || "";
+      const unitPrice = money(firstPriceText);
+      if (unitPrice <= 0) continue;
+      const before = text.slice(Math.max(0, index - 180), index);
+      const candidateLines = before
+        .split(/\r?\n/)
+        .map(clean)
+        .filter(Boolean)
+        .filter((line) => !/(Miktar|Birim Fiyat|İskonto|KDV|Mal Hizmet)$/i.test(line));
+      const description = clean(candidateLines.slice(-1)[0] || "Ürün / hizmet");
+      const percentValues = [...afterQuantity.matchAll(/%\s*([0-9]+(?:[,.][0-9]+)?)/g)];
+      const vatText = percentValues.at(-1)?.[1] || "";
+      const vatRate = money(vatText);
+      const subtotal = Number((qty * unitPrice).toFixed(2));
+      const vatAmount = Number((subtotal * vatRate / 100).toFixed(2));
+      rows.push({
+        lineId: `${fileHash}-${rows.length + 1}`,
+        lineNo: rows.length + 1,
+        rawName: description,
+        description,
+        quantity: qty,
+        unit: "ADET",
+        unitPrice,
+        subtotal,
+        vatRate,
+        vatAmount,
+        total: subtotal,
+        lotNo: "",
+        modelGuess: modelGuessFromText(`${description} ${text}`),
+        missingFields: [],
+      });
+    }
+    return rows;
+  }
+
+  /**
+   * Bedelsiz numune ve kalite-fire satirlari fatura tutarina girmese de adet
+   * mutabakatina girer. PDF metinlerinde bu satirlar kolon sirasi bozulmus
+   * gelebiliyor; bu nedenle fiyat regex'inden bagimsiz olarak adet + aciklama
+   * uzerinden ikinci bir guvenli gecis yapilir. XML belgelerde zaten tum
+   * InvoiceLine satirlari kaydedildigi icin bu yalnizca PDF yedegidir.
+   */
+  private parseZeroValueQuantityLines(
+    text: string,
+    fileHash: string,
+    offset = 0,
+  ): ParsedDocumentLine[] {
+    const rows: ParsedDocumentLine[] = [];
+    const exceptionWords =
+      /\b(TEST|NUMUNE|KUMA[SŞ]\s*SAKATI|BASKI\s*SAKATI|SAKAT|HATALI|HATA|F[Iİ]RE|DEFOLU|BOZUK|ISKARTA)\b/i;
+    const quantityPattern =
+      /(\d{1,3}(?:\.\d{3})+|\d+(?:,\d+)?)\s*(?:Adet|ADET|Ad|AD)\b/gi;
+    for (const match of text.matchAll(quantityPattern)) {
+      const qty = quantity(match[1]);
+      if (qty <= 0) continue;
+      const index = match.index || 0;
+      const nearby = clean(text.slice(Math.max(0, index - 140), index + 280));
+      const keyword = nearby.match(exceptionWords)?.[0] || "";
+      if (!keyword) continue;
+      // Ucretli ana satir ayni pencereye denk gelse bile yalniz sifir bedelli
+      // istisna satirini al. IsNet PDF'lerinde 0 TL bilgisi adet sonrasinda olur.
+      const afterQuantity = clean(text.slice(index, index + 180));
+      const firstPrice = afterQuantity.match(/\b(\d+(?:[,.]\d+)?)\s*TL\b/i)?.[1] || "";
+      if (money(firstPrice) !== 0) continue;
+      if (rows.some((row) => Math.abs(row.quantity - qty) < 0.0001 && row.rawName === nearby)) continue;
+      const description = clean(
+        nearby.match(/(?:TEST\s*NUMUNE\w*|KUMA[SŞ]\s*SAKATI\w*|BASKI\s*SAKATI\w*|SAKAT\w*|HATALI\w*|F[Iİ]RE\w*|DEFOLU\w*|BOZUK\w*|ISKARTA\w*)/i)?.[0] ||
+          keyword,
+      );
+      rows.push({
+        lineId: `${fileHash}-${offset + rows.length + 1}`,
+        lineNo: offset + rows.length + 1,
+        rawName: nearby,
+        description,
+        quantity: qty,
+        unit: "ADET",
+        unitPrice: 0,
+        subtotal: 0,
+        vatRate: 0,
+        vatAmount: 0,
+        total: 0,
+        lotNo: "",
+        modelGuess: modelGuessFromText(text),
+        missingFields: [],
+      });
+    }
     return rows;
   }
 
@@ -487,7 +697,7 @@ export class DocumentParserService {
       const unitPrice = money(match[4]);
       const vatRate = money(match[5]);
       const grossTotal = money(match[6]);
-      if (!rawName || qty <= 0 || unitPrice <= 0 || grossTotal <= 0) continue;
+      if (!rawName || qty <= 0) continue;
       const vatAmount = vatRate > 0 ? Number((grossTotal - grossTotal / (1 + vatRate / 100)).toFixed(2)) : 0;
       rows.push({
         lineId: `${fileHash}-${rows.length + 1}`,

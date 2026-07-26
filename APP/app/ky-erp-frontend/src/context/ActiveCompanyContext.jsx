@@ -69,7 +69,9 @@ function sanitizeLegacyCompanyStorage() {
       forceDefault = true;
       try {
         window.localStorage.removeItem(key);
-      } catch {}
+      } catch {
+        // Depolama kullanılamıyorsa varsayılan şirketle devam edilir.
+      }
       continue;
     }
 
@@ -85,7 +87,9 @@ function sanitizeLegacyCompanyStorage() {
           continue;
         }
       }
-    } catch {}
+    } catch {
+      // Bozuk eski kayıt yok sayılır.
+    }
   }
 
   if (forceDefault) {
@@ -95,7 +99,9 @@ function sanitizeLegacyCompanyStorage() {
       window.localStorage.setItem("selectedCompany", JSON.stringify(snapshot));
       window.localStorage.setItem("activeCompany", snapshot.slug);
       window.localStorage.setItem("companySlug", snapshot.slug);
-    } catch {}
+    } catch {
+      // Depolama kullanılamıyorsa bellek içindeki seçim korunur.
+    }
     return snapshot.slug;
   }
 
@@ -144,7 +150,9 @@ export function ActiveCompanyProvider({ children }) {
         STORAGE_KEY,
         normalizeCompanySlug(activeCompanySlug),
       );
-    } catch {}
+    } catch {
+      // Depolama kullanılamıyorsa context state'i kaynak olarak kalır.
+    }
   }, [activeCompanySlug]);
 
   useEffect(() => {
@@ -183,7 +191,7 @@ export function ActiveCompanyProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [isAuthenticated]);
+  }, [activeCompanySlug, isAuthenticated]);
 
   const activeCompany = useMemo(() => {
     return (
