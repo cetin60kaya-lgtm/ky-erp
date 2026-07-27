@@ -1,0 +1,3 @@
+-- Baseline marker for the legacy HR layout.
+-- The HR tables were created before Prisma migration tracking was enabled.
+-- This migration intentionally performs no data or schema mutation.

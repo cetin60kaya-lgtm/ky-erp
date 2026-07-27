@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ky-erp-api",
+  "main": "src/index.ts",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "api.kyerp.net",
+      "custom_domain": true
+    }
+  ],
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ky-erp-db",
+      "database_id": "b504b712-6927-499d-815d-0b954c8ee246",
+      "remote": true
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "ky-erp-files",
+      "remote": true
+    }
+  ]
+}

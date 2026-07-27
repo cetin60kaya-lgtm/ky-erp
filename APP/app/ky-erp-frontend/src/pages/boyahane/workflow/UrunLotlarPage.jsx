@@ -1,0 +1,14 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useEffect, useState } from "react";
+import { createBoyahaneWorkflowLot, listBoyahaneLots, listBoyahaneProducts, runBoyahaneLotAction } from "../../../services/boyahaneWorkflowApi";
+import { formatKg, safeArray } from "./boyahaneFormat";
+import AddLotModal from "./AddLotModal";
+
+export default function UrunLotlarPage({ activeMainCompany }) {
+  const [products, setProducts] = useState([]); const [lots, setLots] = useState([]); const [modal, setModal] = useState(false); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  async function load() { try { const [p, l] = await Promise.all([listBoyahaneProducts(activeMainCompany), listBoyahaneLots(activeMainCompany)]); setProducts(safeArray(p)); setLots(safeArray(l)); } catch (requestError) { setError(requestError.message); } }
+  useEffect(() => { load(); }, [activeMainCompany?.slug]);
+  async function save(form) { setBusy(true); setError(""); try { await createBoyahaneWorkflowLot(activeMainCompany, form); setModal(false); await load(); } catch (requestError) { setError(requestError.message); } finally { setBusy(false); } }
+  async function action(id, type) { setBusy(true); setError(""); try { await runBoyahaneLotAction(activeMainCompany, id, type); await load(); } catch (requestError) { setError(requestError.message); } finally { setBusy(false); } }
+  return <section className="bh-card"><div className="bh-card-head"><div><h2>Ürün ve Lotlar</h2><small>Muhasebe/onaylı envanter ve elle açılan gerçek lotlar</small></div><button className="bh-btn primary" onClick={() => setModal(true)}>+ Lot Ekle</button></div><div className="bh-card-body">{error ? <div className="bh-notice danger">{error}</div> : null}<div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Boya türü</th><th>Lot</th><th>Firma</th><th>Fatura</th><th>Giriş KG</th><th>Kullanılan KG</th><th>Kalan KG</th><th>Varsayılan</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{lots.map((row) => <tr key={row.id}><td>{row.productName}</td><td>{row.dyeType || "-"}</td><td>{row.lotNo}</td><td>{row.supplierName || "-"}</td><td>{row.invoiceNo || "-"}</td><td>{formatKg(row.entryKg)}</td><td>{formatKg(row.usedKg)}</td><td>{formatKg(row.remainingKg)}</td><td>{row.isDefault ? "Evet" : "Hayır"}</td><td>{row.status}</td><td><button className="bh-btn mini" disabled={busy} onClick={() => action(row.id, "SET_DEFAULT")}>Varsayılan Yap</button> <button className="bh-btn mini" disabled={busy} onClick={() => action(row.id, "FINISH")}>Lot Bitti</button> <button className="bh-btn mini danger" disabled={busy} onClick={() => action(row.id, "DEACTIVATE")}>Pasife Al</button></td></tr>)}</tbody></table></div>{!lots.length ? <div className="bh-empty">Kayıtlı lot bulunamadı.</div> : null}</div>{modal ? <AddLotModal products={products} busy={busy} onCancel={() => setModal(false)} onSave={save} /> : null}</section>;
+}

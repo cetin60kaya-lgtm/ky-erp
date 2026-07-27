@@ -1,0 +1,84 @@
+import { apiGet, apiPatch, apiPost, apiPut } from "../utils/api";
+
+export { fetchErpModuleData, runErpApprovedAction } from "./erpApi";
+
+function unwrap(payload) {
+  return payload &&
+    typeof payload === "object" &&
+    payload.ok === true &&
+    Object.prototype.hasOwnProperty.call(payload, "data")
+     ? payload?.data
+    : payload;
+}
+
+export async function getMainCompanies(params = {}) {
+  return unwrap(await apiGet("/admin/main-companies", params));
+}
+
+export async function createMainCompany(payload = {}) {
+  return unwrap(await apiPost("/admin/main-companies", payload));
+}
+
+export async function getSettings(params = {}) {
+  return unwrap(await apiGet("/admin/settings", params));
+}
+
+export async function saveSetting(payload = {}) {
+  return unwrap(await apiPost("/admin/settings", payload));
+}
+
+export async function getLogs(params = {}) {
+  return unwrap(await apiGet("/admin/logs", params));
+}
+
+export async function createBackup(payload = {}) {
+  return unwrap(await apiPost("/admin/backup", payload));
+}
+
+export async function listUsers() {
+  return unwrap(await apiGet("/admin/users"));
+}
+
+export async function createUser(payload = {}) {
+  return unwrap(await apiPost("/admin/users", payload));
+}
+
+export async function updateUser(id, payload = {}) {
+  return unwrap(
+    await apiPatch(`/admin/users/${encodeURIComponent(id)}`, payload),
+  );
+}
+
+export async function resetUserPassword(id, password) {
+  return unwrap(
+    await apiPost(`/admin/users/${encodeURIComponent(id)}/reset-password`, {
+      password,
+    }),
+  );
+}
+
+export async function activateUser(id) {
+  return unwrap(
+    await apiPost(`/admin/users/${encodeURIComponent(id)}/activate`, {}),
+  );
+}
+
+export async function deactivateUser(id) {
+  return unwrap(
+    await apiPost(`/admin/users/${encodeURIComponent(id)}/deactivate`, {}),
+  );
+}
+
+export async function getUserPermissions(id) {
+  return unwrap(
+    await apiGet(`/admin/users/${encodeURIComponent(id)}/permissions`),
+  );
+}
+
+export async function updateUserPermissions(id, permissions) {
+  return unwrap(
+    await apiPut(`/admin/users/${encodeURIComponent(id)}/permissions`, {
+      permissions,
+    }),
+  );
+}

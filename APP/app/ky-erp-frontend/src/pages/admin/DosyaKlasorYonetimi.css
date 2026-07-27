@@ -1,0 +1,241 @@
+.ky-file-admin {
+  display: grid;
+  gap: 16px;
+}
+
+.ky-file-admin__head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.ky-file-admin__head h1 {
+  font-size: 24px;
+  margin: 0 0 6px;
+}
+
+.ky-file-admin__head p {
+  color: #64748b;
+  margin: 0;
+}
+
+.ky-file-admin__status {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ky-file-admin__status > div,
+.ky-file-admin__section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.ky-file-admin__status span {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.ky-file-admin__status strong {
+  color: #0f172a;
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ky-file-admin__rules-table td,
+.ky-file-admin__rules-table th {
+  white-space: nowrap;
+}
+
+.ky-file-admin__form,
+.ky-file-admin__simple-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ky-file-admin__form label,
+.ky-file-admin__simple-form label {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+}
+
+.ky-file-admin__form input,
+.ky-file-admin__form select,
+.ky-file-admin__simple-form input,
+.ky-file-admin__simple-form select,
+.ky-file-admin__filters input,
+.ky-file-admin__filters select {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 7px 9px;
+}
+
+.ky-file-admin__wide {
+  grid-column: span 2;
+}
+
+.ky-file-admin__check {
+  align-items: center;
+  display: flex !important;
+  flex-direction: row;
+  gap: 8px !important;
+  min-height: 36px;
+}
+
+.ky-file-admin__actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: span 4;
+}
+
+.ky-file-admin__exts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: span 4;
+}
+
+.ky-file-admin__exts button {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+  min-height: 30px;
+  padding: 5px 10px;
+}
+
+.ky-file-admin__exts button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.ky-file-admin__selected td {
+  background: #eff6ff;
+}
+
+.ky-file-admin__root-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.ky-file-admin__root-form label {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+}
+
+.ky-file-admin__root-form input {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 7px 9px;
+}
+
+.ky-file-admin__test {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.ky-file-admin__test.ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.ky-file-admin__import-summary {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.ky-file-admin__import-summary strong {
+  color: #0f172a;
+}
+
+.ky-file-admin__skipped {
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  flex-basis: 100%;
+  gap: 4px;
+  max-height: 120px;
+  overflow: auto;
+  padding-top: 8px;
+}
+
+.ky-file-admin__files-scroll {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.ky-file-admin__filters {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1100px) {
+  .ky-file-admin__status,
+  .ky-file-admin__form,
+  .ky-file-admin__simple-form,
+  .ky-file-admin__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ky-file-admin__actions,
+  .ky-file-admin__exts,
+  .ky-file-admin__wide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 700px) {
+  .ky-file-admin__head {
+    display: grid;
+  }
+
+  .ky-file-admin__status,
+  .ky-file-admin__form,
+  .ky-file-admin__simple-form,
+  .ky-file-admin__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .ky-file-admin__root-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ky-file-admin__actions,
+  .ky-file-admin__exts,
+  .ky-file-admin__wide {
+    grid-column: span 1;
+  }
+}

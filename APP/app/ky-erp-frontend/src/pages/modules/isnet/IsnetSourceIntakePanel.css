@@ -1,0 +1,183 @@
+.isnet-source-intake {
+  display: grid;
+  gap: 16px;
+}
+
+.isnet-source-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.isnet-source-type-grid > button {
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid #d8e2ef;
+  border-radius: 12px;
+  background: #fff;
+  color: #17345c;
+  text-align: left;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: 9px;
+  row-gap: 4px;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.isnet-source-type-grid > button:hover {
+  border-color: #8eb7e6;
+  box-shadow: 0 6px 18px rgba(37, 88, 146, .09);
+}
+
+.isnet-source-type-grid > button.active {
+  border-color: #1677c8;
+  background: #eef7ff;
+  box-shadow: inset 0 0 0 1px #1677c8;
+}
+
+.isnet-source-type-grid strong {
+  font-size: 14px;
+}
+
+.isnet-source-type-grid span {
+  grid-column: 1 / -1;
+  color: #5b6f87;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isnet-source-form {
+  display: grid;
+  gap: 14px;
+}
+
+.isnet-source-form label {
+  display: grid;
+  gap: 6px;
+  color: #324c6c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.isnet-source-form input,
+.isnet-source-form select,
+.isnet-source-form textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #ced9e7;
+  border-radius: 8px;
+  background: #fff;
+  color: #17345c;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+}
+
+.isnet-source-form textarea {
+  resize: vertical;
+}
+
+.isnet-source-form input:focus,
+.isnet-source-form select:focus,
+.isnet-source-form textarea:focus {
+  border-color: #1677c8;
+  box-shadow: 0 0 0 3px rgba(22, 119, 200, .12);
+}
+
+.isnet-source-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.isnet-source-results,
+.isnet-model-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 2px;
+}
+
+.isnet-source-results button,
+.isnet-model-results button {
+  border: 1px solid #d6e0eb;
+  border-radius: 9px;
+  background: #fff;
+  padding: 10px;
+  text-align: left;
+  display: grid;
+  gap: 3px;
+  color: #17345c;
+  cursor: pointer;
+}
+
+.isnet-source-results button:hover,
+.isnet-model-results button:hover {
+  border-color: #1677c8;
+  background: #f4f9ff;
+}
+
+.isnet-source-results span,
+.isnet-source-results small,
+.isnet-model-results span {
+  color: #687c93;
+  font-size: 11px;
+}
+
+.isnet-file-drop {
+  min-height: 118px;
+  border: 1px dashed #8db4dd;
+  border-radius: 12px;
+  background: #f6fbff;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 18px;
+  cursor: pointer;
+}
+
+.isnet-file-drop input {
+  display: none;
+}
+
+.isnet-file-drop span {
+  font-weight: 500;
+  color: #677b92;
+}
+
+.isnet-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.isnet-inline-notice {
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isnet-inline-notice--warning {
+  border: 1px solid #f3c56b;
+  background: #fff7e6;
+  color: #7c4d00;
+}
+
+@media (max-width: 1100px) {
+  .isnet-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .isnet-source-type-grid,
+  .isnet-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

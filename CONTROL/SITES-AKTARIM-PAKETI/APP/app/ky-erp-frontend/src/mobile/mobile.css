@@ -1,0 +1,623 @@
+/* ============================================================
+   KY ERP Mobile CSS - Yeni Tasarım
+   Sadece .ky-mobile-* classlarını etkiler.
+   Desktop CSS ile kesinlikle çakışmaz.
+   ============================================================ */
+
+/* ---- Reset sadece mobile scope'da ---- */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Kök kapsayıcı, tam 100dvh olacak ve taşmayacak */
+.ky-mobile-app {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+}
+
+.ky-mobile-shell {
+  width: 100%;
+  max-width: 480px;
+  height: 100dvh;
+  background-color: #f8fafc;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 40px rgba(0,0,0,0.05);
+}
+
+/* ---- Header (Top Bar) ---- */
+.ky-mobile-header {
+  flex: 0 0 auto;
+  height: 72px;
+  background: #fff;
+  border-bottom: 1px solid #dbe5f2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  z-index: 20;
+}
+
+.ky-mobile-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 950;
+  font-size: 15px;
+  flex: 0 0 auto;
+}
+
+.ky-mobile-titlebox {
+  min-width: 0;
+  flex: 1;
+}
+
+.ky-mobile-titlebox h1 {
+  font-size: 15px;
+  margin: 0;
+  line-height: 1.1;
+  font-weight: 950;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ky-mobile-titlebox p {
+  font-size: 10px;
+  margin: 3px 0 0;
+  color: #64748b;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ky-mobile-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #dff4ff;
+  border: 1px solid #bae6fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 950;
+  color: #075985;
+  flex: 0 0 auto;
+}
+
+.ky-mobile-logout {
+  height: 34px;
+  border: 1px solid #dbe5f2;
+  background: #fff;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #64748b;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+/* ---- Main Content Area ---- */
+.ky-mobile-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  padding: 14px 14px 110px; /* Alttaki barı kapatmaması için yüksek padding */
+}
+
+.ky-mobile-content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ---- Bottom Navigation ---- */
+.ky-mobile-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 78px;
+  background: #fff;
+  border-top: 1px solid #dbe5f2;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  z-index: 50;
+  padding-bottom: 6px;
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.ky-mobile-navitem {
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 850;
+  min-width: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.ky-mobile-navitem .ky-mobile-ico {
+  font-size: 18px;
+}
+
+.ky-mobile-navitem.active {
+  color: #2563eb;
+}
+
+/* ---- Typography & Headings ---- */
+.ky-mobile-h2 {
+  font-size: 20px;
+  margin: 4px 0 12px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.ky-mobile-h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.ky-mobile-p {
+  margin: 0;
+}
+
+.ky-mobile-section-title {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 950;
+  margin: 18px 0 10px;
+}
+
+/* ---- Layout Helpers ---- */
+.ky-mobile-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ky-mobile-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ky-mobile-row { display: flex; align-items: center; gap: 10px; }
+.ky-mobile-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ky-mobile-right { text-align: right; }
+.ky-mobile-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---- Spacing ---- */
+.ky-mobile-p12 { padding: 12px; }
+.ky-mobile-p14 { padding: 14px; }
+.ky-mobile-p16 { padding: 16px; }
+.ky-mobile-mb8 { margin-bottom: 8px; }
+.ky-mobile-mb10 { margin-bottom: 10px; }
+.ky-mobile-mb14 { margin-bottom: 14px; }
+
+/* ---- Text Helpers ---- */
+.ky-mobile-muted { color: #64748b; }
+.ky-mobile-small { font-size: 12px; }
+.ky-mobile-tiny { font-size: 10px; }
+.ky-mobile-strong { font-weight: 950; }
+
+/* ---- Card ---- */
+.ky-mobile-card {
+  background: #fff;
+  border: 1px solid #dbe5f2;
+  border-radius: 20px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+/* ---- Pills & Badges ---- */
+.ky-mobile-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 950;
+  background: #eef2ff;
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+.ky-mobile-pill.green { background: #dcfce7; color: #166534; }
+.ky-mobile-pill.red { background: #fee2e2; color: #b91c1c; }
+.ky-mobile-pill.orange { background: #ffedd5; color: #c2410c; }
+.ky-mobile-pill.yellow { background: #fef9c3; color: #854d0e; }
+.ky-mobile-pill.gray { background: #f1f5f9; color: #475569; }
+.ky-mobile-pill.purple { background: #f3e8ff; color: #6d28d9; }
+
+/* ---- Buttons ---- */
+.ky-mobile-btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: #2563eb;
+  color: white;
+  font-weight: 950;
+  padding: 10px 14px;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
+  cursor: pointer;
+}
+.ky-mobile-btn.secondary { background: #fff; color: #1d4ed8; border: 1px solid #bfdbfe; box-shadow: none; }
+.ky-mobile-btn.green { background: #16a34a; }
+.ky-mobile-btn.red { background: #ef4444; }
+.ky-mobile-btn.orange { background: #f97316; }
+.ky-mobile-btn.purple { background: #7c3aed; }
+.ky-mobile-btn.gray { background: #f8fafc; color: #334155; border: 1px solid #dbe5f2; box-shadow: none; }
+.ky-mobile-btn.full { width: 100%; }
+.ky-mobile-btn.xs { min-height: 32px; padding: 6px 8px; border-radius: 10px; font-size: 11px; box-shadow: none; }
+
+/* ---- Forms & Inputs ---- */
+.ky-mobile-input,
+.ky-mobile-select,
+.ky-mobile-textarea {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #dbe5f2;
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+  color: #101827;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+.ky-mobile-textarea { min-height: 82px; resize: vertical; }
+.ky-mobile-input:focus,
+.ky-mobile-select:focus,
+.ky-mobile-textarea:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px #dbeafe; }
+
+.ky-mobile-formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ky-mobile-field label { display: block; font-size: 11px; font-weight: 950; color: #64748b; margin: 0 0 5px; }
+
+/* ---- UI Components ---- */
+.ky-mobile-module-card {
+  min-height: 92px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #dbe5f2;
+  border-radius: 22px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+.ky-mobile-module-card .ky-mobile-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 16px;
+  background: #f1f5ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex: 0 0 auto;
+}
+.ky-mobile-module-card h3 { font-size: 15px; margin: 0 0 4px; font-weight: 950; }
+.ky-mobile-module-card p { margin: 0; color: #64748b; font-size: 12px; font-weight: 750; line-height: 1.3; }
+.ky-mobile-module-card .ky-mobile-arrow { margin-left: auto; color: #94a3b8; font-size: 22px; }
+
+.ky-mobile-hero {
+  background: linear-gradient(135deg, #0f172a, #2563eb);
+  color: white;
+  border-radius: 26px;
+  padding: 20px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+.ky-mobile-hero h2 { font-size: 23px; margin: 0 0 6px; }
+.ky-mobile-hero p { color: #e0ecff; font-weight: 750; font-size: 13px; margin: 0; }
+
+.ky-mobile-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.ky-mobile-tabs::-webkit-scrollbar { width: 0; height: 0; }
+.ky-mobile-tab {
+  white-space: nowrap;
+  min-height: 38px;
+  border: 1px solid #dbe5f2;
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 13px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #475569;
+  cursor: pointer;
+}
+.ky-mobile-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+.ky-mobile-summary {
+  padding: 12px 8px;
+  border-radius: 16px;
+  border: 1px solid #dbe5f2;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+.ky-mobile-summary b { font-size: 17px; display: block; }
+.ky-mobile-summary span { font-size: 10px; color: #64748b; font-weight: 850; }
+
+.ky-mobile-kv {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  border-top: 1px solid #eef2f7;
+  padding-top: 10px;
+  margin-top: 10px;
+}
+.ky-mobile-kv:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.ky-mobile-kv span { color: #64748b; font-weight: 800; }
+.ky-mobile-money { font-size: 18px; font-weight: 950; }
+
+.ky-mobile-alert {
+  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid #dbe5f2;
+  background: #fff;
+}
+.ky-mobile-alert.green { background: #ecfdf5; border-color: #bbf7d0; }
+.ky-mobile-alert.red { background: #fff1f2; border-color: #fecdd3; }
+.ky-mobile-alert.orange { background: #fff7ed; border-color: #fed7aa; }
+.ky-mobile-alert.blue { background: #eff6ff; border-color: #bfdbfe; }
+
+.ky-mobile-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+.ky-mobile-table th,
+.ky-mobile-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 9px 7px;
+  text-align: left;
+}
+.ky-mobile-table th { background: #f8fafc; color: #64748b; font-size: 10px; text-transform: uppercase; }
+
+.ky-mobile-activity {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+.ky-mobile-activity:last-child { border-bottom: 0; }
+.ky-mobile-activity .ky-mobile-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  flex: 0 0 auto;
+}
+
+/* Muhasebe & Çek */
+.ky-mobile-check-card {
+  border-left: 5px solid #2563eb;
+  padding: 14px;
+}
+.ky-mobile-check-card.overdue { border-left-color: #ef4444; }
+.ky-mobile-check-card.soon { border-left-color: #f97316; }
+.ky-mobile-check-card.paid { border-left-color: #16a34a; }
+
+/* İK Günlük Giriş */
+.ky-mobile-daily-person {
+  background: #fff;
+  border: 1px solid #dbe5f2;
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  padding: 12px;
+}
+.ky-mobile-person-head { display: flex; align-items: center; gap: 10px; }
+.ky-mobile-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  color: #334155;
+  font-weight: 950;
+  flex: 0 0 auto;
+}
+.ky-mobile-person-name { font-weight: 950; font-size: 13px; }
+.ky-mobile-person-job { font-size: 10px; color: #64748b; font-weight: 800; }
+.ky-mobile-week-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-top: 10px;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.ky-mobile-week-scroll::-webkit-scrollbar { height: 0; }
+.ky-mobile-weekstrip { display: grid; grid-template-columns: repeat(7, 68px); gap: 7px; min-width: max-content; }
+.ky-mobile-daychip {
+  min-height: 70px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 5px;
+  text-align: center;
+}
+.ky-mobile-daychip b { font-size: 11px; display: block; margin-bottom: 5px; }
+.ky-mobile-shift { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.ky-mobile-shift button {
+  border: 0;
+  border-radius: 8px;
+  min-height: 36px;
+  font-size: 14px;
+  font-weight: 950;
+  background: #e2e8f0;
+  color: #475569;
+  cursor: pointer;
+}
+.ky-mobile-shift button.on { background: #2563eb; color: white; }
+.ky-mobile-shift button.night.on { background: #7c3aed; color: white; }
+
+/* İmalat */
+.ky-mobile-prod-card {
+  border-left: 5px solid #16a34a;
+  padding: 14px;
+}
+.ky-mobile-prod-title { font-size: 15px; font-weight: 950; line-height: 1.25; }
+.ky-mobile-numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 10px 0; }
+.ky-mobile-num { border-radius: 12px; padding: 9px 5px; text-align: center; background: #f8fafc; }
+.ky-mobile-num b { display: block; font-size: 13px; }
+.ky-mobile-num span { font-size: 9px; color: #64748b; font-weight: 900; }
+.ky-mobile-num.green { background: #dcfce7; }
+.ky-mobile-num.orange { background: #ffedd5; }
+.ky-mobile-num.red { background: #fee2e2; }
+
+/* Desen */
+.ky-mobile-design-search { display: grid; grid-template-columns: 1fr 76px; gap: 8px; margin-bottom: 10px; }
+.ky-mobile-design-top-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.ky-mobile-design-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.ky-mobile-design-card {
+  background: #fff;
+  border: 1px solid #dbe5f2;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  padding: 8px;
+  min-height: 238px;
+  display: flex;
+  flex-direction: column;
+}
+.ky-mobile-design-card.missing-image { background: #fffaf0; border-color: #fed7aa; }
+.ky-mobile-design-card.missing-channel { box-shadow: inset 0 0 0 2px #fee2e2, 0 12px 28px rgba(15, 23, 42, 0.08); }
+.ky-mobile-design-thumb {
+  height: 122px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fef3c7, #fff7ed);
+  border: 1px solid #fed7aa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  overflow: hidden;
+}
+.ky-mobile-design-thumb.has { background: #eef2ff; border-color: #dbe4f0; color: #94a3b8; }
+.ky-mobile-design-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ky-mobile-design-title { font-size: 12px; font-weight: 950; line-height: 1.15; margin: 7px 0 2px; min-height: 30px; word-break: break-word; }
+.ky-mobile-design-meta { font-size: 10px; color: #64748b; font-weight: 800; line-height: 1.2; margin-bottom: 5px; }
+.ky-mobile-design-tags { font-size: 9px; color: #64748b; line-height: 1.2; background: #f8fafc; border-radius: 9px; padding: 5px; margin: 3px 0; min-height: 34px; }
+.ky-mobile-design-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: auto; }
+.ky-mobile-design-actions .ky-mobile-btn { font-size: 10px; min-height: 30px; padding: 5px 4px; border-radius: 10px; }
+
+/* Boyahane */
+.ky-mobile-paint-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 12px;
+}
+.ky-mobile-paint-row:last-child { border-bottom: 0; }
+.ky-mobile-paint-color {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  flex: 0 0 auto;
+}
+
+/* Modals & Overlays */
+.ky-mobile-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  display: none;
+  align-items: flex-end;
+  z-index: 100;
+}
+.ky-mobile-modal.open { display: flex; }
+.ky-mobile-sheet {
+  width: 100%;
+  max-height: 88vh;
+  background: #fff;
+  border-radius: 26px 26px 0 0;
+  padding: 16px;
+  overflow: auto;
+}
+.ky-mobile-sheet .ky-mobile-bar {
+  width: 46px;
+  height: 5px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  margin: 0 auto 12px;
+}
+.ky-mobile-toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(78px + 14px + env(safe-area-inset-bottom, 0px));
+  background: #111827;
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.3);
+  font-size: 12px;
+  font-weight: 800;
+  z-index: 90;
+  display: none;
+}
+.ky-mobile-toast.show { display: block; animation: kyMobileToastIn 0.2s; }
+@keyframes kyMobileToastIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Standalone / Login */
+.ky-mobile-standalone {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #edf3fb;
+  padding: 20px;
+}
