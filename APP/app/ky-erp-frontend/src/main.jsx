@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import ApprovedShellEnhancer from "./components/shell/ApprovedShellEnhancer.jsx";
 import MonthlyPersonnelWorkspace from "./pages/modules/ik/MonthlyPersonnelWorkspace.jsx";
+import MonthlySalaryContractWorkspace from "./pages/modules/ik/MonthlySalaryContractWorkspace.jsx";
 import { ActiveCompanyProvider } from "./context/ActiveCompanyContext";
 import { AuthProvider } from "./context/AuthContext";
 import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
@@ -35,6 +36,7 @@ if (isMobileWebRoute) {
           <App />
           <ApprovedShellEnhancer />
           <MonthlyPersonnelWorkspace />
+          <MonthlySalaryContractWorkspace />
         </ActiveCompanyProvider>
       </AuthProvider>
     );
