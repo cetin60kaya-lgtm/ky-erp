@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 .vite/
 coverage/
@@ -15,17 +15,17 @@ test-results/
 *.sqlite
 *.sqlite3
 
-DATA/
-STORAGE/
-LOGS/
-TEMP/
-tmp/
-uploads/
-APP-BACKUP/
-SQL-BACKUP/
-BACKUPS/
-CODE/
-CONTROL/
+/DATA/
+/STORAGE/
+/LOGS/
+/TEMP/
+/tmp/
+/uploads/
+/APP-BACKUP/
+/SQL-BACKUP/
+/BACKUPS/
+/CODE/
+/CONTROL/
 
 android/
 prisma/_hold/
