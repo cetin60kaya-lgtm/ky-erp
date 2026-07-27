@@ -1,0 +1,258 @@
+:root {
+  --kyv2-nav: #101d31;
+  --kyv2-nav-active: #203b60;
+  --kyv2-bg: #eef3f8;
+  --kyv2-surface: #ffffff;
+  --kyv2-soft: #f8fafc;
+  --kyv2-line: #d9e2ec;
+  --kyv2-text: #172033;
+  --kyv2-muted: #6e7988;
+  --kyv2-primary: #0a67a3;
+  --kyv2-success: #177c5c;
+}
+
+/* KYERP V2 kabuk: mevcut çalışan ekranları ve route'lar korunur. */
+.app-shell {
+  grid-template-columns: 76px 230px minmax(0, 1fr) !important;
+  height: 100vh;
+  min-height: 100vh;
+  background: var(--kyv2-bg);
+}
+
+.sidebar-thin {
+  gap: 7px !important;
+  padding: 10px 7px !important;
+  background: var(--kyv2-nav) !important;
+  border-right: 0 !important;
+}
+
+.kyerp-rail-logo {
+  width: 48px !important;
+  height: 48px !important;
+  margin: 0 auto 5px !important;
+  border-radius: 12px;
+  color: #fff !important;
+  background: linear-gradient(145deg, #1687c3, #0a5c7d);
+}
+
+.thin-nav-btn {
+  min-height: 58px;
+  width: 100%;
+  gap: 4px !important;
+  padding: 6px 2px !important;
+  border-radius: 11px !important;
+  color: #cbd5e1 !important;
+}
+
+.thin-nav-btn:hover,
+.thin-nav-btn.active {
+  color: #fff !important;
+  background: var(--kyv2-nav-active) !important;
+}
+
+.thin-nav-icon {
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.thin-nav-label {
+  font-size: 9px !important;
+  line-height: 1.15 !important;
+}
+
+.sidebar-module {
+  gap: 0 !important;
+  padding: 0 !important;
+  background: var(--kyv2-surface) !important;
+  border-right: 1px solid var(--kyv2-line) !important;
+}
+
+.kyerp-module-brand {
+  height: 58px !important;
+  flex: 0 0 58px;
+  padding: 0 15px !important;
+  border-bottom: 1px solid var(--kyv2-line) !important;
+  color: #153f69 !important;
+  font-size: 15px !important;
+}
+
+.module-kicker {
+  display: none !important;
+}
+
+.module-menu-list {
+  height: calc(100vh - 58px);
+  padding: 10px 9px !important;
+  gap: 2px !important;
+}
+
+.module-menu-list > div > div[style] {
+  margin: 10px 0 5px !important;
+  padding: 7px 11px !important;
+  color: #8a96a7 !important;
+  font-size: 9px !important;
+  letter-spacing: .06em !important;
+}
+
+.module-menu-btn {
+  width: 100%;
+  min-height: 36px !important;
+  margin: 2px 0;
+  padding: 9px 11px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #29364a !important;
+  background: transparent !important;
+  font-size: 11px;
+}
+
+.module-menu-btn:hover,
+.module-menu-btn.active {
+  color: var(--kyv2-primary) !important;
+  background: #e8f2ff !important;
+  font-weight: 800 !important;
+}
+
+.main-content {
+  display: grid !important;
+  grid-template-rows: 58px minmax(0, 1fr) 24px;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden !important;
+  background: var(--kyv2-bg);
+}
+
+.kyerp-global-topbar {
+  position: relative !important;
+  top: auto !important;
+  z-index: 30 !important;
+  height: 58px !important;
+  min-height: 58px;
+  padding: 0 12px !important;
+  gap: 10px !important;
+  border-bottom: 1px solid var(--kyv2-line) !important;
+  background: var(--kyv2-surface) !important;
+  box-shadow: none !important;
+}
+
+.kyerp-global-topbar::before {
+  content: "";
+  width: 35px;
+  height: 35px;
+  flex: 0 0 35px;
+  border: 1px solid var(--kyv2-line);
+  border-radius: 8px;
+  background:
+    linear-gradient(#66758a 0 0) 9px 10px/15px 1px no-repeat,
+    linear-gradient(#66758a 0 0) 9px 16px/15px 1px no-repeat,
+    linear-gradient(#66758a 0 0) 9px 22px/15px 1px no-repeat,
+    var(--kyv2-surface);
+}
+
+.kyerp-global-crumb {
+  max-width: 760px;
+  height: 35px;
+  padding: 0 12px;
+  border: 1px solid var(--kyv2-line);
+  border-radius: 8px;
+  background: var(--kyv2-soft);
+  font-size: 11px !important;
+}
+
+.top-select.main-company-select,
+.kyerp-notification,
+.logout-btn {
+  height: 35px !important;
+  border-color: var(--kyv2-line) !important;
+  border-radius: 8px !important;
+  background: var(--kyv2-surface) !important;
+  font-size: 10px !important;
+}
+
+.kyerp-user-chip {
+  gap: 7px !important;
+}
+
+.kyerp-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  background: #0d4a82 !important;
+}
+
+.kyerp-user-meta strong {
+  font-size: 9px !important;
+}
+
+.kyerp-user-meta span {
+  font-size: 7px !important;
+}
+
+.main-content > .topbar {
+  display: none !important;
+}
+
+.main-content > .module-error-card,
+.main-content > .module-loading-card,
+.main-content > .muhasebe-page,
+.main-content > .isnet-page,
+.main-content > .desen-page,
+.main-content > .boyahane-page,
+.main-content > .ik-page,
+.main-content > .kyerp-page,
+.main-content > div:not(.kyerp-global-topbar):not(.topbar):not(.ai-dialog-backdrop) {
+  min-width: 0;
+}
+
+.main-content > :not(.kyerp-global-topbar):not(.topbar):not(.ai-dialog-backdrop):not(.kyerp-ai-fab) {
+  overflow: auto;
+}
+
+.main-content::after {
+  content: "KY ERP  •  Çalışan temiz sürüm";
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-top: 1px solid var(--kyv2-line);
+  color: var(--kyv2-muted);
+  background: var(--kyv2-surface);
+  font-size: 9px;
+}
+
+.content-card,
+.isnet-card,
+.muhasebe-card,
+.dsg-card,
+.ik-html .card {
+  border-color: var(--kyv2-line) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 28px rgba(20, 40, 65, .06) !important;
+}
+
+.kyerp-ai-fab {
+  right: 14px !important;
+  bottom: 34px !important;
+}
+
+@media (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: 68px 210px minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-shell {
+    display: block !important;
+  }
+
+  .sidebar-thin,
+  .sidebar-module {
+    position: fixed !important;
+  }
+
+  .kyerp-global-crumb {
+    max-width: none;
+  }
+}
