@@ -1,0 +1,538 @@
+:root {
+  --shell-rail: 76px;
+  --shell-menu: 248px;
+  --shell-topbar: 58px;
+  --shell-bg: #eef3f8;
+  --shell-rail-bg: #101d31;
+  --shell-rail-active: #203b60;
+  --shell-surface: #ffffff;
+  --shell-line: #d9e2ec;
+  --shell-text: #172033;
+  --shell-muted: #6e7988;
+  --shell-primary: #0a67a3;
+  --shell-primary-soft: #e8f2ff;
+  --shell-success: #177c5c;
+  --shell-danger: #c13d4f;
+  --shell-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--shell-bg);
+  color: var(--shell-text);
+}
+
+.app-shell {
+  display: grid !important;
+  grid-template-columns: var(--shell-rail) var(--shell-menu) minmax(0, 1fr) !important;
+  width: 100%;
+  height: 100vh;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--shell-bg);
+}
+
+.sidebar-thin {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 30;
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  width: auto !important;
+  min-width: 0;
+  height: 100vh;
+  padding: 10px 7px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 0 !important;
+  background: var(--shell-rail-bg) !important;
+  box-shadow: none !important;
+}
+
+.kyerp-rail-logo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 13px;
+  background: linear-gradient(145deg, #1687c3, #0a5c7d);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(5, 40, 70, 0.28);
+}
+
+.thin-nav-btn {
+  display: grid !important;
+  place-items: center;
+  gap: 4px;
+  width: 100% !important;
+  min-height: 58px;
+  margin: 2px 0;
+  padding: 6px 2px !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+  background: transparent !important;
+  color: #cbd5e1 !important;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.thin-nav-btn:hover,
+.thin-nav-btn.active {
+  background: var(--shell-rail-active) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+
+.thin-nav-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: inherit;
+}
+
+.thin-nav-label {
+  max-width: 64px;
+  overflow: hidden;
+  color: inherit !important;
+  font-size: 9px !important;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.sidebar-module {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 20;
+  display: flex !important;
+  flex-direction: column;
+  width: auto !important;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+  border: 0 !important;
+  border-right: 1px solid var(--shell-line) !important;
+  background: var(--shell-surface) !important;
+  box-shadow: none !important;
+}
+
+.kyerp-module-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 var(--shell-topbar);
+  height: var(--shell-topbar);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--shell-line);
+  color: #153f69;
+}
+
+.kyerp-module-brand strong {
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.module-kicker {
+  padding: 14px 16px 6px !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.module-menu-list {
+  flex: 1 1 auto;
+  height: auto !important;
+  padding: 4px 9px 16px !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.module-menu-list > div > div[style*="text-transform"] {
+  margin-top: 8px;
+  padding: 9px 10px 5px !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+}
+
+.module-menu-btn {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  width: 100% !important;
+  min-height: 38px;
+  margin: 2px 0;
+  padding: 9px 11px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #29364a !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.25;
+  text-align: left;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.module-menu-btn:hover,
+.module-menu-btn.active {
+  background: var(--shell-primary-soft) !important;
+  color: var(--shell-primary) !important;
+}
+
+.module-menu-btn.active {
+  font-weight: 800 !important;
+  box-shadow: inset 3px 0 0 var(--shell-primary);
+}
+
+.main-content {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex-direction: column;
+  width: auto !important;
+  min-width: 0;
+  height: 100vh;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: var(--shell-bg) !important;
+}
+
+.kyerp-global-topbar {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 15;
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 var(--shell-topbar);
+  min-height: var(--shell-topbar);
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--shell-line) !important;
+  background: var(--shell-surface) !important;
+  box-shadow: var(--shell-shadow);
+}
+
+.kyerp-global-crumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.kyerp-global-crumb span,
+.kyerp-global-crumb strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kyerp-global-crumb strong {
+  color: #1e3a5f;
+}
+
+.main-company-select,
+.top-select {
+  height: 35px !important;
+  max-width: 270px;
+  padding: 0 34px 0 11px !important;
+  border: 1px solid var(--shell-line) !important;
+  border-radius: 8px !important;
+  background-color: #fff !important;
+  color: #263549 !important;
+  font-size: 10px !important;
+}
+
+.kyerp-notification {
+  position: relative;
+  display: grid !important;
+  place-items: center;
+  flex: 0 0 35px;
+  width: 35px !important;
+  height: 35px !important;
+  padding: 0 !important;
+  border: 1px solid var(--shell-line) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #4a5a6f !important;
+}
+
+.kyerp-notification span {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: var(--shell-danger);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.kyerp-user-chip {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.kyerp-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: #0d4a82 !important;
+  color: #fff !important;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kyerp-user-meta {
+  min-width: 0;
+}
+
+.kyerp-user-meta strong,
+.kyerp-user-meta span {
+  display: block;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kyerp-user-meta strong {
+  color: #27364a;
+  font-size: 9px;
+}
+
+.kyerp-user-meta span {
+  margin-top: 2px;
+  color: var(--shell-muted);
+  font-size: 8px;
+}
+
+.logout-btn {
+  min-height: 30px !important;
+  padding: 0 9px !important;
+  border: 1px solid var(--shell-line) !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  color: #475569 !important;
+  font-size: 9px !important;
+}
+
+.topbar {
+  display: flex !important;
+  align-items: center;
+  flex: 0 0 42px;
+  min-height: 42px;
+  padding: 4px 12px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--shell-line) !important;
+  background: #e8eef5 !important;
+}
+
+.search-input {
+  width: min(720px, 100%) !important;
+  height: 33px !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--shell-line) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: var(--shell-text) !important;
+  font-size: 11px !important;
+}
+
+.main-content > .module-error-card,
+.main-content > .module-loading-card,
+.main-content > .content-card,
+.main-content > [class*="page"],
+.main-content > section,
+.main-content > div:not(.kyerp-global-topbar):not(.topbar) {
+  min-width: 0;
+}
+
+.main-content > .module-error-card,
+.main-content > .module-loading-card {
+  margin: 12px;
+}
+
+.main-content > .kyerp-global-topbar ~ *:last-child,
+.main-content > .topbar ~ *:last-child {
+  min-height: 0;
+}
+
+.main-content > :not(.kyerp-global-topbar):not(.topbar) {
+  overflow: auto;
+}
+
+.kyerp-ai-fab {
+  position: fixed !important;
+  right: 18px !important;
+  bottom: 16px !important;
+  z-index: 80;
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: #0d4a82 !important;
+  color: #fff !important;
+  box-shadow: 0 10px 28px rgba(13, 74, 130, 0.3);
+}
+
+.mobile-menu-toggle,
+.mobile-overlay {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  :root {
+    --shell-menu: 224px;
+  }
+
+  .main-company-select {
+    max-width: 210px;
+  }
+
+  .kyerp-user-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: 64px minmax(0, 1fr) !important;
+  }
+
+  .sidebar-thin {
+    grid-column: 1;
+  }
+
+  .sidebar-module {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 64px !important;
+    z-index: 70;
+    width: 244px !important;
+    transform: translateX(-112%);
+    transition: transform 0.2s ease;
+  }
+
+  .app-shell.mobile-open .sidebar-module {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    grid-column: 2;
+  }
+
+  .mobile-menu-toggle {
+    display: grid !important;
+    place-items: center;
+    flex: 0 0 35px;
+    width: 35px;
+    height: 35px;
+    padding: 0;
+    border: 1px solid var(--shell-line);
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+  }
+
+  .mobile-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: block;
+    background: rgba(15, 23, 42, 0.38);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    display: block !important;
+    padding-bottom: 62px;
+  }
+
+  .sidebar-thin {
+    position: fixed !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 90;
+    flex-direction: row;
+    width: 100% !important;
+    height: 62px;
+    padding: 5px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .kyerp-rail-logo {
+    display: none;
+  }
+
+  .thin-nav-btn {
+    flex: 0 0 64px;
+    min-height: 50px;
+  }
+
+  .sidebar-module {
+    left: 0 !important;
+    width: min(280px, 86vw) !important;
+  }
+
+  .main-content {
+    width: 100%;
+    height: calc(100vh - 62px);
+  }
+
+  .kyerp-global-crumb {
+    font-size: 10px;
+  }
+
+  .main-company-select {
+    max-width: 126px;
+  }
+
+  .kyerp-user-chip,
+  .logout-btn {
+    display: none !important;
+  }
+
+  .kyerp-ai-fab {
+    right: 12px !important;
+    bottom: 74px !important;
+  }
+}
