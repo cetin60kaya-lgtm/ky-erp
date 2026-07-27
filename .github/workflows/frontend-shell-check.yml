@@ -1,0 +1,35 @@
+name: Frontend Shell Check
+
+on:
+  push:
+    branches:
+      - arayuz-kabuk-v3
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
