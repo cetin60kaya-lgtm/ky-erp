@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
 import { installPersistentModalSizing } from "./utils/installPersistentModalSizing";
 import "./App.css";
+import "./styles/kyerp-v2-shell.css";
 
 installMuhasebeDocumentSanitizer();
 installPersistentModalSizing();
