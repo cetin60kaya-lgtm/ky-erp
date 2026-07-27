@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - arayuz-kabuk-v3
+      - tasarim-dogru-v4
   pull_request:
     branches:
       - main
