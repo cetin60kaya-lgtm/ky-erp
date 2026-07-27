@@ -1,0 +1,2 @@
+-- Intentionally empty. The finalized migration is
+-- 20260719210000_add_dispatch_non_billable_allocations.

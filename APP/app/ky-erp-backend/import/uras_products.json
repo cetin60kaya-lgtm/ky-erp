@@ -1,0 +1,1059 @@
+[
+  {
+    "id": "uras-1",
+    "urunAdi": "A 25 FIXATOR",
+    "ticariAdi": "A 25 FIXATOR",
+    "kategori": "Kimyasal Katkı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-2",
+    "urunAdi": "ACTIVATOR",
+    "ticariAdi": "ACTIVATOR",
+    "kategori": "Kimyasal Katkı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "1 KG",
+    "ambalajVaryantlari": [
+      "1 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 1KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-3",
+    "urunAdi": "ANTIFOIL GEL",
+    "ticariAdi": "ANTIFOIL GEL",
+    "kategori": "Yapıştırıcı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-4",
+    "urunAdi": "BARRIER PASTE",
+    "ticariAdi": "BARRIER PASTE",
+    "kategori": "Kimyasal Katkı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-5",
+    "urunAdi": "BLACK KNG",
+    "ticariAdi": "BLACK KNG",
+    "kategori": "Pigment Baskı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-6",
+    "urunAdi": "BLUE KBT",
+    "ticariAdi": "BLUE KBT",
+    "kategori": "Pigment Baskı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-7",
+    "urunAdi": "EP 10 CLEAR",
+    "ticariAdi": "EP 10 CLEAR",
+    "kategori": "Subazlı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-8",
+    "urunAdi": "EP 20 WHITE",
+    "ticariAdi": "EP 20 WHITE",
+    "kategori": "Subazlı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-9",
+    "urunAdi": "EXTRA BARRIER PASTE",
+    "ticariAdi": "EXTRA BARRIER PASTE",
+    "kategori": "Kimyasal Katkı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-10",
+    "urunAdi": "FFB 57",
+    "ticariAdi": "FFB 57",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-11",
+    "urunAdi": "FLUOR BLUE",
+    "ticariAdi": "FLUOR BLUE",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-12",
+    "urunAdi": "FLUOR GREEN",
+    "ticariAdi": "FLUOR GREEN",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-13",
+    "urunAdi": "FLUOR ORANGE",
+    "ticariAdi": "FLUOR ORANGE",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-14",
+    "urunAdi": "FLUOR PINK",
+    "ticariAdi": "FLUOR PINK",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-15",
+    "urunAdi": "FLUOR RED",
+    "ticariAdi": "FLUOR RED",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-16",
+    "urunAdi": "FLUOR ROSE",
+    "ticariAdi": "FLUOR ROSE",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "1 KG",
+    "ambalajVaryantlari": [
+      "1 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 1KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-17",
+    "urunAdi": "FLUOR YELLOW",
+    "ticariAdi": "FLUOR YELLOW",
+    "kategori": "Fluoresan",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-18",
+    "urunAdi": "FOIL ADHESIVE",
+    "ticariAdi": "FOIL ADHESIVE",
+    "kategori": "Yapıştırıcı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-19",
+    "urunAdi": "FUCHSIA KB",
+    "ticariAdi": "FUCHSIA KB",
+    "kategori": "Pigment Baskı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-20",
+    "urunAdi": "GAZ",
+    "ticariAdi": "GAZ",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-21",
+    "urunAdi": "GLITTER BASE",
+    "ticariAdi": "GLITTER BASE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-22",
+    "urunAdi": "GOLD YELLOW KFT",
+    "ticariAdi": "GOLD YELLOW KFT",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-23",
+    "urunAdi": "GP PUFF",
+    "ticariAdi": "GP PUFF",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-24",
+    "urunAdi": "GREEN KB",
+    "ticariAdi": "GREEN KB",
+    "kategori": "Pigment Baskı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-25",
+    "urunAdi": "GW 10 CLEAR",
+    "ticariAdi": "GW 10 CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-26",
+    "urunAdi": "GW 20 WHITE",
+    "ticariAdi": "GW 20 WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-27",
+    "urunAdi": "IPPOL 3025",
+    "ticariAdi": "IPPOL 3025",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-28",
+    "urunAdi": "IPPOL AT 3060",
+    "ticariAdi": "IPPOL AT 3060",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-29",
+    "urunAdi": "M 10 CLEAR",
+    "ticariAdi": "M 10 CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-30",
+    "urunAdi": "M 20 WHITE",
+    "ticariAdi": "M 20 WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "40 KG",
+    "ambalajVaryantlari": [
+      "40 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 40KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-31",
+    "urunAdi": "METALLIC GOLD ZHDC LEVEL 3",
+    "ticariAdi": "METALLIC GOLD ZHDC LEVEL 3",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-32",
+    "urunAdi": "METALLIC SILVER",
+    "ticariAdi": "METALLIC SILVER",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-33",
+    "urunAdi": "NAVY KRL-E",
+    "ticariAdi": "NAVY KRL-E",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-34",
+    "urunAdi": "ND CLEAR",
+    "ticariAdi": "ND CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-35",
+    "urunAdi": "ORANGE KG",
+    "ticariAdi": "ORANGE KG",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-36",
+    "urunAdi": "PEARL PASTE",
+    "ticariAdi": "PEARL PASTE",
+    "kategori": "Kimyasal Katkı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-37",
+    "urunAdi": "PERMANENT FABRIC ADHESIVE",
+    "ticariAdi": "PERMANENT FABRIC ADHESIVE",
+    "kategori": "Yapıştırıcı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-38",
+    "urunAdi": "PF BLACK",
+    "ticariAdi": "PF BLACK",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-39",
+    "urunAdi": "PF FOIL ADHESIVE",
+    "ticariAdi": "PF FOIL ADHESIVE",
+    "kategori": "Yapıştırıcı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-40",
+    "urunAdi": "PF G.YELLOW",
+    "ticariAdi": "PF G.YELLOW",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-41",
+    "urunAdi": "PF HIGH BASE",
+    "ticariAdi": "PF HIGH BASE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-42",
+    "urunAdi": "PF Metallıc GOLD",
+    "ticariAdi": "PF Metallıc GOLD",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-43",
+    "urunAdi": "PF METALLIC SILVER",
+    "ticariAdi": "PF METALLIC SILVER",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-44",
+    "urunAdi": "PF WHITE",
+    "ticariAdi": "PF WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "10 KG",
+    "ambalajVaryantlari": [
+      "10 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 10KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-45",
+    "urunAdi": "PHOSPHOR PIGMENT POWDER",
+    "ticariAdi": "PHOSPHOR PIGMENT POWDER",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "1 KG",
+    "ambalajVaryantlari": [
+      "1 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 1KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-46",
+    "urunAdi": "Polyester Base",
+    "ticariAdi": "Polyester Base",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "60 KG",
+    "ambalajVaryantlari": [
+      "60 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 60KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-47",
+    "urunAdi": "PTF Thıchkener",
+    "ticariAdi": "PTF Thıchkener",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-48",
+    "urunAdi": "PUFF HR 200 S",
+    "ticariAdi": "PUFF HR 200 S",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-49",
+    "urunAdi": "RED KBD",
+    "ticariAdi": "RED KBD",
+    "kategori": "Pigment Baskı",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-50",
+    "urunAdi": "RED KGC NEW",
+    "ticariAdi": "RED KGC NEW",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-51",
+    "urunAdi": "RETARDER GEL",
+    "ticariAdi": "RETARDER GEL",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-52",
+    "urunAdi": "S 10 CLEAR",
+    "ticariAdi": "S 10 CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-53",
+    "urunAdi": "S 10 MATT",
+    "ticariAdi": "S 10 MATT",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-54",
+    "urunAdi": "S 20 WHITE",
+    "ticariAdi": "S 20 WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "40 KG",
+    "ambalajVaryantlari": [
+      "40 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 40KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-55",
+    "urunAdi": "SCARLET KYD",
+    "ticariAdi": "SCARLET KYD",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-56",
+    "urunAdi": "STRETCH BASE",
+    "ticariAdi": "STRETCH BASE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-57",
+    "urunAdi": "SW 10 CLEAR",
+    "ticariAdi": "SW 10 CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-58",
+    "urunAdi": "SW 20 WHITE",
+    "ticariAdi": "SW 20 WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "40 KG",
+    "ambalajVaryantlari": [
+      "40 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 40KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-59",
+    "urunAdi": "TB WHITE",
+    "ticariAdi": "TB WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "30 KG",
+    "ambalajVaryantlari": [
+      "30 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 30KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-60",
+    "urunAdi": "Thıchkener",
+    "ticariAdi": "Thıchkener",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "1 KG",
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 1KG ambalaj",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-61",
+    "urunAdi": "U 400",
+    "ticariAdi": "U 400",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "60 KG",
+    "ambalajVaryantlari": [
+      "60 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 60KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-62",
+    "urunAdi": "VIOLET KRL",
+    "ticariAdi": "VIOLET KRL",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-63",
+    "urunAdi": "VP 10 CLEAR",
+    "ticariAdi": "VP 10 CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "20 KG",
+    "ambalajVaryantlari": [
+      "20 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 20KG ambalaj - ZDHC LEVEL 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-64",
+    "urunAdi": "WET ON WET CLEAR",
+    "ticariAdi": "WET ON WET CLEAR",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-65",
+    "urunAdi": "WX WHITE",
+    "ticariAdi": "WX WHITE",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "20 KG",
+    "ambalajVaryantlari": [
+      "20 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 20KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  },
+  {
+    "id": "uras-66",
+    "urunAdi": "YELLOW KLC",
+    "ticariAdi": "YELLOW KLC",
+    "kategori": "Genel",
+    "birim": "KG",
+    "varsayilanAmbalaj": "5 KG",
+    "ambalajVaryantlari": [
+      "5 KG"
+    ],
+    "tedarikci": "URAS KİMYA",
+    "aktif": true,
+    "not": "URAS KİMYA ürünü - 5KG ambalaj - ZDHC Level 3",
+    "createdAt": "2026-04-26T13:22:24.868109",
+    "updatedAt": "2026-04-26T13:22:24.868109"
+  }
+]

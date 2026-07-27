@@ -1,0 +1,3 @@
+-- Baseline marker for the legacy design/storage cleanup analysis.
+-- The related schema was already present before migration tracking was enabled.
+-- This migration intentionally performs no data or schema mutation.

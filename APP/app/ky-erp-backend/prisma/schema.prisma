@@ -1,0 +1,4787 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Print region definitions for standardization across companies
+model PrintRegionDefinition {
+  id            String   @id @default(uuid())
+  mainCompanyId String?
+  regionCode    String
+  regionName    String
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("print_region_definitions")
+}
+
+// Per-model persisted print regions (optional migration)
+model ModelPrintRegion {
+  id            String   @id @default(uuid())
+  modelRecordId String
+  mainCompanyId String?
+  regionCode    String
+  regionName    String
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("model_print_regions")
+}
+
+model MainCompany {
+  id                      String                   @id @default(uuid())
+  slug                    String                   @unique
+  name                    String
+  isActive                Boolean                  @default(true) @map("is_active")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  activityLogs            ActivityLog[]
+  companies               Company[]
+  companyAliases          CompanyAlias[]
+  currentAccountMovements CurrentAccountMovement[]
+  documentFiles           DocumentFile[]
+  documents               Document[]
+  storedFiles             StoredFile[]
+  fileStorageRules        FileStorageRule[]
+  jobs                    Job[]
+  legacyPermissions       LegacyPermission[]
+  productAlias            ProductAlias[]
+  products                Product[]
+  legacyRoles             LegacyRole[]
+  legacyUsers             LegacyUser[]
+  vatRecords              VatRecord[]
+
+  @@map("main_companies")
+}
+
+model LegacyUser {
+  id              String           @id @default(uuid())
+  mainCompanySlug String           @map("main_company_slug")
+  email           String
+  name            String
+  passwordHash    String?          @map("password_hash")
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  roles           LegacyUserRole[]
+  mainCompany     MainCompany      @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@unique([mainCompanySlug, email])
+  @@index([mainCompanySlug])
+  @@map("users")
+}
+
+model LegacyRole {
+  id              String           @id @default(uuid())
+  mainCompanySlug String           @map("main_company_slug")
+  name            String
+  description     String?
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  mainCompany     MainCompany      @relation(fields: [mainCompanySlug], references: [slug])
+  users           LegacyUserRole[]
+
+  @@unique([mainCompanySlug, name])
+  @@index([mainCompanySlug])
+  @@map("roles")
+}
+
+model LegacyUserRole {
+  userId String     @map("user_id")
+  roleId String     @map("role_id")
+  role   LegacyRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user   LegacyUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model LegacyPermission {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  code            String
+  description     String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@unique([mainCompanySlug, code])
+  @@index([mainCompanySlug])
+  @@map("permissions")
+}
+
+enum Role {
+  ADMIN
+  MUHASEBE
+  DESEN
+  IMALAT
+  BOYAHANE
+  IK
+  VIEWER
+
+  @@map("auth_role")
+}
+
+enum ModuleKey {
+  DASHBOARD
+  MUHASEBE
+  FIRMA_CARI
+  BELGE_ISLEM
+  KDV
+  CEK_ODEME
+  DESEN
+  IMALAT
+  BOYAHANE
+  IK
+  ISNET
+  ASISTAN
+  ADMIN
+  RAPORLAR
+
+  @@map("auth_module_key")
+}
+
+model User {
+  id                 String                 @id @default(uuid())
+  username           String                 @unique
+  passwordHash       String                 @map("password_hash")
+  fullName           String                 @map("full_name")
+  role               Role
+  isActive           Boolean                @default(true) @map("is_active")
+  mustChangePassword Boolean                @default(false) @map("must_change_password")
+  lastLoginAt        DateTime?              @map("last_login_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  permissions        UserModulePermission[]
+
+  @@map("auth_users")
+}
+
+model UserModulePermission {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  moduleKey  ModuleKey @map("module_key")
+  canView    Boolean   @default(false) @map("can_view")
+  canCreate  Boolean   @default(false) @map("can_create")
+  canUpdate  Boolean   @default(false) @map("can_update")
+  canDelete  Boolean   @default(false) @map("can_delete")
+  canApprove Boolean   @default(false) @map("can_approve")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleKey])
+  @@index([userId])
+  @@map("auth_user_module_permissions")
+}
+
+model AiConversation {
+  id              String            @id @default(uuid())
+  userId          String            @map("user_id")
+  mainCompanySlug String?           @map("main_company_slug")
+  title           String
+  moduleContext   Json?             @map("module_context")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+  messages        AiMessage[]
+  pendingActions  AiPendingAction[]
+
+  @@index([userId, updatedAt])
+  @@index([mainCompanySlug])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(uuid())
+  conversationId String         @map("conversation_id")
+  role           String
+  content        String
+  toolName       String?        @map("tool_name")
+  toolPayload    Json?          @map("tool_payload")
+  tokenInput     Int            @default(0) @map("token_input")
+  tokenOutput    Int            @default(0) @map("token_output")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiPendingAction {
+  id                    String         @id @default(uuid())
+  conversationId        String         @map("conversation_id")
+  userId                String         @map("user_id")
+  actionType            String         @map("action_type")
+  actionPayload         Json           @map("action_payload")
+  confirmationTokenHash String         @map("confirmation_token_hash")
+  status                String         @default("PENDING")
+  expiresAt             DateTime       @map("expires_at")
+  approvedAt            DateTime?      @map("approved_at")
+  executedAt            DateTime?      @map("executed_at")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  conversation          AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([conversationId, status])
+  @@map("ai_pending_actions")
+}
+
+model AiAuditLog {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  conversationId String?  @map("conversation_id")
+  operation      String
+  module         String?
+  recordType     String?  @map("record_type")
+  recordId       String?  @map("record_id")
+  beforeData     Json?    @map("before_data")
+  afterData      Json?    @map("after_data")
+  success        Boolean  @default(true)
+  errorMessage   String?  @map("error_message")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([conversationId])
+  @@map("ai_audit_logs")
+}
+
+model AiUsageDaily {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  usageDate     String   @map("usage_date")
+  requestCount  Int      @default(0) @map("request_count")
+  inputTokens   Int      @default(0) @map("input_tokens")
+  outputTokens  Int      @default(0) @map("output_tokens")
+  estimatedCost Decimal  @default(0) @map("estimated_cost")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, usageDate])
+  @@index([usageDate])
+  @@map("ai_usage_daily")
+}
+
+model Company {
+  id                        String                   @id @default(uuid())
+  mainCompanySlug           String                   @map("main_company_slug")
+  legacyId                  String?                  @map("legacy_id")
+  name                      String
+  normalizedName            String                   @map("normalized_name")
+  type                      String                   @default("SATICI")
+  companyType               String                   @default("SUPPLIER") @map("company_type")
+  taxNo                     String?                  @map("tax_no")
+  taxOffice                 String?                  @map("tax_office")
+  phone                     String?
+  email                     String?
+  address                   String?
+  defaultRecordType         String?                  @default("RESMI") @map("default_record_type")
+  firmaTuru                 String?                  @map("firma_turu")
+  varsayilanRaporKategoriId String?                  @map("varsayilan_rapor_kategori_id")
+  defaultVatRate            Decimal                  @default(0) @map("default_vat_rate")
+  vatIncludedMode           String?                  @default("HARIC") @map("vat_included_mode")
+  currentBalance            Decimal                  @default(0) @map("current_balance")
+  openingBalance            Decimal                  @default(0) @map("opening_balance")
+  isActive                  Boolean                  @default(true) @map("is_active")
+  isFavorite                Boolean                  @default(false) @map("is_favorite")
+  note                      String?
+  source                    String?                  @default("MANUAL")
+  deletedAt                 DateTime?                @map("deleted_at")
+  deletedBy                 String?                  @map("deleted_by")
+  deleteReason              String?                  @map("delete_reason")
+  raw                       Json?
+  createdAt                 DateTime                 @default(now()) @map("created_at")
+  updatedAt                 DateTime                 @updatedAt @map("updated_at")
+  mainCompany               MainCompany              @relation(fields: [mainCompanySlug], references: [slug])
+  aliases                   CompanyAlias[]
+  movements                 CurrentAccountMovement[]
+  documents                 Document[]
+  vatRecords                VatRecord[]
+
+  @@unique([mainCompanySlug, legacyId])
+  @@unique([mainCompanySlug, normalizedName])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, normalizedName])
+  @@index([mainCompanySlug, isActive])
+  @@index([mainCompanySlug, updatedAt])
+  @@index([mainCompanySlug, currentBalance])
+  @@index([varsayilanRaporKategoriId])
+  @@map("companies")
+}
+
+model CompanyAlias {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  companyId       String      @map("company_id")
+  rawName         String      @map("raw_name")
+  normalizedName  String      @map("normalized_name")
+  isActive        Boolean     @default(true) @map("is_active")
+  source          String?     @default("MANUAL")
+  taxNo           String?     @map("tax_no")
+  deletedAt       DateTime?   @map("deleted_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@unique([mainCompanySlug, normalizedName])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, normalizedName])
+  @@map("company_aliases")
+}
+
+model CurrentAccountMovement {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  companyId       String      @map("company_id")
+  movementDate    DateTime    @map("movement_date")
+  movementType    String      @map("movement_type")
+  sourceType      String      @map("source_type")
+  documentNo      String?     @map("document_no")
+  documentId      String?     @map("document_id")
+  description     String?
+  debit           Decimal     @default(0)
+  credit          Decimal     @default(0)
+  amount          Decimal     @default(0)
+  effect          Decimal     @default(0)
+  balanceAfter    Decimal     @default(0) @map("balance_after")
+  legacyId        String?     @map("legacy_id")
+  raw             Json?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  company         Company     @relation(fields: [companyId], references: [id])
+  document        Document?   @relation(fields: [documentId], references: [id])
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, movementDate])
+  @@index([companyId, movementDate])
+  @@index([mainCompanySlug, companyId, movementDate])
+  @@index([mainCompanySlug, documentNo])
+  @@map("current_account_movements")
+}
+
+model Document {
+  id              String                   @id @default(uuid())
+  mainCompanySlug String                   @map("main_company_slug")
+  companyId       String?                  @map("company_id")
+  documentNo      String?                  @map("document_no")
+  documentType    String?                  @map("document_type")
+  sourceType      String?                  @map("source_type")
+  date            DateTime?
+  subtotal        Decimal                  @default(0)
+  vatTotal        Decimal                  @default(0) @map("vat_total")
+  grandTotal      Decimal                  @default(0) @map("grand_total")
+  status          String                   @default("kontrol_bekliyor")
+  processedAt     DateTime?                @map("processed_at")
+  rejectReason    String?                  @map("reject_reason")
+  fileHash        String?                  @map("file_hash")
+  detectedType    String?                  @map("detected_type")
+  targetType      String?                  @map("target_type")
+  targetModule    String?                  @map("target_module")
+  targetRecordId  String?                  @map("target_record_id")
+  firmMatchStatus String?                  @map("firm_match_status")
+  confidence      Decimal?
+  routeStatus     String?                  @map("route_status")
+  routeMessage    String?                  @map("route_message")
+  raporKategoriId String?                  @map("rapor_kategori_id")
+  kategoriKaynagi String?                  @map("kategori_kaynagi")
+  deletedAt       DateTime?                @map("deleted_at")
+  deletedBy       String?                  @map("deleted_by")
+  deleteReason    String?                  @map("delete_reason")
+  raw             Json?
+  metadata        Json?
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
+  movements       CurrentAccountMovement[]
+  files           DocumentFile[]
+  company         Company?                 @relation(fields: [companyId], references: [id])
+  mainCompany     MainCompany              @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@unique([mainCompanySlug, targetModule, targetRecordId])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, date])
+  @@index([mainCompanySlug, fileHash])
+  @@index([mainCompanySlug, documentType])
+  @@index([mainCompanySlug, targetType])
+  @@index([mainCompanySlug, routeStatus])
+  @@index([raporKategoriId])
+  @@map("documents")
+}
+
+model MuhasebeRaporKategorisi {
+  id                 String   @id @default(uuid())
+  mainCompanySlug    String   @map("main_company_slug")
+  ad                 String
+  kod                String?
+  kategoriTipi       String   @map("kategori_tipi")
+  anaKategoriId      String?  @map("ana_kategori_id")
+  sira               Int      @default(0)
+  aktifMi            Boolean  @default(true) @map("aktif_mi")
+  sistemKategorisiMi Boolean  @default(false) @map("sistem_kategorisi_mi")
+  renk               String?
+  aciklama           String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, ad])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, kategoriTipi])
+  @@index([anaKategoriId])
+  @@map("muhasebe_rapor_kategorileri")
+}
+
+model MuhasebeRaporManuelKalem {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  ad              String
+  kartTipi        String    @default("KUCUK") @map("kart_tipi")
+  kategoriId      String?   @map("kategori_id")
+  firmaId         String?   @map("firma_id")
+  tarih           DateTime?
+  baslangic       DateTime?
+  bitis           DateTime?
+  tutar           Decimal   @default(0)
+  kdv             Decimal   @default(0)
+  aciklama        String?
+  belgeNo         String?   @map("belge_no")
+  resmiTip        String    @default("GAYRI_RESMI") @map("resmi_tip")
+  kdvOrani        Decimal   @default(0) @map("kdv_orani")
+  raporaDahil     Boolean   @default(true) @map("rapora_dahil")
+  odemeSekli      String?   @map("odeme_sekli")
+  not             String?
+  cariyeEkle      Boolean   @default(false) @map("cariye_ekle")
+  cariHareketId   String?   @map("cari_hareket_id")
+  sabitSablonId   String?   @map("sabit_sablon_id")
+  tahakkukAyi     String?   @map("tahakkuk_ayi")
+  islemTuru       String    @default("GIDER") @map("islem_turu")
+  aktifMi         Boolean   @default(true) @map("aktif_mi")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@unique([sabitSablonId, tahakkukAyi])
+  @@index([mainCompanySlug])
+  @@index([kategoriId])
+  @@index([firmaId])
+  @@map("muhasebe_rapor_manuel_kalemler")
+}
+
+model MuhasebeSabitGiderSablonu {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  ad              String
+  kategoriId      String?   @map("kategori_id")
+  firmaId         String?   @map("firma_id")
+  tutar           Decimal   @default(0)
+  resmiTip        String    @default("GAYRI_RESMI") @map("resmi_tip")
+  kdvOrani        Decimal   @default(0) @map("kdv_orani")
+  baslangicAyi    String    @map("baslangic_ayi")
+  bitisAyi        String?   @map("bitis_ayi")
+  herAyOtomatik   Boolean   @default(true) @map("her_ay_otomatik")
+  cariyeEkle      Boolean   @default(false) @map("cariye_ekle")
+  aktifMi         Boolean   @default(true) @map("aktif_mi")
+  aciklama        String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug, aktifMi])
+  @@index([kategoriId])
+  @@map("muhasebe_sabit_gider_sablonlari")
+}
+
+model MuhasebeRaporKayitAyari {
+  id                  String   @id @default(uuid())
+  mainCompanySlug     String   @map("main_company_slug")
+  sourceType          String   @map("source_type")
+  sourceId            String   @map("source_id")
+  reportIncluded      Boolean? @map("report_included")
+  reportCategoryId    String?  @map("report_category_id")
+  reportAmount        Decimal? @map("report_amount")
+  reportDescription   String?  @map("report_description")
+  reportOfficialType  String?  @map("report_official_type")
+  reportVatAmount     Decimal? @map("report_vat_amount")
+  reportVatIncluded   Boolean? @map("report_vat_included")
+  reportExpenseStatus String?  @map("report_expense_status")
+  reportNote          String?  @map("report_note")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, sourceType, sourceId])
+  @@index([mainCompanySlug, reportIncluded])
+  @@index([reportCategoryId])
+  @@map("muhasebe_rapor_kayit_ayarlari")
+}
+
+model DocumentFile {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  documentId      String      @map("document_id")
+  filePath        String      @map("file_path")
+  fileName        String      @map("file_name")
+  mimeType        String?     @map("mime_type")
+  fileSize        Int?        @map("file_size")
+  checksum        String?
+  role            String?     @default("archive")
+  deletedAt       DateTime?   @map("deleted_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  document        Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@index([mainCompanySlug])
+  @@index([documentId])
+  @@map("document_files")
+}
+
+enum FileStorageModule {
+  MUHASEBE_MUSTERI
+  MUHASEBE_TEDARIKCI
+  DESEN
+  CEK
+  IK_PERSONEL
+  TASNIF
+
+  @@map("file_storage_module")
+}
+
+enum FileDocumentType {
+  MUSTERI_GELEN_IRSALIYE
+  MUSTERI_FATURA
+  BIZIM_IRSALIYE
+  BIZIM_FATURA
+  SATIS_FATURA
+  TASNIF_RAPORU
+  TEDARIKCI_FATURA
+  TEDARIKCI_IRSALIYE
+  LOT_BELGESI
+  DESEN_GORSEL
+  KANAL_GORSEL
+  DESEN_PDF
+  CEK_GORSEL
+  PERSONEL_KIMLIK
+  PERSONEL_SOZLESME
+  PERSONEL_SGK
+  PERSONEL_IZIN
+  PERSONEL_DIGER
+
+  @@map("file_document_type")
+}
+
+enum FileStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+  DUPLICATE
+  ERROR
+
+  @@map("file_status")
+}
+
+enum OwnerType {
+  DOCUMENT
+  DOCUMENT_LINE
+  MODEL
+  DESEN
+  PERSONEL
+  CEK
+  CARI
+  LOT
+  NONE
+
+  @@map("owner_type")
+}
+
+model StoredFile {
+  id               String            @id @default(uuid())
+  mainCompanyId    String            @map("main_company_id")
+  module           FileStorageModule
+  documentType     FileDocumentType  @map("document_type")
+  ownerType        OwnerType         @default(NONE) @map("owner_type")
+  ownerId          String?           @map("owner_id")
+  firmId           String?           @map("firm_id")
+  modelId          String?           @map("model_id")
+  personelId       String?           @map("personel_id")
+  cariId           String?           @map("cari_id")
+  originalFileName String            @map("original_file_name")
+  storedFileName   String            @map("stored_file_name")
+  mimeType         String?           @map("mime_type")
+  extension        String?
+  fileSize         Int?              @map("file_size")
+  fileHash         String            @map("file_hash")
+  sourcePath       String?           @map("source_path")
+  relativePath     String            @map("relative_path")
+  absolutePath     String            @map("absolute_path")
+  publicUrl        String?           @map("public_url")
+  thumbnailPath    String?           @map("thumbnail_path")
+  previewPath      String?           @map("preview_path")
+  status           FileStatus        @default(ACTIVE)
+  isDeleted        Boolean           @default(false) @map("is_deleted")
+  deletedAt        DateTime?         @map("deleted_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  createdBy        String?           @map("created_by")
+  mainCompany      MainCompany       @relation(fields: [mainCompanyId], references: [id])
+
+  @@index([mainCompanyId])
+  @@index([mainCompanyId, fileHash, isDeleted])
+  @@index([mainCompanyId, module, documentType])
+  @@index([ownerType, ownerId])
+  @@map("stored_files")
+}
+
+model FileStorageRule {
+  id                 String            @id @default(uuid())
+  mainCompanyId      String            @map("main_company_id")
+  module             FileStorageModule
+  documentType       FileDocumentType  @map("document_type")
+  displayName        String            @map("display_name")
+  targetPathTemplate String            @map("target_path_template")
+  allowedExtensions  String            @map("allowed_extensions")
+  maxFileSizeMb      Int?              @map("max_file_size_mb")
+  imageResizeEnabled Boolean           @default(false) @map("image_resize_enabled")
+  imageMaxWidth      Int?              @map("image_max_width")
+  imageMaxHeight     Int?              @map("image_max_height")
+  thumbEnabled       Boolean           @default(false) @map("thumb_enabled")
+  thumbWidth         Int?              @map("thumb_width")
+  thumbHeight        Int?              @map("thumb_height")
+  watchEnabled       Boolean           @default(false) @map("watch_enabled")
+  watchSourcePath    String?           @map("watch_source_path")
+  isActive           Boolean           @default(true) @map("is_active")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  mainCompany        MainCompany       @relation(fields: [mainCompanyId], references: [id])
+
+  @@unique([mainCompanyId, module, documentType])
+  @@index([mainCompanyId])
+  @@map("file_storage_rules")
+}
+
+enum DocumentIntakeKind {
+  OUR_INVOICE
+  OUR_DISPATCH
+  CUSTOMER_DISPATCH
+  SUPPLIER_INVOICE
+  EXPENSE_INVOICE
+  UNKNOWN
+
+  @@map("document_intake_kind")
+}
+
+enum DocumentIntakeStatus {
+  UPLOADED
+  PARSED
+  CONTROL_WAITING
+  MISSING_INFO
+  READY
+  APPROVED
+  REJECTED
+  ARCHIVED
+
+  @@map("document_intake_status")
+}
+
+model DocumentIntake {
+  id                String                @id @default(uuid())
+  batchId           String                @map("batch_id")
+  mainCompanyId     String?               @map("main_company_id")
+  mainCompanySlug   String                @map("main_company_slug")
+  originalFileName  String                @map("original_file_name")
+  filePath          String                @map("file_path")
+  fileHash          String?               @map("file_hash")
+  mimeType          String?               @map("mime_type")
+  documentNo        String?               @map("document_no")
+  invoiceNo         String?               @map("invoice_no")
+  dispatchNo        String?               @map("dispatch_no")
+  documentKind      DocumentIntakeKind    @default(UNKNOWN) @map("document_kind")
+  direction         String?
+  scenario          String?
+  documentType      String?               @map("document_type")
+  issueDate         DateTime?             @map("issue_date")
+  dueDate           DateTime?             @map("due_date")
+  issuerName        String?               @map("issuer_name")
+  issuerTaxNo       String?               @map("issuer_tax_no")
+  receiverName      String?               @map("receiver_name")
+  receiverTaxNo     String?               @map("receiver_tax_no")
+  firmId            String?               @map("firm_id")
+  firmDraftJson     Json?                 @map("firm_draft_json")
+  modelId           String?               @map("model_id")
+  modelGuess        String?               @map("model_guess")
+  currency          String?               @default("TRY")
+  subtotal          Decimal               @default(0)
+  vatTotal          Decimal               @default(0) @map("vat_total")
+  grandTotal        Decimal               @default(0) @map("grand_total")
+  status            DocumentIntakeStatus  @default(CONTROL_WAITING)
+  missingFieldsJson Json?                 @map("missing_fields_json")
+  parseRawJson      Json?                 @map("parse_raw_json")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  lines             DocumentIntakeLine[]
+  matches           DocumentIntakeMatch[]
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, status])
+  @@index([mainCompanySlug, documentKind])
+  @@index([mainCompanySlug, fileHash])
+  @@map("document_intakes")
+}
+
+model DocumentIntakeLine {
+  id                  String         @id @default(uuid())
+  documentIntakeId    String         @map("document_intake_id")
+  lineNo              Int?           @map("line_no")
+  rawName             String?        @map("raw_name")
+  description         String?
+  productId           String?        @map("product_id")
+  productDraftJson    Json?          @map("product_draft_json")
+  quantity            Decimal        @default(0)
+  unit                String?
+  kg                  Decimal        @default(0)
+  packageInfo         String?        @map("package_info")
+  unitPrice           Decimal        @default(0) @map("unit_price")
+  discountRate        Decimal        @default(0) @map("discount_rate")
+  discountAmount      Decimal        @default(0) @map("discount_amount")
+  subtotal            Decimal        @default(0)
+  vatRate             Decimal        @default(0) @map("vat_rate")
+  vatAmount           Decimal        @default(0) @map("vat_amount")
+  total               Decimal        @default(0)
+  lotNo               String?        @map("lot_no")
+  modelGuess          String?        @map("model_guess")
+  modelId             String?        @map("model_id")
+  orderNo             String?        @map("order_no")
+  productCode         String?        @map("product_code")
+  color               String?
+  region              String?
+  matchConfidence     Decimal?       @map("match_confidence")
+  matchStatus         String?        @map("match_status")
+  matchCandidatesJson Json?          @map("match_candidates_json")
+  missingFieldsJson   Json?          @map("missing_fields_json")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  documentIntake      DocumentIntake @relation(fields: [documentIntakeId], references: [id], onDelete: Cascade)
+
+  @@index([documentIntakeId])
+  @@index([modelId])
+  @@map("document_intake_lines")
+}
+
+model DocumentIntakeMatch {
+  id               String         @id @default(uuid())
+  documentIntakeId String         @map("document_intake_id")
+  matchType        String         @map("match_type")
+  matchedId        String?        @map("matched_id")
+  score            Decimal        @default(0)
+  status           String
+  note             String?
+  documentIntake   DocumentIntake @relation(fields: [documentIntakeId], references: [id], onDelete: Cascade)
+
+  @@index([documentIntakeId])
+  @@index([matchType])
+  @@map("document_intake_matches")
+}
+
+model DocumentFolderSetting {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  folderKey       String    @map("folder_key")
+  folderName      String    @map("folder_name")
+  folderPath      String    @map("folder_path")
+  targetType      String    @map("target_type")
+  targetModule    String    @map("target_module")
+  active          Boolean   @default(true)
+  lastScanAt      DateTime? @map("last_scan_at")
+  processedCount  Int       @default(0) @map("processed_count")
+  failedCount     Int       @default(0) @map("failed_count")
+  duplicateCount  Int       @default(0) @map("duplicate_count")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@unique([mainCompanySlug, folderKey])
+  @@index([mainCompanySlug])
+  @@map("document_folder_settings")
+}
+
+model FolderWatchLog {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  folderSettingId String?  @map("folder_setting_id")
+  fileName        String   @map("file_name")
+  filePath        String   @map("file_path")
+  fileHash        String?  @map("file_hash")
+  status          String
+  targetType      String?  @map("target_type")
+  targetModule    String?  @map("target_module")
+  targetRecordId  String?  @map("target_record_id")
+  message         String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([folderSettingId])
+  @@index([fileHash])
+  @@map("folder_watch_logs")
+}
+
+model DocumentReadTemplate {
+  id                String    @id @default(uuid())
+  mainCompanyId     String?   @map("main_company_id")
+  mainCompanySlug   String    @map("main_company_slug")
+  companyId         String?   @map("company_id")
+  companyName       String?   @map("company_name")
+  documentType      String?   @map("document_type")
+  targetType        String?   @map("target_type")
+  templateName      String    @map("template_name")
+  active            Boolean   @default(true)
+  priority          Int       @default(100)
+  matchKeywordsJson Json?     @map("match_keywords_json")
+  fieldRulesJson    Json?     @map("field_rules_json")
+  lineRulesJson     Json?     @map("line_rules_json")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@map("document_read_templates")
+}
+
+model CustomerDispatchLine {
+  id                     String                          @id @default(uuid())
+  mainCompanySlug        String                          @map("main_company_slug")
+  musteriIrsaliyeId      String?                         @map("musteri_irsaliye_id")
+  documentId             String?                         @map("document_id")
+  aciklama               String?
+  adet                   Decimal                         @default(0)
+  birim                  String?
+  modelId                String?                         @map("model_id")
+  modelAdi               String?                         @map("model_adi")
+  modelAdiOnerisi        String?                         @map("model_adi_onerisi")
+  durum                  String?
+  createdAt              DateTime                        @default(now()) @map("created_at")
+  updatedAt              DateTime                        @updatedAt @map("updated_at")
+  deletedAt              DateTime?                       @map("deleted_at")
+  nonBillableAllocations DispatchNonBillableAllocation[]
+
+  @@index([mainCompanySlug])
+  @@index([documentId])
+  @@map("customer_dispatch_lines")
+}
+
+model DispatchNonBillableAllocation {
+  id              String               @id @default(uuid())
+  mainCompanySlug String               @map("main_company_slug")
+  dispatchLineId  String               @map("dispatch_line_id")
+  category        String
+  quantity        Decimal              @default(0)
+  deliveryMethod  String               @default("ELDEN_TESLIM") @map("delivery_method")
+  note            String?
+  createdBy       String?              @map("created_by")
+  updatedBy       String?              @map("updated_by")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  deletedAt       DateTime?            @map("deleted_at")
+  dispatchLine    CustomerDispatchLine @relation(fields: [dispatchLineId], references: [id], onDelete: Cascade)
+
+  @@index([mainCompanySlug, dispatchLineId, deletedAt])
+  @@index([mainCompanySlug, category])
+  @@map("dispatch_non_billable_allocations")
+}
+
+model DispatchInvoiceMatch {
+  id                 String    @id @default(uuid())
+  mainCompanySlug    String    @map("main_company_slug")
+  dispatchId         String?   @map("dispatch_id")
+  dispatchLineId     String    @map("dispatch_line_id")
+  invoiceId          String    @map("invoice_id")
+  invoiceLineId      String    @map("invoice_line_id")
+  dispatchQty        Decimal   @default(0) @map("dispatch_qty")
+  matchedQty         Decimal   @default(0) @map("matched_qty")
+  matchType          String    @map("match_type")
+  confidence         Int       @default(0)
+  status             String    @default("ACTIVE")
+  matchedFieldsJson  Json?     @map("matched_fields_json")
+  mismatchFieldsJson Json?     @map("mismatch_fields_json")
+  isManual           Boolean   @default(false) @map("is_manual")
+  approvedBy         String?   @map("approved_by")
+  approvedAt         DateTime? @map("approved_at")
+  rejectedBy         String?   @map("rejected_by")
+  rejectedAt         DateTime? @map("rejected_at")
+  note               String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, invoiceLineId])
+  @@index([mainCompanySlug, dispatchLineId])
+  @@index([mainCompanySlug, invoiceId])
+  @@index([mainCompanySlug, status])
+  @@map("dispatch_invoice_matches")
+}
+
+model DispatchInvoiceMatchLog {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  matchId         String?  @map("match_id")
+  dispatchLineId  String   @map("dispatch_line_id")
+  action          String
+  oldValueJson    Json?    @map("old_value_json")
+  newValueJson    Json?    @map("new_value_json")
+  description     String?
+  userId          String?  @map("user_id")
+  isAutomatic     Boolean  @default(false) @map("is_automatic")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug, dispatchLineId, createdAt])
+  @@index([matchId])
+  @@map("dispatch_invoice_match_logs")
+}
+
+model ActivityLog {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  module          String?
+  entityType      String      @map("entity_type")
+  entityId        String?     @map("entity_id")
+  action          String?
+  actionType      String      @map("action_type")
+  description     String?
+  oldValue        Json?       @map("old_value")
+  newValue        Json?       @map("new_value")
+  afterData       Json?       @map("after_data")
+  actor           String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, createdAt])
+  @@map("activity_logs")
+}
+
+model JsonStore {
+  id              String   @id @default(uuid())
+  scope           String
+  mainCompanySlug String?  @map("main_company_slug")
+  fileName        String   @map("file_name")
+  data            Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([scope, mainCompanySlug, fileName])
+  @@index([scope])
+  @@index([mainCompanySlug])
+  @@map("json_store")
+}
+
+model VatRecord {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  companyId       String?     @map("company_id")
+  firmId          String?     @map("firm_id")
+  documentId      String?     @map("document_id")
+  direction       String?     @map("direction")
+  workType        String?     @map("work_type")
+  date            DateTime?   @map("date")
+  subtotal        Decimal?    @map("subtotal")
+  total           Decimal?    @map("total")
+  periodMonth     Int         @map("period_month")
+  periodYear      Int         @map("period_year")
+  vatDirection    String?     @map("vat_direction")
+  vatRate         Decimal?    @map("vat_rate")
+  baseAmount      Decimal?    @map("base_amount")
+  vatAmount       Decimal?    @map("vat_amount")
+  documentNo      String?     @map("document_no")
+  documentDate    DateTime?   @map("document_date")
+  incomingVat     Decimal     @default(0) @map("incoming_vat")
+  outgoingVat     Decimal     @default(0) @map("outgoing_vat")
+  carryVat        Decimal     @default(0) @map("carry_vat")
+  raw             Json?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  company         Company?    @relation(fields: [companyId], references: [id])
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@index([mainCompanySlug])
+  @@index([firmId])
+  @@index([documentId])
+  @@index([mainCompanySlug, periodYear, periodMonth])
+  @@map("vat_records")
+}
+
+model Product {
+  id              String         @id @default(uuid())
+  mainCompanySlug String         @map("main_company_slug")
+  legacyId        String?        @map("legacy_id")
+  name            String
+  normalizedName  String         @map("normalized_name")
+  unit            String?
+  defaultVatRate  Decimal        @default(0) @map("default_vat_rate")
+  isActive        Boolean        @default(true) @map("is_active")
+  raw             Json?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  aliases         ProductAlias[]
+  mainCompany     MainCompany    @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@unique([mainCompanySlug, normalizedName])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, normalizedName])
+  @@map("products")
+}
+
+model ProductAlias {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  productId       String      @map("product_id")
+  rawName         String      @map("raw_name")
+  normalizedName  String      @map("normalized_name")
+  packageInfo     String?     @map("package_info")
+  isActive        Boolean     @default(true) @map("is_active")
+  raw             Json?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([mainCompanySlug, normalizedName])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, productId])
+  @@map("product_aliases")
+}
+
+model Job {
+  id              String      @id @default(uuid())
+  mainCompanySlug String      @map("main_company_slug")
+  type            String
+  status          String      @default("PENDING")
+  payload         Json?
+  result          Json?
+  error           String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  mainCompany     MainCompany @relation(fields: [mainCompanySlug], references: [slug])
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, status])
+  @@map("jobs")
+}
+
+model Payment {
+  id                       String   @id @default(uuid())
+  mainCompanySlug          String   @map("main_company_slug")
+  companyId                String   @map("company_id")
+  paymentDate              DateTime @map("payment_date")
+  paymentType              String   @map("payment_type")
+  direction                String   @default("OUT")
+  amount                   Decimal  @default(0)
+  currency                 String   @default("TRY")
+  bankName                 String?  @map("bank_name")
+  accountName              String?  @map("account_name")
+  description              String?
+  documentNo               String?  @map("document_no")
+  sourceType               String   @default("PAYMENT") @map("source_type")
+  currentAccountMovementId String?  @map("current_account_movement_id")
+  legacyId                 String?  @map("legacy_id")
+  raw                      Json?
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, legacyId])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, companyId])
+  @@index([mainCompanySlug, paymentDate])
+  @@map("payments")
+}
+
+model Check {
+  id                       String    @id @default(uuid())
+  mainCompanySlug          String    @map("main_company_slug")
+  companyId                String?   @map("company_id")
+  checkNo                  String    @map("check_no")
+  bankName                 String?   @map("bank_name")
+  branchName               String?   @map("branch_name")
+  dueDate                  DateTime  @map("due_date")
+  amount                   Decimal   @default(0)
+  status                   String    @default("bekliyor")
+  direction                String    @default("IN")
+  description              String?
+  reminderDate             DateTime? @map("reminder_date")
+  currentAccountMovementId String?   @map("current_account_movement_id")
+  legacyId                 String?   @map("legacy_id")
+  raw                      Json?
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, legacyId])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, status])
+  @@index([mainCompanySlug, dueDate])
+  @@map("checks")
+}
+
+model CreditCard {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  bankName        String?   @map("bank_name")
+  cardName        String    @map("card_name")
+  lastFourDigits  String?   @map("last_four_digits")
+  period          String?
+  totalDebt       Decimal   @default(0) @map("total_debt")
+  minimumPayment  Decimal   @default(0) @map("minimum_payment")
+  dueDate         DateTime? @map("due_date")
+  isActive        Boolean   @default(true) @map("is_active")
+  note            String?
+  legacyId        String?   @map("legacy_id")
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, legacyId])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, isActive])
+  @@map("credit_cards")
+}
+
+model CreditCardMovement {
+  id                       String   @id @default(uuid())
+  mainCompanySlug          String   @map("main_company_slug")
+  creditCardId             String   @map("credit_card_id")
+  movementDate             DateTime @map("movement_date")
+  amount                   Decimal  @default(0)
+  description              String?
+  usagePurpose             String?  @map("usage_purpose")
+  companyId                String?  @map("company_id")
+  documentId               String?  @map("document_id")
+  currentAccountMovementId String?  @map("current_account_movement_id")
+  legacyId                 String?  @map("legacy_id")
+  raw                      Json?
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, legacyId])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, creditCardId])
+  @@index([mainCompanySlug, movementDate])
+  @@map("credit_card_movements")
+}
+
+model MailContact {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  companyId       String?  @map("company_id")
+  companyName     String?  @map("company_name")
+  department      String?
+  fullName        String   @map("full_name")
+  email           String
+  isActive        Boolean  @default(true) @map("is_active")
+  isDefault       Boolean  @default(false) @map("is_default")
+  legacyId        String?  @map("legacy_id")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, legacyId])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, email])
+  @@map("mail_contacts")
+}
+
+model MailSendLog {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  documentId      String?  @map("document_id")
+  toEmail         String   @map("to_email")
+  subject         String?
+  status          String   @default("PENDING")
+  error           String?
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, createdAt])
+  @@map("mail_send_logs")
+}
+
+model EmailContact {
+  id                   String    @id @default(uuid())
+  mainCompanySlug      String    @map("main_company_slug")
+  companyId            String?   @map("company_id")
+  name                 String
+  email                String
+  departmentNo         String?   @map("department_no")
+  title                String?
+  receivesInvoice      Boolean   @default(true) @map("receives_invoice")
+  receivesDispatch     Boolean   @default(true) @map("receives_dispatch")
+  receivesTasnifReport Boolean   @default(true) @map("receives_tasnif_report")
+  defaultTo            Boolean   @default(true) @map("default_to")
+  defaultCc            Boolean   @default(false) @map("default_cc")
+  active               Boolean   @default(true)
+  raw                  Json?
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  deletedAt            DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, email])
+  @@map("email_contacts")
+}
+
+model MailPackage {
+  id                 String    @id @default(uuid())
+  mainCompanySlug    String    @map("main_company_slug")
+  companyId          String?   @map("company_id")
+  modelId            String?   @map("model_id")
+  invoiceDocumentId  String?   @map("invoice_document_id")
+  dispatchDocumentId String?   @map("dispatch_document_id")
+  invoiceNo          String?   @map("invoice_no")
+  dispatchNo         String?   @map("dispatch_no")
+  departmentNo       String?   @map("department_no")
+  toList             Json      @map("to_list")
+  ccList             Json      @map("cc_list")
+  subject            String?
+  body               String?
+  attachmentsJson    Json?     @map("attachments_json")
+  tasnifIncluded     Boolean   @default(false) @map("tasnif_included")
+  status             String    @default("DRAFT")
+  sentAt             DateTime? @map("sent_at")
+  raw                Json?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, modelId])
+  @@map("mail_packages")
+}
+
+model TasnifTemplate {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  name            String
+  filePath        String?   @map("file_path")
+  fileHash        String?   @map("file_hash")
+  active          Boolean   @default(true)
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@unique([mainCompanySlug, name])
+  @@index([mainCompanySlug])
+  @@map("tasnif_templates")
+}
+
+model InvoiceItem {
+  id                    String   @id @default(uuid())
+  mainCompanySlug       String   @map("main_company_slug")
+  documentId            String   @map("document_id")
+  productId             String?  @map("product_id")
+  lineNo                Int?     @map("line_no")
+  productName           String?  @map("product_name")
+  normalizedProductName String?  @map("normalized_product_name")
+  description           String?
+  quantity              Decimal  @default(0)
+  unit                  String?
+  unitPrice             Decimal  @default(0) @map("unit_price")
+  vatRate               Decimal  @default(0) @map("vat_rate")
+  vatAmount             Decimal  @default(0) @map("vat_amount")
+  lineTotal             Decimal  @default(0) @map("line_total")
+  lotNo                 String?  @map("lot_no")
+  raw                   Json?
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, documentId])
+  @@map("invoice_items")
+}
+
+model SalesInvoiceState {
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  invoiceId        String   @unique @map("invoice_id")
+  companyId        String   @map("company_id")
+  invoiceNo        String   @map("invoice_no")
+  invoiceDate      DateTime @map("invoice_date")
+  documentType     String   @default("SATIS_FATURA") @map("document_type")
+  sourceKind       String   @default("MANUAL") @map("source_kind")
+  cariStatus       String   @default("CARI_PENDING") @map("cari_status")
+  modelStatus      String   @default("MODEL_PENDING") @map("model_status")
+  cariMovementId   String?  @map("cari_movement_id")
+  dispatchNo       String?  @map("dispatch_no")
+  orderNo          String?  @map("order_no")
+  note             String?
+  parserConfidence Decimal? @map("parser_confidence")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, companyId, invoiceNo, invoiceDate, documentType])
+  @@index([mainCompanySlug, invoiceDate])
+  @@index([mainCompanySlug, cariStatus])
+  @@index([mainCompanySlug, modelStatus])
+  @@map("sales_invoice_states")
+}
+
+model SalesInvoiceLineModelLink {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  invoiceId       String   @map("invoice_id")
+  invoiceLineId   String   @map("invoice_line_id")
+  modelId         String   @map("model_id")
+  printRegionId   String?  @map("print_region_id")
+  printRegionName String?  @map("print_region_name")
+  matchedQuantity Decimal  @default(0) @map("matched_quantity")
+  note            String?
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([invoiceLineId, modelId, printRegionId])
+  @@index([mainCompanySlug, invoiceId])
+  @@index([invoiceLineId])
+  @@index([modelId])
+  @@map("sales_invoice_line_model_links")
+}
+
+model SalesInvoiceHistory {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  invoiceId       String   @map("invoice_id")
+  action          String
+  message         String
+  detail          Json?
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug, invoiceId, createdAt])
+  @@map("sales_invoice_history")
+}
+
+model InvoiceParserCompanyProfile {
+  id                           String    @id @default(uuid())
+  mainCompanySlug              String    @map("main_company_slug")
+  companyId                    String    @map("company_id")
+  documentType                 String    @default("SATIS_FATURA") @map("document_type")
+  knownInvoicePrefixes         Json?     @map("known_invoice_prefixes")
+  knownLineDescriptionPatterns Json?     @map("known_line_description_patterns")
+  knownModelAliases            Json?     @map("known_model_aliases")
+  knownUnitPatterns            Json?     @map("known_unit_patterns")
+  knownPricePatterns           Json?     @map("known_price_patterns")
+  extractionHintsJson          Json?     @map("extraction_hints_json")
+  lastSuccessfulImportAt       DateTime? @map("last_successful_import_at")
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  updatedAt                    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, companyId, documentType])
+  @@index([mainCompanySlug, companyId])
+  @@map("invoice_parser_company_profiles")
+}
+
+model StockMovement {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  productId       String   @map("product_id")
+  firmId          String?  @map("firm_id")
+  documentId      String?  @map("document_id")
+  documentLineId  String?  @map("document_line_id")
+  movementType    String   @map("movement_type")
+  sourceType      String   @map("source_type")
+  date            DateTime @map("date")
+  quantity        Decimal  @default(0)
+  unit            String?
+  unitPrice       Decimal? @map("unit_price")
+  totalAmount     Decimal? @map("total_amount")
+  lotNo           String?  @map("lot_no")
+  note            String?
+  active          Boolean  @default(true)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, productId, date])
+  @@index([mainCompanySlug, documentId])
+  @@index([mainCompanySlug, firmId])
+  @@map("stock_movements")
+}
+
+model VatCarryForward {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  periodMonth     String   @map("period_month")
+  amount          Decimal  @default(0)
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, periodMonth])
+  @@index([mainCompanySlug])
+  @@map("vat_carry_forwards")
+}
+
+model ModelRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  modelName       String   @map("model_name")
+  modelCode       String?  @map("model_code")
+  orderNo         String?  @map("order_no")
+  status          String   @default("ACTIVE")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, status])
+  @@map("model_records")
+}
+
+model ModelDocumentLink {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  modelId         String   @map("model_id")
+  documentId      String   @map("document_id")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([mainCompanySlug, modelId, documentId])
+  @@index([mainCompanySlug])
+  @@map("model_document_links")
+}
+
+model ModelProductionLink {
+  id                 String   @id @default(uuid())
+  mainCompanySlug    String   @map("main_company_slug")
+  modelId            String   @map("model_id")
+  productionRecordId String   @map("production_record_id")
+  raw                Json?
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@unique([mainCompanySlug, modelId, productionRecordId])
+  @@index([mainCompanySlug])
+  @@map("model_production_links")
+}
+
+model ModelImage {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  modelId         String   @map("model_id")
+  filePath        String   @map("file_path")
+  thumbnailPath   String?  @map("thumbnail_path")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, modelId])
+  @@map("model_images")
+}
+
+model Machine {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  name            String
+  isActive        Boolean  @default(true) @map("is_active")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, name])
+  @@index([mainCompanySlug])
+  @@map("machines")
+}
+
+model MachineShiftDefault {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  machineId       String   @map("machine_id")
+  shift           String
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("machine_shift_defaults")
+}
+
+model ProductionRecord {
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  modelId          String?  @map("model_id")
+  modelName        String?  @map("model_name")
+  orderNo          String?  @map("order_no")
+  groundColor      String?  @map("ground_color")
+  machineName      String?  @map("machine_name")
+  totalQuantity    Int      @default(0) @map("total_quantity")
+  machinist        String?
+  assistant        String?
+  serimci          String?
+  fikseTemperature String?  @map("fikse_temperature")
+  fikseSpeed       String?  @map("fikse_speed")
+  printArea        String?  @map("print_area")
+  fabricDefect     String?  @map("fabric_defect")
+  printDefect      String?  @map("print_defect")
+  shift            String?
+  productionDate   DateTime @map("production_date")
+  note             String?
+  raw              Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, productionDate])
+  @@map("production_records")
+}
+
+model ProductionSizeItem {
+  id                 String   @id @default(uuid())
+  productionRecordId String   @map("production_record_id")
+  size               String
+  quantity           Int      @default(0)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([productionRecordId])
+  @@map("production_size_items")
+}
+
+model Personnel {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  fullName        String   @map("full_name")
+  phone           String?
+  isActive        Boolean  @default(true) @map("is_active")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("personnel")
+}
+
+model DailyWageEntry {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  entryDate       DateTime @map("entry_date")
+  shift           String
+  note            String?
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, entryDate])
+  @@map("daily_wage_entries")
+}
+
+model DailyWageEntryPerson {
+  id               String   @id @default(uuid())
+  dailyWageEntryId String   @map("daily_wage_entry_id")
+  personnelId      String   @map("personnel_id")
+  hours            Decimal  @default(0)
+  amount           Decimal  @default(0)
+  raw              Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([dailyWageEntryId, personnelId])
+  @@index([dailyWageEntryId])
+  @@map("daily_wage_entry_people")
+}
+
+model WeeklyPaymentSlip {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  week            String
+  amount          Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("weekly_payment_slips")
+}
+
+model MonthlyHrRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  month           String
+  personnelId     String?  @map("personnel_id")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, month])
+  @@map("monthly_hr_records")
+}
+
+model OvertimeLeaveRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  month           String
+  personnelId     String?  @map("personnel_id")
+  type            String
+  amount          Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("overtime_leave_records")
+}
+
+model PayrollRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  month           String
+  personnelId     String?  @map("personnel_id")
+  amount          Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("payroll_records")
+}
+
+model PaymentControlRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  month           String?
+  amount          Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("payment_control_records")
+}
+
+model Setting {
+  id              String    @id @default(uuid())
+  mainCompanySlug String?   @map("main_company_slug")
+  scope           String    @default("GLOBAL")
+  key             String
+  value           Json
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@unique([scope, mainCompanySlug, key])
+  @@index([mainCompanySlug])
+  @@map("settings")
+}
+
+model IsnetDocumentState {
+  id               String    @id @default(uuid())
+  mainCompanySlug  String    @map("main_company_slug")
+  automationKey    String    @map("automation_key")
+  sourceId         String?   @map("source_id")
+  kind             String?
+  direction        String?
+  documentNo       String?   @map("document_no")
+  partnerName      String?   @map("partner_name")
+  dateText         String?   @map("date_text")
+  modelName        String?   @map("model_name")
+  modelLinked      Boolean   @default(false) @map("model_linked")
+  archiveStage     String?   @map("archive_stage")
+  intakeId         String?   @map("intake_id")
+  pdfPath          String?   @map("pdf_path")
+  xmlPath          String?   @map("xml_path")
+  customerDispatch Boolean   @default(false) @map("customer_dispatch")
+  printEligible    Boolean   @default(false) @map("print_eligible")
+  printedAt        DateTime? @map("printed_at")
+  completed        Boolean   @default(false)
+  downloadedAt     DateTime? @map("downloaded_at")
+  markedReadAt     DateTime? @map("marked_read_at")
+  firstSeenAt      DateTime? @map("first_seen_at")
+  newDocument      Boolean   @default(false) @map("new_document")
+  appReadAt        DateTime? @map("app_read_at")
+  error            String?
+  lastAttemptAt    DateTime? @map("last_attempt_at")
+  metadata         Json?     @map("metadata_json")
+  uuid             String?
+  issuerTaxNo      String?   @map("issuer_tax_no")
+  receiverTaxNo    String?   @map("receiver_tax_no")
+  companyId        String?   @map("company_id")
+  companyType      String?   @map("company_type")
+  documentClass    String?   @map("document_class")
+  pdfStatus        String?   @map("pdf_status")
+  xmlStatus        String?   @map("xml_status")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, automationKey])
+  @@index([mainCompanySlug, completed])
+  @@index([mainCompanySlug, printEligible, printedAt])
+  @@index([mainCompanySlug, documentNo])
+  @@map("isnet_document_states")
+}
+
+model IsnetModelAlias {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  companyId       String?   @map("company_id")
+  rawText         String    @map("raw_text")
+  normalizedText  String    @map("normalized_text")
+  orderNo         String?   @map("order_no")
+  productCode     String?   @map("product_code")
+  modelId         String    @map("model_id")
+  confidence      Decimal   @default(100)
+  approved        Boolean   @default(false)
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  usageCount      Int       @default(0) @map("usage_count")
+
+  @@index([mainCompanySlug, companyId, normalizedText])
+  @@index([mainCompanySlug, modelId])
+  @@map("isnet_model_aliases")
+}
+
+model IsnetInvoiceDraftRequest {
+  id                    String                       @id @default(uuid())
+  mainCompanySlug       String                       @map("main_company_slug")
+  idempotencyKey        String                       @map("idempotency_key")
+  sourceId              String?                      @map("source_id")
+  dispatchNo            String?                      @map("dispatch_no")
+  externalId            String                       @map("external_id")
+  status                String                       @default("CREATING")
+  draftNo               String?                      @map("draft_no")
+  portalDraftId         String?                      @map("portal_draft_id")
+  expectedSnapshot      Json?                        @map("expected_snapshot")
+  portalSnapshot        Json?                        @map("portal_snapshot")
+  verificationDiff      Json?                        @map("verification_diff")
+  draftVersion          String?                      @map("draft_version")
+  approvalVersion       String?                      @map("approval_version")
+  approvedAt            DateTime?                    @map("approved_at")
+  approvedBy            String?                      @map("approved_by")
+  submittedAt           DateTime?                    @map("submitted_at")
+  submittedBy           String?                      @map("submitted_by")
+  officialInvoiceNumber String?                      @map("official_invoice_number")
+  officialUuid          String?                      @map("official_uuid")
+  isnetDocumentId       String?                      @map("isnet_document_id")
+  officialStatus        String?                      @map("official_status")
+  portalResponseHash    String?                      @map("portal_response_hash")
+  pdfPath               String?                      @map("pdf_path")
+  xmlPath               String?                      @map("xml_path")
+  salesInvoiceId        String?                      @map("sales_invoice_id")
+  currentMovementId     String?                      @map("current_movement_id")
+  mailPackageId         String?                      @map("mail_package_id")
+  error                 String?
+  completedAt           DateTime?                    @map("completed_at")
+  createdAt             DateTime                     @default(now()) @map("created_at")
+  updatedAt             DateTime                     @updatedAt @map("updated_at")
+  lineAllocations       IsnetInvoiceLineAllocation[]
+
+  @@unique([mainCompanySlug, idempotencyKey])
+  @@unique([mainCompanySlug, externalId])
+  @@unique([mainCompanySlug, portalDraftId])
+  @@unique([mainCompanySlug, officialInvoiceNumber])
+  @@unique([mainCompanySlug, officialUuid])
+  @@index([mainCompanySlug, sourceId])
+  @@index([mainCompanySlug, status])
+  @@map("isnet_invoice_draft_requests")
+}
+
+model IsnetInvoiceLineAllocation {
+  id                   String                   @id @default(uuid())
+  draftRequestId       String                   @map("draft_request_id")
+  sourceLineKey        String                   @map("source_line_key")
+  sourceIntakeLineId   String?                  @map("source_intake_line_id")
+  sourceDocumentLineId String?                  @map("source_document_line_id")
+  salesInvoiceLineId   String?                  @map("sales_invoice_line_id")
+  modelId              String?                  @map("model_id")
+  productName          String?                  @map("product_name")
+  dispatchedQuantity   Decimal                  @default(0) @map("dispatched_quantity")
+  previouslyBilled     Decimal                  @default(0) @map("previously_billed")
+  billedQuantity       Decimal                  @default(0) @map("billed_quantity")
+  nonBillableQuantity  Decimal                  @default(0) @map("non_billable_quantity")
+  totalBilled          Decimal                  @default(0) @map("total_billed")
+  remainingQuantity    Decimal                  @default(0) @map("remaining_quantity")
+  status               String                   @default("FATURALANMADI")
+  raw                  Json?
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  draftRequest         IsnetInvoiceDraftRequest @relation(fields: [draftRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([draftRequestId, sourceLineKey])
+  @@index([sourceIntakeLineId])
+  @@index([sourceDocumentLineId])
+  @@index([salesInvoiceLineId])
+  @@index([modelId])
+  @@map("isnet_invoice_line_allocations")
+}
+
+model QualityRecord {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  productionId    String?   @map("production_id")
+  modelId         String?   @map("model_id")
+  recordDate      DateTime  @map("record_date")
+  level           String?
+  description     String?
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@map("quality_records")
+}
+
+model DesignRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  title           String
+  status          String   @default("ACTIVE")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("design_records")
+}
+
+model DesenRecord {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  modelId         String?   @map("model_id")
+  companyId       String?   @map("company_id")
+  name            String
+  filePath        String?   @map("file_path")
+  previewPath     String?   @map("preview_path")
+  status          String    @default("ACTIVE")
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, modelId])
+  @@map("desen_records")
+}
+
+model YerlesimRecord {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  modelId         String?   @map("model_id")
+  companyId       String?   @map("company_id")
+  kalipCode       String?   @map("kalip_code")
+  filePath        String?   @map("file_path")
+  previewPath     String?   @map("preview_path")
+  status          String    @default("ACTIVE")
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, modelId])
+  @@map("yerlesim_records")
+}
+
+model DesignFile {
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  designRecordId   String?  @map("design_record_id")
+  filePath         String   @map("file_path")
+  fileName         String   @map("file_name")
+  mimeType         String?  @map("mime_type")
+  modelId          String?  @map("model_id")
+  operationId      String?  @map("operation_id")
+  fileRole         String?  @map("file_role")
+  originalFileName String?  @map("original_file_name")
+  storedFileName   String?  @map("stored_file_name")
+  storagePath      String?  @map("storage_path")
+  fileHash         String?  @map("file_hash")
+  fileSize         Int?     @map("file_size")
+  sourceType       String?  @map("source_type")
+  sourceExternalId String?  @map("source_external_id")
+  previewPath      String?  @map("preview_path")
+  status           String   @default("ACTIVE")
+  raw              Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelId])
+  @@index([operationId])
+  @@index([fileHash])
+  @@map("design_files")
+}
+
+model DesignModelLink {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  designRecordId  String   @map("design_record_id")
+  modelId         String   @map("model_id")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@map("design_model_links")
+}
+
+model DesignWorkflowModel {
+  id               String   @id @default(uuid())
+  mainCompanySlug  String   @map("main_company_slug")
+  companyId        String?  @map("company_id")
+  modelCode        String?  @map("model_code")
+  modelName        String   @map("model_name")
+  designName       String?  @map("design_name")
+  groundColor      String?  @map("ground_color")
+  mainImageFileId  String?  @map("main_image_file_id")
+  sourceType       String   @default("MANUAL_UPLOAD") @map("source_type")
+  sourceExternalId String?  @map("source_external_id")
+  status           String   @default("NEW_ARRIVAL")
+  notes            String?
+  metadata         Json?
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, sourceType, sourceExternalId])
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@index([modelName])
+  @@index([status])
+  @@map("design_models")
+}
+
+model DesignModelOperation {
+  id                 String   @id @default(uuid())
+  modelId            String   @map("model_id")
+  printAreaCode      String   @map("print_area_code")
+  printAreaName      String   @map("print_area_name")
+  sequence           Int      @default(0)
+  moldType           String?  @map("mold_type")
+  moldWidth          Float?   @map("mold_width")
+  moldHeight         Float?   @map("mold_height")
+  modelImageFileId   String?  @map("model_image_file_id")
+  channelImageFileId String?  @map("channel_image_file_id")
+  placementFileId    String?  @map("placement_file_id")
+  placementStatus    String   @default("WAITING") @map("placement_status")
+  dyehouseStatus     String   @default("WAITING") @map("dyehouse_status")
+  productionReady    Boolean  @default(false) @map("production_ready")
+  notes              String?
+  metadata           Json?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([modelId, printAreaCode])
+  @@index([modelId])
+  @@index([placementStatus])
+  @@index([dyehouseStatus])
+  @@map("design_model_operations")
+}
+
+model DesignOperationChannel {
+  id                String   @id @default(uuid())
+  operationId       String   @map("operation_id")
+  sequence          Int      @default(0)
+  rawName           String   @map("raw_name")
+  normalizedName    String   @map("normalized_name")
+  channelType       String   @default("OTHER") @map("channel_type")
+  colorCode         String?  @map("color_code")
+  colorGroupId      String?  @map("color_group_id")
+  registeredColorId String?  @map("registered_color_id")
+  included          Boolean  @default(true)
+  status            String   @default("PENDING")
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([operationId, sequence])
+  @@index([operationId])
+  @@index([colorGroupId])
+  @@map("design_operation_channels")
+}
+
+model DesignColorGroup {
+  id                String   @id @default(uuid())
+  operationId       String   @map("operation_id")
+  groupKey          String   @map("group_key")
+  displayName       String   @map("display_name")
+  colorCode         String?  @map("color_code")
+  registeredColorId String?  @map("registered_color_id")
+  moldCount         Int      @default(0) @map("mold_count")
+  status            String   @default("UNRESOLVED")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([operationId, groupKey])
+  @@index([operationId])
+  @@index([registeredColorId])
+  @@map("design_color_groups")
+}
+
+model DesignImportQueue {
+  id                 String    @id @default(uuid())
+  mainCompanySlug    String    @map("main_company_slug")
+  sourceType         String    @default("FOLDER_SCAN") @map("source_type")
+  sourceExternalId   String?   @map("source_external_id")
+  originalPath       String    @map("original_path")
+  fileName           String    @map("file_name")
+  fileHash           String?   @map("file_hash")
+  fileSize           Int       @default(0) @map("file_size")
+  modifiedAt         DateTime? @map("modified_at")
+  mimeType           String?   @map("mime_type")
+  suggestedModelName String?   @map("suggested_model_name")
+  suggestedRole      String?   @map("suggested_role")
+  groupKey           String?   @map("group_key")
+  status             String    @default("READY")
+  errorMessage       String?   @map("error_message")
+  metadata           Json?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  processedAt        DateTime? @map("processed_at")
+
+  @@unique([mainCompanySlug, originalPath])
+  @@index([mainCompanySlug])
+  @@index([fileHash])
+  @@index([groupKey])
+  @@index([status])
+  @@map("design_import_queue")
+}
+
+model DesignActionLog {
+  id           String   @id @default(uuid())
+  modelId      String?  @map("model_id")
+  operationId  String?  @map("operation_id")
+  fileId       String?  @map("file_id")
+  userId       String?  @map("user_id")
+  action       String
+  oldValueJson Json?    @map("old_value_json")
+  newValueJson Json?    @map("new_value_json")
+  description  String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([modelId])
+  @@index([operationId])
+  @@index([fileId])
+  @@map("design_action_logs")
+}
+
+model LayoutRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  title           String
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("layout_records")
+}
+
+model MoldLayoutRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  title           String
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("mold_layout_records")
+}
+
+model DyehouseModel {
+  id               String    @id @default(uuid())
+  mainCompanySlug  String    @map("main_company_slug")
+  modelName        String    @map("model_name")
+  modelCardId      String?   @map("model_card_id")
+  designId         String?   @map("design_id")
+  companyId        String?   @map("company_id")
+  orderId          String?   @map("order_id")
+  orderNo          String?   @map("order_no")
+  printRegion      String?   @map("print_region")
+  plannedQuantity  Decimal   @default(0) @map("planned_quantity")
+  channelCount     Int       @default(0) @map("channel_count")
+  uniqueColorCount Int       @default(0) @map("unique_color_count")
+  moldCount        Int       @default(0) @map("mold_count")
+  priority         String    @default("NORMAL")
+  status           String    @default("ACTIVE")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  raw              Json?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, status])
+  @@index([modelCardId, companyId, orderNo, printRegion, designId])
+  @@map("dyehouse_models")
+}
+
+model DyehouseColor {
+  id                String    @id @default(uuid())
+  mainCompanySlug   String    @map("main_company_slug")
+  dyehouseModelId   String?   @map("dyehouse_model_id")
+  registeredColorId String?   @map("registered_color_id")
+  sourceChannelKey  String?   @map("source_channel_key")
+  colorName         String    @map("color_name")
+  pantone           String?
+  paintType         String?   @map("paint_type")
+  recipeId          String?   @map("recipe_id")
+  printRegion       String?   @map("print_region")
+  plannedKg         Decimal   @default(0) @map("planned_kg")
+  status            String    @default("WAITING")
+  completedAt       DateTime? @map("completed_at")
+  raw               Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  @@unique([mainCompanySlug, dyehouseModelId, sourceChannelKey])
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, dyehouseModelId])
+  @@map("dyehouse_colors")
+}
+
+model BoyahaneColor {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  modelId         String?   @map("model_id")
+  colorCode       String?   @map("color_code")
+  colorName       String    @map("color_name")
+  paintType       String?   @map("paint_type")
+  version         String?
+  hex             String?
+  active          Boolean   @default(true)
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, modelId])
+  @@map("boyahane_colors")
+}
+
+model BoyahaneRecipe {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  modelId         String?   @map("model_id")
+  colorId         String?   @map("color_id")
+  recipeName      String    @map("recipe_name")
+  totalGramaj     Decimal   @default(0) @map("total_gramaj")
+  active          Boolean   @default(true)
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, modelId])
+  @@map("boyahane_recipes")
+}
+
+model BoyahaneRecipeLine {
+  id          String    @id @default(uuid())
+  recipeId    String    @map("recipe_id")
+  productId   String?   @map("product_id")
+  productName String?   @map("product_name")
+  lotId       String?   @map("lot_id")
+  amount      Decimal   @default(0)
+  unit        String?
+  percentage  Decimal   @default(0)
+  raw         Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([recipeId])
+  @@map("boyahane_recipe_lines")
+}
+
+model BoyahaneLot {
+  id                String    @id @default(uuid())
+  mainCompanySlug   String    @map("main_company_slug")
+  productId         String?   @map("product_id")
+  supplierCompanyId String?   @map("supplier_company_id")
+  invoiceItemId     String?   @map("invoice_item_id")
+  lotNo             String    @map("lot_no")
+  quantity          Decimal   @default(0)
+  remainingQuantity Decimal   @default(0) @map("remaining_quantity")
+  status            String    @default("ACTIVE")
+  raw               Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  @@unique([mainCompanySlug, lotNo])
+  @@index([mainCompanySlug])
+  @@map("boyahane_lots")
+}
+
+model BoyahaneMovement {
+  id              String    @id @default(uuid())
+  mainCompanySlug String    @map("main_company_slug")
+  lotId           String?   @map("lot_id")
+  recipeId        String?   @map("recipe_id")
+  movementType    String    @map("movement_type")
+  amount          Decimal   @default(0)
+  description     String?
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@map("boyahane_movements")
+}
+
+model DyehouseGrammageRecord {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  dyehouseModelId String?  @map("dyehouse_model_id")
+  grammage        Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("dyehouse_grammage_records")
+}
+
+model DyehouseRecipeItem {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  dyehouseModelId String?  @map("dyehouse_model_id")
+  productId       String?  @map("product_id")
+  quantity        Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@map("dyehouse_recipe_items")
+}
+
+model RawMaterialLot {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  productId       String?  @map("product_id")
+  lotNo           String   @map("lot_no")
+  quantity        Decimal  @default(0)
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, lotNo])
+  @@index([mainCompanySlug])
+  @@map("raw_material_lots")
+}
+
+model LotConsumption {
+  id              String   @id @default(uuid())
+  mainCompanySlug String   @map("main_company_slug")
+  lotId           String   @map("lot_id")
+  quantity        Decimal  @default(0)
+  description     String?
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, lotId])
+  @@map("lot_consumptions")
+}
+
+model MuhasebeLog {
+  id        Int      @id @default(autoincrement())
+  tarihSaat DateTime @default(now())
+  modul     String
+  islemTipi String
+  firma     String
+  belgeNo   String?
+  modelAdi  String?
+  aciklama  String
+
+  @@map("MuhasebeLog")
+}
+
+model FirmaEsleme {
+  id         Int    @id @default(autoincrement())
+  anaFirma   String
+  bagliFirma String
+  tip        String
+
+  @@map("FirmaEsleme")
+}
+
+model MailKisi {
+  id         Int     @id @default(autoincrement())
+  firma      String
+  departman  String
+  adSoyad    String
+  eposta     String
+  aktif      Boolean @default(true)
+  varsayilan Boolean @default(false)
+
+  @@map("MailKisi")
+}
+
+model KdvTakip {
+  id          Int    @id @default(autoincrement())
+  firma       String
+  ay          String
+  yil         String
+  devredenKdv Float  @default(0)
+  gelenKdv    Float  @default(0)
+  gidenKdv    Float  @default(0)
+
+  @@map("KdvTakip")
+}
+
+model IrsaliyeFaturaKayit {
+  id              Int    @id @default(autoincrement())
+  firma           String
+  irsaliyeNo      String
+  model           String
+  adet            Int
+  faturalananAdet Int    @default(0)
+  kalanAdet       Int    @default(0)
+  durum           String
+
+  @@map("IrsaliyeFaturaKayit")
+}
+
+model accounting_checks {
+  id                String                @id
+  main_company_slug String
+  firm_id           String
+  shared_model_id   String?
+  invoice_id        String?
+  check_tracking_no String
+  check_no          String
+  bank_name         String?
+  branch_name       String?
+  amount            Decimal               @default(0)
+  due_date          DateTime
+  record_group      AccountingRecordGroup
+  front_image_url   String?
+  back_image_url    String?
+  has_provision     Boolean               @default(false)
+  status            AccountingCheckStatus @default(WAITING)
+  note              String?
+  created_at        DateTime              @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([due_date])
+  @@index([firm_id])
+  @@index([invoice_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+  @@index([status])
+}
+
+model accounting_documents {
+  id                String                   @id
+  main_company_slug String
+  firm_id           String
+  shared_model_id   String?
+  document_type     AccountingDocumentType
+  document_no       String
+  document_date     DateTime
+  record_group      AccountingRecordGroup
+  amount            Decimal                  @default(0)
+  vat_rate          Decimal                  @default(0)
+  vat_amount        Decimal                  @default(0)
+  total_amount      Decimal                  @default(0)
+  quantity          Decimal?
+  unit_price        Decimal?
+  currency          String                   @default("TRY")
+  file_url          String?
+  source_file_name  String?
+  status            AccountingDocumentStatus @default(SAVED)
+  note              String?
+  created_at        DateTime                 @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([firm_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model accounting_firms {
+  id                   String                @id
+  main_company_slug    String
+  firm_name            String
+  firm_type            AccountingFirmType    @default(CUSTOMER)
+  tax_no               String?
+  phone                String?
+  email                String?
+  address              String?
+  default_record_group AccountingRecordGroup @default(TAX_INCLUDED)
+  default_vat_rate     Decimal               @default(0)
+  is_active            Boolean               @default(true)
+  note                 String?
+  created_at           DateTime              @default(now())
+  updated_at           DateTime
+  deleted_at           DateTime?
+
+  @@index([firm_name])
+  @@index([firm_type])
+  @@index([main_company_slug])
+}
+
+model accounting_invoices {
+  id                        String                    @id
+  main_company_slug         String
+  firm_id                   String
+  shared_model_id           String?
+  customer_delivery_note_id String?
+  outgoing_delivery_note_id String?
+  invoice_no                String
+  invoice_date              DateTime
+  invoice_type              AccountingInvoiceType
+  record_group              AccountingRecordGroup
+  quantity                  Decimal?
+  unit_price                Decimal?
+  subtotal                  Decimal                   @default(0)
+  vat_rate                  Decimal                   @default(0)
+  vat_amount                Decimal                   @default(0)
+  total_amount              Decimal                   @default(0)
+  file_url                  String?
+  email_sent                Boolean                   @default(false)
+  email_sent_at             DateTime?
+  statement_status          AccountingStatementStatus @default(NOT_CHECKED)
+  payment_status            AccountingPaymentStatus   @default(UNPAID)
+  note                      String?
+  created_at                DateTime                  @default(now())
+  updated_at                DateTime
+  deleted_at                DateTime?
+
+  @@unique([main_company_slug, invoice_no])
+  @@index([firm_id])
+  @@index([invoice_date])
+  @@index([invoice_no])
+  @@index([main_company_slug])
+  @@index([payment_status])
+  @@index([shared_model_id])
+  @@index([statement_status])
+}
+
+model accounting_ledger_entries {
+  id                String                     @id
+  main_company_slug String
+  firm_id           String
+  shared_model_id   String?
+  source_type       AccountingLedgerSourceType
+  source_id         String?
+  entry_date        DateTime
+  record_group      AccountingRecordGroup
+  debit             Decimal                    @default(0)
+  credit            Decimal                    @default(0)
+  balance_after     Decimal?
+  description       String?
+  created_at        DateTime                   @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([entry_date])
+  @@index([firm_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model accounting_payments {
+  id                String                @id
+  main_company_slug String
+  firm_id           String
+  shared_model_id   String?
+  invoice_id        String?
+  check_id          String?
+  payment_date      DateTime
+  payment_type      AccountingPaymentType
+  record_group      AccountingRecordGroup
+  amount            Decimal               @default(0)
+  note              String?
+  created_at        DateTime              @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([firm_id])
+  @@index([invoice_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model audit_categories {
+  id                String   @id
+  main_company_slug String
+  name              String
+  raw               Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime
+
+  @@unique([main_company_slug, name])
+  @@index([main_company_slug])
+}
+
+model audit_files {
+  id                String   @id
+  main_company_slug String
+  audit_record_id   String?
+  file_path         String
+  file_name         String
+  raw               Json?
+  created_at        DateTime @default(now())
+
+  @@index([main_company_slug])
+}
+
+model audit_physical_locations {
+  id                String   @id
+  main_company_slug String
+  audit_record_id   String
+  has_physical_copy Boolean  @default(false)
+  folder_color      String?
+  folder_no         String?
+  shelf             String?
+  file_order        String?
+  original_place    String?
+  archive_status    String?
+  note              String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime
+
+  @@unique([main_company_slug, audit_record_id])
+  @@index([main_company_slug])
+}
+
+model audit_records {
+  id                String   @id
+  main_company_slug String
+  title             String
+  category          String?
+  status            String   @default("ACTIVE")
+  raw               Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime
+
+  @@index([main_company_slug])
+}
+
+model customer_delivery_notes {
+  id                String                @id
+  main_company_slug String
+  firm_id           String
+  shared_model_id   String
+  department_id     String?
+  delivery_no       String
+  delivery_date     DateTime
+  quantity          Decimal               @default(0)
+  ground_color      String?
+  record_group      AccountingRecordGroup
+  file_url          String?
+  note              String?
+  created_at        DateTime              @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([delivery_no])
+  @@index([firm_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model customer_departments {
+  id                String    @id
+  main_company_slug String
+  firm_id           String
+  department_code   String?
+  department_name   String
+  note              String?
+  is_active         Boolean   @default(true)
+  created_at        DateTime  @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([department_code])
+  @@index([firm_id])
+  @@index([main_company_slug])
+}
+
+model department_contacts {
+  id                String    @id
+  main_company_slug String
+  department_id     String
+  firm_id           String
+  full_name         String
+  email             String
+  phone             String?
+  title             String?
+  is_active         Boolean   @default(true)
+  note              String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([department_id])
+  @@index([email])
+  @@index([firm_id])
+  @@index([main_company_slug])
+}
+
+model hr_advance_deduction_records {
+  id                 String                 @id
+  main_company_slug  String
+  personnel_id       String
+  record_date        DateTime
+  type               HrAdvanceDeductionType
+  amount             Decimal                @default(0)
+  reflect_to_payroll Boolean                @default(true)
+  note               String
+  created_at         DateTime               @default(now())
+  updated_at         DateTime
+
+  @@index([main_company_slug])
+  @@index([personnel_id])
+}
+
+model hr_daily_personnel {
+  id                String                @id
+  main_company_slug String
+  full_name         String
+  skill             HrDailyPersonnelSkill @default(VASIFSIZ)
+  is_active         Boolean               @default(true)
+  day_wage          Decimal               @default(0)
+  night_wage        Decimal               @default(0)
+  has_broker        Boolean               @default(false)
+  nationality       String?
+  default_shift     HrDailyDefaultShift   @default(DAY)
+  default_team      String?
+  note              String?
+  created_at        DateTime              @default(now())
+  updated_at        DateTime
+
+  @@index([main_company_slug])
+  @@index([main_company_slug, is_active])
+}
+
+model hr_daily_weekly_payments {
+  id                String                     @id
+  main_company_slug String
+  personnel_id      String
+  week_start        DateTime
+  week_end          DateTime
+  day_count         Decimal                    @default(0)
+  night_count       Decimal                    @default(0)
+  day_amount        Decimal                    @default(0)
+  night_amount      Decimal                    @default(0)
+  total_amount      Decimal                    @default(0)
+  paid_amount       Decimal                    @default(0)
+  remaining_amount  Decimal                    @default(0)
+  status            HrDailyWeeklyPaymentStatus @default(WAITING)
+  note              String?
+  created_at        DateTime                   @default(now())
+  updated_at        DateTime
+
+  @@unique([main_company_slug, personnel_id, week_start, week_end])
+  @@index([main_company_slug])
+  @@index([personnel_id])
+  @@index([status])
+  @@index([week_start, week_end])
+}
+
+model hr_daily_work_entries {
+  id                String       @id
+  main_company_slug String
+  personnel_id      String
+  work_date         DateTime
+  shift             HrDailyShift
+  wage              Decimal      @default(0)
+  week_start        DateTime
+  week_end          DateTime
+  note              String?
+  created_at        DateTime     @default(now())
+  updated_at        DateTime
+
+  @@unique([main_company_slug, personnel_id, work_date, shift])
+  @@index([main_company_slug])
+  @@index([personnel_id])
+  @@index([week_start, week_end])
+  @@index([work_date])
+}
+
+model hr_leave_records {
+  id                 String   @id
+  main_company_slug  String
+  personnel_id       String
+  leave_type         String
+  start_date         DateTime
+  end_date           DateTime
+  day_count          Decimal  @default(0)
+  is_paid_leave      Boolean  @default(true)
+  deduct_from_salary Boolean  @default(false)
+  reflect_to_payroll Boolean  @default(true)
+  note               String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime
+
+  @@index([main_company_slug])
+  @@index([personnel_id])
+}
+
+model hr_monthly_personnel {
+  id                        String    @id
+  main_company_slug         String
+  code                      String?
+  full_name                 String
+  department                String?
+  title                     String?
+  hire_date                 DateTime?
+  is_active                 Boolean   @default(true)
+  sgk_status                String    @default("VAR")
+  payment_type              String    @default("BANKA_ELDEN")
+  iban                      String?
+  monthly_salary            Decimal   @default(0)
+  monthly_road_fee          Decimal   @default(0)
+  monthly_hour_base         Decimal   @default(225)
+  bank_base_amount          Decimal   @default(0)
+  previous_year_leave_carry Decimal   @default(0)
+  current_year_leave_earned Decimal   @default(14)
+  manual_leave_adjustment   Decimal   @default(0)
+  used_leave                Decimal   @default(0)
+  remaining_leave           Decimal   @default(0)
+  note                      String?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime
+
+  @@index([main_company_slug])
+  @@index([main_company_slug, is_active])
+}
+
+model hr_overtime_records {
+  id                 String               @id
+  main_company_slug  String
+  personnel_id       String
+  record_date        DateTime
+  record_type        HrOvertimeRecordType
+  hour               Decimal              @default(0)
+  day_count          Decimal              @default(0)
+  multiplier         Decimal              @default(1)
+  reflect_to_payroll Boolean              @default(true)
+  note               String?
+  created_at         DateTime             @default(now())
+  updated_at         DateTime
+
+  @@index([main_company_slug])
+  @@index([personnel_id])
+  @@index([record_date])
+}
+
+model hr_payment_approvals {
+  id                String                  @id
+  main_company_slug String
+  payroll_id        String                  @unique
+  personnel_id      String
+  period            String
+  net_amount        Decimal                 @default(0)
+  bank_amount       Decimal                 @default(0)
+  cash_amount       Decimal                 @default(0)
+  paid_amount       Decimal                 @default(0)
+  remaining_amount  Decimal                 @default(0)
+  status            HrPaymentApprovalStatus @default(WAITING)
+  payment_date      DateTime?
+  note              String?
+  created_at        DateTime                @default(now())
+  updated_at        DateTime
+
+  @@index([main_company_slug])
+  @@index([period])
+  @@index([personnel_id])
+  @@index([status])
+}
+
+model hr_payrolls {
+  id                       String          @id
+  main_company_slug        String
+  period                   String
+  personnel_id             String
+  base_salary              Decimal         @default(0)
+  road_fee                 Decimal         @default(0)
+  overtime_amount          Decimal         @default(0)
+  missing_day_amount       Decimal         @default(0)
+  advance_amount           Decimal         @default(0)
+  deduction_amount         Decimal         @default(0)
+  manual_adjustment_amount Decimal         @default(0)
+  manual_bank_amount       Decimal?
+  net_amount               Decimal         @default(0)
+  bank_amount              Decimal         @default(0)
+  cash_amount              Decimal         @default(0)
+  status                   HrPayrollStatus @default(DRAFT)
+  is_checked               Boolean         @default(false)
+  checked_at               DateTime?
+  locked_at                DateTime?
+  sent_to_payment_at       DateTime?
+  note                     String?
+  created_at               DateTime        @default(now())
+  updated_at               DateTime
+
+  @@unique([main_company_slug, period, personnel_id])
+  @@index([main_company_slug])
+  @@index([period])
+  @@index([personnel_id])
+  @@index([status])
+}
+
+model mail_dispatches {
+  id                        String             @id
+  main_company_slug         String
+  firm_id                   String
+  shared_model_id           String?
+  department_id             String?
+  invoice_id                String?
+  outgoing_delivery_note_id String?
+  customer_delivery_note_id String?
+  mail_type                 MailDispatchType
+  subject                   String
+  body                      String
+  recipients_json           Json
+  attachments_json          Json
+  status                    MailDispatchStatus @default(DRAFT)
+  sent_at                   DateTime?
+  created_at                DateTime           @default(now())
+  updated_at                DateTime
+
+  @@index([firm_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model model_contact_assignments {
+  id                String   @id
+  main_company_slug String
+  shared_model_id   String
+  department_id     String
+  contact_id        String
+  firm_id           String
+  role              String?
+  is_primary        Boolean  @default(false)
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now())
+  updated_at        DateTime
+
+  @@unique([shared_model_id, contact_id])
+  @@index([contact_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model operation_logs {
+  id                String   @id
+  main_company_slug String
+  module            String
+  entity_type       String
+  entity_id         String?
+  action            String
+  old_value_json    Json?
+  new_value_json    Json?
+  created_by        String?
+  created_at        DateTime @default(now())
+
+  @@index([entity_type, entity_id])
+  @@index([main_company_slug])
+}
+
+model outgoing_delivery_notes {
+  id                        String                @id
+  main_company_slug         String
+  firm_id                   String
+  shared_model_id           String
+  customer_delivery_note_id String?
+  delivery_no               String
+  delivery_date             DateTime
+  quantity                  Decimal               @default(0)
+  record_group              AccountingRecordGroup
+  file_url                  String?
+  mail_sent                 Boolean               @default(false)
+  mail_sent_at              DateTime?
+  note                      String?
+  created_at                DateTime              @default(now())
+  updated_at                DateTime
+  deleted_at                DateTime?
+
+  @@index([firm_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+}
+
+model shared_models {
+  id                String            @id
+  main_company_slug String
+  customer_firm_id  String?
+  model_name        String
+  model_code        String?
+  department_code   String?
+  department_name   String?
+  ground_color      String?
+  design_code       String?
+  image_url         String?
+  thumbnail_url     String?
+  status            SharedModelStatus @default(WAITING)
+  note              String?
+  created_at        DateTime          @default(now())
+  updated_at        DateTime
+  deleted_at        DateTime?
+
+  @@index([customer_firm_id])
+  @@index([department_code])
+  @@index([main_company_slug])
+  @@index([model_name])
+  @@index([status])
+}
+
+model statement_imports {
+  id                String   @id
+  main_company_slug String
+  firm_id           String
+  period_start      DateTime
+  period_end        DateTime
+  file_url          String?
+  file_name         String
+  imported_at       DateTime @default(now())
+  created_at        DateTime @default(now())
+  updated_at        DateTime
+
+  @@index([firm_id])
+  @@index([main_company_slug])
+}
+
+model statement_matches {
+  id                  String                 @id
+  main_company_slug   String
+  statement_import_id String
+  firm_id             String
+  invoice_id          String?
+  invoice_no          String
+  our_amount          Decimal                @default(0)
+  statement_amount    Decimal?
+  statement_balance   Decimal?
+  department_code     String?
+  shared_model_id     String?
+  match_status        StatementMatchStatus
+  payment_status      StatementPaymentStatus @default(NOT_CHECKED)
+  mail_required       Boolean                @default(false)
+  mail_dispatch_id    String?
+  created_at          DateTime               @default(now())
+  updated_at          DateTime
+
+  @@index([firm_id])
+  @@index([invoice_id])
+  @@index([main_company_slug])
+  @@index([shared_model_id])
+  @@index([statement_import_id])
+}
+
+model statement_rows {
+  id                  String   @id
+  statement_import_id String
+  external_record_no  String?
+  record_type         String?
+  record_date         DateTime
+  document_no         String?
+  code                String?
+  debit               Decimal  @default(0)
+  credit              Decimal  @default(0)
+  balance             Decimal  @default(0)
+  department_code     String?
+  raw_json            Json?
+  created_at          DateTime @default(now())
+
+  @@index([document_no])
+  @@index([statement_import_id])
+}
+
+model vat_carryovers {
+  id                String   @id
+  main_company_slug String
+  period            String
+  carryover_amount  Decimal  @default(0)
+  note              String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime
+
+  @@unique([main_company_slug, period])
+  @@index([main_company_slug])
+}
+
+enum AccountingCheckStatus {
+  WAITING
+  APPROACHING
+  DUE_THIS_MONTH
+  OVERDUE
+  COLLECTED
+  PAID
+  BOUNCED
+  RETURNED
+  CANCELLED
+}
+
+enum AccountingDocumentStatus {
+  SAVED
+  LINKED
+  PROCESSED
+  CANCELLED
+}
+
+enum AccountingDocumentType {
+  CUSTOMER_INCOMING_DELIVERY
+  OUR_OUTGOING_DELIVERY
+  OUR_OUTGOING_INVOICE
+  SUPPLIER_INCOMING_INVOICE
+  SUPPLIER_INCOMING_DELIVERY
+  PAYMENT_DOCUMENT
+  CHECK_DOCUMENT
+  INTERNAL_INCOMING
+  INTERNAL_OUTGOING
+}
+
+enum AccountingFirmType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+enum AccountingInvoiceType {
+  OUTGOING
+  INCOMING
+}
+
+enum AccountingLedgerSourceType {
+  OPENING_BALANCE
+  INVOICE
+  PAYMENT
+  CHECK
+  MANUAL
+  ADJUSTMENT
+}
+
+enum AccountingPaymentStatus {
+  UNPAID
+  PARTIAL_PAID
+  PAID
+  IN_PROCESS
+}
+
+enum AccountingPaymentType {
+  CASH
+  BANK
+  CREDIT_CARD
+  CHECK
+  OFFSET
+  ADJUSTMENT
+}
+
+enum AccountingRecordGroup {
+  TAX_INCLUDED
+  INTERNAL_TRACKING
+}
+
+enum AccountingStatementStatus {
+  NOT_CHECKED
+  VISIBLE_IN_STATEMENT
+  NOT_VISIBLE_IN_STATEMENT
+  AMOUNT_DIFFERENCE
+}
+
+enum HrAdvanceDeductionType {
+  ADVANCE
+  DEDUCTION
+}
+
+enum HrDailyDefaultShift {
+  DAY
+  NIGHT
+  DAY_AND_NIGHT
+}
+
+enum HrDailyPersonnelSkill {
+  MAKINACI
+  SERIMCI
+  YARDIMCI
+  VASIFSIZ
+  USTA
+  DIGER
+}
+
+enum HrDailyShift {
+  DAY
+  NIGHT
+}
+
+enum HrDailyWeeklyPaymentStatus {
+  WAITING
+  READY_FOR_PAYMENT
+  PARTIAL_PAID
+  PAID
+  CANCELLED
+}
+
+enum HrOvertimeRecordType {
+  WEEKDAY_OVERTIME
+  SUNDAY_OVERTIME
+  HOLIDAY_OVERTIME
+  MISSING_DAY
+  ABSENCE
+}
+
+enum HrPaymentApprovalStatus {
+  WAITING
+  PARTIAL_PAID
+  PAID
+  CANCELLED
+}
+
+enum HrPayrollStatus {
+  DRAFT
+  CHECKED
+  LOCKED
+  SENT_TO_PAYMENT
+  PAID
+  CANCELLED
+}
+
+enum MailDispatchStatus {
+  DRAFT
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum MailDispatchType {
+  MODEL_DOCUMENT_SEND
+  STATEMENT_MISSING_INVOICE_NOTICE
+  PAYMENT_PROCESS_REMINDER
+}
+
+enum SharedModelStatus {
+  WAITING
+  IN_DESIGN
+  IN_PRODUCTION
+  PARTIAL_INVOICED
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+enum StatementMatchStatus {
+  MATCHED
+  NOT_IN_STATEMENT
+  AMOUNT_DIFFERENCE
+  ONLY_IN_STATEMENT
+}
+
+enum StatementPaymentStatus {
+  NOT_CHECKED
+  IN_PROCESS
+  PAID
+  UNPAID
+}
+
+model MuhasebeContactPerson {
+  id                          String   @id @default(uuid())
+  mainCompanyId               String?  @map("main_company_id")
+  mainCompanySlug             String   @map("main_company_slug")
+  firmId                      String?  @map("firm_id")
+  firmName                    String?  @map("firm_name")
+  departmentCode              String?  @map("department_code")
+  departmentName              String?  @map("department_name")
+  fullName                    String   @map("full_name")
+  email                       String
+  phone                       String?
+  title                       String?
+  canReceiveInvoiceMail       Boolean  @default(true) @map("can_receive_invoice_mail")
+  canReceiveDispatchMail      Boolean  @default(true) @map("can_receive_dispatch_mail")
+  canReceiveStatementReminder Boolean  @default(true) @map("can_receive_statement_reminder")
+  canReceiveModelNotification Boolean  @default(false) @map("can_receive_model_notification")
+  note                        String?
+  isActive                    Boolean  @default(true) @map("is_active")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, firmId])
+  @@index([mainCompanySlug, email])
+  @@map("muhasebe_contact_people")
+}
+
+model MuhasebeContactDepartment {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  firmId          String?  @map("firm_id")
+  firmName        String?  @map("firm_name")
+  departmentCode  String   @map("department_code")
+  departmentName  String?  @map("department_name")
+  usageNote       String?  @map("usage_note")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, firmId])
+  @@index([mainCompanySlug, departmentCode])
+  @@map("muhasebe_contact_departments")
+}
+
+model MuhasebeMailSendLog {
+  id                 String    @id @default(uuid())
+  mainCompanyId      String?   @map("main_company_id")
+  mainCompanySlug    String    @map("main_company_slug")
+  firmId             String?   @map("firm_id")
+  firmName           String?   @map("firm_name")
+  departmentCode     String?   @map("department_code")
+  departmentName     String?   @map("department_name")
+  contactPersonIds   Json?     @map("contact_person_ids")
+  recipientEmails    Json?     @map("recipient_emails")
+  recipientPhones    Json?     @map("recipient_phones")
+  invoiceNo          String?   @map("invoice_no")
+  dispatchNo         String?   @map("dispatch_no")
+  documentId         String?   @map("document_id")
+  modelId            String?   @map("model_id")
+  modelName          String?   @map("model_name")
+  subject            String?
+  body               String?
+  sentAt             DateTime? @map("sent_at")
+  status             String    @default("PREPARED")
+  statementStatus    String    @default("UNKNOWN") @map("statement_status")
+  reminderCount      Int       @default(0) @map("reminder_count")
+  lastReminderAt     DateTime? @map("last_reminder_at")
+  lastReminderStatus String?   @map("last_reminder_status")
+  note               String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, firmId])
+  @@index([mainCompanySlug, invoiceNo])
+  @@map("muhasebe_mail_send_logs")
+}
+
+model MuhasebeStatementImport {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  firmId          String?   @map("firm_id")
+  firmName        String?   @map("firm_name")
+  fileName        String?   @map("file_name")
+  filePath        String?   @map("file_path")
+  fileType        String?   @map("file_type")
+  importedAt      DateTime? @map("imported_at")
+  status          String    @default("UPLOADED")
+  rowCount        Int       @default(0) @map("row_count")
+  note            String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, firmId])
+  @@map("muhasebe_statement_imports")
+}
+
+model MuhasebeStatementCompareResult {
+  id                String    @id @default(uuid())
+  mainCompanyId     String?   @map("main_company_id")
+  mainCompanySlug   String    @map("main_company_slug")
+  firmId            String?   @map("firm_id")
+  firmName          String?   @map("firm_name")
+  statementImportId String?   @map("statement_import_id")
+  invoiceNo         String?   @map("invoice_no")
+  ourAmount         Decimal?  @map("our_amount")
+  statementAmount   Decimal?  @map("statement_amount")
+  difference        Decimal?
+  invoiceDate       DateTime? @map("invoice_date")
+  statementDate     DateTime? @map("statement_date")
+  status            String    @default("UNKNOWN")
+  relatedMailLogId  String?   @map("related_mail_log_id")
+  reminderNeeded    Boolean   @default(false) @map("reminder_needed")
+  note              String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, firmId])
+  @@index([mainCompanySlug, invoiceNo])
+  @@map("muhasebe_statement_compare_results")
+}
+
+model MuhasebeSupplierInvoiceLot {
+  id                String    @id @default(uuid())
+  mainCompanyId     String?   @map("main_company_id")
+  mainCompanySlug   String    @map("main_company_slug")
+  supplierInvoiceId String?   @map("supplier_invoice_id")
+  invoiceNo         String?   @map("invoice_no")
+  supplierFirmId    String?   @map("supplier_firm_id")
+  supplierFirmName  String?   @map("supplier_firm_name")
+  productId         String?   @map("product_id")
+  productName       String?   @map("product_name")
+  productAlias      String?   @map("product_alias")
+  lotNo             String?   @map("lot_no")
+  purchaseDate      DateTime? @map("purchase_date")
+  expiryDate        DateTime? @map("expiry_date")
+  quantity          Decimal?
+  unit              String?
+  unitPrice         Decimal?  @map("unit_price")
+  totalAmount       Decimal?  @map("total_amount")
+  status            String    @default("LOT_BEKLIYOR")
+  boyaStockLotId    String?   @map("boya_stock_lot_id")
+  note              String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, invoiceNo])
+  @@index([mainCompanySlug, status])
+  @@map("muhasebe_supplier_invoice_lots")
+}
+
+model MuhasebeManualCustomerDispatch {
+  id                   String    @id @default(uuid())
+  mainCompanyId        String?   @map("main_company_id")
+  mainCompanySlug      String    @map("main_company_slug")
+  firmId               String?   @map("firm_id")
+  firmName             String?   @map("firm_name")
+  dispatchNo           String?   @map("dispatch_no")
+  dispatchDate         DateTime? @map("dispatch_date")
+  rawDescription       String?   @map("raw_description")
+  suggestedModelId     String?   @map("suggested_model_id")
+  suggestedModelName   String?   @map("suggested_model_name")
+  suggestionConfidence Int?      @map("suggestion_confidence")
+  linkedModelId        String?   @map("linked_model_id")
+  linkedModelName      String?   @map("linked_model_name")
+  groundColor          String?   @map("ground_color")
+  quantity             Decimal?
+  status               String    @default("MODEL_BEKLIYOR")
+  note                 String?
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanySlug, firmId])
+  @@index([mainCompanySlug, status])
+  @@map("muhasebe_manual_customer_dispatches")
+}
+
+enum FirmType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+enum WorkType {
+  OFFICIAL
+  UNOFFICIAL
+  BOTH
+}
+
+enum MovementType {
+  DEBIT
+  CREDIT
+}
+
+enum PaymentType {
+  CASH
+  CARD
+  TRANSFER
+  CHECK
+}
+
+enum PaymentRecordStatus {
+  PLANNED
+  WAITING
+  PAID
+  PROBLEM
+  CANCELLED
+}
+
+enum MailTaskType {
+  INVOICE_SEND
+  DISPATCH_SEND
+  INVOICE_DISPATCH_SEND
+  STATEMENT_CHECK
+  PAYMENT_REMINDER
+  MISSING_IN_STATEMENT
+}
+
+enum MailTaskStatus {
+  DRAFT
+  READY
+  SENT
+  FAILED
+  MISSING_RECIPIENT
+  MISSING_MODEL
+}
+
+model Firm {
+  id                       String                @id @default(uuid())
+  mainCompanyId            String                @map("main_company_id")
+  mainCompanySlug          String?               @map("main_company_slug")
+  name                     String
+  shortName                String?               @map("short_name")
+  normalizedName           String                @map("normalized_name")
+  taxNo                    String?               @map("tax_no")
+  taxOffice                String?               @map("tax_office")
+  firmType                 FirmType              @default(BOTH) @map("firm_type")
+  workType                 WorkType              @default(OFFICIAL) @map("work_type")
+  officialType             String?               @default("RESMI") @map("official_type")
+  defaultVatRate           Decimal               @default(20) @map("default_vat_rate")
+  openingBalance           Decimal               @default(0) @map("opening_balance")
+  openingBalanceDate       DateTime?             @map("opening_balance_date")
+  openingBalanceDirection  String?               @default("BORC") @map("opening_balance_direction")
+  openingVatAmount         Decimal               @default(0) @map("opening_vat_amount")
+  openingVatPeriod         String?               @map("opening_vat_period")
+  dueDay                   Int?                  @map("due_day")
+  riskLimit                Decimal               @default(0) @map("risk_limit")
+  statementTrackingEnabled Boolean               @default(true) @map("statement_tracking_enabled")
+  address                  String?
+  phone                    String?
+  email                    String?
+  note                     String?
+  isActive                 Boolean               @default(true) @map("is_active")
+  status                   String                @default("ACTIVE")
+  deletedAt                DateTime?             @map("deleted_at")
+  createdAt                DateTime              @default(now()) @map("created_at")
+  updatedAt                DateTime              @updatedAt @map("updated_at")
+  contacts                 FirmContact[]
+  modelMailAssignments     ModelMailAssignment[]
+
+  @@index([mainCompanyId])
+  @@index([mainCompanySlug])
+  @@index([normalizedName])
+  @@map("firms")
+}
+
+model FirmContact {
+  id                          String    @id @default(uuid())
+  mainCompanyId               String?   @map("main_company_id")
+  firmId                      String    @map("firm_id")
+  fullName                    String    @map("full_name")
+  email                       String?
+  phone                       String?
+  department                  String?
+  title                       String?
+  isActive                    Boolean   @default(true) @map("is_active")
+  canReceiveInvoice           Boolean   @default(false) @map("can_receive_invoice")
+  canReceiveDispatch          Boolean   @default(false) @map("can_receive_dispatch")
+  canReceiveStatement         Boolean   @default(false) @map("can_receive_statement")
+  canReceivePaymentReminder   Boolean   @default(false) @map("can_receive_payment_reminder")
+  canReceiveGeneralAccounting Boolean   @default(false) @map("can_receive_general_accounting")
+  canBeModelResponsible       Boolean   @default(false) @map("can_be_model_responsible")
+  note                        String?
+  status                      String    @default("ACTIVE")
+  deletedAt                   DateTime? @map("deleted_at")
+  createdAt                   DateTime  @default(now()) @map("created_at")
+  updatedAt                   DateTime  @updatedAt @map("updated_at")
+  firm                        Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId])
+  @@index([email])
+  @@map("firm_contacts")
+}
+
+model ModelMailAssignment {
+  id                        String   @id @default(uuid())
+  firmId                    String   @map("firm_id")
+  modelId                   String   @map("model_id")
+  invoiceContactId          String?  @map("invoice_contact_id")
+  dispatchContactId         String?  @map("dispatch_contact_id")
+  modelResponsibleContactId String?  @map("model_responsible_contact_id")
+  ccContactIdsJson          Json?    @map("cc_contact_ids_json")
+  isActive                  Boolean  @default(true) @map("is_active")
+  note                      String?
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  firm                      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@unique([firmId, modelId])
+  @@index([firmId])
+  @@index([modelId])
+  @@map("model_mail_assignments")
+}
+
+model CariMovement {
+  id            String       @id @default(uuid())
+  mainCompanyId String       @map("main_company_id")
+  firmId        String       @map("firm_id")
+  documentId    String?      @map("document_id")
+  movementType  MovementType @map("movement_type")
+  workType      WorkType     @default(OFFICIAL) @map("work_type")
+  date          DateTime
+  dueDate       DateTime?    @map("due_date")
+  description   String?
+  debit         Decimal      @default(0)
+  credit        Decimal      @default(0)
+  balanceAfter  Decimal?     @map("balance_after")
+  status        String       @default("ACTIVE")
+  deletedAt     DateTime?    @map("deleted_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  @@index([mainCompanyId])
+  @@index([firmId])
+  @@index([documentId])
+  @@map("cari_movements")
+}
+
+model PaymentRecord {
+  id                String              @id @default(uuid())
+  mainCompanyId     String              @map("main_company_id")
+  firmId            String              @map("firm_id")
+  relatedDocumentId String?             @map("related_document_id")
+  paymentType       PaymentType         @map("payment_type")
+  workType          WorkType            @default(OFFICIAL) @map("work_type")
+  checkNo           String?             @map("check_no")
+  bankName          String?             @map("bank_name")
+  dueDate           DateTime?           @map("due_date")
+  amount            Decimal             @default(0)
+  status            PaymentRecordStatus @default(PLANNED)
+  frontImagePath    String?             @map("front_image_path")
+  backImagePath     String?             @map("back_image_path")
+  note              String?
+  deletedAt         DateTime?           @map("deleted_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  @@index([mainCompanyId])
+  @@index([firmId])
+  @@index([status])
+  @@map("payment_records")
+}
+
+model MailTask {
+  id                 String         @id @default(uuid())
+  mainCompanyId      String         @map("main_company_id")
+  firmId             String         @map("firm_id")
+  modelId            String?        @map("model_id")
+  invoiceDocumentId  String?        @map("invoice_document_id")
+  dispatchDocumentId String?        @map("dispatch_document_id")
+  mailType           MailTaskType   @map("mail_type")
+  subject            String
+  body               String?
+  toJson             Json?          @map("to_json")
+  ccJson             Json?          @map("cc_json")
+  attachmentJson     Json?          @map("attachment_json")
+  status             MailTaskStatus @default(DRAFT)
+  sentAt             DateTime?      @map("sent_at")
+  deletedAt          DateTime?      @map("deleted_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  @@index([mainCompanyId])
+  @@index([firmId])
+  @@index([status])
+  @@map("mail_tasks")
+}
+
+model StatementCompare {
+  id            String    @id @default(uuid())
+  mainCompanyId String    @map("main_company_id")
+  firmId        String    @map("firm_id")
+  filePath      String    @map("file_path")
+  compareDate   DateTime  @map("compare_date")
+  resultJson    Json?     @map("result_json")
+  status        String    @default("ACTIVE")
+  deletedAt     DateTime? @map("deleted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanyId])
+  @@index([firmId])
+  @@map("statement_compares")
+}
+
+model HrMonthlyEmployee {
+  id                     String    @id @default(uuid())
+  mainCompanyId          String    @map("main_company_id")
+  code                   String?
+  fullName               String    @map("full_name")
+  department             String?
+  title                  String?
+  workType               String?   @map("work_type")
+  sgkStatus              String?   @map("sgk_status")
+  status                 String    @default("ACTIVE")
+  hireDate               DateTime? @map("hire_date")
+  salary                 Decimal   @default(0)
+  roadAllowance          Decimal   @default(0) @map("road_allowance")
+  bankPaymentType        String?   @map("bank_payment_type")
+  bankAmount             Decimal   @default(0) @map("bank_amount")
+  cashAmount             Decimal   @default(0) @map("cash_amount")
+  overtimeHourlyBase     Decimal   @default(225) @map("overtime_hourly_base")
+  annualLeaveEntitlement Decimal   @default(14) @map("annual_leave_entitlement")
+  annualLeaveCarryover   Decimal   @default(0) @map("annual_leave_carryover")
+  note                   String?
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanyId])
+  @@index([status])
+  @@map("hr_monthly_employees")
+}
+
+model HrSalaryContract {
+  id              String    @id @default(uuid())
+  employeeId      String    @map("employee_id")
+  salary          Decimal   @default(0)
+  roadAllowance   Decimal   @default(0) @map("road_allowance")
+  bankPaymentType String?   @map("bank_payment_type")
+  bankAmount      Decimal   @default(0) @map("bank_amount")
+  cashAmount      Decimal   @default(0) @map("cash_amount")
+  contractType    String?   @map("contract_type")
+  contractStart   DateTime  @map("contract_start")
+  contractEnd     DateTime? @map("contract_end")
+  effectiveDate   DateTime  @map("effective_date")
+  note            String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("hr_salary_contracts")
+}
+
+model HrLeaveRecord {
+  id           String   @id @default(uuid())
+  employeeId   String   @map("employee_id")
+  recordType   String   @map("record_type")
+  effectType   String   @map("effect_type")
+  startDate    DateTime @map("start_date")
+  endDate      DateTime @map("end_date")
+  dayCount     Decimal  @default(0) @map("day_count")
+  documentPath String?  @map("document_path")
+  note         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("hr_leave_records_v2")
+}
+
+model HrMonthlyAdjustment {
+  id             String   @id @default(uuid())
+  employeeId     String   @map("employee_id")
+  date           DateTime
+  adjustmentType String   @map("adjustment_type")
+  hourOrDay      Decimal  @default(0) @map("hour_or_day")
+  amount         Decimal  @default(0)
+  payrollEffect  String   @map("payroll_effect")
+  note           String?
+  status         String   @default("DRAFT")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([date])
+  @@map("hr_monthly_adjustments_v2")
+}
+
+model OfficialHoliday {
+  id        String   @id @default(uuid())
+  date      DateTime @unique @map("tarih")
+  name      String   @map("ad")
+  year      Int      @map("yil")
+  active    Boolean  @default(true) @map("aktif")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([year])
+  @@index([active])
+  @@map("official_holidays")
+}
+
+model HrPayroll {
+  id              String   @id @default(uuid())
+  mainCompanyId   String   @map("main_company_id")
+  year            Int
+  month           Int
+  employeeId      String   @map("employee_id")
+  salary          Decimal  @default(0)
+  roadAllowance   Decimal  @default(0) @map("road_allowance")
+  overtimeAmount  Decimal  @default(0) @map("overtime_amount")
+  premiumAmount   Decimal  @default(0) @map("premium_amount")
+  deductionAmount Decimal  @default(0) @map("deduction_amount")
+  advanceAmount   Decimal  @default(0) @map("advance_amount")
+  bankAmount      Decimal  @default(0) @map("bank_amount")
+  cashAmount      Decimal  @default(0) @map("cash_amount")
+  totalAmount     Decimal  @default(0) @map("total_amount")
+  status          String   @default("DRAFT")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanyId, year, month, employeeId])
+  @@index([mainCompanyId])
+  @@map("hr_payrolls_v2")
+}
+
+model HrEmployeeDocument {
+  id           String   @id @default(uuid())
+  employeeId   String   @map("employee_id")
+  documentType String   @map("document_type")
+  fileName     String   @map("file_name")
+  filePath     String?  @map("file_path")
+  date         DateTime
+  status       String   @default("WAITING")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("hr_employee_documents")
+}
+
+model IkPersonCardSetting {
+  employeeId      String  @id @map("employee_id")
+  mainCompanyId   String  @map("main_company_id")
+  cardNo          String  @default("") @map("card_no")
+  identityNo      String  @default("") @map("identity_no")
+  payrollIncluded Int     @default(1) @map("payroll_included")
+  cardSource      String  @default("TNF") @map("card_source")
+  personelKodu    String  @default("") @map("personel_kodu")
+  exitDate        String? @map("exit_date")
+  activePassive   String  @default("AKTIF") @map("active_passive")
+  workType        String  @default("AYLIK") @map("work_type")
+  sgkFollow       Int     @default(1) @map("sgk_follow")
+  paymentType     String  @default("BANKA_ELDEN") @map("payment_type")
+  note            String  @default("")
+  updatedAt       String  @default("CURRENT_TIMESTAMP") @map("updated_at")
+
+  @@unique([mainCompanyId, cardNo])
+  @@map("ik_person_card_settings")
+}
+
+model IkMonthlyAttendance {
+  id            String @id
+  mainCompanyId String @map("main_company_id")
+  employeeId    String @map("employee_id")
+  workDate      String @map("work_date")
+  status        String @default("G")
+  checkIn       String @default("") @map("check_in")
+  checkOut      String @default("") @map("check_out")
+  note          String @default("")
+  source        String @default("MANUAL")
+  isManual      Int    @default(0) @map("is_manual")
+  earlyExit     String @default("") @map("early_exit")
+  lateEntry     String @default("") @map("late_entry")
+  documentId    String @default("") @map("document_id")
+  createdBy     String @default("") @map("created_by")
+  updatedBy     String @default("") @map("updated_by")
+  createdAt     String @default("CURRENT_TIMESTAMP") @map("created_at")
+  updatedAt     String @default("CURRENT_TIMESTAMP") @map("updated_at")
+
+  @@unique([employeeId, workDate])
+  @@index([mainCompanyId, workDate])
+  @@map("ik_monthly_attendance")
+}
+
+model IkCardImport {
+  id            String @id
+  mainCompanyId String @map("main_company_id")
+  periodYear    Int    @map("period_year")
+  periodMonth   Int    @map("period_month")
+  fileName      String @default("") @map("file_name")
+  status        String @default("PREVIEW")
+  createdAt     String @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([mainCompanyId, periodYear, periodMonth])
+  @@map("ik_card_imports")
+}
+
+model IkCardImportRow {
+  id         String  @id
+  importId   String  @map("import_id")
+  employeeId String? @map("employee_id")
+  fullName   String  @default("") @map("full_name")
+  cardNo     String  @default("") @map("card_no")
+  workDate   String  @default("") @map("work_date")
+  checkIn    String  @default("") @map("check_in")
+  checkOut   String  @default("") @map("check_out")
+  warning    String  @default("")
+  rawLine    String  @default("") @map("raw_line")
+  createdAt  String  @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([importId])
+  @@map("ik_card_import_rows")
+}
+
+model IkSgkImport {
+  id            String @id
+  mainCompanyId String @map("main_company_id")
+  periodYear    Int    @map("period_year")
+  periodMonth   Int    @map("period_month")
+  fileName      String @default("") @map("file_name")
+  versionNo     Int    @default(1) @map("version_no")
+  status        String @default("CONFIRMED")
+  createdAt     String @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([mainCompanyId, periodYear, periodMonth])
+  @@map("ik_sgk_imports")
+}
+
+model IkSgkRow {
+  id                   String  @id
+  importId             String  @map("import_id")
+  employeeId           String? @map("employee_id")
+  fullName             String  @map("full_name")
+  identityNo           String  @default("") @map("identity_no")
+  personCode           String  @default("") @map("person_code")
+  hireDate             String  @default("") @map("hire_date")
+  exitDate             String  @default("") @map("exit_date")
+  sgkDays              Float   @default(0) @map("sgk_days")
+  gross                Float   @default(0)
+  net                  Float   @default(0)
+  normalEarning        Float   @default(0) @map("normal_earning")
+  otherEarning         Float   @default(0) @map("other_earning")
+  totalEarning         Float   @default(0) @map("total_earning")
+  sgkBase              Float   @default(0) @map("sgk_base")
+  sgkPremium           Float   @default(0) @map("sgk_premium")
+  unemploymentPremium  Float   @default(0) @map("unemployment_premium")
+  incomeTax            Float   @default(0) @map("income_tax")
+  stampTax             Float   @default(0) @map("stamp_tax")
+  specialDeduction     Float   @default(0) @map("special_deduction")
+  employerSgk          Float   @default(0) @map("employer_sgk")
+  employerUnemployment Float   @default(0) @map("employer_unemployment")
+  sgkIncentive         Float   @default(0) @map("sgk_incentive")
+  employerNetCost      Float   @default(0) @map("employer_net_cost")
+  differenceReason     String  @default("") @map("difference_reason")
+  rawJson              String  @default("{}") @map("raw_json")
+  createdAt            String  @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([importId])
+  @@map("ik_sgk_rows")
+}
+
+model IkMonthlyClose {
+  id            String  @id
+  mainCompanyId String  @map("main_company_id")
+  periodYear    Int     @map("period_year")
+  periodMonth   Int     @map("period_month")
+  isLocked      Int     @default(0) @map("is_locked")
+  lockedAt      String? @map("locked_at")
+  createdAt     String  @default("CURRENT_TIMESTAMP") @map("created_at")
+  updatedAt     String  @default("CURRENT_TIMESTAMP") @map("updated_at")
+
+  @@unique([mainCompanyId, periodYear, periodMonth])
+  @@map("ik_monthly_close")
+}
+
+model IkMonthlyCloseLog {
+  id            String @id
+  mainCompanyId String @map("main_company_id")
+  periodYear    Int    @map("period_year")
+  periodMonth   Int    @map("period_month")
+  action        String
+  reason        String @default("")
+  oldJson       String @default("{}") @map("old_json")
+  newJson       String @default("{}") @map("new_json")
+  userName      String @default("") @map("user_name")
+  createdAt     String @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([mainCompanyId, periodYear, periodMonth])
+  @@map("ik_monthly_close_logs")
+}
+
+model IkAuditLog {
+  id            String @id
+  mainCompanyId String @map("main_company_id")
+  employeeId    String @default("") @map("employee_id")
+  period        String @default("")
+  actionType    String @map("action_type")
+  sourceScreen  String @default("") @map("source_screen")
+  oldJson       String @default("{}") @map("old_json")
+  newJson       String @default("{}") @map("new_json")
+  reason        String @default("")
+  userName      String @default("") @map("user_name")
+  createdAt     String @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([mainCompanyId, employeeId, period])
+  @@map("ik_audit_logs")
+}
+
+model IkPayrollOverride {
+  id            String @id
+  mainCompanyId String @map("main_company_id")
+  periodYear    Int    @map("period_year")
+  periodMonth   Int    @map("period_month")
+  employeeId    String @map("employee_id")
+  systemJson    String @default("{}") @map("system_json")
+  overrideJson  String @default("{}") @map("override_json")
+  reason        String
+  status        String @default("MANUAL_APPROVED")
+  userName      String @default("") @map("user_name")
+  createdAt     String @default("CURRENT_TIMESTAMP") @map("created_at")
+  updatedAt     String @default("CURRENT_TIMESTAMP") @map("updated_at")
+
+  @@unique([mainCompanyId, periodYear, periodMonth, employeeId])
+  @@index([mainCompanyId, periodYear, periodMonth])
+  @@map("ik_payroll_overrides")
+}
+
+model IkSettlementDraft {
+  id                String @id
+  mainCompanyId     String @map("main_company_id")
+  employeeId        String @map("employee_id")
+  exitDate          String @map("exit_date")
+  seniorityDays     Int    @default(0) @map("seniority_days")
+  grossSalary       Float  @default(0) @map("gross_salary")
+  ceilingAmount     Float  @default(0) @map("ceiling_amount")
+  severanceAmount   Float  @default(0) @map("severance_amount")
+  unusedLeaveDays   Float  @default(0) @map("unused_leave_days")
+  unusedLeaveAmount Float  @default(0) @map("unused_leave_amount")
+  note              String @default("")
+  userName          String @default("") @map("user_name")
+  createdAt         String @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@index([mainCompanyId, employeeId, exitDate])
+  @@map("ik_settlement_drafts")
+}
+
+model HrDailyEmployee {
+  id            String   @id @default(uuid())
+  mainCompanyId String   @map("main_company_id")
+  fullName      String   @map("full_name")
+  qualification String?
+  dayWage       Decimal  @default(0) @map("day_wage")
+  nightWage     Decimal  @default(0) @map("night_wage")
+  broker        String?
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanyId])
+  @@map("hr_daily_employees")
+}
+
+model HrDailyAttendance {
+  id            String   @id @default(uuid())
+  employeeId    String   @map("employee_id")
+  workDate      DateTime @map("work_date")
+  dayShift      Boolean  @default(false) @map("day_shift")
+  nightShift    Boolean  @default(false) @map("night_shift")
+  dayWage       Decimal  @default(0) @map("day_wage")
+  nightWage     Decimal  @default(0) @map("night_wage")
+  totalAmount   Decimal  @default(0) @map("total_amount")
+  paymentStatus String   @default("WAITING") @map("payment_status")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([employeeId, workDate])
+  @@index([employeeId])
+  @@index([workDate])
+  @@map("hr_daily_attendance")
+}
+
+model CompanyDepartment {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  companyId       String   @map("company_id")
+  name            String
+  code            String?
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@map("company_departments")
+}
+
+model CompanyContact {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  companyId       String   @map("company_id")
+  departmentId    String?  @map("department_id")
+  fullName        String   @map("full_name")
+  department      String?
+  title           String?
+  email           String?
+  phone           String?
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@map("company_contacts")
+}
+
+model CompanyContactAuthority {
+  id                            String   @id @default(uuid())
+  mainCompanyId                 String?  @map("main_company_id")
+  mainCompanySlug               String   @map("main_company_slug")
+  contactId                     String   @map("contact_id")
+  canReceiveInvoice             Boolean  @default(false) @map("can_receive_invoice")
+  canReceiveDispatch            Boolean  @default(false) @map("can_receive_dispatch")
+  canReceiveStatement           Boolean  @default(false) @map("can_receive_statement")
+  canReceivePaymentReminder     Boolean  @default(false) @map("can_receive_payment_reminder")
+  canReceiveGeneralAccountingCc Boolean  @default(false) @map("can_receive_general_accounting_cc")
+  canBeModelResponsible         Boolean  @default(false) @map("can_be_model_responsible")
+  canAssignModel                Boolean  @default(false) @map("can_assign_model")
+  canSeePrice                   Boolean  @default(false) @map("can_see_price")
+  createdAt                     DateTime @default(now()) @map("created_at")
+  updatedAt                     DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([contactId])
+  @@map("company_contact_authorities")
+}
+
+model AccountingDocumentLine {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  documentId      String   @map("document_id")
+  materialNo      String?  @map("material_no")
+  description     String?
+  quantity        Decimal  @default(0)
+  unit            String?
+  unitPrice       Decimal  @default(0) @map("unit_price")
+  total           Decimal  @default(0)
+  vatRate         Decimal  @default(0) @map("vat_rate")
+  vatAmount       Decimal  @default(0) @map("vat_amount")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([documentId])
+  @@map("accounting_document_lines")
+}
+
+model AccountingDocumentModelLink {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  documentId      String   @map("document_id")
+  documentLineId  String?  @map("document_line_id")
+  modelId         String   @map("model_id")
+  modelOrderId    String?  @map("model_order_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([mainCompanySlug, documentId, documentLineId, modelId])
+  @@index([mainCompanySlug])
+  @@map("accounting_document_model_links")
+}
+
+model Model {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  companyId       String?  @map("company_id")
+  name            String
+  code            String?
+  orderNo         String?  @map("order_no")
+  imageUrl        String?  @map("image_url")
+  unitPrice       Decimal  @default(0) @map("unit_price")
+  status          String   @default("ACTIVE")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@map("models")
+}
+
+model ModelOrder {
+  id                  String    @id @default(uuid())
+  mainCompanyId       String?   @map("main_company_id")
+  mainCompanySlug     String    @map("main_company_slug")
+  companyId           String?   @map("company_id")
+  customerId          String?   @map("customer_id")
+  customerName        String?   @map("customer_name")
+  modelId             String?   @map("model_id")
+  modelName           String?   @map("model_name")
+  modelCode           String?   @map("model_code")
+  modelOrderNo        String?   @map("model_order_no")
+  orderNo             String?   @map("order_no")
+  customerDispatchNo  String?   @map("customer_dispatch_no")
+  invoiceNo           String?   @map("invoice_no")
+  sourceDispatchNo    String?   @map("source_dispatch_no")
+  sourceDispatchDate  DateTime? @map("source_dispatch_date")
+  incomingQty         Decimal   @default(0) @map("incoming_qty")
+  incomingQuantity    Decimal   @default(0) @map("incoming_quantity")
+  producedQuantity    Decimal   @default(0) @map("produced_quantity")
+  remainingQuantity   Decimal   @default(0) @map("remaining_quantity")
+  unitPrice           Decimal   @default(0) @map("unit_price")
+  invoiceQty          Decimal   @default(0) @map("invoice_qty")
+  dispatchQty         Decimal   @default(0) @map("dispatch_qty")
+  remainingQty        Decimal   @default(0) @map("remaining_qty")
+  remainingAmount     Decimal   @default(0) @map("remaining_amount")
+  printStructure      String?   @map("print_structure")
+  printAreas          Json?     @map("print_areas")
+  colorCount          Int       @default(0) @map("color_count")
+  undefinedColorCount Int       @default(0) @map("undefined_color_count")
+  responsiblePersonId String?   @map("responsible_person_id")
+  assignedPersonId    String?   @map("assigned_person_id")
+  notes               String?
+  imageUrl            String?   @map("image_url")
+  status              String    @default("CONTROL_WAITING")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@index([modelId])
+  @@map("model_orders")
+}
+
+model ModelOrderLine {
+  id                   String   @id @default(uuid())
+  mainCompanyId        String?  @map("main_company_id")
+  mainCompanySlug      String   @map("main_company_slug")
+  modelOrderId         String   @map("model_order_id")
+  sourceDocumentLineId String?  @map("source_document_line_id")
+  materialNo           String?  @map("material_no")
+  description          String?
+  incomingQty          Decimal  @default(0) @map("incoming_qty")
+  ourDispatchQty       Decimal  @default(0) @map("our_dispatch_qty")
+  invoiceQty           Decimal  @default(0) @map("invoice_qty")
+  unitPrice            Decimal  @default(0) @map("unit_price")
+  invoicePrice         Decimal  @default(0) @map("invoice_price")
+  remainingQty         Decimal  @default(0) @map("remaining_qty")
+  remainingAmount      Decimal  @default(0) @map("remaining_amount")
+  printStructure       String?  @map("print_structure")
+  status               String   @default("CONTROL_WAITING")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelOrderId])
+  @@map("model_order_lines")
+}
+
+model ProductionPlanLine {
+  id               String   @id @default(uuid())
+  mainCompanyId    String?  @map("main_company_id")
+  mainCompanySlug  String   @map("main_company_slug")
+  modelOrderId     String?  @map("model_order_id")
+  modelOrderLineId String?  @map("model_order_line_id")
+  modelId          String?  @map("model_id")
+  companyId        String?  @map("company_id")
+  orderNo          String?  @map("order_no")
+  sourceDispatchNo String?  @map("source_dispatch_no")
+  printArea        String   @map("print_area")
+  expectedQty      Decimal  @default(0) @map("expected_qty")
+  producedQty      Decimal  @default(0) @map("produced_qty")
+  wasteQty         Decimal  @default(0) @map("waste_qty")
+  machineId        String?  @map("machine_id")
+  shift            String?
+  operatorId       String?  @map("operator_id")
+  assistantId      String?  @map("assistant_id")
+  status           String   @default("WAITING")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelOrderId])
+  @@map("production_plan_lines")
+}
+
+model ProductionEntry {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  planLineId      String?  @map("plan_line_id")
+  machineId       String?  @map("machine_id")
+  shift           String?
+  entryDate       DateTime @map("entry_date")
+  producedQty     Decimal  @default(0) @map("produced_qty")
+  wasteQty        Decimal  @default(0) @map("waste_qty")
+  operatorId      String?  @map("operator_id")
+  assistantId     String?  @map("assistant_id")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([planLineId])
+  @@map("production_plan_entries")
+}
+
+model ProductionJob {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  modelId         String?   @map("model_id")
+  modelName       String?   @map("model_name")
+  companyId       String?   @map("company_id")
+  companyName     String?   @map("company_name")
+  orderNo         String?   @map("order_no")
+  dispatchNo      String?   @map("dispatch_no")
+  dispatchDate    DateTime? @map("dispatch_date")
+  dispatchQty     Decimal   @default(0) @map("dispatch_qty")
+  producedQty     Decimal   @default(0) @map("produced_qty")
+  invoiceQty      Decimal   @default(0) @map("invoice_qty")
+  unitPrice       Decimal   @default(0) @map("unit_price")
+  status          String    @default("WAITING")
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelId])
+  @@map("production_jobs")
+}
+
+model ProductionMachine {
+  id               String   @id @default(uuid())
+  mainCompanyId    String?  @map("main_company_id")
+  mainCompanySlug  String   @map("main_company_slug")
+  machineNo        String   @map("machine_no")
+  machineName      String   @map("machine_name")
+  shift            String?
+  defaultMachinist String?  @map("default_machinist")
+  status           String   @default("Aktif")
+  raw              Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([mainCompanySlug, machineNo])
+  @@index([mainCompanySlug])
+  @@map("production_machines")
+}
+
+model ProductionDispatchLink {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  productionJobId String?  @map("production_job_id")
+  modelId         String?  @map("model_id")
+  dispatchNo      String   @map("dispatch_no")
+  orderNo         String?  @map("order_no")
+  dispatchQty     Decimal  @default(0) @map("dispatch_qty")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelId])
+  @@map("production_dispatch_links")
+}
+
+model ProductionInvoiceLink {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  productionJobId String?  @map("production_job_id")
+  modelId         String?  @map("model_id")
+  invoiceNo       String   @map("invoice_no")
+  dispatchNo      String?  @map("dispatch_no")
+  invoiceQty      Decimal  @default(0) @map("invoice_qty")
+  unitPrice       Decimal  @default(0) @map("unit_price")
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelId])
+  @@map("production_invoice_links")
+}
+
+model MachineShiftAssignment {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  machineId       String   @map("machine_id")
+  shift           String
+  operatorId      String?  @map("operator_id")
+  assistantId     String?  @map("assistant_id")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([machineId])
+  @@map("machine_shift_assignments")
+}
+
+model KdvRecord {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  documentId      String?  @map("document_id")
+  companyId       String?  @map("company_id")
+  date            DateTime
+  documentNo      String?  @map("document_no")
+  recordType      String   @map("record_type")
+  officialType    String?  @map("official_type")
+  baseAmount      Decimal  @default(0) @map("base_amount")
+  vatRate         Decimal  @default(0) @map("vat_rate")
+  vatAmount       Decimal  @default(0) @map("vat_amount")
+  totalAmount     Decimal  @default(0) @map("total_amount")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([documentId])
+  @@map("kdv_records")
+}
+
+model ChequePayment {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  companyId       String?   @map("company_id")
+  documentId      String?   @map("document_id")
+  checkNo         String?   @map("check_no")
+  bankName        String?   @map("bank_name")
+  paymentType     String?   @map("payment_type")
+  dueDate         DateTime? @map("due_date")
+  amount          Decimal   @default(0)
+  officialType    String?   @map("official_type")
+  status          String    @default("WAITING")
+  frontImagePath  String?   @map("front_image_path")
+  backImagePath   String?   @map("back_image_path")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@map("cheque_payments")
+}
+
+model MailTracking {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  companyId       String?  @map("company_id")
+  modelId         String?  @map("model_id")
+  invoiceNo       String?  @map("invoice_no")
+  dispatchNo      String?  @map("dispatch_no")
+  amount          Decimal  @default(0)
+  toJson          Json?    @map("to_json")
+  ccJson          Json?    @map("cc_json")
+  status          String   @default("DRAFT")
+  statementStatus String?  @map("statement_status")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([companyId])
+  @@map("mail_tracking")
+}
+
+model DesignWork {
+  id               String    @id @default(uuid())
+  mainCompanyId    String?   @map("main_company_id")
+  mainCompanySlug  String    @map("main_company_slug")
+  modelOrderId     String?   @map("model_order_id")
+  modelName        String?   @map("model_name")
+  customerName     String?   @map("customer_name")
+  designName       String?   @map("design_name")
+  ground           String?
+  printArea        String?   @map("print_area")
+  templateSize     String?   @map("template_size")
+  placementFileUrl String?   @map("placement_file_url")
+  designImageUrl   String?   @map("design_image_url")
+  colorCount       Int       @default(0) @map("color_count")
+  channelCount     Int       @default(0) @map("channel_count")
+  status           String    @default("WAITING")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelOrderId])
+  @@map("design_works")
+}
+
+model ModelColor {
+  id                String    @id @default(uuid())
+  mainCompanyId     String?   @map("main_company_id")
+  mainCompanySlug   String    @map("main_company_slug")
+  modelOrderId      String    @map("model_order_id")
+  orderNo           Int       @default(0) @map("order_no")
+  colorName         String?   @map("color_name")
+  customerColorCode String?   @map("customer_color_code")
+  pantone           String?
+  dyeType           String?   @map("dye_type")
+  version           String?   @default("v1")
+  colorHex          String?   @map("color_hex")
+  isRegisteredColor Boolean   @default(false) @map("is_registered_color")
+  registeredColorId String?   @map("registered_color_id")
+  channelImageUrl   String?   @map("channel_image_url")
+  status            String    @default("DEFINE")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelOrderId])
+  @@map("model_colors")
+}
+
+model ApprovedChemicalInventory {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  productCode     String?   @map("product_code")
+  productName     String    @map("product_name")
+  shortName       String?   @map("short_name")
+  supplierName    String?   @map("supplier_name")
+  dyeType         String    @map("dye_type")
+  usageStatus     String?   @map("usage_status")
+  casStatus       String?   @map("cas_status")
+  lcwStatus       String?   @map("lcw_status")
+  msdsStatus      String?   @map("msds_status")
+  tdsStatus       String?   @map("tds_status")
+  zdhcStatus      String?   @map("zdhc_status")
+  defaultLotId    String?   @map("default_lot_id")
+  canUseInRecipe  Boolean   @default(true) @map("can_use_in_recipe")
+  status          String    @default("ACTIVE")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([mainCompanyId])
+  @@index([productName])
+  @@map("approved_chemical_inventory")
+}
+
+model ChemicalLot {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  inventoryId     String?   @map("inventory_id")
+  productName     String    @map("product_name")
+  dyeType         String?   @map("dye_type")
+  lotNo           String    @map("lot_no")
+  supplierName    String?   @map("supplier_name")
+  invoiceNo       String?   @map("invoice_no")
+  entryKg         Decimal   @default(0) @map("entry_kg")
+  usedKg          Decimal   @default(0) @map("used_kg")
+  remainingKg     Decimal   @default(0) @map("remaining_kg")
+  isDefault       Boolean   @default(false) @map("is_default")
+  status          String    @default("ACTIVE")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([inventoryId])
+  @@map("chemical_lots")
+}
+
+model ChemicalDocument {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  productName     String?   @map("product_name")
+  supplierName    String?   @map("supplier_name")
+  documentType    String    @map("document_type")
+  documentNo      String?   @map("document_no")
+  validUntil      DateTime? @map("valid_until")
+  filePath        String?   @map("file_path")
+  lotNo           String?   @map("lot_no")
+  auditType       String?   @map("audit_type")
+  status          String    @default("WAITING")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@map("chemical_documents")
+}
+
+model RegisteredColor {
+  id                    String    @id @default(uuid())
+  mainCompanyId         String?   @map("main_company_id")
+  mainCompanySlug       String    @map("main_company_slug")
+  colorName             String?   @map("color_name")
+  customerColorCode     String?   @map("customer_color_code")
+  pantone               String?
+  dyeType               String?   @map("dye_type")
+  version               String?   @default("v1")
+  colorHex              String?   @map("color_hex")
+  productCombinationKey String?   @map("product_combination_key")
+  status                String    @default("ACTIVE")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@map("registered_colors")
+}
+
+model DyeRecipe {
+  id                String    @id @default(uuid())
+  mainCompanyId     String?   @map("main_company_id")
+  mainCompanySlug   String    @map("main_company_slug")
+  modelOrderId      String?   @map("model_order_id")
+  modelColorId      String?   @map("model_color_id")
+  registeredColorId String?   @map("registered_color_id")
+  colorName         String?   @map("color_name")
+  customerColorCode String?   @map("customer_color_code")
+  pantone           String?
+  dyeType           String?   @map("dye_type")
+  version           String?   @default("v1")
+  layerCount        Int       @default(1) @map("layer_count")
+  status            String    @default("DRAFT")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelOrderId])
+  @@index([modelColorId])
+  @@map("dye_recipes")
+}
+
+model DyeRecipeLine {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  recipeId        String    @map("recipe_id")
+  inventoryId     String?   @map("inventory_id")
+  productName     String?   @map("product_name")
+  trial1Gr        Decimal   @default(0) @map("trial1_gr")
+  trial2Gr        Decimal   @default(0) @map("trial2_gr")
+  trial3Gr        Decimal   @default(0) @map("trial3_gr")
+  trialTotalGr    Decimal   @default(0) @map("trial_total_gr")
+  productionGr    Decimal   @default(0) @map("production_gr")
+  totalGr         Decimal   @default(0) @map("total_gr")
+  percent         Decimal   @default(0)
+  lotId           String?   @map("lot_id")
+  lotNo           String?   @map("lot_no")
+  dyeType         String?   @map("dye_type")
+  status          String    @default("WAITING")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([recipeId])
+  @@map("dye_recipe_lines")
+}
+
+model ModelDyeExpense {
+  id                 String    @id @default(uuid())
+  mainCompanyId      String?   @map("main_company_id")
+  mainCompanySlug    String    @map("main_company_slug")
+  modelOrderId       String?   @map("model_order_id")
+  inventoryId        String?   @map("inventory_id")
+  productName        String?   @map("product_name")
+  lotId              String?   @map("lot_id")
+  lotNo              String?   @map("lot_no")
+  amountKg           Decimal   @default(0) @map("amount_kg")
+  expenseDate        DateTime  @default(now()) @map("expense_date")
+  note               String?
+  sourceProductionId String?   @map("source_production_id")
+  productionItemId   String?   @map("production_item_id")
+  estimatedCost      Decimal   @default(0) @map("estimated_cost")
+  snapshot           Json?
+  status             String    @default("ACTIVE")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([modelOrderId])
+  @@index([mainCompanySlug, sourceProductionId])
+  @@map("model_dye_expenses")
+}
+
+model DyeProduction {
+  id                  String   @id @default(uuid())
+  mainCompanySlug     String   @map("main_company_slug")
+  requestId           String   @map("request_id")
+  jobId               String   @map("job_id")
+  jobColorId          String   @map("job_color_id")
+  colorId             String?  @map("color_id")
+  recipeId            String?  @map("recipe_id")
+  pantoneSnapshot     String?  @map("pantone_snapshot")
+  colorNameSnapshot   String   @map("color_name_snapshot")
+  paintTypeSnapshot   String   @map("paint_type_snapshot")
+  versionSnapshot     String   @map("version_snapshot")
+  referenceTotalGram  Decimal  @default(0) @map("reference_total_gram")
+  multiplier          Decimal  @default(1)
+  productionTotalGram Decimal  @default(0) @map("production_total_gram")
+  productionTotalKg   Decimal  @default(0) @map("production_total_kg")
+  jobType             String   @default("PRODUCTION") @map("job_type")
+  modelSnapshot       String   @map("model_snapshot")
+  companySnapshot     String?  @map("company_snapshot")
+  orderSnapshot       String?  @map("order_snapshot")
+  printRegionSnapshot String?  @map("print_region_snapshot")
+  recipeSnapshot      Json     @map("recipe_snapshot")
+  createdBy           String?  @map("created_by")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@unique([mainCompanySlug, requestId])
+  @@index([mainCompanySlug, jobId])
+  @@index([mainCompanySlug, colorId, createdAt])
+  @@map("dye_productions")
+}
+
+model DyeProductionItem {
+  id                  String   @id @default(uuid())
+  productionId        String   @map("production_id")
+  productId           String?  @map("product_id")
+  productNameSnapshot String   @map("product_name_snapshot")
+  referenceGram       Decimal  @default(0) @map("reference_gram")
+  percentage          Decimal  @default(0)
+  productionGram      Decimal  @default(0) @map("production_gram")
+  productionKg        Decimal  @default(0) @map("production_kg")
+  lotId               String   @map("lot_id")
+  lotNoSnapshot       String   @map("lot_no_snapshot")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([productionId])
+  @@index([lotId])
+  @@map("dye_production_items")
+}
+
+model Employee {
+  id              String    @id @default(uuid())
+  mainCompanyId   String?   @map("main_company_id")
+  mainCompanySlug String    @map("main_company_slug")
+  employeeType    String    @map("employee_type")
+  fullName        String    @map("full_name")
+  role            String?
+  department      String?
+  phone           String?
+  iban            String?
+  sgkStatus       String?   @map("sgk_status")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeType])
+  @@map("employees")
+}
+
+model DailyEmployee {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  employeeId      String?  @map("employee_id")
+  fullName        String?  @map("full_name")
+  dayWage         Decimal  @default(0) @map("day_wage")
+  nightWage       Decimal  @default(0) @map("night_wage")
+  overtime50Rate  Decimal  @default(0) @map("overtime50_rate")
+  overtime100Rate Decimal  @default(0) @map("overtime100_rate")
+  roadFee         Decimal  @default(0) @map("road_fee")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeId])
+  @@map("daily_employees")
+}
+
+model MonthlyEmployee {
+  id               String   @id @default(uuid())
+  mainCompanyId    String?  @map("main_company_id")
+  mainCompanySlug  String   @map("main_company_slug")
+  employeeId       String?  @map("employee_id")
+  fullName         String?  @map("full_name")
+  grossSalary      Decimal  @default(0) @map("gross_salary")
+  netSalary        Decimal  @default(0) @map("net_salary")
+  bankSalary       Decimal  @default(0) @map("bank_salary")
+  cashSalary       Decimal  @default(0) @map("cash_salary")
+  annualLeaveTotal Decimal  @default(0) @map("annual_leave_total")
+  annualLeaveUsed  Decimal  @default(0) @map("annual_leave_used")
+  sgkStatus        String?  @map("sgk_status")
+  department       String?
+  title            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeId])
+  @@map("monthly_employees")
+}
+
+model DailyAttendance {
+  id               String   @id @default(uuid())
+  mainCompanyId    String?  @map("main_company_id")
+  mainCompanySlug  String   @map("main_company_slug")
+  employeeId       String   @map("employee_id")
+  date             DateTime
+  shift            String?
+  present          Boolean  @default(false)
+  overtime50Hours  Decimal  @default(0) @map("overtime50_hours")
+  overtime100Hours Decimal  @default(0) @map("overtime100_hours")
+  roadFee          Decimal  @default(0) @map("road_fee")
+  note             String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeId])
+  @@map("daily_attendances")
+}
+
+model MonthlyAttendance {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  employeeId      String   @map("employee_id")
+  date            DateTime
+  status          String?
+  leaveType       String?  @map("leave_type")
+  overtimeHours   Decimal  @default(0) @map("overtime_hours")
+  deductionAmount Decimal  @default(0) @map("deduction_amount")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeId])
+  @@map("monthly_attendances")
+}
+
+model LeaveRecord {
+  id              String   @id @default(uuid())
+  mainCompanyId   String?  @map("main_company_id")
+  mainCompanySlug String   @map("main_company_slug")
+  employeeId      String   @map("employee_id")
+  startDate       DateTime @map("start_date")
+  endDate         DateTime @map("end_date")
+  leaveType       String   @map("leave_type")
+  effectType      String   @map("effect_type")
+  days            Decimal  @default(0)
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeId])
+  @@map("leave_records")
+}
+
+model Payroll {
+  id                String    @id @default(uuid())
+  mainCompanyId     String?   @map("main_company_id")
+  mainCompanySlug   String    @map("main_company_slug")
+  employeeId        String    @map("employee_id")
+  period            String
+  employeeType      String    @map("employee_type")
+  normalDays        Decimal   @default(0) @map("normal_days")
+  nightDays         Decimal   @default(0) @map("night_days")
+  overtime50Amount  Decimal   @default(0) @map("overtime50_amount")
+  overtime100Amount Decimal   @default(0) @map("overtime100_amount")
+  roadFeeTotal      Decimal   @default(0) @map("road_fee_total")
+  grossAmount       Decimal   @default(0) @map("gross_amount")
+  bankAmount        Decimal   @default(0) @map("bank_amount")
+  cashAmount        Decimal   @default(0) @map("cash_amount")
+  deductionAmount   Decimal   @default(0) @map("deduction_amount")
+  netPayable        Decimal   @default(0) @map("net_payable")
+  status            String    @default("DRAFT")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  @@index([mainCompanySlug])
+  @@index([employeeId])
+  @@map("payrolls")
+}
