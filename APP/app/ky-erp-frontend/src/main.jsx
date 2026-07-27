@@ -4,6 +4,7 @@ import App from "./App.jsx";
 import ApprovedShellEnhancer from "./components/shell/ApprovedShellEnhancer.jsx";
 import MonthlyPersonnelWorkspace from "./pages/modules/ik/MonthlyPersonnelWorkspace.jsx";
 import MonthlySalaryContractWorkspace from "./pages/modules/ik/MonthlySalaryContractWorkspace.jsx";
+import MonthlyOperationsWorkspace from "./pages/modules/ik/MonthlyOperationsWorkspace.jsx";
 import { ActiveCompanyProvider } from "./context/ActiveCompanyContext";
 import { AuthProvider } from "./context/AuthContext";
 import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
@@ -37,6 +38,7 @@ if (isMobileWebRoute) {
           <ApprovedShellEnhancer />
           <MonthlyPersonnelWorkspace />
           <MonthlySalaryContractWorkspace />
+          <MonthlyOperationsWorkspace />
         </ActiveCompanyProvider>
       </AuthProvider>
     );
