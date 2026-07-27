@@ -1,0 +1,367 @@
+:root {
+  --approved-rail: 76px;
+  --approved-menu: 230px;
+  --approved-topbar: 58px;
+  --approved-tabs: 42px;
+  --approved-status: 28px;
+  --approved-bg: #eef3f8;
+  --approved-rail-bg: #0f1d31;
+  --approved-rail-active: #1d3b60;
+  --approved-panel: #ffffff;
+  --approved-border: #dbe3ec;
+  --approved-text: #162033;
+  --approved-muted: #6f7b8c;
+  --approved-primary: #0d6ca8;
+  --approved-primary-soft: #e8f3ff;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--approved-bg);
+}
+
+.app-shell {
+  display: grid !important;
+  grid-template-columns: var(--approved-rail) var(--approved-menu) minmax(0, 1fr) !important;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--approved-bg);
+}
+
+.sidebar-thin {
+  position: relative !important;
+  inset: auto !important;
+  width: auto !important;
+  height: 100vh !important;
+  padding: 10px 7px !important;
+  overflow-y: auto !important;
+  border: 0 !important;
+  background: var(--approved-rail-bg) !important;
+}
+
+.kyerp-rail-logo {
+  display: grid !important;
+  place-items: center !important;
+  width: 48px !important;
+  height: 48px !important;
+  margin: 0 auto 10px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg, #1787c3, #0c5c7d) !important;
+  color: #fff !important;
+}
+
+.thin-nav-btn {
+  display: grid !important;
+  place-items: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+  min-height: 60px !important;
+  margin: 2px 0 !important;
+  padding: 6px 2px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #c9d3df !important;
+}
+
+.thin-nav-btn:hover,
+.thin-nav-btn.active {
+  background: var(--approved-rail-active) !important;
+  color: #fff !important;
+}
+
+.thin-nav-label {
+  max-width: 64px !important;
+  overflow: hidden !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  text-align: center !important;
+  text-overflow: ellipsis !important;
+}
+
+.sidebar-module {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: auto !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+  border-right: 1px solid var(--approved-border) !important;
+  background: var(--approved-panel) !important;
+}
+
+.kyerp-module-brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex: 0 0 var(--approved-topbar) !important;
+  height: var(--approved-topbar) !important;
+  padding: 0 16px !important;
+  border-bottom: 1px solid var(--approved-border) !important;
+  color: #164770 !important;
+}
+
+.module-kicker {
+  padding: 14px 16px 6px !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+}
+
+.module-menu-list {
+  flex: 1 1 auto !important;
+  padding: 4px 10px 16px !important;
+  overflow-y: auto !important;
+}
+
+.module-menu-btn {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  width: 100% !important;
+  min-height: 38px !important;
+  margin: 2px 0 !important;
+  padding: 9px 11px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #29364a !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+}
+
+.module-menu-btn:hover,
+.module-menu-btn.active {
+  background: var(--approved-primary-soft) !important;
+  color: var(--approved-primary) !important;
+}
+
+.module-menu-btn.active {
+  box-shadow: inset 3px 0 0 var(--approved-primary) !important;
+  font-weight: 800 !important;
+}
+
+.main-content {
+  position: relative !important;
+  inset: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: var(--approved-bg) !important;
+}
+
+.kyerp-global-topbar {
+  order: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex: 0 0 var(--approved-topbar) !important;
+  min-height: var(--approved-topbar) !important;
+  padding: 0 12px !important;
+  border-bottom: 1px solid var(--approved-border) !important;
+  background: var(--approved-panel) !important;
+}
+
+.kyerp-global-crumb {
+  display: none !important;
+}
+
+.approved-global-search {
+  order: -10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 520px;
+  max-width: 760px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--approved-border);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #657084;
+}
+
+.approved-global-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--approved-text);
+  font-size: 12px;
+}
+
+.main-company-select,
+.top-select {
+  height: 36px !important;
+  max-width: 250px !important;
+  border: 1px solid var(--approved-border) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  font-size: 11px !important;
+}
+
+.kyerp-notification {
+  width: 36px !important;
+  height: 36px !important;
+  border: 1px solid var(--approved-border) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+}
+
+.kyerp-user-chip {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.approved-work-tabs {
+  order: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 var(--approved-tabs);
+  min-height: var(--approved-tabs);
+  padding: 6px 10px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--approved-border);
+  background: #e9eef4;
+}
+
+.approved-work-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 250px;
+  min-height: 35px;
+  padding: 0 10px;
+  border: 1px solid var(--approved-border);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #f4f7fa;
+  color: #506075;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.approved-work-tab > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.approved-work-tab.active {
+  background: #fff;
+  color: #184d79;
+  font-weight: 700;
+}
+
+.approved-tab-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+
+.approved-tab-close:hover {
+  background: #e2e8f0;
+}
+
+.main-content > .topbar {
+  display: none !important;
+}
+
+.main-content > :not(.kyerp-global-topbar):not(.approved-work-tabs):not(.approved-statusbar):not(.topbar) {
+  order: 3;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.approved-statusbar {
+  order: 4;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 0 0 var(--approved-status);
+  min-height: var(--approved-status);
+  padding: 0 12px;
+  border-top: 1px solid var(--approved-border);
+  background: #fff;
+  color: #687588;
+  font-size: 10px;
+}
+
+.approved-status-ok {
+  margin-left: auto;
+  color: #16845e;
+  font-weight: 700;
+}
+
+/* Muhasebe içindeki mükerrer üst sekme satırı yalnız dış kabukta gizlenir. */
+.muhasebe-page .tabs,
+.muhasebe-page .tab-list,
+.muhasebe-page .muhasebe-tabs,
+.muhasebe-page [class*="workspace-tabs"],
+.muhasebe-page [class*="tab-strip"] {
+  display: none !important;
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --approved-menu: 210px;
+  }
+
+  .approved-global-search {
+    max-width: 480px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 64px minmax(0, 1fr) !important;
+  }
+
+  .sidebar-module {
+    position: fixed !important;
+    left: 64px !important;
+    top: 0 !important;
+    z-index: 60 !important;
+    width: min(280px, calc(100vw - 64px)) !important;
+    transform: translateX(-110%);
+    transition: transform .18s ease;
+  }
+
+  .app-shell.mobile-open .sidebar-module {
+    transform: translateX(0);
+  }
+
+  .approved-global-search {
+    max-width: none;
+  }
+
+  .main-company-select,
+  .kyerp-user-meta {
+    display: none !important;
+  }
+}
