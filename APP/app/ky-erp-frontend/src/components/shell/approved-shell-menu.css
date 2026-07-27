@@ -1,0 +1,105 @@
+:root {
+  --approved-menu-collapsed: 0px;
+}
+
+.app-shell {
+  transition: grid-template-columns 180ms ease;
+}
+
+.app-shell.approved-menu-open {
+  grid-template-columns: var(--approved-rail) var(--approved-menu) minmax(0, 1fr) !important;
+}
+
+.app-shell.approved-menu-collapsed {
+  grid-template-columns: var(--approved-rail) var(--approved-menu-collapsed) minmax(0, 1fr) !important;
+}
+
+.app-shell.approved-menu-collapsed .sidebar-module {
+  width: 0 !important;
+  min-width: 0 !important;
+  border-right: 0 !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-16px);
+}
+
+.sidebar-module {
+  transition:
+    width 180ms ease,
+    opacity 140ms ease,
+    transform 180ms ease,
+    visibility 180ms ease;
+}
+
+.approved-menu-toggle {
+  order: -20;
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--approved-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #31516f;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.approved-menu-toggle:hover {
+  border-color: #b9c8d8;
+  background: var(--approved-primary-soft);
+  color: var(--approved-primary);
+}
+
+.approved-menu-toggle:focus-visible {
+  outline: 2px solid rgba(13, 108, 168, 0.28);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .app-shell,
+  .app-shell.approved-menu-open,
+  .app-shell.approved-menu-collapsed {
+    grid-template-columns: 64px minmax(0, 1fr) !important;
+  }
+
+  .sidebar-module {
+    position: fixed !important;
+    left: 64px !important;
+    top: 0 !important;
+    z-index: 70 !important;
+    width: min(280px, calc(100vw - 64px)) !important;
+    min-width: min(280px, calc(100vw - 64px)) !important;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-112%);
+    box-shadow: 16px 0 34px rgba(15, 29, 49, 0.2);
+  }
+
+  .app-shell.approved-menu-open .sidebar-module,
+  .app-shell.mobile-open .sidebar-module {
+    transform: translateX(0);
+  }
+
+  .app-shell.approved-menu-collapsed .sidebar-module {
+    width: min(280px, calc(100vw - 64px)) !important;
+    min-width: min(280px, calc(100vw - 64px)) !important;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-112%);
+  }
+
+  .approved-menu-toggle {
+    flex-basis: 34px;
+    width: 34px;
+    height: 34px;
+  }
+}
