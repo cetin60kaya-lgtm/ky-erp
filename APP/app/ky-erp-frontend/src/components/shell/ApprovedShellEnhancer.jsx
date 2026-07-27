@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Search, X } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-react";
+import "./approved-shell-menu.css";
 
 const STORAGE_KEY = "kyerp-approved-work-tabs-v1";
+const MENU_STORAGE_KEY = "kyerp-module-menu-open-v1";
 const HOME_PATH = "/muhasebe/yonetim-ozeti";
 
 const MODULE_LABELS = {
@@ -72,6 +74,17 @@ function readTabs() {
   return [routeInfo(HOME_PATH)];
 }
 
+function readMenuOpen() {
+  try {
+    const stored = window.localStorage.getItem(MENU_STORAGE_KEY);
+    if (stored === "0") return false;
+    if (stored === "1") return true;
+  } catch {
+    // localStorage kullanılamazsa masaüstünde açık başlatılır.
+  }
+  return window.innerWidth > 760;
+}
+
 function navigate(path) {
   if (window.location.pathname === path) return;
   window.history.pushState({}, "", path);
@@ -79,16 +92,18 @@ function navigate(path) {
 }
 
 export default function ApprovedShellEnhancer() {
-  const [targets, setTargets] = useState({ topbar: null, main: null });
+  const [targets, setTargets] = useState({ topbar: null, main: null, shell: null });
   const [activePath, setActivePath] = useState(window.location.pathname);
   const [tabs, setTabs] = useState(readTabs);
   const [query, setQuery] = useState("");
+  const [menuOpen, setMenuOpen] = useState(readMenuOpen);
 
   useEffect(() => {
     const resolveTargets = () => {
       setTargets({
         topbar: document.querySelector(".kyerp-global-topbar"),
         main: document.querySelector(".main-content"),
+        shell: document.querySelector(".app-shell"),
       });
     };
     resolveTargets();
@@ -98,7 +113,37 @@ export default function ApprovedShellEnhancer() {
   }, []);
 
   useEffect(() => {
-    const sync = () => setActivePath(window.location.pathname);
+    const shell = targets.shell;
+    if (!shell) return undefined;
+
+    shell.classList.toggle("approved-menu-open", menuOpen);
+    shell.classList.toggle("approved-menu-collapsed", !menuOpen);
+    shell.classList.toggle("mobile-open", menuOpen && window.innerWidth <= 760);
+
+    try {
+      window.localStorage.setItem(MENU_STORAGE_KEY, menuOpen ? "1" : "0");
+    } catch {
+      // Tercih saklanamasa da görünüm çalışmaya devam eder.
+    }
+
+    return () => {
+      shell.classList.remove("approved-menu-open", "approved-menu-collapsed", "mobile-open");
+    };
+  }, [menuOpen, targets.shell]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 760) setMenuOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      setActivePath(window.location.pathname);
+      if (window.innerWidth <= 760) setMenuOpen(false);
+    };
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
@@ -141,20 +186,34 @@ export default function ApprovedShellEnhancer() {
     );
   };
 
+  const toggleMenu = () => setMenuOpen((current) => !current);
+
   return (
     <>
       {targets.topbar
         ? createPortal(
-            <form className="approved-global-search" onSubmit={submitSearch}>
-              <Search size={17} aria-hidden="true" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                type="search"
-                placeholder="Firma, belge, model, ürün veya personel ara..."
-                aria-label="Global arama"
-              />
-            </form>,
+            <>
+              <button
+                type="button"
+                className="approved-menu-toggle"
+                onClick={toggleMenu}
+                aria-expanded={menuOpen}
+                aria-label={menuOpen ? "Sol menüyü kapat" : "Sol menüyü aç"}
+                title={menuOpen ? "Sol menüyü kapat" : "Sol menüyü aç"}
+              >
+                {menuOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
+              </button>
+              <form className="approved-global-search" onSubmit={submitSearch}>
+                <Search size={17} aria-hidden="true" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  type="search"
+                  placeholder="Firma, belge, model, ürün veya personel ara..."
+                  aria-label="Global arama"
+                />
+              </form>
+            </>,
             targets.topbar,
           )
         : null}
