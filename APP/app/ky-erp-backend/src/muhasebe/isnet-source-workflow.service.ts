@@ -61,6 +61,15 @@ export class IsnetSourceWorkflowService {
       throw new BadRequestException("Önce kaynak kaydına model bağlayın.");
     }
 
+    const unresolvedDraft = (intake.outgoingDispatchDrafts || []).find(
+      (row: any) => row.status === "DRAFT",
+    );
+    if (unresolvedDraft) {
+      throw new ConflictException(
+        "Bu kaynak için daha önce İşNet taslak isteği başlatıldı ancak portal sonucu kesinleştirilemedi. Çift irsaliye riskini önlemek için otomatik ikinci istek engellendi; İşNet giden irsaliye taslaklarını kontrol edin.",
+      );
+    }
+
     const maximum = numberValue(intake.capacity?.outgoingRemaining);
     const quantity = numberValue(body.quantity || maximum);
     if (quantity <= 0) throw new BadRequestException("Giden irsaliye adedi sıfırdan büyük olmalıdır.");
@@ -85,42 +94,50 @@ export class IsnetSourceWorkflowService {
       );
     }
 
-    const externalId = `KYERP-SOURCE-${intake.id}-${Date.now()}`;
-    const portalResult: any = await this.operations.createManualDispatchDraft({
-      mainCompanySlug: slug,
-      confirmed: true,
-      recipientId: recipient.id,
-      recipientName: recipient.name,
-      localCompanyId: intake.companyId,
-      issueDate: clean(body.issueDate || new Date().toISOString().slice(0, 10)),
-      issueTime: clean(body.issueTime),
-      orderNo: clean(intake.orderNo),
-      modelId: clean(intake.modelId),
-      modelName: clean(intake.modelName),
-      note: clean(body.note || intake.note),
-      externalId,
-      lines: [
-        {
-          productName: clean(intake.modelName) || "Baskı hizmeti",
-          description: clean(body.description || intake.note || intake.modelName),
-          quantity,
-          unitPrice: 0,
-          measureUnitId: 67,
-        },
-      ],
-    });
-
-    const draftNo = clean(portalResult?.draftNo || portalResult?.documentNo);
-    if (portalResult?.ok !== true || !draftNo) {
-      throw new ConflictException(
-        "İşNet portalı taslak numarası döndürmedi. Yerel kayıt tamamlanmadı ve tekrar denenebilir.",
-      );
-    }
-
     const prepared: any = await this.sourceIntakes.prepareOutgoingDispatch(slug, id, {
       quantity,
       note: clean(body.note || intake.note),
     });
+    const externalId = `KYERP-SOURCE-${intake.id}-${prepared.draft.id}`;
+
+    let portalResult: any;
+    try {
+      portalResult = await this.operations.createManualDispatchDraft({
+        mainCompanySlug: slug,
+        confirmed: true,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+        localCompanyId: intake.companyId,
+        issueDate: clean(body.issueDate || new Date().toISOString().slice(0, 10)),
+        issueTime: clean(body.issueTime),
+        orderNo: clean(intake.orderNo),
+        modelId: clean(intake.modelId),
+        modelName: clean(intake.modelName),
+        note: clean(body.note || intake.note),
+        externalId,
+        lines: [
+          {
+            productName: clean(intake.modelName) || "Baskı hizmeti",
+            description: clean(body.description || intake.note || intake.modelName),
+            quantity,
+            unitPrice: 0,
+            measureUnitId: 67,
+          },
+        ],
+      });
+    } catch (error: any) {
+      throw new ConflictException(
+        `${clean(error?.message) || "İşNet irsaliye taslak sonucu alınamadı."} Yerel taslak korundu; çift kayıt riskini önlemek için otomatik tekrar kapatıldı.`,
+      );
+    }
+
+    const draftNo = clean(portalResult?.draftNo || portalResult?.documentNo);
+    if (portalResult?.ok !== true || !draftNo) {
+      throw new ConflictException(
+        "İşNet portalı taslak numarası döndürmedi. Yerel taslak korundu ve otomatik ikinci istek engellendi.",
+      );
+    }
+
     const completed = await this.sourceIntakes.completeOutgoingDispatch(
       slug,
       id,
@@ -148,7 +165,9 @@ export class IsnetSourceWorkflowService {
     const completedDrafts = (intake.outgoingDispatchDrafts || []).filter(
       (row: any) => row.status === "COMPLETED" && clean(row.documentNo),
     );
-    const selected = completedDrafts.find((row: any) => row.id === clean(body.draftId)) || completedDrafts.at(-1);
+    const selected =
+      completedDrafts.find((row: any) => row.id === clean(body.draftId)) ||
+      completedDrafts[completedDrafts.length - 1];
     if (!selected) throw new BadRequestException("Faturaya çevrilecek tamamlanmış giden irsaliye bulunamadı.");
 
     await this.fullSync.run({
