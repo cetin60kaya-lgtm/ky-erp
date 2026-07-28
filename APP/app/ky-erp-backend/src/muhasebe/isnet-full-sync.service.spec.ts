@@ -2,6 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { IsnetFullSyncService } from "./isnet-full-sync.service";
 
+function smartMatchMock() {
+  return {
+    synchronizeSupplierRouting: async () => ({
+      ok: true,
+      documents: 0,
+      lines: 0,
+      stockMovementsCreated: 0,
+      lotsCreated: 0,
+      lotsLinked: 0,
+      pendingProduct: 0,
+      pendingLot: 0,
+    }),
+  };
+}
+
 test("tam senkronizasyon kalan belge sıfır olana kadar bütün partileri işler", async () => {
   const calls: any[] = [];
   const operations = {
@@ -44,6 +59,7 @@ test("tam senkronizasyon kalan belge sıfır olana kadar bütün partileri işle
     prisma as any,
     operations as any,
     { upload: async () => ({}) } as any,
+    smartMatchMock() as any,
   );
 
   const result = await service.run({
@@ -57,6 +73,7 @@ test("tam senkronizasyon kalan belge sıfır olana kadar bütün partileri işle
   assert.equal(result.automation.downloaded, 52);
   assert.equal(result.automation.remaining, 0);
   assert.equal(result.fullSync, true);
+  assert.equal(result.supplierRouting.ok, true);
   assert.equal(saved.length, 1);
 });
 
@@ -80,6 +97,7 @@ test("senkronizasyon ilerlemiyorsa sonsuz döngü yerine güvenli hata verir", a
     prisma as any,
     operations as any,
     { upload: async () => ({}) } as any,
+    smartMatchMock() as any,
   );
 
   await assert.rejects(
