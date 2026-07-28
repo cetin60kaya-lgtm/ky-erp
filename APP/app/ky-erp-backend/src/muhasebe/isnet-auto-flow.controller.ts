@@ -45,4 +45,12 @@ export class IsnetAutoFlowController {
   ) {
     return apiSuccess(await this.service.refreshAfterDispatch(id, body));
   }
+
+  @Patch(":id/invoice-state")
+  async updateInvoiceState(
+    @Param("id") id: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return apiSuccess(await this.service.updateInvoiceState(id, body));
+  }
 }
