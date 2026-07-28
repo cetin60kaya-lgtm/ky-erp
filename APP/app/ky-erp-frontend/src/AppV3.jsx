@@ -58,18 +58,35 @@ class ModuleErrorBoundary extends React.Component {
     super(props);
     this.state = { error: null, recoveryKey: 0 };
   }
-  static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) { console.error("KY ERP V3 module render error", error, info); }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("KY ERP V3 module render error", error, info);
+  }
+
   render() {
     if (this.state.error) {
       return (
         <div className="content-card module-error-card">
           <h3>Ekran açılırken hata oluştu</h3>
           <p>{this.state.error?.message || "Beklenmeyen arayüz hatası."}</p>
-          <button type="button" className="primary-btn" onClick={() => this.setState((current) => ({ error: null, recoveryKey: current.recoveryKey + 1 }))}>Tekrar Dene</button>
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={() => this.setState((current) => ({
+              error: null,
+              recoveryKey: current.recoveryKey + 1,
+            }))}
+          >
+            Tekrar Dene
+          </button>
         </div>
       );
     }
+
     return <React.Fragment key={this.state.recoveryKey}>{this.props.children}</React.Fragment>;
   }
 }
@@ -80,15 +97,28 @@ export default function AppV3() {
   const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
   const [moduleActionContext, setModuleActionContext] = useState({});
 
-  const visibleModules = useMemo(() => MODULES.filter((item) => hasModule(item.permissionKey)), [hasModule]);
+  const visibleModules = useMemo(
+    () => MODULES.filter((item) => hasModule(item.permissionKey)),
+    [hasModule],
+  );
+
   const initialRoute = useMemo(() => {
     const requested = getInitialRoute(window.location.pathname);
     return normalizeRoute(requested, visibleModules) || requested;
   }, [visibleModules]);
 
-  const workspace = useWorkspaceTabs(initialRoute, resolveLabel);
-  const activeModule = visibleModules.find((item) => item.key === workspace.activeRoute.moduleKey) || visibleModules[0];
-  const activeTab = findTab(activeModule, workspace.activeRoute.tabKey)?.[0] || getModuleTabs(activeModule)[0]?.[0] || "";
+  const {
+    tabs: workspaceTabs,
+    activeRoute,
+    activeId,
+    openTab: openWorkspaceTab,
+    activateTab: activateWorkspaceRoute,
+    closeTab: closeWorkspaceTab,
+    replaceActiveRoute,
+  } = useWorkspaceTabs(initialRoute, resolveLabel);
+
+  const activeModule = visibleModules.find((item) => item.key === activeRoute.moduleKey) || visibleModules[0];
+  const activeTab = findTab(activeModule, activeRoute.tabKey)?.[0] || getModuleTabs(activeModule)[0]?.[0] || "";
 
   const selectableCompanies = useMemo(() => {
     const activeRows = companies.filter((item) => item?.isActive !== false);
@@ -97,11 +127,13 @@ export default function AppV3() {
 
   const normalizedCompany = useMemo(() => {
     if (!companies.length) return activeCompany || null;
+
     const raw = String(activeCompanySlug || "").trim().toLocaleLowerCase("tr-TR");
-    return companies.find((item) => [item?.id, item?.slug, item?.name].map((value) => String(value || "").toLocaleLowerCase("tr-TR")).includes(raw))
-      || companies.find((item) => item?.isActive !== false)
-      || companies[0]
-      || null;
+    return companies.find((item) => (
+      [item?.id, item?.slug, item?.name]
+        .map((value) => String(value || "").toLocaleLowerCase("tr-TR"))
+        .includes(raw)
+    )) || companies.find((item) => item?.isActive !== false) || companies[0] || null;
   }, [activeCompany, activeCompanySlug, companies]);
 
   useEffect(() => {
@@ -111,57 +143,77 @@ export default function AppV3() {
 
   useEffect(() => {
     if (!isAuthenticated || !visibleModules.length) return;
-    const normalized = normalizeRoute(workspace.activeRoute, visibleModules);
+
+    const normalized = normalizeRoute(activeRoute, visibleModules);
     if (!normalized) return;
-    if (normalized.moduleKey !== workspace.activeRoute.moduleKey || normalized.tabKey !== workspace.activeRoute.tabKey) {
-      workspace.replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
+
+    if (
+      normalized.moduleKey !== activeRoute.moduleKey
+      || normalized.tabKey !== activeRoute.tabKey
+    ) {
+      replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
       updateBrowserPath(normalized, true);
     }
-  }, [isAuthenticated, visibleModules, workspace.activeRoute, workspace.replaceActiveRoute]);
+  }, [activeRoute, isAuthenticated, replaceActiveRoute, visibleModules]);
 
   useEffect(() => {
     const onPopState = () => {
       const requested = getInitialRoute(window.location.pathname);
       const normalized = normalizeRoute(requested, visibleModules);
-      if (normalized) workspace.replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
+      if (normalized) replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
       setModuleMenuOpen(false);
     };
+
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [visibleModules, workspace.replaceActiveRoute]);
+  }, [replaceActiveRoute, visibleModules]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === "Escape") setModuleMenuOpen(false);
     };
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   useEffect(() => {
-    if (!workspace.activeRoute.moduleKey || !workspace.activeRoute.tabKey) return;
-    updateBrowserPath(workspace.activeRoute, true);
-  }, [workspace.activeRoute.moduleKey, workspace.activeRoute.tabKey]);
+    if (!activeRoute.moduleKey || !activeRoute.tabKey) return;
+    updateBrowserPath(activeRoute, true);
+  }, [activeRoute]);
 
   useEffect(() => {
     window.requestAnimationFrame(() => {
-      document.querySelector(".shell-v3-workspace")?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      document.querySelector(".shell-v3-workspace")?.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: "auto",
+      });
     });
-  }, [workspace.activeRoute]);
+  }, [activeRoute]);
 
   const openTab = useCallback((moduleKey, tabKey, options = {}) => {
     const module = visibleModules.find((item) => item.key === moduleKey);
     if (!module) return;
+
     const nextTab = findTab(module, tabKey)?.[0] || getModuleTabs(module)[0]?.[0];
     if (!nextTab) return;
+
     preloadModule(moduleKey);
+
     if (options.actionContext) {
-      setModuleActionContext({ ...options.actionContext, targetModule: moduleKey, targetTab: nextTab, nonce: String(Date.now()) });
+      setModuleActionContext({
+        ...options.actionContext,
+        targetModule: moduleKey,
+        targetTab: nextTab,
+        nonce: String(Date.now()),
+      });
     }
-    const next = workspace.openTab(moduleKey, nextTab);
+
+    const next = openWorkspaceTab(moduleKey, nextTab);
     updateBrowserPath(next);
     setModuleMenuOpen(false);
-  }, [visibleModules, workspace.openTab]);
+  }, [openWorkspaceTab, visibleModules]);
 
   const toggleModuleMenu = useCallback((moduleKey) => {
     const module = visibleModules.find((item) => item.key === moduleKey);
@@ -176,16 +228,17 @@ export default function AppV3() {
 
     const nextTab = getModuleTabs(module)[0]?.[0];
     if (!nextTab) return;
-    const next = workspace.openTab(moduleKey, nextTab);
+
+    const next = openWorkspaceTab(moduleKey, nextTab);
     updateBrowserPath(next);
     setModuleMenuOpen(true);
-  }, [activeModule?.key, visibleModules, workspace.openTab]);
+  }, [activeModule?.key, openWorkspaceTab, visibleModules]);
 
   const activateWorkspaceTab = useCallback((item) => {
-    workspace.activateTab(item);
+    activateWorkspaceRoute(item);
     updateBrowserPath(item);
     setModuleMenuOpen(false);
-  }, [workspace.activateTab]);
+  }, [activateWorkspaceRoute]);
 
   function renderPage() {
     const sharedProps = {
@@ -193,6 +246,7 @@ export default function AppV3() {
       moduleActionContext,
       openModule: (moduleKey, options = {}) => openTab(moduleKey, options.tabKey, options),
     };
+
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
@@ -205,15 +259,23 @@ export default function AppV3() {
 
   if (authLoading) return <LoadingCard title="Oturum kontrol ediliyor" />;
   if (!isAuthenticated) return <LoginPage />;
-  if (!visibleModules.length) return <div className="content-card module-error-card" style={{ margin: 24 }}><h3>Modül yetkisi tanımlı değil</h3><p>Sistem yöneticisi kullanıcı yetkilerini güncellemelidir.</p></div>;
+
+  if (!visibleModules.length) {
+    return (
+      <div className="content-card module-error-card" style={{ margin: 24 }}>
+        <h3>Modül yetkisi tanımlı değil</h3>
+        <p>Sistem yöneticisi kullanıcı yetkilerini güncellemelidir.</p>
+      </div>
+    );
+  }
 
   return (
     <AppShellV3
       modules={visibleModules}
       activeModule={activeModule}
       activeTab={activeTab}
-      tabs={workspace.tabs}
-      activeTabId={workspace.activeId}
+      tabs={workspaceTabs}
+      activeTabId={activeId}
       companies={selectableCompanies}
       activeCompanySlug={normalizedCompany?.slug || activeCompanySlug}
       user={user}
@@ -221,7 +283,7 @@ export default function AppV3() {
       onToggleModuleMenu={toggleModuleMenu}
       onOpenTab={(moduleKey, tabKey) => openTab(moduleKey, tabKey)}
       onActivateWorkspaceTab={activateWorkspaceTab}
-      onCloseWorkspaceTab={workspace.closeTab}
+      onCloseWorkspaceTab={closeWorkspaceTab}
       onCompanyChange={setActiveCompanySlug}
       onOpenMobileMenu={() => setModuleMenuOpen(true)}
       onCloseMobileMenu={() => setModuleMenuOpen(false)}
