@@ -31,20 +31,20 @@ jobs:
         run: npm ci
 
       - name: Build
-        id: build
-        continue-on-error: true
         shell: pwsh
         run: |
-          npm run build *>&1 | Tee-Object -FilePath build.log
-          exit $LASTEXITCODE
+          cmd /c "npm run build > build.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content build.log
+          exit $code
 
-      - name: Final kabuk lint
-        id: lint
-        continue-on-error: true
+      - name: Final kabuk ve aylık İK lint
         shell: pwsh
         run: |
-          npx eslint src/AppV3.jsx src/app/moduleRegistry.js src/hooks/useWorkspaceTabs.js src/layouts/AppShellV3.jsx --max-warnings=0 *>&1 | Tee-Object -FilePath lint.log
-          exit $LASTEXITCODE
+          cmd /c "npx eslint src/AppV3.jsx src/app/moduleRegistry.js src/hooks/useWorkspaceTabs.js src/layouts/AppShellV3.jsx src/pages/modules/ik/MonthlyOperationsWorkspace.jsx --max-warnings=0 > lint.log 2>&1"
+          $code = $LASTEXITCODE
+          if (Test-Path lint.log) { Get-Content lint.log }
+          exit $code
 
       - name: Kontrol loglarını yükle
         if: always()
@@ -55,20 +55,6 @@ jobs:
             APP/app/ky-erp-frontend/build.log
             APP/app/ky-erp-frontend/lint.log
           if-no-files-found: ignore
-
-      - name: Sonucu doğrula
-        if: always()
-        shell: pwsh
-        run: |
-          $buildOutcome = "${{ steps.build.outcome }}"
-          $lintOutcome = "${{ steps.lint.outcome }}"
-          Write-Host "Build: $buildOutcome"
-          Write-Host "Lint: $lintOutcome"
-          if ($buildOutcome -ne "success" -or $lintOutcome -ne "success") {
-            if (Test-Path build.log) { Get-Content build.log -Tail 100 }
-            if (Test-Path lint.log) { Get-Content lint.log -Tail 100 }
-            exit 1
-          }
 
   isnet-backend:
     runs-on: windows-latest
@@ -96,20 +82,20 @@ jobs:
         run: npm run db:generate
 
       - name: Backend build
-        id: backend_build
-        continue-on-error: true
         shell: pwsh
         run: |
-          npm run build *>&1 | Tee-Object -FilePath backend-build.log
-          exit $LASTEXITCODE
+          cmd /c "npm run build > backend-build.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content backend-build.log
+          exit $code
 
       - name: İşNet testleri
-        id: isnet_tests
-        continue-on-error: true
         shell: pwsh
         run: |
-          npm run test:isnet *>&1 | Tee-Object -FilePath isnet-tests.log
-          exit $LASTEXITCODE
+          cmd /c "npm run test:isnet > isnet-tests.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content isnet-tests.log
+          exit $code
 
       - name: Backend loglarını yükle
         if: always()
@@ -120,17 +106,3 @@ jobs:
             APP/app/ky-erp-backend/backend-build.log
             APP/app/ky-erp-backend/isnet-tests.log
           if-no-files-found: ignore
-
-      - name: Backend sonucunu doğrula
-        if: always()
-        shell: pwsh
-        run: |
-          $buildOutcome = "${{ steps.backend_build.outcome }}"
-          $testOutcome = "${{ steps.isnet_tests.outcome }}"
-          Write-Host "Backend build: $buildOutcome"
-          Write-Host "İşNet testleri: $testOutcome"
-          if ($buildOutcome -ne "success" -or $testOutcome -ne "success") {
-            if (Test-Path backend-build.log) { Get-Content backend-build.log -Tail 120 }
-            if (Test-Path isnet-tests.log) { Get-Content isnet-tests.log -Tail 160 }
-            exit 1
-          }
