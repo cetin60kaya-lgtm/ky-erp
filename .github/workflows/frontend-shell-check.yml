@@ -1,4 +1,4 @@
-name: KY ERP Frontend ve İşNet Kontrolü
+name: KY ERP Muhasebe İşNet ve İK Kontrolü
 
 on:
   push:
@@ -65,7 +65,7 @@ jobs:
             APP/app/ky-erp-frontend/tab-audit.log
           if-no-files-found: ignore
 
-  isnet-backend:
+  core-backend:
     runs-on: windows-latest
     env:
       DATABASE_URL: file:./ci-isnet.db
@@ -98,7 +98,7 @@ jobs:
           Get-Content backend-build.log
           exit $code
 
-      - name: İşNet testleri
+      - name: İşNet ve Muhasebe testleri
         shell: pwsh
         run: |
           cmd /c "npm run test:isnet > isnet-tests.log 2>&1"
@@ -106,12 +106,21 @@ jobs:
           Get-Content isnet-tests.log
           exit $code
 
+      - name: İK aylık ve günlük testleri
+        shell: pwsh
+        run: |
+          cmd /c "npm run test:ik > ik-tests.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content ik-tests.log
+          exit $code
+
       - name: Backend loglarını yükle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: isnet-backend-check-logs
+          name: core-backend-check-logs
           path: |
             APP/app/ky-erp-backend/backend-build.log
             APP/app/ky-erp-backend/isnet-tests.log
+            APP/app/ky-erp-backend/ik-tests.log
           if-no-files-found: ignore
