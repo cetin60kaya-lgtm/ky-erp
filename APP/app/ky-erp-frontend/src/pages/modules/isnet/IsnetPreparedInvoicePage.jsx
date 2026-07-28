@@ -14,6 +14,7 @@ import {
   retryIsnetInvoiceClosure,
   submitIsnetOfficialInvoice,
 } from "../../../services/isnetApi";
+import { updateIsnetAutoFlowInvoiceState } from "../../../services/isnetAutoFlowApi";
 import "../IsnetPage.css";
 
 const todayText = () => new Date().toISOString().slice(0, 10);
@@ -74,12 +75,11 @@ function normalizeSeed(seed = {}) {
   };
 }
 
-export default function IsnetPreparedInvoicePage({
-  moduleActionContext,
-  openModule,
-}) {
+export default function IsnetPreparedInvoicePage({ moduleActionContext, openModule }) {
   const seed = moduleActionContext?.invoiceDraft || null;
   const sourceId = String(moduleActionContext?.sourceId || seed?.sourceId || "");
+  const autoFlowId = String(moduleActionContext?.autoFlowId || "");
+  const existingRequestId = String(moduleActionContext?.existingRequestId || "");
   const [form, setForm] = useState(() => normalizeSeed({ ...seed, sourceId }));
   const [unitPrice, setUnitPrice] = useState(() => numberValue(seed?.lines?.[0]?.unitPrice) || "");
   const [vatRate, setVatRate] = useState(() => seed?.lines?.[0]?.vatRate ?? 20);
@@ -94,10 +94,40 @@ export default function IsnetPreparedInvoicePage({
     setForm(next);
     setUnitPrice(numberValue(next.lines[0]?.unitPrice) || "");
     setVatRate(next.lines[0]?.vatRate ?? 20);
-    setDraftResult(null);
     setOfficialStatus(null);
     setNotice(null);
-  }, [moduleActionContext?.nonce, seed, sourceId]);
+
+    if (!existingRequestId) {
+      setDraftResult(null);
+      return;
+    }
+
+    const existingDraft = {
+      requestId: existingRequestId,
+      draftNo: moduleActionContext?.existingDraftNo || "",
+      draftVersion: moduleActionContext?.existingDraftVersion || "",
+      verified: true,
+      status: "INVOICE_DRAFT_READY",
+      verification: { differences: [] },
+    };
+    setDraftResult(existingDraft);
+    void getIsnetInvoiceDraftStatus(existingRequestId)
+      .then(async (status) => {
+        setOfficialStatus(status);
+        if (status?.status === "COMPLETED" && autoFlowId) {
+          await updateIsnetAutoFlowInvoiceState(autoFlowId, {
+            status: "COMPLETED",
+            requestId: existingRequestId,
+            draftNo: status.draftNo || existingDraft.draftNo,
+            draftVersion: status.draftVersion || existingDraft.draftVersion,
+            officialInvoiceNo: status.officialInvoiceNumber || "",
+          });
+        }
+      })
+      .catch((error) => {
+        setNotice({ tone: "warning", text: error?.message || "Mevcut fatura taslağı durumu alınamadı." });
+      });
+  }, [autoFlowId, existingRequestId, moduleActionContext?.existingDraftNo, moduleActionContext?.existingDraftVersion, moduleActionContext?.nonce, seed, sourceId]);
 
   const totals = useMemo(() => {
     const subtotal = form.lines.reduce(
@@ -105,11 +135,7 @@ export default function IsnetPreparedInvoicePage({
       0,
     );
     const vat = form.lines.reduce(
-      (sum, line) =>
-        sum +
-        numberValue(line.quantity) *
-          numberValue(line.unitPrice) *
-          (numberValue(line.vatRate) / 100),
+      (sum, line) => sum + numberValue(line.quantity) * numberValue(line.unitPrice) * (numberValue(line.vatRate) / 100),
       0,
     );
     return { subtotal, vat, total: subtotal + vat };
@@ -125,10 +151,9 @@ export default function IsnetPreparedInvoicePage({
     setForm((current) => ({
       ...current,
       ...values,
-      previewApproved:
-        Object.prototype.hasOwnProperty.call(values, "previewApproved")
-          ? values.previewApproved
-          : false,
+      previewApproved: Object.prototype.hasOwnProperty.call(values, "previewApproved")
+        ? values.previewApproved
+        : false,
     }));
   }
 
@@ -150,6 +175,11 @@ export default function IsnetPreparedInvoicePage({
       previewApproved: false,
       lines: current.lines.map((line) => ({ ...line, vatRate: value })),
     }));
+  }
+
+  async function updateFlowState(payload) {
+    if (!autoFlowId) return null;
+    return updateIsnetAutoFlowInvoiceState(autoFlowId, payload);
   }
 
   async function createDraft() {
@@ -188,10 +218,23 @@ export default function IsnetPreparedInvoicePage({
       const status = await getIsnetInvoiceDraftStatus(result.requestId);
       setOfficialStatus(status);
       const verified = result.verified === true && !result.verification?.differences?.length;
+      let flowWarning = "";
+      if (autoFlowId) {
+        try {
+          await updateFlowState({
+            status: "INVOICE_DRAFT_READY",
+            requestId: result.requestId,
+            draftNo: result.draftNo || "",
+            draftVersion: result.draftVersion || status?.draftVersion || "",
+          });
+        } catch (error) {
+          flowWarning = ` KY ERP iş akışı güncellenemedi: ${error?.message || "bilinmeyen hata"}.`;
+        }
+      }
       setNotice({
-        tone: verified ? "success" : "error",
+        tone: verified && !flowWarning ? "success" : flowWarning ? "warning" : "error",
         text: verified
-          ? `${result.draftNo || "Fatura taslağı"} İşNet'te oluşturuldu ve satırlar geri okunarak doğrulandı.`
+          ? `${result.draftNo || "Fatura taslağı"} İşNet'te oluşturuldu ve satırlar geri okunarak doğrulandı.${flowWarning}`
           : result.message || "Taslak oluşturuldu ancak portal doğrulaması tamamlanamadı.",
       });
     } catch (error) {
@@ -207,6 +250,15 @@ export default function IsnetPreparedInvoicePage({
     try {
       const status = await getIsnetInvoiceDraftStatus(draftResult.requestId);
       setOfficialStatus(status);
+      if (status.status === "COMPLETED") {
+        await updateFlowState({
+          status: "COMPLETED",
+          requestId: draftResult.requestId,
+          draftNo: status.draftNo || draftResult.draftNo || "",
+          draftVersion: status.draftVersion || draftResult.draftVersion || "",
+          officialInvoiceNo: status.officialInvoiceNumber || "",
+        });
+      }
       setNotice({ tone: status.status === "COMPLETED" ? "success" : "info", text: `Fatura durumu: ${statusText(status.status)}.` });
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Fatura durumu alınamadı." });
@@ -239,12 +291,20 @@ export default function IsnetPreparedInvoicePage({
       await submitIsnetOfficialInvoice(requestId);
       const status = await getIsnetInvoiceDraftStatus(requestId);
       setOfficialStatus(status);
+      if (status.status === "COMPLETED") {
+        await updateFlowState({
+          status: "COMPLETED",
+          requestId,
+          draftNo: status.draftNo || draftResult.draftNo || "",
+          draftVersion: status.draftVersion || draftVersion,
+          officialInvoiceNo: status.officialInvoiceNumber || "",
+        });
+      }
       setNotice({
         tone: status.status === "COMPLETED" ? "success" : "warning",
-        text:
-          status.status === "COMPLETED"
-            ? `Resmî fatura gönderildi, PDF/XML arşivlendi ve muhasebe-cari-KDV kapanışı tamamlandı: ${status.officialInvoiceNumber || ""}`
-            : `Resmî gönderim ${statusText(status.status)} aşamasında. Aynı fatura ikinci kez gönderilmeyecek.`,
+        text: status.status === "COMPLETED"
+          ? `Resmî fatura gönderildi, PDF/XML arşivlendi ve muhasebe-cari-KDV kapanışı tamamlandı: ${status.officialInvoiceNumber || ""}`
+          : `Resmî gönderim ${statusText(status.status)} aşamasında. Aynı fatura ikinci kez gönderilmeyecek.`,
       });
     } catch (error) {
       try {
@@ -266,12 +326,20 @@ export default function IsnetPreparedInvoicePage({
     try {
       const status = await retryIsnetInvoiceClosure(draftResult.requestId);
       setOfficialStatus(status);
+      if (status.status === "COMPLETED") {
+        await updateFlowState({
+          status: "COMPLETED",
+          requestId: draftResult.requestId,
+          draftNo: status.draftNo || draftResult.draftNo || "",
+          draftVersion: status.draftVersion || draftResult.draftVersion || "",
+          officialInvoiceNo: status.officialInvoiceNumber || "",
+        });
+      }
       setNotice({
         tone: status.status === "COMPLETED" ? "success" : "warning",
-        text:
-          status.status === "COMPLETED"
-            ? "PDF/XML arşivi, muhasebe, cari ve KDV kapanışı tamamlandı."
-            : `Kapanış ${statusText(status.status)} aşamasında.`,
+        text: status.status === "COMPLETED"
+          ? "PDF/XML arşivi, muhasebe, cari ve KDV kapanışı tamamlandı."
+          : `Kapanış ${statusText(status.status)} aşamasında.`,
       });
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Fatura kapanışı yeniden denenemedi." });
@@ -288,9 +356,7 @@ export default function IsnetPreparedInvoicePage({
             <AlertTriangle size={24} />
             <strong>Faturaya çevrilecek gönderilmiş irsaliye seçilmedi</strong>
             <p>İrsaliye ve Fatura İş Akışı ekranından gönderilmiş irsaliyeyi bulun.</p>
-            <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openModule?.("isnet", { tabKey: "is-akisi" })}>
-              İş Akışına Git
-            </button>
+            <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openModule?.("isnet", { tabKey: "is-akisi" })}>İş Akışına Git</button>
           </div>
         </section>
       </main>
@@ -307,80 +373,11 @@ export default function IsnetPreparedInvoicePage({
 
   return (
     <main className="isnet-page">
-      <header className="isnet-hero">
-        <div className="isnet-hero__copy">
-          <span className="isnet-kicker"><FileCheck2 size={14} /> SON İKİ ADIM</span>
-          <h1>{form.dispatchNo || moduleActionContext?.documentNo}</h1>
-          <p>İrsaliye satırları ve adetler otomatik taşındı. Yalnız fiyatı girin, taslağı kontrol edin ve gönderin.</p>
-        </div>
-        <div className="isnet-hero__actions">
-          <span className="isnet-badge isnet-badge--blue">{statusText(status)}</span>
-          {draftResult?.requestId && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={refreshStatus} disabled={busy === "status"}><RefreshCw size={15} /> Durumu Yenile</button>}
-        </div>
-      </header>
-
+      <header className="isnet-hero"><div className="isnet-hero__copy"><span className="isnet-kicker"><FileCheck2 size={14} /> SON İKİ ADIM</span><h1>{form.dispatchNo || moduleActionContext?.documentNo}</h1><p>İrsaliye satırları ve adetler otomatik taşındı. Yalnız fiyatı girin, taslağı kontrol edin ve gönderin.</p></div><div className="isnet-hero__actions"><span className="isnet-badge isnet-badge--blue">{statusText(status)}</span>{draftResult?.requestId && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={refreshStatus} disabled={busy === "status"}><RefreshCw size={15} /> Durumu Yenile</button>}</div></header>
       {notice && <div className={`isnet-notice isnet-notice--${notice.tone || "info"}`}>{notice.text}</div>}
-
-      <section className="isnet-card">
-        <div className="isnet-section-head">
-          <div>
-            <small>OTOMATİK GELEN BİLGİLER</small>
-            <h2>{form.recipientName || "İşNet alıcısı"}</h2>
-            <p>Model: {form.modelName || "-"} · Toplam adet: {totalQuantity} · İrsaliye: {form.dispatchNo}</p>
-          </div>
-        </div>
-        <div className="isnet-form-grid">
-          <label>
-            Birim fiyat
-            <input type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => applyPrice(event.target.value)} disabled={Boolean(draftResult)} autoFocus />
-          </label>
-          <label>
-            KDV %
-            <input type="number" min="0" max="100" step="1" value={vatRate} onChange={(event) => applyVat(event.target.value)} disabled={Boolean(draftResult)} />
-          </label>
-          <label>
-            Fatura tarihi
-            <input type="date" value={form.invoiceDate} onChange={(event) => patch({ invoiceDate: event.target.value })} disabled={Boolean(draftResult)} />
-          </label>
-          <label>
-            Departman / bölüm <small>(mail için, varsa otomatik seçildi)</small>
-            <select value={form.departmentNo} onChange={(event) => patch({ departmentNo: event.target.value })} disabled={Boolean(draftResult)}>
-              <option value="">Departman yok / sonra tamamla</option>
-              {form.departments.map((department) => <option key={department.code} value={department.code}>{department.code} · {department.name}</option>)}
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="isnet-card">
-        <div className="isnet-section-head">
-          <div>
-            <small>KİLİTLİ İRSALİYE SATIRLARI</small>
-            <h2>Fatura önizlemesi</h2>
-            <p>Ürün ve adetler değiştirilemez; aynı irsaliyeden fazla fatura kesilemez.</p>
-          </div>
-        </div>
-        <div className="isnet-table-wrap">
-          <table className="isnet-table">
-            <thead><tr><th>#</th><th>Ürün / model</th><th>Açıklama</th><th>Adet</th><th>Birim fiyat</th><th>KDV</th><th>Toplam</th></tr></thead>
-            <tbody>{form.lines.map((line, index) => <tr key={line.id || line.lineNo || index}><td>{index + 1}</td><td><strong>{line.productName}</strong></td><td>{line.description}</td><td>{line.quantity}</td><td>{money(line.unitPrice)}</td><td>%{line.vatRate}</td><td><strong>{money(numberValue(line.quantity) * numberValue(line.unitPrice) * (1 + numberValue(line.vatRate) / 100))}</strong></td></tr>)}</tbody>
-          </table>
-        </div>
-        <div className="isnet-summary-grid">
-          <article><small>Ara toplam</small><strong>{money(totals.subtotal)}</strong></article>
-          <article><small>KDV</small><strong>{money(totals.vat)}</strong></article>
-          <article><small>Genel toplam</small><strong>{money(totals.total)}</strong></article>
-        </div>
-
-        {!draftResult && <><label className="isnet-check-row"><input type="checkbox" checked={form.previewApproved} onChange={(event) => patch({ previewApproved: event.target.checked })} /> Alıcıyı, irsaliye numarasını, adedi, fiyatı, KDV’yi ve toplamı kontrol ettim.</label><div className="isnet-action-row"><button type="button" className="isnet-btn isnet-btn--primary" onClick={createDraft} disabled={busy === "draft"}>{busy === "draft" ? <LoaderCircle size={15} className="spin" /> : <FileCheck2 size={15} />} Fatura Taslağını Oluştur ve Doğrula</button></div></>}
-      </section>
-
-      {draftResult && <section className="isnet-card"><div className="isnet-section-head"><div><small>SON ONAY</small><h2>{draftResult.draftNo || "İşNet fatura taslağı"}</h2><p>Taslak İşNet'ten geri okundu. Resmî gönderim yalnız sizin son onayınızla yapılır.</p></div><span className={`isnet-badge isnet-badge--${verified ? "green" : "warning"}`}>{verified ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{verified ? "Portal doğrulandı" : "Kontrol gerekli"}</span></div>
-        {(draftResult.verification?.differences || []).length > 0 && <div className="isnet-notice isnet-notice--error">{draftResult.verification.differences.length} doğrulama farkı bulundu. Resmî gönderim kapalıdır.</div>}
-        {verified && !["SUBMITTING", "SENT", "FILE_DOWNLOAD_PENDING", "ACCOUNTING_PENDING", "COMPLETED"].includes(status) && <div className="isnet-form-grid"><label>Son onay metni<input value={form.confirmationText} onChange={(event) => setForm((current) => ({ ...current, confirmationText: event.target.value }))} placeholder="FATURAYI GÖNDER" /></label><div className="isnet-action-row"><button type="button" className="isnet-btn isnet-btn--danger" onClick={submitOfficial} disabled={busy === "submit"}>{busy === "submit" ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />} Resmî Faturayı Gönder</button></div></div>}
-        {closurePending && <div className="isnet-action-row"><button type="button" className="isnet-btn isnet-btn--primary" onClick={retryClosure} disabled={busy === "closure"}><RefreshCw size={15} /> PDF/XML ve Muhasebe Kapanışını Tamamla</button></div>}
-        {status === "COMPLETED" && <div className="isnet-notice isnet-notice--success">Fatura {officialStatus?.officialInvoiceNumber || draftResult.draftNo} numarasıyla tamamlandı; arşiv, muhasebe, cari ve KDV kayıtları doğrulandı.</div>}
-      </section>}
+      <section className="isnet-card"><div className="isnet-section-head"><div><small>OTOMATİK GELEN BİLGİLER</small><h2>{form.recipientName || "İşNet alıcısı"}</h2><p>Model: {form.modelName || "-"} · Toplam adet: {totalQuantity} · İrsaliye: {form.dispatchNo}</p></div></div><div className="isnet-form-grid"><label>Birim fiyat<input type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => applyPrice(event.target.value)} disabled={Boolean(draftResult)} autoFocus /></label><label>KDV %<input type="number" min="0" max="100" step="1" value={vatRate} onChange={(event) => applyVat(event.target.value)} disabled={Boolean(draftResult)} /></label><label>Fatura tarihi<input type="date" value={form.invoiceDate} onChange={(event) => patch({ invoiceDate: event.target.value })} disabled={Boolean(draftResult)} /></label><label>Departman / bölüm <small>(mail için, varsa otomatik seçildi)</small><select value={form.departmentNo} onChange={(event) => patch({ departmentNo: event.target.value })} disabled={Boolean(draftResult)}><option value="">Departman yok / sonra tamamla</option>{form.departments.map((department) => <option key={department.code} value={department.code}>{department.code} · {department.name}</option>)}</select></label></div></section>
+      <section className="isnet-card"><div className="isnet-section-head"><div><small>KİLİTLİ İRSALİYE SATIRLARI</small><h2>Fatura önizlemesi</h2><p>Ürün ve adetler değiştirilemez; aynı irsaliyeden fazla fatura kesilemez.</p></div></div><div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>#</th><th>Ürün / model</th><th>Açıklama</th><th>Adet</th><th>Birim fiyat</th><th>KDV</th><th>Toplam</th></tr></thead><tbody>{form.lines.map((line, index) => <tr key={line.id || line.lineNo || index}><td>{index + 1}</td><td><strong>{line.productName}</strong></td><td>{line.description}</td><td>{line.quantity}</td><td>{money(line.unitPrice)}</td><td>%{line.vatRate}</td><td><strong>{money(numberValue(line.quantity) * numberValue(line.unitPrice) * (1 + numberValue(line.vatRate) / 100))}</strong></td></tr>)}</tbody></table></div><div className="isnet-summary-grid"><article><small>Ara toplam</small><strong>{money(totals.subtotal)}</strong></article><article><small>KDV</small><strong>{money(totals.vat)}</strong></article><article><small>Genel toplam</small><strong>{money(totals.total)}</strong></article></div>{!draftResult && <><label className="isnet-check-row"><input type="checkbox" checked={form.previewApproved} onChange={(event) => patch({ previewApproved: event.target.checked })} /> Alıcıyı, irsaliye numarasını, adedi, fiyatı, KDV’yi ve toplamı kontrol ettim.</label><div className="isnet-action-row"><button type="button" className="isnet-btn isnet-btn--primary" onClick={createDraft} disabled={busy === "draft"}>{busy === "draft" ? <LoaderCircle size={15} className="spin" /> : <FileCheck2 size={15} />} Fatura Taslağını Oluştur ve Doğrula</button></div></>}</section>
+      {draftResult && <section className="isnet-card"><div className="isnet-section-head"><div><small>SON ONAY</small><h2>{draftResult.draftNo || "İşNet fatura taslağı"}</h2><p>Taslak İşNet'ten geri okundu. Resmî gönderim yalnız sizin son onayınızla yapılır.</p></div><span className={`isnet-badge isnet-badge--${verified ? "green" : "warning"}`}>{verified ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{verified ? "Portal doğrulandı" : "Kontrol gerekli"}</span></div>{(draftResult.verification?.differences || []).length > 0 && <div className="isnet-notice isnet-notice--error">{draftResult.verification.differences.length} doğrulama farkı bulundu. Resmî gönderim kapalıdır.</div>}{verified && !["SUBMITTING", "SENT", "FILE_DOWNLOAD_PENDING", "ACCOUNTING_PENDING", "COMPLETED"].includes(status) && <div className="isnet-form-grid"><label>Son onay metni<input value={form.confirmationText} onChange={(event) => setForm((current) => ({ ...current, confirmationText: event.target.value }))} placeholder="FATURAYI GÖNDER" /></label><div className="isnet-action-row"><button type="button" className="isnet-btn isnet-btn--danger" onClick={submitOfficial} disabled={busy === "submit"}>{busy === "submit" ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />} Resmî Faturayı Gönder</button></div></div>}{closurePending && <div className="isnet-action-row"><button type="button" className="isnet-btn isnet-btn--primary" onClick={retryClosure} disabled={busy === "closure"}><RefreshCw size={15} /> PDF/XML ve Muhasebe Kapanışını Tamamla</button></div>}{status === "COMPLETED" && <div className="isnet-notice isnet-notice--success">Fatura {officialStatus?.officialInvoiceNumber || draftResult.draftNo} numarasıyla tamamlandı; arşiv, muhasebe, cari ve KDV kayıtları doğrulandı.</div>}</section>}
     </main>
   );
 }
