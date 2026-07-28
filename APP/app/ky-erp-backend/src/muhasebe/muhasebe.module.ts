@@ -53,6 +53,8 @@ import { MuhasebeSmartMatchController } from "./muhasebe-smart-match.controller"
 import { MuhasebeSmartMatchService } from "./muhasebe-smart-match.service";
 import { IsnetBusinessSettingsController } from "./isnet-business-settings.controller";
 import { IsnetBusinessSettingsService } from "./isnet-business-settings.service";
+import { IsnetDispatchPreparationService } from "./isnet-dispatch-preparation.service";
+import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coordinator.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -111,6 +113,8 @@ import { IsnetBusinessSettingsService } from "./isnet-business-settings.service"
     IsnetDocumentCenterService,
     IsnetSelectedPrintService,
     IsnetBusinessSettingsService,
+    IsnetDispatchPreparationService,
+    IsnetDispatchFlowCoordinatorService,
   ],
   exports: [
     MuhasebeBelgeService,
@@ -118,6 +122,8 @@ import { IsnetBusinessSettingsService } from "./isnet-business-settings.service"
     MuhasebeDocumentWorkflowService,
     MuhasebeSmartMatchService,
     IsnetBusinessSettingsService,
+    IsnetDispatchPreparationService,
+    IsnetDispatchFlowCoordinatorService,
     DocumentIntakeService,
     DocumentFolderWatcherService,
     AccountingApiService,
