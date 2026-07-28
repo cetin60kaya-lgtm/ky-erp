@@ -1,0 +1,195 @@
+.isnet-auto-page {
+  display: grid;
+  gap: 14px;
+}
+
+.isnet-auto-guide {
+  padding: 14px 16px;
+}
+
+.isnet-auto-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.isnet-auto-steps > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 10px;
+  border: 1px solid #dce6f3;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.isnet-auto-steps span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #1767d8;
+  color: #fff;
+  font-weight: 800;
+}
+
+.isnet-auto-steps strong {
+  color: #153255;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.isnet-source-switch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2eaf4;
+}
+
+.isnet-source-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border: 1px solid #cfdaea;
+  border-radius: 9px;
+  background: #fff;
+  color: #35516f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.isnet-source-switch button.active {
+  border-color: #1767d8;
+  background: #eaf3ff;
+  color: #0f5bc4;
+}
+
+.isnet-manual-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.isnet-form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.isnet-form-field--wide {
+  grid-column: span 2;
+}
+
+.isnet-form-field label {
+  color: #51657d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.isnet-form-field input,
+.isnet-form-field select,
+.isnet-inline-number input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #d3deec;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px 10px;
+  color: #153255;
+}
+
+.isnet-manual-action {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+}
+
+.isnet-exception-card {
+  border-color: #f0c46a;
+  background: #fffdf7;
+}
+
+.isnet-model-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.isnet-model-choice-grid button {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid #d6e0ed;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.isnet-model-choice-grid button:hover {
+  border-color: #1767d8;
+  background: #f5f9ff;
+}
+
+.isnet-model-choice-grid small,
+.isnet-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #71839a;
+}
+
+.isnet-inline-number {
+  display: flex;
+  gap: 6px;
+  min-width: 230px;
+}
+
+.isnet-inline-number button {
+  border: 1px solid #1767d8;
+  border-radius: 7px;
+  background: #1767d8;
+  color: #fff;
+  padding: 0 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.isnet-row-selected {
+  background: #f2f7ff;
+}
+
+@media (max-width: 1180px) {
+  .isnet-auto-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .isnet-manual-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .isnet-model-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .isnet-auto-steps,
+  .isnet-manual-grid,
+  .isnet-model-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .isnet-form-field--wide {
+    grid-column: auto;
+  }
+
+  .isnet-source-switch {
+    display: grid;
+  }
+}
