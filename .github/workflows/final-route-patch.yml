@@ -1,0 +1,134 @@
+name: Final İşNet Route Patch
+
+on:
+  push:
+    branches:
+      - tasarim-final-v1
+    paths:
+      - ".github/workflows/final-route-patch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-and-commit:
+    runs-on: windows-latest
+    env:
+      DATABASE_URL: file:./ci-isnet.db
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          ref: tasarim-final-v1
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Nihai İşNet sayfasını rotaya bağla
+        shell: pwsh
+        run: |
+          $appPath = "APP/app/ky-erp-frontend/src/AppV3.jsx"
+          $content = Get-Content $appPath -Raw
+          $content = $content.Replace(
+            './pages/modules/isnet/IsnetAutomationWorkflowPage',
+            './pages/modules/isnet/IsnetWorkflowFinalPage'
+          )
+          $content = $content.Replace(
+            'IsnetAutomationWorkflowPage',
+            'IsnetWorkflowFinalPage'
+          )
+          $content = $content.Replace(
+            'isnet-automation-workflow-v1',
+            'isnet-workflow-final-v1'
+          )
+          Set-Content -Path $appPath -Value $content -Encoding utf8
+
+          $checkPath = ".github/workflows/frontend-shell-check.yml"
+          $check = Get-Content $checkPath -Raw
+          $oldLine = '          src/pages/modules/isnet/IsnetAutomationWorkflowPage.jsx'
+          $newLine = '          src/pages/modules/isnet/IsnetWorkflowFinalPage.jsx'
+          if (-not $check.Contains($newLine)) {
+            $check = $check.Replace($oldLine, "$oldLine`n$newLine")
+            Set-Content -Path $checkPath -Value $check -Encoding utf8
+          }
+
+          if (-not $content.Contains('IsnetWorkflowFinalPage')) {
+            throw "Nihai İşNet sayfası AppV3 rotasına bağlanamadı."
+          }
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/app/ky-erp-frontend/package-lock.json
+            APP/app/ky-erp-backend/package-lock.json
+
+      - name: Frontend bağımlılıklarını kur
+        shell: pwsh
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend production build
+        shell: pwsh
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Yeni ekranları lint et
+        shell: pwsh
+        working-directory: APP/app/ky-erp-frontend
+        run: >-
+          npx eslint
+          src/AppV3.jsx
+          src/pages/modules/isnet/IsnetWorkflowFinalPage.jsx
+          src/pages/modules/isnet/IsnetPreparedInvoicePage.jsx
+          src/pages/modules/isnet/IsnetSettingsMasterPage.jsx
+          src/pages/modules/muhasebe/MuhasebeSmartMatchPage.jsx
+          src/services/isnetApi.js
+          src/services/isnetAutoFlowApi.js
+          src/services/isnetBusinessSettingsApi.js
+          src/services/muhasebeSmartMatchApi.js
+
+      - name: Backend bağımlılıklarını kur
+        shell: pwsh
+        working-directory: APP/app/ky-erp-backend
+        run: npm ci
+
+      - name: Prisma client üret
+        shell: pwsh
+        working-directory: APP/app/ky-erp-backend
+        run: npx prisma generate
+
+      - name: Backend derle
+        shell: pwsh
+        working-directory: APP/app/ky-erp-backend
+        run: npm run build
+
+      - name: Mevcut İşNet test paketini çalıştır
+        shell: pwsh
+        working-directory: APP/app/ky-erp-backend
+        run: npm run test:isnet
+
+      - name: Yeni irsaliye ve fatura güvenlik testlerini çalıştır
+        shell: pwsh
+        working-directory: APP/app/ky-erp-backend
+        run: >-
+          npx jest --runInBand
+          src/muhasebe/isnet-dispatch-preparation.service.spec.ts
+          src/muhasebe/isnet-invoice-preparation.service.spec.ts
+
+      - name: Doğrulanan rota değişikliğini commit et
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm ".github/workflows/final-route-patch.yml"
+          git add "APP/app/ky-erp-frontend/src/AppV3.jsx"
+          git add ".github/workflows/frontend-shell-check.yml"
+          if (git diff --cached --quiet) {
+            Write-Host "Commit gerektiren değişiklik yok."
+            exit 0
+          }
+          git commit -m "İşNet nihai iş akışını doğrulayarak rotaya bağla"
+          git push origin HEAD:tasarim-final-v1
