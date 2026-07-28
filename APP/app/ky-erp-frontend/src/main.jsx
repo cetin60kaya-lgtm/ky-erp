@@ -10,6 +10,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
 import { installPersistentModalSizing } from "./utils/installPersistentModalSizing";
 import "./App.css";
+import "./styles/shell-v3-isnet.css";
 
 installMuhasebeDocumentSanitizer();
 installPersistentModalSizing();
