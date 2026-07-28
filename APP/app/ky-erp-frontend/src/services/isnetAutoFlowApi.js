@@ -31,3 +31,9 @@ export const refreshIsnetAutoFlow = (flowId, payload = {}) =>
   apiPost(`/isnet/auto-flows/${encodeURIComponent(flowId)}/refresh`, payload, {
     timeoutMs: 900_000,
   }).then(unwrap);
+
+export const updateIsnetAutoFlowInvoiceState = (flowId, payload) =>
+  apiFetch(`/isnet/auto-flows/${encodeURIComponent(flowId)}/invoice-state`, {
+    method: "PATCH",
+    body: payload,
+  }).then(unwrap);
