@@ -151,14 +151,19 @@ for (const endpoint of [
 
 const autoFlowApi = read("src/services/isnetAutoFlowApi.js");
 const autoFlowController = read("src/muhasebe/isnet-auto-flow.controller.ts", backendRoot);
-for (const endpoint of [
-  "auto-flows", "incoming/:sourceId/prepare", ":id/model", ":id/outgoing-draft",
-  ":id/outgoing-document-no", ":id/refresh", ":id/invoice-state",
-]) {
-  const frontendToken = endpoint === "auto-flows" ? "/isnet/auto-flows" : endpoint.split("/:id")[0];
+const autoFlowPairs = [
+  ["/isnet/auto-flows", '@Controller("isnet/auto-flows")'],
+  ["incoming/${encodeURIComponent(sourceId)}/prepare", "incoming/:sourceId/prepare"],
+  ["${encodeURIComponent(flowId)}/model", ":id/model"],
+  ["${encodeURIComponent(flowId)}/outgoing-draft", ":id/outgoing-draft"],
+  ["${encodeURIComponent(flowId)}/outgoing-document-no", ":id/outgoing-document-no"],
+  ["${encodeURIComponent(flowId)}/refresh", ":id/refresh"],
+  ["${encodeURIComponent(flowId)}/invoice-state", ":id/invoice-state"],
+];
+for (const [frontendToken, backendToken] of autoFlowPairs) {
   requireCheck(
-    autoFlowApi.includes(frontendToken) && autoFlowController.includes(endpoint),
-    `İşNet otomatik akış API: ${endpoint} bağlı`,
+    autoFlowApi.includes(frontendToken) && autoFlowController.includes(backendToken),
+    `İşNet otomatik akış API: ${backendToken} bağlı`,
   );
 }
 
