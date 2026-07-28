@@ -234,7 +234,6 @@ export default function IsnetWorkflowFinalPage({
   const [models, setModels] = useState([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [modelDecision, setModelDecision] = useState(null);
-  const [dispatchCandidates, setDispatchCandidates] = useState({});
   const [preparationModal, setPreparationModal] = useState(null);
   const [manualForm, setManualForm] = useState({
     companyId: "",
@@ -587,3 +586,4 @@ export default function IsnetWorkflowFinalPage({
     </main>
   );
 }
+
