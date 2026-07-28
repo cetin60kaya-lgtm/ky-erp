@@ -14,6 +14,7 @@ import { getFirmaKartlari } from "../../../services/muhasebeApi";
 import { getDesenSimpleModels } from "../../../services/desenApi";
 import {
   getIsnetLocalDocuments,
+  getIsnetModelSuggestions,
   startDailySync,
 } from "../../../services/isnetApi";
 import {
@@ -66,11 +67,11 @@ function statusLabel(value) {
   }[value] || value || "Hazır";
 }
 
-function sumQuantity(lines = []) {
-  return lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-}
-
-export default function IsnetAutomationWorkflowPage({ activeMainCompany, openModule }) {
+export default function IsnetAutomationWorkflowPage({
+  activeMainCompany,
+  openModule,
+  moduleActionContext,
+}) {
   const companySlug = activeMainCompany?.slug || activeMainCompany?.id || "";
   const [sourceMode, setSourceMode] = useState("portal");
   const [loading, setLoading] = useState(true);
@@ -124,25 +125,37 @@ export default function IsnetAutomationWorkflowPage({ activeMainCompany, openMod
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!moduleActionContext?.nonce) return;
+    setSourceMode("portal");
+    if (moduleActionContext.modelDecision) {
+      setModelDecision(moduleActionContext.modelDecision);
+    }
+    if (moduleActionContext.notice) {
+      setNotice({
+        tone: moduleActionContext.noticeTone || "success",
+        text: moduleActionContext.notice,
+      });
+    }
+  }, [moduleActionContext?.nonce, moduleActionContext?.modelDecision, moduleActionContext?.notice, moduleActionContext?.noticeTone]);
+
   const incomingCustomerDispatches = useMemo(
-    () =>
-      portalDocuments.filter((row) => {
-        const companyType = String(row.companyType || "").toUpperCase();
-        return (
-          row.direction === "incoming" &&
-          row.kind === "dispatch" &&
-          (row.modelApplicable === true || ["CUSTOMER", "BOTH"].includes(companyType))
-        );
-      }),
+    () => portalDocuments.filter((row) => {
+      const companyType = String(row.companyType || "").toUpperCase();
+      return (
+        row.direction === "incoming" &&
+        row.kind === "dispatch" &&
+        (row.modelApplicable === true || ["CUSTOMER", "BOTH"].includes(companyType))
+      );
+    }),
     [portalDocuments],
   );
 
   const customerCompanies = useMemo(
-    () =>
-      companies.filter((row) => {
-        const type = String(row.companyType || row.firmaTuru || row.type || "").toUpperCase();
-        return !type || ["CUSTOMER", "MUSTERI", "MÜŞTERİ", "BOTH", "GENEL"].includes(type);
-      }),
+    () => companies.filter((row) => {
+      const type = String(row.companyType || row.firmaTuru || row.type || "").toUpperCase();
+      return !type || ["CUSTOMER", "MUSTERI", "MÜŞTERİ", "BOTH", "GENEL"].includes(type);
+    }),
     [companies],
   );
 
@@ -183,6 +196,24 @@ export default function IsnetAutomationWorkflowPage({ activeMainCompany, openMod
       await load();
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Otomatik irsaliye taslağı hazırlanamadı." });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openPersistedModelDecision(flow) {
+    if (!flow.incomingIntakeId) {
+      setNotice({ tone: "error", text: "Model önerisi için kaynak işleme kaydı bulunamadı." });
+      return;
+    }
+    setBusy(`suggestions-${flow.id}`);
+    setNotice(null);
+    try {
+      const result = await getIsnetModelSuggestions(flow.incomingIntakeId, flow.modelName || "");
+      setModelDecision({ flow, suggestions: result?.suggestions || [] });
+      setNotice({ tone: "warning", text: "Firma ve adet hazır. Yalnız doğru modeli onaylayın." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error?.message || "Model önerileri alınamadı." });
     } finally {
       setBusy("");
     }
@@ -341,21 +372,13 @@ export default function IsnetAutomationWorkflowPage({ activeMainCompany, openMod
         <div className="isnet-hero__actions">
           <label><small>Başlangıç</small><input type="date" value={range.startDate} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} /></label>
           <label><small>Bitiş</small><input type="date" value={range.endDate} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} /></label>
-          <button className="isnet-btn isnet-btn--primary" type="button" onClick={synchronize} disabled={busy === "sync"}>
-            {busy === "sync" ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />} İşNet'i Senkronize Et
-          </button>
+          <button className="isnet-btn isnet-btn--primary" type="button" onClick={synchronize} disabled={busy === "sync"}>{busy === "sync" ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />} İşNet'i Senkronize Et</button>
         </div>
       </header>
 
       {notice && <div className={`isnet-notice isnet-notice--${notice.tone || "info"}`}>{notice.text}</div>}
 
-      <section className="isnet-card isnet-auto-guide">
-        <div className="isnet-auto-steps">
-          {["Kaynağı seç", "İrsaliye taslağı", "Siz kontrol edip gönderin", "Sistem gönderileni bulsun", "Fiyat girin", "Fatura taslağı ve son gönderim"].map((label, index) => (
-            <div key={label}><span>{index + 1}</span><strong>{label}</strong></div>
-          ))}
-        </div>
-      </section>
+      <section className="isnet-card isnet-auto-guide"><div className="isnet-auto-steps">{["Kaynağı seç", "İrsaliye taslağı", "Siz kontrol edip gönderin", "Sistem gönderileni bulsun", "Fiyat girin", "Fatura taslağı ve son gönderim"].map((label, index) => <div key={label}><span>{index + 1}</span><strong>{label}</strong></div>)}</div></section>
 
       <section className="isnet-card">
         <div className="isnet-source-switch">
@@ -364,45 +387,18 @@ export default function IsnetAutomationWorkflowPage({ activeMainCompany, openMod
           <button type="button" className={sourceMode === "manual" ? "active" : ""} onClick={() => setSourceMode("manual")}><ReceiptText size={16} /> İrsaliye Yok</button>
         </div>
 
-        {sourceMode === "portal" ? (
-          <div className="isnet-auto-source">
-            <div className="isnet-section-head"><div><small>NORMAL HIZLI AKIŞ</small><h2>Gelen müşteri irsaliyesini seçin</h2><p>Firma, satır ve adet İşNet belgesinden otomatik alınır.</p></div><button type="button" className="isnet-btn isnet-btn--secondary" onClick={load}><RefreshCw size={15} /> Yenile</button></div>
-            {loading ? <div className="isnet-empty"><LoaderCircle className="spin" /><strong>Belgeler yükleniyor</strong></div> : incomingCustomerDispatches.length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>İşlem bekleyen müşteri irsaliyesi yok</strong><p>Önce İşNet'i Senkronize Et düğmesini çalıştırın.</p></div> : (
-              <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Tarih</th><th>İrsaliye</th><th>Müşteri</th><th>Model</th><th>Dosya</th><th>İşlem</th></tr></thead><tbody>{incomingCustomerDispatches.map((row) => <tr key={row.id} className={selectedDocumentId === row.id ? "isnet-row-selected" : ""}><td>{row.dateText}</td><td><strong>{row.documentNo}</strong></td><td>{row.partnerName}</td><td>{row.modelName || row.modelGuess || "Otomatik kontrol"}</td><td><span className={`isnet-badge isnet-badge--${row.pdfSaved && row.xmlSaved ? "green" : "amber"}`}>{row.pdfSaved && row.xmlSaved ? "PDF + XML hazır" : "Eksik dosya tamamlanacak"}</span></td><td><button type="button" className="isnet-btn isnet-btn--primary" disabled={busy === `prepare-${row.id}`} onClick={() => preparePortalDocument(row)}>{busy === `prepare-${row.id}` ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />} Otomatik Taslak Hazırla</button></td></tr>)}</tbody></table></div>
-            )}
-          </div>
-        ) : (
-          <div className="isnet-manual-grid">
-            <div className="isnet-form-field"><label>Müşteri</label><select value={manualForm.companyId} onChange={(event) => patchManual({ companyId: event.target.value })}><option value="">Müşteri seçin</option>{customerCompanies.map((row) => <option key={row.id} value={row.id}>{row.name || row.companyName}</option>)}</select></div>
-            <div className="isnet-form-field"><label>Model</label><select value={manualForm.modelId} onChange={(event) => patchManual({ modelId: event.target.value })}><option value="">Model seçin</option>{models.map((row) => <option key={row.id} value={row.id}>{row.modelName || row.name}</option>)}</select></div>
-            <div className="isnet-form-field"><label>Tarih</label><input type="date" value={manualForm.issueDate} onChange={(event) => patchManual({ issueDate: event.target.value })} /></div>
-            <div className="isnet-form-field"><label>Adet</label><input type="number" min="1" value={manualForm.quantity} onChange={(event) => patchManual({ quantity: event.target.value })} /></div>
-            <div className="isnet-form-field"><label>Sipariş / Piyon</label><input value={manualForm.orderNo} onChange={(event) => patchManual({ orderNo: event.target.value })} /></div>
-            {sourceMode === "pdf" && <div className="isnet-form-field"><label>İrsaliye PDF</label><input type="file" accept="application/pdf,.pdf" onChange={(event) => patchManual({ pdfFile: event.target.files?.[0] || null })} /></div>}
-            <div className="isnet-form-field isnet-form-field--wide"><label>Not</label><input value={manualForm.note} onChange={(event) => patchManual({ note: event.target.value })} placeholder="Varsa açıklama" /></div>
-            <div className="isnet-manual-action"><button type="button" className="isnet-btn isnet-btn--primary" onClick={createManualSource} disabled={busy === "manual-create"}>{busy === "manual-create" ? <LoaderCircle size={15} className="spin" /> : <Sparkles size={15} />} İş Akışını ve Taslağı Oluştur</button></div>
-          </div>
-        )}
+        {sourceMode === "portal" ? <div className="isnet-auto-source"><div className="isnet-section-head"><div><small>NORMAL HIZLI AKIŞ</small><h2>Gelen müşteri irsaliyesini seçin</h2><p>Firma, satır ve adet İşNet belgesinden otomatik alınır.</p></div><button type="button" className="isnet-btn isnet-btn--secondary" onClick={load}><RefreshCw size={15} /> Yenile</button></div>
+          {loading ? <div className="isnet-empty"><LoaderCircle className="spin" /><strong>Belgeler yükleniyor</strong></div> : incomingCustomerDispatches.length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>İşlem bekleyen müşteri irsaliyesi yok</strong><p>Önce İşNet'i Senkronize Et düğmesini çalıştırın.</p></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Tarih</th><th>İrsaliye</th><th>Müşteri</th><th>Model</th><th>Dosya</th><th>İşlem</th></tr></thead><tbody>{incomingCustomerDispatches.map((row) => <tr key={row.id} className={selectedDocumentId === row.id ? "isnet-row-selected" : ""}><td>{row.dateText}</td><td><strong>{row.documentNo}</strong></td><td>{row.partnerName}</td><td>{row.modelName || row.modelGuess || "Otomatik kontrol"}</td><td><span className={`isnet-badge isnet-badge--${row.pdfSaved && row.xmlSaved ? "green" : "warning"}`}>{row.pdfSaved && row.xmlSaved ? "PDF + XML hazır" : "Eksik dosya tamamlanacak"}</span></td><td><button type="button" className="isnet-btn isnet-btn--primary" disabled={busy === `prepare-${row.id}`} onClick={() => preparePortalDocument(row)}>{busy === `prepare-${row.id}` ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />} Otomatik Taslak Hazırla</button></td></tr>)}</tbody></table></div>}
+        </div> : <div className="isnet-manual-grid"><div className="isnet-form-field"><label>Müşteri</label><select value={manualForm.companyId} onChange={(event) => patchManual({ companyId: event.target.value })}><option value="">Müşteri seçin</option>{customerCompanies.map((row) => <option key={row.id} value={row.id}>{row.name || row.companyName}</option>)}</select></div><div className="isnet-form-field"><label>Model</label><select value={manualForm.modelId} onChange={(event) => patchManual({ modelId: event.target.value })}><option value="">Model seçin</option>{models.map((row) => <option key={row.id} value={row.id}>{row.modelName || row.name}</option>)}</select></div><div className="isnet-form-field"><label>Tarih</label><input type="date" value={manualForm.issueDate} onChange={(event) => patchManual({ issueDate: event.target.value })} /></div><div className="isnet-form-field"><label>Adet</label><input type="number" min="1" value={manualForm.quantity} onChange={(event) => patchManual({ quantity: event.target.value })} /></div><div className="isnet-form-field"><label>Sipariş / Piyon</label><input value={manualForm.orderNo} onChange={(event) => patchManual({ orderNo: event.target.value })} /></div>{sourceMode === "pdf" && <div className="isnet-form-field"><label>İrsaliye PDF</label><input type="file" accept="application/pdf,.pdf" onChange={(event) => patchManual({ pdfFile: event.target.files?.[0] || null })} /></div>}<div className="isnet-form-field isnet-form-field--wide"><label>Not</label><input value={manualForm.note} onChange={(event) => patchManual({ note: event.target.value })} placeholder="Varsa açıklama" /></div><div className="isnet-manual-action"><button type="button" className="isnet-btn isnet-btn--primary" onClick={createManualSource} disabled={busy === "manual-create"}>{busy === "manual-create" ? <LoaderCircle size={15} className="spin" /> : <Sparkles size={15} />} İş Akışını ve Taslağı Oluştur</button></div></div>}
       </section>
 
-      {modelDecision && (
-        <section className="isnet-card isnet-exception-card">
-          <div className="isnet-section-head"><div><small>YALNIZ İSTİSNA</small><h2>Model eşleşmesini onaylayın</h2><p>Firma ve adet hazırdır; yalnız güvenli olmayan model eşleşmesi soruluyor.</p></div><AlertTriangle /></div>
-          <div className="isnet-model-choice-grid">{modelDecision.suggestions.length ? modelDecision.suggestions.map((candidate) => <button key={`${candidate.source}-${candidate.id}`} type="button" onClick={() => approveModel(candidate)} disabled={busy === `model-${candidate.id}`}><strong>{candidate.name}</strong><small>{candidate.code || "Kod yok"} · %{candidate.score} eşleşme</small></button>) : <div className="isnet-empty"><AlertTriangle /><strong>Otomatik model bulunamadı</strong><p>Desen Havuzu'nda model açıldıktan sonra tekrar deneyin.</p></div>}</div>
-        </section>
-      )}
+      {modelDecision && <section className="isnet-card isnet-exception-card"><div className="isnet-section-head"><div><small>YALNIZ İSTİSNA</small><h2>Model eşleşmesini onaylayın</h2><p>Firma ve adet hazırdır; yalnız güvenli olmayan model eşleşmesi soruluyor.</p></div><AlertTriangle /></div><div className="isnet-model-choice-grid">{modelDecision.suggestions.length ? modelDecision.suggestions.map((candidate) => <button key={`${candidate.source}-${candidate.id}`} type="button" onClick={() => approveModel(candidate)} disabled={busy === `model-${candidate.id}`}><strong>{candidate.name}</strong><small>{candidate.code || "Kod yok"} · %{candidate.score} eşleşme</small></button>) : <div className="isnet-empty"><AlertTriangle /><strong>Otomatik model bulunamadı</strong><p>Desen Havuzu'nda model açıldıktan sonra tekrar deneyin.</p></div>}</div></section>}
 
-      <section className="isnet-card">
-        <div className="isnet-section-head"><div><small>AKTİF İŞLER</small><h2>Kontrol ve devam işlemleri</h2><p>Aynı kaynak için ikinci taslak oluşturulmaz; işlem kaldığı adımdan devam eder.</p></div></div>
-        {flows.length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Aktif otomatik iş akışı yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri / Model</th><th>Adet</th><th>Giden Taslak</th><th>Durum</th><th>Devam</th></tr></thead><tbody>{flows.map((flow) => <tr key={flow.id}><td><strong>{flow.incomingDocumentNo || flow.incomingSourceId}</strong><small>{flow.issueDate}</small></td><td>{flow.companyName}<small>{flow.modelName || "Model bekliyor"}</small></td><td>{flow.quantity}</td><td>{flow.outgoingDraftNo || <div className="isnet-inline-number"><input value={outgoingNoDraft[flow.id] || ""} onChange={(event) => setOutgoingNoDraft((current) => ({ ...current, [flow.id]: event.target.value }))} placeholder="Portal irsaliye no" /><button type="button" onClick={() => saveOutgoingNo(flow)}>Kaydet</button></div>}</td><td><span className="isnet-badge isnet-badge--blue">{statusLabel(flow.status)}</span></td><td>{flow.status === "MODEL_REQUIRED" ? <span>Yukarıdan model onaylayın</span> : flow.status === "PRICE_REQUIRED" && flow.invoiceSeed ? <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openModule?.("isnet", { tabKey: "irsaliyeden-faturaya", actionContext: { sourceId: flow.outgoingSourceId, documentNo: flow.outgoingDraftNo, invoiceDraft: flow.invoiceSeed, autoFlowId: flow.id } })}><ReceiptText size={14} /> Fiyat Gir ve Faturala</button> : <button type="button" className="isnet-btn isnet-btn--secondary" disabled={busy === `refresh-${flow.id}`} onClick={() => findSentDispatch(flow)}>{busy === `refresh-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Gönderilmiş İrsaliyeyi Bul</button>}</td></tr>)}</tbody></table></div>}
+      <section className="isnet-card"><div className="isnet-section-head"><div><small>AKTİF İŞLER</small><h2>Kontrol ve devam işlemleri</h2><p>Aynı kaynak için ikinci taslak oluşturulmaz; işlem kaldığı adımdan devam eder.</p></div></div>
+        {flows.length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Aktif otomatik iş akışı yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri / Model</th><th>Adet</th><th>Giden Taslak</th><th>Durum</th><th>Devam</th></tr></thead><tbody>{flows.map((flow) => <tr key={flow.id}><td><strong>{flow.incomingDocumentNo || flow.incomingSourceId}</strong><small>{flow.issueDate}</small></td><td>{flow.companyName}<small>{flow.modelName || "Model bekliyor"}</small></td><td>{flow.quantity}</td><td>{flow.outgoingDraftNo || <div className="isnet-inline-number"><input value={outgoingNoDraft[flow.id] || ""} onChange={(event) => setOutgoingNoDraft((current) => ({ ...current, [flow.id]: event.target.value }))} placeholder="Portal irsaliye no" /><button type="button" onClick={() => saveOutgoingNo(flow)}>Kaydet</button></div>}</td><td><span className="isnet-badge isnet-badge--blue">{statusLabel(flow.status)}</span></td><td>{flow.status === "MODEL_REQUIRED" ? <button type="button" className="isnet-btn isnet-btn--primary" disabled={busy === `suggestions-${flow.id}`} onClick={() => openPersistedModelDecision(flow)}>{busy === `suggestions-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />} Model Seç</button> : flow.status === "PRICE_REQUIRED" && flow.invoiceSeed ? <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openModule?.("isnet", { tabKey: "irsaliyeden-faturaya", actionContext: { sourceId: flow.outgoingSourceId, documentNo: flow.outgoingDraftNo, invoiceDraft: flow.invoiceSeed, autoFlowId: flow.id } })}><ReceiptText size={14} /> Fiyat Gir ve Faturala</button> : <button type="button" className="isnet-btn isnet-btn--secondary" disabled={busy === `refresh-${flow.id}`} onClick={() => findSentDispatch(flow)}>{busy === `refresh-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Gönderilmiş İrsaliyeyi Bul</button>}</td></tr>)}</tbody></table></div>}
       </section>
 
-      {manualRows.length > 0 && (
-        <section className="isnet-card">
-          <div className="isnet-section-head"><div><small>PDF / MANUEL KAYNAKLAR</small><h2>İrsaliyesiz veya yüklenen işler</h2></div></div>
-          <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Tarih</th><th>Müşteri</th><th>Model</th><th>Adet</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{manualRows.map((row) => { const completedDraft = (row.outgoingDispatchDrafts || []).some((item) => item.status === "COMPLETED"); return <tr key={row.id}><td>{row.issueDate}</td><td>{row.companyName}</td><td>{row.modelName}</td><td>{row.quantity}</td><td>{statusLabel(row.workflowStatus)}</td><td><button type="button" className="isnet-btn isnet-btn--secondary" disabled={!completedDraft || busy === `manual-invoice-${row.id}`} onClick={() => prepareManualInvoice(row)}><Send size={14} /> Gönderilmiş İrsaliyeyi Bul ve Faturala</button></td></tr>; })}</tbody></table></div>
-        </section>
-      )}
+      {manualRows.length > 0 && <section className="isnet-card"><div className="isnet-section-head"><div><small>PDF / MANUEL KAYNAKLAR</small><h2>İrsaliyesiz veya yüklenen işler</h2></div></div><div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Tarih</th><th>Müşteri</th><th>Model</th><th>Adet</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{manualRows.map((row) => { const completedDraft = (row.outgoingDispatchDrafts || []).some((item) => item.status === "COMPLETED"); return <tr key={row.id}><td>{row.issueDate}</td><td>{row.companyName}</td><td>{row.modelName}</td><td>{row.quantity}</td><td>{statusLabel(row.workflowStatus)}</td><td><button type="button" className="isnet-btn isnet-btn--secondary" disabled={!completedDraft || busy === `manual-invoice-${row.id}`} onClick={() => prepareManualInvoice(row)}><Send size={14} /> Gönderilmiş İrsaliyeyi Bul ve Faturala</button></td></tr>; })}</tbody></table></div></section>}
     </main>
   );
 }
