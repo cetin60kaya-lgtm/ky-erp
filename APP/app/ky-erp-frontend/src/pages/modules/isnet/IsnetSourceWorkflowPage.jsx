@@ -11,6 +11,7 @@ import { getFirmaKartlari } from "../../../services/muhasebeApi";
 import { getDesenSimpleModels } from "../../../services/desenApi";
 import { getIsnetLocalDocuments, startDailySync } from "../../../services/isnetApi";
 import {
+  completeOutgoingDispatchFromSourceIntake,
   createIsnetManualPdfSourceIntake,
   createIsnetNoDispatchSourceIntake,
   createIsnetPortalSourceIntake,
@@ -170,6 +171,32 @@ export default function IsnetSourceWorkflowPage({ activeMainCompany, openModule 
       await load();
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Giden irsaliye oluşturulamadı." });
+      await load();
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function verifyPortalDraft(row, draft) {
+    const documentNo = window.prompt(
+      "İşNet giden irsaliye taslaklarında görünen gerçek taslak numarasını yazın",
+      draft.documentNo || "",
+    );
+    if (!documentNo?.trim()) return;
+    if (!window.confirm(`${documentNo.trim()} numarası bu kaynak kaydına bağlansın mı?`)) return;
+    setBusy(`verify-${draft.id}`);
+    setNotice(null);
+    try {
+      await completeOutgoingDispatchFromSourceIntake(row.id, draft.id, {
+        documentNo: documentNo.trim(),
+      });
+      setNotice({
+        tone: "success",
+        text: `${documentNo.trim()} portal taslak numarası doğrulandı ve kaynak kaydına bağlandı.`,
+      });
+      await load();
+    } catch (error) {
+      setNotice({ tone: "error", text: error?.message || "Portal taslak numarası doğrulanamadı." });
     } finally {
       setBusy("");
     }
@@ -270,23 +297,39 @@ export default function IsnetSourceWorkflowPage({ activeMainCompany, openModule 
               <tbody>
                 {intakes.map((row) => {
                   const completedDraft = (row.outgoingDispatchDrafts || []).some((item) => item.status === "COMPLETED");
+                  const unresolvedDraft = (row.outgoingDispatchDrafts || []).find((item) => item.status === "DRAFT");
                   return (
                     <tr key={row.id}>
                       <td>{row.issueDate}</td>
                       <td><strong>{row.companyName}</strong><small>{row.customerDispatchNo || row.internalReference}</small></td>
                       <td>{row.modelName || "Model bekliyor"}</td>
                       <td>{row.quantity} {row.unit || "ADET"}<small>Kalan: {row.capacity?.outgoingRemaining ?? 0}</small></td>
-                      <td><span className="isnet-badge isnet-badge--blue">{statusLabel(row.workflowStatus)}</span></td>
+                      <td>
+                        <span className={`isnet-badge isnet-badge--${unresolvedDraft ? "warning" : "blue"}`}>
+                          {unresolvedDraft ? "Portal kontrolü gerekli" : statusLabel(row.workflowStatus)}
+                        </span>
+                      </td>
                       <td>
                         <div className="isnet-action-row">
-                          <button
-                            type="button"
-                            className="isnet-btn isnet-btn--secondary"
-                            disabled={!row.modelId || Number(row.capacity?.outgoingRemaining || 0) <= 0 || busy === `dispatch-${row.id}`}
-                            onClick={() => createDispatch(row)}
-                          >
-                            <Truck size={14} /> Giden İrsaliye Oluştur
-                          </button>
+                          {unresolvedDraft ? (
+                            <button
+                              type="button"
+                              className="isnet-btn isnet-btn--secondary"
+                              disabled={busy === `verify-${unresolvedDraft.id}`}
+                              onClick={() => verifyPortalDraft(row, unresolvedDraft)}
+                            >
+                              <CheckCircle2 size={14} /> Portal Taslak No Doğrula
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="isnet-btn isnet-btn--secondary"
+                              disabled={!row.modelId || Number(row.capacity?.outgoingRemaining || 0) <= 0 || busy === `dispatch-${row.id}`}
+                              onClick={() => createDispatch(row)}
+                            >
+                              <Truck size={14} /> Giden İrsaliye Oluştur
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="isnet-btn isnet-btn--primary"
