@@ -90,10 +90,11 @@ export const getIsnetDispatchInvoiceDraft = (sourceId) =>
   apiGet(`/isnet/dispatches/${encodeURIComponent(sourceId)}/invoice-draft`).then(unwrap);
 
 export const createIsnetInvoiceFromDispatch = (sourceId, payload) =>
-  apiPost(`/isnet/dispatches/${encodeURIComponent(sourceId)}/invoice-draft`, {
-    ...payload,
-    confirmed: true,
-  }).then(unwrap);
+  apiPost(
+    `/isnet/invoice-preparation/dispatches/${encodeURIComponent(sourceId)}/draft`,
+    { ...payload, confirmed: true },
+    { timeoutMs: 300_000 },
+  ).then(unwrap);
 
 export const getIsnetInvoiceDraftStatus = (draftId) =>
   apiGet(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}`).then(unwrap);
