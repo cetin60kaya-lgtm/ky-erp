@@ -115,7 +115,7 @@ requireCheck(
   "İK mesai: 225/300 saat tabanı destekleniyor",
 );
 requireCheck(
-  monthlyOperations.includes("1.5") && monthlyOperations.includes("return 2"),
+  monthlyOperations.includes("1.5") && monthlyOperations.includes("? 2 : 1.5"),
   "İK mesai: hafta içi ×1,5 ve hafta sonu/resmî tatil ×2 kuralı var",
 );
 
