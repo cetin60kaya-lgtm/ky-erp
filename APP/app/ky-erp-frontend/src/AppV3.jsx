@@ -139,6 +139,11 @@ export default function AppV3() {
   }, []);
 
   useEffect(() => {
+    if (!workspace.activeRoute.moduleKey || !workspace.activeRoute.tabKey) return;
+    updateBrowserPath(workspace.activeRoute, true);
+  }, [workspace.activeRoute.moduleKey, workspace.activeRoute.tabKey]);
+
+  useEffect(() => {
     window.requestAnimationFrame(() => {
       document.querySelector(".shell-v3-workspace")?.scrollTo({ top: 0, left: 0, behavior: "auto" });
     });
