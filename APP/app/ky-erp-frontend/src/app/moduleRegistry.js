@@ -69,6 +69,7 @@ export const MODULES = [
       {
         label: "Belge Oluşturma",
         tabs: [
+          ["belge-kaynagi", "Belge Kaynağı", "file-check"],
           ["irsaliyeden-faturaya", "Fatura Kesme Yardımcısı", "file-check"],
           ["yeni-irsaliye", "Yeni İrsaliye", "dosya"],
         ],
