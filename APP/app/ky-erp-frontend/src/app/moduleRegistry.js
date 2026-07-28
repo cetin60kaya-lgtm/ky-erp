@@ -51,19 +51,35 @@ export const MODULES = [
     icon: "eposta",
     groups: [
       {
-        label: "Belge Yönetimi",
+        label: "Kontrol Merkezi",
         tabs: [
           ["yonetim-merkezi", "Analiz ve Eşleştirme", "dashboard"],
-          ["belge-akisi", "Gelen / Giden Belgeler", "dosya"],
-          ["irsaliyeden-faturaya", "Fatura Kesme Yardımcısı", "file-check"],
+          ["belge-akisi", "Tüm Belge Akışı", "dosya"],
         ],
       },
       {
-        label: "Arşiv ve Çıktı",
+        label: "Portal Belgeleri",
+        tabs: [
+          ["gelen-irsaliyeler", "Gelen İrsaliyeler", "musteri-irsaliye"],
+          ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
+          ["gelen-faturalar", "Gelen Faturalar", "tedarikci-fatura"],
+          ["giden-faturalar", "Giden Faturalar", "dosya"],
+        ],
+      },
+      {
+        label: "Belge Oluşturma",
+        tabs: [
+          ["irsaliyeden-faturaya", "Fatura Kesme Yardımcısı", "file-check"],
+          ["yeni-irsaliye", "Yeni İrsaliye", "dosya"],
+        ],
+      },
+      {
+        label: "Arşiv ve Gönderim",
         tabs: [
           ["kesilen-belgeler", "Yerel Belge Arşivi", "dosya"],
-          ["cikti-kuyrugu", "Çıktı ve Mail", "file-check"],
-          ["ayarlar", "Ayarlar", "ayarlar"],
+          ["cikti-kuyrugu", "Çıktı Kuyruğu", "file-check"],
+          ["mail-merkezi", "Mail Merkezi", "eposta"],
+          ["ayarlar", "Ayarlar ve Bağlantı", "ayarlar"],
         ],
       },
     ],
