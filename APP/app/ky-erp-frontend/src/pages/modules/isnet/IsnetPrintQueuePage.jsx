@@ -42,10 +42,14 @@ export default function IsnetPrintQueuePage() {
 
   useEffect(() => {
     void load();
-    return () => {
-      if (preview?.url) URL.revokeObjectURL(preview.url);
-    };
   }, []);
+
+  useEffect(() => {
+    const previewUrl = preview?.url;
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [preview?.url]);
 
   const rows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("tr-TR");
