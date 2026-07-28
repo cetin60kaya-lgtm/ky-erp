@@ -29,11 +29,19 @@ const recentStartText = () => {
 };
 
 function rowsOf(value) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.rows)) return value.rows;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.data)) return value.data;
-  return [];
+  const candidates = [
+    value,
+    value?.rows,
+    value?.items,
+    value?.documents,
+    value?.models,
+    value?.data,
+    value?.data?.rows,
+    value?.data?.items,
+    value?.data?.documents,
+    value?.data?.models,
+  ];
+  return candidates.find(Array.isArray) || [];
 }
 
 function statusLabel(value) {
@@ -60,7 +68,10 @@ export default function IsnetSourceWorkflowPage({ activeMainCompany, openModule 
   const [preparedInvoice, setPreparedInvoice] = useState(null);
 
   const load = useCallback(async () => {
-    if (!companySlug) return;
+    if (!companySlug) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [companyResult, modelResult, portalResult, intakeResult] = await Promise.all([
@@ -131,9 +142,10 @@ export default function IsnetSourceWorkflowPage({ activeMainCompany, openModule 
     try {
       const result = await startDailySync(range);
       const accounting = result?.supplierAccounting || {};
+      const syncErrors = Number(result?.automation?.errors?.length || 0);
       setNotice({
-        tone: accounting.failed > 0 ? "warning" : "success",
-        text: `${Number(result?.automation?.downloaded || 0)} yeni belge indirildi. ${Number(accounting.imported || 0)} tedarikçi faturası muhasebe ve cariye işlendi${accounting.failed ? `; ${accounting.failed} kayıt kontrol bekliyor.` : "."}`,
+        tone: accounting.failed > 0 || syncErrors > 0 ? "warning" : "success",
+        text: `${Number(result?.automation?.downloaded || 0)} yeni belge indirildi. ${Number(accounting.imported || 0)} tedarikçi faturası muhasebe ve cariye işlendi${accounting.failed || syncErrors ? `; ${Number(accounting.failed || 0) + syncErrors} kayıt kontrol bekliyor.` : "."}`,
       });
       await load();
     } catch (error) {
