@@ -34,6 +34,7 @@ import { DispatchReconciliationController } from "./dispatch-reconciliation.cont
 import { DispatchReconciliationService } from "./dispatch-reconciliation.service";
 import { IsnetOperationsController } from "./isnet-operations.controller";
 import { IsnetOperationsService } from "./isnet-operations.service";
+import { IsnetMailDraftService } from "./isnet-mail-draft.service";
 import { IsnetSourceIntakeController } from "./isnet-source-intake.controller";
 import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
 
@@ -76,6 +77,7 @@ import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
     MailTemplateService,
     DispatchReconciliationService,
     IsnetOperationsService,
+    IsnetMailDraftService,
     IsnetSourceIntakeService,
   ],
   exports: [
