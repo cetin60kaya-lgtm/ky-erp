@@ -72,6 +72,9 @@ jobs:
 
   isnet-backend:
     runs-on: windows-latest
+    env:
+      DATABASE_URL: file:./ci-isnet.db
+      NODE_ENV: test
     defaults:
       run:
         working-directory: APP/app/ky-erp-backend
