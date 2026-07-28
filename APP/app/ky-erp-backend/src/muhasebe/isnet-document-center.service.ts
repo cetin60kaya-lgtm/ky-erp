@@ -8,6 +8,8 @@ const numberValue = (value: unknown) => {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+const objectValue = (value: unknown): Query =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Query) : {};
 
 @Injectable()
 export class IsnetDocumentCenterService {
@@ -97,6 +99,7 @@ export class IsnetDocumentCenterService {
 
     const enriched = states
       .map((state) => {
+        const metadata = objectValue(state.metadata);
         const documentNo = clean(state.documentNo);
         const intake = intakeByNo.get(documentNo);
         const accounting = accountingByNo.get(documentNo);
@@ -104,6 +107,7 @@ export class IsnetDocumentCenterService {
         const xmlSaved = Boolean(state.xmlPath && fs.existsSync(clean(state.xmlPath)));
         const companyType = clean(
           state.companyType ||
+            metadata.companyType ||
             (state.customerDispatch || intake?.documentKind === "CUSTOMER_DISPATCH"
               ? "CUSTOMER"
               : "SUPPLIER"),
@@ -132,15 +136,15 @@ export class IsnetDocumentCenterService {
           kind: clean(state.kind),
           date,
           dateText: clean(state.dateText) || date,
-          transferDateText: clean(state.transferDateText),
+          transferDateText: clean(metadata.transferDateText),
           documentNo,
           partnerName: clean(state.partnerName),
-          scenarioText: clean(state.scenarioText),
-          subtypeText: clean(state.subtypeText),
-          portalStatusText: clean(state.statusText),
-          amount: state.amount,
-          amountText: clean(state.amountText),
-          currency: clean(state.currency),
+          scenarioText: clean(metadata.scenarioText),
+          subtypeText: clean(metadata.subtypeText),
+          portalStatusText: clean(metadata.statusText),
+          amount: metadata.amount ?? null,
+          amountText: clean(metadata.amountText),
+          currency: clean(metadata.currency),
           uuid: clean(state.uuid),
           downloaded: Boolean(state.completed),
           pdfSaved,
