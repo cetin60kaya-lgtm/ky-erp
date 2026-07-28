@@ -1,0 +1,16 @@
+.isnet-selected-print-page {
+  display: grid;
+  gap: 14px;
+}
+
+.isnet-selected-print-page .isnet-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #71839a;
+}
+
+.isnet-selected-print-page input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #1767d8;
+}
