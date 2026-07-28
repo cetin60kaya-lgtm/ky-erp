@@ -31,7 +31,9 @@ export class MuhasebeSmartMatchService {
   }
 
   private slug(input: Input = {}) {
-    const value = clean(input.mainCompanySlug || input.mainCompanyId || "mecit-hakan");
+    const value = clean(
+      input.mainCompanySlug || input.mainCompanyId || "mecit-hakan",
+    );
     if (!value) throw new BadRequestException("Ana firma seçimi zorunludur.");
     return value;
   }
@@ -51,57 +53,44 @@ export class MuhasebeSmartMatchService {
       .trim();
   }
 
-  private similarity(left: string, right: string) {
-    if (!left || !right) return 0;
-    if (left === right) return 100;
-    if (left.includes(right) || right.includes(left)) return 90;
-    const leftParts = new Set(left.split(" ").filter(Boolean));
-    const rightParts = new Set(right.split(" ").filter(Boolean));
-    const intersection = [...leftParts].filter((item) => rightParts.has(item)).length;
-    return Math.round(
-      (intersection / Math.max(leftParts.size, rightParts.size, 1)) * 100,
-    );
-  }
-
   async summary(input: Input = {}) {
     const mainCompanySlug = this.slug(input);
-    const [companyAliasCount, productAliasCount, unmatchedLineCount, documents, lots] =
-      await Promise.all([
-        this.db().companyAlias.count({
-          where: { mainCompanySlug, isActive: true, deletedAt: null },
-        }),
-        this.db().productAlias.count({
-          where: { mainCompanySlug, isActive: true },
-        }),
-        this.db().invoiceItem.count({
-          where: { mainCompanySlug, productId: null },
-        }),
-        this.db().document.findMany({
-          where: { mainCompanySlug, deletedAt: null },
-          select: {
-            id: true,
-            detectedType: true,
-            targetType: true,
-            documentType: true,
-            raporKategoriId: true,
-          },
-          take: 3000,
-        }),
-        this.db().boyahaneLot.findMany({
-          where: { mainCompanySlug, deletedAt: null },
-          select: { id: true, remainingQuantity: true, status: true },
-          take: 3000,
-        }),
-      ]);
+    const [
+      companyAliasCount,
+      productAliasCount,
+      unmatchedLineCount,
+      documents,
+      lots,
+    ] = await Promise.all([
+      this.db().companyAlias.count({
+        where: { mainCompanySlug, isActive: true, deletedAt: null },
+      }),
+      this.db().productAlias.count({
+        where: { mainCompanySlug, isActive: true },
+      }),
+      this.db().invoiceItem.count({
+        where: { mainCompanySlug, productId: null },
+      }),
+      this.db().document.findMany({
+        where: { mainCompanySlug, deletedAt: null },
+        select: {
+          id: true,
+          detectedType: true,
+          targetType: true,
+          documentType: true,
+          raporKategoriId: true,
+        },
+        take: 3000,
+      }),
+      this.db().boyahaneLot.findMany({
+        where: { mainCompanySlug, deletedAt: null },
+        select: { id: true, remainingQuantity: true, status: true },
+        take: 3000,
+      }),
+    ]);
 
     const supplierDocuments = documents.filter((row: any) =>
-      [row.detectedType, row.targetType, row.documentType]
-        .map((value) => String(value || "").toUpperCase())
-        .some((value) =>
-          ["SUPPLIER_INVOICE", "GELEN_FATURA", "ALIS_FATURA"].some((token) =>
-            value.includes(token),
-          ),
-        ),
+      this.isSupplierDocument(row),
     );
 
     return {
@@ -125,11 +114,15 @@ export class MuhasebeSmartMatchService {
     return this.db().companyAlias.findMany({
       where: {
         mainCompanySlug,
-        ...(input.includePassive ? {} : { isActive: true, deletedAt: null }),
+        ...(input.includePassive
+          ? {}
+          : { isActive: true, deletedAt: null }),
         ...(input.companyId ? { companyId: clean(input.companyId) } : {}),
       },
       include: {
-        company: { select: { id: true, name: true, taxNo: true, type: true } },
+        company: {
+          select: { id: true, name: true, taxNo: true, type: true },
+        },
       },
       orderBy: [{ companyId: "asc" }, { rawName: "asc" }],
       take: Math.min(Math.max(Number(input.limit || 500), 1), 2000),
@@ -144,6 +137,7 @@ export class MuhasebeSmartMatchService {
     if (!companyId || !rawName || !normalizedName) {
       throw new BadRequestException("Firma ve alias adı zorunludur.");
     }
+
     const company = await this.db().company.findFirst({
       where: { id: companyId, mainCompanySlug, deletedAt: null },
     });
@@ -181,7 +175,9 @@ export class MuhasebeSmartMatchService {
         source: clean(body.source) || "MANUAL",
         isActive: true,
       },
-      include: { company: { select: { id: true, name: true, taxNo: true } } },
+      include: {
+        company: { select: { id: true, name: true, taxNo: true } },
+      },
     });
   }
 
@@ -191,7 +187,9 @@ export class MuhasebeSmartMatchService {
       where: { id: clean(id), mainCompanySlug },
       data: { isActive: false, deletedAt: new Date() },
     });
-    if (!result.count) throw new NotFoundException("Firma alias kaydı bulunamadı.");
+    if (!result.count) {
+      throw new NotFoundException("Firma alias kaydı bulunamadı.");
+    }
     return { ok: true, id };
   }
 
@@ -219,6 +217,7 @@ export class MuhasebeSmartMatchService {
     if (!productId || !rawName || !normalizedName) {
       throw new BadRequestException("Ürün ve alias adı zorunludur.");
     }
+
     const product = await this.db().product.findFirst({
       where: { id: productId, mainCompanySlug, isActive: true },
     });
@@ -235,6 +234,15 @@ export class MuhasebeSmartMatchService {
       );
     }
 
+    const nextRaw = {
+      ...objectValue(existing?.raw),
+      supplierFirmId: clean(body.supplierFirmId) || null,
+      sellerItemId: clean(body.sellerItemId) || null,
+      manufacturerItemId: clean(body.manufacturerItemId) || null,
+      standardItemId: clean(body.standardItemId) || null,
+      source: clean(body.source) || "MANUAL",
+    };
+
     return this.db().productAlias.upsert({
       where: {
         mainCompanySlug_normalizedName: { mainCompanySlug, normalizedName },
@@ -244,14 +252,7 @@ export class MuhasebeSmartMatchService {
         rawName,
         packageInfo: clean(body.packageInfo) || null,
         isActive: true,
-        raw: {
-          ...objectValue(existing?.raw),
-          supplierFirmId: clean(body.supplierFirmId) || null,
-          sellerItemId: clean(body.sellerItemId) || null,
-          manufacturerItemId: clean(body.manufacturerItemId) || null,
-          standardItemId: clean(body.standardItemId) || null,
-          source: clean(body.source) || "MANUAL",
-        },
+        raw: nextRaw,
       },
       create: {
         mainCompanySlug,
@@ -260,15 +261,11 @@ export class MuhasebeSmartMatchService {
         normalizedName,
         packageInfo: clean(body.packageInfo) || null,
         isActive: true,
-        raw: {
-          supplierFirmId: clean(body.supplierFirmId) || null,
-          sellerItemId: clean(body.sellerItemId) || null,
-          manufacturerItemId: clean(body.manufacturerItemId) || null,
-          standardItemId: clean(body.standardItemId) || null,
-          source: clean(body.source) || "MANUAL",
-        },
+        raw: nextRaw,
       },
-      include: { product: { select: { id: true, name: true, unit: true } } },
+      include: {
+        product: { select: { id: true, name: true, unit: true } },
+      },
     });
   }
 
@@ -278,21 +275,22 @@ export class MuhasebeSmartMatchService {
       where: { id: clean(id), mainCompanySlug },
       data: { isActive: false },
     });
-    if (!result.count) throw new NotFoundException("Ürün alias kaydı bulunamadı.");
+    if (!result.count) {
+      throw new NotFoundException("Ürün alias kaydı bulunamadı.");
+    }
     return { ok: true, id };
   }
 
   async pendingProductLines(input: Input = {}) {
     const mainCompanySlug = this.slug(input);
     const rows = await this.db().invoiceItem.findMany({
-      where: {
-        mainCompanySlug,
-        productId: null,
-      },
+      where: { mainCompanySlug, productId: null },
       orderBy: { createdAt: "desc" },
       take: Math.min(Math.max(Number(input.limit || 250), 1), 1000),
     });
-    const documentIds = [...new Set(rows.map((row: any) => row.documentId))];
+    const documentIds = [
+      ...new Set(rows.map((row: any) => row.documentId).filter(Boolean)),
+    ];
     const documents = documentIds.length
       ? await this.db().document.findMany({
           where: { mainCompanySlug, id: { in: documentIds } },
@@ -306,14 +304,22 @@ export class MuhasebeSmartMatchService {
           },
         })
       : [];
-    const documentMap = new Map(documents.map((row: any) => [row.id, row]));
-    return rows.map((row: any) => ({ ...row, document: documentMap.get(row.documentId) || null }));
+    const documentMap = new Map(
+      documents.map((row: any) => [row.id, row]),
+    );
+    return rows.map((row: any) => ({
+      ...row,
+      document: documentMap.get(row.documentId) || null,
+    }));
   }
 
   async assignProductLine(lineId: string, body: Input = {}) {
     const mainCompanySlug = this.slug(body);
     const productId = clean(body.productId);
-    if (!productId) throw new BadRequestException("Ürün seçimi zorunludur.");
+    if (!productId) {
+      throw new BadRequestException("Ürün seçimi zorunludur.");
+    }
+
     const [line, product] = await Promise.all([
       this.db().invoiceItem.findFirst({
         where: { id: clean(lineId), mainCompanySlug },
@@ -358,24 +364,32 @@ export class MuhasebeSmartMatchService {
       where: { id: productId, mainCompanySlug, isActive: true },
     });
     if (!product) throw new NotFoundException("Ürün kartı bulunamadı.");
+
     const raw = objectValue(product.raw);
-    const routingType = clean(body.routingType || raw.routingType || "EXPENSE").toUpperCase();
+    const routingType = clean(
+      body.routingType || raw.routingType || "EXPENSE",
+    ).toUpperCase();
     if (!["EXPENSE", "STOCK", "BOYAHANE"].includes(routingType)) {
-      throw new BadRequestException("Yönlendirme tipi EXPENSE, STOCK veya BOYAHANE olmalıdır.");
+      throw new BadRequestException(
+        "Yönlendirme tipi EXPENSE, STOCK veya BOYAHANE olmalıdır.",
+      );
     }
+
     return this.db().product.update({
       where: { id: product.id },
       data: {
         raw: {
           ...raw,
           routingType,
-          productGroup: clean(body.productGroup || raw.productGroup) ||
+          productGroup:
+            clean(body.productGroup || raw.productGroup) ||
             (routingType === "BOYAHANE" ? "BOYAHANE" : "GENEL"),
           expenseCategoryId: clean(body.expenseCategoryId) || null,
           expenseCategoryName: clean(body.expenseCategoryName) || null,
-          requiresLot: body.requiresLot === undefined
-            ? routingType === "BOYAHANE"
-            : body.requiresLot === true,
+          requiresLot:
+            body.requiresLot === undefined
+              ? routingType === "BOYAHANE"
+              : body.requiresLot === true,
           ruleUpdatedAt: new Date().toISOString(),
           ruleUpdatedBy: clean(body.updatedBy) || "USER",
         },
@@ -387,8 +401,8 @@ export class MuhasebeSmartMatchService {
     return [row?.detectedType, row?.targetType, row?.documentType]
       .map((value) => String(value || "").toUpperCase())
       .some((value) =>
-        ["SUPPLIER_INVOICE", "GELEN_FATURA", "ALIS_FATURA"].some((token) =>
-          value.includes(token),
+        ["SUPPLIER_INVOICE", "GELEN_FATURA", "ALIS_FATURA"].some(
+          (token) => value.includes(token),
         ),
       );
   }
@@ -397,11 +411,15 @@ export class MuhasebeSmartMatchService {
     const raw = objectValue(product?.raw);
     const routingType = clean(raw.routingType).toUpperCase();
     const productGroup = clean(raw.productGroup).toUpperCase();
-    if (routingType === "BOYAHANE" || productGroup === "BOYAHANE") return true;
+    if (routingType === "BOYAHANE" || productGroup === "BOYAHANE") {
+      return true;
+    }
     const normalized = this.normalize(
-      [product?.name, item?.productName, item?.description].filter(Boolean).join(" "),
+      [product?.name, item?.productName, item?.description]
+        .filter(Boolean)
+        .join(" "),
     );
-    return /BOYA|PIGMENT|KIMYA|WHITE|RETARDER|FIXATOR|FIXAT|SILIKON|SILICONE|EMULSIYON|TİNER|TINER|GAZ|SPREY|SIM/.test(
+    return /BOYA|PIGMENT|KIMYA|WHITE|RETARDER|FIXATOR|FIXAT|SILIKON|SILICONE|EMULSIYON|TINER|GAZ|SPREY|SIM/.test(
       normalized,
     );
   }
@@ -423,7 +441,9 @@ export class MuhasebeSmartMatchService {
       take: 3000,
       orderBy: { date: "desc" },
     });
-    const supplierDocuments = documents.filter((row: any) => this.isSupplierDocument(row));
+    const supplierDocuments = documents.filter((row: any) =>
+      this.isSupplierDocument(row),
+    );
     const documentIds = supplierDocuments.map((row: any) => row.id);
     if (!documentIds.length) {
       return {
@@ -431,7 +451,8 @@ export class MuhasebeSmartMatchService {
         documents: 0,
         lines: 0,
         stockMovementsCreated: 0,
-        lotsCreatedOrUpdated: 0,
+        lotsCreated: 0,
+        lotsLinked: 0,
         pendingProduct: 0,
         pendingLot: 0,
       };
@@ -442,18 +463,23 @@ export class MuhasebeSmartMatchService {
       orderBy: [{ documentId: "asc" }, { lineNo: "asc" }],
       take: 10000,
     });
-    const productIds = [...new Set(items.map((row: any) => row.productId).filter(Boolean))];
+    const productIds = [
+      ...new Set(items.map((row: any) => row.productId).filter(Boolean)),
+    ];
     const products = productIds.length
       ? await this.db().product.findMany({
           where: { mainCompanySlug, id: { in: productIds } },
         })
       : [];
     const productMap = new Map(products.map((row: any) => [row.id, row]));
-    const documentMap = new Map(supplierDocuments.map((row: any) => [row.id, row]));
+    const documentMap = new Map(
+      supplierDocuments.map((row: any) => [row.id, row]),
+    );
     const categoriesByDocument = new Map<string, Set<string>>();
 
     let stockMovementsCreated = 0;
-    let lotsCreatedOrUpdated = 0;
+    let lotsCreated = 0;
+    let lotsLinked = 0;
     let pendingProduct = 0;
     let pendingLot = 0;
 
@@ -464,15 +490,20 @@ export class MuhasebeSmartMatchService {
         pendingProduct += 1;
         continue;
       }
+
       const productRaw = objectValue(product.raw);
       const itemRaw = objectValue(item.raw);
-      const routingType = clean(productRaw.routingType || "EXPENSE").toUpperCase();
+      const routingType = clean(
+        productRaw.routingType || "EXPENSE",
+      ).toUpperCase();
       const expenseCategoryId = clean(productRaw.expenseCategoryId);
-      const chemical = this.isChemicalProduct(product, item);
-      const effectiveRouting = chemical ? "BOYAHANE" : routingType;
+      const effectiveRouting = this.isChemicalProduct(product, item)
+        ? "BOYAHANE"
+        : routingType;
 
       if (expenseCategoryId) {
-        const categorySet = categoriesByDocument.get(item.documentId) || new Set<string>();
+        const categorySet =
+          categoriesByDocument.get(item.documentId) || new Set<string>();
         categorySet.add(expenseCategoryId);
         categoriesByDocument.set(item.documentId, categorySet);
       }
@@ -484,7 +515,8 @@ export class MuhasebeSmartMatchService {
             ...itemRaw,
             routingType: effectiveRouting,
             expenseCategoryId: expenseCategoryId || null,
-            expenseCategoryName: clean(productRaw.expenseCategoryName) || null,
+            expenseCategoryName:
+              clean(productRaw.expenseCategoryName) || null,
             routingUpdatedAt: new Date().toISOString(),
           },
         },
@@ -534,24 +566,42 @@ export class MuhasebeSmartMatchService {
         continue;
       }
 
-      await this.db().boyahaneLot.upsert({
+      const existingLot = await this.db().boyahaneLot.findUnique({
         where: { mainCompanySlug_lotNo: { mainCompanySlug, lotNo } },
-        update: {
-          productId: product.id,
-          supplierCompanyId: document?.companyId || null,
-          invoiceItemId: item.id,
-          quantity: numberValue(item.quantity),
-          remainingQuantity: numberValue(item.quantity),
-          status: "ACTIVE",
-          deletedAt: null,
-          raw: {
-            source: "SUPPLIER_INVOICE_ROUTING",
-            documentId: item.documentId,
-            documentNo: document?.documentNo || "",
-            invoiceItemId: item.id,
+      });
+      if (existingLot) {
+        const existingRaw = objectValue(existingLot.raw);
+        if (
+          existingLot.invoiceItemId &&
+          existingLot.invoiceItemId !== item.id
+        ) {
+          throw new BadRequestException(
+            `Lot ${lotNo} başka bir fatura kalemine bağlı. Mükerrer lot kontrolü gerekiyor.`,
+          );
+        }
+        await this.db().boyahaneLot.update({
+          where: { id: existingLot.id },
+          data: {
+            productId: product.id,
+            supplierCompanyId: document?.companyId || null,
+            invoiceItemId: existingLot.invoiceItemId || item.id,
+            deletedAt: null,
+            raw: {
+              ...existingRaw,
+              source: "SUPPLIER_INVOICE_ROUTING",
+              documentId: item.documentId,
+              documentNo: document?.documentNo || "",
+              invoiceItemId: item.id,
+              lastVerifiedAt: new Date().toISOString(),
+            },
           },
-        },
-        create: {
+        });
+        lotsLinked += 1;
+        continue;
+      }
+
+      await this.db().boyahaneLot.create({
+        data: {
           mainCompanySlug,
           productId: product.id,
           supplierCompanyId: document?.companyId || null,
@@ -568,7 +618,7 @@ export class MuhasebeSmartMatchService {
           },
         },
       });
-      lotsCreatedOrUpdated += 1;
+      lotsCreated += 1;
     }
 
     for (const [documentId, categorySet] of categoriesByDocument.entries()) {
@@ -585,7 +635,8 @@ export class MuhasebeSmartMatchService {
       documents: supplierDocuments.length,
       lines: items.length,
       stockMovementsCreated,
-      lotsCreatedOrUpdated,
+      lotsCreated,
+      lotsLinked,
       pendingProduct,
       pendingLot,
     };
@@ -602,8 +653,14 @@ export class MuhasebeSmartMatchService {
       orderBy: { updatedAt: "desc" },
       take: Math.min(Math.max(Number(input.limit || 500), 1), 2000),
     });
-    const productIds = [...new Set(rows.map((row: any) => row.productId).filter(Boolean))];
-    const companyIds = [...new Set(rows.map((row: any) => row.supplierCompanyId).filter(Boolean))];
+    const productIds = [
+      ...new Set(rows.map((row: any) => row.productId).filter(Boolean)),
+    ];
+    const companyIds = [
+      ...new Set(
+        rows.map((row: any) => row.supplierCompanyId).filter(Boolean),
+      ),
+    ];
     const [products, companies] = await Promise.all([
       productIds.length
         ? this.db().product.findMany({
