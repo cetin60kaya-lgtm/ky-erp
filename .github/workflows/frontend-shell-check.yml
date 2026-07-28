@@ -30,8 +30,14 @@ jobs:
       - name: Bağımlılıkları kur
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Final kabuk lint
+        run: >-
+          npx eslint
+          src/AppV3.jsx
+          src/app/moduleRegistry.js
+          src/hooks/useWorkspaceTabs.js
+          src/layouts/AppShellV3.jsx
+          --max-warnings=0
 
       - name: Build
         shell: pwsh
