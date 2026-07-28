@@ -47,6 +47,8 @@ import { IsnetLocalFileController } from "./isnet-local-file.controller";
 import { IsnetLocalFileService } from "./isnet-local-file.service";
 import { IsnetDocumentCenterController } from "./isnet-document-center.controller";
 import { IsnetDocumentCenterService } from "./isnet-document-center.service";
+import { IsnetSelectedPrintController } from "./isnet-selected-print.controller";
+import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -70,6 +72,7 @@ import { IsnetDocumentCenterService } from "./isnet-document-center.service";
     IsnetAutoFlowController,
     IsnetLocalFileController,
     IsnetDocumentCenterController,
+    IsnetSelectedPrintController,
   ],
   providers: [
     AccountingApiService,
@@ -99,6 +102,7 @@ import { IsnetDocumentCenterService } from "./isnet-document-center.service";
     IsnetAutoFlowService,
     IsnetLocalFileService,
     IsnetDocumentCenterService,
+    IsnetSelectedPrintService,
   ],
   exports: [
     MuhasebeBelgeService,
