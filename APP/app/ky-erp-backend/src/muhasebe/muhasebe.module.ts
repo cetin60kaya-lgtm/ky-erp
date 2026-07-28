@@ -37,6 +37,8 @@ import { IsnetOperationsService } from "./isnet-operations.service";
 import { IsnetMailDraftService } from "./isnet-mail-draft.service";
 import { IsnetSourceIntakeController } from "./isnet-source-intake.controller";
 import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
+import { IsnetFullSyncController } from "./isnet-full-sync.controller";
+import { IsnetFullSyncService } from "./isnet-full-sync.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -55,6 +57,7 @@ import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
     DispatchReconciliationController,
     IsnetOperationsController,
     IsnetSourceIntakeController,
+    IsnetFullSyncController,
   ],
   providers: [
     AccountingApiService,
@@ -79,6 +82,7 @@ import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
     IsnetOperationsService,
     IsnetMailDraftService,
     IsnetSourceIntakeService,
+    IsnetFullSyncService,
   ],
   exports: [
     MuhasebeBelgeService,
