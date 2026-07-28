@@ -38,12 +38,20 @@ jobs:
           Get-Content build.log
           exit $code
 
-      - name: Final kabuk ve aylık İK lint
+      - name: Muhasebe İşNet ve İK lint
         shell: pwsh
         run: |
-          cmd /c "npx eslint src/AppV3.jsx src/app/moduleRegistry.js src/hooks/useWorkspaceTabs.js src/layouts/AppShellV3.jsx src/pages/modules/ik/MonthlyOperationsWorkspace.jsx --max-warnings=0 > lint.log 2>&1"
+          cmd /c "npx eslint src/AppV3.jsx src/app/moduleRegistry.js src/hooks/useWorkspaceTabs.js src/layouts/AppShellV3.jsx src/pages/modules/ik/MonthlyOperationsWorkspaceV2.jsx src/pages/modules/muhasebe/MuhasebeSmartMatchPage.jsx src/pages/modules/isnet/*.jsx --max-warnings=0 > lint.log 2>&1"
           $code = $LASTEXITCODE
           if (Test-Path lint.log) { Get-Content lint.log }
+          exit $code
+
+      - name: Üç modül sekme bağlantı denetimi
+        shell: pwsh
+        run: |
+          cmd /c "node scripts/audit-core-tabs.mjs > tab-audit.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content tab-audit.log
           exit $code
 
       - name: Kontrol loglarını yükle
@@ -54,6 +62,7 @@ jobs:
           path: |
             APP/app/ky-erp-frontend/build.log
             APP/app/ky-erp-frontend/lint.log
+            APP/app/ky-erp-frontend/tab-audit.log
           if-no-files-found: ignore
 
   isnet-backend:
