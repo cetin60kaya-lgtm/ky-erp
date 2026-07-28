@@ -1,0 +1,141 @@
+.isnet-management-page {
+  display: grid;
+  gap: 14px;
+}
+
+.isnet-connection-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(180px, .5fr));
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #d9e4f1;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.isnet-connection-strip > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: #f7faff;
+}
+
+.isnet-connection-strip > div:not(:first-child) {
+  display: grid;
+  gap: 3px;
+}
+
+.isnet-connection-strip.ready > div:first-child {
+  background: #effaf5;
+  color: #12704b;
+}
+
+.isnet-connection-strip.offline > div:first-child {
+  background: #fff8e8;
+  color: #925f00;
+}
+
+.isnet-connection-strip strong,
+.isnet-connection-strip span,
+.isnet-connection-strip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.isnet-connection-strip small {
+  color: #71839a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.isnet-management-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.isnet-management-grid button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 96px;
+  padding: 15px;
+  border: 1px solid #dce5f1;
+  border-radius: 12px;
+  background: #fff;
+  color: #173656;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.isnet-management-grid button:hover {
+  transform: translateY(-1px);
+  border-color: #8ab5eb;
+  box-shadow: 0 8px 22px rgba(28, 70, 120, .08);
+}
+
+.isnet-management-grid button > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+}
+
+.isnet-management-grid button.attention > span {
+  background: #fff2dc;
+  color: #b36a00;
+}
+
+.isnet-management-grid button.clear > span {
+  background: #eaf8f2;
+  color: #13805a;
+}
+
+.isnet-management-grid button > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.isnet-management-grid small {
+  color: #647991;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.isnet-management-grid strong {
+  color: #102f52;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.isnet-management-grid p {
+  margin: 2px 0 0;
+  color: #71839a;
+  font-size: 11px;
+}
+
+@media (max-width: 1050px) {
+  .isnet-connection-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .isnet-management-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .isnet-management-grid {
+    grid-template-columns: 1fr;
+  }
+}
