@@ -1,9 +1,9 @@
 name: İşNet Muhasebe Tip Hatalarını Düzelt
 
 on:
-  push:
-    branches: [tasarim-final-v1]
-    paths: [.github/workflows/fix-isnet-types-final.yml]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   fix-test-commit:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'tasarim-final-v1'
     runs-on: windows-latest
     env:
       DATABASE_URL: file:./ci-isnet.db
@@ -65,8 +66,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/fix-isnet-types-final.yml
           git add APP/app/ky-erp-backend/src/muhasebe/isnet-dispatch-flow-coordinator.service.ts
           git add APP/app/ky-erp-backend/src/muhasebe/muhasebe-smart-match.service.ts
+          if (git diff --cached --quiet) {
+            Write-Host 'Tip düzeltmeleri zaten uygulanmış.'
+            exit 0
+          }
           git commit -m "İşNet ve muhasebe TypeScript hatalarını düzelt"
           git push origin HEAD:tasarim-final-v1
