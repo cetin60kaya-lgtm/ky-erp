@@ -77,7 +77,7 @@ class ModuleErrorBoundary extends React.Component {
 export default function AppV3() {
   const { user, loading: authLoading, isAuthenticated, hasModule, logout } = useAuth();
   const { companies, activeCompany, activeCompanySlug, setActiveCompanySlug } = useActiveCompany();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
   const [moduleActionContext, setModuleActionContext] = useState({});
 
   const visibleModules = useMemo(() => MODULES.filter((item) => hasModule(item.permissionKey)), [hasModule]);
@@ -124,10 +124,19 @@ export default function AppV3() {
       const requested = getInitialRoute(window.location.pathname);
       const normalized = normalizeRoute(requested, visibleModules);
       if (normalized) workspace.replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
+      setModuleMenuOpen(false);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [visibleModules, workspace.replaceActiveRoute]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setModuleMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     window.requestAnimationFrame(() => {
@@ -146,12 +155,31 @@ export default function AppV3() {
     }
     const next = workspace.openTab(moduleKey, nextTab);
     updateBrowserPath(next);
-    setMobileMenuOpen(false);
+    setModuleMenuOpen(false);
   }, [visibleModules, workspace.openTab]);
+
+  const toggleModuleMenu = useCallback((moduleKey) => {
+    const module = visibleModules.find((item) => item.key === moduleKey);
+    if (!module) return;
+
+    preloadModule(moduleKey);
+
+    if (activeModule?.key === moduleKey) {
+      setModuleMenuOpen((current) => !current);
+      return;
+    }
+
+    const nextTab = getModuleTabs(module)[0]?.[0];
+    if (!nextTab) return;
+    const next = workspace.openTab(moduleKey, nextTab);
+    updateBrowserPath(next);
+    setModuleMenuOpen(true);
+  }, [activeModule?.key, visibleModules, workspace.openTab]);
 
   const activateWorkspaceTab = useCallback((item) => {
     workspace.activateTab(item);
     updateBrowserPath(item);
+    setModuleMenuOpen(false);
   }, [workspace.activateTab]);
 
   function renderPage() {
@@ -184,14 +212,14 @@ export default function AppV3() {
       companies={selectableCompanies}
       activeCompanySlug={normalizedCompany?.slug || activeCompanySlug}
       user={user}
-      mobileMenuOpen={mobileMenuOpen}
-      onOpenModule={(moduleKey) => openTab(moduleKey)}
+      mobileMenuOpen={moduleMenuOpen}
+      onToggleModuleMenu={toggleModuleMenu}
       onOpenTab={(moduleKey, tabKey) => openTab(moduleKey, tabKey)}
       onActivateWorkspaceTab={activateWorkspaceTab}
       onCloseWorkspaceTab={workspace.closeTab}
       onCompanyChange={setActiveCompanySlug}
-      onOpenMobileMenu={() => setMobileMenuOpen(true)}
-      onCloseMobileMenu={() => setMobileMenuOpen(false)}
+      onOpenMobileMenu={() => setModuleMenuOpen(true)}
+      onCloseMobileMenu={() => setModuleMenuOpen(false)}
       onLogout={logout}
     >
       <ModuleErrorBoundary key={`${activeModule?.key}:${activeTab}`}>
