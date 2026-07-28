@@ -1,7 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
-import ApprovedShellEnhancer from "./components/shell/ApprovedShellEnhancer.jsx";
+import AppV3 from "./AppV3.jsx";
 import MonthlyPersonnelWorkspace from "./pages/modules/ik/MonthlyPersonnelWorkspace.jsx";
 import MonthlySalaryContractWorkspace from "./pages/modules/ik/MonthlySalaryContractWorkspace.jsx";
 import MonthlyOperationsWorkspace from "./pages/modules/ik/MonthlyOperationsWorkspace.jsx";
@@ -11,7 +10,6 @@ import { AuthProvider } from "./context/AuthContext";
 import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
 import { installPersistentModalSizing } from "./utils/installPersistentModalSizing";
 import "./App.css";
-import "./styles/approved-shell-v4.css";
 
 installMuhasebeDocumentSanitizer();
 installPersistentModalSizing();
@@ -35,8 +33,7 @@ if (isMobileWebRoute) {
     return (
       <AuthProvider>
         <ActiveCompanyProvider>
-          <App />
-          <ApprovedShellEnhancer />
+          <AppV3 />
           <MonthlyPersonnelWorkspace />
           <MonthlySalaryContractWorkspace />
           <MonthlyOperationsWorkspace />
