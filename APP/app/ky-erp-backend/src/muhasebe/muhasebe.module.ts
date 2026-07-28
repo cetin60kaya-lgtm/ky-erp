@@ -41,6 +41,8 @@ import { IsnetFullSyncController } from "./isnet-full-sync.controller";
 import { IsnetFullSyncService } from "./isnet-full-sync.service";
 import { IsnetSourceWorkflowController } from "./isnet-source-workflow.controller";
 import { IsnetSourceWorkflowService } from "./isnet-source-workflow.service";
+import { IsnetAutoFlowController } from "./isnet-auto-flow.controller";
+import { IsnetAutoFlowService } from "./isnet-auto-flow.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -61,6 +63,7 @@ import { IsnetSourceWorkflowService } from "./isnet-source-workflow.service";
     IsnetSourceIntakeController,
     IsnetFullSyncController,
     IsnetSourceWorkflowController,
+    IsnetAutoFlowController,
   ],
   providers: [
     AccountingApiService,
@@ -87,6 +90,7 @@ import { IsnetSourceWorkflowService } from "./isnet-source-workflow.service";
     IsnetSourceIntakeService,
     IsnetFullSyncService,
     IsnetSourceWorkflowService,
+    IsnetAutoFlowService,
   ],
   exports: [
     MuhasebeBelgeService,
