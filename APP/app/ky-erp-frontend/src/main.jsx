@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import AppV3 from "./AppV3.jsx";
 import MonthlyPersonnelWorkspace from "./pages/modules/ik/MonthlyPersonnelWorkspace.jsx";
 import MonthlySalaryContractWorkspace from "./pages/modules/ik/MonthlySalaryContractWorkspace.jsx";
-import MonthlyOperationsWorkspace from "./pages/modules/ik/MonthlyOperationsWorkspace.jsx";
+import MonthlyOperationsWorkspaceV2 from "./pages/modules/ik/MonthlyOperationsWorkspaceV2.jsx";
 import DailyHrWorkspace from "./pages/modules/ik/DailyHrWorkspace.jsx";
 import { ActiveCompanyProvider } from "./context/ActiveCompanyContext";
 import { AuthProvider } from "./context/AuthContext";
@@ -37,7 +37,7 @@ if (isMobileWebRoute) {
           <AppV3 />
           <MonthlyPersonnelWorkspace />
           <MonthlySalaryContractWorkspace />
-          <MonthlyOperationsWorkspace />
+          <MonthlyOperationsWorkspaceV2 />
           <DailyHrWorkspace />
         </ActiveCompanyProvider>
       </AuthProvider>
