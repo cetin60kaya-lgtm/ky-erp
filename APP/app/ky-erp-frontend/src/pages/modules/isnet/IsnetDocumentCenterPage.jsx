@@ -11,6 +11,7 @@ import {
 import { getIsnetDocumentCenter } from "../../../services/isnetDocumentCenterApi";
 import { getIsnetLocalFile, openBlobInNewTab } from "../../../services/isnetLocalFileApi";
 import { startDailySync } from "../../../services/isnetApi";
+import { prepareIsnetIncomingAutoFlow } from "../../../services/isnetAutoFlowApi";
 import "../IsnetPage.css";
 import "./IsnetDocumentCenterPage.css";
 
@@ -153,15 +154,28 @@ export default function IsnetDocumentCenterPage({ openModule }) {
     }
   }
 
-  function openWorkflow(row) {
-    openModule?.("isnet", {
-      tabKey: "is-akisi",
-      actionContext: {
-        autoPrepareSourceId: row.sourceId,
-        autoPrepareDocumentId: row.id,
-        documentNo: row.documentNo,
-      },
-    });
+  async function openWorkflow(row) {
+    setBusy(`workflow-${row.id}`);
+    setNotice(null);
+    try {
+      const flowResult = await prepareIsnetIncomingAutoFlow(row.sourceId, range);
+      openModule?.("isnet", {
+        tabKey: "is-akisi",
+        actionContext: {
+          modelDecision: flowResult.needsModel
+            ? { flow: flowResult.flow, suggestions: flowResult.suggestions || [] }
+            : null,
+          notice: flowResult.message,
+          noticeTone: flowResult.needsModel ? "warning" : "success",
+          documentNo: row.documentNo,
+        },
+      });
+      await load();
+    } catch (error) {
+      setNotice({ tone: "error", text: error?.message || "İrsaliye iş akışına alınamadı." });
+    } finally {
+      setBusy("");
+    }
   }
 
   const summary = result.summary || {};
@@ -197,49 +211,17 @@ export default function IsnetDocumentCenterPage({ openModule }) {
           {TYPE_FILTERS.map(([key, label]) => <button key={key} type="button" className={typeFilter === key ? "active" : ""} onClick={() => updateFilter(setTypeFilter, key)}>{label}</button>)}
         </div>
         <div className="isnet-document-filters">
-          <form onSubmit={(event) => { event.preventDefault(); setSearch(searchDraft.trim()); setPage(1); }}>
-            <Search size={16} />
-            <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Belge no, firma veya model ara" />
-            <button type="submit">Ara</button>
-          </form>
-          <select value={fileStatus} onChange={(event) => updateFilter(setFileStatus, event.target.value)}>
-            <option value="all">Tüm dosya durumları</option>
-            <option value="complete">PDF + XML tam</option>
-            <option value="missing">Eksik dosyalı</option>
-            <option value="pdf-missing">PDF eksik</option>
-            <option value="xml-missing">XML eksik</option>
-          </select>
-          <select value={actionStatus} onChange={(event) => updateFilter(setActionStatus, event.target.value)}>
-            <option value="all">Tüm işlem durumları</option>
-            <option value="needed">Yalnız işlem gereken</option>
-            <option value="clear">Tamamlananlar</option>
-          </select>
-          <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
-            <option value="25">25 kayıt</option>
-            <option value="50">50 kayıt</option>
-            <option value="100">100 kayıt</option>
-          </select>
+          <form onSubmit={(event) => { event.preventDefault(); setSearch(searchDraft.trim()); setPage(1); }}><Search size={16} /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Belge no, firma veya model ara" /><button type="submit">Ara</button></form>
+          <select value={fileStatus} onChange={(event) => updateFilter(setFileStatus, event.target.value)}><option value="all">Tüm dosya durumları</option><option value="complete">PDF + XML tam</option><option value="missing">Eksik dosyalı</option><option value="pdf-missing">PDF eksik</option><option value="xml-missing">XML eksik</option></select>
+          <select value={actionStatus} onChange={(event) => updateFilter(setActionStatus, event.target.value)}><option value="all">Tüm işlem durumları</option><option value="needed">Yalnız işlem gereken</option><option value="clear">Tamamlananlar</option></select>
+          <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value="25">25 kayıt</option><option value="50">50 kayıt</option><option value="100">100 kayıt</option></select>
         </div>
 
-        <div className="isnet-document-meta">
-          <span>{result.total || 0} kayıt · Sayfa {page}/{result.totalPages || 1}</span>
-          <span>Son senkronizasyon: {localDateTime(result.lastSyncAt)}</span>
-        </div>
+        <div className="isnet-document-meta"><span>{result.total || 0} kayıt · Sayfa {page}/{result.totalPages || 1}</span><span>Son senkronizasyon: {localDateTime(result.lastSyncAt)}</span></div>
 
-        {loading ? <div className="isnet-empty"><LoaderCircle size={22} className="spin" /><strong>Belgeler yükleniyor</strong></div> : !result.rows?.length ? <div className="isnet-empty"><CheckCircle2 size={22} /><strong>Bu filtrede belge yok</strong><p>Tarih veya filtre aralığını değiştirin.</p></div> : (
-          <div className="isnet-table-wrap">
-            <table className="isnet-table isnet-document-table">
-              <thead><tr><th>Tarih</th><th>Belge</th><th>Firma</th><th>Dosya</th><th>İşlem durumu</th><th>İşlem</th></tr></thead>
-              <tbody>{result.rows.map((row) => { const process = processStatus(row); return <tr key={row.id} className={row.actionNeeded ? "needs-action" : ""}><td>{row.dateText || row.date}</td><td><strong>{row.documentNo}</strong><small>{documentType(row)}</small></td><td>{row.partnerName}<small>{row.modelApplicable ? (row.modelName || "Model henüz bağlanmadı") : row.scenarioText || row.subtypeText}</small></td><td><div className="isnet-file-state"><span className={`isnet-badge isnet-badge--${row.pdfSaved ? "green" : "warning"}`}>PDF {row.pdfSaved ? "hazır" : "eksik"}</span><span className={`isnet-badge isnet-badge--${row.xmlSaved ? "green" : "warning"}`}>XML {row.xmlSaved ? "hazır" : "eksik"}</span></div></td><td><span className={`isnet-badge isnet-badge--${process.tone}`}>{process.label}</span><small>{process.detail}</small></td><td><div className="isnet-action-row">{row.pdfSaved && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openFile(row, "pdf")} disabled={busy === `pdf-${row.id}`}>PDF Aç</button>}{row.xmlSaved && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openFile(row, "xml")} disabled={busy === `xml-${row.id}`}>XML Aç</button>}{row.modelApplicable && <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openWorkflow(row)}><Workflow size={14} /> İş Akışına Al</button>}{row.actionNeeded && !row.modelApplicable && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={synchronize}><RefreshCw size={14} /> Eksikleri Tamamla</button>}</div></td></tr>; })}</tbody>
-            </table>
-          </div>
-        )}
+        {loading ? <div className="isnet-empty"><LoaderCircle size={22} className="spin" /><strong>Belgeler yükleniyor</strong></div> : !result.rows?.length ? <div className="isnet-empty"><CheckCircle2 size={22} /><strong>Bu filtrede belge yok</strong><p>Tarih veya filtre aralığını değiştirin.</p></div> : <div className="isnet-table-wrap"><table className="isnet-table isnet-document-table"><thead><tr><th>Tarih</th><th>Belge</th><th>Firma</th><th>Dosya</th><th>İşlem durumu</th><th>İşlem</th></tr></thead><tbody>{result.rows.map((row) => { const process = processStatus(row); return <tr key={row.id} className={row.actionNeeded ? "needs-action" : ""}><td>{row.dateText || row.date}</td><td><strong>{row.documentNo}</strong><small>{documentType(row)}</small></td><td>{row.partnerName}<small>{row.modelApplicable ? (row.modelName || "Model henüz bağlanmadı") : row.scenarioText || row.subtypeText}</small></td><td><div className="isnet-file-state"><span className={`isnet-badge isnet-badge--${row.pdfSaved ? "green" : "warning"}`}>PDF {row.pdfSaved ? "hazır" : "eksik"}</span><span className={`isnet-badge isnet-badge--${row.xmlSaved ? "green" : "warning"}`}>XML {row.xmlSaved ? "hazır" : "eksik"}</span></div></td><td><span className={`isnet-badge isnet-badge--${process.tone}`}>{process.label}</span><small>{process.detail}</small></td><td><div className="isnet-action-row">{row.pdfSaved && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openFile(row, "pdf")} disabled={busy === `pdf-${row.id}`}>PDF Aç</button>}{row.xmlSaved && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openFile(row, "xml")} disabled={busy === `xml-${row.id}`}>XML Aç</button>}{row.modelApplicable && <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openWorkflow(row)} disabled={busy === `workflow-${row.id}`}>{busy === `workflow-${row.id}` ? <LoaderCircle size={14} className="spin" /> : <Workflow size={14} />} İş Akışına Al</button>}{row.actionNeeded && !row.modelApplicable && <button type="button" className="isnet-btn isnet-btn--secondary" onClick={synchronize}><RefreshCw size={14} /> Eksikleri Tamamla</button>}</div></td></tr>; })}</tbody></table></div>}
 
-        <div className="isnet-pagination">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Önceki</button>
-          <span>{page} / {result.totalPages || 1}</span>
-          <button type="button" disabled={page >= (result.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Sonraki</button>
-        </div>
+        <div className="isnet-pagination"><button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Önceki</button><span>{page} / {result.totalPages || 1}</span><button type="button" disabled={page >= (result.totalPages || 1)} onClick={() => setPage((current) => current + 1)}>Sonraki</button></div>
       </section>
 
       {(summary.missingFiles || 0) > 0 && <div className="isnet-notice isnet-notice--warning"><AlertTriangle size={16} /> {summary.missingFiles} belgede PDF veya XML eksik. İşNet'i Senkronize Et yalnız eksik dosyaları tamamlar; yerelde tam belgeyi yeniden indirmez.</div>}
