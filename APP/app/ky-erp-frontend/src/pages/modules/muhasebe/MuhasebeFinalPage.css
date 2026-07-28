@@ -1,0 +1,88 @@
+.muhasebe-final-shell {
+  display: grid;
+  min-width: 0;
+  color: #122033;
+}
+
+.muhasebe-final-shell .muhasebe-workbench > .mh-tabs {
+  display: none !important;
+}
+
+.muhasebe-final-shell .muhasebe-workbench {
+  min-width: 0;
+}
+
+.muhasebe-final-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 16px 18px 0;
+  padding: 11px 13px;
+  border: 1px solid #dfe6ef;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgba(17, 34, 62, 0.045);
+}
+
+.muhasebe-final-toolbar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.muhasebe-final-toolbar span {
+  color: #2457d6;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+.muhasebe-final-toolbar strong {
+  color: #233a58;
+  font-size: 13px;
+}
+
+.muhasebe-final-toolbar > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+
+.muhasebe-final-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid #d1dbe8;
+  border-radius: 8px;
+  background: #fff;
+  color: #35506f;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.muhasebe-final-toolbar button:hover {
+  border-color: #8fa9cf;
+  background: #f7faff;
+  color: #2457d6;
+}
+
+.muhasebe-final-toolbar button.assistant {
+  border-color: #2457d6;
+  background: #2457d6;
+  color: #fff;
+}
+
+@media (max-width: 700px) {
+  .muhasebe-final-toolbar {
+    display: grid;
+    margin: 10px 10px 0;
+  }
+
+  .muhasebe-final-toolbar > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
