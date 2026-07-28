@@ -49,6 +49,10 @@ function updateBrowserPath(route, replace = false) {
   window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
 }
 
+function keepSidebarExpanded() {
+  return !window.matchMedia("(max-width: 980px)").matches;
+}
+
 function LoadingCard({ title = "Ekran yükleniyor" }) {
   return <div className="content-card module-loading-card"><h3>{title}</h3><p>Lütfen bekleyin...</p></div>;
 }
@@ -94,7 +98,7 @@ class ModuleErrorBoundary extends React.Component {
 export default function AppV3() {
   const { user, loading: authLoading, isAuthenticated, hasModule, logout } = useAuth();
   const { companies, activeCompany, activeCompanySlug, setActiveCompanySlug } = useActiveCompany();
-  const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
+  const [moduleMenuOpen, setModuleMenuOpen] = useState(keepSidebarExpanded);
   const [moduleActionContext, setModuleActionContext] = useState({});
 
   const visibleModules = useMemo(
@@ -161,12 +165,19 @@ export default function AppV3() {
       const requested = getInitialRoute(window.location.pathname);
       const normalized = normalizeRoute(requested, visibleModules);
       if (normalized) replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
-      setModuleMenuOpen(false);
+      setModuleMenuOpen(keepSidebarExpanded());
     };
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [replaceActiveRoute, visibleModules]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 980px)");
+    const onViewportChange = (event) => setModuleMenuOpen(!event.matches);
+    media.addEventListener("change", onViewportChange);
+    return () => media.removeEventListener("change", onViewportChange);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -212,7 +223,7 @@ export default function AppV3() {
 
     const next = openWorkspaceTab(moduleKey, nextTab);
     updateBrowserPath(next);
-    setModuleMenuOpen(false);
+    setModuleMenuOpen(keepSidebarExpanded());
   }, [openWorkspaceTab, visibleModules]);
 
   const toggleModuleMenu = useCallback((moduleKey) => {
@@ -237,7 +248,7 @@ export default function AppV3() {
   const activateWorkspaceTab = useCallback((item) => {
     activateWorkspaceRoute(item);
     updateBrowserPath(item);
-    setModuleMenuOpen(false);
+    setModuleMenuOpen(keepSidebarExpanded());
   }, [activateWorkspaceRoute]);
 
   function renderPage() {
