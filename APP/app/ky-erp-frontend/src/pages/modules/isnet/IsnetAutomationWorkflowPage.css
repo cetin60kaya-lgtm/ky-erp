@@ -93,8 +93,7 @@
 }
 
 .isnet-form-field input,
-.isnet-form-field select,
-.isnet-inline-number input {
+.isnet-form-field select {
   width: 100%;
   min-height: 38px;
   border: 1px solid #d3deec;
@@ -144,20 +143,55 @@
   color: #71839a;
 }
 
-.isnet-inline-number {
-  display: flex;
+.isnet-dispatch-candidates {
+  display: grid;
   gap: 6px;
-  min-width: 230px;
+  min-width: 330px;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid #f0c46a;
+  border-radius: 9px;
+  background: #fffaf0;
 }
 
-.isnet-inline-number button {
-  border: 1px solid #1767d8;
+.isnet-dispatch-candidates > small {
+  color: #805600;
+  font-weight: 800;
+}
+
+.isnet-dispatch-candidates button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d8e1ed;
   border-radius: 7px;
-  background: #1767d8;
-  color: #fff;
-  padding: 0 10px;
-  font-weight: 700;
+  background: #fff;
+  color: #294967;
+  text-align: left;
   cursor: pointer;
+}
+
+.isnet-dispatch-candidates button:hover {
+  border-color: #1767d8;
+  background: #f4f8ff;
+}
+
+.isnet-dispatch-candidates button span {
+  color: #71839a;
+  font-size: 11px;
+}
+
+.isnet-complete-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #bce4d4;
+  border-radius: 8px;
+  background: #effaf5;
+  color: #11704b;
+  font-weight: 800;
 }
 
 .isnet-row-selected {
@@ -191,5 +225,9 @@
 
   .isnet-source-switch {
     display: grid;
+  }
+
+  .isnet-dispatch-candidates {
+    min-width: 0;
   }
 }
