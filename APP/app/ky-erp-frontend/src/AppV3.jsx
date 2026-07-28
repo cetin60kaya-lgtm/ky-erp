@@ -14,17 +14,17 @@ const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "ur
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
 const IsnetPage = lazyWithRetry(() => import("./pages/modules/IsnetPage"), "isnet-v3");
-const IsnetSourceWorkflowPage = lazyWithRetry(
-  () => import("./pages/modules/isnet/IsnetSourceWorkflowPage"),
-  "isnet-source-workflow-v1",
+const IsnetAutomationWorkflowPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
+  "isnet-automation-workflow-v1",
 );
 const IsnetPreparedInvoicePage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
   "isnet-prepared-invoice-v1",
 );
-const IsnetPrintQueuePage = lazyWithRetry(
-  () => import("./pages/modules/isnet/IsnetPrintQueuePage"),
-  "isnet-print-queue-v2",
+const IsnetArchiveDeliveryPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
+  "isnet-archive-delivery-v1",
 );
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 
@@ -37,9 +37,9 @@ const MODULE_LOADERS = {
   boyahane: () => import("./pages/modules/BoyahanePage"),
   isnet: () => Promise.all([
     import("./pages/modules/IsnetPage"),
-    import("./pages/modules/isnet/IsnetSourceWorkflowPage"),
+    import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
     import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
-    import("./pages/modules/isnet/IsnetPrintQueuePage"),
+    import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
   ]),
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
@@ -277,8 +277,8 @@ export default function AppV3() {
     };
 
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
-    if (activeModule?.key === "isnet" && activeTab === "belge-kaynagi") {
-      return <IsnetSourceWorkflowPage {...sharedProps} />;
+    if (activeModule?.key === "isnet" && activeTab === "is-akisi") {
+      return <IsnetAutomationWorkflowPage {...sharedProps} />;
     }
     if (
       activeModule?.key === "isnet"
@@ -288,8 +288,11 @@ export default function AppV3() {
     ) {
       return <IsnetPreparedInvoicePage {...sharedProps} />;
     }
-    if (activeModule?.key === "isnet" && activeTab === "cikti-kuyrugu") {
-      return <IsnetPrintQueuePage {...sharedProps} />;
+    if (activeModule?.key === "isnet" && activeTab === "arsiv-gonderim") {
+      return <IsnetArchiveDeliveryPage {...sharedProps} />;
+    }
+    if (activeModule?.key === "isnet" && activeTab === "belge-merkezi") {
+      return <IsnetPage activeTab="belge-akisi" {...sharedProps} />;
     }
     if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
