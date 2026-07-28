@@ -8,6 +8,7 @@ import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { DocumentIntakeServiceV2 } from "./document-intake/document-intake.service";
 import { IsnetOperationsService } from "./isnet-operations.service";
+import { MuhasebeSmartMatchService } from "./muhasebe-smart-match.service";
 
 type Query = Record<string, any>;
 
@@ -25,6 +26,7 @@ export class IsnetFullSyncService {
     private readonly prisma: PrismaService,
     private readonly operations: IsnetOperationsService,
     private readonly documentIntake: DocumentIntakeServiceV2,
+    private readonly smartMatch: MuhasebeSmartMatchService,
   ) {}
 
   async run(body: Query = {}) {
@@ -44,7 +46,10 @@ export class IsnetFullSyncService {
   }
 
   private async runInternal(slug: string, body: Query) {
-    const maxPasses = Math.min(Math.max(numberValue(body.maxPasses) || 200, 1), 500);
+    const maxPasses = Math.min(
+      Math.max(numberValue(body.maxPasses) || 200, 1),
+      500,
+    );
     const batchSize = 50;
     const startedAt = new Date();
     let pass = 0;
@@ -71,10 +76,15 @@ export class IsnetFullSyncService {
       downloaded += passDownloaded;
       processed += numberValue(automation.processed);
       markedRead += numberValue(automation.markedRead);
-      newDocuments = Math.max(newDocuments, numberValue(automation.newDocuments));
+      newDocuments = Math.max(
+        newDocuments,
+        numberValue(automation.newDocuments),
+      );
       remaining = numberValue(automation.remaining);
 
-      for (const error of Array.isArray(automation.errors) ? automation.errors : []) {
+      for (const error of Array.isArray(automation.errors)
+        ? automation.errors
+        : []) {
         const key = `${clean(error?.key)}:${clean(error?.documentNo)}:${clean(error?.message)}`;
         if (!seenErrors.has(key)) {
           seenErrors.add(key);
@@ -96,6 +106,9 @@ export class IsnetFullSyncService {
     }
 
     const supplierAccounting = await this.reconcileSupplierInvoices(slug);
+    const supplierRouting = await this.smartMatch.synchronizeSupplierRouting({
+      mainCompanySlug: slug,
+    });
     const completedAt = new Date();
 
     await this.prisma.setting.upsert({
@@ -118,6 +131,7 @@ export class IsnetFullSyncService {
           remaining: 0,
           errorCount: errors.length,
           supplierAccounting,
+          supplierRouting,
         },
         deletedAt: null,
       },
@@ -136,6 +150,7 @@ export class IsnetFullSyncService {
           remaining: 0,
           errorCount: errors.length,
           supplierAccounting,
+          supplierRouting,
         },
       },
     });
@@ -148,6 +163,7 @@ export class IsnetFullSyncService {
       completedAt: completedAt.toISOString(),
       passes: pass,
       supplierAccounting,
+      supplierRouting,
       automation: {
         ...(lastResult?.automation || {}),
         downloaded,
@@ -161,7 +177,10 @@ export class IsnetFullSyncService {
     };
   }
 
-  private multerFile(filePath: string, contentType: string): Express.Multer.File {
+  private multerFile(
+    filePath: string,
+    contentType: string,
+  ): Express.Multer.File {
     const buffer = fs.readFileSync(filePath);
     return {
       fieldname: "files",
@@ -234,10 +253,15 @@ export class IsnetFullSyncService {
           mainCompanySlug: slug,
           autoApprove: true,
         });
-        if (result?.errors?.length || result?.autoApproved?.some((row: any) => row?.ok === false)) {
+        if (
+          result?.errors?.length ||
+          result?.autoApproved?.some((row: any) => row?.ok === false)
+        ) {
           throw new Error(
-            result?.errors?.map((row: any) => clean(row?.message)).filter(Boolean).join(" ") ||
-              "Fatura muhasebeye aktarılamadı.",
+            result?.errors
+              ?.map((row: any) => clean(row?.message))
+              .filter(Boolean)
+              .join(" ") || "Fatura muhasebeye aktarılamadı.",
           );
         }
 
@@ -247,7 +271,11 @@ export class IsnetFullSyncService {
         });
         movement = document
           ? await this.prisma.currentAccountMovement.findFirst({
-              where: { mainCompanySlug: slug, documentNo, documentId: document.id },
+              where: {
+                mainCompanySlug: slug,
+                documentNo,
+                documentId: document.id,
+              },
               select: { id: true },
             })
           : null;
@@ -259,14 +287,17 @@ export class IsnetFullSyncService {
           : null;
 
         if (!document || !movement || !vat) {
-          throw new Error("Belge, firma carisi veya KDV kaydı doğrulanamadı.");
+          throw new Error(
+            "Belge, firma carisi veya KDV kaydı doğrulanamadı.",
+          );
         }
         imported += 1;
       } catch (error: any) {
         failures.push({
           documentNo,
           partnerName: state.partnerName,
-          message: clean(error?.message) || "Tedarikçi faturası kapatılamadı.",
+          message:
+            clean(error?.message) || "Tedarikçi faturası kapatılamadı.",
         });
       }
     }
