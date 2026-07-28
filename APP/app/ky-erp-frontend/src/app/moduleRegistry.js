@@ -6,42 +6,54 @@ export const MODULES = [
     icon: "cari-kasa",
     groups: [
       {
-        label: "Genel Yönetim",
+        label: "Yönetim",
         tabs: [
           ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
-          ["firma-kartlari", "Firma Kartları", "firma-kartlari"],
-          ["firma-yetkilileri", "Firma Yetkilileri", "users"],
-          ["gider-kategorileri", "Gider Kategorileri", "raporlar"],
         ],
       },
       {
-        label: "Fatura ve İrsaliye",
+        label: "Firma ve Eşleştirme",
         tabs: [
-          ["tedarikci-faturalar", "Tedarikçi Faturaları", "tedarikci-fatura"],
-          ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
-          ["musteri-irsaliyeleri", "İrsaliyeler", "musteri-irsaliye"],
-          ["irsaliye-fatura-kontrol", "İrsaliye / Fatura", "file-check"],
-          ["model-takip", "Model Üretim Takibi", "model-takip-merkezi"],
+          ["firma-kartlari", "Firma Kartları", "firma-kartlari"],
+          ["firma-yetkilileri", "Departman ve Yetkililer", "users"],
+          ["envanter-urunleri", "Ürün ve Alias Eşleştirme", "urunler"],
+          ["gider-kategorileri", "Firma / Gider Kuralları", "raporlar"],
         ],
       },
       {
-        label: "Finans ve Kontrol",
+        label: "Belge Yönetimi",
+        tabs: [
+          ["tedarikci-faturalar", "Gelen Tedarikçi Faturaları", "tedarikci-fatura"],
+          ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
+          ["irsaliye-fatura-kontrol", "İrsaliye / Fatura Kontrolü", "file-check"],
+        ],
+      },
+      {
+        label: "Cari ve Ödeme",
         tabs: [
           ["cari-hareketler", "Cari Hareketler", "cari-kasa"],
-          ["kar-zarar", "Gelir / Gider", "raporlar"],
-          ["envanter-urunleri", "Ürünler", "urunler"],
-          ["kdv-kontrol", "KDV Kontrol", "kdv"],
           ["cek-odeme", "Çek / Ödeme", "cekler"],
+          ["mail-ekstre", "Ekstre ve Mail Takibi", "eposta"],
         ],
       },
       {
-        label: "Mail ve Rapor",
+        label: "Mali Kontrol",
         tabs: [
-          ["mail-ekstre", "Mail / Ekstre", "eposta"],
-          ["mail-sablonlari", "Mail Şablonları", "eposta"],
-          ["muhasebe-raporlari", "Raporlar", "raporlar"],
+          ["kar-zarar", "Gelir / Gider ve Kâr / Zarar", "raporlar"],
+          ["kdv-kontrol", "Gelen / Giden KDV Kontrolü", "kdv"],
         ],
       },
+      {
+        label: "Rapor ve Şablon",
+        tabs: [
+          ["muhasebe-raporlari", "Muhasebe Raporları", "raporlar"],
+          ["mail-sablonlari", "Mail Şablonları", "eposta"],
+        ],
+      },
+    ],
+    hiddenTabs: [
+      ["musteri-irsaliyeleri", "Müşteri İrsaliyeleri (Eski Bağlantı)", "musteri-irsaliye"],
+      ["model-takip", "Model Üretim Takibi (Eski Bağlantı)", "model-takip-merkezi"],
     ],
   },
   {
