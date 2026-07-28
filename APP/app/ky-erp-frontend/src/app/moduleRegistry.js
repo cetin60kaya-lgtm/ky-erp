@@ -51,38 +51,18 @@ export const MODULES = [
     icon: "eposta",
     groups: [
       {
-        label: "Kontrol Merkezi",
+        label: "İşNet İşlemleri",
         tabs: [
-          ["yonetim-merkezi", "Analiz ve Eşleştirme", "dashboard"],
-          ["belge-akisi", "Tüm Belge Akışı", "dosya"],
-        ],
-      },
-      {
-        label: "Portal Belgeleri",
-        tabs: [
-          ["gelen-irsaliyeler", "Gelen İrsaliyeler", "musteri-irsaliye"],
-          ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
-          ["gelen-faturalar", "Gelen Faturalar", "tedarikci-fatura"],
-          ["giden-faturalar", "Giden Faturalar", "dosya"],
-        ],
-      },
-      {
-        label: "Belge Oluşturma",
-        tabs: [
-          ["belge-kaynagi", "Belge Kaynağı", "file-check"],
-          ["irsaliyeden-faturaya", "Fatura Kesme Yardımcısı", "file-check"],
-          ["yeni-irsaliye", "Yeni İrsaliye", "dosya"],
-        ],
-      },
-      {
-        label: "Arşiv ve Gönderim",
-        tabs: [
-          ["kesilen-belgeler", "Yerel Belge Arşivi", "dosya"],
-          ["cikti-kuyrugu", "Çıktı Kuyruğu", "file-check"],
-          ["mail-merkezi", "Mail Merkezi", "eposta"],
+          ["yonetim-merkezi", "Yönetim Merkezi", "dashboard"],
+          ["belge-merkezi", "Belge Merkezi", "dosya"],
+          ["is-akisi", "İrsaliye ve Fatura İş Akışı", "file-check"],
+          ["arsiv-gonderim", "Arşiv ve Gönderim", "eposta"],
           ["ayarlar", "Ayarlar ve Bağlantı", "ayarlar"],
         ],
       },
+    ],
+    hiddenTabs: [
+      ["irsaliyeden-faturaya", "Fatura Önizleme ve Gönderim", "file-check"],
     ],
   },
   {
@@ -206,11 +186,25 @@ export const MODULES = [
   },
 ];
 
+const ISNET_ROUTE_ALIASES = {
+  "belge-akisi": "belge-merkezi",
+  "gelen-irsaliyeler": "belge-merkezi",
+  "giden-irsaliyeler": "belge-merkezi",
+  "gelen-faturalar": "belge-merkezi",
+  "giden-faturalar": "belge-merkezi",
+  "belge-kaynagi": "is-akisi",
+  "yeni-irsaliye": "is-akisi",
+  "kesilen-belgeler": "arsiv-gonderim",
+  "cikti-kuyrugu": "arsiv-gonderim",
+  "mail-merkezi": "arsiv-gonderim",
+};
+
 export function getModuleTabs(module) {
   if (!module) return [];
-  return module.groups
+  const visible = module.groups
     ? module.groups.flatMap((group) => group.tabs)
     : module.tabs || [];
+  return [...visible, ...(module.hiddenTabs || [])];
 }
 
 export function findModule(moduleKey) {
@@ -222,10 +216,14 @@ export function findTab(module, tabKey) {
 }
 
 export function getInitialRoute(pathname = window.location.pathname) {
-  const [moduleKey, tabKey] = pathname.split("/").filter(Boolean);
-  const module = findModule(moduleKey) || MODULES[0];
+  const [requestedModuleKey, requestedTabKey] = pathname.split("/").filter(Boolean);
+  const module = findModule(requestedModuleKey) || MODULES[0];
+  const normalizedTabKey =
+    module.key === "isnet"
+      ? ISNET_ROUTE_ALIASES[requestedTabKey] || requestedTabKey
+      : requestedTabKey;
   const tabs = getModuleTabs(module);
-  const tab = tabs.find(([key]) => key === tabKey) || tabs[0];
+  const tab = tabs.find(([key]) => key === normalizedTabKey) || tabs[0];
   return {
     moduleKey: module.key,
     tabKey: tab?.[0] || "",
