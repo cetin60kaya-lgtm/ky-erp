@@ -160,6 +160,8 @@ export class IsnetDispatchFlowCoordinatorService {
           quantity: 0,
           measureUnitId: "67",
           unitPrice: 0,
+          sourceQuantity: 0,
+          lockedDescription: true,
         },
         {
           sourceLineId: "BASKI_SAKATI",
@@ -169,6 +171,8 @@ export class IsnetDispatchFlowCoordinatorService {
           quantity: 0,
           measureUnitId: "67",
           unitPrice: 0,
+          sourceQuantity: 0,
+          lockedDescription: true,
         },
         {
           sourceLineId: "KUMAS_SAKATI",
@@ -178,6 +182,8 @@ export class IsnetDispatchFlowCoordinatorService {
           quantity: 0,
           measureUnitId: "67",
           unitPrice: 0,
+          sourceQuantity: 0,
+          lockedDescription: true,
         },
       ]);
   }
@@ -557,3 +563,4 @@ export class IsnetDispatchFlowCoordinatorService {
     return flow;
   }
 }
+

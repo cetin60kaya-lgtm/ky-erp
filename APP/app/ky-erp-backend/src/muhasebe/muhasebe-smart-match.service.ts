@@ -304,7 +304,7 @@ export class MuhasebeSmartMatchService {
           },
         })
       : [];
-    const documentMap = new Map(
+    const documentMap = new Map<string, any>(
       documents.map((row: any) => [row.id, row]),
     );
     return rows.map((row: any) => ({
@@ -471,8 +471,8 @@ export class MuhasebeSmartMatchService {
           where: { mainCompanySlug, id: { in: productIds } },
         })
       : [];
-    const productMap = new Map(products.map((row: any) => [row.id, row]));
-    const documentMap = new Map(
+    const productMap = new Map<string, any>(products.map((row: any) => [row.id, row]));
+    const documentMap = new Map<string, any>(
       supplierDocuments.map((row: any) => [row.id, row]),
     );
     const categoriesByDocument = new Map<string, Set<string>>();
@@ -675,7 +675,7 @@ export class MuhasebeSmartMatchService {
           })
         : [],
     ]);
-    const productMap = new Map(products.map((row: any) => [row.id, row]));
+    const productMap = new Map<string, any>(products.map((row: any) => [row.id, row]));
     const companyMap = new Map(companies.map((row: any) => [row.id, row]));
     return rows.map((row: any) => ({
       ...row,
@@ -684,3 +684,4 @@ export class MuhasebeSmartMatchService {
     }));
   }
 }
+
