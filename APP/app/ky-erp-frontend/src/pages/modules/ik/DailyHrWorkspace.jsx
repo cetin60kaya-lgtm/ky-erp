@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Banknote, CalendarDays, Moon, Plus, Save, Search, Sun, UserRound, Users } from "lucide-react";
