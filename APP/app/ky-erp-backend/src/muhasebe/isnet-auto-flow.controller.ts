@@ -3,11 +3,15 @@ import { ModuleKey } from "@prisma/client";
 import { RequireModule } from "../auth/roles.decorator";
 import { apiSuccess } from "../common/api-helpers";
 import { IsnetAutoFlowService } from "./isnet-auto-flow.service";
+import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coordinator.service";
 
 @Controller("isnet/auto-flows")
 @RequireModule(ModuleKey.ISNET)
 export class IsnetAutoFlowController {
-  constructor(private readonly service: IsnetAutoFlowService) {}
+  constructor(
+    private readonly service: IsnetAutoFlowService,
+    private readonly coordinator: IsnetDispatchFlowCoordinatorService,
+  ) {}
 
   @Get()
   async list(@Query() query: Record<string, any>) {
@@ -19,7 +23,7 @@ export class IsnetAutoFlowController {
     @Param("sourceId") sourceId: string,
     @Body() body: Record<string, any>,
   ) {
-    return apiSuccess(await this.service.prepareIncoming(sourceId, body));
+    return apiSuccess(await this.coordinator.prepareIncoming(sourceId, body));
   }
 
   @Post(":id/model")
@@ -27,7 +31,15 @@ export class IsnetAutoFlowController {
     @Param("id") id: string,
     @Body() body: Record<string, any>,
   ) {
-    return apiSuccess(await this.service.assignModel(id, body));
+    return apiSuccess(await this.coordinator.assignModel(id, body));
+  }
+
+  @Post(":id/outgoing-draft")
+  async createOutgoingDraft(
+    @Param("id") id: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return apiSuccess(await this.coordinator.createOutgoingDraft(id, body));
   }
 
   @Patch(":id/outgoing-document-no")
@@ -51,6 +63,6 @@ export class IsnetAutoFlowController {
     @Param("id") id: string,
     @Body() body: Record<string, any>,
   ) {
-    return apiSuccess(await this.service.updateInvoiceState(id, body));
+    return apiSuccess(await this.coordinator.updateInvoiceState(id, body));
   }
 }
