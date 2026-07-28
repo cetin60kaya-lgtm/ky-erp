@@ -8,6 +8,7 @@ import { IsnetOperationsService } from "./isnet-operations.service";
 import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
 import { IsnetFullSyncService } from "./isnet-full-sync.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { IsnetDispatchPreparationService } from "./isnet-dispatch-preparation.service";
 
 type Query = Record<string, any>;
 
@@ -34,6 +35,7 @@ export class IsnetSourceWorkflowService {
     private readonly operations: IsnetOperationsService,
     private readonly fullSync: IsnetFullSyncService,
     private readonly prisma: PrismaService,
+    private readonly preparation: IsnetDispatchPreparationService,
   ) {}
 
   async createOutgoingDraft(id: string, body: Query = {}) {
@@ -52,10 +54,16 @@ export class IsnetSourceWorkflowService {
     }
   }
 
-  private async createOutgoingDraftInternal(slug: string, id: string, body: Query) {
+  private async createOutgoingDraftInternal(
+    slug: string,
+    id: string,
+    body: Query,
+  ) {
     const intake: any = await this.sourceIntakes.detail(slug, id);
     if (intake.companyRole === "SUPPLIER") {
-      throw new BadRequestException("Tedarikçi kaydından giden müşteri irsaliyesi oluşturulamaz.");
+      throw new BadRequestException(
+        "Tedarikçi kaydından giden müşteri irsaliyesi oluşturulamaz.",
+      );
     }
     if (!intake.modelId && !clean(intake.modelName)) {
       throw new BadRequestException("Önce kaynak kaydına model bağlayın.");
@@ -71,10 +79,21 @@ export class IsnetSourceWorkflowService {
     }
 
     const maximum = numberValue(intake.capacity?.outgoingRemaining);
-    const quantity = numberValue(body.quantity || maximum);
-    if (quantity <= 0) throw new BadRequestException("Giden irsaliye adedi sıfırdan büyük olmalıdır.");
+    const requestedLines = Array.isArray(body.lines) ? body.lines : [];
+    const requestedTotal = requestedLines.reduce(
+      (sum: number, line: any) => sum + numberValue(line.quantity),
+      0,
+    );
+    const quantity = numberValue(body.quantity || requestedTotal || maximum);
+    if (quantity <= 0) {
+      throw new BadRequestException(
+        "Giden irsaliye adedi sıfırdan büyük olmalıdır.",
+      );
+    }
     if (quantity > maximum + 0.0001) {
-      throw new ConflictException(`Giden irsaliye adedi kalan ${maximum} adedi aşamaz.`);
+      throw new ConflictException(
+        `Giden irsaliye adedi kalan ${maximum} adedi aşamaz.`,
+      );
     }
 
     const recipientResult: any = await this.operations.recipientSearch({
@@ -82,11 +101,17 @@ export class IsnetSourceWorkflowService {
       kind: "dispatch",
       q: intake.companyName,
     });
-    const rows = Array.isArray(recipientResult?.rows) ? recipientResult.rows : [];
+    const rows = Array.isArray(recipientResult?.rows)
+      ? recipientResult.rows
+      : [];
     const companyName = normalize(intake.companyName);
     const recipient =
       rows.find((row: any) => normalize(row?.name) === companyName) ||
-      rows.find((row: any) => normalize(row?.name).includes(companyName) || companyName.includes(normalize(row?.name))) ||
+      rows.find(
+        (row: any) =>
+          normalize(row?.name).includes(companyName) ||
+          companyName.includes(normalize(row?.name)),
+      ) ||
       null;
     if (!recipient?.id) {
       throw new NotFoundException(
@@ -94,36 +119,53 @@ export class IsnetSourceWorkflowService {
       );
     }
 
-    const prepared: any = await this.sourceIntakes.prepareOutgoingDispatch(slug, id, {
-      quantity,
-      note: clean(body.note || intake.note),
-    });
-    const externalId = `KYERP-SOURCE-${intake.id}-${prepared.draft.id}`;
+    const prepared: any = await this.sourceIntakes.prepareOutgoingDispatch(
+      slug,
+      id,
+      {
+        quantity,
+        note: clean(body.note || intake.note),
+      },
+    );
 
     let portalResult: any;
     try {
-      portalResult = await this.operations.createManualDispatchDraft({
+      portalResult = await this.preparation.createDraft({
         mainCompanySlug: slug,
         confirmed: true,
+        previewApproved: body.previewApproved === true,
+        flowId: `SOURCE-${intake.id}-${prepared.draft.id}`,
+        sourceId: intake.id,
+        cycleNo: (intake.outgoingDispatchDrafts || []).length + 1,
+        remainingQuantity: maximum,
         recipientId: recipient.id,
-        recipientName: recipient.name,
-        localCompanyId: intake.companyId,
-        issueDate: clean(body.issueDate || new Date().toISOString().slice(0, 10)),
-        issueTime: clean(body.issueTime),
-        orderNo: clean(intake.orderNo),
+        companyId: intake.companyId,
+        companyName: intake.companyName,
         modelId: clean(intake.modelId),
         modelName: clean(intake.modelName),
+        issueDate: clean(
+          body.issueDate || new Date().toISOString().slice(0, 10),
+        ),
+        issueTime: clean(body.issueTime),
+        orderNo: clean(intake.orderNo),
         note: clean(body.note || intake.note),
-        externalId,
-        lines: [
-          {
-            productName: clean(intake.modelName) || "Baskı hizmeti",
-            description: clean(body.description || intake.note || intake.modelName),
-            quantity,
-            unitPrice: 0,
-            measureUnitId: 67,
-          },
-        ],
+        carrier: body.carrier,
+        fullClose: body.fullClose !== false,
+        lines: requestedLines.length
+          ? requestedLines
+          : [
+              {
+                sourceLineId: "MAIN",
+                category: "MAIN",
+                productName: clean(intake.modelName) || "Baskı hizmeti",
+                description: clean(
+                  body.description || intake.note || intake.modelName,
+                ),
+                quantity,
+                unitPrice: 0,
+                measureUnitId: 67,
+              },
+            ],
       });
     } catch (error: any) {
       throw new ConflictException(
@@ -168,13 +210,19 @@ export class IsnetSourceWorkflowService {
     const selected =
       completedDrafts.find((row: any) => row.id === clean(body.draftId)) ||
       completedDrafts[completedDrafts.length - 1];
-    if (!selected) throw new BadRequestException("Faturaya çevrilecek tamamlanmış giden irsaliye bulunamadı.");
+    if (!selected) {
+      throw new BadRequestException(
+        "Faturaya çevrilecek tamamlanmış giden irsaliye bulunamadı.",
+      );
+    }
 
     await this.fullSync.run({
       ...body,
       mainCompanySlug: slug,
       startDate: clean(body.startDate || intake.issueDate),
-      endDate: clean(body.endDate || new Date().toISOString().slice(0, 10)),
+      endDate: clean(
+        body.endDate || new Date().toISOString().slice(0, 10),
+      ),
     });
 
     const state = await this.prisma.isnetDocumentState.findFirst({
@@ -198,9 +246,10 @@ export class IsnetSourceWorkflowService {
       };
     }
 
-    const draft = await this.operations.outgoingDispatchInvoiceDraft(state.sourceId, {
-      mainCompanySlug: slug,
-    });
+    const draft = await this.operations.outgoingDispatchInvoiceDraft(
+      state.sourceId,
+      { mainCompanySlug: slug },
+    );
     return {
       ok: true,
       ready: true,
