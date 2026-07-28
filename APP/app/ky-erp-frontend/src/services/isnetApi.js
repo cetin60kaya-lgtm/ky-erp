@@ -142,7 +142,10 @@ export const saveIsnetSettings = (payload) =>
   apiPut("/isnet/settings", payload).then(unwrap);
 
 export const startDailySync = (payload = {}) =>
-  apiPost("/isnet/sync", payload, { timeoutMs: 300_000 }).then(unwrap);
+  apiPost("/isnet/full-sync", payload, { timeoutMs: 900_000 }).then(unwrap);
+
+export const getIsnetFullSyncStatus = () =>
+  apiGet("/isnet/full-sync/status").then(unwrap);
 
 export const markIsnetDocumentRead = (key, read = true) =>
   apiPost(`/isnet/documents/${encodeURIComponent(key)}/read`, { read }).then(unwrap);
