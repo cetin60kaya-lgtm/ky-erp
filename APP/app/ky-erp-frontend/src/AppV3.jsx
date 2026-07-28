@@ -26,9 +26,9 @@ const IsnetDocumentCenterPage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetDocumentCenterPage"),
   "isnet-document-center-v1",
 );
-const IsnetAutomationWorkflowPage = lazyWithRetry(
-  () => import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
-  "isnet-automation-workflow-v1",
+const IsnetWorkflowFinalPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetWorkflowFinalPage"),
+  "isnet-workflow-final-v1",
 );
 const IsnetPreparedInvoicePage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
@@ -57,7 +57,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/IsnetPage"),
     import("./pages/modules/isnet/IsnetManagementCenterPage"),
     import("./pages/modules/isnet/IsnetDocumentCenterPage"),
-    import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
+    import("./pages/modules/isnet/IsnetWorkflowFinalPage"),
     import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
     import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
     import("./pages/modules/isnet/IsnetSettingsMasterPage"),
@@ -308,7 +308,7 @@ export default function AppV3() {
       return <IsnetDocumentCenterPage {...sharedProps} />;
     }
     if (activeModule?.key === "isnet" && activeTab === "is-akisi") {
-      return <IsnetAutomationWorkflowPage {...sharedProps} />;
+      return <IsnetWorkflowFinalPage {...sharedProps} />;
     }
     if (
       activeModule?.key === "isnet"
@@ -372,3 +372,4 @@ export default function AppV3() {
     </AppShellV3>
   );
 }
+

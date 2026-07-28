@@ -80,7 +80,7 @@ for (const tab of expected.muhasebe) {
 const isnetComponents = {
   "yonetim-merkezi": "IsnetManagementCenterPage",
   "belge-merkezi": "IsnetDocumentCenterPage",
-  "is-akisi": "IsnetAutomationWorkflowPage",
+  "is-akisi": "IsnetWorkflowFinalPage",
   "arsiv-gonderim": "IsnetArchiveDeliveryPage",
   ayarlar: "IsnetSettingsMasterPage",
 };
@@ -186,3 +186,4 @@ if (failures.length) {
   process.exit(1);
 }
 console.log("Muhasebe, İşNet ve İK sekme bağlantı denetimi tamamlandı.");
+
