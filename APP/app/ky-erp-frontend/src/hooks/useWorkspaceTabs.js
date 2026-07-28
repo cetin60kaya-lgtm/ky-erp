@@ -43,23 +43,21 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
   }, []);
 
   const closeTab = useCallback((id) => {
-    setTabs((current) => {
-      if (current.length === 1) return current;
-      const index = current.findIndex((item) => item.id === id);
-      if (index < 0) return current;
-      const next = current.filter((item) => item.id !== id);
-      if (id === tabId(activeRoute.moduleKey, activeRoute.tabKey)) {
-        const fallback = next[Math.max(0, index - 1)] || next[0];
-        if (fallback) {
-          setActiveRoute({
-            moduleKey: fallback.moduleKey,
-            tabKey: fallback.tabKey,
-          });
-        }
+    if (tabs.length === 1) return;
+
+    const index = tabs.findIndex((item) => item.id === id);
+    if (index < 0) return;
+
+    const nextTabs = tabs.filter((item) => item.id !== id);
+    setTabs(nextTabs);
+
+    if (id === activeId) {
+      const fallback = nextTabs[Math.max(0, index - 1)] || nextTabs[0];
+      if (fallback) {
+        setActiveRoute({ moduleKey: fallback.moduleKey, tabKey: fallback.tabKey });
       }
-      return next;
-    });
-  }, [activeRoute.moduleKey, activeRoute.tabKey]);
+    }
+  }, [activeId, tabs]);
 
   const replaceActiveRoute = useCallback(
     (moduleKey, tabKey) => {
