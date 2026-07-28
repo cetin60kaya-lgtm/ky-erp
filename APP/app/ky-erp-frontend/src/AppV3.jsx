@@ -14,6 +14,10 @@ const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "ur
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
 const IsnetPage = lazyWithRetry(() => import("./pages/modules/IsnetPage"), "isnet-v3");
+const IsnetSourceWorkflowPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetSourceWorkflowPage"),
+  "isnet-source-workflow-v1",
+);
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 
 const MODULE_LOADERS = {
@@ -23,7 +27,10 @@ const MODULE_LOADERS = {
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
-  isnet: () => import("./pages/modules/IsnetPage"),
+  isnet: () => Promise.all([
+    import("./pages/modules/IsnetPage"),
+    import("./pages/modules/isnet/IsnetSourceWorkflowPage"),
+  ]),
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
 
@@ -260,6 +267,9 @@ export default function AppV3() {
     };
 
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule?.key === "isnet" && activeTab === "belge-kaynagi") {
+      return <IsnetSourceWorkflowPage {...sharedProps} />;
+    }
     if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "boyahane") return <BoyahanePage activeTab={activeTab} {...sharedProps} />;
