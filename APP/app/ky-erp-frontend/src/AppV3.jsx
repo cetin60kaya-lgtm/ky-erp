@@ -14,6 +14,10 @@ const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "ur
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
 const IsnetPage = lazyWithRetry(() => import("./pages/modules/IsnetPage"), "isnet-v3");
+const MuhasebeSmartMatchPage = lazyWithRetry(
+  () => import("./pages/modules/muhasebe/MuhasebeSmartMatchPage"),
+  "muhasebe-smart-match-v1",
+);
 const IsnetManagementCenterPage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetManagementCenterPage"),
   "isnet-management-center-v1",
@@ -37,7 +41,9 @@ const IsnetArchiveDeliveryPage = lazyWithRetry(
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 
 const MODULE_LOADERS = {
-  muhasebe: () => Promise.resolve(),
+  muhasebe: () => Promise.all([
+    import("./pages/modules/muhasebe/MuhasebeSmartMatchPage"),
+  ]),
   admin: () => import("./pages/modules/AdminPage"),
   ik: () => import("./pages/modules/IkPage"),
   desen: () => import("./pages/modules/DesenPage"),
@@ -286,6 +292,9 @@ export default function AppV3() {
       openModule: (moduleKey, options = {}) => openTab(moduleKey, options.tabKey, options),
     };
 
+    if (activeModule?.key === "muhasebe" && activeTab === "envanter-urunleri") {
+      return <MuhasebeSmartMatchPage {...sharedProps} />;
+    }
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "isnet" && activeTab === "yonetim-merkezi") {
       return <IsnetManagementCenterPage {...sharedProps} />;
