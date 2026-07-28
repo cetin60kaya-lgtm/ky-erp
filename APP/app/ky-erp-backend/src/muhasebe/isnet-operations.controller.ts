@@ -15,20 +15,40 @@ import { RequireModule } from "../auth/roles.decorator";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { apiSuccess } from "../common/api-helpers";
 import { IsnetOperationsService } from "./isnet-operations.service";
+import { IsnetMailDraftService } from "./isnet-mail-draft.service";
 
 @Controller("isnet")
 @RequireModule(ModuleKey.ISNET)
 export class IsnetOperationsController {
-  constructor(private readonly service: IsnetOperationsService) {}
+  constructor(
+    private readonly service: IsnetOperationsService,
+    private readonly mailDraftService: IsnetMailDraftService,
+  ) {}
+
+  private withImplementedCapabilities(payload: any) {
+    const configuration = payload?.configuration || {};
+    return {
+      ...payload,
+      configuration: {
+        ...configuration,
+        capabilities: {
+          ...(configuration.capabilities || {}),
+          prepareInvoice: true,
+          archiveInvoice: true,
+          outlookDraft: true,
+        },
+      },
+    };
+  }
 
   @Get("dashboard")
   async dashboard(@Query() query: Record<string, any>) {
-    return apiSuccess(await this.service.dashboard(query));
+    return apiSuccess(this.withImplementedCapabilities(await this.service.dashboard(query)));
   }
 
   @Get("configuration")
   async configuration(@Query() query: Record<string, any>) {
-    return apiSuccess(await this.service.configurationSummary(query));
+    return apiSuccess(this.withImplementedCapabilities(await this.service.configurationSummary(query)));
   }
 
   @Get("dispatches/incoming")
@@ -66,7 +86,6 @@ export class IsnetOperationsController {
     return apiSuccess(await this.service.localDocuments(query));
   }
 
-  // Yerel arşiv için kanonik, dış bağlantı kurmayan liste endpoint'i.
   @Get("documents")
   async documents(@Query() query: Record<string, any>) {
     return apiSuccess(await this.service.localDocuments(query));
@@ -85,12 +104,7 @@ export class IsnetOperationsController {
     @Query() query: Record<string, any>,
     @Res() response: Response,
   ) {
-    const file = await this.service.portalDocumentFile({
-      ...query,
-      direction,
-      kind,
-      id,
-    });
+    const file = await this.service.portalDocumentFile({ ...query, direction, kind, id });
     response.setHeader("Content-Type", file.contentType);
     response.setHeader(
       "Content-Disposition",
@@ -104,9 +118,7 @@ export class IsnetOperationsController {
     @Param("id") id: string,
     @Body() body: Record<string, any>,
   ) {
-    return apiSuccess(
-      await this.service.importIncomingDispatch({ ...body, id }),
-    );
+    return apiSuccess(await this.service.importIncomingDispatch({ ...body, id }));
   }
 
   @Post("documents/incoming/dispatch/:id/create-outgoing-draft")
@@ -114,9 +126,7 @@ export class IsnetOperationsController {
     @Param("id") id: string,
     @Body() body: Record<string, any>,
   ) {
-    return apiSuccess(
-      await this.service.createDispatchDraftFromIncoming({ ...body, id }),
-    );
+    return apiSuccess(await this.service.createDispatchDraftFromIncoming({ ...body, id }));
   }
 
   @Get("documents/incoming/dispatch/:id/outgoing-draft")
@@ -174,12 +184,18 @@ export class IsnetOperationsController {
   }
 
   @Get("invoice-drafts/:draftId")
-  async invoiceDraftStatus(@Param("draftId") draftId: string, @Query() query: Record<string, any>) {
+  async invoiceDraftStatus(
+    @Param("draftId") draftId: string,
+    @Query() query: Record<string, any>,
+  ) {
     return apiSuccess(await this.service.invoiceDraftStatus(draftId, query));
   }
 
   @Post("invoice-drafts/:draftId/verify")
-  async verifyInvoiceDraft(@Param("draftId") draftId: string, @Body() body: Record<string, any>) {
+  async verifyInvoiceDraft(
+    @Param("draftId") draftId: string,
+    @Body() body: Record<string, any>,
+  ) {
     return apiSuccess(await this.service.verifyInvoiceDraft(draftId, body));
   }
 
@@ -189,7 +205,13 @@ export class IsnetOperationsController {
     @Body() body: Record<string, any>,
     @CurrentUser() user: any,
   ) {
-    return apiSuccess(await this.service.finalApproveInvoiceDraft(draftId, body, user?.id || user?.sub || "user"));
+    return apiSuccess(
+      await this.service.finalApproveInvoiceDraft(
+        draftId,
+        body,
+        user?.id || user?.sub || "user",
+      ),
+    );
   }
 
   @Post("invoice-drafts/:draftId/submit")
@@ -198,11 +220,20 @@ export class IsnetOperationsController {
     @Body() body: Record<string, any>,
     @CurrentUser() user: any,
   ) {
-    return apiSuccess(await this.service.submitOfficialInvoice(draftId, body, user?.id || user?.sub || "user"));
+    return apiSuccess(
+      await this.service.submitOfficialInvoice(
+        draftId,
+        body,
+        user?.id || user?.sub || "user",
+      ),
+    );
   }
 
   @Post("invoice-drafts/:draftId/retry-closure")
-  async retryInvoiceClosure(@Param("draftId") draftId: string, @Body() body: Record<string, any>) {
+  async retryInvoiceClosure(
+    @Param("draftId") draftId: string,
+    @Body() body: Record<string, any>,
+  ) {
     return apiSuccess(await this.service.archiveInvoice({ ...body, draftId }));
   }
 
@@ -249,12 +280,18 @@ export class IsnetOperationsController {
   }
 
   @Put("model-aliases/:id")
-  async updateModelAlias(@Param("id") id: string, @Body() body: Record<string, any>) {
+  async updateModelAlias(
+    @Param("id") id: string,
+    @Body() body: Record<string, any>,
+  ) {
     return apiSuccess(await this.service.updateModelAlias(id, body));
   }
 
   @Post("model-aliases/:id/reject")
-  async rejectModelAlias(@Param("id") id: string, @Body() body: Record<string, any>) {
+  async rejectModelAlias(
+    @Param("id") id: string,
+    @Body() body: Record<string, any>,
+  ) {
     return apiSuccess(await this.service.rejectModelAlias(id, body));
   }
 
@@ -314,7 +351,10 @@ export class IsnetOperationsController {
     const file = await this.service.printQueueBundle(body);
     response.setHeader("Content-Type", "application/pdf");
     response.setHeader("X-Isnet-Print-Keys", encodeURIComponent(file.keys.join(",")));
-    response.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
+    response.setHeader(
+      "Content-Disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    );
     response.send(file.buffer);
   }
 
@@ -352,8 +392,13 @@ export class IsnetOperationsController {
   }
 
   @Post("invoices/prepare")
-  async prepareInvoice(@Body() body: Record<string, any>, @CurrentUser() user: any) {
-    return apiSuccess(await this.service.prepareInvoice(body, user?.id || user?.sub || "user"));
+  async prepareInvoice(
+    @Body() body: Record<string, any>,
+    @CurrentUser() user: any,
+  ) {
+    return apiSuccess(
+      await this.service.prepareInvoice(body, user?.id || user?.sub || "user"),
+    );
   }
 
   @Post("invoices/archive")
@@ -366,7 +411,7 @@ export class IsnetOperationsController {
     @Param("id") id: string,
     @Body() body: Record<string, any>,
   ) {
-    return apiSuccess(await this.service.createOutlookDraft(id, body));
+    return apiSuccess(await this.mailDraftService.createDraft(id, body));
   }
 
   @Post("mail/:id/sent")
