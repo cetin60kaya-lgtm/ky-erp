@@ -23,6 +23,22 @@ export class IsnetAutoFlowController {
     @Param("sourceId") sourceId: string,
     @Body() body: Record<string, any>,
   ) {
+    const current: any = await this.service.list(body);
+    const existing = Array.isArray(current?.rows)
+      ? current.rows.find(
+          (row: any) => String(row.incomingSourceId || "") === String(sourceId),
+        )
+      : null;
+    if (existing?.status === "OUTGOING_SEND_REQUIRED") {
+      return apiSuccess({
+        ok: true,
+        duplicatePrevented: true,
+        flow: existing,
+        message: existing.outgoingDraftNo
+          ? `${existing.outgoingDraftNo} taslağı daha önce oluşturuldu. Yeni taslak açılmadı; İşNet'te gönderip gönderilmiş irsaliyeyi bulun.`
+          : "İşNet taslak sonucu numarasız kaldı. Çift irsaliye riskine karşı yeni taslak engellendi; portal taslak listesini kontrol edip gönderilmiş irsaliyeyi bulun.",
+      });
+    }
     return apiSuccess(await this.coordinator.prepareIncoming(sourceId, body));
   }
 
