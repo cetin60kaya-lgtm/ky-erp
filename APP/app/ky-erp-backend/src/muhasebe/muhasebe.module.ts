@@ -49,6 +49,8 @@ import { IsnetDocumentCenterController } from "./isnet-document-center.controlle
 import { IsnetDocumentCenterService } from "./isnet-document-center.service";
 import { IsnetSelectedPrintController } from "./isnet-selected-print.controller";
 import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
+import { MuhasebeSmartMatchController } from "./muhasebe-smart-match.controller";
+import { MuhasebeSmartMatchService } from "./muhasebe-smart-match.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -57,6 +59,7 @@ import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
     DocumentIntakeController,
     BelgeImportController,
     MuhasebeAliasController,
+    MuhasebeSmartMatchController,
     FirmsController,
     CariController,
     KdvController,
@@ -79,6 +82,7 @@ import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
     MuhasebeBelgeService,
     MuhasebeService,
     MuhasebeDocumentWorkflowService,
+    MuhasebeSmartMatchService,
     DocumentIntakeService,
     DocumentIntakeServiceV2,
     DocumentParserService,
@@ -108,6 +112,7 @@ import { IsnetSelectedPrintService } from "./isnet-selected-print.service";
     MuhasebeBelgeService,
     MuhasebeService,
     MuhasebeDocumentWorkflowService,
+    MuhasebeSmartMatchService,
     DocumentIntakeService,
     DocumentFolderWatcherService,
     AccountingApiService,
