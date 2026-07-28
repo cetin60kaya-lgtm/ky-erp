@@ -1,6 +1,13 @@
-import { Bell, Menu, Search, X } from "lucide-react";
+import { Bell, ChevronDown, Menu, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import "../styles/shell-v3.css";
+
+function getTabs(module) {
+  if (!module) return [];
+  return module.groups
+    ? module.groups.flatMap((group) => group.tabs)
+    : module.tabs || [];
+}
 
 export default function AppShellV3({
   modules,
@@ -22,85 +29,85 @@ export default function AppShellV3({
   onLogout,
   children,
 }) {
-  const moduleTabs = activeModule?.groups
-    ? activeModule.groups.flatMap((group) => group.tabs)
-    : activeModule?.tabs || [];
-  const activeTabLabel = moduleTabs.find(([key]) => key === activeTab)?.[1] || "";
+  const activeTabLabel = getTabs(activeModule).find(([key]) => key === activeTab)?.[1] || "";
 
   return (
     <div className={`shell-v3 ${mobileMenuOpen ? "mobile-open" : ""}`}>
-      {mobileMenuOpen ? (
-        <button
-          type="button"
-          className="shell-v3-overlay"
-          aria-label="Menüyü kapat"
-          onClick={onCloseMobileMenu}
-        />
-      ) : null}
+      <button
+        type="button"
+        className="shell-v3-overlay"
+        aria-label="Menüyü kapat"
+        onClick={onCloseMobileMenu}
+      />
 
-      <aside className="shell-v3-rail">
-        <button
-          type="button"
-          className="shell-v3-logo"
-          onClick={() => onToggleModuleMenu("muhasebe")}
-        >
-          KY
-        </button>
-        <nav>
-          {modules.map((module) => (
-            <button
-              type="button"
-              key={module.key}
-              className={activeModule?.key === module.key ? "active" : ""}
-              onClick={() => onToggleModuleMenu(module.key)}
-            >
-              <ErpIcon name={module.icon || "dashboard"} size={21} />
-              <span>{module.label}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      <aside className="shell-v3-menu">
-        <header>
-          <div>
-            <strong>KY ERP</strong>
-            <span>{activeModule?.label || ""}</span>
-          </div>
-          <button type="button" aria-label="Menüyü kapat" onClick={onCloseMobileMenu}>
-            <X size={17} />
+      <aside className="shell-v3-sidebar">
+        <header className="shell-v3-sidebar-brand">
+          <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("muhasebe")}>
+            <b>KY</b>
+            <span>
+              <strong>KY ERP</strong>
+              <small>{activeModule?.label || "Yönetim Sistemi"}</small>
+            </span>
+          </button>
+          <button type="button" className="shell-v3-sidebar-close" aria-label="Menüyü kapat" onClick={onCloseMobileMenu}>
+            <X size={18} />
           </button>
         </header>
-        <div className="shell-v3-menu-scroll">
-          {activeModule?.groups
-            ? activeModule.groups.map((group) => (
-                <section key={group.label}>
-                  <h3>{group.label}</h3>
-                  {group.tabs.map(([key, label, icon]) => (
-                    <button
-                      type="button"
-                      key={key}
-                      className={activeTab === key ? "active" : ""}
-                      onClick={() => onOpenTab(activeModule.key, key)}
-                    >
-                      <ErpIcon name={icon || "dashboard"} size={17} />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </section>
-              ))
-            : moduleTabs.map(([key, label, icon]) => (
+
+        <nav className="shell-v3-sidebar-nav" aria-label="Ana modüller">
+          {modules.map((module) => {
+            const isActiveModule = activeModule?.key === module.key;
+            const isExpanded = isActiveModule && mobileMenuOpen;
+
+            return (
+              <section key={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
                 <button
                   type="button"
-                  key={key}
-                  className={activeTab === key ? "active" : ""}
-                  onClick={() => onOpenTab(activeModule.key, key)}
+                  className="shell-v3-module-button"
+                  onClick={() => onToggleModuleMenu(module.key)}
+                  aria-expanded={isExpanded}
                 >
-                  <ErpIcon name={icon || "dashboard"} size={17} />
-                  <span>{label}</span>
+                  <ErpIcon name={module.icon || "dashboard"} size={18} />
+                  <span>{module.label}</span>
+                  <ChevronDown size={15} className={isExpanded ? "expanded" : ""} />
                 </button>
-              ))}
-        </div>
+
+                {isExpanded ? (
+                  <div className="shell-v3-submenu">
+                    {module.groups
+                      ? module.groups.map((group) => (
+                          <div key={group.label} className="shell-v3-submenu-group">
+                            <h3>{group.label}</h3>
+                            {group.tabs.map(([key, label, icon]) => (
+                              <button
+                                type="button"
+                                key={key}
+                                className={activeTab === key ? "active" : ""}
+                                onClick={() => onOpenTab(module.key, key)}
+                              >
+                                <ErpIcon name={icon || "dashboard"} size={15} />
+                                <span>{label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ))
+                      : getTabs(module).map(([key, label, icon]) => (
+                          <button
+                            type="button"
+                            key={key}
+                            className={activeTab === key ? "active" : ""}
+                            onClick={() => onOpenTab(module.key, key)}
+                          >
+                            <ErpIcon name={icon || "dashboard"} size={15} />
+                            <span>{label}</span>
+                          </button>
+                        ))}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
+        </nav>
       </aside>
 
       <main className="shell-v3-main">
@@ -113,24 +120,23 @@ export default function AppShellV3({
           >
             <Menu size={19} />
           </button>
+
           <label className="shell-v3-search">
             <Search size={17} />
             <input placeholder="Firma, belge, model veya ürün ara" />
           </label>
-          <select
-            value={activeCompanySlug || ""}
-            onChange={(event) => onCompanyChange(event.target.value)}
-          >
+
+          <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => (
-              <option key={company.slug} value={company.slug}>
-                {company.name}
-              </option>
+              <option key={company.slug} value={company.slug}>{company.name}</option>
             ))}
           </select>
+
           <button type="button" className="shell-v3-icon notification" aria-label="Bildirimler">
             <Bell size={18} />
             <span>3</span>
           </button>
+
           <div className="shell-v3-user">
             <b>{String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</b>
             <div>
@@ -159,6 +165,13 @@ export default function AppShellV3({
                     event.stopPropagation();
                     onCloseWorkspaceTab(tab.id);
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onCloseWorkspaceTab(tab.id);
+                    }
+                  }}
                 >
                   <X size={13} />
                 </i>
@@ -171,7 +184,9 @@ export default function AppShellV3({
           <span>KY ERP</span><span>/</span><span>{activeModule?.label}</span>
           {activeTabLabel ? <><span>/</span><strong>{activeTabLabel}</strong></> : null}
         </div>
+
         <section className="shell-v3-workspace">{children}</section>
+
         <footer className="shell-v3-status">
           <span>KY ERP</span>
           <span>Firma: {companies.find((item) => item.slug === activeCompanySlug)?.name || "-"}</span>
