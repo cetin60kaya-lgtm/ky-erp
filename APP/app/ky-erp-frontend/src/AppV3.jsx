@@ -118,6 +118,7 @@ export default function AppV3() {
     openTab: openWorkspaceTab,
     activateTab: activateWorkspaceRoute,
     closeTab: closeWorkspaceTab,
+    closeAllTabs: closeAllWorkspaceTabs,
     replaceActiveRoute,
   } = useWorkspaceTabs(initialRoute, resolveLabel);
 
@@ -295,6 +296,7 @@ export default function AppV3() {
       onOpenTab={(moduleKey, tabKey) => openTab(moduleKey, tabKey)}
       onActivateWorkspaceTab={activateWorkspaceTab}
       onCloseWorkspaceTab={closeWorkspaceTab}
+      onCloseAllWorkspaceTabs={closeAllWorkspaceTabs}
       onCompanyChange={setActiveCompanySlug}
       onOpenMobileMenu={() => setModuleMenuOpen(true)}
       onCloseMobileMenu={() => setModuleMenuOpen(false)}
