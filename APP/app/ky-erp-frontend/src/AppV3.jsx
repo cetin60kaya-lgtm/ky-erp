@@ -22,6 +22,10 @@ const IsnetPreparedInvoicePage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
   "isnet-prepared-invoice-v1",
 );
+const IsnetPrintQueuePage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetPrintQueuePage"),
+  "isnet-print-queue-v2",
+);
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 
 const MODULE_LOADERS = {
@@ -35,6 +39,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/IsnetPage"),
     import("./pages/modules/isnet/IsnetSourceWorkflowPage"),
     import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
+    import("./pages/modules/isnet/IsnetPrintQueuePage"),
   ]),
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
@@ -282,6 +287,9 @@ export default function AppV3() {
       && moduleActionContext?.sourceId
     ) {
       return <IsnetPreparedInvoicePage {...sharedProps} />;
+    }
+    if (activeModule?.key === "isnet" && activeTab === "cikti-kuyrugu") {
+      return <IsnetPrintQueuePage {...sharedProps} />;
     }
     if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
