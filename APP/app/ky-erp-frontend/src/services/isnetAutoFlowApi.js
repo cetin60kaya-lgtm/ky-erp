@@ -21,6 +21,13 @@ export const assignIsnetAutoFlowModel = (flowId, payload) =>
     timeoutMs: 300_000,
   }).then(unwrap);
 
+export const createIsnetAutoFlowOutgoingDraft = (flowId, payload) =>
+  apiPost(
+    `/isnet/auto-flows/${encodeURIComponent(flowId)}/outgoing-draft`,
+    payload,
+    { timeoutMs: 300_000 },
+  ).then(unwrap);
+
 export const setIsnetAutoFlowOutgoingNo = (flowId, documentNo) =>
   apiFetch(`/isnet/auto-flows/${encodeURIComponent(flowId)}/outgoing-document-no`, {
     method: "PATCH",
