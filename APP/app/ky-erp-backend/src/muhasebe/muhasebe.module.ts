@@ -55,6 +55,8 @@ import { IsnetBusinessSettingsController } from "./isnet-business-settings.contr
 import { IsnetBusinessSettingsService } from "./isnet-business-settings.service";
 import { IsnetDispatchPreparationService } from "./isnet-dispatch-preparation.service";
 import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coordinator.service";
+import { IsnetInvoicePreparationController } from "./isnet-invoice-preparation.controller";
+import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -81,6 +83,7 @@ import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coord
     IsnetDocumentCenterController,
     IsnetSelectedPrintController,
     IsnetBusinessSettingsController,
+    IsnetInvoicePreparationController,
   ],
   providers: [
     AccountingApiService,
@@ -115,6 +118,7 @@ import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coord
     IsnetBusinessSettingsService,
     IsnetDispatchPreparationService,
     IsnetDispatchFlowCoordinatorService,
+    IsnetInvoicePreparationService,
   ],
   exports: [
     MuhasebeBelgeService,
@@ -124,6 +128,7 @@ import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coord
     IsnetBusinessSettingsService,
     IsnetDispatchPreparationService,
     IsnetDispatchFlowCoordinatorService,
+    IsnetInvoicePreparationService,
     DocumentIntakeService,
     DocumentFolderWatcherService,
     AccountingApiService,
