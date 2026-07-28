@@ -38,6 +38,10 @@ const IsnetArchiveDeliveryPage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
   "isnet-archive-delivery-v1",
 );
+const IsnetSettingsMasterPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetSettingsMasterPage"),
+  "isnet-settings-master-v1",
+);
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 
 const MODULE_LOADERS = {
@@ -56,6 +60,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
     import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
     import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
+    import("./pages/modules/isnet/IsnetSettingsMasterPage"),
   ]),
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
@@ -315,6 +320,9 @@ export default function AppV3() {
     }
     if (activeModule?.key === "isnet" && activeTab === "arsiv-gonderim") {
       return <IsnetArchiveDeliveryPage {...sharedProps} />;
+    }
+    if (activeModule?.key === "isnet" && activeTab === "ayarlar") {
+      return <IsnetSettingsMasterPage {...sharedProps} />;
     }
     if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
