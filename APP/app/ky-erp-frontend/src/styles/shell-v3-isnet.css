@@ -1,0 +1,203 @@
+:root {
+  --shell-sidebar: #10284d;
+  --shell-sidebar-deep: #0b1e3a;
+  --shell-sidebar-line: rgba(255, 255, 255, 0.1);
+  --shell-sidebar-text: #dce8f8;
+  --shell-sidebar-muted: #9db1cf;
+  --shell-sidebar-active: #2457d6;
+  --shell-bg: #edf3fb;
+  --shell-surface: #ffffff;
+  --shell-line: #dfe6ef;
+  --shell-text: #122033;
+  --shell-muted: #657287;
+  --shell-primary: #2457d6;
+}
+
+.shell-v3-sidebar {
+  border-right-color: #08182f;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(45, 107, 229, 0.24), transparent 28%),
+    linear-gradient(180deg, var(--shell-sidebar) 0%, var(--shell-sidebar-deep) 100%);
+  box-shadow: 8px 0 24px rgba(14, 35, 68, 0.12);
+}
+
+.shell-v3-sidebar-brand {
+  min-height: 72px;
+  background: rgba(5, 16, 34, 0.3);
+}
+
+.shell-v3-brand-button > b {
+  background: linear-gradient(145deg, #2f78ec, #1b54c6);
+  box-shadow: 0 8px 20px rgba(3, 15, 34, 0.34);
+}
+
+.shell-v3-module-button {
+  min-height: 47px;
+  font-size: 11px;
+}
+
+.shell-v3-module-button:hover,
+.shell-v3-module.active > .shell-v3-module-button {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shell-v3-module.active > .shell-v3-module-button {
+  box-shadow: inset 3px 0 0 #58a8ff;
+}
+
+.shell-v3-submenu {
+  padding: 6px 8px 11px;
+  background: rgba(2, 13, 29, 0.22);
+}
+
+.shell-v3-submenu h3 {
+  color: #7f9cc4;
+}
+
+.shell-v3-submenu button {
+  min-height: 37px;
+  border-left-width: 3px;
+  border-radius: 7px;
+  color: #c9d8ed;
+}
+
+.shell-v3-submenu button.active {
+  border-left-color: #6fc2ff;
+  background: linear-gradient(90deg, rgba(45, 107, 229, 0.5), rgba(45, 107, 229, 0.16));
+  color: #fff;
+}
+
+.shell-v3-topbar {
+  min-height: 62px;
+  padding: 0 16px;
+  border-bottom-color: var(--shell-line);
+  box-shadow: 0 3px 14px rgba(22, 52, 95, 0.045);
+}
+
+.shell-v3-search input,
+.shell-v3-topbar select,
+.shell-v3-icon {
+  border-color: #d7e0eb;
+  background: #fff;
+}
+
+.shell-v3-search input:focus,
+.shell-v3-topbar select:focus {
+  border-color: #7ea5f3;
+  outline: 3px solid rgba(45, 107, 229, 0.12);
+}
+
+.shell-v3-tabs-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  min-width: 0;
+  border-bottom: 1px solid var(--shell-line);
+  background: #e7eef8;
+}
+
+.shell-v3-tabs {
+  min-width: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.shell-v3-tabs > button {
+  min-height: 37px;
+  padding: 8px 12px;
+  border-radius: 8px 8px 0 0;
+  color: #68778d;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.shell-v3-tabs > button:hover {
+  background: rgba(255, 255, 255, 0.58);
+  color: #24436c;
+}
+
+.shell-v3-tabs > button.active {
+  position: relative;
+  border-color: #d7e0eb;
+  background: #fff;
+  color: #2457d6;
+  box-shadow: 0 -3px 10px rgba(31, 74, 145, 0.06);
+}
+
+.shell-v3-tabs > button.active::after {
+  position: absolute;
+  right: 9px;
+  bottom: -1px;
+  left: 9px;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: #2d6be5;
+  content: "";
+}
+
+.shell-v3-tabs i {
+  z-index: 1;
+  border-radius: 5px;
+  padding: 2px;
+}
+
+.shell-v3-tabs i:hover {
+  background: #e9eff9;
+  opacity: 1;
+}
+
+.shell-v3-close-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 112px;
+  margin: 4px 7px 4px 6px;
+  padding: 0 11px;
+  border: 1px solid #cbd7e7;
+  border-radius: 8px;
+  background: #fff;
+  color: #36516f;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.shell-v3-close-all:hover:not(:disabled) {
+  border-color: #8ba9d7;
+  background: #f7faff;
+  color: #2457d6;
+}
+
+.shell-v3-close-all:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.shell-v3-crumb {
+  min-height: 28px;
+  border-bottom-color: var(--shell-line);
+  background: #fff;
+}
+
+.shell-v3-workspace {
+  background: linear-gradient(180deg, #edf3fb 0, #f6f8fb 260px);
+}
+
+.shell-v3-workspace > *:not(.isnet-page) {
+  color: var(--shell-text);
+}
+
+.shell-v3-status {
+  border-top-color: var(--shell-line);
+  background: #fff;
+}
+
+@media (max-width: 760px) {
+  .shell-v3-close-all {
+    min-width: 42px;
+  }
+
+  .shell-v3-close-all span {
+    display: none;
+  }
+}
