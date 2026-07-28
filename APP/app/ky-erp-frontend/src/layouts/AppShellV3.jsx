@@ -23,6 +23,7 @@ export default function AppShellV3({
   onOpenTab,
   onActivateWorkspaceTab,
   onCloseWorkspaceTab,
+  onCloseAllWorkspaceTabs,
   onCompanyChange,
   onOpenMobileMenu,
   onCloseMobileMenu,
@@ -147,37 +148,50 @@ export default function AppShellV3({
           </div>
         </header>
 
-        <div className="shell-v3-tabs">
-          {tabs.map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              className={activeTabId === tab.id ? "active" : ""}
-              onClick={() => onActivateWorkspaceTab(tab)}
-            >
-              <span>{tab.label}</span>
-              {tabs.length > 1 ? (
-                <i
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Sekmeyi kapat"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCloseWorkspaceTab(tab.id);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
+        <div className="shell-v3-tabs-bar">
+          <div className="shell-v3-tabs">
+            {tabs.map((tab) => (
+              <button
+                type="button"
+                key={tab.id}
+                className={activeTabId === tab.id ? "active" : ""}
+                onClick={() => onActivateWorkspaceTab(tab)}
+              >
+                <span>{tab.label}</span>
+                {tabs.length > 1 ? (
+                  <i
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Sekmeyi kapat"
+                    onClick={(event) => {
                       event.stopPropagation();
                       onCloseWorkspaceTab(tab.id);
-                    }
-                  }}
-                >
-                  <X size={13} />
-                </i>
-              ) : null}
-            </button>
-          ))}
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onCloseWorkspaceTab(tab.id);
+                      }
+                    }}
+                  >
+                    <X size={13} />
+                  </i>
+                ) : null}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="shell-v3-close-all"
+            onClick={onCloseAllWorkspaceTabs}
+            disabled={tabs.length <= 1}
+            title="Diğer açık sekmelerin tamamını kapat"
+          >
+            <X size={14} />
+            <span>Tümünü Kapat</span>
+          </button>
         </div>
 
         <div className="shell-v3-crumb">
