@@ -5,6 +5,7 @@ on:
     branches:
       - arayuz-kabuk-v3
       - tasarim-dogru-v4
+      - tasarim-final-v1
   pull_request:
     branches:
       - main
