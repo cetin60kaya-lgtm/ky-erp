@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Archive, Mail, Printer } from "lucide-react";
 import IsnetPage from "../IsnetPage";
+import IsnetSelectedPrintPage from "./IsnetSelectedPrintPage";
 import "./IsnetArchiveDeliveryPage.css";
 
 const SECTIONS = [
   ["kesilen-belgeler", "Belge Arşivi", Archive],
-  ["cikti-kuyrugu", "Yazdırma", Printer],
+  ["selected-print", "Yazdırma", Printer],
   ["mail-merkezi", "Mail Gönderimi", Mail],
 ];
 
@@ -29,7 +30,11 @@ export default function IsnetArchiveDeliveryPage(props) {
           </button>
         ))}
       </div>
-      <IsnetPage {...props} activeTab={section} />
+      {section === "selected-print" ? (
+        <IsnetSelectedPrintPage />
+      ) : (
+        <IsnetPage {...props} activeTab={section} />
+      )}
     </div>
   );
 }
