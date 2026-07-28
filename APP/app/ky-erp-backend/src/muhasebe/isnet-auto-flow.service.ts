@@ -33,6 +33,10 @@ type AutoFlowRow = {
   quantity: number;
   outgoingDraftNo: string;
   outgoingSourceId: string;
+  invoiceRequestId?: string;
+  invoiceDraftNo?: string;
+  invoiceDraftVersion?: string;
+  officialInvoiceNo?: string;
   status: AutoFlowStatus;
   lastError: string;
   preview: Query | null;
@@ -54,6 +58,11 @@ const normalize = (value: unknown) =>
     .replace(/[^a-z0-9çğıöşü]+/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+const dateOnly = (value: unknown) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? clean(value).slice(0, 10) : date.toISOString().slice(0, 10);
+};
 
 @Injectable()
 export class IsnetAutoFlowService {
@@ -221,8 +230,7 @@ export class IsnetAutoFlowService {
         flow.updatedAt = now;
         flow.incomingIntakeId = intake.id;
         flow.modelName = clean(intake.modelGuess);
-        const nextRows = rows.filter((row) => row.id !== flow!.id).concat(flow);
-        await this.writeRows(slug, nextRows);
+        await this.writeRows(slug, rows.filter((row) => row.id !== flow!.id).concat(flow));
         return {
           ok: true,
           needsModel: true,
@@ -293,17 +301,14 @@ export class IsnetAutoFlowService {
       preview,
       updatedAt: now,
     });
-    await this.writeRows(
-      slug,
-      rows.filter((row) => row.id !== flow!.id).concat(flow),
-    );
+    await this.writeRows(slug, rows.filter((row) => row.id !== flow!.id).concat(flow));
     return {
       ok: true,
       flow,
       portalDraft: draft,
       message: draftNo
         ? `${draftNo} giden irsaliye taslağı hazır. İşNet'te kontrol edip gönderin.`
-        : "Giden irsaliye taslağı hazır. İşNet'te kontrol edip gönderin.",
+        : "Giden irsaliye taslağı hazır. İşNet'te kontrol edip gönderin; sistem gönderilmiş belgeyi otomatik bulacak.",
     };
   }
 
@@ -346,26 +351,13 @@ export class IsnetAutoFlowService {
     return flow;
   }
 
-  async refreshAfterDispatch(flowId: string, body: Query = {}) {
-    const slug = this.slug(body);
-    return this.withLock(`${slug}:refresh:${clean(flowId)}`, async () => {
-      const rows = await this.readRows(slug);
-      const flow = rows.find((row) => row.id === clean(flowId));
-      if (!flow) throw new NotFoundException("İşNet iş akışı bulunamadı.");
-      if (!flow.outgoingDraftNo) {
-        throw new BadRequestException(
-          "İşNet taslak numarası bulunamadı. Portalda görünen giden irsaliye numarasını girin.",
-        );
-      }
-
-      await this.fullSync.run({
-        ...body,
-        mainCompanySlug: slug,
-        startDate: clean(body.startDate || flow.issueDate),
-        endDate: clean(body.endDate || new Date().toISOString().slice(0, 10)),
-      });
-
-      const state = await this.prisma.isnetDocumentState.findFirst({
+  private async findSentDispatchCandidate(
+    slug: string,
+    flow: AutoFlowRow,
+    allFlows: AutoFlowRow[],
+  ) {
+    if (flow.outgoingDraftNo) {
+      const exact = await this.prisma.isnetDocumentState.findFirst({
         where: {
           mainCompanySlug: slug,
           direction: "outgoing",
@@ -375,6 +367,111 @@ export class IsnetAutoFlowService {
         },
         orderBy: { downloadedAt: "desc" },
       });
+      return exact ? { state: exact, candidates: [] as Query[] } : { state: null, candidates: [] as Query[] };
+    }
+
+    const states = await this.prisma.isnetDocumentState.findMany({
+      where: {
+        mainCompanySlug: slug,
+        direction: "outgoing",
+        kind: "dispatch",
+        completed: true,
+      },
+      orderBy: { downloadedAt: "desc" },
+      take: 100,
+    });
+    const usedSourceIds = new Set(
+      allFlows
+        .filter((row) => row.id !== flow.id)
+        .map((row) => clean(row.outgoingSourceId))
+        .filter(Boolean),
+    );
+    const usableStates = states.filter(
+      (state) => /^\d+$/.test(clean(state.sourceId)) && !usedSourceIds.has(clean(state.sourceId)),
+    );
+    const documentNos = usableStates.map((state) => clean(state.documentNo)).filter(Boolean);
+    const intakes = documentNos.length
+      ? await this.prisma.documentIntake.findMany({
+          where: {
+            mainCompanySlug: slug,
+            OR: [
+              { documentNo: { in: documentNos } },
+              { dispatchNo: { in: documentNos } },
+            ],
+          },
+          include: { lines: true },
+        })
+      : [];
+    const intakeByNo = new Map(
+      intakes.map((row) => [clean(row.documentNo || row.dispatchNo), row]),
+    );
+    const companyName = normalize(flow.companyName);
+    const modelName = normalize(flow.modelName);
+    const issueDate = dateOnly(flow.issueDate);
+    const candidates = usableStates
+      .map((state) => {
+        const intake = intakeByNo.get(clean(state.documentNo));
+        const partner = normalize(state.partnerName);
+        const candidateModel = normalize(state.modelName || intake?.modelGuess);
+        const quantity = (intake?.lines || []).reduce(
+          (sum: number, line: any) => sum + numberValue(line.quantity),
+          0,
+        );
+        const candidateDate = dateOnly(intake?.issueDate || state.dateText || state.downloadedAt);
+        const companyMatch = Boolean(
+          companyName && partner &&
+            (companyName === partner || companyName.includes(partner) || partner.includes(companyName)),
+        );
+        const modelMatch = Boolean(
+          modelName && candidateModel &&
+            (modelName === candidateModel || modelName.includes(candidateModel) || candidateModel.includes(modelName)),
+        );
+        const quantityMatch = quantity > 0 && Math.abs(quantity - flow.quantity) <= 0.0001;
+        const dateMatch = !issueDate || !candidateDate || issueDate === candidateDate;
+        const score =
+          (companyMatch ? 50 : 0) +
+          (quantityMatch ? 35 : 0) +
+          (modelMatch ? 15 : 0) +
+          (dateMatch ? 5 : 0);
+        return {
+          state,
+          documentNo: clean(state.documentNo),
+          sourceId: clean(state.sourceId),
+          partnerName: clean(state.partnerName),
+          modelName: clean(state.modelName || intake?.modelGuess),
+          quantity,
+          date: candidateDate,
+          score,
+        };
+      })
+      .filter((candidate) => candidate.score >= 100)
+      .sort((left, right) => right.score - left.score);
+
+    if (candidates.length === 1) {
+      return { state: candidates[0].state, candidates: [] as Query[] };
+    }
+    return {
+      state: null,
+      candidates: candidates.map(({ state: _state, ...candidate }) => candidate),
+    };
+  }
+
+  async refreshAfterDispatch(flowId: string, body: Query = {}) {
+    const slug = this.slug(body);
+    return this.withLock(`${slug}:refresh:${clean(flowId)}`, async () => {
+      const rows = await this.readRows(slug);
+      const flow = rows.find((row) => row.id === clean(flowId));
+      if (!flow) throw new NotFoundException("İşNet iş akışı bulunamadı.");
+
+      await this.fullSync.run({
+        ...body,
+        mainCompanySlug: slug,
+        startDate: clean(body.startDate || flow.issueDate),
+        endDate: clean(body.endDate || new Date().toISOString().slice(0, 10)),
+      });
+
+      const matched = await this.findSentDispatchCandidate(slug, flow, rows);
+      const state = matched.state;
       if (!state?.sourceId || !/^\d+$/.test(clean(state.sourceId))) {
         flow.status = "OUTGOING_SEND_REQUIRED";
         flow.updatedAt = new Date().toISOString();
@@ -382,9 +479,12 @@ export class IsnetAutoFlowService {
         return {
           ok: true,
           ready: false,
+          needsDispatchSelection: matched.candidates.length > 1,
+          candidates: matched.candidates,
           flow,
-          message:
-            "Taslak henüz İşNet gönderilmiş irsaliyeler listesinde görünmüyor. Taslağı gönderip tekrar kontrol edin.",
+          message: matched.candidates.length > 1
+            ? "Birden fazla gönderilmiş irsaliye aynı firma, model ve adetle eşleşti. Yalnız doğru belgeyi seçin."
+            : "Taslak henüz İşNet gönderilmiş irsaliyeler listesinde görünmüyor. Taslağı gönderip tekrar kontrol edin.",
         };
       }
 
@@ -392,6 +492,7 @@ export class IsnetAutoFlowService {
         clean(state.sourceId),
         { mainCompanySlug: slug },
       );
+      flow.outgoingDraftNo = clean(state.documentNo || flow.outgoingDraftNo);
       flow.outgoingSourceId = clean(state.sourceId);
       flow.invoiceSeed = invoiceSeed;
       flow.status = "PRICE_REQUIRED";
@@ -408,5 +509,28 @@ export class IsnetAutoFlowService {
         message: `${flow.outgoingDraftNo} gönderilmiş irsaliye olarak bulundu. Yalnız fiyat girilmesi gerekiyor.`,
       };
     });
+  }
+
+  async updateInvoiceState(flowId: string, body: Query = {}) {
+    const slug = this.slug(body);
+    const status = clean(body.status) as AutoFlowStatus;
+    if (!["INVOICE_DRAFT_READY", "COMPLETED"].includes(status)) {
+      throw new BadRequestException("Fatura iş akışı durumu geçersiz.");
+    }
+    const rows = await this.readRows(slug);
+    const flow = rows.find((row) => row.id === clean(flowId));
+    if (!flow) throw new NotFoundException("İşNet iş akışı bulunamadı.");
+    if (status === "INVOICE_DRAFT_READY" && !clean(body.requestId)) {
+      throw new BadRequestException("Fatura taslak işlem kimliği zorunludur.");
+    }
+    flow.status = status;
+    flow.invoiceRequestId = clean(body.requestId || flow.invoiceRequestId);
+    flow.invoiceDraftNo = clean(body.draftNo || flow.invoiceDraftNo);
+    flow.invoiceDraftVersion = clean(body.draftVersion || flow.invoiceDraftVersion);
+    flow.officialInvoiceNo = clean(body.officialInvoiceNo || flow.officialInvoiceNo);
+    flow.updatedAt = new Date().toISOString();
+    flow.lastError = "";
+    await this.writeRows(slug, rows);
+    return flow;
   }
 }
