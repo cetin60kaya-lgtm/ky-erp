@@ -187,6 +187,37 @@
   color: var(--shell-text);
 }
 
+.shell-v3-workspace .muhasebe-workbench {
+  --mh-blue: #2457d6;
+  --mh-dark: #0e2344;
+  --mh-border: #dfe6ef;
+  --mh-muted: #657287;
+  padding: 18px;
+}
+
+.shell-v3-workspace .muhasebe-workbench > .mh-tabs {
+  display: none;
+}
+
+.shell-v3-workspace .muhasebe-workbench .mh-page-head,
+.shell-v3-workspace .muhasebe-workbench .mh-card,
+.shell-v3-workspace .muhasebe-workbench .mh-summary,
+.shell-v3-workspace .muhasebe-workbench .mh-invoice-paper {
+  border-color: #dfe6ef;
+  border-radius: 16px;
+  box-shadow: 0 9px 24px rgba(17, 34, 62, 0.055);
+}
+
+.shell-v3-workspace .muhasebe-workbench .mh-page-head {
+  padding: 16px 18px;
+}
+
+.shell-v3-workspace .muhasebe-workbench .mh-btn.primary,
+.shell-v3-workspace .muhasebe-workbench .mh-tab-btn.active {
+  border-color: #2457d6;
+  background: #2457d6;
+}
+
 .shell-v3-status {
   border-top-color: var(--shell-line);
   background: #fff;
