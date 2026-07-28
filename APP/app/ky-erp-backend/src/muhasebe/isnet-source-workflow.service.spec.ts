@@ -37,9 +37,14 @@ test("portal taslak numarası doğrulanmadan kaynak adedini tamamlanmış saymaz
   };
   const operations = {
     recipientSearch: async () => ({ rows: [{ id: "recipient-1", name: "Taha Giyim" }] }),
-    createManualDispatchDraft: async (body: any) => {
+  };
+  const preparation = {
+    createDraft: async (body: any) => {
       sequence.push("portal-draft");
-      assert.equal(body.externalId, "KYERP-SOURCE-source-1-local-draft-1");
+      assert.equal(body.flowId, "SOURCE-source-1-local-draft-1");
+      assert.equal(body.previewApproved, true);
+      assert.equal(body.quantity, undefined);
+      assert.equal(body.lines[0].quantity, 40);
       return { ok: true, draftNo: "HKN2026001" };
     },
   };
@@ -48,11 +53,13 @@ test("portal taslak numarası doğrulanmadan kaynak adedini tamamlanmış saymaz
     operations as any,
     {} as any,
     {} as any,
+    preparation as any,
   );
 
   const result = await service.createOutgoingDraft("source-1", {
     mainCompanySlug: "mecit-hakan",
     quantity: 40,
+    previewApproved: true,
   });
 
   assert.deepEqual(sequence, ["local-draft", "portal-draft", "complete"]);
@@ -72,7 +79,9 @@ test("belirsiz eski portal isteğinde otomatik ikinci taslak oluşturmaz", async
   };
   const operations = {
     recipientSearch: async () => ({ rows: [] }),
-    createManualDispatchDraft: async () => {
+  };
+  const preparation = {
+    createDraft: async () => {
       portalCalled = true;
       return {};
     },
@@ -82,6 +91,7 @@ test("belirsiz eski portal isteğinde otomatik ikinci taslak oluşturmaz", async
     operations as any,
     {} as any,
     {} as any,
+    preparation as any,
   );
 
   await assert.rejects(
@@ -89,6 +99,7 @@ test("belirsiz eski portal isteğinde otomatik ikinci taslak oluşturmaz", async
       service.createOutgoingDraft("source-1", {
         mainCompanySlug: "mecit-hakan",
         quantity: 40,
+        previewApproved: true,
       }),
     /otomatik ikinci istek engellendi/,
   );
