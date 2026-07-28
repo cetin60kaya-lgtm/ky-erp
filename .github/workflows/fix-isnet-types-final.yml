@@ -1,0 +1,72 @@
+name: İşNet Muhasebe Tip Hatalarını Düzelt
+
+on:
+  push:
+    branches: [tasarim-final-v1]
+    paths: [.github/workflows/fix-isnet-types-final.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-test-commit:
+    runs-on: windows-latest
+    env:
+      DATABASE_URL: file:./ci-isnet.db
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tasarim-final-v1
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-backend/package-lock.json
+
+      - name: TypeScript tiplerini düzelt
+        shell: pwsh
+        run: |
+          $dispatch = 'APP/app/ky-erp-backend/src/muhasebe/isnet-dispatch-flow-coordinator.service.ts'
+          $c = Get-Content $dispatch -Raw
+          foreach ($id in @('TEST_NUMUNESI','BASKI_SAKATI','KUMAS_SAKATI')) {
+            $pattern = '(sourceLineId:\s*"' + $id + '"[\s\S]*?unitPrice:\s*0,)(\s*\})'
+            $c = [regex]::Replace($c, $pattern, '$1' + "`n          sourceQuantity: 0,`n          lockedDescription: true," + '$2', 1)
+          }
+          Set-Content $dispatch $c -Encoding utf8
+
+          $smart = 'APP/app/ky-erp-backend/src/muhasebe/muhasebe-smart-match.service.ts'
+          $s = Get-Content $smart -Raw
+          $s = $s.Replace('const productMap = new Map(products.map((row: any) => [row.id, row]));', 'const productMap = new Map<string, any>(products.map((row: any) => [row.id, row]));')
+          $s = $s.Replace('const documentMap = new Map(', 'const documentMap = new Map<string, any>(')
+          Set-Content $smart $s -Encoding utf8
+
+          if ((Select-String -Path $dispatch -Pattern 'sourceQuantity: 0' -AllMatches).Matches.Count -lt 3) { throw 'Özel irsaliye kalemleri tip düzeltmesi eksik.' }
+          if (-not $s.Contains('new Map<string, any>')) { throw 'Muhasebe map tipleri düzeltilemedi.' }
+
+      - name: Backend bağımlılıklarını kur
+        working-directory: APP/app/ky-erp-backend
+        run: npm ci
+      - name: Prisma üret
+        working-directory: APP/app/ky-erp-backend
+        run: npm run db:generate
+      - name: Backend build
+        working-directory: APP/app/ky-erp-backend
+        run: npm run build
+      - name: İşNet testleri
+        working-directory: APP/app/ky-erp-backend
+        run: npm run test:isnet
+
+      - name: Doğrulanmış düzeltmeyi commit et
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-isnet-types-final.yml
+          git add APP/app/ky-erp-backend/src/muhasebe/isnet-dispatch-flow-coordinator.service.ts
+          git add APP/app/ky-erp-backend/src/muhasebe/muhasebe-smart-match.service.ts
+          git commit -m "İşNet ve muhasebe TypeScript hatalarını düzelt"
+          git push origin HEAD:tasarim-final-v1
