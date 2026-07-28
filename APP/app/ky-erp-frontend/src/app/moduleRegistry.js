@@ -4,24 +4,44 @@ export const MODULES = [
     permissionKey: "MUHASEBE",
     label: "Muhasebe",
     icon: "cari-kasa",
-    tabs: [
-      ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
-      ["firma-kartlari", "Firma Kartları", "firma-kartlari"],
-      ["firma-yetkilileri", "Firma Yetkilileri", "users"],
-      ["gider-kategorileri", "Gider Kategorileri", "raporlar"],
-      ["tedarikci-faturalar", "Tedarikçi Faturaları", "tedarikci-fatura"],
-      ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
-      ["musteri-irsaliyeleri", "İrsaliyeler", "musteri-irsaliye"],
-      ["irsaliye-fatura-kontrol", "İrsaliye / Fatura", "file-check"],
-      ["model-takip", "Model Üretim Takibi", "model-takip-merkezi"],
-      ["cari-hareketler", "Cari Hareketler", "cari-kasa"],
-      ["kar-zarar", "Gelir / Gider", "raporlar"],
-      ["envanter-urunleri", "Ürünler", "urunler"],
-      ["kdv-kontrol", "KDV Kontrol", "kdv"],
-      ["cek-odeme", "Çek / Ödeme", "cekler"],
-      ["mail-ekstre", "Mail / Ekstre", "eposta"],
-      ["mail-sablonlari", "Mail Şablonları", "eposta"],
-      ["muhasebe-raporlari", "Raporlar", "raporlar"],
+    groups: [
+      {
+        label: "Genel Yönetim",
+        tabs: [
+          ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
+          ["firma-kartlari", "Firma Kartları", "firma-kartlari"],
+          ["firma-yetkilileri", "Firma Yetkilileri", "users"],
+          ["gider-kategorileri", "Gider Kategorileri", "raporlar"],
+        ],
+      },
+      {
+        label: "Fatura ve İrsaliye",
+        tabs: [
+          ["tedarikci-faturalar", "Tedarikçi Faturaları", "tedarikci-fatura"],
+          ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
+          ["musteri-irsaliyeleri", "İrsaliyeler", "musteri-irsaliye"],
+          ["irsaliye-fatura-kontrol", "İrsaliye / Fatura", "file-check"],
+          ["model-takip", "Model Üretim Takibi", "model-takip-merkezi"],
+        ],
+      },
+      {
+        label: "Finans ve Kontrol",
+        tabs: [
+          ["cari-hareketler", "Cari Hareketler", "cari-kasa"],
+          ["kar-zarar", "Gelir / Gider", "raporlar"],
+          ["envanter-urunleri", "Ürünler", "urunler"],
+          ["kdv-kontrol", "KDV Kontrol", "kdv"],
+          ["cek-odeme", "Çek / Ödeme", "cekler"],
+        ],
+      },
+      {
+        label: "Mail ve Rapor",
+        tabs: [
+          ["mail-ekstre", "Mail / Ekstre", "eposta"],
+          ["mail-sablonlari", "Mail Şablonları", "eposta"],
+          ["muhasebe-raporlari", "Raporlar", "raporlar"],
+        ],
+      },
     ],
   },
   {
@@ -29,13 +49,23 @@ export const MODULES = [
     permissionKey: "ISNET",
     label: "İşNet",
     icon: "eposta",
-    tabs: [
-      ["yonetim-merkezi", "Analiz ve Eşleştirme", "dashboard"],
-      ["belge-akisi", "Gelen / Giden Belgeler", "dosya"],
-      ["irsaliyeden-faturaya", "Fatura Kesme Yardımcısı", "file-check"],
-      ["kesilen-belgeler", "Yerel Belge Arşivi", "dosya"],
-      ["cikti-kuyrugu", "Çıktı ve Mail", "file-check"],
-      ["ayarlar", "Ayarlar", "ayarlar"],
+    groups: [
+      {
+        label: "Belge Yönetimi",
+        tabs: [
+          ["yonetim-merkezi", "Analiz ve Eşleştirme", "dashboard"],
+          ["belge-akisi", "Gelen / Giden Belgeler", "dosya"],
+          ["irsaliyeden-faturaya", "Fatura Kesme Yardımcısı", "file-check"],
+        ],
+      },
+      {
+        label: "Arşiv ve Çıktı",
+        tabs: [
+          ["kesilen-belgeler", "Yerel Belge Arşivi", "dosya"],
+          ["cikti-kuyrugu", "Çıktı ve Mail", "file-check"],
+          ["ayarlar", "Ayarlar", "ayarlar"],
+        ],
+      },
     ],
   },
   {
@@ -43,11 +73,19 @@ export const MODULES = [
     permissionKey: "DESEN",
     label: "Desen",
     icon: "dosya",
-    tabs: [
-      ["gelen-desenler", "Gelen Desenler", "dashboard"],
-      ["desen-modeller", "Desen Havuzu", "dosya"],
-      ["desen-yerlesim-is-akisi", "Yerleşim / Kalıp", "file-check"],
-      ["desen-raporlari", "Desen Raporları", "raporlar"],
+    groups: [
+      {
+        label: "Desen İşlemleri",
+        tabs: [
+          ["gelen-desenler", "Gelen Desenler", "dashboard"],
+          ["desen-modeller", "Desen Havuzu", "dosya"],
+          ["desen-yerlesim-is-akisi", "Yerleşim / Kalıp", "file-check"],
+        ],
+      },
+      {
+        label: "Rapor",
+        tabs: [["desen-raporlari", "Desen Raporları", "raporlar"]],
+      },
     ],
   },
   {
@@ -55,14 +93,24 @@ export const MODULES = [
     permissionKey: "BOYAHANE",
     label: "Boyahane",
     icon: "renk",
-    tabs: [
-      ["is-akisi", "İş Akışı", "dashboard"],
-      ["kayitli-renkler", "Kayıtlı Renkler", "renk"],
-      ["receteler", "Reçeteler", "file-check"],
-      ["urun-lotlar", "Ürün ve Lotlar", "urunler"],
-      ["uretim-gecmisi", "Üretim Geçmişi", "dosya"],
-      ["boya-giderleri", "Boya Giderleri", "odeme"],
-      ["raporlar", "Raporlar", "raporlar"],
+    groups: [
+      {
+        label: "Üretim Akışı",
+        tabs: [
+          ["is-akisi", "İş Akışı", "dashboard"],
+          ["kayitli-renkler", "Kayıtlı Renkler", "renk"],
+          ["receteler", "Reçeteler", "file-check"],
+        ],
+      },
+      {
+        label: "Stok ve Geçmiş",
+        tabs: [
+          ["urun-lotlar", "Ürün ve Lotlar", "urunler"],
+          ["uretim-gecmisi", "Üretim Geçmişi", "dosya"],
+          ["boya-giderleri", "Boya Giderleri", "odeme"],
+          ["raporlar", "Raporlar", "raporlar"],
+        ],
+      },
     ],
   },
   {
@@ -98,9 +146,14 @@ export const MODULES = [
     permissionKey: "IMALAT",
     label: "İmalat",
     icon: "dashboard",
-    tabs: [
-      ["uretim-girisi", "Üretim Girişi", "dashboard"],
-      ["imalat-kontrol-rapor", "Denetim ve Rapor", "raporlar"],
+    groups: [
+      {
+        label: "Üretim",
+        tabs: [
+          ["uretim-girisi", "Üretim Girişi", "dashboard"],
+          ["imalat-kontrol-rapor", "Denetim ve Rapor", "raporlar"],
+        ],
+      },
     ],
   },
   {
@@ -115,13 +168,23 @@ export const MODULES = [
     permissionKey: "ADMIN",
     label: "Yönetim",
     icon: "ayarlar",
-    tabs: [
-      ["admin-yonetim-ozeti", "Yönetim Özeti", "dashboard"],
-      ["kullanicilar", "Kullanıcılar", "users"],
-      ["ana-firma-ayarlar", "Ana Firma / Ayarlar", "ayarlar"],
-      ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
-      ["eslestirmeler", "Eşleştirmeler", "file-check"],
-      ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
+    groups: [
+      {
+        label: "Sistem Yönetimi",
+        tabs: [
+          ["admin-yonetim-ozeti", "Yönetim Özeti", "dashboard"],
+          ["kullanicilar", "Kullanıcılar", "users"],
+          ["ana-firma-ayarlar", "Ana Firma / Ayarlar", "ayarlar"],
+        ],
+      },
+      {
+        label: "Dosya ve Güvenlik",
+        tabs: [
+          ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
+          ["eslestirmeler", "Eşleştirmeler", "file-check"],
+          ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
+        ],
+      },
     ],
   },
 ];
