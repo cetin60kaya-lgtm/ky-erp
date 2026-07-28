@@ -27,11 +27,12 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
         tabKey,
         label: resolveLabel(moduleKey, tabKey),
       };
-      setTabs((current) =>
+
+      setTabs((current) => (
         current.some((item) => item.id === next.id)
           ? current
-          : [...current, next],
-      );
+          : [...current, next]
+      ));
       setActiveRoute({ moduleKey, tabKey });
       return next;
     },
@@ -59,6 +60,17 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
     }
   }, [activeId, tabs]);
 
+  const closeAllTabs = useCallback(() => {
+    const activeTab = tabs.find((item) => item.id === activeId) || tabs[0];
+    if (!activeTab) return;
+
+    setTabs([activeTab]);
+    setActiveRoute({
+      moduleKey: activeTab.moduleKey,
+      tabKey: activeTab.tabKey,
+    });
+  }, [activeId, tabs]);
+
   const replaceActiveRoute = useCallback(
     (moduleKey, tabKey) => {
       const next = {
@@ -67,6 +79,7 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
         tabKey,
         label: resolveLabel(moduleKey, tabKey),
       };
+
       setTabs((current) => {
         const oldId = tabId(activeRoute.moduleKey, activeRoute.tabKey);
         const withoutOld = current.filter((item) => item.id !== oldId);
@@ -86,6 +99,7 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
     openTab,
     activateTab,
     closeTab,
+    closeAllTabs,
     replaceActiveRoute,
   };
 }
