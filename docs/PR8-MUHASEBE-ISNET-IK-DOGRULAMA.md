@@ -64,4 +64,4 @@ Fatura önizleme ve kontrollü gönderim için kullanılan gizli işlem rotası 
 
 ## İşNet güvenlik sınırı
 
-Kod, rota, build ve otomatik davranış testleri doğrulanmıştır. Gerçek İşNet hesabında canlı giden irsaliye veya resmî fatura gönderimi yapılmamıştır. Canlı portal testi, gerçek sabit taşıyıcı bilgileri, gerçek test-numunesi muafiyet kodu ve yerel kayıt merkezi verileri doğrulanmadan PR taslak durumda kalır ve `main` dalına birleştirilmez.
+Kod, rota, build ve otomatik davranış testleri doğrulanmıştır. Gerçek İşNet hesabında canlı giden irsaliye veya resmî fatura gönderimi yapılmamıştır. Gerçek sabit taşıyıcı bilgileri, test-numunesi muafiyet kodu ve TAHA 125 kişi kayıtları yerel kayıt merkezine girilip canlı portal geri okuması doğrulanmadan PR taslak durumda kalır ve `main` dalına birleştirilmez.
