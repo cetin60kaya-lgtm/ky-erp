@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 function tabId(moduleKey, tabKey) {
   return `${moduleKey}:${tabKey}`;
@@ -13,6 +13,11 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
       label: resolveLabel(initialRoute.moduleKey, initialRoute.tabKey),
     },
   ]);
+  const tabsRef = useRef(tabs);
+  const activeRouteRef = useRef(activeRoute);
+
+  tabsRef.current = tabs;
+  activeRouteRef.current = activeRoute;
 
   const activeId = useMemo(
     () => tabId(activeRoute.moduleKey, activeRoute.tabKey),
@@ -39,23 +44,44 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
   );
 
   const activateTab = useCallback((item) => {
+    if (!item) return;
     setActiveRoute({ moduleKey: item.moduleKey, tabKey: item.tabKey });
   }, []);
 
-  const closeTab = useCallback(
-    (id) => {
-      let fallback = null;
-      setTabs((current) => {
-        const index = current.findIndex((item) => item.id === id);
-        if (index < 0 || current.length === 1) return current;
-        const next = current.filter((item) => item.id !== id);
-        if (id === activeId) fallback = next[Math.max(0, index - 1)] || next[0];
-        return next;
-      });
-      if (fallback) activateTab(fallback);
-    },
-    [activeId, activateTab],
-  );
+  const closeTab = useCallback((id) => {
+    const current = tabsRef.current;
+    if (current.length <= 1) return;
+
+    const index = current.findIndex((item) => item.id === id);
+    if (index < 0) return;
+
+    const next = current.filter((item) => item.id !== id);
+    const currentActiveId = tabId(
+      activeRouteRef.current.moduleKey,
+      activeRouteRef.current.tabKey,
+    );
+
+    setTabs(next);
+    if (id === currentActiveId) {
+      activateTab(next[Math.max(0, index - 1)] || next[0]);
+    }
+  }, [activateTab]);
+
+  const replaceActiveRoute = useCallback((moduleKey, tabKey) => {
+    const nextId = tabId(moduleKey, tabKey);
+    const next = {
+      id: nextId,
+      moduleKey,
+      tabKey,
+      label: resolveLabel(moduleKey, tabKey),
+    };
+
+    setTabs((current) => {
+      if (current.some((item) => item.id === nextId)) return current;
+      return [...current, next];
+    });
+    setActiveRoute({ moduleKey, tabKey });
+  }, [resolveLabel]);
 
   return {
     tabs,
@@ -64,5 +90,6 @@ export function useWorkspaceTabs(initialRoute, resolveLabel) {
     openTab,
     activateTab,
     closeTab,
+    replaceActiveRoute,
   };
 }
