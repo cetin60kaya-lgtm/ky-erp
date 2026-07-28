@@ -1,4 +1,4 @@
-name: Frontend Shell Check
+name: KY ERP Frontend ve İşNet Kontrolü
 
 on:
   push:
@@ -67,5 +67,67 @@ jobs:
           if ($buildOutcome -ne "success" -or $lintOutcome -ne "success") {
             if (Test-Path build.log) { Get-Content build.log -Tail 100 }
             if (Test-Path lint.log) { Get-Content lint.log -Tail 100 }
+            exit 1
+          }
+
+  isnet-backend:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-backend/package-lock.json
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Prisma client üret
+        run: npm run db:generate
+
+      - name: Backend build
+        id: backend_build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          npm run build *>&1 | Tee-Object -FilePath backend-build.log
+          exit $LASTEXITCODE
+
+      - name: İşNet testleri
+        id: isnet_tests
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          npm run test:isnet *>&1 | Tee-Object -FilePath isnet-tests.log
+          exit $LASTEXITCODE
+
+      - name: Backend loglarını yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isnet-backend-check-logs
+          path: |
+            APP/app/ky-erp-backend/backend-build.log
+            APP/app/ky-erp-backend/isnet-tests.log
+          if-no-files-found: ignore
+
+      - name: Backend sonucunu doğrula
+        if: always()
+        shell: pwsh
+        run: |
+          $buildOutcome = "${{ steps.backend_build.outcome }}"
+          $testOutcome = "${{ steps.isnet_tests.outcome }}"
+          Write-Host "Backend build: $buildOutcome"
+          Write-Host "İşNet testleri: $testOutcome"
+          if ($buildOutcome -ne "success" -or $testOutcome -ne "success") {
+            if (Test-Path backend-build.log) { Get-Content backend-build.log -Tail 120 }
+            if (Test-Path isnet-tests.log) { Get-Content isnet-tests.log -Tail 160 }
             exit 1
           }
