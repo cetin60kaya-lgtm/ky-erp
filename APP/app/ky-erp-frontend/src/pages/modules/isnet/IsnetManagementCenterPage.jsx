@@ -41,6 +41,18 @@ function dateTime(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("tr-TR");
 }
 
+function flowStatus(value) {
+  return {
+    MODEL_REQUIRED: "Model onayı gerekiyor",
+    OUTGOING_DRAFT_READY: "İrsaliye taslağı hazırlanıyor",
+    OUTGOING_SEND_REQUIRED: "Taslak gönderilecek",
+    PRICE_REQUIRED: "Fiyat bekliyor",
+    INVOICE_DRAFT_READY: "Fatura taslağı hazır",
+    COMPLETED: "Tamamlandı",
+    ERROR: "Kontrol gerekiyor",
+  }[value] || value || "Hazır";
+}
+
 export default function IsnetManagementCenterPage({ openModule }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -48,6 +60,7 @@ export default function IsnetManagementCenterPage({ openModule }) {
   const [settings, setSettings] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [documentTotal, setDocumentTotal] = useState(0);
   const [flows, setFlows] = useState([]);
   const range = useMemo(() => ({ startDate: recentStartText(), endDate: todayText() }), []);
 
@@ -63,6 +76,7 @@ export default function IsnetManagementCenterPage({ openModule }) {
       setSettings(settingResult);
       setSyncStatus(statusResult);
       setDocuments(rowsOf(documentResult));
+      setDocumentTotal(Number(documentResult?.totalLocal || documentResult?.total || rowsOf(documentResult).length));
       setFlows(rowsOf(flowResult));
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "İşNet yönetim bilgileri alınamadı." });
@@ -90,11 +104,14 @@ export default function IsnetManagementCenterPage({ openModule }) {
   }, [documents, flows]);
 
   const connectionReady = Boolean(
-    settings?.companyId &&
-      (settings?.hasStoredPassword || settings?.passwordSaved || settings?.passwordConfigured) &&
-      (settings?.username || settings?.usernameMasked),
+    settings?.companyId && settings?.hasPassword && settings?.username,
   );
-  const lastSyncAt = syncStatus?.completedAt || syncStatus?.lastRunAt || settings?.lastSuccessfulSyncAt;
+  const connectionLabel = connectionReady
+    ? settings?.connectionMode === "portal"
+      ? "İşNet portal bağlantısı kayıtlı"
+      : "İşNet API bağlantısı kayıtlı"
+    : "Yerel mod – bağlantı bilgileri eksik";
+  const lastSyncAt = syncStatus?.completedAt || syncStatus?.lastRunAt;
 
   async function synchronize() {
     setBusy(true);
@@ -140,20 +157,16 @@ export default function IsnetManagementCenterPage({ openModule }) {
       {notice && <div className={`isnet-notice isnet-notice--${notice.tone || "info"}`}>{notice.text}</div>}
 
       <section className={`isnet-connection-strip ${connectionReady ? "ready" : "offline"}`}>
-        <div>{connectionReady ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}<strong>{connectionReady ? "İşNet bağlantı bilgileri kayıtlı" : "Yerel mod – bağlantı bilgileri eksik"}</strong><span>{settings?.companyName || "İşNet firması seçilmedi"}</span></div>
+        <div>{connectionReady ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}<strong>{connectionLabel}</strong><span>{settings?.companyName || "İşNet firması seçilmedi"}</span></div>
         <div><small>Son başarılı senkronizasyon</small><strong>{dateTime(lastSyncAt)}</strong></div>
-        <div><small>Yerel belge</small><strong>{documents.length} kayıt</strong></div>
+        <div><small>Son bağlantı testi / yerel belge</small><strong>{dateTime(settings?.testedAt)} · {documentTotal} kayıt</strong></div>
       </section>
 
-      {loading ? <section className="isnet-card"><div className="isnet-empty"><LoaderCircle className="spin" /><strong>Gerçek durum hesaplanıyor</strong></div></section> : (
-        <section className="isnet-management-grid">
-          {workItems.map(([label, value, tabKey, Icon]) => <button key={label} type="button" className={Number(value) > 0 ? "attention" : "clear"} onClick={() => openModule?.("isnet", { tabKey })}><span><Icon size={18} /></span><div><small>{label}</small><strong>{value}</strong><p>{Number(value) > 0 ? "İncelemek için aç" : "Bekleyen işlem yok"}</p></div></button>)}
-        </section>
-      )}
+      {loading ? <section className="isnet-card"><div className="isnet-empty"><LoaderCircle className="spin" /><strong>Gerçek durum hesaplanıyor</strong></div></section> : <section className="isnet-management-grid">{workItems.map(([label, value, tabKey, Icon]) => <button key={label} type="button" className={Number(value) > 0 ? "attention" : "clear"} onClick={() => openModule?.("isnet", { tabKey })}><span><Icon size={18} /></span><div><small>{label}</small><strong>{value}</strong><p>{Number(value) > 0 ? "İncelemek için aç" : "Bekleyen işlem yok"}</p></div></button>)}</section>}
 
       <section className="isnet-card">
         <div className="isnet-section-head"><div><small>SON OTOMATİK İŞLER</small><h2>İrsaliye ve fatura akışı</h2><p>Yalnız açık veya kontrol bekleyen işlemler gösterilir.</p></div><button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openModule?.("isnet", { tabKey: "is-akisi" })}>İş Akışını Aç</button></div>
-        {flows.filter((row) => row.status !== "COMPLETED").length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Açık otomatik iş yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri</th><th>Model</th><th>Adet</th><th>Durum</th></tr></thead><tbody>{flows.filter((row) => row.status !== "COMPLETED").slice(0, 12).map((row) => <tr key={row.id}><td><strong>{row.incomingDocumentNo || row.incomingSourceId}</strong></td><td>{row.companyName}</td><td>{row.modelName || "Model bekliyor"}</td><td>{row.quantity}</td><td><span className="isnet-badge isnet-badge--blue">{row.status}</span></td></tr>)}</tbody></table></div>}
+        {flows.filter((row) => row.status !== "COMPLETED").length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Açık otomatik iş yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri</th><th>Model</th><th>Adet</th><th>Durum</th></tr></thead><tbody>{flows.filter((row) => row.status !== "COMPLETED").slice(0, 12).map((row) => <tr key={row.id}><td><strong>{row.incomingDocumentNo || row.incomingSourceId}</strong></td><td>{row.companyName}</td><td>{row.modelName || "Model bekliyor"}</td><td>{row.quantity}</td><td><span className="isnet-badge isnet-badge--blue">{flowStatus(row.status)}</span></td></tr>)}</tbody></table></div>}
       </section>
     </main>
   );
