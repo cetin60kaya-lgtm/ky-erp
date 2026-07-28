@@ -85,7 +85,7 @@ export default function IsnetAutomationWorkflowPage({
   const [models, setModels] = useState([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [modelDecision, setModelDecision] = useState(null);
-  const [outgoingNoDraft, setOutgoingNoDraft] = useState({});
+  const [dispatchCandidates, setDispatchCandidates] = useState({});
   const [manualForm, setManualForm] = useState({
     companyId: "",
     modelId: "",
@@ -161,6 +161,27 @@ export default function IsnetAutomationWorkflowPage({
 
   const selectedCompany = customerCompanies.find((row) => row.id === manualForm.companyId) || null;
   const selectedModel = models.find((row) => row.id === manualForm.modelId) || null;
+
+  function openInvoiceFlow(flow, values = {}) {
+    const invoiceDraft = values.invoiceDraft || flow.invoiceSeed;
+    const sourceId = values.sourceId || flow.outgoingSourceId;
+    if (!invoiceDraft || !sourceId) {
+      setNotice({ tone: "warning", text: "Faturaya çevrilecek gönderilmiş irsaliye henüz doğrulanmadı." });
+      return;
+    }
+    openModule?.("isnet", {
+      tabKey: "irsaliyeden-faturaya",
+      actionContext: {
+        sourceId,
+        documentNo: values.documentNo || flow.outgoingDraftNo,
+        invoiceDraft,
+        autoFlowId: flow.id,
+        existingRequestId: flow.invoiceRequestId || "",
+        existingDraftNo: flow.invoiceDraftNo || "",
+        existingDraftVersion: flow.invoiceDraftVersion || "",
+      },
+    });
+  }
 
   async function synchronize() {
     setBusy("sync");
@@ -239,44 +260,56 @@ export default function IsnetAutomationWorkflowPage({
     }
   }
 
-  async function saveOutgoingNo(flow) {
-    const documentNo = String(outgoingNoDraft[flow.id] || "").trim();
-    if (!documentNo) {
-      setNotice({ tone: "warning", text: "İşNet'te görünen giden irsaliye numarasını girin." });
-      return;
-    }
-    setBusy(`number-${flow.id}`);
-    try {
-      await setIsnetAutoFlowOutgoingNo(flow.id, documentNo);
-      setNotice({ tone: "success", text: `${documentNo} işlem kaydına bağlandı.` });
-      await load();
-    } catch (error) {
-      setNotice({ tone: "error", text: error?.message || "İrsaliye numarası kaydedilemedi." });
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function findSentDispatch(flow) {
     setBusy(`refresh-${flow.id}`);
     setNotice(null);
     try {
       const result = await refreshIsnetAutoFlow(flow.id, range);
+      if (result.needsDispatchSelection) {
+        setDispatchCandidates((current) => ({
+          ...current,
+          [flow.id]: result.candidates || [],
+        }));
+      } else {
+        setDispatchCandidates((current) => {
+          const next = { ...current };
+          delete next[flow.id];
+          return next;
+        });
+      }
       setNotice({ tone: result.ready ? "success" : "warning", text: result.message });
       if (result.ready) {
-        openModule?.("isnet", {
-          tabKey: "irsaliyeden-faturaya",
-          actionContext: {
-            sourceId: result.sourceId,
-            documentNo: result.documentNo,
-            invoiceDraft: result.invoiceDraft,
-            autoFlowId: flow.id,
-          },
-        });
+        openInvoiceFlow(flow, result);
       }
       await load();
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Gönderilmiş irsaliye bulunamadı." });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function selectSentDispatch(flow, candidate) {
+    setBusy(`candidate-${flow.id}-${candidate.sourceId}`);
+    setNotice(null);
+    try {
+      await setIsnetAutoFlowOutgoingNo(flow.id, candidate.documentNo);
+      const result = await refreshIsnetAutoFlow(flow.id, range);
+      setDispatchCandidates((current) => {
+        const next = { ...current };
+        delete next[flow.id];
+        return next;
+      });
+      setNotice({ tone: result.ready ? "success" : "warning", text: result.message });
+      if (result.ready) {
+        openInvoiceFlow(
+          { ...flow, outgoingDraftNo: candidate.documentNo },
+          result,
+        );
+      }
+      await load();
+    } catch (error) {
+      setNotice({ tone: "error", text: error?.message || "Gönderilmiş irsaliye seçilemedi." });
     } finally {
       setBusy("");
     }
@@ -361,6 +394,22 @@ export default function IsnetAutomationWorkflowPage({
     }
   }
 
+  function renderFlowAction(flow) {
+    if (flow.status === "MODEL_REQUIRED") {
+      return <button type="button" className="isnet-btn isnet-btn--primary" disabled={busy === `suggestions-${flow.id}`} onClick={() => openPersistedModelDecision(flow)}>{busy === `suggestions-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />} Model Seç</button>;
+    }
+    if (flow.status === "PRICE_REQUIRED" && flow.invoiceSeed) {
+      return <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openInvoiceFlow(flow)}><ReceiptText size={14} /> Fiyat Gir ve Faturala</button>;
+    }
+    if (flow.status === "INVOICE_DRAFT_READY" && flow.invoiceSeed && flow.invoiceRequestId) {
+      return <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openInvoiceFlow(flow)}><ReceiptText size={14} /> Mevcut Fatura Taslağını Aç</button>;
+    }
+    if (flow.status === "COMPLETED") {
+      return <span className="isnet-complete-label"><CheckCircle2 size={15} /> {flow.officialInvoiceNo || "İşlem tamamlandı"}</span>;
+    }
+    return <button type="button" className="isnet-btn isnet-btn--secondary" disabled={busy === `refresh-${flow.id}`} onClick={() => findSentDispatch(flow)}>{busy === `refresh-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Gönderilmiş İrsaliyeyi Otomatik Bul</button>;
+  }
+
   return (
     <main className="isnet-page isnet-auto-page" aria-busy={loading}>
       <header className="isnet-hero">
@@ -394,8 +443,8 @@ export default function IsnetAutomationWorkflowPage({
 
       {modelDecision && <section className="isnet-card isnet-exception-card"><div className="isnet-section-head"><div><small>YALNIZ İSTİSNA</small><h2>Model eşleşmesini onaylayın</h2><p>Firma ve adet hazırdır; yalnız güvenli olmayan model eşleşmesi soruluyor.</p></div><AlertTriangle /></div><div className="isnet-model-choice-grid">{modelDecision.suggestions.length ? modelDecision.suggestions.map((candidate) => <button key={`${candidate.source}-${candidate.id}`} type="button" onClick={() => approveModel(candidate)} disabled={busy === `model-${candidate.id}`}><strong>{candidate.name}</strong><small>{candidate.code || "Kod yok"} · %{candidate.score} eşleşme</small></button>) : <div className="isnet-empty"><AlertTriangle /><strong>Otomatik model bulunamadı</strong><p>Desen Havuzu'nda model açıldıktan sonra tekrar deneyin.</p></div>}</div></section>}
 
-      <section className="isnet-card"><div className="isnet-section-head"><div><small>AKTİF İŞLER</small><h2>Kontrol ve devam işlemleri</h2><p>Aynı kaynak için ikinci taslak oluşturulmaz; işlem kaldığı adımdan devam eder.</p></div></div>
-        {flows.length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Aktif otomatik iş akışı yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri / Model</th><th>Adet</th><th>Giden Taslak</th><th>Durum</th><th>Devam</th></tr></thead><tbody>{flows.map((flow) => <tr key={flow.id}><td><strong>{flow.incomingDocumentNo || flow.incomingSourceId}</strong><small>{flow.issueDate}</small></td><td>{flow.companyName}<small>{flow.modelName || "Model bekliyor"}</small></td><td>{flow.quantity}</td><td>{flow.outgoingDraftNo || <div className="isnet-inline-number"><input value={outgoingNoDraft[flow.id] || ""} onChange={(event) => setOutgoingNoDraft((current) => ({ ...current, [flow.id]: event.target.value }))} placeholder="Portal irsaliye no" /><button type="button" onClick={() => saveOutgoingNo(flow)}>Kaydet</button></div>}</td><td><span className="isnet-badge isnet-badge--blue">{statusLabel(flow.status)}</span></td><td>{flow.status === "MODEL_REQUIRED" ? <button type="button" className="isnet-btn isnet-btn--primary" disabled={busy === `suggestions-${flow.id}`} onClick={() => openPersistedModelDecision(flow)}>{busy === `suggestions-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />} Model Seç</button> : flow.status === "PRICE_REQUIRED" && flow.invoiceSeed ? <button type="button" className="isnet-btn isnet-btn--primary" onClick={() => openModule?.("isnet", { tabKey: "irsaliyeden-faturaya", actionContext: { sourceId: flow.outgoingSourceId, documentNo: flow.outgoingDraftNo, invoiceDraft: flow.invoiceSeed, autoFlowId: flow.id } })}><ReceiptText size={14} /> Fiyat Gir ve Faturala</button> : <button type="button" className="isnet-btn isnet-btn--secondary" disabled={busy === `refresh-${flow.id}`} onClick={() => findSentDispatch(flow)}>{busy === `refresh-${flow.id}` ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Gönderilmiş İrsaliyeyi Bul</button>}</td></tr>)}</tbody></table></div>}
+      <section className="isnet-card"><div className="isnet-section-head"><div><small>AKTİF İŞLER</small><h2>Kontrol ve devam işlemleri</h2><p>Aynı kaynak için ikinci irsaliye veya fatura taslağı oluşturulmaz; işlem kaldığı adımdan devam eder.</p></div></div>
+        {flows.length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Aktif otomatik iş akışı yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri / Model</th><th>Adet</th><th>Giden İrsaliye</th><th>Durum</th><th>Devam</th></tr></thead><tbody>{flows.map((flow) => <tr key={flow.id}><td><strong>{flow.incomingDocumentNo || flow.incomingSourceId}</strong><small>{flow.issueDate}</small></td><td>{flow.companyName}<small>{flow.modelName || "Model bekliyor"}</small></td><td>{flow.quantity}</td><td>{flow.outgoingDraftNo || "Gönderimden sonra otomatik bulunacak"}</td><td><span className={`isnet-badge isnet-badge--${flow.status === "COMPLETED" ? "green" : "blue"}`}>{statusLabel(flow.status)}</span></td><td>{renderFlowAction(flow)}{dispatchCandidates[flow.id]?.length > 0 && <div className="isnet-dispatch-candidates"><small>Doğru gönderilmiş irsaliyeyi seçin:</small>{dispatchCandidates[flow.id].map((candidate) => <button key={candidate.sourceId} type="button" disabled={busy === `candidate-${flow.id}-${candidate.sourceId}`} onClick={() => selectSentDispatch(flow, candidate)}><strong>{candidate.documentNo}</strong><span>{candidate.partnerName} · {candidate.modelName || "Model"} · {candidate.quantity} adet · {candidate.date}</span></button>)}</div>}</td></tr>)}</tbody></table></div>}
       </section>
 
       {manualRows.length > 0 && <section className="isnet-card"><div className="isnet-section-head"><div><small>PDF / MANUEL KAYNAKLAR</small><h2>İrsaliyesiz veya yüklenen işler</h2></div></div><div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Tarih</th><th>Müşteri</th><th>Model</th><th>Adet</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{manualRows.map((row) => { const completedDraft = (row.outgoingDispatchDrafts || []).some((item) => item.status === "COMPLETED"); return <tr key={row.id}><td>{row.issueDate}</td><td>{row.companyName}</td><td>{row.modelName}</td><td>{row.quantity}</td><td>{statusLabel(row.workflowStatus)}</td><td><button type="button" className="isnet-btn isnet-btn--secondary" disabled={!completedDraft || busy === `manual-invoice-${row.id}`} onClick={() => prepareManualInvoice(row)}><Send size={14} /> Gönderilmiş İrsaliyeyi Bul ve Faturala</button></td></tr>; })}</tbody></table></div></section>}
