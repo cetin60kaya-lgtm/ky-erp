@@ -1,0 +1,38 @@
+.isnet-archive-center {
+  display: grid;
+  gap: 10px;
+}
+
+.isnet-archive-center__switch {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #d9e3f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.isnet-archive-center__switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border: 1px solid #d6e0ed;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #38536f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.isnet-archive-center__switch button.active {
+  border-color: #1767d8;
+  background: #eaf3ff;
+  color: #0f5bc4;
+}
+
+@media (max-width: 680px) {
+  .isnet-archive-center__switch {
+    display: grid;
+  }
+}
