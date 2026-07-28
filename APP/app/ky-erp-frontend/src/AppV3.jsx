@@ -14,6 +14,14 @@ const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "ur
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
 const IsnetPage = lazyWithRetry(() => import("./pages/modules/IsnetPage"), "isnet-v3");
+const IsnetManagementCenterPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetManagementCenterPage"),
+  "isnet-management-center-v1",
+);
+const IsnetDocumentCenterPage = lazyWithRetry(
+  () => import("./pages/modules/isnet/IsnetDocumentCenterPage"),
+  "isnet-document-center-v1",
+);
 const IsnetAutomationWorkflowPage = lazyWithRetry(
   () => import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
   "isnet-automation-workflow-v1",
@@ -37,6 +45,8 @@ const MODULE_LOADERS = {
   boyahane: () => import("./pages/modules/BoyahanePage"),
   isnet: () => Promise.all([
     import("./pages/modules/IsnetPage"),
+    import("./pages/modules/isnet/IsnetManagementCenterPage"),
+    import("./pages/modules/isnet/IsnetDocumentCenterPage"),
     import("./pages/modules/isnet/IsnetAutomationWorkflowPage"),
     import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
     import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
@@ -277,6 +287,12 @@ export default function AppV3() {
     };
 
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule?.key === "isnet" && activeTab === "yonetim-merkezi") {
+      return <IsnetManagementCenterPage {...sharedProps} />;
+    }
+    if (activeModule?.key === "isnet" && activeTab === "belge-merkezi") {
+      return <IsnetDocumentCenterPage {...sharedProps} />;
+    }
     if (activeModule?.key === "isnet" && activeTab === "is-akisi") {
       return <IsnetAutomationWorkflowPage {...sharedProps} />;
     }
@@ -290,9 +306,6 @@ export default function AppV3() {
     }
     if (activeModule?.key === "isnet" && activeTab === "arsiv-gonderim") {
       return <IsnetArchiveDeliveryPage {...sharedProps} />;
-    }
-    if (activeModule?.key === "isnet" && activeTab === "belge-merkezi") {
-      return <IsnetPage activeTab="belge-akisi" {...sharedProps} />;
     }
     if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
