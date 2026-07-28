@@ -1,6 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
 import { ActiveCompanyProvider } from "./context/ActiveCompanyContext";
 import { AuthProvider } from "./context/AuthContext";
 import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
@@ -11,12 +10,9 @@ installMuhasebeDocumentSanitizer();
 installPersistentModalSizing();
 
 const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode;
-
 const currentPath = window.location.pathname;
-
-// /mobile tarayıcı rotası ayrı ve hafif bir web paketi olarak yüklenir.
-// Masaüstü /muhasebe, /ik, /desen gibi rotalar /mobile tarafına çevrilmez.
 const isMobileWebRoute = currentPath.startsWith("/mobile");
+const useShellV3 = String(import.meta.env.VITE_APP_SHELL_V3 || "").toLowerCase() === "true";
 
 function mountApp(RootComponent) {
   ReactDOM.createRoot(document.getElementById("root")).render(
@@ -25,20 +21,23 @@ function mountApp(RootComponent) {
 }
 
 if (isMobileWebRoute) {
-  // /mobile/* → MobileApp (ayrı dinamik web bundle'ı)
   import("./mobile/MobileApp.jsx").then(({ default: MobileApp }) => {
     mountApp(MobileApp);
   });
 } else {
-  // Desktop
-  function DesktopRoot() {
-    return (
-      <AuthProvider>
-        <ActiveCompanyProvider>
-          <App />
-        </ActiveCompanyProvider>
-      </AuthProvider>
-    );
-  }
-  mountApp(DesktopRoot);
+  const appLoader = useShellV3 ? import("./AppV3.jsx") : import("./App.jsx");
+
+  appLoader.then(({ default: DesktopApp }) => {
+    function DesktopRoot() {
+      return (
+        <AuthProvider>
+          <ActiveCompanyProvider>
+            <DesktopApp />
+          </ActiveCompanyProvider>
+        </AuthProvider>
+      );
+    }
+
+    mountApp(DesktopRoot);
+  });
 }
