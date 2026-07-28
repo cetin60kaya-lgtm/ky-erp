@@ -29,6 +29,7 @@ export const createIsnetNoDispatchSourceIntake = (payload) =>
 export const createIsnetManualPdfSourceIntake = (payload) => {
   const body = new FormData();
   body.append("pdf", payload.pdfFile);
+  body.append("mainCompanySlug", payload.mainCompanySlug || "");
   body.append("companyId", payload.companyId || "");
   body.append("companyName", payload.companyName || "");
   body.append("companyRole", payload.companyRole || "CUSTOMER");
@@ -61,9 +62,14 @@ export const getIsnetSourceIntakeDetail = (intakeId) =>
   apiGet(`/isnet/source-intakes/${encodeURIComponent(intakeId)}`).then(unwrap);
 
 export const createOutgoingDispatchFromSourceIntake = (intakeId, payload) =>
-  apiPost(`/isnet/source-intakes/${encodeURIComponent(intakeId)}/outgoing-dispatch`, {
+  apiPost(`/isnet/source-workflow/${encodeURIComponent(intakeId)}/outgoing-dispatch`, {
     ...payload,
     confirmed: true,
+  }).then(unwrap);
+
+export const prepareInvoiceFromSourceIntake = (intakeId, payload = {}) =>
+  apiPost(`/isnet/source-workflow/${encodeURIComponent(intakeId)}/invoice`, payload, {
+    timeoutMs: 900_000,
   }).then(unwrap);
 
 export const completeOutgoingDispatchFromSourceIntake = (intakeId, draftId, payload) =>
