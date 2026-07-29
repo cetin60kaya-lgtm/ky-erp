@@ -299,7 +299,7 @@ export class CanonicalWorkflowOrchestratorService {
         numberValue(invoiceQty.get(modelId)) + numberValue(link.matchedQuantity),
       );
     }
-    const designByModel = new Map(
+    const designByModel = new Map<string, string>(
       designLinks.map((link: any) => [clean(link.modelId), clean(link.designRecordId)]),
     );
     const designIds = [...new Set([...designByModel.values()].filter(Boolean))];
@@ -308,7 +308,9 @@ export class CanonicalWorkflowOrchestratorService {
           .findMany({ where: { id: { in: designIds }, mainCompanySlug } })
           .catch(() => [])
       : [];
-    const designById = new Map(designs.map((row: any) => [clean(row.id), row]));
+    const designById = new Map<string, any>(
+      designs.map((row: any) => [clean(row.id), row]),
+    );
 
     const enrichedRows = rows.map((row: any) => {
       const modelId = clean(row.modelId);

@@ -504,7 +504,7 @@ export class CanonicalModelFlowService {
         take: 10000,
       }),
     ]);
-    const modelMap = new Map(
+    const modelMap = new Map<string, any>(
       modelRows.map((row: any) => [String(row.id), row]),
     );
     const groups = new Map<string, any>();
