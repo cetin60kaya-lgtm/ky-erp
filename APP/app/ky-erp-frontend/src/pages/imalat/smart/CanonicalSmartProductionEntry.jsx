@@ -29,7 +29,13 @@ function machineId(machine) {
 }
 
 function machineName(machine) {
-  return machine?.machineName || machine?.makineAdi || machine?.ad || machine?.machineNo || "";
+  return (
+    machine?.machineName ||
+    machine?.makineAdi ||
+    machine?.ad ||
+    machine?.machineNo ||
+    ""
+  );
 }
 
 function modelRows(payload) {
@@ -38,9 +44,16 @@ function modelRows(payload) {
   return [];
 }
 
-export default function CanonicalSmartProductionEntry({ activeMainCompany, onConfigureMachines }) {
+export default function CanonicalSmartProductionEntry({
+  activeMainCompany,
+  onConfigureMachines,
+}) {
   const storageKey = `kyerp-canonical-production-${activeMainCompany?.slug || activeMainCompany?.id || "default"}`;
-  const [dict, setDict] = useState({ models: [], machines: [], operators: [] });
+  const [dict, setDict] = useState({
+    models: [],
+    machines: [],
+    operators: [],
+  });
   const [defaults, setDefaults] = useState({
     date: today(),
     shift: "Gündüz",
@@ -48,17 +61,23 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
     machineName: "",
     operatorName: "",
   });
-  const [text, setText] = useState(() => localStorage.getItem(storageKey) || "");
+  const [text, setText] = useState(
+    () => localStorage.getItem(storageKey) || "",
+  );
   const [rows, setRows] = useState([]);
   const [recent, setRecent] = useState([]);
   const [showIssuesOnly, setShowIssuesOnly] = useState(false);
   const [message, setMessage] = useState("");
 
-  const loadRecent = useCallback(() =>
-    getRecentProductionEntries(activeMainCompany, { limit: 20 })
-      .then((result) => setRecent(Array.isArray(result) ? result : []))
-      .catch((error) => setMessage(error?.message || "Son üretim kayıtları okunamadı.")),
-  [activeMainCompany]);
+  const loadRecent = useCallback(
+    () =>
+      getRecentProductionEntries(activeMainCompany, { limit: 20 })
+        .then((result) => setRecent(Array.isArray(result) ? result : []))
+        .catch((error) =>
+          setMessage(error?.message || "Son üretim kayıtları okunamadı."),
+        ),
+    [activeMainCompany],
+  );
 
   const loadDictionaries = useCallback(async () => {
     try {
@@ -73,16 +92,25 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
         operators: Array.isArray(base?.operators) ? base.operators : [],
       };
       setDict(dictionaries);
+
       const firstMachine = dictionaries.machines[0];
       if (firstMachine) {
         setDefaults((current) => ({
           ...current,
           machineId: current.machineId || machineId(firstMachine),
           machineName: current.machineName || machineName(firstMachine),
-          operatorName: current.operatorName || operatorForMachine(firstMachine, current.shift),
+          operatorName:
+            current.operatorName ||
+            operatorForMachine(firstMachine, current.shift),
         }));
       }
-      setMessage(`${dictionaries.models.length} tek merkez model, ${dictionaries.machines.length} aktif makine hazır.`);
+
+      const openDispatchCount = dictionaries.models.filter(
+        (model) => model.defaultDispatchNo,
+      ).length;
+      setMessage(
+        `${dictionaries.models.length} tek merkez model, ${openDispatchCount} açık irsaliye ve ${dictionaries.machines.length} aktif makine hazır.`,
+      );
     } catch (error) {
       setMessage(error?.message || "Tek merkez üretim sözlükleri okunamadı.");
     }
@@ -99,12 +127,17 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
   }, [text, storageKey]);
 
   const visibleRows = useMemo(
-    () => (showIssuesOnly ? rows.filter((row) => !["ready", "context"].includes(row.status)) : rows),
+    () =>
+      showIssuesOnly
+        ? rows.filter((row) => !["ready", "context"].includes(row.status))
+        : rows,
     [rows, showIssuesOnly],
   );
 
   function updateMachine(nextMachineId) {
-    const machine = dict.machines.find((item) => machineId(item) === String(nextMachineId));
+    const machine = dict.machines.find(
+      (item) => machineId(item) === String(nextMachineId),
+    );
     setDefaults((current) => ({
       ...current,
       machineId: nextMachineId,
@@ -114,7 +147,9 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
   }
 
   function updateShift(shift) {
-    const machine = dict.machines.find((item) => machineId(item) === String(defaults.machineId));
+    const machine = dict.machines.find(
+      (item) => machineId(item) === String(defaults.machineId),
+    );
     setDefaults((current) => ({
       ...current,
       shift,
@@ -125,7 +160,9 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
   function parse() {
     const parsed = parseProductionEntries(text, dict, defaults);
     const productionRows = parsed.filter((row) => row.status !== "context");
-    const issueCount = productionRows.filter((row) => row.status !== "ready").length;
+    const issueCount = productionRows.filter(
+      (row) => row.status !== "ready",
+    ).length;
     setRows(parsed);
     setShowIssuesOnly(false);
     setMessage(
@@ -138,7 +175,9 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
   function runSerialValidation() {
     const checked = validateProductionRows(rows);
     const activeRows = checked.filter((row) => row.status !== "context");
-    const issueCount = activeRows.filter((row) => row.status !== "ready").length;
+    const issueCount = activeRows.filter(
+      (row) => row.status !== "ready",
+    ).length;
     setRows(checked);
     setMessage(
       issueCount
@@ -147,33 +186,81 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
     );
   }
 
+  function enrichWithOpenDispatch(entries) {
+    return entries.map((entry) => {
+      const model = dict.models.find(
+        (item) => String(item.id || item.modelId) === String(entry.modelId),
+      );
+      return {
+        ...entry,
+        dispatchNo:
+          entry.dispatchNo ||
+          entry.irsaliyeNo ||
+          model?.defaultDispatchNo ||
+          model?.sourceDispatchNo ||
+          model?.orderNo ||
+          "",
+        orderNo:
+          entry.orderNo || model?.defaultOrderNo || model?.orderNo || "",
+        printRegion:
+          entry.printRegion || model?.defaultPrintArea || entry.printRegion,
+      };
+    });
+  }
+
   async function saveReadyRows() {
     const checked = validateProductionRows(rows);
     setRows(checked);
-    const entries = checked.filter((row) => row.status === "ready");
-    if (!entries.length) {
-      setMessage("Kaydedilecek hazır satır yok. Önce kırmızı/sarı satırları düzeltin.");
+    const readyEntries = checked.filter((row) => row.status === "ready");
+    if (!readyEntries.length) {
+      setMessage(
+        "Kaydedilecek hazır satır yok. Önce kırmızı/sarı satırları düzeltin.",
+      );
       return;
     }
-    if (!window.confirm(`${entries.length} hazır üretim satırı kaydedilsin mi?`)) return;
+    if (
+      !window.confirm(
+        `${readyEntries.length} hazır üretim satırı kaydedilsin mi?`,
+      )
+    ) {
+      return;
+    }
+
+    const entries = enrichWithOpenDispatch(readyEntries);
     const requestId = crypto.randomUUID();
     try {
-      const result = await bulkCreateProduction(activeMainCompany, { requestId, entries });
-      const successIds = new Set((result?.success || []).map((item) => item.clientId));
-      const failures = new Map((result?.failed || []).map((item) => [item.clientId, item.error]));
+      const result = await bulkCreateProduction(activeMainCompany, {
+        requestId,
+        entries,
+      });
+      const successIds = new Set(
+        (result?.success || []).map((item) => item.clientId),
+      );
+      const failures = new Map(
+        (result?.failed || []).map((item) => [item.clientId, item.error]),
+      );
       setRows((current) =>
         current
           .filter((row) => !successIds.has(row.id))
-          .map((row) => failures.has(row.id)
-            ? { ...row, status: "error", warnings: [failures.get(row.id)] }
-            : row),
+          .map((row) =>
+            failures.has(row.id)
+              ? {
+                  ...row,
+                  status: "error",
+                  warnings: [failures.get(row.id)],
+                }
+              : row,
+          ),
       );
-      setMessage(`${successIds.size} satır kaydedildi, ${failures.size} satır hata nedeniyle kaldı.`);
+      setMessage(
+        `${successIds.size} satır kaydedildi, ${failures.size} satır hata nedeniyle kaldı.`,
+      );
       if (!failures.size && successIds.size === entries.length) {
         setText("");
         localStorage.removeItem(storageKey);
       }
       loadRecent();
+      loadDictionaries();
     } catch (error) {
       setMessage(error?.message || "Toplu üretim kaydı yapılamadı.");
     }
@@ -183,30 +270,242 @@ export default function CanonicalSmartProductionEntry({ activeMainCompany, onCon
     <div className="smart-entry">
       <section className="iw-card smart-capture-card">
         <div className="iw-card-head">
-          <div><h2><ScanText size={18} /> Akıllı Seri Fiş Girişi</h2><small>Model yalnız Desen merkezindeki tek kayıttan bulunur. “gündüz 1” yazıldığında Makine 1’in kayıtlı makinacısı otomatik atanır.</small></div>
+          <div>
+            <h2>
+              <ScanText size={18} /> Akıllı Seri Fiş Girişi
+            </h2>
+            <small>
+              Model yalnız Desen merkezindeki tek kayıttan bulunur. Modelin açık
+              İşNet irsaliyesi varsa kayıt otomatik olarak ona bağlanır.
+            </small>
+          </div>
           <span className="smart-shortcut">Ctrl + Enter: çözümle</span>
         </div>
         <div className="iw-card-body">
           <div className="smart-defaults">
-            <label>Tarih<input type="date" value={defaults.date} onChange={(event) => setDefaults({ ...defaults, date: event.target.value })} /></label>
-            <label>Vardiya<select value={defaults.shift} onChange={(event) => updateShift(event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
-            <label>Makine<select value={defaults.machineId} onChange={(event) => updateMachine(event.target.value)}><option value="">Makine seçin</option>{dict.machines.map((machine) => <option key={machineId(machine)} value={machineId(machine)}>{machine.machineNo || machine.no} - {machineName(machine)}</option>)}</select></label>
-            <label>Kayıtlı makinacı<div className="smart-operator-value"><UserRound size={16} /><strong>{defaults.operatorName || "Tanımlı değil"}</strong></div></label>
+            <label>
+              Tarih
+              <input
+                type="date"
+                value={defaults.date}
+                onChange={(event) =>
+                  setDefaults({ ...defaults, date: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Vardiya
+              <select
+                value={defaults.shift}
+                onChange={(event) => updateShift(event.target.value)}
+              >
+                <option>Gündüz</option>
+                <option>Gece</option>
+              </select>
+            </label>
+            <label>
+              Makine
+              <select
+                value={defaults.machineId}
+                onChange={(event) => updateMachine(event.target.value)}
+              >
+                <option value="">Makine seçin</option>
+                {dict.machines.map((machine) => (
+                  <option key={machineId(machine)} value={machineId(machine)}>
+                    {machine.machineNo || machine.no} - {machineName(machine)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Kayıtlı makinacı
+              <div className="smart-operator-value">
+                <UserRound size={16} />
+                <strong>{defaults.operatorName || "Tanımlı değil"}</strong>
+              </div>
+            </label>
           </div>
-          {!dict.machines.length ? <div className="smart-machine-warning"><div><CircleAlert size={17} /><span><strong>Aktif makine tanımı yok.</strong> Seri kayıt için makine ve vardiya ayarlarını tamamlayın.</span></div><button className="iw-btn" type="button" onClick={onConfigureMachines}>Makine Ayarlarını Aç</button></div> : null}
-          <textarea className="smart-textarea" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.ctrlKey && event.key === "Enter") { event.preventDefault(); parse(); } }} placeholder={"15 windy ekru ön 2500 gündüz 1\n15 mervod polo ön 2500 kol 2400 gece 2\nMurat windy arka 2480"} />
+
+          {!dict.machines.length ? (
+            <div className="smart-machine-warning">
+              <div>
+                <CircleAlert size={17} />
+                <span>
+                  <strong>Aktif makine tanımı yok.</strong> Seri kayıt için makine
+                  ve vardiya ayarlarını tamamlayın.
+                </span>
+              </div>
+              <button
+                className="iw-btn"
+                type="button"
+                onClick={onConfigureMachines}
+              >
+                Makine Ayarlarını Aç
+              </button>
+            </div>
+          ) : null}
+
+          <textarea
+            className="smart-textarea"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.ctrlKey && event.key === "Enter") {
+                event.preventDefault();
+                parse();
+              }
+            }}
+            placeholder={
+              "15 windy ekru ön 2500 gündüz 1\n15 mervod polo ön 2500 kol 2400 gece 2\nMurat windy arka 2480"
+            }
+          />
+
           <div className="seri-actions smart-primary-actions">
-            <button className="iw-btn primary" type="button" onClick={parse}><ScanText size={16} /> Çözümle ve Denetle</button>
-            <button className="iw-btn" type="button" onClick={() => { setText(""); setRows([]); setMessage(""); }}><Eraser size={16} /> Formu Temizle</button>
-            <button className="iw-btn" type="button" onClick={() => { loadDictionaries(); loadRecent(); }}><History size={16} /> Sözlük ve Kayıtları Yenile</button>
+            <button
+              className="iw-btn primary"
+              type="button"
+              onClick={parse}
+            >
+              <ScanText size={16} /> Çözümle ve Denetle
+            </button>
+            <button
+              className="iw-btn"
+              type="button"
+              onClick={() => {
+                setText("");
+                setRows([]);
+                setMessage("");
+              }}
+            >
+              <Eraser size={16} /> Formu Temizle
+            </button>
+            <button
+              className="iw-btn"
+              type="button"
+              onClick={() => {
+                loadDictionaries();
+                loadRecent();
+              }}
+            >
+              <History size={16} /> Sözlük ve Kayıtları Yenile
+            </button>
           </div>
-          {message ? <div className="iw-notice smart-notice"><CircleAlert size={16} /> {message}</div> : null}
+
+          {message ? (
+            <div className="iw-notice smart-notice">
+              <CircleAlert size={16} /> {message}
+            </div>
+          ) : null}
         </div>
       </section>
 
-      {rows.length ? <section className="iw-card smart-review-card"><div className="iw-card-head smart-review-head"><div><h2><ClipboardCheck size={18} /> Seri Hata Denetimi</h2><small>Her satır model ID, tarih, adet, baskı bölgesi, makine ve makinacı açısından kontrol edilir.</small></div><div className="seri-actions"><button className="iw-btn" type="button" onClick={runSerialValidation}><ClipboardCheck size={16} /> Yeniden Denetle</button><button className={`iw-btn ${showIssuesOnly ? "active-filter" : ""}`} type="button" onClick={() => setShowIssuesOnly((current) => !current)}><CircleAlert size={16} /> {showIssuesOnly ? "Tüm Satırlar" : "Sorunlular"}</button><button className="iw-btn primary" type="button" onClick={saveReadyRows}><Save size={16} /> Hazırları Kaydet</button></div></div><div className="iw-card-body smart-summary-body"><ProductionEntrySummary rows={rows} /></div><ParsedProductionTable rows={visibleRows} setRows={setRows} dictionaries={dict} /></section> : null}
+      {rows.length ? (
+        <section className="iw-card smart-review-card">
+          <div className="iw-card-head smart-review-head">
+            <div>
+              <h2>
+                <ClipboardCheck size={18} /> Seri Hata Denetimi
+              </h2>
+              <small>
+                Her satır model ID, tarih, adet, baskı bölgesi, makine ve makinacı
+                açısından kontrol edilir.
+              </small>
+            </div>
+            <div className="seri-actions">
+              <button
+                className="iw-btn"
+                type="button"
+                onClick={runSerialValidation}
+              >
+                <ClipboardCheck size={16} /> Yeniden Denetle
+              </button>
+              <button
+                className={`iw-btn ${showIssuesOnly ? "active-filter" : ""}`}
+                type="button"
+                onClick={() => setShowIssuesOnly((current) => !current)}
+              >
+                <CircleAlert size={16} />
+                {showIssuesOnly ? "Tüm Satırlar" : "Sorunlular"}
+              </button>
+              <button
+                className="iw-btn primary"
+                type="button"
+                onClick={saveReadyRows}
+              >
+                <Save size={16} /> Hazırları Kaydet
+              </button>
+            </div>
+          </div>
+          <div className="iw-card-body smart-summary-body">
+            <ProductionEntrySummary rows={rows} />
+          </div>
+          <ParsedProductionTable
+            rows={visibleRows}
+            setRows={setRows}
+            dictionaries={dict}
+          />
+        </section>
+      ) : null}
 
-      <section className="iw-card"><div className="iw-card-head"><h2><History size={18} /> Son 20 Üretim Kaydı</h2></div><div className="iw-table-wrap compact"><table><thead><tr><th>Tarih</th><th>Model</th><th>Görsel</th><th>Bölge</th><th>Adet</th><th>Makine</th><th>Vardiya</th><th>Makinacı</th></tr></thead><tbody>{recent.length ? recent.map((entry) => <tr key={entry.id}><td>{entry.tarih}</td><td>{entry.model}</td><td>{entry.modelImageUrl ? <img className="smart-thumb" src={entry.modelImageUrl} alt={entry.model || "Model"} /> : "-"}</td><td>{entry.baskiBolgesi || "-"}</td><td>{Number(entry.adet || 0).toLocaleString("tr-TR")}</td><td>{[entry.makineNo, entry.makineAdi].filter(Boolean).join(" - ") || "-"}</td><td>{entry.vardiya || "-"}</td><td>{entry.makinaci || "-"}</td></tr>) : <tr><td colSpan={8}>Henüz üretim kaydı bulunamadı.</td></tr>}</tbody></table></div></section>
+      <section className="iw-card">
+        <div className="iw-card-head">
+          <h2>
+            <History size={18} /> Son 20 Üretim Kaydı
+          </h2>
+        </div>
+        <div className="iw-table-wrap compact">
+          <table>
+            <thead>
+              <tr>
+                <th>Tarih</th>
+                <th>Model</th>
+                <th>Görsel</th>
+                <th>Bölge</th>
+                <th>Adet</th>
+                <th>Makine</th>
+                <th>Vardiya</th>
+                <th>Makinacı</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.length ? (
+                recent.map((entryItem) => (
+                  <tr key={entryItem.id}>
+                    <td>{entryItem.tarih}</td>
+                    <td>{entryItem.model}</td>
+                    <td>
+                      {entryItem.modelImageUrl ? (
+                        <img
+                          className="smart-thumb"
+                          src={entryItem.modelImageUrl}
+                          alt={entryItem.model || "Model"}
+                        />
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td>{entryItem.baskiBolgesi || "-"}</td>
+                    <td>
+                      {Number(entryItem.adet || 0).toLocaleString("tr-TR")}
+                    </td>
+                    <td>
+                      {[entryItem.makineNo, entryItem.makineAdi]
+                        .filter(Boolean)
+                        .join(" - ") || "-"}
+                    </td>
+                    <td>{entryItem.vardiya || "-"}</td>
+                    <td>{entryItem.makinaci || "-"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8}>Henüz üretim kaydı bulunamadı.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
