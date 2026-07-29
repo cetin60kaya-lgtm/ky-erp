@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: uretim-tek-merkez-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   apply-and-verify:
     runs-on: ubuntu-latest
