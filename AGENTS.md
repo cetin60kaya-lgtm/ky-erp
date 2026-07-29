@@ -38,6 +38,19 @@
 - Hızlı girişler veri doğrulamasını atlamaz. Belirsiz model/firma, adet farkı veya resmî işlemde kullanıcı onayı zorunludur.
 - Gerçek İşNet giden irsaliye ve resmî fatura gönderimi son kullanıcı onayı olmadan çalıştırılmaz.
 
+## İşNet bağlantısı ve Desen klasör ayarı
+
+- İşNet bağlantı testi önce resmî API girişini dener; API 404/500, ağ, zaman aşımı, geçersiz yanıt, eksik token veya firma listesi hatasında NetFatura portalına otomatik geçer.
+- API başarısızlığı portal denemesini engellemez; kullanıcıya API ve portal aşamalarının ayrı ve anlaşılır sonucu gösterilir.
+- İşNet kullanıcı adı ve şifresi GitHub'a, loglara veya frontend kaynak koduna yazılmaz. Şifre yalnız yerel anahtarla AES-256-GCM formatında saklanır.
+- İşNet firma seçimi bağlantı testinden dönen gerçek yetkili firma listesinden yapılır; serbest firma kimliği kaydedilmez.
+- Canlı portal oturumu doğrulanmadan sistem “uçtan uca tamamlandı” sayılmaz. Resmî irsaliye/fatura gönderimi kullanıcı onayı olmadan yapılmaz.
+- Desen görsel klasörleri Desen > Gelen Desenler ekranındaki klasör ayar merkezinden yönetilir.
+- Gelen Görsel, Model Arşivi, İşlenen, İşlenemeyen ve Arşiv klasörleri ayrı, tam ve birbirinden farklı Windows yolları olmalıdır.
+- Mevcut Desen tarama ve model oluşturma motoru standart `STORAGE\desen` yollarını kullanmaya devam eder; seçilen harici klasörler Windows junction ile bu standart yollara güvenli bağlanır.
+- Klasör değişikliğinde mevcut dosyalar silinmez. Hedefe güvenli taşınır; aynı isim varsa üzerine yazılmaz ve `-aktarilan-N` adıyla korunur.
+- Klasör ayarı kaydedilmeden önce erişim ve yazma testi yapılabilir; bağlantı başarısızsa model taraması başlatılmaz.
+
 ## Canlı veri ve dosya kaynağı
 
 - Gerçek canlı veritabanı Git reposunda tutulmaz.
