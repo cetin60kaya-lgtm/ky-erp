@@ -1,15 +1,76 @@
-import UretimGirisHavuzu from "../imalat/UretimGirisHavuzu";
+import { ClipboardList, Factory, Gauge, Settings, Zap } from "lucide-react";
+import { DetailedProductionEntry } from "../imalat/UretimGirisHavuzu";
 import ImalatKontrolRapor from "../imalat/ImalatKontrolRapor";
+import ProductionReconciliationPage from "../imalat/ProductionReconciliationPage";
+import ProductionSettingsPage from "../imalat/ProductionSettingsPage";
+import SmartProductionEntry from "../imalat/smart/SmartProductionEntry";
+import "../imalat/productionCenter.css";
+
+function openProductionSettings() {
+  window.history.pushState({}, "", "/uretim/uretim-ayarlari");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function PageIntro({ icon: Icon, title, description, badge }) {
+  return (
+    <section className="iw-card production-page-intro">
+      <div>
+        <h1><Icon size={21} /> {title}</h1>
+        <p>{description}</p>
+      </div>
+      <span className="production-page-intro-badge"><Gauge size={15} /> {badge}</span>
+    </section>
+  );
+}
 
 export default function UretimPage({ activeMainCompany, activeTab }) {
-  if (["imalat-kontrol-rapor", "imalat-denetim", "uretim-raporu"].includes(activeTab)) {
+  if (["uretim-denge", "imalat-denetim"].includes(activeTab)) {
+    return <ProductionReconciliationPage activeMainCompany={activeMainCompany} />;
+  }
+
+  if (["uretim-raporlari", "imalat-kontrol-rapor", "uretim-raporu"].includes(activeTab)) {
     return (
       <ImalatKontrolRapor
         activeMainCompany={activeMainCompany}
-        initialView={activeTab === "uretim-raporu" ? "report" : "audit"}
+        initialView={activeTab === "imalat-denetim" ? "audit" : "report"}
       />
     );
   }
 
-  return <UretimGirisHavuzu activeMainCompany={activeMainCompany} />;
+  if (activeTab === "uretim-ayarlari") {
+    return <ProductionSettingsPage activeMainCompany={activeMainCompany} />;
+  }
+
+  if (["uretim-is-havuzu", "uretim-girisi"].includes(activeTab)) {
+    return (
+      <div className="imalat-entry-page">
+        <PageIntro
+          icon={Factory}
+          title="Üretim İş Havuzu"
+          description="İşNet irsaliyesine bağlanan modeli seçin; baskı bölgesi, makine, vardiya, baskı sakatı ve kumaş sakatıyla ayrıntılı üretim kaydı oluşturun."
+          badge="Kontrollü tekli giriş"
+        />
+        <DetailedProductionEntry activeMainCompany={activeMainCompany} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="imalat-entry-page">
+      <PageIntro
+        icon={Zap}
+        title="Akıllı Hızlı Üretim Girişi"
+        description="Fişi serbest sırayla yazın. Sistem tek merkezdeki modeli, baskı bölgesini, makineyi, vardiyayı ve makinacıyı bulup satırları kayıttan önce denetler."
+        badge="Varsayılan hızlı ekran"
+      />
+      <SmartProductionEntry
+        activeMainCompany={activeMainCompany}
+        onConfigureMachines={openProductionSettings}
+      />
+      <section className="iw-card production-page-intro">
+        <div><h1><ClipboardList size={20} /> Ayrıntılı işlem gerekiyor mu?</h1><p>İrsaliye seçimi, baskı-kumaş sakatı, birden fazla baskı bölgesi veya satır düzenleme için Üretim İş Havuzu sekmesini kullanın.</p></div>
+        <button className="iw-btn" type="button" onClick={openProductionSettings}><Settings size={16} /> Makine Ayarları</button>
+      </section>
+    </div>
+  );
 }
