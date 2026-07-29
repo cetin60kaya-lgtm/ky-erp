@@ -34,6 +34,8 @@ import { DispatchReconciliationController } from "./dispatch-reconciliation.cont
 import { DispatchReconciliationService } from "./dispatch-reconciliation.service";
 import { IsnetOperationsController } from "./isnet-operations.controller";
 import { IsnetOperationsService } from "./isnet-operations.service";
+import { IsnetConnectionController } from "./isnet-connection.controller";
+import { IsnetConnectionService } from "./isnet-connection.service";
 import { IsnetMailDraftService } from "./isnet-mail-draft.service";
 import { IsnetSourceIntakeController } from "./isnet-source-intake.controller";
 import { IsnetSourceIntakeService } from "./isnet-source-intake.service";
@@ -75,6 +77,7 @@ import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.serv
     AccountingPublicApiController,
     DispatchReconciliationController,
     IsnetOperationsController,
+    IsnetConnectionController,
     IsnetSourceIntakeController,
     IsnetFullSyncController,
     IsnetSourceWorkflowController,
@@ -107,6 +110,7 @@ import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.serv
     MailTemplateService,
     DispatchReconciliationService,
     IsnetOperationsService,
+    IsnetConnectionService,
     IsnetMailDraftService,
     IsnetSourceIntakeService,
     IsnetFullSyncService,
