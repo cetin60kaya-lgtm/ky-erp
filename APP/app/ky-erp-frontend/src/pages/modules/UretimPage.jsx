@@ -1,9 +1,9 @@
 import { ClipboardList, Factory, Gauge, Settings, Zap } from "lucide-react";
-import { DetailedProductionEntry } from "../imalat/UretimGirisHavuzu";
 import ImalatKontrolRapor from "../imalat/ImalatKontrolRapor";
 import ProductionReconciliationPage from "../imalat/ProductionReconciliationPage";
 import ProductionSettingsPage from "../imalat/ProductionSettingsPage";
-import SmartProductionEntry from "../imalat/smart/SmartProductionEntry";
+import ProductionWorkPoolPage from "../imalat/ProductionWorkPoolPage";
+import CanonicalSmartProductionEntry from "../imalat/smart/CanonicalSmartProductionEntry";
 import "../imalat/productionCenter.css";
 
 function openProductionSettings() {
@@ -29,12 +29,7 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
   }
 
   if (["uretim-raporlari", "imalat-kontrol-rapor", "uretim-raporu"].includes(activeTab)) {
-    return (
-      <ImalatKontrolRapor
-        activeMainCompany={activeMainCompany}
-        initialView="report"
-      />
-    );
+    return <ImalatKontrolRapor activeMainCompany={activeMainCompany} initialView="report" />;
   }
 
   if (activeTab === "uretim-ayarlari") {
@@ -47,10 +42,10 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
         <PageIntro
           icon={Factory}
           title="Üretim İş Havuzu"
-          description="İşNet irsaliyesine bağlanan modeli seçin; baskı bölgesi, makine, vardiya, baskı sakatı ve kumaş sakatıyla ayrıntılı üretim kaydı oluşturun."
-          badge="Kontrollü tekli giriş"
+          description="İşNet irsaliyesine bağlanan tek merkez modeli ve baskı operasyonunu seçin; brüt üretim, baskı sakatı, kumaş sakatı ve net sağlam adedi kaydedin."
+          badge="Tek kaynaklı kontrollü giriş"
         />
-        <DetailedProductionEntry activeMainCompany={activeMainCompany} />
+        <ProductionWorkPoolPage activeMainCompany={activeMainCompany} />
       </div>
     );
   }
@@ -60,15 +55,15 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
       <PageIntro
         icon={Zap}
         title="Akıllı Hızlı Üretim Girişi"
-        description="Fişi serbest sırayla yazın. Sistem tek merkezdeki modeli, baskı bölgesini, makineyi, vardiyayı ve makinacıyı bulup satırları kayıttan önce denetler."
+        description="Fişi serbest sırayla yazın. Sistem yalnız Desen merkezindeki tek model kaydını, baskı bölgesini, makineyi, vardiyayı ve makinacıyı kullanır."
         badge="Varsayılan hızlı ekran"
       />
-      <SmartProductionEntry
+      <CanonicalSmartProductionEntry
         activeMainCompany={activeMainCompany}
         onConfigureMachines={openProductionSettings}
       />
       <section className="iw-card production-page-intro">
-        <div><h1><ClipboardList size={20} /> Ayrıntılı işlem gerekiyor mu?</h1><p>İrsaliye seçimi, baskı-kumaş sakatı, birden fazla baskı bölgesi veya satır düzenleme için Üretim İş Havuzu sekmesini kullanın.</p></div>
+        <div><h1><ClipboardList size={20} /> Sakat veya irsaliye kontrolü var mı?</h1><p>Baskı-kumaş sakatı, çoklu baskı bölgesi ve irsaliye farkı için Üretim İş Havuzu sekmesini kullanın; sonuç Üretim Dengesi’nde otomatik görünür.</p></div>
         <button className="iw-btn" type="button" onClick={openProductionSettings}><Settings size={16} /> Makine Ayarları</button>
       </section>
     </div>
