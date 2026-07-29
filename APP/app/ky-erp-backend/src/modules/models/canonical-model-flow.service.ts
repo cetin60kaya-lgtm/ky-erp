@@ -282,7 +282,7 @@ export class CanonicalModelFlowService {
     const ensure = (modelId: string, dispatchNo: string) => {
       const key = `${modelId}|${dispatchNo}`;
       if (!groups.has(key)) {
-        const model = modelMap.get(modelId);
+        const model: any = modelMap.get(modelId);
         const raw = model?.raw && typeof model.raw === "object" ? model.raw : {};
         groups.set(key, {
           key,
