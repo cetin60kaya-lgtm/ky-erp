@@ -118,7 +118,14 @@ export class CanonicalDispatchSyncService {
       pageSize: Math.min(5000, Number(input.limit || 5000)),
       customerOnly: input.customerOnly ?? false,
     });
-    const rows = Array.isArray(result) ? result : result.rows || [];
+    const sourceRows = Array.isArray(result) ? result : result.rows || [];
+    const rows = sourceRows.filter(
+      (row: any) =>
+        !row?.isFromDesenStorage &&
+        !clean(row?.id).startsWith("desen-") &&
+        clean(row?.id) &&
+        clean(row?.modelName || row?.modelAdi),
+    );
     return {
       rows: rows.map((row: any) => ({
         ...row,
