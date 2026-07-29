@@ -279,13 +279,6 @@ export default function MuhasebeSmartMatchPage({ activeMainCompany }) {
     }
   }, [activeMainCompany, companyKey]);
 
-  const ensureCompanies = useCallback(async () => {
-    if (companies.length) return companies;
-    const result = rowsOf(await fetchCompanies(activeMainCompany));
-    setCompanies(result);
-    return result;
-  }, [activeMainCompany, companies]);
-
   const ensureProducts = useCallback(async () => {
     if (products.length) return products;
     setProductLoading(true);
