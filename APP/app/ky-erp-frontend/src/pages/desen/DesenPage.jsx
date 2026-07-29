@@ -1,5 +1,6 @@
 import "../modules/cleanWorkflow.css";
 import "./desenWorkflow.css";
+import DesenFolderSettingsBar from "./DesenFolderSettingsBar";
 import DesenModelMasasi from "./DesenModelMasasi";
 import DesenModeller from "./DesenModeller";
 import YerlesimKalipPage from "./YerlesimKalipPage";
@@ -19,12 +20,14 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
 
   const title =
     activeTab === "desen-modeller"
-       ? "Desen Havuzu"
+      ? "Desen Havuzu"
       : activeTab === "desen-yerlesim-is-akisi"
-         ? "Yerlesim / Kalip"
+        ? "Yerlesim / Kalip"
         : activeTab === "desen-raporlari"
-           ? "Desen Raporlari"
+          ? "Desen Raporlari"
           : "Gelen Desenler";
+
+  const showFolderSettings = !activeTab || activeTab === "gelen-desenler";
 
   return (
     <div className="clean-workflow-page dw-page">
@@ -43,6 +46,9 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
             </p>
           </div>
         </header>
+        {showFolderSettings ? (
+          <DesenFolderSettingsBar activeMainCompany={activeMainCompany} />
+        ) : null}
         {page}
       </section>
     </div>
