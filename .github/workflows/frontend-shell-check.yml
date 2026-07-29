@@ -13,34 +13,9 @@ on:
       - tasarim-final-v1
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  normalize-production-types:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/uretim-tek-merkez'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Üretim dalını al
-        uses: actions/checkout@v4
-        with:
-          ref: agent/uretim-tek-merkez
-          fetch-depth: 0
-
-      - name: Kanonik Map tiplerini kaynakta düzelt
-        run: node scripts/patch-canonical-map-type.mjs
-
-      - name: Kaynak düzeltmesini kaydet
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add APP/app/ky-erp-backend/src/modules/models/canonical-model-flow.service.ts
-          git add APP/app/ky-erp-backend/src/modules/models/canonical-workflow-orchestrator.service.ts
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Kanonik model Map tiplerini kaynakta düzelt"
-          git push origin HEAD:agent/uretim-tek-merkez
-
   frontend:
     runs-on: windows-latest
     defaults:
@@ -116,10 +91,6 @@ jobs:
 
       - name: Bağımlılıkları kur
         run: npm ci
-
-      - name: Kanonik tipleri doğrula
-        working-directory: .
-        run: node scripts/patch-canonical-map-type.mjs
 
       - name: Prisma client üret
         run: npm run db:generate
