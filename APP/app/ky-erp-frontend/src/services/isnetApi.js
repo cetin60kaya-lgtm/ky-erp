@@ -135,12 +135,13 @@ export const getMailQueue = () => apiGet("/isnet/mail/queue").then(unwrap);
 export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
 
 export const testIsnetSettings = (payload) =>
-  apiPost("/isnet/settings/test", payload, {
+  apiPost("/isnet/connection/test", payload, {
     suppressUnauthorized: true,
+    timeoutMs: 90_000,
   }).then(unwrap);
 
 export const saveIsnetSettings = (payload) =>
-  apiPut("/isnet/settings", payload).then(unwrap);
+  apiPut("/isnet/connection", payload, { timeoutMs: 90_000 }).then(unwrap);
 
 export const startDailySync = (payload = {}) =>
   apiPost("/isnet/full-sync", payload, { timeoutMs: 900_000 }).then(unwrap);
