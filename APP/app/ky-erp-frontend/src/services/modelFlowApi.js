@@ -14,6 +14,15 @@ function companyPayload(activeMainCompany, extra = {}) {
   };
 }
 
+export async function getCanonicalModels(activeMainCompany, params = {}) {
+  return unwrap(
+    await apiGet(
+      "/model-flow/models",
+      companyPayload(activeMainCompany, params),
+    ),
+  );
+}
+
 export async function quickCreateCanonicalModel(activeMainCompany, payload = {}) {
   return unwrap(
     await apiPost(
@@ -27,6 +36,24 @@ export async function linkDispatchToCanonicalModel(activeMainCompany, payload = 
   return unwrap(
     await apiPost(
       "/model-flow/link-dispatch",
+      companyPayload(activeMainCompany, payload),
+    ),
+  );
+}
+
+export async function linkIsnetFlowToProduction(activeMainCompany, payload = {}) {
+  return unwrap(
+    await apiPost(
+      "/model-flow/link-isnet-flow",
+      companyPayload(activeMainCompany, payload),
+    ),
+  );
+}
+
+export async function syncCanonicalDispatchPlans(activeMainCompany, payload = {}) {
+  return unwrap(
+    await apiPost(
+      "/model-flow/sync-intakes",
       companyPayload(activeMainCompany, payload),
     ),
   );
