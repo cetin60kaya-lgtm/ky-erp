@@ -20,8 +20,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/patch-isnet-desen-final.mjs
-      - run: |
+      - name: Kaynak yamasını uygula
+        run: node scripts/patch-isnet-desen-final.mjs
+      - name: Kaynak düzeltmelerini kaydet
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add APP/app/ky-erp-backend/src/muhasebe/isnet-operations.service.ts
