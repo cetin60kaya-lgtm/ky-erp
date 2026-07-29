@@ -1,0 +1,56 @@
+name: KY ERP Muhasebe Sadeleştirme Kontrolü
+
+on:
+  push:
+    branches:
+      - agent/muhasebe-sade-v1
+  pull_request:
+    branches:
+      - agent/uretim-tek-merkez
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - name: Bağımlılıkları kur
+        run: npm ci
+      - name: Frontend build
+        run: npm run build
+      - name: Muhasebe ekran lint
+        run: npx eslint src/pages/modules/muhasebe/MuhasebeSmartMatchPage.jsx --max-warnings=0
+
+  backend:
+    runs-on: windows-latest
+    env:
+      DATABASE_URL: file:./ci-isnet.db
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-backend/package-lock.json
+      - name: Bağımlılıkları kur
+        run: npm ci
+      - name: Prisma client üret
+        run: npm run db:generate
+      - name: Backend build
+        run: npm run build
+      - name: İşNet ve Muhasebe testleri
+        run: npm run test:isnet

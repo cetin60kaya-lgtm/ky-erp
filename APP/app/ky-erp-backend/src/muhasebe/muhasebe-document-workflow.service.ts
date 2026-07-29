@@ -3154,7 +3154,7 @@ export class MuhasebeDocumentWorkflowService {
         warnings.push("Ürün eşleşmesi bekleyen kalem var.");
       }
       if (
-        this.isLotRequiredForSupplierInvoice(invoice, lines) &&
+        this.isLotRequiredForSupplierInvoice(company, invoice) &&
         lines.some((line) => !this.cleanText(line.lotNo))
       ) {
         warnings.push("Lot numarası olmayan kalem var.");
@@ -3499,39 +3499,109 @@ export class MuhasebeDocumentWorkflowService {
       .replace(/İ/g, "I");
   }
 
-  private isLotRequiredForSupplierInvoice(invoice: any, lines: any[]) {
-    const supplierText = this.normalizeLotRuleText(
-      [
-        invoice?.supplierName,
-        invoice?.firma,
-        invoice?.saticiUnvan,
-        invoice?.rawSupplierName,
-      ].join(" "),
+  private isLotRequiredForSupplierInvoice(
+    company: MainCompany,
+    invoice: any,
+  ) {
+    const companies = this.getCompanies(company);
+    const supplierId = this.cleanText(
+      invoice?.supplierCompanyId || invoice?.companyId,
     );
-    const supplierKeywords = ["URAS", "TURAN", "KIMYA", "BOYA", "KIMYEVI"];
-    if (supplierKeywords.some((keyword) => supplierText.includes(keyword))) {
+    const supplierName = this.normalizeLotRuleText(
+      invoice?.supplierName || invoice?.firma || invoice?.saticiUnvan,
+    );
+    const supplier = companies.find((row: any) => {
+      if (supplierId && this.cleanText(row?.id || row?.firmaId) === supplierId) {
+        return true;
+      }
+      const rowName = this.normalizeLotRuleText(
+        row?.firmaAdi || row?.firma || row?.name || row?.companyName,
+      );
+      return Boolean(
+        supplierName &&
+          rowName &&
+          (rowName === supplierName ||
+            rowName.includes(supplierName) ||
+            supplierName.includes(rowName)),
+      );
+    });
+    const raw = supplier?.raw || {};
+    const explicitFlags = [
+      supplier?.isChemicalSupplier,
+      supplier?.kimyaBoyaTedarikcisi,
+      supplier?.dyehouseSupplier,
+      supplier?.boyahaneTedarikcisi,
+      raw?.isChemicalSupplier,
+      raw?.kimyaBoyaTedarikcisi,
+      raw?.dyehouseSupplier,
+      raw?.boyahaneTedarikcisi,
+    ];
+    if (
+      explicitFlags.some(
+        (value) =>
+          value === true ||
+          value === 1 ||
+          ["EVET", "TRUE", "1", "AKTIF", "ACTIVE"].includes(
+            this.normalizeLotRuleText(value),
+          ),
+      )
+    ) {
       return true;
     }
-    const productKeywords = [
+    const classificationText = this.normalizeLotRuleText(
+      [
+        supplier?.supplierCategory,
+        supplier?.tedarikciKategorisi,
+        supplier?.category,
+        supplier?.kategori,
+        supplier?.sector,
+        supplier?.sektor,
+        supplier?.companyGroup,
+        supplier?.firmaGrubu,
+        raw?.supplierCategory,
+        raw?.tedarikciKategorisi,
+        raw?.category,
+        raw?.kategori,
+        raw?.sector,
+        raw?.sektor,
+        raw?.companyGroup,
+        raw?.firmaGrubu,
+      ].join(" "),
+    );
+    const classificationKeywords = [
       "KIMYA",
       "BOYA",
+      "KIMYEVI",
       "PIGMENT",
-      "BASE",
-      "FIKSATOR",
-      "TUTKAL",
+      "BOYAHANE",
     ];
-    return (Array.isArray(lines) ? lines : []).some((line) => {
-      const productText = this.normalizeLotRuleText(
-        [
-          line?.category,
-          line?.productCategory,
-          line?.productName,
-          line?.matchedProductName,
-          line?.rawDescription,
-        ].join(" "),
-      );
-      return productKeywords.some((keyword) => productText.includes(keyword));
-    });
+    if (
+      classificationKeywords.some((keyword) =>
+        classificationText.includes(keyword),
+      )
+    ) {
+      return true;
+    }
+    const supplierText = this.normalizeLotRuleText(
+      [
+        supplierName,
+        invoice?.rawSupplierName,
+        supplier?.firmaAdi,
+        supplier?.firma,
+        supplier?.name,
+      ].join(" "),
+    );
+    const knownChemicalSupplierKeywords = [
+      "URAS",
+      "TURAN",
+      "SELVI",
+      "KIMYA",
+      "BOYA",
+      "KIMYEVI",
+    ];
+    return knownChemicalSupplierKeywords.some((keyword) =>
+      supplierText.includes(keyword),
+    );
   }
 
   private createRawMaterialLotsFromInvoice(
@@ -3541,7 +3611,7 @@ export class MuhasebeDocumentWorkflowService {
     poolRecord: any,
     warnings: string[],
   ) {
-    if (!this.isLotRequiredForSupplierInvoice(invoice, lines)) {
+    if (!this.isLotRequiredForSupplierInvoice(company, invoice)) {
       return [];
     }
     if (!lines.some((line) => this.cleanText(line.lotNo))) {
