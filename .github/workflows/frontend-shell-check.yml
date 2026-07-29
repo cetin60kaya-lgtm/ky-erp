@@ -71,6 +71,13 @@ jobs:
 
   core-backend:
     runs-on: windows-latest
+    outputs:
+      dependencies: ${{ steps.dependencies.outcome }}
+      prisma: ${{ steps.prisma.outcome }}
+      backend_build: ${{ steps.backend_build.outcome }}
+      isnet_tests: ${{ steps.isnet_tests.outcome }}
+      ik_tests: ${{ steps.ik_tests.outcome }}
+      production_tests: ${{ steps.production_tests.outcome }}
     env:
       DATABASE_URL: file:./ci-isnet.db
       NODE_ENV: test
@@ -88,13 +95,19 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-backend/package-lock.json
 
-      - name: Bağımlılıkları kur
+      - id: dependencies
+        name: Bağımlılıkları kur
+        continue-on-error: true
         run: npm ci
 
-      - name: Prisma client üret
+      - id: prisma
+        name: Prisma client üret
+        continue-on-error: true
         run: npm run db:generate
 
-      - name: Backend build
+      - id: backend_build
+        name: Backend build
+        continue-on-error: true
         shell: pwsh
         run: |
           cmd /c "npm run build > backend-build.log 2>&1"
@@ -102,7 +115,9 @@ jobs:
           Get-Content backend-build.log
           exit $code
 
-      - name: İşNet ve Muhasebe testleri
+      - id: isnet_tests
+        name: İşNet ve Muhasebe testleri
+        continue-on-error: true
         shell: pwsh
         run: |
           cmd /c "npm run test:isnet > isnet-tests.log 2>&1"
@@ -110,7 +125,9 @@ jobs:
           Get-Content isnet-tests.log
           exit $code
 
-      - name: İK aylık ve günlük testleri
+      - id: ik_tests
+        name: İK aylık ve günlük testleri
+        continue-on-error: true
         shell: pwsh
         run: |
           cmd /c "npm run test:ik > ik-tests.log 2>&1"
@@ -118,7 +135,9 @@ jobs:
           Get-Content ik-tests.log
           exit $code
 
-      - name: Üretim denge testleri
+      - id: production_tests
+        name: Üretim denge testleri
+        continue-on-error: true
         shell: pwsh
         run: |
           cmd /c "npm run test:production > production-tests.log 2>&1"
@@ -137,6 +156,22 @@ jobs:
             APP/app/ky-erp-backend/ik-tests.log
             APP/app/ky-erp-backend/production-tests.log
           if-no-files-found: ignore
+
+      - name: Backend sonucunu doğrula
+        if: always()
+        shell: pwsh
+        run: |
+          $results = @(
+            "${{ steps.dependencies.outcome }}",
+            "${{ steps.prisma.outcome }}",
+            "${{ steps.backend_build.outcome }}",
+            "${{ steps.isnet_tests.outcome }}",
+            "${{ steps.ik_tests.outcome }}",
+            "${{ steps.production_tests.outcome }}"
+          )
+          if ($results -contains "failure" -or $results -contains "cancelled") {
+            exit 1
+          }
 
   validation-result:
     if: always() && github.ref == 'refs/heads/agent/uretim-tek-merkez'
@@ -160,7 +195,13 @@ jobs:
           - Commit: ${{ github.sha }}
           - Çalışma zamanı (UTC): $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           - Frontend build / lint / sekme denetimi: **${{ needs.frontend.result }}**
-          - Backend build / İşNet / İK / üretim testleri: **${{ needs.core-backend.result }}**
+          - Backend genel sonucu: **${{ needs.core-backend.result }}**
+          - Backend bağımlılık kurulumu: **${{ needs.core-backend.outputs.dependencies }}**
+          - Prisma client üretimi: **${{ needs.core-backend.outputs.prisma }}**
+          - Backend TypeScript build: **${{ needs.core-backend.outputs.backend_build }}**
+          - İşNet ve Muhasebe testleri: **${{ needs.core-backend.outputs.isnet_tests }}**
+          - İK testleri: **${{ needs.core-backend.outputs.ik_tests }}**
+          - Üretim denge testleri: **${{ needs.core-backend.outputs.production_tests }}**
 
           Bu belge GitHub Actions tarafından otomatik oluşturulmuştur. Canlı İşNet portal gönderimi bu kontrolün kapsamında değildir.
           EOF
