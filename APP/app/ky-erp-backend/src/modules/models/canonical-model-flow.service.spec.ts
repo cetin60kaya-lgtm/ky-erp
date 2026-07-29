@@ -1,74 +1,78 @@
+import assert from "node:assert/strict";
+import test from "node:test";
 import { CanonicalModelFlowService } from "./canonical-model-flow.service";
 
-describe("CanonicalModelFlowService irsaliye imalat denklemi", () => {
-  const service = new CanonicalModelFlowService({} as any, {} as any);
-  const calculate = (input: any) => (service as any).calculateRow(input);
+const service = new CanonicalModelFlowService({} as any, {} as any);
+const calculate = (input: any) => (service as any).calculateRow(input);
 
-  const totals = (rows: Array<[string, number]>) =>
-    new Map(
-      rows.map(([region, gross]) => [
-        region,
-        { gross, printDefect: 0, fabricDefect: 0, waste: 0 },
-      ]),
-    );
+const totals = (rows: Array<[string, number]>) =>
+  new Map(
+    rows.map(([region, gross]) => [
+      region,
+      { gross, printDefect: 0, fabricDefect: 0, waste: 0 },
+    ]),
+  );
 
-  it("ön ve arka operasyonlarını toplamak yerine en düşük ortak adedi kullanır", () => {
-    const row = calculate({
-      expectedQty: 1000,
-      requiredRegions: ["Ön", "Arka"],
-      regionTotals: totals([
-        ["Ön", 1000],
-        ["Arka", 980],
-      ]),
-      printDefectQty: 10,
-      fabricDefectQty: 5,
-      wasteQty: 15,
-    });
-    expect(row.completedGrossQty).toBe(980);
-    expect(row.remainingQty).toBe(20);
-    expect(row.netGoodQty).toBe(965);
-    expect(row.status).toBe("EKSİK");
+test("ön ve arka operasyonlarını toplamak yerine en düşük ortak adedi kullanır", () => {
+  const row = calculate({
+    expectedQty: 1000,
+    requiredRegions: ["Ön", "Arka"],
+    regionTotals: totals([
+      ["Ön", 1000],
+      ["Arka", 980],
+    ]),
+    printDefectQty: 10,
+    fabricDefectQty: 5,
+    wasteQty: 15,
   });
 
-  it("gelen adedi aşan üretimi fazla olarak işaretler", () => {
-    const row = calculate({
-      expectedQty: 1000,
-      requiredRegions: ["Ön"],
-      regionTotals: totals([["Ön", 1020]]),
-      printDefectQty: 0,
-      fabricDefectQty: 0,
-      wasteQty: 0,
-    });
-    expect(row.completedGrossQty).toBe(1020);
-    expect(row.overQty).toBe(20);
-    expect(row.status).toBe("FAZLA");
+  assert.equal(row.completedGrossQty, 980);
+  assert.equal(row.remainingQty, 20);
+  assert.equal(row.netGoodQty, 965);
+  assert.equal(row.status, "EKSİK");
+});
+
+test("gelen adedi aşan üretimi fazla olarak işaretler", () => {
+  const row = calculate({
+    expectedQty: 1000,
+    requiredRegions: ["Ön"],
+    regionTotals: totals([["Ön", 1020]]),
+    printDefectQty: 0,
+    fabricDefectQty: 0,
+    wasteQty: 0,
   });
 
-  it("eksik baskı bölgesini tamamlanmış model saymaz", () => {
-    const row = calculate({
-      expectedQty: 800,
-      requiredRegions: ["Ön", "Arka"],
-      regionTotals: totals([["Ön", 800]]),
-      printDefectQty: 0,
-      fabricDefectQty: 0,
-      wasteQty: 0,
-    });
-    expect(row.completedGrossQty).toBe(0);
-    expect(row.missingRegions).toEqual(["Arka"]);
-    expect(row.status).toBe("EKSİK BÖLGE");
+  assert.equal(row.completedGrossQty, 1020);
+  assert.equal(row.overQty, 20);
+  assert.equal(row.status, "FAZLA");
+});
+
+test("eksik baskı bölgesini tamamlanmış model saymaz", () => {
+  const row = calculate({
+    expectedQty: 800,
+    requiredRegions: ["Ön", "Arka"],
+    regionTotals: totals([["Ön", 800]]),
+    printDefectQty: 0,
+    fabricDefectQty: 0,
+    wasteQty: 0,
   });
 
-  it("tam üretimde baskı ve kumaş sakatını net sağlam adetten düşer", () => {
-    const row = calculate({
-      expectedQty: 500,
-      requiredRegions: ["Ön"],
-      regionTotals: totals([["Ön", 500]]),
-      printDefectQty: 8,
-      fabricDefectQty: 2,
-      wasteQty: 10,
-    });
-    expect(row.completedGrossQty).toBe(500);
-    expect(row.netGoodQty).toBe(490);
-    expect(row.status).toBe("SAKATLI TAMAM");
+  assert.equal(row.completedGrossQty, 0);
+  assert.deepEqual(row.missingRegions, ["Arka"]);
+  assert.equal(row.status, "EKSİK BÖLGE");
+});
+
+test("tam üretimde baskı ve kumaş sakatını net sağlam adetten düşer", () => {
+  const row = calculate({
+    expectedQty: 500,
+    requiredRegions: ["Ön"],
+    regionTotals: totals([["Ön", 500]]),
+    printDefectQty: 8,
+    fabricDefectQty: 2,
+    wasteQty: 10,
   });
+
+  assert.equal(row.completedGrossQty, 500);
+  assert.equal(row.netGoodQty, 490);
+  assert.equal(row.status, "SAKATLI TAMAM");
 });
