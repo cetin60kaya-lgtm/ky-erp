@@ -16,10 +16,14 @@ export const prepareIsnetIncomingAutoFlow = (sourceId, payload = {}) =>
     { timeoutMs: 300_000 },
   ).then(unwrap);
 
-export const assignIsnetAutoFlowModel = (flowId, payload) =>
-  apiPost(`/isnet/auto-flows/${encodeURIComponent(flowId)}/model`, payload, {
+export const assignIsnetAutoFlowModel = (flowId, payload) => {
+  const body = typeof payload === "string"
+    ? { candidateId: payload, modelId: payload, source: "shared-model" }
+    : payload;
+  return apiPost(`/isnet/auto-flows/${encodeURIComponent(flowId)}/model`, body, {
     timeoutMs: 300_000,
   }).then(unwrap);
+};
 
 export const createIsnetAutoFlowOutgoingDraft = (flowId, payload) =>
   apiPost(
