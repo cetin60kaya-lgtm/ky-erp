@@ -1,7 +1,7 @@
 # Üretim Tek Merkez Doğrulama Sonucu
 
-- Commit: cec3809ee0da63c0efcddbd9eda90671b296347b
-- Çalışma zamanı (UTC): 2026-07-29T06:16:28Z
+- Commit: 277f3e2e1f0aa42f8b7a5325857e05b9471c116b
+- Çalışma zamanı (UTC): 2026-07-29T06:22:25Z
 - Frontend build / lint / sekme denetimi: **success**
 - Backend genel sonucu: **failure**
 - Backend bağımlılık kurulumu: **success**
