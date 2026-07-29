@@ -11,6 +11,7 @@ $Backend = Join-Path $Root "APP\app\ky-erp-backend"
 $Frontend = Join-Path $Root "APP\app\ky-erp-frontend"
 $Runtime = Join-Path $Root "TEMP\runtime"
 $Logs = Join-Path $Root "LOGS"
+$Database = Join-Path $Root "DATA\KYERP.db"
 $DatabaseCheck = Join-Path $PSScriptRoot "KYERP_DATABASE_GUVENCE.ps1"
 
 New-Item -ItemType Directory -Force -Path $Runtime | Out-Null
@@ -71,7 +72,7 @@ function Show-Status {
   [pscustomobject]@{
     Backend3101 = Get-PortStatus 3101
     Frontend5173 = Get-PortStatus 5173
-    Database = if (Test-Path -LiteralPath (Join-Path $Root "DATA\KYERP.db")) { "MEVCUT" } else { "EKSIK" }
+    Database = if (Test-Path -LiteralPath $Database) { "MEVCUT: $Database" } else { "EKSIK: $Database" }
   } | Format-List
 }
 
@@ -92,6 +93,13 @@ function Start-KyErp {
   Stop-KyErpProcesses
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $DatabaseCheck -Action check
   if ($LASTEXITCODE -ne 0) { throw "Veritabani guvence kontrolu basarisiz." }
+
+  if (-not (Test-Path -LiteralPath $Database)) {
+    throw "Veritabani bulunamadi: $Database"
+  }
+
+  $databaseUrlPath = $Database.Replace("\", "/")
+  $env:DATABASE_URL = "file:$databaseUrlPath"
 
   # Yalnizca yerel gelistirme servisinde ADMIN kod araclarini etkinlestirir.
   # Backend ayrica NODE_ENV=production ortaminda bu yetkiyi kesin olarak kapatir.
