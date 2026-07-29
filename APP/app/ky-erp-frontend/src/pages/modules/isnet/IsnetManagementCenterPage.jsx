@@ -6,11 +6,14 @@ import {
   FileWarning,
   Link2,
   LoaderCircle,
+  Plus,
   RefreshCw,
   ReceiptText,
   Settings2,
   Truck,
+  X,
 } from "lucide-react";
+import { getDesignCompanies } from "../../../services/desenWorkflowApi";
 import {
   getIsnetFullSyncStatus,
   getIsnetLocalDocuments,
@@ -18,6 +21,7 @@ import {
   startDailySync,
 } from "../../../services/isnetApi";
 import { getIsnetAutoFlows } from "../../../services/isnetAutoFlowApi";
+import { quickCreateCanonicalModel } from "../../../services/modelFlowApi";
 import "../IsnetPage.css";
 import "./IsnetManagementCenterPage.css";
 
@@ -53,7 +57,7 @@ function flowStatus(value) {
   }[value] || value || "Hazır";
 }
 
-export default function IsnetManagementCenterPage({ openModule }) {
+export default function IsnetManagementCenterPage({ openModule, activeMainCompany }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -62,6 +66,10 @@ export default function IsnetManagementCenterPage({ openModule }) {
   const [documents, setDocuments] = useState([]);
   const [documentTotal, setDocumentTotal] = useState(0);
   const [flows, setFlows] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [quickModelOpen, setQuickModelOpen] = useState(false);
+  const [quickModelBusy, setQuickModelBusy] = useState(false);
+  const [quickModel, setQuickModel] = useState({ modelName: "", companyId: "" });
   const range = useMemo(() => ({ startDate: recentStartText(), endDate: todayText() }), []);
 
   const load = useCallback(async () => {
@@ -88,6 +96,13 @@ export default function IsnetManagementCenterPage({ openModule }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
+    getDesignCompanies(activeMainCompany)
+      .then((rows) => setCompanies(Array.isArray(rows) ? rows : []))
+      .catch(() => setCompanies([]));
+  }, [activeMainCompany]);
 
   const metrics = useMemo(() => {
     const missingFiles = documents.filter((row) => !row.pdfSaved || !row.xmlSaved).length;
@@ -131,6 +146,40 @@ export default function IsnetManagementCenterPage({ openModule }) {
     }
   }
 
+  async function createQuickModel() {
+    const modelName = quickModel.modelName.trim();
+    if (!modelName) {
+      setNotice({ tone: "warning", text: "Hızlı model açmak için model adı zorunludur." });
+      return;
+    }
+    if (!quickModel.companyId) {
+      setNotice({ tone: "warning", text: "Model için kayıtlı müşteri firma seçilmelidir." });
+      return;
+    }
+    const company = companies.find((row) => row.id === quickModel.companyId);
+    setQuickModelBusy(true);
+    try {
+      const result = await quickCreateCanonicalModel(activeMainCompany, {
+        modelName,
+        companyId: quickModel.companyId,
+        firmaId: quickModel.companyId,
+        firmaAdi: company?.name || "",
+        companyName: company?.name || "",
+        sourceModule: "ISNET",
+      });
+      setQuickModelOpen(false);
+      setQuickModel({ modelName: "", companyId: "" });
+      setNotice({
+        tone: "success",
+        text: `${result?.model?.modelName || modelName} Desen merkezinde tek model olarak açıldı. İşNet, Boyahane, İmalat ve Muhasebe aynı model kimliğini kullanacak.`,
+      });
+    } catch (error) {
+      setNotice({ tone: "error", text: error?.message || "Model açılamadı." });
+    } finally {
+      setQuickModelBusy(false);
+    }
+  }
+
   const workItems = [
     ["Eksik PDF/XML", metrics.missingFiles, "belge-merkezi", FileWarning],
     ["Muhasebe bekleyen tedarikçi faturası", metrics.supplierAccounting, "belge-merkezi", ReceiptText],
@@ -149,6 +198,7 @@ export default function IsnetManagementCenterPage({ openModule }) {
           <p>Canlı bağlantıyı, son senkronizasyonu ve yalnız müdahale gereken işleri görün.</p>
         </div>
         <div className="isnet-hero__actions">
+          <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => setQuickModelOpen(true)}><Plus size={15} /> Hızlı Model Aç</button>
           <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openModule?.("isnet", { tabKey: "ayarlar" })}><Settings2 size={15} /> Bağlantı Ayarları</button>
           <button type="button" className="isnet-btn isnet-btn--primary" onClick={synchronize} disabled={busy}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />} İşNet'i Senkronize Et</button>
         </div>
@@ -168,6 +218,8 @@ export default function IsnetManagementCenterPage({ openModule }) {
         <div className="isnet-section-head"><div><small>SON OTOMATİK İŞLER</small><h2>İrsaliye ve fatura akışı</h2><p>Yalnız açık veya kontrol bekleyen işlemler gösterilir.</p></div><button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openModule?.("isnet", { tabKey: "is-akisi" })}>İş Akışını Aç</button></div>
         {flows.filter((row) => row.status !== "COMPLETED").length === 0 ? <div className="isnet-empty"><CheckCircle2 /><strong>Açık otomatik iş yok</strong></div> : <div className="isnet-table-wrap"><table className="isnet-table"><thead><tr><th>Kaynak</th><th>Müşteri</th><th>Model</th><th>Adet</th><th>Durum</th></tr></thead><tbody>{flows.filter((row) => row.status !== "COMPLETED").slice(0, 12).map((row) => <tr key={row.id}><td><strong>{row.incomingDocumentNo || row.incomingSourceId}</strong></td><td>{row.companyName}</td><td>{row.modelName || "Model bekliyor"}</td><td>{row.quantity}</td><td><span className="isnet-badge isnet-badge--blue">{flowStatus(row.status)}</span></td></tr>)}</tbody></table></div>}
       </section>
+
+      {quickModelOpen ? <div className="isnet-modal-backdrop"><section className="isnet-modal"><button type="button" className="isnet-modal-close" onClick={() => setQuickModelOpen(false)}><X size={18} /></button><h2>Tek Merkezli Hızlı Model Aç</h2><p>Model ana kaydı Desen merkezinde oluşur. Firma serbest yazılmaz; gerçek müşteri kartı seçilir.</p><label>Model adı *<input autoFocus value={quickModel.modelName} onChange={(event) => setQuickModel((current) => ({ ...current, modelName: event.target.value }))} /></label><label>Müşteri firma *<select value={quickModel.companyId} onChange={(event) => setQuickModel((current) => ({ ...current, companyId: event.target.value }))}><option value="">Firma seçin</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><div className="isnet-actions"><button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => setQuickModelOpen(false)}>Vazgeç</button><button type="button" className="isnet-btn isnet-btn--primary" onClick={createQuickModel} disabled={quickModelBusy}>{quickModelBusy ? <LoaderCircle size={15} className="spin" /> : <Plus size={15} />} Modeli Aç</button></div></section></div> : null}
     </main>
   );
 }

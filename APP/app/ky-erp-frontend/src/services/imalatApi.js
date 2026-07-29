@@ -15,8 +15,19 @@ function unwrap(payload) {
 }
 
 function withCompany(activeMainCompany, extra = {}) {
+  const mainCompanyId =
+    activeMainCompany?.id || activeMainCompany?.mainCompanyId || "";
+  const mainCompanySlug =
+    activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || "";
+  if (!mainCompanyId && !mainCompanySlug) {
+    throw new Error("Ana firma hazır olmadan üretim işlemi yapılamaz.");
+  }
   return {
     ...(activeMainCompany || {}),
+    id: mainCompanyId,
+    slug: mainCompanySlug,
+    mainCompanyId,
+    mainCompanySlug,
     ...extra,
   };
 }
@@ -28,7 +39,7 @@ export async function getImalatGirisHavuzu(activeMainCompany, params = {}) {
       search.set(key, String(value));
     }
   });
-  const suffix = search.toString() ? `${search.toString()}` : "";
+  const suffix = search.toString() ? `?${search.toString()}` : "";
   return unwrap(
     await apiGet(
       `/imalat/giris-havuzu${suffix}`,
@@ -113,22 +124,39 @@ export async function getImalatHavuz(activeMainCompany, params = {}) {
 }
 
 export async function createManuelIs(activeMainCompany, payload = {}) {
-  return unwrap(
+  const result = unwrap(
     await apiPost(
-      "/imalat/manuel-is",
+      "/model-flow/quick-create",
       withCompany(activeMainCompany, {
-        firma: payload?.firma,
-        musteriFirma: payload?.firma,
-        modelAdi: payload?.model || payload?.modelAdi,
-        musteriIrsaliyeNo: payload?.irsaliyeNo || payload?.siparisNo,
-        gelenAdet: payload?.beklenenAdet,
-        grup: payload?.baskiBolgesi,
-        tarih: payload?.tarih,
-        durum: payload?.durum || "İşlem Bekliyor",
-        kaynak: "Manuel",
+        modelName: payload?.model || payload?.modelAdi,
+        firmaId: payload?.firmaId,
+        companyId: payload?.firmaId,
+        firmaAdi: payload?.firma,
+        companyName: payload?.firma,
+        siparisNo: payload?.siparisNo,
+        dispatchNo: payload?.irsaliyeNo || payload?.siparisNo,
+        expectedQty: payload?.beklenenAdet,
+        baskiBolgesi: payload?.baskiBolgesi,
+        printRegions: payload?.baskiBolgesi,
+        sourceModule: "IMALAT",
       }),
     ),
   );
+  const model = result?.model || {};
+  const plan = result?.planLines?.[0] || {};
+  return {
+    ...plan,
+    id: plan.id || model.id,
+    modelId: model.id,
+    modelName: model.modelName || payload?.model,
+    companyName: model.firmaAdi || payload?.firma,
+    sourceDispatchNo: plan.sourceDispatchNo || payload?.siparisNo,
+    orderNo: plan.orderNo || payload?.siparisNo,
+    expectedQty: plan.expectedQty || payload?.beklenenAdet,
+    printArea: plan.printArea || payload?.baskiBolgesi || "Ön",
+    status: plan.status || "WAITING",
+    raw: { kaynak: "Desen Tek Merkez", modelId: model.id },
+  };
 }
 
 export async function addUretimGirisi(
@@ -152,6 +180,10 @@ export async function addUretimGirisi(
         sorumluPersonel: payload?.makinaci || payload?.sorumluPersonel,
         uretimAdedi: payload?.adet,
         hataliAdet: payload?.hataliAdet || 0,
+        baskiHatasiAdet: payload?.baskiHatasiAdet || 0,
+        kumasHatasiAdet: payload?.kumasHatasiAdet || 0,
+        printDefectQty: payload?.baskiHatasiAdet || 0,
+        fabricDefectQty: payload?.kumasHatasiAdet || 0,
         not: payload?.not,
         firma: payload?.firma,
         modelAdi: payload?.model,
@@ -327,6 +359,8 @@ export async function updateUretimGirisi(
         sorumluPersonel: payload?.makinaci || payload?.sorumluPersonel,
         uretimAdedi: payload?.adet,
         hataliAdet: payload?.hataliAdet || 0,
+        baskiHatasiAdet: payload?.baskiHatasiAdet || 0,
+        kumasHatasiAdet: payload?.kumasHatasiAdet || 0,
         printDefectQty: payload?.baskiHatasiAdet || 0,
         fabricDefectQty: payload?.kumasHatasiAdet || 0,
         grup: payload?.baskiBolgesi,
@@ -358,58 +392,4 @@ export async function deleteModelKaydiImalat(activeMainCompany, modelKaydiId) {
 export async function getFisAktarimHavuzu(activeMainCompany, tumu = false) {
   const path = tumu ? "/uretim/fis-aktarim/havuz/tumu" : "/uretim/fis-aktarim/havuz";
   return unwrap(await apiGet(path, withCompany(activeMainCompany)));
-}
-
-export async function fisAktarimSatirlariHavuzaAl(activeMainCompany, satirlar = []) {
-  return unwrap(
-    await apiPost(
-      "/uretim/fis-aktarim/excel-satirlari",
-      withCompany(activeMainCompany, { kaynak: "EXCEL", satirlar }),
-    ),
-  );
-}
-
-export async function updateFisAktarimSatiri(activeMainCompany, id, payload = {}) {
-  return unwrap(
-    await apiPatch(
-      `/uretim/fis-aktarim/havuz/${encodeURIComponent(id)}`,
-      withCompany(activeMainCompany, payload),
-    ),
-  );
-}
-
-export async function deleteFisAktarimSatiri(activeMainCompany, id) {
-  return unwrap(
-    await apiDelete(
-      `/uretim/fis-aktarim/havuz/${encodeURIComponent(id)}`,
-      withCompany(activeMainCompany),
-    ),
-  );
-}
-
-export async function topluEslestirFisAktarim(activeMainCompany) {
-  return unwrap(
-    await apiPost(
-      "/uretim/fis-aktarim/toplu-eslestir",
-      withCompany(activeMainCompany),
-    ),
-  );
-}
-
-export async function onaylaAktarFisAktarim(activeMainCompany) {
-  return unwrap(
-    await apiPost(
-      "/uretim/fis-aktarim/onayla-aktar",
-      withCompany(activeMainCompany),
-    ),
-  );
-}
-
-export async function temizleFisAktarimHavuzu(activeMainCompany) {
-  return unwrap(
-    await apiPost(
-      "/uretim/fis-aktarim/havuz-temizle",
-      withCompany(activeMainCompany),
-    ),
-  );
 }

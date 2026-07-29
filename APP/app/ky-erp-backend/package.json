@@ -41,6 +41,7 @@
     "isnet:purge-quarantine": "tsx src/scripts/isnet-document-organizer.ts purge-quarantine",
     "test:isnet": "tsx --test src/scripts/isnet-document-organizer.spec.ts src/muhasebe/isnet-operations.service.spec.ts src/muhasebe/isnet-source-intake.spec.ts src/muhasebe/isnet-source-intake.service.spec.ts src/muhasebe/isnet-full-sync.service.spec.ts src/muhasebe/isnet-source-workflow.service.spec.ts src/muhasebe/isnet-auto-flow.service.spec.ts src/muhasebe/muhasebe-document-workflow.spec.ts",
     "test:ik": "tsx --test src/ik/ik.service.spec.ts",
+    "test:production": "tsx --test src/modules/models/canonical-model-flow.service.spec.ts",
     "measure:isnet-local": "tsx src/scripts/measure-isnet-local.ts",
     "db:import:json-to-sql": "tsx src/scripts/import-all-json-to-sql.ts",
     "import:companies": "node scripts/import-json-companies-to-sqlite.js",

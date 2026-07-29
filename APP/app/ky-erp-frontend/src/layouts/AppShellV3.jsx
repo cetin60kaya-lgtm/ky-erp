@@ -1,4 +1,5 @@
-import { Bell, ChevronDown, Menu, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bell, ChevronDown, Command, Menu, Plus, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import "../styles/shell-v3.css";
 
@@ -7,6 +8,96 @@ function getTabs(module) {
   return module.groups
     ? module.groups.flatMap((group) => group.tabs)
     : module.tabs || [];
+}
+
+const QUICK_ACTIONS = [
+  {
+    id: "quick-production",
+    moduleKey: "uretim",
+    tabKey: "uretim-hizli-giris",
+    label: "Akıllı Üretim Fişi",
+    description: "Model, adet, bölge, vardiya ve makinacıyı serbest metinden çözümle.",
+    keywords: "imalat üretim fiş hızlı adet makine vardiya",
+  },
+  {
+    id: "production-pool",
+    moduleKey: "uretim",
+    tabKey: "uretim-is-havuzu",
+    label: "Üretim İş Havuzu",
+    description: "İrsaliyeye bağlı işi seç, sakatları ayır ve net sağlam adedi kaydet.",
+    keywords: "irsaliye baskı sakatı kumaş sakatı net sağlam",
+  },
+  {
+    id: "production-balance",
+    moduleKey: "uretim",
+    tabKey: "uretim-denge",
+    label: "İrsaliye / Üretim Dengesi",
+    description: "Gelen adet, operasyonlar, eksik, fazla ve sakat durumunu aç.",
+    keywords: "denge eksik fazla irsaliye rapor",
+  },
+  {
+    id: "isnet-workflow",
+    moduleKey: "isnet",
+    tabKey: "is-akisi",
+    label: "İrsaliyeyi Modele Bağla",
+    description: "İşNet gelen irsaliyesini tek merkez modele ve üretim planına bağla.",
+    keywords: "işnet irsaliye model bağla eşleştir",
+  },
+  {
+    id: "quick-model",
+    moduleKey: "isnet",
+    tabKey: "yonetim-merkezi",
+    label: "Hızlı Model Aç",
+    description: "Modeli Desen merkezinde aç; bütün modüller aynı kimliği kullansın.",
+    keywords: "desen model hızlı yeni kart",
+  },
+  {
+    id: "dyehouse-job",
+    moduleKey: "boyahane",
+    tabKey: "is-akisi",
+    label: "Boyahane İşi Başlat",
+    description: "Desen modelini kuyruğa al, kayıtlı renk ve reçeteyle devam et.",
+    keywords: "boyahane boya iş reçete renk",
+  },
+  {
+    id: "dye-recipe",
+    moduleKey: "boyahane",
+    tabKey: "receteler",
+    label: "Hızlı Reçete",
+    description: "Kayıtlı renk reçetesini aç veya yeni sürüm oluştur.",
+    keywords: "reçete pantone boya hızlı",
+  },
+  {
+    id: "current-account",
+    moduleKey: "muhasebe",
+    tabKey: "cari-hareketler",
+    label: "Hızlı Cari İşlem",
+    description: "Firma hareketi, ödeme veya düzeltme girişine geç.",
+    keywords: "muhasebe cari ödeme tahsilat hareket",
+  },
+  {
+    id: "check-payment",
+    moduleKey: "muhasebe",
+    tabKey: "cek-odeme",
+    label: "Hızlı Çek / Ödeme",
+    description: "Çek ve ödeme takip ekranını aç.",
+    keywords: "çek ödeme banka vade",
+  },
+  {
+    id: "hr-entry",
+    moduleKey: "ik",
+    tabKey: "mesai-avans",
+    label: "Hızlı Mesai / Avans",
+    description: "Mesai, avans veya kesinti işlemini aç.",
+    keywords: "ik personel mesai avans kesinti",
+  },
+];
+
+function normalize(value) {
+  return String(value || "")
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 export default function AppShellV3({
@@ -30,7 +121,40 @@ export default function AppShellV3({
   onLogout,
   children,
 }) {
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickSearch, setQuickSearch] = useState("");
   const activeTabLabel = getTabs(activeModule).find(([key]) => key === activeTab)?.[1] || "";
+
+  const quickActions = useMemo(() => {
+    const permitted = new Set(modules.map((item) => item.key));
+    const query = normalize(quickSearch);
+    return QUICK_ACTIONS.filter((action) => {
+      if (!permitted.has(action.moduleKey)) return false;
+      if (!query) return true;
+      return normalize(`${action.label} ${action.description} ${action.keywords}`).includes(query);
+    });
+  }, [modules, quickSearch]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("tr-TR") === "k") {
+        event.preventDefault();
+        setQuickOpen((current) => !current);
+      }
+      if (event.key === "Escape") setQuickOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!quickOpen) setQuickSearch("");
+  }, [quickOpen]);
+
+  function runQuickAction(action) {
+    onOpenTab(action.moduleKey, action.tabKey);
+    setQuickOpen(false);
+  }
 
   return (
     <div className={`shell-v3 ${mobileMenuOpen ? "mobile-open" : ""}`}>
@@ -127,6 +251,12 @@ export default function AppShellV3({
             <input placeholder="Firma, belge, model veya ürün ara" />
           </label>
 
+          <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}>
+            <Plus size={16} />
+            <span>Hızlı İşlem</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+
           <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => (
               <option key={company.slug} value={company.slug}>{company.name}</option>
@@ -207,6 +337,42 @@ export default function AppShellV3({
           <span className="ok">Sistem hazır</span>
         </footer>
       </main>
+
+      {quickOpen ? (
+        <div className="shell-v3-quick-backdrop" role="presentation" onMouseDown={() => setQuickOpen(false)}>
+          <section className="shell-v3-quick-palette" role="dialog" aria-modal="true" aria-label="Hızlı işlemler" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <Command size={19} />
+              <input
+                autoFocus
+                value={quickSearch}
+                onChange={(event) => setQuickSearch(event.target.value)}
+                placeholder="İşlem ara: üretim fişi, model, reçete, cari..."
+              />
+              <button type="button" onClick={() => setQuickOpen(false)} aria-label="Kapat"><X size={18} /></button>
+            </header>
+            <div className="shell-v3-quick-list">
+              {quickActions.map((action, index) => (
+                <button
+                  type="button"
+                  key={action.id}
+                  className="shell-v3-quick-action"
+                  onClick={() => runQuickAction(action)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") runQuickAction(action);
+                  }}
+                >
+                  <b>{index + 1}</b>
+                  <span><strong>{action.label}</strong><small>{action.description}</small></span>
+                  <em>{modules.find((item) => item.key === action.moduleKey)?.label}</em>
+                </button>
+              ))}
+              {!quickActions.length ? <div className="shell-v3-quick-empty">Aramaya uygun hızlı işlem bulunamadı.</div> : null}
+            </div>
+            <footer><span><kbd>Ctrl</kbd> + <kbd>K</kbd> ile her ekrandan açılır.</span><span>Seçilen işlem yeni çalışma sekmesinde açılır.</span></footer>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

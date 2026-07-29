@@ -16,14 +16,37 @@ export const prepareIsnetIncomingAutoFlow = (sourceId, payload = {}) =>
     { timeoutMs: 300_000 },
   ).then(unwrap);
 
-export const assignIsnetAutoFlowModel = (flowId, payload) => {
+export async function assignIsnetAutoFlowModel(flowId, payload) {
   const body = typeof payload === "string"
     ? { candidateId: payload, modelId: payload, source: "shared-model" }
-    : payload;
-  return apiPost(`/isnet/auto-flows/${encodeURIComponent(flowId)}/model`, body, {
-    timeoutMs: 300_000,
-  }).then(unwrap);
-};
+    : payload || {};
+
+  const assigned = unwrap(
+    await apiPost(`/isnet/auto-flows/${encodeURIComponent(flowId)}/model`, body, {
+      timeoutMs: 300_000,
+    }),
+  );
+
+  const flow = assigned?.flow || assigned;
+  const mainCompanySlug =
+    flow?.mainCompanySlug || body.mainCompanySlug || body.mainCompanyId || "";
+  const modelId =
+    flow?.modelId || assigned?.model?.id || body.modelId || body.candidateId || "";
+
+  if (mainCompanySlug && modelId) {
+    const productionLink = unwrap(
+      await apiPost("/model-flow/link-isnet-flow", {
+        mainCompanySlug,
+        mainCompanyId: body.mainCompanyId || undefined,
+        flowId,
+        modelId,
+      }),
+    );
+    return { ...assigned, productionLink };
+  }
+
+  return assigned;
+}
 
 export const createIsnetAutoFlowOutgoingDraft = (flowId, payload) =>
   apiPost(

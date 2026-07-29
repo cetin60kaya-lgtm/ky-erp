@@ -1,0 +1,215 @@
+.shell-v3-quick-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 35px;
+  padding: 0 10px;
+  border: 1px solid #c7d7e8;
+  border-radius: 8px;
+  background: #eef7ff;
+  color: #0b5f97;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shell-v3-quick-button:hover {
+  border-color: #71b8df;
+  background: #e0f2fe;
+}
+
+.shell-v3-quick-button kbd,
+.shell-v3-quick-palette kbd {
+  padding: 2px 5px;
+  border: 1px solid #cbd5e1;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #fff;
+  color: #526174;
+  font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.shell-v3-quick-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: start center;
+  padding: min(12vh, 110px) 18px 18px;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(4px);
+}
+
+.shell-v3-quick-palette {
+  width: min(720px, 100%);
+  max-height: min(720px, 76vh);
+  overflow: hidden;
+  border: 1px solid #d7e1ec;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.shell-v3-quick-palette > header {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 13px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.shell-v3-quick-palette > header > svg {
+  color: #0b69a6;
+}
+
+.shell-v3-quick-palette > header input {
+  width: 100%;
+  height: 40px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #162236;
+  font-size: 14px;
+}
+
+.shell-v3-quick-palette > header button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.shell-v3-quick-list {
+  display: grid;
+  gap: 5px;
+  max-height: calc(min(720px, 76vh) - 126px);
+  padding: 9px;
+  overflow-y: auto;
+}
+
+.shell-v3-quick-action {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #1e293b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell-v3-quick-action:hover,
+.shell-v3-quick-action:focus-visible {
+  border-color: #bfdbfe;
+  outline: 0;
+  background: #eff6ff;
+}
+
+.shell-v3-quick-action > b {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 7px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 10px;
+}
+
+.shell-v3-quick-action span,
+.shell-v3-quick-action strong,
+.shell-v3-quick-action small {
+  display: block;
+  min-width: 0;
+}
+
+.shell-v3-quick-action strong {
+  font-size: 12px;
+}
+
+.shell-v3-quick-action small {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-v3-quick-action em {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #526174;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.shell-v3-quick-empty {
+  padding: 34px 18px;
+  color: #64748b;
+  text-align: center;
+  font-size: 11px;
+}
+
+.shell-v3-quick-palette > footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 13px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 9px;
+}
+
+@media (max-width: 1160px) {
+  .shell-v3-quick-button kbd {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell-v3-quick-button span {
+    display: none;
+  }
+
+  .shell-v3-quick-button {
+    width: 35px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .shell-v3-quick-backdrop {
+    padding: 58px 8px 8px;
+  }
+
+  .shell-v3-quick-palette {
+    max-height: calc(100vh - 66px);
+    border-radius: 12px;
+  }
+
+  .shell-v3-quick-action {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .shell-v3-quick-action em,
+  .shell-v3-quick-palette > footer span:last-child {
+    display: none;
+  }
+}

@@ -1,4 +1,4 @@
-name: KY ERP Muhasebe İşNet ve İK Kontrolü
+name: KY ERP Muhasebe İşNet İK ve Üretim Kontrolü
 
 on:
   push:
@@ -6,9 +6,14 @@ on:
       - arayuz-kabuk-v3
       - tasarim-dogru-v4
       - tasarim-final-v1
+      - agent/uretim-tek-merkez
   pull_request:
     branches:
       - main
+      - tasarim-final-v1
+
+permissions:
+  contents: read
 
 jobs:
   frontend:
@@ -30,7 +35,7 @@ jobs:
       - name: Bağımlılıkları kur
         run: npm ci
 
-      - name: Build
+      - name: Frontend build
         shell: pwsh
         run: |
           cmd /c "npm run build > build.log 2>&1"
@@ -38,15 +43,15 @@ jobs:
           Get-Content build.log
           exit $code
 
-      - name: Muhasebe İşNet ve İK lint
+      - name: Muhasebe İşNet İK ve Üretim lint
         shell: pwsh
         run: |
-          cmd /c "npx eslint src/AppV3.jsx src/app/moduleRegistry.js src/hooks/useWorkspaceTabs.js src/layouts/AppShellV3.jsx src/pages/modules/ik/MonthlyOperationsWorkspaceV2.jsx src/pages/modules/muhasebe/MuhasebeSmartMatchPage.jsx src/pages/modules/isnet/*.jsx --max-warnings=0 > lint.log 2>&1"
+          cmd /c "npx eslint src/AppV3.jsx src/app/moduleRegistry.js src/hooks/useWorkspaceTabs.js src/layouts/AppShellV3.jsx src/pages/modules/ik/MonthlyOperationsWorkspaceV2.jsx src/pages/modules/muhasebe/MuhasebeSmartMatchPage.jsx src/pages/modules/isnet/*.jsx src/pages/modules/UretimPage.jsx src/pages/imalat/ProductionReconciliationPage.jsx src/pages/imalat/ProductionSettingsPage.jsx src/pages/imalat/ProductionWorkPoolPage.jsx src/pages/imalat/smart/CanonicalSmartProductionEntry.jsx src/services/imalatApi.js src/services/isnetAutoFlowApi.js src/services/modelFlowApi.js --max-warnings=0 > lint.log 2>&1"
           $code = $LASTEXITCODE
           if (Test-Path lint.log) { Get-Content lint.log }
           exit $code
 
-      - name: Üç modül sekme bağlantı denetimi
+      - name: Dört modül sekme bağlantı denetimi
         shell: pwsh
         run: |
           cmd /c "node scripts/audit-core-tabs.mjs > tab-audit.log 2>&1"
@@ -54,7 +59,7 @@ jobs:
           Get-Content tab-audit.log
           exit $code
 
-      - name: Kontrol loglarını yükle
+      - name: Frontend kontrol loglarını yükle
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -114,7 +119,15 @@ jobs:
           Get-Content ik-tests.log
           exit $code
 
-      - name: Backend loglarını yükle
+      - name: Üretim denge testleri
+        shell: pwsh
+        run: |
+          cmd /c "npm run test:production > production-tests.log 2>&1"
+          $code = $LASTEXITCODE
+          Get-Content production-tests.log
+          exit $code
+
+      - name: Backend kontrol loglarını yükle
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -123,4 +136,5 @@ jobs:
             APP/app/ky-erp-backend/backend-build.log
             APP/app/ky-erp-backend/isnet-tests.log
             APP/app/ky-erp-backend/ik-tests.log
+            APP/app/ky-erp-backend/production-tests.log
           if-no-files-found: ignore
