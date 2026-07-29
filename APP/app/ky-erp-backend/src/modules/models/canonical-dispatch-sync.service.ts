@@ -126,16 +126,44 @@ export class CanonicalDispatchSyncService {
         clean(row?.id) &&
         clean(row?.modelName || row?.modelAdi),
     );
+    const modelIds = rows.map((row: any) => clean(row.id)).filter(Boolean);
+    const openPlans = modelIds.length
+      ? await this.db().productionPlanLine.findMany({
+          where: {
+            mainCompanySlug,
+            modelId: { in: modelIds },
+            NOT: { status: "COMPLETED" },
+          },
+          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+          take: 10000,
+        })
+      : [];
+    const openPlanByModel = new Map<string, any>();
+    for (const plan of openPlans) {
+      const modelId = clean(plan.modelId);
+      if (modelId && !openPlanByModel.has(modelId)) {
+        openPlanByModel.set(modelId, plan);
+      }
+    }
     return {
-      rows: rows.map((row: any) => ({
-        ...row,
-        id: row.id,
-        modelId: row.id,
-        modelName: row.modelName || row.modelAdi,
-        modelAdi: row.modelAdi || row.modelName,
-        printRegions:
-          row.activePrintRegions || row.printRegions || row.baskiBolgeleri || [],
-      })),
+      rows: rows.map((row: any) => {
+        const openPlan = openPlanByModel.get(clean(row.id));
+        return {
+          ...row,
+          id: row.id,
+          modelId: row.id,
+          modelName: row.modelName || row.modelAdi,
+          modelAdi: row.modelAdi || row.modelName,
+          printRegions:
+            row.activePrintRegions || row.printRegions || row.baskiBolgeleri || [],
+          defaultDispatchNo:
+            clean(openPlan?.sourceDispatchNo || openPlan?.orderNo) || "",
+          defaultOrderNo: clean(openPlan?.orderNo) || "",
+          defaultPrintArea: clean(openPlan?.printArea) || "",
+          openExpectedQty: Number(openPlan?.expectedQty || 0),
+          openProducedQty: Number(openPlan?.producedQty || 0),
+        };
+      }),
       total: rows.length,
       designSync,
     };
