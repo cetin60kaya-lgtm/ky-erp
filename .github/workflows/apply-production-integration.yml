@@ -1,0 +1,82 @@
+name: Üretim Tek Merkez Entegrasyonu
+
+on:
+  push:
+    branches:
+      - agent/uretim-tek-merkez
+    paths:
+      - scripts/apply-production-integration.mjs
+      - .github/workflows/apply-production-integration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Dalı al
+        uses: actions/checkout@v4
+        with:
+          ref: agent/uretim-tek-merkez
+          fetch-depth: 0
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/app/ky-erp-backend/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Tek merkez entegrasyon yamasını uygula
+        run: node scripts/apply-production-integration.mjs
+
+      - name: Backend bağımlılıkları
+        working-directory: APP/app/ky-erp-backend
+        run: npm ci
+
+      - name: Prisma ve backend derleme
+        working-directory: APP/app/ky-erp-backend
+        run: |
+          npx prisma generate
+          npm run build
+
+      - name: Üretim denklemi testleri
+        working-directory: APP/app/ky-erp-backend
+        run: npx tsx --test src/modules/models/canonical-model-flow.service.spec.ts
+
+      - name: Frontend bağımlılıkları
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend üretim derlemesi
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Değişen frontend dosyalarını denetle
+        working-directory: APP/app/ky-erp-frontend
+        run: >-
+          npx eslint
+          src/app/moduleRegistry.js
+          src/pages/modules/UretimPage.jsx
+          src/pages/modules/isnet/IsnetWorkflowFinalPage.jsx
+          src/pages/imalat/UretimGirisHavuzu.jsx
+          src/pages/imalat/ProductionReconciliationPage.jsx
+          src/pages/imalat/ProductionSettingsPage.jsx
+          src/services/imalatApi.js
+          src/services/isnetAutoFlowApi.js
+          src/services/modelFlowApi.js
+          --max-warnings=0
+
+      - name: Geçici yama dosyalarını kaldır ve kaydet
+        run: |
+          rm -f scripts/apply-production-integration.mjs
+          rm -f .github/workflows/apply-production-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Üretim tek merkez model ve irsaliye denklemini tamamla"
+          git push origin HEAD:agent/uretim-tek-merkez
