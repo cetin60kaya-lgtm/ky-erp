@@ -27,8 +27,91 @@ export class CanonicalDispatchSyncService {
     return value;
   }
 
+  private async syncDesignModels(mainCompanySlug: string) {
+    const designRows = await this.db().designWorkflowModel.findMany({
+      where: { mainCompanySlug },
+      orderBy: [{ createdAt: "asc" }],
+      take: 10000,
+    });
+    if (!designRows.length) return { scanned: 0, linked: 0 };
+
+    const ids = designRows.map((row: any) => row.id);
+    const [existingLinks, operations] = await Promise.all([
+      this.db().designModelLink.findMany({
+        where: { mainCompanySlug, designRecordId: { in: ids } },
+      }),
+      this.db().designModelOperation.findMany({
+        where: { modelId: { in: ids } },
+        orderBy: [{ sequence: "asc" }],
+      }),
+    ]);
+    const linkedIds = new Set(
+      existingLinks.map((row: any) => clean(row.designRecordId)),
+    );
+    const operationsByModel = new Map<string, any[]>();
+    for (const operation of operations) {
+      const list = operationsByModel.get(clean(operation.modelId)) || [];
+      list.push(operation);
+      operationsByModel.set(clean(operation.modelId), list);
+    }
+
+    let linked = 0;
+    for (const design of designRows) {
+      if (linkedIds.has(clean(design.id))) continue;
+      const metadata =
+        design.metadata && typeof design.metadata === "object"
+          ? design.metadata
+          : {};
+      const printRegions = (operationsByModel.get(clean(design.id)) || [])
+        .map((row: any) => clean(row.printAreaName || row.printAreaCode))
+        .filter(Boolean);
+      const canonical = await this.models.create({
+        mainCompanySlug,
+        modelName: design.modelName,
+        modelCode: design.modelCode,
+        companyId: design.companyId,
+        firmaId: design.companyId,
+        firmaAdi: clean((metadata as any).companyName),
+        groundColor: design.groundColor,
+        zeminRenk: design.groundColor,
+        printRegions,
+        sourceModule: "DESEN",
+        sourceType: design.sourceType || "DESEN_WORKFLOW",
+        sourceExternalId: design.id,
+        imageUrl: clean(
+          (metadata as any).imageUrl ||
+            (metadata as any).thumbnail ||
+            (metadata as any).previewUrl,
+        ),
+        canonicalModel: true,
+      });
+      await this.db().designModelLink.create({
+        data: {
+          mainCompanySlug,
+          designRecordId: design.id,
+          modelId: canonical.id,
+          raw: { source: "DESEN_WORKFLOW_AUTO_SYNC" },
+        },
+      });
+      await this.db().designWorkflowModel.update({
+        where: { id: design.id },
+        data: {
+          metadata: {
+            ...metadata,
+            canonicalModelId: canonical.id,
+            canonicalLinkedAt: new Date().toISOString(),
+          },
+        },
+      });
+      linkedIds.add(clean(design.id));
+      linked += 1;
+    }
+    return { scanned: designRows.length, linked };
+  }
+
   async listModels(input: Input = {}) {
     const mainCompanySlug = this.slug(input);
+    const designSync = await this.syncDesignModels(mainCompanySlug);
     const result = await this.models.list({
       mainCompanySlug,
       q: clean(input.q || input.search),
@@ -47,11 +130,13 @@ export class CanonicalDispatchSyncService {
           row.activePrintRegions || row.printRegions || row.baskiBolgeleri || [],
       })),
       total: rows.length,
+      designSync,
     };
   }
 
   async linkIsnetFlow(input: Input = {}) {
     const mainCompanySlug = this.slug(input);
+    await this.syncDesignModels(mainCompanySlug);
     const flowId = clean(input.flowId || input.id);
     if (!flowId) throw new BadRequestException("İşNet akış kimliği zorunludur.");
     const setting = await this.db().setting.findUnique({
@@ -77,6 +162,7 @@ export class CanonicalDispatchSyncService {
 
   async syncLinkedIntakes(input: Input = {}) {
     const mainCompanySlug = this.slug(input);
+    const designSync = await this.syncDesignModels(mainCompanySlug);
     const intakes = await this.db().documentIntake.findMany({
       where: {
         mainCompanySlug,
@@ -97,12 +183,15 @@ export class CanonicalDispatchSyncService {
       for (const line of intake.lines || []) {
         const modelId = clean(line.modelId || intake.modelId);
         if (!modelId) continue;
-        const ids = byModel.get(modelId) || [];
-        ids.push(line.id);
-        byModel.set(modelId, ids);
+        const idsForModel = byModel.get(modelId) || [];
+        idsForModel.push(line.id);
+        byModel.set(modelId, idsForModel);
       }
       if (!byModel.size && clean(intake.modelId)) {
-        byModel.set(clean(intake.modelId), (intake.lines || []).map((line: any) => line.id));
+        byModel.set(
+          clean(intake.modelId),
+          (intake.lines || []).map((line: any) => line.id),
+        );
       }
       for (const [modelId, lineIds] of byModel.entries()) {
         try {
@@ -124,6 +213,7 @@ export class CanonicalDispatchSyncService {
       }
     }
     return {
+      designSync,
       scannedIntakes: intakes.length,
       linkedPlans: success.length,
       failedCount: failed.length,
