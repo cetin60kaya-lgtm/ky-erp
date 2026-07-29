@@ -12,21 +12,31 @@ export type DesenFolderSettings = {
   updatedAt?: string;
 };
 
+type FolderLinkResult = {
+  key: keyof Omit<DesenFolderSettings, "updatedAt">;
+  canonicalPath: string;
+  targetPath: string;
+  mode: "DEFAULT" | "JUNCTION" | "DIRECT";
+  migratedCount: number;
+};
+
 function clean(value: unknown) {
   return String(value ?? "").replace(/^['\"]+|['\"]+$/g, "").trim();
 }
 
 function safeSlug(value: unknown) {
-  return clean(value)
-    .toLocaleLowerCase("tr-TR")
-    .replace(/ı/g, "i")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "default";
+  return (
+    clean(value)
+      .toLocaleLowerCase("tr-TR")
+      .replace(/ı/g, "i")
+      .replace(/ğ/g, "g")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ö/g, "o")
+      .replace(/ç/g, "c")
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "default"
+  );
 }
 
 function defaults(): DesenFolderSettings {
@@ -49,7 +59,9 @@ function readAll(): Record<string, DesenFolderSettings> {
   try {
     if (!fs.existsSync(file)) return {};
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
   } catch {
     return {};
   }
@@ -64,6 +76,99 @@ function normalizeFolder(value: unknown, fallback: string) {
   return path.resolve(raw);
 }
 
+function samePath(left: string, right: string) {
+  return path.resolve(left).toLocaleLowerCase("tr-TR") === path.resolve(right).toLocaleLowerCase("tr-TR");
+}
+
+function isInside(candidate: string, parent: string) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function uniqueTarget(targetPath: string) {
+  if (!fs.existsSync(targetPath)) return targetPath;
+  const parsed = path.parse(targetPath);
+  let index = 1;
+  let candidate = path.join(parsed.dir, `${parsed.name}-aktarilan-${index}${parsed.ext}`);
+  while (fs.existsSync(candidate)) {
+    index += 1;
+    candidate = path.join(parsed.dir, `${parsed.name}-aktarilan-${index}${parsed.ext}`);
+  }
+  return candidate;
+}
+
+function migrateDirectoryContents(sourceDir: string, targetDir: string) {
+  if (!fs.existsSync(sourceDir)) return 0;
+  fs.mkdirSync(targetDir, { recursive: true });
+  let migratedCount = 0;
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const source = path.join(sourceDir, entry.name);
+    const desired = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      migratedCount += migrateDirectoryContents(source, desired);
+      if (fs.existsSync(source) && fs.readdirSync(source).length === 0) fs.rmdirSync(source);
+      continue;
+    }
+    const target = uniqueTarget(desired);
+    try {
+      fs.renameSync(source, target);
+    } catch {
+      fs.copyFileSync(source, target);
+      fs.unlinkSync(source);
+    }
+    migratedCount += 1;
+  }
+  return migratedCount;
+}
+
+function ensureCanonicalLink(
+  key: FolderLinkResult["key"],
+  canonicalPath: string,
+  targetPath: string,
+): FolderLinkResult {
+  const canonical = path.resolve(canonicalPath);
+  const target = path.resolve(targetPath);
+  fs.mkdirSync(target, { recursive: true });
+
+  if (samePath(canonical, target)) {
+    fs.mkdirSync(canonical, { recursive: true });
+    return { key, canonicalPath: canonical, targetPath: target, mode: "DEFAULT", migratedCount: 0 };
+  }
+  if (isInside(target, canonical)) {
+    throw new BadRequestException(
+      `${key} hedefi standart klasörün içinde olamaz: ${target}`,
+    );
+  }
+  if (process.platform !== "win32") {
+    return { key, canonicalPath: canonical, targetPath: target, mode: "DIRECT", migratedCount: 0 };
+  }
+
+  let migratedCount = 0;
+  if (fs.existsSync(canonical)) {
+    const stat = fs.lstatSync(canonical);
+    if (stat.isSymbolicLink()) {
+      let currentTarget = "";
+      try {
+        currentTarget = fs.realpathSync(canonical);
+      } catch {
+        currentTarget = "";
+      }
+      if (currentTarget && samePath(currentTarget, target)) {
+        return { key, canonicalPath: canonical, targetPath: target, mode: "JUNCTION", migratedCount: 0 };
+      }
+      fs.unlinkSync(canonical);
+    } else if (stat.isDirectory()) {
+      migratedCount = migrateDirectoryContents(canonical, target);
+      if (fs.readdirSync(canonical).length === 0) fs.rmdirSync(canonical);
+    } else {
+      throw new BadRequestException(`Standart desen yolu klasör değil: ${canonical}`);
+    }
+  }
+  fs.mkdirSync(path.dirname(canonical), { recursive: true });
+  fs.symlinkSync(target, canonical, "junction");
+  return { key, canonicalPath: canonical, targetPath: target, mode: "JUNCTION", migratedCount };
+}
+
 export function getDesenFolderSettings(mainCompanySlug: unknown): DesenFolderSettings {
   const base = defaults();
   const saved = readAll()[safeSlug(mainCompanySlug)] || {};
@@ -75,6 +180,17 @@ export function getDesenFolderSettings(mainCompanySlug: unknown): DesenFolderSet
     archiveFolder: normalizeFolder(saved.archiveFolder, base.archiveFolder),
     updatedAt: clean(saved.updatedAt) || undefined,
   };
+}
+
+export function applyDesenFolderLinks(settings: DesenFolderSettings) {
+  const base = defaults();
+  return [
+    ensureCanonicalLink("incomingFolder", base.incomingFolder, settings.incomingFolder),
+    ensureCanonicalLink("modelsFolder", base.modelsFolder, settings.modelsFolder),
+    ensureCanonicalLink("processedFolder", base.processedFolder, settings.processedFolder),
+    ensureCanonicalLink("errorFolder", base.errorFolder, settings.errorFolder),
+    ensureCanonicalLink("archiveFolder", base.archiveFolder, settings.archiveFolder),
+  ];
 }
 
 export function saveDesenFolderSettings(
@@ -100,11 +216,10 @@ export function saveDesenFolderSettings(
   if (distinct.size !== 5) {
     throw new BadRequestException("Desen klasörlerinin her biri farklı olmalıdır.");
   }
-  Object.values(next).forEach((folder) => {
-    if (typeof folder === "string" && path.isAbsolute(folder)) {
-      fs.mkdirSync(folder, { recursive: true });
-    }
+  Object.entries(next).forEach(([key, folder]) => {
+    if (key !== "updatedAt" && typeof folder === "string") fs.mkdirSync(folder, { recursive: true });
   });
+  applyDesenFolderLinks(next);
   const all = readAll();
   all[safeSlug(mainCompanySlug)] = next;
   const file = settingsFile();
@@ -120,10 +235,7 @@ export function testDesenFolderSettings(
   input?: Partial<DesenFolderSettings>,
 ) {
   const current = input
-    ? {
-        ...getDesenFolderSettings(mainCompanySlug),
-        ...input,
-      }
+    ? { ...getDesenFolderSettings(mainCompanySlug), ...input }
     : getDesenFolderSettings(mainCompanySlug);
   const normalized: DesenFolderSettings = {
     incomingFolder: normalizeFolder(current.incomingFolder, defaults().incomingFolder),
