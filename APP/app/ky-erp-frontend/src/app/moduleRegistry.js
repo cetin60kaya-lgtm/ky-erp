@@ -157,12 +157,26 @@ export const MODULES = [
     icon: "dashboard",
     groups: [
       {
-        label: "Üretim",
+        label: "Üretim Girişi",
         tabs: [
-          ["uretim-girisi", "Üretim Girişi", "dashboard"],
-          ["imalat-kontrol-rapor", "Denetim ve Rapor", "raporlar"],
+          ["uretim-hizli-giris", "Akıllı Hızlı Giriş", "dashboard"],
+          ["uretim-is-havuzu", "Üretim İş Havuzu", "dosya"],
         ],
       },
+      {
+        label: "Kontrol ve Yönetim",
+        tabs: [
+          ["uretim-denge", "İrsaliye / Üretim Dengesi", "file-check"],
+          ["uretim-raporlari", "Üretim Raporları", "raporlar"],
+          ["uretim-ayarlari", "Makine ve Vardiya Ayarları", "ayarlar"],
+        ],
+      },
+    ],
+    hiddenTabs: [
+      ["uretim-girisi", "Üretim Girişi (Eski Bağlantı)", "dashboard"],
+      ["imalat-kontrol-rapor", "Denetim ve Rapor (Eski Bağlantı)", "raporlar"],
+      ["imalat-denetim", "Üretim Dengesi (Eski Bağlantı)", "file-check"],
+      ["uretim-raporu", "Üretim Raporu (Eski Bağlantı)", "raporlar"],
     ],
   },
   {
