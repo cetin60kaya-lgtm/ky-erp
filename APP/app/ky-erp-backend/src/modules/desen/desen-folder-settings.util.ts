@@ -171,7 +171,7 @@ function ensureCanonicalLink(
 
 export function getDesenFolderSettings(mainCompanySlug: unknown): DesenFolderSettings {
   const base = defaults();
-  const saved = readAll()[safeSlug(mainCompanySlug)] || {};
+  const saved = (readAll()[safeSlug(mainCompanySlug)] || {}) as Partial<DesenFolderSettings>;
   return {
     incomingFolder: normalizeFolder(saved.incomingFolder, base.incomingFolder),
     modelsFolder: normalizeFolder(saved.modelsFolder, base.modelsFolder),
