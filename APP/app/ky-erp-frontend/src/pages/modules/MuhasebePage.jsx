@@ -639,6 +639,74 @@ function DataTable({
   );
 }
 
+function FirmCardExtras({ activeMainCompany, refreshKey, reloadAll, goTab }) {
+  const [openPanel, setOpenPanel] = useState("");
+  return (
+    <section
+      style={{
+        marginTop: 12,
+        border: "1px solid #dfe7f2",
+        borderRadius: 14,
+        background: "#fff",
+        overflow: "hidden",
+      }}
+    >
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "12px 14px",
+          background: "#f8fbff",
+          borderBottom: openPanel ? "1px solid #e7edf5" : 0,
+        }}
+      >
+        <div>
+          <strong style={{ color: "#17365f" }}>Firma Kartı Ek Ayarları</strong>
+          <p style={{ margin: "3px 0 0", color: "#748297", fontSize: 12 }}>
+            Gider kuralı ve mail/yetkili bilgileri yalnız gerektiğinde açılır.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          <button
+            className={openPanel === "expense" ? "mh-btn primary" : "mh-btn"}
+            type="button"
+            onClick={() => setOpenPanel((value) => (value === "expense" ? "" : "expense"))}
+          >
+            Firma / Gider Kuralları
+          </button>
+          <button
+            className={openPanel === "contacts" ? "mh-btn primary" : "mh-btn"}
+            type="button"
+            onClick={() => setOpenPanel((value) => (value === "contacts" ? "" : "contacts"))}
+          >
+            Yetkililer ve E-posta
+          </button>
+        </div>
+      </header>
+      {openPanel === "expense" ? (
+        <div style={{ padding: 12 }}>
+          <ExpenseCategories
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+          />
+        </div>
+      ) : null}
+      {openPanel === "contacts" ? (
+        <div style={{ padding: 12 }}>
+          <FirmContacts
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+            reloadAll={reloadAll}
+            goTab={goTab}
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function MuhasebePage({
   activeTab,
   activeMainCompany,
@@ -712,6 +780,12 @@ export default function MuhasebePage({
           <CompanyAliasPanel
             activeMainCompany={activeMainCompany}
             refreshKey={refreshKey}
+          />
+          <FirmCardExtras
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+            reloadAll={reloadAll}
+            goTab={goTab}
           />
         </>
       ) : null}
@@ -5611,6 +5685,20 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
       visibleCompanies[0] ||
       {};
   const [form, setForm] = useState(emptyCompanyForm());
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quick") !== "cari") return;
+    setIsNewFirm(true);
+    setSelectedId("");
+    setFeedback("Hızlı cari: firma bilgilerini girip Firma Kaydet düğmesine basın.");
+    params.delete("quick");
+    const query = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (query ? "?" + query : ""),
+    );
+  }, []);
   const filteredReportCategories = useMemo(() => {
     const needle = categorySearch.trim().toLocaleLowerCase("tr-TR");
     return reportCategories.filter((category) => {
