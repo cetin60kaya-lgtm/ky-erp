@@ -101,3 +101,18 @@ Aşağıdaki klasörler ana çalışma kaynağı değildir; otomatik eşitlenmez
 - Cloudflare D1, R2, Workers ve Pages uyumluluğunu koru.
 - Production API adresi `https://api.kyerp.net` olarak kalmalıdır.
 - İş tamamlandığında değiştirilen dosyaları ve test sonuçlarını raporla.
+
+
+## Muhasebe, İşNet, cari, alias ve çek merkezi
+
+- İşNet belge operasyonunun tek merkezidir: portal senkronu, gelen/giden belge, irsaliyeden faturaya, PDF/XML ve yerel arşiv İşNet altında yürür. Muhasebe aynı belge operasyonunu ikinci kez yaptırmaz.
+- Muhasebe günlük menüsü sade tutulur: Yönetim Özeti, Firmalar ve Cari, Tedarikçi Faturaları, Gelir/Gider/Kâr Zarar, KDV, Çek/Kart/Ödeme, Ekstre/Mail ve Raporlar.
+- Muhasebe yalnız finansal sonucu ve istisnayı gösterir: cari işlendi mi, KDV işlendi mi, gider kategorisi var mı, ödeme/çek durumu nedir.
+- Firma kartı müşteri/tedarikçi, resmi/gayri, gider kategorisi, yetkili/e-posta, boya-kimya tedarikçisi ve cari bilgisinin ortak kaynağıdır.
+- Firma aliası aynı firmaya yazılan farklı adları tek firma kimliğine bağlar. Örnek: Taha Giyim ve Taha Tekstil aynı firma kartına alias olabilir.
+- Ürün aliası yalnız boya/kimya tedarik akışında kullanılır. Örnek: S 20 White ve S 20 Beyaz aynı S 20 ürün kartına bağlanabilir.
+- Boya/kimya tedarikçisi olmayan faturalar ürün/lot beklemeden gider kategorisi, cari ve KDV akışına gider.
+- Çek merkezi büyük aylık denetim ekranıdır; bu ay, gelecek ay, geciken, açık ve yıllık toplamlar atlanmaz.
+- Çek kaydında firma, verilen tarih, vade, banka, hesap no, çek no, tutar, müşteri/kendi çeki, alınan/verilen, resmi/gayri ve not tutulur.
+- Çek ön/arka görseli ve tahsilat makbuzu JPG, PNG, WEBP veya PDF olarak STORAGE altında saklanır; GitHub'a girmez.
+- Hızlı Cari, Hızlı Çek ve Hızlı Ödeme/Tahsilat normal ekranlarla aynı doğrulama ve servisleri kullanır.

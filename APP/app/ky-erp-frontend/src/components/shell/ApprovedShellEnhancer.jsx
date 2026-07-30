@@ -19,7 +19,7 @@ const MODULE_LABELS = {
 
 const SCREEN_LABELS = {
   "yonetim-ozeti": "Yönetim Özeti",
-  "firma-kartlari": "Firma Kartları",
+  "firma-kartlari": "Firmalar ve Cari",
   "firma-yetkilileri": "Firma Yetkilileri",
   "gider-kategorileri": "Gider Kategorileri",
   "tedarikci-faturalar": "Tedarikçi Faturaları",
@@ -28,11 +28,11 @@ const SCREEN_LABELS = {
   "irsaliye-fatura-kontrol": "İrsaliye / Fatura",
   "model-takip": "Model Üretim Takibi",
   "cari-hareketler": "Cari Hareketler",
-  "kar-zarar": "Gelir / Gider",
+  "kar-zarar": "Gelir / Gider / Kâr Zarar",
   "envanter-urunleri": "Ürünler",
   "kdv-kontrol": "KDV Kontrol",
-  "cek-odeme": "Çek / Ödeme",
-  "mail-ekstre": "Mail / Ekstre",
+  "cek-odeme": "Çek, Kart ve Ödeme",
+  "mail-ekstre": "Ekstre ve Mail",
   "mail-sablonlari": "Mail Şablonları",
   "muhasebe-raporlari": "Muhasebe Raporları",
   "yonetim-merkezi": "Analiz ve Eşleştirme",

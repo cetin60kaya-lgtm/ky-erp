@@ -1,0 +1,45 @@
+name: KY ERP Finans Regresyon Kontrolü
+
+on:
+  push:
+    branches:
+      - agent/muhasebe-isnet-finans-v3
+  pull_request:
+    branches:
+      - agent/uretim-tek-merkez
+      - tasarim-final-v1
+
+permissions:
+  contents: read
+
+jobs:
+  ik-ve-uretim:
+    runs-on: windows-latest
+    env:
+      DATABASE_URL: file:./ci-finans-regresyon.db
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-backend/package-lock.json
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Prisma client üret
+        run: npm run db:generate
+
+      - name: İK aylık ve günlük testleri
+        run: npm run test:ik
+
+      - name: Üretim irsaliye ve imalat denge testleri
+        run: npm run test:production

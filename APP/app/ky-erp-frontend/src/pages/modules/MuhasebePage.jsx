@@ -14,6 +14,7 @@ import BelgeIslemMerkezi, {
   ModelMerkezliMusteriTakip,
 } from "../muhasebe/BelgeIslemMerkezi";
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
+import CompanyAliasPanel from "../muhasebe/CompanyAliasPanel";
 import { fetchBelgeImport } from "../../services/muhasebeDocumentService";
 import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
 import MuhasebeReportsWorkspace from "./muhasebe/MuhasebeReportsWorkspace";
@@ -23,114 +24,67 @@ import MusteriIrsaliyeleriTab from "./muhasebe/MusteriIrsaliyeleriTab";
 import IrsaliyeFaturaKontrolTab from "./muhasebe/IrsaliyeFaturaKontrolTab";
 
 const TAB_CONFIG = [
-  {
-    key: "yonetim-ozeti",
-    short: "Yönetim Özeti",
-    title: "Muhasebe Yönetim Özeti",
-  },
-  { key: "firma-kartlari", short: "Firma Kartları", title: "Firma Kartları" },
-  {
-    key: "gider-kategorileri",
-    short: "Gider Kategorileri",
-    title: "Gider Kategorileri",
-  },
-  {
-    key: "firma-yetkilileri",
-    short: "Firma Yetkilileri",
-    title: "Firma Yetkilileri",
-  },
-  {
-    key: "tedarikci-faturalar",
-    short: "Tedarikçi Fatura",
-    title: "Tedarikçi Faturaları",
-  },
-  {
-    key: "kesilen-faturalar",
-    short: "Kesilen Faturalar",
-    title: "Kesilen Faturalar",
-  },
-  {
-    key: "musteri-irsaliyeleri",
-    short: "İrsaliyeler",
-    title: "Müşteri İrsaliyeleri",
-  },
-  {
-    key: "irsaliye-fatura-kontrol",
-    short: "İrsaliye / Fatura",
-    title: "İrsaliye – Fatura Kontrolü",
-  },
-  {
-    key: "model-takip",
-    short: "Model Üretim Takibi",
-    title: "Model Üretim Takibi",
-  },
-  { key: "cari-hareketler", short: "Cari Hareket", title: "Cari Hareketler" },
-  {
-    key: "kar-zarar",
-    short: "Gelir / Gider",
-    title: "Gelir / Gider ve İş Hacmi",
-  },
-  {
-    key: "envanter-urunleri",
-    short: "Ürünler",
-    title: "Ürünler / Envanter",
-  },
+  { key: "yonetim-ozeti", short: "Yönetim Özeti", title: "Muhasebe Yönetim Özeti" },
+  { key: "firma-kartlari", short: "Firmalar ve Cari", title: "Firmalar, Cari ve Yetkililer" },
+  { key: "tedarikci-faturalar", short: "Tedarikçi Faturaları", title: "Tedarikçi Faturaları" },
+  { key: "kar-zarar", short: "Gelir / Gider", title: "Gelir, Gider ve Kâr Zarar" },
   { key: "kdv-kontrol", short: "KDV", title: "KDV Kontrol" },
-  { key: "cek-odeme", short: "Çek / Ödeme", title: "Çek / Ödeme" },
-  { key: "mail-ekstre", short: "Mail / Ekstre", title: "Mail / Ekstre Takip" },
-  {
-    key: "mail-sablonlari",
-    short: "Mail Şablonları",
-    title: "Mail Şablonları",
-  },
-  { key: "muhasebe-raporlari", short: "Rapor", title: "Muhasebe Raporları" },
+  { key: "cek-odeme", short: "Çek / Ödeme", title: "Çek, Kart ve Ödeme Merkezi" },
+  { key: "mail-ekstre", short: "Ekstre / Mail", title: "Ekstre ve Mail Takibi" },
+  { key: "muhasebe-raporlari", short: "Raporlar", title: "Muhasebe Raporları" },
 ];
 
 const TAB_ALIASES = {
   "genel-bakis": "yonetim-ozeti",
+  "yonetim-ozeti": "yonetim-ozeti",
+  "firma-kartlari": "firma-kartlari",
+  firmalar: "firma-kartlari",
+  cari: "firma-kartlari",
+  "cari-hareketler": "firma-kartlari",
+  "firma-yetkilileri": "firma-kartlari",
+  "eposta-kisileri": "firma-kartlari",
+  "gider-kategorileri": "firma-kartlari",
+  "tedarikci-faturalar": "tedarikci-faturalar",
+  "tedarikci-fatura": "tedarikci-faturalar",
+  "tedarik-fatura": "tedarikci-faturalar",
   "belge-kontrol": "tedarikci-faturalar",
   "belge-is-akisi": "tedarikci-faturalar",
   "belge-yukle": "tedarikci-faturalar",
   "belge-merkezi": "tedarikci-faturalar",
   "model-muhasebe": "tedarikci-faturalar",
   "model-muhasebe-ekrani": "tedarikci-faturalar",
-  "model-takip": "model-takip",
-  "tedarikci-faturalar": "tedarikci-faturalar",
-  "tedarikci-fatura": "tedarikci-faturalar",
-  "kesilen-faturalar": "kesilen-faturalar",
-  "fatura-kesim-yardimcisi": "kesilen-faturalar",
-  "fatura-kesim": "kesilen-faturalar",
-  "fatura-yardimci": "kesilen-faturalar",
-  "musteri-belgeleri": "kesilen-faturalar",
-  "musteri-irsaliyeleri": "musteri-irsaliyeleri",
-  "musteri-irsaliye": "musteri-irsaliyeleri",
-  "irsaliye-fatura-kontrol": "irsaliye-fatura-kontrol",
-  "irsaliye-fatura": "irsaliye-fatura-kontrol",
+  "kesilen-faturalar": "yonetim-ozeti",
+  "fatura-kesim-yardimcisi": "yonetim-ozeti",
+  "fatura-kesim": "yonetim-ozeti",
+  "fatura-yardimci": "yonetim-ozeti",
+  "musteri-belgeleri": "yonetim-ozeti",
+  "musteri-irsaliyeleri": "yonetim-ozeti",
+  "musteri-irsaliye": "yonetim-ozeti",
+  "irsaliye-fatura-kontrol": "yonetim-ozeti",
+  "irsaliye-fatura": "yonetim-ozeti",
+  "model-takip": "yonetim-ozeti",
   "kar-zarar": "kar-zarar",
   kar: "kar-zarar",
   zarar: "kar-zarar",
   "gelir-gider": "kar-zarar",
   "is-hacmi": "kar-zarar",
-  envanter: "envanter-urunleri",
-  urunler: "envanter-urunleri",
-  "urun-kartlari": "envanter-urunleri",
   "envanter-urunleri": "envanter-urunleri",
   "urun-eslestirme": "envanter-urunleri",
   "urun-eslesmeleri": "envanter-urunleri",
   alias: "envanter-urunleri",
   aliases: "envanter-urunleri",
-  cari: "cari-hareketler",
-  firmalar: "firma-kartlari",
-  "firma-yetkilileri": "firma-yetkilileri",
-  "eposta-kisileri": "firma-yetkilileri",
   kdv: "kdv-kontrol",
+  "kdv-kontrol": "kdv-kontrol",
   "cek-kart": "cek-odeme",
+  "cek-odeme": "cek-odeme",
   "odeme-nakit-akisi": "cek-odeme",
   odemeler: "cek-odeme",
   "odeme-tahsilat": "cek-odeme",
   "eposta-ekstre": "mail-ekstre",
-  "mail-sablonlari": "mail-sablonlari",
+  "mail-ekstre": "mail-ekstre",
+  "mail-sablonlari": "mail-ekstre",
   raporlar: "muhasebe-raporlari",
+  "muhasebe-raporlari": "muhasebe-raporlari",
 };
 
 const REPORTS = [
@@ -685,6 +639,74 @@ function DataTable({
   );
 }
 
+function FirmCardExtras({ activeMainCompany, refreshKey, reloadAll, goTab }) {
+  const [openPanel, setOpenPanel] = useState("");
+  return (
+    <section
+      style={{
+        marginTop: 12,
+        border: "1px solid #dfe7f2",
+        borderRadius: 14,
+        background: "#fff",
+        overflow: "hidden",
+      }}
+    >
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "12px 14px",
+          background: "#f8fbff",
+          borderBottom: openPanel ? "1px solid #e7edf5" : 0,
+        }}
+      >
+        <div>
+          <strong style={{ color: "#17365f" }}>Firma Kartı Ek Ayarları</strong>
+          <p style={{ margin: "3px 0 0", color: "#748297", fontSize: 12 }}>
+            Gider kuralı ve mail/yetkili bilgileri yalnız gerektiğinde açılır.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          <button
+            className={openPanel === "expense" ? "mh-btn primary" : "mh-btn"}
+            type="button"
+            onClick={() => setOpenPanel((value) => (value === "expense" ? "" : "expense"))}
+          >
+            Firma / Gider Kuralları
+          </button>
+          <button
+            className={openPanel === "contacts" ? "mh-btn primary" : "mh-btn"}
+            type="button"
+            onClick={() => setOpenPanel((value) => (value === "contacts" ? "" : "contacts"))}
+          >
+            Yetkililer ve E-posta
+          </button>
+        </div>
+      </header>
+      {openPanel === "expense" ? (
+        <div style={{ padding: 12 }}>
+          <ExpenseCategories
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+          />
+        </div>
+      ) : null}
+      {openPanel === "contacts" ? (
+        <div style={{ padding: 12 }}>
+          <FirmContacts
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+            reloadAll={reloadAll}
+            goTab={goTab}
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function MuhasebePage({
   activeTab,
   activeMainCompany,
@@ -706,48 +728,40 @@ export default function MuhasebePage({
     }
   };
 
+  const currentTabInfo = TAB_CONFIG.find((tab) => tab.key === currentTab) || TAB_CONFIG[0];
+  const goPath = (path) => {
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+
   return (
     <div className="muhasebe-workbench">
       <style>{styles}</style>
-
-      <header className="mh-page-head">
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          padding: "10px 12px",
+          marginBottom: 10,
+          border: "1px solid #dfe7f2",
+          borderRadius: 12,
+          background: "#fff",
+        }}
+      >
         <div>
-          <h1>Muhasebe Çalışma Masası</h1>
-          <p>
-            {activeMainCompany?.name || "KY ERP"} için belge, cari, KDV, çek,
-            ödeme, mail, ekstre ve departman kişi yetkileri tek merkezden
-            yönetilir.
+          <h1 style={{ margin: 0, fontSize: 18, color: "#17365f" }}>{currentTabInfo.title}</h1>
+          <p style={{ margin: "3px 0 0", color: "#7b8798", fontSize: 12 }}>
+            İşNet belgeyi yönetir; Muhasebe cari, KDV, ödeme ve finansal sonucu izler.
           </p>
         </div>
-        <button
-          className="mh-btn primary"
-          type="button"
-          onClick={() =>
-            goTab(
-              currentTab === "kesilen-faturalar"
-                ? "kesilen-faturalar"
-                : "tedarikci-faturalar",
-            )
-          }
-        >
-          {currentTab === "kesilen-faturalar"
-            ? "Yeni Kesilen Fatura"
-            : "Yeni Belge Yükle"}
-        </button>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button className="mh-btn" type="button" onClick={() => goTab("firma-kartlari", "?quick=cari")}>Hızlı Cari</button>
+          <button className="mh-btn primary" type="button" onClick={() => goTab("cek-odeme", "?quick=cek")}>Hızlı Çek</button>
+          <button className="mh-btn" type="button" onClick={() => goPath("/isnet/belge-akisi")}>İşNet Belge Merkezi</button>
+        </div>
       </header>
-
-      <nav className="mh-tabs" aria-label="Muhasebe üst sekmeleri">
-        {TAB_CONFIG.map((tab) => (
-          <button
-            key={tab.key}
-            className={`mh-tab-btn ${currentTab === tab.key ? "active" : ""}`}
-            type="button"
-            onClick={() => goTab(tab.key)}
-          >
-            {tab.short}
-          </button>
-        ))}
-      </nav>
 
       {currentTab === "yonetim-ozeti" ? (
         <ManagementSummary
@@ -757,11 +771,23 @@ export default function MuhasebePage({
         />
       ) : null}
       {currentTab === "firma-kartlari" ? (
-        <CompanyCards
-          activeMainCompany={activeMainCompany}
-          refreshKey={refreshKey}
-          reloadAll={reloadAll}
-        />
+        <>
+          <CompanyCards
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+            reloadAll={reloadAll}
+          />
+          <CompanyAliasPanel
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+          />
+          <FirmCardExtras
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+            reloadAll={reloadAll}
+            goTab={goTab}
+          />
+        </>
       ) : null}
       {currentTab === "gider-kategorileri" ? (
         <ExpenseCategories
@@ -5659,6 +5685,20 @@ function CompanyCards({ activeMainCompany, refreshKey, reloadAll }) {
       visibleCompanies[0] ||
       {};
   const [form, setForm] = useState(emptyCompanyForm());
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quick") !== "cari") return;
+    setIsNewFirm(true);
+    setSelectedId("");
+    setFeedback("Hızlı cari: firma bilgilerini girip Firma Kaydet düğmesine basın.");
+    params.delete("quick");
+    const query = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (query ? "?" + query : ""),
+    );
+  }, []);
   const filteredReportCategories = useMemo(() => {
     const needle = categorySearch.trim().toLocaleLowerCase("tr-TR");
     return reportCategories.filter((category) => {

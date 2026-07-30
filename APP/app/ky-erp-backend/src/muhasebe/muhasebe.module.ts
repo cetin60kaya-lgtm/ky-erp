@@ -59,6 +59,8 @@ import { IsnetDispatchPreparationService } from "./isnet-dispatch-preparation.se
 import { IsnetDispatchFlowCoordinatorService } from "./isnet-dispatch-flow-coordinator.service";
 import { IsnetInvoicePreparationController } from "./isnet-invoice-preparation.controller";
 import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.service";
+import { CheckCenterController } from "./check-center/check-center.controller";
+import { CheckCenterService } from "./check-center/check-center.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -75,6 +77,7 @@ import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.serv
     MailController,
     StatementController,
     AccountingPublicApiController,
+    CheckCenterController,
     DispatchReconciliationController,
     IsnetOperationsController,
     IsnetConnectionController,
@@ -90,6 +93,7 @@ import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.serv
   ],
   providers: [
     AccountingApiService,
+    CheckCenterService,
     MuhasebeBelgeService,
     MuhasebeService,
     MuhasebeDocumentWorkflowService,
@@ -136,6 +140,7 @@ import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.serv
     DocumentIntakeService,
     DocumentFolderWatcherService,
     AccountingApiService,
+    CheckCenterService,
     MuhasebeFinalService,
     FirmaKartlariDbService,
   ],

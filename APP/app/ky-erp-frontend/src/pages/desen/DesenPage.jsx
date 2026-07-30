@@ -8,7 +8,7 @@ import DesenRaporlari from "./DesenRaporlari";
 
 export default function DesenPage({ activeTab, activeMainCompany }) {
   const page =
-    activeTab === "desen-modeller" ? (
+    activeTab === "desen-klasor-ayarlari" ? null : activeTab === "desen-modeller" ? (
       <DesenModeller activeMainCompany={activeMainCompany} />
     ) : activeTab === "desen-yerlesim-is-akisi" ? (
       <YerlesimKalipPage activeMainCompany={activeMainCompany} />
@@ -19,7 +19,9 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
     );
 
   const title =
-    activeTab === "desen-modeller"
+    activeTab === "desen-klasor-ayarlari"
+      ? "Desen Görsel Klasör Ayarları"
+      : activeTab === "desen-modeller"
       ? "Desen Havuzu"
       : activeTab === "desen-yerlesim-is-akisi"
         ? "Yerlesim / Kalip"
@@ -27,7 +29,10 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
           ? "Desen Raporlari"
           : "Gelen Desenler";
 
-  const showFolderSettings = !activeTab || activeTab === "gelen-desenler";
+  const showFolderSettings =
+    !activeTab ||
+    activeTab === "gelen-desenler" ||
+    activeTab === "desen-klasor-ayarlari";
 
   return (
     <div className="clean-workflow-page dw-page">
@@ -36,8 +41,10 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
           <div>
             <h1>{title}</h1>
             <p>
-              {activeTab === "desen-modeller"
-                ? "Tüm modelleri, baskı bölgelerini ve hazırlık durumlarını tek merkezden yönetin."
+              {activeTab === "desen-klasor-ayarlari"
+                ? "Model oluşturulacak görsellerin gelen klasörünü, model arşivini ve hata klasörlerini test ederek kaydedin."
+                : activeTab === "desen-modeller"
+                  ? "Tüm modelleri, baskı bölgelerini ve hazırlık durumlarını tek merkezden yönetin."
                 : activeTab === "desen-yerlesim-is-akisi"
                   ? "Baskı bölgesi bazlı yerleşim ve kalıp işlerini teknik kuyrukta tamamlayın."
                   : activeTab === "desen-raporlari"
