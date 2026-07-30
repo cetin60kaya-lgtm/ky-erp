@@ -264,7 +264,12 @@ export class IsnetConnectionService {
       }
       const token = clean(payload?.Token ?? payload?.token);
       const errorMessage = clean(
-        payload?.ErrorMessage ?? payload?.errorMessage ?? payload?.Message,
+        payload?.ErrorMessage ??
+          payload?.errorMessage ??
+          payload?.Message ??
+          payload?.message ??
+          payload?.Error?.Message ??
+          payload?.error?.message,
       );
       const companies = this.normalizeCompanies(payload);
       if (errorMessage) throw new Error(errorMessage);
@@ -286,12 +291,12 @@ export class IsnetConnectionService {
       const timeout = setTimeout(() => controller.abort(), 35_000);
       try {
         const response = await fetch(
-          url.startsWith("http") ? url : `${this.portalBase}${url}`,
+          url.startsWith("http") ? url : this.portalBase + url,
           {
             ...init,
             headers: {
               Accept: "text/html,application/xhtml+xml,application/json",
-              "User-Agent": "Mozilla/5.0 KY-ERP-IsNet-Connector/2.0",
+              "User-Agent": "Mozilla/5.0 KY-ERP-IsNet-Connector/3.0",
               ...(jar.size ? { Cookie: this.cookieHeader(jar) } : {}),
               ...(init.headers || {}),
             },
@@ -306,65 +311,111 @@ export class IsnetConnectionService {
       }
     };
 
-    const loginPage = await request("/Account/Login");
-    const loginHtml = await loginPage.text();
-    const loginToken = this.verificationToken(loginHtml);
-    if (!loginPage.ok || !loginToken) {
-      throw new Error("Portal giriş sayfası veya doğrulama anahtarı alınamadı.");
+    const loginPaths = [
+      "/account/login/Login",
+      "/Account/Login",
+      "/account/login",
+    ];
+    let loginPath = "";
+    let loginHtml = "";
+    let loginToken = "";
+    for (const candidate of loginPaths) {
+      try {
+        const response = await request(candidate);
+        const html = await response.text();
+        const token = this.verificationToken(html);
+        if (response.ok && token) {
+          loginPath = candidate;
+          loginHtml = html;
+          loginToken = token;
+          break;
+        }
+      } catch {
+        // Bir sonraki güncel/uyumlu portal yolu denenir.
+      }
+    }
+    if (!loginPath || !loginToken) {
+      throw new Error(
+        "İşNet portal giriş sayfası veya doğrulama anahtarı alınamadı.",
+      );
     }
 
-    const loginResponse = await request("/Account/Login", {
+    const inputNames = [...loginHtml.matchAll(/<input[^>]*name=["']([^"']+)["']/gi)]
+      .map((match) => clean(match[1]))
+      .filter(Boolean);
+    const usernameField =
+      inputNames.find((name) =>
+        /(identificationnumber|vkntckn|tckn|username|user_name)/i.test(name),
+      ) || "VknTckn";
+    const passwordField =
+      inputNames.find((name) => /(password|sifre|şifre)/i.test(name)) ||
+      "Password";
+    const loginBody = new URLSearchParams();
+    loginBody.set(usernameField, username);
+    loginBody.set(passwordField, password);
+    loginBody.set("RememberMe", "false");
+    loginBody.set("__RequestVerificationToken", loginToken);
+
+    const loginResponse = await request(loginPath, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: this.portalBase,
-        Referer: `${this.portalBase}/Account/Login`,
+        Referer: this.portalBase + loginPath,
       },
-      body: new URLSearchParams({
-        VknTckn: username,
-        Password: password,
-        RememberMe: "false",
-        __RequestVerificationToken: loginToken,
-      }).toString(),
+      body: loginBody.toString(),
     });
     const loginResult = await loginResponse.text();
 
-    const companyResponse = await request("/Account/GetCompanyList", {
-      method: "POST",
-      headers: {
-        Accept: "application/json, text/javascript, */*; q=0.01",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        Origin: this.portalBase,
-        Referer: `${this.portalBase}/Account/Login`,
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      body: new URLSearchParams({ q: "" }).toString(),
-    });
-    const companyRaw = await companyResponse.text();
-    let companyPayload: any = {};
-    try {
-      companyPayload = companyRaw ? JSON.parse(companyRaw) : {};
-    } catch {
-      companyPayload = {};
+    const companyPaths = [
+      "/account/GetCompanyList",
+      "/Account/GetCompanyList",
+      "/account/login/GetCompanyList",
+    ];
+    let companyRaw = "";
+    for (const candidate of companyPaths) {
+      try {
+        const companyResponse = await request(candidate, {
+          method: "POST",
+          headers: {
+            Accept: "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            Origin: this.portalBase,
+            Referer: this.portalBase + loginPath,
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: new URLSearchParams({ q: "" }).toString(),
+        });
+        const raw = await companyResponse.text();
+        companyRaw = companyRaw + " " + raw;
+        let payload: any = {};
+        try {
+          payload = raw ? JSON.parse(raw) : {};
+        } catch {
+          payload = {};
+        }
+        const companies = this.normalizeCompanies(payload);
+        if (companies.length) return { companies, expiresOn: null };
+      } catch {
+        // Eski veya yeni firma liste yolu sırayla denenir.
+      }
     }
-    const companies = this.normalizeCompanies(companyPayload);
-    if (companies.length) return { companies, expiresOn: null };
 
-    const portalMessage = this.portalErrorText(`${loginResult} ${companyRaw}`);
+    const portalMessage = this.portalErrorText(loginResult + " " + companyRaw);
     if (portalMessage) throw new BadRequestException(portalMessage);
     const location = clean(loginResponse.headers.get("location"));
     if (
       loginResponse.status >= 300 &&
       loginResponse.status < 400 &&
       location &&
-      !location.toLocaleLowerCase("tr-TR").includes("account/login")
+      !location.toLocaleLowerCase("tr-TR").includes("login")
     ) {
       throw new Error(
         "Portal girişi doğrulandı ancak yetkili firma listesi alınamadı.",
       );
     }
     throw new BadRequestException(
-      "İşNet portalı kullanıcı adı veya şifreyi kabul etmedi.",
+      "İşNet kullanıcı/TCKN veya şifre bilgisini kabul etmedi.",
     );
   }
 

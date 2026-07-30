@@ -205,6 +205,7 @@ export default function IsnetPage({
     companyId: "",
     companies: [],
     connectionMode: "",
+    diagnostics: null,
   });
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
   const [invoiceDraft, setInvoiceDraft] = useState({
@@ -1556,6 +1557,7 @@ export default function IsnetPage({
         ? settings.companies
         : current.companies,
       connectionMode: settings.connectionMode || current.connectionMode,
+      diagnostics: settings.diagnostics || current.diagnostics || null,
     }));
   }, [settings]);
 
@@ -1616,6 +1618,7 @@ export default function IsnetPage({
         ...current,
         companies: result.companies || [],
         connectionMode: result.connectionMode || "",
+        diagnostics: result.diagnostics || null,
         companyId: result.companies?.some(
           (company) => company.id === current.companyId,
         )
@@ -3282,6 +3285,22 @@ export default function IsnetPage({
                 </span>
               </div>
             </div>
+            {connectionForm.diagnostics ? (
+              <div className="isnet-status-list" style={{ marginBottom: 12 }}>
+                <div>
+                  <span>Resmî İşNet API</span>
+                  <Badge tone={connectionForm.diagnostics.api === "Bağlandı" ? "green" : "warning"}>
+                    {connectionForm.diagnostics.api || "Denenmedi"}
+                  </Badge>
+                </div>
+                <div>
+                  <span>NetteFatura portalı</span>
+                  <Badge tone={connectionForm.diagnostics.portal === "Bağlandı" ? "green" : "neutral"}>
+                    {connectionForm.diagnostics.portal || "Denenmedi"}
+                  </Badge>
+                </div>
+              </div>
+            ) : null}
             <div className="isnet-connection-form">
               <label>
                 İşNet kullanıcı adı / TCKN
