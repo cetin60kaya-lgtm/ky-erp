@@ -14,6 +14,7 @@ import BelgeIslemMerkezi, {
   ModelMerkezliMusteriTakip,
 } from "../muhasebe/BelgeIslemMerkezi";
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
+import CompanyAliasPanel from "../muhasebe/CompanyAliasPanel";
 import { fetchBelgeImport } from "../../services/muhasebeDocumentService";
 import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
 import MuhasebeReportsWorkspace from "./muhasebe/MuhasebeReportsWorkspace";
@@ -702,11 +703,17 @@ export default function MuhasebePage({
         />
       ) : null}
       {currentTab === "firma-kartlari" ? (
-        <CompanyCards
-          activeMainCompany={activeMainCompany}
-          refreshKey={refreshKey}
-          reloadAll={reloadAll}
-        />
+        <>
+          <CompanyCards
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+            reloadAll={reloadAll}
+          />
+          <CompanyAliasPanel
+            activeMainCompany={activeMainCompany}
+            refreshKey={refreshKey}
+          />
+        </>
       ) : null}
       {currentTab === "gider-kategorileri" ? (
         <ExpenseCategories
