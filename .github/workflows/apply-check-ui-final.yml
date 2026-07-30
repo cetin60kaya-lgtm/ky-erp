@@ -1,0 +1,29 @@
+name: Çek UI son kaynak düzeltmesi
+
+on:
+  push:
+    branches:
+      - agent/muhasebe-isnet-finans-v3
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/muhasebe-isnet-finans-v3
+          fetch-depth: 0
+      - run: node scripts/patch-check-ui-final.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/muhasebe/CekOdemeMerkeziPage.jsx
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Çek hızlı cari dönüşünü düzelt"
+          git push origin HEAD:agent/muhasebe-isnet-finans-v3
