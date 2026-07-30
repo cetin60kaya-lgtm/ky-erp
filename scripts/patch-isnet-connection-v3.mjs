@@ -13,7 +13,7 @@ const portalReplacement = `  private async loginPortal(username: string, passwor
       const timeout = setTimeout(() => controller.abort(), 35_000);
       try {
         const response = await fetch(
-          url.startsWith("http") ? url : \`${this.portalBase}\${url}\`,
+          url.startsWith("http") ? url : this.portalBase + url,
           {
             ...init,
             headers: {
@@ -83,7 +83,7 @@ const portalReplacement = `  private async loginPortal(username: string, passwor
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: this.portalBase,
-        Referer: \`${this.portalBase}\${loginPath}\`,
+        Referer: this.portalBase + loginPath,
       },
       body: loginBody.toString(),
     });
@@ -103,13 +103,13 @@ const portalReplacement = `  private async loginPortal(username: string, passwor
             Accept: "application/json, text/javascript, */*; q=0.01",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             Origin: this.portalBase,
-            Referer: \`${this.portalBase}\${loginPath}\`,
+            Referer: this.portalBase + loginPath,
             "X-Requested-With": "XMLHttpRequest",
           },
           body: new URLSearchParams({ q: "" }).toString(),
         });
         const raw = await companyResponse.text();
-        companyRaw = \`\${companyRaw} \${raw}\`;
+        companyRaw = companyRaw + " " + raw;
         let payload: any = {};
         try {
           payload = raw ? JSON.parse(raw) : {};
@@ -123,9 +123,7 @@ const portalReplacement = `  private async loginPortal(username: string, passwor
       }
     }
 
-    const portalMessage = this.portalErrorText(
-      \`\${loginResult} \${companyRaw}\`,
-    );
+    const portalMessage = this.portalErrorText(loginResult + " " + companyRaw);
     if (portalMessage) throw new BadRequestException(portalMessage);
     const location = clean(loginResponse.headers.get("location"));
     if (
