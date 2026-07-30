@@ -87,7 +87,7 @@ export async function createOdemeFirma(payload = {}) {
 }
 
 export async function createOdemeCek(payload = {}) {
-  return unwrap(await apiPost("/api/muhasebe/odeme/cek", payload));
+  return unwrap(await apiPost("/api/muhasebe/odeme/cek-v3", payload));
 }
 
 export async function uploadOdemeCekDosyalari(
