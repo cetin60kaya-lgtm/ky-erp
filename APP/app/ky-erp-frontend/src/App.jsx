@@ -141,6 +141,7 @@ const MODULES = [
         icon: "file-check",
       },
       { key: "desen-raporlari", label: "Desen Raporları", icon: "raporlar" },
+      { key: "desen-klasor-ayarlari", label: "Klasör Ayarları", icon: "ayarlar" },
     ],
   },
   {
