@@ -3,8 +3,8 @@ import fs from "node:fs";
 const servicePath = "APP/app/ky-erp-backend/src/muhasebe/accounting-api.service.ts";
 const controllerPath = "APP/app/ky-erp-backend/src/muhasebe/muhasebe.controller.ts";
 
-let service = fs.readFileSync(servicePath, "utf8");
-let controller = fs.readFileSync(controllerPath, "utf8");
+let service = fs.readFileSync(servicePath, "utf8").replace(/\r\n/g, "\n");
+let controller = fs.readFileSync(controllerPath, "utf8").replace(/\r\n/g, "\n");
 
 const helperAnchor = `function paymentStatusForAmount(amount: number, openAmount: number) {
   return amount >= openAmount ? "PAID" : "WAITING";
@@ -16,7 +16,14 @@ const CHECK_META_PREFIX = "KYERP_CHECK_META:";
 function checkMeta(value: unknown) {
   const raw = text(value);
   if (!raw.startsWith(CHECK_META_PREFIX)) {
-    return { note: raw, receiptPath: "", issueDate: "", accountNo: "", checkOwnership: "CUSTOMER_CHECK", checkDirection: "RECEIVED" };
+    return {
+      note: raw,
+      receiptPath: "",
+      issueDate: "",
+      accountNo: "",
+      checkOwnership: "CUSTOMER_CHECK",
+      checkDirection: "RECEIVED",
+    };
   }
   try {
     const parsed = JSON.parse(raw.slice(CHECK_META_PREFIX.length));
@@ -29,7 +36,14 @@ function checkMeta(value: unknown) {
       checkDirection: text(parsed?.checkDirection || "RECEIVED"),
     };
   } catch {
-    return { note: raw, receiptPath: "", issueDate: "", accountNo: "", checkOwnership: "CUSTOMER_CHECK", checkDirection: "RECEIVED" };
+    return {
+      note: raw,
+      receiptPath: "",
+      issueDate: "",
+      accountNo: "",
+      checkOwnership: "CUSTOMER_CHECK",
+      checkDirection: "RECEIVED",
+    };
   }
 }
 
@@ -65,7 +79,10 @@ const createCheckNew = `    const meta = checkMetaText({
       status: body.status || "PLANNED",
       description: meta,
     });`;
-if (service.includes(createCheckOld)) service = service.replace(createCheckOld, createCheckNew);
+if (!service.includes("const meta = checkMetaText({")) {
+  if (!service.includes(createCheckOld)) throw new Error("Create check anchor bulunamadı");
+  service = service.replace(createCheckOld, createCheckNew);
+}
 
 const updateCheckAnchor = `  updatePaymentCenterCheck(id: string, body: AnyBody = {}) {
     return this.updatePayment(id, { ...body, paymentType: "CHECK" });
@@ -89,10 +106,7 @@ const updateCheckBlock = `${updateCheckAnchor}
         }),
       },
     });
-    return response({
-      ...data,
-      ...checkMeta(data.note),
-    });
+    return response({ ...data, ...checkMeta(data.note) });
   }
 
   async paymentCenterCheckFilePath(id: string, side: string) {
@@ -156,7 +170,10 @@ const firmChecksNew = `        const meta = checkMeta(row.note);
           receiptPath: meta.receiptPath,
           open: remaining > 0 && openPaymentStatus(row.status),
         };`;
-if (service.includes(firmChecksOld)) service = service.replace(firmChecksOld, firmChecksNew);
+if (!service.includes("receiptPath: meta.receiptPath")) {
+  if (!service.includes(firmChecksOld)) throw new Error("Firm check mapping anchor bulunamadı");
+  service = service.replace(firmChecksOld, firmChecksNew);
+}
 
 const cardsAnchor = `  async paymentCenterFirmCards(firmId: string) {`;
 const overviewMethod = `  async paymentCenterChecksOverview(query: AnyBody = {}) {
@@ -174,10 +191,17 @@ const overviewMethod = `  async paymentCenterChecksOverview(query: AnyBody = {})
         relatedDocumentId: null,
         deletedAt: null,
       },
-      include: { firm: true },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 2000,
     });
+    const firmIds = [...new Set(rows.map((row) => row.firmId).filter(Boolean))];
+    const firms = firmIds.length
+      ? await this.prisma.firm.findMany({
+          where: { id: { in: firmIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const firmById = new Map(firms.map((firm) => [firm.id, firm.name]));
     const normalized = rows.map((row) => {
       const meta = checkMeta(row.note);
       const due = row.dueDate || row.createdAt;
@@ -189,7 +213,7 @@ const overviewMethod = `  async paymentCenterChecksOverview(query: AnyBody = {})
       return {
         id: row.id,
         firmId: row.firmId,
-        firmaAdi: row.firm?.name || "",
+        firmaAdi: firmById.get(row.firmId) || "",
         workType: row.workType,
         checkNo: row.checkNo || "",
         bankName: row.bankName || "",
@@ -210,7 +234,10 @@ const overviewMethod = `  async paymentCenterChecksOverview(query: AnyBody = {})
         createdAt: row.createdAt,
       };
     });
-    const monthMap = new Map<string, { monthKey: string; label: string; total: number; count: number }>();
+    const monthMap = new Map<
+      string,
+      { monthKey: string; label: string; total: number; count: number }
+    >();
     for (const row of normalized.filter((item) => item.open)) {
       const due = new Date(`${row.dueDate}T12:00:00`);
       const current = monthMap.get(row.monthKey) || {
@@ -228,11 +255,18 @@ const overviewMethod = `  async paymentCenterChecksOverview(query: AnyBody = {})
       const parsed = new Date(`${value}T12:00:00`);
       return parsed >= start && parsed < end;
     };
-    const sum = (items: any[]) => items.reduce((total, row) => total + number(row.amount), 0);
-    const thisMonth = openRows.filter((row) => inRange(row.dueDate, startOfMonth, startOfNextMonth));
-    const nextMonth = openRows.filter((row) => inRange(row.dueDate, startOfNextMonth, startOfFollowingMonth));
+    const sum = (items: Array<{ amount: number }>) =>
+      items.reduce((total, row) => total + number(row.amount), 0);
+    const thisMonth = openRows.filter((row) =>
+      inRange(row.dueDate, startOfMonth, startOfNextMonth),
+    );
+    const nextMonth = openRows.filter((row) =>
+      inRange(row.dueDate, startOfNextMonth, startOfFollowingMonth),
+    );
     const overdue = openRows.filter((row) => row.daysRemaining < 0);
-    const yearRows = normalized.filter((row) => inRange(row.dueDate, startOfYear, endOfYear));
+    const yearRows = normalized.filter((row) =>
+      inRange(row.dueDate, startOfYear, endOfYear),
+    );
     return response({
       summary: {
         thisMonthTotal: sum(thisMonth),
@@ -246,7 +280,9 @@ const overviewMethod = `  async paymentCenterChecksOverview(query: AnyBody = {})
         yearTotal: sum(yearRows),
         yearCount: yearRows.length,
       },
-      months: [...monthMap.values()].sort((a, b) => a.monthKey.localeCompare(b.monthKey)).slice(0, 18),
+      months: [...monthMap.values()]
+        .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+        .slice(0, 18),
       rows: normalized,
     });
   }
@@ -320,14 +356,19 @@ ${controllerCheckAnchor}
     const saved: Record<string, string> = {};
     for (const file of files || []) {
       const side = String(file.fieldname || "").toLowerCase();
-      if (!new Set(["front", "back", "receipt"]).has(side)) continue;
+      if (!["front", "back", "receipt"].includes(side)) continue;
       const ext = path.extname(file.originalname || file.filename || "").toLowerCase();
       if (!allowed.has(ext)) {
         if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
         throw new BadRequestException("Çek ekleri JPG, PNG, WEBP veya PDF olmalıdır.");
       }
       const targetPath = path.join(targetDir, `${side}-${Date.now()}${ext}`);
-      fs.renameSync(file.path, targetPath);
+      try {
+        fs.renameSync(file.path, targetPath);
+      } catch {
+        fs.copyFileSync(file.path, targetPath);
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      }
       saved[`${side}Path`] = targetPath;
     }
     return this.accountingApi.updatePaymentCenterCheckAttachments(id, saved);
@@ -345,7 +386,7 @@ ${controllerCheckAnchor}
     }
     const storageRoot = path.resolve(getStorageRoot());
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(storageRoot)) {
+    if (resolved !== storageRoot && !resolved.startsWith(`${storageRoot}${path.sep}`)) {
       throw new BadRequestException("Geçersiz çek dosya yolu.");
     }
     return res.sendFile(resolved);
