@@ -75,7 +75,7 @@ const component = `function FirmCardExtras({ activeMainCompany, refreshKey, relo
 `;
 if (!source.includes("function FirmCardExtras")) {
   if (!source.includes(componentAnchor)) throw new Error("Muhasebe ana component anchor bulunamadı");
-  source = source.replace(componentAnchor, `${component}${componentAnchor}`);
+  source = source.replace(componentAnchor, component + componentAnchor);
 }
 
 const aliasBlock = `          <CompanyAliasPanel
@@ -107,7 +107,7 @@ const quickEffect = `${stateAnchor}
     window.history.replaceState(
       {},
       "",
-      `${window.location.pathname}${query ? `?${query}` : ""}`,
+      window.location.pathname + (query ? "?" + query : ""),
     );
   }, []);`;
 if (!source.includes("Hızlı cari: firma bilgilerini girip")) {
