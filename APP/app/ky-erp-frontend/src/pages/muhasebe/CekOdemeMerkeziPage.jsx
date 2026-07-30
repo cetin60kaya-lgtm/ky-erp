@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Building2,
-  CalendarDays,
   CheckCircle2,
   CreditCard,
   FileImage,
@@ -279,15 +278,24 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   };
 
   const saveFirm = async () => {
+    const returnToCheck = modal?.returnToCheck === true;
+    const previousCheckForm = modal?.checkForm || null;
     setBusy(true);
     setNotice(null);
     try {
       const created = await createOdemeFirma({ ...baseParams, ...modal.form });
       const firmId = created?.id || created?.firmaId || "";
-      setModal(null);
       setNotice({ tone: "ok", text: "Firma/cari kaydedildi." });
       await loadBase();
       if (firmId) setSelectedFirmId(firmId);
+      if (returnToCheck && previousCheckForm && firmId) {
+        setModal({
+          type: "check",
+          form: { ...previousCheckForm, firmId },
+        });
+      } else {
+        setModal(null);
+      }
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Firma kaydedilemedi." });
     } finally {
