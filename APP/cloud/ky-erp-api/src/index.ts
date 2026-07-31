@@ -38,26 +38,42 @@ app.use(
 );
 
 app.onError((error, c) => {
-  console.error(JSON.stringify({
-    level: "error",
-    requestId: c.get("requestId"),
-    path: c.req.path,
-    message: error.message,
-  }));
-  return c.json(jsonError("INTERNAL_ERROR", "Beklenmeyen bir sunucu hatası oluştu."), 500);
+  console.error(
+    JSON.stringify({
+      level: "error",
+      requestId: c.get("requestId"),
+      path: c.req.path,
+      message: error.message,
+    }),
+  );
+  return c.json(
+    jsonError("INTERNAL_ERROR", "Beklenmeyen bir sunucu hatası oluştu."),
+    500,
+  );
 });
 
-app.notFound((c) => c.json(jsonError("NOT_FOUND", "Endpoint bulunamadı."), 404));
+app.notFound((c) =>
+  c.json(jsonError("NOT_FOUND", "Endpoint bulunamadı."), 404),
+);
 
-function positiveInt(value: string | undefined, fallback: number, maximum = 500): number | null {
+function positiveInt(
+  value: string | undefined,
+  fallback: number,
+  maximum = 500,
+): number | null {
   if (value === undefined || value === "") return fallback;
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) return null;
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
+    return null;
+  }
   return parsed;
 }
 
-function nonNegativeInt(value: string | undefined, fallback = 0): number | null {
+function nonNegativeInt(
+  value: string | undefined,
+  fallback = 0,
+): number | null {
   if (value === undefined || value === "") return fallback;
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
@@ -77,7 +93,13 @@ async function listRows(
   const limit = positiveInt(c.req.query("limit"), 100);
   const offset = nonNegativeInt(c.req.query("offset"), 0);
   if (limit === null || offset === null) {
-    return c.json(jsonError("INVALID_PAGINATION", "limit 1-500, offset ise 0 veya daha büyük olmalıdır."), 400);
+    return c.json(
+      jsonError(
+        "INVALID_PAGINATION",
+        "limit 1-500, offset ise 0 veya daha büyük olmalıdır.",
+      ),
+      400,
+    );
   }
 
   const clauses: string[] = [];
@@ -87,18 +109,29 @@ async function listRows(
     bindings.push(filter.value);
   }
   if (options.search?.value) {
-    clauses.push(`(${options.search.columns.map((column) => `${column} LIKE ?`).join(" OR ")})`);
+    clauses.push(
+      `(${options.search.columns
+        .map((column) => `${column} LIKE ?`)
+        .join(" OR ")})`,
+    );
     const term = `%${options.search.value}%`;
     bindings.push(...options.search.columns.map(() => term));
   }
+
   const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
   const orderBy = options.orderBy || "id DESC";
   const query = `SELECT * FROM ${table}${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
   const countQuery = `SELECT COUNT(*) AS total FROM ${table}${where}`;
+
   const [dataResult, countRow] = await Promise.all([
-    c.env.DB.prepare(query).bind(...bindings, limit, offset).all<Record<string, unknown>>(),
-    c.env.DB.prepare(countQuery).bind(...bindings).first<{ total: number }>(),
+    c.env.DB.prepare(query)
+      .bind(...bindings, limit, offset)
+      .all<Record<string, unknown>>(),
+    c.env.DB.prepare(countQuery)
+      .bind(...bindings)
+      .first<{ total: number }>(),
   ]);
+
   return c.json({
     ok: true,
     data: dataResult.results,
@@ -108,13 +141,79 @@ async function listRows(
 
 async function byId(c: Context<AppEnv>, table: string) {
   const id = c.req.param("id");
-  if (!id) return c.json(jsonError("INVALID_ID", "Geçerli bir id gereklidir."), 400);
-  const row = await c.env.DB.prepare(`SELECT * FROM ${table} WHERE id = ? LIMIT 1`).bind(id).first();
-  if (!row) return c.json(jsonError("NOT_FOUND", "Kayıt bulunamadı."), 404);
+  if (!id) {
+    return c.json(jsonError("INVALID_ID", "Geçerli bir id gereklidir."), 400);
+  }
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM ${table} WHERE id = ? LIMIT 1`,
+  )
+    .bind(id)
+    .first();
+  if (!row) {
+    return c.json(jsonError("NOT_FOUND", "Kayıt bulunamadı."), 404);
+  }
   return c.json({ ok: true, data: row });
 }
 
-app.get("/api/health", (c) => c.json({ ok: true, service: "ky-erp-api", database: "d1" }));
+async function accountingSummary(c: Context<AppEnv>) {
+  const row = await c.env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM companies) AS companyCount,
+      (SELECT COUNT(*) FROM documents) AS documentCount,
+      (SELECT COUNT(*) FROM invoice_items) AS invoiceItemCount,
+      (SELECT COUNT(*) FROM current_account_movements) AS movementCount,
+      (SELECT COUNT(*) FROM vat_records) AS vatRecordCount
+  `).first<Record<string, number>>();
+
+  const data = {
+    generatedAt: new Date().toISOString(),
+    companyCount: Number(row?.companyCount || 0),
+    documentCount: Number(row?.documentCount || 0),
+    invoiceItemCount: Number(row?.invoiceItemCount || 0),
+    movementCount: Number(row?.movementCount || 0),
+    vatRecordCount: Number(row?.vatRecordCount || 0),
+    cards: [
+      {
+        key: "companies",
+        label: "Firma",
+        value: Number(row?.companyCount || 0),
+      },
+      {
+        key: "documents",
+        label: "Belge",
+        value: Number(row?.documentCount || 0),
+      },
+      {
+        key: "movements",
+        label: "Cari Hareket",
+        value: Number(row?.movementCount || 0),
+      },
+      {
+        key: "vat",
+        label: "KDV Kaydı",
+        value: Number(row?.vatRecordCount || 0),
+      },
+    ],
+    alerts: [],
+    recentMovements: [],
+    totals: {
+      receivable: 0,
+      payable: 0,
+      balance: 0,
+      income: 0,
+      expense: 0,
+      vatIncoming: 0,
+      vatOutgoing: 0,
+      vatPayable: 0,
+    },
+  };
+
+  return c.json({ ok: true, success: true, data });
+}
+
+app.get("/api/health", (c) =>
+  c.json({ ok: true, service: "ky-erp-api", database: "d1" }),
+);
 
 app.get("/api/health/db", async (c) => {
   await c.env.DB.prepare("SELECT COUNT(*) AS count FROM main_companies").first();
@@ -135,15 +234,25 @@ app.get("/api/system/status", async (c) => {
   return c.json({ ok: true, data: row });
 });
 
-app.get("/api/companies", (c) => listRows(c, "companies", {
-  search: { value: c.req.query("search")?.trim() || "", columns: ["name", "normalized_name", "tax_no"] },
-  orderBy: "name COLLATE NOCASE ASC",
-}));
+app.get("/api/companies", (c) =>
+  listRows(c, "companies", {
+    search: {
+      value: c.req.query("search")?.trim() || "",
+      columns: ["name", "normalized_name", "tax_no"],
+    },
+    orderBy: "name COLLATE NOCASE ASC",
+  }),
+);
 app.get("/api/companies/:id", (c) => byId(c, "companies"));
-app.get("/api/firms", (c) => listRows(c, "firms", {
-  search: { value: c.req.query("search")?.trim() || "", columns: ["name", "normalized_name", "tax_no"] },
-  orderBy: "name COLLATE NOCASE ASC",
-}));
+app.get("/api/firms", (c) =>
+  listRows(c, "firms", {
+    search: {
+      value: c.req.query("search")?.trim() || "",
+      columns: ["name", "normalized_name", "tax_no"],
+    },
+    orderBy: "name COLLATE NOCASE ASC",
+  }),
+);
 
 app.get("/api/current-account-movements", (c) => {
   const companyId = c.req.query("companyId") || c.req.query("firmId");
@@ -154,70 +263,194 @@ app.get("/api/current-account-movements", (c) => {
     ...(startDate ? [{ sql: "movement_date >= ?", value: startDate }] : []),
     ...(endDate ? [{ sql: "movement_date <= ?", value: endDate }] : []),
   ];
-  return listRows(c, "current_account_movements", { filters, orderBy: "movement_date DESC, id DESC" });
+  return listRows(c, "current_account_movements", {
+    filters,
+    orderBy: "movement_date DESC, id DESC",
+  });
 });
+
 app.get("/api/cari-movements", (c) => {
   const filters = [
-    ...(c.req.query("companyId") ? [{ sql: "main_company_id = ?", value: c.req.query("companyId")! }] : []),
-    ...(c.req.query("firmId") ? [{ sql: "firm_id = ?", value: c.req.query("firmId")! }] : []),
-    ...(c.req.query("startDate") ? [{ sql: "date >= ?", value: c.req.query("startDate")! }] : []),
-    ...(c.req.query("endDate") ? [{ sql: "date <= ?", value: c.req.query("endDate")! }] : []),
+    ...(c.req.query("companyId")
+      ? [{ sql: "main_company_id = ?", value: c.req.query("companyId")! }]
+      : []),
+    ...(c.req.query("firmId")
+      ? [{ sql: "firm_id = ?", value: c.req.query("firmId")! }]
+      : []),
+    ...(c.req.query("startDate")
+      ? [{ sql: "date >= ?", value: c.req.query("startDate")! }]
+      : []),
+    ...(c.req.query("endDate")
+      ? [{ sql: "date <= ?", value: c.req.query("endDate")! }]
+      : []),
   ];
-  return listRows(c, "cari_movements", { filters, orderBy: "date DESC, id DESC" });
+  return listRows(c, "cari_movements", {
+    filters,
+    orderBy: "date DESC, id DESC",
+  });
 });
 
-app.get("/api/personnel", (c) => listRows(c, "personnel", {
-  search: { value: c.req.query("search")?.trim() || "", columns: ["full_name", "phone"] },
-  orderBy: "full_name COLLATE NOCASE ASC",
-}));
+app.get("/api/personnel", (c) =>
+  listRows(c, "personnel", {
+    search: {
+      value: c.req.query("search")?.trim() || "",
+      columns: ["full_name", "phone"],
+    },
+    orderBy: "full_name COLLATE NOCASE ASC",
+  }),
+);
 app.get("/api/personnel/:id", (c) => byId(c, "personnel"));
+
 app.get("/api/hr/daily-attendance", (c) => {
   const date = c.req.query("date");
-  const personnelId = c.req.query("personnelId") || c.req.query("employeeId");
+  const personnelId =
+    c.req.query("personnelId") || c.req.query("employeeId");
   const filters = [
     ...(date ? [{ sql: "work_date = ?", value: date }] : []),
-    ...(personnelId ? [{ sql: "employee_id = ?", value: personnelId }] : []),
+    ...(personnelId
+      ? [{ sql: "employee_id = ?", value: personnelId }]
+      : []),
   ];
-  return listRows(c, "hr_daily_attendance", { filters, orderBy: "work_date DESC, id DESC" });
+  return listRows(c, "hr_daily_attendance", {
+    filters,
+    orderBy: "work_date DESC, id DESC",
+  });
 });
-app.get("/api/hr/payrolls", (c) => listRows(c, "hr_payrolls_v2", {
-  filters: [
-    ...(c.req.query("year") ? [{ sql: "year = ?", value: c.req.query("year")! }] : []),
-    ...(c.req.query("month") ? [{ sql: "month = ?", value: c.req.query("month")! }] : []),
-    ...(c.req.query("personnelId") ? [{ sql: "employee_id = ?", value: c.req.query("personnelId")! }] : []),
-  ],
-  orderBy: "year DESC, month DESC, id DESC",
-}));
 
-app.get("/api/documents", (c) => listRows(c, "documents", {
-  filters: [
-    ...(c.req.query("companyId") ? [{ sql: "company_id = ?", value: c.req.query("companyId")! }] : []),
-    ...(c.req.query("status") ? [{ sql: "status = ?", value: c.req.query("status")! }] : []),
-  ],
-  orderBy: "date DESC, id DESC",
-}));
+app.get("/api/hr/payrolls", (c) =>
+  listRows(c, "hr_payrolls_v2", {
+    filters: [
+      ...(c.req.query("year")
+        ? [{ sql: "year = ?", value: c.req.query("year")! }]
+        : []),
+      ...(c.req.query("month")
+        ? [{ sql: "month = ?", value: c.req.query("month")! }]
+        : []),
+      ...(c.req.query("personnelId")
+        ? [{ sql: "employee_id = ?", value: c.req.query("personnelId")! }]
+        : []),
+    ],
+    orderBy: "year DESC, month DESC, id DESC",
+  }),
+);
+
+app.get("/api/documents", (c) =>
+  listRows(c, "documents", {
+    filters: [
+      ...(c.req.query("companyId")
+        ? [{ sql: "company_id = ?", value: c.req.query("companyId")! }]
+        : []),
+      ...(c.req.query("status")
+        ? [{ sql: "status = ?", value: c.req.query("status")! }]
+        : []),
+    ],
+    orderBy: "date DESC, id DESC",
+  }),
+);
 app.get("/api/documents/:id", (c) => byId(c, "documents"));
-app.get("/api/invoice-items", (c) => listRows(c, "invoice_items", {
-  filters: c.req.query("documentId") ? [{ sql: "document_id = ?", value: c.req.query("documentId")! }] : [],
-  orderBy: "document_id DESC, line_no ASC, id ASC",
-}));
-app.get("/api/vat-records", (c) => listRows(c, "vat_records", {
-  filters: [
-    ...(c.req.query("companyId") ? [{ sql: "company_id = ?", value: c.req.query("companyId")! }] : []),
-    ...(c.req.query("firmId") ? [{ sql: "firm_id = ?", value: c.req.query("firmId")! }] : []),
-    ...(c.req.query("startDate") ? [{ sql: "date >= ?", value: c.req.query("startDate")! }] : []),
-    ...(c.req.query("endDate") ? [{ sql: "date <= ?", value: c.req.query("endDate")! }] : []),
-  ],
-  orderBy: "date DESC, id DESC",
-}));
+
+app.get("/api/invoice-items", (c) =>
+  listRows(c, "invoice_items", {
+    filters: c.req.query("documentId")
+      ? [{ sql: "document_id = ?", value: c.req.query("documentId")! }]
+      : [],
+    orderBy: "document_id DESC, line_no ASC, id ASC",
+  }),
+);
+
+app.get("/api/vat-records", (c) =>
+  listRows(c, "vat_records", {
+    filters: [
+      ...(c.req.query("companyId")
+        ? [{ sql: "company_id = ?", value: c.req.query("companyId")! }]
+        : []),
+      ...(c.req.query("firmId")
+        ? [{ sql: "firm_id = ?", value: c.req.query("firmId")! }]
+        : []),
+      ...(c.req.query("startDate")
+        ? [{ sql: "date >= ?", value: c.req.query("startDate")! }]
+        : []),
+      ...(c.req.query("endDate")
+        ? [{ sql: "date <= ?", value: c.req.query("endDate")! }]
+        : []),
+    ],
+    orderBy: "date DESC, id DESC",
+  }),
+);
+
+// Muhasebe ekranının çevrim içi ilk okuma uçları.
+app.get("/api/muhasebe/dashboard", accountingSummary);
+app.get("/api/muhasebe/preview", accountingSummary);
+app.get("/api/muhasebe/yonetim-ozeti", accountingSummary);
+app.get("/api/muhasebe/reports/management-summary", accountingSummary);
+
+app.get("/api/muhasebe/firmalar", (c) =>
+  listRows(c, "companies", {
+    search: {
+      value: c.req.query("search")?.trim() || "",
+      columns: ["name", "normalized_name", "tax_no"],
+    },
+    orderBy: "name COLLATE NOCASE ASC",
+  }),
+);
+
+app.get("/api/muhasebe/cari-hareketler", (c) => {
+  const filters = [
+    ...(c.req.query("companyId")
+      ? [{ sql: "company_id = ?", value: c.req.query("companyId")! }]
+      : []),
+    ...(c.req.query("firmId")
+      ? [{ sql: "company_id = ?", value: c.req.query("firmId")! }]
+      : []),
+    ...(c.req.query("startDate")
+      ? [{ sql: "movement_date >= ?", value: c.req.query("startDate")! }]
+      : []),
+    ...(c.req.query("endDate")
+      ? [{ sql: "movement_date <= ?", value: c.req.query("endDate")! }]
+      : []),
+  ];
+  return listRows(c, "current_account_movements", {
+    filters,
+    orderBy: "movement_date DESC, id DESC",
+  });
+});
+
+app.get("/api/muhasebe/kdv", (c) =>
+  listRows(c, "vat_records", {
+    orderBy: "date DESC, id DESC",
+  }),
+);
+
+app.get("/api/muhasebe/cekler", (c) =>
+  c.json({ ok: true, success: true, data: [] }),
+);
+app.get("/api/muhasebe/cheques", (c) =>
+  c.json({ ok: true, success: true, data: [] }),
+);
+app.get("/api/muhasebe/mail-ekstre", (c) =>
+  c.json({ ok: true, success: true, data: [] }),
+);
+app.get("/api/muhasebe/raporlar", (c) =>
+  c.json({ ok: true, success: true, data: [] }),
+);
 
 app.get("/api/json-store", async (c) => {
   const scope = c.req.query("scope")?.trim();
   const fileName = c.req.query("fileName")?.trim();
-  if (!scope || !fileName) return c.json(jsonError("MISSING_PARAMETERS", "scope ve fileName zorunludur."), 400);
-  const row = await c.env.DB.prepare("SELECT * FROM json_store WHERE scope = ? AND file_name = ? LIMIT 1")
-    .bind(scope, fileName).first<Record<string, unknown>>();
-  if (!row) return c.json(jsonError("NOT_FOUND", "JSON kaydı bulunamadı."), 404);
+  if (!scope || !fileName) {
+    return c.json(
+      jsonError("MISSING_PARAMETERS", "scope ve fileName zorunludur."),
+      400,
+    );
+  }
+  const row = await c.env.DB.prepare(
+    "SELECT * FROM json_store WHERE scope = ? AND file_name = ? LIMIT 1",
+  )
+    .bind(scope, fileName)
+    .first<Record<string, unknown>>();
+  if (!row) {
+    return c.json(jsonError("NOT_FOUND", "JSON kaydı bulunamadı."), 404);
+  }
   return c.json({ ok: true, data: row });
 });
 
@@ -225,18 +458,35 @@ app.get("/api/json-store/:scope/*", async (c) => {
   const scope = c.req.param("scope");
   const prefix = `/api/json-store/${encodeURIComponent(scope)}/`;
   const fileName = decodeURIComponent(c.req.path.slice(prefix.length));
-  if (!fileName) return c.json(jsonError("MISSING_PARAMETERS", "fileName zorunludur."), 400);
-  const row = await c.env.DB.prepare("SELECT * FROM json_store WHERE scope = ? AND file_name = ? LIMIT 1")
-    .bind(scope, fileName).first<Record<string, unknown>>();
-  if (!row) return c.json(jsonError("NOT_FOUND", "JSON kaydı bulunamadı."), 404);
+  if (!fileName) {
+    return c.json(
+      jsonError("MISSING_PARAMETERS", "fileName zorunludur."),
+      400,
+    );
+  }
+  const row = await c.env.DB.prepare(
+    "SELECT * FROM json_store WHERE scope = ? AND file_name = ? LIMIT 1",
+  )
+    .bind(scope, fileName)
+    .first<Record<string, unknown>>();
+  if (!row) {
+    return c.json(jsonError("NOT_FOUND", "JSON kaydı bulunamadı."), 404);
+  }
   return c.json({ ok: true, data: row });
 });
 
 app.get("/api/files/*", async (c) => {
   const key = decodeURIComponent(c.req.path.slice("/api/files/".length));
-  if (!key) return c.json(jsonError("INVALID_FILE_KEY", "Dosya anahtarı zorunludur."), 400);
+  if (!key) {
+    return c.json(
+      jsonError("INVALID_FILE_KEY", "Dosya anahtarı zorunludur."),
+      400,
+    );
+  }
   const object = await c.env.FILES.get(key);
-  if (!object) return c.json(jsonError("NOT_FOUND", "Dosya bulunamadı."), 404);
+  if (!object) {
+    return c.json(jsonError("NOT_FOUND", "Dosya bulunamadı."), 404);
+  }
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
