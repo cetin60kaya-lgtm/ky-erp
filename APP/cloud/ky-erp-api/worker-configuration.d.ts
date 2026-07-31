@@ -1,3 +1,4 @@
+// KY ERP Cloudflare Worker binding types
 interface D1Result<T = Record<string, unknown>> {
   results: T[];
   success: boolean;
