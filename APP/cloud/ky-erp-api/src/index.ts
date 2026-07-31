@@ -150,7 +150,9 @@ function adminToken(): string {
 const adminUser = { id: "bootstrap-admin", username: "admin", fullName: "Sistem Admin", role: "ADMIN", mustChangePassword: false, permissions: [] };
 
 app.post("/api/auth/login", async (c) => {
-  const body = await c.req.json<{ username?: string; password?: string }>().catch(() => ({}));
+  const body: { username?: string; password?: string } = await c.req
+    .json<{ username?: string; password?: string }>()
+    .catch(() => ({} as { username?: string; password?: string }));
   if (String(body.username || "").trim().toLowerCase() !== "admin" || String(body.password || "") !== "2582") {
     return c.json(jsonError("UNAUTHORIZED", "Kullanıcı adı veya şifre hatalı."), 401);
   }
@@ -195,7 +197,6 @@ app.get("/api/muhasebe/cheques", (c) => c.json(ok([])));
 app.get("/api/muhasebe/mail-ekstre", (c) => c.json(ok([])));
 app.get("/api/muhasebe/raporlar", accountingSummary);
 
-// İK çevrim içi okuma uçları
 app.get("/api/ik/personel", (c) => listRows(c, "personnel", { orderBy: "full_name COLLATE NOCASE ASC" }));
 app.get("/api/ik/monthly-employees", (c) => listRows(c, "personnel", { orderBy: "full_name COLLATE NOCASE ASC" }));
 app.get("/api/ik/daily-employees", (c) => listRows(c, "personnel", { orderBy: "full_name COLLATE NOCASE ASC" }));
@@ -225,7 +226,6 @@ app.get("/api/ik/advanced/payroll", async (c) => c.json(ok(await safeRows(c, "hr
 app.get("/api/ik/advanced/leave-center", (c) => c.json(ok({ rows: [], policies: [] })));
 app.get("/api/ik/monthly-employees/:id/salary-contracts", (c) => c.json(ok([])));
 
-// İşNet çevrim içi okuma uçları. Portal yazma/senkron işlemleri güvenli biçimde kapalıdır.
 async function isnetDashboard(c: Context<AppEnv>) {
   const [documentCount, companyCount] = await Promise.all([safeCount(c, "documents"), safeCount(c, "companies")]);
   return c.json(ok({
