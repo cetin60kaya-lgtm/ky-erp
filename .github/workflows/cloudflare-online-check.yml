@@ -1,0 +1,75 @@
+name: KY ERP Cloudflare Online Kontrolü
+
+on:
+  pull_request:
+    branches:
+      - agent/uretim-tek-merkez
+    paths:
+      - "APP/app/ky-erp-frontend/**"
+      - "APP/cloud/ky-erp-api/**"
+      - ".github/workflows/cloudflare-online-check.yml"
+  push:
+    branches:
+      - agent/cloudflare-online-v1
+    paths:
+      - "APP/app/ky-erp-frontend/**"
+      - "APP/cloud/ky-erp-api/**"
+      - ".github/workflows/cloudflare-online-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend build ve lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - name: Kaynağı al
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: npm run build
+
+  worker:
+    name: Cloudflare Worker typecheck ve dry-run
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - name: Kaynağı al
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: TypeScript kontrolü
+        run: npm run typecheck
+
+      - name: Wrangler dry-run
+        run: npm run build
