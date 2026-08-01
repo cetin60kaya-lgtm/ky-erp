@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
-import MailSablonlariPage from "../muhasebe/MailSablonlariPage";
+import MailTemplatesWorkspace from "./muhasebe/MailTemplatesWorkspace";
 import IrsaliyeFaturaKontrolTab from "./muhasebe/IrsaliyeFaturaKontrolTab";
 import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
 import AccountingReportsListWorkspace from "./muhasebe/AccountingReportsListWorkspace";
@@ -71,7 +71,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   else if (current.key === "kar-zarar") content = <ProfitLossWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "kdv-kontrol") content = <VatComparisonWorkspace {...pageProps} />;
   else if (current.key === "muhasebe-raporlari") content = <AccountingReportsListWorkspace {...pageProps} />;
-  else if (current.key === "mail-sablonlari") content = <MailSablonlariPage activeMainCompany={activeMainCompany} />;
+  else if (current.key === "mail-sablonlari") content = <MailTemplatesWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
 
   return (
     <main className="muhasebe-module-page">

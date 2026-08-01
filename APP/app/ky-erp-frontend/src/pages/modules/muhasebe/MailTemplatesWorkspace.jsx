@@ -248,7 +248,7 @@ export default function MailTemplatesWorkspace({ activeMainCompany, refreshKey =
       {drawerOpen ? (
         <div className="mtpl-drawer-layer" role="presentation" onMouseDown={() => setDrawerOpen(false)}>
           <aside className="mtpl-drawer" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-            <header><div><h2>{form.id ? "Mail şablonunu düzenle" : "Yeni mail şablonu"}</h2><p>Değişkenler: {{"{{firmaAdi}}"}}, {{"{{bakiye}}"}}, {{"{{tarih}}"}}</p></div><button type="button" onClick={() => setDrawerOpen(false)} aria-label="Kapat"><X size={20} /></button></header>
+            <header><div><h2>{form.id ? "Mail şablonunu düzenle" : "Yeni mail şablonu"}</h2><p>Değişkenler: <code>{"{{firmaAdi}}"}</code>, <code>{"{{bakiye}}"}</code>, <code>{"{{tarih}}"}</code></p></div><button type="button" onClick={() => setDrawerOpen(false)} aria-label="Kapat"><X size={20} /></button></header>
             <div className="mtpl-drawer-body">
               <div className="mtpl-form">
                 <label>Şablon adı<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
