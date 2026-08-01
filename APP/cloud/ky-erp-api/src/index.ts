@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
 type AppEnv = { Bindings: Bindings; Variables: Variables };
-type DatabaseRow = Record<string, unknown>;
+type DatabaseRow = Record<string, any>;
 type QueryFilter = {
   column: string;
   value: string | number;
@@ -596,7 +596,10 @@ async function accountingDocuments(
     });
 }
 
-async function accountingDocumentDetail(c: Context<AppEnv>, id: string) {
+async function accountingDocumentDetail(
+  c: Context<AppEnv>,
+  id: string,
+): Promise<DatabaseRow | null> {
   const slug = slugOf(c);
   const [row, companies, lines] = await Promise.all([
     rowByIdScoped(c, "documents", id, slug),
@@ -707,7 +710,7 @@ async function accountingSummary(c: Context<AppEnv>) {
     (item) => !/PROCESSED|APPROVED|ISLENDI|ISLENDI/.test(normalizeText(item.status)),
   );
   const today = new Date();
-  const upcomingCheques = cheques
+  const upcomingCheques: DatabaseRow[] = cheques
     .filter((row) => normalizeText(row.status) !== "ODENDI")
     .map((row) => ({ ...row, dueMs: new Date(databaseText(row.dueDate || row.vadeTarihi)).getTime() }))
     .filter((row) => Number.isFinite(row.dueMs) && row.dueMs >= today.getTime())
@@ -1061,7 +1064,8 @@ async function buildMailTracking(c: Context<AppEnv>) {
     tracking.map((row) => [databaseText(row.companyId), row]),
   );
   const liste = companies.map((company) => {
-    const state = trackingMap.get(databaseText(company.id)) || {};
+    const state: DatabaseRow =
+      trackingMap.get(databaseText(company.id)) || {};
     const email = databaseText(company.email || state.email);
     const status = state.status || (email ? "EKSTRE_ISTENECEK" : "MAIL_EKSIK");
     return {
