@@ -9,7 +9,6 @@ import "./App.css";
 import "./app/appShell.css";
 import {
   MODULES,
-  findModule,
   findTab,
   getDefaultTabKey,
   getInitialRoute,
@@ -167,9 +166,40 @@ export default function App() {
     return visibleModules.find((item) => item.key === activeModule) || fallback;
   }, [activeModule, navigationModules, visibleModules]);
 
+  const activeTabConfig = findTab(moduleConfig, activeTab);
+  const activeTabLabel = activeTabConfig?.[1] || "";
+  const moduleGroups = getModuleGroups(moduleConfig);
+
   const hasActiveModuleAccess = Boolean(
     moduleConfig?.permissionKey && hasModule(moduleConfig.permissionKey),
   );
+
+  const selectableCompanies = useMemo(() => {
+    const activeRows = companies.filter((item) => item?.isActive !== false);
+    return activeRows.length ? activeRows : companies;
+  }, [companies]);
+
+  const normalizedActiveMainCompany = useMemo(() => {
+    if (!companies.length) return activeCompany || null;
+    const bySlug = companies.find((item) => item.slug === activeCompanySlug);
+    if (bySlug) return bySlug;
+
+    const raw = String(activeCompanySlug || "")
+      .trim()
+      .toLocaleLowerCase("tr-TR");
+    const byLegacyValue = companies.find((item) =>
+      [item?.id, item?.slug, item?.name]
+        .map((value) => String(value || "").toLocaleLowerCase("tr-TR"))
+        .includes(raw),
+    );
+    if (byLegacyValue) return byLegacyValue;
+
+    return (
+      companies.find((item) => item?.isActive !== false) ||
+      companies[0] ||
+      null
+    );
+  }, [activeCompany, activeCompanySlug, companies]);
 
   const writeRoute = useCallback(
     (moduleKey, tabKey, options = {}) => {
@@ -191,8 +221,26 @@ export default function App() {
           ...(options.actionContext || {}),
           sourceModule:
             options.actionContext?.sourceModule || activeModule,
+          sourceModuleLabel:
+            options.actionContext?.sourceModuleLabel || moduleConfig?.label || "",
+          sourceTab: options.actionContext?.sourceTab || activeTab,
+          sourceTabLabel:
+            options.actionContext?.sourceTabLabel || activeTabLabel,
           sourceRoute:
-            options.actionContext?.sourceRoute || window.location.pathname,
+            options.actionContext?.sourceRoute ||
+            `${window.location.pathname}${window.location.search}`,
+          mainCompanyId:
+            options.actionContext?.mainCompanyId ||
+            normalizedActiveMainCompany?.id ||
+            "",
+          mainCompanySlug:
+            options.actionContext?.mainCompanySlug ||
+            normalizedActiveMainCompany?.slug ||
+            "",
+          mainCompanyName:
+            options.actionContext?.mainCompanyName ||
+            normalizedActiveMainCompany?.name ||
+            "",
           nonce: String(Number(previous?.nonce || 0) + 1),
         }));
         setIsMobileMenuOpen(false);
@@ -221,7 +269,17 @@ export default function App() {
       });
       setIsMobileMenuOpen(false);
     },
-    [activeModule, visibleModules, writeRoute],
+    [
+      activeModule,
+      activeTab,
+      activeTabLabel,
+      moduleConfig?.label,
+      normalizedActiveMainCompany?.id,
+      normalizedActiveMainCompany?.name,
+      normalizedActiveMainCompany?.slug,
+      visibleModules,
+      writeRoute,
+    ],
   );
 
   const setActiveTabWithRoute = useCallback(
@@ -262,33 +320,6 @@ export default function App() {
     navigationModules,
     openModule,
   ]);
-
-  const selectableCompanies = useMemo(() => {
-    const activeRows = companies.filter((item) => item?.isActive !== false);
-    return activeRows.length ? activeRows : companies;
-  }, [companies]);
-
-  const normalizedActiveMainCompany = useMemo(() => {
-    if (!companies.length) return activeCompany || null;
-    const bySlug = companies.find((item) => item.slug === activeCompanySlug);
-    if (bySlug) return bySlug;
-
-    const raw = String(activeCompanySlug || "")
-      .trim()
-      .toLocaleLowerCase("tr-TR");
-    const byLegacyValue = companies.find((item) =>
-      [item?.id, item?.slug, item?.name]
-        .map((value) => String(value || "").toLocaleLowerCase("tr-TR"))
-        .includes(raw),
-    );
-    if (byLegacyValue) return byLegacyValue;
-
-    return (
-      companies.find((item) => item?.isActive !== false) ||
-      companies[0] ||
-      null
-    );
-  }, [activeCompany, activeCompanySlug, companies]);
 
   useEffect(() => {
     if (!normalizedActiveMainCompany?.slug) return;
@@ -362,10 +393,6 @@ export default function App() {
     }
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
   }
-
-  const activeTabConfig = findTab(moduleConfig, activeTab);
-  const activeTabLabel = activeTabConfig?.[1] || "";
-  const moduleGroups = getModuleGroups(moduleConfig);
 
   if (authLoading) {
     return (
@@ -518,15 +545,7 @@ export default function App() {
         <button
           type="button"
           className="kyerp-ai-fab"
-          onClick={() =>
-            openModule("asistan", {
-              tabKey: "sohbet",
-              actionContext: {
-                sourceModule: activeModule,
-                sourceRoute: window.location.pathname,
-              },
-            })
-          }
+          onClick={() => openModule("asistan", { tabKey: "sohbet" })}
         >
           <ErpIcon name="dashboard" size={18} />
           <span>Asistana Sor</span>
