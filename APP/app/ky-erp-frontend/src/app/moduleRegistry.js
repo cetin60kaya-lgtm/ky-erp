@@ -152,22 +152,18 @@ export const MODULES = [
     icon: "dashboard",
     groups: [
       {
-        label: "Üretim Girişi",
+        label: "Tek Merkez Üretim",
         tabs: [
-          ["uretim-hizli-giris", "Akıllı Hızlı Giriş", "dashboard"],
-          ["uretim-is-havuzu", "Üretim İş Havuzu", "dosya"],
-        ],
-      },
-      {
-        label: "Kontrol ve Yönetim",
-        tabs: [
-          ["uretim-denge", "İrsaliye / Üretim Dengesi", "file-check"],
+          ["uretim-merkezi", "Model ve Üretim Kontrol Merkezi", "dashboard"],
           ["uretim-raporlari", "Üretim Raporları", "raporlar"],
           ["uretim-ayarlari", "Makine ve Vardiya Ayarları", "ayarlar"],
         ],
       },
     ],
     hiddenTabs: [
+      ["uretim-hizli-giris", "Akıllı Hızlı Giriş (Merkez içinde)", "dashboard"],
+      ["uretim-is-havuzu", "Üretim İş Havuzu (Merkez içinde)", "dosya"],
+      ["uretim-denge", "İrsaliye / Üretim Dengesi (Merkez içinde)", "file-check"],
       ["uretim-girisi", "Üretim Girişi (Eski Bağlantı)", "dashboard"],
       ["imalat-kontrol-rapor", "Denetim ve Rapor (Eski Bağlantı)", "raporlar"],
       ["imalat-denetim", "Üretim Dengesi (Eski Bağlantı)", "file-check"],
@@ -246,9 +242,20 @@ export const MUHASEBE_ROUTE_ALIASES = {
   raporlar: "muhasebe-raporlari",
 };
 
+export const URETIM_ROUTE_ALIASES = {
+  "uretim-hizli-giris": "uretim-merkezi",
+  "uretim-is-havuzu": "uretim-merkezi",
+  "uretim-denge": "uretim-merkezi",
+  "uretim-girisi": "uretim-merkezi",
+  "imalat-denetim": "uretim-merkezi",
+  "imalat-kontrol-rapor": "uretim-raporlari",
+  "uretim-raporu": "uretim-raporlari",
+};
+
 export function normalizeModuleTabKey(module, tabKey) {
   if (module?.key === "muhasebe") return MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
   if (module?.key === "isnet") return ISNET_ROUTE_ALIASES[tabKey] || tabKey;
+  if (module?.key === "uretim") return URETIM_ROUTE_ALIASES[tabKey] || tabKey;
   return tabKey;
 }
 
