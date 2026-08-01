@@ -1,0 +1,41 @@
+name: KY ERP Cloudflare Worker Kontrolü
+
+on:
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/**"
+      - ".github/workflows/worker-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: TypeScript kontrolü
+        run: npm run typecheck
+
+      - name: Wrangler dry-run build
+        run: npm run build
