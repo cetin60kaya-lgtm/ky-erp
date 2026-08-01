@@ -6,16 +6,24 @@ on:
       - "APP/cloud/ky-erp-api/src/main.ts"
       - "APP/cloud/ky-erp-api/src/production-center.ts"
       - "APP/cloud/ky-erp-api/src/boyahane-inventory.ts"
+      - "APP/cloud/ky-erp-api/src/boyahane-workflow.ts"
+      - "APP/cloud/ky-erp-api/src/desen-storage.ts"
+      - "APP/cloud/ky-erp-api/src/desen-workflow.ts"
+      - "APP/cloud/ky-erp-api/src/desen-operations.ts"
+      - "APP/cloud/ky-erp-api/worker-configuration.d.ts"
       - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
       - "APP/cloud/ky-erp-api/local-production-center.sql"
       - "APP/cloud/ky-erp-api/local-boyahane-inventory.sql"
       - "APP/app/ky-erp-frontend/src/pages/imalat/**"
       - "APP/app/ky-erp-frontend/src/pages/boyahane/**"
+      - "APP/app/ky-erp-frontend/src/pages/desen/**"
       - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/**"
       - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
       - "APP/app/ky-erp-frontend/src/pages/modules/UretimPage.jsx"
       - "APP/app/ky-erp-frontend/src/services/productionCenterApi.js"
       - "APP/app/ky-erp-frontend/src/services/boyahaneWorkflowApi.js"
+      - "APP/app/ky-erp-frontend/src/services/desenWorkflowApi.js"
+      - "APP/app/ky-erp-frontend/src/services/desenFolderSettingsApi.js"
       - "APP/app/ky-erp-frontend/src/app/moduleRegistry.js"
       - "APP/app/ky-erp-frontend/src/App.jsx"
       - "APP/app/ky-erp-frontend/src/app/appShell.css"
@@ -274,6 +282,195 @@ jobs:
             "http://127.0.0.1:8788/api/boyahane/workflow/lots/${LOT_ID}/action")
           test "$HTTP_CODE" = "409"
           jq -e '.error.code == "LOT_HAS_STOCK"' /tmp/finish-result.json
+
+      - name: Desen R2 çoklu yükleme ve tarama akışını doğrula
+        run: |
+          printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl9p1sAAAAASUVORK5CYII=' | base64 -d > /tmp/CI-MODEL-ON.png
+          curl --fail --silent \
+            -X POST \
+            -F "mainCompanySlug=mecit-hakan" \
+            -F "files=@/tmp/CI-MODEL-ON.png;type=image/png" \
+            "http://127.0.0.1:8788/api/desen/workflow/inbox/upload" \
+            > /tmp/design-upload.json
+          jq -e '.ok == true' /tmp/design-upload.json
+          jq -e '.data.uploaded == 1' /tmp/design-upload.json
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan"}' \
+            "http://127.0.0.1:8788/api/desen/workflow/inbox/scan" \
+            > /tmp/design-scan.json
+          jq -e '.ok == true' /tmp/design-scan.json
+          jq -e '.data.items | length == 1' /tmp/design-scan.json
+          jq -e '.data.groups | length == 1' /tmp/design-scan.json
+
+      - name: Desen modeli, kanal ve renk grubunu oluştur
+        run: |
+          cat > /tmp/design-model.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "design-ci-model",
+            "modelName": "CI DESEN MODEL",
+            "modelCode": "CI-DESEN-001",
+            "companyId": "company-customer",
+            "companyName": "TAHA GİYİM TEST",
+            "orderNo": "CI-SP-001",
+            "status": "CHANNEL_REVIEW_PENDING"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-model.json \
+            "http://127.0.0.1:8788/api/desen/workflow/models" \
+            > /tmp/design-model-result.json
+          jq -e '.ok == true' /tmp/design-model-result.json
+          jq -e '.data.id == "design-ci-model"' /tmp/design-model-result.json
+
+          cat > /tmp/design-operation.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "design-ci-front",
+            "printAreaCode": "FRONT",
+            "printAreaName": "Ön",
+            "moldType": "SCREEN",
+            "placementStatus": "READY"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-operation.json \
+            "http://127.0.0.1:8788/api/desen/workflow/models/design-ci-model/operations" \
+            > /tmp/design-operation-result.json
+          jq -e '.ok == true' /tmp/design-operation-result.json
+
+          cat > /tmp/design-channels.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "channels": [
+              {
+                "id": "design-ci-channel-a",
+                "rawName": "PANTONE 18-1664",
+                "normalizedName": "KIRMIZI",
+                "colorCode": "18-1664",
+                "groupKey": "design-ci-red",
+                "included": true
+              },
+              {
+                "id": "design-ci-channel-b",
+                "rawName": "KIRMIZI GÖLGE",
+                "normalizedName": "KIRMIZI GÖLGE",
+                "colorCode": "18-1664",
+                "groupKey": "design-ci-red",
+                "included": true
+              }
+            ]
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-channels.json \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/channels" \
+            > /tmp/design-channels-result.json
+          jq -e '.ok == true' /tmp/design-channels-result.json
+
+          cat > /tmp/design-group.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "design-ci-red",
+            "groupKey": "design-ci-red",
+            "displayName": "CI KIRMIZI",
+            "colorCode": "18-1664",
+            "moldCount": 2
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-group.json \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/color-groups" \
+            > /tmp/design-group-result.json
+          jq -e '.ok == true' /tmp/design-group-result.json
+
+      - name: Desen rengini onayla ve Boyahane kuyruğuna aktar
+        run: |
+          cat > /tmp/design-color.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "pantone": "18-1664",
+            "colorName": "CI KIRMIZI",
+            "paintType": "PIGMENT"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-color.json \
+            "http://127.0.0.1:8788/api/boyahane/registered-colors" \
+            > /tmp/design-color-result.json
+          jq -e '.ok == true' /tmp/design-color-result.json
+          jq -r '.data.id' /tmp/design-color-result.json > /tmp/design-color-id.txt
+          COLOR_ID="$(cat /tmp/design-color-id.txt)"
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data "{\"mainCompanySlug\":\"mecit-hakan\",\"registeredColorId\":\"${COLOR_ID}\"}" \
+            "http://127.0.0.1:8788/api/desen/workflow/color-groups/design-ci-red/link-registered-color" \
+            > /tmp/design-link-result.json
+          jq -e '.ok == true' /tmp/design-link-result.json
+
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/totals?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-totals.json
+          jq -e '.ok == true' /tmp/design-totals.json
+          jq -e '.data.channelCount == 2' /tmp/design-totals.json
+          jq -e '.data.uniqueColorCount == 1' /tmp/design-totals.json
+          jq -e '.data.registeredColorCount == 1' /tmp/design-totals.json
+          jq -e '.data.unresolvedColorCount == 0' /tmp/design-totals.json
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan"}' \
+            "http://127.0.0.1:8788/api/desen/workflow/models/design-ci-model/sync-dyehouse" \
+            > /tmp/design-sync.json
+          jq -e '.ok == true' /tmp/design-sync.json
+          jq -e '.data.jobId == "design-design-ci-model"' /tmp/design-sync.json
+          jq -e '.data.colorCount == 1' /tmp/design-sync.json
+
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/boyahane/jobs/design-design-ci-model?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-job.json
+          jq -e '.ok == true' /tmp/design-job.json
+          jq -e '.data.modelName == "CI DESEN MODEL"' /tmp/design-job.json
+          jq -e '.data.colors | length == 1' /tmp/design-job.json
+
+      - name: Desen kanal sıralama, silme ve rapor rotalarını doğrula
+        run: |
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan","channelIds":["design-ci-channel-b","design-ci-channel-a"]}' \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/channels/reorder" \
+            > /tmp/design-reorder.json
+          jq -e '.ok == true' /tmp/design-reorder.json
+          jq -e '.data.operations[0].channels[0].id == "design-ci-channel-b"' /tmp/design-reorder.json
+
+          curl --fail --silent \
+            -X DELETE \
+            "http://127.0.0.1:8788/api/desen/workflow/channels/design-ci-channel-a?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-delete-channel.json
+          jq -e '.ok == true' /tmp/design-delete-channel.json
+
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/desen/workflow/reports?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-report.json
+          jq -e '.ok == true' /tmp/design-report.json
+          jq -e '.data.rows | map(select(.id == "design-ci-model")) | length == 1' /tmp/design-report.json
 
       - name: Frontend paketleri
         working-directory: APP/app/ky-erp-frontend
