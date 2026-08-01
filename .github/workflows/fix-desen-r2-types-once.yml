@@ -55,3 +55,5 @@ jobs:
           git add APP/cloud/ky-erp-api/src/desen-workflow.ts .github/workflows/fix-desen-r2-types-once.yml
           git commit -m "fix(desen): R2 liste ve taşıma tiplerini açıklaştır"
           git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+
+# tekrar tetikleme: 2026-08-01
