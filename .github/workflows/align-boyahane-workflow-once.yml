@@ -1,9 +1,7 @@
 name: Boyahane Reçete Alan Eşitleme Tek Sefer
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
+  pull_request:
     paths:
       - ".github/workflows/align-boyahane-workflow-once.yml"
 
@@ -85,5 +83,3 @@ jobs:
           git add APP/app/ky-erp-frontend/src/pages/boyahane/workflow/RecipeWorkspace.jsx APP/cloud/ky-erp-api/src/boyahane-workflow.ts .github/workflows/align-boyahane-workflow-once.yml
           git commit -m "fix(boyahane): lot durumu ve üretim snapshot alanlarını eşitle"
           git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
-
-# tekrar tetikleme: 2026-08-01
