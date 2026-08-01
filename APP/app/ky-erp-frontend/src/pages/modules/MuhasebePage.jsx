@@ -1,59 +1,31 @@
 import { useMemo, useState } from "react";
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
-import CompanyAliasPanel from "../muhasebe/CompanyAliasPanel";
 import MailSablonlariPage from "../muhasebe/MailSablonlariPage";
 import IrsaliyeFaturaKontrolTab from "./muhasebe/IrsaliyeFaturaKontrolTab";
 import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
-import {
-  CompanyCards,
-  FirmCardExtras,
-  ProfitLossCenter,
-  muhasebeLegacyStyles,
-} from "./MuhasebeLegacyWorkspaces";
-import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
-import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
-import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
 import AccountingReportsListWorkspace from "./muhasebe/AccountingReportsListWorkspace";
+import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
+import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
+import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
+import ProfitLossWorkspace from "./muhasebe/ProfitLossWorkspace";
 import SupplierInvoicesWorkspace from "./muhasebe/SupplierInvoicesWorkspace";
+import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
 import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
 import "./muhasebe/muhasebeModule.css";
 
 export const MUHASEBE_TABS = [
   { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve çek görünümünü tek ekranda izleyin." },
-  { key: "firma-kartlari", title: "Firmalar ve Cari", description: "Firma bakiyeleri, hareketler ve yetkililer için tek liste." },
+  { key: "firma-kartlari", title: "Firmalar ve Cari", description: "Firma bakiyeleri, cari hareketler ve hızlı işlemler için tek liste." },
   { key: "tedarikci-faturalar", title: "Gelen Tedarikçi Faturaları", description: "İşNet faturalarını kontrol edin; boya ve kimyasal alımlarını firma bazlı alias ve lot ile boyahaneye aktarın." },
-  { key: "kesilen-faturalar", title: "Kesilen Faturalar", description: "Kesilen faturaların İşNet, mail ve belge durumlarını izleyin." },
+  { key: "kesilen-faturalar", title: "Kesilen Faturalar", description: "Kesilen faturaların İşNet, model, adet ve belge durumlarını izleyin." },
   { key: "irsaliye-fatura-kontrol", title: "İrsaliye / Fatura Kontrolü", description: "Model, sipariş ve adet farklarını tek listede karşılaştırın." },
   { key: "cek-odeme", title: "Çek / Ödeme", description: "Vadeleri, banka ve firma riskini yakından takip edin." },
   { key: "mail-ekstre", title: "Ekstre ve Mail Takibi", description: "Ekstre, alıcı, hatırlatma ve gönderim işlerini satırdan yönetin." },
-  { key: "kar-zarar", title: "Gelir / Gider ve Kâr Zarar", description: "Resmi ve gayri resmi hareketleri aynı dönem görünümünde analiz edin." },
+  { key: "kar-zarar", title: "Gelir / Gider ve Kâr Zarar", description: "Resmî ve gayri resmî hareketleri aynı dönem görünümünde analiz edin." },
   { key: "kdv-kontrol", title: "Gelen / Giden KDV Kontrolü", description: "Firma bazlı KDV hareketlerini ve dönem farkını karşılaştırın." },
   { key: "muhasebe-raporlari", title: "Muhasebe Raporları", description: "Operasyonel ve yönetim raporlarını filtreleyip dışa aktarın." },
   { key: "mail-sablonlari", title: "Mail Şablonları", description: "Muhasebe yazışmalarında kullanılan şablonları yönetin." },
 ];
-
-function FirmWorkspace({ activeMainCompany, refreshKey, reloadAll, goTab }) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  return (
-    <div className="accounting-stack">
-      <CompanyCards activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />
-      <details className="accounting-secondary" onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
-        <summary>Firma eşleştirme ve yardımcı ayarlar</summary>
-        {advancedOpen ? (
-          <>
-            <CompanyAliasPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
-            <FirmCardExtras
-              activeMainCompany={activeMainCompany}
-              refreshKey={refreshKey}
-              reloadAll={reloadAll}
-              goTab={goTab}
-            />
-          </>
-        ) : null}
-      </details>
-    </div>
-  );
-}
 
 function ControlledEmptyState({ requestedTab, goTab }) {
   return (
@@ -90,20 +62,19 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   let content = null;
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
-  else if (current.key === "firma-kartlari") content = <FirmWorkspace {...pageProps} />;
+  else if (current.key === "firma-kartlari") content = <CompaniesCurrentWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "tedarikci-faturalar") content = <SupplierInvoicesWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "kesilen-faturalar") content = <KesilenFaturalarTab activeMainCompany={activeMainCompany} />;
   else if (current.key === "irsaliye-fatura-kontrol") content = <IrsaliyeFaturaKontrolTab activeMainCompany={activeMainCompany} />;
   else if (current.key === "cek-odeme") content = <CekOdemeMerkeziPage activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />;
   else if (current.key === "mail-ekstre") content = <MailTrackingWorkspace {...pageProps} />;
-  else if (current.key === "kar-zarar") content = <ProfitLossCenter {...pageProps} />;
+  else if (current.key === "kar-zarar") content = <ProfitLossWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "kdv-kontrol") content = <VatComparisonWorkspace {...pageProps} />;
   else if (current.key === "muhasebe-raporlari") content = <AccountingReportsListWorkspace {...pageProps} />;
   else if (current.key === "mail-sablonlari") content = <MailSablonlariPage activeMainCompany={activeMainCompany} />;
 
   return (
     <main className="muhasebe-module-page">
-      <style>{muhasebeLegacyStyles}</style>
       {current ? (
         <header className="accounting-page-header">
           <div>
