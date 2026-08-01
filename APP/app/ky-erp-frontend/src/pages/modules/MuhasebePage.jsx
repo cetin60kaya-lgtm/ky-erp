@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import BelgeIslemMerkezi from "../muhasebe/BelgeIslemMerkezi";
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
 import CompanyAliasPanel from "../muhasebe/CompanyAliasPanel";
 import MailSablonlariPage from "../muhasebe/MailSablonlariPage";
@@ -15,13 +14,14 @@ import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace"
 import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
 import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
 import AccountingReportsListWorkspace from "./muhasebe/AccountingReportsListWorkspace";
+import SupplierInvoicesWorkspace from "./muhasebe/SupplierInvoicesWorkspace";
 import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
 import "./muhasebe/muhasebeModule.css";
 
 export const MUHASEBE_TABS = [
   { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve çek görünümünü tek ekranda izleyin." },
   { key: "firma-kartlari", title: "Firmalar ve Cari", description: "Firma bakiyeleri, hareketler ve yetkililer için tek liste." },
-  { key: "tedarikci-faturalar", title: "Gelen Tedarikçi Faturaları", description: "İşNet'ten gelen faturaları kontrol edin; gerektiğinde manuel belge ekleyin." },
+  { key: "tedarikci-faturalar", title: "Gelen Tedarikçi Faturaları", description: "İşNet faturalarını kontrol edin; boya ve kimyasal alımlarını firma bazlı alias ve lot ile boyahaneye aktarın." },
   { key: "kesilen-faturalar", title: "Kesilen Faturalar", description: "Kesilen faturaların İşNet, mail ve belge durumlarını izleyin." },
   { key: "irsaliye-fatura-kontrol", title: "İrsaliye / Fatura Kontrolü", description: "Model, sipariş ve adet farklarını tek listede karşılaştırın." },
   { key: "cek-odeme", title: "Çek / Ödeme", description: "Vadeleri, banka ve firma riskini yakından takip edin." },
@@ -39,15 +39,17 @@ function FirmWorkspace({ activeMainCompany, refreshKey, reloadAll, goTab }) {
       <CompanyCards activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />
       <details className="accounting-secondary" onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
         <summary>Firma eşleştirme ve yardımcı ayarlar</summary>
-        {advancedOpen ? <>
-          <CompanyAliasPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
-          <FirmCardExtras
-            activeMainCompany={activeMainCompany}
-            refreshKey={refreshKey}
-            reloadAll={reloadAll}
-            goTab={goTab}
-          />
-        </> : null}
+        {advancedOpen ? (
+          <>
+            <CompanyAliasPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
+            <FirmCardExtras
+              activeMainCompany={activeMainCompany}
+              refreshKey={refreshKey}
+              reloadAll={reloadAll}
+              goTab={goTab}
+            />
+          </>
+        ) : null}
       </details>
     </div>
   );
@@ -89,7 +91,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
   else if (current.key === "firma-kartlari") content = <FirmWorkspace {...pageProps} />;
-  else if (current.key === "tedarikci-faturalar") content = <BelgeIslemMerkezi activeMainCompany={activeMainCompany} />;
+  else if (current.key === "tedarikci-faturalar") content = <SupplierInvoicesWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "kesilen-faturalar") content = <KesilenFaturalarTab activeMainCompany={activeMainCompany} />;
   else if (current.key === "irsaliye-fatura-kontrol") content = <IrsaliyeFaturaKontrolTab activeMainCompany={activeMainCompany} />;
   else if (current.key === "cek-odeme") content = <CekOdemeMerkeziPage activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />;
