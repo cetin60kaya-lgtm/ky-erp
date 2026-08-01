@@ -42,14 +42,6 @@ export const MODULES = [
         ],
       },
     ],
-    hiddenTabs: [
-      ["cari-hareketler", "Cari Hareketler (Firmalar ve Cari içinde)", "cari-kasa"],
-      ["firma-yetkilileri", "Departman ve Yetkililer (Firmalar ve Cari içinde)", "users"],
-      ["envanter-urunleri", "Ürün Eşleştirme (Fatura kontrolünde)", "urunler"],
-      ["gider-kategorileri", "Gider Kuralları (Kâr / Zarar içinde)", "raporlar"],
-      ["musteri-irsaliyeleri", "Müşteri İrsaliyeleri (Eski Bağlantı)", "musteri-irsaliye"],
-      ["model-takip", "Model Üretim Takibi (Eski Bağlantı)", "model-takip-merkezi"],
-    ],
   },
   {
     key: "isnet",
@@ -58,18 +50,35 @@ export const MODULES = [
     icon: "eposta",
     groups: [
       {
-        label: "İşNet İşlemleri",
+        label: "Yönetim",
+        tabs: [["yonetim-merkezi", "Yönetim Merkezi", "dashboard"]],
+      },
+      {
+        label: "Belge İşlemleri",
         tabs: [
-          ["yonetim-merkezi", "Yönetim Merkezi", "dashboard"],
-          ["belge-merkezi", "Belge Merkezi", "dosya"],
-          ["is-akisi", "İrsaliye ve Fatura İş Akışı", "file-check"],
-          ["arsiv-gonderim", "Arşiv ve Gönderim", "eposta"],
-          ["ayarlar", "Ayarlar ve Bağlantı", "ayarlar"],
+          ["belge-akisi", "Gelen / Giden Belgeler", "dosya"],
+          ["irsaliyeden-faturaya", "İrsaliye ve Fatura İş Akışı", "file-check"],
         ],
+      },
+      {
+        label: "Arşiv ve Gönderim",
+        tabs: [
+          ["kesilen-belgeler", "Belge Arşivi", "dosya"],
+          ["cikti-kuyrugu", "Çıktı ve Mail", "eposta"],
+        ],
+      },
+      {
+        label: "Sistem",
+        tabs: [["ayarlar", "Ayarlar ve Bağlantı", "ayarlar"]],
       },
     ],
     hiddenTabs: [
-      ["irsaliyeden-faturaya", "Fatura Önizleme ve Gönderim", "file-check"],
+      ["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"],
+      ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
+      ["gelen-faturalar", "Gelen Faturalar", "dosya"],
+      ["giden-faturalar", "Giden Faturalar", "dosya"],
+      ["yeni-irsaliye", "Yeni İrsaliye", "file-check"],
+      ["mail-merkezi", "Mail Merkezi", "eposta"],
     ],
   },
   {
@@ -160,22 +169,6 @@ export const MODULES = [
         ],
       },
     ],
-    hiddenTabs: [
-      ["uretim-hizli-giris", "Akıllı Hızlı Giriş (Merkez içinde)", "dashboard"],
-      ["uretim-is-havuzu", "Üretim İş Havuzu (Merkez içinde)", "dosya"],
-      ["uretim-denge", "İrsaliye / Üretim Dengesi (Merkez içinde)", "file-check"],
-      ["uretim-girisi", "Üretim Girişi (Eski Bağlantı)", "dashboard"],
-      ["imalat-kontrol-rapor", "Denetim ve Rapor (Eski Bağlantı)", "raporlar"],
-      ["imalat-denetim", "Üretim Dengesi (Eski Bağlantı)", "file-check"],
-      ["uretim-raporu", "Üretim Raporu (Eski Bağlantı)", "raporlar"],
-    ],
-  },
-  {
-    key: "asistan",
-    permissionKey: "ASISTAN",
-    label: "KY ERP Asistan",
-    icon: "dashboard",
-    tabs: [["sohbet", "Asistan Sohbeti", "dashboard"]],
   },
   {
     key: "admin",
@@ -201,70 +194,185 @@ export const MODULES = [
       },
     ],
   },
+  {
+    key: "asistan",
+    permissionKey: "ASISTAN",
+    label: "KY ERP Asistan",
+    icon: "dashboard",
+    tabs: [["sohbet", "Asistan Sohbeti", "dashboard"]],
+  },
 ];
 
-const ISNET_ROUTE_ALIASES = {
-  "belge-akisi": "belge-merkezi",
-  "gelen-irsaliyeler": "belge-merkezi",
-  "giden-irsaliyeler": "belge-merkezi",
-  "gelen-faturalar": "belge-merkezi",
-  "giden-faturalar": "belge-merkezi",
-  "belge-kaynagi": "is-akisi",
-  "yeni-irsaliye": "is-akisi",
-  "kesilen-belgeler": "arsiv-gonderim",
-  "cikti-kuyrugu": "arsiv-gonderim",
-  "mail-merkezi": "arsiv-gonderim",
+export const MODULE_ROUTE_ALIASES = {
+  muhasebe: {
+    "genel-bakis": "yonetim-ozeti",
+    firmalar: "firma-kartlari",
+    cari: "firma-kartlari",
+    "cari-hareketler": "firma-kartlari",
+    "firma-yetkilileri": "firma-kartlari",
+    "eposta-kisileri": "firma-kartlari",
+    "gider-kategorileri": "kar-zarar",
+    "gelir-gider": "kar-zarar",
+    kar: "kar-zarar",
+    zarar: "kar-zarar",
+    kdv: "kdv-kontrol",
+    "cek-kart": "cek-odeme",
+    "odeme-tahsilat": "cek-odeme",
+    odemeler: "cek-odeme",
+    "odeme-nakit-akisi": "cek-odeme",
+    "eposta-ekstre": "mail-ekstre",
+    "belge-kontrol": "tedarikci-faturalar",
+    "belge-is-akisi": "tedarikci-faturalar",
+    "belge-yukle": "tedarikci-faturalar",
+    "belge-merkezi": "tedarikci-faturalar",
+    "tedarikci-fatura": "tedarikci-faturalar",
+    "tedarik-fatura": "tedarikci-faturalar",
+    "fatura-kesim": "kesilen-faturalar",
+    "fatura-kesim-yardimcisi": "kesilen-faturalar",
+    "fatura-yardimci": "kesilen-faturalar",
+    "musteri-belgeleri": "kesilen-faturalar",
+    "musteri-irsaliyeleri": "irsaliye-fatura-kontrol",
+    "musteri-irsaliye": "irsaliye-fatura-kontrol",
+    "irsaliye-fatura": "irsaliye-fatura-kontrol",
+    "model-muhasebe": "tedarikci-faturalar",
+    "model-takip": "irsaliye-fatura-kontrol",
+    "isveren-ozeti": "muhasebe-raporlari",
+    "kontrol-paneli": "yonetim-ozeti",
+    "hizli-giris": "firma-kartlari",
+    "gelen-irsaliye": "irsaliye-fatura-kontrol",
+    "giden-fatura": "kesilen-faturalar",
+    "bizim-fatura": "kesilen-faturalar",
+    "bizim-irsaliye": "irsaliye-fatura-kontrol",
+    raporlar: "muhasebe-raporlari",
+    ayarlar: "mail-sablonlari",
+  },
+  isnet: {
+    "belge-merkezi": "belge-akisi",
+    "is-akisi": "irsaliyeden-faturaya",
+    "arsiv-gonderim": "cikti-kuyrugu",
+  },
+  desen: {
+    desen: "gelen-desenler",
+    "desen-yonetim-ozeti": "gelen-desenler",
+    yerlesim: "desen-yerlesim-is-akisi",
+    "kalip-yerlesim": "desen-yerlesim-is-akisi",
+    "desen-klasor-ayarlari": "gelen-desenler",
+  },
+  boyahane: {
+    "boyahane-yonetim-ozeti": "is-akisi",
+    "renk-recete-is-akisi": "is-akisi",
+    "renk-gramaj": "is-akisi",
+    "hammadde-lot": "urun-lotlar",
+    "onayli-envanter": "urun-lotlar",
+    "boyahane-raporlari": "raporlar",
+    "evraklar-denetim": "raporlar",
+    "evrak-denetim": "raporlar",
+    evraklar: "raporlar",
+    "renk-havuzu": "kayitli-renkler",
+  },
+  ik: {
+    "ik-ozet": "ozet",
+    "ik-yonetim-ozeti": "ozet",
+    "ay-genel-kontrol": "ozet",
+    "genel-kontrol": "ozet",
+    "monthly-overview": "ozet",
+    "aylik-personel": "personel-kartlari",
+    "ay-personel-kartlari": "personel-kartlari",
+    "monthly-personnel": "personel-kartlari",
+    "ay-mesai-avans": "mesai-avans",
+    "mesai-kesinti": "mesai-avans",
+    "monthly-work-advance": "mesai-avans",
+    "izin-mesai-kesinti": "puantaj-izin",
+    "ay-maas-sozlesme": "puantaj-izin",
+    "maas-sozlesme": "puantaj-izin",
+    "yillik-izin": "puantaj-izin",
+    "ay-izin-evrak": "puantaj-izin",
+    "izin-evrak": "puantaj-izin",
+    "monthly-leave-management": "puantaj-izin",
+    "puantaj-kart-takibi": "puantaj-izin",
+    "ay-bordro": "bordro-odeme",
+    bordro: "bordro-odeme",
+    "monthly-payroll": "bordro-odeme",
+    "ay-odeme": "bordro-odeme",
+    "monthly-payment": "bordro-odeme",
+    "sgk-bordro-aktarim": "sgk-evrak-kontrol",
+    "sgk-bordro-aktirim": "sgk-evrak-kontrol",
+    "aylik-ik-kapanis": "sgk-evrak-kontrol",
+    "ay-evrak": "sgk-evrak-kontrol",
+    "evrak-belgeler": "sgk-evrak-kontrol",
+    "gun-personel-kartlari": "gunluk-personel-kartlari",
+    "daily-personnel": "gunluk-personel-kartlari",
+    "gun-giris": "gunluk-personel",
+    "gunluk-giris": "gunluk-personel",
+    "daily-entry": "gunluk-personel",
+    "gun-haftalik-ozet": "ik-raporlari",
+    "haftalik-ozet": "ik-raporlari",
+    "daily-weekly-summary": "ik-raporlari",
+    "gun-odemeler": "gunluk-odeme-fisleri",
+    odemeler: "gunluk-odeme-fisleri",
+    "daily-payments": "gunluk-odeme-fisleri",
+  },
+  uretim: {
+    "uretim-hizli-giris": "uretim-merkezi",
+    "uretim-is-havuzu": "uretim-merkezi",
+    "uretim-denge": "uretim-merkezi",
+    "uretim-girisi": "uretim-merkezi",
+    "imalat-denetim": "uretim-merkezi",
+    genel: "uretim-merkezi",
+    makinalar: "uretim-ayarlari",
+    "makine-tanimlari": "uretim-ayarlari",
+    "makine-vardiya-takibi": "uretim-ayarlari",
+    "uretim-kayit": "uretim-merkezi",
+    kalite: "uretim-merkezi",
+    "uretim-giris-is-akisi": "uretim-merkezi",
+    "uretim-seri-havuz": "uretim-merkezi",
+    "fis-aktarim-havuzu": "uretim-merkezi",
+    "imalat-yonetim-ozeti": "uretim-merkezi",
+    "manuel-is-ac": "uretim-merkezi",
+    "imalat-kontrol-rapor": "uretim-raporlari",
+    "uretim-raporu": "uretim-raporlari",
+    "imalat-raporlari": "uretim-raporlari",
+  },
+  admin: {
+    "ana-firma-yonetimi": "ana-firma-ayarlar",
+    "eposta-kayit": "ana-firma-ayarlar",
+    "firma-esleme": "eslestirmeler",
+    "urun-esleme": "eslestirmeler",
+    "kdv-baglantisi": "eslestirmeler",
+    yedekleme: "yedekleme-loglar",
+    loglar: "yedekleme-loglar",
+  },
 };
 
-export const MUHASEBE_ROUTE_ALIASES = {
-  "genel-bakis": "yonetim-ozeti",
-  firmalar: "firma-kartlari",
-  cari: "firma-kartlari",
-  "cari-hareketler": "firma-kartlari",
-  "firma-yetkilileri": "firma-kartlari",
-  "eposta-kisileri": "firma-kartlari",
-  "gider-kategorileri": "kar-zarar",
-  "gelir-gider": "kar-zarar",
-  kdv: "kdv-kontrol",
-  "cek-kart": "cek-odeme",
-  "eposta-ekstre": "mail-ekstre",
-  "belge-kontrol": "tedarikci-faturalar",
-  "belge-is-akisi": "tedarikci-faturalar",
-  "belge-yukle": "tedarikci-faturalar",
-  "belge-merkezi": "tedarikci-faturalar",
-  "tedarikci-fatura": "tedarikci-faturalar",
-  "fatura-kesim": "kesilen-faturalar",
-  "fatura-kesim-yardimcisi": "kesilen-faturalar",
-  "musteri-belgeleri": "kesilen-faturalar",
-  "musteri-irsaliyeleri": "irsaliye-fatura-kontrol",
-  "musteri-irsaliye": "irsaliye-fatura-kontrol",
-  "irsaliye-fatura": "irsaliye-fatura-kontrol",
-  raporlar: "muhasebe-raporlari",
-};
-
-export const URETIM_ROUTE_ALIASES = {
-  "uretim-hizli-giris": "uretim-merkezi",
-  "uretim-is-havuzu": "uretim-merkezi",
-  "uretim-denge": "uretim-merkezi",
-  "uretim-girisi": "uretim-merkezi",
-  "imalat-denetim": "uretim-merkezi",
-  "imalat-kontrol-rapor": "uretim-raporlari",
-  "uretim-raporu": "uretim-raporlari",
-};
+export const MUHASEBE_ROUTE_ALIASES = MODULE_ROUTE_ALIASES.muhasebe;
+export const URETIM_ROUTE_ALIASES = MODULE_ROUTE_ALIASES.uretim;
 
 export function normalizeModuleTabKey(module, tabKey) {
-  if (module?.key === "muhasebe") return MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
-  if (module?.key === "isnet") return ISNET_ROUTE_ALIASES[tabKey] || tabKey;
-  if (module?.key === "uretim") return URETIM_ROUTE_ALIASES[tabKey] || tabKey;
-  return tabKey;
+  const rawKey = String(tabKey || "").trim();
+  if (!rawKey) return rawKey;
+  return MODULE_ROUTE_ALIASES[module?.key]?.[rawKey] || rawKey;
+}
+
+export function getModuleGroups(module) {
+  if (!module) return [];
+  if (Array.isArray(module.groups) && module.groups.length) return module.groups;
+  if (Array.isArray(module.tabs) && module.tabs.length) {
+    return [{ label: "", tabs: module.tabs }];
+  }
+  return [];
+}
+
+export function getVisibleModuleTabs(module) {
+  return getModuleGroups(module).flatMap((group) => group.tabs || []);
 }
 
 export function getModuleTabs(module) {
   if (!module) return [];
-  const visible = module.groups
-    ? module.groups.flatMap((group) => group.tabs)
-    : module.tabs || [];
-  return [...visible, ...(module.hiddenTabs || [])];
+  return [...getVisibleModuleTabs(module), ...(module.hiddenTabs || [])];
+}
+
+export function getDefaultTabKey(module) {
+  return getVisibleModuleTabs(module)[0]?.[0] || "";
 }
 
 export function findModule(moduleKey) {
@@ -276,14 +384,18 @@ export function findTab(module, tabKey) {
   return getModuleTabs(module).find(([key]) => key === normalizedTabKey) || null;
 }
 
-export function getInitialRoute(pathname = window.location.pathname) {
-  const [requestedModuleKey, requestedTabKey] = pathname.split("/").filter(Boolean);
+export function getInitialRoute(pathname) {
+  const resolvedPathname =
+    pathname ??
+    (typeof window !== "undefined" ? window.location.pathname : "/");
+  const [requestedModuleKey, requestedTabKey] = resolvedPathname
+    .split("/")
+    .filter(Boolean);
   const module = findModule(requestedModuleKey) || MODULES[0];
   const normalizedTabKey = normalizeModuleTabKey(module, requestedTabKey);
-  const tabs = getModuleTabs(module);
-  const tab = tabs.find(([key]) => key === normalizedTabKey) || tabs[0];
+  const tab = findTab(module, normalizedTabKey);
   return {
     moduleKey: module.key,
-    tabKey: tab?.[0] || "",
+    tabKey: tab?.[0] || getDefaultTabKey(module),
   };
 }
