@@ -1,0 +1,94 @@
+name: Muhasebe Son Temizlik ve Doğrulama
+
+on:
+  pull_request:
+    paths:
+      - "docs/trigger-final-accounting-cleanup.txt"
+      - ".github/workflows/final-accounting-cleanup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Çalışma dalını al
+        uses: actions/checkout@v4
+        with:
+          ref: codex/muhasebe-tam-yeniden-tasarim
+          fetch-depth: 0
+
+      - name: Kullanılmayan geçiş dosyasını temizle
+        run: |
+          set -euo pipefail
+          LEGACY="APP/app/ky-erp-frontend/src/pages/modules/MuhasebeLegacyWorkspaces.jsx"
+          if [ -f "$LEGACY" ]; then
+            COUNT=$(grep -R --exclude="MuhasebeLegacyWorkspaces.jsx" --exclude-dir=node_modules --exclude-dir=dist -n "MuhasebeLegacyWorkspaces" APP/app/ky-erp-frontend/src | wc -l | tr -d ' ')
+            if [ "$COUNT" = "0" ]; then
+              git rm "$LEGACY"
+            else
+              echo "Geçiş dosyası halen kullanılıyor; silinmedi."
+            fi
+          fi
+
+      - name: Muhasebe bağlantı doğrulaması
+        run: |
+          set -euo pipefail
+          grep -q 'MailTemplatesWorkspace' APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+          grep -q 'CompaniesCurrentWorkspace' APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+          grep -q 'SupplierInvoicesWorkspace' APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+          grep -q 'InvoiceDispatchControlWorkspace' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/IrsaliyeFaturaKontrolTab.jsx
+          grep -q 'app.post("/api/muhasebe/cari-hareketler"' APP/cloud/ky-erp-api/src/index.ts
+          grep -q 'app.post("/api/muhasebe/belge-import/upload"' APP/cloud/ky-erp-api/src/index.ts
+          grep -q 'app.post("/api/muhasebe/odeme/cek-v3"' APP/cloud/ky-erp-api/src/index.ts
+          grep -q 'app.post("/api/muhasebe/accounting/manual-expenses"' APP/cloud/ky-erp-api/src/index.ts
+          grep -q 'app.post("/api/muhasebe/belge-import/:id/boyahane-transfer"' APP/cloud/ky-erp-api/src/index.ts
+          ! grep -R --exclude-dir=node_modules --exclude-dir=dist -n '{{"{{firmaAdi}}"}}' APP/app/ky-erp-frontend/src
+
+      - name: Frontend build ve lint
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run build
+          npm run lint
+
+      - name: Worker typecheck ve dry-run
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+      - name: Backend build ve test
+        working-directory: APP/app/ky-erp-backend
+        run: |
+          npm ci
+          npm run build
+          npm test -- --runInBand
+
+      - name: Veri güvenliği ve diff kontrolü
+        run: |
+          set -euo pipefail
+          git fetch origin agent/uretim-tek-merkez
+          git diff --check origin/agent/uretim-tek-merkez...HEAD
+          if git diff --name-only origin/agent/uretim-tek-merkez...HEAD | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then
+            echo "Yasaklı veri dosyası değişikliği bulundu."
+            exit 1
+          fi
+
+      - name: Geçici akışı kaldır ve temizliği kaydet
+        run: |
+          set -euo pipefail
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm -f .github/workflows/final-accounting-cleanup.yml docs/trigger-final-accounting-cleanup.txt
+          if git diff --cached --quiet; then
+            echo "Kaydedilecek temizlik değişikliği yok."
+            exit 0
+          fi
+          git diff --cached --check
+          git commit -m "chore(muhasebe): son temizlik ve doğrulamayı tamamla"
+          git push origin HEAD:codex/muhasebe-tam-yeniden-tasarim
