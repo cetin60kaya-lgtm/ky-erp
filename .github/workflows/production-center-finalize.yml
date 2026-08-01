@@ -7,13 +7,24 @@ on:
     paths:
       - ".github/workflows/production-center-finalize.yml"
       - "docs/trigger-production-center-finalize.txt"
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/src/production-center.ts"
+      - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/cloud/ky-erp-api/wrangler.jsonc"
+      - "APP/app/ky-erp-frontend/src/pages/imalat/**"
+      - "APP/app/ky-erp-frontend/src/pages/modules/UretimPage.jsx"
+      - "APP/app/ky-erp-frontend/src/services/productionCenterApi.js"
+      - "APP/app/ky-erp-frontend/src/app/moduleRegistry.js"
+      - ".github/workflows/production-center-finalize.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
-  group: production-center-finalize
+  group: production-center-finalize-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
