@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "../modules/cleanWorkflow.css";
 import "./desenWorkflow.css";
+import "./desenCloud.css";
 import DesenFolderSettingsBar from "./DesenFolderSettingsBar";
 import DesenInboxUploadButton from "./DesenInboxUploadButton";
 import DesenModelMasasi from "./DesenModelMasasi";
