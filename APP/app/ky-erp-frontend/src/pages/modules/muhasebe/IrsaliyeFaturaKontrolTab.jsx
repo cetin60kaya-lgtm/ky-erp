@@ -1,5 +1,5 @@
-import DispatchWorkspace from "./DispatchWorkspace";
+import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 
-export default function IrsaliyeFaturaKontrolTab() {
-  return <DispatchWorkspace mode="control" />;
+export default function IrsaliyeFaturaKontrolTab({ activeMainCompany }) {
+  return <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} />;
 }
