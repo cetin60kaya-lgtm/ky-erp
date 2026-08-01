@@ -12,6 +12,7 @@ import SupplierInventoryWorkspace from "./muhasebe/SupplierInventoryWorkspace";
 import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
 import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
 import "./muhasebe/muhasebeModule.css";
+import "./muhasebe/supplierInventoryWorkspace.css";
 
 export const MUHASEBE_TABS = [
   {
