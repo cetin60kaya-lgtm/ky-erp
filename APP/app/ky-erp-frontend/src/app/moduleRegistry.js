@@ -9,19 +9,11 @@ export const MODULES = [
         label: "Yönetim",
         tabs: [
           ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
+          ["firma-kartlari", "Firmalar ve Cari", "firma-kartlari"],
         ],
       },
       {
-        label: "Firma ve Eşleştirme",
-        tabs: [
-          ["firma-kartlari", "Firma Kartları", "firma-kartlari"],
-          ["firma-yetkilileri", "Departman ve Yetkililer", "users"],
-          ["envanter-urunleri", "Ürün ve Alias Eşleştirme", "urunler"],
-          ["gider-kategorileri", "Firma / Gider Kuralları", "raporlar"],
-        ],
-      },
-      {
-        label: "Belge Yönetimi",
+        label: "Fatura ve Belge",
         tabs: [
           ["tedarikci-faturalar", "Gelen Tedarikçi Faturaları", "tedarikci-fatura"],
           ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
@@ -31,7 +23,6 @@ export const MODULES = [
       {
         label: "Cari ve Ödeme",
         tabs: [
-          ["cari-hareketler", "Cari Hareketler", "cari-kasa"],
           ["cek-odeme", "Çek / Ödeme", "cekler"],
           ["mail-ekstre", "Ekstre ve Mail Takibi", "eposta"],
         ],
@@ -52,6 +43,10 @@ export const MODULES = [
       },
     ],
     hiddenTabs: [
+      ["cari-hareketler", "Cari Hareketler (Firmalar ve Cari içinde)", "cari-kasa"],
+      ["firma-yetkilileri", "Departman ve Yetkililer (Firmalar ve Cari içinde)", "users"],
+      ["envanter-urunleri", "Ürün Eşleştirme (Fatura kontrolünde)", "urunler"],
+      ["gider-kategorileri", "Gider Kuralları (Kâr / Zarar içinde)", "raporlar"],
       ["musteri-irsaliyeleri", "Müşteri İrsaliyeleri (Eski Bağlantı)", "musteri-irsaliye"],
       ["model-takip", "Model Üretim Takibi (Eski Bağlantı)", "model-takip-merkezi"],
     ],
@@ -225,6 +220,38 @@ const ISNET_ROUTE_ALIASES = {
   "mail-merkezi": "arsiv-gonderim",
 };
 
+export const MUHASEBE_ROUTE_ALIASES = {
+  "genel-bakis": "yonetim-ozeti",
+  firmalar: "firma-kartlari",
+  cari: "firma-kartlari",
+  "cari-hareketler": "firma-kartlari",
+  "firma-yetkilileri": "firma-kartlari",
+  "eposta-kisileri": "firma-kartlari",
+  "gider-kategorileri": "kar-zarar",
+  "gelir-gider": "kar-zarar",
+  kdv: "kdv-kontrol",
+  "cek-kart": "cek-odeme",
+  "eposta-ekstre": "mail-ekstre",
+  "belge-kontrol": "tedarikci-faturalar",
+  "belge-is-akisi": "tedarikci-faturalar",
+  "belge-yukle": "tedarikci-faturalar",
+  "belge-merkezi": "tedarikci-faturalar",
+  "tedarikci-fatura": "tedarikci-faturalar",
+  "fatura-kesim": "kesilen-faturalar",
+  "fatura-kesim-yardimcisi": "kesilen-faturalar",
+  "musteri-belgeleri": "kesilen-faturalar",
+  "musteri-irsaliyeleri": "irsaliye-fatura-kontrol",
+  "musteri-irsaliye": "irsaliye-fatura-kontrol",
+  "irsaliye-fatura": "irsaliye-fatura-kontrol",
+  raporlar: "muhasebe-raporlari",
+};
+
+export function normalizeModuleTabKey(module, tabKey) {
+  if (module?.key === "muhasebe") return MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
+  if (module?.key === "isnet") return ISNET_ROUTE_ALIASES[tabKey] || tabKey;
+  return tabKey;
+}
+
 export function getModuleTabs(module) {
   if (!module) return [];
   const visible = module.groups
@@ -238,16 +265,14 @@ export function findModule(moduleKey) {
 }
 
 export function findTab(module, tabKey) {
-  return getModuleTabs(module).find(([key]) => key === tabKey) || null;
+  const normalizedTabKey = normalizeModuleTabKey(module, tabKey);
+  return getModuleTabs(module).find(([key]) => key === normalizedTabKey) || null;
 }
 
 export function getInitialRoute(pathname = window.location.pathname) {
   const [requestedModuleKey, requestedTabKey] = pathname.split("/").filter(Boolean);
   const module = findModule(requestedModuleKey) || MODULES[0];
-  const normalizedTabKey =
-    module.key === "isnet"
-      ? ISNET_ROUTE_ALIASES[requestedTabKey] || requestedTabKey
-      : requestedTabKey;
+  const normalizedTabKey = normalizeModuleTabKey(module, requestedTabKey);
   const tabs = getModuleTabs(module);
   const tab = tabs.find(([key]) => key === normalizedTabKey) || tabs[0];
   return {

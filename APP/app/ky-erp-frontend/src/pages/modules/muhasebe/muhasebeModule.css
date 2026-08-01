@@ -1,0 +1,205 @@
+.muhasebe-module-page {
+  min-width: 0;
+  padding: 18px;
+  color: #172033;
+  background: #f5f7fa;
+}
+
+.accounting-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+
+.accounting-page-header h1 {
+  margin: 3px 0 2px;
+  color: #12233f;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+  line-height: 1.2;
+}
+
+.accounting-page-header p {
+  max-width: 760px;
+  margin: 0;
+  color: #667085;
+  font-size: 0.84rem;
+}
+
+.accounting-eyebrow {
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.accounting-refresh,
+.accounting-primary {
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #334155;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.accounting-primary {
+  border-color: #2563eb;
+  color: #fff;
+  background: #2563eb;
+}
+
+.accounting-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.accounting-secondary {
+  overflow: hidden;
+  border: 1px solid #dde3ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.accounting-secondary > summary {
+  padding: 12px 14px;
+  color: #344054;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.accounting-secondary[open] > summary {
+  border-bottom: 1px solid #e7ebf1;
+}
+
+.accounting-empty {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-height: 240px;
+  align-content: center;
+  padding: 28px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #667085;
+  background: #fff;
+}
+
+.accounting-empty strong { color: #172033; font-size: 1rem; }
+
+.management-overview { display: grid; gap: 10px; }
+.management-primary-metrics,
+.management-secondary-metrics { display: grid; gap: 8px; }
+.management-primary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.management-secondary-metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); }
+.management-metric { display: grid; gap: 5px; min-width: 0; padding: 10px 11px; border: 1px solid #dce3ec; border-radius: 9px; background: #fff; }
+.management-metric.emphasis { padding: 14px; }
+.management-metric span { overflow: hidden; color: #667085; font-size: 0.68rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.management-metric strong { overflow: hidden; color: #172033; font-size: 0.91rem; text-overflow: ellipsis; white-space: nowrap; }
+.management-metric.emphasis strong { font-size: 1.18rem; }
+.management-lists-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.management-list-card { overflow: hidden; min-width: 0; border: 1px solid #dce3ec; border-radius: 10px; background: #fff; }
+.management-list-card:last-child { grid-column: 1 / -1; }
+.management-list-card > header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #e4e7ec; }
+.management-list-card h2 { margin: 0; color: #344054; font-size: 0.78rem; }
+.management-list-card header span { color: #98a2b3; font-size: 0.62rem; }
+.management-table-wrap { overflow-x: auto; }
+.management-list-card table { width: 100%; border-collapse: collapse; }
+.management-list-card th,
+.management-list-card td { padding: 7px 9px; border-bottom: 1px solid #eef1f5; color: #475467; font-size: 0.68rem; text-align: left; }
+.management-list-card th { color: #667085; background: #f8fafc; font-size: 0.61rem; white-space: nowrap; }
+.management-list-card td:last-child { text-align: right; }
+.management-list-card td button { border: 0; color: #1d4ed8; background: transparent; font-weight: 800; cursor: pointer; }
+.management-empty { padding: 18px 8px; color: #98a2b3; text-align: center; }
+.management-skeleton { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.management-skeleton span { height: 70px; border-radius: 9px; background: linear-gradient(90deg, #e9eef4, #f8fafc, #e9eef4); background-size: 200% 100%; animation: management-pulse 1.2s infinite; }
+@keyframes management-pulse { to { background-position: -200% 0; } }
+.management-controlled-state { display: grid; justify-items: start; gap: 7px; padding: 24px; border: 1px dashed #cbd5e1; border-radius: 10px; color: #667085; background: #fff; }
+.management-controlled-state strong { color: #344054; }
+.management-controlled-state button { border: 1px solid #2563eb; border-radius: 7px; padding: 7px 11px; color: #fff; background: #2563eb; cursor: pointer; }
+.accounting-list-workspace,
+.vat-workspace,
+.reports-list-workspace { display: grid; gap: 10px; }
+.accounting-list-toolbar,
+.reports-filter-row { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid #dce3ec; border-radius: 9px; background: #fff; }
+.accounting-list-toolbar input { min-width: 220px; min-height: 34px; flex: 1; border: 1px solid #d0d5dd; border-radius: 7px; padding: 0 10px; }
+.accounting-list-toolbar > span { color: #667085; font-size: 0.7rem; }
+.accounting-list-toolbar label,
+.reports-filter-row label { display: grid; gap: 3px; color: #667085; font-size: 0.62rem; font-weight: 700; }
+.accounting-list-toolbar label input,
+.reports-filter-row input { min-height: 34px; border: 1px solid #d0d5dd; border-radius: 7px; padding: 0 9px; color: #344054; background: #fff; }
+.accounting-list-toolbar button { min-height: 34px; border: 1px solid #2563eb; border-radius: 7px; padding: 0 11px; color: #fff; background: #2563eb; cursor: pointer; }
+.accounting-list-notice { padding: 9px 11px; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af; background: #eff6ff; font-size: 0.72rem; }
+.accounting-table-shell { overflow-x: auto; border: 1px solid #dce3ec; border-radius: 10px; background: #fff; }
+.accounting-table-shell table { width: 100%; min-width: 1050px; border-collapse: collapse; }
+.accounting-table-shell th,
+.accounting-table-shell td { padding: 8px 9px; border-bottom: 1px solid #edf0f4; color: #475467; font-size: 0.68rem; text-align: left; vertical-align: middle; }
+.accounting-table-shell th { color: #667085; background: #f8fafc; font-size: 0.61rem; white-space: nowrap; }
+.accounting-status { display: inline-flex; border-radius: 999px; padding: 4px 7px; background: #f2f4f7; white-space: nowrap; }
+.accounting-status.warning { color: #92400e; background: #fffbeb; }
+.accounting-row-actions { display: flex; gap: 4px; white-space: nowrap; }
+.accounting-row-actions button { border: 1px solid #d0d5dd; border-radius: 6px; padding: 5px 7px; color: #344054; background: #fff; font-size: 0.62rem; cursor: pointer; }
+.accounting-row-actions button:hover { border-color: #2563eb; color: #1d4ed8; }
+.accounting-table-empty { padding: 24px; color: #98a2b3; text-align: center; }
+.accounting-list-skeleton { display: grid; gap: 7px; }
+.accounting-list-skeleton span { height: 42px; border-radius: 8px; background: linear-gradient(90deg, #e9eef4, #f8fafc, #e9eef4); background-size: 200% 100%; animation: management-pulse 1.2s infinite; }
+.accounting-controlled-state { display: grid; justify-items: start; gap: 7px; padding: 24px; border: 1px dashed #cbd5e1; border-radius: 10px; color: #667085; background: #fff; }
+.accounting-controlled-state button { border: 0; border-radius: 7px; padding: 7px 11px; color: #fff; background: #2563eb; cursor: pointer; }
+.vat-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.vat-summary > div { display: grid; gap: 5px; padding: 11px; border: 1px solid #dce3ec; border-radius: 9px; background: #fff; }
+.vat-summary span { color: #667085; font-size: 0.65rem; }
+.vat-summary strong { color: #172033; font-size: 0.9rem; }
+.vat-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.vat-side { overflow: hidden; border: 1px solid #dce3ec; border-radius: 10px; background: #fff; }
+.vat-side header { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px; border-bottom: 1px solid #e4e7ec; }
+.vat-side h2 { margin: 0; color: #344054; font-size: 0.78rem; }
+.vat-side header strong { font-size: 0.78rem; }
+.vat-side article { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; border-bottom: 1px solid #eef1f5; color: #475467; font-size: 0.7rem; }
+.vat-side article b.incoming { color: #166534; }
+.vat-side article b.outgoing { color: #b42318; }
+.vat-totals { display: flex; justify-content: flex-end; gap: 18px; padding: 10px 12px; border: 1px solid #dce3ec; border-radius: 9px; color: #667085; background: #fff; font-size: 0.7rem; }
+.vat-totals b { color: #344054; }
+.reports-filter-row { align-items: end; }
+.reports-filter-row label { min-width: 180px; flex: 1; }
+.reports-list { overflow: hidden; border: 1px solid #dce3ec; border-radius: 10px; background: #fff; }
+.reports-list > header,
+.reports-list article { display: grid; grid-template-columns: minmax(200px, 0.8fr) minmax(260px, 1.5fr) auto; align-items: center; gap: 14px; padding: 9px 12px; border-bottom: 1px solid #edf0f4; }
+.reports-list > header { color: #667085; background: #f8fafc; font-size: 0.62rem; font-weight: 800; }
+.reports-list article > div:first-child { display: grid; gap: 2px; }
+.reports-list article strong { color: #344054; font-size: 0.75rem; }
+.reports-list article small { color: #98a2b3; font-size: 0.58rem; }
+.reports-list article p { margin: 0; color: #667085; font-size: 0.68rem; }
+.reports-list article > div:last-child { display: flex; justify-content: flex-end; gap: 5px; }
+.reports-list article button { border: 1px solid #d0d5dd; border-radius: 6px; padding: 6px 8px; color: #344054; background: #fff; font-size: 0.63rem; cursor: pointer; }
+
+@media (max-width: 760px) {
+  .muhasebe-module-page { padding: 10px; }
+  .accounting-page-header { align-items: flex-start; }
+  .accounting-page-header p { display: none; }
+  .accounting-refresh { min-width: 42px; padding: 0 10px; font-size: 0; }
+  .accounting-refresh::after { content: "↻"; font-size: 1rem; }
+  .management-primary-metrics { grid-template-columns: 1fr; }
+  .management-secondary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .management-lists-grid { grid-template-columns: 1fr; }
+  .management-list-card:last-child { grid-column: auto; }
+  .accounting-list-toolbar,
+  .reports-filter-row { align-items: stretch; flex-direction: column; }
+  .accounting-list-toolbar input,
+  .reports-filter-row label { width: 100%; min-width: 0; }
+  .vat-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vat-sides { grid-template-columns: 1fr; }
+  .vat-totals { flex-direction: column; gap: 5px; }
+  .reports-list > header { display: none; }
+  .reports-list article { grid-template-columns: 1fr; gap: 6px; }
+  .reports-list article > div:last-child { justify-content: flex-start; }
+}
+
+@media (min-width: 761px) and (max-width: 1200px) {
+  .management-secondary-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+}

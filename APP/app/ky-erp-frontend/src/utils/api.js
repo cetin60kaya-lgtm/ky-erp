@@ -66,7 +66,7 @@ export function apiUrl(path) {
 
   const normalized = ensureLeadingSlash(raw);
   if (normalized === "/api" || normalized.startsWith("/api/")) {
-    return normalized;
+    return `${API_BASE.replace(/\/api$/i, "")}${normalized}`;
   }
 
   const shouldPrefix = MODULE_PREFIXES.some((prefix) =>

@@ -2005,12 +2005,27 @@ export class MuhasebeFinalService {
 
   async yonetimOzeti(query: Query = {}) {
     const slug = this.slug(query);
-    const [documents, cari, kdv, cekOdeme, mail] = await Promise.all([
+    const [documents, cari, kdv, cekOdeme, mail, recentMovements, isnetSetting] = await Promise.all([
       this.belgeHavuzu({ mainCompanySlug: slug }),
       this.cariList({ mainCompanySlug: slug }),
       this.kdvKontrol({ mainCompanySlug: slug }),
       this.cekOdeme({ mainCompanySlug: slug }),
       this.mailEkstre({ mainCompanySlug: slug }),
+      this.prisma.currentAccountMovement.findMany({
+        where: { mainCompanySlug: slug },
+        include: { company: true },
+        orderBy: [{ movementDate: "desc" }, { createdAt: "desc" }],
+        take: 10,
+      }),
+      this.prisma.setting.findUnique({
+        where: {
+          scope_mainCompanySlug_key: {
+            scope: "ISNET",
+            mainCompanySlug: slug,
+            key: "AUTOMATION",
+          },
+        },
+      }),
     ]);
     const monthStart = startOfMonth();
     const monthEnd = endOfMonth();
@@ -2024,6 +2039,29 @@ export class MuhasebeFinalService {
     const buAyAlisGider = monthDocs
       .filter((doc: any) => normalizeType(doc.belgeTuru) !== "SATIS")
       .reduce((sum: number, doc: any) => sum + number(doc.tutar), 0);
+    const aggregateCompanies = (source: any[]) =>
+      Array.from(
+        source.reduce((map: Map<string, any>, doc: any) => {
+          const firma = text(doc.firma || "Eşleşmeyen firma");
+          const current = map.get(firma) || {
+            firma,
+            belgeSayisi: 0,
+            toplam: 0,
+          };
+          current.belgeSayisi += 1;
+          current.toplam += number(doc.tutar);
+          map.set(firma, current);
+          return map;
+        }, new Map<string, any>()).values(),
+      )
+        .sort((left: any, right: any) => right.toplam - left.toplam)
+        .slice(0, 10);
+    const enYuksekMusteriler = aggregateCompanies(
+      monthDocs.filter((doc: any) => normalizeType(doc.belgeTuru) === "SATIS"),
+    );
+    const enYuksekTedarikciler = aggregateCompanies(
+      monthDocs.filter((doc: any) => normalizeType(doc.belgeTuru) !== "SATIS"),
+    );
     const cekOzet = buildCheckDashboard(cekOdeme.liste);
     const gunlukIsListesi = [
       ...documents.slice(0, 10).map((doc: any) => ({
@@ -2059,7 +2097,44 @@ export class MuhasebeFinalService {
           .join("|"),
       ),
     );
+    const toplamAlacak = cari
+      .filter((row: any) => number(row.bakiye) > 0)
+      .reduce((sum: number, row: any) => sum + number(row.bakiye), 0);
+    const toplamBorc = cari
+      .filter((row: any) => number(row.bakiye) < 0)
+      .reduce((sum: number, row: any) => sum + Math.abs(number(row.bakiye)), 0);
+    const isnetAutomation =
+      isnetSetting?.value && typeof isnetSetting.value === "object"
+        ? (isnetSetting.value as any)
+        : {};
+    const eksikBelgeler = documents
+      .filter((doc: any) =>
+        !["islendi", "processed", "approved"].includes(
+          text(doc.durum).toLocaleLowerCase("tr-TR"),
+        ),
+      )
+      .slice(0, 10)
+      .map((doc: any) => ({
+        id: doc.id,
+        belgeNo: doc.belgeNo,
+        firma: doc.firma,
+        durum: doc.durum,
+        eksik: Array.isArray(doc.eksikBilgiler)
+          ? doc.eksikBilgiler.join(", ")
+          : "Kontrol bekliyor",
+      }));
     return {
+      toplamAlacak,
+      toplamBorc,
+      netBakiye: toplamAlacak - toplamBorc,
+      buAyGelenFatura: buAyAlisGider,
+      buAyKesilenFatura: buAySatis,
+      buAyGelenFaturaSayisi: monthDocs.filter(
+        (doc: any) => normalizeType(doc.belgeTuru) !== "SATIS",
+      ).length,
+      buAyKesilenFaturaSayisi: monthDocs.filter(
+        (doc: any) => normalizeType(doc.belgeTuru) === "SATIS",
+      ).length,
       onayBekleyenBelge: documents.filter(
         (doc: any) =>
           !["islendi", "processed"].includes(
@@ -2077,6 +2152,23 @@ export class MuhasebeFinalService {
       gidenKdv: kdv.gidenKdv,
       devredenKdv: kdv.devredenKdv,
       netKdv: kdv.netKdv,
+      odenecekKdv: Math.max(0, number(kdv.netKdv)),
+      yaklasanCekToplami: cekOzet.yaklasanCekTutari,
+      vadesiGecenCari: cari
+        .filter(
+          (row: any) =>
+            number(row.bakiye) < 0 &&
+            text(row.sonHareketTarihi) < new Date().toISOString().slice(0, 10),
+        )
+        .reduce((sum: number, row: any) => sum + Math.abs(number(row.bakiye)), 0),
+      isnetSonSenkronizasyon:
+        isnetAutomation.lastRunAt || isnetAutomation.lastSyncAt || null,
+      kontrolBekleyenBelge: documents.filter(
+        (doc: any) =>
+          !["islendi", "processed", "approved"].includes(
+            text(doc.durum).toLocaleLowerCase("tr-TR"),
+          ),
+      ).length,
       tahsilatBekleyen: cari
         .filter((row: any) => row.bakiye > 0)
         .reduce((sum: number, row: any) => sum + row.bakiye, 0),
@@ -2084,6 +2176,17 @@ export class MuhasebeFinalService {
         .filter((row: any) => row.bakiye < 0)
         .reduce((sum: number, row: any) => sum + Math.abs(row.bakiye), 0),
       gunlukIsListesi,
+      sonCariHareketler: recentMovements.map((row: any) => ({
+        id: row.id,
+        tarih: isoDate(row.movementDate),
+        firma: row.company?.name || "",
+        aciklama: row.description || row.movementType,
+        tutar: number(row.amount || row.debit || row.credit),
+      })),
+      enYuksekTedarikciler,
+      enYuksekMusteriler,
+      yaklasanCekler: cekOzet.yaklasanListe,
+      eksikBelgeler,
       yaklasanOdemeler: cekOzet.yaklasanListe,
       cekOzet,
       mailDepartmanYetkiKontrol: {

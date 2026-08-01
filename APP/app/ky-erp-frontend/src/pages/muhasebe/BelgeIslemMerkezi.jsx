@@ -60,12 +60,14 @@ import {
 import "./BelgeIslemMerkezi.css";
 
 const SUPPLIER_STATUS_TABS = [
-  ["ALL", "Tüm Havuz"],
+  ["ALL", "Tümü"],
   ["ISSUE", "Kontrol Gerekli"],
   ["READY", "İşleme Hazır"],
   ["QUARANTINE", "Eksik Bilgi"],
-  ["APPROVED", "Tamamlanan"],
+  ["APPROVED", "İşlenen"],
 ];
+
+const SUPPLIER_LIST_REDESIGN = true;
 
 const PROCESSED_STATUSES = new Set([
   "APPROVED",
@@ -227,6 +229,12 @@ function translatedReasons(row) {
 
 function supplierName(row) {
   return row?.issuerName || row?.companyName || row?.receiverName || "-";
+}
+
+function supplierSourceLabel(row) {
+  const value = `${row?.source || ""} ${row?.sourceType || ""} ${row?.ingestionSource || ""} ${row?.channel || ""}`
+    .toLocaleUpperCase("tr-TR");
+  return value.includes("ISNET") || value.includes("İŞNET") ? "İşNet" : "Manuel";
 }
 
 function missingFieldsOf(row) {
@@ -4197,6 +4205,10 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [statusTab, setStatusTab] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [lotDrafts, setLotDrafts] = useState({});
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -4244,6 +4256,11 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
   useEffect(() => {
     loadRows();
   }, [activeMainCompany?.slug, activeMainCompany?.id, refreshKey, loadRows]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchDraft), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchDraft]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -4328,6 +4345,20 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
     });
   }, [filteredRows, supplierFirmFilter]);
 
+  const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const pagedRows = useMemo(
+    () => visibleRows.slice((page - 1) * pageSize, page * pageSize),
+    [page, pageSize, visibleRows],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusTab, supplierFirmFilter, pageSize]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
+
   useEffect(() => {
     if (!visibleRows.length) return;
     if (!visibleRows.some((row) => String(row?.id) === String(selectedId))) {
@@ -4352,11 +4383,21 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
 
   const metrics = useMemo(() => {
     const source = Array.isArray(rows) ? rows : [];
+    const today = new Date().toISOString().slice(0, 10);
     return {
       total: source.length,
+      today: source.filter((row) => String(row?.issueDate || row?.createdAt || "").slice(0, 10) === today).length,
       ready: source.filter((row) => row.status === "READY").length,
       missing: source.filter((row) => hasIssueStatus(row)).length,
+      unmatchedFirm: source.filter((row) => !row?.firmId).length,
+      missingProduct: source.filter((row) =>
+        missingFieldsOf(row).some((field) => String(field).includes("PRODUCT")),
+      ).length,
+      vatReview: source.filter((row) =>
+        missingFieldsOf(row).some((field) => String(field).includes("VAT") || String(field).includes("TAX")),
+      ).length,
       approved: source.filter((row) => isProcessedStatus(row?.status)).length,
+      isnet: source.filter((row) => supplierSourceLabel(row) === "İşNet").length,
       amount: source.reduce(
         (sum, row) => sum + Number(row?.grandTotal || 0),
         0,
@@ -4658,6 +4699,60 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
       setBusy(false);
     }
   };
+
+  if (SUPPLIER_LIST_REDESIGN) {
+    return (
+      <SupplierInvoiceListView
+        uploadRef={uploadRef}
+        uploadReview={uploadReview}
+        setUploadReview={setUploadReview}
+        confirmUploadFiles={confirmUploadFiles}
+        uploadFiles={uploadFiles}
+        busy={busy}
+        loading={loading}
+        message={message}
+        loadRows={loadRows}
+        rows={rows}
+        metrics={metrics}
+        statusTab={statusTab}
+        setStatusTab={setStatusTab}
+        searchDraft={searchDraft}
+        setSearchDraft={setSearchDraft}
+        filtersOpen={filtersOpen}
+        setFiltersOpen={setFiltersOpen}
+        pagedRows={pagedRows}
+        visibleRows={visibleRows}
+        selectedId={selectedId}
+        setSelectedId={setSelectedId}
+        selectedRow={selectedRow}
+        supplierTab={supplierTab}
+        setSupplierTab={setSupplierTab}
+        page={page}
+        setPage={setPage}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        lotDrafts={lotDrafts}
+        setLotDrafts={setLotDrafts}
+        selectedProcessed={selectedProcessed}
+        selectedWarnings={selectedWarnings}
+        selectedBlockers={selectedBlockers}
+        controlSummary={controlSummary}
+        allReady={allReady}
+        retrySelected={retrySelected}
+        rejectSelected={rejectSelected}
+        archiveSelected={archiveSelected}
+        purgeProblematic={purgeProblematic}
+        createFirm={createFirm}
+        createProduct={createProduct}
+        saveLot={saveLot}
+        approveSelected={approveSelected}
+        approveManualSelected={approveManualSelected}
+        convertSelectedToPaidExpense={convertSelectedToPaidExpense}
+        isOpenPayable={isOpenPayable}
+      />
+    );
+  }
 
   return (
     <>
@@ -5372,6 +5467,260 @@ function SupplierBelgeMerkezi({ activeMainCompany, refreshKey, onRefresh }) {
         convertSelectedToPaidExpense={convertSelectedToPaidExpense}
       />
     </>
+  );
+}
+
+function SupplierInvoiceListView({
+  uploadRef,
+  uploadReview,
+  setUploadReview,
+  confirmUploadFiles,
+  uploadFiles,
+  busy,
+  loading,
+  message,
+  loadRows,
+  rows,
+  metrics,
+  statusTab,
+  setStatusTab,
+  searchDraft,
+  setSearchDraft,
+  filtersOpen,
+  setFiltersOpen,
+  pagedRows,
+  visibleRows,
+  selectedId,
+  setSelectedId,
+  selectedRow,
+  supplierTab,
+  setSupplierTab,
+  page,
+  setPage,
+  pageCount,
+  pageSize,
+  setPageSize,
+  lotDrafts,
+  setLotDrafts,
+  selectedProcessed,
+  selectedWarnings,
+  selectedBlockers,
+  controlSummary,
+  allReady,
+  retrySelected,
+  rejectSelected,
+  archiveSelected,
+  purgeProblematic,
+  createFirm,
+  createProduct,
+  saveLot,
+  approveSelected,
+  approveManualSelected,
+  convertSelectedToPaidExpense,
+  isOpenPayable,
+}) {
+  const openIsnet = () => {
+    window.history.pushState({}, "", "/isnet/belge-merkezi");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+  const missingProduct = (row) =>
+    missingFieldsOf(row).some((field) => String(field).includes("PRODUCT"));
+  const vatReview = (row) =>
+    missingFieldsOf(row).some(
+      (field) => String(field).includes("VAT") || String(field).includes("TAX"),
+    );
+  const detailTabs = [
+    ["preview", "Fatura"],
+    ["lines", "Kalemler"],
+    ["tax", "KDV Kontrolü"],
+    ["source", "PDF / XML"],
+  ];
+
+  return (
+    <div className="supplier-list-center">
+      <InvoiceUploadReviewModal
+        open={uploadReview.open}
+        title="Manuel Tedarikçi Faturalarını Kontrol Et"
+        rows={uploadReview.rows}
+        results={uploadReview.results}
+        busy={busy}
+        progress={uploadReview.progress}
+        onClose={() => setUploadReview({ open: false, rows: [], results: null, progress: "" })}
+        onConfirm={confirmUploadFiles}
+      />
+
+      <section className="supplier-source-bar">
+        <div className="supplier-source-copy">
+          <span className="supplier-source-icon"><Inbox size={18} /></span>
+          <div>
+            <strong>İşNet ana belge kaynağı</strong>
+            <span>{metrics.isnet} İşNet kaydı · Liste son yenilemede güncellendi</span>
+          </div>
+        </div>
+        <div className="supplier-source-actions">
+          <button className="bim-btn" type="button" onClick={openIsnet}>İşNet Belge Merkezi</button>
+          <button className="bim-btn" type="button" onClick={() => loadRows(selectedId)} disabled={loading || busy}>Yenile</button>
+          <button className="bim-btn primary" type="button" onClick={() => uploadRef.current?.click()} disabled={busy}>
+            <UploadCloud size={15} /> Fatura Yükle
+          </button>
+          <input
+            ref={uploadRef}
+            className="bim-hidden-input"
+            type="file"
+            multiple
+            accept=".pdf,.xml,.zip,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,application/zip,image/jpeg,image/png"
+            onChange={(event) => uploadFiles(event.target.files)}
+          />
+        </div>
+      </section>
+
+      <div className="supplier-metrics" aria-label="Tedarikçi faturası özeti">
+        {[
+          ["Bugün gelen", metrics.today],
+          ["Kontrol bekleyen", metrics.missing],
+          ["Eşleşmeyen firma", metrics.unmatchedFirm],
+          ["Eksik ürün", metrics.missingProduct],
+          ["KDV kontrolü", metrics.vatReview],
+          ["İşlenen", metrics.approved],
+          ["Toplam tutar", money(metrics.amount)],
+        ].map(([label, value]) => (
+          <div className="supplier-metric" key={label}><span>{label}</span><strong>{value}</strong></div>
+        ))}
+      </div>
+
+      {message ? <div className="supplier-feedback" role="status">{message}</div> : null}
+
+      <section className="supplier-toolbar">
+        <div className="supplier-search">
+          <input
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
+            placeholder="Firma, fatura no veya tarih ara"
+            aria-label="Tedarikçi faturalarında ara"
+          />
+          <small>Arama 300 ms sonra uygulanır</small>
+        </div>
+        <button className="bim-btn" type="button" onClick={() => setFiltersOpen((value) => !value)}>
+          Filtreler {filtersOpen ? "Kapat" : "Aç"}
+        </button>
+        <div className="supplier-filter-tags">
+          {statusTab !== "ALL" ? (
+            <button type="button" onClick={() => setStatusTab("ALL")}>{SUPPLIER_STATUS_TABS.find(([key]) => key === statusTab)?.[1]} ×</button>
+          ) : <span>Tüm faturalar</span>}
+        </div>
+      </section>
+
+      {filtersOpen ? (
+        <aside className="supplier-filter-panel" aria-label="Fatura filtreleri">
+          <strong>Durum</strong>
+          <div>
+            {SUPPLIER_STATUS_TABS.map(([key, label]) => (
+              <button key={key} type="button" className={statusTab === key ? "active" : ""} onClick={() => setStatusTab(key)}>{label}</button>
+            ))}
+          </div>
+        </aside>
+      ) : null}
+
+      <div className={`supplier-content ${selectedRow?.id ? "detail-open" : ""}`}>
+        <section className="supplier-table-card">
+          <div className="supplier-table-wrap">
+            <table className="supplier-table">
+              <thead>
+                <tr>
+                  <th>Tarih</th><th>Firma</th><th>Fatura no</th><th className="num">Matrah</th><th className="num">KDV</th><th className="num">Toplam</th><th>Kaynak</th><th>Firma</th><th>Ürün</th><th>Durum</th><th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? Array.from({ length: 6 }, (_, index) => (
+                  <tr className="supplier-skeleton" key={index}><td colSpan="11"><span /></td></tr>
+                )) : null}
+                {!loading && pagedRows.map((row) => (
+                  <tr key={row.id} className={String(row.id) === String(selectedId) ? "selected" : ""} onClick={() => setSelectedId(String(row.id))}>
+                    <td>{dateText(row.issueDate || row.createdAt)}</td>
+                    <td><strong>{supplierName(row)}</strong></td>
+                    <td>{row.documentNo || row.invoiceNo || "-"}</td>
+                    <td className="num">{money(row.subtotal)}</td>
+                    <td className="num">{money(row.vatTotal)}</td>
+                    <td className="num"><strong>{money(row.grandTotal)}</strong></td>
+                    <td><span className={`bim-pill ${supplierSourceLabel(row) === "İşNet" ? "blue" : "gray"}`}>{supplierSourceLabel(row)}</span></td>
+                    <td><span className={`bim-pill ${row.firmId ? "green" : "amber"}`}>{row.firmId ? "Eşleşti" : "Bekliyor"}</span></td>
+                    <td><span className={`bim-pill ${missingProduct(row) ? "amber" : "green"}`}>{missingProduct(row) ? "Eksik" : "Eşleşti"}</span></td>
+                    <td><span className={`bim-pill ${statusChipClass(row.status)}`}>{statusLabel(row.status, row)}</span></td>
+                    <td><button className="supplier-row-action" type="button" onClick={(event) => { event.stopPropagation(); setSelectedId(String(row.id)); }}>İncele</button></td>
+                  </tr>
+                ))}
+                {!loading && !pagedRows.length ? (
+                  <tr><td colSpan="11"><div className="supplier-empty"><Inbox size={22} /><strong>Bu filtrede fatura bulunamadı.</strong><span>İşNet senkronizasyonunu yenileyin veya filtreleri temizleyin.</span></div></td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+          <footer className="supplier-pagination">
+            <span>{visibleRows.length} / {rows.length} kayıt</span>
+            <label>Sayfa boyutu <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+            <button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Önceki</button>
+            <b>{page} / {pageCount}</b>
+            <button type="button" disabled={page >= pageCount} onClick={() => setPage((value) => value + 1)}>Sonraki</button>
+          </footer>
+        </section>
+
+        {selectedRow?.id ? (
+          <aside className="supplier-detail-panel" aria-label="Seçili fatura detayı">
+            <header>
+              <div><span>{supplierSourceLabel(selectedRow)} · {dateText(selectedRow.issueDate)}</span><h2>{selectedRow.documentNo || selectedRow.invoiceNo || "Fatura"}</h2><p>{supplierName(selectedRow)}</p></div>
+              <span className={`bim-pill ${statusChipClass(selectedRow.status)}`}>{statusLabel(selectedRow.status, selectedRow)}</span>
+            </header>
+            <nav className="supplier-detail-tabs">
+              {detailTabs.map(([key, label]) => <button key={key} type="button" className={supplierTab === key ? "active" : ""} onClick={() => setSupplierTab(key)}>{label}</button>)}
+            </nav>
+            <div className="supplier-detail-body">
+              {supplierTab === "preview" ? (
+                <>
+                  <div className="supplier-detail-totals"><ReadField label="Matrah" value={money(selectedRow.subtotal)} /><ReadField label="KDV" value={money(selectedRow.vatTotal)} /><ReadField label="Toplam" value={money(selectedRow.grandTotal)} /></div>
+                  <section className="supplier-check-list">
+                    <CheckLine label="Firma eşleşmesi" ok={!!selectedRow.firmId} />
+                    <CheckLine label="Ürün eşleşmesi" ok={!missingProduct(selectedRow)} />
+                    <CheckLine label="KDV ve toplam kontrolü" ok={!vatReview(selectedRow)} />
+                    <CheckLine label="Mükerrer belge kontrolü" ok={!missingFieldsOf(selectedRow).includes("DUPLICATE_DOCUMENT")} />
+                  </section>
+                  {selectedBlockers.length || selectedWarnings.length ? <div className="supplier-warning">Kontrol özeti: {translatedReasons(selectedRow).join(" ")}</div> : <div className="supplier-success">Fatura muhasebeleştirme kontrolüne hazır.</div>}
+                  {!selectedRow.firmId ? <button className="bim-btn" type="button" onClick={createFirm} disabled={busy}>Tedarikçi firma oluştur</button> : null}
+                </>
+              ) : null}
+              {supplierTab === "lines" ? (
+                <div className="supplier-line-list">
+                  {(selectedRow.lines || []).map((line, index) => (
+                    <article key={line.id || index}>
+                      <div><strong>{line.rawName || line.description || "Kalem"}</strong><span>{numberText(line.quantity)} {line.unit || ""} · {money(line.unitPrice)} · KDV %{numberText(line.vatRate)}</span></div>
+                      <span className={`bim-pill ${line.productId ? "green" : "amber"}`}>{line.productId ? "Ürün eşleşti" : "Ürün eksik"}</span>
+                      {!line.productId ? <button className="bim-btn small" type="button" onClick={() => createProduct(line)} disabled={busy}>Yeni ürün oluştur</button> : null}
+                      {isLotRelevantLine(line) ? <div className="supplier-lot"><input value={lotDrafts[line.id] || ""} onChange={(event) => setLotDrafts((current) => ({ ...current, [line.id]: event.target.value }))} placeholder="Lot no" /><button className="bim-btn small" type="button" onClick={() => saveLot(line.id)} disabled={busy}>Lot kaydet</button></div> : null}
+                    </article>
+                  ))}
+                  {!selectedRow.lines?.length ? <div className="supplier-empty"><strong>Fatura kalemi bulunamadı.</strong><span>Belgeyi yeniden kontrol ederek satırları okuyabilirsiniz.</span></div> : null}
+                </div>
+              ) : null}
+              {supplierTab === "tax" ? (
+                <div className="supplier-tax-grid">
+                  <ReadField label="Satır matrahı" value={money(controlSummary.lineSubtotal)} /><ReadField label="Belge matrahı" value={money(controlSummary.documentSubtotal)} /><ReadField label="Matrah farkı" value={money(controlSummary.subtotalDiff)} /><ReadField label="Satır KDV" value={money(controlSummary.lineVat)} /><ReadField label="Belge vergi toplamı" value={money(controlSummary.documentTaxTotal)} /><ReadField label="Toplam farkı" value={money(controlSummary.grandDiff)} />
+                </div>
+              ) : null}
+              {supplierTab === "source" ? (
+                <div className="supplier-source-detail"><ReadField label="Kaynak" value={supplierSourceLabel(selectedRow)} /><ReadField label="Dosya" value={selectedRow.fileName || selectedRow.originalFileName || "-"} /><ReadField label="PDF" value={selectedRow.pdfPath ? "Mevcut" : "Bulunamadı"} /><ReadField label="XML" value={selectedRow.xmlPath || selectedRow.sourceType === "XML" ? "Mevcut" : "Kaynak bilgisi yok"} /><button className="bim-btn" type="button" onClick={retrySelected} disabled={busy || selectedProcessed}>Belgeyi yeniden kontrol et</button></div>
+              ) : null}
+            </div>
+            <footer className="supplier-detail-footer">
+              <div><span>Doğrulama özeti</span><strong>{allReady ? "Tüm zorunlu kontroller tamam" : `${selectedBlockers.length} bloklayan kontrol`}</strong></div>
+              <button className="bim-btn green" type="button" onClick={approveSelected} disabled={busy || !allReady || selectedProcessed}>{selectedProcessed ? "Muhasebeleştirildi" : "Onayla ve Muhasebeleştir"}</button>
+              <details>
+                <summary>Diğer işlemler</summary>
+                <div><button className="bim-btn small" type="button" onClick={approveManualSelected} disabled={busy || selectedProcessed}>Uyarılarla onayla</button><button className="bim-btn small" type="button" onClick={convertSelectedToPaidExpense} disabled={busy || !selectedProcessed || !isOpenPayable}>Peşin gidere çevir</button><button className="bim-btn small danger" type="button" onClick={rejectSelected} disabled={busy || selectedProcessed}>Reddet</button><button className="bim-btn small danger" type="button" onClick={archiveSelected} disabled={busy}>Havuzdan kaldır</button><button className="bim-btn small danger" type="button" onClick={() => purgeProblematic("duplicates")} disabled={busy}>Sorunlu kayıtları temizle</button></div>
+              </details>
+            </footer>
+          </aside>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

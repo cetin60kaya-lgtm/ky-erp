@@ -89,10 +89,14 @@ export default function ProfitLossWorkspace({ activeMainCompany, goTab }) {
       const month = next.startDate.slice(0, 7);
       const sameMonth = next.endDate.slice(0, 7) === month;
       if (sameMonth && activeMainCompany?.slug) {
-        await apiPost("/muhasebe/accounting/fixed-expenses-generate-month", {
-          ...params,
-          month,
-        });
+        try {
+          await apiPost("/muhasebe/accounting/fixed-expenses-generate-month", {
+            ...params,
+            month,
+          });
+        } catch (error) {
+          setNotice(error?.message || "Sabit giderler üretilemedi; kayıtlı rapor verileri gösteriliyor.");
+        }
       }
       const [report, firms, fixed] = await Promise.all([
         apiGet("/muhasebe/accounting/reports/records", {
