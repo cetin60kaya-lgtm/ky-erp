@@ -1,0 +1,1 @@
+KY ERP model ve üretim kontrol merkezi son doğrulama tetikleyicisi.
