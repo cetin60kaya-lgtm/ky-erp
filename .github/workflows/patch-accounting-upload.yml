@@ -1,0 +1,173 @@
+name: Muhasebe Manuel Yükleme Düzeltmesi
+
+on:
+  push:
+    branches:
+      - codex/muhasebe-tam-yeniden-tasarim
+    paths:
+      - ".github/workflows/patch-accounting-upload.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dalı al
+        uses: actions/checkout@v4
+        with:
+          ref: codex/muhasebe-tam-yeniden-tasarim
+
+      - name: Manuel yükleme endpointini ekle
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("APP/cloud/ky-erp-api/src/index.ts")
+          text = path.read_text(encoding="utf-8")
+          marker = 'app.get("/api/muhasebe/belge-import", async (c) => {'
+          if marker not in text:
+              raise SystemExit("Belge import işaretçisi bulunamadı.")
+          if 'app.post("/api/muhasebe/belge-import/upload"' in text:
+              raise SystemExit("Manuel yükleme endpointi zaten mevcut.")
+          block = r'''
+app.post("/api/muhasebe/belge-import/upload", async (c) => {
+  const form = await c.req.formData();
+  const slug = databaseText(
+    form.get("mainCompanySlug") ||
+      form.get("mainCompanyId") ||
+      c.req.query("mainCompanySlug") ||
+      "mecit-hakan",
+  ).trim();
+  const files = form
+    .getAll("files")
+    .filter((value): value is File => value instanceof File && value.size > 0);
+  if (!files.length) {
+    return c.json(
+      jsonError("FILES_REQUIRED", "Yüklenecek PDF, XML veya ZIP dosyası seçilmedi."),
+      400,
+    );
+  }
+  const allowedExtensions = new Set(["pdf", "xml", "zip"]);
+  const maximumFileSize = 25 * 1024 * 1024;
+  const created: DatabaseRow[] = [];
+  const rejected: DatabaseRow[] = [];
+  const dateFolder = new Date().toISOString().slice(0, 10);
+
+  for (const file of files) {
+    const extension = file.name.split(".").pop()?.toLocaleLowerCase("tr-TR") || "";
+    if (!allowedExtensions.has(extension)) {
+      rejected.push({ fileName: file.name, reason: "Yalnız PDF, XML veya ZIP kabul edilir." });
+      continue;
+    }
+    if (file.size > maximumFileSize) {
+      rejected.push({ fileName: file.name, reason: "Dosya boyutu 25 MB sınırını aşıyor." });
+      continue;
+    }
+    const id = crypto.randomUUID();
+    const safeName = file.name
+      .normalize("NFKD")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || `${id}.${extension}`;
+    const objectKey = `${slug}/muhasebe/gelen-faturalar/manual/${dateFolder}/${id}-${safeName}`;
+    await c.env.FILES.put(objectKey, await file.arrayBuffer(), {
+      httpMetadata: {
+        contentType: file.type || "application/octet-stream",
+        contentDisposition: `attachment; filename="${safeName.replace(/"/g, "")}"`,
+      },
+      customMetadata: {
+        mainCompanySlug: slug,
+        source: "MANUAL_UPLOAD",
+        originalName: file.name,
+      },
+    });
+    const now = new Date().toISOString();
+    const documentNo = file.name.replace(/\.[^.]+$/, "").slice(0, 120);
+    const metadata = {
+      fileKey: objectKey,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      fileSize: file.size,
+      extension,
+      sourceType: "MANUAL_UPLOAD",
+      reviewRequired: true,
+      uploadedAt: now,
+      missingFields: ["Firma ve fatura bilgileri kontrol edilmeli"],
+    };
+    await insertDynamic(c, "documents", {
+      id,
+      main_company_slug: slug,
+      document_type: "SUPPLIER_INVOICE",
+      detected_type: "SUPPLIER_INVOICE",
+      target_type: "SUPPLIER_INVOICE",
+      document_no: documentNo,
+      date: now.slice(0, 10),
+      source_type: "MANUAL_UPLOAD",
+      status: "CONTROL_WAITING",
+      firm_match_status: "PENDING",
+      subtotal: 0,
+      vat_total: 0,
+      grand_total: 0,
+      metadata,
+      raw: metadata,
+      created_at: now,
+      updated_at: now,
+    });
+    if (await tableExists(c, "document_files")) {
+      await insertDynamic(c, "document_files", {
+        id: crypto.randomUUID(),
+        main_company_slug: slug,
+        document_id: id,
+        file_name: file.name,
+        file_key: objectKey,
+        mime_type: file.type || "application/octet-stream",
+        file_size: file.size,
+        source_type: "MANUAL_UPLOAD",
+        created_at: now,
+        updated_at: now,
+      });
+    }
+    created.push({
+      id,
+      documentNo,
+      fileName: file.name,
+      fileKey: objectKey,
+      status: "CONTROL_WAITING",
+    });
+  }
+
+  if (!created.length) {
+    return c.json(
+      jsonError("UPLOAD_REJECTED", "Seçilen dosyaların hiçbiri yüklenemedi.", rejected),
+      400,
+    );
+  }
+  return c.json(
+    {
+      ok: true,
+      success: true,
+      data: { created, rejected, createdCount: created.length, rejectedCount: rejected.length },
+    },
+    201,
+  );
+});
+
+'''
+          text = text.replace(marker, block + marker, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Kontrol ve kaydet
+        run: |
+          cd APP/cloud/ky-erp-api
+          npm ci
+          npm run typecheck
+          npm run build
+          cd ../../..
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/index.ts
+          git diff --cached --check
+          git commit -m "feat(muhasebe): manuel belgeleri R2 ve kontrol listesine al"
+          git push origin HEAD:codex/muhasebe-tam-yeniden-tasarim
