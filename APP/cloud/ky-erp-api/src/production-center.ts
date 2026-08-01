@@ -15,6 +15,12 @@ type CenterModel = Row & {
   orderNo: string;
   defaultDispatchNo: string;
   expectedQty: number;
+  modelCode?: string;
+  groundColor?: string;
+  status?: string;
+  imageUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
   printRegions: Array<{ id?: string; regionName: string; regionCode?: string; sortOrder?: number }>;
   isVirtual: boolean;
   raw: Row;
@@ -814,8 +820,11 @@ async function loadMachines(c: Context<AppEnv>, slug: string): Promise<Row[]> {
   }).filter((row) => row.machineNo && row.isActive !== false));
 }
 
-async function buildCenter(c: Context<AppEnv>) {
-  const slug = companySlug(c);
+async function buildCenter(
+  c: Context<AppEnv>,
+  forcedSlug = companySlug(c),
+) {
+  const slug = forcedSlug;
   const companyById = await loadCompanies(c, slug);
   const [baseModels, regionsByModel, links, documents, productionEntries, machines] = await Promise.all([
     loadModels(c, slug, companyById),
@@ -1019,7 +1028,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   const requestId = text(body.requestId) || crypto.randomUUID();
   const existingRequest = await jsonStoreGet(c, "PRODUCTION_CENTER_REQUEST", requestId, slug).catch(() => null);
   if (existingRequest?.result) return { ...existingRequest.result, idempotent: true };
-  const center = await buildCenter(c);
+  const center = await buildCenter(c, slug);
   const cardsById = new Map(center.cards.map((card) => [text(card.id), card]));
   const sourceEntries = Array.isArray(body.entries) ? body.entries : [body];
   const success: Row[] = [];
@@ -1146,7 +1155,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   const slug = companySlug(c, body);
   const modelName = text(first(body.modelName, body.modelAdi));
   if (!modelName) throw new Error("Model adı zorunludur.");
-  const center = await buildCenter(c);
+  const center = await buildCenter(c, slug);
   const companyId = text(first(body.companyId, body.firmaId));
   const orderNo = text(first(body.orderNo, body.siparisNo));
   const duplicate = center.cards.find(
@@ -1159,7 +1168,7 @@ async function createModel(c: Context<AppEnv>, body: Row) {
   if (duplicate) return { ...duplicate, duplicate: true };
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const company = center.companies.find((row: Row) => row.id === companyId) || {};
+  const company: Row = center.companies.find((row: Row) => row.id === companyId) || {};
   const regions = String(first(body.printRegions, body.printArea, body.baskiBolgesi, "Ön"))
     .split(/[,;|]/)
     .map((value) => value.trim())
@@ -1375,7 +1384,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     const body = await requestBody(c);
     try {
       const result = await createModel(c, body);
-      return c.json({ ok: true, success: true, data: result }, result.duplicate ? 200 : 201);
+      return c.json({ ok: true, success: true, data: result }, "duplicate" in result && result.duplicate ? 200 : 201);
     } catch (error) {
       return c.json(
         jsonError("MODEL_CREATE_FAILED", error instanceof Error ? error.message : String(error)),
@@ -1492,22 +1501,63 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     return c.json({ ok: true, success: true, data: await saveProductionBatch(c, body) }, 201);
   });
   app.post("/api/imalat/kayitlar", async (c) => {
-    const body = await requestBody(c);
-    const result = await saveProductionBatch(c, {
-      ...body,
-      modelId: first(body.modelId, body.modelKaydiId),
-      quantity: first(body.quantity, body.adet, body.uretimAdedi),
-      printRegion: first(body.printRegion, body.baskiBolgesi),
-      machineId: first(body.machineId, body.makineNo),
-      machineName: first(body.machineName, body.makineAdi),
-      operatorName: first(body.operatorName, body.makinaci, body.sorumluPersonel),
-      entries: [body],
-      requestId: crypto.randomUUID(),
-    });
-    return result.failedCount
-      ? c.json(jsonError("PRODUCTION_ENTRY_REJECTED", text(result.failed[0]?.error), result), 409)
-      : c.json({ ok: true, success: true, data: result.success[0] }, 201);
+  const body = await requestBody(c);
+  const mappedEntry = {
+    ...body,
+    modelId: first(body.modelId, body.modelKaydiId),
+    quantity: first(body.quantity, body.adet, body.uretimAdedi),
+    printRegion: first(body.printRegion, body.baskiBolgesi),
+    machineId: first(body.machineId, body.makineNo, body.makina),
+    machineName: first(
+      body.machineName,
+      body.makineAdi,
+      body.makinaAdi,
+      body.makineNo,
+      body.makina,
+    ),
+    operatorName: first(
+      body.operatorName,
+      body.makinaci,
+      body.sorumluPersonel,
+    ),
+    date: first(body.date, body.tarih),
+    shift: first(body.shift, body.vardiya),
+    dispatchNo: first(
+      body.dispatchNo,
+      body.irsaliyeNo,
+      body.musteriIrsaliyeNo,
+    ),
+    orderNo: first(body.orderNo, body.siparisNo),
+    batchNo: first(body.batchNo, body.partiNo),
+    printDefectQty: first(
+      body.printDefectQty,
+      body.baskiHatasiAdet,
+    ),
+    fabricDefectQty: first(
+      body.fabricDefectQty,
+      body.kumasHatasiAdet,
+    ),
+    testQty: first(body.testQty, body.testAdedi),
+  };
+  const result = await saveProductionBatch(c, {
+    ...body,
+    entries: [mappedEntry],
+    requestId: text(body.requestId) || crypto.randomUUID(),
   });
+  return result.failedCount
+    ? c.json(
+        jsonError(
+"PRODUCTION_ENTRY_REJECTED",
+          text(result.failed[0]?.error),
+          result,
+        ),
+        409,
+      )
+    : c.json(
+        { ok: true, success: true, data: result.success[0] },
+        201,
+      );
+});
 
   app.get("/api/uretim/seri/summary", async (c) => {
     const center = await buildCenter(c);
