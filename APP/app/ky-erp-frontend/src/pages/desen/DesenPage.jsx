@@ -1,12 +1,16 @@
+import { useState } from "react";
 import "../modules/cleanWorkflow.css";
 import "./desenWorkflow.css";
 import DesenFolderSettingsBar from "./DesenFolderSettingsBar";
+import DesenInboxUploadButton from "./DesenInboxUploadButton";
 import DesenModelMasasi from "./DesenModelMasasi";
 import DesenModeller from "./DesenModeller";
 import YerlesimKalipPage from "./YerlesimKalipPage";
 import DesenRaporlari from "./DesenRaporlari";
 
 export default function DesenPage({ activeTab, activeMainCompany }) {
+  const [inboxRevision, setInboxRevision] = useState(0);
+  const isInbox = !activeTab || activeTab === "gelen-desenler";
   const page =
     activeTab === "desen-klasor-ayarlari" ? null : activeTab === "desen-modeller" ? (
       <DesenModeller activeMainCompany={activeMainCompany} />
@@ -15,24 +19,25 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
     ) : activeTab === "desen-raporlari" ? (
       <DesenRaporlari activeMainCompany={activeMainCompany} />
     ) : (
-      <DesenModelMasasi activeMainCompany={activeMainCompany} />
+      <DesenModelMasasi
+        key={`${activeMainCompany?.slug || "company"}-${inboxRevision}`}
+        activeMainCompany={activeMainCompany}
+      />
     );
 
   const title =
     activeTab === "desen-klasor-ayarlari"
-      ? "Desen Görsel Klasör Ayarları"
+      ? "Desen R2 Depolama Ayarları"
       : activeTab === "desen-modeller"
-      ? "Desen Havuzu"
-      : activeTab === "desen-yerlesim-is-akisi"
-        ? "Yerlesim / Kalip"
-        : activeTab === "desen-raporlari"
-          ? "Desen Raporlari"
-          : "Gelen Desenler";
+        ? "Desen Havuzu"
+        : activeTab === "desen-yerlesim-is-akisi"
+          ? "Yerleşim / Kalıp"
+          : activeTab === "desen-raporlari"
+            ? "Desen Raporları"
+            : "Gelen Desenler";
 
   const showFolderSettings =
-    !activeTab ||
-    activeTab === "gelen-desenler" ||
-    activeTab === "desen-klasor-ayarlari";
+    isInbox || activeTab === "desen-klasor-ayarlari";
 
   return (
     <div className="clean-workflow-page dw-page">
@@ -42,16 +47,22 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
             <h1>{title}</h1>
             <p>
               {activeTab === "desen-klasor-ayarlari"
-                ? "Model oluşturulacak görsellerin gelen klasörünü, model arşivini ve hata klasörlerini test ederek kaydedin."
+                ? "Canlı uygulamanın R2 gelen, model, hata ve arşiv alanlarını kontrol edin."
                 : activeTab === "desen-modeller"
-                  ? "Tüm modelleri, baskı bölgelerini ve hazırlık durumlarını tek merkezden yönetin."
-                : activeTab === "desen-yerlesim-is-akisi"
-                  ? "Baskı bölgesi bazlı yerleşim ve kalıp işlerini teknik kuyrukta tamamlayın."
-                  : activeTab === "desen-raporlari"
-                    ? "Desen hazırlık sürecini gerçek kayıtlar ve aynı filtreli Excel çıktısıyla izleyin."
-                    : "Gelen klasördeki model ve kanal görsellerini kontrol ederek model kartına dönüştürün."}
+                  ? "Tüm modelleri, baskı bölgelerini, kanalları, renk gruplarını ve Boyahane bağlantısını tek merkezden yönetin."
+                  : activeTab === "desen-yerlesim-is-akisi"
+                    ? "Baskı bölgesi bazlı yerleşim ve kalıp işlerini teknik kuyrukta tamamlayın."
+                    : activeTab === "desen-raporlari"
+                      ? "Desen hazırlık sürecini gerçek kayıtlar ve filtreli CSV çıktısıyla izleyin."
+                      : "Model, kanal ve yerleşim görsellerini R2 gelen alanına yükleyip kontrol ederek tek model kartına dönüştürün."}
             </p>
           </div>
+          {isInbox ? (
+            <DesenInboxUploadButton
+              activeMainCompany={activeMainCompany}
+              onUploaded={() => setInboxRevision((value) => value + 1)}
+            />
+          ) : null}
         </header>
         {showFolderSettings ? (
           <DesenFolderSettingsBar activeMainCompany={activeMainCompany} />
