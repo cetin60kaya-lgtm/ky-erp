@@ -15,18 +15,48 @@ interface D1Database {
   prepare(query: string): D1PreparedStatement;
 }
 
+interface R2HttpMetadata {
+  contentType?: string;
+  contentLanguage?: string;
+  contentDisposition?: string;
+  contentEncoding?: string;
+  cacheControl?: string;
+  cacheExpiry?: Date;
+}
+
 interface R2ObjectBody {
   body: ReadableStream;
   httpEtag: string;
+  httpMetadata?: R2HttpMetadata;
+  customMetadata?: Record<string, string>;
   writeHttpMetadata(headers: Headers): void;
 }
 
 interface R2PutOptions {
-  httpMetadata?: {
-    contentType?: string;
-    contentDisposition?: string;
-  };
+  httpMetadata?: R2HttpMetadata;
   customMetadata?: Record<string, string>;
+}
+
+interface R2ListedObject {
+  key: string;
+  size: number;
+  etag: string;
+  uploaded?: Date;
+  customMetadata?: Record<string, string>;
+}
+
+interface R2Objects {
+  objects: R2ListedObject[];
+  truncated?: boolean;
+  cursor?: string;
+}
+
+interface R2ListOptions {
+  prefix?: string;
+  limit?: number;
+  cursor?: string;
+  delimiter?: string;
+  include?: Array<"httpMetadata" | "customMetadata">;
 }
 
 interface R2Bucket {
@@ -36,6 +66,8 @@ interface R2Bucket {
     value: ArrayBuffer | ArrayBufferView | Blob | ReadableStream | string,
     options?: R2PutOptions,
   ): Promise<unknown>;
+  list(options?: R2ListOptions): Promise<R2Objects>;
+  delete(key: string | string[]): Promise<void>;
 }
 
 declare namespace Cloudflare {
