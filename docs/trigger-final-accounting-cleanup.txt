@@ -1,0 +1,1 @@
+KY ERP muhasebe son temizlik ve doğrulama tetikleyicisi.
