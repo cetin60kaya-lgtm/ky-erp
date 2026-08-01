@@ -1,0 +1,87 @@
+name: Boyahane Reçete Alan Eşitleme Tek Sefer
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - ".github/workflows/align-boyahane-workflow-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+          fetch-depth: 0
+      - name: Reçete lot durumunu ve üretim snapshotlarını eşitle
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          recipe_path = Path('APP/app/ky-erp-frontend/src/pages/boyahane/workflow/RecipeWorkspace.jsx')
+          recipe = recipe_path.read_text(encoding='utf-8')
+          recipe = recipe.replace(
+              'lot.isDefault && lot.status === "ACTIVE") || lots.find((lot) => lot.inventoryId === value && lot.status === "ACTIVE")',
+              'lot.isDefault && ["ACTIVE", "AVAILABLE"].includes(lot.status)) || lots.find((lot) => lot.inventoryId === value && ["ACTIVE", "AVAILABLE"].includes(lot.status))'
+          )
+          recipe = recipe.replace(
+              'lots.filter((lot) => lot.inventoryId === row.productId && lot.status === "ACTIVE")',
+              'lots.filter((lot) => lot.inventoryId === row.productId && ["ACTIVE", "AVAILABLE"].includes(lot.status))'
+          )
+          recipe_path.write_text(recipe, encoding='utf-8')
+
+          worker_path = Path('APP/cloud/ky-erp-api/src/boyahane-workflow.ts')
+          worker = worker_path.read_text(encoding='utf-8')
+          old = '''        modelName: job.modelName,
+        companyName: body.companyName || job.companyName,
+        orderNo: body.orderNo || job.orderNo,
+        colorName: body.colorName || jobColor.colorName,
+        pantoneSnapshot: body.pantone || jobColor.pantone,
+        paintTypeSnapshot: body.paintType || jobColor.paintType,
+        version: body.version || "V1",
+        multiplier,
+        jobType: body.jobType || "PRODUCTION",
+        totalReferenceGr: lines.reduce((sum, line) => sum + num(line.referenceGram), 0),
+        totalPreparedKg: items.reduce((sum, item) => sum + num(item.consumedKg), 0),
+        totalCost,
+        items,
+        createdAt: nowIso(),'''
+          new = '''        modelName: job.modelName,
+        modelSnapshot: job.modelName,
+        companyName: body.companyName || job.companyName,
+        companySnapshot: body.companyName || job.companyName,
+        orderNo: body.orderNo || job.orderNo,
+        orderSnapshot: body.orderNo || job.orderNo,
+        printRegionSnapshot: jobColor.printRegion || job.printRegion || "",
+        colorName: body.colorName || jobColor.colorName,
+        pantoneSnapshot: body.pantone || jobColor.pantone,
+        paintTypeSnapshot: body.paintType || jobColor.paintType,
+        version: body.version || "V1",
+        versionSnapshot: body.version || "V1",
+        multiplier,
+        jobType: body.jobType || "PRODUCTION",
+        totalReferenceGr: lines.reduce((sum, line) => sum + num(line.referenceGram), 0),
+        totalPreparedKg: items.reduce((sum, item) => sum + num(item.consumedKg), 0),
+        productionTotalKg: items.reduce((sum, item) => sum + num(item.consumedKg), 0),
+        totalCost,
+        items,
+        createdBy: text(body.createdBy || "KY ERP"),
+        createdAt: nowIso(),'''
+          if old not in worker:
+              raise SystemExit('Üretim snapshot bloğu bulunamadı.')
+          worker_path.write_text(worker.replace(old, new), encoding='utf-8')
+
+          Path('.github/workflows/align-boyahane-workflow-once.yml').unlink()
+          PY
+      - name: Eşitlemeyi kaydet ve geçici akışı kaldır
+        run: |
+          git config user.name "kyerp-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/boyahane/workflow/RecipeWorkspace.jsx APP/cloud/ky-erp-api/src/boyahane-workflow.ts .github/workflows/align-boyahane-workflow-once.yml
+          git commit -m "fix(boyahane): lot durumu ve üretim snapshot alanlarını eşitle"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
