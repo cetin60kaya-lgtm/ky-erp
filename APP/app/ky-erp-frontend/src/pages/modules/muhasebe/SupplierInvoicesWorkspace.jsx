@@ -18,12 +18,18 @@ import { apiGet, apiPatch, apiPost, apiUpload } from "../../../utils/api";
 import "./supplierInvoicesWorkspace.css";
 
 const PAGE_SIZES = [25, 50, 100];
-const STATUS_OPTIONS = [
+const INVOICE_STATUS_OPTIONS = [
   ["ALL", "Tümü"],
   ["CONTROL_WAITING", "Kontrol bekliyor"],
   ["READY", "İşleme hazır"],
   ["PROCESSED", "İşlendi"],
   ["REJECTED", "Reddedildi"],
+];
+const LOT_STATUS_OPTIONS = [
+  ["ALL", "Tüm lotlar"],
+  ["AVAILABLE", "Kullanılabilir"],
+  ["QUARANTINE", "Karantina"],
+  ["DEPLETED", "Bitti"],
 ];
 
 const normalize = (value) =>
@@ -64,17 +70,21 @@ const listOf = (payload) => {
 
 function statusLabel(value) {
   const key = normalize(value);
+  if (/DEPLETED|BITTI/.test(key)) return "Bitti";
+  if (/QUARANTINE|KARANTINA/.test(key)) return "Karantina";
+  if (/AVAILABLE|KULLANILABILIR/.test(key)) return "Kullanılabilir";
   if (/PROCESSED|APPROVED|ISLENDI/.test(key)) return "İşlendi";
   if (/READY|HAZIR/.test(key)) return "İşleme hazır";
   if (/REJECT|RED/.test(key)) return "Reddedildi";
-  if (/MISSING|EKSIK|QUARANTINE/.test(key)) return "Eksik bilgi";
+  if (/MISSING|EKSIK/.test(key)) return "Eksik bilgi";
   return "Kontrol bekliyor";
 }
 
 function statusTone(value) {
   const key = normalize(value);
-  if (/PROCESSED|APPROVED|ISLENDI/.test(key)) return "success";
-  if (/REJECT|RED|ERROR|HATA/.test(key)) return "danger";
+  if (/AVAILABLE|PROCESSED|APPROVED|ISLENDI/.test(key)) return "success";
+  if (/DEPLETED/.test(key)) return "muted";
+  if (/REJECT|RED|ERROR|HATA|QUARANTINE/.test(key)) return "danger";
   if (/READY|HAZIR/.test(key)) return "ready";
   return "warning";
 }
@@ -157,13 +167,14 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [profile, setProfile] = useState(null);
-  const [aliases, setAliases] = useState([]);
   const [lineDrafts, setLineDrafts] = useState([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState([]);
   const uploadRef = useRef(null);
+
+  const statusOptions = view === "invoices" ? INVOICE_STATUS_OPTIONS : LOT_STATUS_OPTIONS;
 
   const companyParams = useMemo(
     () => ({
@@ -172,6 +183,15 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
     }),
     [activeMainCompany?.id, activeMainCompany?.slug],
   );
+
+  const changeView = (nextView) => {
+    setView(nextView);
+    setStatus("ALL");
+    setSearch("");
+    setPage(1);
+    setSelected(null);
+    setMessage("");
+  };
 
   const loadProducts = useCallback(async () => {
     try {
@@ -194,8 +214,9 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
         offset: (page - 1) * pageSize,
         _ts: Date.now(),
       });
-      setRows(listOf(payload));
-      setTotal(Number(payload?.pagination?.total ?? payload?.data?.pagination?.total ?? listOf(payload).length));
+      const data = listOf(payload);
+      setRows(data);
+      setTotal(Number(payload?.pagination?.total ?? payload?.data?.pagination?.total ?? data.length));
     } catch (requestError) {
       setRows([]);
       setTotal(0);
@@ -271,7 +292,6 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
         const nextAliases = listOf(aliasesPayload);
         setSelected({ ...detail, detailType: "invoice" });
         setProfile(nextProfile);
-        setAliases(nextAliases);
         setLineDrafts(buildLineDrafts(detail, nextAliases, nextProfile));
       } catch (requestError) {
         setMessage(requestError?.message || "Fatura detayı alınamadı.");
@@ -364,35 +384,6 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
     }
   };
 
-  const saveAliases = async () => {
-    if (!selected?.companyId) return;
-    setSaving(true);
-    setMessage("");
-    try {
-      const nextAliases = [];
-      for (const line of lineDrafts) {
-        const payload = await apiPost(
-          `/muhasebe/chemical-suppliers/${encodeURIComponent(selected.companyId)}/aliases`,
-          {
-            ...companyParams,
-            rawName: line.rawName,
-            aliasName: line.aliasName,
-            productId: line.productId || null,
-            productName: line.productName || line.aliasName,
-            unit: line.unit,
-          },
-        );
-        nextAliases.push(unwrap(payload));
-      }
-      setAliases(nextAliases);
-      setMessage("Firma bazlı ürün aliasları kaydedildi.");
-    } catch (requestError) {
-      setMessage(requestError?.message || "Alias kayıtları tamamlanamadı.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const transferToDyehouse = async () => {
     if (!selected?.id) return;
     setSaving(true);
@@ -410,12 +401,11 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
           })),
         },
       );
-      await saveAliases();
       setSelected((current) => ({
         ...current,
         boyahaneTransferStatus: unwrap(payload)?.status || "COMPLETED",
       }));
-      setMessage("Lotlar oluşturuldu ve boyahane stok listesine aktarıldı.");
+      setMessage("Firma bazlı aliaslar kaydedildi; lotlar boyahane stok listesine aktarıldı.");
       await Promise.all([loadInvoices(), loadLots()]);
     } catch (requestError) {
       setMessage(requestError?.message || "Boyahane lot aktarımı tamamlanamadı.");
@@ -452,10 +442,16 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
       uploadFiles.forEach((file) => formData.append("files", file));
       if (activeMainCompany?.slug) formData.set("mainCompanySlug", activeMainCompany.slug);
       if (activeMainCompany?.id) formData.set("mainCompanyId", activeMainCompany.id);
-      await apiUpload("/muhasebe/belge-import/upload", formData);
+      const payload = await apiUpload("/muhasebe/belge-import/upload", formData);
+      const result = unwrap(payload);
       setUploadFiles([]);
       setUploadOpen(false);
-      setMessage("Belgeler yüklendi ve kontrol listesine alındı.");
+      setMessage(
+        `${Number(result.createdCount || result.created?.length || 0)} belge yüklendi ve kontrol listesine alındı.` +
+          (Number(result.rejectedCount || result.rejected?.length || 0) > 0
+            ? ` ${Number(result.rejectedCount || result.rejected?.length)} belge reddedildi.`
+            : ""),
+      );
       await loadInvoices();
     } catch (requestError) {
       setMessage(requestError?.message || "Belge yükleme tamamlanamadı.");
@@ -482,14 +478,14 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
           <button
             type="button"
             className={view === "invoices" ? "active" : ""}
-            onClick={() => setView("invoices")}
+            onClick={() => changeView("invoices")}
           >
             <FileText size={17} /> Faturalar
           </button>
           <button
             type="button"
             className={view === "lots" ? "active" : ""}
-            onClick={() => setView("lots")}
+            onClick={() => changeView("lots")}
           >
             <Boxes size={17} /> Boyahane Lot Stoku
           </button>
@@ -523,7 +519,7 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
           />
         </label>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>
-          {STATUS_OPTIONS.map(([value, label]) => (
+          {statusOptions.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
@@ -615,7 +611,7 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
                       <td>{row.unit || "-"}</td>
                       <td>{dateText(row.expiryDate)}</td>
                       <td>{row.warehouse || "-"}</td>
-                      <td><span className={`siw-status ${normalize(row.status) === "DEPLETED" ? "muted" : "success"}`}>{normalize(row.status) === "DEPLETED" ? "Bitti" : "Kullanılabilir"}</span></td>
+                      <td><span className={`siw-status ${statusTone(row.status)}`}>{statusLabel(row.status)}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -693,7 +689,7 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
               <div><span>Üretim tarihi</span><strong>{dateText(selected.productionDate)}</strong></div>
               <div><span>Son kullanma</span><strong>{dateText(selected.expiryDate)}</strong></div>
               <div><span>Fatura</span><strong>{selected.documentNo || "-"}</strong></div>
-              <div><span>Durum</span><strong>{normalize(selected.status) === "DEPLETED" ? "Bitti" : "Kullanılabilir"}</strong></div>
+              <div><span>Durum</span><strong>{statusLabel(selected.status)}</strong></div>
             </section>
             <section className="siw-section">
               <header><h3>Stok hareketleri</h3></header>
@@ -876,7 +872,7 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
         open={uploadOpen}
         width="small"
         title="Manuel Fatura Yükle"
-        subtitle="İşNet dışında kalan PDF veya XML belgeleri için ikincil işlem."
+        subtitle="İşNet dışında kalan PDF, XML veya ZIP belgeleri için ikincil işlem."
         onClose={() => setUploadOpen(false)}
         footer={
           <>
@@ -890,7 +886,7 @@ export default function SupplierInvoicesWorkspace({ activeMainCompany, refreshKe
         <button type="button" className="siw-upload-box" onClick={() => uploadRef.current?.click()}>
           <Upload size={28} />
           <strong>PDF, XML veya ZIP seçin</strong>
-          <span>Belgeler kontrol listesine alınır; otomatik işlenmez.</span>
+          <span>Belgeler R2 arşivine kaydedilir ve kontrol listesine alınır; otomatik işlenmez.</span>
         </button>
         <input
           ref={uploadRef}
