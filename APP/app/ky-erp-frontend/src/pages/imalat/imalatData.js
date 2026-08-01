@@ -13,6 +13,7 @@ export function calcProduction(job) {
       missingRegions: [],
     };
   }
+
   let cumulative = 0;
   const requiredRegions = (job.printRegions || job.baskiBolgeleri || [])
     .filter((region) => region.isActive !== false)
@@ -30,12 +31,13 @@ export function calcProduction(job) {
       durum: statusFromTotals(Number(job.beklenenAdet || 0), cumulative),
     };
   });
+
   const regional = hasRegionTracking
-     ? calculateRegionalCompletion(entries, requiredRegions)
+    ? calculateRegionalCompletion(entries, requiredRegions)
     : null;
-  const toplamUretilen =
-    regional.completedQty 
-    entries.reduce((sum, entry) => sum + Number(entry.adet || 0), 0);
+  const toplamUretilen = regional
+    ? regional.completedQty
+    : entries.reduce((sum, entry) => sum + Number(entry.adet || 0), 0);
   const toplamBaskiSakati = entries.reduce(
     (sum, entry) => sum + Number(entry.baskiHatasiAdet || 0),
     0,
@@ -45,6 +47,7 @@ export function calcProduction(job) {
     0,
   );
   const kalan = Number(job.beklenenAdet || 0) - toplamUretilen;
+
   return {
     entries,
     toplamUretilen,
@@ -55,20 +58,25 @@ export function calcProduction(job) {
     progress: Math.min(
       100,
       Number(job.beklenenAdet || 0)
-         ? (toplamUretilen / Number(job.beklenenAdet || 0)) * 100
+        ? (toplamUretilen / Number(job.beklenenAdet || 0)) * 100
         : 0,
     ),
     requiredRegions,
-    regionSummary: regional.regionSummary || [],
-    missingRegions: regional.missingRegions || [],
+    regionSummary: regional?.regionSummary || [],
+    missingRegions: regional?.missingRegions || [],
   };
 }
 
 function calculateRegionalCompletion(entries, requiredRegions) {
   const batches = new Map();
+
   for (const entry of entries) {
     const batchKey = String(
-      entry.partiNo || entry.batchNo || entry.seriNo || entry.irsaliyeNo || "GENEL",
+      entry.partiNo ||
+        entry.batchNo ||
+        entry.seriNo ||
+        entry.irsaliyeNo ||
+        "GENEL",
     );
     const region = String(
       entry.baskiBolgesi || entry.printArea || entry.regionName || "",
@@ -78,21 +86,30 @@ function calculateRegionalCompletion(entries, requiredRegions) {
     row[region] = Number(row[region] || 0) + Number(entry.adet || 0);
     batches.set(batchKey, row);
   }
+
   let completedQty = 0;
   const regionTotals = new Map(requiredRegions.map((region) => [region, 0]));
   const missing = new Map();
+
   for (const batch of batches.values()) {
     const values = requiredRegions.map((region) => Number(batch[region] || 0));
     completedQty += values.length ? Math.min(...values) : 0;
     requiredRegions.forEach((region, index) => {
-      regionTotals.set(region, Number(regionTotals.get(region) || 0) + values[index]);
+      regionTotals.set(
+        region,
+        Number(regionTotals.get(region) || 0) + values[index],
+      );
     });
   }
+
   const maxRegionQty = Math.max(0, ...Array.from(regionTotals.values()));
   for (const region of requiredRegions) {
-    const qty = Number(regionTotals.get(region) || 0);
-    if (qty < maxRegionQty) missing.set(region, maxRegionQty - qty);
+    const regionQty = Number(regionTotals.get(region) || 0);
+    if (regionQty < maxRegionQty) {
+      missing.set(region, maxRegionQty - regionQty);
+    }
   }
+
   return {
     completedQty,
     regionSummary: requiredRegions.map((region) => ({
@@ -100,9 +117,9 @@ function calculateRegionalCompletion(entries, requiredRegions) {
       qty: Number(regionTotals.get(region) || 0),
       missingQty: Number(missing.get(region) || 0),
     })),
-    missingRegions: Array.from(missing.entries()).map(([region, qty]) => ({
+    missingRegions: Array.from(missing.entries()).map(([region, amount]) => ({
       region,
-      qty,
+      qty: amount,
     })),
   };
 }
@@ -118,7 +135,13 @@ export function toneForStatus(status) {
   const value = String(status || "").toLocaleLowerCase("tr-TR");
   if (value.includes("tamam")) return "green";
   if (value.includes("fazla") || value.includes("iptal")) return "red";
-  if (value.includes("kısmi") || value.includes("eksik") || value.includes("kontrol")) return "orange";
+  if (
+    value.includes("kısmi") ||
+    value.includes("eksik") ||
+    value.includes("kontrol")
+  ) {
+    return "orange";
+  }
   return "blue";
 }
 
