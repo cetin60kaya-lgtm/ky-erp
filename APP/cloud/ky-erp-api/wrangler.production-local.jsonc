@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ky-erp-production-local",
+  "main": "src/main.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": false
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ky-erp-production-local",
+      "database_id": "00000000-0000-0000-0000-000000000001"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "ky-erp-production-local-files"
+    }
+  ]
+}
