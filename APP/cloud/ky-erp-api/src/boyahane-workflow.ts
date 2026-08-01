@@ -232,7 +232,7 @@ function normalizedColorStatus(value: unknown) {
     : "WAITING";
 }
 
-async function jobView(c: Context<AppEnv>, job: Row, slug: string) {
+async function jobView(c: Context<AppEnv>, job: Row, slug: string): Promise<Row> {
   const colors = (await storeList(c, SCOPES.jobColor, slug))
     .filter((row) => text(row.jobId || row.dyehouseModelId) === text(job.id))
     .sort((a, b) => text(a.createdAt).localeCompare(text(b.createdAt)));
@@ -282,7 +282,7 @@ function recipeSignature(lines: Row[]) {
   );
 }
 
-function recipeView(row: Row) {
+function recipeView(row: Row): Row {
   const lines = recipeLines(row.lines);
   return {
     ...row,
