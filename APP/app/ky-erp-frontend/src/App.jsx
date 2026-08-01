@@ -1,7 +1,21 @@
-﻿import { Suspense, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import "./App.css";
-import { useCallback } from "react";
-import React from "react";
+import "./app/appShell.css";
+import {
+  MODULES,
+  findModule,
+  findTab,
+  getDefaultTabKey,
+  getInitialRoute,
+  getModuleGroups,
+  normalizeModuleTabKey,
+} from "./app/moduleRegistry";
 import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
 import { ErpIcon } from "./components/erp/IconMap";
@@ -94,6 +108,7 @@ class ModuleErrorBoundary extends React.Component {
         </div>
       );
     }
+
     return (
       <React.Fragment key={this.state.recoveryKey}>
         {this.props.children}
@@ -102,441 +117,21 @@ class ModuleErrorBoundary extends React.Component {
   }
 }
 
-const MODULES = [
-  {
-    key: "muhasebe",
-    permissionKey: "MUHASEBE",
-    short: "MH",
-    label: "Muhasebe",
-    tabs: [
-      { key: "yonetim-ozeti", label: "Yönetim Özeti", icon: "genel-bakis" },
-      { key: "firma-kartlari", label: "Firmalar ve Cari", icon: "firma-kartlari" },
-      { key: "tedarikci-faturalar", label: "Gelen Tedarikçi Faturaları", icon: "tedarikci-fatura" },
-      { key: "kesilen-faturalar", label: "Kesilen Faturalar", icon: "dosya" },
-      { key: "irsaliye-fatura-kontrol", label: "İrsaliye / Fatura Kontrolü", icon: "file-check" },
-      { key: "cek-odeme", label: "Çek / Ödeme", icon: "cekler" },
-      { key: "mail-ekstre", label: "Ekstre ve Mail Takibi", icon: "eposta" },
-      { key: "kar-zarar", label: "Gelir / Gider ve Kâr Zarar", icon: "raporlar" },
-      { key: "kdv-kontrol", label: "Gelen / Giden KDV Kontrolü", icon: "kdv" },
-      { key: "muhasebe-raporlari", label: "Muhasebe Raporları", icon: "raporlar" },
-      { key: "mail-sablonlari", label: "Mail Şablonları", icon: "eposta" },
-    ],
-  },
-  {
-    key: "desen",
-    permissionKey: "DESEN",
-    short: "DS",
-    label: "Desen",
-    tabs: [
-      {
-        key: "gelen-desenler",
-        label: "Gelen Desenler",
-        icon: "dashboard",
-      },
-      {
-        key: "desen-modeller",
-        label: "Desen Havuzu",
-        icon: "dosya",
-      },
-      {
-        key: "desen-yerlesim-is-akisi",
-        label: "Yerleşim / Kalıp",
-        icon: "file-check",
-      },
-      { key: "desen-raporlari", label: "Desen Raporları", icon: "raporlar" },
-      { key: "desen-klasor-ayarlari", label: "Klasör Ayarları", icon: "ayarlar" },
-    ],
-  },
-  {
-    key: "boyahane",
-    permissionKey: "BOYAHANE",
-    short: "BY",
-    label: "Boyahane",
-    tabs: [
-      {
-        key: "is-akisi",
-        label: "İş Akışı",
-        icon: "dashboard",
-      },
-      {
-        key: "kayitli-renkler",
-        label: "Kayıtlı Renkler",
-        icon: "renk",
-      },
-      { key: "receteler", label: "Reçeteler", icon: "file-check" },
-      { key: "urun-lotlar", label: "Ürün ve Lotlar", icon: "urunler" },
-      { key: "uretim-gecmisi", label: "Üretim Geçmişi", icon: "dosya" },
-      { key: "boya-giderleri", label: "Boya Giderleri", icon: "odeme" },
-      {
-        key: "raporlar",
-        label: "Raporlar",
-        icon: "raporlar",
-      },
-    ],
-  },
-  {
-    key: "ik",
-    permissionKey: "IK",
-    short: "IK",
-    label: "İK",
-    tabGroups: [
-      {
-        groupName: "İK Yönetimi",
-        tabs: [
-          {
-            key: "ozet",
-            label: "İK Özet",
-            icon: "dashboard",
-          },
-          {
-            key: "personel-kartlari",
-            label: "Personel Kartı",
-            icon: "users",
-          },
-          {
-            key: "mesai-avans",
-            label: "Mesai • Avans • Kesinti",
-            icon: "takvim",
-          },
-          {
-            key: "puantaj-izin",
-            label: "Yıllık İzin / Günlük Durum",
-            icon: "takvim",
-          },
-          {
-            key: "bordro-odeme",
-            label: "Bordro & Ödeme",
-            icon: "odemeler",
-          },
-          {
-            key: "sgk-evrak-kontrol",
-            label: "SGK • Evrak • Ay Sonu",
-            icon: "file-check",
-          },
-        ],
-      },
-      {
-        groupName: "Günlük Personel",
-        isSeparated: true,
-        tabs: [
-          { key: "gunluk-personel", label: "Günlük Giriş", icon: "users" },
-          {
-            key: "gunluk-personel-kartlari",
-            label: "Günlük Personel Kartları",
-            icon: "users",
-          },
-          { key: "ik-raporlari", label: "Haftalık Özet", icon: "takvim" },
-          {
-            key: "gunluk-odeme-fisleri",
-            label: "Günlük Ödeme Fişleri",
-            icon: "odemeler",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    key: "uretim",
-    permissionKey: "IMALAT",
-    short: "ÜR",
-    label: "İmalat",
-    tabs: [
-      { key: "uretim-girisi", label: "Üretim Girişi" },
-      { key: "imalat-kontrol-rapor", label: "Denetim ve Rapor" },
-    ],
-  },
-  {
-    key: "isnet",
-    permissionKey: "ISNET",
-    short: "İŞ",
-    label: "İşNet",
-    icon: "eposta",
-    tabs: [
-      {
-        key: "yonetim-merkezi",
-        label: "Analiz ve Eşleştirme",
-        icon: "dashboard",
-      },
-      {
-        key: "belge-akisi",
-        label: "Gelen / Giden Belgeler",
-        icon: "dosya",
-      },
-      {
-        key: "irsaliyeden-faturaya",
-        label: "Fatura Kesme Yardımcısı",
-        icon: "file-check",
-      },
-      { key: "kesilen-belgeler", label: "Yerel Belge Arşivi", icon: "dosya" },
-      { key: "cikti-kuyrugu", label: "Çıktı ve Mail", icon: "file-check" },
-      { key: "ayarlar", label: "Ayarlar", icon: "ayarlar" },
-    ],
-  },
-  {
-    key: "asistan",
-    permissionKey: "ASISTAN",
-    short: "AI",
-    label: "KY ERP Asistan",
-    icon: "dashboard",
-    tabs: [{ key: "sohbet", label: "Asistan Sohbeti", icon: "dashboard" }],
-  },
-  {
-    key: "admin",
-    permissionKey: "ADMIN",
-    short: "AD",
-    label: "Admin",
-    tabs: [
-      { key: "admin-yonetim-ozeti", label: "Admin Yönetim Özeti" },
-      { key: "kullanicilar", label: "Kullanıcılar" },
-      { key: "ana-firma-ayarlar", label: "Ana Firma / Ayarlar" },
-      { key: "dosya-klasor-yonetimi", label: "Dosya ve Klasör Yönetimi" },
-      { key: "eslestirmeler", label: "Eşleştirmeler" },
-      { key: "yedekleme-loglar", label: "Yedekleme / Loglar" },
-    ],
-  },
-];
-
-const MUHASEBE_ROUTE_TABS = new Set([
-  "genel-bakis",
-  "yonetim-ozeti",
-  "model-muhasebe",
-  "model-takip",
-  "tedarikci-faturalar",
-  "kesilen-faturalar",
-  "musteri-irsaliyeleri",
-  "musteri-irsaliye",
-  "irsaliye-fatura-kontrol",
-  "irsaliye-fatura",
-  "kar-zarar",
-  "kar",
-  "zarar",
-  "gelir-gider",
-  "is-hacmi",
-  "musteri-belgeleri",
-  "firma-yetkilileri",
-  "cari-hareketler",
-  "envanter-urunleri",
-  "kdv-kontrol",
-  "cek-odeme",
-  "mail-ekstre",
-  "mail-sablonlari",
-  "firma-kartlari",
-  "gider-kategorileri",
-  "muhasebe-raporlari",
-  "isveren-ozeti",
-  "kontrol-paneli",
-  "belge-is-akisi",
-  "hizli-giris",
-  "belge-yukle",
-  "gelen-irsaliye",
-  "giden-fatura",
-  "bizim-fatura",
-  "bizim-irsaliye",
-  "tedarik-fatura",
-  "cari",
-  "firmalar",
-  "kdv",
-  "mail-ekstre",
-  "eposta-ekstre",
-  "odeme-tahsilat",
-  "odemeler",
-  "cek-kart",
-  "odeme-nakit-akisi",
-  "raporlar",
-  "ayarlar",
-]);
-
-const LEGACY_ROUTE_TABS = {
-  desen: ["desen", "yerlesim", "kalip-yerlesim"],
-  boyahane: [
-    "boyahane-yonetim-ozeti",
-    "renk-recete-is-akisi",
-    "boyahane-raporlari",
-    "renk-gramaj",
-    "kayitli-renkler",
-    "hammadde-lot",
-    "onayli-envanter",
-    "evraklar-denetim",
-    "evrak-denetim",
-    "evraklar",
-    "renk-havuzu",
-    "raporlar",
-  ],
-  ik: [
-    "ozet",
-    "personel-kartlari",
-    "puantaj-izin",
-    "mesai-avans",
-    "ay-genel-kontrol",
-    "ay-personel-kartlari",
-    "maas-sozlesme",
-    "yillik-izin",
-    "puantaj-kart-takibi",
-    "sgk-bordro-aktarim",
-    "sgk-bordro-aktirim",
-    "sgk-evrak-kontrol",
-    "aylik-ik-kapanis",
-    "ay-izin-evrak",
-    "mesai-kesinti",
-    "ay-mesai-avans",
-    "ay-bordro",
-    "bordro-odeme",
-    "ay-odeme",
-    "evrak-belgeler",
-    "gunluk-personel-kartlari",
-    "gun-personel-kartlari",
-    "gun-giris",
-    "gun-haftalik-ozet",
-    "gun-odemeler",
-    "gunluk-odeme-fisleri",
-  ],
-  uretim: [
-    "imalat-denetim",
-    "uretim-raporu",
-    "genel",
-    "makinalar",
-    "uretim-kayit",
-    "kalite",
-    "uretim-giris-is-akisi",
-    "makine-tanimlari",
-    "uretim-seri-havuz",
-    "fis-aktarim-havuzu",
-    "imalat-yonetim-ozeti",
-    "makine-vardiya-takibi",
-    "imalat-raporlari",
-    "manuel-is-ac",
-  ],
-  admin: [
-    "ana-firma-yonetimi",
-    "eposta-kayit",
-    "firma-esleme",
-    "urun-esleme",
-    "dosya-klasor-yonetimi",
-    "kdv-baglantisi",
-    "yedekleme",
-    "loglar",
-  ],
-};
-
-const MODULE_ROUTE_TABS = Object.fromEntries(
-  MODULES.map((module) => [
-    module.key,
-    module.key === "muhasebe"
-      ? MUHASEBE_ROUTE_TABS
-      : new Set([
-          ...(module.tabGroups
-            ? module.tabGroups.flatMap((group) =>
-                group.tabs.map((tab) => tab.key),
-              )
-            : (module.tabs || []).map((tab) => tab.key)),
-          ...(LEGACY_ROUTE_TABS[module.key] || []),
-        ]),
-  ]),
-);
-
-const SUPPLIER_ARCHIVE_REPORT_PATH =
-  "/muhasebe/muhasebe-raporlari?tip=tedarikci-fatura-kontrol-arsiv";
-
-function shouldRedirectSupplierArchiveRoute(parts, searchParams) {
-  const [moduleKey, tabKey, extraKey] = parts;
-  if (moduleKey !== "muhasebe") return false;
-  const tab = String(tabKey || "").toLocaleLowerCase("tr-TR");
-  const extra = String(extraKey || "").toLocaleLowerCase("tr-TR");
-  const center = String(searchParams.get("center") || "").toLocaleLowerCase(
-    "tr-TR",
-  );
-  const tip = String(searchParams.get("tip") || "").toLocaleLowerCase("tr-TR");
-  if (tip === "tedarikci-fatura-kontrol-arsiv") return false;
-  if (tab === "kontrol-arsiv" || tab === "kontrol-arsivi") return true;
-  if (tab === "arsiv" || tab === "archive") return true;
-  if (extra === "arsiv" || extra === "archive" || extra === "kontrol-arsiv") {
-    return tab === "tedarikci-faturalar";
-  }
-  return center === "archive" && tab === "tedarikci-faturalar";
+function tabParts(tab) {
+  return {
+    key: tab?.[0] || "",
+    label: tab?.[1] || "",
+    icon: tab?.[2] || "dashboard",
+  };
 }
 
-function getInitialRouteState() {
-  const parts = window.location.pathname.split("/").filter(Boolean);
-  const searchParams = new URLSearchParams(window.location.search);
-  if (shouldRedirectSupplierArchiveRoute(parts, searchParams)) {
-    window.history.replaceState({}, "", SUPPLIER_ARCHIVE_REPORT_PATH);
-    return { module: "muhasebe", tab: "muhasebe-raporlari" };
-  }
-  const moduleKey = parts[0];
-  const tabKey = parts[1];
-  if (
-    moduleKey === "muhasebe" &&
-    ["fatura-kesim-yardimcisi", "fatura-kesim", "fatura-yardimci"].includes(
-      tabKey,
-    )
-  ) {
-    window.history.replaceState({}, "", "/muhasebe/kesilen-faturalar");
-    return { module: "muhasebe", tab: "kesilen-faturalar" };
-  }
-  if (moduleKey === "muhasebe" && tabKey === "belge-kontrol") {
-    window.history.replaceState({}, "", "/muhasebe/tedarikci-faturalar");
-    return { module: "muhasebe", tab: "tedarikci-faturalar" };
-  }
-  if (moduleKey === "muhasebe" && tabKey === "isveren-ozeti") {
-    window.history.replaceState(
-      {},
-      "",
-      "/muhasebe/muhasebe-raporlaritip=yonetici-ozet",
-    );
-    return { module: "muhasebe", tab: "muhasebe-raporlari" };
-  }
-  if (
-    moduleKey === "uretim" &&
-    ["imalat-denetim", "uretim-raporu"].includes(tabKey)
-  ) {
-    window.history.replaceState({}, "", "/uretim/imalat-kontrol-rapor");
-    return { module: "uretim", tab: "imalat-kontrol-rapor" };
-  }
-  if (
-    moduleKey === "desen" &&
-    ["desen-yonetim-ozeti", "gelen-desenler"].includes(tabKey)
-  ) {
-    window.history.replaceState({}, "", "/desen/gelen-desenler");
-    return { module: "desen", tab: "gelen-desenler" };
-  }
-  if (
-    moduleKey === "boyahane" &&
-    ["boyahane-yonetim-ozeti", "renk-recete-is-akisi", "renk-gramaj"].includes(
-      tabKey,
-    )
-  ) {
-    window.history.replaceState({}, "", "/boyahane/is-akisi");
-    return { module: "boyahane", tab: "is-akisi" };
-  }
-  if (
-    moduleKey === "boyahane" &&
-    ["hammadde-lot", "onayli-envanter"].includes(tabKey)
-  ) {
-    window.history.replaceState({}, "", "/boyahane/urun-lotlar");
-    return { module: "boyahane", tab: "urun-lotlar" };
-  }
-  if (
-    moduleKey === "boyahane" &&
-    [
-      "boyahane-raporlari",
-      "evraklar-denetim",
-      "evrak-denetim",
-      "evraklar",
-    ].includes(tabKey)
-  ) {
-    window.history.replaceState({}, "", "/boyahane/raporlar");
-    return { module: "boyahane", tab: "raporlar" };
-  }
-  if (moduleKey && tabKey && MODULE_ROUTE_TABS[moduleKey].has(tabKey)) {
-    if (moduleKey === "muhasebe" && tabKey === "model-muhasebe") {
-      return { module: moduleKey, tab: "tedarikci-faturalar" };
-    }
-    return { module: moduleKey, tab: tabKey };
-  }
-  if (!window.location.pathname.startsWith("/mobile")) {
-    window.history.replaceState({}, "", "/muhasebe/yonetim-ozeti");
-  }
-  return { module: "muhasebe", tab: "yonetim-ozeti" };
+function routePath(moduleKey, tabKey, search = "") {
+  const suffix = search
+    ? String(search).startsWith("?")
+      ? String(search)
+      : `?${search}`
+    : "";
+  return `/${moduleKey}/${tabKey}${suffix}`;
 }
 
 export default function App() {
@@ -549,27 +144,44 @@ export default function App() {
   } = useAuth();
   const { companies, activeCompany, activeCompanySlug, setActiveCompanySlug } =
     useActiveCompany();
-  const [activeModule, setActiveModule] = useState(
-    () => getInitialRouteState().module,
-  );
-  const [activeTab, setActiveTab] = useState(() => getInitialRouteState().tab);
+  const [route, setRoute] = useState(() => getInitialRoute());
   const [moduleActionContext, setModuleActionContext] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [assistantDialogContext, setAssistantDialogContext] = useState(null);
 
-  const visibleModules = useMemo(() => {
-    return MODULES.filter((item) => hasModule(item?.permissionKey));
-  }, [hasModule]);
+  const activeModule = route.moduleKey;
+  const activeTab = route.tabKey;
+
+  const visibleModules = useMemo(
+    () => MODULES.filter((item) => hasModule(item.permissionKey)),
+    [hasModule],
+  );
+
+  const navigationModules = useMemo(
+    () => visibleModules.filter((item) => item.key !== "asistan"),
+    [visibleModules],
+  );
 
   const moduleConfig = useMemo(() => {
-    const fallback = visibleModules[0] || MODULES[0];
-    return visibleModules.find((item) => item.key === activeModule) ?? fallback;
-  }, [activeModule, visibleModules]);
+    const fallback = navigationModules[0] || visibleModules[0] || MODULES[0];
+    return visibleModules.find((item) => item.key === activeModule) || fallback;
+  }, [activeModule, navigationModules, visibleModules]);
 
-  const hasActiveModuleAccess = useMemo(() => {
-    if (!moduleConfig?.permissionKey) return false;
-    return hasModule(moduleConfig?.permissionKey);
-  }, [moduleConfig, hasModule]);
+  const hasActiveModuleAccess = Boolean(
+    moduleConfig?.permissionKey && hasModule(moduleConfig.permissionKey),
+  );
+
+  const writeRoute = useCallback(
+    (moduleKey, tabKey, options = {}) => {
+      const path = routePath(moduleKey, tabKey, options.search || "");
+      const method = options.replace ? "replaceState" : "pushState";
+      if (`${window.location.pathname}${window.location.search}` !== path) {
+        window.history[method]({}, "", path);
+      }
+      setRoute({ moduleKey, tabKey });
+    },
+    [],
+  );
 
   const openModule = useCallback(
     (moduleKey, options = {}) => {
@@ -577,61 +189,79 @@ export default function App() {
         preloadModule("asistan");
         setAssistantDialogContext((previous) => ({
           ...(options.actionContext || {}),
-          sourceModule: options.actionContext?.sourceModule || activeModule,
-          sourceRoute: options.actionContext?.sourceRoute || window.location.pathname,
+          sourceModule:
+            options.actionContext?.sourceModule || activeModule,
+          sourceRoute:
+            options.actionContext?.sourceRoute || window.location.pathname,
           nonce: String(Number(previous?.nonce || 0) + 1),
         }));
         setIsMobileMenuOpen(false);
         return;
       }
+
       const found = visibleModules.find((item) => item.key === moduleKey);
       if (!found) return;
+
       preloadModule(found.key);
-      setActiveModule(found.key);
+      const requestedTab = normalizeModuleTabKey(found, options.tabKey);
+      const nextTab = findTab(found, requestedTab)?.[0] || getDefaultTabKey(found);
+
       if (options.actionContext) {
         setModuleActionContext((previous) => ({
           ...options.actionContext,
           targetModule: found.key,
-          targetTab: options.tabKey || options.actionContext.targetTab || "",
+          targetTab: nextTab,
           nonce: String(Number(previous?.nonce || 0) + 1),
         }));
       }
 
-      if (options.tabKey) {
-        setActiveTab(options.tabKey);
-      } else if (found.tabGroups && found.tabGroups.length > 0) {
-        setActiveTab(found.tabGroups[0].tabs[0].key ?? "");
-      } else if (found.tabs && found.tabs.length > 0) {
-        setActiveTab(found.tabs[0].key ?? "");
-      } else {
-        setActiveTab("");
-      }
-      const nextTab =
-        options.tabKey ||
-        (found.tabGroups && found.tabGroups.length > 0
-          ? found.tabGroups[0].tabs[0].key
-          : found.tabs?.[0].key);
-      if (nextTab && MODULE_ROUTE_TABS[found.key].has(nextTab)) {
-        const nextPath = `/${found.key}/${nextTab}`;
-        if (window.location.pathname !== nextPath) {
-          window.history.pushState({}, "", nextPath);
-        }
-      }
+      writeRoute(found.key, nextTab, {
+        search: options.search,
+        replace: options.replace,
+      });
       setIsMobileMenuOpen(false);
     },
-    [activeModule, visibleModules],
+    [activeModule, visibleModules, writeRoute],
+  );
+
+  const setActiveTabWithRoute = useCallback(
+    (tabKey) => {
+      const normalized = normalizeModuleTabKey(moduleConfig, tabKey);
+      const nextTab = findTab(moduleConfig, normalized)?.[0];
+      if (!nextTab) return;
+      writeRoute(moduleConfig.key, nextTab);
+      setIsMobileMenuOpen(false);
+    },
+    [moduleConfig, writeRoute],
   );
 
   useEffect(() => {
-    if (!isAuthenticated || !visibleModules.length) return;
-    const stillVisible = visibleModules.some(
+    const onPopState = () => setRoute(getInitialRoute(window.location.pathname));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    const canonical = routePath(activeModule, activeTab, window.location.search);
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current !== canonical) {
+      window.history.replaceState({}, "", canonical);
+    }
+  }, [activeModule, activeTab]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !navigationModules.length) return;
+    const stillVisible = navigationModules.some(
       (item) => item.key === activeModule,
     );
-    if (stillVisible) return;
-
-    const fallback = visibleModules[0];
-    openModule(fallback.key);
-  }, [isAuthenticated, visibleModules, activeModule, openModule]);
+    if (stillVisible || activeModule === "asistan") return;
+    openModule(navigationModules[0].key, { replace: true });
+  }, [
+    activeModule,
+    isAuthenticated,
+    navigationModules,
+    openModule,
+  ]);
 
   const selectableCompanies = useMemo(() => {
     const activeRows = companies.filter((item) => item?.isActive !== false);
@@ -640,30 +270,36 @@ export default function App() {
 
   const normalizedActiveMainCompany = useMemo(() => {
     if (!companies.length) return activeCompany || null;
-
     const bySlug = companies.find((item) => item.slug === activeCompanySlug);
     if (bySlug) return bySlug;
 
-    const raw = String(activeCompanySlug || "").trim();
-    const rawLower = raw.toLocaleLowerCase("tr-TR");
-    const byLegacyValue = companies.find((item) => {
-      const id = String(item?.id || "").toLocaleLowerCase("tr-TR");
-      const slug = String(item?.slug || "").toLocaleLowerCase("tr-TR");
-      const name = String(item?.name || "").toLocaleLowerCase("tr-TR");
-      return rawLower === id || rawLower === slug || rawLower === name;
-    });
+    const raw = String(activeCompanySlug || "")
+      .trim()
+      .toLocaleLowerCase("tr-TR");
+    const byLegacyValue = companies.find((item) =>
+      [item?.id, item?.slug, item?.name]
+        .map((value) => String(value || "").toLocaleLowerCase("tr-TR"))
+        .includes(raw),
+    );
     if (byLegacyValue) return byLegacyValue;
 
-    const firstActive = companies.find((item) => item?.isActive !== false);
-    return firstActive || companies[0] || null;
-  }, [companies, activeCompany, activeCompanySlug]);
+    return (
+      companies.find((item) => item?.isActive !== false) ||
+      companies[0] ||
+      null
+    );
+  }, [activeCompany, activeCompanySlug, companies]);
 
   useEffect(() => {
     if (!normalizedActiveMainCompany?.slug) return;
     if (activeCompanySlug !== normalizedActiveMainCompany.slug) {
       setActiveCompanySlug(normalizedActiveMainCompany.slug);
     }
-  }, [activeCompanySlug, normalizedActiveMainCompany, setActiveCompanySlug]);
+  }, [
+    activeCompanySlug,
+    normalizedActiveMainCompany,
+    setActiveCompanySlug,
+  ]);
 
   useEffect(() => {
     const resetScroll = () => {
@@ -687,19 +323,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [activeModule, activeTab]);
 
-  function setActiveTabWithRoute(tabKey) {
-    setActiveTab(tabKey);
-    if (MODULE_ROUTE_TABS[activeModule].has(tabKey)) {
-      const nextPath = `/${activeModule}/${tabKey}`;
-      if (window.location.pathname !== nextPath) {
-        window.history.pushState({}, "", nextPath);
-      }
-    } else if (window.location.pathname.startsWith(`/${activeModule}/`)) {
-      window.history.pushState({}, "", "/");
-    }
-    setIsMobileMenuOpen(false);
-  }
-
   function renderPage() {
     if (!hasActiveModuleAccess) {
       return (
@@ -715,158 +338,133 @@ export default function App() {
       moduleActionContext,
       openModule,
     };
-    if (activeModule === "muhasebe")
+
+    if (activeModule === "muhasebe") {
       return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
-    if (activeModule === "isnet")
+    }
+    if (activeModule === "isnet") {
       return <IsnetPage activeTab={activeTab} {...sharedProps} />;
-    if (activeModule === "asistan")
+    }
+    if (activeModule === "asistan") {
       return <AiAssistantPage {...sharedProps} />;
-    if (activeModule === "desen")
+    }
+    if (activeModule === "desen") {
       return <DesenPage activeTab={activeTab} {...sharedProps} />;
-    if (activeModule === "boyahane")
+    }
+    if (activeModule === "boyahane") {
       return <BoyahanePage activeTab={activeTab} {...sharedProps} />;
+    }
     if (activeModule === "ik") {
       return <IkPage activeTab={activeTab} {...sharedProps} />;
     }
-    if (activeModule === "uretim")
+    if (activeModule === "uretim") {
       return <UretimPage activeTab={activeTab} {...sharedProps} />;
+    }
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
   }
 
-  const activeTabs = moduleConfig?.tabGroups
-    ? moduleConfig.tabGroups.flatMap((group) => group.tabs || [])
-    : moduleConfig?.tabs || [];
-  const activeTabLabel =
-    activeTabs.find((item) => item.key === activeTab)?.label || "";
-
-  const hideGlobalTopbar = ["ik", "boyahane"].includes(activeModule);
+  const activeTabConfig = findTab(moduleConfig, activeTab);
+  const activeTabLabel = activeTabConfig?.[1] || "";
+  const moduleGroups = getModuleGroups(moduleConfig);
 
   if (authLoading) {
     return (
-      <div className="content-card module-loading-card" style={{ margin: 24 }}>
+      <div className="content-card module-loading-card app-centered-state">
         <h3>Oturum kontrol ediliyor</h3>
         <p>Lütfen bekleyin...</p>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
+  if (!isAuthenticated) return <LoginPage />;
 
-  if (!visibleModules.length) {
+  if (!navigationModules.length) {
     return (
-      <div className="content-card module-error-card" style={{ margin: 24 }}>
+      <div className="content-card module-error-card app-centered-state">
         <h3>Modül yetkisi tanımlı değil</h3>
-        <p>
-          Sistem yöneticisi ile görüşerek kullanıcı yetkilerinizi güncelleyin.
-        </p>
+        <p>Sistem yöneticisi ile görüşerek kullanıcı yetkilerinizi güncelleyin.</p>
       </div>
     );
   }
 
   return (
     <div className={`app-shell ${isMobileMenuOpen ? "mobile-open" : ""}`}>
-      {isMobileMenuOpen && (
-        <div
+      {isMobileMenuOpen ? (
+        <button
+          type="button"
           className="mobile-overlay"
+          aria-label="Menüyü kapat"
           onClick={() => setIsMobileMenuOpen(false)}
-        ></div>
-      )}
-      <aside className="sidebar-thin">
-        <div className="kyerp-rail-logo">
+        />
+      ) : null}
+
+      <aside className="sidebar-thin" aria-label="Ana modüller">
+        <div className="kyerp-rail-logo" title="KY ERP">
           <ErpIcon name="dashboard" size={22} />
         </div>
-        {visibleModules.map((item) => (
+        {navigationModules.map((item) => (
           <button
-            key={item?.key}
-            className={`thin-nav-btn ${activeModule === item?.key ? "active" : ""}`}
-            onClick={() => openModule(item?.key)}
-            onMouseEnter={() => preloadModule(item?.key)}
+            key={item.key}
+            type="button"
+            className={`thin-nav-btn ${activeModule === item.key ? "active" : ""}`}
+            onClick={() => openModule(item.key)}
+            onMouseEnter={() => preloadModule(item.key)}
+            title={item.label}
           >
-            <div className="thin-nav-icon">
-              <ErpIcon
-                name={item?.icon || item?.tabs?.[0]?.icon || "dashboard"}
-                size={18}
-              />
-            </div>
-            <div className="thin-nav-label">{item?.label}</div>
+            <span className="thin-nav-icon">
+              <ErpIcon name={item.icon || "dashboard"} size={18} />
+            </span>
+            <span className="thin-nav-label">{item.label}</span>
           </button>
         ))}
       </aside>
 
-      <aside className="sidebar-module">
+      <aside className="sidebar-module" aria-label={`${moduleConfig.label} menüsü`}>
         <div className="kyerp-module-brand">
-          <ErpIcon name="dashboard" size={22} />
+          <ErpIcon name={moduleConfig.icon || "dashboard"} size={22} />
           <strong>KY ERP</strong>
         </div>
-        <div className="module-kicker">{moduleConfig?.label}</div>
-        <div className="module-menu-list">
-          {moduleConfig?.tabGroups
-            ? moduleConfig.tabGroups.map((group, groupIdx) => (
-                <div key={groupIdx}>
-                  {group.isSeparated && groupIdx > 0 ? (
-                    <div
-                      style={{
-                        margin: "12px 0",
-                        borderTop: "1px solid #e5e7eb",
-                      }}
-                    />
-                  ) : null}
-                  {group.groupName ? (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#94a3b8",
-                        padding: "8px 12px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px",
-                      }}
-                    >
-                      {group.groupName}
-                    </div>
-                  ) : null}
-                  {group.tabs.map((tab) => (
-                    <button
-                      key={tab.key}
-                      className={`module-menu-btn ${activeTab === tab.key ? "active" : ""}`}
-                      onClick={() => setActiveTabWithRoute(tab.key)}
-                      onMouseEnter={() => preloadModule(activeModule)}
-                    >
-                      {tab.icon ? <ErpIcon name={tab.icon} size={18} /> : null}
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              ))
-            : // Normal tabs
-              moduleConfig.tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  className={`module-menu-btn ${activeTab === tab.key ? "active" : ""}`}
-                  onClick={() => setActiveTabWithRoute(tab.key)}
-                  onMouseEnter={() => preloadModule(activeModule)}
-                >
-                  {tab.icon ? <ErpIcon name={tab.icon} size={18} /> : null}
-                  {tab.label}
-                </button>
-              ))}
-        </div>
+        <div className="module-kicker">{moduleConfig.label}</div>
+        <nav className="module-menu-list">
+          {moduleGroups.map((group) => (
+            <section className="module-menu-group" key={group.label || "main"}>
+              {group.label ? (
+                <div className="module-menu-group-title">{group.label}</div>
+              ) : null}
+              {(group.tabs || []).map((rawTab) => {
+                const tab = tabParts(rawTab);
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={`module-menu-btn ${activeTab === tab.key ? "active" : ""}`}
+                    onClick={() => setActiveTabWithRoute(tab.key)}
+                    onMouseEnter={() => preloadModule(activeModule)}
+                  >
+                    <ErpIcon name={tab.icon} size={18} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </section>
+          ))}
+        </nav>
       </aside>
 
       <main className="main-content">
-        <div className="kyerp-global-topbar">
+        <header className="kyerp-global-topbar">
           <button
+            type="button"
             className="mobile-menu-toggle"
             onClick={() => setIsMobileMenuOpen(true)}
+            aria-label="Menüyü aç"
           >
             <ErpIcon name="dashboard" size={20} />
           </button>
           <div className="kyerp-global-crumb">
             <span>KY ERP</span>
             <span>/</span>
-            <span>{moduleConfig?.label}</span>
+            <span>{moduleConfig.label}</span>
             {activeTabLabel ? (
               <>
                 <span>/</span>
@@ -876,23 +474,20 @@ export default function App() {
           </div>
           <select
             className="top-select main-company-select"
-            value={activeCompanySlug || ""}
-            onChange={(e) => setActiveCompanySlug(e.target.value)}
+            value={normalizedActiveMainCompany?.slug || ""}
+            disabled={!selectableCompanies.length}
+            onChange={(event) => setActiveCompanySlug(event.target.value)}
+            aria-label="Aktif ana firma"
           >
+            {!selectableCompanies.length ? (
+              <option value="">Ana firma bulunamadı</option>
+            ) : null}
             {selectableCompanies.map((item) => (
-              <option key={item?.slug} value={item?.slug}>
-                {item?.name}
+              <option key={item.slug || item.id} value={item.slug || item.id}>
+                {item.name}
               </option>
             ))}
           </select>
-          <button
-            className="kyerp-notification"
-            type="button"
-            aria-label="Bildirimler"
-          >
-            <ErpIcon name="uyari" size={18} />
-            <span>3</span>
-          </button>
           <div className="kyerp-user-chip">
             <div className="kyerp-avatar">
               {String(user?.fullName || user?.username || "U")
@@ -908,27 +503,17 @@ export default function App() {
               Çıkış
             </button>
           </div>
-        </div>
-        {!hideGlobalTopbar && activeModule !== "muhasebe" ? (
-          <div className="topbar">
-            <input
-              className="search-input"
-              placeholder={
-                activeModule === "uretim"
-                  ? "Model, irsaliye veya makina arayın..."
-                  : "Genel arama..."
-              }
-            />
-          </div>
-        ) : null}
+        </header>
+
         <ModuleErrorBoundary key={`${activeModule}-${activeTab}`}>
           <Suspense
-            fallback={<ModuleLoadingFallback label={moduleConfig?.label} />}
+            fallback={<ModuleLoadingFallback label={moduleConfig.label} />}
           >
             {renderPage()}
           </Suspense>
         </ModuleErrorBoundary>
       </main>
+
       {hasModule("ASISTAN") ? (
         <button
           type="button"
@@ -943,18 +528,27 @@ export default function App() {
             })
           }
         >
-          <ErpIcon name="dashboard" size={18} /> <span>Asistana Sor</span>
+          <ErpIcon name="dashboard" size={18} />
+          <span>Asistana Sor</span>
         </button>
       ) : null}
+
       {assistantDialogContext && hasModule("ASISTAN") ? (
         <div
           className="ai-dialog-backdrop"
           role="presentation"
           onClick={(event) => {
-            if (event.target === event.currentTarget) setAssistantDialogContext(null);
+            if (event.target === event.currentTarget) {
+              setAssistantDialogContext(null);
+            }
           }}
         >
-          <div className="ai-dialog" role="dialog" aria-modal="true" aria-label="KY ERP Asistan">
+          <div
+            className="ai-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="KY ERP Asistan"
+          >
             <AiAssistantPage
               activeMainCompany={normalizedActiveMainCompany}
               moduleActionContext={assistantDialogContext}
