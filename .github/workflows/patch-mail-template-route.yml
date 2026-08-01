@@ -1,0 +1,58 @@
+name: Muhasebe Mail Şablonu Bağlantısı
+
+on:
+  pull_request:
+    paths:
+      - "docs/trigger-mail-workspace.txt"
+      - ".github/workflows/patch-mail-template-route.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Çalışma dalını al
+        uses: actions/checkout@v4
+        with:
+          ref: codex/muhasebe-tam-yeniden-tasarim
+          fetch-depth: 0
+
+      - name: Muhasebe sayfasını yeni mail şablonu çalışma alanına bağla
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx")
+          text = path.read_text(encoding="utf-8")
+          old_import = 'import MailSablonlariPage from "../muhasebe/MailSablonlariPage";'
+          new_import = 'import MailTemplatesWorkspace from "./muhasebe/MailTemplatesWorkspace";'
+          old_route = 'else if (current.key === "mail-sablonlari") content = <MailSablonlariPage activeMainCompany={activeMainCompany} />;'
+          new_route = 'else if (current.key === "mail-sablonlari") content = <MailTemplatesWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;'
+          if old_import not in text:
+              raise SystemExit("Eski mail şablonu importu bulunamadı.")
+          if old_route not in text:
+              raise SystemExit("Eski mail şablonu rota satırı bulunamadı.")
+          text = text.replace(old_import, new_import, 1)
+          text = text.replace(old_route, new_route, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Frontend doğrulaması
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run build
+          npm run lint
+
+      - name: Değişikliği kaydet ve geçici dosyaları kaldır
+        run: |
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+          git rm -f .github/workflows/patch-mail-template-route.yml docs/trigger-mail-workspace.txt
+          git diff --cached --check
+          git commit -m "feat(muhasebe): mail şablonlarını yeni çalışma alanına bağla"
+          git push origin HEAD:codex/muhasebe-tam-yeniden-tasarim
