@@ -1941,6 +1941,212 @@ app.get("/api/desen/modeller", async (c) => {
   return c.json({ ok: true, success: true, data: products });
 });
 
+app.post("/api/muhasebe/odeme/firma", async (c) => {
+  const body = await requestBody(c);
+  const slug = slugOf(c, body);
+  const name = databaseText(body.name || body.firmaAdi).trim();
+  if (!name) {
+    return c.json(jsonError("FIRM_NAME_REQUIRED", "Firma adı zorunludur."), 400);
+  }
+  const id = databaseText(body.id || crypto.randomUUID());
+  const now = new Date().toISOString();
+  await insertDynamic(c, "companies", {
+    id,
+    main_company_slug: slug,
+    name,
+    normalized_name: normalizeText(name),
+    type: body.firmType || body.type || "CUSTOMER",
+    company_type: body.firmType || body.type || "CUSTOMER",
+    default_record_type: body.workType || body.defaultRecordType || "OFFICIAL",
+    tax_no: body.taxNo || null,
+    phone: body.phone || null,
+    email: body.email || null,
+    note: body.note || null,
+    current_balance: 0,
+    opening_balance: 0,
+    is_active: 1,
+    created_at: now,
+    updated_at: now,
+  });
+  return c.json({
+    ok: true,
+    success: true,
+    data: { id, firmaId: id, firmaAdi: name },
+  }, 201);
+});
+
+app.post("/api/muhasebe/odeme/cek-v3", async (c) => {
+  const body = await requestBody(c);
+  const amount = databaseNumber(body.amount || body.tutar);
+  const firmId = databaseText(body.firmId || body.companyId);
+  const checkNo = databaseText(body.checkNo || body.chequeNo || body.cekNo).trim();
+  const bankName = databaseText(body.bankName || body.bank || body.banka).trim();
+  if (!firmId || !checkNo || !bankName || amount <= 0) {
+    return c.json(
+      jsonError("INVALID_CHEQUE", "Firma, banka, çek no ve sıfırdan büyük tutar zorunludur."),
+      400,
+    );
+  }
+  const id = databaseText(body.id || crypto.randomUUID());
+  const company = await rowByIdScoped(c, "companies", firmId, slugOf(c, body));
+  if (!company) {
+    return c.json(jsonError("COMPANY_NOT_FOUND", "Firma kaydı bulunamadı."), 404);
+  }
+  const data = await jsonStorePut(c, "MUHASEBE_CHEQUE", id, {
+    id,
+    firmId,
+    companyId: firmId,
+    firmaAdi: company.name,
+    companyName: company.name,
+    issueDate: body.issueDate || new Date().toISOString().slice(0, 10),
+    dueDate: body.dueDate || body.vadeTarihi,
+    bankName,
+    bank: bankName,
+    accountNo: body.accountNo || body.account || "",
+    checkNo,
+    chequeNo: checkNo,
+    amount,
+    checkOwnership: body.checkOwnership || "CUSTOMER_CHECK",
+    checkDirection: body.checkDirection || "RECEIVED",
+    checkType: body.checkType || "MUSTERI_CEKI_ALINAN",
+    workType: body.workType || "OFFICIAL",
+    note: body.note || "",
+    status: body.status || "OPEN",
+    open: true,
+    createdAt: new Date().toISOString(),
+  }, slugOf(c, body));
+  return c.json({ ok: true, success: true, data }, 201);
+});
+
+app.post("/api/muhasebe/odeme/kart", async (c) => {
+  const body = await requestBody(c);
+  const firmId = databaseText(body.firmId || body.companyId);
+  const cardName = databaseText(body.cardName).trim();
+  const lastFourDigits = databaseText(body.lastFourDigits).trim();
+  if (!firmId || !cardName || !/^\d{4}$/.test(lastFourDigits)) {
+    return c.json(
+      jsonError("INVALID_CARD", "Firma, kart adı ve dört haneli kart sonu zorunludur."),
+      400,
+    );
+  }
+  const id = databaseText(body.id || crypto.randomUUID());
+  const data = await jsonStorePut(c, "MUHASEBE_CARD", id, {
+    id,
+    firmId,
+    companyId: firmId,
+    cardName,
+    bankName: body.bankName || "",
+    lastFourDigits,
+    totalDebt: databaseNumber(body.totalDebt),
+    limit: databaseNumber(body.limit),
+    availableLimit: databaseNumber(body.availableLimit),
+    dueDate: body.dueDate || null,
+    note: body.note || "",
+    active: true,
+    createdAt: new Date().toISOString(),
+  }, slugOf(c, body));
+  return c.json({ ok: true, success: true, data }, 201);
+});
+
+app.post("/api/muhasebe/odeme/islem", async (c) => {
+  const body = await requestBody(c);
+  const slug = slugOf(c, body);
+  const firmId = databaseText(body.firmId || body.companyId);
+  const amount = databaseNumber(body.amount);
+  if (!firmId || amount <= 0) {
+    return c.json(jsonError("INVALID_PAYMENT", "Firma ve sıfırdan büyük tutar zorunludur."), 400);
+  }
+  const company = await rowByIdScoped(c, "companies", firmId, slug);
+  if (!company) {
+    return c.json(jsonError("COMPANY_NOT_FOUND", "Firma kaydı bulunamadı."), 404);
+  }
+  const direction = normalizeText(body.transactionDirection || "PAYMENT_OUT");
+  const isIncoming = /TAHSIL|RECEIPT|PAYMENT IN|INCOMING/.test(direction);
+  const effect = isIncoming ? amount : -amount;
+  const balanceAfter = databaseNumber(company.current_balance) + effect;
+  const id = databaseText(body.id || crypto.randomUUID());
+  const paymentDate = body.paymentDate || new Date().toISOString().slice(0, 10);
+  const data = await jsonStorePut(c, "MUHASEBE_PAYMENT", id, {
+    id,
+    firmId,
+    companyId: firmId,
+    companyName: company.name,
+    transactionDirection: body.transactionDirection || "PAYMENT_OUT",
+    paymentMethod: body.paymentMethod || "TRANSFER",
+    paymentDate,
+    amount,
+    description: body.description || "",
+    bankName: body.bankName || "",
+    createdAt: new Date().toISOString(),
+  }, slug);
+  await insertDynamic(c, "current_account_movements", {
+    id: crypto.randomUUID(),
+    main_company_slug: slug,
+    company_id: firmId,
+    movement_date: paymentDate,
+    movement_type: isIncoming ? "TAHSILAT" : "ODEME",
+    source_type: "PAYMENT",
+    document_no: id,
+    description: body.description || (isIncoming ? "Tahsilat" : "Ödeme"),
+    debit: isIncoming ? amount : 0,
+    credit: isIncoming ? 0 : amount,
+    amount,
+    effect,
+    balance_after: balanceAfter,
+    raw: data,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  await updateDynamic(c, "companies", firmId, {
+    current_balance: balanceAfter,
+    updated_at: new Date().toISOString(),
+  }, slug);
+  return c.json({ ok: true, success: true, data }, 201);
+});
+
+app.post("/api/muhasebe/odeme/cek/:id/dosyalar", async (c) => {
+  const id = c.req.param("id");
+  const form = await c.req.formData();
+  const slug = databaseText(
+    form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || "mecit-hakan",
+  ).trim();
+  const cheque = await jsonStoreGet(c, "MUHASEBE_CHEQUE", id, slug);
+  if (!cheque) return c.json(jsonError("NOT_FOUND", "Çek kaydı bulunamadı."), 404);
+  const fileKeys: DatabaseRow = { ...(jsonObject(cheque.fileKeys)) };
+  for (const side of ["front", "back", "receipt"] as const) {
+    const value = form.get(side);
+    if (!(value instanceof File) || value.size <= 0) continue;
+    if (value.size > 15 * 1024 * 1024) {
+      return c.json(jsonError("FILE_TOO_LARGE", "Çek dosyası 15 MB sınırını aşıyor."), 400);
+    }
+    const extension = value.name.split(".").pop()?.toLowerCase() || "bin";
+    const key = `${slug}/muhasebe/cekler/${id}/${side}.${extension}`;
+    await c.env.FILES.put(key, await value.arrayBuffer(), {
+      httpMetadata: { contentType: value.type || "application/octet-stream" },
+      customMetadata: { chequeId: id, side, originalName: value.name },
+    });
+    fileKeys[side] = key;
+  }
+  const data = await jsonStorePut(c, "MUHASEBE_CHEQUE", id, {
+    ...cheque,
+    fileKeys,
+  }, slug);
+  return c.json({ ok: true, success: true, data });
+});
+
+app.get("/api/muhasebe/odeme/cek/:id/dosya/:side", async (c) => {
+  const cheque = await jsonStoreGet(c, "MUHASEBE_CHEQUE", c.req.param("id"));
+  if (!cheque) return c.json(jsonError("NOT_FOUND", "Çek kaydı bulunamadı."), 404);
+  const key = databaseText(jsonObject(cheque.fileKeys)[c.req.param("side")]);
+  if (!key) return c.json(jsonError("NOT_FOUND", "Çek dosyası bulunamadı."), 404);
+  const object = await c.env.FILES.get(key);
+  if (!object) return c.json(jsonError("NOT_FOUND", "Çek dosyası bulunamadı."), 404);
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  return new Response(object.body, { headers });
+});
+
 app.get("/api/muhasebe/odeme/firmalar", async (c) => {
   const companies = await scopedRows(c, "companies", {
     orderBy: "name COLLATE NOCASE ASC",
@@ -1960,24 +2166,39 @@ app.get("/api/muhasebe/odeme/firmalar", async (c) => {
 });
 app.get("/api/muhasebe/odeme/firmalar/:id/:view", async (c) => {
   const id = c.req.param("id");
-  const movements = await scopedRows(c, "current_account_movements", {
-    filters: [{ column: "company_id", value: id }],
-    orderBy: "movement_date DESC, id DESC",
-    limit: 10000,
-  });
-  if (c.req.param("view") === "ozet") {
-    return c.json({
-      ok: true,
-      success: true,
-      data: {
-        firmId: id,
-        totalDebt: movements.reduce((sum, row) => sum + databaseNumber(row.debit), 0),
-        totalCredit: movements.reduce((sum, row) => sum + databaseNumber(row.credit), 0),
-        balance: movements.at(0)?.balance_after || 0,
-      },
-    });
-  }
-  return c.json({ ok: true, success: true, data: movements });
+  const view = c.req.param("view");
+  const [movements, cheques, cards, payments] = await Promise.all([
+    scopedRows(c, "current_account_movements", {
+      filters: [{ column: "company_id", value: id }],
+      orderBy: "movement_date DESC, id DESC",
+      limit: 10000,
+    }),
+    jsonStoreList(c, "MUHASEBE_CHEQUE"),
+    jsonStoreList(c, "MUHASEBE_CARD"),
+    jsonStoreList(c, "MUHASEBE_PAYMENT"),
+  ]);
+  const firmCheques = cheques.filter((row) => databaseText(row.firmId || row.companyId) === id);
+  const firmCards = cards.filter((row) => databaseText(row.firmId || row.companyId) === id);
+  const firmPayments = payments.filter((row) => databaseText(row.firmId || row.companyId) === id);
+  let data: unknown;
+  if (view === "ozet") {
+    data = {
+      firmId: id,
+      totalDebt: movements.reduce((sum, row) => sum + databaseNumber(row.debit), 0),
+      totalCredit: movements.reduce((sum, row) => sum + databaseNumber(row.credit), 0),
+      balance: movements.at(0)?.balance_after || 0,
+      openChequeTotal: firmCheques
+        .filter((row) => !/PAID|CANCELLED|ODENDI|IPTAL/.test(normalizeText(row.status)))
+        .reduce((sum, row) => sum + databaseNumber(row.amount), 0),
+      cardDebt: firmCards.reduce((sum, row) => sum + databaseNumber(row.totalDebt), 0),
+    };
+  } else if (view === "cekler") data = firmCheques;
+  else if (view === "kartlar") data = firmCards;
+  else if (view === "nakit-havale") data = firmPayments;
+  else if (view === "acik-kalemler") {
+    data = movements.filter((row) => databaseNumber(row.balance_after) !== 0);
+  } else data = movements;
+  return c.json({ ok: true, success: true, data });
 });
 
 app.get("/api/muhasebe/chemical-suppliers", async (c) => {
