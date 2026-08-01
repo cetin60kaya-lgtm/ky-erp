@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle2,
   Cloud,
@@ -29,30 +29,37 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
-  const load = async (test = false) => {
-    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const data = test
-        ? await testDesenFolderSettings(activeMainCompany)
-        : await getDesenFolderSettings(activeMainCompany);
-      setResult(data || null);
-      setMessage(
-        test
-          ? `R2 bağlantısı doğrulandı. ${Number(data?.pendingFileCount || 0)} gelen dosya hazır.`
-          : "",
-      );
-    } catch (error) {
-      setMessage(error?.message || "Desen R2 alanı kontrol edilemedi.");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const companyId = activeMainCompany?.id || "";
+  const companySlug = activeMainCompany?.slug || "";
+
+  const load = useCallback(
+    async (test = false) => {
+      if (!companySlug && !companyId) return;
+      setBusy(true);
+      setMessage("");
+      try {
+        const company = { id: companyId, slug: companySlug };
+        const data = test
+          ? await testDesenFolderSettings(company)
+          : await getDesenFolderSettings(company);
+        setResult(data || null);
+        setMessage(
+          test
+            ? `R2 bağlantısı doğrulandı. ${Number(data?.pendingFileCount || 0)} gelen dosya hazır.`
+            : "",
+        );
+      } catch (error) {
+        setMessage(error?.message || "Desen R2 alanı kontrol edilemedi.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [companyId, companySlug],
+  );
 
   useEffect(() => {
     load(false);
-  }, [activeMainCompany?.id, activeMainCompany?.slug]);
+  }, [load]);
 
   const connected = result?.connected === true || result?.ok === true;
   const settings = result?.settings || {};
