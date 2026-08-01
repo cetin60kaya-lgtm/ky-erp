@@ -1,0 +1,176 @@
+name: Üretim Merkezi Yerel Uçtan Uca Test
+
+on:
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/cloud/ky-erp-api/src/production-center.ts"
+      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
+      - "APP/cloud/ky-erp-api/local-production-center.sql"
+      - "APP/app/ky-erp-frontend/src/pages/imalat/ProductionControlCenterPage.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/imalat/ProductionSmartEntryDrawer.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/imalat/productionControlCenter.css"
+      - "APP/app/ky-erp-frontend/src/services/productionCenterApi.js"
+      - "APP/app/ky-erp-frontend/src/pages/modules/UretimPage.jsx"
+      - "APP/app/ky-erp-frontend/src/app/moduleRegistry.js"
+      - "SCRIPTS/KYERP_URETIM_YEREL_TEST.ps1"
+      - ".github/workflows/production-center-local-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-center-local-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: PowerShell başlatma betiğini ayrıştır
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/SCRIPTS/KYERP_URETIM_YEREL_TEST.ps1",
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "PowerShell betiği sözdizimi temiz."
+
+      - name: Worker paketleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Worker typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Worker varsayılan dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Yerel Worker yapılandırması dry-run
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler deploy --dry-run --config wrangler.production-local.jsonc
+
+      - name: İzole yerel D1 verisini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          rm -rf .local-test-ci
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-test-ci \
+            --file local-production-center.sql
+
+      - name: Yerel Worker'ı başlat
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          nohup npx wrangler dev \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-test-ci \
+            --port 8788 > /tmp/kyerp-production-worker.log 2>&1 &
+          echo $! > /tmp/kyerp-production-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "http://127.0.0.1:8788/api/production-center?mainCompanySlug=mecit-hakan&pageSize=10" > /tmp/production-center.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kyerp-production-worker.log
+          exit 1
+
+      - name: Üretim merkezi başlangıç hesaplarını doğrula
+        run: |
+          jq -e '.ok == true' /tmp/production-center.json
+          jq -e '.data.summary.modelCount == 2' /tmp/production-center.json
+          jq -e '.data.summary.totalIncomingQty == 8000' /tmp/production-center.json
+          jq -e '.data.summary.totalCompletedNetQty == 5255' /tmp/production-center.json
+          jq -e '.data.summary.totalInvoicedQty == 4500' /tmp/production-center.json
+          jq -e '.data.summary.totalInvoiceRemainingQty == 755' /tmp/production-center.json
+          jq -e '.data.rows | map(select(.modelName == "WINDY")) | length == 1' /tmp/production-center.json
+          jq -e '.data.rows | map(select(.modelName == "WINDY"))[0].completedGrossQty == 2400' /tmp/production-center.json
+
+      - name: İzole D1 üzerinde kontrollü üretim kaydı oluştur
+        run: |
+          cat > /tmp/entry.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "requestId": "ci-windy-back-100",
+            "modelId": "model-windy",
+            "modelName": "WINDY",
+            "date": "2026-08-01",
+            "dispatchNo": "DDM2026000001001",
+            "orderNo": "SP-2451",
+            "batchNo": "DDM2026000001001",
+            "printRegion": "Arka",
+            "quantity": 100,
+            "printDefectQty": 0,
+            "fabricDefectQty": 0,
+            "testQty": 0,
+            "machineId": "2",
+            "machineName": "MHM",
+            "shift": "Gece",
+            "operatorName": "RESUL",
+            "note": "CI yerel üretim testi"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/entry.json \
+            "http://127.0.0.1:8788/api/production-center/entries" \
+            > /tmp/entry-result.json
+          jq -e '.ok == true' /tmp/entry-result.json
+
+      - name: Yeni üretim kaydının hesaplara işlendiğini doğrula
+        run: |
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/production-center/models/model-windy?mainCompanySlug=mecit-hakan" \
+            > /tmp/windy-after.json
+          jq -e '.ok == true' /tmp/windy-after.json
+          jq -e '.data.completedGrossQty == 2500' /tmp/windy-after.json
+          jq -e '.data.completedNetQty == 2470' /tmp/windy-after.json
+          jq -e '.data.invoiceRemainingQty == 470' /tmp/windy-after.json
+          jq -e '.data.productionEntries | length == 3' /tmp/windy-after.json
+
+      - name: Frontend paketleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend production build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Veri güvenliği
+        run: |
+          git diff --check
+          ! git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'
+
+      - name: Hata olursa Worker logunu göster
+        if: failure()
+        run: cat /tmp/kyerp-production-worker.log || true
