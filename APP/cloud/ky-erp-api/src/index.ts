@@ -910,34 +910,67 @@ async function buildProfitLoss(c: Context<AppEnv>) {
     c.req.query("startDate") ||
     `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
   const endDate = c.req.query("endDate") || today.toISOString().slice(0, 10);
-  const documents = (await accountingDocuments(c)).filter((row) =>
-    documentDateInRange(row, startDate, endDate),
+  const [documents, manualExpenses, fixedExpenses] = await Promise.all([
+    accountingDocuments(c),
+    jsonStoreList(c, "MUHASEBE_MANUAL_EXPENSE"),
+    jsonStoreList(c, "MUHASEBE_FIXED_EXPENSE"),
+  ]);
+  const documentRecords = documents
+    .filter((row) => documentDateInRange(row, startDate, endDate))
+    .filter((row) =>
+      ["SUPPLIER_INVOICE", "CUSTOMER_INVOICE"].includes(databaseText(row.documentKind)),
+    )
+    .map((row) => {
+      const income = row.documentKind === "CUSTOMER_INVOICE";
+      const raw = jsonObject(row.raw);
+      return {
+        id: row.id,
+        date: row.issueDate,
+        companyId: row.companyId,
+        companyName: row.companyName || row.supplierName,
+        documentNo: row.documentNo,
+        description: raw.description || raw.aciklama || "",
+        category:
+raw.reportCategory ||
+          raw.giderKategori ||
+          (income ? "Baskı Geliri" : "Mal ve Hizmet Alımı"),
+        type: income ? "INCOME" : "EXPENSE",
+        amount: databaseNumber(row.grandTotal),
+        vatAmount: databaseNumber(row.vatTotal),
+        recordType: raw.recordType || "RESMI",
+        source: "DOCUMENT",
+      };
+    });
+  const manualRecords = manualExpenses
+    .filter((row) => {
+      const date = databaseText(row.date || row.createdAt).slice(0, 10);
+      if (startDate && date < startDate) return false;
+      if (endDate && date > endDate) return false;
+      return true;
+    })
+    .map((row) => ({
+      id: row.id || row.fileName,
+      date: row.date || row.createdAt,
+      companyId: row.companyId || null,
+      companyName: row.companyName || row.description || "Genel gider",
+      documentNo: row.documentNo || "MANUEL",
+      description: row.description || "",
+      category: row.category || "Diğer",
+      type: "EXPENSE",
+      amount: databaseNumber(row.amount),
+      vatAmount: databaseNumber(row.vatAmount),
+      recordType: row.recordType || "RESMI",
+      source: "MANUAL",
+    }));
+  const records = [...documentRecords, ...manualRecords].sort((left, right) =>
+    databaseText(right.date).localeCompare(databaseText(left.date)),
   );
-  const records = documents.map((row) => {
-    const income = row.documentKind === "CUSTOMER_INVOICE";
-    const raw = jsonObject(row.raw);
-    return {
-      id: row.id,
-      date: row.issueDate,
-      companyId: row.companyId,
-      companyName: row.companyName || row.supplierName,
-      documentNo: row.documentNo,
-      category:
-        raw.reportCategory ||
-        raw.giderKategori ||
-        (income ? "Baskı Geliri" : "Mal ve Hizmet Alımı"),
-      type: income ? "INCOME" : "EXPENSE",
-      amount: databaseNumber(row.grandTotal),
-      vatAmount: databaseNumber(row.vatTotal),
-      recordType: raw.recordType || "RESMI",
-    };
-  });
   const totalIncome = records
     .filter((row) => row.type === "INCOME")
-    .reduce((sum, row) => sum + row.amount, 0);
+    .reduce((sum, row) => sum + databaseNumber(row.amount), 0);
   const totalExpense = records
     .filter((row) => row.type === "EXPENSE")
-    .reduce((sum, row) => sum + row.amount, 0);
+    .reduce((sum, row) => sum + databaseNumber(row.amount), 0);
   const categoryMap = new Map<string, DatabaseRow>();
   for (const row of records) {
     const key = `${row.type}:${row.category}`;
@@ -948,25 +981,27 @@ async function buildProfitLoss(c: Context<AppEnv>) {
       total: 0,
     };
     current.count = databaseNumber(current.count) + 1;
-    current.total = databaseNumber(current.total) + row.amount;
+    current.total = databaseNumber(current.total) + databaseNumber(row.amount);
     categoryMap.set(key, current);
   }
-  const companyMapRows = new Map<string, DatabaseRow>();
+  const companyRows = new Map<string, DatabaseRow>();
   for (const row of records) {
-    const key = databaseText(row.companyId || row.companyName);
-    const current = companyMapRows.get(key) || {
+    const key = databaseText(row.companyId || row.companyName || row.id);
+    const current = companyRows.get(key) || {
       companyId: row.companyId,
       companyName: row.companyName,
       income: 0,
       expense: 0,
       net: 0,
     };
-    if (row.type === "INCOME") current.income = databaseNumber(current.income) + row.amount;
-    else current.expense = databaseNumber(current.expense) + row.amount;
+    if (row.type === "INCOME") {
+      current.income = databaseNumber(current.income) + databaseNumber(row.amount);
+    } else {
+      current.expense = databaseNumber(current.expense) + databaseNumber(row.amount);
+    }
     current.net = databaseNumber(current.income) - databaseNumber(current.expense);
-    companyMapRows.set(key, current);
+    companyRows.set(key, current);
   }
-  const fixedExpenses = await jsonStoreList(c, "MUHASEBE_FIXED_EXPENSE");
   return {
     period: { startDate, endDate },
     summary: {
@@ -974,10 +1009,10 @@ async function buildProfitLoss(c: Context<AppEnv>) {
       totalExpense,
       incomingVat: records
         .filter((row) => row.type === "EXPENSE")
-        .reduce((sum, row) => sum + row.vatAmount, 0),
+        .reduce((sum, row) => sum + databaseNumber(row.vatAmount), 0),
       outgoingVat: records
         .filter((row) => row.type === "INCOME")
-        .reduce((sum, row) => sum + row.vatAmount, 0),
+        .reduce((sum, row) => sum + databaseNumber(row.vatAmount), 0),
       grossProfit: totalIncome - totalExpense,
       netProfit: totalIncome - totalExpense,
       netResult: totalIncome - totalExpense,
@@ -986,8 +1021,9 @@ async function buildProfitLoss(c: Context<AppEnv>) {
     categories: [...categoryMap.values()].sort(
       (a, b) => databaseNumber(b.total) - databaseNumber(a.total),
     ),
-    companySummary: [...companyMapRows.values()].sort(
-      (a, b) => Math.abs(databaseNumber(b.net)) - Math.abs(databaseNumber(a.net)),
+    companySummary: [...companyRows.values()].sort(
+      (a, b) =>
+        Math.abs(databaseNumber(b.net)) - Math.abs(databaseNumber(a.net)),
     ),
     generalExpenses: fixedExpenses,
     emptyState:
@@ -1388,6 +1424,135 @@ app.get("/api/muhasebe/cari-hareketler", (c) =>
   }),
 );
 
+
+app.post("/api/muhasebe/belge-import/upload", async (c) => {
+  const form = await c.req.formData();
+  const slug = databaseText(
+    form.get("mainCompanySlug") ||
+      form.get("mainCompanyId") ||
+      c.req.query("mainCompanySlug") ||
+      "mecit-hakan",
+  ).trim();
+  const files = form
+    .getAll("files")
+    .filter((value): value is File => value instanceof File && value.size > 0);
+  if (!files.length) {
+    return c.json(
+      jsonError("FILES_REQUIRED", "Yüklenecek PDF, XML veya ZIP dosyası seçilmedi."),
+      400,
+    );
+  }
+  const allowedExtensions = new Set(["pdf", "xml", "zip"]);
+  const maximumFileSize = 25 * 1024 * 1024;
+  const created: DatabaseRow[] = [];
+  const rejected: DatabaseRow[] = [];
+  const dateFolder = new Date().toISOString().slice(0, 10);
+
+  for (const file of files) {
+    const extension = file.name.split(".").pop()?.toLocaleLowerCase("tr-TR") || "";
+    if (!allowedExtensions.has(extension)) {
+      rejected.push({ fileName: file.name, reason: "Yalnız PDF, XML veya ZIP kabul edilir." });
+      continue;
+    }
+    if (file.size > maximumFileSize) {
+      rejected.push({ fileName: file.name, reason: "Dosya boyutu 25 MB sınırını aşıyor." });
+      continue;
+    }
+    const id = crypto.randomUUID();
+    const safeName =
+      file.name
+        .normalize("NFKD")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || `${id}.${extension}`;
+    const objectKey = `${slug}/muhasebe/gelen-faturalar/manual/${dateFolder}/${id}-${safeName}`;
+    await c.env.FILES.put(objectKey, await file.arrayBuffer(), {
+      httpMetadata: {
+        contentType: file.type || "application/octet-stream",
+        contentDisposition: `attachment; filename="${safeName.replace(/"/g, "")}"`,
+      },
+      customMetadata: {
+        mainCompanySlug: slug,
+        source: "MANUAL_UPLOAD",
+        originalName: file.name,
+      },
+    });
+    const now = new Date().toISOString();
+    const documentNo = file.name.replace(/\.[^.]+$/, "").slice(0, 120);
+    const metadata = {
+      fileKey: objectKey,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      fileSize: file.size,
+      extension,
+      sourceType: "MANUAL_UPLOAD",
+      reviewRequired: true,
+      uploadedAt: now,
+      missingFields: ["Firma ve fatura bilgileri kontrol edilmeli"],
+    };
+    await insertDynamic(c, "documents", {
+      id,
+      main_company_slug: slug,
+      document_type: "SUPPLIER_INVOICE",
+      detected_type: "SUPPLIER_INVOICE",
+      target_type: "SUPPLIER_INVOICE",
+      document_no: documentNo,
+      date: now.slice(0, 10),
+      source_type: "MANUAL_UPLOAD",
+      status: "CONTROL_WAITING",
+      firm_match_status: "PENDING",
+      subtotal: 0,
+      vat_total: 0,
+      grand_total: 0,
+      metadata,
+      raw: metadata,
+      created_at: now,
+      updated_at: now,
+    });
+    if (await tableExists(c, "document_files")) {
+      await insertDynamic(c, "document_files", {
+        id: crypto.randomUUID(),
+        main_company_slug: slug,
+        document_id: id,
+        file_name: file.name,
+        file_key: objectKey,
+        mime_type: file.type || "application/octet-stream",
+        file_size: file.size,
+        source_type: "MANUAL_UPLOAD",
+        created_at: now,
+        updated_at: now,
+      });
+    }
+    created.push({
+      id,
+      documentNo,
+      fileName: file.name,
+      fileKey: objectKey,
+      status: "CONTROL_WAITING",
+    });
+  }
+
+  if (!created.length) {
+    return c.json(
+      jsonError("UPLOAD_REJECTED", "Seçilen dosyaların hiçbiri yüklenemedi.", rejected),
+      400,
+    );
+  }
+  return c.json(
+    {
+      ok: true,
+      success: true,
+      data: {
+        created,
+        rejected,
+        createdCount: created.length,
+        rejectedCount: rejected.length,
+      },
+    },
+    201,
+  );
+});
+
 app.get("/api/muhasebe/belge-import", async (c) => {
   const all = await accountingDocuments(c, {
     kind: "SUPPLIER_INVOICE",
@@ -1587,6 +1752,53 @@ app.get("/api/vat/firms/:id/detail", async (c) => {
       netKdv: data.netVat,
     },
   });
+});
+
+app.get("/api/muhasebe/accounting/manual-expenses", async (c) => {
+  const startDate = c.req.query("startDate") || "";
+  const endDate = c.req.query("endDate") || "";
+  const data = (await jsonStoreList(c, "MUHASEBE_MANUAL_EXPENSE")).filter((row) => {
+    const date = databaseText(row.date || row.createdAt).slice(0, 10);
+    if (startDate && date < startDate) return false;
+    if (endDate && date > endDate) return false;
+    return true;
+  });
+  return c.json({ ok: true, success: true, data });
+});
+app.post("/api/muhasebe/accounting/manual-expenses", async (c) => {
+  const body = await requestBody(c);
+  const amount = databaseNumber(body.amount);
+  const date = databaseText(body.date).slice(0, 10);
+  if (!date || amount <= 0 || !databaseText(body.category).trim()) {
+    return c.json(
+      jsonError(
+        "INVALID_EXPENSE",
+        "Tarih, kategori ve sıfırdan büyük gider tutarı zorunludur.",
+      ),
+      400,
+    );
+  }
+  const id = databaseText(body.id || crypto.randomUUID());
+  const data = await jsonStorePut(
+    c,
+    "MUHASEBE_MANUAL_EXPENSE",
+    id,
+    {
+      id,
+      date,
+      companyId: body.companyId || null,
+      companyName: body.companyName || "Genel gider",
+      category: body.category,
+      amount,
+      vatAmount: databaseNumber(body.vatAmount),
+      recordType: body.recordType || "RESMI",
+      description: body.description || "",
+      type: "EXPENSE",
+      createdAt: new Date().toISOString(),
+    },
+    slugOf(c, body),
+  );
+  return c.json({ ok: true, success: true, data }, 201);
 });
 
 app.get("/api/muhasebe/accounting/reports/records", async (c) => {
