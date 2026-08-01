@@ -241,9 +241,11 @@ export function registerDesenOperationRoutes(app: Hono<AppEnv>) {
           400,
         );
       }
-      const byId = new Map(channels.map((channel: Row) => [text(channel.id), channel]));
-      const ordered = channelIds.map((id: string, index: number) => ({
-        ...byId.get(id),
+      const byId = new Map<string, Row>(
+        channels.map((channel: Row) => [text(channel.id), channel]),
+      );
+      const ordered: Row[] = channelIds.map((id: string, index: number) => ({
+        ...(byId.get(id) || {}),
         sequence: index + 1,
       }));
       const operations = [...found.operations];
