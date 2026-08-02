@@ -9,7 +9,8 @@ try {
   release = {};
 }
 
-if (release?.mode !== "pages-domain-audit") {
+const mode = String(release?.mode || "production");
+if (!["pages-domain-audit", "pages-domain-repair"].includes(mode)) {
   process.exit(0);
 }
 
@@ -17,24 +18,30 @@ const token = String(process.env.CLOUDFLARE_API_TOKEN || "").trim();
 const accountId = String(process.env.CLOUDFLARE_ACCOUNT_ID || "ab49b099fee10183fa65951e5077d14a").trim();
 const projectName = "ky-erp-frontend";
 const customDomain = "kyerp.net";
+const apiBase = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
 
 if (!token) {
-  console.error("PAGES_DOMAIN_AUDIT_ERROR=CLOUDFLARE_API_TOKEN eksik");
+  console.error("PAGES_DOMAIN_ERROR=CLOUDFLARE_API_TOKEN eksik");
   process.exit(1);
 }
 
-async function cf(pathname) {
-  const url = `https://api.cloudflare.com/client/v4${pathname}`;
+async function cf(pathname, options = {}) {
+  const url = pathname.startsWith("http") ? pathname : `https://api.cloudflare.com/client/v4${pathname}`;
   try {
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
     });
     const text = await response.text();
     let body;
     try {
       body = JSON.parse(text);
     } catch {
-      body = { raw: text.slice(0, 500) };
+      body = { raw: text.slice(0, 1_000) };
     }
     return { httpStatus: response.status, ok: response.ok, body };
   } catch (error) {
@@ -42,31 +49,11 @@ async function cf(pathname) {
   }
 }
 
-async function publicHtml(url) {
-  try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-    });
-    const html = await response.text();
-    const title = html.match(/<title>([^<]*)<\/title>/i)?.[1] || "";
-    const script = html.match(/<script[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-    return {
-      httpStatus: response.status,
-      finalUrl: response.url,
-      title,
-      script,
-      bytes: html.length,
-    };
-  } catch (error) {
-    return { httpStatus: 0, finalUrl: url, title: "", script: "", bytes: 0, error: error?.message || String(error) };
-  }
-}
-
+const projectPath = `/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}`;
 const projectsRes = await cf(`/accounts/${accountId}/pages/projects`);
-const projectRes = await cf(`/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}`);
-const domainsRes = await cf(`/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/domains`);
-const deploymentsRes = await cf(`/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/deployments?env=production&page=1&per_page=20`);
+const projectRes = await cf(projectPath);
+const domainsRes = await cf(`${projectPath}/domains`);
+const deploymentsRes = await cf(`${projectPath}/deployments?env=production&page=1&per_page=20`);
 const workersDomainsRes = await cf(`/accounts/${accountId}/workers/domains?hostname=${encodeURIComponent(customDomain)}`);
 
 const projects = Array.isArray(projectsRes?.body?.result) ? projectsRes.body.result : [];
@@ -83,9 +70,6 @@ for (const project of projects) {
   }
 }
 
-const deployments = Array.isArray(deploymentsRes?.body?.result) ? deploymentsRes.body.result : [];
-const latest = deployments[0] || {};
-const latestUrl = String(latest?.url || "").trim();
 const workerDomains = Array.isArray(workersDomainsRes?.body?.result)
   ? workersDomainsRes.body.result
       .filter((row) => String(row?.hostname || "").toLowerCase() === customDomain)
@@ -94,64 +78,110 @@ const workerDomains = Array.isArray(workersDomainsRes?.body?.result)
         hostname: row?.hostname || "",
         service: row?.service || "",
         environment: row?.environment || "",
-        zoneId: row?.zone_id || "",
-        zoneName: row?.zone_name || "",
       }))
   : [];
-
-const zonesRes = await cf(`/zones?name=${encodeURIComponent(customDomain)}`);
-const zones = Array.isArray(zonesRes?.body?.result) ? zonesRes.body.result : [];
-const zoneId = String(zones[0]?.id || "");
-const dnsRes = zoneId
-  ? await cf(`/zones/${zoneId}/dns_records?name=${encodeURIComponent(customDomain)}&page=1&per_page=100`)
-  : { httpStatus: 0, ok: false, body: { result: [] } };
-const dnsRows = Array.isArray(dnsRes?.body?.result) ? dnsRes.body.result : [];
 
 const targetDomains = Array.isArray(domainsRes?.body?.result)
   ? domainsRes.body.result.map((row) => ({ name: row?.name || "", status: row?.status || "" }))
   : [];
 
-const result = {
-  accountId,
-  projectApi: { httpStatus: projectRes.httpStatus, success: Boolean(projectRes?.body?.success) },
+const deployments = Array.isArray(deploymentsRes?.body?.result) ? deploymentsRes.body.result : [];
+const latest = deployments[0] || {};
+
+const auditResult = {
+  mode,
   productionBranch: projectRes?.body?.result?.production_branch || "",
   latest: {
     id: latest?.id || "",
-    url: latestUrl,
-    environment: latest?.environment || "",
+    url: latest?.url || "",
     branch: latest?.deployment_trigger?.metadata?.branch || "",
+    environment: latest?.environment || "",
     aliases: Array.isArray(latest?.aliases) ? latest.aliases : [],
-    createdOn: latest?.created_on || "",
-    latestStage: latest?.latest_stage || null,
   },
   targetDomains,
   domainOwners,
-  workerDomainsApi: {
-    httpStatus: workersDomainsRes.httpStatus,
-    success: Boolean(workersDomainsRes?.body?.success),
-  },
   workerDomains,
-  liveHtml: await publicHtml(`https://${customDomain}/`),
-  latestHtml: latestUrl ? await publicHtml(`${latestUrl.replace(/\/$/, "")}/`) : null,
-  dnsApi: { httpStatus: dnsRes.httpStatus, success: Boolean(dnsRes?.body?.success) },
-  dns: dnsRows.map((row) => ({
-    id: row?.id || "",
-    type: row?.type || "",
-    name: row?.name || "",
-    content: row?.content || "",
-    proxied: Boolean(row?.proxied),
-  })),
   apiErrors: {
-    projects: projectsRes?.body?.errors || [],
     project: projectRes?.body?.errors || [],
     domains: domainsRes?.body?.errors || [],
     deployments: deploymentsRes?.body?.errors || [],
     workersDomains: workersDomainsRes?.body?.errors || [],
-    zones: zonesRes?.body?.errors || [],
-    dns: dnsRes?.body?.errors || [],
   },
 };
 
-console.log(`PAGES_DOMAIN_AUDIT_JSON=${JSON.stringify(result)}`);
-console.error("PAGES_DOMAIN_AUDIT_STOP=Denetim modu tamamlandı; canlı değişiklik yapılmadan yayın durduruldu.");
+console.log(`PAGES_DOMAIN_AUDIT_JSON=${JSON.stringify(auditResult)}`);
+
+if (mode === "pages-domain-audit") {
+  console.error("PAGES_DOMAIN_AUDIT_STOP=Denetim tamamlandı; canlı değişiklik yapılmadı.");
+  process.exit(1);
+}
+
+if (!projectRes.ok || projectRes?.body?.success !== true) {
+  console.error(`PAGES_DOMAIN_REPAIR_ERROR=Pages projesi okunamadı: ${JSON.stringify(projectRes.body)}`);
+  process.exit(1);
+}
+
+if (workerDomains.length > 0) {
+  console.error(`PAGES_DOMAIN_REPAIR_ERROR=${customDomain} bir Worker custom domainine bağlı: ${JSON.stringify(workerDomains)}`);
+  process.exit(1);
+}
+
+const conflictingPagesOwners = domainOwners.filter((row) => row.project !== projectName);
+if (conflictingPagesOwners.length > 0) {
+  console.error(`PAGES_DOMAIN_REPAIR_ERROR=${customDomain} başka Pages projesine bağlı: ${JSON.stringify(conflictingPagesOwners)}`);
+  process.exit(1);
+}
+
+let domainState = targetDomains.find((row) => String(row.name).toLowerCase() === customDomain) || null;
+let createResponse = null;
+
+if (!domainState) {
+  createResponse = await cf(`${projectPath}/domains`, {
+    method: "POST",
+    body: JSON.stringify({ name: customDomain }),
+  });
+
+  if (!createResponse.ok || createResponse?.body?.success !== true) {
+    const refreshed = await cf(`${projectPath}/domains`);
+    const refreshedDomains = Array.isArray(refreshed?.body?.result) ? refreshed.body.result : [];
+    domainState = refreshedDomains.find((row) => String(row?.name || "").toLowerCase() === customDomain) || null;
+    if (!domainState) {
+      console.error(`PAGES_DOMAIN_REPAIR_ERROR=Alan adı eklenemedi: ${JSON.stringify(createResponse.body)}`);
+      process.exit(1);
+    }
+  }
+}
+
+for (let attempt = 1; attempt <= 60; attempt += 1) {
+  const statusResponse = await cf(`${projectPath}/domains/${encodeURIComponent(customDomain)}`);
+  const row = statusResponse?.body?.result || domainState || {};
+  const status = String(row?.status || "").toLowerCase();
+  const validationStatus = String(row?.validation_data?.status || "").toLowerCase();
+  const verificationStatus = String(row?.verification_data?.status || "").toLowerCase();
+
+  console.log(`PAGES_DOMAIN_REPAIR_POLL=${JSON.stringify({ attempt, status, validationStatus, verificationStatus })}`);
+
+  if (status === "active") {
+    console.log(`PAGES_DOMAIN_REPAIR_JSON=${JSON.stringify({
+      ok: true,
+      project: projectName,
+      domain: customDomain,
+      status,
+      created: Boolean(createResponse),
+      productionBranch: projectRes?.body?.result?.production_branch || "",
+    })}`);
+    process.exit(0);
+  }
+
+  if (["failed", "error"].includes(status) || ["failed", "error"].includes(validationStatus)) {
+    console.error(`PAGES_DOMAIN_REPAIR_ERROR=Alan adı doğrulaması başarısız: ${JSON.stringify(row)}`);
+    process.exit(1);
+  }
+
+  if (attempt < 60) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+}
+
+console.error(`PAGES_DOMAIN_REPAIR_ERROR=${customDomain} 300 saniye içinde active olmadı.`);
 process.exit(1);
