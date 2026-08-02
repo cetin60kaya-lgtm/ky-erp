@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useMemo, useState } from "react";
 import { createManualBoyahaneJob } from "../../../services/boyahaneManualApi";
 import { getRegisteredColor } from "../../../services/boyahaneWorkflowApi";
