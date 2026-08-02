@@ -67,7 +67,11 @@ function errorBody(code: string, message: string, details?: unknown) {
   };
 }
 
-async function storeList(c: Context<AppEnv>, scope: string, slug: string) {
+async function storeList(
+  c: Context<AppEnv>,
+  scope: string,
+  slug: string,
+): Promise<Row[]> {
   const result = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
@@ -83,7 +87,7 @@ async function storeList(c: Context<AppEnv>, scope: string, slug: string) {
     fileName: text(row.file_name),
     createdAt: text(objectOf(row.data).createdAt || row.created_at),
     updatedAt: text(objectOf(row.data).updatedAt || row.updated_at),
-  }));
+  })) as Row[];
 }
 
 async function storePut(
