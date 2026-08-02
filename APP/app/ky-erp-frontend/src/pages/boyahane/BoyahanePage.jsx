@@ -7,9 +7,10 @@ import "./boyahaneFinal.css";
 import "./boyahaneCompactV2.css";
 import "./boyahaneCompactV2Patch.css";
 import "./boyahaneRefineV3.css";
+import "./boyahaneFormulaV4.css";
 import BoyahaneDashboardCompactPage from "./workflow/BoyahaneDashboardCompactPage";
-import BoyahaneWorkPageV3 from "./workflow/BoyahaneWorkPageV3";
-import BoyahaneInventoryHubV2 from "./workflow/BoyahaneInventoryHubV2";
+import BoyahaneWorkPageV4 from "./workflow/BoyahaneWorkPageV4";
+import BoyahaneInventoryHubV3 from "./workflow/BoyahaneInventoryHubV3";
 import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
 
@@ -36,13 +37,13 @@ export default function BoyahanePage({
   const tab = normalizeTab(activeTab);
 
   const page = tab === "receteler" ? (
-    <BoyahaneWorkPageV3
+    <BoyahaneWorkPageV4
       mode="sample"
       activeMainCompany={activeMainCompany}
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "uretim-gecmisi" ? (
-    <BoyahaneWorkPageV3
+    <BoyahaneWorkPageV4
       mode="production"
       activeMainCompany={activeMainCompany}
       moduleActionContext={moduleActionContext}
@@ -54,7 +55,7 @@ export default function BoyahanePage({
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "urun-lotlar" ? (
-    <BoyahaneInventoryHubV2 activeMainCompany={activeMainCompany} />
+    <BoyahaneInventoryHubV3 activeMainCompany={activeMainCompany} />
   ) : tab === "raporlar" ? (
     <BoyahaneReportsAndLogsPage activeMainCompany={activeMainCompany} />
   ) : (
