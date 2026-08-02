@@ -1,4 +1,16 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "../utils/api";
+import {
+  DEMO_COLORS,
+  DEMO_JOBS,
+  DEMO_LOGS,
+  DEMO_LOTS,
+  DEMO_PRODUCTS,
+  DEMO_PRODUCTIONS,
+  DEMO_REPORT,
+  DEMO_STOCK_SUMMARY,
+  demoJobDetail,
+  demoRegisteredColorDetail,
+} from "../pages/boyahane/workflow/boyahaneDemoData";
 
 function companyParams(activeMainCompany, extra = {}) {
   const mainCompanySlug = String(
@@ -20,21 +32,38 @@ function unwrap(payload, fallback) {
   return data ?? fallback;
 }
 
+function localDemoEnabled() {
+  if (!import.meta.env.DEV || typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1"].includes(window.location.hostname);
+}
+
+function arrayOrDemo(value, demo) {
+  const rows = Array.isArray(value) ? value : [];
+  return localDemoEnabled() && rows.length === 0 ? demo : rows;
+}
+
+function objectOrDemo(value, demo, hasData) {
+  if (!localDemoEnabled()) return value;
+  return hasData(value) ? value : demo;
+}
+
 export async function listBoyahaneJobs(company, params = {}) {
-  return unwrap(
+  const data = unwrap(
     await apiGet("/boyahane/jobs", companyParams(company, params)),
     [],
   );
+  return arrayOrDemo(data, DEMO_JOBS);
 }
 
 export async function getBoyahaneJob(company, id) {
-  return unwrap(
+  const data = unwrap(
     await apiGet(
       `/boyahane/jobs/${encodeURIComponent(id)}`,
       companyParams(company),
     ),
     null,
   );
+  return data || (localDemoEnabled() ? demoJobDetail(id) : null);
 }
 
 export async function startBoyahaneJob(company, id, force = false) {
@@ -98,23 +127,25 @@ export async function deleteBoyahaneJobColor(company, id) {
 }
 
 export async function listRegisteredColors(company, params = {}) {
-  return unwrap(
+  const data = unwrap(
     await apiGet(
       "/boyahane/registered-colors",
       companyParams(company, params),
     ),
     [],
   );
+  return arrayOrDemo(data, DEMO_COLORS);
 }
 
 export async function getRegisteredColor(company, id) {
-  return unwrap(
+  const data = unwrap(
     await apiGet(
       `/boyahane/registered-colors/${encodeURIComponent(id)}`,
       companyParams(company),
     ),
     null,
   );
+  return data || (localDemoEnabled() ? demoRegisteredColorDetail(id) : null);
 }
 
 export async function createRegisteredColor(company, body) {
@@ -168,10 +199,11 @@ export async function updateWorkflowRecipe(company, id, body) {
 }
 
 export async function listBoyahaneProducts(company, params = {}) {
-  return unwrap(
+  const data = unwrap(
     await apiGet("/boyahane/products", companyParams(company, params)),
     [],
   );
+  return arrayOrDemo(data, DEMO_PRODUCTS);
 }
 
 export async function createBoyahaneProduct(company, body) {
@@ -192,20 +224,33 @@ export async function updateBoyahaneProduct(company, id, body) {
 }
 
 export async function getBoyahaneStockSummary(company) {
-  return unwrap(
+  const data = unwrap(
     await apiGet("/boyahane/stock/summary", companyParams(company)),
     { summary: {}, products: [], lots: [], movements: [] },
+  );
+  return objectOrDemo(
+    data,
+    DEMO_STOCK_SUMMARY,
+    (row) =>
+      Boolean(
+        row &&
+          (Object.keys(row.summary || {}).length ||
+            row.products?.length ||
+            row.lots?.length ||
+            row.movements?.length),
+      ),
   );
 }
 
 export async function listBoyahaneLots(company, params = {}) {
-  return unwrap(
+  const data = unwrap(
     await apiGet(
       "/boyahane/workflow/lots",
       companyParams(company, params),
     ),
     [],
   );
+  return arrayOrDemo(data, DEMO_LOTS);
 }
 
 export async function getBoyahaneWorkflowLot(company, id) {
@@ -256,28 +301,42 @@ export async function createBoyahaneProduction(company, body) {
 }
 
 export async function listBoyahaneProductions(company, params = {}) {
-  return unwrap(
+  const data = unwrap(
     await apiGet(
       "/boyahane/productions",
       companyParams(company, params),
     ),
     [],
   );
+  return arrayOrDemo(data, DEMO_PRODUCTIONS);
 }
 
 export async function listBoyahaneLogs(company, params = {}) {
-  return unwrap(
+  const data = unwrap(
     await apiGet(
       "/boyahane/workflow/logs",
       companyParams(company, params),
     ),
     [],
   );
+  return arrayOrDemo(data, DEMO_LOGS);
 }
 
 export async function getBoyahaneReports(company) {
-  return unwrap(
+  const data = unwrap(
     await apiGet("/boyahane/workflow/reports", companyParams(company)),
     { summary: {}, jobs: [], productions: [], expenses: [] },
+  );
+  return objectOrDemo(
+    data,
+    DEMO_REPORT,
+    (row) =>
+      Boolean(
+        row &&
+          (Object.keys(row.summary || {}).length ||
+            row.jobs?.length ||
+            row.productions?.length ||
+            row.expenses?.length),
+      ),
   );
 }
