@@ -1,0 +1,107 @@
+name: KY ERP Ortak Altyapı Denetimi
+
+on:
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/app/ky-erp-frontend/src/utils/api.js"
+      - "SCRIPTS/KYERP_YEREL_BASLAT.ps1"
+      - "SCRIPTS/KYERP_YEREL_DURDUR.ps1"
+      - ".github/workflows/non-boyahane-final-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-shared-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Yerel PowerShell betiklerini ayrıştır
+        shell: pwsh
+        run: |
+          $files = @(
+            "$PWD/SCRIPTS/KYERP_YEREL_BASLAT.ps1",
+            "$PWD/SCRIPTS/KYERP_YEREL_DURDUR.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $file,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$file: $($_.Message)" }
+              exit 1
+            }
+            Write-Host "Sözdizimi temiz: $file"
+          }
+
+      - name: Ortak güvenlik kurallarını denetle
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const api = fs.readFileSync('APP/app/ky-erp-frontend/src/utils/api.js', 'utf8');
+          const worker = fs.readFileSync('APP/cloud/ky-erp-api/src/main.ts', 'utf8');
+          const forbidden = [
+            '${method} ${requestPath}: API sunucusuna bağlanılamadı',
+            '${method} ${requestPath}: istek zaman aşımına uğradı',
+          ];
+          for (const marker of forbidden) {
+            if (api.includes(marker)) {
+              throw new Error(`Kullanıcıya teknik endpoint sızdıran metin bulundu: ${marker}`);
+            }
+          }
+          if (!api.includes('payload?.error?.message')) {
+            throw new Error('Worker error.message alanı okunmuyor.');
+          }
+          if (!worker.includes('LOCAL_DEV_ORIGIN')) {
+            throw new Error('Yerel origin doğrulaması bulunamadı.');
+          }
+          if (/origin:\s*["']\*["']/.test(worker)) {
+            throw new Error('Credential kullanan CORS yapılandırmasında wildcard origin yasaktır.');
+          }
+          console.log('Ortak hata ve CORS güvenliği doğrulandı.');
+          NODE
+
+      - name: Worker paketleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Worker typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Worker dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Frontend paketleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend production build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
