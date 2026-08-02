@@ -7,6 +7,7 @@ import { registerBoyahaneColorResolveRoutes } from "./boyahane-color-resolve";
 import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import-runtime";
 import { registerBoyahaneInventoryRoutes } from "./boyahane-inventory";
 import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
+import { registerBoyahaneManualJobV2Routes } from "./boyahane-manual-job-v2";
 import { registerBoyahaneSampleRoutes } from "./boyahane-sample";
 import { registerBoyahaneWorkflowRoutes } from "./boyahane-workflow";
 import { registerDesenOperationRoutes } from "./desen-operations";
@@ -41,9 +42,10 @@ function allowedOrigin(origin: string) {
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
+// Kaynak türü destekli manuel rota eski uyumluluk rotasından önce çalışır.
+registerBoyahaneManualJobV2Routes(app);
 registerBoyahaneManualJobRoutes(app);
 registerBoyahaneSampleRoutes(app);
-// Kayıt sırasında aynı renk kartı varsa tekrar kullanılır; sonra kimlik ve iş rotaları çalışır.
 registerBoyahaneColorResolveRoutes(app);
 registerBoyahaneColorIdentityRoutes(app);
 registerBoyahaneColorJobRoutes(app);
