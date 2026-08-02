@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   runtime-smoke:
@@ -54,15 +55,44 @@ jobs:
           exit 1
 
       - name: Boyahane ekranını gerçek Chrome ile doğrula
+        id: runtime
+        continue-on-error: true
         run: node scripts/runtime-smoke.mjs
 
-      - name: Tarayıcı ekran görüntüsünü sakla
+      - name: Tarayıcı ekran görüntüsünü ve sonucu sakla
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: frontend-runtime-smoke-${{ github.run_id }}
           path: |
             APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
             /tmp/kyerp-vite-preview.log
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Gerçek tarayıcı sonucunu PR kaydına yaz
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
+        run: |
+          result="$(cat runtime-result.json 2>/dev/null || printf '{"ok":false,"runtimeErrors":["runtime-result.json oluşmadı"]}')"
+          compact="$(jq -c '{ok, finalUrl, bodyPreview, runtimeErrors}' <<<"$result")"
+          body=$(cat <<EOF
+          ## KY ERP gerçek tarayıcı testi
+
+          - Commit: `${GITHUB_SHA}`
+          - Run: `${GITHUB_RUN_ID}`
+          - Sonuç: **${RUNTIME_OUTCOME}**
+
+          \`\`\`json
+          ${compact}
+          \`\`\`
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" -f body="$body"
+
+      - name: Tarayıcı hatası varsa başarısız say
+        if: steps.runtime.outcome != 'success'
+        run: exit 1
