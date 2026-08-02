@@ -1,5 +1,18 @@
 import { apiPost } from "../utils/api";
-import { companyPayload } from "./boyahaneWorkflowApi";
+
+function companyPayload(activeMainCompany) {
+  const mainCompanySlug = String(
+    activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || "",
+  ).trim();
+  if (!mainCompanySlug) {
+    throw new Error("Ana firma seçmeden numune işi oluşturulamaz.");
+  }
+  return {
+    mainCompanySlug,
+    mainCompanyId:
+      activeMainCompany?.id || activeMainCompany?.mainCompanyId || undefined,
+  };
+}
 
 function unwrap(payload) {
   return payload?.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
