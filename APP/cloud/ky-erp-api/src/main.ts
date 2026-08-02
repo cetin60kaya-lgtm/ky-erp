@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
-import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import";
+import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import-runtime";
 import { registerBoyahaneInventoryRoutes } from "./boyahane-inventory";
 import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
 import { registerBoyahaneSampleRoutes } from "./boyahane-sample";
