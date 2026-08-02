@@ -8,7 +8,7 @@ on:
       - "RELEASES/pages-domain-audit.json"
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -17,124 +17,90 @@ jobs:
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
 
-      - name: Cloudflare hesabını çöz
+      - name: Pages ve alan adı durumunu hataya dayanıklı denetle
         shell: bash
         run: |
-          set -euo pipefail
-          database_id="b504b712-6927-499d-815d-0b954c8ee246"
-          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-          accounts="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
-          account_id=""
-          while IFS= read -r candidate; do
-            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${candidate}/d1/database?per_page=100")"
-            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
-              account_id="$candidate"
-              break
-            fi
-          done < <(jq -r '.result[]?.id' <<<"$accounts")
-          test -n "$account_id"
-          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
-
-      - name: Pages projelerini, alan adlarını ve dağıtımları denetle
-        shell: bash
-        run: |
-          set -euo pipefail
+          set -u
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
           api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects"
           mkdir -p pages-audit
 
-          projects="$(curl --fail --silent --show-error -H "$auth" "${api}?per_page=100")"
-          echo "$projects" > pages-audit/projects.json
+          curl --silent --show-error -H "$auth" "$api" > pages-audit/projects.json || printf '{"success":false,"result":[]}' > pages-audit/projects.json
+          curl --silent --show-error -H "$auth" "${api}/ky-erp-frontend" > pages-audit/project.json || printf '{"success":false,"result":{}}' > pages-audit/project.json
+          curl --silent --show-error -H "$auth" "${api}/ky-erp-frontend/domains" > pages-audit/domains.json || printf '{"success":false,"result":[]}' > pages-audit/domains.json
+          curl --silent --show-error -H "$auth" "${api}/ky-erp-frontend/deployments?env=production&per_page=10" > pages-audit/deployments.json || printf '{"success":false,"result":[]}' > pages-audit/deployments.json
 
-          echo '[]' > pages-audit/domain-owners.json
-          while IFS= read -r project; do
-            encoded_project="$(jq -rn --arg v "$project" '$v|@uri')"
-            domains="$(curl --fail --silent --show-error -H "$auth" "${api}/${encoded_project}/domains" || printf '{"success":false,"result":[]}')"
-            jq --arg project "$project" '[.result[]? | {project:$project,name,status,verification_data,validation_data}]' <<<"$domains" > pages-audit/current-domains.json
-            jq -s '.[0] + .[1]' pages-audit/domain-owners.json pages-audit/current-domains.json > pages-audit/domain-owners.next.json
-            mv pages-audit/domain-owners.next.json pages-audit/domain-owners.json
-          done < <(jq -r '.result[]?.name' <<<"$projects")
+          echo '[]' > pages-audit/all-domain-owners.json
+          jq -r '.result[]?.name // empty' pages-audit/projects.json 2>/dev/null | while IFS= read -r project; do
+            safe_project="$(jq -rn --arg v "$project" '$v|@uri')"
+            curl --silent --show-error -H "$auth" "${api}/${safe_project}/domains" > pages-audit/one-domains.json || printf '{"success":false,"result":[]}' > pages-audit/one-domains.json
+            jq --arg project "$project" '[.result[]? | {project:$project,name,status}]' pages-audit/one-domains.json > pages-audit/one-owner.json 2>/dev/null || echo '[]' > pages-audit/one-owner.json
+            jq -s '.[0] + .[1]' pages-audit/all-domain-owners.json pages-audit/one-owner.json > pages-audit/all-domain-owners.next.json
+            mv pages-audit/all-domain-owners.next.json pages-audit/all-domain-owners.json
+          done
 
-          target_project="$(curl --fail --silent --show-error -H "$auth" "${api}/ky-erp-frontend")"
-          target_domains="$(curl --fail --silent --show-error -H "$auth" "${api}/ky-erp-frontend/domains")"
-          deployments="$(curl --fail --silent --show-error -H "$auth" "${api}/ky-erp-frontend/deployments?env=production&per_page=10")"
-          echo "$target_project" > pages-audit/target-project.json
-          echo "$target_domains" > pages-audit/target-domains.json
-          echo "$deployments" > pages-audit/production-deployments.json
-
-          latest_url="$(jq -r '.result[0].url // empty' <<<"$deployments")"
-          latest_id="$(jq -r '.result[0].id // empty' <<<"$deployments")"
-          latest_branch="$(jq -r '.result[0].deployment_trigger.metadata.branch // empty' <<<"$deployments")"
-          latest_env="$(jq -r '.result[0].environment // empty' <<<"$deployments")"
-          latest_aliases="$(jq -c '.result[0].aliases // []' <<<"$deployments")"
-          production_branch="$(jq -r '.result.production_branch // empty' <<<"$target_project")"
-          domain_owner="$(jq -c '[.[] | select(.name == "kyerp.net")]' pages-audit/domain-owners.json)"
-
-          curl --location --silent --show-error --fail https://kyerp.net/ > pages-audit/live-root.html || true
+          latest_url="$(jq -r '.result[0].url // empty' pages-audit/deployments.json 2>/dev/null)"
+          curl --location --silent --show-error https://kyerp.net/ > pages-audit/live.html || true
           if [ -n "$latest_url" ]; then
-            curl --location --silent --show-error --fail "$latest_url/" > pages-audit/latest-root.html || true
+            curl --location --silent --show-error "$latest_url/" > pages-audit/latest.html || true
           else
-            : > pages-audit/latest-root.html
+            : > pages-audit/latest.html
           fi
 
-          live_title="$(sed -n 's:.*<title>\(.*\)</title>.*:\1:p' pages-audit/live-root.html | head -1)"
-          latest_title="$(sed -n 's:.*<title>\(.*\)</title>.*:\1:p' pages-audit/latest-root.html | head -1)"
-          live_script="$(grep -oE '<script[^>]+src="[^"]+"' pages-audit/live-root.html | sed -n 's/.*src="\([^"]*\)"/\1/p' | head -1 || true)"
-          latest_script="$(grep -oE '<script[^>]+src="[^"]+"' pages-audit/latest-root.html | sed -n 's/.*src="\([^"]*\)"/\1/p' | head -1 || true)"
-
-          zone_json="$(curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones?name=kyerp.net" || printf '{"success":false,"result":[]}')"
-          zone_id="$(jq -r '.result[0].id // empty' <<<"$zone_json")"
+          zone_json="$(curl --silent --show-error -H "$auth" 'https://api.cloudflare.com/client/v4/zones?name=kyerp.net' || printf '{"success":false,"result":[]}')"
+          printf '%s' "$zone_json" > pages-audit/zone.json
+          zone_id="$(jq -r '.result[0].id // empty' pages-audit/zone.json 2>/dev/null)"
           if [ -n "$zone_id" ]; then
-            dns_json="$(curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=kyerp.net&per_page=100" || printf '{"success":false,"result":[]}')"
+            curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=kyerp.net" > pages-audit/dns.json || printf '{"success":false,"result":[]}' > pages-audit/dns.json
           else
-            dns_json='{"success":false,"result":[]}'
+            printf '{"success":false,"result":[]}' > pages-audit/dns.json
           fi
-          echo "$zone_json" > pages-audit/zone.json
-          echo "$dns_json" > pages-audit/dns.json
+
+          live_title="$(grep -oE '<title>[^<]*</title>' pages-audit/live.html | head -1 | sed 's/<[^>]*>//g' || true)"
+          latest_title="$(grep -oE '<title>[^<]*</title>' pages-audit/latest.html | head -1 | sed 's/<[^>]*>//g' || true)"
+          live_script="$(grep -oE '<script[^>]+src="[^"]+"' pages-audit/live.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p' || true)"
+          latest_script="$(grep -oE '<script[^>]+src="[^"]+"' pages-audit/latest.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p' || true)"
 
           jq -n \
-            --arg productionBranch "$production_branch" \
-            --arg latestId "$latest_id" \
+            --arg projectSuccess "$(jq -r '.success // false' pages-audit/project.json 2>/dev/null)" \
+            --arg productionBranch "$(jq -r '.result.production_branch // empty' pages-audit/project.json 2>/dev/null)" \
+            --arg latestId "$(jq -r '.result[0].id // empty' pages-audit/deployments.json 2>/dev/null)" \
             --arg latestUrl "$latest_url" \
-            --arg latestBranch "$latest_branch" \
-            --arg latestEnvironment "$latest_env" \
-            --argjson latestAliases "$latest_aliases" \
-            --argjson domainOwner "$domain_owner" \
+            --arg latestBranch "$(jq -r '.result[0].deployment_trigger.metadata.branch // empty' pages-audit/deployments.json 2>/dev/null)" \
+            --arg latestEnvironment "$(jq -r '.result[0].environment // empty' pages-audit/deployments.json 2>/dev/null)" \
+            --argjson aliases "$(jq -c '.result[0].aliases // []' pages-audit/deployments.json 2>/dev/null || echo '[]')" \
+            --argjson targetDomains "$(jq -c '[.result[]? | {name,status}]' pages-audit/domains.json 2>/dev/null || echo '[]')" \
+            --argjson owners "$(jq -c '[.[] | select(.name == "kyerp.net")]' pages-audit/all-domain-owners.json 2>/dev/null || echo '[]')" \
             --arg liveTitle "$live_title" \
             --arg latestTitle "$latest_title" \
             --arg liveScript "$live_script" \
             --arg latestScript "$latest_script" \
-            --argjson dns "$(jq '[.result[]? | {id,type,name,content,proxied}]' <<<"$dns_json")" \
-            '{productionBranch,latest:{id:$latestId,url:$latestUrl,branch:$latestBranch,environment:$latestEnvironment,aliases:$latestAliases},domainOwner:$domainOwner,html:{liveTitle:$liveTitle,latestTitle:$latestTitle,liveScript:$liveScript,latestScript:$latestScript},dns:$dns}' \
+            --argjson dns "$(jq -c '[.result[]? | {id,type,name,content,proxied}]' pages-audit/dns.json 2>/dev/null || echo '[]')" \
+            '{projectSuccess:$projectSuccess,productionBranch:$productionBranch,latest:{id:$latestId,url:$latestUrl,branch:$latestBranch,environment:$latestEnvironment,aliases:$aliases},targetDomains:$targetDomains,kyerpDomainOwners:$owners,html:{liveTitle:$liveTitle,latestTitle:$latestTitle,liveScript:$liveScript,latestScript:$latestScript},dns:$dns}' \
             > pages-audit/summary.json
           cat pages-audit/summary.json
 
-      - name: Denetim çıktısını sakla
-        uses: actions/upload-artifact@v4
-        with:
-          name: pages-domain-audit-${{ github.run_id }}
-          path: pages-audit
-          if-no-files-found: error
-          retention-days: 7
+      - name: Denetim sonucunu repo dosyasına yaz
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          path='RELEASES/pages-domain-audit-result.json'
+          content="$(base64 -w0 pages-audit/summary.json)"
+          existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=codex/model-uretim-kontrol-merkezi-final" --jq '.sha' 2>/dev/null || true)"
+          args=(--method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" -f message='audit: Pages alan adı denetim sonucunu kaydet' -f content="$content" -f branch='codex/model-uretim-kontrol-merkezi-final')
+          if [ -n "$existing_sha" ]; then
+            args+=(-f sha="$existing_sha")
+          fi
+          gh api "${args[@]}"
 
       - name: Sonucu PR kaydına yaz
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           compact="$(jq -c . pages-audit/summary.json)"
-          body=$(cat <<EOF
-          ## KY ERP Pages alan adı denetimi
-
-          - Commit: `${GITHUB_SHA}`
-          - Run: `${GITHUB_RUN_ID}`
-
-          \`\`\`json
-          ${compact}
-          \`\`\`
-          EOF
-          )
-          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" -f body="$body"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" -f body="## KY ERP Pages alan adı denetimi\n\n- Run: ${GITHUB_RUN_ID}\n\n\`\`\`json\n${compact}\n\`\`\`"
