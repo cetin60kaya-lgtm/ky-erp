@@ -5,6 +5,7 @@ import "./boyahaneCommandCenter.css";
 import "./boyahaneForms.css";
 import "./boyahaneFinal.css";
 import "./boyahaneCompactV2.css";
+import "./boyahaneCompactV2Patch.css";
 import BoyahaneDashboardPage from "./workflow/BoyahaneDashboardPage";
 import BoyahaneWorkPageV2 from "./workflow/BoyahaneWorkPageV2";
 import BoyahaneInventoryHub from "./workflow/BoyahaneInventoryHub";
