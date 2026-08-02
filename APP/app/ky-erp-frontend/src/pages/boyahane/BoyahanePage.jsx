@@ -8,6 +8,7 @@ import "./boyahaneCompactV2.css";
 import "./boyahaneCompactV2Patch.css";
 import "./boyahaneRefineV3.css";
 import "./boyahaneFormulaV4.css";
+import "./boyahaneColorIdentity.css";
 import BoyahaneDashboardCompactPage from "./workflow/BoyahaneDashboardCompactPage";
 import BoyahaneWorkPageV4 from "./workflow/BoyahaneWorkPageV4";
 import BoyahaneInventoryHubV3 from "./workflow/BoyahaneInventoryHubV3";
