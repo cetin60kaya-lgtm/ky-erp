@@ -90,7 +90,6 @@ function parseJsonOutput(output) {
     try {
       return JSON.parse(candidate);
     } catch {
-      // Wrangler bilgi satırlarını yazmış olabilir; son kapanışa kadar tekrar dene.
       for (const end of [candidate.lastIndexOf("]"), candidate.lastIndexOf("}")]) {
         if (end < 0) continue;
         try {
@@ -116,6 +115,17 @@ function collectRows(value, rows = []) {
   return rows;
 }
 
+function sleep(milliseconds) {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(waitBuffer, 0, 0, milliseconds);
+}
+
+function isRetryableRemoteError(text) {
+  return /code:\s*7500|internal error|rate.?limit|too many requests|\b429\b|\b5\d\d\b/i.test(
+    text,
+  );
+}
+
 function execute(sql) {
   const command = process.platform === "win32" ? "npx.cmd" : "npx";
   const args = [
@@ -134,17 +144,39 @@ function execute(sql) {
     args.push("--persist-to", persistTo);
   }
 
-  const result = spawnSync(command, args, {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `D1 sorgusu başarısız (${result.status}).\n${result.stdout || ""}\n${result.stderr || ""}`,
+  const maxAttempts = mode === "remote" ? 5 : 1;
+  let lastResult = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = spawnSync(command, args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    lastResult = result;
+
+    if (result.status === 0) {
+      return collectRows(parseJsonOutput(result.stdout));
+    }
+
+    const errorText = `${result.stdout || ""}\n${result.stderr || ""}`;
+    const canRetry =
+      attempt < maxAttempts &&
+      mode === "remote" &&
+      isRetryableRemoteError(errorText);
+
+    if (!canRetry) break;
+
+    const waitMs = attempt * 1500;
+    console.warn(
+      `Cloudflare D1 geçici hata verdi; sorgu ${attempt}/${maxAttempts} sonrasında ${waitMs} ms beklenerek yeniden deneniyor.`,
     );
+    sleep(waitMs);
   }
-  return collectRows(parseJsonOutput(result.stdout));
+
+  throw new Error(
+    `D1 sorgusu başarısız (${lastResult?.status ?? "bilinmiyor"}).\n${lastResult?.stdout || ""}\n${lastResult?.stderr || ""}`,
+  );
 }
 
 function quoteIdentifier(value) {
