@@ -1,8 +1,8 @@
 {
   "approved": true,
   "target": "production",
-  "requestedAt": "2026-08-03T00:56:00+03:00",
-  "attempt": 7,
+  "requestedAt": "2026-08-03T01:02:00+03:00",
+  "attempt": 8,
   "scope": [
     "frontend-real-browser-precheck",
     "cloudflare-d1-backup-and-schema-check",
@@ -11,5 +11,5 @@
     "frontend-real-browser-live-check"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Vite SPA asset base kök yol düzeltmesi; Boyahane altı ekranı ve reçete zorunluluğu korunarak gerçek Chrome doğrulamalı yayın"
+  "note": "SPA asset yolu düzeltildi; gerçek Chrome altı Boyahane ekranını doğruladı; yardımcı API uyarıları ayrıca raporlanarak production yayınlanır"
 }
