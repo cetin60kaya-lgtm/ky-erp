@@ -25,8 +25,17 @@ function Stop-SafeProcess([int]$ProcessId) {
 if (Test-Path $ProcessFile) {
     try {
         $state = Get-Content $ProcessFile -Raw | ConvertFrom-Json
-        Stop-SafeProcess ([int]$state.apiPid)
-        Stop-SafeProcess ([int]$state.webPid)
+        $processIds = @(
+            $state.apiPid,
+            $state.webPid,
+            $state.apiHostPid,
+            $state.webHostPid
+        )
+        foreach ($processId in $processIds) {
+            if ($null -ne $processId) {
+                Stop-SafeProcess ([int]$processId)
+            }
+        }
     } catch {
         Write-Warning "Kayıtlı işlem bilgisi okunamadı: $($_.Exception.Message)"
     }
