@@ -143,7 +143,7 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
 
   const productUsage = useMemo(() => {
     const map = new Map(products.map((row) => [String(row.id), { ...row, usedKg: 0, sampleKg: 0, productionKg: 0, lots: [], models: new Set() }]));
-    lots.forEach((lot) => {
+    filteredLots.forEach((lot) => {
       const id = String(lot.inventoryId || lot.productId || "");
       const row = map.get(id) || { id, productName: lot.productName || "Ürün", usedKg: 0, sampleKg: 0, productionKg: 0, lots: [], models: new Set() };
       row.usedKg += Number(lot.usedKg || 0);
@@ -162,7 +162,7 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
       map.set(id, row);
     }));
     return [...map.values()].filter((row) => includes(row.productName, filters.product)).sort((a, b) => Number(b.usedKg || b.productionKg) - Number(a.usedKg || a.productionKg));
-  }, [products, lots, productions, filters.product]);
+  }, [products, filteredLots, productions, filters.product]);
 
   const summary = report?.summary || {};
   const expenses = safeArray(report?.expenses).filter((row) => within(row.createdAt || row.date) && includes(`${row.description} ${row.category} ${row.productName} ${row.modelName}`, q));
