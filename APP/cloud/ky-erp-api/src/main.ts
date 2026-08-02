@@ -6,6 +6,8 @@ import { registerBoyahaneWorkflowRoutes } from "./boyahane-workflow";
 import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
+import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
+import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerProductionCenterRoutes } from "./production-center";
 
 type ShellEnv = {
@@ -36,6 +38,11 @@ registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
+
+// İşNet, İK ve Yönetim modülleri ayrı uyumluluk katmanlarıdır.
+// Bu kayıtlar yapılmadan ilgili frontend çağrıları Worker'da 404'e düşer.
+registerIsnetCloudRoutes(app);
+registerIkAdminCloudRoutes(app);
 
 const shell = new Hono<ShellEnv>();
 
