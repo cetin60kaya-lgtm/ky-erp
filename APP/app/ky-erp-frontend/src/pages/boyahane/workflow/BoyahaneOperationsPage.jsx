@@ -6,7 +6,6 @@ import {
   createBoyahaneProduction,
   createColorRecipeVersion,
   createRegisteredColor,
-  deleteBoyahaneJobColor,
   getBoyahaneJob,
   listBoyahaneJobs,
   listBoyahaneLogs,
