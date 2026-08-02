@@ -106,30 +106,39 @@ export function registerBoyahaneColorResolveRoutes(app: Hono<AppEnv>) {
     const pantoneKey = normalize(body.pantone);
     const nameKey = normalize(body.colorName);
     const paintKey = normalize(body.paintType || body.dyeType);
-    const context = (await storeList(c, JOB_COLOR_SCOPE, slug)).find((row) =>
+    const jobColors = await storeList(c, JOB_COLOR_SCOPE, slug);
+    const exactContext = jobColors.find((row) =>
       (!pantoneKey || normalize(row.pantone) === pantoneKey) &&
       (!nameKey || normalize(row.colorName) === nameKey) &&
       (!paintKey || normalize(row.paintType || row.dyeType) === paintKey),
     );
+    const fallbackContext = jobColors.find((row) =>
+      (!nameKey || normalize(row.colorName) === nameKey) &&
+      (!paintKey || normalize(row.paintType || row.dyeType) === paintKey),
+    );
+    const context = exactContext || fallbackContext;
     const merged = { ...context, ...body };
     const sourceType = sourceTypeOf(merged);
     const colorName = text(merged.colorName);
     const paintType = text(merged.paintType || merged.dyeType || "SUBAZLI");
-    const colorHex = text(merged.colorHex);
+    const colorHex = text(context?.colorHex || merged.colorHex);
+    const realPantone = sourceType === "REFERENCE"
+      ? text(context?.basePantone || context?.pantone || merged.basePantone || merged.pantone)
+      : text(merged.pantone);
     const candidate: Row = {
       colorName,
-      pantone: sourceType === "VISUAL" ? "" : text(merged.pantone),
-      basePantone: sourceType === "REFERENCE" ? text(merged.basePantone || merged.pantone) : "",
+      pantone: sourceType === "VISUAL" ? "" : realPantone,
+      basePantone: sourceType === "REFERENCE" ? realPantone : "",
       paintType,
       dyeType: paintType,
       sourceType,
       colorSource: sourceType,
-      referenceName: text(merged.referenceName),
-      referenceCode: text(merged.referenceCode),
-      referenceNote: text(merged.referenceNote),
-      referenceImageUrl: text(merged.referenceImageUrl),
+      referenceName: text(context?.referenceName || merged.referenceName),
+      referenceCode: text(context?.referenceCode || merged.referenceCode),
+      referenceNote: text(context?.referenceNote || merged.referenceNote),
+      referenceImageUrl: text(context?.referenceImageUrl || merged.referenceImageUrl),
       colorHex,
-      colorFamily: text(merged.colorFamily) || colorFamilyFromHex(colorHex),
+      colorFamily: text(context?.colorFamily || merged.colorFamily) || colorFamilyFromHex(colorHex),
     };
 
     if (!colorName) {
