@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$Reset,
     [ValidateSet("Boyahane", "Uretim")]
     [string]$Page = "Boyahane"
@@ -24,7 +24,8 @@ $FrontendDir = Join-Path $Repo "APP\app\ky-erp-frontend"
 $ConfigFile = Join-Path $WorkerDir "wrangler.production-local.jsonc"
 $SeedFile = Join-Path $WorkerDir "local-production-center.sql"
 $BoyahaneSeedFile = Join-Path $WorkerDir "local-boyahane-inventory.sql"
-$PersistDir = Join-Path $Repo ".local-test\production-center"
+$PersistRoot = Join-Path $Repo ".local-test"
+$PersistDir = Join-Path $PersistRoot "production-center"
 $ExpectedBranch = "codex/model-uretim-kontrol-merkezi-final"
 $PageUrl = if ($Page -eq "Uretim") {
     "http://localhost:5173/uretim/uretim-merkezi"
@@ -36,17 +37,68 @@ function Write-Step([string]$Message) {
     Write-Host "`n=== $Message ===" -ForegroundColor Cyan
 }
 
+function Stop-ProcessTree([int]$ProcessId) {
+    if ($ProcessId -le 0 -or $ProcessId -eq $PID) {
+        return
+    }
+
+    try {
+        if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
+            & taskkill.exe /PID $ProcessId /T /F 2>$null | Out-Null
+        } else {
+            Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    } catch {
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Stop-Port([int]$Port) {
-    Get-NetTCPConnection `
-        -LocalPort $Port `
-        -State Listen `
-        -ErrorAction SilentlyContinue |
-    ForEach-Object {
-        Write-Host "Port $Port kapatılıyor. PID: $($_.OwningProcess)" -ForegroundColor Yellow
-        Stop-Process `
-            -Id $_.OwningProcess `
-            -Force `
+    $Connections = @(
+        Get-NetTCPConnection `
+            -LocalPort $Port `
+            -State Listen `
             -ErrorAction SilentlyContinue
+    )
+
+    foreach ($Connection in $Connections) {
+        $OwnerPid = [int]$Connection.OwningProcess
+        Write-Host "Port $Port kapatılıyor. PID: $OwnerPid" -ForegroundColor Yellow
+        Stop-ProcessTree -ProcessId $OwnerPid
+    }
+}
+
+function Stop-LocalDevProcesses {
+    $RepoPattern = [regex]::Escape($Repo)
+    $PersistPattern = [regex]::Escape($PersistRoot)
+    $Candidates = @(
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $Name = [string]$_.Name
+            $CommandLine = [string]$_.CommandLine
+
+            if (-not $CommandLine -or [int]$_.ProcessId -eq $PID) {
+                return $false
+            }
+
+            $SupportedProcess = $Name -match '^(node|npm|npx|powershell|pwsh|cmd)(\.exe)?$'
+            $LocalCommand =
+                $CommandLine -match $RepoPattern -or
+                $CommandLine -match $PersistPattern
+            $DevCommand =
+                $CommandLine -match 'wrangler(\.cmd)?\s+dev' -or
+                $CommandLine -match 'miniflare' -or
+                $CommandLine -match 'vite' -or
+                $CommandLine -match 'npm(\.cmd)?\s+run\s+dev' -or
+                $CommandLine -match 'KY ERP - YEREL'
+
+            $SupportedProcess -and $LocalCommand -and $DevCommand
+        }
+    )
+
+    foreach ($Process in $Candidates) {
+        Write-Host "Yerel geliştirme işlemi kapatılıyor. PID: $($Process.ProcessId) | $($Process.Name)" -ForegroundColor Yellow
+        Stop-ProcessTree -ProcessId ([int]$Process.ProcessId)
     }
 }
 
@@ -67,6 +119,33 @@ function Wait-Port([int]$Port, [int]$TimeoutSeconds = 60) {
     }
 
     return $false
+}
+
+function Reset-PersistDirectory([string]$Path) {
+    if (-not (Test-Path $Path)) {
+        return $Path
+    }
+
+    for ($Attempt = 1; $Attempt -le 8; $Attempt++) {
+        try {
+            Remove-Item $Path -Recurse -Force -ErrorAction Stop
+            return $Path
+        } catch {
+            Write-Host "Yerel test verisi kilitli. Temizleme yeniden deneniyor ($Attempt/8)..." -ForegroundColor Yellow
+            Stop-LocalDevProcesses
+            foreach ($Port in @(5173, 8787, 8788)) {
+                Stop-Port $Port
+            }
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+            Start-Sleep -Milliseconds 900
+        }
+    }
+
+    $FreshPath = Join-Path $PersistRoot ("production-center-reset-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+    Write-Host "Eski Miniflare klasörü hâlâ kilitli. Temiz bir yeni yerel veri klasörü kullanılacak:" -ForegroundColor Yellow
+    Write-Host $FreshPath -ForegroundColor Yellow
+    return $FreshPath
 }
 
 Write-Host ""
@@ -118,10 +197,12 @@ if ($Status.Count -gt 0) {
 foreach ($Port in @(5173, 8787, 8788)) {
     Stop-Port $Port
 }
+Stop-LocalDevProcesses
+Start-Sleep -Milliseconds 1200
 
-if ($Reset -and (Test-Path $PersistDir)) {
+if ($Reset) {
     Write-Step "Yalnız izole test verisi sıfırlanıyor"
-    Remove-Item $PersistDir -Recurse -Force
+    $PersistDir = Reset-PersistDirectory -Path $PersistDir
 }
 
 New-Item -ItemType Directory -Path $PersistDir -Force | Out-Null
