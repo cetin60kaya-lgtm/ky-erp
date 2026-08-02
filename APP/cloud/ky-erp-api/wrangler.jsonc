@@ -20,7 +20,9 @@
       "binding": "DB",
       "database_name": "ky-erp-db",
       "database_id": "b504b712-6927-499d-815d-0b954c8ee246",
-      "remote": true
+      "remote": true,
+      "migrations_dir": "migrations",
+      "migrations_table": "d1_migrations"
     }
   ],
   "r2_buckets": [
