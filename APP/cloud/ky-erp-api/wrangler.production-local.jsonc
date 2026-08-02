@@ -12,7 +12,9 @@
     {
       "binding": "DB",
       "database_name": "ky-erp-production-local",
-      "database_id": "00000000-0000-0000-0000-000000000001"
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations",
+      "migrations_table": "d1_migrations"
     }
   ],
   "r2_buckets": [
