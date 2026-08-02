@@ -207,10 +207,19 @@ export async function listBoyahaneProducts(company, params = {}) {
 }
 
 export async function createBoyahaneProduct(company, body) {
-  return unwrap(
-    await apiPost("/boyahane/products", companyParams(company, body)),
+  const approvalStatus = body?.approvalStatus || "REVIEW_REQUIRED";
+  const created = unwrap(
+    await apiPost(
+      "/boyahane/products",
+      companyParams(company, { ...body, approvalStatus }),
+    ),
     null,
   );
+  if (!created?.id || created.approvalStatus === approvalStatus) return created;
+  return updateBoyahaneProduct(company, created.id, {
+    approvalStatus,
+    approvedAt: approvalStatus === "APPROVED" ? new Date().toISOString() : null,
+  });
 }
 
 export async function updateBoyahaneProduct(company, id, body) {
