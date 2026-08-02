@@ -1,6 +1,8 @@
 -- KY ERP Cloudflare D1 çalışma şeması.
 -- Bu migration veri silmez ve örnek/test kaydı eklemez.
 -- Var olan tabloları korur; yalnız eksik çekirdek tabloları ve güvenli indeksleri oluşturur.
+-- machine_shift_defaults tablosu canlıdaki eski şemayla uyumlu tutulur;
+-- yeni alanlar 0002 migrationında güvenli biçimde eklenir.
 
 PRAGMA defer_foreign_keys = true;
 
@@ -169,15 +171,11 @@ CREATE TABLE IF NOT EXISTS model_production_links (
 CREATE TABLE IF NOT EXISTS machine_shift_defaults (
   id TEXT PRIMARY KEY,
   main_company_slug TEXT NOT NULL,
-  machine_no TEXT NOT NULL,
-  machine_name TEXT,
-  day_operator TEXT,
-  night_operator TEXT,
-  is_active INTEGER DEFAULT 1,
-  sort_order INTEGER DEFAULT 0,
+  machine_id TEXT NOT NULL,
+  shift TEXT NOT NULL,
+  raw TEXT,
   created_at TEXT,
-  updated_at TEXT,
-  deleted_at TEXT
+  updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS json_store (
@@ -206,8 +204,6 @@ CREATE INDEX IF NOT EXISTS idx_model_document_links_model
   ON model_document_links (main_company_slug, model_id, document_id);
 CREATE INDEX IF NOT EXISTS idx_model_production_links_model
   ON model_production_links (main_company_slug, model_id, production_record_id);
-CREATE INDEX IF NOT EXISTS idx_machine_shift_defaults_company
-  ON machine_shift_defaults (main_company_slug, machine_no);
 CREATE INDEX IF NOT EXISTS idx_json_store_scope_company_file
   ON json_store (scope, main_company_slug, file_name);
 CREATE INDEX IF NOT EXISTS idx_json_store_company_updated
