@@ -1,0 +1,27 @@
+{
+  "projectSuccess": "true",
+  "productionBranch": "agent/uretim-tek-merkez",
+  "latest": {
+    "id": "a4ef1c35-4097-4d88-ad6c-75c9b14f0207",
+    "url": "https://a4ef1c35.ky-erp-frontend.pages.dev",
+    "branch": "agent/uretim-tek-merkez",
+    "environment": "production",
+    "aliases": [
+      "https://app.kyerp.net"
+    ]
+  },
+  "targetDomains": [
+    {
+      "name": "app.kyerp.net",
+      "status": "active"
+    }
+  ],
+  "kyerpDomainOwners": [],
+  "html": {
+    "liveTitle": "ky-erp-frontend",
+    "latestTitle": "KY ERP",
+    "liveScript": "./assets/index-FJFFthaj.js",
+    "latestScript": "/assets/index-BiazjG5j.js"
+  },
+  "dns": []
+}
