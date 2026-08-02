@@ -1,17 +1,14 @@
 {
-  "approved": true,
+  "approved": false,
   "target": "production",
-  "mode": "pages-domain-repair",
-  "requestedAt": "2026-08-03T01:56:00+03:00",
-  "attempt": 12,
+  "mode": "production",
+  "requestedAt": "2026-08-03T01:38:00+03:00",
+  "attempt": 13,
   "scope": [
-    "pages-root-domain-repair",
-    "frontend-real-browser-precheck",
-    "cloudflare-d1-backup-and-schema-check",
-    "api-worker",
-    "frontend-pages",
-    "frontend-real-browser-live-check"
+    "production-branch-alignment",
+    "frontend-pages-git-deployment",
+    "live-browser-verification"
   ],
-  "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "kyerp.net alan adını ky-erp-frontend Pages projesine bağla; Boyahane altı ekranı ve reçete zorunluluğu korunarak gerçek Chrome ile doğrula"
+  "sourceBranch": "agent/uretim-tek-merkez",
+  "note": "Alan adı onarım denemesi kapatıldı; doğrulanmış final kaynak production dalına taşınır. Manuel release devre dışıdır."
 }
