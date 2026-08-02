@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import app from "./index";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
+import { registerBoyahaneColorResolveRoutes } from "./boyahane-color-resolve";
 import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import-runtime";
 import { registerBoyahaneInventoryRoutes } from "./boyahane-inventory";
 import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
@@ -37,13 +38,13 @@ function allowedOrigin(origin: string) {
   return undefined;
 }
 
-// Önce ortak üretim ve stok kaynakları, ardından bu kaynakları kullanan iş akışları bağlanır.
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobRoutes(app);
 registerBoyahaneSampleRoutes(app);
-// Renk kimliği ve işe renk ekleme rotaları genel workflow rotalarından önce bağlanır.
+// Kayıt sırasında aynı renk kartı varsa tekrar kullanılır; sonra kimlik ve iş rotaları çalışır.
+registerBoyahaneColorResolveRoutes(app);
 registerBoyahaneColorIdentityRoutes(app);
 registerBoyahaneColorJobRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
@@ -51,8 +52,6 @@ registerDesenStorageRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 
-// İşNet intake uyumluluğu ana İşNet rotalarından önce bağlanır; aynı belgenin
-// işlem kimliği tüm sonraki model ve fatura adımlarında değişmeden korunur.
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
