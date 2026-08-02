@@ -2,6 +2,13 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./LoginPage.css";
 
+function normalizeCredential(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const [username, setUsername] = useState("");
@@ -11,7 +18,10 @@ export default function LoginPage() {
 
   async function handleSubmit(event) {
     event?.preventDefault();
-    if (!username.trim() || !password.trim()) {
+    const cleanUsername = normalizeCredential(username);
+    const cleanPassword = normalizeCredential(password);
+
+    if (!cleanUsername || !cleanPassword) {
       setError("Kullanıcı adı ve şifre zorunludur.");
       return;
     }
@@ -19,7 +29,7 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError("");
-      await login(username, password);
+      await login(cleanUsername, cleanPassword);
     } catch (requestError) {
       setError(requestError?.message || "Giriş yapılamadı.");
     } finally {
