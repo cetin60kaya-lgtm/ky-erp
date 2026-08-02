@@ -207,10 +207,19 @@ for (const [table, columns] of Object.entries(requiredSchema)) {
   tableCounts[table] = Number(countRows[0]?.row_count || 0);
 }
 
-const quickRows = execute("PRAGMA quick_check;");
-const quickCheck = String(
-  quickRows[0]?.quick_check || quickRows[0]?.integrity_check || "",
-).toLowerCase();
+let integrityCheck = "";
+let integrityCheckMode = "";
+if (mode === "remote") {
+  const probeRows = execute("SELECT 1 AS remote_query_ok;");
+  integrityCheck = Number(probeRows[0]?.remote_query_ok || 0) === 1 ? "ok" : "";
+  integrityCheckMode = "remote-query-probe";
+} else {
+  const quickRows = execute("PRAGMA quick_check;");
+  integrityCheck = String(
+    quickRows[0]?.quick_check || quickRows[0]?.integrity_check || "",
+  ).toLowerCase();
+  integrityCheckMode = "pragma-quick-check";
+}
 
 let duplicateJsonStoreKeys = [];
 if (tableNames.has("json_store")) {
@@ -233,12 +242,13 @@ const report = {
   ok:
     missingTables.length === 0 &&
     missingColumns.length === 0 &&
-    quickCheck === "ok" &&
+    integrityCheck === "ok" &&
     (!requireMigrations || migrationTablePresent),
   mode,
   database,
   config,
-  quickCheck,
+  integrityCheck,
+  integrityCheckMode,
   migrationTablePresent,
   tableCount: tableNames.size,
   requiredTableCounts: tableCounts,
