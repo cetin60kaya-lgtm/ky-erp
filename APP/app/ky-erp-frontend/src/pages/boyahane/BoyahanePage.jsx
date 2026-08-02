@@ -10,15 +10,6 @@ import BoyahaneInventoryHub from "./workflow/BoyahaneInventoryHub";
 import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
 
-const NAV_ITEMS = [
-  ["is-akisi", "Ana Ekran"],
-  ["receteler", "Numune Çalışmaları"],
-  ["uretim-gecmisi", "İmalat Boyaları"],
-  ["kayitli-renkler", "Kayıtlı Renkler"],
-  ["urun-lotlar", "Stok, Lot ve Ürünler"],
-  ["raporlar", "Raporlar ve İşlem Logları"],
-];
-
 function normalizeTab(value) {
   const aliases = {
     "boyahane-yonetim-ozeti": "is-akisi",
@@ -70,21 +61,7 @@ export default function BoyahanePage({
 
   return (
     <div className="clean-workflow-page bh-page">
-      <section className="cw-screen bh-module-shell">
-        <nav className="bh-module-nav" aria-label="Boyahane ekranları">
-          {NAV_ITEMS.map(([key, label]) => (
-            <button
-              type="button"
-              key={key}
-              className={tab === key ? "active" : ""}
-              onClick={() => openModule?.("boyahane", { tabKey: key })}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-        {page}
-      </section>
+      <section className="cw-screen bh-module-shell">{page}</section>
     </div>
   );
 }
