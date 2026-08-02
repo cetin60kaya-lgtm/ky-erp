@@ -1,5 +1,6 @@
 name: KY ERP D1 Şema ve Canlı Yayın Hazırlığı
 
+# Secrets doğrulaması için güncel dal tetiklemesi: 2026-08-02
 on:
   pull_request:
     paths:
