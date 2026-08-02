@@ -1,0 +1,178 @@
+name: KY ERP D1 Şema ve Canlı Yayın Hazırlığı
+
+on:
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/migrations/**"
+      - "APP/cloud/ky-erp-api/scripts/d1-schema-audit.mjs"
+      - "APP/cloud/ky-erp-api/wrangler.jsonc"
+      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
+      - "APP/cloud/ky-erp-api/package.json"
+      - ".github/workflows/d1-schema-readiness.yml"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Canlı D1 işlemi"
+        required: true
+        default: "check"
+        type: choice
+        options:
+          - check
+          - apply
+          - apply-and-deploy-worker
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-d1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  local-schema:
+    name: İzole D1 migration ve şema denetimi
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Paketleri kur
+        run: npm ci
+
+      - name: Temiz yerel D1 oluştur ve migration uygula
+        run: |
+          rm -rf .local-d1-readiness
+          npx wrangler d1 migrations apply ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-d1-readiness
+
+      - name: İzole test verilerini yükle
+        run: |
+          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql; do
+            npx wrangler d1 execute ky-erp-production-local \
+              --local \
+              --config wrangler.production-local.jsonc \
+              --persist-to .local-d1-readiness \
+              --file "$sql"
+          done
+
+      - name: D1 şemasını ve quick_check sonucunu doğrula
+        run: >-
+          node scripts/d1-schema-audit.mjs
+          --local
+          --database ky-erp-production-local
+          --config wrangler.production-local.jsonc
+          --persist-to .local-d1-readiness
+          --require-migrations
+
+      - name: Worker typecheck
+        run: npm run typecheck
+
+      - name: Worker dry-run build
+        run: npm run build
+
+  remote-readiness:
+    name: Canlı D1 yedek, kontrol ve isteğe bağlı yayın
+    if: github.event_name == 'workflow_dispatch'
+    needs: local-schema
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Cloudflare kimlik bilgilerini doğrula
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || (echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1)
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "CLOUDFLARE_ACCOUNT_ID eksik" >&2; exit 1)
+
+      - name: Paketleri kur
+        run: npm ci
+
+      - name: Canlı D1 tam yedeğini ve şema yedeğini al
+        run: |
+          mkdir -p database-backup
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          npx wrangler d1 export ky-erp-db \
+            --remote \
+            --config wrangler.jsonc \
+            --skip-confirmation \
+            --output "database-backup/ky-erp-db-before-${stamp}.sql"
+          npx wrangler d1 export ky-erp-db \
+            --remote \
+            --config wrangler.jsonc \
+            --skip-confirmation \
+            --no-data \
+            --output "database-backup/ky-erp-db-schema-before-${stamp}.sql"
+
+      - name: Canlı D1 mevcut şemasını denetle
+        run: >-
+          node scripts/d1-schema-audit.mjs
+          --remote
+          --database ky-erp-db
+          --config wrangler.jsonc
+        continue-on-error: ${{ inputs.action != 'check' }}
+
+      - name: Bekleyen migration listesini göster
+        run: npx wrangler d1 migrations list ky-erp-db --remote --config wrangler.jsonc
+
+      - name: Canlı D1 migrationlarını uygula
+        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
+        run: npx wrangler d1 migrations apply ky-erp-db --remote --config wrangler.jsonc
+
+      - name: Migration sonrası canlı D1 denetimi
+        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
+        run: >-
+          node scripts/d1-schema-audit.mjs
+          --remote
+          --database ky-erp-db
+          --config wrangler.jsonc
+          --require-migrations
+
+      - name: Worker'ı canlıya dağıt
+        if: inputs.action == 'apply-and-deploy-worker'
+        run: npx wrangler deploy --config wrangler.jsonc
+
+      - name: Canlı API sağlık kontrolü
+        if: inputs.action == 'apply-and-deploy-worker'
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent https://api.kyerp.net/api/health | tee /tmp/health.json | jq -e '.ok == true'; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent https://api.kyerp.net/api/system/status | tee /tmp/system-status.json | jq -e '.ok == true'
+
+      - name: Veritabanı yedeğini sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-d1-backup-${{ github.run_id }}
+          path: APP/cloud/ky-erp-api/database-backup/*.sql
+          if-no-files-found: warn
+          retention-days: 14
