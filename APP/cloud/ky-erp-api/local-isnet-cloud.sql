@@ -1,3 +1,8 @@
+-- İşNet smoke testi üretim merkezinin şemasını kullanır; ancak üretim örnek belgelerini
+-- İşNet sayaçlarına dahil etmez. Yalnız bu izole yerel test veritabanı temizlenir.
+DELETE FROM invoice_items;
+DELETE FROM documents;
+
 INSERT OR REPLACE INTO companies
   (id, main_company_slug, name, normalized_name, company_type, type, tax_no, is_active, created_at, updated_at)
 VALUES
