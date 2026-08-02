@@ -9,6 +9,16 @@ on:
       - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
       - "APP/cloud/ky-erp-api/package.json"
       - ".github/workflows/d1-schema-readiness.yml"
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/cloud/ky-erp-api/migrations/**"
+      - "APP/cloud/ky-erp-api/scripts/d1-schema-audit.mjs"
+      - "APP/cloud/ky-erp-api/wrangler.jsonc"
+      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
+      - "APP/cloud/ky-erp-api/package.json"
+      - ".github/workflows/d1-schema-readiness.yml"
   workflow_dispatch:
     inputs:
       action:
@@ -84,7 +94,7 @@ jobs:
 
   remote-readiness:
     name: Canlı D1 şema kontrolü ve isteğe bağlı yayın
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     needs: local-schema
     runs-on: ubuntu-latest
     environment: production
@@ -108,7 +118,44 @@ jobs:
       - name: Cloudflare kimlik bilgilerini doğrula
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || (echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1)
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "CLOUDFLARE_ACCOUNT_ID eksik" >&2; exit 1)
+
+      - name: Gerçek Cloudflare hesabını ve D1 sahibini otomatik çöz
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_id="b504b712-6927-499d-815d-0b954c8ee246"
+          auth_header="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          accounts_json="$(curl --fail --silent --show-error \
+            -H "$auth_header" \
+            https://api.cloudflare.com/client/v4/accounts)"
+
+          mapfile -t account_ids < <(jq -r '.result[]?.id' <<<"$accounts_json")
+          test "${#account_ids[@]}" -gt 0 || {
+            echo "Tokenın erişebildiği Cloudflare hesabı bulunamadı." >&2
+            exit 1
+          }
+
+          resolved_account_id=""
+          for account_id in "${account_ids[@]}"; do
+            databases_json="$(curl --fail --silent --show-error \
+              -H "$auth_header" \
+              "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?per_page=100")"
+
+            if jq -e --arg database_id "$database_id" \
+              'any(.result[]?; ((.uuid // .id // "") == $database_id))' \
+              <<<"$databases_json" >/dev/null; then
+              resolved_account_id="$account_id"
+              break
+            fi
+          done
+
+          test -n "$resolved_account_id" || {
+            echo "ky-erp-db veritabanının sahibi olan Cloudflare hesabı bulunamadı." >&2
+            exit 1
+          }
+
+          echo "CLOUDFLARE_ACCOUNT_ID=$resolved_account_id" >> "$GITHUB_ENV"
+          echo "D1 sahibi Cloudflare hesabı otomatik doğrulandı."
 
       - name: Paketleri kur
         run: npm ci
@@ -125,7 +172,7 @@ jobs:
             --output "database-backup/ky-erp-db-schema-before-${stamp}.sql"
 
       - name: Migration öncesi tam D1 yedeğini al
-        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
+        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
         run: |
           stamp="$(date -u +%Y%m%d-%H%M%S)"
           npx wrangler d1 export ky-erp-db \
@@ -140,17 +187,17 @@ jobs:
           --remote
           --database ky-erp-db
           --config wrangler.jsonc
-        continue-on-error: ${{ inputs.action != 'check' }}
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.action != 'check' }}
 
       - name: Bekleyen migration listesini göster
         run: npx wrangler d1 migrations list ky-erp-db --remote --config wrangler.jsonc
 
       - name: Canlı D1 migrationlarını uygula
-        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
+        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
         run: npx wrangler d1 migrations apply ky-erp-db --remote --config wrangler.jsonc
 
       - name: Migration sonrası canlı D1 denetimi
-        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
+        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
         run: >-
           node scripts/d1-schema-audit.mjs
           --remote
@@ -159,11 +206,11 @@ jobs:
           --require-migrations
 
       - name: Worker'ı canlıya dağıt
-        if: inputs.action == 'apply-and-deploy-worker'
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply-and-deploy-worker'
         run: npx wrangler deploy --config wrangler.jsonc
 
       - name: Canlı API sağlık kontrolü
-        if: inputs.action == 'apply-and-deploy-worker'
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply-and-deploy-worker'
         run: |
           for attempt in $(seq 1 30); do
             if curl --fail --silent https://api.kyerp.net/api/health | tee /tmp/health.json | jq -e '.ok == true'; then
