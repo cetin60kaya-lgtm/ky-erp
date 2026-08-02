@@ -23,19 +23,26 @@ function normalizeRoute(value) {
   route = route.replace(/\$\{[^}]+\}/g, ":param");
   route = route.replace(/\/:([^/]+)/g, "/:param");
   route = route.replace(/\/{2,}/g, "/");
-  return route;
+  return route.length > 1 ? route.replace(/\/$/, "") : route;
 }
 
 function routePattern(route) {
-  const escaped = normalizeRoute(route)
-    .split("/")
-    .map((segment) => {
-      if (!segment) return "";
-      if (segment === ":param" || segment === "*") return "[^/]+";
-      return segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    })
-    .join("/");
-  return new RegExp(`^${escaped}$`);
+  const segments = normalizeRoute(route).split("/");
+  let expression = "";
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (!segment) continue;
+    if (segment === "*") {
+      expression += "(?:/.*)?";
+      continue;
+    }
+    if (segment === ":param") {
+      expression += "/[^/]+";
+      continue;
+    }
+    expression += `/${segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`;
+  }
+  return new RegExp(`^${expression || "/"}$`);
 }
 
 function extractFrontendRoutes(file) {
@@ -50,12 +57,12 @@ function extractFrontendRoutes(file) {
     for (const match of text.matchAll(pattern)) {
       const raw = match[2] || match[1];
       const normalized = normalizeRoute(raw);
-      if (normalized) found.add(normalized);
+      if (normalized) found.add(normalized.replace(/^\/api(?=\/|$)/, ""));
     }
   }
   for (const match of text.matchAll(/([`'"])(\/api\/[^`'"]+)\1/g)) {
     const normalized = normalizeRoute(match[2]);
-    if (normalized) found.add(normalized.replace(/^\/api/, ""));
+    if (normalized) found.add(normalized.replace(/^\/api(?=\/|$)/, ""));
   }
   return [...found];
 }
@@ -65,7 +72,7 @@ function extractWorkerRoutes(file) {
   const found = [];
   for (const match of text.matchAll(/\b(?:app|shell)\.(?:get|post|put|patch|delete|all|use)\(\s*([`'"])(\/api\/[^`'"]+)\1/g)) {
     const normalized = normalizeRoute(match[2]);
-    if (normalized) found.push(normalized.replace(/^\/api/, ""));
+    if (normalized) found.push(normalized.replace(/^\/api(?=\/|$)/, ""));
   }
   return found;
 }
@@ -82,11 +89,16 @@ for (const file of frontendFiles) {
 }
 
 const workerRoutes = [...new Set(workerFiles.flatMap(extractWorkerRoutes))].sort();
-const workerPatterns = workerRoutes.map((route) => ({ route, pattern: routePattern(route) }));
+const workerPatterns = workerRoutes.map((route) => ({
+  route,
+  pattern: routePattern(route),
+}));
 
 const missing = [];
-for (const [route, files] of [...frontendRows.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-  const comparable = route.replace(/^\/api/, "");
+for (const [route, files] of [...frontendRows.entries()].sort(([a], [b]) =>
+  a.localeCompare(b),
+)) {
+  const comparable = normalizeRoute(route).replace(/^\/api(?=\/|$)/, "");
   const matched = workerPatterns.some(({ pattern }) => pattern.test(comparable));
   if (!matched) missing.push({ route: comparable, files });
 }
@@ -105,11 +117,15 @@ console.log(`Frontend benzersiz rota: ${frontendRows.size}`);
 console.log(`Worker benzersiz rota: ${workerRoutes.length}`);
 console.log(`Eşleşmeyen rota: ${missing.length}`);
 
-for (const [prefix, rows] of [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+for (const [prefix, rows] of [...groups.entries()].sort(([a], [b]) =>
+  a.localeCompare(b),
+)) {
   console.log(`\n[${prefix.toUpperCase()}] ${rows.length} eksik rota`);
   for (const row of rows) {
     console.log(`- ${row.route}`);
-    for (const file of row.files.slice(0, 3)) console.log(`  • ${file}`);
+    for (const file of row.files.slice(0, 3)) {
+      console.log(`  • ${file}`);
+    }
   }
 }
 
@@ -132,6 +148,8 @@ const criticalMissing = missing.filter((row) =>
   criticalPrefixes.has(row.route.split("/").filter(Boolean)[0]),
 );
 if (criticalMissing.length) {
-  console.error(`\nKRİTİK: ${criticalMissing.length} İşNet/İK/Yönetim/Asistan rotası Worker'da bulunamadı.`);
+  console.error(
+    `\nKRİTİK: ${criticalMissing.length} İşNet/İK/Yönetim/Asistan rotası Worker'da bulunamadı.`,
+  );
   process.exitCode = 2;
 }
