@@ -81,21 +81,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          projects_json="$(curl --fail --silent --show-error \
+          project_json="$(curl --fail --silent --show-error \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects?per_page=100")"
-          project_name="$(jq -r '
-            ([.result[]? | select(any(.domains[]?; . == "kyerp.net" or . == "www.kyerp.net"))][0].name) //
-            ([.result[]? | select(.name | test("ky[-_]?erp|kyerp"; "i"))][0].name) //
-            empty
-          ' <<<"$projects_json")"
-          test -n "$project_name" || {
-            echo "kyerp.net için mevcut Pages projesi bulunamadı; canlı veriye dokunulmadı." >&2
-            exit 1
-          }
-          production_branch="$(jq -r --arg name "$project_name" \
-            '.result[] | select(.name == $name) | (.production_branch // "main")' \
-            <<<"$projects_json" | head -n1)"
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/ky-erp-frontend")"
+          jq -e '.success == true and .result.name == "ky-erp-frontend"' \
+            <<<"$project_json" >/dev/null
+          project_name="$(jq -r '.result.name' <<<"$project_json")"
+          production_branch="$(jq -r '.result.production_branch // "main"' <<<"$project_json")"
+          test -n "$production_branch" && test "$production_branch" != "null"
           echo "name=$project_name" >> "$GITHUB_OUTPUT"
           echo "branch=$production_branch" >> "$GITHUB_OUTPUT"
           echo "Pages projesi doğrulandı: $project_name / $production_branch"
