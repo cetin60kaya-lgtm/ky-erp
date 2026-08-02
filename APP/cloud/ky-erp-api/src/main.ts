@@ -25,18 +25,20 @@ type ShellEnv = {
 };
 
 const LIVE_ORIGINS = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
   "https://kyerp.net",
   "https://www.kyerp.net",
   "https://app.kyerp.net",
 ]);
 
+const LOCAL_DEV_ORIGIN =
+  /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
+const PAGES_PREVIEW_ORIGIN =
+  /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
+
 function allowedOrigin(origin: string) {
   if (LIVE_ORIGINS.has(origin)) return origin;
-  if (/^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i.test(origin)) {
-    return origin;
-  }
+  if (LOCAL_DEV_ORIGIN.test(origin)) return origin;
+  if (PAGES_PREVIEW_ORIGIN.test(origin)) return origin;
   return undefined;
 }
 
@@ -66,7 +68,15 @@ shell.use(
   "/api/*",
   cors({
     origin: allowedOrigin,
-    allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    allowMethods: [
+      "GET",
+      "POST",
+      "PATCH",
+      "PUT",
+      "DELETE",
+      "HEAD",
+      "OPTIONS",
+    ],
     allowHeaders: ["Accept", "Authorization", "Content-Type"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
     maxAge: 86400,

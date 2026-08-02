@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Archive, Mail, Printer } from "lucide-react";
 import IsnetPage from "../IsnetPage";
 import IsnetSelectedPrintPage from "./IsnetSelectedPrintPage";
@@ -10,12 +10,31 @@ const SECTIONS = [
   ["mail-merkezi", "Mail Gönderimi", Mail],
 ];
 
-export default function IsnetArchiveDeliveryPage(props) {
-  const [section, setSection] = useState("kesilen-belgeler");
+function normalizeSection(value) {
+  return SECTIONS.some(([key]) => key === value)
+    ? value
+    : "kesilen-belgeler";
+}
+
+export default function IsnetArchiveDeliveryPage({
+  initialSection = "kesilen-belgeler",
+  ...props
+}) {
+  const [section, setSection] = useState(() =>
+    normalizeSection(initialSection),
+  );
+
+  useEffect(() => {
+    setSection(normalizeSection(initialSection));
+  }, [initialSection]);
 
   return (
     <div className="isnet-archive-center">
-      <div className="isnet-archive-center__switch" role="tablist" aria-label="Arşiv ve gönderim bölümleri">
+      <div
+        className="isnet-archive-center__switch"
+        role="tablist"
+        aria-label="Arşiv ve gönderim bölümleri"
+      >
         {SECTIONS.map(([key, label, Icon]) => (
           <button
             key={key}

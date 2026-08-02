@@ -11,6 +11,64 @@ const text = (value: unknown) =>
 const nowIso = () => new Date().toISOString();
 const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
 
+const NON_RECORD_TAILS = new Set(
+  [
+    "ik",
+    "personel",
+    "aylik",
+    "gunluk",
+    "liste",
+    "durum",
+    "giris",
+    "odeme",
+    "odeme-hesapla",
+    "mesai",
+    "avans",
+    "kesinti",
+    "izin",
+    "evrak",
+    "sozlesme",
+    "loglar",
+    "skills",
+    "beceriler",
+    "resmi-tatiller",
+    "upload",
+    "apply",
+    "excel",
+    "export",
+    "excel-upload",
+    "excel-apply",
+    "save-range",
+    "hesapla",
+    "olustur",
+    "raporlar",
+    "monthly-employees",
+    "monthly-adjustments",
+    "monthly-audit-logs",
+    "official-holidays",
+    "documents",
+    "leaves",
+    "daily-employees",
+    "daily-attendance",
+    "salary-contracts",
+    "leave-balances",
+    "gun-kayitlari",
+    "ozet",
+    "users",
+    "kullanicilar",
+    "logs",
+    "settings",
+    "folder-settings",
+    "file-settings",
+    "company-aliases",
+    "product-aliases",
+    "email-contacts",
+    "vat-links",
+    "backups",
+    "main-companies",
+  ].map((item) => item.toLocaleLowerCase("tr-TR")),
+);
+
 function objectOf(value: unknown): Row {
   if (value && typeof value === "object" && !Array.isArray(value)) return value as Row;
   if (typeof value !== "string" || !value.trim()) return {};
@@ -177,7 +235,9 @@ function ikScope(pathname: string) {
   if (/evrak|document/.test(path)) return "IK_MONTHLY_DOCUMENT";
   if (/izin|leave/.test(path)) return "IK_MONTHLY_LEAVE";
   if (/mesai|avans|kesinti|adjustment|overtime/.test(path)) return "IK_MONTHLY_ADJUSTMENT";
-  if (/gun[-_/]?kayit|daily[-_/]?record|gunluk[-_/]?durum/.test(path)) return "IK_DAILY_RECORD";
+  if (/gun[-_/]?kayit|daily[-_/]?(record|attendance)|gunluk[-_/]?durum/.test(path)) {
+    return "IK_DAILY_RECORD";
+  }
   if (/gunluk[-_/]?personel[-_/]?liste|daily[-_/]?personnel[-_/]?list/.test(path)) {
     return "IK_DAILY_PERSONNEL_LIST";
   }
@@ -187,21 +247,32 @@ function ikScope(pathname: string) {
   return "IK_MONTHLY_PERSONNEL";
 }
 
+function pathSegments(pathname: string) {
+  return pathname
+    .split("/")
+    .filter(Boolean)
+    .map((part) => decodeURIComponent(part));
+}
+
 function actionTail(pathname: string) {
-  return pathname.split("/").filter(Boolean).at(-1) || "";
+  return pathSegments(pathname).at(-1) || "";
 }
 
 function likelyRecordId(pathname: string) {
   const tail = actionTail(pathname);
-  if (
-    !tail ||
-    /^(ik|personel|aylik|gunluk|liste|durum|mesai|avans|kesinti|izin|evrak|sozlesme|loglar|skills|resmi-tatiller|upload|apply|excel|export)$/i.test(
-      tail,
-    )
-  ) {
-    return "";
-  }
-  return decodeURIComponent(tail);
+  if (!tail || NON_RECORD_TAILS.has(tail.toLocaleLowerCase("tr-TR"))) return "";
+  return tail;
+}
+
+function nestedEmployeeId(pathname: string) {
+  const segments = pathSegments(pathname);
+  const collectionIndex = segments.findIndex(
+    (item) => item.toLocaleLowerCase("tr-TR") === "monthly-employees",
+  );
+  if (collectionIndex < 0) return "";
+  const candidate = text(segments[collectionIndex + 1]);
+  if (!candidate || NON_RECORD_TAILS.has(candidate.toLocaleLowerCase("tr-TR"))) return "";
+  return candidate;
 }
 
 async function handleIkGet(c: Context<AppEnv>) {
@@ -213,8 +284,16 @@ async function handleIkGet(c: Context<AppEnv>) {
     if (!row) return c.json(errorBody("NOT_FOUND", "İK kaydı bulunamadı."), 404);
     return c.json({ ok: true, success: true, data: row });
   }
+
   const period = periodOf(c);
-  const rows = (await storeList(c, scope, slug)).filter((row) => matchesPeriod(row, period));
+  const employeeId = scope === "IK_MONTHLY_CONTRACT" ? nestedEmployeeId(c.req.path) : "";
+  const rows = (await storeList(c, scope, slug))
+    .filter((row) => matchesPeriod(row, period))
+    .filter(
+      (row) =>
+        !employeeId ||
+        text(row.employeeId || row.employee_id || row.personnelId) === employeeId,
+    );
   return c.json({ ok: true, success: true, data: rows, items: rows });
 }
 
@@ -248,19 +327,22 @@ async function handleIkWrite(c: Context<AppEnv>) {
       { id: uploadId, scope, files: uploaded, createdAt: nowIso() },
       slug,
     );
-    return c.json({
-      ok: true,
-      success: true,
-      data: {
-        uploadId,
-        uploadedCount: uploaded.length,
-        files: uploaded,
-        parsedRows: [],
-        requiresReview: true,
-        message:
-          "Dosya güvenli R2 alanına yüklendi. Satırlar uygulamada önizlenip onaylandıktan sonra kayıt edilir.",
+    return c.json(
+      {
+        ok: true,
+        success: true,
+        data: {
+          uploadId,
+          uploadedCount: uploaded.length,
+          files: uploaded,
+          parsedRows: [],
+          requiresReview: true,
+          message:
+            "Dosya güvenli R2 alanına yüklendi. Satırlar uygulamada önizlenip onaylandıktan sonra kayıt edilir.",
+        },
       },
-    }, 201);
+      201,
+    );
   }
 
   const body = await bodyOf(c);
@@ -270,7 +352,7 @@ async function handleIkWrite(c: Context<AppEnv>) {
     : Array.isArray(body.items)
       ? body.items
       : [];
-  if (/apply|toplu|bulk/.test(c.req.path.toLowerCase()) && bulkRows.length) {
+  if (/apply|toplu|bulk|leave-balances/.test(c.req.path.toLowerCase()) && bulkRows.length) {
     const saved: Row[] = [];
     for (const source of bulkRows) {
       const id = text(source.id || crypto.randomUUID());
@@ -292,6 +374,7 @@ async function handleIkWrite(c: Context<AppEnv>) {
   }
 
   const pathId = likelyRecordId(c.req.path);
+  const employeeId = scope === "IK_MONTHLY_CONTRACT" ? nestedEmployeeId(c.req.path) : "";
   const id = text(pathId || body.id || crypto.randomUUID());
   const current = pathId ? await storeGet(c, scope, pathId, slug) : null;
   const row = await storePut(
@@ -301,18 +384,20 @@ async function handleIkWrite(c: Context<AppEnv>) {
     {
       ...current,
       ...body,
+      ...(employeeId && !body.employeeId ? { employeeId } : {}),
       ...period,
       id,
       createdAt: current?.createdAt || body.createdAt || nowIso(),
     },
     slug,
   );
+  const logId = crypto.randomUUID();
   await storePut(
     c,
     "IK_LOG",
-    crypto.randomUUID(),
+    logId,
     {
-      id: crypto.randomUUID(),
+      id: logId,
       entityId: id,
       entityScope: scope,
       action: current ? "UPDATED" : "CREATED",
@@ -347,7 +432,11 @@ async function handleAdminMainCompanies(c: Context<AppEnv>) {
   const method = c.req.method;
   if (method === "GET") {
     const rows = (await companyRows(c))
-      .filter((row) => /MAIN|ANA/.test(upper(row.company_type || row.type)) || row.is_main_company === 1)
+      .filter(
+        (row) =>
+          /MAIN|ANA/.test(upper(row.company_type || row.type)) ||
+          row.is_main_company === 1,
+      )
       .map((row) => ({
         id: text(row.id),
         name: text(row.name || row.company_name),
@@ -357,7 +446,11 @@ async function handleAdminMainCompanies(c: Context<AppEnv>) {
         updatedAt: row.updated_at,
       }));
     const fallbackSlugs = [
-      ...new Set((await companyRows(c)).map((row) => text(row.main_company_slug)).filter(Boolean)),
+      ...new Set(
+        (await companyRows(c))
+          .map((row) => text(row.main_company_slug))
+          .filter(Boolean),
+      ),
     ];
     if (!rows.length) {
       rows.push(
@@ -392,11 +485,11 @@ function adminScope(pathname: string) {
   if (/company-alias|firma-esle/.test(path)) return "ADMIN_COMPANY_ALIAS";
   if (/product-alias|urun-esle/.test(path)) return "ADMIN_PRODUCT_ALIAS";
   if (/email|eposta/.test(path)) return "ADMIN_EMAIL_CONTACT";
-  if (/kdv/.test(path)) return "ADMIN_VAT_LINK";
+  if (/kdv|vat/.test(path)) return "ADMIN_VAT_LINK";
   if (/backup|yedek/.test(path)) return "ADMIN_BACKUP_STATE";
   if (/log/.test(path)) return "ADMIN_LOG";
   if (/user|kullanici/.test(path)) return "ADMIN_USER";
-  if (/folder|klasor|dosya/.test(path)) return "ADMIN_FILE_SETTING";
+  if (/folder|klasor|dosya|file/.test(path)) return "ADMIN_FILE_SETTING";
   return "ADMIN_SETTING";
 }
 
@@ -426,7 +519,12 @@ async function handleAdminGeneric(c: Context<AppEnv>) {
     c,
     scope,
     recordId,
-    { ...current, ...body, id: recordId, createdAt: current?.createdAt || nowIso() },
+    {
+      ...current,
+      ...body,
+      id: recordId,
+      createdAt: current?.createdAt || nowIso(),
+    },
     slug,
   );
   return c.json({ ok: true, success: true, data: row }, current ? 200 : 201);

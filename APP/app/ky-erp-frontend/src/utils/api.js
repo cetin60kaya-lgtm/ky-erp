@@ -73,10 +73,7 @@ export function apiUrl(path) {
     normalized.startsWith(prefix),
   );
 
-  if (shouldPrefix) {
-    return `${API_BASE}${normalized}`;
-  }
-
+  if (shouldPrefix) return `${API_BASE}${normalized}`;
   return `${API_BASE}${normalized}`;
 }
 
@@ -154,8 +151,7 @@ function attachCompanyToBody(body) {
 }
 
 export function buildApiUrl(path, params) {
-  const withParams = appendParams(path, params);
-  return apiUrl(withParams);
+  return apiUrl(appendParams(path, params));
 }
 
 function createTimeoutSignal(timeoutMs, existingSignal) {
@@ -189,9 +185,7 @@ function createTimeoutSignal(timeoutMs, existingSignal) {
   return {
     signal: controller.signal,
     cleanup: () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
       if (existingSignal) {
         existingSignal.removeEventListener("abort", abortFromParent);
       }
@@ -212,54 +206,79 @@ async function parseResponsePayload(response, responseType = "auto") {
 
 function extractPlainText(value) {
   if (typeof value !== "string") return "";
-  const noHtml = value
+  return value
     .replace(/<style[\s\S]*<\/style>/gi, " ")
     .replace(/<script[\s\S]*<\/script>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return noHtml;
 }
 
 function isLikelyHtml(value) {
   return (
-    typeof value === "string" && /<\/(html|body|head|doctype)\b/i.test(value)
+    typeof value === "string" && /<\/?(html|body|head|doctype)\b/i.test(value)
   );
 }
 
-function buildApiErrorMessage(response, payload) {
-  const statusText = `${response.status} ${response.statusText}`.trim();
+function cleanServerMessage(value) {
+  const text = extractPlainText(String(value || ""))
+    .replace(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\/\S+\s*:\s*/i, "")
+    .trim();
+  if (!text) return "";
+  if (/endpoint bulunamad[ıi]/i.test(text)) {
+    return "Bu işlem sunucuda henüz kullanıma açık değil.";
+  }
+  return text.slice(0, 300);
+}
 
-  if (payload && typeof payload === "object") {
-    const rawMessage = payload?.message;
-    if (Array.isArray(rawMessage)) {
-      const merged = rawMessage
-        .map((item) => String(item || "").trim())
+function payloadMessage(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  const candidates = [payload?.error?.message, payload?.message];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const merged = candidate
+        .map((item) => cleanServerMessage(item))
         .filter(Boolean)
         .join(", ");
       if (merged) return merged;
     }
-    if (typeof rawMessage === "string" && rawMessage.trim()) {
-      return rawMessage.trim();
-    }
+    const message = cleanServerMessage(candidate);
+    if (message) return message;
+  }
+  return "";
+}
+
+function statusMessage(status) {
+  if (status === 400) return "Girilen bilgileri kontrol edip tekrar deneyin.";
+  if (status === 401) return "Oturum süreniz doldu. Yeniden giriş yapın.";
+  if (status === 403) return "Bu işlem için yetkiniz bulunmuyor.";
+  if (status === 404) return "İstenen kayıt veya işlem bulunamadı.";
+  if (status === 409) return "Kayıt güncel durumuyla çakışıyor. Ekranı yenileyip tekrar deneyin.";
+  if (status === 413) return "Gönderilen dosya izin verilen boyutu aşıyor.";
+  if (status === 422) return "Bilgiler doğrulanamadı. Zorunlu alanları kontrol edin.";
+  if (status === 429) return "Çok fazla işlem yapıldı. Kısa bir süre sonra tekrar deneyin.";
+  if (status >= 500) return "Sunucu işlemi tamamlayamadı. Biraz sonra tekrar deneyin.";
+  return "İşlem tamamlanamadı. Tekrar deneyin.";
+}
+
+function buildApiErrorMessage(response, payload) {
+  const fromPayload = payloadMessage(payload);
+  if (fromPayload) return fromPayload;
+
+  if (typeof payload === "string" && !isLikelyHtml(payload)) {
+    const plain = cleanServerMessage(payload);
+    if (plain) return plain;
   }
 
-  if (typeof payload === "string") {
-    if (isLikelyHtml(payload)) {
-      if ([502, 503, 504].includes(response.status)) {
-        return `${statusText}: API sunucusuna ulaşılamadı. Backend servisinin çalıştığını kontrol edin.`;
-      }
-      return `${statusText}: Sunucu beklenmeyen bir yanıt döndü.`;
-    }
-    const plain = extractPlainText(payload);
-    if (plain) return plain.slice(0, 300);
-  }
+  return statusMessage(response.status);
+}
 
-  if ([502, 503, 504].includes(response.status)) {
-    return `${statusText}: API sunucusuna ulaşılamadı. Backend servisinin çalıştığını kontrol edin.`;
-  }
-
-  return statusText || "İstek başarısız";
+function createRequestError(message, details = {}) {
+  const error = new Error(message || "İşlem tamamlanamadı.");
+  Object.entries(details).forEach(([key, value]) => {
+    if (value !== undefined) error[key] = value;
+  });
+  return error;
 }
 
 export async function apiFetch(path, options = {}) {
@@ -279,10 +298,7 @@ export async function apiFetch(path, options = {}) {
   const requestUrl = buildApiUrl(requestPath);
   const method = String(fetchOptions.method || "GET").toUpperCase();
 
-  const finalHeaders = {
-    ...(headers || {}),
-  };
-
+  const finalHeaders = { ...(headers || {}) };
   const token = skipAuth ? "" : String(authTokenGetter?.() || "").trim();
   if (token && !finalHeaders.Authorization) {
     finalHeaders.Authorization = `Bearer ${token}`;
@@ -311,45 +327,69 @@ export async function apiFetch(path, options = {}) {
 
     const payload = await parseResponsePayload(response, responseType);
 
-    if (response.status === 401 && !suppressUnauthorized) {
-      onUnauthorized?.();
-    }
+    if (response.status === 401 && !suppressUnauthorized) onUnauthorized?.();
 
     if (!response.ok) {
-      const error = new Error(buildApiErrorMessage(response, payload));
-      error.status = response.status;
-      error.payload = payload;
-      throw error;
+      throw createRequestError(buildApiErrorMessage(response, payload), {
+        status: response.status,
+        code: payload?.error?.code || payload?.code,
+        payload,
+        method,
+        requestPath,
+        requestUrl,
+      });
     }
 
     if (payload && typeof payload === "object" && payload.ok === false) {
-      const rawMessage = payload?.message || "İstek başarısız";
-      const message = Array.isArray(rawMessage)
-        ? rawMessage.join(", ")
-        : String(rawMessage);
-      const error = new Error(message);
-      error.status = response.status;
-      error.payload = payload;
-      throw error;
+      throw createRequestError(
+        payloadMessage(payload) || "İşlem sunucu tarafından tamamlanamadı.",
+        {
+          status: response.status,
+          code: payload?.error?.code || payload?.code,
+          payload,
+          method,
+          requestPath,
+          requestUrl,
+        },
+      );
     }
 
     return payload;
   } catch (error) {
     if (error instanceof Error) {
+      if (error.requestPath) throw error;
       if (error.name === "AbortError" && didTimeout()) {
-        throw new Error(`${method} ${requestPath}: istek zaman aşımına uğradı`);
+        throw createRequestError(
+          "Sunucu zamanında yanıt vermedi. Bağlantıyı kontrol edip tekrar deneyin.",
+          { code: "REQUEST_TIMEOUT", method, requestPath, requestUrl },
+        );
       }
       if (
         error.name === "TypeError" &&
-        /fetch|network|failed/i.test(String(error?.message || ""))
+        /fetch|network|failed|connection|load/i.test(String(error.message || ""))
       ) {
-        throw new Error(
-          `${method} ${requestPath}: API sunucusuna bağlanılamadı. Backend servisinin çalıştığını kontrol edin.`,
+        throw createRequestError(
+          "KY ERP sunucusuna bağlanılamadı. Yerel kontrolde API penceresinin açık olduğunu doğrulayın.",
+          {
+            code: "NETWORK_ERROR",
+            method,
+            requestPath,
+            requestUrl,
+            cause: error,
+          },
         );
       }
+      error.method = error.method || method;
+      error.requestPath = error.requestPath || requestPath;
+      error.requestUrl = error.requestUrl || requestUrl;
       throw error;
     }
-    throw new Error(`${method} ${requestPath}: bilinmeyen hata`);
+    throw createRequestError("İşlem tamamlanamadı. Tekrar deneyin.", {
+      code: "UNKNOWN_ERROR",
+      method,
+      requestPath,
+      requestUrl,
+    });
   } finally {
     cleanup();
   }
@@ -365,9 +405,7 @@ export async function apiGet(path, params, options = {}) {
     return cached.payload;
   }
 
-  if (apiGetInFlight.has(url)) {
-    return apiGetInFlight.get(url);
-  }
+  if (apiGetInFlight.has(url)) return apiGetInFlight.get(url);
 
   const requestPromise = (async () => {
     const payload = await apiFetch(path, {
@@ -386,7 +424,7 @@ export async function apiGet(path, params, options = {}) {
   }
 }
 
-function clearApiGetCache() {
+export function clearApiGetCache() {
   apiGetCache.clear();
   apiGetInFlight.clear();
 }
@@ -457,19 +495,41 @@ function downloadBlob(blob, fileName) {
 }
 
 export async function downloadFile(path, params, fileName = "export.xlsx") {
-  const requestUrl = buildApiUrl(path, params);
+  const requestPath = appendParams(path, params);
+  const requestUrl = buildApiUrl(requestPath);
   const headers = {};
   const token = String(authTokenGetter?.() || "").trim();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(requestUrl, { headers });
-  if (response.status === 401) onUnauthorized?.();
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(text || `${response.status}: Dosya indirilemedi.`);
+
+  try {
+    const response = await fetch(requestUrl, { headers });
+    if (response.status === 401) onUnauthorized?.();
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      let payload = text;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        // Plain-text errors are handled by buildApiErrorMessage.
+      }
+      throw createRequestError(buildApiErrorMessage(response, payload), {
+        status: response.status,
+        payload,
+        method: "GET",
+        requestPath,
+        requestUrl,
+      });
+    }
+    const blob = await response.blob();
+    downloadBlob(blob, fileName);
+    return true;
+  } catch (error) {
+    if (error?.requestPath) throw error;
+    throw createRequestError(
+      "Dosya indirilemedi. Sunucu bağlantısını kontrol edip tekrar deneyin.",
+      { code: "DOWNLOAD_FAILED", method: "GET", requestPath, requestUrl },
+    );
   }
-  const blob = await response.blob();
-  downloadBlob(blob, fileName);
-  return true;
 }
 
 export function downloadExcel(path, fileName = "export.xls") {
