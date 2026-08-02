@@ -1,0 +1,185 @@
+.bh-work-page-v4,
+.bh-inventory-v3 {
+  min-height: 0;
+}
+
+.bh-work-intro-v4,
+.bh-inventory-intro-v3 {
+  padding: 10px 14px;
+  min-height: 0;
+}
+
+.bh-work-intro-v4 h2,
+.bh-inventory-intro-v3 h2 {
+  margin: 1px 0 2px;
+}
+
+.bh-operation-card-grid-v4 {
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 8px;
+}
+
+.bh-operation-card-grid-v4 .bh-operation-card {
+  grid-template-columns: 78px 1fr;
+  min-height: 108px;
+  padding: 7px;
+}
+
+.bh-operation-card-grid-v4 .bh-model-image-button,
+.bh-operation-card-grid-v4 .bh-model-thumbnail {
+  width: 72px;
+  height: 92px;
+  min-height: 0;
+}
+
+.bh-operation-model-head-v4 {
+  min-height: 70px;
+  padding: 7px 10px;
+}
+
+.bh-operation-model-head-v4 .bh-model-thumbnail {
+  width: 48px;
+  height: 58px;
+}
+
+.bh-workspace-v4 .bh-card-head {
+  min-height: 42px;
+  padding: 6px 9px;
+}
+
+.bh-workspace-v4 .bh-card-body {
+  padding: 7px;
+}
+
+.bh-workspace-v4 .bh-registered-recipe-state {
+  margin-bottom: 6px;
+}
+
+.bh-registered-recipe-state.warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.bh-workspace-v4 .bh-recipe-meta-grid {
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.bh-workspace-v4 .bh-table-wrap.recipe {
+  max-height: none;
+  overflow: visible;
+}
+
+.bh-workspace-v4 .bh-table-wrap.recipe table {
+  min-width: 1050px;
+}
+
+.bh-workspace-v4 .bh-table-wrap.recipe th,
+.bh-workspace-v4 .bh-table-wrap.recipe td {
+  padding: 3px 5px;
+}
+
+.bh-workspace-v4 .bh-table-wrap.recipe input,
+.bh-workspace-v4 .bh-table-wrap.recipe select {
+  min-height: 27px;
+  height: 27px;
+}
+
+.bh-exact-recipe-row {
+  background: #f0fdf4;
+}
+
+.bh-default-starter-row {
+  background: #eff6ff;
+}
+
+.bh-default-products-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 5px 7px;
+}
+
+.bh-default-products-note span {
+  white-space: nowrap;
+}
+
+.bh-product-filter-bar {
+  grid-template-columns: minmax(260px, 2fr) repeat(3, minmax(135px, 1fr)) auto auto;
+}
+
+.bh-default-order-strip-v3 {
+  align-items: flex-start;
+}
+
+.bh-default-type-list {
+  display: flex;
+  flex: 1 1 420px;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 74px;
+  overflow: auto;
+}
+
+.bh-product-sheet-v3 {
+  min-width: 1420px;
+}
+
+.bh-product-sheet-v3 th,
+.bh-product-sheet-v3 td {
+  padding: 3px;
+}
+
+.bh-product-sheet-v3 input,
+.bh-product-sheet-v3 select {
+  min-height: 27px;
+  height: 27px;
+}
+
+.bh-default-check-cell label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.bh-default-check-cell input {
+  width: 16px;
+  height: 16px;
+}
+
+.bh-product-card-grid-v3 {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.bh-product-card-v3 {
+  padding: 9px;
+}
+
+.bh-product-card-v3 dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+@media (max-width: 1100px) {
+  .bh-product-filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bh-operation-card-grid-v4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .bh-operation-card-grid-v4,
+  .bh-product-card-grid-v3 {
+    grid-template-columns: 1fr;
+  }
+
+  .bh-product-filter-bar {
+    grid-template-columns: 1fr;
+  }
+}
