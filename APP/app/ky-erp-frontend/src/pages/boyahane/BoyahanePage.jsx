@@ -10,7 +10,7 @@ import "./boyahaneRefineV3.css";
 import "./boyahaneFormulaV4.css";
 import "./boyahaneColorIdentity.css";
 import BoyahaneDashboardCompactPage from "./workflow/BoyahaneDashboardCompactPage";
-import BoyahaneWorkPageV4 from "./workflow/BoyahaneWorkPageV4";
+import BoyahaneWorkPageV5 from "./workflow/BoyahaneWorkPageV5";
 import BoyahaneInventoryHubV3 from "./workflow/BoyahaneInventoryHubV3";
 import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
@@ -38,13 +38,13 @@ export default function BoyahanePage({
   const tab = normalizeTab(activeTab);
 
   const page = tab === "receteler" ? (
-    <BoyahaneWorkPageV4
+    <BoyahaneWorkPageV5
       mode="sample"
       activeMainCompany={activeMainCompany}
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "uretim-gecmisi" ? (
-    <BoyahaneWorkPageV4
+    <BoyahaneWorkPageV5
       mode="production"
       activeMainCompany={activeMainCompany}
       moduleActionContext={moduleActionContext}
