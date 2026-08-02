@@ -6,6 +6,7 @@ import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
 import { registerBoyahaneColorResolveRoutes } from "./boyahane-color-resolve";
 import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import-runtime";
 import { registerBoyahaneInventoryRoutes } from "./boyahane-inventory";
+import { registerBoyahaneJobIntegrityRoutes } from "./boyahane-job-integrity";
 import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
 import { registerBoyahaneManualJobV2Routes } from "./boyahane-manual-job-v2";
 import { registerBoyahaneSampleRoutes } from "./boyahane-sample";
@@ -42,13 +43,14 @@ function allowedOrigin(origin: string) {
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
-// Kaynak türü destekli manuel rota eski uyumluluk rotasından önce çalışır.
 registerBoyahaneManualJobV2Routes(app);
 registerBoyahaneManualJobRoutes(app);
 registerBoyahaneSampleRoutes(app);
 registerBoyahaneColorResolveRoutes(app);
 registerBoyahaneColorIdentityRoutes(app);
 registerBoyahaneColorJobRoutes(app);
+// Reçetesi olmayan renk tamamlandı sayılmaz; genel workflow GET rotalarından önce çalışır.
+registerBoyahaneJobIntegrityRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
 registerDesenWorkflowRoutes(app);
