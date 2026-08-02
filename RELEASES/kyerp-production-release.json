@@ -1,15 +1,15 @@
 {
   "approved": true,
   "target": "production",
-  "requestedAt": "2026-08-03T01:02:00+03:00",
-  "attempt": 8,
+  "requestedAt": "2026-08-03T01:07:00+03:00",
+  "attempt": 9,
   "scope": [
     "frontend-real-browser-precheck",
     "cloudflare-d1-backup-and-schema-check",
     "api-worker",
     "frontend-pages",
-    "frontend-real-browser-live-check"
+    "frontend-real-browser-live-check-with-propagation-retry"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "SPA asset yolu düzeltildi; gerçek Chrome altı Boyahane ekranını doğruladı; yardımcı API uyarıları ayrıca raporlanarak production yayınlanır"
+  "note": "SPA asset yolu ve Boyahane final düzeni doğrulandı; kyerp.net özel alan adı geçişi 150 saniyeye kadar gerçek Chrome ile tekrar denenerek yayınlanır"
 }
