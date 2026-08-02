@@ -1,0 +1,54 @@
+name: KY ERP App Alan Adı Gerçek Tarayıcı Testi
+
+on:
+  push:
+    branches:
+      - agent/uretim-tek-merkez
+    paths:
+      - "RELEASES/app-domain-runtime-smoke.json"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - name: Paketleri kur
+        run: npm ci
+      - name: Gerçek Chrome kur
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: app.kyerp.net Boyahane ekranını doğrula
+        env:
+          SMOKE_URL: https://app.kyerp.net
+        run: node scripts/runtime-smoke.mjs
+      - name: Sonucu sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-domain-runtime-${{ github.run_id }}
+          path: |
+            APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Sonucu PR kaydına yaz
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          result="$(cat runtime-result.json 2>/dev/null || printf '{"ok":false,"runtimeErrors":["runtime sonucu oluşmadı"]}')"
+          compact="$(jq -c '{ok,attempt,finalUrl,bodyPreview,runtimeErrors,runtimeWarnings}' <<<"$result")"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/9/comments" -f body="## app.kyerp.net gerçek Chrome testi\n\n- Commit: ${GITHUB_SHA}\n- Run: ${GITHUB_RUN_ID}\n\n\`\`\`json\n${compact}\n\`\`\`"
