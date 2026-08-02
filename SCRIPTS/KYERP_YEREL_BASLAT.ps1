@@ -16,6 +16,7 @@ $Frontend = Join-Path $RepoRoot "APP\app\ky-erp-frontend"
 $WorkerConfig = Join-Path $Worker "wrangler.production-local.jsonc"
 $PersistName = ".local-kyerp-dev"
 $PersistPath = Join-Path $Worker $PersistName
+$InitMarker = Join-Path $PersistPath ".kyerp-initialized"
 $ProcessFile = Join-Path $env:TEMP "kyerp-local-processes.json"
 $ApiOrigin = "http://127.0.0.1:$ApiPort"
 $WebOrigin = "http://localhost:$WebPort"
@@ -43,6 +44,21 @@ function Wait-Endpoint([string]$Url, [int]$Seconds = 60) {
         try {
             $response = Invoke-RestMethod -Uri $Url -TimeoutSec 4
             if ($response -and $response.ok -eq $true) { return $true }
+        } catch {
+            Start-Sleep -Milliseconds 750
+        }
+    } while ((Get-Date) -lt $deadline)
+    return $false
+}
+
+function Wait-Web([string]$Url, [int]$Seconds = 60) {
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do {
+        try {
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 4
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+                return $true
+            }
         } catch {
             Start-Sleep -Milliseconds 750
         }
@@ -82,12 +98,13 @@ if (-not (Test-Path $WorkerConfig)) {
 Install-Packages $Worker "Worker"
 Install-Packages $Frontend "Frontend"
 
-if ($ResetLocalData -and (Test-Path $PersistPath)) {
-    Write-Step "İzole yerel veri sıfırlanıyor"
-    Remove-Item $PersistPath -Recurse -Force
-}
+$mustInitialize = $ResetLocalData -or -not (Test-Path $InitMarker)
+if ($mustInitialize) {
+    if (Test-Path $PersistPath) {
+        Write-Step "Eksik veya eski izole yerel veri temizleniyor"
+        Remove-Item $PersistPath -Recurse -Force
+    }
 
-if (-not (Test-Path $PersistPath)) {
     Write-Step "İzole yerel D1 verisi hazırlanıyor"
     Push-Location $Worker
     try {
@@ -98,7 +115,9 @@ if (-not (Test-Path $PersistPath)) {
         )
         foreach ($sqlFile in $sqlFiles) {
             $sqlPath = Join-Path $Worker $sqlFile
-            if (-not (Test-Path $sqlPath)) { continue }
+            if (-not (Test-Path $sqlPath)) {
+                throw "Yerel kurulum dosyası bulunamadı: $sqlFile"
+            }
             Write-Host "Yükleniyor: $sqlFile" -ForegroundColor Yellow
             & npx wrangler d1 execute ky-erp-production-local `
                 --local `
@@ -109,11 +128,18 @@ if (-not (Test-Path $PersistPath)) {
                 throw "$sqlFile yerel D1'e yüklenemedi."
             }
         }
+        New-Item -ItemType File -Path $InitMarker -Force | Out-Null
+    } catch {
+        if (Test-Path $InitMarker) {
+            Remove-Item $InitMarker -Force -ErrorAction SilentlyContinue
+        }
+        throw
     } finally {
         Pop-Location
     }
 }
 
+$apiHostPid = 0
 $apiPid = Get-ListeningProcessId $ApiPort
 if ($apiPid -gt 0) {
     if (-not (Wait-Endpoint "$ApiOrigin/api/health" 5)) {
@@ -131,12 +157,18 @@ npx wrangler dev --local --config '$WorkerConfig' --persist-to '$PersistName' --
         "-ExecutionPolicy", "Bypass",
         "-Command", $workerCommand
     )
-    $apiPid = $apiProcess.Id
+    $apiHostPid = $apiProcess.Id
     if (-not (Wait-Endpoint "$ApiOrigin/api/health" 75)) {
+        Stop-Process -Id $apiHostPid -Force -ErrorAction SilentlyContinue
         throw "Yerel API başlayamadı. Açılan Worker penceresindeki hatayı kontrol edin."
+    }
+    $apiPid = Get-ListeningProcessId $ApiPort
+    if ($apiPid -le 0) {
+        throw "Yerel API yanıt verdi ancak dinleyen işlem belirlenemedi."
     }
 }
 
+$webHostPid = 0
 $webPid = Get-ListeningProcessId $WebPort
 if ($webPid -gt 0) {
     Write-Host "Frontend zaten çalışıyor (PID $webPid)." -ForegroundColor Green
@@ -152,26 +184,23 @@ npm run dev -- --host localhost --port $WebPort --strictPort
         "-ExecutionPolicy", "Bypass",
         "-Command", $frontendCommand
     )
-    $webPid = $webProcess.Id
+    $webHostPid = $webProcess.Id
 
-    $deadline = (Get-Date).AddSeconds(60)
-    do {
-        try {
-            $response = Invoke-WebRequest -Uri $WebOrigin -UseBasicParsing -TimeoutSec 4
-            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) { break }
-        } catch {
-            Start-Sleep -Milliseconds 750
-        }
-    } while ((Get-Date) -lt $deadline)
-
-    if (-not (Get-ListeningProcessId $WebPort)) {
+    if (-not (Wait-Web $WebOrigin 60)) {
+        Stop-Process -Id $webHostPid -Force -ErrorAction SilentlyContinue
         throw "Frontend başlayamadı. Açılan frontend penceresindeki hatayı kontrol edin."
+    }
+    $webPid = Get-ListeningProcessId $WebPort
+    if ($webPid -le 0) {
+        throw "Frontend yanıt verdi ancak dinleyen işlem belirlenemedi."
     }
 }
 
 @{
     apiPid = $apiPid
+    apiHostPid = $apiHostPid
     webPid = $webPid
+    webHostPid = $webHostPid
     apiPort = $ApiPort
     webPort = $WebPort
     repoRoot = $RepoRoot
