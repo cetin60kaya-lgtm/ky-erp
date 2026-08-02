@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = String(process.env.SMOKE_URL || "http://127.0.0.1:4173").replace(/\/$/, "");
@@ -14,6 +15,7 @@ const expectedMenuLabels = [
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const runtimeErrors = [];
+let result = null;
 
 page.on("pageerror", (error) => runtimeErrors.push(`PAGE_ERROR: ${error.message}`));
 page.on("console", (message) => {
@@ -54,16 +56,28 @@ try {
 
   await page.screenshot({ path: "runtime-smoke.png", fullPage: true });
 
-  console.log(JSON.stringify({
+  result = {
     ok: runtimeErrors.length === 0,
     targetUrl,
     title: await page.title(),
     finalUrl: page.url(),
     bodyPreview: bodyText.slice(0, 1_500),
     runtimeErrors,
-  }, null, 2));
-
-  if (runtimeErrors.length) process.exitCode = 1;
+  };
+} catch (error) {
+  runtimeErrors.push(`SMOKE_EXCEPTION: ${error?.stack || error?.message || String(error)}`);
+  result = {
+    ok: false,
+    targetUrl,
+    title: await page.title().catch(() => ""),
+    finalUrl: page.url(),
+    bodyPreview: await page.locator("body").innerText().catch(() => ""),
+    runtimeErrors,
+  };
 } finally {
+  await writeFile("runtime-result.json", `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify(result, null, 2));
   await browser.close();
 }
+
+if (!result?.ok) process.exitCode = 1;
