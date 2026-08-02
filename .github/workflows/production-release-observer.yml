@@ -1,0 +1,55 @@
+name: KY ERP Canlı Yayın İzleyici
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "RELEASES/kyerp-production-release.json"
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Canlı yayın sonucunu bekle ve PRa yaz
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_run=""
+          for attempt in $(seq 1 90); do
+            runs_json="$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=100")"
+            target_run="$(jq -c '[.workflow_runs[]? | select(.name == "KY ERP Canlı Yayın")][0] // empty' <<<"$runs_json")"
+            if [[ -n "$target_run" ]]; then
+              status="$(jq -r '.status' <<<"$target_run")"
+              if [[ "$status" == "completed" ]]; then
+                break
+              fi
+            fi
+            sleep 10
+          done
+
+          test -n "$target_run" || {
+            gh pr comment 17 --repo "$REPO" --body "Canlı yayın çalışması bulunamadı. Commit: \`${SHA}\`."
+            exit 1
+          }
+
+          run_id="$(jq -r '.id' <<<"$target_run")"
+          status="$(jq -r '.status' <<<"$target_run")"
+          conclusion="$(jq -r '.conclusion // "bekliyor"' <<<"$target_run")"
+          url="$(jq -r '.html_url' <<<"$target_run")"
+          gh pr comment 17 --repo "$REPO" --body "## KY ERP canlı yayın sonucu\n\n- Commit: \`${SHA}\`\n- Run: \`${run_id}\`\n- Durum: **${status}**\n- Sonuç: **${conclusion}**\n- Çalışma: ${url}"
+
+          [[ "$conclusion" == "success" ]]
