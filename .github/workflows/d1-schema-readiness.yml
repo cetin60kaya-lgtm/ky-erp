@@ -94,7 +94,7 @@ jobs:
 
   remote-readiness:
     name: Canlı D1 şema kontrolü ve isteğe bağlı yayın
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: local-schema
     runs-on: ubuntu-latest
     environment: production
@@ -161,25 +161,59 @@ jobs:
         run: npm ci
 
       - name: Canlı D1 şemasını dışa aktar
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p database-backup
           stamp="$(date -u +%Y%m%d-%H%M%S)"
-          npx wrangler d1 export ky-erp-db \
-            --remote \
-            --config wrangler.jsonc \
-            --skip-confirmation \
-            --no-data \
-            --output "database-backup/ky-erp-db-schema-before-${stamp}.sql"
+          output="database-backup/ky-erp-db-schema-before-${stamp}.sql"
+          success=0
+          for attempt in 1 2 3 4 5 6; do
+            rm -f "$output"
+            if npx wrangler d1 export ky-erp-db \
+              --remote \
+              --config wrangler.jsonc \
+              --skip-confirmation \
+              --no-data \
+              --output "$output"; then
+              success=1
+              break
+            fi
+            wait_seconds=$((attempt * 20))
+            echo "D1 export henüz müsait değil; ${wait_seconds} saniye sonra yeniden denenecek."
+            sleep "$wait_seconds"
+          done
+          test "$success" -eq 1 || {
+            echo "Canlı D1 şema exportu tekrar denemelere rağmen tamamlanamadı." >&2
+            exit 1
+          }
 
       - name: Migration öncesi tam D1 yedeğini al
         if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
+        shell: bash
         run: |
+          set -euo pipefail
           stamp="$(date -u +%Y%m%d-%H%M%S)"
-          npx wrangler d1 export ky-erp-db \
-            --remote \
-            --config wrangler.jsonc \
-            --skip-confirmation \
-            --output "database-backup/ky-erp-db-full-before-${stamp}.sql"
+          output="database-backup/ky-erp-db-full-before-${stamp}.sql"
+          success=0
+          for attempt in 1 2 3 4 5 6; do
+            rm -f "$output"
+            if npx wrangler d1 export ky-erp-db \
+              --remote \
+              --config wrangler.jsonc \
+              --skip-confirmation \
+              --output "$output"; then
+              success=1
+              break
+            fi
+            wait_seconds=$((attempt * 30))
+            echo "Tam D1 yedeği henüz müsait değil; ${wait_seconds} saniye sonra yeniden denenecek."
+            sleep "$wait_seconds"
+          done
+          test "$success" -eq 1 || {
+            echo "Canlı D1 tam yedeği tekrar denemelere rağmen tamamlanamadı." >&2
+            exit 1
+          }
 
       - name: Canlı D1 mevcut şemasını denetle
         run: >-
