@@ -119,6 +119,40 @@ jobs:
           npm run lint
           npm run build
 
+      - name: Gerçek Chrome paketini kur
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Yerel production paketini gerçek Chrome ile doğrula
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/kyerp-vite-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          SMOKE_URL=http://127.0.0.1:4173 node scripts/runtime-smoke.mjs
+
+      - name: Yerel tarayıcı sonucunu sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-local-runtime-${{ github.run_id }}
+          path: |
+            APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
+            /tmp/kyerp-vite-preview.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Canlı D1 tam yedeğini al
         working-directory: APP/cloud/ky-erp-api
         shell: bash
@@ -207,7 +241,7 @@ jobs:
           --commit-hash "${{ github.sha }}"
           --commit-message "KY ERP production release ${{ github.sha }}"
 
-      - name: Canlı siteyi doğrula
+      - name: Canlı site HTML kontrolü
         shell: bash
         run: |
           set -euo pipefail
@@ -222,3 +256,20 @@ jobs:
           done
           test "$ready" -eq 1
           test -s /tmp/kyerp-home.html
+
+      - name: Canlı siteyi gerçek Chrome ile doğrula
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          SMOKE_URL: https://kyerp.net
+        run: node scripts/runtime-smoke.mjs
+
+      - name: Canlı tarayıcı sonucunu sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-live-runtime-${{ github.run_id }}
+          path: |
+            APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
+          if-no-files-found: warn
+          retention-days: 7
