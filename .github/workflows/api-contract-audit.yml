@@ -1,0 +1,44 @@
+name: KY ERP API Sözleşme Denetimi
+
+on:
+  pull_request:
+    paths:
+      - "APP/app/ky-erp-frontend/src/**"
+      - "APP/cloud/ky-erp-api/src/**"
+      - "SCRIPTS/audit-api-contracts.mjs"
+      - ".github/workflows/api-contract-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Frontend ve Worker rotalarını karşılaştır
+        id: audit
+        continue-on-error: true
+        run: node SCRIPTS/audit-api-contracts.mjs
+
+      - name: Denetim raporunu yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-contract-audit
+          path: test-results/api-contract-audit.json
+          if-no-files-found: error
+
+      - name: Kritik eksikler varsa başarısız say
+        if: steps.audit.outcome == 'failure'
+        run: |
+          echo "İşNet, İK, Yönetim veya Asistan için eksik Worker rotaları var."
+          exit 1

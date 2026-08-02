@@ -1,0 +1,13 @@
+{
+  "approved": true,
+  "target": "production",
+  "requestedAt": "2026-08-02T21:12:00+03:00",
+  "attempt": 3,
+  "scope": [
+    "cloudflare-d1-migrations",
+    "api-worker",
+    "frontend-pages"
+  ],
+  "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
+  "note": "KY ERP Boyahane, İşNet, Muhasebe, Desen, İmalat, İK ve ortak altyapı final yayını"
+}

@@ -1,29 +1,74 @@
 import "../modules/cleanWorkflow.css";
 import "./boyahaneWorkflow.css";
-import BoyahaneIsAkisiPage from "./workflow/BoyahaneIsAkisiPage";
+import "./inventoryCenter.css";
+import "./boyahaneCommandCenter.css";
+import "./boyahaneForms.css";
+import "./boyahaneFinal.css";
+import "./boyahaneCompactV2.css";
+import "./boyahaneCompactV2Patch.css";
+import "./boyahaneRefineV3.css";
+import "./boyahaneFormulaV4.css";
+import "./boyahaneColorIdentity.css";
+import BoyahaneDashboardCompactPage from "./workflow/BoyahaneDashboardCompactPage";
+import BoyahaneWorkPageV5 from "./workflow/BoyahaneWorkPageV5";
+import BoyahaneInventoryHubV3 from "./workflow/BoyahaneInventoryHubV3";
+import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
-import UrunLotlarPage from "./workflow/UrunLotlarPage";
-import { BoyaGiderleriPage, BoyahaneRaporlarPage, UretimGecmisiPage } from "./workflow/BoyahaneRecordPages";
 
-const titles = {
-  "is-akisi": "İş Akışı",
-  "kayitli-renkler": "Kayıtlı Renkler",
-  receteler: "Reçeteler",
-  "urun-lotlar": "Ürün ve Lotlar",
-  "uretim-gecmisi": "Üretim Geçmişi",
-  "boya-giderleri": "Boya Giderleri",
-  raporlar: "Raporlar",
-};
+function normalizeTab(value) {
+  const aliases = {
+    "boyahane-yonetim-ozeti": "is-akisi",
+    "renk-recete-is-akisi": "is-akisi",
+    "renk-gramaj": "uretim-gecmisi",
+    "boya-giderleri": "raporlar",
+    "boyahane-raporlari": "raporlar",
+    "hammadde-lot": "urun-lotlar",
+    "onayli-envanter": "urun-lotlar",
+    "renk-havuzu": "kayitli-renkler",
+  };
+  return aliases[value] || value || "is-akisi";
+}
 
-export default function BoyahanePage({ activeTab, activeMainCompany }) {
-  const tab = activeTab === "renk-recete-is-akisi" || activeTab === "boyahane-yonetim-ozeti" ? "is-akisi" : activeTab;
-  const page = tab === "kayitli-renkler" ? <KayitliRenklerWorkspace activeMainCompany={activeMainCompany} />
-    : tab === "receteler" ? <KayitliRenklerWorkspace activeMainCompany={activeMainCompany} recipesOnly />
-      : tab === "urun-lotlar" ? <UrunLotlarPage activeMainCompany={activeMainCompany} />
-        : tab === "uretim-gecmisi" ? <UretimGecmisiPage activeMainCompany={activeMainCompany} />
-          : tab === "boya-giderleri" ? <BoyaGiderleriPage activeMainCompany={activeMainCompany} />
-            : tab === "raporlar" ? <BoyahaneRaporlarPage activeMainCompany={activeMainCompany} />
-              : <BoyahaneIsAkisiPage activeMainCompany={activeMainCompany} />;
+export default function BoyahanePage({
+  activeTab,
+  activeMainCompany,
+  openModule,
+  moduleActionContext,
+}) {
+  const tab = normalizeTab(activeTab);
 
-  return <div className="clean-workflow-page bh-page"><section className="cw-screen"><header className="cw-card bh-header"><div><h1>{titles[tab] || "İş Akışı"}</h1><p>Desen’den gönderilen gerçek işler; kayıtlı reçete, onaylı ürün/lot, üretim snapshotı ve muhasebe gideriyle tek akışta ilerler.</p></div></header>{page}</section></div>;
+  const page = tab === "receteler" ? (
+    <BoyahaneWorkPageV5
+      mode="sample"
+      activeMainCompany={activeMainCompany}
+      moduleActionContext={moduleActionContext}
+    />
+  ) : tab === "uretim-gecmisi" ? (
+    <BoyahaneWorkPageV5
+      mode="production"
+      activeMainCompany={activeMainCompany}
+      moduleActionContext={moduleActionContext}
+    />
+  ) : tab === "kayitli-renkler" ? (
+    <KayitliRenklerWorkspace
+      activeMainCompany={activeMainCompany}
+      openModule={openModule}
+      moduleActionContext={moduleActionContext}
+    />
+  ) : tab === "urun-lotlar" ? (
+    <BoyahaneInventoryHubV3 activeMainCompany={activeMainCompany} />
+  ) : tab === "raporlar" ? (
+    <BoyahaneReportsAndLogsPage activeMainCompany={activeMainCompany} />
+  ) : (
+    <BoyahaneDashboardCompactPage
+      activeMainCompany={activeMainCompany}
+      openModule={openModule}
+    />
+  );
+
+  return (
+    <div className="clean-workflow-page bh-page">
+      <section className="cw-screen bh-module-shell">{page}</section>
+    </div>
+  );
 }

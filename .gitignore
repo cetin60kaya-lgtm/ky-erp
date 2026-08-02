@@ -6,6 +6,8 @@ test-results/
 .next/
 .cache/
 .wrangler/
+.local-test/
+.local-*/
 
 .env
 .env.*

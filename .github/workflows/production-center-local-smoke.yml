@@ -1,0 +1,494 @@
+name: KY ERP Yerel Uçtan Uca Test
+
+on:
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/cloud/ky-erp-api/src/production-center.ts"
+      - "APP/cloud/ky-erp-api/src/boyahane-inventory.ts"
+      - "APP/cloud/ky-erp-api/src/boyahane-workflow.ts"
+      - "APP/cloud/ky-erp-api/src/desen-storage.ts"
+      - "APP/cloud/ky-erp-api/src/desen-workflow.ts"
+      - "APP/cloud/ky-erp-api/src/desen-operations.ts"
+      - "APP/cloud/ky-erp-api/worker-configuration.d.ts"
+      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
+      - "APP/cloud/ky-erp-api/local-production-center.sql"
+      - "APP/cloud/ky-erp-api/local-boyahane-inventory.sql"
+      - "APP/app/ky-erp-frontend/src/pages/imalat/**"
+      - "APP/app/ky-erp-frontend/src/pages/boyahane/**"
+      - "APP/app/ky-erp-frontend/src/pages/desen/**"
+      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/**"
+      - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/modules/UretimPage.jsx"
+      - "APP/app/ky-erp-frontend/src/services/productionCenterApi.js"
+      - "APP/app/ky-erp-frontend/src/services/boyahaneWorkflowApi.js"
+      - "APP/app/ky-erp-frontend/src/services/desenWorkflowApi.js"
+      - "APP/app/ky-erp-frontend/src/services/desenFolderSettingsApi.js"
+      - "APP/app/ky-erp-frontend/src/app/moduleRegistry.js"
+      - "APP/app/ky-erp-frontend/src/App.jsx"
+      - "APP/app/ky-erp-frontend/src/app/appShell.css"
+      - "SCRIPTS/KYERP_URETIM_YEREL_TEST.ps1"
+      - ".github/workflows/production-center-local-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-local-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: PowerShell başlatma betiğini ayrıştır
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/SCRIPTS/KYERP_URETIM_YEREL_TEST.ps1",
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "PowerShell betiği sözdizimi temiz."
+
+      - name: Worker paketleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Worker typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Worker varsayılan dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Yerel Worker yapılandırması dry-run
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler deploy --dry-run --config wrangler.production-local.jsonc
+
+      - name: İzole yerel D1 üretim verisini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          rm -rf .local-test-ci
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-test-ci \
+            --file local-production-center.sql
+
+      - name: İzole yerel D1 muhasebe ve Boyahane verisini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-test-ci \
+            --file local-boyahane-inventory.sql
+
+      - name: Yerel Worker'ı başlat
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          nohup npx wrangler dev \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-test-ci \
+            --port 8788 > /tmp/kyerp-worker.log 2>&1 &
+          echo $! > /tmp/kyerp-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "http://127.0.0.1:8788/api/production-center?mainCompanySlug=mecit-hakan&pageSize=10" > /tmp/production-center.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kyerp-worker.log
+          exit 1
+
+      - name: Üretim merkezi başlangıç hesaplarını doğrula
+        run: |
+          jq -e '.ok == true' /tmp/production-center.json
+          jq -e '.data.summary.modelCount == 2' /tmp/production-center.json
+          jq -e '.data.summary.totalIncomingQty == 8000' /tmp/production-center.json
+          jq -e '.data.summary.totalCompletedNetQty == 5255' /tmp/production-center.json
+          jq -e '.data.summary.totalInvoicedQty == 4500' /tmp/production-center.json
+          jq -e '.data.summary.totalInvoiceRemainingQty == 755' /tmp/production-center.json
+          jq -e '.data.rows | map(select(.modelName == "WINDY")) | length == 1' /tmp/production-center.json
+          jq -e '.data.rows | map(select(.modelName == "WINDY"))[0].completedGrossQty == 2400' /tmp/production-center.json
+
+      - name: İzole D1 üzerinde kontrollü üretim kaydı oluştur
+        run: |
+          cat > /tmp/entry.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "requestId": "ci-windy-back-100",
+            "modelId": "model-windy",
+            "modelName": "WINDY",
+            "date": "2026-08-01",
+            "dispatchNo": "DDM2026000001001",
+            "orderNo": "SP-2451",
+            "batchNo": "DDM2026000001001",
+            "printRegion": "Arka",
+            "quantity": 100,
+            "printDefectQty": 0,
+            "fabricDefectQty": 0,
+            "testQty": 0,
+            "machineId": "2",
+            "machineName": "MHM",
+            "shift": "Gece",
+            "operatorName": "RESUL",
+            "note": "CI yerel üretim testi"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/entry.json \
+            "http://127.0.0.1:8788/api/production-center/entries" \
+            > /tmp/entry-result.json
+          jq -e '.ok == true' /tmp/entry-result.json
+
+      - name: Yeni üretim kaydının hesaplara işlendiğini doğrula
+        run: |
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/production-center/models/model-windy?mainCompanySlug=mecit-hakan" \
+            > /tmp/windy-after.json
+          jq -e '.ok == true' /tmp/windy-after.json
+          jq -e '.data.completedGrossQty == 2500' /tmp/windy-after.json
+          jq -e '.data.completedNetQty == 2470' /tmp/windy-after.json
+          jq -e '.data.invoiceRemainingQty == 470' /tmp/windy-after.json
+          jq -e '.data.productionEntries | length == 3' /tmp/windy-after.json
+
+      - name: Onaylı Boyahane ürünü oluştur
+        run: |
+          cat > /tmp/product.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "approved-reactive-red",
+            "productName": "REAKTİF KIRMIZI TEST",
+            "code": "RK-TEST",
+            "dyeType": "REAKTİF",
+            "unit": "KG",
+            "minStockKg": 25
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/product.json \
+            "http://127.0.0.1:8788/api/boyahane/products" \
+            > /tmp/product-result.json
+          jq -e '.ok == true' /tmp/product-result.json
+          jq -e '.data.id == "approved-reactive-red"' /tmp/product-result.json
+          jq -e '.data.approvalStatus == "APPROVED"' /tmp/product-result.json
+
+      - name: Muhasebe faturasını lot ve stok girişine aktar
+        run: |
+          cat > /tmp/transfer.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "lines": [
+              {
+                "lineId": "line-chemical-red",
+                "rawName": "REAKTİF KIRMIZI TEST",
+                "aliasName": "REAKTİF KIRMIZI TEST",
+                "productId": "approved-reactive-red",
+                "productName": "REAKTİF KIRMIZI TEST",
+                "lotNo": "LOT-RK-001",
+                "quantity": 120,
+                "unit": "KG",
+                "unitPrice": 100,
+                "totalCost": 12000,
+                "warehouse": "BOYAHANE",
+                "status": "AVAILABLE"
+              }
+            ]
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/transfer.json \
+            "http://127.0.0.1:8788/api/muhasebe/belge-import/supplier-invoice-chemical/boyahane-transfer-v2" \
+            > /tmp/transfer-result.json
+          jq -e '.ok == true' /tmp/transfer-result.json
+          jq -e '.data.status == "COMPLETED"' /tmp/transfer-result.json
+          jq -e '.data.transferredCount == 1' /tmp/transfer-result.json
+          jq -r '.data.lots[0].id' /tmp/transfer-result.json > /tmp/lot-id.txt
+
+      - name: Lot girişini ve stok sarfını doğrula
+        run: |
+          LOT_ID="$(cat /tmp/lot-id.txt)"
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/boyahane/workflow/lots?mainCompanySlug=mecit-hakan" \
+            > /tmp/lots-before.json
+          jq -e '.ok == true' /tmp/lots-before.json
+          jq -e '.data | map(select(.lotNo == "LOT-RK-001")) | length == 1' /tmp/lots-before.json
+          jq -e '.data | map(select(.lotNo == "LOT-RK-001"))[0].entryKg == 120' /tmp/lots-before.json
+          jq -e '.data | map(select(.lotNo == "LOT-RK-001"))[0].remainingKg == 120' /tmp/lots-before.json
+
+          cat > /tmp/movement.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "type": "OUT",
+            "quantity": 20,
+            "note": "CI reçete sarf testi"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/movement.json \
+            "http://127.0.0.1:8788/api/boyahane/workflow/lots/${LOT_ID}/movements" \
+            > /tmp/movement-result.json
+          jq -e '.ok == true' /tmp/movement-result.json
+          jq -e '.data.remainingKg == 100' /tmp/movement-result.json
+          jq -e '.data.usedKg == 20' /tmp/movement-result.json
+
+      - name: Boyahane stok özetini ve güvenlik kuralını doğrula
+        run: |
+          LOT_ID="$(cat /tmp/lot-id.txt)"
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/boyahane/stock/summary?mainCompanySlug=mecit-hakan" \
+            > /tmp/stock-summary.json
+          jq -e '.ok == true' /tmp/stock-summary.json
+          jq -e '.data.summary.approvedProductCount == 1' /tmp/stock-summary.json
+          jq -e '.data.summary.totalEntryKg == 120' /tmp/stock-summary.json
+          jq -e '.data.summary.totalUsedKg == 20' /tmp/stock-summary.json
+          jq -e '.data.summary.totalRemainingKg == 100' /tmp/stock-summary.json
+
+          HTTP_CODE=$(curl --silent --output /tmp/finish-result.json --write-out '%{http_code}' \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan","action":"FINISH"}' \
+            "http://127.0.0.1:8788/api/boyahane/workflow/lots/${LOT_ID}/action")
+          test "$HTTP_CODE" = "409"
+          jq -e '.error.code == "LOT_HAS_STOCK"' /tmp/finish-result.json
+
+      - name: Desen R2 çoklu yükleme ve tarama akışını doğrula
+        run: |
+          printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl9p1sAAAAASUVORK5CYII=' | base64 -d > /tmp/CI-MODEL-ON.png
+          curl --fail --silent \
+            -X POST \
+            -F "mainCompanySlug=mecit-hakan" \
+            -F "files=@/tmp/CI-MODEL-ON.png;type=image/png" \
+            "http://127.0.0.1:8788/api/desen/workflow/inbox/upload" \
+            > /tmp/design-upload.json
+          jq -e '.ok == true' /tmp/design-upload.json
+          jq -e '.data.uploaded == 1' /tmp/design-upload.json
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan"}' \
+            "http://127.0.0.1:8788/api/desen/workflow/inbox/scan" \
+            > /tmp/design-scan.json
+          jq -e '.ok == true' /tmp/design-scan.json
+          jq -e '.data.items | length == 1' /tmp/design-scan.json
+          jq -e '.data.groups | length == 1' /tmp/design-scan.json
+
+      - name: Desen modeli, kanal ve renk grubunu oluştur
+        run: |
+          cat > /tmp/design-model.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "design-ci-model",
+            "modelName": "CI DESEN MODEL",
+            "modelCode": "CI-DESEN-001",
+            "companyId": "company-customer",
+            "companyName": "TAHA GİYİM TEST",
+            "orderNo": "CI-SP-001",
+            "status": "CHANNEL_REVIEW_PENDING"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-model.json \
+            "http://127.0.0.1:8788/api/desen/workflow/models" \
+            > /tmp/design-model-result.json
+          jq -e '.ok == true' /tmp/design-model-result.json
+          jq -e '.data.id == "design-ci-model"' /tmp/design-model-result.json
+
+          cat > /tmp/design-operation.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "design-ci-front",
+            "printAreaCode": "FRONT",
+            "printAreaName": "Ön",
+            "moldType": "SCREEN",
+            "placementStatus": "READY"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-operation.json \
+            "http://127.0.0.1:8788/api/desen/workflow/models/design-ci-model/operations" \
+            > /tmp/design-operation-result.json
+          jq -e '.ok == true' /tmp/design-operation-result.json
+
+          cat > /tmp/design-channels.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "channels": [
+              {
+                "id": "design-ci-channel-a",
+                "rawName": "PANTONE 18-1664",
+                "normalizedName": "KIRMIZI",
+                "colorCode": "18-1664",
+                "groupKey": "design-ci-red",
+                "included": true
+              },
+              {
+                "id": "design-ci-channel-b",
+                "rawName": "KIRMIZI GÖLGE",
+                "normalizedName": "KIRMIZI GÖLGE",
+                "colorCode": "18-1664",
+                "groupKey": "design-ci-red",
+                "included": true
+              }
+            ]
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-channels.json \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/channels" \
+            > /tmp/design-channels-result.json
+          jq -e '.ok == true' /tmp/design-channels-result.json
+
+          cat > /tmp/design-group.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "id": "design-ci-red",
+            "groupKey": "design-ci-red",
+            "displayName": "CI KIRMIZI",
+            "colorCode": "18-1664",
+            "moldCount": 2
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-group.json \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/color-groups" \
+            > /tmp/design-group-result.json
+          jq -e '.ok == true' /tmp/design-group-result.json
+
+      - name: Desen rengini onayla ve Boyahane kuyruğuna aktar
+        run: |
+          cat > /tmp/design-color.json <<'JSON'
+          {
+            "mainCompanySlug": "mecit-hakan",
+            "pantone": "18-1664",
+            "colorName": "CI KIRMIZI",
+            "paintType": "PIGMENT"
+          }
+          JSON
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/design-color.json \
+            "http://127.0.0.1:8788/api/boyahane/registered-colors" \
+            > /tmp/design-color-result.json
+          jq -e '.ok == true' /tmp/design-color-result.json
+          jq -r '.data.id' /tmp/design-color-result.json > /tmp/design-color-id.txt
+          COLOR_ID="$(cat /tmp/design-color-id.txt)"
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data "{\"mainCompanySlug\":\"mecit-hakan\",\"registeredColorId\":\"${COLOR_ID}\"}" \
+            "http://127.0.0.1:8788/api/desen/workflow/color-groups/design-ci-red/link-registered-color" \
+            > /tmp/design-link-result.json
+          jq -e '.ok == true' /tmp/design-link-result.json
+
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/totals?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-totals.json
+          jq -e '.ok == true' /tmp/design-totals.json
+          jq -e '.data.channelCount == 2' /tmp/design-totals.json
+          jq -e '.data.uniqueColorCount == 1' /tmp/design-totals.json
+          jq -e '.data.registeredColorCount == 1' /tmp/design-totals.json
+          jq -e '.data.unresolvedColorCount == 0' /tmp/design-totals.json
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan"}' \
+            "http://127.0.0.1:8788/api/desen/workflow/models/design-ci-model/sync-dyehouse" \
+            > /tmp/design-sync.json
+          jq -e '.ok == true' /tmp/design-sync.json
+          jq -e '.data.jobId == "design-design-ci-model"' /tmp/design-sync.json
+          jq -e '.data.colorCount == 1' /tmp/design-sync.json
+
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/boyahane/jobs/design-design-ci-model?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-job.json
+          jq -e '.ok == true' /tmp/design-job.json
+          jq -e '.data.modelName == "CI DESEN MODEL"' /tmp/design-job.json
+          jq -e '.data.colors | length == 1' /tmp/design-job.json
+
+      - name: Desen kanal sıralama, silme ve rapor rotalarını doğrula
+        run: |
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"mainCompanySlug":"mecit-hakan","channelIds":["design-ci-channel-b","design-ci-channel-a"]}' \
+            "http://127.0.0.1:8788/api/desen/workflow/operations/design-ci-front/channels/reorder" \
+            > /tmp/design-reorder.json
+          jq -e '.ok == true' /tmp/design-reorder.json
+          jq -e '.data.operations[0].channels[0].id == "design-ci-channel-b"' /tmp/design-reorder.json
+
+          curl --fail --silent \
+            -X DELETE \
+            "http://127.0.0.1:8788/api/desen/workflow/channels/design-ci-channel-a?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-delete-channel.json
+          jq -e '.ok == true' /tmp/design-delete-channel.json
+
+          curl --fail --silent \
+            "http://127.0.0.1:8788/api/desen/workflow/reports?mainCompanySlug=mecit-hakan" \
+            > /tmp/design-report.json
+          jq -e '.ok == true' /tmp/design-report.json
+          jq -e '.data.rows | map(select(.id == "design-ci-model")) | length == 1' /tmp/design-report.json
+
+      - name: Frontend paketleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend production build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Veri güvenliği
+        run: |
+          git diff --check
+          ! git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'
+
+      - name: Hata olursa Worker logunu göster
+        if: failure()
+        run: cat /tmp/kyerp-worker.log || true

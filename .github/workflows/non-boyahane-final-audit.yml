@@ -1,0 +1,223 @@
+name: KY ERP Ortak Altyapı Denetimi
+
+on:
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/app/ky-erp-frontend/src/main.jsx"
+      - "APP/app/ky-erp-frontend/src/AppV3.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/modules/isnet/IsnetArchiveDeliveryPage.jsx"
+      - "APP/app/ky-erp-frontend/src/utils/api.js"
+      - "SCRIPTS/KYERP_YEREL_BASLAT.ps1"
+      - "SCRIPTS/KYERP_YEREL_DURDUR.ps1"
+      - ".github/workflows/non-boyahane-final-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-shared-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Yerel PowerShell betiklerini ayrıştır
+        shell: pwsh
+        run: |
+          $files = @(
+            "$PWD/SCRIPTS/KYERP_YEREL_BASLAT.ps1",
+            "$PWD/SCRIPTS/KYERP_YEREL_DURDUR.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $file,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "${file}: $($_.Message)" }
+              exit 1
+            }
+            Write-Host "Sözdizimi temiz: $file"
+          }
+
+      - name: Ortak güvenlik ve yönlendirme kurallarını denetle
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const api = fs.readFileSync('APP/app/ky-erp-frontend/src/utils/api.js', 'utf8');
+          const worker = fs.readFileSync('APP/cloud/ky-erp-api/src/main.ts', 'utf8');
+          const entry = fs.readFileSync('APP/app/ky-erp-frontend/src/main.jsx', 'utf8');
+          const app = fs.readFileSync('APP/app/ky-erp-frontend/src/AppV3.jsx', 'utf8');
+          const archive = fs.readFileSync(
+            'APP/app/ky-erp-frontend/src/pages/modules/isnet/IsnetArchiveDeliveryPage.jsx',
+            'utf8',
+          );
+
+          const forbidden = [
+            '${method} ${requestPath}: API sunucusuna bağlanılamadı',
+            '${method} ${requestPath}: istek zaman aşımına uğradı',
+          ];
+          for (const marker of forbidden) {
+            if (api.includes(marker)) {
+              throw new Error(`Kullanıcıya teknik endpoint sızdıran metin bulundu: ${marker}`);
+            }
+          }
+          if (!api.includes('payload?.error?.message')) {
+            throw new Error('Worker error.message alanı okunmuyor.');
+          }
+          if (!worker.includes('LOCAL_DEV_ORIGIN')) {
+            throw new Error('Yerel origin doğrulaması bulunamadı.');
+          }
+          if (/origin:\s*["']\*["']/.test(worker)) {
+            throw new Error('Credential kullanan CORS yapılandırmasında wildcard origin yasaktır.');
+          }
+          if (entry.includes('./mobile/') || entry.includes('MobileApp')) {
+            throw new Error('Eski ayrı mobil uygulama ana girişte hâlâ etkin.');
+          }
+          const legacyIkPortals = [
+            'MonthlyPersonnelWorkspace',
+            'MonthlySalaryContractWorkspace',
+            'MonthlyOperationsWorkspaceV2',
+            'DailyHrWorkspace',
+          ];
+          for (const marker of legacyIkPortals) {
+            if (entry.includes(marker)) {
+              throw new Error(`Ana girişte paralel İK portalı bulundu: ${marker}`);
+            }
+          }
+          if (!entry.includes('<AppV3 />')) {
+            throw new Error('Tek responsive AppV3 girişi bulunamadı.');
+          }
+
+          const canonicalIsnetRoutes = [
+            ['belge-akisi', 'IsnetDocumentCenterPage'],
+            ['irsaliyeden-faturaya', 'IsnetWorkflowFinalPage'],
+            ['kesilen-belgeler', 'IsnetArchiveDeliveryPage'],
+            ['cikti-kuyrugu', 'IsnetArchiveDeliveryPage'],
+          ];
+          for (const [route, component] of canonicalIsnetRoutes) {
+            if (!app.includes(`activeTab === "${route}"`) && !app.includes(`"${route}"`)) {
+              throw new Error(`İşNet kanonik sekmesi bağlı değil: ${route}`);
+            }
+            if (!app.includes(component)) {
+              throw new Error(`İşNet çalışma bileşeni bağlı değil: ${component}`);
+            }
+          }
+          if (!archive.includes('initialSection')) {
+            throw new Error('İşNet arşiv merkezi hedef bölümü kabul etmiyor.');
+          }
+          if (app.includes('activeTab === "belge-merkezi"') || app.includes('activeTab === "is-akisi"')) {
+            throw new Error('Eski İşNet aliası AppV3 yönlendirmesinde kanonik sekme gibi kullanılıyor.');
+          }
+          if (app.includes('this.state.error?.message')) {
+            throw new Error('Ham arayüz hata mesajı kullanıcıya gösteriliyor.');
+          }
+          console.log('Ortak hata, CORS, tek giriş ve İşNet yönlendirmeleri doğrulandı.');
+          NODE
+
+      - name: Worker paketleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Worker typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Worker dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Birleşik izole D1 verisini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          rm -rf .local-shared-audit
+          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql; do
+            npx wrangler d1 execute ky-erp-production-local \
+              --local \
+              --config wrangler.production-local.jsonc \
+              --persist-to .local-shared-audit \
+              --file "$sql"
+          done
+
+      - name: Birleşik yerel Worker'ı başlat
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          nohup npx wrangler dev \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-shared-audit \
+            --port 8790 > /tmp/kyerp-shared-worker.log 2>&1 &
+          echo $! > /tmp/kyerp-shared-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8790/api/health > /tmp/shared-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kyerp-shared-worker.log
+          exit 1
+
+      - name: Ortak modül ve CORS bağlantılarını doğrula
+        run: |
+          jq -e '.ok == true' /tmp/shared-health.json
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/production-center?mainCompanySlug=mecit-hakan&pageSize=5' \
+            | jq -e '.ok == true'
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan' \
+            | jq -e '.ok == true'
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan' \
+            | jq -e '.ok == true'
+
+          curl --silent --show-error -D /tmp/cors-local.headers -o /dev/null \
+            -X OPTIONS \
+            -H 'Origin: http://localhost:5174' \
+            -H 'Access-Control-Request-Method: GET' \
+            http://127.0.0.1:8790/api/health
+          grep -qi '^access-control-allow-origin: http://localhost:5174' /tmp/cors-local.headers
+
+          curl --silent --show-error -D /tmp/cors-foreign.headers -o /dev/null \
+            -X OPTIONS \
+            -H 'Origin: https://example.invalid' \
+            -H 'Access-Control-Request-Method: GET' \
+            http://127.0.0.1:8790/api/health
+          if grep -qi '^access-control-allow-origin:' /tmp/cors-foreign.headers; then
+            cat /tmp/cors-foreign.headers
+            echo 'Yetkisiz origin CORS izni aldı.' >&2
+            exit 1
+          fi
+
+      - name: Frontend paketleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend production build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Hata olursa Worker logunu göster
+        if: failure()
+        run: cat /tmp/kyerp-shared-worker.log 2>/dev/null || true
