@@ -1,0 +1,37 @@
+name: KY ERP Pages Denetim Gözlemcisi
+
+on:
+  workflow_run:
+    workflows:
+      - KY ERP Pages Alan Adı Denetimi
+    types:
+      - completed
+
+permissions:
+  actions: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Denetim çalışma sonucunu PR kaydına yaz
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_STATUS: ${{ github.event.workflow_run.status }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          body=$(cat <<EOF
+          ## KY ERP Pages denetim çalışma sonucu
+
+          - Commit: `${RUN_SHA}`
+          - Run: `${RUN_ID}`
+          - Durum: **${RUN_STATUS}**
+          - Sonuç: **${RUN_CONCLUSION}**
+          - Çalışma: ${RUN_URL}
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" -f body="$body"
