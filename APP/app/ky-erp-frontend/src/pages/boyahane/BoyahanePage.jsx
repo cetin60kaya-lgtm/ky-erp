@@ -2,6 +2,7 @@ import "../modules/cleanWorkflow.css";
 import "./boyahaneWorkflow.css";
 import "./inventoryCenter.css";
 import "./boyahaneCommandCenter.css";
+import "./boyahaneForms.css";
 import BoyahaneDashboardPage from "./workflow/BoyahaneDashboardPage";
 import BoyahaneOperationsPage from "./workflow/BoyahaneOperationsPage";
 import BoyahaneInventoryHub from "./workflow/BoyahaneInventoryHub";
