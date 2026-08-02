@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "wrangler deploy --dry-run",
+    "build": "node scripts/pages-domain-preflight.mjs && wrangler deploy --dry-run",
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
     "db:migrations:local": "wrangler d1 migrations apply ky-erp-production-local --local --config wrangler.production-local.jsonc",
