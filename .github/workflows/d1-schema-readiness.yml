@@ -1,18 +1,7 @@
 name: KY ERP D1 Şema ve Canlı Yayın Hazırlığı
 
-# Secrets doğrulaması için güncel dal tetiklemesi: 2026-08-02
 on:
   pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/migrations/**"
-      - "APP/cloud/ky-erp-api/scripts/d1-schema-audit.mjs"
-      - "APP/cloud/ky-erp-api/wrangler.jsonc"
-      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
-      - "APP/cloud/ky-erp-api/package.json"
-      - ".github/workflows/d1-schema-readiness.yml"
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "APP/cloud/ky-erp-api/migrations/**"
       - "APP/cloud/ky-erp-api/scripts/d1-schema-audit.mjs"
@@ -95,7 +84,7 @@ jobs:
 
   remote-readiness:
     name: Canlı D1 şema kontrolü ve isteğe bağlı yayın
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     needs: local-schema
     runs-on: ubuntu-latest
     environment: production
@@ -136,7 +125,7 @@ jobs:
             --output "database-backup/ky-erp-db-schema-before-${stamp}.sql"
 
       - name: Migration öncesi tam D1 yedeğini al
-        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
+        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
         run: |
           stamp="$(date -u +%Y%m%d-%H%M%S)"
           npx wrangler d1 export ky-erp-db \
@@ -151,17 +140,17 @@ jobs:
           --remote
           --database ky-erp-db
           --config wrangler.jsonc
-        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.action != 'check' }}
+        continue-on-error: ${{ inputs.action != 'check' }}
 
       - name: Bekleyen migration listesini göster
         run: npx wrangler d1 migrations list ky-erp-db --remote --config wrangler.jsonc
 
       - name: Canlı D1 migrationlarını uygula
-        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
+        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
         run: npx wrangler d1 migrations apply ky-erp-db --remote --config wrangler.jsonc
 
       - name: Migration sonrası canlı D1 denetimi
-        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
+        if: inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker'
         run: >-
           node scripts/d1-schema-audit.mjs
           --remote
@@ -170,11 +159,11 @@ jobs:
           --require-migrations
 
       - name: Worker'ı canlıya dağıt
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply-and-deploy-worker'
+        if: inputs.action == 'apply-and-deploy-worker'
         run: npx wrangler deploy --config wrangler.jsonc
 
       - name: Canlı API sağlık kontrolü
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply-and-deploy-worker'
+        if: inputs.action == 'apply-and-deploy-worker'
         run: |
           for attempt in $(seq 1 30); do
             if curl --fail --silent https://api.kyerp.net/api/health | tee /tmp/health.json | jq -e '.ok == true'; then
