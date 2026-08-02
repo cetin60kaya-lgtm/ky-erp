@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/app/ky-erp-frontend/src/main.jsx"
       - "APP/app/ky-erp-frontend/src/utils/api.js"
       - "SCRIPTS/KYERP_YEREL_BASLAT.ps1"
       - "SCRIPTS/KYERP_YEREL_DURDUR.ps1"
@@ -61,6 +62,7 @@ jobs:
           const fs = require('node:fs');
           const api = fs.readFileSync('APP/app/ky-erp-frontend/src/utils/api.js', 'utf8');
           const worker = fs.readFileSync('APP/cloud/ky-erp-api/src/main.ts', 'utf8');
+          const entry = fs.readFileSync('APP/app/ky-erp-frontend/src/main.jsx', 'utf8');
           const forbidden = [
             '${method} ${requestPath}: API sunucusuna bağlanılamadı',
             '${method} ${requestPath}: istek zaman aşımına uğradı',
@@ -79,7 +81,24 @@ jobs:
           if (/origin:\s*["']\*["']/.test(worker)) {
             throw new Error('Credential kullanan CORS yapılandırmasında wildcard origin yasaktır.');
           }
-          console.log('Ortak hata ve CORS güvenliği doğrulandı.');
+          if (entry.includes('./mobile/') || entry.includes('MobileApp')) {
+            throw new Error('Eski ayrı mobil uygulama ana girişte hâlâ etkin.');
+          }
+          const legacyIkPortals = [
+            'MonthlyPersonnelWorkspace',
+            'MonthlySalaryContractWorkspace',
+            'MonthlyOperationsWorkspaceV2',
+            'DailyHrWorkspace',
+          ];
+          for (const marker of legacyIkPortals) {
+            if (entry.includes(marker)) {
+              throw new Error(`Ana girişte paralel İK portalı bulundu: ${marker}`);
+            }
+          }
+          if (!entry.includes('<AppV3 />')) {
+            throw new Error('Tek responsive AppV3 girişi bulunamadı.');
+          }
+          console.log('Ortak hata, CORS ve tek uygulama girişi doğrulandı.');
           NODE
 
       - name: Worker paketleri
