@@ -17,187 +17,181 @@ const NOISE_PATTERNS = [
 ];
 
 const ITEM_KEYS = [
-  'belgeKalemleri',
-  'kalemler',
-  'items',
-  'lineItems',
-  'rows',
-  'parsedItems',
-  'matchedItems',
-  'candidateItems',
-  'documentItems',
-  'invoiceItems',
+  "belgeKalemleri",
+  "kalemler",
+  "items",
+  "lineItems",
+  "rows",
+  "parsedItems",
+  "matchedItems",
+  "candidateItems",
+  "documentItems",
+  "invoiceItems",
 ];
 
 const POOL_KEYS = [
-  'havuz',
-  'irsaliyeHavuzu',
-  'taslaklar',
-  'drafts',
-  'pool',
-  'kayitLogu',
-  'log',
-  'logs',
+  "havuz",
+  "irsaliyeHavuzu",
+  "taslaklar",
+  "drafts",
+  "pool",
+  "kayitLogu",
+  "log",
+  "logs",
 ];
 
 function normalizeText(input) {
-  return String(input ?? '')
-    .replace(/\s+/g, ' ')
-    .replace(/[‐-‒–—]/g, '-')
+  return String(input ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/[‐-‒–—]/g, "-")
     .trim();
 }
 
 function hasNoise(text) {
   const value = normalizeText(text);
   if (!value) return false;
-  return NOISE_PATTERNS.some((r) => r.test(value));
+  return NOISE_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 function extractItemText(value) {
-  if (typeof value === 'string') return value;
-  if (!value || typeof value !== 'object') return '';
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
 
-  return normalizeText([
-    value.raw,
-    value.rawText,
-    value.line,
-    value.lineText,
-    value.hamSatir,
-    value.hamAciklama,
-    value.description,
-    value.aciklama,
-    value.name,
-    value.title,
-    value.productName,
-    value.urunAdi,
-    value.malzeme,
-    value.malzemeAdi,
-    value.itemName,
-    value.parsedLabel,
-    value.displayName,
-  ].filter(Boolean).join(' | '));
+  return normalizeText(
+    [
+      value.raw,
+      value.rawText,
+      value.line,
+      value.lineText,
+      value.hamSatir,
+      value.hamAciklama,
+      value.description,
+      value.aciklama,
+      value.name,
+      value.title,
+      value.productName,
+      value.urunAdi,
+      value.malzeme,
+      value.malzemeAdi,
+      value.itemName,
+      value.parsedLabel,
+      value.displayName,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  );
 }
 
 function looksLikeItemObject(value) {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
 
   const keys = Object.keys(value);
   const signalKeys = [
-    'urunAdi',
-    'productName',
-    'itemName',
-    'name',
-    'description',
-    'aciklama',
-    'miktar',
-    'quantity',
-    'adet',
-    'birim',
-    'unit',
-    'fiyat',
-    'price',
-    'tutar',
-    'amount',
-    'lotNo',
-    'ambalaj',
+    "urunAdi",
+    "productName",
+    "itemName",
+    "name",
+    "description",
+    "aciklama",
+    "miktar",
+    "quantity",
+    "adet",
+    "birim",
+    "unit",
+    "fiyat",
+    "price",
+    "tutar",
+    "amount",
+    "lotNo",
+    "ambalaj",
   ];
 
-  return signalKeys.some((k) => keys.includes(k));
+  return signalKeys.some((key) => keys.includes(key));
 }
 
 function getDateValue(item) {
   const raw =
-    item?.tarih 
-    item?.date 
-    item?.createdAt 
-    item?.updatedAt 
-    item?.belgeTarihi 
-    item?.dispatchDate 
+    item?.tarih ||
+    item?.date ||
+    item?.createdAt ||
+    item?.updatedAt ||
+    item?.belgeTarihi ||
+    item?.dispatchDate ||
     item?.invoiceDate;
 
   if (!raw) return 0;
-  const t = new Date(String(raw)).getTime();
-  return Number.isFinite(t) ? t : 0;
+  const timestamp = new Date(String(raw)).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function dedupeArray(arr) {
+function dedupeArray(items) {
   const seen = new Set();
-  const out = [];
+  const output = [];
 
-  for (const item of arr) {
-    let key = '';
+  for (const item of items) {
+    let key = "";
 
-    if (typeof item === 'string') {
+    if (typeof item === "string") {
       key = normalizeText(item).toLowerCase();
-    } else if (item && typeof item === 'object') {
-      const text = extractItemText(item).toLowerCase();
-      const qty = normalizeText(item?.miktar ?? item?.quantity ?? item?.adet ?? '');
-      const unit = normalizeText(item?.birim ?? item?.unit ?? '');
-      const amount = normalizeText(item?.tutar ?? item?.amount ?? item?.total ?? '');
-      key = [text, qty, unit, amount].filter(Boolean).join(' | ');
+    } else if (item && typeof item === "object") {
+      const itemText = extractItemText(item).toLowerCase();
+      const quantity = normalizeText(
+        item?.miktar ?? item?.quantity ?? item?.adet ?? "",
+      );
+      const unit = normalizeText(item?.birim ?? item?.unit ?? "");
+      const amount = normalizeText(
+        item?.tutar ?? item?.amount ?? item?.total ?? "",
+      );
+      key = [itemText, quantity, unit, amount].filter(Boolean).join(" | ");
     }
 
-    if (!key) {
-      out.push(item);
-      continue;
-    }
-
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(item);
+    if (!key || !seen.has(key)) {
+      if (key) seen.add(key);
+      output.push(item);
     }
   }
 
-  return out;
+  return output;
 }
 
-function sanitizeArray(parentKey, arr) {
-  let out = arr.map((x) => sanitizeNode(x, parentKey));
+function sanitizeArray(parentKey, items) {
+  let output = items.map((item) => sanitizeNode(item, parentKey));
+  const normalizedParentKey = String(parentKey || "").toLowerCase();
 
   const isItemArray =
-    ITEM_KEYS.some((k) => parentKey.toLowerCase().includes(k.toLowerCase())) ||
-    /kalem|item|line|row/i.test(parentKey);
+    ITEM_KEYS.some((key) => normalizedParentKey.includes(key.toLowerCase())) ||
+    /kalem|item|line|row/i.test(normalizedParentKey);
 
   if (isItemArray) {
-    out = out.filter((item) => {
-      if (typeof item === 'string') {
-        return !hasNoise(item);
-      }
-
-      if (looksLikeItemObject(item)) {
-        const text = extractItemText(item);
-        return !text || !hasNoise(text);
-      }
-
-      return true;
+    output = output.filter((item) => {
+      if (typeof item === "string") return !hasNoise(item);
+      if (!looksLikeItemObject(item)) return true;
+      const itemText = extractItemText(item);
+      return !itemText || !hasNoise(itemText);
     });
-
-    out = dedupeArray(out);
+    output = dedupeArray(output);
   }
 
   const isPoolArray =
-    POOL_KEYS.some((k) => parentKey.toLowerCase().includes(k.toLowerCase())) ||
-    /havuz|pool|taslak|draft|log/i.test(parentKey);
+    POOL_KEYS.some((key) => normalizedParentKey.includes(key.toLowerCase())) ||
+    /havuz|pool|taslak|draft|log/i.test(normalizedParentKey);
 
   if (isPoolArray) {
-    out = [...out].sort((a, b) => {
-      const ad = a && typeof a === 'object' ? getDateValue(a) : 0;
-      const bd = b && typeof b === 'object' ? getDateValue(b) : 0;
-      return bd - ad;
+    output = [...output].sort((left, right) => {
+      const leftDate =
+        left && typeof left === "object" ? getDateValue(left) : 0;
+      const rightDate =
+        right && typeof right === "object" ? getDateValue(right) : 0;
+      return rightDate - leftDate;
     });
   }
 
-  return out;
+  return output;
 }
 
-function sanitizeNode(node, parentKey = '') {
-  if (Array.isArray(node)) {
-    return sanitizeArray(parentKey, node);
-  }
-
-  if (!node || typeof node !== 'object') {
-    return node;
-  }
+function sanitizeNode(node, parentKey = "") {
+  if (Array.isArray(node)) return sanitizeArray(parentKey, node);
+  if (!node || typeof node !== "object") return node;
 
   const result = { ...node };
   for (const [key, value] of Object.entries(node)) {
@@ -207,16 +201,19 @@ function sanitizeNode(node, parentKey = '') {
 }
 
 function isLikelyDocumentUrl(url) {
-  const value = String(url || '').toLowerCase();
+  const value = String(url || "").toLowerCase();
   return (
-    value.includes('/muhasebe') &&
-    /(document|intake|belge|invoice|irsaliye|fatura|tedarik|parse|upload|havuz|taslak)/i.test(value)
+    value.includes("/muhasebe") &&
+    /(document|intake|belge|invoice|irsaliye|fatura|tedarik|parse|upload|havuz|taslak)/i.test(
+      value,
+    )
   );
 }
 
 export function installMuhasebeDocumentSanitizer() {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   if (window.__KYERP_DOC_SANITIZER_INSTALLED__) return;
+  if (typeof window.fetch !== "function") return;
 
   const originalFetch = window.fetch.bind(window);
 
@@ -226,24 +223,15 @@ export function installMuhasebeDocumentSanitizer() {
     try {
       const input = args?.[0];
       const url =
-        typeof input === 'string'
-           ? input
-          : input.url || '';
+        typeof input === "string" ? input : String(input?.url || "");
 
-      if (!isLikelyDocumentUrl(url)) {
-        return response;
-      }
+      if (!isLikelyDocumentUrl(url)) return response;
 
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return response;
-      }
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) return response;
 
-      const cloned = response.clone();
-      const rawText = await cloned.text();
-      if (!rawText || !rawText.trim()) {
-        return response;
-      }
+      const rawText = await response.clone().text();
+      if (!rawText.trim()) return response;
 
       let parsed;
       try {
@@ -252,12 +240,10 @@ export function installMuhasebeDocumentSanitizer() {
         return response;
       }
 
-      const clean = sanitizeNode(parsed);
-
       const headers = new Headers(response.headers);
-      headers.delete('content-length');
+      headers.delete("content-length");
 
-      return new Response(JSON.stringify(clean), {
+      return new Response(JSON.stringify(sanitizeNode(parsed)), {
         status: response.status,
         statusText: response.statusText,
         headers,
