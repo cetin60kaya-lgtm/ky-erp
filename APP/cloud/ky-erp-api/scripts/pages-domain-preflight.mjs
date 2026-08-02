@@ -67,6 +67,7 @@ const projectsRes = await cf(`/accounts/${accountId}/pages/projects`);
 const projectRes = await cf(`/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}`);
 const domainsRes = await cf(`/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/domains`);
 const deploymentsRes = await cf(`/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/deployments?env=production&page=1&per_page=20`);
+const workersDomainsRes = await cf(`/accounts/${accountId}/workers/domains?hostname=${encodeURIComponent(customDomain)}`);
 
 const projects = Array.isArray(projectsRes?.body?.result) ? projectsRes.body.result : [];
 const domainOwners = [];
@@ -85,6 +86,18 @@ for (const project of projects) {
 const deployments = Array.isArray(deploymentsRes?.body?.result) ? deploymentsRes.body.result : [];
 const latest = deployments[0] || {};
 const latestUrl = String(latest?.url || "").trim();
+const workerDomains = Array.isArray(workersDomainsRes?.body?.result)
+  ? workersDomainsRes.body.result
+      .filter((row) => String(row?.hostname || "").toLowerCase() === customDomain)
+      .map((row) => ({
+        id: row?.id || "",
+        hostname: row?.hostname || "",
+        service: row?.service || "",
+        environment: row?.environment || "",
+        zoneId: row?.zone_id || "",
+        zoneName: row?.zone_name || "",
+      }))
+  : [];
 
 const zonesRes = await cf(`/zones?name=${encodeURIComponent(customDomain)}`);
 const zones = Array.isArray(zonesRes?.body?.result) ? zonesRes.body.result : [];
@@ -113,6 +126,11 @@ const result = {
   },
   targetDomains,
   domainOwners,
+  workerDomainsApi: {
+    httpStatus: workersDomainsRes.httpStatus,
+    success: Boolean(workersDomainsRes?.body?.success),
+  },
+  workerDomains,
   liveHtml: await publicHtml(`https://${customDomain}/`),
   latestHtml: latestUrl ? await publicHtml(`${latestUrl.replace(/\/$/, "")}/`) : null,
   dnsApi: { httpStatus: dnsRes.httpStatus, success: Boolean(dnsRes?.body?.success) },
@@ -128,6 +146,7 @@ const result = {
     project: projectRes?.body?.errors || [],
     domains: domainsRes?.body?.errors || [],
     deployments: deploymentsRes?.body?.errors || [],
+    workersDomains: workersDomainsRes?.body?.errors || [],
     zones: zonesRes?.body?.errors || [],
     dns: dnsRes?.body?.errors || [],
   },
