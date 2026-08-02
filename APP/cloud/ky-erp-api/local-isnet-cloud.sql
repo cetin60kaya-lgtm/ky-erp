@@ -1,5 +1,9 @@
--- İşNet smoke testi üretim merkezinin şemasını kullanır; ancak üretim örnek belgelerini
--- İşNet sayaçlarına dahil etmez. Yalnız bu izole yerel test veritabanı temizlenir.
+-- İşNet smoke testi üretim merkezinin şemasını kullanır; ancak İşNet satır
+-- sıralamasında kullanılan uyumluluk sütunu eski yerel şemada bulunmuyordu.
+ALTER TABLE invoice_items ADD COLUMN line_no INTEGER;
+
+-- Üretim örnek belgeleri İşNet sayaçlarına dahil edilmez. Yalnız izole yerel
+-- test veritabanı temizlenir; canlı D1 veya kullanıcı verisi etkilenmez.
 DELETE FROM invoice_items;
 DELETE FROM documents;
 
@@ -51,12 +55,13 @@ VALUES
   );
 
 INSERT OR REPLACE INTO invoice_items
-  (id, main_company_slug, document_id, product_name, description, quantity, unit, unit_price, line_total, subtotal, vat_amount, raw, created_at, updated_at)
+  (id, main_company_slug, document_id, line_no, product_name, description, quantity, unit, unit_price, line_total, subtotal, vat_amount, raw, created_at, updated_at)
 VALUES
   (
     'isnet-dispatch-line-1',
     'mecit-hakan',
     'isnet-incoming-dispatch-1',
+    1,
     'CI ISNET MODEL',
     'CI ISNET MODEL ÖN BASKI',
     1500,
