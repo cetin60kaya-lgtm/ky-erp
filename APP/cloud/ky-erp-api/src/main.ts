@@ -8,6 +8,7 @@ import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
+import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
 import { registerProductionCenterRoutes } from "./production-center";
 
 type ShellEnv = {
@@ -39,8 +40,9 @@ registerDesenStorageRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 
-// İşNet, İK ve Yönetim modülleri ayrı uyumluluk katmanlarıdır.
-// Bu kayıtlar yapılmadan ilgili frontend çağrıları Worker'da 404'e düşer.
+// İşNet intake uyumluluğu ana İşNet rotalarından önce bağlanır; aynı belgenin
+// işlem kimliği tüm sonraki model ve fatura adımlarında değişmeden korunur.
+registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 
