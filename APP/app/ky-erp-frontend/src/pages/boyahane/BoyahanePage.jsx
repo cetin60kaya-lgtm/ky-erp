@@ -3,6 +3,7 @@ import "./boyahaneWorkflow.css";
 import "./inventoryCenter.css";
 import "./boyahaneCommandCenter.css";
 import "./boyahaneForms.css";
+import "./boyahaneFinal.css";
 import BoyahaneDashboardPage from "./workflow/BoyahaneDashboardPage";
 import BoyahaneSamplePage from "./workflow/BoyahaneSamplePage";
 import BoyahaneOperationsPage from "./workflow/BoyahaneOperationsPage";
