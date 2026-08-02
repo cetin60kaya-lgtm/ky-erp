@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
+import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import";
 import { registerBoyahaneInventoryRoutes } from "./boyahane-inventory";
 import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
 import { registerBoyahaneSampleRoutes } from "./boyahane-sample";
@@ -37,6 +38,7 @@ function allowedOrigin(origin: string) {
 // Önce ortak üretim ve stok kaynakları, ardından bu kaynakları kullanan iş akışları bağlanır.
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
+registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobRoutes(app);
 registerBoyahaneSampleRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
