@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
+import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneExcelImportRoutes } from "./boyahane-excel-import-runtime";
 import { registerBoyahaneInventoryRoutes } from "./boyahane-inventory";
 import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
@@ -41,6 +42,8 @@ registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobRoutes(app);
 registerBoyahaneSampleRoutes(app);
+// Kayıtlı renk kimliği rotaları genel workflow rotalarından önce bağlanır.
+registerBoyahaneColorIdentityRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
 registerDesenWorkflowRoutes(app);
