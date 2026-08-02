@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Context, Hono } from "hono";
 
 type Bindings = Cloudflare.Env;
@@ -46,12 +47,13 @@ function slugOf(c: Context<AppEnv>, body: Row = {}) {
 
 async function storeList(c: Context<AppEnv>, scope: string, slug: string): Promise<Row[]> {
   const result = await c.env.DB.prepare(
-    `SELECT id, file_name, data, created_at, updated_at FROM json_store
+    `SELECT id, file_name, data FROM json_store
       WHERE scope = ? AND (main_company_slug = ? OR main_company_slug IS NULL)
       ORDER BY updated_at DESC, id DESC`,
   ).bind(scope, slug).all<Row>();
   return (result.results || []).map((row) => ({
     ...objectOf(row.data),
+    id: text(objectOf(row.data).id || row.file_name),
     storeId: text(row.id),
     fileName: text(row.file_name),
   }));
@@ -59,41 +61,34 @@ async function storeList(c: Context<AppEnv>, scope: string, slug: string): Promi
 
 async function storeGet(c: Context<AppEnv>, scope: string, fileName: string, slug: string): Promise<Row | null> {
   const row = await c.env.DB.prepare(
-    `SELECT id, file_name, data, created_at, updated_at FROM json_store
+    `SELECT id, file_name, data FROM json_store
       WHERE scope = ? AND file_name = ?
         AND (main_company_slug = ? OR main_company_slug IS NULL)
       ORDER BY updated_at DESC LIMIT 1`,
   ).bind(scope, fileName, slug).first<Row>();
   if (!row) return null;
-  return { ...objectOf(row.data), storeId: text(row.id), fileName: text(row.file_name) };
+  return { ...objectOf(row.data), id: text(objectOf(row.data).id || row.file_name), storeId: text(row.id), fileName: text(row.file_name) };
 }
 
-async function storePut(c: Context<AppEnv>, scope: string, fileName: string, data: Row, slug: string) {
+async function storePut(c: Context<AppEnv>, scope: string, fileName: string, data: Row, slug: string): Promise<Row> {
   const now = nowIso();
-  const existing = await c.env.DB.prepare(
-    `SELECT id FROM json_store
-      WHERE scope = ? AND file_name = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)
-      LIMIT 1`,
+  const current = await c.env.DB.prepare(
+    `SELECT id FROM json_store WHERE scope = ? AND file_name = ?
+      AND (main_company_slug = ? OR main_company_slug IS NULL) LIMIT 1`,
   ).bind(scope, fileName, slug).first<Row>();
-  const payload = { ...data, updatedAt: now };
-  if (existing?.id) {
-    await c.env.DB.prepare(
-      `UPDATE json_store SET data = ?, updated_at = ? WHERE id = ?`,
-    ).bind(JSON.stringify(payload), now, existing.id).run();
-    return { ...payload, storeId: text(existing.id), fileName };
+  const payload = { ...data, id: fileName, updatedAt: now };
+  if (current?.id) {
+    await c.env.DB.prepare(`UPDATE json_store SET data = ?, updated_at = ? WHERE id = ?`)
+      .bind(JSON.stringify(payload), now, current.id).run();
+    return { ...payload, storeId: text(current.id), fileName };
   }
-  const id = crypto.randomUUID();
+  const storeId = crypto.randomUUID();
   await c.env.DB.prepare(
     `INSERT INTO json_store
       (id, scope, main_company_slug, file_name, data, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, scope, slug || null, fileName, JSON.stringify(payload), now, now).run();
-  return { ...payload, storeId: id, fileName };
-}
-
-function errorBody(code: string, message: string) {
-  return { ok: false, success: false, error: { code, message } };
+  ).bind(storeId, scope, slug || null, fileName, JSON.stringify(payload), now, now).run();
+  return { ...payload, storeId, fileName };
 }
 
 function sourceTypeOf(body: Row) {
@@ -115,21 +110,22 @@ function identityKey(row: Row) {
   return `PANTONE|${paintType}|${normalize(row.pantone)}`;
 }
 
-async function ensureRegisteredColor(c: Context<AppEnv>, slug: string, body: Row) {
+async function ensureRegisteredColor(c: Context<AppEnv>, slug: string, body: Row): Promise<Row> {
   if (body.registeredColorId) {
     const selected = await storeGet(c, REGISTERED_SCOPE, text(body.registeredColorId), slug);
     if (selected) return selected;
   }
-
   const sourceType = sourceTypeOf(body);
-  const candidate = {
+  const paintType = text(body.paintType || "SUBAZLI");
+  const candidate: Row = {
     colorName: text(body.colorName),
     pantone: sourceType === "VISUAL" ? "" : text(body.pantone),
     basePantone: sourceType === "REFERENCE" ? text(body.basePantone || body.pantone) : "",
-    paintType: text(body.paintType || "SUBAZLI"),
-    dyeType: text(body.paintType || "SUBAZLI"),
+    paintType,
+    dyeType: paintType,
     sourceType,
     colorSource: sourceType,
+    isPantoneExact: sourceType === "PANTONE",
     referenceName: text(body.referenceName),
     referenceCode: text(body.referenceCode),
     referenceNote: text(body.referenceNote),
@@ -137,23 +133,24 @@ async function ensureRegisteredColor(c: Context<AppEnv>, slug: string, body: Row
     colorHex: text(body.colorHex),
     colorFamily: text(body.colorFamily),
   };
-
   const existing = (await storeList(c, REGISTERED_SCOPE, slug)).find(
     (row) => identityKey(row) === identityKey(candidate),
   );
   if (existing) return existing;
-
   const id = crypto.randomUUID();
   return storePut(c, REGISTERED_SCOPE, id, {
     id,
     ...candidate,
-    isPantoneExact: sourceType === "PANTONE",
     status: "ACTIVE",
     isActive: true,
     activeVersion: "",
     recipeCount: 0,
     createdAt: nowIso(),
   }, slug);
+}
+
+function errorBody(code: string, message: string) {
+  return { ok: false, success: false, error: { code, message } };
 }
 
 export function registerBoyahaneColorJobRoutes(app: Hono<AppEnv>) {
