@@ -46,8 +46,18 @@ function effectiveColor(row: Row) {
   const status = upper(row.status || "WAITING");
   const hasRecipe = Boolean(text(row.recipeId));
   const effectiveStatus = status === "COMPLETED" && !hasRecipe ? "WAITING" : status;
+  const sourceType = upper(row.sourceType || row.colorSource || (row.pantone ? "PANTONE" : "VISUAL"));
+  const displayCode = sourceType === "VISUAL"
+    ? text(row.colorHex || row.pantone || "RGB")
+    : sourceType === "REFERENCE"
+      ? text(row.pantone || row.basePantone || row.referenceCode || row.referenceName)
+      : text(row.pantone);
   return {
     ...row,
+    pantone: displayCode,
+    sourceType,
+    colorSource: sourceType,
+    isPantoneExact: sourceType === "PANTONE",
     status: effectiveStatus,
     integrityWarning: status === "COMPLETED" && !hasRecipe ? "RECIPE_MISSING" : row.integrityWarning,
   };
