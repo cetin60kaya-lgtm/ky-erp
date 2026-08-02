@@ -2,13 +2,14 @@
   "approved": true,
   "target": "production",
   "mode": "pages-domain-audit",
-  "requestedAt": "2026-08-03T01:41:00+03:00",
-  "attempt": 10,
+  "requestedAt": "2026-08-03T01:47:00+03:00",
+  "attempt": 11,
   "scope": [
     "pages-project-domain-owner-audit",
+    "workers-custom-domain-audit",
     "production-deployment-alias-audit",
     "kyerp-net-html-and-dns-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Yalnız kyerp.net özel alan adı teşhisi; Worker dry-run aşamasında rapor yazılır ve canlı değişiklik yapılmadan zincir durdurulur"
+  "note": "Yalnız kyerp.net Pages ve Worker custom domain teşhisi; canlı değişiklik yapılmadan zincir durdurulur"
 }
