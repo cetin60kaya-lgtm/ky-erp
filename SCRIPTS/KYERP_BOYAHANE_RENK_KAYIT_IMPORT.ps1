@@ -167,12 +167,11 @@ function Read-WorkbookRecipes {
                 $GramValue = $Values[$RowIndex, (17 + $ItemIndex)]
                 $Grams = 0.0
                 if ($null -ne $GramValue) {
-                    [double]::TryParse(
-                        [string]$GramValue,
-                        [Globalization.NumberStyles]::Any,
-                        [Globalization.CultureInfo]::InvariantCulture,
-                        [ref]$Grams
-                    ) | Out-Null
+                    try {
+                        $Grams = [double]$GramValue
+                    } catch {
+                        [double]::TryParse([string]$GramValue, [ref]$Grams) | Out-Null
+                    }
                 }
 
                 if (-not [string]::IsNullOrWhiteSpace($ProductName) -and $Grams -gt 0) {
@@ -230,11 +229,11 @@ function Send-RecipeBatches {
             seedKnownLots = ($Start -eq 0)
         } | ConvertTo-Json -Depth 10 -Compress
 
-        $Result = Invoke-RestMethod \
-            -Uri "$ApiBase/api/boyahane/import/recipes/batch" \
-            -Method Post \
-            -ContentType "application/json; charset=utf-8" \
-            -Body ([Text.Encoding]::UTF8.GetBytes($Body)) \
+        $Result = Invoke-RestMethod `
+            -Uri "$ApiBase/api/boyahane/import/recipes/batch" `
+            -Method Post `
+            -ContentType "application/json; charset=utf-8" `
+            -Body ([Text.Encoding]::UTF8.GetBytes($Body)) `
             -TimeoutSec 180
 
         if (-not $Result.ok) {
