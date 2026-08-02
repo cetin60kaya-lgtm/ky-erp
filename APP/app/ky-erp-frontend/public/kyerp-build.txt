@@ -1,0 +1,5 @@
+KY ERP production build
+generated_at=2026-08-03T00:29:00+03:00
+source=e212ff9f89742b7be6a72fac84fb15eab02c03c8
+boyahane_layout=final-six-screens
+recipe_required_before_ready=true
