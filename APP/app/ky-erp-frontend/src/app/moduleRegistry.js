@@ -108,20 +108,14 @@ export const MODULES = [
     icon: "renk",
     groups: [
       {
-        label: "Üretim Akışı",
+        label: "Hakan Emprime Boyahane",
         tabs: [
-          ["is-akisi", "İş Akışı", "dashboard"],
+          ["is-akisi", "Ana Ekran", "dashboard"],
+          ["receteler", "Numune Çalışmaları", "file-check"],
+          ["uretim-gecmisi", "İmalat Boyaları", "dosya"],
           ["kayitli-renkler", "Kayıtlı Renkler", "renk"],
-          ["receteler", "Reçeteler", "file-check"],
-        ],
-      },
-      {
-        label: "Stok ve Geçmiş",
-        tabs: [
-          ["urun-lotlar", "Ürün ve Lotlar", "urunler"],
-          ["uretim-gecmisi", "Üretim Geçmişi", "dosya"],
-          ["boya-giderleri", "Boya Giderleri", "odeme"],
-          ["raporlar", "Raporlar", "raporlar"],
+          ["urun-lotlar", "Stok, Lot ve Ürünler", "urunler"],
+          ["raporlar", "Raporlar ve İşlem Logları", "raporlar"],
         ],
       },
     ],
@@ -261,7 +255,7 @@ export const MODULE_ROUTE_ALIASES = {
   boyahane: {
     "boyahane-yonetim-ozeti": "is-akisi",
     "renk-recete-is-akisi": "is-akisi",
-    "renk-gramaj": "is-akisi",
+    "renk-gramaj": "uretim-gecmisi",
     "hammadde-lot": "urun-lotlar",
     "onayli-envanter": "urun-lotlar",
     "boyahane-raporlari": "raporlar",
@@ -269,6 +263,11 @@ export const MODULE_ROUTE_ALIASES = {
     "evrak-denetim": "raporlar",
     evraklar: "raporlar",
     "renk-havuzu": "kayitli-renkler",
+    "boya-giderleri": "raporlar",
+    "is-akisi-eski": "is-akisi",
+    "recete": "receteler",
+    "uretim-gecmis": "uretim-gecmisi",
+    "urun-ve-lotlar": "urun-lotlar",
   },
   ik: {
     "ik-ozet": "ozet",
