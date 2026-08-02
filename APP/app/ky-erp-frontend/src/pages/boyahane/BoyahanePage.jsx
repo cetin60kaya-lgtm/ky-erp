@@ -1,78 +1,88 @@
 import "../modules/cleanWorkflow.css";
 import "./boyahaneWorkflow.css";
 import "./inventoryCenter.css";
-import BoyahaneIsAkisiPage from "./workflow/BoyahaneIsAkisiPage";
+import "./boyahaneCommandCenter.css";
+import BoyahaneDashboardPage from "./workflow/BoyahaneDashboardPage";
+import BoyahaneOperationsPage from "./workflow/BoyahaneOperationsPage";
+import BoyahaneInventoryHub from "./workflow/BoyahaneInventoryHub";
+import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
-import UrunLotlarPage from "./workflow/UrunLotlarPage";
-import {
-  BoyaGiderleriPage,
-  BoyahaneRaporlarPage,
-  UretimGecmisiPage,
-} from "./workflow/BoyahaneRecordPages";
 
-const titles = {
-  "is-akisi": "İş Akışı",
-  "kayitli-renkler": "Kayıtlı Renkler",
-  receteler: "Reçeteler",
-  "urun-lotlar": "Onaylı Ürün ve Lot Stoku",
-  "uretim-gecmisi": "Üretim Geçmişi",
-  "boya-giderleri": "Boya Giderleri",
-  raporlar: "Raporlar",
-};
+const NAV_ITEMS = [
+  ["is-akisi", "Ana Ekran"],
+  ["receteler", "Numune Çalışmaları"],
+  ["uretim-gecmisi", "İmalat Boyaları"],
+  ["kayitli-renkler", "Kayıtlı Renkler"],
+  ["urun-lotlar", "Stok, Lot ve Ürünler"],
+  ["raporlar", "Raporlar ve İşlem Logları"],
+];
 
-const descriptions = {
-  "is-akisi":
-    "Desen’den gelen işleri renk, reçete, onaylı ürün ve lot stoklarıyla tek akışta yürütün.",
-  "kayitli-renkler":
-    "Kayıtlı renkleri ve onaylı reçete bağlantılarını yönetin.",
-  receteler:
-    "Renk reçetelerini sürüm, karşılaştırma ve onay düzeniyle yönetin.",
-  "urun-lotlar":
-    "Muhasebe tedarikçi faturalarından gelen lotları, onaylı ürünleri ve stok hareketlerini aynı merkezde takip edin.",
-  "uretim-gecmisi":
-    "Tamamlanan Boyahane üretimlerini kullanılan reçete ve lotlarıyla inceleyin.",
-  "boya-giderleri":
-    "Boya ve kimyasal sarflarının muhasebe gider karşılıklarını izleyin.",
-  raporlar:
-    "İş, üretim, stok, sarf ve gider sonuçlarını birlikte raporlayın.",
-};
+function normalizeTab(value) {
+  const aliases = {
+    "boyahane-yonetim-ozeti": "is-akisi",
+    "renk-recete-is-akisi": "is-akisi",
+    "renk-gramaj": "uretim-gecmisi",
+    "boya-giderleri": "raporlar",
+    "boyahane-raporlari": "raporlar",
+    "hammadde-lot": "urun-lotlar",
+    "onayli-envanter": "urun-lotlar",
+    "renk-havuzu": "kayitli-renkler",
+  };
+  return aliases[value] || value || "is-akisi";
+}
 
-export default function BoyahanePage({ activeTab, activeMainCompany }) {
-  const tab =
-    activeTab === "renk-recete-is-akisi" ||
-    activeTab === "boyahane-yonetim-ozeti"
-      ? "is-akisi"
-      : activeTab;
+export default function BoyahanePage({
+  activeTab,
+  activeMainCompany,
+  openModule,
+  moduleActionContext,
+}) {
+  const tab = normalizeTab(activeTab);
 
-  const page =
-    tab === "kayitli-renkler" ? (
-      <KayitliRenklerWorkspace activeMainCompany={activeMainCompany} />
-    ) : tab === "receteler" ? (
-      <KayitliRenklerWorkspace
-        activeMainCompany={activeMainCompany}
-        recipesOnly
-      />
-    ) : tab === "urun-lotlar" ? (
-      <UrunLotlarPage activeMainCompany={activeMainCompany} />
-    ) : tab === "uretim-gecmisi" ? (
-      <UretimGecmisiPage activeMainCompany={activeMainCompany} />
-    ) : tab === "boya-giderleri" ? (
-      <BoyaGiderleriPage activeMainCompany={activeMainCompany} />
-    ) : tab === "raporlar" ? (
-      <BoyahaneRaporlarPage activeMainCompany={activeMainCompany} />
-    ) : (
-      <BoyahaneIsAkisiPage activeMainCompany={activeMainCompany} />
-    );
+  const page = tab === "receteler" ? (
+    <BoyahaneOperationsPage
+      activeMainCompany={activeMainCompany}
+      mode="sample"
+      moduleActionContext={moduleActionContext}
+    />
+  ) : tab === "uretim-gecmisi" ? (
+    <BoyahaneOperationsPage
+      activeMainCompany={activeMainCompany}
+      mode="production"
+      moduleActionContext={moduleActionContext}
+    />
+  ) : tab === "kayitli-renkler" ? (
+    <KayitliRenklerWorkspace
+      activeMainCompany={activeMainCompany}
+      openModule={openModule}
+      moduleActionContext={moduleActionContext}
+    />
+  ) : tab === "urun-lotlar" ? (
+    <BoyahaneInventoryHub activeMainCompany={activeMainCompany} />
+  ) : tab === "raporlar" ? (
+    <BoyahaneReportsAndLogsPage activeMainCompany={activeMainCompany} />
+  ) : (
+    <BoyahaneDashboardPage
+      activeMainCompany={activeMainCompany}
+      openModule={openModule}
+    />
+  );
 
   return (
     <div className="clean-workflow-page bh-page">
-      <section className="cw-screen">
-        <header className="cw-card bh-header">
-          <div>
-            <h1>{titles[tab] || "İş Akışı"}</h1>
-            <p>{descriptions[tab] || descriptions["is-akisi"]}</p>
-          </div>
-        </header>
+      <section className="cw-screen bh-module-shell">
+        <nav className="bh-module-nav" aria-label="Boyahane ekranları">
+          {NAV_ITEMS.map(([key, label]) => (
+            <button
+              type="button"
+              key={key}
+              className={tab === key ? "active" : ""}
+              onClick={() => openModule?.("boyahane", { tabKey: key })}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
         {page}
       </section>
     </div>
