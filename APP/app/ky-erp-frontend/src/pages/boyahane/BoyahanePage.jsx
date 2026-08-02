@@ -4,6 +4,7 @@ import "./inventoryCenter.css";
 import "./boyahaneCommandCenter.css";
 import "./boyahaneForms.css";
 import BoyahaneDashboardPage from "./workflow/BoyahaneDashboardPage";
+import BoyahaneSamplePage from "./workflow/BoyahaneSamplePage";
 import BoyahaneOperationsPage from "./workflow/BoyahaneOperationsPage";
 import BoyahaneInventoryHub from "./workflow/BoyahaneInventoryHub";
 import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
@@ -41,15 +42,13 @@ export default function BoyahanePage({
   const tab = normalizeTab(activeTab);
 
   const page = tab === "receteler" ? (
-    <BoyahaneOperationsPage
+    <BoyahaneSamplePage
       activeMainCompany={activeMainCompany}
-      mode="sample"
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "uretim-gecmisi" ? (
     <BoyahaneOperationsPage
       activeMainCompany={activeMainCompany}
-      mode="production"
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "kayitli-renkler" ? (
