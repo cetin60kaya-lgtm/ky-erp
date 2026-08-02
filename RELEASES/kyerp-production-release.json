@@ -1,13 +1,13 @@
 {
   "approved": true,
   "target": "production",
-  "requestedAt": "2026-08-02T21:12:00+03:00",
-  "attempt": 3,
+  "requestedAt": "2026-08-03T00:40:00+03:00",
+  "attempt": 5,
   "scope": [
-    "cloudflare-d1-migrations",
+    "cloudflare-d1-backup-and-schema-check",
     "api-worker",
     "frontend-pages"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "KY ERP Boyahane, İşNet, Muhasebe, Desen, İmalat, İK ve ortak altyapı final yayını"
+  "note": "Beyaz ekran açılış hatası düzeltilmiş final kaynak; Boyahane altı ekranı ve reçete zorunluluğu korunarak production yeniden yayınlanıyor"
 }
