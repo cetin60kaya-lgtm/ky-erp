@@ -171,8 +171,8 @@ CREATE TABLE IF NOT EXISTS model_production_links (
 CREATE TABLE IF NOT EXISTS machine_shift_defaults (
   id TEXT PRIMARY KEY,
   main_company_slug TEXT NOT NULL,
-  machine_id TEXT NOT NULL,
-  shift TEXT NOT NULL,
+  machine_id TEXT,
+  shift TEXT,
   raw TEXT,
   created_at TEXT,
   updated_at TEXT
