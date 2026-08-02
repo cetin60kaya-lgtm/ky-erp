@@ -113,6 +113,67 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: npm run build
 
+      - name: Birleşik izole D1 verisini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          rm -rf .local-shared-audit
+          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql; do
+            npx wrangler d1 execute ky-erp-production-local \
+              --local \
+              --config wrangler.production-local.jsonc \
+              --persist-to .local-shared-audit \
+              --file "$sql"
+          done
+
+      - name: Birleşik yerel Worker'ı başlat
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          nohup npx wrangler dev \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-shared-audit \
+            --port 8790 > /tmp/kyerp-shared-worker.log 2>&1 &
+          echo $! > /tmp/kyerp-shared-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8790/api/health > /tmp/shared-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kyerp-shared-worker.log
+          exit 1
+
+      - name: Ortak modül ve CORS bağlantılarını doğrula
+        run: |
+          jq -e '.ok == true' /tmp/shared-health.json
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/production-center?mainCompanySlug=mecit-hakan&pageSize=5' \
+            | jq -e '.ok == true'
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan' \
+            | jq -e '.ok == true'
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/ik/aylik-personel?mainCompanySlug=mecit-hakan' \
+            | jq -e '.ok == true'
+
+          curl --silent --show-error -D /tmp/cors-local.headers -o /dev/null \
+            -X OPTIONS \
+            -H 'Origin: http://localhost:5174' \
+            -H 'Access-Control-Request-Method: GET' \
+            http://127.0.0.1:8790/api/health
+          grep -qi '^access-control-allow-origin: http://localhost:5174' /tmp/cors-local.headers
+
+          curl --silent --show-error -D /tmp/cors-foreign.headers -o /dev/null \
+            -X OPTIONS \
+            -H 'Origin: https://example.invalid' \
+            -H 'Access-Control-Request-Method: GET' \
+            http://127.0.0.1:8790/api/health
+          if grep -qi '^access-control-allow-origin:' /tmp/cors-foreign.headers; then
+            cat /tmp/cors-foreign.headers
+            echo 'Yetkisiz origin CORS izni aldı.' >&2
+            exit 1
+          fi
+
       - name: Frontend paketleri
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
@@ -124,3 +185,7 @@ jobs:
       - name: Frontend production build
         working-directory: APP/app/ky-erp-frontend
         run: npm run build
+
+      - name: Hata olursa Worker logunu göster
+        if: failure()
+        run: cat /tmp/kyerp-shared-worker.log 2>/dev/null || true
