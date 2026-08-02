@@ -185,7 +185,7 @@ jobs:
             'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan' \
             | jq -e '.ok == true'
           curl --fail --silent \
-            'http://127.0.0.1:8790/api/ik/aylik-personel?mainCompanySlug=mecit-hakan' \
+            'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan' \
             | jq -e '.ok == true'
 
           curl --silent --show-error -D /tmp/cors-local.headers -o /dev/null \
