@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = String(process.env.SMOKE_URL || "http://127.0.0.1:4173").replace(/\/$/, "");
+const baseOrigin = new URL(baseUrl).origin;
 const targetUrl = `${baseUrl}/boyahane/is-akisi?runtime-smoke=1`;
 const expectedMenuLabels = [
   "Ana Ekran",
@@ -15,17 +16,47 @@ const expectedMenuLabels = [
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const runtimeErrors = [];
+const runtimeWarnings = [];
 let result = null;
 
 page.on("pageerror", (error) => runtimeErrors.push(`PAGE_ERROR: ${error.message}`));
 page.on("console", (message) => {
-  if (message.type() === "error") runtimeErrors.push(`CONSOLE_ERROR: ${message.text()}`);
+  if (message.type() !== "error") return;
+  const text = message.text();
+  if (/^Failed to load resource:/i.test(text)) {
+    runtimeWarnings.push(`CONSOLE_RESOURCE_WARNING: ${text}`);
+    return;
+  }
+  runtimeErrors.push(`CONSOLE_ERROR: ${text}`);
+});
+page.on("response", (response) => {
+  if (response.status() < 400) return;
+  const url = response.url();
+  const entry = `HTTP_${response.status()}: ${response.request().method()} ${url}`;
+  let origin = "";
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    origin = "";
+  }
+
+  if (origin === baseOrigin && /\.(?:js|css|mjs|json|wasm)(?:\?|$)/i.test(url)) {
+    runtimeErrors.push(entry);
+  } else {
+    runtimeWarnings.push(entry);
+  }
 });
 page.on("requestfailed", (request) => {
   const url = request.url();
-  if (url.startsWith(baseUrl)) {
-    runtimeErrors.push(`REQUEST_FAILED: ${request.method()} ${url} ${request.failure()?.errorText || ""}`);
+  let origin = "";
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    origin = "";
   }
+  const entry = `REQUEST_FAILED: ${request.method()} ${url} ${request.failure()?.errorText || ""}`;
+  if (origin === baseOrigin) runtimeErrors.push(entry);
+  else runtimeWarnings.push(entry);
 });
 
 try {
@@ -62,7 +93,8 @@ try {
     title: await page.title(),
     finalUrl: page.url(),
     bodyPreview: bodyText.slice(0, 1_500),
-    runtimeErrors,
+    runtimeErrors: [...new Set(runtimeErrors)],
+    runtimeWarnings: [...new Set(runtimeWarnings)],
   };
 } catch (error) {
   runtimeErrors.push(`SMOKE_EXCEPTION: ${error?.stack || error?.message || String(error)}`);
@@ -72,7 +104,8 @@ try {
     title: await page.title().catch(() => ""),
     finalUrl: page.url(),
     bodyPreview: await page.locator("body").innerText().catch(() => ""),
-    runtimeErrors,
+    runtimeErrors: [...new Set(runtimeErrors)],
+    runtimeWarnings: [...new Set(runtimeWarnings)],
   };
 } finally {
   await writeFile("runtime-result.json", `${JSON.stringify(result, null, 2)}\n`, "utf8");
