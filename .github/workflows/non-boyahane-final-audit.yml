@@ -5,6 +5,8 @@ on:
     paths:
       - "APP/cloud/ky-erp-api/src/main.ts"
       - "APP/app/ky-erp-frontend/src/main.jsx"
+      - "APP/app/ky-erp-frontend/src/AppV3.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/modules/isnet/IsnetArchiveDeliveryPage.jsx"
       - "APP/app/ky-erp-frontend/src/utils/api.js"
       - "SCRIPTS/KYERP_YEREL_BASLAT.ps1"
       - "SCRIPTS/KYERP_YEREL_DURDUR.ps1"
@@ -56,13 +58,19 @@ jobs:
             Write-Host "Sözdizimi temiz: $file"
           }
 
-      - name: Ortak güvenlik kurallarını denetle
+      - name: Ortak güvenlik ve yönlendirme kurallarını denetle
         run: |
           node <<'NODE'
           const fs = require('node:fs');
           const api = fs.readFileSync('APP/app/ky-erp-frontend/src/utils/api.js', 'utf8');
           const worker = fs.readFileSync('APP/cloud/ky-erp-api/src/main.ts', 'utf8');
           const entry = fs.readFileSync('APP/app/ky-erp-frontend/src/main.jsx', 'utf8');
+          const app = fs.readFileSync('APP/app/ky-erp-frontend/src/AppV3.jsx', 'utf8');
+          const archive = fs.readFileSync(
+            'APP/app/ky-erp-frontend/src/pages/modules/isnet/IsnetArchiveDeliveryPage.jsx',
+            'utf8',
+          );
+
           const forbidden = [
             '${method} ${requestPath}: API sunucusuna bağlanılamadı',
             '${method} ${requestPath}: istek zaman aşımına uğradı',
@@ -98,7 +106,31 @@ jobs:
           if (!entry.includes('<AppV3 />')) {
             throw new Error('Tek responsive AppV3 girişi bulunamadı.');
           }
-          console.log('Ortak hata, CORS ve tek uygulama girişi doğrulandı.');
+
+          const canonicalIsnetRoutes = [
+            ['belge-akisi', 'IsnetDocumentCenterPage'],
+            ['irsaliyeden-faturaya', 'IsnetWorkflowFinalPage'],
+            ['kesilen-belgeler', 'IsnetArchiveDeliveryPage'],
+            ['cikti-kuyrugu', 'IsnetArchiveDeliveryPage'],
+          ];
+          for (const [route, component] of canonicalIsnetRoutes) {
+            if (!app.includes(`activeTab === "${route}"`) && !app.includes(`"${route}"`)) {
+              throw new Error(`İşNet kanonik sekmesi bağlı değil: ${route}`);
+            }
+            if (!app.includes(component)) {
+              throw new Error(`İşNet çalışma bileşeni bağlı değil: ${component}`);
+            }
+          }
+          if (!archive.includes('initialSection')) {
+            throw new Error('İşNet arşiv merkezi hedef bölümü kabul etmiyor.');
+          }
+          if (app.includes('activeTab === "belge-merkezi"') || app.includes('activeTab === "is-akisi"')) {
+            throw new Error('Eski İşNet aliası AppV3 yönlendirmesinde kanonik sekme gibi kullanılıyor.');
+          }
+          if (app.includes('this.state.error?.message')) {
+            throw new Error('Ham arayüz hata mesajı kullanıcıya gösteriliyor.');
+          }
+          console.log('Ortak hata, CORS, tek giriş ve İşNet yönlendirmeleri doğrulandı.');
           NODE
 
       - name: Worker paketleri
