@@ -5,8 +5,7 @@ import "./boyahaneCommandCenter.css";
 import "./boyahaneForms.css";
 import "./boyahaneFinal.css";
 import BoyahaneDashboardPage from "./workflow/BoyahaneDashboardPage";
-import BoyahaneSamplePage from "./workflow/BoyahaneSamplePage";
-import BoyahaneOperationsPage from "./workflow/BoyahaneOperationsPage";
+import BoyahaneWorkPageV2 from "./workflow/BoyahaneWorkPageV2";
 import BoyahaneInventoryHub from "./workflow/BoyahaneInventoryHub";
 import BoyahaneReportsAndLogsPage from "./workflow/BoyahaneReportsAndLogsPage";
 import KayitliRenklerWorkspace from "./workflow/KayitliRenklerWorkspace";
@@ -34,12 +33,14 @@ export default function BoyahanePage({
   const tab = normalizeTab(activeTab);
 
   const page = tab === "receteler" ? (
-    <BoyahaneSamplePage
+    <BoyahaneWorkPageV2
+      mode="sample"
       activeMainCompany={activeMainCompany}
       moduleActionContext={moduleActionContext}
     />
   ) : tab === "uretim-gecmisi" ? (
-    <BoyahaneOperationsPage
+    <BoyahaneWorkPageV2
+      mode="production"
       activeMainCompany={activeMainCompany}
       moduleActionContext={moduleActionContext}
     />
