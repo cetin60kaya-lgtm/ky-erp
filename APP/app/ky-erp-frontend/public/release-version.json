@@ -1,0 +1,14 @@
+{
+  "release": "kyerp-boyahane-final-20260803",
+  "sourceBranch": "agent/uretim-tek-merkez",
+  "sourceCommit": "e85e386eea23209deb785b5f1a703eee49f52b35",
+  "boyahaneMenu": [
+    "Ana Ekran",
+    "Numune Çalışmaları",
+    "İmalat Boyaları",
+    "Kayıtlı Renkler",
+    "Stok, Lot ve Ürünler",
+    "Raporlar ve İşlem Logları"
+  ],
+  "recipeRequiredBeforeReady": true
+}
