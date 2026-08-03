@@ -1,0 +1,60 @@
+name: KY ERP Kök Alan Adı Yönlendirme Yayını
+
+on:
+  push:
+    branches:
+      - agent/uretim-tek-merkez
+    paths:
+      - "APP/cloud/ky-erp-root-redirect/**"
+      - "RELEASES/root-domain-redirect.json"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cloudflare bilgilerini doğrula
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Kök yönlendirme Workerını dağıt
+        working-directory: APP/cloud/ky-erp-root-redirect
+        run: npx --yes wrangler@4.110.0 deploy --config wrangler.jsonc
+
+      - name: Kök adres yönlendirmesini doğrula
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            headers="$(curl --silent --show-error --max-time 20 --dump-header - --output /dev/null https://kyerp.net/boyahane/is-akisi || true)"
+            status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END {print code}' <<<"$headers")"
+            location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' <<<"$headers")"
+            echo "Deneme ${attempt}: status=${status:-yok} location=${location:-yok}"
+            if [ "$status" = "308" ] && [ "$location" = "https://app.kyerp.net/boyahane/is-akisi" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "kyerp.net beklenen 308 yönlendirmesini vermedi." >&2
+          exit 1
+
+      - name: Sonucu PR kaydına yaz
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/issues/9/comments" -f body="## kyerp.net kök alan adı yönlendirme sonucu\n\n- Commit: ${GITHUB_SHA}\n- Run: ${GITHUB_RUN_ID}\n- Sonuç: **${JOB_STATUS}**\n- Hedef: https://app.kyerp.net/boyahane/is-akisi"
