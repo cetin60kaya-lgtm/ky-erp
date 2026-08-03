@@ -1,0 +1,8 @@
+{
+  "approved": true,
+  "requestedAt": "2026-08-03T07:04:00+03:00",
+  "source": "kyerp.net",
+  "target": "https://app.kyerp.net",
+  "preservePathAndQuery": true,
+  "scope": "root-domain-only"
+}
