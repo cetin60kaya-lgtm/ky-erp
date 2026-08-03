@@ -1,7 +1,7 @@
 {
   "approved": true,
-  "requestedAt": "2026-08-03T07:10:00+03:00",
-  "attempt": 2,
+  "requestedAt": "2026-08-03T07:14:00+03:00",
+  "attempt": 3,
   "source": "kyerp.net",
   "target": "https://app.kyerp.net",
   "preservePathAndQuery": true,
