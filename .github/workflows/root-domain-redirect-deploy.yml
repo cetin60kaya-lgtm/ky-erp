@@ -9,7 +9,7 @@ on:
       - "RELEASES/root-domain-redirect.json"
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -44,6 +44,8 @@ jobs:
             location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' <<<"$headers")"
             echo "Deneme ${attempt}: status=${status:-yok} location=${location:-yok}"
             if [ "$status" = "308" ] && [ "$location" = "https://app.kyerp.net/boyahane/is-akisi" ]; then
+              printf '%s' "$status" > /tmp/root-status.txt
+              printf '%s' "$location" > /tmp/root-location.txt
               exit 0
             fi
             sleep 5
@@ -51,10 +53,30 @@ jobs:
           echo "kyerp.net beklenen 308 yönlendirmesini vermedi." >&2
           exit 1
 
-      - name: Sonucu PR kaydına yaz
+      - name: Sonucu repo dosyasına ve PR kaydına yaz
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/9/comments" -f body="## kyerp.net kök alan adı yönlendirme sonucu\n\n- Commit: ${GITHUB_SHA}\n- Run: ${GITHUB_RUN_ID}\n- Sonuç: **${JOB_STATUS}**\n- Hedef: https://app.kyerp.net/boyahane/is-akisi"
+          status_code="$(cat /tmp/root-status.txt 2>/dev/null || true)"
+          location="$(cat /tmp/root-location.txt 2>/dev/null || true)"
+          result="$(jq -n \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg commit "$GITHUB_SHA" \
+            --arg result "$JOB_STATUS" \
+            --arg statusCode "$status_code" \
+            --arg location "$location" \
+            --arg checkedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{runId:$runId,commit:$commit,result:$result,statusCode:$statusCode,location:$location,checkedAt:$checkedAt}')"
+
+          path='RELEASES/root-domain-redirect-result.json'
+          content="$(printf '%s\n' "$result" | base64 -w0)"
+          existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=agent/uretim-tek-merkez" --jq '.sha' 2>/dev/null || true)"
+          args=(--method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" -f message='status(domain): kyerp.net yönlendirme sonucunu kaydet' -f content="$content" -f branch='agent/uretim-tek-merkez')
+          if [ -n "$existing_sha" ]; then
+            args+=(-f sha="$existing_sha")
+          fi
+          gh api "${args[@]}"
+
+          gh api "repos/${GITHUB_REPOSITORY}/issues/9/comments" -f body="## kyerp.net kök alan adı yönlendirme sonucu\n\n- Commit: ${GITHUB_SHA}\n- Run: ${GITHUB_RUN_ID}\n- Sonuç: **${JOB_STATUS}**\n- HTTP: ${status_code:-yok}\n- Hedef: ${location:-yok}"
