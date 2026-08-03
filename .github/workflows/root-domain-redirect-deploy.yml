@@ -32,7 +32,7 @@ jobs:
 
       - name: Kök yönlendirme Workerını dağıt
         working-directory: APP/cloud/ky-erp-root-redirect
-        run: npx --yes wrangler@4.110.0 deploy --config wrangler.jsonc
+        run: npx --yes wrangler@4.110.0 deploy --config wrangler.route.toml
 
       - name: Kök adres yönlendirmesini doğrula
         run: |
