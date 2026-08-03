@@ -5,8 +5,8 @@
   "compatibility_date": "2026-08-01",
   "routes": [
     {
-      "pattern": "kyerp.net/*",
-      "zone_name": "kyerp.net"
+      "pattern": "kyerp.net",
+      "custom_domain": true
     }
   ]
 }
