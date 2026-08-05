@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -531,6 +532,8 @@ async function handleAdminGeneric(c: Context<AppEnv>) {
 }
 
 export function registerIkAdminCloudRoutes(app: Hono<AppEnv>) {
+  registerIkRelationalCloudRoutes(app);
+
   app.all("/api/ik/*", async (c) => {
     if (c.req.method === "GET") return handleIkGet(c);
     if (c.req.method === "DELETE") return handleIkDelete(c);

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const argv = process.argv.slice(2);
 const has = (flag) => argv.includes(flag);
@@ -18,6 +19,9 @@ const config = option(
 );
 const persistTo = option("--persist-to", "");
 const requireMigrations = has("--require-migrations");
+const wranglerBin = fileURLToPath(
+  new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url),
+);
 
 const requiredSchema = {
   main_companies: ["id", "slug", "name"],
@@ -73,6 +77,42 @@ const requiredSchema = {
     "created_at",
     "updated_at",
   ],
+  hr_monthly_employees: ["id", "main_company_id", "full_name", "status"],
+  hr_daily_employees: ["id", "main_company_id", "full_name", "status"],
+  hr_daily_attendance: [
+    "id",
+    "employee_id",
+    "work_date",
+    "day_shift",
+    "night_shift",
+  ],
+  hr_monthly_adjustments_v2: [
+    "id",
+    "employee_id",
+    "date",
+    "adjustment_type",
+    "amount",
+  ],
+  hr_leave_records_v2: [
+    "id",
+    "employee_id",
+    "record_type",
+    "start_date",
+    "end_date",
+  ],
+  hr_payrolls_v2: [
+    "id",
+    "main_company_id",
+    "year",
+    "month",
+    "employee_id",
+  ],
+  ik_person_card_settings: [
+    "employee_id",
+    "main_company_id",
+    "card_no",
+    "payroll_included",
+  ],
 };
 
 function parseJsonOutput(output) {
@@ -127,9 +167,9 @@ function isRetryableRemoteError(text) {
 }
 
 function execute(sql) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const command = process.execPath;
   const args = [
-    "wrangler",
+    wranglerBin,
     "d1",
     "execute",
     database,
