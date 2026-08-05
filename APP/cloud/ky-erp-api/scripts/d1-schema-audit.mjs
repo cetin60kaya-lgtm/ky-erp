@@ -86,6 +86,21 @@ const requiredSchema = {
     "day_shift",
     "night_shift",
   ],
+  hr_daily_range_roster: [
+    "id",
+    "main_company_id",
+    "start_date",
+    "end_date",
+    "employee_id",
+  ],
+  hr_daily_attendance_notes: [
+    "id",
+    "main_company_id",
+    "employee_id",
+    "work_date",
+    "shift",
+    "note",
+  ],
   hr_monthly_adjustments_v2: [
     "id",
     "employee_id",

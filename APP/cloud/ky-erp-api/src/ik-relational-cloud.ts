@@ -71,6 +71,10 @@ function okData(c: Context<AppEnv>, data: unknown, status: 200 | 201 = 200) {
   return c.json({ ok: true, success: true, data }, status);
 }
 
+function okDataItems(c: Context<AppEnv>, data: unknown, items: unknown[]) {
+  return c.json({ ok: true, success: true, data, items });
+}
+
 function error(c: Context<AppEnv>, status: 400 | 404 | 409 | 500, code: string, message: string) {
   return c.json({ ok: false, success: false, error: { code, message } }, status);
 }
@@ -267,6 +271,134 @@ async function attendanceRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
   return rows
     .map(mapAttendance)
     .filter((row) => (!start || text(row.workDate) >= start) && (!end || text(row.workDate) <= end));
+}
+
+async function focusedDailyRoster(c: Context<AppEnv>) {
+  const companyId = companyIdOf(c);
+  const startDate = hrDateOnly(c.req.query("startDate") || c.req.query("start"));
+  const endDate = hrDateOnly(c.req.query("endDate") || c.req.query("end") || startDate);
+  if (!startDate || !endDate) return error(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
+
+  const [savedRows, people, attendance] = await Promise.all([
+    all(
+      c,
+      `SELECT employee_id FROM hr_daily_range_roster
+        WHERE main_company_id=? AND start_date=? AND end_date=?
+        ORDER BY created_at ASC`,
+      [companyId, startDate, endDate],
+    ),
+    dailyRows(c, companyId),
+    attendanceRows(c, companyId),
+  ]);
+  const savedIds = savedRows.map((row) => text(row.employee_id)).filter(Boolean);
+  const workedIds = attendance
+    .filter((row) => row.dayShift || row.nightShift)
+    .map((row) => text(row.employeeId))
+    .filter(Boolean);
+  const activeIds = people.filter((row) => row.active !== false).map((row) => text(row.id));
+  const employeeIds = [...new Set([...(savedIds.length ? savedIds : activeIds), ...workedIds])];
+  return okDataItems(c, { startDate, endDate, employeeIds }, employeeIds);
+}
+
+async function focusedDailyRecords(c: Context<AppEnv>) {
+  const companyId = companyIdOf(c);
+  const date = hrDateOnly(c.req.query("date") || c.req.query("selectedDate"));
+  if (!date) return error(c, 400, "DATE_REQUIRED", "Geçerli tarih seçilmedi.");
+  const shiftValue = text(c.req.query("shift")).toLocaleLowerCase("tr-TR");
+  const shift = ["n", "night", "gece"].includes(shiftValue) ? "night" : "day";
+  const [attendance, people, notes] = await Promise.all([
+    attendanceRows(c, companyId),
+    dailyRows(c, companyId),
+    all(
+      c,
+      `SELECT employee_id, shift, note FROM hr_daily_attendance_notes
+        WHERE main_company_id=? AND work_date=?`,
+      [companyId, date],
+    ),
+  ]);
+  const peopleById = new Map(people.map((row) => [text(row.id), row]));
+  const notesByKey = new Map(notes.map((row) => [`${text(row.employee_id)}-${text(row.shift).toLowerCase()}`, text(row.note)]));
+  const rows = attendance
+    .filter((row) => text(row.workDate) === date)
+    .map((row) => ({
+      ...row,
+      employee: peopleById.get(text(row.employeeId)) || {},
+      shift,
+      selected: shift === "day" ? Boolean(row.dayShift) : Boolean(row.nightShift),
+      note: notesByKey.get(`${text(row.employeeId)}-${shift}`) || "",
+    }));
+  return okDataItems(c, rows, rows);
+}
+
+async function saveFocusedDailyRoster(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const startDate = hrDateOnly(body.startDate || body.start);
+  const endDate = hrDateOnly(body.endDate || body.end || startDate);
+  const requestedIds = Array.isArray(body.employeeIds)
+    ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
+    : [];
+  if (!startDate || !endDate) return error(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
+  if (requestedIds.length) {
+    const allowed = await all(c, `SELECT id FROM hr_daily_employees WHERE main_company_id=? AND id IN (${requestedIds.map(() => "?").join(",")})`, [companyId, ...requestedIds]);
+    if (allowed.length !== requestedIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
+  }
+  const existingRoster = await all(c, "SELECT id FROM hr_daily_range_roster WHERE main_company_id=? AND start_date=? AND end_date=?", [companyId, startDate, endDate]);
+  const attendance = await attendanceRows(c, companyId);
+  const workedIds = attendance
+    .filter((row) => text(row.workDate) >= startDate && text(row.workDate) <= endDate && (row.dayShift || row.nightShift))
+    .map((row) => text(row.employeeId));
+  const employeeIds = [...new Set([...requestedIds, ...workedIds])];
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare("DELETE FROM hr_daily_range_roster WHERE main_company_id=? AND start_date=? AND end_date=?").bind(companyId, startDate, endDate),
+    ...employeeIds.map((employeeId) => c.env.DB.prepare("INSERT INTO hr_daily_range_roster (id,main_company_id,start_date,end_date,employee_id,created_at) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), companyId, startDate, endDate, employeeId, nowIso())),
+  ];
+  await c.env.DB.batch(statements);
+  return okDataItems(c, { startDate, endDate, employeeIds, replacedCount: existingRoster.length }, employeeIds);
+}
+
+async function saveFocusedDailyRecords(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const date = hrDateOnly(body.date || body.selectedDate);
+  const shiftValue = text(body.shift).toLocaleLowerCase("tr-TR");
+  const shift = ["n", "night", "gece"].includes(shiftValue) ? "night" : "day";
+  const entries = Array.isArray(body.personnelEntries)
+    ? body.personnelEntries.filter((entry): entry is Row => Boolean(entry && typeof entry === "object" && !Array.isArray(entry)))
+    : [];
+  if (!date) return error(c, 400, "DATE_REQUIRED", "Geçerli tarih seçilmedi.");
+  if (!entries.length) return error(c, 400, "ROWS_REQUIRED", "Kaydedilecek personel seçilmedi.");
+  const ids = [...new Set(entries.map((entry) => text(entry.personelId || entry.employeeId)).filter(Boolean))];
+  if (!ids.length) return error(c, 400, "EMPLOYEE_REQUIRED", "Personel zorunludur.");
+  const people = await all(c, `SELECT id,day_wage,night_wage FROM hr_daily_employees WHERE main_company_id=? AND id IN (${ids.map(() => "?").join(",")})`, [companyId, ...ids]);
+  if (people.length !== ids.length) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
+  const peopleById = new Map(people.map((row) => [text(row.id), row]));
+  const existing = await all(c, `SELECT a.* FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id WHERE e.main_company_id=? AND a.employee_id IN (${ids.map(() => "?").join(",")})`, [companyId, ...ids]);
+  const existingByEmployee = new Map(existing.filter((row) => hrDateOnly(row.work_date) === date).map((row) => [text(row.employee_id), row]));
+  const statements: D1PreparedStatement[] = [];
+  for (const entry of entries) {
+    const employeeId = text(entry.personelId || entry.employeeId);
+    const person = peopleById.get(employeeId) || {};
+    const current = existingByEmployee.get(employeeId);
+    const status = text(entry.status).toLocaleUpperCase("tr-TR");
+    const selected = !["REMOVE", "PASSIVE", "INACTIVE", "DELETE"].includes(status);
+    const day = shift === "day" ? selected : flag(current?.day_shift);
+    const night = shift === "night" ? selected : flag(current?.night_shift);
+    const dayWage = number(current?.day_wage ?? person.day_wage);
+    const nightWage = number(current?.night_wage ?? person.night_wage);
+    const total = (day ? dayWage : 0) + (night ? nightWage : 0);
+    if (!day && !night) {
+      if (current?.id) statements.push(c.env.DB.prepare("DELETE FROM hr_daily_attendance WHERE id=?").bind(text(current.id)));
+    } else if (current?.id) {
+      statements.push(c.env.DB.prepare("UPDATE hr_daily_attendance SET work_date=?,day_shift=?,night_shift=?,day_wage=?,night_wage=?,total_amount=?,updated_at=? WHERE id=?").bind(date, day ? 1 : 0, night ? 1 : 0, dayWage, nightWage, total, nowIso(), text(current.id)));
+    } else {
+      const timestamp = nowIso();
+      statements.push(c.env.DB.prepare("INSERT INTO hr_daily_attendance (id,employee_id,work_date,day_shift,night_shift,day_wage,night_wage,total_amount,payment_status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(), employeeId, date, day ? 1 : 0, night ? 1 : 0, dayWage, nightWage, total, "WAITING", timestamp, timestamp));
+    }
+    statements.push(c.env.DB.prepare("INSERT INTO hr_daily_attendance_notes (id,main_company_id,employee_id,work_date,shift,note,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,work_date,shift) DO UPDATE SET note=excluded.note,updated_at=excluded.updated_at").bind(crypto.randomUUID(), companyId, employeeId, date, shift, text(entry.note), nowIso()));
+  }
+  await c.env.DB.batch(statements);
+  return okDataItems(c, { date, shift, count: entries.length }, ids);
 }
 
 function weekBounds() {
@@ -872,8 +1004,10 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/daily-attendance/save-range", protect(saveAttendance));
   app.get("/api/ik/daily-attendance/weekly-summary", protect(async (c) => okList(c, await weeklyAttendanceRows(c))));
   app.get("/api/ik/daily-attendance/payment-slips", protect(async (c) => okList(c, await weeklyAttendanceRows(c))));
-  app.get("/api/ik/gunluk-personel/gun-kayitlari", protect(async (c) => okList(c, await attendanceRows(c))));
-  app.get("/api/ik/gunluk-personel/liste", protect(async (c) => okList(c, await dailyRows(c))));
+  app.get("/api/ik/gunluk-personel/gun-kayitlari", protect(focusedDailyRecords));
+  app.post("/api/ik/gunluk-personel/gun-kayitlari", protect(saveFocusedDailyRecords));
+  app.get("/api/ik/gunluk-personel/liste", protect(focusedDailyRoster));
+  app.post("/api/ik/gunluk-personel/liste", protect(saveFocusedDailyRoster));
 
   app.get("/api/ik/monthly-adjustments", protect(listAdjustments));
   app.post("/api/ik/monthly-adjustments", protect(saveAdjustment));
