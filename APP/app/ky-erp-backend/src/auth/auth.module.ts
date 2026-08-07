@@ -11,7 +11,7 @@ const jwtExpiresInSeconds = getJwtExpiresInSeconds();
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET || "change-me-in-env",
+      secret: process.env.JWT_SECRET,
       signOptions: {
         expiresIn: jwtExpiresInSeconds,
       },

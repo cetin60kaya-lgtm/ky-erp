@@ -8,6 +8,7 @@ const DEFAULT_API_TIMEOUT_MS = 45000;
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60000;
 const ACTIVE_COMPANY_STORAGE_KEY = "kyerp.activeCompany";
 const COMPANY_PARAM_NAME = "mainCompanySlug";
+const TENANT_HEADER_NAME = "X-KYERP-Tenant-Slug";
 const apiGetCache = new Map();
 const apiGetInFlight = new Map();
 let activeMainCompany = null;
@@ -114,7 +115,7 @@ export function getApiActiveMainCompanySlug() {
 function shouldAutoAttachCompany(path) {
   const normalizedPath = String(path || "");
   if (/^https:\/\//i.test(normalizedPath)) return false;
-  return !/^\/(?:api\/)?(health|auth\/login|admin\/main-companies)(\/|$)/i.test(
+  return !/^\/(?:api\/)?(health|auth|admin|tenant-admin)(\/|$)/i.test(
     normalizedPath,
   );
 }
@@ -303,12 +304,16 @@ export async function apiFetch(path, options = {}) {
   if (token && !finalHeaders.Authorization) {
     finalHeaders.Authorization = `Bearer ${token}`;
   }
+  if (token && shouldAutoAttachCompany(requestPath) && !finalHeaders[TENANT_HEADER_NAME]) {
+    const tenantSlug = getApiActiveMainCompanySlug();
+    if (tenantSlug) finalHeaders[TENANT_HEADER_NAME] = tenantSlug;
+  }
 
   let finalBody = body;
   if (body && !(body instanceof FormData) && typeof body === "object") {
     finalHeaders["Content-Type"] =
       finalHeaders["Content-Type"] || "application/json";
-    finalBody = JSON.stringify(attachCompanyToBody(body));
+    finalBody = JSON.stringify(skipAuth ? body : attachCompanyToBody(body));
   }
 
   const { signal, cleanup, didTimeout } = createTimeoutSignal(
@@ -500,6 +505,10 @@ export async function downloadFile(path, params, fileName = "export.xlsx") {
   const headers = {};
   const token = String(authTokenGetter?.() || "").trim();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const tenantSlug = getApiActiveMainCompanySlug();
+  if (token && tenantSlug && shouldAutoAttachCompany(requestPath)) {
+    headers[TENANT_HEADER_NAME] = tenantSlug;
+  }
 
   try {
     const response = await fetch(requestUrl, { headers });

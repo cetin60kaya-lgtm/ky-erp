@@ -20,6 +20,8 @@ import { useAuth } from "./context/AuthContext";
 import { ErpIcon } from "./components/erp/IconMap";
 import MuhasebePage from "./pages/modules/MuhasebePage";
 import LoginPage from "./pages/LoginPage";
+import CompanySelectionPage from "./pages/CompanySelectionPage";
+import PlatformAdminPage from "./pages/admin/PlatformAdminPage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 
 const AdminPage = lazyWithRetry(
@@ -140,6 +142,9 @@ export default function App() {
     isAuthenticated,
     hasModule,
     logout,
+    leaveCompany,
+    isPlatformAdmin,
+    requiresCompanySelection,
   } = useAuth();
   const { companies, activeCompany, activeCompanySlug, setActiveCompanySlug } =
     useActiveCompany();
@@ -300,6 +305,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated || !isPlatformAdmin || normalizedActiveMainCompany) return;
+    window.history.replaceState({}, "", "/admin");
+    setRoute({ moduleKey: "admin", tabKey: "admin-yonetim-ozeti" });
+  }, [isAuthenticated, isPlatformAdmin, normalizedActiveMainCompany]);
+
+  useEffect(() => {
     const canonical = routePath(activeModule, activeTab, window.location.search);
     const current = `${window.location.pathname}${window.location.search}`;
     if (current !== canonical) {
@@ -391,6 +402,7 @@ export default function App() {
     if (activeModule === "uretim") {
       return <UretimPage activeTab={activeTab} {...sharedProps} />;
     }
+    if (isPlatformAdmin) return <PlatformAdminPage embedded />;
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
   }
 
@@ -404,6 +416,12 @@ export default function App() {
   }
 
   if (!isAuthenticated) return <LoginPage />;
+
+  if (requiresCompanySelection) return <CompanySelectionPage />;
+
+  if (isPlatformAdmin && !normalizedActiveMainCompany) {
+    return <PlatformAdminPage />;
+  }
 
   if (!navigationModules.length) {
     return (
@@ -515,6 +533,17 @@ export default function App() {
               </option>
             ))}
           </select>
+          <div className="kyerp-user-chip" style={{ minWidth: 190 }}>
+            <div>
+              <strong>{isPlatformAdmin ? "Sistem Yöneticisi" : normalizedActiveMainCompany?.name || "Firma"}</strong>
+              <small style={{ display: "block" }}>
+                {isPlatformAdmin ? `Görüntülenen Firma: ${normalizedActiveMainCompany?.name || "Seçilmedi"}` : user?.username}
+              </small>
+            </div>
+            {isPlatformAdmin && normalizedActiveMainCompany ? (
+              <button type="button" className="topbar-icon-btn" onClick={leaveCompany} title="Firma Değiştir">Firma Değiştir</button>
+            ) : null}
+          </div>
           <div className="kyerp-user-chip">
             <div className="kyerp-avatar">
               {String(user?.fullName || user?.username || "U")

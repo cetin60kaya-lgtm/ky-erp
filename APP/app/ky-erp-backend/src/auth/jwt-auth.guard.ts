@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -40,8 +41,12 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
+      const jwtSecret = String(process.env.JWT_SECRET || "").trim();
+      if (jwtSecret.length < 32) {
+        throw new ServiceUnavailableException("Kimlik servisi yapılandırılmamış.");
+      }
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || "change-me-in-env",
+        secret: jwtSecret,
       });
 
       const user = await this.authService.findUserForRequest(
@@ -54,7 +59,7 @@ export class JwtAuthGuard implements CanActivate {
       request.user = user;
       return true;
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
+      if (error instanceof UnauthorizedException || error instanceof ServiceUnavailableException) {
         throw error;
       }
       throw new UnauthorizedException("Oturum doğrulanamadı.");

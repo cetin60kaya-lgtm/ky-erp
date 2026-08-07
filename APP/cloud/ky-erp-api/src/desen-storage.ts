@@ -39,7 +39,8 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
   return text(
-    body.mainCompanySlug ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+      body.mainCompanySlug ||
       body.main_company_slug ||
       c.req.query("mainCompanySlug") ||
       c.req.query("mainCompanyId") ||
@@ -188,7 +189,7 @@ export function registerDesenStorageRoutes(app: Hono<AppEnv>) {
 
   app.post("/api/desen/workflow/inbox/upload", async (c) => {
     const form = (await c.req.parseBody({ all: true })) as Record<string, any>;
-    const slug = text(form.mainCompanySlug || form.mainCompanyId || "mecit-hakan");
+    const slug = text(c.req.header("X-KYERP-Tenant-Slug") || form.mainCompanySlug || form.mainCompanyId || "mecit-hakan");
     const files = filesFromForm(form);
     if (!files.length) {
       return c.json(

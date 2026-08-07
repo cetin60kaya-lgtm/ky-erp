@@ -39,7 +39,15 @@ model ModelPrintRegion {
 model MainCompany {
   id                      String                   @id @default(uuid())
   slug                    String                   @unique
+  code                    String?
   name                    String
+  legalName               String?                  @map("legal_name")
+  taxNumber               String?                  @map("tax_number")
+  taxOffice               String?                  @map("tax_office")
+  email                   String?
+  phone                   String?
+  address                 String?
+  logo                    String?
   isActive                Boolean                  @default(true) @map("is_active")
   createdAt               DateTime                 @default(now()) @map("created_at")
   updatedAt               DateTime                 @updatedAt @map("updated_at")
@@ -58,6 +66,9 @@ model MainCompany {
   legacyRoles             LegacyRole[]
   legacyUsers             LegacyUser[]
   vatRecords              VatRecord[]
+  userMemberships         UserCompanyMembership[]
+  authSessions            AuthSession[]
+  authActivityLogs        AuthActivityLog[]
 
   @@map("main_companies")
 }
@@ -154,6 +165,9 @@ model User {
   username           String                 @unique
   passwordHash       String                 @map("password_hash")
   fullName           String                 @map("full_name")
+  email              String?
+  backupEmail        String?                @map("backup_email")
+  platformRole       String                 @default("USER") @map("platform_role")
   role               Role
   isActive           Boolean                @default(true) @map("is_active")
   mustChangePassword Boolean                @default(false) @map("must_change_password")
@@ -161,8 +175,104 @@ model User {
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
   permissions        UserModulePermission[]
+  companyMemberships UserCompanyMembership[]
+  authSessions       AuthSession[]
+  mfaMethods         AuthMfaMethod[]
+  authActivityLogs   AuthActivityLog[]
 
   @@map("auth_users")
+}
+
+model UserCompanyMembership {
+  id              String                  @id @default(uuid())
+  userId          String                  @map("user_id")
+  mainCompanyId   String                  @map("main_company_id")
+  mainCompanySlug String                  @map("main_company_slug")
+  companyRole     String                  @default("VIEWER") @map("company_role")
+  isActive        Boolean                 @default(true) @map("is_active")
+  isDefault       Boolean                 @default(false) @map("is_default")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mainCompany     MainCompany             @relation(fields: [mainCompanyId], references: [id], onDelete: Restrict)
+  permissions     UserCompanyPermission[]
+  sessions        AuthSession[]
+
+  @@unique([userId, mainCompanyId])
+  @@index([mainCompanyId, isActive])
+  @@index([userId, isActive])
+  @@map("user_company_memberships")
+}
+
+model UserCompanyPermission {
+  id           String                @id @default(uuid())
+  membershipId String                @map("membership_id")
+  moduleKey    ModuleKey             @map("module_key")
+  canView      Boolean               @default(false) @map("can_view")
+  canCreate    Boolean               @default(false) @map("can_create")
+  canUpdate    Boolean               @default(false) @map("can_update")
+  canDelete    Boolean               @default(false) @map("can_delete")
+  canApprove   Boolean               @default(false) @map("can_approve")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  membership   UserCompanyMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, moduleKey])
+  @@index([membershipId])
+  @@map("user_company_permissions")
+}
+
+model AuthSession {
+  id                  String                 @id @default(uuid())
+  userId              String                 @map("user_id")
+  membershipId        String?                @map("membership_id")
+  activeCompanyId     String?                @map("active_company_id")
+  activeCompanySlug   String?                @map("active_company_slug")
+  issuedAt            DateTime               @map("issued_at")
+  expiresAt           DateTime               @map("expires_at")
+  revokedAt           DateTime?              @map("revoked_at")
+  replacedBySessionId String?                @map("replaced_by_session_id")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membership          UserCompanyMembership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  activeCompany       MainCompany?           @relation(fields: [activeCompanyId], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("auth_sessions")
+}
+
+model AuthMfaMethod {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  methodType        String    @map("method_type")
+  label             String?
+  secretCiphertext  String?   @map("secret_ciphertext")
+  destinationMasked String?   @map("destination_masked")
+  isEnabled         Boolean   @default(false) @map("is_enabled")
+  verifiedAt        DateTime? @map("verified_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, methodType, label])
+  @@map("auth_mfa_methods")
+}
+
+model AuthActivityLog {
+  id            String       @id @default(uuid())
+  actorUserId   String?      @map("actor_user_id")
+  mainCompanyId String?      @map("main_company_id")
+  action        String
+  targetType    String?      @map("target_type")
+  targetId      String?      @map("target_id")
+  detailsJson   Json?        @map("details_json")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  actorUser     User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  mainCompany   MainCompany? @relation(fields: [mainCompanyId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([mainCompanyId, createdAt])
+  @@map("auth_activity_logs")
 }
 
 model UserModulePermission {

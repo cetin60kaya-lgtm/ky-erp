@@ -7,6 +7,8 @@ const baseOrigin = parsedBaseUrl.origin;
 const isLocalTarget = ["127.0.0.1", "localhost"].includes(parsedBaseUrl.hostname);
 const maxAttempts = isLocalTarget ? 1 : 30;
 const retryDelayMs = 5_000;
+const smokeUsername = String(process.env.KYERP_SMOKE_USERNAME || "").trim();
+const smokePassword = String(process.env.KYERP_SMOKE_PASSWORD || "");
 const expectedMenuLabels = [
   "Ana Ekran",
   "Numune Çalışmaları",
@@ -78,10 +80,14 @@ async function runAttempt(attempt) {
     const loginButton = page.getByRole("button", { name: /giriş yap/i });
 
     if (await loginButton.isVisible().catch(() => false)) {
-      await username.fill("admin");
-      await password.fill("2582");
-      await loginButton.click();
-      await page.waitForTimeout(2_000);
+      if (!smokeUsername || !smokePassword) {
+        runtimeWarnings.push("LOGIN_SKIPPED: güvenli smoke kimlik bilgileri ortam değişkenlerinde yok");
+      } else {
+        await username.fill(smokeUsername);
+        await password.fill(smokePassword);
+        await loginButton.click();
+        await page.waitForTimeout(2_000);
+      }
     }
 
     const bodyText = await page.locator("body").innerText().catch(() => "");

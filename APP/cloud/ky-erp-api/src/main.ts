@@ -18,11 +18,14 @@ import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
 import { registerProductionCenterRoutes } from "./production-center";
+import {
+  registerTenantAuthRoutes,
+  tenantAuthMiddleware,
+  TENANT_HEADER,
+  type TenantAuthEnv,
+} from "./tenant-auth";
 
-type ShellEnv = {
-  Bindings: Cloudflare.Env;
-  Variables: { requestId: string };
-};
+type ShellEnv = TenantAuthEnv;
 
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
@@ -77,13 +80,19 @@ shell.use(
       "HEAD",
       "OPTIONS",
     ],
-    allowHeaders: ["Accept", "Authorization", "Content-Type"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", TENANT_HEADER],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
     maxAge: 86400,
     credentials: true,
   }),
 );
 
+shell.use("/api/*", async (c, next) => {
+  c.set("requestId", crypto.randomUUID());
+  await next();
+});
+shell.use("/api/*", tenantAuthMiddleware);
+registerTenantAuthRoutes(shell);
 shell.route("/", app);
 
 export default shell;

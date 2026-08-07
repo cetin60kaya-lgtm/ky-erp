@@ -125,7 +125,8 @@ function sqlValue(value: unknown): string | number | null {
 
 function companySlug(c: Context<AppEnv>, body: Row = {}): string {
   return text(
-    body.mainCompanySlug ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+      body.mainCompanySlug ||
       body.main_company_slug ||
       c.req.query("mainCompanySlug") ||
       c.req.query("mainCompanyId") ||

@@ -42,7 +42,7 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
 }
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(body.mainCompanySlug || body.main_company_slug || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
+  return text(c.req.header("X-KYERP-Tenant-Slug") || body.mainCompanySlug || body.main_company_slug || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
 }
 
 async function storeList(c: Context<AppEnv>, scope: string, slug: string): Promise<Row[]> {

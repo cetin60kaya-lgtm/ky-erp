@@ -37,7 +37,7 @@ app.use(
   cors({
     origin: (origin) => (ALLOWED_ORIGINS.has(origin) ? origin : undefined),
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
-    allowHeaders: ["Accept", "Authorization", "Content-Type"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
     maxAge: 86400,
     credentials: true,
@@ -143,7 +143,8 @@ async function requestBody(c: Context<AppEnv>): Promise<DatabaseRow> {
 
 function slugOf(c: Context<AppEnv>, body: DatabaseRow = {}): string {
   return databaseText(
-    body.mainCompanySlug ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+      body.mainCompanySlug ||
       body.main_company_slug ||
       c.req.query("mainCompanySlug") ||
       c.req.query("mainCompanyId") ||
@@ -1428,7 +1429,8 @@ app.get("/api/muhasebe/cari-hareketler", (c) =>
 app.post("/api/muhasebe/belge-import/upload", async (c) => {
   const form = await c.req.formData();
   const slug = databaseText(
-    form.get("mainCompanySlug") ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+      form.get("mainCompanySlug") ||
       form.get("mainCompanyId") ||
       c.req.query("mainCompanySlug") ||
       "mecit-hakan",
@@ -2108,7 +2110,7 @@ app.post("/api/muhasebe/odeme/cek/:id/dosyalar", async (c) => {
   const id = c.req.param("id");
   const form = await c.req.formData();
   const slug = databaseText(
-    form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || "mecit-hakan",
+    c.req.header("X-KYERP-Tenant-Slug") || form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || "mecit-hakan",
   ).trim();
   const cheque = await jsonStoreGet(c, "MUHASEBE_CHEQUE", id, slug);
   if (!cheque) return c.json(jsonError("NOT_FOUND", "Çek kaydı bulunamadı."), 404);

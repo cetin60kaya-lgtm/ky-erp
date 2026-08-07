@@ -14,6 +14,10 @@ function getToken() {
   return localStorage.getItem("kyerp_auth_token");
 }
 
+function getTenantSlug() {
+  return String(localStorage.getItem("kyerp.activeCompany") || "").trim();
+}
+
 export function getMobileToken() {
   return getToken();
 }
@@ -35,6 +39,7 @@ function authHeaders(extra = {}) {
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token && getTenantSlug() ? { "X-KYERP-Tenant-Slug": getTenantSlug() } : {}),
     ...extra,
   };
 }

@@ -12,7 +12,9 @@ export async function mobileUploadFile({ file, targetType, entityId, modelId, fi
   const form = new FormData();
   form.append("file", file);
   form.append("targetType", targetType || "genel");
-  form.append("mainCompanySlug", mainCompanySlug || "mecit-hakan");
+  const tenantSlug = String(mainCompanySlug || localStorage.getItem("kyerp.activeCompany") || "").trim();
+  if (!tenantSlug) throw new Error("Aktif firma bulunamadı.");
+  form.append("mainCompanySlug", tenantSlug);
   if (entityId) form.append("entityId", String(entityId));
   if (modelId) form.append("modelId", String(modelId));
   if (firmaId) form.append("firmaId", String(firmaId));
@@ -20,7 +22,7 @@ export async function mobileUploadFile({ file, targetType, entityId, modelId, fi
 
   const res = await fetch(`${API_BASE}/storage/upload`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { Authorization: `Bearer ${token}`, "X-KYERP-Tenant-Slug": tenantSlug } : {},
     body: form,
   });
 
@@ -58,14 +60,16 @@ export async function mobileUploadHavuzImage({ file, modelName, firmName, firmId
   const token = getMobileToken();
   const form = new FormData();
   form.append("file", file);
-  form.append("mainCompanySlug", "mecit-hakan");
+  const tenantSlug = String(localStorage.getItem("kyerp.activeCompany") || "").trim();
+  if (!tenantSlug) throw new Error("Aktif firma bulunamadı.");
+  form.append("mainCompanySlug", tenantSlug);
   if (modelName) form.append("modelName", String(modelName));
   if (firmName) form.append("firmName", String(firmName));
   if (firmId) form.append("firmId", String(firmId));
 
   const res = await fetch(`${API_BASE}/desen/havuz/upload-image`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { Authorization: `Bearer ${token}`, "X-KYERP-Tenant-Slug": tenantSlug } : {},
     body: form,
   });
   const text = await res.text();

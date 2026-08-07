@@ -39,7 +39,8 @@ export function hrDateOnly(value: unknown) {
 
 function companyIdOf(c: Context<AppEnv>, body: Row = {}) {
   return canonicalHrCompanyId(
-    body.mainCompanyId ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+      body.mainCompanyId ||
       body.main_company_id ||
       body.mainCompanySlug ||
       body.main_company_slug ||

@@ -25,7 +25,7 @@ function objectOf(value: unknown): Row {
 }
 
 function slugOf(c: Context<AppEnv>) {
-  return text(c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
+  return text(c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
 }
 
 async function storeList(c: Context<AppEnv>, scope: string, slug: string): Promise<Row[]> {
