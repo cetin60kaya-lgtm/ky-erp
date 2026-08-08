@@ -19,132 +19,122 @@ jobs:
           ref: codex/model-uretim-kontrol-merkezi-final
           fetch-depth: 0
 
-      - name: Finish IK extra pay and garnishment wiring
+      - name: Finalize IK person-card payroll wiring
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx')
           text = path.read_text(encoding='utf-8')
 
-          def replace_once(old, new, label):
+          def sub(pattern, replacement, label, flags=0):
               global text
-              n = text.count(old)
-              if n != 1:
-                  raise SystemExit(f'{label}: expected 1 match, found {n}')
-              text = text.replace(old, new, 1)
+              text, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
 
-          replace_once(
-          '''      salary: row.salary,
-                road: row.road,
-                overtime: row.overtime,
-                advance: row.advance,
-                deduction: row.deduction,
-                bank: row.bank,
-                cash: row.cash,''',
-          '''      salary: row.salary,
-                road: row.road,
-                extra: row.extra,
-                overtime: row.overtime,
-                advance: row.advance,
-                deduction: row.deduction,
-                garnishment: row.garnishment,
-                bank: row.bank,
-                cash: row.cash,''',
-          'openPayroll fields')
+          # Bordro düzeltme modalı kişi kartındaki ek ödeme / icrayı taşısın.
+          sub(
+              r'(const openPayroll = \(row = .*?setModalDraft\(\{.*?\n\s*road: row\.road,)(\n\s*overtime: row\.overtime,.*?\n\s*deduction: row\.deduction,)(\n\s*bank: row\.bank,)',
+              r'\1\n      extra: row.extra,\2\n      garnishment: row.garnishment,\3',
+              'openPayroll', re.S,
+          )
 
-          replace_once(
-          '''    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan maas/yol toplamindan yuksek. Devam edilsin mi?")) return;''',
-          '''    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) + num(modalDraft.extraPaymentAmount) && !window.confirm("Banka plan + elden plan ücret/yol/ek ödeme toplamından yüksek. Devam edilsin mi?")) return;''',
-          'person plan validation')
+          # Personel kartı ödeme planı kontrolü ek ödemeyi de hesaba katsın.
+          old_validation = 'if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan maas/yol toplamindan yuksek. Devam edilsin mi?")) return;'
+          new_validation = 'if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) + num(modalDraft.extraPaymentAmount) && !window.confirm("Banka plan + elden plan ücret/yol/ek ödeme toplamından yüksek. Devam edilsin mi?")) return;'
+          if old_validation not in text:
+              raise SystemExit('person plan validation not found')
+          text = text.replace(old_validation, new_validation, 1)
 
-          replace_once(
-          '''        bankAmount: num(modalDraft.bankAmount),
-                cashAmount: num(modalDraft.cashAmount),
-                payrollIncluded: modalDraft.payrollIncluded !== false,''',
-          '''        bankAmount: num(modalDraft.bankAmount),
-                cashAmount: num(modalDraft.cashAmount),
-                extraPaymentLabel: modalDraft.extraPaymentLabel || "Ek Ödeme / Prim",
-                extraPaymentAmount: num(modalDraft.extraPaymentAmount),
-                garnishmentActive: modalDraft.garnishmentActive === true && num(modalDraft.garnishmentAmount) > 0,
-                garnishmentAmount: modalDraft.garnishmentActive === true ? num(modalDraft.garnishmentAmount) : 0,
-                garnishmentNote: modalDraft.garnishmentNote || "",
-                payrollIncluded: modalDraft.payrollIncluded !== false,''',
-          'person-card save fields')
+          # Sadece savePerson fonksiyonunda yeni kişi bazlı alanları API payloadına ekle.
+          person_match = re.search(r'(const savePerson = async \(\) => \{.*?\n\s*\};)(?=\n\n\s*const validateFinance)', text, re.S)
+          if not person_match:
+              raise SystemExit('savePerson block not found')
+          person = person_match.group(1)
+          needle = 'cashAmount: num(modalDraft.cashAmount),'
+          if needle not in person:
+              raise SystemExit('savePerson cashAmount not found')
+          person = person.replace(needle, needle + '''
+        extraPaymentLabel: modalDraft.extraPaymentLabel || "Ek Ödeme / Prim",
+        extraPaymentAmount: num(modalDraft.extraPaymentAmount),
+        garnishmentActive: modalDraft.garnishmentActive === true && num(modalDraft.garnishmentAmount) > 0,
+        garnishmentAmount: modalDraft.garnishmentActive === true ? num(modalDraft.garnishmentAmount) : 0,
+        garnishmentNote: modalDraft.garnishmentNote || "",''', 1)
+          text = text[:person_match.start(1)] + person + text[person_match.end(1):]
 
-          replace_once(
-          '''    const totals = calcRow({
-                salary: modalDraft.salary,
-                road: modalDraft.road,
-                overtime: modalDraft.overtime,
-                advance: modalDraft.advance,
-                deduction: modalDraft.deduction,
-                bank: modalDraft.bank,
-                cash: modalDraft.cash,
-              });''',
-          '''    const totals = calcRow({
-                salary: modalDraft.salary,
-                road: modalDraft.road,
-                extra: modalDraft.extra,
-                overtime: modalDraft.overtime,
-                advance: modalDraft.advance,
-                deduction: modalDraft.deduction,
-                garnishment: modalDraft.garnishment,
-                bank: modalDraft.bank,
-                cash: modalDraft.cash,
-              });''',
-          'payroll override calculation')
+          # Bordro düzeltmesini tek blok olarak yenile; böylece prim/icra kaydı kesin persist edilir.
+          payroll_override = '''  const savePayrollOverride = async () => {
+    const totals = calcRow({
+      salary: modalDraft.salary,
+      road: modalDraft.road,
+      extra: modalDraft.extra,
+      overtime: modalDraft.overtime,
+      advance: modalDraft.advance,
+      deduction: modalDraft.deduction,
+      garnishment: modalDraft.garnishment,
+      bank: modalDraft.bank,
+      cash: modalDraft.cash,
+    });
+    if (totals.diff !== 0 && !window.confirm("Banka + elden net odeme ile eslesmiyor. Devam edilsin mi?")) return;
+    setBusy(true);
+    try {
+      await saveIkAdvancedPayrollOverride({
+        mainCompanyId: companyId,
+        year,
+        month,
+        employeeId: modalDraft.employeeId,
+        reason: modalDraft.reason || "Bordro kontrol duzeltmesi",
+        override: {
+          roadPay: num(modalDraft.road),
+          overtimeAmount: num(modalDraft.overtime),
+          premiumAmount: num(modalDraft.extra),
+          advanceAmount: num(modalDraft.advance),
+          deductionAmount: num(modalDraft.deduction),
+          garnishmentAmount: num(modalDraft.garnishment),
+          bank: num(modalDraft.bank),
+          cash: num(modalDraft.cash),
+          total: totals.net,
+        },
+      });
+      setModal(null);
+      setNotice("Bordro duzeltmesi kaydedildi.");
+      await load();
+    } catch (error) {
+      setNotice(error?.message || "Bordro duzeltmesi kaydedilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+'''
+          sub(r'  const savePayrollOverride = async \(\) => \{.*?\n  \};\n(?=\n  const refreshPayroll)', payroll_override, 'savePayrollOverride', re.S)
 
-          replace_once(
-          '''          roadPay: num(modalDraft.road),
-                  overtimeAmount: num(modalDraft.overtime),
-                  premiumAmount: 0,
-                  advanceAmount: num(modalDraft.advance),
-                  deductionAmount: num(modalDraft.deduction),
-                  bank: num(modalDraft.bank),''',
-          '''          roadPay: num(modalDraft.road),
-                  overtimeAmount: num(modalDraft.overtime),
-                  premiumAmount: num(modalDraft.extra),
-                  advanceAmount: num(modalDraft.advance),
-                  deductionAmount: num(modalDraft.deduction),
-                  garnishmentAmount: num(modalDraft.garnishment),
-                  bank: num(modalDraft.bank),''',
-          'payroll override payload')
-
-          replace_once(
-          '''      maas: row.salary,
-                yol: row.road,
-                mesai: row.overtime,
-                avans: row.advance,
-                kesinti: row.deduction,
-                hakedis: row.hakedis,''',
-          '''      maas: row.salary,
-                yol: row.road,
-                ekOdemeAdi: row.extraLabel,
-                ekOdeme: row.extra,
-                mesai: row.overtime,
-                avans: row.advance,
-                kesinti: row.deduction,
-                icraKesintisi: row.garnishment,
-                hakedis: row.hakedis,''',
-          'payroll excel fields')
-
-          # Aylık yazdırma listesinde de ek ödeme ve icra ayrı görünsün.
-          replace_once(
-          '''<th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th>''',
-          '''<th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Ek Ödeme</th><th>Avans</th><th>Kesinti</th><th>İcra</th><th>Banka</th><th>Elden</th><th>Net</th>''',
-          'print report headers')
-
-          replace_once(
-          '''<td>${money(row.hakedis)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>''',
-          '''<td>${money(row.hakedis)}</td><td>${money(row.extra)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>''',
-          'print report row')
-
-          replace_once(
-          '''<td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td>''',
-          '''<td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.extra,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.garnishment,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td>''',
-          'print report totals')
+          # Excel bordro dışa aktarımında iki kalem de açıkça ayrı kolon olsun.
+          export_block = '''  const exportPayroll = () => {
+    exportRowsToExcelFile(`ik-bordro-${period}.xlsx`, payrollRows.map((row) => ({
+      personel: row.employee.fullName,
+      sgk: sgkLabel(row.employee),
+      odeme: paymentLabel(row.employee),
+      maas: row.salary,
+      yol: row.road,
+      ekOdemeAdi: row.extraLabel,
+      ekOdeme: row.extra,
+      mesai: row.overtime,
+      avans: row.advance,
+      kesinti: row.deduction,
+      icraKesintisi: row.garnishment,
+      hakedis: row.hakedis,
+      netOdenecek: row.net,
+      banka: row.bank,
+      elden: row.cash,
+      toplam: row.total,
+      durum: row.diff === 0 ? "Dengeli" : "Kontrol",
+    })));
+  };
+'''
+          sub(r'  const exportPayroll = \(\) => \{.*?\n  \};\n(?=\n\n  const printPayrollReport)', export_block, 'exportPayroll', re.S)
 
           path.write_text(text, encoding='utf-8')
           PY
@@ -160,6 +150,8 @@ jobs:
           grep -q 'extra: row.extra' "$FILE"
           grep -q 'garnishment: row.garnishment' "$FILE"
           grep -q 'bankPlanAfterGarnishment' "$FILE"
+          grep -q 'Ek Ödeme Adı' "$FILE"
+          grep -q 'Aylık İcra Tutarı' "$FILE"
           grep -q 'İcra Kesintisi' "$FILE"
 
       - name: Validate frontend
