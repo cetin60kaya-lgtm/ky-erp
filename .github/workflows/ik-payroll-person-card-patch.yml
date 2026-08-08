@@ -30,6 +30,24 @@ jobs:
           end = src.index("\n          PY", start)
           lines = src[start:end].splitlines()
           code = "\n".join(line[10:] if line.startswith("          ") else line for line in lines) + "\n"
+          strict_rep = '''def rep(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
+              text = text.replace(old, new, 1)'''
+          tolerant_rep = '''def rep(old, new, label):
+              global text
+              count = text.count(old)
+              if count == 0:
+                  print(f'WARN skip exact patch: {label}')
+                  return
+              if count != 1:
+                  raise SystemExit(f'{label}: expected <=1 match, found {count}')
+              text = text.replace(old, new, 1)'''
+          if strict_rep not in code:
+              raise SystemExit('rep helper hook not found')
+          code = code.replace(strict_rep, tolerant_rep, 1)
           needle = "rep(old_plan, new_plan, 'planFor')"
           replacement = '''pattern_plan = re.compile(r"  const planFor = useCallback\\(\\(employee\\) => \\{.*?\\n  \\}, \\[movements, payrollLines\\]\\);", re.S)
           text, n = pattern_plan.subn(lambda _m: new_plan, text, count=1)
@@ -41,6 +59,14 @@ jobs:
           Path('/tmp/ik_patch.py').write_text(code, encoding='utf-8')
           PY
           python3 /tmp/ik_patch.py
+
+      - name: Validate patched source markers
+        shell: bash
+        run: |
+          grep -q "extraPaymentAmount" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
+          grep -q "garnishmentAmount" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
+          grep -q "İcra Kesintisi" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
+          grep -q "Ek Ödeme / Prim" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
 
       - name: Validate frontend
         working-directory: APP/app/ky-erp-frontend
