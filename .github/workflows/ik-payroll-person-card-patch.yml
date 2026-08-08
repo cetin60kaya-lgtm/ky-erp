@@ -14,148 +14,25 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout control scripts
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: control
+          fetch-depth: 1
+
+      - name: Checkout production source
+        uses: actions/checkout@v4
         with:
           ref: codex/model-uretim-kontrol-merkezi-final
+          path: prod
           fetch-depth: 0
 
-      - name: Finalize IK person-card payroll wiring
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+      - name: Apply IK patch
+        run: python3 control/tools/ik_payroll_finalize.py prod/APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
 
-          path = Path('APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx')
-          text = path.read_text(encoding='utf-8')
-
-          def sub(pattern, replacement, label, flags=0):
-              global text
-              text, count = re.subn(pattern, replacement, text, count=1, flags=flags)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected 1 match, found {count}')
-
-          # Bordro düzeltme modalı kişi kartındaki ek ödeme / icrayı taşısın.
-          sub(
-              r'(const openPayroll = \(row = .*?setModalDraft\(\{.*?\n\s*road: row\.road,)(\n\s*overtime: row\.overtime,.*?\n\s*deduction: row\.deduction,)(\n\s*bank: row\.bank,)',
-              r'\1\n      extra: row.extra,\2\n      garnishment: row.garnishment,\3',
-              'openPayroll', re.S,
-          )
-
-          # Personel kartı ödeme planı kontrolü ek ödemeyi de hesaba katsın.
-          old_validation = 'if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan maas/yol toplamindan yuksek. Devam edilsin mi?")) return;'
-          new_validation = 'if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) + num(modalDraft.extraPaymentAmount) && !window.confirm("Banka plan + elden plan ücret/yol/ek ödeme toplamından yüksek. Devam edilsin mi?")) return;'
-          if old_validation not in text:
-              raise SystemExit('person plan validation not found')
-          text = text.replace(old_validation, new_validation, 1)
-
-          # Sadece savePerson fonksiyonunda yeni kişi bazlı alanları API payloadına ekle.
-          person_match = re.search(r'(const savePerson = async \(\) => \{.*?\n\s*\};)(?=\n\n\s*const validateFinance)', text, re.S)
-          if not person_match:
-              raise SystemExit('savePerson block not found')
-          person = person_match.group(1)
-          needle = 'cashAmount: num(modalDraft.cashAmount),'
-          if needle not in person:
-              raise SystemExit('savePerson cashAmount not found')
-          person = person.replace(needle, needle + '''
-        extraPaymentLabel: modalDraft.extraPaymentLabel || "Ek Ödeme / Prim",
-        extraPaymentAmount: num(modalDraft.extraPaymentAmount),
-        garnishmentActive: modalDraft.garnishmentActive === true && num(modalDraft.garnishmentAmount) > 0,
-        garnishmentAmount: modalDraft.garnishmentActive === true ? num(modalDraft.garnishmentAmount) : 0,
-        garnishmentNote: modalDraft.garnishmentNote || "",''', 1)
-          text = text[:person_match.start(1)] + person + text[person_match.end(1):]
-
-          # Bordro düzeltmesini tek blok olarak yenile; böylece prim/icra kaydı kesin persist edilir.
-          payroll_override = '''  const savePayrollOverride = async () => {
-    const totals = calcRow({
-      salary: modalDraft.salary,
-      road: modalDraft.road,
-      extra: modalDraft.extra,
-      overtime: modalDraft.overtime,
-      advance: modalDraft.advance,
-      deduction: modalDraft.deduction,
-      garnishment: modalDraft.garnishment,
-      bank: modalDraft.bank,
-      cash: modalDraft.cash,
-    });
-    if (totals.diff !== 0 && !window.confirm("Banka + elden net odeme ile eslesmiyor. Devam edilsin mi?")) return;
-    setBusy(true);
-    try {
-      await saveIkAdvancedPayrollOverride({
-        mainCompanyId: companyId,
-        year,
-        month,
-        employeeId: modalDraft.employeeId,
-        reason: modalDraft.reason || "Bordro kontrol duzeltmesi",
-        override: {
-          roadPay: num(modalDraft.road),
-          overtimeAmount: num(modalDraft.overtime),
-          premiumAmount: num(modalDraft.extra),
-          advanceAmount: num(modalDraft.advance),
-          deductionAmount: num(modalDraft.deduction),
-          garnishmentAmount: num(modalDraft.garnishment),
-          bank: num(modalDraft.bank),
-          cash: num(modalDraft.cash),
-          total: totals.net,
-        },
-      });
-      setModal(null);
-      setNotice("Bordro duzeltmesi kaydedildi.");
-      await load();
-    } catch (error) {
-      setNotice(error?.message || "Bordro duzeltmesi kaydedilemedi.");
-    } finally {
-      setBusy(false);
-    }
-  };
-'''
-          sub(r'  const savePayrollOverride = async \(\) => \{.*?\n  \};\n(?=\n  const refreshPayroll)', payroll_override, 'savePayrollOverride', re.S)
-
-          # Excel bordro dışa aktarımında iki kalem de açıkça ayrı kolon olsun.
-          export_block = '''  const exportPayroll = () => {
-    exportRowsToExcelFile(`ik-bordro-${period}.xlsx`, payrollRows.map((row) => ({
-      personel: row.employee.fullName,
-      sgk: sgkLabel(row.employee),
-      odeme: paymentLabel(row.employee),
-      maas: row.salary,
-      yol: row.road,
-      ekOdemeAdi: row.extraLabel,
-      ekOdeme: row.extra,
-      mesai: row.overtime,
-      avans: row.advance,
-      kesinti: row.deduction,
-      icraKesintisi: row.garnishment,
-      hakedis: row.hakedis,
-      netOdenecek: row.net,
-      banka: row.bank,
-      elden: row.cash,
-      toplam: row.total,
-      durum: row.diff === 0 ? "Dengeli" : "Kontrol",
-    })));
-  };
-'''
-          sub(r'  const exportPayroll = \(\) => \{.*?\n  \};\n(?=\n\n  const printPayrollReport)', export_block, 'exportPayroll', re.S)
-
-          path.write_text(text, encoding='utf-8')
-          PY
-
-      - name: Verify complete IK wiring
-        shell: bash
-        run: |
-          FILE=APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
-          grep -q 'extraPaymentLabel: modalDraft.extraPaymentLabel' "$FILE"
-          grep -q 'garnishmentAmount: modalDraft.garnishmentActive === true' "$FILE"
-          grep -q 'premiumAmount: num(modalDraft.extra)' "$FILE"
-          grep -q 'garnishmentAmount: num(modalDraft.garnishment)' "$FILE"
-          grep -q 'extra: row.extra' "$FILE"
-          grep -q 'garnishment: row.garnishment' "$FILE"
-          grep -q 'bankPlanAfterGarnishment' "$FILE"
-          grep -q 'Ek Ödeme Adı' "$FILE"
-          grep -q 'Aylık İcra Tutarı' "$FILE"
-          grep -q 'İcra Kesintisi' "$FILE"
-
-      - name: Validate frontend
-        working-directory: APP/app/ky-erp-frontend
+      - name: Build frontend
+        working-directory: prod/APP/app/ky-erp-frontend
         env:
           VITE_API_URL: https://api.kyerp.net
           VITE_API_BASE_URL: https://api.kyerp.net
@@ -163,7 +40,8 @@ jobs:
           npm ci
           npm run build
 
-      - name: Commit completed IK patch
+      - name: Commit production source
+        working-directory: prod
         run: |
           git diff --check
           git config user.name "kyerp-automation"
