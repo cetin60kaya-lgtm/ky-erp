@@ -1,14 +1,16 @@
 {
-  "approved": false,
+  "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-03T01:38:00+03:00",
-  "attempt": 13,
+  "requestedAt": "2026-08-08T21:45:00+03:00",
+  "attempt": 14,
   "scope": [
-    "production-branch-alignment",
+    "ik-personel-karti-ek-odeme",
+    "ik-icra-kesintisi",
+    "ik-bordro-fisi",
     "frontend-pages-git-deployment",
     "live-browser-verification"
   ],
-  "sourceBranch": "agent/uretim-tek-merkez",
-  "note": "Alan adı onarım denemesi kapatıldı; doğrulanmış final kaynak production dalına taşınır. Manuel release devre dışıdır."
+  "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
+  "note": "İK personel kartına kişi bazlı ek ödeme/prim ve icra kesintisi eklendi; bordro hesaplama, banka/elden planı, fiş ve Excel akışı canlıya alınacak."
 }
