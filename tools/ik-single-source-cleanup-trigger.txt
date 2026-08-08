@@ -1,2 +1,0 @@
-2026-08-08T22:11:00+03:00
-Remove remaining legal-deduction UI/state from person card, make payroll source amounts read-only, keep only Banka/Elden final distribution override, improve legal columns in report/export, deploy live.
