@@ -1,6 +1,14 @@
 -- İK nihai ücret planı: baz personel, otomatik EK ve hukuki kesinti kanalı.
 -- Mevcut bordro geçmişini silmez veya değiştirmez.
 
+-- Eski tam unique indeks boş kart numarasını da tekil sayıyordu.
+-- Gerçek kart numaraları yine tekil kalır; boş kartlar birden fazla personelde bulunabilir.
+DROP INDEX IF EXISTS idx_ik_person_card_card_no;
+DROP INDEX IF EXISTS idx_ik_person_card_company_card;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ik_person_card_company_card
+  ON ik_person_card_settings(main_company_id, card_no)
+  WHERE trim(card_no) <> '';
+
 ALTER TABLE ik_person_card_settings ADD COLUMN base_employee_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE ik_person_card_settings ADD COLUMN legal_deduction_type TEXT NOT NULL DEFAULT 'YOK';
 ALTER TABLE ik_person_card_settings ADD COLUMN garnishment_source TEXT NOT NULL DEFAULT 'BANKA';
