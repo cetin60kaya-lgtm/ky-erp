@@ -1,2 +1,2 @@
-2026-08-08T22:08:00+03:00
-Query exact HKN-03/HKN-05 employee, card, payroll and override records.
+2026-08-08T22:30:00+03:00
+Verify live HKN-03/HKN-05 card, payroll, extra-payment and garnishment columns after deployment.
