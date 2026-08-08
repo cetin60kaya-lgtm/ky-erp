@@ -1,2 +1,2 @@
-2026-08-08T21:29:00+03:00
-Run scoped-regex final IK person-card extra payment and garnishment wiring.
+2026-08-08T21:39:00+03:00
+Execute deterministic IK payroll finalizer from control script.
