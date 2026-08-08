@@ -30,6 +30,14 @@ jobs:
           end = src.index("\n          PY", start)
           lines = src[start:end].splitlines()
           code = "\n".join(line[10:] if line.startswith("          ") else line for line in lines) + "\n"
+          needle = "rep(old_plan, new_plan, 'planFor')"
+          replacement = '''pattern_plan = re.compile(r"  const planFor = useCallback\\(\\(employee\\) => \\{.*?\\n  \\}, \\[movements, payrollLines\\]\\);", re.S)
+          text, n = pattern_plan.subn(lambda _m: new_plan, text, count=1)
+          if n != 1:
+              raise SystemExit(f"planFor regex: expected 1 match, found {n}")'''
+          if needle not in code:
+              raise SystemExit('planFor patch hook not found')
+          code = code.replace(needle, replacement, 1)
           Path('/tmp/ik_patch.py').write_text(code, encoding='utf-8')
           PY
           python3 /tmp/ik_patch.py
