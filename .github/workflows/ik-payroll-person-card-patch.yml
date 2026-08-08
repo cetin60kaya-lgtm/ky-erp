@@ -19,54 +19,148 @@ jobs:
           ref: codex/model-uretim-kontrol-merkezi-final
           fetch-depth: 0
 
-      - name: Apply embedded IK patch
+      - name: Finish IK extra pay and garnishment wiring
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          src = Path('.github/workflows/ik-payroll-person-card-patch.yml').read_text(encoding='utf-8')
-          marker = "          python3 - <<'PY'\n"
-          start = src.index(marker) + len(marker)
-          end = src.index("\n          PY", start)
-          lines = src[start:end].splitlines()
-          code = "\n".join(line[10:] if line.startswith("          ") else line for line in lines) + "\n"
-          strict_rep = '''def rep(old, new, label):
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected 1 match, found {count}')
-              text = text.replace(old, new, 1)'''
-          tolerant_rep = '''def rep(old, new, label):
-              global text
-              count = text.count(old)
-              if count == 0:
-                  print(f'WARN skip exact patch: {label}')
-                  return
-              if count != 1:
-                  raise SystemExit(f'{label}: expected <=1 match, found {count}')
-              text = text.replace(old, new, 1)'''
-          if strict_rep not in code:
-              raise SystemExit('rep helper hook not found')
-          code = code.replace(strict_rep, tolerant_rep, 1)
-          needle = "rep(old_plan, new_plan, 'planFor')"
-          replacement = '''pattern_plan = re.compile(r"  const planFor = useCallback\\(\\(employee\\) => \\{.*?\\n  \\}, \\[movements, payrollLines\\]\\);", re.S)
-          text, n = pattern_plan.subn(lambda _m: new_plan, text, count=1)
-          if n != 1:
-              raise SystemExit(f"planFor regex: expected 1 match, found {n}")'''
-          if needle not in code:
-              raise SystemExit('planFor patch hook not found')
-          code = code.replace(needle, replacement, 1)
-          Path('/tmp/ik_patch.py').write_text(code, encoding='utf-8')
-          PY
-          python3 /tmp/ik_patch.py
 
-      - name: Validate patched source markers
+          path = Path('APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              n = text.count(old)
+              if n != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {n}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+          '''      salary: row.salary,
+                road: row.road,
+                overtime: row.overtime,
+                advance: row.advance,
+                deduction: row.deduction,
+                bank: row.bank,
+                cash: row.cash,''',
+          '''      salary: row.salary,
+                road: row.road,
+                extra: row.extra,
+                overtime: row.overtime,
+                advance: row.advance,
+                deduction: row.deduction,
+                garnishment: row.garnishment,
+                bank: row.bank,
+                cash: row.cash,''',
+          'openPayroll fields')
+
+          replace_once(
+          '''    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan maas/yol toplamindan yuksek. Devam edilsin mi?")) return;''',
+          '''    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) + num(modalDraft.extraPaymentAmount) && !window.confirm("Banka plan + elden plan ücret/yol/ek ödeme toplamından yüksek. Devam edilsin mi?")) return;''',
+          'person plan validation')
+
+          replace_once(
+          '''        bankAmount: num(modalDraft.bankAmount),
+                cashAmount: num(modalDraft.cashAmount),
+                payrollIncluded: modalDraft.payrollIncluded !== false,''',
+          '''        bankAmount: num(modalDraft.bankAmount),
+                cashAmount: num(modalDraft.cashAmount),
+                extraPaymentLabel: modalDraft.extraPaymentLabel || "Ek Ödeme / Prim",
+                extraPaymentAmount: num(modalDraft.extraPaymentAmount),
+                garnishmentActive: modalDraft.garnishmentActive === true && num(modalDraft.garnishmentAmount) > 0,
+                garnishmentAmount: modalDraft.garnishmentActive === true ? num(modalDraft.garnishmentAmount) : 0,
+                garnishmentNote: modalDraft.garnishmentNote || "",
+                payrollIncluded: modalDraft.payrollIncluded !== false,''',
+          'person-card save fields')
+
+          replace_once(
+          '''    const totals = calcRow({
+                salary: modalDraft.salary,
+                road: modalDraft.road,
+                overtime: modalDraft.overtime,
+                advance: modalDraft.advance,
+                deduction: modalDraft.deduction,
+                bank: modalDraft.bank,
+                cash: modalDraft.cash,
+              });''',
+          '''    const totals = calcRow({
+                salary: modalDraft.salary,
+                road: modalDraft.road,
+                extra: modalDraft.extra,
+                overtime: modalDraft.overtime,
+                advance: modalDraft.advance,
+                deduction: modalDraft.deduction,
+                garnishment: modalDraft.garnishment,
+                bank: modalDraft.bank,
+                cash: modalDraft.cash,
+              });''',
+          'payroll override calculation')
+
+          replace_once(
+          '''          roadPay: num(modalDraft.road),
+                  overtimeAmount: num(modalDraft.overtime),
+                  premiumAmount: 0,
+                  advanceAmount: num(modalDraft.advance),
+                  deductionAmount: num(modalDraft.deduction),
+                  bank: num(modalDraft.bank),''',
+          '''          roadPay: num(modalDraft.road),
+                  overtimeAmount: num(modalDraft.overtime),
+                  premiumAmount: num(modalDraft.extra),
+                  advanceAmount: num(modalDraft.advance),
+                  deductionAmount: num(modalDraft.deduction),
+                  garnishmentAmount: num(modalDraft.garnishment),
+                  bank: num(modalDraft.bank),''',
+          'payroll override payload')
+
+          replace_once(
+          '''      maas: row.salary,
+                yol: row.road,
+                mesai: row.overtime,
+                avans: row.advance,
+                kesinti: row.deduction,
+                hakedis: row.hakedis,''',
+          '''      maas: row.salary,
+                yol: row.road,
+                ekOdemeAdi: row.extraLabel,
+                ekOdeme: row.extra,
+                mesai: row.overtime,
+                avans: row.advance,
+                kesinti: row.deduction,
+                icraKesintisi: row.garnishment,
+                hakedis: row.hakedis,''',
+          'payroll excel fields')
+
+          # Aylık yazdırma listesinde de ek ödeme ve icra ayrı görünsün.
+          replace_once(
+          '''<th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th>''',
+          '''<th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Ek Ödeme</th><th>Avans</th><th>Kesinti</th><th>İcra</th><th>Banka</th><th>Elden</th><th>Net</th>''',
+          'print report headers')
+
+          replace_once(
+          '''<td>${money(row.hakedis)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>''',
+          '''<td>${money(row.hakedis)}</td><td>${money(row.extra)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>''',
+          'print report row')
+
+          replace_once(
+          '''<td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td>''',
+          '''<td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.extra,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.garnishment,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td>''',
+          'print report totals')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Verify complete IK wiring
         shell: bash
         run: |
-          grep -q "extraPaymentAmount" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
-          grep -q "garnishmentAmount" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
-          grep -q "İcra Kesintisi" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
-          grep -q "Ek Ödeme / Prim" APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
+          FILE=APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
+          grep -q 'extraPaymentLabel: modalDraft.extraPaymentLabel' "$FILE"
+          grep -q 'garnishmentAmount: modalDraft.garnishmentActive === true' "$FILE"
+          grep -q 'premiumAmount: num(modalDraft.extra)' "$FILE"
+          grep -q 'garnishmentAmount: num(modalDraft.garnishment)' "$FILE"
+          grep -q 'extra: row.extra' "$FILE"
+          grep -q 'garnishment: row.garnishment' "$FILE"
+          grep -q 'bankPlanAfterGarnishment' "$FILE"
+          grep -q 'İcra Kesintisi' "$FILE"
 
       - name: Validate frontend
         working-directory: APP/app/ky-erp-frontend
@@ -77,12 +171,12 @@ jobs:
           npm ci
           npm run build
 
-      - name: Commit patched IK file
+      - name: Commit completed IK patch
         run: |
           git diff --check
           git config user.name "kyerp-automation"
           git config user.email "kyerp-automation@users.noreply.github.com"
           git add APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
           git diff --cached --quiet && { echo "No changes produced"; exit 1; }
-          git commit -m "feat(ik): add per-person extra pay and garnishment controls"
+          git commit -m "fix(ik): persist extra pay and garnishment through payroll"
           git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
