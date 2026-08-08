@@ -1,2 +1,2 @@
-2026-08-08T21:28:00+03:00
-Deploy final base-person EK, legal deduction source and 10-up payment slips from agent/uretim-tek-merkez.
+2026-08-08T22:05:00+03:00
+Deploy IK Mesai/Kesinti quick-entry improvements and repaired payment-slip printing from agent/uretim-tek-merkez.
