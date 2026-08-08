@@ -1,2 +1,0 @@
-2026-08-08T22:07:00+03:00
-Move legal deductions out of person card and into Mesai-Avans-Kesinti center, persist Banka/Elden source, recalculate payroll, deploy live.
