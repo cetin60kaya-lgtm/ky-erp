@@ -1,2 +1,0 @@
-2026-08-08T21:33:00+03:00
-Verify final live Cuma/Murat base salary, EK, legal deduction fields and payroll output.
