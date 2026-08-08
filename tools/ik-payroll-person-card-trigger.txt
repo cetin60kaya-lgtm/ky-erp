@@ -1,2 +1,2 @@
-2026-08-08T20:35:00+03:00
-Per-person extra payment and garnishment payroll patch.
+2026-08-08T20:52:00+03:00
+Per-person extra payment and garnishment payroll patch rerun after workflow registration.
