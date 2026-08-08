@@ -9,6 +9,7 @@ const CANONICAL_COMPANY_ID = "mecit-hakan";
 
 const text = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
+const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
 const number = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
