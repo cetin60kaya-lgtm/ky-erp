@@ -1,0 +1,67 @@
+name: IK agent finalize
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/ik-agent-finalize-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout control
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: control
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/uretim-tek-merkez
+          path: prod
+          fetch-depth: 0
+      - name: Checkout completed IK frontend
+        uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+          path: ui
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply relational backend finalizer
+        run: python3 control/tools/ik_agent_finalize.py prod/APP/cloud/ky-erp-api/src/ik-relational-cloud.ts
+      - name: Copy completed IK frontend and smoke fix
+        shell: bash
+        run: |
+          cp ui/APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx prod/APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
+          cp ui/APP/app/ky-erp-frontend/scripts/runtime-smoke.mjs prod/APP/app/ky-erp-frontend/scripts/runtime-smoke.mjs
+      - name: Validate Worker
+        working-directory: prod/APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npx wrangler deploy --dry-run --config wrangler.jsonc
+      - name: Validate frontend
+        working-directory: prod/APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+          VITE_API_BASE_URL: https://api.kyerp.net
+        run: |
+          npm ci
+          npm run build
+      - name: Commit final IK source
+        working-directory: prod
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name "kyerp-automation"
+          git config user.email "kyerp-automation@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/ik-relational-cloud.ts APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx APP/app/ky-erp-frontend/scripts/runtime-smoke.mjs
+          git diff --cached --quiet && { echo "No changes produced"; exit 1; }
+          git commit -m "feat(ik): finalize extra pay and garnishment end-to-end"
+          git push origin HEAD:agent/uretim-tek-merkez
