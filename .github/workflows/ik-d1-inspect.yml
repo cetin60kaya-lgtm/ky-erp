@@ -39,11 +39,27 @@ jobs:
       - name: Install Worker packages
         working-directory: APP/cloud/ky-erp-api
         run: npm ci
-      - name: Inspect Cuma and Murat D1 rows
+      - name: Inspect IK schema and candidate stores
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
-          SQL="SELECT id, scope, main_company_slug, file_name, json_extract(data,'$.id') AS employee_id, json_extract(data,'$.fullName') AS full_name, json_extract(data,'$.code') AS code, json_extract(data,'$.salary') AS salary, json_extract(data,'$.roadAllowance') AS road, json_extract(data,'$.bankAmount') AS bank_amount, json_extract(data,'$.cashAmount') AS cash_amount, json_extract(data,'$.extraPaymentLabel') AS extra_label, json_extract(data,'$.extraPaymentAmount') AS extra_amount, json_extract(data,'$.garnishmentActive') AS garnishment_active, json_extract(data,'$.garnishmentAmount') AS garnishment_amount FROM json_store WHERE upper(data) LIKE '%CUMA%' OR upper(data) LIKE '%MURAT M%' ORDER BY scope, full_name;"
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json > /tmp/rows.json
-          jq -c '.[]?.results[]?' /tmp/rows.json
+          echo '--- TABLES / SCHEMAS ---'
+          SQL="SELECT name, sql FROM sqlite_master WHERE type='table' AND (lower(name) LIKE '%ik%' OR lower(name) LIKE '%person%' OR lower(name) LIKE '%employee%' OR lower(name) LIKE '%payroll%' OR lower(name) LIKE '%bordro%' OR lower(name) LIKE '%json%') ORDER BY name;"
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json > /tmp/schema.json
+          jq -c '.[]?.results[]?' /tmp/schema.json
+
+          echo '--- JSON STORE SCOPES ---'
+          SQL="SELECT scope, main_company_slug, count(*) AS adet FROM json_store GROUP BY scope, main_company_slug ORDER BY scope, main_company_slug;"
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json > /tmp/scopes.json
+          jq -c '.[]?.results[]?' /tmp/scopes.json
+
+          echo '--- JSON STORE CANDIDATES ---'
+          SQL="SELECT id, scope, main_company_slug, file_name, substr(data,1,900) AS data_preview FROM json_store WHERE lower(scope) LIKE '%ik%' OR lower(scope) LIKE '%person%' OR lower(scope) LIKE '%payroll%' ORDER BY scope, updated_at DESC LIMIT 200;"
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json > /tmp/jsonrows.json
+          jq -c '.[]?.results[]?' /tmp/jsonrows.json
+
+          echo '--- CUMA/MURAT ANY JSON ---'
+          SQL="SELECT id, scope, main_company_slug, file_name, substr(data,1,1400) AS data_preview FROM json_store WHERE upper(data) LIKE '%CUMA%' OR upper(data) LIKE '%MURAT M%' ORDER BY scope, updated_at DESC LIMIT 100;"
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json > /tmp/names.json
+          jq -c '.[]?.results[]?' /tmp/names.json
