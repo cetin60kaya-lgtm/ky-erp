@@ -36,14 +36,20 @@ jobs:
       - name: Install Worker packages
         working-directory: APP/cloud/ky-erp-api
         run: npm ci
-      - name: Inspect IK schema and rows
+      - name: Verify final IK D1 and live API
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
           run_sql(){ echo "===== $1 ====="; npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$2" --json | jq -c '.[]?.results[]?'; }
-          run_sql table "SELECT type,name,sql FROM sqlite_master WHERE tbl_name='ik_person_card_settings' ORDER BY type,name;"
-          run_sql columns "PRAGMA table_info('ik_person_card_settings');"
-          run_sql indexes "PRAGMA index_list('ik_person_card_settings');"
-          run_sql cards "SELECT employee_id,main_company_id,card_no,personel_kodu FROM ik_person_card_settings ORDER BY employee_id;"
-          run_sql migrations "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 5;"
+          run_sql indexes "SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name='ik_person_card_settings' ORDER BY name;"
+          run_sql cuma "SELECT e.code,e.full_name,e.salary,s.card_no,s.base_employee_id,s.extra_payment_label,s.extra_payment_amount,s.legal_deduction_type,s.garnishment_amount,s.garnishment_source,s.legal_start_period,s.legal_end_period FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id WHERE e.main_company_id='mecit-hakan' AND e.code IN ('HKN-03','HKN-05') ORDER BY e.code;"
+          run_sql migrations "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 3;"
+          echo '===== live month ====='
+          curl --fail --silent --show-error "https://api.kyerp.net/api/ik/advanced/month?mainCompanyId=mecit-hakan&year=2026&month=8" > /tmp/month.json
+          jq -c '.data.employees[] | select(.code=="HKN-03" or .code=="HKN-05") | {code,fullName,salary,baseEmployeeId,extraPaymentAmount,legalDeductionType,garnishmentSource}' /tmp/month.json
+          echo '===== live payroll ====='
+          curl --fail --silent --show-error "https://api.kyerp.net/api/ik/advanced/payroll?mainCompanyId=mecit-hakan&year=2026&month=8" > /tmp/payroll.json
+          jq -c '.data.lines[] | select(.code=="HKN-05") | {code,fullName,final}' /tmp/payroll.json
+          jq -e '.data.employees[] | select(.code=="HKN-05") | .salary==48100 and (.baseEmployeeId|length)>0 and .extraPaymentAmount==2600' /tmp/month.json >/dev/null
+          jq -e '.data.lines[] | select(.code=="HKN-05") | .final.salaryPay==45500 and .final.premiumAmount==2600' /tmp/payroll.json >/dev/null
