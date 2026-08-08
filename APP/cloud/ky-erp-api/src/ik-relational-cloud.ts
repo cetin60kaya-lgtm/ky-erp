@@ -112,10 +112,15 @@ function mapMonthly(row: Row): Row {
     bankPaymentType: paymentType,
     bankAmount: number(row.bank_amount),
     cashAmount: number(row.cash_amount),
-    extraPaymentLabel: text(row.extra_payment_label) || "Ek Ödeme / Prim",
+    baseEmployeeId: text(row.base_employee_id),
+    extraPaymentLabel: "EK",
     extraPaymentAmount: number(row.extra_payment_amount),
+    legalDeductionType: text(row.legal_deduction_type) || (flag(row.garnishment_active) || number(row.garnishment_amount) > 0 ? "ICRA" : "YOK"),
     garnishmentActive: flag(row.garnishment_active) || number(row.garnishment_amount) > 0,
     garnishmentAmount: number(row.garnishment_amount),
+    garnishmentSource: text(row.garnishment_source) || "BANKA",
+    legalStartPeriod: text(row.legal_start_period),
+    legalEndPeriod: text(row.legal_end_period),
     garnishmentNote: text(row.garnishment_note),
     overtimeBaseHours: number(row.overtime_hourly_base) || 225,
     overtimeHourlyBase: number(row.overtime_hourly_base) || 225,
@@ -242,8 +247,13 @@ async function monthlyRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
       `SELECT e.*,
               s.extra_payment_label,
               s.extra_payment_amount,
+              s.base_employee_id,
+              s.legal_deduction_type,
               s.garnishment_active,
               s.garnishment_amount,
+              s.garnishment_source,
+              s.legal_start_period,
+              s.legal_end_period,
               s.garnishment_note
          FROM hr_monthly_employees e
          LEFT JOIN ik_person_card_settings s
@@ -933,16 +943,24 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const month = number(c.req.query("month")) || new Date().getMonth() + 1;
   const employees = await monthlyRows(c, companyId);
   const saved = await payrollRows(c, companyId);
+  const employeesById = new Map(employees.map((employee) => [text(employee.id), employee]));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
+  const period = `${year}-${String(month).padStart(2, "0")}`;
   const lines = employees.map((employee) => {
     const row = byEmployee.get(text(employee.id));
-    const extra = number(employee.extraPaymentAmount);
-    const garnishment = employee.garnishmentActive === true || number(employee.garnishmentAmount) > 0 ? number(employee.garnishmentAmount) : 0;
-    const baseNet = Math.max(number(employee.salary) + number(employee.roadAllowance) + extra - garnishment, 0);
-    const bankPlan = Math.max(number(employee.bankAmount) - garnishment, 0);
+    const baseEmployee = employee.baseEmployeeId ? employeesById.get(text(employee.baseEmployeeId)) : null;
+    const baseSalary = baseEmployee ? number(baseEmployee.salary) : number(employee.salary);
+    const extra = baseEmployee ? Math.max(number(employee.salary) - baseSalary, 0) : number(employee.extraPaymentAmount);
+    const legalType = text(employee.legalDeductionType) || (employee.garnishmentActive ? "ICRA" : "YOK");
+    const legalInPeriod = legalType !== "YOK" && (!text(employee.legalStartPeriod) || period >= text(employee.legalStartPeriod)) && (!text(employee.legalEndPeriod) || period <= text(employee.legalEndPeriod));
+    const garnishment = legalInPeriod ? number(employee.garnishmentAmount) : 0;
+    const baseNet = Math.max(baseSalary + number(employee.roadAllowance) + extra - garnishment, 0);
+    const garnishmentSource = upper(employee.garnishmentSource) === "ELDEN" ? "ELDEN" : "BANKA";
+    const bankPlan = garnishmentSource === "BANKA" ? Math.max(number(employee.bankAmount) - garnishment, 0) : number(employee.bankAmount);
     const systemBank = Math.min(baseNet, bankPlan);
     const systemCash = Math.max(baseNet - systemBank, 0);
-    const final = row ? {
+    const legacyAutoBase = Boolean(baseEmployee) && row && number(row.salary) === number(employee.salary) && number(row.premiumAmount) === 0;
+    const final = row && !legacyAutoBase ? {
       salaryPay: row.salary,
       roadPay: row.roadAllowance,
       overtimeAmount: row.overtimeAmount,
@@ -954,7 +972,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
       cash: row.cashAmount,
       total: row.totalAmount,
     } : {
-      salaryPay: number(employee.salary),
+      salaryPay: baseSalary,
       roadPay: number(employee.roadAllowance),
       overtimeAmount: 0,
       premiumAmount: extra,
@@ -965,28 +983,41 @@ async function advancedPayroll(c: Context<AppEnv>) {
       cash: systemCash,
       total: baseNet,
     };
-    return { employeeId: employee.id, code: employee.code, fullName: employee.fullName, department: employee.department, system: final, final, status: row?.status || "SYSTEM" };
+    return { employeeId: employee.id, code: employee.code, fullName: employee.fullName, department: employee.department, system: final, final, status: row && !legacyAutoBase ? row.status : "SYSTEM" };
   });
   const totals = lines.reduce((sum, row) => ({ bank: sum.bank + number(row.final.bank), cash: sum.cash + number(row.final.cash), total: sum.total + number(row.final.total) }), { bank: 0, cash: 0, total: 0 });
-  return okData(c, { year, month, policy: { roadByActualPresence: true, defaultOvertimeBase: 225, advanceFirstFromCash: true, garnishmentReducesBank: true }, lines, totals });
+  return okData(c, { year, month, policy: { roadByActualPresence: true, defaultOvertimeBase: 225, advanceFirstFromCash: true, garnishmentRespectsSource: true }, lines, totals });
 }
 
 async function savePersonCard(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
   const employeeId = text(c.req.param("employeeId"));
-  if (!(await employeeBelongsToCompany(c, employeeId, companyId))) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+  const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [employeeId, companyId]);
+  if (!current) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const cardNo = text(body.cardNo);
   if (cardNo) {
     const duplicate = await first(c, "SELECT employee_id FROM ik_person_card_settings WHERE main_company_id=? AND card_no=? AND employee_id<>?", [companyId, cardNo, employeeId]);
     if (duplicate) return error(c, 409, "DUPLICATE_CARD", "Bu kart numarası başka bir personele bağlı.");
   }
+  const baseEmployeeId = text(body.baseEmployeeId);
+  if (baseEmployeeId === employeeId) return error(c, 400, "INVALID_BASE_EMPLOYEE", "Personel kendisini baz personel seçemez.");
+  const baseEmployee = baseEmployeeId ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [baseEmployeeId, companyId]) : null;
+  if (baseEmployeeId && !baseEmployee) return error(c, 400, "INVALID_BASE_EMPLOYEE", "Baz personel bulunamadı.");
+  const actualSalary = number(body.salary ?? current.salary);
+  if (baseEmployee && number(baseEmployee.salary) > actualSalary) return error(c, 400, "BASE_SALARY_HIGH", "Baz personel maaşı gerçek maaştan yüksek olamaz.");
+  const autoExtra = baseEmployee ? Math.max(actualSalary - number(baseEmployee.salary), 0) : 0;
+  const legalTypeRaw = upper(body.legalDeductionType);
+  const legalType = legalTypeRaw === "HACIZ" ? "HACIZ" : legalTypeRaw === "ICRA" ? "ICRA" : "YOK";
+  const legalAmount = legalType === "YOK" ? 0 : number(body.garnishmentAmount);
+  const legalSource = upper(body.garnishmentSource) === "ELDEN" ? "ELDEN" : "BANKA";
   await c.env.DB.prepare(
     `INSERT INTO ik_person_card_settings (
        employee_id,main_company_id,card_no,identity_no,payroll_included,card_source,personel_kodu,exit_date,
        active_passive,work_type,sgk_follow,payment_type,note,phone,extra_payment_label,extra_payment_amount,
-       garnishment_active,garnishment_amount,garnishment_note,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       base_employee_id,legal_deduction_type,garnishment_active,garnishment_amount,garnishment_source,
+       legal_start_period,legal_end_period,garnishment_note,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(employee_id) DO UPDATE SET
        main_company_id=excluded.main_company_id,
        card_no=excluded.card_no,
@@ -1003,37 +1034,27 @@ async function savePersonCard(c: Context<AppEnv>) {
        phone=excluded.phone,
        extra_payment_label=excluded.extra_payment_label,
        extra_payment_amount=excluded.extra_payment_amount,
+       base_employee_id=excluded.base_employee_id,
+       legal_deduction_type=excluded.legal_deduction_type,
        garnishment_active=excluded.garnishment_active,
        garnishment_amount=excluded.garnishment_amount,
+       garnishment_source=excluded.garnishment_source,
+       legal_start_period=excluded.legal_start_period,
+       legal_end_period=excluded.legal_end_period,
        garnishment_note=excluded.garnishment_note,
        updated_at=excluded.updated_at`,
   ).bind(
-    employeeId,
-    companyId,
-    cardNo,
-    text(body.identityNo),
-    body.payrollIncluded === false ? 0 : 1,
-    text(body.cardSource) || "TNF",
-    text(body.personelKodu || body.code),
-    hrDateOnly(body.exitDate) || null,
-    text(body.activePassive || body.status) || "AKTIF",
-    text(body.workType) || "AYLIK",
-    body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1,
-    text(body.paymentType) || "BANKA_ELDEN",
-    text(body.note),
-    text(body.phone),
-    text(body.extraPaymentLabel) || "Ek Ödeme / Prim",
-    number(body.extraPaymentAmount),
-    body.garnishmentActive === true && number(body.garnishmentAmount) > 0 ? 1 : 0,
-    body.garnishmentActive === true ? number(body.garnishmentAmount) : 0,
-    text(body.garnishmentNote),
-    nowIso(),
+    employeeId, companyId, cardNo, text(body.identityNo), body.payrollIncluded === false ? 0 : 1,
+    text(body.cardSource) || "TNF", text(body.personelKodu || body.code), hrDateOnly(body.exitDate) || null,
+    text(body.activePassive || body.status) || "AKTIF", text(body.workType) || "AYLIK",
+    body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1, text(body.paymentType) || "BANKA_ELDEN",
+    text(body.note), text(body.phone), "EK", autoExtra, baseEmployeeId, legalType,
+    legalType !== "YOK" && legalAmount > 0 ? 1 : 0, legalAmount, legalSource,
+    text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
-  const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=?", [employeeId]);
-  if (current) await updateMonthlyEmployeeFromCard(c, employeeId, companyId, body, current);
-  return okData(c, { employeeId, saved: true });
+  await updateMonthlyEmployeeFromCard(c, employeeId, companyId, body, current);
+  return okData(c, { employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra, legalDeductionType: legalType, garnishmentSource: legalSource });
 }
-
 async function updateMonthlyEmployeeFromCard(c: Context<AppEnv>, employeeId: string, companyId: string, body: Row, current: Row) {
   const merged: Row = { ...current, ...body, code: body.personelKodu || body.code || current.code, bankPaymentType: body.paymentType || current.bank_payment_type, sgkStatus: body.sgkFollow === false ? "YOK" : "VAR", status: body.activePassive || body.status || current.status };
   const value = monthlyValues(merged, current);
@@ -1047,18 +1068,25 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const year = number(body.year) || new Date().getFullYear();
   const month = number(body.month) || new Date().getMonth() + 1;
   const override = body.override && typeof body.override === "object" && !Array.isArray(body.override) ? body.override as Row : {};
-  const employee = await first(c, `SELECT e.*, s.extra_payment_amount, s.garnishment_active, s.garnishment_amount FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=?`, [employeeId, companyId]);
+  const employee = await first(c, `SELECT e.*, s.extra_payment_amount, s.base_employee_id, s.legal_deduction_type, s.garnishment_active, s.garnishment_amount, s.garnishment_source, s.legal_start_period, s.legal_end_period FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=?`, [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const existing = await first(c, "SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=?", [companyId, year, month, employeeId]);
-  const salary = number(override.salaryPay ?? existing?.salary ?? employee.salary);
+  const baseEmployee = text(employee.base_employee_id) ? await first(c, "SELECT id,salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [text(employee.base_employee_id), companyId]) : null;
+  const baseSalary = baseEmployee ? number(baseEmployee.salary) : number(employee.salary);
+  const autoPremium = baseEmployee ? Math.max(number(employee.salary) - baseSalary, 0) : number(employee.extra_payment_amount);
+  const salary = number(override.salaryPay ?? existing?.salary ?? baseSalary);
   const road = number(override.roadPay ?? existing?.road_allowance ?? employee.road_allowance);
   const overtime = number(override.overtimeAmount ?? existing?.overtime_amount);
-  const premium = number(override.premiumAmount ?? existing?.premium_amount ?? employee.extra_payment_amount);
+  const premium = number(override.premiumAmount ?? existing?.premium_amount ?? autoPremium);
   const deduction = number(override.deductionAmount ?? existing?.deduction_amount);
   const advance = number(override.advanceAmount ?? existing?.advance_amount);
-  const garnishment = number(override.garnishmentAmount ?? existing?.garnishment_amount ?? employee.garnishment_amount);
+  const legalType = text(employee.legal_deduction_type) || (number(employee.garnishment_amount) > 0 ? "ICRA" : "YOK");
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const legalInPeriod = legalType !== "YOK" && (!text(employee.legal_start_period) || period >= text(employee.legal_start_period)) && (!text(employee.legal_end_period) || period <= text(employee.legal_end_period));
+  const defaultGarnishment = legalInPeriod ? number(employee.garnishment_amount) : 0;
+  const garnishment = number(override.garnishmentAmount ?? existing?.garnishment_amount ?? defaultGarnishment);
   const calculatedTotal = Math.max(salary + road + overtime + premium - deduction - advance - garnishment, 0);
-  const plannedBank = Math.max(number(employee.bank_amount) - garnishment, 0);
+  const plannedBank = upper(employee.garnishment_source) === "ELDEN" ? number(employee.bank_amount) : Math.max(number(employee.bank_amount) - garnishment, 0);
   const bank = override.bank !== undefined ? number(override.bank) : Math.min(calculatedTotal, plannedBank);
   const cash = override.cash !== undefined ? number(override.cash) : Math.max(calculatedTotal - bank, 0);
   const total = override.total !== undefined ? number(override.total) : calculatedTotal;
