@@ -1,2 +1,2 @@
-2026-08-08T21:22:00+03:00
-Finish and verify person-card extra payment plus garnishment payroll wiring.
+2026-08-08T21:29:00+03:00
+Run scoped-regex final IK person-card extra payment and garnishment wiring.
