@@ -1,2 +1,2 @@
-2026-08-08T22:15:00+03:00
-Restore relational IK Worker from agent/uretim-tek-merkez and apply pending safe migrations.
+2026-08-08T22:24:00+03:00
+Deploy finalized relational IK Worker, D1 migration and frontend Pages from agent/uretim-tek-merkez.
