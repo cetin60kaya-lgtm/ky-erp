@@ -1,2 +1,0 @@
-2026-08-08T21:31:00+03:00
-Verify live HKN-03/HKN-05 base person, EK and legal-deduction fields after final deploy.
