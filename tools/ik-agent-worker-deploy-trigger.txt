@@ -1,2 +1,2 @@
-2026-08-08T22:24:00+03:00
-Deploy finalized relational IK Worker, D1 migration and frontend Pages from agent/uretim-tek-merkez.
+2026-08-08T21:28:00+03:00
+Deploy final base-person EK, legal deduction source and 10-up payment slips from agent/uretim-tek-merkez.
