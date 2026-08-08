@@ -1,2 +1,2 @@
-2026-08-08T22:02:00+03:00
-Inspect IK D1 schemas, scopes and Cuma/Murat candidate records.
+2026-08-08T22:08:00+03:00
+Query exact HKN-03/HKN-05 employee, card, payroll and override records.
