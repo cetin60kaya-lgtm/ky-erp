@@ -1,0 +1,17 @@
+name: IK payroll person-card patch
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - tools/ik-payroll-person-card-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  registered:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "IK payroll patch workflow is registered on the default branch; production ref contains the patch job."
