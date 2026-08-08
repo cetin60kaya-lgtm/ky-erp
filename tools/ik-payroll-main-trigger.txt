@@ -1,2 +1,0 @@
-2026-08-08T21:39:00+03:00
-Execute deterministic IK payroll finalizer from control script.
