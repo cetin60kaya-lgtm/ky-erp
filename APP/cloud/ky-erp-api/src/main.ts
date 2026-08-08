@@ -15,6 +15,7 @@ import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
+import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
 import { registerProductionCenterRoutes } from "./production-center";
@@ -63,6 +64,8 @@ registerDesenOperationRoutes(app);
 
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
+// İK'nın gerçek D1 tablolarını kullanan rotaları genel /api/ik/* fallback'inden önce bağla.
+registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 
 const shell = new Hono<ShellEnv>();
