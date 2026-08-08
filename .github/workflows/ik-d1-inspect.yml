@@ -1,0 +1,49 @@
+name: IK D1 inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/ik-d1-inspect-trigger.txt
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/model-uretim-kontrol-merkezi-final
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve D1 account
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_id='b504b712-6927-499d-815d-0b954c8ee246'
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          accounts="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+          for account_id in $(jq -r '.result[]?.id' <<<"$accounts"); do
+            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?per_page=100")"
+            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
+              echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          exit 1
+      - name: Install Worker packages
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+      - name: Inspect Cuma and Murat D1 rows
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL="SELECT id, scope, main_company_slug, file_name, json_extract(data,'$.id') AS employee_id, json_extract(data,'$.fullName') AS full_name, json_extract(data,'$.code') AS code, json_extract(data,'$.salary') AS salary, json_extract(data,'$.roadAllowance') AS road, json_extract(data,'$.bankAmount') AS bank_amount, json_extract(data,'$.cashAmount') AS cash_amount, json_extract(data,'$.extraPaymentLabel') AS extra_label, json_extract(data,'$.extraPaymentAmount') AS extra_amount, json_extract(data,'$.garnishmentActive') AS garnishment_active, json_extract(data,'$.garnishmentAmount') AS garnishment_amount FROM json_store WHERE upper(data) LIKE '%CUMA%' OR upper(data) LIKE '%MURAT M%' ORDER BY scope, full_name;"
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json > /tmp/rows.json
+          jq -c '.[]?.results[]?' /tmp/rows.json
