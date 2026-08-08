@@ -1,0 +1,2 @@
+2026-08-08T22:01:00+03:00
+Fix Mesai/Kesinti quick-entry forms and repair blank payment-slip printing.
