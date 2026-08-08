@@ -1,0 +1,49 @@
+name: IK final schema inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/ik-final-schema-inspect-trigger.txt
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/uretim-tek-merkez
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve D1 account
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_id='b504b712-6927-499d-815d-0b954c8ee246'
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          accounts="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+          for account_id in $(jq -r '.result[]?.id' <<<"$accounts"); do
+            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?per_page=100")"
+            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"; exit 0; fi
+          done
+          exit 1
+      - name: Install Worker packages
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+      - name: Inspect IK schema and rows
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_sql(){ echo "===== $1 ====="; npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$2" --json | jq -c '.[]?.results[]?'; }
+          run_sql table "SELECT type,name,sql FROM sqlite_master WHERE tbl_name='ik_person_card_settings' ORDER BY type,name;"
+          run_sql columns "PRAGMA table_info('ik_person_card_settings');"
+          run_sql indexes "PRAGMA index_list('ik_person_card_settings');"
+          run_sql cards "SELECT employee_id,main_company_id,card_no,personel_kodu FROM ik_person_card_settings ORDER BY employee_id;"
+          run_sql migrations "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 5;"
