@@ -336,7 +336,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       date: row?.date || row?.adjustmentDate || dateKey(year, month, 1),
       hourOrDay: row?.hourOrDay || row?.quantity || "",
       amount: row?.amount || "",
-      paymentMethod: row?.paymentMethod || "Elden",
+      paymentMethod: row?.paymentMethod || (normalized === "Mesai" ? "Bordro" : "Elden"),
       payrollEffect: row?.payrollEffect || "Bordroya yansir",
       note: row?.note || row?.description || "",
     });
@@ -509,6 +509,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (modalDraft.adjustmentType !== "Toplu avans" && !modalDraft.employeeId) return "Personel secilmeden kayit yapilamaz.";
     if (modalDraft.adjustmentType === "Toplu avans" && !safeList(modalDraft.employeeIds).length) return "En az 1 personel secilmelidir.";
     if (!modalDraft.date) return "Tarih secilmeden kayit yapilamaz.";
+    if (modalDraft.adjustmentType === "Mesai" && num(modalDraft.hourOrDay) <= 0) return "Mesai saati 0 dan buyuk olmalidir.";
     if (num(modalDraft.amount) <= 0) return "Tutar bos veya negatif olamaz.";
     if (num(modalDraft.hourOrDay) < 0) return "Saat / gun negatif olamaz.";
     const duplicate = movements.some((item) => item.id !== modalDraft.id && item.employeeId === modalDraft.employeeId && (item.date || item.adjustmentDate) === modalDraft.date && num(item.amount) === num(modalDraft.amount) && item.type === modalDraft.adjustmentType);
@@ -1169,20 +1170,38 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function financeForm(type, bulk = false) {
-    return (
-      <div className="form">
-        {!bulk && <Field label="Personel" half><select value={modalDraft.employeeId || selected?.id || ""} onChange={(event) => setModalDraft((old) => ({ ...old, employeeId: event.target.value }))}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></Field>}
-        <Field label="Tarih"><input type="date" value={modalDraft.date || dateKey(year, month, 1)} onChange={(event) => setModalDraft((old) => ({ ...old, date: event.target.value }))} /></Field>
-        <Field label="Tip"><select value={type} onChange={(event) => setModalDraft((old) => ({ ...old, adjustmentType: event.target.value }))}>{FINANCE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></Field>
-        <Field label="Saat / Gun"><input type="number" value={modalDraft.hourOrDay || ""} onChange={(event) => setModalDraft((old) => ({ ...old, hourOrDay: event.target.value }))} /></Field>
-        <Field label="Tutar"><input type="number" value={modalDraft.amount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, amount: event.target.value, adjustmentType: type }))} /></Field>
-        <Field label="Odeme Sekli"><select value={modalDraft.paymentMethod || "Elden"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentMethod: event.target.value }))}><option>Elden</option><option>Banka</option></select></Field>
-        <Field label="Bordro Etkisi"><select value={modalDraft.payrollEffect || "Bordroya yansir"} onChange={(event) => setModalDraft((old) => ({ ...old, payrollEffect: event.target.value }))}><option>Bordroya yansir</option><option>Sadece kayit</option></select></Field>
-        <Field label="Aciklama" wide><textarea value={modalDraft.note || ""} onChange={(event) => setModalDraft((old) => ({ ...old, note: event.target.value }))} /></Field>
-        <div className="wide warnline warn">Kayit oncesi: personel, tarih, negatif tutar ve tekrar kayit kontrol edilir.</div>
-      </div>
-    );
-  }
+  const isMesai = type === "Mesai";
+  const isKesinti = type === "Ozel kesinti";
+  const financeEmployee = employees.find((employee) => employee.id === modalDraft.employeeId) || selected;
+  const financeBaseEmployee = financeEmployee?.baseEmployeeId ? employees.find((employee) => employee.id === financeEmployee.baseEmployeeId) : null;
+  const overtimeBaseSalary = num(financeBaseEmployee?.salary || financeEmployee?.salary);
+  const overtimeDivisor = num(financeEmployee?.overtimeHourlyBase || financeEmployee?.overtimeBaseHours) || 225;
+  const overtimeHourly = overtimeDivisor > 0 ? round(overtimeBaseSalary / overtimeDivisor) : 0;
+  const overtimeSuggested = round(overtimeHourly * num(modalDraft.hourOrDay));
+  const currentTotal = movements
+    .filter((item) => item.id !== modalDraft.id && item.employeeId === modalDraft.employeeId && item.type === type)
+    .reduce((sum, item) => sum + num(item.amount), 0);
+  const afterTotal = round(currentTotal + num(modalDraft.amount));
+  return (
+    <div className="form">
+      {!bulk && <Field label="Personel" half><select value={modalDraft.employeeId || selected?.id || ""} onChange={(event) => setModalDraft((old) => ({ ...old, employeeId: event.target.value }))}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></Field>}
+      <Field label="Tarih" half><input type="date" value={modalDraft.date || dateKey(year, month, 1)} onChange={(event) => setModalDraft((old) => ({ ...old, date: event.target.value }))} /></Field>
+      {isMesai ? <>
+        <Field label="Mesai Saati"><input type="number" min="0" step="0.5" value={modalDraft.hourOrDay || ""} onChange={(event) => setModalDraft((old) => ({ ...old, hourOrDay: event.target.value, adjustmentType: type }))} /></Field>
+        <Field label={`Saatlik Baz (${overtimeDivisor} saat)`}><input value={money(overtimeHourly)} readOnly /></Field>
+        <Field label="Mesai Tutarı" half><div style={{ display: "flex", gap: 6 }}><input type="number" min="0" value={modalDraft.amount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, amount: event.target.value, adjustmentType: type, payrollEffect: "Bordroya yansir", paymentMethod: "Bordro" }))} /><button type="button" className="btn" disabled={!num(modalDraft.hourOrDay)} onClick={() => setModalDraft((old) => ({ ...old, amount: overtimeSuggested, adjustmentType: type, payrollEffect: "Bordroya yansir", paymentMethod: "Bordro" }))}>Hesapla</button></div></Field>
+        <Field label="Bordro Etkisi" half><input value="Maaşa eklenir" readOnly /></Field>
+      </> : <>
+        <Field label={isKesinti ? "Kesinti Tutarı" : "Avans Tutarı"} half><input type="number" min="0" value={modalDraft.amount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, amount: event.target.value, adjustmentType: type }))} /></Field>
+        <Field label={isKesinti ? "Kesinti Yeri" : "Ödeme Şekli"} half><select value={modalDraft.paymentMethod || "Elden"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentMethod: event.target.value }))}><option>Elden</option><option>Banka</option></select></Field>
+        <Field label="Bordro Etkisi" half><select value={modalDraft.payrollEffect || "Bordroya yansir"} onChange={(event) => setModalDraft((old) => ({ ...old, payrollEffect: event.target.value }))}><option>Bordroya yansir</option><option>Sadece kayit</option></select></Field>
+      </>}
+      <Field label="Açıklama" wide><textarea value={modalDraft.note || ""} onChange={(event) => setModalDraft((old) => ({ ...old, note: event.target.value }))} placeholder={isMesai ? "Mesai nedeni / vardiya notu" : isKesinti ? "Kesinti nedeni" : "Avans açıklaması"} /></Field>
+      {!bulk && <div className={`wide warnline ${isKesinti ? "warn" : "ok"}`}>{isMesai ? `Bu ay mevcut mesai: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)} · Hesaplama: baz maaş / ${overtimeDivisor} × saat.` : isKesinti ? `Bu ay mevcut özel kesinti: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)}. İcra / haciz burada değil, Personel Kartı > Hukuki Kesinti alanından yönetilir.` : `Bu ay mevcut avans: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)}.`}</div>}
+      {bulk && <div className="wide warnline warn">Toplu avans kaydında seçili personellerin her biri için aynı tarih ve kişi başı tutar kaydedilir.</div>}
+    </div>
+  );
+}
 
 
   function dailyFields() {

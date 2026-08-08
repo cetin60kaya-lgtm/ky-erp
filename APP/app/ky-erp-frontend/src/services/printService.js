@@ -1,28 +1,46 @@
-export async function printHtmlDocument({ title = "KY ERP", html = "", css = "" }) {
+export async function printHtmlDocument(options = {}, legacyTitle = "KY ERP") {
+  let title = "KY ERP";
+  let html = "";
+  let css = "";
+
+  if (typeof options === "string") {
+    const source = options;
+    title = legacyTitle || "KY ERP";
+    const styles = Array.from(source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)).map((match) => match[1]);
+    css = styles.join("\n");
+    const bodyMatch = source.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    html = bodyMatch ? bodyMatch[1] : source;
+  } else {
+    title = options?.title || "KY ERP";
+    html = options?.html || "";
+    css = options?.css || "";
+  }
+
   const frame = document.createElement("iframe");
   frame.style.position = "fixed";
-  frame.style.right = "0";
-  frame.style.bottom = "0";
-  frame.style.width = "0";
-  frame.style.height = "0";
+  frame.style.left = "-10000px";
+  frame.style.top = "0";
+  frame.style.width = "210mm";
+  frame.style.height = "297mm";
   frame.style.border = "0";
+  frame.style.opacity = "0.001";
   frame.setAttribute("aria-hidden", "true");
   document.body.appendChild(frame);
 
-  const doc = frame.contentDocument;
-  if (!doc) {
-    frame.remove();
-    throw new Error("Yazdirma cercevesi olusturulamadi.");
-  }
-
-  doc.open();
-  doc.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${css}</style></head><body>${html}</body></html>`);
-  doc.close();
-
-  await new Promise((resolve) => {
+  const markup = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>html,body{background:#fff!important}${css}</style></head><body>${html}</body></html>`;
+  const loaded = new Promise((resolve) => {
     frame.onload = () => resolve();
-    window.setTimeout(resolve, 700);
+    window.setTimeout(resolve, 1000);
   });
+  frame.srcdoc = markup;
+  await loaded;
+
+  const doc = frame.contentDocument;
+  const win = frame.contentWindow;
+  if (!doc || !win) {
+    frame.remove();
+    throw new Error("Yazdirma penceresi olusturulamadi.");
+  }
 
   if (doc.fonts?.ready) await doc.fonts.ready;
   await Promise.all(Array.from(doc.images || []).map((img) => (
@@ -33,18 +51,13 @@ export async function printHtmlDocument({ title = "KY ERP", html = "", css = "" 
         img.onerror = () => resolve();
       })
   )));
+  await new Promise((resolve) => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
 
-  const win = frame.contentWindow;
-  if (!win) {
-    frame.remove();
-    throw new Error("Yazdirma penceresi acilamadi.");
-  }
-
-  const cleanup = () => window.setTimeout(() => frame.remove(), 300);
+  const cleanup = () => window.setTimeout(() => frame.remove(), 500);
   win.addEventListener("afterprint", cleanup, { once: true });
   win.focus();
   win.print();
-  window.setTimeout(cleanup, 4000);
+  window.setTimeout(cleanup, 10000);
 }
 
 function escapeHtml(value) {
