@@ -1,0 +1,2 @@
+2026-08-08T21:25:00+03:00
+Inspect live IK person-card schema after failed 0007 migration.
