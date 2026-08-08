@@ -1,0 +1,25 @@
+name: IK live inspect
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/ik-live-inspect-trigger.txt
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read live August IK data
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://api.kyerp.net/api/ik/advanced/month?mainCompanyId=mecit-hakan&year=2026&month=8'
+          curl --fail --silent --show-error "$url" -o /tmp/ik.json
+          echo '--- CUMA ---'
+          jq -c '.. | objects | select(((.fullName // .name // "") | ascii_upcase | contains("CUMA"))) | {id,employeeId,fullName,name,code,salary,roadAllowance,bankAmount,cashAmount,extraPaymentLabel,extraPaymentAmount,garnishmentActive,garnishmentAmount}' /tmp/ik.json | sort -u | head -20
+          echo '--- MURAT MINANZ ---'
+          jq -c '.. | objects | select(((.fullName // .name // "") | ascii_upcase | contains("MURAT M"))) | {id,employeeId,fullName,name,code,salary,roadAllowance,bankAmount,cashAmount,extraPaymentLabel,extraPaymentAmount,garnishmentActive,garnishmentAmount}' /tmp/ik.json | sort -u | head -20
+          echo '--- TOP LEVEL ---'
+          jq -c '{ok,success,keys:(.data|if type=="object" then keys else [] end)}' /tmp/ik.json
