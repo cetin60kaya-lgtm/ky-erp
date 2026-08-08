@@ -377,9 +377,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       fullName: row.employee.fullName,
       salary: row.salary,
       road: row.road,
+      extra: row.extra,
       overtime: row.overtime,
       advance: row.advance,
       deduction: row.deduction,
+      garnishment: row.garnishment,
       bank: row.bank,
       cash: row.cash,
       reason: "",
@@ -440,7 +442,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (num(modalDraft.extraPaymentAmount) < 0) return setNotice("Ek odeme negatif olamaz.");
     if (num(modalDraft.garnishmentAmount) < 0) return setNotice("Icra kesintisi negatif olamaz.");
     const planTotal = num(modalDraft.bankAmount) + num(modalDraft.cashAmount);
-    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) && !window.confirm("Banka plan + elden plan maas/yol toplamindan yuksek. Devam edilsin mi?")) return;
+    if (planTotal > num(modalDraft.salary) + num(modalDraft.roadAllowance) + num(modalDraft.extraPaymentAmount) && !window.confirm("Banka plan + elden plan ücret/yol/ek ödeme toplamından yüksek. Devam edilsin mi?")) return;
     setBusy(true);
     try {
       await saveIkAdvancedPersonCard(modalDraft.id, {
@@ -455,6 +457,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         roadAllowance: num(modalDraft.roadAllowance),
         bankAmount: num(modalDraft.bankAmount),
         cashAmount: num(modalDraft.cashAmount),
+        extraPaymentLabel: modalDraft.extraPaymentLabel || "Ek Ödeme / Prim",
+        extraPaymentAmount: num(modalDraft.extraPaymentAmount),
+        garnishmentActive: modalDraft.garnishmentActive === true && num(modalDraft.garnishmentAmount) > 0,
+        garnishmentAmount: modalDraft.garnishmentActive === true ? num(modalDraft.garnishmentAmount) : 0,
+        garnishmentNote: modalDraft.garnishmentNote || "",
         payrollIncluded: modalDraft.payrollIncluded !== false,
         hireDate: modalDraft.startDate,
         title: modalDraft.title,
@@ -602,9 +609,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const totals = calcRow({
       salary: modalDraft.salary,
       road: modalDraft.road,
+      extra: modalDraft.extra,
       overtime: modalDraft.overtime,
       advance: modalDraft.advance,
       deduction: modalDraft.deduction,
+      garnishment: modalDraft.garnishment,
       bank: modalDraft.bank,
       cash: modalDraft.cash,
     });
@@ -620,9 +629,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         override: {
           roadPay: num(modalDraft.road),
           overtimeAmount: num(modalDraft.overtime),
-          premiumAmount: 0,
+          premiumAmount: num(modalDraft.extra),
           advanceAmount: num(modalDraft.advance),
           deductionAmount: num(modalDraft.deduction),
+          garnishmentAmount: num(modalDraft.garnishment),
           bank: num(modalDraft.bank),
           cash: num(modalDraft.cash),
           total: totals.net,
@@ -756,9 +766,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       odeme: paymentLabel(row.employee),
       maas: row.salary,
       yol: row.road,
+      ekOdemeAdi: row.extraLabel,
+      ekOdeme: row.extra,
       mesai: row.overtime,
       avans: row.advance,
       kesinti: row.deduction,
+      icraKesintisi: row.garnishment,
       hakedis: row.hakedis,
       netOdenecek: row.net,
       banka: row.bank,
