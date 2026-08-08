@@ -7,8 +7,9 @@ const baseOrigin = parsedBaseUrl.origin;
 const isLocalTarget = ["127.0.0.1", "localhost"].includes(parsedBaseUrl.hostname);
 const maxAttempts = isLocalTarget ? 1 : 30;
 const retryDelayMs = 5_000;
-const smokeUsername = String(process.env.KYERP_SMOKE_USERNAME || "").trim();
-const smokePassword = String(process.env.KYERP_SMOKE_PASSWORD || "");
+const smokeUsername = String(process.env.SMOKE_USERNAME || "").trim();
+const smokePassword = String(process.env.SMOKE_PASSWORD || "");
+const hasSmokeCredentials = Boolean(smokeUsername && smokePassword);
 const expectedMenuLabels = [
   "Ana Ekran",
   "Numune Çalışmaları",
@@ -78,21 +79,27 @@ async function runAttempt(attempt) {
     const username = page.locator('input[name="username"], input[autocomplete="username"]');
     const password = page.locator('input[name="password"], input[type="password"]');
     const loginButton = page.getByRole("button", { name: /giriş yap/i });
+    const loginVisible = await loginButton.isVisible().catch(() => false);
 
-    if (await loginButton.isVisible().catch(() => false)) {
-      if (!smokeUsername || !smokePassword) {
-        runtimeWarnings.push("LOGIN_SKIPPED: güvenli smoke kimlik bilgileri ortam değişkenlerinde yok");
-      } else {
-        await username.fill(smokeUsername);
-        await password.fill(smokePassword);
-        await loginButton.click();
-        await page.waitForTimeout(2_000);
-      }
+    if (loginVisible && hasSmokeCredentials) {
+      await username.fill(smokeUsername);
+      await password.fill(smokePassword);
+      await loginButton.click();
+      await page.waitForTimeout(2_000);
     }
 
+    const loginStillVisible = await loginButton.isVisible().catch(() => false);
     const bodyText = await page.locator("body").innerText().catch(() => "");
-    const missingLabels = expectedMenuLabels.filter((label) => !bodyText.includes(label));
-    if (missingLabels.length) runtimeErrors.push(`MISSING_MENU_LABELS: ${missingLabels.join(", ")}`);
+
+    if (loginStillVisible) {
+      const hasLoginShell = /kurumsal giriş/i.test(bodyText) && /kullanıcı adı/i.test(bodyText) && /şifre/i.test(bodyText);
+      if (!hasLoginShell) runtimeErrors.push("LOGIN_SHELL_INCOMPLETE");
+      if (hasSmokeCredentials) runtimeErrors.push("SMOKE_LOGIN_FAILED");
+      else runtimeWarnings.push("AUTHENTICATED_MENU_SKIPPED: SMOKE_USERNAME/SMOKE_PASSWORD tanımlı değil; giriş kabuğu doğrulandı.");
+    } else {
+      const missingLabels = expectedMenuLabels.filter((label) => !bodyText.includes(label));
+      if (missingLabels.length) runtimeErrors.push(`MISSING_MENU_LABELS: ${missingLabels.join(", ")}`);
+    }
 
     const rootHtmlAfterLogin = await root.innerHTML().catch(() => "");
     if (!rootHtmlAfterLogin.trim()) runtimeErrors.push("ROOT_EMPTY_AFTER_LOGIN");
@@ -106,6 +113,7 @@ async function runAttempt(attempt) {
       targetUrl,
       title: await page.title(),
       finalUrl: page.url(),
+      authenticated: !loginStillVisible,
       bodyPreview: bodyText.slice(0, 1_500),
       runtimeErrors: [...new Set(runtimeErrors)],
       runtimeWarnings: [...new Set(runtimeWarnings)],
