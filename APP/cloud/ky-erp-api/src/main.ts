@@ -19,6 +19,7 @@ import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
+import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
@@ -71,7 +72,9 @@ registerDesenVisualSearchRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 
-// İşNet V2 gerçek bağlantı, firma rolü ve dört yönlü belge akışını legacy rotalardan önce karşılar.
+// İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
+// Şifre D1'e yazılmaz; geçici girişten API tokenı / firma seçilmiş portal oturumu alınır.
+registerIsnetLiveSyncRoutes(app);
 // Müşteri: gelen irsaliye -> model/üretim -> bizim giden irsaliye -> bizim fatura.
 // Tedarikçi: gelen irsaliye -> gelen fatura -> muhasebe/KDV/stok/cari.
 registerIsnetRuntimeV2Routes(app);
