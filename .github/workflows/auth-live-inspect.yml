@@ -1,0 +1,45 @@
+name: KY ERP Auth Live Inspect
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/auth-live-inspect.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inspect auth route and D1 schema
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_header='Content-Type: application/json'
+          echo '--- LOGIN PROBE ---'
+          curl -sS -D /tmp/h -o /tmp/b -X POST https://api.kyerp.net/api/auth/login -H "$auth_header" --data '{"username":"__probe__","password":"__probe__"}' || true
+          head -n 8 /tmp/h || true
+          cat /tmp/b || true
+          echo
+          echo '--- AUTH TABLES ---'
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'auth_%' ORDER BY name;"
+          echo '--- AUTH USERS COLUMNS ---'
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(auth_users);" || true
+          echo '--- AUTH USERS SAFE SUMMARY ---'
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT id, username, full_name, role, is_active, must_change_password, length(password_hash) AS hash_length, substr(password_hash,1,4) AS hash_prefix FROM auth_users ORDER BY username LIMIT 20;" || true
+          echo '--- PERMISSION TABLE COLUMNS ---'
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(auth_user_module_permissions);" || true
+          echo '--- PERMISSION COUNT ---'
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT count(*) AS permission_count FROM auth_user_module_permissions;" || true
