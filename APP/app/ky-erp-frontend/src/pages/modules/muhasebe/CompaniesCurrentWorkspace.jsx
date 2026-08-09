@@ -9,6 +9,7 @@ import {
 import { apiGet, apiPost } from "../../../utils/api";
 import "./companiesCurrentWorkspace.css";
 
+const ACCOUNTING_RESET_MARKER = "[[ACC_RESET_2026_08]]";
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
 const listOf = (payload) => {
   const value = unwrap(payload);
@@ -35,7 +36,7 @@ const normalize = (value) => String(value || "").trim().toLocaleUpperCase("tr-TR
 function roleLabel(row) {
   const value = normalize(`${row.type || ""} ${row.companyType || ""}`);
   if (/BOTH|CUSTOMER.*SUPPLIER|SUPPLIER.*CUSTOMER|HER IKISI/.test(value)) return "Müşteri ve tedarikçi";
-  if (/SUPPLIER|TEDARIK/.test(value)) return "Tedarikçi";
+  if (/SUPPLIER|TEDARIK|SATICI|VENDOR/.test(value)) return "Tedarikçi";
   return "Müşteri";
 }
 
@@ -109,6 +110,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const visibleFirms = useMemo(
     () =>
       firms.filter((firm) => {
+        if (String(firm.note || "").includes(ACCOUNTING_RESET_MARKER)) return false;
         const firmRole = roleLabel(firm);
         const balance = Number(firm.currentBalance || 0);
         if (role === "CUSTOMER" && !/Müşteri/.test(firmRole)) return false;
@@ -238,7 +240,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             </table>
           </div>
         ) : (
-          <div className="ccw-empty"><strong>Firma bulunamadı.</strong><span>Arama ve filtre seçimlerini kontrol edin.</span></div>
+          <div className="ccw-empty">
+            <strong>Ağustos 2026 temiz başlangıç hazır.</strong>
+            <span>Yeni firma, fatura, irsaliye veya cari hareket girdikçe ilgili firma burada yeniden görünecek.</span>
+          </div>
         )}
       </section>
 
