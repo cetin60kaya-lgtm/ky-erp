@@ -1,0 +1,51 @@
+name: KY ERP Desen Bridge Live Verify
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/desen-bridge-live-verify.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify live design bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          status_code="$(curl -sS -o /tmp/status.json -w '%{http_code}' 'https://api.kyerp.net/api/desen/bridge/status?mainCompanySlug=mecit-hakan')"
+          echo "BRIDGE_STATUS_HTTP=$status_code"
+          cat /tmp/status.json | jq '{ok, online: .data.online, deviceCount: .data.deviceCount}'
+          test "$status_code" = "200"
+          jq -e '.ok == true' /tmp/status.json >/dev/null
+
+          hb_code="$(curl -sS -o /tmp/hb.json -w '%{http_code}' -X POST 'https://api.kyerp.net/api/desen/bridge/heartbeat' -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","deviceName":"unauthorized-probe"}')"
+          echo "UNAUTHORIZED_HEARTBEAT_HTTP=$hb_code"
+          cat /tmp/hb.json
+          echo
+          test "$hb_code" = "401"
+
+          ingest_code="$(curl -sS -o /tmp/ingest.json -w '%{http_code}' -X POST 'https://api.kyerp.net/api/desen/bridge/ingest' -F 'mainCompanySlug=mecit-hakan' -F 'modelName=unauthorized-probe')"
+          echo "UNAUTHORIZED_INGEST_HTTP=$ingest_code"
+          cat /tmp/ingest.json
+          echo
+          test "$ingest_code" = "401"
+
+          storage_code="$(curl -sS -o /tmp/storage.json -w '%{http_code}' 'https://api.kyerp.net/api/desen/folder-settings?mainCompanySlug=mecit-hakan')"
+          echo "R2_STORAGE_HTTP=$storage_code"
+          cat /tmp/storage.json | jq '{ok, connected: .data.connected, storageMode: .data.storageMode, pending: .data.pendingFileCount}'
+          test "$storage_code" = "200"
+          jq -e '.data.connected == true and .data.storageMode == "R2"' /tmp/storage.json >/dev/null
+
+          site_code="$(curl -L -sS -o /tmp/site.html -w '%{http_code}' 'https://app.kyerp.net/desen/gelen-desenler')"
+          echo "SITE_HTTP=$site_code"
+          test "$site_code" = "200"
+          grep -q '<title>KY ERP</title>' /tmp/site.html
