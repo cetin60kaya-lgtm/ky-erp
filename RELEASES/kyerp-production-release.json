@@ -2,18 +2,22 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T19:12:00+03:00",
-  "attempt": 32,
+  "requestedAt": "2026-08-09T19:30:00+03:00",
+  "attempt": 33,
   "scope": [
-    "company-accounting-profile",
-    "supplier-debt-only",
-    "cash-purchase-no-cari",
-    "official-vat-profile",
-    "expense-category",
-    "company-alias-auto-match",
-    "firm-profile-ui",
-    "reactivate-firm-on-new-document-match"
+    "isnet-settings-404-fix",
+    "isnet-secure-live-connection",
+    "isnet-portal-pdf-xml-sync",
+    "customer-incoming-dispatch-flow",
+    "supplier-dispatch-invoice-flow",
+    "our-outgoing-dispatch-flow",
+    "our-outgoing-invoice-flow",
+    "isnet-model-production-bridge",
+    "isnet-official-invoice-draft-and-submit",
+    "accounting-customer-supplier-document-chains",
+    "outgoing-vat-and-customer-receivable",
+    "august-2026-clean-start-floor"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Firma kartı muhasebe davranışını kesinleştir. Yalnız cari takipli tedarikçinin onaylı tedarikçi faturası firma borcu oluştursun. BİM, Metro ve benzeri peşin alış firmalarında cari borç oluşmasın; belge gider takibine ve resmîyse KDV takibine girsin. Firma kartında Müşteri/Tedarikçi/Her İkisi, peşin-vadeli, tedarikçi borç takibi, müşteri alacak takibi, KDV takibi, varsayılan kayıt türü, gider kategorisi ve aliaslar yönetilsin. Firma adı ilk alias olsun; VKN veya alias ile İşNet belgeleri otomatik eşleşsin. Ağustos temiz başlangıçta gizlenen eski firma yeni belgeye eşleşince tekrar Muhasebe listesinde görünsün. Desen, İmalat, Boyahane ve İK verilerine dokunma. Tek production run kullan ve yayın öncesi tam D1 yedeği al."
+  "note": "İşNet ayarlarındaki 404 hatasını kaldır ve kullanıcı/TCKN + şifreyle gerçek İşNet API/portal bağlantısını doğrula; ham şifreyi D1'e kaydetme. Belge akışını kesin ayır: müşteriden gelen irsaliye -> model/üretim -> bizim giden irsaliyemiz -> bizim kesilen faturamız; tedarikçiden gelen irsaliye -> tedarikçiden gelen fatura -> gider/KDV/stok-lot/cari. Tedarikçi irsaliyeleri modele/imalata girmesin. PDF/XML belgeleri R2 arşivine tekilleştirerek indir. Model eşlemesini İmalat üretim merkezine bağla. Fatura taslağını İşNet SaveInvoice ile oluştur, resmî gönderimi yalnız kullanıcının FATURAYI GÖNDER son onayından sonra SendStagingInvoice ile yap. Bizim gönderilmiş faturamız senkronizasyonda geri okununca Giden KDV ve müşteri alacağını tekilleştirerek muhasebeye işle. Muhasebe ve İşNet veri okumalarında Ağustos 2026 temiz başlangıç alt sınırını koru. İK, Desen, Boyahane ve mevcut İmalat verilerini bozma. Tek production run kullan ve yayın öncesi tam D1 yedeği al."
 }
