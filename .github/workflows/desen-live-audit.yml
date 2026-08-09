@@ -1,0 +1,47 @@
+name: KY ERP Desen Live Audit
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/desen-live-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit live Desen endpoints and images
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://api.kyerp.net'
+          MODELS="$BASE/api/desen/workflow/models?mainCompanySlug=mecit-hakan&limit=5"
+          REPORTS="$BASE/api/desen/workflow/reports?mainCompanySlug=mecit-hakan"
+          curl -fsS "$MODELS" -o /tmp/models.json
+          echo '=== MODEL SUMMARY ==='
+          jq '{ok, total:.data.total, rows:(.data.rows|length)}' /tmp/models.json
+          echo '=== FIRST MODELS ==='
+          jq -c '.data.rows[] | {id,modelName,createdAt,updatedAt,mainImage}' /tmp/models.json
+          echo '=== IMAGE PROBES ==='
+          jq -r '.data.rows[] | [.modelName, (.mainImage.thumbnailUrl // .mainImage.previewUrl // "")] | @tsv' /tmp/models.json | while IFS=$'\t' read -r name url; do
+            if [ -z "$url" ]; then echo "$name|NO_URL"; continue; fi
+            case "$url" in
+              http*) full="$url" ;;
+              /*) full="$BASE$url" ;;
+              *) full="$BASE/$url" ;;
+            esac
+            code=$(curl -sS -o /tmp/img.bin -w '%{http_code}' "$full")
+            ctype=$(curl -sSI "$full" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print $2; exit}')
+            bytes=$(wc -c </tmp/img.bin | tr -d ' ')
+            echo "$name|$code|$ctype|$bytes|$full"
+          done
+          echo '=== REPORT SUMMARY ==='
+          curl -fsS "$REPORTS" | jq '{ok, summary:.data.summary, rows:(.data.rows|length)}'
+          echo '=== BRIDGE ==='
+          curl -fsS "$BASE/api/desen/bridge/status?mainCompanySlug=mecit-hakan" | jq '{ok, data}'
