@@ -9,7 +9,7 @@ const PORTAL_SCOPE = "ISNET_PORTAL_DOCUMENT";
 const STATE_SCOPE = "ISNET_DOCUMENT_STATE";
 const SYNC_SCOPE = "ISNET_SYNC_RUN";
 const API_BASE = "https://einvoiceapi.isnet.net.tr";
-const PORTAL_BASE = "https://nettefatura.isnet.net.tr";
+const PORTAL_BASE = "https://efatura.isnet.net.tr";
 
 const text = (value: unknown) => value == null ? "" : String(value).trim();
 const numberValue = (value: unknown) => {
@@ -65,22 +65,38 @@ async function loginApi(username: string, password: string) {
 function verificationToken(html: string) { return text(html.match(/name=["']__RequestVerificationToken["'][^>]*value=["']([^"']+)["']/i)?.[1] || html.match(/value=["']([^"']+)["'][^>]*name=["']__RequestVerificationToken["']/i)?.[1]); }
 function mergeCookies(response: Response, jar: Map<string,string>) { const h = response.headers as Headers & {getSetCookie?:()=>string[]}; const values = h.getSetCookie?.() || (h.get("set-cookie") ? [h.get("set-cookie") as string] : []); for (const value of values) { const pair = text(value.split(";",1)[0]); const pos = pair.indexOf("="); if (pos>0) jar.set(pair.slice(0,pos),pair.slice(pos+1)); } }
 function cookieHeader(jar: Map<string,string>) { return [...jar.entries()].map(([k,v])=>`${k}=${v}`).join("; "); }
+function portalErrorText(html:string){const plain=String(html||"").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;/gi," ").replace(/&amp;/gi,"&").replace(/\s+/g," ").trim();const lower=plain.toLocaleLowerCase("tr-TR");const marker=["kullanıcı adı veya şifre","hatalı giriş","captcha","güvenlik kodu","doğrulama"].find((item)=>lower.includes(item));if(!marker)return "";const index=lower.indexOf(marker);return text(plain.slice(Math.max(0,index-60),index+220));}
 
 async function portalLogin(username: string, password: string, companyId = "", companyName = "") {
   const jar = new Map<string,string>();
-  const request = async (path: string, init: RequestInit = {}) => { const response = await fetch(`${PORTAL_BASE}${path}`, { ...init, headers: { "User-Agent":"KY-ERP-IsNet-Cloud/4.1", ...(init.headers||{}), ...(jar.size ? { Cookie: cookieHeader(jar)} : {}) }, redirect:"manual", signal: AbortSignal.timeout(30_000) }); mergeCookies(response, jar); return response; };
-  let response = await request("/Account/Login"); let html = await response.text(); let token = verificationToken(html);
-  if (!response.ok || !token) throw new Error("Portal giriş sayfasına ulaşılamadı.");
-  response = await request("/Account/Login", { method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded",Origin:PORTAL_BASE,Referer:`${PORTAL_BASE}/Account/Login`}, body:new URLSearchParams({VknTckn:username,Password:password,RememberMe:"false",__RequestVerificationToken:token}).toString() });
-  html = await response.text();
-  const companyResponse = await request("/Account/GetCompanyList", { method:"POST", headers:{Accept:"application/json, text/javascript, */*; q=0.01","Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",Origin:PORTAL_BASE,Referer:`${PORTAL_BASE}/Account/Login`,"X-Requested-With":"XMLHttpRequest"}, body:new URLSearchParams({q:""}).toString() });
-  const companyRaw = await companyResponse.text(); let companyPayload:any={}; try{companyPayload=companyRaw?JSON.parse(companyRaw):{}}catch{companyPayload={}}; const companies=normalizeCompanies(companyPayload);
-  if (!companies.length) throw new Error(/captcha|güvenlik kodu|hatalı giriş/i.test(html) ? "Portal kullanıcı adı/TCKN veya şifreyi kabul etmedi." : "Portal yetkili firma listesi alınamadı.");
+  const request = async (path: string, init: RequestInit = {}) => {
+    const target = path.startsWith("http") ? path : `${PORTAL_BASE}${path}`;
+    const response = await fetch(target, { ...init, headers: { Accept:"text/html,application/xhtml+xml,application/json", "User-Agent":"Mozilla/5.0 KY-ERP-IsNet-Cloud/5.0", ...(init.headers||{}), ...(jar.size ? { Cookie: cookieHeader(jar)} : {}) }, redirect:"manual", signal: AbortSignal.timeout(30_000) });
+    mergeCookies(response, jar);
+    return response;
+  };
+  const loginPaths=["/account/Login","/Account/Login","/account/login/Login","/account/login"];
+  let loginPath="";let loginHtml="";let token="";
+  for(const candidate of loginPaths){try{const response=await request(candidate);const html=await response.text();const candidateToken=verificationToken(html);if(response.ok&&candidateToken){loginPath=candidate;loginHtml=html;token=candidateToken;break;}}catch{/* next current/legacy path */}}
+  if(!loginPath||!token)throw new Error("Portal giriş sayfasına veya doğrulama anahtarına ulaşılamadı.");
+  const inputNames=[...loginHtml.matchAll(/<input[^>]*name=["']([^"']+)["']/gi)].map((match)=>text(match[1])).filter(Boolean);
+  const usernameField=inputNames.find((name)=>/(identificationnumber|vkntckn|tckn|username|user_name)/i.test(name))||"VknTckn";
+  const passwordField=inputNames.find((name)=>/(password|sifre|şifre)/i.test(name))||"Password";
+  const loginBody=new URLSearchParams();loginBody.set(usernameField,username);loginBody.set(passwordField,password);loginBody.set("RememberMe","false");loginBody.set("__RequestVerificationToken",token);
+  const loginResponse=await request(loginPath,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded",Origin:PORTAL_BASE,Referer:`${PORTAL_BASE}${loginPath}`},body:loginBody.toString()});
+  const loginResult=await loginResponse.text();
+  const companyPaths=["/account/GetCompanyList","/Account/GetCompanyList","/account/login/GetCompanyList"];
+  let companies:Row[]=[];let companyRaw="";
+  for(const candidate of companyPaths){try{const companyResponse=await request(candidate,{method:"POST",headers:{Accept:"application/json, text/javascript, */*; q=0.01","Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",Origin:PORTAL_BASE,Referer:`${PORTAL_BASE}${loginPath}`,"X-Requested-With":"XMLHttpRequest"},body:new URLSearchParams({q:""}).toString()});const raw=await companyResponse.text();companyRaw+=` ${raw}`;let payload:any={};try{payload=raw?JSON.parse(raw):{}}catch{payload={}};const rows=normalizeCompanies(payload);if(rows.length){companies=rows;break;}}catch{/* next compatible path */}}
+  if(!companies.length){const portalMessage=portalErrorText(`${loginResult} ${companyRaw}`);if(portalMessage)throw new Error(portalMessage);throw new Error("Portal yetkili firma listesi alınamadı.");}
   if (!companyId) return { companies, cookie: cookieHeader(jar), companySelected:false };
   const selected = companies.find((row:Row)=>text(row.id)===companyId); if (!selected) throw new Error("Seçilen firma İşNet yetki listesinde bulunamadı.");
-  response = await request("/Account/Login"); html = await response.text(); token = verificationToken(html); if (!token) throw new Error("Portal firma seçimi başlatılamadı.");
-  response = await request("/Account/Login", { method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded",Origin:PORTAL_BASE,Referer:`${PORTAL_BASE}/Account/Login`}, body:new URLSearchParams({VknTckn:username,Password:password,"validation[Companylist]":companyName || selected.name,CompanyId:companyId,RememberMe:"false",__RequestVerificationToken:token}).toString() });
-  const location = text(response.headers.get("location")); if (response.status!==302 || location!=="/") throw new Error("İşNet firmasıyla portal oturumu açılamadı.");
+  let selectionHtml=loginResult;let selectionToken=verificationToken(selectionHtml);
+  if(!selectionToken){const selectionPage=await request(loginPath);selectionHtml=await selectionPage.text();selectionToken=verificationToken(selectionHtml);}
+  if (!selectionToken) throw new Error("Portal firma seçimi başlatılamadı.");
+  const selectionBody=new URLSearchParams();selectionBody.set(usernameField,username);selectionBody.set(passwordField,password);selectionBody.set("validation[Companylist]",companyName||text(selected.name));selectionBody.set("CompanyId",companyId);selectionBody.set("RememberMe","false");selectionBody.set("__RequestVerificationToken",selectionToken);
+  const selectionResponse=await request(loginPath,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded",Origin:PORTAL_BASE,Referer:`${PORTAL_BASE}${loginPath}`},body:selectionBody.toString()});
+  const location=text(selectionResponse.headers.get("location"));const accepted=selectionResponse.status>=300&&selectionResponse.status<400&&location&&!location.toLocaleLowerCase("tr-TR").includes("login");if(!accepted)throw new Error("İşNet firmasıyla portal oturumu açılamadı.");
   return { companies, cookie: cookieHeader(jar), companySelected:true };
 }
 
@@ -95,7 +111,7 @@ const SOURCES = [
 function portalDate(value:string){const [y,m,d]=value.split("-");return `${d}.${m}.${y}`;}
 function normalizePortal(source:any,row:Row){const incoming=source.direction==="incoming";const invoice=source.kind==="invoice";const sourceId=text(invoice?(incoming?row.IdFaturaGelen:row.IdFatura):(incoming?row.IdIrsaliyeGelen:row.IdIrsaliye));return {id:`${source.direction}-${source.kind}-${sourceId}`,sourceId,kind:source.kind,direction:source.direction,documentNo:text(invoice?row.FaturaNo:row.IrsaliyeNo),dateText:text(invoice?row.FaturaTarihiFormated:row.IrsaliyeTarihiFormated),transferDateText:text(incoming?row.GelisTarihiFormated:row.GonderilmeTarihiFormated),partnerName:text(incoming?(row.FirmaAdi||row.AliciAdi):row.AliciAdi),partnerTaxNo:text(row.VknTckn||row.VNKTCKN||row.VKN||row.TCKN),scenarioText:text(row.SenaryoAdi),subtypeText:text(invoice?row.FaturaTipiAdi:row.IrsaliyeTipiAdi),statusText:text(row.DurumAdi||row.GonderimDurumAdi),amount:invoice?numberValue(row.OdenecekTutar):0,amountText:invoice?text(row.OdenecekTutarFormatted):"",currency:invoice?text(row.DovizKodu):"",uuid:invoice?text(row.Ettn||row.ETTN||row.UUID):"",raw:row};}
 
-async function portalRequest(cookie:string,path:string,init:RequestInit={}){return fetch(`${PORTAL_BASE}${path}`,{...init,headers:{"User-Agent":"KY-ERP-IsNet-Cloud/4.1",...(init.headers||{}),Cookie:cookie},redirect:"manual",signal:AbortSignal.timeout(30_000)});}
+async function portalRequest(cookie:string,path:string,init:RequestInit={}){return fetch(`${PORTAL_BASE}${path}`,{...init,headers:{"User-Agent":"Mozilla/5.0 KY-ERP-IsNet-Cloud/5.0",...(init.headers||{}),Cookie:cookie},redirect:"manual",signal:AbortSignal.timeout(30_000)});}
 async function fetchSource(cookie:string,source:any,companyId:string,startDate:string,endDate:string){const pagePath=source.page(startDate);const pageResponse=await portalRequest(cookie,pagePath);const pageHtml=await pageResponse.text();const token=verificationToken(pageHtml);if(!pageResponse.ok||!token)throw new Error(`${source.direction} ${source.kind} ekranı açılamadı; portal oturumunu yeniden test edin.`);const rows:Row[]=[];const length=300;let total=length;for(let start=0;start<total&&start<1500;start+=length){const form:Record<string,string>={draw:"1",start:String(start),length:String(length),"search[value]":"","search[regex]":"false",CompanyIdFilter:companyId,__RequestVerificationToken:token,IlkTarih:portalDate(startDate),SonTarih:portalDate(endDate)};if(source.kind==="invoice"){form.FaturaIlkTarihi=portalDate(startDate);form.FaturaSonTarihi=portalDate(endDate);}else{form.IrsaliyeIlkTarihi=portalDate(startDate);form.IrsaliyeSonTarihi=portalDate(endDate);}const response=await portalRequest(cookie,source.endpoint,{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",Referer:`${PORTAL_BASE}${pagePath}`,"X-Requested-With":"XMLHttpRequest"},body:new URLSearchParams(form).toString()});const payload:any=await response.json().catch(()=>null);if(!response.ok||!Array.isArray(payload?.data))throw new Error(`${source.direction} ${source.kind} listesi alınamadı.`);rows.push(...payload.data);total=Math.min(numberValue(payload.recordsFiltered||payload.recordsTotal),5000);if(payload.data.length<length)break;}return rows.map((row)=>normalizePortal(source,row)).filter((row)=>row.sourceId&&row.documentNo);}
 
 function xmlDecode(value:string){return value.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&apos;/g,"'").trim();}
