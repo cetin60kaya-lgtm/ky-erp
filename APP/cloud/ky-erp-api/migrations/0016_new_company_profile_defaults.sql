@@ -97,3 +97,18 @@ BEGIN
   )
   ON CONFLICT(main_company_slug, normalized_name) DO NOTHING;
 END;
+
+-- Alias/VKN eşleştirmesi belgeyi sonradan firmaya bağlarsa, temiz başlangıçta gizlenen firma tekrar Muhasebe'de görünür.
+DROP TRIGGER IF EXISTS trg_accounting_reactivate_company_from_document_match;
+CREATE TRIGGER trg_accounting_reactivate_company_from_document_match
+AFTER UPDATE OF company_id ON documents
+WHEN NEW.main_company_slug = 'mecit-hakan'
+ AND COALESCE(NEW.company_id, '') <> ''
+BEGIN
+  UPDATE companies
+     SET note = NULLIF(TRIM(REPLACE(COALESCE(note, ''), '[[ACC_RESET_2026_08]]', '')), ''),
+         opening_balance = 0,
+         updated_at = CURRENT_TIMESTAMP
+   WHERE id = NEW.company_id
+     AND main_company_slug = NEW.main_company_slug;
+END;
