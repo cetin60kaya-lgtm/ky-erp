@@ -15,6 +15,7 @@ import { registerDesenBridgeRoutes } from "./desen-bridge";
 import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
+import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
@@ -58,6 +59,7 @@ registerBoyahaneJobIntegrityRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
 registerDesenBridgeRoutes(app);
+registerDesenVisualSearchRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 

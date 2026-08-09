@@ -51,7 +51,7 @@ export default function DesenModeller({ activeMainCompany }) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [page, setPage] = useState(0);
-  const [filters, setFilters] = useState({ q: "", companyId: "", status: "", printAreaCode: "", placementStatus: "", dateField: "createdAt", dateFrom: "", dateTo: "", sort: "created_desc" });
+  const [filters, setFilters] = useState({ q: new URLSearchParams(window.location.search).get("q") || "", companyId: "", status: "", printAreaCode: "", placementStatus: "", dateField: "createdAt", dateFrom: "", dateTo: "", sort: "created_desc" });
 
   const load = useCallback(async () => {
     if (!activeMainCompany?.slug) return;

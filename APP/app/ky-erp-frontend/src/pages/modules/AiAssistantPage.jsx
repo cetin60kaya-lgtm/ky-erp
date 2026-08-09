@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bot, Check, CircleStop, Clipboard, Cloud, CloudOff, Code2, History, LoaderCircle,
-  MessageSquarePlus, RefreshCw, Send, ShieldCheck, Sparkles, Trash2, Wrench, X,
+  Bot, Check, CircleStop, Clipboard, Cloud, CloudOff, Code2, History, ImagePlus, LoaderCircle,
+  MessageSquarePlus, RefreshCw, SearchCheck, Send, ShieldCheck, Sparkles, Trash2, Wrench, X,
 } from "lucide-react";
 import {
   cancelAiAction, confirmAiAction, deleteAiConversation, getAiConversation,
-  getAiConversations, getAiStatus, sendAiMessage,
+  findDesignByImage, getAiConversations, getAiStatus, sendAiMessage,
 } from "../../services/aiApi";
+import { apiUrl } from "../../utils/api";
 import "./AiAssistantPage.css";
 
 const QUICK_QUESTIONS = [
@@ -78,6 +79,42 @@ function MessageText({ content }) {
   })}</>;
 }
 
+function VisualSearchResults({ data }) {
+  const matches = data?.matches || [];
+  const best = data?.bestMatch || matches[0];
+  if (!matches.length) return <section className="ai-visual-results empty"><SearchCheck size={20} /><strong>Eşleşen desen bulunamadı.</strong><span>Görseli daha yakın veya daha net çekip tekrar deneyin.</span></section>;
+  const confident = Number(best?.percent || 0) >= 72;
+  return (
+    <section className="ai-visual-results">
+      <div className="ai-visual-result-head">
+        <SearchCheck size={20} />
+        <div>
+          <strong>{confident ? `Bu model büyük olasılıkla ${best.modelName}` : `En yakın model ${best.modelName}`}</strong>
+          <span>%{best.percent} eşleşme · {best.confidence} güven · {data.totalModels || matches.length} model tarandı</span>
+        </div>
+      </div>
+      <div className="ai-visual-grid">
+        {matches.slice(0, 6).map((match, index) => (
+          <article key={match.id} className={index === 0 ? "best" : ""}>
+            <div className="ai-visual-thumb">
+              {match.thumbnailUrl ? <img src={apiUrl(match.thumbnailUrl)} alt={match.modelName} /> : <ImagePlus size={28} />}
+              <b>%{match.percent}</b>
+            </div>
+            <div className="ai-visual-card-copy">
+              <strong>{match.modelName}</strong>
+              <span>{match.companyName || "Firma bekliyor"}</span>
+              {(match.matchedPantones || []).length > 0 && <small>Pantone: {match.matchedPantones.join(", ")}</small>}
+              {(match.characters || []).length > 0 && <small>{match.characters.slice(0, 3).join(" · ")}</small>}
+              <a href={`/desen/desen-modeller?q=${encodeURIComponent(match.modelName)}`}>Desen Havuzunda Aç</a>
+            </div>
+          </article>
+        ))}
+      </div>
+      {data.query?.description && <details className="ai-visual-query"><summary>Fotoğrafta ne algılandı?</summary><p>{data.query.description}</p></details>}
+    </section>
+  );
+}
+
 function Message({ message, onConfirm, onCancel, actionBusy }) {
   const assistant = message.role === "assistant";
   return (
@@ -85,6 +122,7 @@ function Message({ message, onConfirm, onCancel, actionBusy }) {
       <div className="ai-message-avatar">{assistant ? <Bot size={17} /> : "Siz"}</div>
       <div className="ai-message-body">
         <div className="ai-message-copy"><MessageText content={message.content} /></div>
+        {message.visualSearch && <VisualSearchResults data={message.visualSearch} />}
         {message.sourceCount > 0 && <small>{message.sourceCount} kaynak kayıt incelendi</small>}
         {(message.actions || []).map((action) => <ActionCard key={action.id} action={action} onConfirm={onConfirm} onCancel={onCancel} busy={actionBusy === action.id} />)}
         {assistant && (
@@ -106,7 +144,9 @@ export default function AiAssistantPage({ activeMainCompany, moduleActionContext
   const [error, setError] = useState("");
   const [actionBusy, setActionBusy] = useState("");
   const [assistantMode, setAssistantMode] = useState("erp");
+  const [imageSearching, setImageSearching] = useState(false);
   const abortRef = useRef(null);
+  const imageInputRef = useRef(null);
   const messagesRef = useRef(null);
   const companySlug = activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || "";
 
@@ -169,6 +209,29 @@ export default function AiAssistantPage({ activeMainCompany, moduleActionContext
     if (!window.confirm("Bu konuşma geçmişi silinsin mi? ERP kayıtları etkilenmez.")) return;
     try { await deleteAiConversation(id); if (id === conversationId) newConversation(); await refreshSidebar(); }
     catch (requestError) { setError(requestError?.message || "Konuşma silinemedi."); }
+  }
+
+  async function findModelFromImage(file) {
+    if (!file || imageSearching || loading || !companySlug) return;
+    if (!String(file.type || "").startsWith("image/")) {
+      setError("Model araması için bir fotoğraf veya görsel seçin.");
+      return;
+    }
+    setImageSearching(true); setError("");
+    setMessages((current) => [...current, { id: newLocalId(), role: "user", content: `📷 Görselle model ara: ${file.name || "kamera görüntüsü"}` }]);
+    try {
+      const result = await findDesignByImage(activeMainCompany, file);
+      const best = result?.bestMatch || result?.matches?.[0];
+      const answer = best
+        ? `${Number(best.percent || 0) >= 72 ? "Bu model büyük olasılıkla" : "En yakın eşleşme"} **${best.modelName}** (%${best.percent}). İlk ${Math.min(6, result?.matches?.length || 0)} aday aşağıda.`
+        : "Fotoğraf analiz edildi ancak güvenilir bir model eşleşmesi bulunamadı.";
+      setMessages((current) => [...current, { id: newLocalId(), role: "assistant", content: answer, visualSearch: result }]);
+    } catch (requestError) {
+      setError(requestError?.message || "Görselle model araması tamamlanamadı.");
+    } finally {
+      setImageSearching(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
   }
 
   async function sendMessage(textOverride) {
@@ -244,13 +307,18 @@ export default function AiAssistantPage({ activeMainCompany, moduleActionContext
           )}
           {messages.map((message) => <Message key={message.id} message={message} onConfirm={confirmAction} onCancel={cancelAction} actionBusy={actionBusy} />)}
           {loading && <div className="ai-thinking"><LoaderCircle className="spin" size={18} /><div><strong>{developmentMode ? "Uygulama kodu inceleniyor" : "KY ERP verileri inceleniyor"}</strong><span>Yetkili araçlar çalıştırılıyor…</span></div></div>}
+          {imageSearching && <div className="ai-thinking ai-visual-thinking"><LoaderCircle className="spin" size={18} /><div><strong>Fotoğraf Desen Havuzuyla karşılaştırılıyor</strong><span>OCR, Pantone, figür ve AI benzerlik puanı hesaplanıyor…</span></div></div>}
           {error && <div className="ai-error"><span>{error}</span><button type="button" onClick={retryLast}><RefreshCw size={14} /> Yeniden dene</button></div>}
         </div>
 
-        <footer className="ai-composer">
-          <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} maxLength={4000} placeholder={developmentMode ? "Başkan, hatayı veya istediğiniz kod değişikliğini yazın…" : "Başkan, sorunuzu veya yapmak istediğiniz işi yazın…"} disabled={loading || status?.enabled === false} />
-          {loading ? <button type="button" className="stop" onClick={stopGeneration}><CircleStop size={18} /> Durdur</button> : <button type="button" onClick={() => sendMessage()} disabled={!input.trim() || status?.enabled === false}><Send size={18} /> Gönder</button>}
-          <small>{input.length}/4000 · {developmentMode ? "Kod yazımı onay ve otomatik test gerektirir." : "Yapay zekâ yanıtlarını kritik işlemlerde kontrol edin."}</small>
+        <footer className={`ai-composer${!developmentMode ? " visual-search-enabled" : ""}`}>
+          {!developmentMode && <>
+            <input ref={imageInputRef} className="ai-visual-file" type="file" accept="image/*" onChange={(event) => findModelFromImage(event.target.files?.[0])} />
+            <button type="button" className="ai-image-search" onClick={() => imageInputRef.current?.click()} disabled={imageSearching || loading || !companySlug} title="Kameradan veya galeriden görsel seçip modeli bul"><ImagePlus size={18} /> {imageSearching ? "Aranıyor" : "Görselle Bul"}</button>
+          </>}
+          <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} maxLength={4000} placeholder={developmentMode ? "Başkan, hatayı veya istediğiniz kod değişikliğini yazın…" : "Başkan, sorunuzu yazın veya Görselle Bul ile fotoğraf çekin…"} disabled={loading || imageSearching || status?.enabled === false} />
+          {loading ? <button type="button" className="stop" onClick={stopGeneration}><CircleStop size={18} /> Durdur</button> : <button type="button" onClick={() => sendMessage()} disabled={!input.trim() || imageSearching || status?.enabled === false}><Send size={18} /> Gönder</button>}
+          <small>{input.length}/4000 · {developmentMode ? "Kod yazımı onay ve otomatik test gerektirir." : "Fotoğrafla model bulma, OCR + Pantone + figür + AI benzerliği kullanır."}</small>
         </footer>
       </section>
     </main>
