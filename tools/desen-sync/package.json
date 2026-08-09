@@ -1,0 +1,12 @@
+{
+  "name": "kyerp-desen-sync",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "sharp": "0.34.3"
+  }
+}
