@@ -14,6 +14,38 @@ function unwrap(payload) {
     : payload;
 }
 
+function normalizeCompanyRole(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleUpperCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/İ/g, "I");
+}
+
+function isCustomerCompany(row) {
+  const role = normalizeCompanyRole(
+    `${row?.type || ""} ${row?.companyType || row?.company_type || ""}`,
+  );
+  if (/BOTH|CUSTOMER|MUSTERI|ALICI|HER IKISI/.test(role)) return true;
+  if (/SUPPLIER|TEDARIK/.test(role)) return false;
+  return true;
+}
+
+function customerCompanies(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.isActive !== false && row?.is_active !== 0)
+    .filter(isCustomerCompany)
+    .sort((a, b) => {
+      const aName = String(a?.name || a?.firmaAdi || "");
+      const bName = String(b?.name || b?.firmaAdi || "");
+      const aTaha = /^TAHA\b/.test(normalizeCompanyRole(aName));
+      const bTaha = /^TAHA\b/.test(normalizeCompanyRole(bName));
+      if (aTaha !== bTaha) return aTaha ? -1 : 1;
+      return aName.localeCompare(bName, "tr");
+    });
+}
+
 export function companyParams(activeMainCompany, extra = {}) {
   return {
     mainCompanyId: activeMainCompany?.id || "",
@@ -403,6 +435,6 @@ export async function getDesignCompanies(activeMainCompany) {
       companyParams(activeMainCompany, { limit: 1000 }),
     ),
   );
-  if (Array.isArray(payload)) return payload;
-  return payload?.rows || payload?.items || [];
+  const rows = Array.isArray(payload) ? payload : payload?.rows || payload?.items || [];
+  return customerCompanies(rows);
 }
