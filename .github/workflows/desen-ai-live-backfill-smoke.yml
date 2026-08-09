@@ -1,0 +1,181 @@
+name: KY ERP Desen AI Canlı Hazırlık
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/desen-ai-live-backfill-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backfill-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Mevcut canlı AI durumunu al
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --retry 3 --retry-delay 2 \
+            'https://api.kyerp.net/api/desen/workflow/analysis/status?mainCompanySlug=mecit-hakan' \
+            -o before.json
+          cat before.json
+
+      - name: Mevcut Desen Havuzunu gerçek görsel AI ile indeksle
+        shell: python
+        run: |
+          import concurrent.futures
+          import json
+          import time
+          import urllib.request
+          import urllib.error
+
+          BASE = 'https://api.kyerp.net/api'
+          SLUG = 'mecit-hakan'
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'KYERP-Live-AI-Backfill/1.0'})
+              with urllib.request.urlopen(req, timeout=90) as response:
+                  return json.loads(response.read().decode('utf-8'))
+
+          def post_json(url, payload):
+              body = json.dumps(payload).encode('utf-8')
+              req = urllib.request.Request(
+                  url,
+                  data=body,
+                  method='POST',
+                  headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'KYERP-Live-AI-Backfill/1.0'},
+              )
+              with urllib.request.urlopen(req, timeout=180) as response:
+                  return response.getcode(), json.loads(response.read().decode('utf-8'))
+
+          models_payload = get_json(f'{BASE}/desen/workflow/models?mainCompanySlug={SLUG}&limit=1000')
+          models = models_payload.get('data', {}).get('rows', [])
+          targets = [row for row in models if row.get('id') and row.get('status') != 'ARCHIVE']
+          print(f'TOTAL_MODELS={len(targets)}', flush=True)
+
+          def analyze(model):
+              model_id = model['id']
+              name = model.get('modelName') or model_id
+              for attempt in range(2):
+                  try:
+                      code, payload = post_json(
+                          f'{BASE}/desen/workflow/models/{urllib.parse.quote(str(model_id), safe="")}/analyze',
+                          {'mainCompanySlug': SLUG, 'force': True, 'useVision': True},
+                      )
+                      analysis = payload.get('data', {}).get('metadata', {}).get('analysis', {})
+                      status = analysis.get('visionStatus') or analysis.get('ocrStatus') or 'UNKNOWN'
+                      return {'id': model_id, 'name': name, 'http': code, 'status': status, 'error': analysis.get('error') or analysis.get('note') or ''}
+                  except Exception as exc:
+                      if attempt == 0:
+                          time.sleep(2)
+                          continue
+                      return {'id': model_id, 'name': name, 'http': 0, 'status': 'REQUEST_FAILED', 'error': str(exc)}
+
+          results = []
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+              futures = [pool.submit(analyze, model) for model in targets]
+              for index, future in enumerate(concurrent.futures.as_completed(futures), 1):
+                  row = future.result()
+                  results.append(row)
+                  print(f'[{index}/{len(targets)}] {row["name"]}: {row["status"]}', flush=True)
+                  if index % 20 == 0:
+                      time.sleep(1)
+
+          completed = [row for row in results if row['status'] == 'COMPLETED']
+          failed = [row for row in results if row['status'] != 'COMPLETED']
+          print(f'AI_COMPLETED={len(completed)}', flush=True)
+          print(f'AI_NOT_COMPLETED={len(failed)}', flush=True)
+          if failed:
+              print('FAILED_SAMPLE=' + json.dumps(failed[:12], ensure_ascii=False), flush=True)
+
+          with open('backfill-results.json', 'w', encoding='utf-8') as handle:
+              json.dump({'total': len(targets), 'completed': len(completed), 'failed': len(failed), 'rows': results}, handle, ensure_ascii=False, indent=2)
+          with open('completed-models.json', 'w', encoding='utf-8') as handle:
+              json.dump(completed, handle, ensure_ascii=False, indent=2)
+
+          if not completed:
+              raise SystemExit('No model completed real visual analysis; visual search cannot be validated.')
+
+      - name: Canlı AI durumunu tekrar kontrol et
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --retry 3 --retry-delay 2 \
+            'https://api.kyerp.net/api/desen/workflow/analysis/status?mainCompanySlug=mecit-hakan' \
+            -o after.json
+          cat after.json
+
+      - name: Aynı desen görselini canlı Görselle Bul motorunda doğrula
+        shell: python
+        run: |
+          import json
+          import urllib.parse
+          import urllib.request
+
+          API = 'https://api.kyerp.net'
+          SLUG = 'mecit-hakan'
+          completed = json.load(open('completed-models.json', encoding='utf-8'))
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'KYERP-Visual-Smoke/1.0'})
+              with urllib.request.urlopen(req, timeout=90) as response:
+                  return json.loads(response.read().decode('utf-8'))
+
+          selected = None
+          for candidate in completed:
+              payload = get_json(f'{API}/api/desen/workflow/models/{urllib.parse.quote(str(candidate["id"]), safe="")}?mainCompanySlug={SLUG}')
+              model = payload.get('data', {})
+              image = model.get('mainImage') or {}
+              path = image.get('thumbnailUrl') or image.get('previewUrl')
+              if path:
+                  selected = {'model': model, 'path': path}
+                  if str(model.get('modelName', '')).upper() == 'GARFIELD 1':
+                      break
+          if not selected:
+              raise SystemExit('No analyzed model has a downloadable live image.')
+          json.dump(selected, open('smoke-target.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+          print('SMOKE_TARGET=' + str(selected['model'].get('modelName')), flush=True)
+          print('SMOKE_IMAGE=' + str(selected['path']), flush=True)
+
+      - name: Görseli indir ve görsel arama endpointine gönder
+        run: |
+          set -euo pipefail
+          TARGET_NAME=$(jq -r '.model.modelName' smoke-target.json)
+          TARGET_PATH=$(jq -r '.path' smoke-target.json)
+          if [[ "$TARGET_PATH" == http* ]]; then
+            TARGET_URL="$TARGET_PATH"
+          else
+            TARGET_URL="https://api.kyerp.net${TARGET_PATH}"
+          fi
+          echo "TARGET_NAME=$TARGET_NAME"
+          curl --fail-with-body --retry 3 --retry-delay 2 "$TARGET_URL" -o smoke-image.webp
+          file smoke-image.webp
+          curl --fail-with-body --retry 2 --retry-delay 3 \
+            -X POST 'https://api.kyerp.net/api/desen/visual-search' \
+            -F 'mainCompanySlug=mecit-hakan' \
+            -F 'image=@smoke-image.webp;type=image/webp' \
+            -o visual-result.json
+          cat visual-result.json | jq '{ok, mode:.data.mode, totalModels:.data.totalModels, bestMatch:.data.bestMatch, top3:(.data.matches[0:3] | map({modelName, percent, confidence, matchedPantones, characters}))}'
+          jq -e '.ok == true and .data.mode == "VISION_OCR_PLUS_BGE_M3_RERANK" and (.data.matches | length) > 0' visual-result.json >/dev/null
+          TOP_NAME=$(jq -r '.data.bestMatch.modelName // ""' visual-result.json)
+          TOP_PERCENT=$(jq -r '.data.bestMatch.percent // 0' visual-result.json)
+          echo "SELF_MATCH_TARGET=$TARGET_NAME"
+          echo "SELF_MATCH_TOP=$TOP_NAME"
+          echo "SELF_MATCH_PERCENT=$TOP_PERCENT"
+          if [[ "${TOP_NAME^^}" != "${TARGET_NAME^^}" ]]; then
+            echo "::warning::Aynı görselin ilk sonucu hedef model değil; sıralama ayarı gerekebilir."
+          fi
+
+      - name: Sonuç özeti
+        if: always()
+        run: |
+          echo '=== BEFORE ==='
+          test -f before.json && cat before.json || true
+          echo '=== AFTER ==='
+          test -f after.json && cat after.json || true
+          echo '=== BACKFILL ==='
+          test -f backfill-results.json && jq '{total,completed,failed}' backfill-results.json || true
+          echo '=== VISUAL SELF MATCH ==='
+          test -f visual-result.json && jq '{best:.data.bestMatch, top3:(.data.matches[0:3] | map({modelName,percent,confidence}))}' visual-result.json || true
