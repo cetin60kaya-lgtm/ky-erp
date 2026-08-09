@@ -8,7 +8,7 @@ import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
 import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
 import ProfitLossWorkspace from "./muhasebe/ProfitLossWorkspace";
-import SupplierInventoryWorkspace from "./muhasebe/SupplierInventoryWorkspace";
+import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
 import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
 import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
 import "./muhasebe/muhasebeModule.css";
@@ -27,19 +27,19 @@ export const MUHASEBE_TABS = [
   },
   {
     key: "tedarikci-faturalar",
-    title: "Gelen Tedarikçi Faturaları",
+    title: "Tedarikçi İrsaliye / Faturaları",
     description:
-      "İşNet'ten gelen tedarikçi faturalarını kontrol edin; onaylı ürün, firma aliası, lot ve stok hareketiyle ilgili akışlara aktarın.",
+      "Tedarikçiden gelen irsaliye ve faturaları satınalma zincirinde izleyin; fatura gider, KDV, stok-lot ve cari kurallarına göre işlenir.",
   },
   {
     key: "kesilen-faturalar",
-    title: "Kesilen Faturalar",
-    description: "Bizim kestiğimiz faturaların İşNet, model, adet ve belge durumlarını izleyin.",
+    title: "Bizim Kesilen Faturalarımız",
+    description: "Bizim giden irsaliyelerimize bağlı kestiğimiz faturaların İşNet, model, adet ve belge durumlarını izleyin.",
   },
   {
     key: "irsaliye-fatura-kontrol",
-    title: "Gelen Müşteri İrsaliyeleri / Fatura Kontrolü",
-    description: "TAHA, REN FASHION, MIND ve diğer müşterilerden gelen irsaliyeleri; model, sipariş, adet ve kesilen fatura eşleşmesiyle takip edin.",
+    title: "Müşteri İrsaliye / Bizim Belge Kontrolü",
+    description: "Müşteriden gelen irsaliye → model/üretim → bizim giden irsaliyemiz → bizim kesilen faturamız zincirini takip edin.",
   },
   {
     key: "cek-odeme",
@@ -134,7 +134,7 @@ export default function MuhasebePage({
     );
   } else if (current.key === "tedarikci-faturalar") {
     content = (
-      <SupplierInventoryWorkspace
+      <SupplierDocumentsWorkspace
         activeMainCompany={activeMainCompany}
         refreshKey={refreshKey}
       />
