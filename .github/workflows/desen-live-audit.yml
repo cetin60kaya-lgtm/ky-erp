@@ -16,32 +16,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Audit live Desen endpoints and images
+      - name: Verify live Desen integrity release
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://api.kyerp.net'
-          MODELS="$BASE/api/desen/workflow/models?mainCompanySlug=mecit-hakan&limit=5"
-          REPORTS="$BASE/api/desen/workflow/reports?mainCompanySlug=mecit-hakan"
-          curl -fsS "$MODELS" -o /tmp/models.json
-          echo '=== MODEL SUMMARY ==='
-          jq '{ok, total:.data.total, rows:(.data.rows|length)}' /tmp/models.json
-          echo '=== FIRST MODELS ==='
-          jq -c '.data.rows[] | {id,modelName,createdAt,updatedAt,mainImage}' /tmp/models.json
+
+          curl -fsS "$BASE/api/desen/workflow/models?mainCompanySlug=mecit-hakan&limit=5" -o /tmp/models.json
+          echo '=== MODELS ==='
+          jq '{ok,total:.data.total,returned:.data.returned,rows:(.data.rows|length)}' /tmp/models.json
+          jq -e '.ok == true and .data.total == 112 and .data.returned == 5 and (.data.rows|length) == 5' /tmp/models.json >/dev/null
+          jq -e '[.data.rows[].operations[]? | has("totals")] | all' /tmp/models.json >/dev/null
+          jq -e '[.data.rows[] | (.createdAt != null and .createdAt != "") and (.sourceModifiedAt != null and .sourceModifiedAt != "") and (.updatedAt != null and .updatedAt != "")] | all' /tmp/models.json >/dev/null
+
           echo '=== IMAGE PROBES ==='
           jq -r '.data.rows[] | [.modelName, (.mainImage.thumbnailUrl // .mainImage.previewUrl // "")] | @tsv' /tmp/models.json | while IFS=$'\t' read -r name url; do
-            if [ -z "$url" ]; then echo "$name|NO_URL"; continue; fi
-            case "$url" in
-              http*) full="$url" ;;
-              /*) full="$BASE$url" ;;
-              *) full="$BASE/$url" ;;
-            esac
+            test -n "$url"
+            case "$url" in http*) full="$url" ;; /*) full="$BASE$url" ;; *) full="$BASE/$url" ;; esac
             code=$(curl -sS -o /tmp/img.bin -w '%{http_code}' "$full")
             ctype=$(curl -sSI "$full" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print $2; exit}')
             bytes=$(wc -c </tmp/img.bin | tr -d ' ')
-            echo "$name|$code|$ctype|$bytes|$full"
+            echo "$name|$code|$ctype|$bytes"
+            test "$code" = "200"
+            case "$ctype" in image/webp*) ;; *) exit 1 ;; esac
+            test "$bytes" -gt 0
           done
+
           echo '=== REPORT SUMMARY ==='
-          curl -fsS "$REPORTS" | jq '{ok, summary:.data.summary, rows:(.data.rows|length)}'
+          curl -fsS "$BASE/api/desen/workflow/reports?mainCompanySlug=mecit-hakan" -o /tmp/reports.json
+          jq '{ok,summary:.data.summary,rows:(.data.rows|length)}' /tmp/reports.json
+          jq -e '.ok == true and .data.summary.totalModels == 112 and .data.summary.modelCount == 112 and .data.summary.newArrival == 112 and .data.summary.placementWaiting == 112 and (.data.rows|length) == 112' /tmp/reports.json >/dev/null
+
+          echo '=== CREATED DATE FILTER ==='
+          curl -fsS "$BASE/api/desen/workflow/models?mainCompanySlug=mecit-hakan&dateField=createdAt&dateFrom=2026-08-09&dateTo=2026-08-09&limit=5" -o /tmp/created.json
+          jq '{total:.data.total,returned:.data.returned}' /tmp/created.json
+          jq -e '.data.total == 112 and .data.returned == 5' /tmp/created.json >/dev/null
+
+          echo '=== SOURCE DATE FILTER ==='
+          curl -fsS "$BASE/api/desen/workflow/models?mainCompanySlug=mecit-hakan&dateField=sourceModifiedAt&dateFrom=2026-05-01&dateTo=2026-05-31&limit=5" -o /tmp/source.json
+          jq '{total:.data.total,returned:.data.returned}' /tmp/source.json
+          jq -e '.data.total > 0 and .data.returned > 0' /tmp/source.json >/dev/null
+
           echo '=== BRIDGE ==='
-          curl -fsS "$BASE/api/desen/bridge/status?mainCompanySlug=mecit-hakan" | jq '{ok, data}'
+          curl -fsS "$BASE/api/desen/bridge/status?mainCompanySlug=mecit-hakan" -o /tmp/bridge.json
+          jq '{ok,online:.data.online,deviceCount:.data.deviceCount}' /tmp/bridge.json
+          jq -e '.ok == true and .data.online == true and .data.deviceCount >= 1' /tmp/bridge.json >/dev/null
+
+          site_code=$(curl -L -sS -o /tmp/site.html -w '%{http_code}' 'https://app.kyerp.net/desen/desen-modeller')
+          echo "SITE_HTTP=$site_code"
+          test "$site_code" = "200"
+          grep -q '<title>KY ERP</title>' /tmp/site.html
