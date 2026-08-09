@@ -2,16 +2,18 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T18:47:00+03:00",
-  "attempt": 31,
+  "requestedAt": "2026-08-09T19:12:00+03:00",
+  "attempt": 32,
   "scope": [
-    "accounting-full-clean-restart",
-    "hide-pre-reset-company-cards-from-accounting",
-    "clear-accounting-documents-cari-vat-payments-cheques",
-    "preserve-design-production-company-links",
-    "reactivate-company-on-new-august-document-or-movement",
-    "rename-customer-dispatch-menu"
+    "company-accounting-profile",
+    "supplier-debt-only",
+    "cash-purchase-no-cari",
+    "official-vat-profile",
+    "expense-category",
+    "company-alias-auto-match",
+    "firm-profile-ui",
+    "reactivate-firm-on-new-document-match"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Muhasebeyi tamamen temiz başlangıca al. Eski firma kartlarını Muhasebe listesinde gizle ve tüm eski cari/belge/KDV/ödeme/çek/fatura/muhasebe hareketlerini sıfırla. companies kayıtlarını fiziksel silme; Desen ve İmalatın TAHA ve diğer müşteri bağlantıları bozulmasın. Yeni Ağustos 2026 belgesi veya cari hareketi geldiğinde mevcut firma otomatik Muhasebe listesine geri çıksın; yeni manuel firma zaten doğrudan görünsün. Muhasebe menüsündeki irsaliye ekranının adını Gelen Müşteri İrsaliyeleri / Fatura Kontrolü yap. İK, Desen, Boyahane ve İmalat verilerine dokunma. Yayın öncesi tam D1 yedeği al ve tek production run kullan."
+  "note": "Firma kartı muhasebe davranışını kesinleştir. Yalnız cari takipli tedarikçinin onaylı tedarikçi faturası firma borcu oluştursun. BİM, Metro ve benzeri peşin alış firmalarında cari borç oluşmasın; belge gider takibine ve resmîyse KDV takibine girsin. Firma kartında Müşteri/Tedarikçi/Her İkisi, peşin-vadeli, tedarikçi borç takibi, müşteri alacak takibi, KDV takibi, varsayılan kayıt türü, gider kategorisi ve aliaslar yönetilsin. Firma adı ilk alias olsun; VKN veya alias ile İşNet belgeleri otomatik eşleşsin. Ağustos temiz başlangıçta gizlenen eski firma yeni belgeye eşleşince tekrar Muhasebe listesinde görünsün. Desen, İmalat, Boyahane ve İK verilerine dokunma. Tek production run kullan ve yayın öncesi tam D1 yedeği al."
 }
