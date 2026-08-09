@@ -139,7 +139,7 @@ async function loadModels(c: Context<AppEnv>, slug: string) {
         analysis,
         searchable,
         mainImage,
-      };
+      } as Row;
     })
     .filter((row) => row.status !== "ARCHIVE");
 }
