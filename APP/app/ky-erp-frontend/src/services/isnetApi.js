@@ -111,10 +111,17 @@ export const submitIsnetOfficialInvoice = (draftId) =>
 export const retryIsnetInvoiceClosure = (draftId) =>
   apiPost(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}/retry-closure`, {}, { timeoutMs: 300_000 }).then(unwrap);
 
-export const getIsnetModelSuggestions = (intakeId, search = "") =>
-  apiGet(
-    `/isnet/intakes/${encodeURIComponent(intakeId)}/model-suggestions?search=${encodeURIComponent(search)}`,
+export const getIsnetModelSuggestions = (input, search = "") => {
+  if (input && typeof input === "object") {
+    return apiGet("/isnet/model-suggestions", {
+      ...input,
+      search: input.search || input.query || search,
+    }).then(unwrap);
+  }
+  return apiGet(
+    `/isnet/intakes/${encodeURIComponent(input || "")}/model-suggestions?search=${encodeURIComponent(search)}`,
   ).then(unwrap);
+};
 
 export const getIsnetIntakeDetail = (intakeId) =>
   apiGet(`/isnet/intakes/${encodeURIComponent(intakeId)}`).then(unwrap);
@@ -135,13 +142,13 @@ export const getMailQueue = () => apiGet("/isnet/mail/queue").then(unwrap);
 export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
 
 export const testIsnetSettings = (payload) =>
-  apiPost("/isnet/connection/test", payload, {
+  apiPost("/isnet/settings/test", payload, {
     suppressUnauthorized: true,
     timeoutMs: 90_000,
   }).then(unwrap);
 
 export const saveIsnetSettings = (payload) =>
-  apiPut("/isnet/connection", payload, { timeoutMs: 90_000 }).then(unwrap);
+  apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
 
 export const startDailySync = (payload = {}) =>
   apiPost("/isnet/full-sync", payload, { timeoutMs: 900_000 }).then(unwrap);
