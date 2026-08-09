@@ -2,18 +2,22 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T20:50:00+03:00",
-  "attempt": 34,
+  "requestedAt": "2026-08-09T21:25:33+03:00",
+  "attempt": 35,
   "scope": [
     "persistent-company-cards",
     "manual-company-card-create",
+    "permanent-company-card-delete",
+    "guard-delete-linked-company",
     "official-unofficial-company-default",
     "customer-supplier-both-profile",
     "cash-credit-cari-profile",
     "vat-expense-company-profile",
     "company-alias-directory",
-    "remove-accounting-reset-card-hiding"
+    "company-alias-isnet-match",
+    "isnet-current-portal-domain",
+    "isnet-portal-fallback-after-api-401"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Firma Kartlarını İşNet ve belge akışından bağımsız kalıcı ana rehber yap. Ağustos muhasebe temizliği yalnız hareket/belge/bakiyeyi sıfırlasın; firma kartlarını gizlemesin veya silmesin. Mevcut ACC_RESET_2026_08 işaretlerini temizle. Muhasebe Firmalar ve Cari ekranına İşNet beklemeden Yeni Firma oluşturma ekle. Kartta Müşteri/Tedarikçi/Her İkisi, Resmî/Gayri Resmî varsayılanı, Peşin/Vadeli-Cari, tedarikçi borç takibi, müşteri alacak takibi, KDV takibi, gider kategorisi, VKN/vergi dairesi, telefon, e-posta, adres ve alias mantığı olsun. Yeni tedarikçi varsayılan peşin/cari borçsuz başlasın; yalnız açıkça cari/vadeli seçilip borç takibi açılırsa borç oluşsun. Müşteri kartı varsayılan alacak takipli olabilir. Firma adı ilk alias olarak otomatik kaydedilsin. İşNet geldiğinde firma kartı yaratmak zorunda olmasın; VKN/alias ile mevcut karta bağlansın. Diğer modül verilerine dokunma. Tek production run kullan ve yayın öncesi tam D1 yedeği al."
+  "note": "Firma kartlarında Yeni Firma akışını tam tut ve işlemsiz, bakiyesiz, hiçbir belge/cari/model/diğer kayda bağlı olmayan kartlar için onaylı Kesin Sil ekle. Bağlı kayıt veya bakiye varsa veri kaybını önlemek için silmeyi engelle. Firma kartı İşNet'ten bağımsız kalıcı rehber olmaya devam etsin; firma adı ilk alias olsun, İşNet ve manuel belgeler VKN/alias ile mevcut karta bağlansın. İşNet canlı bağlantısında güncel resmi NetteFatura portal alan adı efatura.isnet.net.tr ve uyumlu login/firma liste yollarını kullan; resmi API 401 olsa bile portal fallback denensin. Diğer modül verilerine dokunma. Tek production run kullan, yayın öncesi tam D1 yedeği al, Worker ve frontend kontrollerini tamamla."
 }
