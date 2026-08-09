@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useCallback } from "react";
 import {
   BadgeCheck,
@@ -115,10 +115,13 @@ const TODAY = (() => {
   const now = new Date();
   return formatDateOnly(now.getFullYear(), now.getMonth() + 1, now.getDate());
 })();
-const IK_DAILY_DATE_RANGE_KEY = "ikDailyDateRange";
-const IK_DAILY_SELECTED_DATE_KEY = "ikDailySelectedDate";
+const IK_DAILY_DATE_RANGE_KEY = "ikDailyDateRange.v2";
+const IK_DAILY_SELECTED_DATE_KEY = "ikDailySelectedDate.v2";
 const IK_DAILY_FAST_CHECK_KEY = "ikDailyFastCheck";
-const DEFAULT_DAILY_RANGE = { start: "2026-05-13", end: "2026-05-19" };
+const DEFAULT_DAILY_RANGE = (() => {
+  const start = startOfWeekDateOnly(TODAY);
+  return { start, end: addDaysDateOnly(start, 6) };
+})();
 const ISO_DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_OFFICIAL_HOLIDAYS_2026 = [
   { date: "2026-01-01", name: "Yılbaşı" },

@@ -3,8 +3,6 @@ import { apiFetch, setApiAuthHandlers } from "../utils/api";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
-const CLOUD_ADMIN_USERNAME = "admin";
-const CLOUD_ADMIN_PASSWORD = "2582";
 
 const MODULE_KEYS = [
   "DASHBOARD",
@@ -59,37 +57,6 @@ function readStoredAuth() {
   } catch {
     return { token: "", user: null, permissions: [] };
   }
-}
-
-function base64Url(value) {
-  return window.btoa(unescape(encodeURIComponent(JSON.stringify(value))))
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-}
-
-function createCloudAdminToken() {
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64Url({ alg: "none", typ: "JWT" });
-  const payload = base64Url({
-    sub: "cloud-admin",
-    username: CLOUD_ADMIN_USERNAME,
-    role: "ADMIN",
-    iat: now,
-    exp: now + 60 * 60 * 12,
-  });
-  return `${header}.${payload}.cloud`;
-}
-
-function cloudAdminUser() {
-  return {
-    id: "cloud-admin",
-    username: CLOUD_ADMIN_USERNAME,
-    fullName: "Sistem Admin",
-    role: "ADMIN",
-    mustChangePassword: false,
-    permissions: [],
-  };
 }
 
 function parseJwtPayload(token) {
@@ -177,13 +144,6 @@ export function AuthProvider({ children }) {
       }
 
       const snapshot = authSnapshotRef.current;
-      if (snapshot.user?.id === "cloud-admin") {
-        if (!cancelled) {
-          saveAuth(token, snapshot.user, snapshot.permissions);
-          setLoading(false);
-        }
-        return;
-      }
 
       try {
         const response = await apiFetch("/auth/me");
@@ -207,19 +167,6 @@ export function AuthProvider({ children }) {
   }, [clearAuth, saveAuth, token]);
 
   const login = useCallback(async function login(username, password) {
-    const cleanUsername = String(username || "").trim().toLowerCase();
-    const cleanPassword = String(password || "");
-
-    if (
-      cleanUsername === CLOUD_ADMIN_USERNAME &&
-      cleanPassword === CLOUD_ADMIN_PASSWORD
-    ) {
-      const nextUser = cloudAdminUser();
-      const nextToken = createCloudAdminToken();
-      saveAuth(nextToken, nextUser, []);
-      return { ok: true, token: nextToken, user: nextUser };
-    }
-
     const response = await apiFetch("/auth/login", {
       method: "POST",
       body: { username, password },

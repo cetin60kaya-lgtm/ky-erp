@@ -5,7 +5,7 @@ import { useAuth } from "./AuthContext";
 const STORAGE_KEY = "kyerp.activeCompany";
 const DEFAULT_MAIN_COMPANY = {
   id: "main-mecit-hakan",
-  name: "Mecit Hakan",
+  name: "Hakan Emprime",
   slug: "mecit-hakan",
   isActive: true,
 };
