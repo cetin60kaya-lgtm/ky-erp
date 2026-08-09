@@ -27,6 +27,21 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          # Explicit JSON row typing for the bridge model store.
+          p = Path('APP/cloud/ky-erp-api/src/desen-bridge.ts')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              'async function modelRows(c: Context<AppEnv>, slug: string) {',
+              'async function modelRows(c: Context<AppEnv>, slug: string): Promise<Row[]> {',
+              1,
+          )
+          s = s.replace(
+              'async function saveModel(c: Context<AppEnv>, slug: string, model: Row) {',
+              'async function saveModel(c: Context<AppEnv>, slug: string, model: Row): Promise<Row> {',
+              1,
+          )
+          p.write_text(s, encoding='utf-8')
+
           # Auth helper for non-browser bridge clients.
           p = Path('APP/cloud/ky-erp-api/src/auth-cloud.ts')
           s = p.read_text(encoding='utf-8')
