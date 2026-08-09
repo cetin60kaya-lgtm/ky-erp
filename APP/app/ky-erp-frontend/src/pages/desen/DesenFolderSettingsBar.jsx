@@ -8,6 +8,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  getDesenBridgeStatus,
   getDesenFolderSettings,
   testDesenFolderSettings,
 } from "../../services/desenFolderSettingsApi";
@@ -26,6 +27,7 @@ function sizeText(value) {
 
 export default function DesenFolderSettingsBar({ activeMainCompany }) {
   const [result, setResult] = useState(null);
+  const [bridge, setBridge] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -39,10 +41,14 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
       setMessage("");
       try {
         const company = { id: companyId, slug: companySlug };
-        const data = test
-          ? await testDesenFolderSettings(company)
-          : await getDesenFolderSettings(company);
+        const [data, bridgeData] = await Promise.all([
+          test
+            ? testDesenFolderSettings(company)
+            : getDesenFolderSettings(company),
+          getDesenBridgeStatus(company).catch(() => null),
+        ]);
         setResult(data || null);
+        setBridge(bridgeData || null);
         setMessage(
           test
             ? `R2 bağlantısı doğrulandı. ${Number(data?.pendingFileCount || 0)} gelen dosya hazır.`
@@ -102,6 +108,12 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
           <span>
             <CheckCircle2 size={14} /> Kalıcı bulut depolama
           </span>
+          <span>
+            <CheckCircle2 size={14} /> Yerel köprü: {bridge?.online ? "Çevrimiçi" : "Çevrimdışı"}
+          </span>
+          {bridge?.latest?.lastModelName ? (
+            <span>Son aktarım: {bridge.latest.lastModelName}</span>
+          ) : null}
           <span>{sizeText(result?.totalBytes)} bekleyen veri</span>
           <span>Model: {settings.modelsFolder || "R2/desen/models"}</span>
           <span>Hata: {settings.errorFolder || "R2/desen/error"}</span>

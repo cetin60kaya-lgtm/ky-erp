@@ -110,7 +110,7 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   return <>
     <section className="dsg-toolbar-card">
       <div className="dsg-toolbar-main">
-        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Gelen Klasörü Tara</button>
+        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Bulut Gelenleri Tara</button>
         <button className={`dsg-btn ${autoScan ? "active" : ""}`} onClick={() => setAutoScan((value) => !value)}><Play size={16} /> Otomatik Tarama {autoScan ? "Açık" : "Kapalı"}</button>
         <button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button>
         <button className="dsg-btn" onClick={openFolder}><FolderOpen size={16} /> Klasörü Aç</button>

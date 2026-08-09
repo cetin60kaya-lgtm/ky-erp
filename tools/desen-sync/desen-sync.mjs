@@ -192,6 +192,7 @@ async function heartbeat(extra = {}) {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
+      "X-KYERP-Device": os.hostname(),
       "content-type": "application/json",
     },
     body: JSON.stringify({
@@ -243,7 +244,7 @@ async function ingest(filePath, stat, hash) {
   if (!token) await login();
   const payload = await requestJson(`${API}/api/desen/bridge/ingest`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "X-KYERP-Device": os.hostname() },
     body: form,
   });
   return {

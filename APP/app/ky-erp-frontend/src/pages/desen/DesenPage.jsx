@@ -33,7 +33,7 @@ const SCREEN_COPY = {
   "gelen-desenler": {
     title: "Gelen Desenler",
     description:
-      "Model, kanal ve yerleşim görsellerini R2 gelen alanına yükleyip kontrol ederek tek model kartına dönüştürün.",
+      "UXP / yerel Desen Köprüsü veya telefon yüklemesiyle gelen görselleri düşük boyutlu R2 önizlemelerine dönüştürüp model kartına bağlayın.",
   },
 };
 

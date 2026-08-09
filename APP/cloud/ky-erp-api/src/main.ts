@@ -11,6 +11,7 @@ import { registerBoyahaneManualJobRoutes } from "./boyahane-manual-job";
 import { registerBoyahaneManualJobV2Routes } from "./boyahane-manual-job-v2";
 import { registerBoyahaneSampleRoutes } from "./boyahane-sample";
 import { registerBoyahaneWorkflowRoutes } from "./boyahane-workflow";
+import { registerDesenBridgeRoutes } from "./desen-bridge";
 import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
@@ -56,6 +57,7 @@ registerBoyahaneColorJobRoutes(app);
 registerBoyahaneJobIntegrityRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
+registerDesenBridgeRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 
@@ -81,7 +83,7 @@ shell.use(
       "HEAD",
       "OPTIONS",
     ],
-    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
     maxAge: 86400,
     credentials: true,

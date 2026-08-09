@@ -89,7 +89,7 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
   }
 }
 
-async function modelRows(c: Context<AppEnv>, slug: string) {
+async function modelRows(c: Context<AppEnv>, slug: string): Promise<Row[]> {
   const result = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
@@ -108,7 +108,7 @@ async function modelRows(c: Context<AppEnv>, slug: string) {
   }));
 }
 
-async function saveModel(c: Context<AppEnv>, slug: string, model: Row) {
+async function saveModel(c: Context<AppEnv>, slug: string, model: Row): Promise<Row> {
   const timestamp = nowIso();
   const payload = {
     ...model,

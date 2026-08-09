@@ -128,6 +128,14 @@ async function findUserById(c: any, id: string) {
     .first();
 }
 
+export async function getAuthenticatedUser(c: any) {
+  const payload = parseSessionToken(bearerToken(c));
+  if (!payload) return null;
+  const user = await findUserById(c, String(payload.sub));
+  if (!user || !Boolean(user.is_active)) return null;
+  return userPayload(c, user);
+}
+
 export function registerAuthCloudRoutes(app: any) {
   app.post("/api/auth/login", async (c: any) => {
     let body: AnyRow = {};
