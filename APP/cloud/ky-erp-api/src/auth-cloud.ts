@@ -1,9 +1,5 @@
 import { compare } from "bcryptjs";
 
-const FALLBACK_ADMIN_ID = "bootstrap-admin";
-const FALLBACK_ADMIN_USERNAME = "admin";
-const FALLBACK_ADMIN_PASSWORD = "2582";
-const FALLBACK_ADMIN_FULL_NAME = "Sistem Admin";
 const SESSION_SECONDS = 60 * 60 * 12;
 
 type AnyRow = Record<string, any>;
@@ -108,17 +104,6 @@ async function userPayload(c: any, user: AnyRow) {
   };
 }
 
-function fallbackAdminPayload() {
-  return {
-    id: FALLBACK_ADMIN_ID,
-    username: FALLBACK_ADMIN_USERNAME,
-    fullName: FALLBACK_ADMIN_FULL_NAME,
-    role: "ADMIN",
-    mustChangePassword: false,
-    permissions: [],
-  };
-}
-
 async function findUserByUsername(c: any, username: string) {
   if (!(await tableExists(c, "auth_users"))) return null;
   return c.env.DB.prepare(
@@ -159,42 +144,31 @@ export function registerAuthCloudRoutes(app: any) {
     }
 
     const user = await findUserByUsername(c, username);
-    if (user && Boolean(user.is_active)) {
-      const matches = await compare(password, String(user.password_hash || ""));
-      if (matches) {
-        const now = new Date().toISOString();
-        await c.env.DB.prepare("UPDATE auth_users SET last_login_at = ?, updated_at = ? WHERE id = ?")
-          .bind(now, now, user.id)
-          .run();
-        const responseUser = await userPayload(c, user);
-        return c.json({
-          ok: true,
-          token: createSessionToken(user),
-          user: responseUser,
-        });
-      }
+    if (!user || !Boolean(user.is_active)) {
+      return c.json(jsonError("INVALID_CREDENTIALS", "Kullanıcı adı veya şifre hatalı."), 401);
     }
 
-    if (username === FALLBACK_ADMIN_USERNAME && password === FALLBACK_ADMIN_PASSWORD) {
-      const fallback = fallbackAdminPayload();
-      return c.json({
-        ok: true,
-        token: createSessionToken(fallback),
-        user: fallback,
-      });
+    const matches = await compare(password, String(user.password_hash || ""));
+    if (!matches) {
+      return c.json(jsonError("INVALID_CREDENTIALS", "Kullanıcı adı veya şifre hatalı."), 401);
     }
 
-    return c.json(jsonError("INVALID_CREDENTIALS", "Kullanıcı adı veya şifre hatalı."), 401);
+    const now = new Date().toISOString();
+    await c.env.DB.prepare("UPDATE auth_users SET last_login_at = ?, updated_at = ? WHERE id = ?")
+      .bind(now, now, user.id)
+      .run();
+    const responseUser = await userPayload(c, user);
+    return c.json({
+      ok: true,
+      token: createSessionToken(user),
+      user: responseUser,
+    });
   });
 
   app.get("/api/auth/me", async (c: any) => {
     const payload = parseSessionToken(bearerToken(c));
     if (!payload) {
       return c.json(jsonError("UNAUTHORIZED", "Oturum geçersiz veya süresi dolmuş."), 401);
-    }
-
-    if (String(payload.sub) === FALLBACK_ADMIN_ID) {
-      return c.json({ ok: true, user: fallbackAdminPayload() });
     }
 
     const user = await findUserById(c, String(payload.sub));
