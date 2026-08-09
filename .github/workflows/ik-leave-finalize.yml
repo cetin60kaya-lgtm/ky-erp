@@ -27,20 +27,7 @@ jobs:
       - name: Apply complete annual leave cleanup
         run: |
           python3 .github/ik_leave_final_patch.py
-          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/package.json > APP/cloud/ky-erp-api/package.json
-          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/package-lock.json > APP/cloud/ky-erp-api/package-lock.json
-          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/tsconfig.json > APP/cloud/ky-erp-api/tsconfig.json
-          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/worker-configuration.d.ts > APP/cloud/ky-erp-api/worker-configuration.d.ts
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('APP/cloud/ky-erp-api/src/ik-relational-cloud.ts')
-          s=p.read_text(encoding='utf-8')
-          old='app.post("/api/ik/advanced/leave/preview", protect(previewAdvancedLeaveV2));'
-          new='app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));'
-          if old not in s:
-              raise SystemExit('preview route marker not found')
-          p.write_text(s.replace(old,new,1), encoding='utf-8')
-          PY
+          python3 .github/ik_leave_toolchain_patch.py
 
       - name: Validate patch markers and diff
         run: |
