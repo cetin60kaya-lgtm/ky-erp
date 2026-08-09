@@ -50,8 +50,63 @@ function booleanValue(value: unknown, fallback = false) {
   return !["0", "FALSE", "HAYIR", "NO", "OFF"].includes(upper(value));
 }
 
-function errorBody(code: string, message: string) {
-  return { ok: false, success: false, error: { code, message } };
+function errorBody(code: string, message: string, details?: unknown) {
+  return {
+    ok: false,
+    success: false,
+    error: { code, message, ...(details === undefined ? {} : { details }) },
+  };
+}
+
+function quoteIdentifier(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+async function tableColumns(c: Context<AppEnv>, table: string) {
+  const result = await c.env.DB.prepare(
+    `PRAGMA table_info(${quoteIdentifier(table)})`,
+  ).all<Row>();
+  return new Set((result.results || []).map((row) => text(row.name)));
+}
+
+async function companyReferences(c: Context<AppEnv>, companyId: string, slug: string) {
+  const tables = await c.env.DB.prepare(
+    `SELECT name
+       FROM sqlite_master
+      WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%'
+        AND name NOT LIKE '_cf_%'`,
+  ).all<Row>();
+  const referenceColumns = new Set([
+    "company_id",
+    "firm_id",
+    "customer_company_id",
+    "supplier_company_id",
+    "buyer_company_id",
+    "seller_company_id",
+  ]);
+  const ownedMetadataTables = new Set(["company_aliases"]);
+  const blockers: Array<{ table: string; column: string; count: number }> = [];
+
+  for (const row of tables.results || []) {
+    const table = text(row.name);
+    if (!table || table === "companies" || ownedMetadataTables.has(table)) continue;
+    const columns = await tableColumns(c, table);
+    const matchedColumns = [...referenceColumns].filter((column) => columns.has(column));
+    for (const column of matchedColumns) {
+      const scoped = columns.has("main_company_slug");
+      const countRow = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS total
+           FROM ${quoteIdentifier(table)}
+          WHERE ${quoteIdentifier(column)} = ?${scoped ? " AND main_company_slug = ?" : ""}`,
+      )
+        .bind(...(scoped ? [companyId, slug] : [companyId]))
+        .first<Row>();
+      const count = Number(countRow?.total || 0);
+      if (count > 0) blockers.push({ table, column, count });
+    }
+  }
+  return blockers;
 }
 
 export function registerAccountingCompanyDirectoryRoutes(app: Hono<AppEnv>) {
@@ -191,11 +246,79 @@ export function registerAccountingCompanyDirectoryRoutes(app: Hono<AppEnv>) {
         phone: text(body.phone),
         email: text(body.email),
         address: text(body.address),
+        note: text(body.note),
         currentBalance: 0,
         openingBalance: 0,
         aliasCount: 1,
         isActive: true,
       },
     }, 201);
+  });
+
+  app.delete("/api/muhasebe/firmalar/:id", async (c) => {
+    const slug = slugOf(c);
+    const companyId = text(c.req.param("id"));
+    const company = await c.env.DB.prepare(
+      `SELECT id, name, current_balance, opening_balance
+         FROM companies
+        WHERE id = ?
+          AND main_company_slug = ?
+          AND deleted_at IS NULL
+        LIMIT 1`,
+    )
+      .bind(companyId, slug)
+      .first<Row>();
+    if (!company) {
+      return c.json(errorBody("COMPANY_NOT_FOUND", "Firma kartı bulunamadı."), 404);
+    }
+
+    const balance = Number(company.current_balance || 0);
+    const openingBalance = Number(company.opening_balance || 0);
+    if (Math.abs(balance) > 0.00001 || Math.abs(openingBalance) > 0.00001) {
+      return c.json(
+        errorBody(
+          "COMPANY_HAS_BALANCE",
+          "Bu firmanın bakiyesi var. Kesin silmeden önce bakiyeyi kapatın.",
+          { balance, openingBalance },
+        ),
+        409,
+      );
+    }
+
+    const blockers = await companyReferences(c, companyId, slug);
+    if (blockers.length) {
+      return c.json(
+        errorBody(
+          "COMPANY_HAS_LINKED_RECORDS",
+          "Bu firma kartına bağlı belge, cari hareket, model veya başka işlem kaydı var. Veri kaybını önlemek için kesin silme engellendi.",
+          { blockers },
+        ),
+        409,
+      );
+    }
+
+    await c.env.DB.prepare(
+      `DELETE FROM company_aliases
+        WHERE company_id = ? AND main_company_slug = ?`,
+    )
+      .bind(companyId, slug)
+      .run();
+    await c.env.DB.prepare(
+      `DELETE FROM companies
+        WHERE id = ? AND main_company_slug = ?`,
+    )
+      .bind(companyId, slug)
+      .run();
+
+    return c.json({
+      ok: true,
+      success: true,
+      data: {
+        id: companyId,
+        companyName: text(company.name),
+        deletedPermanently: true,
+        deletedAt: nowIso(),
+      },
+    });
   });
 }
