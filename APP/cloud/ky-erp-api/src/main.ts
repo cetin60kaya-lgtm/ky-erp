@@ -77,6 +77,7 @@ registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 
 // İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
+// Güncel NetteFatura portalı efatura.isnet.net.tr kullanılır; API 401 olsa bile portal fallback devam eder.
 // Şifre D1'e yazılmaz; geçici girişten API tokenı / firma seçilmiş portal oturumu alınır.
 registerIsnetLiveSyncRoutes(app);
 // Arşivlenen İşNet PDF/XML dosyaları doğrudan R2'den açılır.
