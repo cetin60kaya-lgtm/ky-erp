@@ -597,21 +597,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     }
   };
 
-  const runLeavePreview = async () => {
-    if (!modalDraft.employeeId || !modalDraft.startDate || !modalDraft.endDate) return setNotice("Personel ve tarih araligi zorunludur.");
-    setBusy(true);
-    try {
-      const result = await previewIkAdvancedLeave({ mainCompanyId: companyId, ...modalDraft, returnDate: modalDraft.endDate, recordType: modalDraft.leaveType });
-      setLeavePreview(result);
-      setNotice("");
-    } catch (error) { setNotice(error?.message || "Izin gunleri hesaplanamadi."); } finally { setBusy(false); }
-  };
-
   useEffect(() => {
     if (modal !== "yillik") return undefined;
+    const leaveId = modalDraft.id || "";
     const employeeId = modalDraft.employeeId;
     const startDate = modalDraft.startDate;
     const returnDate = modalDraft.endDate;
+    const recordType = modalDraft.leaveType || "Yillik izin";
     if (!employeeId || !startDate || !returnDate || returnDate <= startDate) {
       setLeavePreview(null);
       return undefined;
@@ -619,7 +611,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const seq = ++leaveAutoPreviewSeq.current;
     const timer = window.setTimeout(async () => {
       try {
-        const result = await previewIkAdvancedLeave({ mainCompanyId: companyId, ...modalDraft, returnDate, recordType: modalDraft.leaveType });
+        const result = await previewIkAdvancedLeave({
+          mainCompanyId: companyId,
+          id: leaveId,
+          employeeId,
+          startDate,
+          endDate: returnDate,
+          returnDate,
+          recordType,
+        });
         if (leaveAutoPreviewSeq.current !== seq) return;
         setLeavePreview(result);
         setNotice("");
@@ -630,7 +630,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       }
     }, 220);
     return () => window.clearTimeout(timer);
-  }, [modal, modalDraft.employeeId, modalDraft.startDate, modalDraft.endDate, modalDraft.leaveType, companyId]);
+  }, [modal, modalDraft.id, modalDraft.employeeId, modalDraft.startDate, modalDraft.endDate, modalDraft.leaveType, companyId]);
 
   const saveLeavePolicy = async () => {
     setBusy(true);
