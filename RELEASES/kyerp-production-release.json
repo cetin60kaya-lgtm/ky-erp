@@ -2,21 +2,20 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T12:19:00+03:00",
-  "attempt": 22,
+  "requestedAt": "2026-08-09T14:15:00+03:00",
+  "attempt": 23,
   "scope": [
-    "desen-uxp-folder-bridge",
-    "secure-desktop-auth",
-    "webp-preview-1600",
-    "webp-thumbnail-420",
-    "r2-low-size-storage-policy",
-    "d1-auto-model-index",
-    "model-name-deduplication",
-    "revision-retention",
-    "bridge-online-status",
-    "mobile-thumbnail-loading",
-    "windows-startup-sync"
+    "design-image-url-fix",
+    "design-r2-thumbnail-display",
+    "design-created-source-updated-dates",
+    "design-date-range-filtering",
+    "design-sort-controls",
+    "design-report-summary-contract",
+    "design-report-filter-consistency",
+    "design-placement-operation-totals",
+    "design-placement-crash-fix",
+    "boyahane-design-thumbnails"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "UXP/Photoshop gelen klasorunu Windows Desen Koprusu ile izle; orijinali yerelde tut; canli R2'ye yalniz 1600px WebP preview ve 420px thumbnail gonder; dosya adindan D1 model kartini otomatik olustur veya mevcut modele bagla; hash tekrarlarini engelle; ayni baski bolgesinde son iki kucuk revizyonu tut; Desen ekraninda yerel kopru durumunu goster; Windows acilisinda otomatik calisan tek tik kurulum araclarini yayinla."
+  "note": "Desen R2 gorsellerinin frontend API URL birlestirmesindeki cift /api hatasini duzelt; mevcut 112 modelin thumbnail ve preview dosyalarini yeniden yuklemeden canli goster; model karti ve raporlara ERP eklenme, kaynak dosya ve son guncelleme tarihlerini ekle; tarih araligi ve siralama filtrelerini tek backend sozlesmesine bagla; rapor ozet sayaclarini tabloyla ayni kaynaktan hesapla; Yerlesim/Kalip ekranindaki operation totals eksikligi nedeniyle olusan cokmeyi gider; Boyahane desen secicisinde kucuk R2 thumbnail kullan."
 }
