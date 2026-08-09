@@ -9,7 +9,6 @@ import {
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
 import "./companiesCurrentWorkspace.css";
 
-const ACCOUNTING_RESET_MARKER = "[[ACC_RESET_2026_08]]";
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
 const listOf = (payload) => {
   const value = unwrap(payload);
@@ -51,6 +50,10 @@ function cariLabel(row) {
   return "Peşin / cari takip yok";
 }
 
+function recordLabel(row) {
+  return normalize(row.defaultRecordType).includes("GAYRI") ? "Gayri resmî" : "Resmî";
+}
+
 function movementTypeLabel(value) {
   const key = normalize(value);
   if (/TAHSIL/.test(key)) return "Tahsilat";
@@ -68,6 +71,24 @@ function emptyTransaction() {
     amount: "",
     recordType: "RESMI",
     description: "",
+  };
+}
+
+function emptyCompany() {
+  return {
+    companyName: "",
+    companyType: "SUPPLIER",
+    defaultRecordType: "RESMI",
+    paymentMode: "CASH",
+    supplierDebtTracking: false,
+    customerReceivableTracking: false,
+    vatTrackingEnabled: true,
+    expenseCategory: "",
+    taxNo: "",
+    taxOffice: "",
+    phone: "",
+    email: "",
+    address: "",
   };
 }
 
@@ -106,6 +127,9 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [saving, setSaving] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [companyFormOpen, setCompanyFormOpen] = useState(false);
+  const [companyForm, setCompanyForm] = useState(emptyCompany);
+  const [companySaving, setCompanySaving] = useState(false);
 
   const params = useMemo(
     () => ({
@@ -154,7 +178,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const visibleFirms = useMemo(
     () =>
       firms.filter((firm) => {
-        if (String(firm.note || "").includes(ACCOUNTING_RESET_MARKER)) return false;
         const firmRole = roleLabel(firm);
         const balance = Number(firm.currentBalance || 0);
         if (role === "CUSTOMER" && !/Müşteri/.test(firmRole)) return false;
@@ -214,6 +237,38 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     },
     [params],
   );
+
+  const createCompany = async () => {
+    if (!companyForm.companyName.trim()) {
+      setError("Firma adı zorunludur.");
+      return;
+    }
+    setCompanySaving(true);
+    setError("");
+    try {
+      const createdPayload = await apiPost("/muhasebe/firmalar", {
+        ...params,
+        ...companyForm,
+        supplierDebtTracking:
+          companyForm.companyType !== "CUSTOMER" &&
+          companyForm.paymentMode === "CREDIT" &&
+          companyForm.supplierDebtTracking,
+        customerReceivableTracking:
+          companyForm.companyType !== "SUPPLIER" && companyForm.customerReceivableTracking,
+        vatTrackingEnabled:
+          companyForm.defaultRecordType === "RESMI" && companyForm.vatTrackingEnabled,
+      });
+      const created = objectOf(createdPayload);
+      setCompanyForm(emptyCompany());
+      setCompanyFormOpen(false);
+      await loadFirms();
+      if (created?.id) await loadMovements(created);
+    } catch (requestError) {
+      setError(requestError?.message || "Firma kartı oluşturulamadı.");
+    } finally {
+      setCompanySaving(false);
+    }
+  };
 
   const saveProfile = async () => {
     if (!selected?.id) return;
@@ -339,8 +394,37 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="PAYABLE">Borç bakiyesi</option>
           <option value="ZERO">Sıfır bakiye</option>
         </select>
+        <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
       </header>
+
+      {companyFormOpen ? (
+        <section className="ccw-profile-card">
+          <header>
+            <div><h3>Yeni Firma Kartı</h3><p>Firma kartı İşNet'ten bağımsız kalıcıdır. Belge geldiğinde VKN veya alias ile bu karta bağlanır.</p></div>
+            <button type="button" className="icon" onClick={() => setCompanyFormOpen(false)} aria-label="Kapat"><X size={18} /></button>
+          </header>
+          <div className="ccw-profile-grid">
+            <label>Firma adı<input value={companyForm.companyName} onChange={(event) => setCompanyForm((current) => ({ ...current, companyName: event.target.value }))} placeholder="Firma adı" /></label>
+            <label>Firma türü<select value={companyForm.companyType} onChange={(event) => setCompanyForm((current) => ({ ...current, companyType: event.target.value, paymentMode: event.target.value === "CUSTOMER" ? "CASH" : current.paymentMode, supplierDebtTracking: event.target.value === "CUSTOMER" ? false : current.supplierDebtTracking, customerReceivableTracking: event.target.value === "SUPPLIER" ? false : current.customerReceivableTracking }))}><option value="CUSTOMER">Müşteri</option><option value="SUPPLIER">Tedarikçi</option><option value="BOTH">Müşteri ve tedarikçi</option></select></label>
+            <label>Varsayılan kayıt<select value={companyForm.defaultRecordType} onChange={(event) => setCompanyForm((current) => ({ ...current, defaultRecordType: event.target.value, vatTrackingEnabled: event.target.value === "RESMI" ? current.vatTrackingEnabled : false }))}><option value="RESMI">Resmî</option><option value="GAYRI_RESMI">Gayri resmî</option></select></label>
+            <label>Alış / ödeme düzeni<select value={companyForm.paymentMode} disabled={companyForm.companyType === "CUSTOMER"} onChange={(event) => setCompanyForm((current) => ({ ...current, paymentMode: event.target.value, supplierDebtTracking: event.target.value === "CREDIT" ? current.supplierDebtTracking : false }))}><option value="CASH">Peşin — cari borç yok</option><option value="CREDIT">Vadeli / cari</option></select></label>
+            <label>Vergi no<input value={companyForm.taxNo} onChange={(event) => setCompanyForm((current) => ({ ...current, taxNo: event.target.value }))} /></label>
+            <label>Vergi dairesi<input value={companyForm.taxOffice} onChange={(event) => setCompanyForm((current) => ({ ...current, taxOffice: event.target.value }))} /></label>
+            <label>Telefon<input value={companyForm.phone} onChange={(event) => setCompanyForm((current) => ({ ...current, phone: event.target.value }))} /></label>
+            <label>E-posta<input type="email" value={companyForm.email} onChange={(event) => setCompanyForm((current) => ({ ...current, email: event.target.value }))} /></label>
+            <label>Gider kategorisi<input value={companyForm.expenseCategory} onChange={(event) => setCompanyForm((current) => ({ ...current, expenseCategory: event.target.value }))} placeholder="Gıda / Market, Kimyasal, Enerji..." /></label>
+            <label>Adres<input value={companyForm.address} onChange={(event) => setCompanyForm((current) => ({ ...current, address: event.target.value }))} /></label>
+          </div>
+          <div className="ccw-check-row">
+            {companyForm.companyType !== "CUSTOMER" ? <label><input type="checkbox" checked={companyForm.supplierDebtTracking && companyForm.paymentMode === "CREDIT"} disabled={companyForm.paymentMode !== "CREDIT"} onChange={(event) => setCompanyForm((current) => ({ ...current, supplierDebtTracking: event.target.checked }))} /> Tedarikçi borcunu caride takip et</label> : null}
+            {companyForm.companyType !== "SUPPLIER" ? <label><input type="checkbox" checked={companyForm.customerReceivableTracking} onChange={(event) => setCompanyForm((current) => ({ ...current, customerReceivableTracking: event.target.checked }))} /> Müşteri alacağını caride takip et</label> : null}
+            <label><input type="checkbox" checked={companyForm.vatTrackingEnabled && companyForm.defaultRecordType === "RESMI"} disabled={companyForm.defaultRecordType !== "RESMI"} onChange={(event) => setCompanyForm((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
+          </div>
+          <div className="ccw-rule-note">Peşin tedarikçide borç oluşmaz. Resmî belgede gider/KDV, gayri resmî kayıtta yalnız iç gider takibi yapılır.</div>
+          <div className="ccw-drawer-actions"><button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button></div>
+        </section>
+      ) : null}
 
       <section className="ccw-summary">
         <div><span>Firma</span><strong>{visibleFirms.length}</strong></div>
@@ -357,12 +441,13 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ) : visibleFirms.length ? (
           <div className="ccw-table-wrap">
             <table>
-              <thead><tr><th>Firma</th><th>Tür</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th></tr></thead>
+              <thead><tr><th>Firma</th><th>Tür</th><th>Kayıt</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th></tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
                   <tr key={firm.id} onClick={() => loadMovements(firm)} tabIndex={0}>
                     <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong>{firm.isChemicalSupplier ? <small>Boya / kimyasal</small> : null}</td>
                     <td>{roleLabel(firm)}</td>
+                    <td>{recordLabel(firm)}</td>
                     <td><span className={firm.supplierDebtTracking || firm.customerReceivableTracking ? "ccw-badge active" : "ccw-badge cash"}>{cariLabel(firm)}</span></td>
                     <td>{firm.vatTrackingEnabled === false ? "Kapalı" : "Takip"}</td>
                     <td>{firm.expenseCategory || "-"}</td>
@@ -377,8 +462,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           </div>
         ) : (
           <div className="ccw-empty">
-            <strong>Ağustos 2026 temiz başlangıç hazır.</strong>
-            <span>Yeni fatura, irsaliye veya cari hareket geldikçe ilgili firma burada doğru tanımıyla yeniden görünecek.</span>
+            <strong>Henüz firma kartı yok.</strong>
+            <span>Yeni Firma ile müşteri veya tedarikçi kartını İşNet beklemeden oluşturabilirsin.</span>
           </div>
         )}
       </section>
@@ -389,7 +474,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <header>
               <div>
                 <h2>{selected.firmaAdi || selected.companyName || selected.name}</h2>
-                <p>{roleLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p>
+                <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p>
               </div>
               <div className="ccw-drawer-actions">
                 {canUseCari ? (
@@ -460,11 +545,12 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                       <span key={alias.id}>{alias.raw_name || alias.rawName}<button type="button" onClick={() => removeAlias(alias.id)} aria-label="Alias kaldır">×</button></span>
                     ))}
                   </div>
-                ) : <div className="ccw-mini-empty">Henüz alias yok. İşNet'te farklı yazılan firma adlarını buraya ekleyebilirsin.</div>}
+                ) : <div className="ccw-mini-empty">Henüz alias yok. İşNet, fiş veya manuel kayıtta farklı yazılan firma adlarını buraya ekleyebilirsin.</div>}
               </section>
 
               <section className="ccw-detail-summary">
                 <div><span>Bakiye</span><strong>{money(selected.currentBalance)}</strong></div>
+                <div><span>Kayıt türü</span><strong>{recordLabel(selected)}</strong></div>
                 <div><span>Cari durumu</span><strong>{cariLabel(selected)}</strong></div>
                 <div><span>KDV takibi</span><strong>{selected.vatTrackingEnabled === false ? "Kapalı" : "Aktif"}</strong></div>
                 <div><span>Telefon</span><strong>{selected.phone || "-"}</strong></div>
