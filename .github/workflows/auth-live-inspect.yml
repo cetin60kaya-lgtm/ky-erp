@@ -14,48 +14,27 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Resolve D1 account
+      - name: Verify live auth endpoints
         shell: bash
         run: |
           set -euo pipefail
-          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-          database_id="b504b712-6927-499d-815d-0b954c8ee246"
-          accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
-          account_id=""
-          while read -r candidate; do
-            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${candidate}/d1/database?per_page=100")"
-            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
-              account_id="$candidate"
-              break
-            fi
-          done < <(jq -r '.result[]?.id' <<<"$accounts_json")
-          test -n "$account_id"
-          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
-      - name: Inspect auth route and D1 schema
-        working-directory: APP/cloud/ky-erp-api
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo '--- LOGIN PROBE ---'
-          curl -sS -D /tmp/h -o /tmp/b -X POST https://api.kyerp.net/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__probe__","password":"__probe__"}' || true
-          head -n 8 /tmp/h || true
-          cat /tmp/b || true
+          login_status="$(curl -sS -o /tmp/login.json -w '%{http_code}' -X POST https://api.kyerp.net/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__probe__","password":"__probe__"}')"
+          echo "LOGIN_STATUS=$login_status"
+          cat /tmp/login.json
           echo
-          echo '--- AUTH TABLES ---'
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'auth_%' ORDER BY name;"
-          echo '--- AUTH USERS COLUMNS ---'
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(auth_users);" || true
-          echo '--- AUTH USERS SAFE SUMMARY ---'
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT id, username, full_name, role, is_active, must_change_password, length(password_hash) AS hash_length, substr(password_hash,1,4) AS hash_prefix FROM auth_users ORDER BY username LIMIT 20;" || true
-          echo '--- PERMISSION TABLE COLUMNS ---'
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(auth_user_module_permissions);" || true
-          echo '--- PERMISSION COUNT ---'
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT count(*) AS permission_count FROM auth_user_module_permissions;" || true
+          test "$login_status" = "401"
+          jq -e '.ok == false and .error.code == "INVALID_CREDENTIALS"' /tmp/login.json >/dev/null
+
+          me_status="$(curl -sS -o /tmp/me.json -w '%{http_code}' https://api.kyerp.net/api/auth/me -H 'Authorization: Bearer invalid.token.value')"
+          echo "ME_STATUS=$me_status"
+          cat /tmp/me.json
+          echo
+          test "$me_status" = "401"
+          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
+
+          site_status="$(curl -L -sS -o /tmp/site.html -w '%{http_code}' https://app.kyerp.net/)"
+          echo "SITE_STATUS=$site_status"
+          test "$site_status" = "200"
+          grep -q '<title>KY ERP</title>' /tmp/site.html
