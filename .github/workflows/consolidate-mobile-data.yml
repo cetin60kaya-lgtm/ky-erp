@@ -58,9 +58,12 @@ jobs:
           s = s.replace(
               'const DEFAULT_DAILY_RANGE = { start: "2026-05-13", end: "2026-05-19" };',
               'const DEFAULT_DAILY_RANGE = (() => {\n  const start = startOfWeekDateOnly(TODAY);\n  return { start, end: addDaysDateOnly(start, 6) };\n})();',
+              1,
           )
-          if '2026-05-13' in s or '2026-05-19' in s:
-              raise SystemExit('Stale daily date range remains')
+          if 'const IK_DAILY_DATE_RANGE_KEY = "ikDailyDateRange.v2";' not in s:
+              raise SystemExit('Daily range storage key was not upgraded')
+          if 'const start = startOfWeekDateOnly(TODAY);' not in s:
+              raise SystemExit('Dynamic current-week default was not installed')
           ik.write_text(s, encoding='utf-8')
 
           company = Path('APP/app/ky-erp-frontend/src/context/ActiveCompanyContext.jsx')
@@ -70,11 +73,12 @@ jobs:
 
           storage = Path('APP/cloud/ky-erp-api/src/desen-storage.ts')
           s = storage.read_text(encoding='utf-8')
-          old = '''        customMetadata: {\n          originalName: file.name,\n          uploadedAt: nowIso(),\n          source: "KY_ERP_UPLOAD",\n        },'''
-          new = '''        customMetadata: {\n          originalName: file.name,\n          relativePath: text(form.relativePath),\n          uploadedAt: nowIso(),\n          source: text(form.source || "KY_ERP_UPLOAD"),\n        },'''
-          if old not in s:
-              raise SystemExit('Desen upload metadata anchor not found')
-          s = s.replace(old, new, 1)
+          if 'relativePath: text(form.relativePath)' not in s:
+              old = '''        customMetadata: {\n          originalName: file.name,\n          uploadedAt: nowIso(),\n          source: "KY_ERP_UPLOAD",\n        },'''
+              new = '''        customMetadata: {\n          originalName: file.name,\n          relativePath: text(form.relativePath),\n          uploadedAt: nowIso(),\n          source: text(form.source || "KY_ERP_UPLOAD"),\n        },'''
+              if old not in s:
+                  raise SystemExit('Desen upload metadata anchor not found')
+              s = s.replace(old, new, 1)
           storage.write_text(s, encoding='utf-8')
           PY
 
@@ -94,13 +98,16 @@ jobs:
           npm run lint
           npm run build
 
-      - name: Verify no fixed 2582 login remains
+      - name: Verify fixed login is gone and IK routes are wired
         shell: bash
         run: |
           set -euo pipefail
           ! grep -R --line-number --fixed-string 'CLOUD_ADMIN_PASSWORD' APP/app/ky-erp-frontend/src
           ! grep -R --line-number --fixed-string 'FALLBACK_ADMIN_PASSWORD' APP/cloud/ky-erp-api/src
           ! grep -R --line-number --fixed-string '2582' APP/app/ky-erp-frontend/src/context/AuthContext.jsx APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q 'registerIkRelationalCloudRoutes(app);' APP/cloud/ky-erp-api/src/main.ts
+          grep -q 'ikDailyDateRange.v2' APP/app/ky-erp-frontend/src/pages/modules/IkPage.jsx
+          grep -q 'startOfWeekDateOnly(TODAY)' APP/app/ky-erp-frontend/src/pages/modules/IkPage.jsx
 
       - name: Commit consolidated source
         shell: bash
