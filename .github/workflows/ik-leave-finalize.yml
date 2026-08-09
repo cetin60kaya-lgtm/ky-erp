@@ -28,6 +28,7 @@ jobs:
         run: |
           python3 .github/ik_leave_final_patch.py
           python3 .github/ik_leave_toolchain_patch.py
+          python3 .github/ik_leave_lint_fix.py
 
       - name: Validate patch markers and diff
         run: |
@@ -46,13 +47,14 @@ jobs:
           npm test
           npm run typecheck
 
-      - name: Frontend install and production build
+      - name: Frontend install lint and production build
         working-directory: APP/app/ky-erp-frontend
         env:
           VITE_API_BASE_URL: https://api.kyerp.net
           VITE_BUILD_LABEL: ik-leave-final-preflight
         run: |
           npm ci
+          npm run lint
           npm run build
 
       - name: Commit final IK leave implementation
