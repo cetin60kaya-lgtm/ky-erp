@@ -19,6 +19,7 @@ import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
+import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
 import { registerIsnetInvoiceRuntimeRoutes } from "./isnet-invoice-runtime";
 import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
@@ -76,6 +77,8 @@ registerDesenOperationRoutes(app);
 // İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
 // Şifre D1'e yazılmaz; geçici girişten API tokenı / firma seçilmiş portal oturumu alınır.
 registerIsnetLiveSyncRoutes(app);
+// Arşivlenen İşNet PDF/XML dosyaları doğrudan R2'den açılır.
+registerIsnetFileRuntimeRoutes(app);
 // Doğrulanmış fatura taslağı SaveInvoice ile oluşur; resmî gönderim yalnız son kullanıcı onayı sonrası SendStagingInvoice kullanır.
 registerIsnetInvoiceRuntimeRoutes(app);
 // Müşteri: gelen irsaliye -> model/üretim -> bizim giden irsaliye -> bizim fatura.
