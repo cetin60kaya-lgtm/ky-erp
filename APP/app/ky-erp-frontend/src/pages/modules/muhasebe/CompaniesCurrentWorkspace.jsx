@@ -4,6 +4,7 @@ import {
   CirclePlus,
   RefreshCcw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
@@ -89,6 +90,7 @@ function emptyCompany() {
     phone: "",
     email: "",
     address: "",
+    note: "",
   };
 }
 
@@ -98,14 +100,15 @@ function profileDraftOf(firm = {}) {
     : /CUSTOMER|MUSTERI|MÜŞTERİ/.test(normalize(firm.companyType || firm.type))
       ? "CUSTOMER"
       : "SUPPLIER";
+  const defaultRecordType = normalize(firm.defaultRecordType).includes("GAYRI") ? "GAYRI_RESMI" : "RESMI";
   return {
     companyType,
     paymentMode: normalize(firm.paymentMode) === "CREDIT" ? "CREDIT" : "CASH",
     supplierDebtTracking: Boolean(firm.supplierDebtTracking),
     customerReceivableTracking: Boolean(firm.customerReceivableTracking),
-    vatTrackingEnabled: firm.vatTrackingEnabled !== false,
+    vatTrackingEnabled: defaultRecordType === "RESMI" && firm.vatTrackingEnabled !== false,
     expenseCategory: firm.expenseCategory || "",
-    defaultRecordType: normalize(firm.defaultRecordType).includes("GAYRI") ? "GAYRI_RESMI" : "RESMI",
+    defaultRecordType,
   };
 }
 
@@ -126,6 +129,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [aliasInput, setAliasInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [companyDeleting, setCompanyDeleting] = useState(false);
   const [notice, setNotice] = useState("");
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
@@ -284,6 +288,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           profileDraft.supplierDebtTracking,
         customerReceivableTracking:
           profileDraft.companyType !== "SUPPLIER" && profileDraft.customerReceivableTracking,
+        vatTrackingEnabled:
+          profileDraft.defaultRecordType === "RESMI" && profileDraft.vatTrackingEnabled,
       });
       const profile = objectOf(payload);
       setSelected((current) => ({ ...current, ...profile }));
@@ -338,6 +344,29 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setNotice(requestError?.message || "Alias kaldırılamadı.");
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const deleteCompany = async () => {
+    if (!selected?.id || companyDeleting) return;
+    const companyName = selected.firmaAdi || selected.companyName || selected.name || "Firma";
+    const confirmed = window.confirm(
+      `${companyName} firma kartı KESİN olarak silinecek.\n\nBu işlem geri alınamaz. Firma kartına bağlı belge, cari hareket, model veya başka kayıt varsa sistem silmeyi otomatik engeller.\n\nDevam edilsin mi?`,
+    );
+    if (!confirmed) return;
+    setCompanyDeleting(true);
+    setNotice("");
+    try {
+      await apiDelete(`/muhasebe/firmalar/${selected.id}`, params);
+      setSelected(null);
+      setMovements([]);
+      setAliases([]);
+      setTransactionOpen(false);
+      await loadFirms();
+    } catch (requestError) {
+      setNotice(requestError?.message || "Firma kartı kesin olarak silinemedi.");
+    } finally {
+      setCompanyDeleting(false);
     }
   };
 
@@ -415,13 +444,14 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <label>E-posta<input type="email" value={companyForm.email} onChange={(event) => setCompanyForm((current) => ({ ...current, email: event.target.value }))} /></label>
             <label>Gider kategorisi<input value={companyForm.expenseCategory} onChange={(event) => setCompanyForm((current) => ({ ...current, expenseCategory: event.target.value }))} placeholder="Gıda / Market, Kimyasal, Enerji..." /></label>
             <label>Adres<input value={companyForm.address} onChange={(event) => setCompanyForm((current) => ({ ...current, address: event.target.value }))} /></label>
+            <label>Not<input value={companyForm.note} onChange={(event) => setCompanyForm((current) => ({ ...current, note: event.target.value }))} placeholder="Firma kartı notu" /></label>
           </div>
           <div className="ccw-check-row">
             {companyForm.companyType !== "CUSTOMER" ? <label><input type="checkbox" checked={companyForm.supplierDebtTracking && companyForm.paymentMode === "CREDIT"} disabled={companyForm.paymentMode !== "CREDIT"} onChange={(event) => setCompanyForm((current) => ({ ...current, supplierDebtTracking: event.target.checked }))} /> Tedarikçi borcunu caride takip et</label> : null}
             {companyForm.companyType !== "SUPPLIER" ? <label><input type="checkbox" checked={companyForm.customerReceivableTracking} onChange={(event) => setCompanyForm((current) => ({ ...current, customerReceivableTracking: event.target.checked }))} /> Müşteri alacağını caride takip et</label> : null}
             <label><input type="checkbox" checked={companyForm.vatTrackingEnabled && companyForm.defaultRecordType === "RESMI"} disabled={companyForm.defaultRecordType !== "RESMI"} onChange={(event) => setCompanyForm((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
           </div>
-          <div className="ccw-rule-note">Peşin tedarikçide borç oluşmaz. Resmî belgede gider/KDV, gayri resmî kayıtta yalnız iç gider takibi yapılır.</div>
+          <div className="ccw-rule-note">Peşin tedarikçide borç oluşmaz. Resmî belgede gider/KDV, gayri resmî kayıtta yalnız iç gider takibi yapılır. Firma adı otomatik ilk alias olur; İşNet veya manuel belgede farklı ad gelirse alias eklenerek aynı karta bağlanır.</div>
           <div className="ccw-drawer-actions"><button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button></div>
         </section>
       ) : null}
@@ -480,6 +510,15 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 {canUseCari ? (
                   <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari İşlem</button>
                 ) : null}
+                <button
+                  type="button"
+                  disabled={companyDeleting}
+                  onClick={deleteCompany}
+                  title="İşlemsiz firma kartını kalıcı olarak sil"
+                  style={{ color: "#b42318", borderColor: "#fda29b", background: "#fff5f5" }}
+                >
+                  <Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kesin Sil"}
+                </button>
                 <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
             </header>
@@ -506,7 +545,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     </select>
                   </label>
                   <label>Varsayılan kayıt
-                    <select value={profileDraft.defaultRecordType} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultRecordType: event.target.value }))}>
+                    <select value={profileDraft.defaultRecordType} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultRecordType: event.target.value, vatTrackingEnabled: event.target.value === "RESMI" ? current.vatTrackingEnabled : false }))}>
                       <option value="RESMI">Resmî</option>
                       <option value="GAYRI_RESMI">Gayri resmî</option>
                     </select>
@@ -522,7 +561,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   {profileDraft.companyType !== "SUPPLIER" ? (
                     <label><input type="checkbox" checked={profileDraft.customerReceivableTracking} onChange={(event) => setProfileDraft((current) => ({ ...current, customerReceivableTracking: event.target.checked }))} /> Müşteri alacağını caride takip et</label>
                   ) : null}
-                  <label><input type="checkbox" checked={profileDraft.vatTrackingEnabled} onChange={(event) => setProfileDraft((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
+                  <label><input type="checkbox" checked={profileDraft.vatTrackingEnabled && profileDraft.defaultRecordType === "RESMI"} disabled={profileDraft.defaultRecordType !== "RESMI"} onChange={(event) => setProfileDraft((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
                 </div>
                 <div className="ccw-rule-note">
                   {profileDraft.companyType !== "CUSTOMER" && profileDraft.paymentMode === "CASH"
