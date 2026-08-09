@@ -1,0 +1,200 @@
+name: KY ERP Desen Bridge Finalize
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/desen-bridge-finalize.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Patch bridge integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Auth helper for non-browser bridge clients.
+          p = Path('APP/cloud/ky-erp-api/src/auth-cloud.ts')
+          s = p.read_text(encoding='utf-8')
+          helper = '''\nexport async function getAuthenticatedUser(c: any) {\n  const payload = parseSessionToken(bearerToken(c));\n  if (!payload) return null;\n  const user = await findUserById(c, String(payload.sub));\n  if (!user || !Boolean(user.is_active)) return null;\n  return userPayload(c, user);\n}\n'''
+          anchor = '\nexport function registerAuthCloudRoutes(app: any) {'
+          if 'export async function getAuthenticatedUser' not in s:
+              if anchor not in s:
+                  raise SystemExit('auth helper anchor not found')
+              s = s.replace(anchor, helper + anchor, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Register the bridge in the live Worker shell.
+          p = Path('APP/cloud/ky-erp-api/src/main.ts')
+          s = p.read_text(encoding='utf-8')
+          import_line = 'import { registerDesenBridgeRoutes } from "./desen-bridge";\n'
+          if import_line not in s:
+              anchor = 'import { registerDesenOperationRoutes } from "./desen-operations";\n'
+              if anchor not in s:
+                  raise SystemExit('main import anchor not found')
+              s = s.replace(anchor, import_line + anchor, 1)
+          if 'registerDesenBridgeRoutes(app);' not in s:
+              anchor = 'registerDesenStorageRoutes(app);\n'
+              if anchor not in s:
+                  raise SystemExit('main register anchor not found')
+              s = s.replace(anchor, anchor + 'registerDesenBridgeRoutes(app);\n', 1)
+          s = s.replace('"X-KYERP-Tenant-Slug"]', '"X-KYERP-Tenant-Slug", "X-KYERP-Device"]')
+          p.write_text(s, encoding='utf-8')
+
+          # Frontend service: bridge status.
+          p = Path('APP/app/ky-erp-frontend/src/services/desenFolderSettingsApi.js')
+          s = p.read_text(encoding='utf-8')
+          if 'export async function getDesenBridgeStatus' not in s:
+              s += '''\n\nexport async function getDesenBridgeStatus(activeMainCompany) {\n  return unwrap(\n    await apiGet(\n      "/desen/bridge/status",\n      companyPayload(activeMainCompany),\n    ),\n  );\n}\n'''
+          p.write_text(s, encoding='utf-8')
+
+          # Frontend storage bar: show bridge health.
+          p = Path('APP/app/ky-erp-frontend/src/pages/desen/DesenFolderSettingsBar.jsx')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              '  getDesenFolderSettings,\n  testDesenFolderSettings,',
+              '  getDesenBridgeStatus,\n  getDesenFolderSettings,\n  testDesenFolderSettings,',
+              1,
+          )
+          s = s.replace(
+              '  const [result, setResult] = useState(null);\n  const [busy, setBusy] = useState(false);',
+              '  const [result, setResult] = useState(null);\n  const [bridge, setBridge] = useState(null);\n  const [busy, setBusy] = useState(false);',
+              1,
+          )
+          old = '''        const data = test\n          ? await testDesenFolderSettings(company)\n          : await getDesenFolderSettings(company);\n        setResult(data || null);'''
+          new = '''        const [data, bridgeData] = await Promise.all([\n          test\n            ? testDesenFolderSettings(company)\n            : getDesenFolderSettings(company),\n          getDesenBridgeStatus(company).catch(() => null),\n        ]);\n        setResult(data || null);\n        setBridge(bridgeData || null);'''
+          if old not in s:
+              raise SystemExit('folder status load anchor not found')
+          s = s.replace(old, new, 1)
+          facts_anchor = '''          <span>\n            <CheckCircle2 size={14} /> Kalıcı bulut depolama\n          </span>'''
+          facts_new = '''          <span>\n            <CheckCircle2 size={14} /> Kalıcı bulut depolama\n          </span>\n          <span>\n            <CheckCircle2 size={14} /> Yerel köprü: {bridge?.online ? "Çevrimiçi" : "Çevrimdışı"}\n          </span>\n          {bridge?.latest?.lastModelName ? (\n            <span>Son aktarım: {bridge.latest.lastModelName}</span>\n          ) : null}'''
+          if facts_anchor not in s:
+              raise SystemExit('folder facts anchor not found')
+          s = s.replace(facts_anchor, facts_new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Copy explains local bridge + low-size R2.
+          p = Path('APP/app/ky-erp-frontend/src/pages/desen/DesenPage.jsx')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              '"Model, kanal ve yerleşim görsellerini R2 gelen alanına yükleyip kontrol ederek tek model kartına dönüştürün."',
+              '"UXP / yerel Desen Köprüsü veya telefon yüklemesiyle gelen görselleri düşük boyutlu R2 önizlemelerine dönüştürüp model kartına bağlayın."',
+              1,
+          )
+          p.write_text(s, encoding='utf-8')
+
+          # Model cards use tiny thumbnails; detail keeps the larger preview.
+          p = Path('APP/app/ky-erp-frontend/src/pages/desen/DesenModeller.jsx')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              'assetUrl(model.mainImage.previewUrl)',
+              'assetUrl(model.mainImage.thumbnailUrl || model.mainImage.previewUrl)',
+          )
+          s = s.replace('>Gelen Klasörü Tara</button>', '>Gelen Desenler</button>')
+          p.write_text(s, encoding='utf-8')
+
+          # Incoming screen now names the action accurately: it scans R2, not Windows.
+          p = Path('APP/app/ky-erp-frontend/src/pages/desen/DesenModelMasasi.jsx')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('Gelen Klasörü Tara', 'Bulut Gelenleri Tara')
+          p.write_text(s, encoding='utf-8')
+
+          # Watcher identifies its device on ingest/heartbeat.
+          p = Path('tools/desen-sync/desen-sync.mjs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              '      Authorization: `Bearer ${token}`,\n      "content-type": "application/json",',
+              '      Authorization: `Bearer ${token}`,\n      "X-KYERP-Device": os.hostname(),\n      "content-type": "application/json",',
+              1,
+          )
+          s = s.replace(
+              '    headers: { Authorization: `Bearer ${token}` },\n    body: form,',
+              '    headers: { Authorization: `Bearer ${token}`, "X-KYERP-Device": os.hostname() },\n    body: form,',
+              1,
+          )
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Install and validate design sync package
+        working-directory: tools/desen-sync
+        run: |
+          npm install --omit=dev --no-audit --no-fund
+          node --check desen-sync.mjs
+
+      - name: Validate PowerShell launchers
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content -LiteralPath 'tools/DESEN-SISTEM-KUR.ps1' -Raw)) | Out-Null
+          [scriptblock]::Create((Get-Content -LiteralPath 'tools/DESEN-SYNC-CALISTIR.ps1' -Raw)) | Out-Null
+
+      - name: Worker typecheck and dry build
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+      - name: Frontend lint and build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Verify design bridge policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'registerDesenBridgeRoutes(app);' APP/cloud/ky-erp-api/src/main.ts
+          grep -q 'WEBP_PREVIEW_THUMB_ONLY' APP/cloud/ky-erp-api/src/desen-bridge.ts
+          grep -q 'PREVIEW_MAX = 1600' tools/desen-sync/desen-sync.mjs
+          grep -q 'THUMB_MAX = 420' tools/desen-sync/desen-sync.mjs
+          grep -q 'Yerel köprü' APP/app/ky-erp-frontend/src/pages/desen/DesenFolderSettingsBar.jsx
+          grep -q 'thumbnailUrl || model.mainImage.previewUrl' APP/app/ky-erp-frontend/src/pages/desen/DesenModeller.jsx
+          ! grep -q '2582' APP/app/ky-erp-frontend/src/context/AuthContext.jsx
+          ! grep -q '2582' APP/cloud/ky-erp-api/src/auth-cloud.ts
+
+      - name: Commit final design bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "cetin kaya"
+          git config user.email "cetin60kaya@gmail.com"
+          git add \
+            APP/cloud/ky-erp-api/src/auth-cloud.ts \
+            APP/cloud/ky-erp-api/src/main.ts \
+            APP/cloud/ky-erp-api/src/desen-bridge.ts \
+            APP/app/ky-erp-frontend/src/services/desenFolderSettingsApi.js \
+            APP/app/ky-erp-frontend/src/pages/desen/DesenFolderSettingsBar.jsx \
+            APP/app/ky-erp-frontend/src/pages/desen/DesenPage.jsx \
+            APP/app/ky-erp-frontend/src/pages/desen/DesenModeller.jsx \
+            APP/app/ky-erp-frontend/src/pages/desen/DesenModelMasasi.jsx \
+            tools/desen-sync/package.json \
+            tools/desen-sync/package-lock.json \
+            tools/desen-sync/desen-sync.mjs \
+            tools/DESEN-SISTEM-KUR.ps1 \
+            tools/DESEN-SISTEM-KUR.bat \
+            tools/DESEN-SYNC-CALISTIR.ps1 \
+            tools/DESEN-SYNC-BASLAT.bat
+          if git diff --cached --quiet; then
+            echo 'No changes'
+            exit 0
+          fi
+          git commit -m "feat: complete low-size automatic design bridge"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
