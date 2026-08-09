@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T04:34:00+03:00",
-  "attempt": 17,
+  "requestedAt": "2026-08-09T04:38:00+03:00",
+  "attempt": 18,
   "scope": [
     "ik-yillik-izin-tarih-mantigi",
     "ik-yillik-izin-d1-motoru",
@@ -11,10 +11,10 @@
     "ik-yillik-izin-cakisma-bakiye",
     "ik-izin-ekran-temizligi",
     "ik-izin-otomatik-hesap",
-    "ik-izin-lint-safe-preview",
+    "ik-izin-d1-compatible-migration",
     "ik-izin-regression-18-gun",
     "live-browser-verification"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Final IK yıllık izin sürümü: tek temiz ekran düzeni, işe dönüş tarihinin izin gününe dahil edilmemesi, gerçek D1 izin motoru/politika/önizleme/çakışma/bakiye kayıtları ve lint-safe otomatik hesap. 10.08.2026 izne çıkış / 31.08.2026 işe dönüş senaryosu tam 18 gün olarak test edildi. Worker test/typecheck ile frontend lint/build ön kontrolden başarıyla geçti."
+  "note": "Final IK yıllık izin sürümü. D1 migration UPSERT ifadesi Cloudflare D1 uyumlu INSERT OR IGNORE biçimine çevrildi. İşe dönüş günü izin hesabına katılmıyor; gerçek D1 policy/plan/preview/conflict/balance akışı ve tek temiz ekran korunuyor. 10.08.2026 izne çıkış / 31.08.2026 işe dönüş = 18 gün testi mevcut."
 }
