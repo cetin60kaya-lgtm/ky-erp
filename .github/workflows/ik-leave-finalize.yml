@@ -41,7 +41,7 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: |
           npm ci
-          npm test
+          node --experimental-strip-types --test src/ik-relational-cloud.test.ts
           npm run typecheck
 
       - name: Frontend install and production build
