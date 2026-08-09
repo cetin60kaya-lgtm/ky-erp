@@ -1,5 +1,7 @@
 import { apiFetch, apiGet, apiPost, apiPut } from "../utils/api";
 
+const ACCOUNTING_CLEAN_START = "2026-08-01";
+
 function unwrap(payload) {
   return payload &&
     payload.ok === true &&
@@ -8,9 +10,10 @@ function unwrap(payload) {
     : payload;
 }
 
-function currentMonthStart() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
+function floorCleanStart(value) {
+  const requested = String(value || "").trim();
+  if (!requested || requested < ACCOUNTING_CLEAN_START) return ACCOUNTING_CLEAN_START;
+  return requested;
 }
 
 export const getIsnetDashboard = () => apiGet("/isnet/dashboard").then(unwrap);
@@ -18,8 +21,8 @@ export const getIsnetConfiguration = () => apiGet("/isnet/configuration").then(u
 export const getIncomingDispatches = () => apiGet("/isnet/dispatches/incoming").then(unwrap);
 export const getIssuedDocuments = () => apiGet("/isnet/documents/issued").then(unwrap);
 export const getIssuedDocumentFile = (id, format = "pdf") => apiFetch(`/isnet/documents/issued/${encodeURIComponent(id)}/file?format=${encodeURIComponent(format)}&preview=1`, { responseType: "blob", timeoutMs: 60_000 });
-export const getIsnetPortalDocuments = ({ startDate, endDate }) => apiGet(`/isnet/documents/portal?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`).then(unwrap);
-export const getIsnetLocalDocuments = ({ startDate, endDate, page = 1, pageSize = 50 }) => apiGet(`/isnet/documents/local?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`).then(unwrap);
+export const getIsnetPortalDocuments = ({ startDate, endDate }) => apiGet(`/isnet/documents/portal?startDate=${encodeURIComponent(floorCleanStart(startDate))}&endDate=${encodeURIComponent(endDate)}`).then(unwrap);
+export const getIsnetLocalDocuments = ({ startDate, endDate, page = 1, pageSize = 50 }) => apiGet(`/isnet/documents/local?startDate=${encodeURIComponent(floorCleanStart(startDate))}&endDate=${encodeURIComponent(endDate)}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`).then(unwrap);
 export const backfillIsnetPortalDocument = (document) => apiPost("/isnet/documents/backfill", { documentNo: document.documentNo, automationKey: document.automationKey }).then(unwrap);
 export const getIsnetPortalDocumentFile = (document, format) => apiFetch(`/isnet/documents/${encodeURIComponent(document.direction)}/${encodeURIComponent(document.kind)}/${encodeURIComponent(document.sourceId)}/file?format=${encodeURIComponent(format)}`, { responseType: "blob", timeoutMs: 60_000 });
 export const importIsnetIncomingDispatch = (document) => apiPost(`/isnet/documents/incoming/dispatch/${encodeURIComponent(document.sourceId)}/import`, { confirmed: true }).then(unwrap);
@@ -53,16 +56,7 @@ export const getMailQueue = () => apiGet("/isnet/mail/queue").then(unwrap);
 export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
 export const testIsnetSettings = (payload) => apiPost("/isnet/settings/test", payload, { suppressUnauthorized: true, timeoutMs: 90_000 }).then(unwrap);
 export const saveIsnetSettings = (payload) => apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
-
-export const startDailySync = (payload = {}) => {
-  const requestedStart = String(payload?.startDate || "").trim();
-  const cleanStart = "2026-08-01";
-  const startDate = !requestedStart || requestedStart < cleanStart
-    ? (currentMonthStart() < cleanStart ? cleanStart : currentMonthStart())
-    : requestedStart;
-  return apiPost("/isnet/full-sync", { ...payload, startDate }, { timeoutMs: 900_000 }).then(unwrap);
-};
-
+export const startDailySync = (payload = {}) => apiPost("/isnet/full-sync", { ...payload, startDate: floorCleanStart(payload.startDate) }, { timeoutMs: 900_000 }).then(unwrap);
 export const getIsnetFullSyncStatus = () => apiGet("/isnet/full-sync/status").then(unwrap);
 export const markIsnetDocumentRead = (key, read = true) => apiPost(`/isnet/documents/${encodeURIComponent(key)}/read`, { read }).then(unwrap);
 export const markIsnetDocumentsRead = (documentIds, isRead) => apiFetch("/isnet/documents/read-status", { method: "PATCH", body: { documentIds, isRead } }).then(unwrap);
