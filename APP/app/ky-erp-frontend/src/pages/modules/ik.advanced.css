@@ -2355,3 +2355,23 @@
   .ik-html .leave-year-board { grid-template-columns: repeat(2, 1fr); }
   .ik-html .weekday-picker { grid-template-columns: repeat(2, 1fr); }
 }
+
+
+/* IK_LEAVE_FINAL_V2 */
+.ik-html .leave-main-tabs { overflow-x:auto; scrollbar-width:thin; }
+.ik-html .leave-main-tabs button { flex:0 0 auto; min-width:128px; }
+.modal-bg .preview-numbers .highlight { border-color:#93c5fd; background:#eff6ff; }
+.modal-bg .preview-numbers .highlight b { color:#1d4ed8; font-size:20px; }
+.modal-bg .preview-numbers .return { border-color:#86efac; background:#f0fdf4; }
+.modal-bg .preview-numbers .return b { color:#15803d; }
+.modal-bg .leave-auto-note { margin-top:10px; }
+.modal-bg .leave-calendar-days button.counted-day { background:#eaf2ff; border-color:#8fb6f6; }
+.modal-bg .leave-calendar-days button.excluded-day { background:#f4f6f8; border-color:#d7dee8; color:#7b8796; }
+.modal-bg .leave-calendar-days button.official-day { background:repeating-linear-gradient(135deg,#fff7ed,#fff7ed 6px,#ffedd5 6px,#ffedd5 12px); border-color:#fdba74; color:#9a3412; }
+.modal-bg .leave-calendar-days button.return-day { background:#dcfce7 !important; border:2px solid #22c55e !important; color:#166534; box-shadow:inset 0 0 0 1px #86efac; }
+.modal-bg .leave-calendar-days button.range-start { box-shadow:inset 0 0 0 2px #2563eb; }
+.modal-bg .leave-calendar-days .excluded-label { color:#64748b; font-style:normal; font-size:8px; }
+.modal-bg .leave-calendar-days .return-label { color:#15803d; font-style:normal; font-weight:900; font-size:8px; }
+.modal-bg .leave-calendar-legend .not-counted { background:#cbd5e1; }
+.modal-bg .leave-calendar-legend .return-legend { background:#22c55e; }
+@media (max-width:1100px){.ik-html .leave-main-tabs{flex-wrap:nowrap}.modal-bg .leave-modal-layout{grid-template-columns:1fr}.modal-bg .leave-preview-panel{position:static}}
