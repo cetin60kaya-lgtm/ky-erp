@@ -2,18 +2,17 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T14:38:00+03:00",
-  "attempt": 24,
+  "requestedAt": "2026-08-09T14:53:00+03:00",
+  "attempt": 25,
   "scope": [
-    "design-cloudflare-ai-vision-ocr",
-    "design-auto-analysis-on-ingest",
-    "design-pantone-search",
-    "design-figure-character-search",
-    "design-description-semantic-index",
-    "design-visible-text-index",
-    "design-fullscreen-preview-fix",
-    "design-legacy-smart-reindex"
+    "design-visual-model-finder",
+    "erp-assistant-image-search",
+    "design-photo-ocr",
+    "design-bge-m3-similarity-rank",
+    "design-pantone-figure-image-match",
+    "design-mobile-camera-search",
+    "design-search-result-deep-link"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Desen görselini R2 küçük önizlemesi üzerinden Cloudflare Workers AI ile otomatik analiz et; görsel eklendiği anda OCR, Pantone, görünen yazı, figür/karakter, tema, renk ve Türkçe desen açıklamasını model metadata arama indeksine kaydet; mevcut Akıllı Tara işlemini eski kayıtları gerçek görsel analizle yeniden indeksleyecek şekilde güncelle; OCR undefined durumunu açık COMPLETED/FAILED/NO_IMAGE statülerine dönüştür; model aramasını indekslenen açıklama ve etiketlerle çalıştır; tam ekran desen önizlemesini gerçek viewport düzenine al ve Esc/X ile güvenli çıkış ekle."
+  "note": "ERP Asistan'a telefondan veya bilgisayardan desen fotoğrafı yükleyerek modeli bulma özelliğini canlıya al. Yüklenen arama fotoğrafını kalıcı depoya kaydetmeden Workers AI ile OCR/görsel açıklama çıkar; Pantone, figür, yazı ve anahtar kelimeleri değerlendir; mevcut Desen Havuzu AI indeksleriyle BGE-M3 semantik benzerlik ve kesin Pantone/kelime eşleşmesini birleştirerek en güçlü adayları yüzde/güven puanıyla sırala. Asistan ilk adayı 'Bu model büyük olasılıkla ...' şeklinde göstersin, alternatifleri küçük görsellerle sunsun ve Desen Havuzunda ilgili modele doğrudan geçiş sağlasın."
 }
