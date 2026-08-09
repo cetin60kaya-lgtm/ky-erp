@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS ik_leave_plans (
 CREATE INDEX IF NOT EXISTS idx_ik_leave_plans_company_dates ON ik_leave_plans(main_company_id,start_date,end_date,status);
 CREATE INDEX IF NOT EXISTS idx_ik_leave_plans_employee_dates ON ik_leave_plans(employee_id,start_date,end_date,status);
 
-INSERT INTO ik_leave_counting_policy (main_company_id,counted_weekdays_json,exclude_official_holidays,max_concurrent_department,updated_by)
-SELECT DISTINCT main_company_id,'[1,2,3,4,5,6]',1,1,'migration-0009' FROM hr_monthly_employees
-ON CONFLICT(main_company_id) DO NOTHING;
+INSERT OR IGNORE INTO ik_leave_counting_policy (
+  main_company_id,
+  counted_weekdays_json,
+  exclude_official_holidays,
+  max_concurrent_department,
+  updated_by
+)
+SELECT DISTINCT main_company_id,'[1,2,3,4,5,6]',1,1,'migration-0009'
+FROM hr_monthly_employees
+WHERE main_company_id IS NOT NULL AND TRIM(main_company_id) <> '';
