@@ -2,14 +2,17 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T15:59:00+03:00",
-  "attempt": 27,
+  "requestedAt": "2026-08-09T16:08:00+03:00",
+  "attempt": 28,
   "scope": [
-    "production-live-schema-compat",
-    "production-center-500-fix",
-    "production-report-500-fix",
-    "production-machine-legacy-shift-compat"
+    "customer-only-company-scope",
+    "default-taha-design-company",
+    "default-taha-production-company",
+    "existing-design-models-to-taha",
+    "future-design-default-taha",
+    "future-production-default-taha",
+    "remove-redundant-actions-observer"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Run 26 sonrası görülen İmalat 500 hatasını düzelt. Canlı D1 yedeğinden doğrulanan eski model_records, invoice_items, production_records, model_document_links ve model_production_links şemalarını yeni production runtime v2 ile uyumlu eksik kolonlarla yükselt. machine_shift_defaults eski shift NOT NULL yapısını diğer tenant satırlarını koruyarak BOTH varsayılanlı uyumlu tabloya dönüştür. Yeni yayın öncesi yeniden tam D1 yedeği al; üretim verisi temiz başlangıçta kalsın; Desen, Boyahane, İK, Muhasebe, İşNet belge/firma içeriklerini değiştirme."
+  "note": "Desen ve İmalat iş akışlarında yalnız müşteri tipindeki firmaları göster; tedarikçi ve diğer cari firmaları seçim listelerinden çıkar. TAHA GİYİM'i varsayılan müşteri yap. Mevcut tüm Desen Havuzu modellerini ve varsa mevcut üretim modellerini TAHA GİYİM'e bağla. Bundan sonra UXP/Desen Köprüsü, gelen klasörü, manuel Desen ve manuel İmalat dahil herhangi bir giriş yolu firma bilgisi göndermeden model oluşturursa D1 katmanında otomatik TAHA GİYİM ata; kullanıcı daha sonra REN FASHION, MIND vb. başka bir müşteri seçerse bu seçimi koru. Ek Actions tüketen production observer workflow'unu kaldır. Yayın öncesi D1 tam yedeğini al ve diğer modül verilerine dokunma."
 }
