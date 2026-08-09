@@ -1,0 +1,65 @@
+name: KY ERP Live Data Audit
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/live-data-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve Cloudflare account
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          database_id="b504b712-6927-499d-815d-0b954c8ee246"
+          accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+          account_id=""
+          while read -r candidate; do
+            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${candidate}/d1/database?per_page=100")"
+            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
+              account_id="$candidate"
+              break
+            fi
+          done < <(jq -r '.result[]?.id' <<<"$accounts_json")
+          test -n "$account_id"
+          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+      - name: Audit D1 and live API
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== MAIN COMPANIES ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT id, slug, name, is_active FROM main_companies ORDER BY name;"
+          echo '=== HR TABLES ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'hr_%' OR name LIKE 'ik_%') ORDER BY name;"
+          echo '=== HR MONTHLY EMPLOYEE COLUMNS ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(hr_monthly_employees);" || true
+          echo '=== HR MONTHLY EMPLOYEE COUNTS ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT main_company_id, COUNT(*) AS cnt FROM hr_monthly_employees GROUP BY main_company_id ORDER BY cnt DESC;" || true
+          echo '=== HR MONTHLY PERSONNEL COUNTS ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT main_company_id, COUNT(*) AS cnt FROM hr_monthly_personnel GROUP BY main_company_id ORDER BY cnt DESC;" || true
+          echo '=== JSON STORE COUNTS ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT main_company_slug, scope, COUNT(*) AS cnt FROM json_store WHERE scope LIKE 'IK_%' OR scope LIKE 'DESEN_%' GROUP BY main_company_slug, scope ORDER BY main_company_slug, scope;" || true
+          echo '=== MODEL RECORD COUNTS ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT main_company_slug, COUNT(*) AS cnt FROM model_records GROUP BY main_company_slug ORDER BY cnt DESC;" || true
+          echo '=== LIVE IK ADVANCED MONTH ==='
+          curl -sS 'https://api.kyerp.net/api/ik/advanced/month?mainCompanySlug=mecit-hakan&year=2026&month=8' | head -c 3000; echo
+          echo '=== LIVE DESIGN MODELS ==='
+          curl -sS 'https://api.kyerp.net/api/desen/workflow/models?mainCompanySlug=mecit-hakan&limit=5' | head -c 3000; echo
+          echo '=== LIVE DESIGN STORAGE ==='
+          curl -sS 'https://api.kyerp.net/api/desen/folder-settings?mainCompanySlug=mecit-hakan' | head -c 3000; echo
