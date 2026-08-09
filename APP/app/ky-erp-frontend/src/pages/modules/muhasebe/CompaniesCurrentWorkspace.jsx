@@ -130,6 +130,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [saving, setSaving] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [companyDeleting, setCompanyDeleting] = useState(false);
+  const [companyStatusSaving, setCompanyStatusSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
@@ -347,11 +348,36 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     }
   };
 
+  const toggleCompanyStatus = async () => {
+    if (!selected?.id || companyStatusSaving) return;
+    const nextIsActive = selected.isActive === false;
+    setCompanyStatusSaving(true);
+    setNotice("");
+    try {
+      const payload = await apiPatch(`/muhasebe/firmalar/${selected.id}/status`, {
+        ...params,
+        isActive: nextIsActive,
+      });
+      const data = objectOf(payload);
+      setSelected((current) => ({ ...current, isActive: data.isActive !== false }));
+      setFirms((current) => current.map((firm) => (
+        String(firm.id) === String(selected.id)
+          ? { ...firm, isActive: data.isActive !== false }
+          : firm
+      )));
+      setNotice(data.isActive === false ? "Firma pasife alındı." : "Firma tekrar aktif edildi.");
+    } catch (requestError) {
+      setNotice(requestError?.message || "Firma durumu değiştirilemedi.");
+    } finally {
+      setCompanyStatusSaving(false);
+    }
+  };
+
   const deleteCompany = async () => {
     if (!selected?.id || companyDeleting) return;
     const companyName = selected.firmaAdi || selected.companyName || selected.name || "Firma";
     const confirmed = window.confirm(
-      `${companyName} firma kartı KESİN olarak silinecek.\n\nBu işlem geri alınamaz. Firma kartına bağlı belge, cari hareket, model veya başka kayıt varsa sistem silmeyi otomatik engeller.\n\nDevam edilsin mi?`,
+      `${companyName} firma kartı KALICI olarak silinecek.\n\nBu işlem geri alınamaz. Geçmiş belge veya cari bağlantısı olsa da firma kartı silinecek.\n\nDevam edilsin mi?`,
     );
     if (!confirmed) return;
     setCompanyDeleting(true);
@@ -364,7 +390,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setTransactionOpen(false);
       await loadFirms();
     } catch (requestError) {
-      setNotice(requestError?.message || "Firma kartı kesin olarak silinemedi.");
+      setNotice(requestError?.message || "Firma kartı kalıcı olarak silinemedi.");
     } finally {
       setCompanyDeleting(false);
     }
@@ -451,7 +477,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             {companyForm.companyType !== "SUPPLIER" ? <label><input type="checkbox" checked={companyForm.customerReceivableTracking} onChange={(event) => setCompanyForm((current) => ({ ...current, customerReceivableTracking: event.target.checked }))} /> Müşteri alacağını caride takip et</label> : null}
             <label><input type="checkbox" checked={companyForm.vatTrackingEnabled && companyForm.defaultRecordType === "RESMI"} disabled={companyForm.defaultRecordType !== "RESMI"} onChange={(event) => setCompanyForm((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
           </div>
-          <div className="ccw-rule-note">Peşin tedarikçide borç oluşmaz. Resmî belgede gider/KDV, gayri resmî kayıtta yalnız iç gider takibi yapılır. Firma adı otomatik ilk alias olur; İşNet veya manuel belgede farklı ad gelirse alias eklenerek aynı karta bağlanır.</div>
+          <div className="ccw-rule-note">Peşin tedarikçide borç oluşmaz. Resmî belgede gider/KDV, gayri resmî kayıtta yalnız iç gider takibi yapılır. Firma adı otomatik ilk alias olur.</div>
           <div className="ccw-drawer-actions"><button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button></div>
         </section>
       ) : null}
@@ -484,7 +510,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     <td>{firm.taxNo || "-"}</td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
                     <td>{Number(firm.aliasCount || 0)}</td>
-                    <td>{firm.isActive === false ? "Pasif" : "Aktif"}</td>
+                    <td><strong>{firm.isActive === false ? "Pasif" : "Aktif"}</strong></td>
                   </tr>
                 ))}
               </tbody>
@@ -504,7 +530,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <header>
               <div>
                 <h2>{selected.firmaAdi || selected.companyName || selected.name}</h2>
-                <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p>
+                <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.isActive === false ? "Pasif" : "Aktif"} · {selected.taxNo || "Vergi no yok"}</p>
               </div>
               <div className="ccw-drawer-actions">
                 {canUseCari ? (
@@ -512,12 +538,22 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 ) : null}
                 <button
                   type="button"
+                  disabled={companyStatusSaving}
+                  onClick={toggleCompanyStatus}
+                  style={selected.isActive === false
+                    ? { color: "#067647", borderColor: "#75e0a7", background: "#ecfdf3" }
+                    : { color: "#b54708", borderColor: "#fec84b", background: "#fffaeb" }}
+                >
+                  {companyStatusSaving ? "Kaydediliyor…" : selected.isActive === false ? "Aktif Et" : "Pasife Al"}
+                </button>
+                <button
+                  type="button"
                   disabled={companyDeleting}
                   onClick={deleteCompany}
-                  title="İşlemsiz firma kartını kalıcı olarak sil"
+                  title="Firma kartını uyarı sonrası kalıcı olarak sil"
                   style={{ color: "#b42318", borderColor: "#fda29b", background: "#fff5f5" }}
                 >
-                  <Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kesin Sil"}
+                  <Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kalıcı Sil"}
                 </button>
                 <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
@@ -564,11 +600,13 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   <label><input type="checkbox" checked={profileDraft.vatTrackingEnabled && profileDraft.defaultRecordType === "RESMI"} disabled={profileDraft.defaultRecordType !== "RESMI"} onChange={(event) => setProfileDraft((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
                 </div>
                 <div className="ccw-rule-note">
-                  {profileDraft.companyType !== "CUSTOMER" && profileDraft.paymentMode === "CASH"
-                    ? "Peşin alış: gider ve resmîyse KDV kaydı oluşur; firmaya cari borç yazılmaz."
-                    : profileDraft.companyType !== "CUSTOMER"
-                      ? "Cari tedarikçi: onaylanan tedarikçi faturası firma borcuna eklenir."
-                      : "Müşteri: gelen irsaliye borç oluşturmaz; müşteri alacağı yalnız kesilen fatura/tahsilat akışından izlenir."}
+                  {selected.isActive === false
+                    ? "Firma pasif. İstersen tekrar Aktif Et ile kullanıma açabilirsin."
+                    : profileDraft.companyType !== "CUSTOMER" && profileDraft.paymentMode === "CASH"
+                      ? "Peşin alış: gider ve resmîyse KDV kaydı oluşur; firmaya cari borç yazılmaz."
+                      : profileDraft.companyType !== "CUSTOMER"
+                        ? "Cari tedarikçi: onaylanan tedarikçi faturası firma borcuna eklenir."
+                        : "Müşteri: gelen irsaliye borç oluşturmaz; müşteri alacağı yalnız kesilen fatura/tahsilat akışından izlenir."}
                 </div>
               </section>
 
@@ -589,6 +627,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
               <section className="ccw-detail-summary">
                 <div><span>Bakiye</span><strong>{money(selected.currentBalance)}</strong></div>
+                <div><span>Durum</span><strong>{selected.isActive === false ? "Pasif" : "Aktif"}</strong></div>
                 <div><span>Kayıt türü</span><strong>{recordLabel(selected)}</strong></div>
                 <div><span>Cari durumu</span><strong>{cariLabel(selected)}</strong></div>
                 <div><span>KDV takibi</span><strong>{selected.vatTrackingEnabled === false ? "Kapalı" : "Aktif"}</strong></div>
