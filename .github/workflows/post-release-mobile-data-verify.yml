@@ -1,0 +1,76 @@
+name: KY ERP Post Release Mobile Data Verify
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/post-release-mobile-data-verify.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify live IK data and auth
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          site_status="$(curl -L -sS -o /tmp/site.html -w '%{http_code}' https://app.kyerp.net/)"
+          echo "SITE_STATUS=$site_status"
+          test "$site_status" = "200"
+
+          ik_status="$(curl -sS -o /tmp/ik.json -w '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/month?mainCompanySlug=mecit-hakan&year=2026&month=8')"
+          echo "IK_STATUS=$ik_status"
+          cat /tmp/ik.json | jq '{ok, employeeCount: ((.employees // .data.employees // .rows // .data.rows // []) | length)}'
+          test "$ik_status" = "200"
+          jq -e '.ok == true or .success == true' /tmp/ik.json >/dev/null
+          employee_count="$(jq '((.employees // .data.employees // .rows // .data.rows // []) | length)' /tmp/ik.json)"
+          echo "IK_EMPLOYEE_COUNT=$employee_count"
+          test "$employee_count" -ge 18
+
+          fixed_status="$(curl -sS -o /tmp/fixed.json -w '%{http_code}' -X POST https://api.kyerp.net/api/auth/login -H 'Content-Type: application/json' --data '{"username":"admin","password":"2582"}')"
+          echo "FIXED_2582_STATUS=$fixed_status"
+          cat /tmp/fixed.json
+          test "$fixed_status" = "401"
+
+          invalid_status="$(curl -sS -o /tmp/invalid.json -w '%{http_code}' -X POST https://api.kyerp.net/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__probe__","password":"__probe__"}')"
+          echo "INVALID_LOGIN_STATUS=$invalid_status"
+          test "$invalid_status" = "401"
+
+      - name: Verify live design storage and model index
+        shell: bash
+        run: |
+          set -euo pipefail
+          storage_status="$(curl -sS -o /tmp/storage.json -w '%{http_code}' 'https://api.kyerp.net/api/desen/folder-settings?mainCompanySlug=mecit-hakan')"
+          echo "DESIGN_STORAGE_STATUS=$storage_status"
+          cat /tmp/storage.json | jq '{connected: (.data.connected // .connected), storageMode: (.data.storageMode // .storageMode), pending: (.data.pendingFileCount // .pendingFileCount)}'
+          test "$storage_status" = "200"
+          jq -e '(.data.connected // .connected) == true' /tmp/storage.json >/dev/null
+          jq -e '(.data.storageMode // .storageMode) == "R2"' /tmp/storage.json >/dev/null
+
+          model_status="$(curl -sS -o /tmp/models.json -w '%{http_code}' 'https://api.kyerp.net/api/desen/workflow/models?mainCompanySlug=mecit-hakan&limit=5')"
+          echo "DESIGN_MODELS_STATUS=$model_status"
+          cat /tmp/models.json | jq '{ok, total: (.data.total // .total // 0)}'
+          test "$model_status" = "200"
+
+      - name: Verify local migration launcher source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/desen-r2-import.mjs
+          test -s tools/DESEN-AKTAR.ps1
+          test -s tools/DESEN-AKTAR.bat
+          grep -q 'ikDailyDateRange.v2' APP/app/ky-erp-frontend/src/pages/modules/IkPage.jsx
+          grep -q 'name: "Hakan Emprime"' APP/app/ky-erp-frontend/src/context/ActiveCompanyContext.jsx
+          grep -q 'registerIkRelationalCloudRoutes(app);' APP/cloud/ky-erp-api/src/main.ts
+          ! grep -q '2582' APP/app/ky-erp-frontend/src/context/AuthContext.jsx
+          ! grep -q '2582' APP/cloud/ky-erp-api/src/auth-cloud.ts
