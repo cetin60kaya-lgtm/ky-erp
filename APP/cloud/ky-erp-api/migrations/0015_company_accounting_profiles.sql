@@ -186,3 +186,90 @@ BEGIN
      )
    WHERE id = NEW.id;
 END;
+
+-- Yeni İşNet/muhasebe belgesi firmasız geldiyse önce VKN, sonra kayıtlı alias ile otomatik eşleştir.
+DROP TRIGGER IF EXISTS trg_document_auto_match_company_insert;
+CREATE TRIGGER trg_document_auto_match_company_insert
+AFTER INSERT ON documents
+WHEN COALESCE(NEW.company_id, '') = ''
+BEGIN
+  UPDATE documents
+     SET company_id = COALESCE(
+       (
+         SELECT c.id
+           FROM companies c
+          WHERE c.main_company_slug = NEW.main_company_slug
+            AND c.deleted_at IS NULL
+            AND COALESCE(c.tax_no, '') <> ''
+            AND REPLACE(REPLACE(REPLACE(COALESCE(c.tax_no, ''), ' ', ''), '-', ''), '.', '') =
+                REPLACE(REPLACE(REPLACE(COALESCE(
+                  json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.taxNo'),
+                  json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.supplierTaxNo'),
+                  json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.vkn'),
+                  json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.taxNo'),
+                  json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.supplierTaxNo'),
+                  json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.vkn'),
+                  ''
+                ), ' ', ''), '-', ''), '.', '')
+          LIMIT 1
+       ),
+       (
+         SELECT a.company_id
+           FROM company_aliases a
+          WHERE a.main_company_slug = NEW.main_company_slug
+            AND a.deleted_at IS NULL
+            AND a.is_active = 1
+            AND UPPER(TRIM(a.raw_name)) = UPPER(TRIM(COALESCE(
+              json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.companyName'),
+              json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.supplierName'),
+              json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.firma'),
+              json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.companyName'),
+              json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.supplierName'),
+              json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.firma'),
+              ''
+            )))
+          LIMIT 1
+       )
+     ),
+         firm_match_status = CASE
+           WHEN company_id IS NOT NULL AND company_id <> '' THEN firm_match_status
+           ELSE CASE WHEN COALESCE(
+             (
+               SELECT c.id FROM companies c
+                WHERE c.main_company_slug = NEW.main_company_slug
+                  AND c.deleted_at IS NULL
+                  AND COALESCE(c.tax_no, '') <> ''
+                  AND REPLACE(REPLACE(REPLACE(COALESCE(c.tax_no, ''), ' ', ''), '-', ''), '.', '') =
+                      REPLACE(REPLACE(REPLACE(COALESCE(
+                        json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.taxNo'),
+                        json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.supplierTaxNo'),
+                        json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.vkn'),
+                        json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.taxNo'),
+                        json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.supplierTaxNo'),
+                        json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.vkn'),
+                        ''
+                      ), ' ', ''), '-', ''), '.', '')
+                LIMIT 1
+             ),
+             (
+               SELECT a.company_id FROM company_aliases a
+                WHERE a.main_company_slug = NEW.main_company_slug
+                  AND a.deleted_at IS NULL
+                  AND a.is_active = 1
+                  AND UPPER(TRIM(a.raw_name)) = UPPER(TRIM(COALESCE(
+                    json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.companyName'),
+                    json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.supplierName'),
+                    json_extract(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata ELSE '{}' END, '$.firma'),
+                    json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.companyName'),
+                    json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.supplierName'),
+                    json_extract(CASE WHEN json_valid(NEW.raw) THEN NEW.raw ELSE '{}' END, '$.firma'),
+                    ''
+                  )))
+                LIMIT 1
+             ),
+             ''
+           ) <> '' THEN 'MATCHED' ELSE COALESCE(firm_match_status, 'PENDING') END
+         END
+   WHERE id = NEW.id
+     AND main_company_slug = NEW.main_company_slug;
+END;
