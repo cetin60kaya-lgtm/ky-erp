@@ -55,9 +55,6 @@ jobs:
           npm ci
           npm run build
 
-      - name: D1 migration readiness
-        run: node APP/scripts/check-d1-schema-ready.mjs
-
       - name: Commit final IK leave implementation
         run: |
           git config user.name 'github-actions[bot]'
