@@ -2,20 +2,18 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T14:15:00+03:00",
-  "attempt": 23,
+  "requestedAt": "2026-08-09T14:38:00+03:00",
+  "attempt": 24,
   "scope": [
-    "design-image-url-fix",
-    "design-r2-thumbnail-display",
-    "design-created-source-updated-dates",
-    "design-date-range-filtering",
-    "design-sort-controls",
-    "design-report-summary-contract",
-    "design-report-filter-consistency",
-    "design-placement-operation-totals",
-    "design-placement-crash-fix",
-    "boyahane-design-thumbnails"
+    "design-cloudflare-ai-vision-ocr",
+    "design-auto-analysis-on-ingest",
+    "design-pantone-search",
+    "design-figure-character-search",
+    "design-description-semantic-index",
+    "design-visible-text-index",
+    "design-fullscreen-preview-fix",
+    "design-legacy-smart-reindex"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Desen R2 gorsellerinin frontend API URL birlestirmesindeki cift /api hatasini duzelt; mevcut 112 modelin thumbnail ve preview dosyalarini yeniden yuklemeden canli goster; model karti ve raporlara ERP eklenme, kaynak dosya ve son guncelleme tarihlerini ekle; tarih araligi ve siralama filtrelerini tek backend sozlesmesine bagla; rapor ozet sayaclarini tabloyla ayni kaynaktan hesapla; Yerlesim/Kalip ekranindaki operation totals eksikligi nedeniyle olusan cokmeyi gider; Boyahane desen secicisinde kucuk R2 thumbnail kullan."
+  "note": "Desen görselini R2 küçük önizlemesi üzerinden Cloudflare Workers AI ile otomatik analiz et; görsel eklendiği anda OCR, Pantone, görünen yazı, figür/karakter, tema, renk ve Türkçe desen açıklamasını model metadata arama indeksine kaydet; mevcut Akıllı Tara işlemini eski kayıtları gerçek görsel analizle yeniden indeksleyecek şekilde güncelle; OCR undefined durumunu açık COMPLETED/FAILED/NO_IMAGE statülerine dönüştür; model aramasını indekslenen açıklama ve etiketlerle çalıştır; tam ekran desen önizlemesini gerçek viewport düzenine al ve Esc/X ile güvenli çıkış ekle."
 }
