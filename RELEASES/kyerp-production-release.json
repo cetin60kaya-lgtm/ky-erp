@@ -2,19 +2,16 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T04:38:00+03:00",
-  "attempt": 18,
+  "requestedAt": "2026-08-09T05:18:00+03:00",
+  "attempt": 19,
   "scope": [
-    "ik-yillik-izin-tarih-mantigi",
-    "ik-yillik-izin-d1-motoru",
-    "ik-yillik-izin-preview-policy",
-    "ik-yillik-izin-cakisma-bakiye",
-    "ik-izin-ekran-temizligi",
-    "ik-izin-otomatik-hesap",
-    "ik-izin-d1-compatible-migration",
-    "ik-izin-regression-18-gun",
-    "live-browser-verification"
+    "refresh-cloudflare-pages-production",
+    "refresh-app-kyerp-net-alias",
+    "verify-kyerp-net",
+    "verify-app-kyerp-net",
+    "verify-pages-production-url",
+    "preserve-current-d1-worker-and-ik-release"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Final IK yıllık izin sürümü. D1 migration UPSERT ifadesi Cloudflare D1 uyumlu INSERT OR IGNORE biçimine çevrildi. İşe dönüş günü izin hesabına katılmıyor; gerçek D1 policy/plan/preview/conflict/balance akışı ve tek temiz ekran korunuyor. 10.08.2026 izne çıkış / 31.08.2026 işe dönüş = 18 gün testi mevcut."
+  "note": "Telefon erişiminde bildirilen 404 için mevcut doğrulanmış production paketini yeniden yayınla. D1 ve Worker güvenlik kontrollerini koru; Pages production aliaslarını app.kyerp.net ve kyerp.net için tazele ve canlı adresleri yeniden doğrula."
 }
