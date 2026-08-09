@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "../utils/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../utils/api";
 
 function unwrap(payload) {
   if (
@@ -91,6 +91,28 @@ export async function createProductionCenterEntry(
   );
 }
 
+export async function updateProductionCenterEntry(
+  activeMainCompany,
+  entryId,
+  payload = {},
+) {
+  return unwrap(
+    await apiPatch(
+      `/production-center/entries/${encodeURIComponent(entryId)}`,
+      companyPayload(activeMainCompany, payload),
+    ),
+  );
+}
+
+export async function deleteProductionCenterEntry(activeMainCompany, entryId) {
+  return unwrap(
+    await apiDelete(
+      `/production-center/entries/${encodeURIComponent(entryId)}`,
+      companyPayload(activeMainCompany),
+    ),
+  );
+}
+
 export async function createProductionCenterModel(
   activeMainCompany,
   payload = {},
@@ -99,6 +121,28 @@ export async function createProductionCenterModel(
     await apiPost(
       "/production-center/models",
       companyPayload(activeMainCompany, payload),
+    ),
+  );
+}
+
+export async function updateProductionCenterModel(
+  activeMainCompany,
+  modelId,
+  payload = {},
+) {
+  return unwrap(
+    await apiPut(
+      `/production-center/models/${encodeURIComponent(modelId)}`,
+      companyPayload(activeMainCompany, payload),
+    ),
+  );
+}
+
+export async function deleteProductionCenterModel(activeMainCompany, modelId) {
+  return unwrap(
+    await apiDelete(
+      `/production-center/models/${encodeURIComponent(modelId)}`,
+      companyPayload(activeMainCompany),
     ),
   );
 }
@@ -129,6 +173,15 @@ export async function saveProductionCenterMachine(
     await apiPost(
       "/production-center/machines",
       companyPayload(activeMainCompany, payload),
+    ),
+  );
+}
+
+export async function deleteProductionCenterMachine(activeMainCompany, machineId) {
+  return unwrap(
+    await apiDelete(
+      `/production-center/machines/${encodeURIComponent(machineId)}`,
+      companyPayload(activeMainCompany),
     ),
   );
 }
