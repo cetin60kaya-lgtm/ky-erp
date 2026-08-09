@@ -17,7 +17,7 @@ export const MODULES = [
         tabs: [
           ["tedarikci-faturalar", "Gelen Tedarikçi Faturaları", "tedarikci-fatura"],
           ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
-          ["irsaliye-fatura-kontrol", "İrsaliye / Fatura Kontrolü", "file-check"],
+          ["irsaliye-fatura-kontrol", "Gelen Müşteri İrsaliyeleri / Fatura Kontrolü", "file-check"],
         ],
       },
       {
