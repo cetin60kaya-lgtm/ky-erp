@@ -29,6 +29,7 @@ jobs:
 
       - name: Validate patch markers and diff
         run: |
+          sed -i 's/[[:space:]]\+$//' APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx
           git diff --check
           grep -q 'calculateAnnualLeaveRange' APP/cloud/ky-erp-api/src/ik-relational-cloud.ts
           grep -q 'advanced/leave/preview' APP/cloud/ky-erp-api/src/ik-relational-cloud.ts
