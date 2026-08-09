@@ -2,13 +2,14 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T21:25:33+03:00",
-  "attempt": 35,
+  "requestedAt": "2026-08-10T01:55:00+03:00",
+  "attempt": 36,
   "scope": [
     "persistent-company-cards",
     "manual-company-card-create",
-    "permanent-company-card-delete",
-    "guard-delete-linked-company",
+    "company-active-passive-status",
+    "warning-before-permanent-company-delete",
+    "permanent-company-delete-without-history-block",
     "official-unofficial-company-default",
     "customer-supplier-both-profile",
     "cash-credit-cari-profile",
@@ -19,5 +20,5 @@
     "isnet-portal-fallback-after-api-401"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Firma kartlarında Yeni Firma akışını tam tut ve işlemsiz, bakiyesiz, hiçbir belge/cari/model/diğer kayda bağlı olmayan kartlar için onaylı Kesin Sil ekle. Bağlı kayıt veya bakiye varsa veri kaybını önlemek için silmeyi engelle. Firma kartı İşNet'ten bağımsız kalıcı rehber olmaya devam etsin; firma adı ilk alias olsun, İşNet ve manuel belgeler VKN/alias ile mevcut karta bağlansın. İşNet canlı bağlantısında güncel resmi NetteFatura portal alan adı efatura.isnet.net.tr ve uyumlu login/firma liste yollarını kullan; resmi API 401 olsa bile portal fallback denensin. Diğer modül verilerine dokunma. Tek production run kullan, yayın öncesi tam D1 yedeği al, Worker ve frontend kontrollerini tamamla."
+  "note": "Firma kartlarında iki net yönetim işlemi kullan: Aktif/Pasif ve Kalıcı Sil. Pasife alma kartı ve geçmiş kayıtları korusun, tekrar Aktif Et ile açılsın. Kalıcı Sil geri alınamaz uyarısı göstersin; kullanıcı onayladıktan sonra bakiye, belge, cari hareket, model veya geçmiş bağlantı kontrolüyle engellenmeden firma kartı ve aliasları silinsin. Yeni Firma ve mevcut Müşteri/Tedarikçi/Her İkisi, Resmi/Gayri resmi, Peşin/Vadeli-Cari, borç/alacak, KDV, gider, VKN ve alias kuralları korunsun. İşNet düzenine dokunmadan mevcut güncel portal fallback yapısı korunsun. Tek production run kullan, yayın öncesi tam D1 yedeği al ve canlı Worker/frontend kontrollerini tamamla."
 }
