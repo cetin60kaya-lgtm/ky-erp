@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
+import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
 import { registerBoyahaneColorResolveRoutes } from "./boyahane-color-resolve";
@@ -46,6 +47,8 @@ function allowedOrigin(origin: string) {
   return undefined;
 }
 
+// Günlük muhasebe firma profili / alias işlemleri doğrudan D1 üzerinde çalışır.
+registerAccountingCompanyProfileRoutes(app);
 // Temiz üretim runtime'ı aynı endpointleri legacy katmandan önce karşılar.
 // Günlük imalat işlemleri doğrudan D1 üzerinde çalışır; GitHub Actions kullanılmaz.
 registerProductionRuntimeV2Routes(app);
