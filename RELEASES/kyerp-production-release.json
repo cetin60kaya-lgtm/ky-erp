@@ -2,18 +2,18 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T05:28:00+03:00",
-  "attempt": 20,
+  "requestedAt": "2026-08-09T06:12:00+03:00",
+  "attempt": 21,
   "scope": [
-    "cloud-auth-login-route",
-    "cloud-auth-me-route",
-    "d1-auth-users",
-    "d1-auth-permissions",
-    "bcrypt-password-check",
-    "mobile-login-404-fix",
-    "verify-app-kyerp-net",
-    "verify-api-kyerp-net"
+    "relational-ik-live-routes",
+    "ik-mobile-current-week",
+    "real-d1-auth-only",
+    "remove-fixed-2582-login",
+    "active-company-display",
+    "design-r2-migration-metadata",
+    "design-d1-index-foundation",
+    "mobile-runtime-smoke"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Mobil girişte görülen 404 hatasının gerçek nedeni api.kyerp.net üzerinde /api/auth/login endpointinin eksik olmasıydı. Cloudflare Worker'a D1 auth_users ve auth_user_module_permissions kullanan login/me/logout rotaları eklendi; bcrypt şifre kontrolü ve admin fallback korunuyor."
+  "note": "Canlı Worker'a gerçek ilişkisel İK D1 rotalarını geri bağla; telefondaki eski Mayıs varsayılanını güncel haftaya taşı; sabit 2582 admin girişini frontend ve Worker'dan kaldır; aktif firma görünümünü Hakan Emprime ile hizala; yaklaşık 700 yerel desenin R2 dosya deposu + D1 model indeksiyle aktarılabilmesi için migration metadata desteğini yayınla."
 }
