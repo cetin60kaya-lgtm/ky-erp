@@ -2,16 +2,16 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T16:55:00+03:00",
-  "attempt": 30,
+  "requestedAt": "2026-08-09T18:47:00+03:00",
+  "attempt": 31,
   "scope": [
-    "accounting-august-2026-clean-start",
-    "remove-pre-august-accounting-transactions",
-    "reset-company-balances",
-    "normalize-satici-to-supplier",
-    "customer-supplier-separation",
-    "customer-dispatch-accounting-label"
+    "accounting-full-clean-restart",
+    "hide-pre-reset-company-cards-from-accounting",
+    "clear-accounting-documents-cari-vat-payments-cheques",
+    "preserve-design-production-company-links",
+    "reactivate-company-on-new-august-document-or-movement",
+    "rename-customer-dispatch-menu"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Muhasebeyi Ağustos 2026 temiz başlangıcına al. Firma kartlarını koru fakat eski açılış ve cari bakiyeleri sıfırla; yalnız 2026 Ağustos business-date kayıtları kalabilsin, önceki muhasebe belge/hareket/KDV/ödeme/çek/fatura durumlarını temizle. companies.type içindeki legacy SATICI değerlerini SUPPLIER'a normalize et ve gelecekte tekrar SATICI gelirse otomatik SUPPLIER yap. MUSTERI müşteriler, SUPPLIER tedarikçiler ve BOTH her ikisi olarak net ayrılsın. İK, Desen, Boyahane ve İmalat verilerine dokunma. Muhasebe müşteri irsaliye ekranını TAHA/REN/MIND vb. müşteri irsaliyeleri ve fatura kontrolü olarak net adlandır. Yayın öncesi tam D1 yedeği al."
+  "note": "Muhasebeyi tamamen temiz başlangıca al. Eski firma kartlarını Muhasebe listesinde gizle ve tüm eski cari/belge/KDV/ödeme/çek/fatura/muhasebe hareketlerini sıfırla. companies kayıtlarını fiziksel silme; Desen ve İmalatın TAHA ve diğer müşteri bağlantıları bozulmasın. Yeni Ağustos 2026 belgesi veya cari hareketi geldiğinde mevcut firma otomatik Muhasebe listesine geri çıksın; yeni manuel firma zaten doğrudan görünsün. Muhasebe menüsündeki irsaliye ekranının adını Gelen Müşteri İrsaliyeleri / Fatura Kontrolü yap. İK, Desen, Boyahane ve İmalat verilerine dokunma. Yayın öncesi tam D1 yedeği al ve tek production run kullan."
 }
