@@ -25,7 +25,22 @@ jobs:
         run: git fetch origin agent/uretim-tek-merkez:refs/remotes/origin/agent/uretim-tek-merkez
 
       - name: Apply complete annual leave cleanup
-        run: python3 .github/ik_leave_final_patch.py
+        run: |
+          python3 .github/ik_leave_final_patch.py
+          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/package.json > APP/cloud/ky-erp-api/package.json
+          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/package-lock.json > APP/cloud/ky-erp-api/package-lock.json
+          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/tsconfig.json > APP/cloud/ky-erp-api/tsconfig.json
+          git show origin/agent/uretim-tek-merkez:APP/cloud/ky-erp-api/worker-configuration.d.ts > APP/cloud/ky-erp-api/worker-configuration.d.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('APP/cloud/ky-erp-api/src/ik-relational-cloud.ts')
+          s=p.read_text(encoding='utf-8')
+          old='app.post("/api/ik/advanced/leave/preview", protect(previewAdvancedLeaveV2));'
+          new='app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));'
+          if old not in s:
+              raise SystemExit('preview route marker not found')
+          p.write_text(s.replace(old,new,1), encoding='utf-8')
+          PY
 
       - name: Validate patch markers and diff
         run: |
@@ -41,7 +56,7 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: |
           npm ci
-          node --experimental-strip-types --test src/ik-relational-cloud.test.ts
+          npm test
           npm run typecheck
 
       - name: Frontend install and production build
@@ -64,6 +79,10 @@ jobs:
             APP/app/ky-erp-frontend/src/pages/modules/IkAdvancedMonthly.jsx \
             APP/app/ky-erp-frontend/src/pages/modules/ik.advanced.css \
             APP/app/ky-erp-frontend/src/services/ikApi.js \
+            APP/cloud/ky-erp-api/package.json \
+            APP/cloud/ky-erp-api/package-lock.json \
+            APP/cloud/ky-erp-api/tsconfig.json \
+            APP/cloud/ky-erp-api/worker-configuration.d.ts \
             APP/cloud/ky-erp-api/src/ik-relational-cloud.ts \
             APP/cloud/ky-erp-api/src/ik-relational-cloud.test.ts \
             APP/cloud/ky-erp-api/migrations/0009_hr_leave_engine.sql
