@@ -5,6 +5,16 @@
 -- 3) Resmî olmayan kayıtlar KDV kaydı oluşturmaz.
 -- 4) Cari bakiye, gerçek cari hareketlerin effect toplamından türetilir.
 
+-- Canlı eski tabloda company_type fiziksel olarak yoktu; önce uyumluluk alanını oluştur.
+ALTER TABLE companies ADD COLUMN company_type TEXT;
+UPDATE companies
+   SET company_type = CASE
+     WHEN UPPER(COALESCE(type, '')) IN ('MUSTERI', 'MÜŞTERİ', 'CUSTOMER') THEN 'CUSTOMER'
+     WHEN UPPER(COALESCE(type, '')) = 'BOTH' THEN 'BOTH'
+     ELSE 'SUPPLIER'
+   END
+ WHERE company_type IS NULL OR TRIM(company_type) = '';
+
 ALTER TABLE companies ADD COLUMN supplier_debt_tracking INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN customer_receivable_tracking INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'CASH';
@@ -61,6 +71,21 @@ UPDATE companies
  WHERE main_company_slug = 'mecit-hakan'
    AND deleted_at IS NULL
    AND (UPPER(name) LIKE '%ELEKTRIK%' OR UPPER(name) LIKE '%ELEKTRİK%');
+
+-- Yeni/eski firma ekleme yolları company_type göndermezse type alanından otomatik tamamla.
+DROP TRIGGER IF EXISTS trg_company_type_compat_insert;
+CREATE TRIGGER trg_company_type_compat_insert
+AFTER INSERT ON companies
+WHEN COALESCE(TRIM(NEW.company_type), '') = ''
+BEGIN
+  UPDATE companies
+     SET company_type = CASE
+       WHEN UPPER(COALESCE(NEW.type, '')) IN ('MUSTERI', 'MÜŞTERİ', 'CUSTOMER') THEN 'CUSTOMER'
+       WHEN UPPER(COALESCE(NEW.type, '')) = 'BOTH' THEN 'BOTH'
+       ELSE 'SUPPLIER'
+     END
+   WHERE id = NEW.id;
+END;
 
 -- Peşin veya cari kapalı tedarikçiye yanlışlıkla tedarikçi faturası cari hareketi yazılırsa sil.
 DROP TRIGGER IF EXISTS trg_supplier_invoice_block_cash_cari;
@@ -232,8 +257,7 @@ BEGIN
        )
      ),
          firm_match_status = CASE
-           WHEN company_id IS NOT NULL AND company_id <> '' THEN firm_match_status
-           ELSE CASE WHEN COALESCE(
+           WHEN COALESCE(
              (
                SELECT c.id FROM companies c
                 WHERE c.main_company_slug = NEW.main_company_slug
@@ -268,8 +292,7 @@ BEGIN
                 LIMIT 1
              ),
              ''
-           ) <> '' THEN 'MATCHED' ELSE COALESCE(firm_match_status, 'PENDING') END
-         END
+           ) <> '' THEN 'MATCHED' ELSE COALESCE(NEW.firm_match_status, 'PENDING') END
    WHERE id = NEW.id
      AND main_company_slug = NEW.main_company_slug;
 END;
