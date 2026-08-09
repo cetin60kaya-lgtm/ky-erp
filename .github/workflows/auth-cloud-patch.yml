@@ -1,0 +1,59 @@
+name: KY ERP Auth Cloud Patch
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/auth-cloud-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wire auth routes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('APP/cloud/ky-erp-api/src/index.ts')
+          s = p.read_text(encoding='utf-8')
+          import_line = 'import { registerAuthCloudRoutes } from "./auth-cloud";\n'
+          if import_line not in s:
+              anchor = 'import { cors } from "hono/cors";\n'
+              if anchor not in s:
+                  raise SystemExit('cors import anchor not found')
+              s = s.replace(anchor, anchor + import_line, 1)
+          call = 'registerAuthCloudRoutes(app);\n\n'
+          if call not in s:
+              anchor = 'export default app;'
+              if anchor not in s:
+                  raise SystemExit('export default app anchor not found')
+              s = s.replace(anchor, call + anchor, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          cd APP/cloud/ky-erp-api
+          npm ci
+          npm run typecheck
+          npm run build
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "cetin kaya"
+          git config user.email "cetin60kaya@gmail.com"
+          git add APP/cloud/ky-erp-api/src/index.ts APP/cloud/ky-erp-api/src/auth-cloud.ts
+          if git diff --cached --quiet; then
+            echo 'No changes'
+            exit 0
+          fi
+          git commit -m "fix: wire live Cloudflare authentication"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
