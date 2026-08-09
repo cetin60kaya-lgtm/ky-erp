@@ -56,3 +56,5 @@ jobs:
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "feat: find ERP models from uploaded design photos"
           git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+
+# validation rerun: 2026-08-09T14:50:00+03:00
