@@ -140,7 +140,7 @@ export default function QueueDesignModal({
               return (
                 <label className={`bh-queue-row ${selectedIds.includes(model.id) ? "selected" : ""} ${duplicate ? "queued" : ""}`} key={model.id}>
                   <input type="checkbox" disabled={duplicate} checked={selectedIds.includes(model.id)} onChange={() => toggle(model.id)} />
-                  <ModelThumbnail src={model.mainImage?.previewUrl} alt={model.modelName} size="medium" />
+                  <ModelThumbnail src={model.mainImage?.thumbnailUrl || model.mainImage?.previewUrl} alt={model.modelName} size="medium" />
                   <span className="bh-queue-row-main">
                     <strong>{model.modelName || "Adsız desen"}</strong>
                     <small>{model.companyName || "Firma yok"} • {activeOperations.map((item) => item.printAreaName).join(", ") || "Baskı bölgesi yok"}</small>

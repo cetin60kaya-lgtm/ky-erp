@@ -20,7 +20,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { API_BASE } from "../../utils/api";
+import { apiUrl } from "../../utils/api";
 import {
   createDesignOperation,
   createDesignModel,
@@ -101,7 +101,7 @@ export function assetUrl(value) {
   const url = String(value || "").trim();
   if (!url) return "";
   if (/^(blob:|data:|https?:\/\/)/i.test(url)) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
+  return apiUrl(url);
 }
 
 export function formatDate(value) {

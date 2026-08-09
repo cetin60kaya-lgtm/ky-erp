@@ -325,15 +325,24 @@ function fileView(file: Row): Row {
 }
 
 function modelView(model: Row): Row {
-  const operations = (Array.isArray(model.operations) ? model.operations : []).map(
-    normalizeOperation,
-  );
+  const operations = (Array.isArray(model.operations) ? model.operations : [])
+    .map(normalizeOperation)
+    .map((operation) => ({
+      ...operation,
+      totals: calculateTotals([operation]),
+    }));
   const files = (Array.isArray(model.files) ? model.files : []).map(fileView);
   const mainImage =
     files.find((file) => file.role === "MODEL_IMAGE") ||
     files.find((file) => /image\//i.test(text(file.contentType))) ||
     model.mainImage ||
     null;
+  const sourceModifiedAt = text(
+    model.sourceModifiedAt ||
+      mainImage?.sourceModifiedAt ||
+      mainImage?.metadata?.sourceModifiedAt ||
+      "",
+  );
   return {
     ...model,
     id: text(model.id || model.fileName),
@@ -346,6 +355,7 @@ function modelView(model: Row): Row {
     operations,
     files,
     mainImage,
+    sourceModifiedAt,
     totals: calculateTotals(operations),
     metadata: objectOf(model.metadata),
   };
@@ -665,7 +675,7 @@ async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
       channelCount: model.totals.activeChannelCount,
       uniqueColorCount: model.totals.uniqueColorCount,
       moldCount: model.totals.totalMoldCount,
-      imageUrl: model.mainImage?.previewUrl || "",
+      imageUrl: model.mainImage?.thumbnailUrl || model.mainImage?.previewUrl || "",
       status: "WAITING",
       priority: "NORMAL",
       source: "DESEN_WORKFLOW",
@@ -734,6 +744,128 @@ async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
     slug,
   );
   return { job, jobId, colorCount: colorSources.length };
+}
+
+
+function isoDateKey(value: unknown) {
+  const raw = text(value);
+  if (!raw) return "";
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function filterModelRows(c: Context<AppEnv>, rows: Row[]) {
+  const q = normalize(c.req.query("q"));
+  const companyId = text(c.req.query("companyId"));
+  const status = text(c.req.query("status"));
+  const printAreaCode = text(c.req.query("printAreaCode"));
+  const placementStatus = text(c.req.query("placementStatus"));
+  const dyehouseStatus = text(c.req.query("dyehouseStatus"));
+  const dateField = text(c.req.query("dateField") || "createdAt");
+  const dateFrom = text(c.req.query("dateFrom"));
+  const dateTo = text(c.req.query("dateTo"));
+  const sort = text(c.req.query("sort") || "created_desc");
+
+  const filtered = rows
+    .filter((row) => row.status !== "ARCHIVE" || status === "ARCHIVE")
+    .filter(
+      (row) =>
+        !q ||
+        normalize(
+          `${row.modelName} ${row.modelCode} ${row.companyName} ${JSON.stringify(row.metadata)}`,
+        ).includes(q),
+    )
+    .filter((row) => !companyId || row.companyId === companyId)
+    .filter((row) => !status || row.status === status)
+    .filter(
+      (row) =>
+        !printAreaCode ||
+        row.operations.some((operation: Row) => operation.printAreaCode === printAreaCode),
+    )
+    .filter(
+      (row) =>
+        !placementStatus ||
+        row.operations.some(
+          (operation: Row) => operation.placementStatus === placementStatus,
+        ),
+    )
+    .filter(
+      (row) =>
+        !dyehouseStatus ||
+        row.operations.some(
+          (operation: Row) => operation.dyehouseStatus === dyehouseStatus,
+        ),
+    )
+    .filter((row) => {
+      if (!dateFrom && !dateTo) return true;
+      const value =
+        dateField === "sourceModifiedAt"
+          ? row.sourceModifiedAt
+          : dateField === "updatedAt"
+            ? row.updatedAt
+            : row.createdAt;
+      const key = isoDateKey(value);
+      if (!key) return false;
+      if (dateFrom && key < dateFrom) return false;
+      if (dateTo && key > dateTo) return false;
+      return true;
+    });
+
+  const byTime = (value: unknown) => {
+    const ms = Date.parse(text(value));
+    return Number.isFinite(ms) ? ms : 0;
+  };
+  filtered.sort((a, b) => {
+    if (sort === "name_asc")
+      return text(a.modelName).localeCompare(text(b.modelName), "tr");
+    if (sort === "source_desc")
+      return byTime(b.sourceModifiedAt) - byTime(a.sourceModifiedAt);
+    if (sort === "updated_desc")
+      return byTime(b.updatedAt) - byTime(a.updatedAt);
+    return byTime(b.createdAt) - byTime(a.createdAt);
+  });
+  return filtered;
+}
+
+function designSummary(rows: Row[]) {
+  const newArrival = rows.filter((row) => row.status === "NEW_ARRIVAL").length;
+  const channelImageMissing = rows.filter(
+    (row) => row.status === "CHANNEL_IMAGE_MISSING",
+  ).length;
+  const channelReviewPending = rows.filter(
+    (row) => row.status === "CHANNEL_REVIEW_PENDING",
+  ).length;
+  const colorMatchMissing = rows.filter(
+    (row) => row.status === "COLOR_MATCH_MISSING",
+  ).length;
+  const placementWaiting = rows.filter((row) =>
+    row.operations.some(
+      (operation: Row) => operation.placementStatus !== "READY",
+    ),
+  ).length;
+  const dyehouseReady = rows.filter(
+    (row) => row.status === "DYEHOUSE_READY",
+  ).length;
+  const productionReady = rows.filter(
+    (row) => row.status === "PRODUCTION_READY",
+  ).length;
+  const unresolvedColorCount = rows.reduce(
+    (sum, row) => sum + num(row.totals.unresolvedColorCount),
+    0,
+  );
+  return {
+    totalModels: rows.length,
+    modelCount: rows.length,
+    newArrival,
+    channelImageMissing,
+    channelReviewPending,
+    colorMatchMissing,
+    placementWaiting,
+    dyehouseReady,
+    readyForDyehouse: dyehouseReady,
+    productionReady,
+    unresolvedColorCount,
+  };
 }
 
 export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
@@ -849,32 +981,20 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
 
   app.get("/api/desen/workflow/models", async (c) => {
     const slug = slugOf(c);
-    const q = normalize(c.req.query("q"));
-    const companyId = text(c.req.query("companyId"));
-    const status = text(c.req.query("status"));
-    const printAreaCode = text(c.req.query("printAreaCode"));
-    const placementStatus = text(c.req.query("placementStatus"));
-    const limit = Math.min(2000, Math.max(1, num(c.req.query("limit") || 1000)));
-    const rows = (await storeList(c, MODEL_SCOPE, slug))
-      .map(modelView)
-      .filter((row) => row.status !== "ARCHIVE" || status === "ARCHIVE")
-      .filter((row) => !q || normalize(`${row.modelName} ${row.modelCode} ${row.companyName} ${JSON.stringify(row.metadata)}`).includes(q))
-      .filter((row) => !companyId || row.companyId === companyId)
-      .filter((row) => !status || row.status === status)
-      .filter(
-        (row) =>
-          !printAreaCode ||
-          row.operations.some((operation: Row) => operation.printAreaCode === printAreaCode),
-      )
-      .filter(
-        (row) =>
-          !placementStatus ||
-          row.operations.some(
-            (operation: Row) => operation.placementStatus === placementStatus,
-          ),
-      )
-      .slice(0, limit);
-    return c.json({ ok: true, success: true, data: { rows, total: rows.length } });
+    const limit = Math.min(
+      2000,
+      Math.max(1, num(c.req.query("limit") || 1000)),
+    );
+    const allRows = filterModelRows(
+      c,
+      (await storeList(c, MODEL_SCOPE, slug)).map(modelView),
+    );
+    const rows = allRows.slice(0, limit);
+    return c.json({
+      ok: true,
+      success: true,
+      data: { rows, total: allRows.length, returned: rows.length },
+    });
   });
 
   app.get("/api/desen/workflow/models/:id", async (c) => {
@@ -1217,33 +1337,23 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
 
   app.get("/api/desen/workflow/reports", async (c) => {
     const slug = slugOf(c);
-    const rows = (await storeList(c, MODEL_SCOPE, slug)).map(modelView);
+    const rows = filterModelRows(
+      c,
+      (await storeList(c, MODEL_SCOPE, slug)).map(modelView),
+    );
     return c.json({
       ok: true,
       success: true,
-      data: {
-        summary: {
-          modelCount: rows.length,
-          readyForDyehouse: rows.filter((row) => row.status === "DYEHOUSE_READY").length,
-          productionReady: rows.filter((row) => row.status === "PRODUCTION_READY").length,
-          unresolvedColorCount: rows.reduce(
-            (sum, row) => sum + num(row.totals.unresolvedColorCount),
-            0,
-          ),
-          placementWaiting: rows.filter((row) =>
-            row.operations.some(
-              (operation: Row) => operation.placementStatus !== "READY",
-            ),
-          ).length,
-        },
-        rows,
-      },
+      data: { summary: designSummary(rows), rows },
     });
   });
 
   app.get("/api/desen/workflow/reports/export", async (c) => {
     const slug = slugOf(c);
-    const rows = (await storeList(c, MODEL_SCOPE, slug)).map(modelView);
+    const rows = filterModelRows(
+      c,
+      (await storeList(c, MODEL_SCOPE, slug)).map(modelView),
+    );
     const escape = (value: unknown) => `"${text(value).replace(/"/g, '""')}"`;
     const lines = [
       [
@@ -1255,6 +1365,8 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
         "Kalıp",
         "Benzersiz Renk",
         "Eksik Renk",
+        "ERP Eklenme",
+        "Dosya Tarihi",
         "Son Güncelleme",
       ].map(escape).join(";"),
       ...rows.map((row) =>
@@ -1267,6 +1379,8 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
           row.totals.totalMoldCount,
           row.totals.uniqueColorCount,
           row.totals.unresolvedColorCount,
+          row.createdAt,
+          row.sourceModifiedAt,
           row.updatedAt,
         ]
           .map(escape)
