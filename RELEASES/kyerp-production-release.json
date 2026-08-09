@@ -2,18 +2,14 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T15:55:00+03:00",
-  "attempt": 26,
+  "requestedAt": "2026-08-09T15:59:00+03:00",
+  "attempt": 27,
   "scope": [
-    "production-clean-reset",
-    "production-runtime-v2",
-    "production-design-pool-picker",
-    "production-direct-quantity-entry",
-    "production-entry-edit-delete",
-    "production-machine-shift-settings-fix",
-    "production-report-404-fix",
-    "production-mobile-drawer-layout"
+    "production-live-schema-compat",
+    "production-center-500-fix",
+    "production-report-500-fix",
+    "production-machine-legacy-shift-compat"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "İmalat tarafını temiz başlangıçla yeniden kur. Yayın öncesi canlı D1 tam yedeğini zorunlu al; yalnız üretim merkezi kayıtlarını, üretim modellerini, üretim hareketlerini ve makine/vardiya tanımlarını temizle; Desen, Boyahane, İK, Muhasebe, İşNet belge ve firma verilerine dokunma. Model ve Üretim Merkezi artık yalnız gerçekten kullanıcı tarafından üretime açılmış modelleri göstersin; belgelerden sanal/sahte model üretmesin. İmalat ana ekranında Desenlerden Model Al çekmecesi ile Desen Havuzundan gerçek modeli seç, üretim kartını aç ve aynı akışta adet, baskı bölgesi, makine, vardiya, makinacı, sakat ve test bilgileriyle üretim kaydı gir. Manuel Yeni Model, Akıllı Seri Giriş, üretim kaydı düzenleme/silme ve model geçmişi çalışsın. /api/imalat/denetim, /api/imalat/rapor ve /api/imalat/makineler uyumluluk rotalarını temiz D1 runtimeına bağlayarak rapor ve makine ayarlarındaki 404 hatalarını kapat. Masaüstü ve telefon çekmecelerini responsive tut."
+  "note": "Run 26 sonrası görülen İmalat 500 hatasını düzelt. Canlı D1 yedeğinden doğrulanan eski model_records, invoice_items, production_records, model_document_links ve model_production_links şemalarını yeni production runtime v2 ile uyumlu eksik kolonlarla yükselt. machine_shift_defaults eski shift NOT NULL yapısını diğer tenant satırlarını koruyarak BOTH varsayılanlı uyumlu tabloya dönüştür. Yeni yayın öncesi yeniden tam D1 yedeği al; üretim verisi temiz başlangıçta kalsın; Desen, Boyahane, İK, Muhasebe, İşNet belge/firma içeriklerini değiştirme."
 }
