@@ -6,7 +6,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { apiGet, apiPost } from "../../../utils/api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
 import "./companiesCurrentWorkspace.css";
 
 const ACCOUNTING_RESET_MARKER = "[[ACC_RESET_2026_08]]";
@@ -17,6 +17,10 @@ const listOf = (payload) => {
   if (Array.isArray(value?.items)) return value.items;
   if (Array.isArray(value?.rows)) return value.rows;
   return [];
+};
+const objectOf = (payload) => {
+  const value = unwrap(payload);
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 };
 const money = (value) =>
   Number(value || 0).toLocaleString("tr-TR", {
@@ -40,6 +44,13 @@ function roleLabel(row) {
   return "Müşteri";
 }
 
+function cariLabel(row) {
+  if (row.supplierDebtTracking && row.customerReceivableTracking) return "Borç + alacak takipli";
+  if (row.supplierDebtTracking) return "Tedarikçi borcu takipli";
+  if (row.customerReceivableTracking) return "Müşteri alacağı takipli";
+  return "Peşin / cari takip yok";
+}
+
 function movementTypeLabel(value) {
   const key = normalize(value);
   if (/TAHSIL/.test(key)) return "Tahsilat";
@@ -60,6 +71,23 @@ function emptyTransaction() {
   };
 }
 
+function profileDraftOf(firm = {}) {
+  const companyType = normalize(firm.companyType || firm.type) === "BOTH"
+    ? "BOTH"
+    : /CUSTOMER|MUSTERI|MÜŞTERİ/.test(normalize(firm.companyType || firm.type))
+      ? "CUSTOMER"
+      : "SUPPLIER";
+  return {
+    companyType,
+    paymentMode: normalize(firm.paymentMode) === "CREDIT" ? "CREDIT" : "CASH",
+    supplierDebtTracking: Boolean(firm.supplierDebtTracking),
+    customerReceivableTracking: Boolean(firm.customerReceivableTracking),
+    vatTrackingEnabled: firm.vatTrackingEnabled !== false,
+    expenseCategory: firm.expenseCategory || "",
+    defaultRecordType: normalize(firm.defaultRecordType).includes("GAYRI") ? "GAYRI_RESMI" : "RESMI",
+  };
+}
+
 export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKey = 0 }) {
   const [firms, setFirms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +100,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [detailLoading, setDetailLoading] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [transaction, setTransaction] = useState(emptyTransaction);
+  const [profileDraft, setProfileDraft] = useState(profileDraftOf());
+  const [aliases, setAliases] = useState([]);
+  const [aliasInput, setAliasInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
   const params = useMemo(
@@ -87,13 +119,25 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     setLoading(true);
     setError("");
     try {
-      const payload = await apiGet("/muhasebe/firmalar", {
-        ...params,
-        search: query,
-        limit: 10000,
-        _ts: Date.now(),
-      });
-      setFirms(listOf(payload));
+      const [firmsPayload, profilesPayload] = await Promise.all([
+        apiGet("/muhasebe/firmalar", {
+          ...params,
+          search: query,
+          limit: 10000,
+          _ts: Date.now(),
+        }),
+        apiGet("/muhasebe/firma-profilleri", {
+          ...params,
+          _ts: Date.now(),
+        }),
+      ]);
+      const profiles = new Map(listOf(profilesPayload).map((item) => [String(item.id), item]));
+      setFirms(
+        listOf(firmsPayload).map((firm) => ({
+          ...firm,
+          ...(profiles.get(String(firm.id)) || {}),
+        })),
+      );
     } catch (requestError) {
       setFirms([]);
       setError(requestError?.message || "Firma ve cari listesi alınamadı.");
@@ -139,17 +183,31 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setSelected(firm);
       setDetailLoading(true);
       setMovements([]);
+      setAliases([]);
       setNotice("");
+      setTransactionOpen(false);
       try {
-        const payload = await apiGet("/muhasebe/cari-hareketler", {
-          ...params,
-          companyId: firm.id,
-          limit: 500,
-          _ts: Date.now(),
-        });
-        setMovements(listOf(payload));
+        const [movementPayload, profilePayload] = await Promise.all([
+          apiGet("/muhasebe/cari-hareketler", {
+            ...params,
+            companyId: firm.id,
+            limit: 500,
+            _ts: Date.now(),
+          }),
+          apiGet(`/muhasebe/firma-profilleri/${firm.id}`, {
+            ...params,
+            _ts: Date.now(),
+          }),
+        ]);
+        const profile = objectOf(profilePayload);
+        const merged = { ...firm, ...profile };
+        setSelected(merged);
+        setProfileDraft(profileDraftOf(merged));
+        setAliases(Array.isArray(profile.aliases) ? profile.aliases : []);
+        setMovements(listOf(movementPayload));
       } catch (requestError) {
-        setNotice(requestError?.message || "Cari hareketler alınamadı.");
+        setProfileDraft(profileDraftOf(firm));
+        setNotice(requestError?.message || "Firma detayları alınamadı.");
       } finally {
         setDetailLoading(false);
       }
@@ -157,9 +215,84 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     [params],
   );
 
+  const saveProfile = async () => {
+    if (!selected?.id) return;
+    setProfileSaving(true);
+    setNotice("");
+    try {
+      const payload = await apiPatch(`/muhasebe/firma-profilleri/${selected.id}`, {
+        ...params,
+        ...profileDraft,
+        supplierDebtTracking:
+          profileDraft.companyType !== "CUSTOMER" &&
+          profileDraft.paymentMode === "CREDIT" &&
+          profileDraft.supplierDebtTracking,
+        customerReceivableTracking:
+          profileDraft.companyType !== "SUPPLIER" && profileDraft.customerReceivableTracking,
+      });
+      const profile = objectOf(payload);
+      setSelected((current) => ({ ...current, ...profile }));
+      setProfileDraft(profileDraftOf(profile));
+      setNotice("Firma muhasebe tanımı kaydedildi.");
+      await loadFirms();
+    } catch (requestError) {
+      setNotice(requestError?.message || "Firma tanımı kaydedilemedi.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const addAlias = async () => {
+    const rawName = aliasInput.trim();
+    if (!selected?.id || !rawName) return;
+    setProfileSaving(true);
+    setNotice("");
+    try {
+      const payload = await apiPost(`/muhasebe/firma-profilleri/${selected.id}/aliases`, {
+        ...params,
+        rawName,
+      });
+      const data = objectOf(payload);
+      setAliases(Array.isArray(data.aliases) ? data.aliases : []);
+      setAliasInput("");
+      setNotice(
+        data.matchedDocuments
+          ? `${data.matchedDocuments} bekleyen belge bu alias ile firmaya eşleştirildi.`
+          : "Firma aliası kaydedildi.",
+      );
+      await loadFirms();
+    } catch (requestError) {
+      setNotice(requestError?.message || "Firma aliası kaydedilemedi.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const removeAlias = async (aliasId) => {
+    if (!selected?.id || !aliasId) return;
+    setProfileSaving(true);
+    try {
+      const payload = await apiDelete(
+        `/muhasebe/firma-profilleri/${selected.id}/aliases/${aliasId}`,
+        params,
+      );
+      setAliases(listOf(payload));
+      setNotice("Alias kaldırıldı.");
+      await loadFirms();
+    } catch (requestError) {
+      setNotice(requestError?.message || "Alias kaldırılamadı.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const saveTransaction = async () => {
     if (!selected?.id || Number(transaction.amount || 0) <= 0) {
       setNotice("Sıfırdan büyük işlem tutarı zorunludur.");
+      return;
+    }
+    if (!selected.supplierDebtTracking && !selected.customerReceivableTracking) {
+      setNotice("Bu firma peşin/cari takipsiz tanımlı. Cari hareket oluşturulmaz.");
       return;
     }
     setSaving(true);
@@ -184,6 +317,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setSaving(false);
     }
   };
+
+  const canUseCari = Boolean(selected?.supplierDebtTracking || selected?.customerReceivableTracking);
 
   return (
     <section className="ccw-root">
@@ -222,17 +357,18 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ) : visibleFirms.length ? (
           <div className="ccw-table-wrap">
             <table>
-              <thead><tr><th>Firma</th><th>Tür</th><th>Vergi No</th><th>Telefon</th><th>Mail</th><th>Bakiye</th><th>Kayıt</th><th>Durum</th></tr></thead>
+              <thead><tr><th>Firma</th><th>Tür</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th></tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
                   <tr key={firm.id} onClick={() => loadMovements(firm)} tabIndex={0}>
-                    <td><strong>{firm.firmaAdi || firm.name || "-"}</strong>{firm.isChemicalSupplier ? <small>Boya / kimyasal</small> : null}</td>
+                    <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong>{firm.isChemicalSupplier ? <small>Boya / kimyasal</small> : null}</td>
                     <td>{roleLabel(firm)}</td>
+                    <td><span className={firm.supplierDebtTracking || firm.customerReceivableTracking ? "ccw-badge active" : "ccw-badge cash"}>{cariLabel(firm)}</span></td>
+                    <td>{firm.vatTrackingEnabled === false ? "Kapalı" : "Takip"}</td>
+                    <td>{firm.expenseCategory || "-"}</td>
                     <td>{firm.taxNo || "-"}</td>
-                    <td>{firm.phone || "-"}</td>
-                    <td>{firm.email || "-"}</td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
-                    <td>{normalize(firm.defaultRecordType).includes("UNOFFICIAL") || normalize(firm.defaultRecordType).includes("GAYRI") ? "Gayri resmî" : "Resmî"}</td>
+                    <td>{Number(firm.aliasCount || 0)}</td>
                     <td>{firm.isActive === false ? "Pasif" : "Aktif"}</td>
                   </tr>
                 ))}
@@ -242,7 +378,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ) : (
           <div className="ccw-empty">
             <strong>Ağustos 2026 temiz başlangıç hazır.</strong>
-            <span>Yeni firma, fatura, irsaliye veya cari hareket girdikçe ilgili firma burada yeniden görünecek.</span>
+            <span>Yeni fatura, irsaliye veya cari hareket geldikçe ilgili firma burada doğru tanımıyla yeniden görünecek.</span>
           </div>
         )}
       </section>
@@ -251,24 +387,92 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <div className="ccw-drawer-layer" role="presentation" onMouseDown={() => setSelected(null)}>
           <aside className="ccw-drawer" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
             <header>
-              <div><h2>{selected.firmaAdi || selected.name}</h2><p>{roleLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p></div>
+              <div>
+                <h2>{selected.firmaAdi || selected.companyName || selected.name}</h2>
+                <p>{roleLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p>
+              </div>
               <div className="ccw-drawer-actions">
-                <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> İşlem</button>
+                {canUseCari ? (
+                  <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari İşlem</button>
+                ) : null}
                 <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
             </header>
             <div className="ccw-drawer-body">
               {notice ? <div className="ccw-notice" role="status">{notice}</div> : null}
+
+              <section className="ccw-profile-card">
+                <header>
+                  <div><h3>Firma Muhasebe Tanımı</h3><p>Borç, KDV ve gider davranışı bu tanımdan otomatik belirlenir.</p></div>
+                  <button type="button" className="ccw-save-profile" disabled={profileSaving} onClick={saveProfile}>Tanımı Kaydet</button>
+                </header>
+                <div className="ccw-profile-grid">
+                  <label>Firma türü
+                    <select value={profileDraft.companyType} onChange={(event) => setProfileDraft((current) => ({ ...current, companyType: event.target.value }))}>
+                      <option value="CUSTOMER">Müşteri</option>
+                      <option value="SUPPLIER">Tedarikçi</option>
+                      <option value="BOTH">Müşteri ve tedarikçi</option>
+                    </select>
+                  </label>
+                  <label>Alış / ödeme düzeni
+                    <select value={profileDraft.paymentMode} disabled={profileDraft.companyType === "CUSTOMER"} onChange={(event) => setProfileDraft((current) => ({ ...current, paymentMode: event.target.value, supplierDebtTracking: event.target.value === "CREDIT" ? current.supplierDebtTracking : false }))}>
+                      <option value="CASH">Peşin — cari borç oluşturma</option>
+                      <option value="CREDIT">Vadeli / cari — tedarikçi borcu oluştur</option>
+                    </select>
+                  </label>
+                  <label>Varsayılan kayıt
+                    <select value={profileDraft.defaultRecordType} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultRecordType: event.target.value }))}>
+                      <option value="RESMI">Resmî</option>
+                      <option value="GAYRI_RESMI">Gayri resmî</option>
+                    </select>
+                  </label>
+                  <label>Gider kategorisi
+                    <input value={profileDraft.expenseCategory} onChange={(event) => setProfileDraft((current) => ({ ...current, expenseCategory: event.target.value }))} placeholder="Gıda / Market, Elektrik, Kimyasal..." />
+                  </label>
+                </div>
+                <div className="ccw-check-row">
+                  {profileDraft.companyType !== "CUSTOMER" ? (
+                    <label><input type="checkbox" checked={profileDraft.supplierDebtTracking && profileDraft.paymentMode === "CREDIT"} disabled={profileDraft.paymentMode !== "CREDIT"} onChange={(event) => setProfileDraft((current) => ({ ...current, supplierDebtTracking: event.target.checked }))} /> Tedarikçi borcunu caride takip et</label>
+                  ) : null}
+                  {profileDraft.companyType !== "SUPPLIER" ? (
+                    <label><input type="checkbox" checked={profileDraft.customerReceivableTracking} onChange={(event) => setProfileDraft((current) => ({ ...current, customerReceivableTracking: event.target.checked }))} /> Müşteri alacağını caride takip et</label>
+                  ) : null}
+                  <label><input type="checkbox" checked={profileDraft.vatTrackingEnabled} onChange={(event) => setProfileDraft((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
+                </div>
+                <div className="ccw-rule-note">
+                  {profileDraft.companyType !== "CUSTOMER" && profileDraft.paymentMode === "CASH"
+                    ? "Peşin alış: gider ve resmîyse KDV kaydı oluşur; firmaya cari borç yazılmaz."
+                    : profileDraft.companyType !== "CUSTOMER"
+                      ? "Cari tedarikçi: onaylanan tedarikçi faturası firma borcuna eklenir."
+                      : "Müşteri: gelen irsaliye borç oluşturmaz; müşteri alacağı yalnız kesilen fatura/tahsilat akışından izlenir."}
+                </div>
+              </section>
+
+              <section className="ccw-section">
+                <header><h3>Firma Alias / Eşleşme</h3><span>{aliases.length} kayıt</span></header>
+                <div className="ccw-alias-entry">
+                  <input value={aliasInput} onChange={(event) => setAliasInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addAlias(); } }} placeholder="Örn. BİM BİRLEŞİK MAĞAZALAR AŞ" />
+                  <button type="button" disabled={profileSaving || !aliasInput.trim()} onClick={addAlias}>Alias Ekle</button>
+                </div>
+                {aliases.length ? (
+                  <div className="ccw-alias-list">
+                    {aliases.map((alias) => (
+                      <span key={alias.id}>{alias.raw_name || alias.rawName}<button type="button" onClick={() => removeAlias(alias.id)} aria-label="Alias kaldır">×</button></span>
+                    ))}
+                  </div>
+                ) : <div className="ccw-mini-empty">Henüz alias yok. İşNet'te farklı yazılan firma adlarını buraya ekleyebilirsin.</div>}
+              </section>
+
               <section className="ccw-detail-summary">
                 <div><span>Bakiye</span><strong>{money(selected.currentBalance)}</strong></div>
-                <div><span>Açılış bakiyesi</span><strong>{money(selected.openingBalance)}</strong></div>
+                <div><span>Cari durumu</span><strong>{cariLabel(selected)}</strong></div>
+                <div><span>KDV takibi</span><strong>{selected.vatTrackingEnabled === false ? "Kapalı" : "Aktif"}</strong></div>
                 <div><span>Telefon</span><strong>{selected.phone || "-"}</strong></div>
                 <div><span>Mail</span><strong>{selected.email || "-"}</strong></div>
                 <div><span>Adres</span><strong>{selected.address || "-"}</strong></div>
-                <div><span>Lot takibi</span><strong>{selected.isChemicalSupplier ? "Aktif" : "Yok"}</strong></div>
               </section>
 
-              {transactionOpen ? (
+              {transactionOpen && canUseCari ? (
                 <section className="ccw-transaction">
                   <header><h3>Yeni cari işlem</h3><button type="button" onClick={() => setTransactionOpen(false)}><X size={16} /></button></header>
                   <div>
@@ -284,9 +488,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
               <section className="ccw-section">
                 <header><h3>Cari hareketler</h3><span>{movements.length} kayıt</span></header>
-                {detailLoading ? <div className="ccw-empty">Hareketler yükleniyor…</div> : movements.length ? (
+                {!canUseCari ? (
+                  <div className="ccw-mini-empty">Bu firma peşin/cari takipsiz. Gider ve KDV kayıtları muhasebe raporlarından takip edilir; borç bakiyesi oluşmaz.</div>
+                ) : detailLoading ? <div className="ccw-empty">Hareketler yükleniyor…</div> : movements.length ? (
                   <div className="ccw-table-wrap compact"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Belge No</th><th>Açıklama</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Kayıt</th></tr></thead><tbody>{movements.map((movement) => <tr key={movement.id}><td>{dateText(movement.movement_date || movement.date)}</td><td>{movementTypeLabel(movement.movement_type || movement.type)}</td><td>{movement.document_no || "-"}</td><td>{movement.description || "-"}</td><td>{money(movement.debit)}</td><td>{money(movement.credit)}</td><td><strong>{money(movement.balance_after)}</strong></td><td>{normalize(movement.record_type).includes("GAYRI") ? "Gayri resmî" : "Resmî"}</td></tr>)}</tbody></table></div>
-                ) : <div className="ccw-empty">Bu firma için cari hareket bulunamadı.</div>}
+                ) : <div className="ccw-mini-empty">Bu firma için cari hareket bulunamadı.</div>}
               </section>
             </div>
           </aside>
