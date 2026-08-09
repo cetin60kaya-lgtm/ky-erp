@@ -2,16 +2,18 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-08T22:03:00+03:00",
-  "attempt": 15,
+  "requestedAt": "2026-08-09T04:31:00+03:00",
+  "attempt": 16,
   "scope": [
-    "ik-personel-karti-ek-odeme",
-    "ik-icra-kesintisi",
-    "ik-bordro-fisi",
-    "runtime-smoke-auth-fix",
-    "frontend-pages-git-deployment",
+    "ik-yillik-izin-tarih-mantigi",
+    "ik-yillik-izin-d1-motoru",
+    "ik-yillik-izin-preview-policy",
+    "ik-yillik-izin-cakisma-bakiye",
+    "ik-izin-ekran-temizligi",
+    "ik-izin-otomatik-hesap",
+    "ik-izin-regression-18-gun",
     "live-browser-verification"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "İK kişi bazlı ek ödeme/prim ve icra kesintisi akışı; hardcoded smoke parolası kaldırıldı ve kimlik doğrulaması olmayan CI smoke testi giriş kabuğunu güvenli doğrulayacak şekilde düzeltildi."
+  "note": "Yıllık izin ekranı tek düzen halinde temizlendi. İkinci tarih işe dönüş olarak yorumlanıyor; dönüş günü izin hesabına katılmıyor. D1 üzerinde gerçek izin planı, gün sayım politikası, önizleme, çakışma, bakiye ve doğru day_count kayıt akışı eklendi. 10.08.2026 izne çıkış / 31.08.2026 işe dönüş senaryosu 18 gün regresyon testiyle doğrulandı."
 }
