@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, apiPost } from "../utils/api";
+import { apiFetch, apiGet, apiPost, getApiActiveMainCompanySlug } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -29,7 +29,11 @@ export async function assignIsnetAutoFlowModel(flowId, payload) {
 
   const flow = assigned?.flow || assigned;
   const mainCompanySlug =
-    flow?.mainCompanySlug || body.mainCompanySlug || body.mainCompanyId || "";
+    flow?.mainCompanySlug ||
+    body.mainCompanySlug ||
+    body.mainCompanyId ||
+    getApiActiveMainCompanySlug() ||
+    "";
   const modelId =
     flow?.modelId || assigned?.model?.id || body.modelId || body.candidateId || "";
 
