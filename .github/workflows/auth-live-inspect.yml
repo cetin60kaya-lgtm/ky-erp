@@ -22,14 +22,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Resolve D1 account
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          database_id="b504b712-6927-499d-815d-0b954c8ee246"
+          accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+          account_id=""
+          while read -r candidate; do
+            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${candidate}/d1/database?per_page=100")"
+            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
+              account_id="$candidate"
+              break
+            fi
+          done < <(jq -r '.result[]?.id' <<<"$accounts_json")
+          test -n "$account_id"
+          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
       - name: Inspect auth route and D1 schema
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
-          auth_header='Content-Type: application/json'
           echo '--- LOGIN PROBE ---'
-          curl -sS -D /tmp/h -o /tmp/b -X POST https://api.kyerp.net/api/auth/login -H "$auth_header" --data '{"username":"__probe__","password":"__probe__"}' || true
+          curl -sS -D /tmp/h -o /tmp/b -X POST https://api.kyerp.net/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__probe__","password":"__probe__"}' || true
           head -n 8 /tmp/h || true
           cat /tmp/b || true
           echo
