@@ -14,6 +14,7 @@ import { registerBoyahaneWorkflowRoutes } from "./boyahane-workflow";
 import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
+import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
@@ -60,6 +61,9 @@ registerDesenOperationRoutes(app);
 
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
+// İK'nın gerçek D1 ilişkisel rotaları genel/legacy İK rotalarından önce kayıt edilir.
+// Böylece /api/ik/advanced/* ve aylık personel ekranları JSON fallback'e düşmez.
+registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 
 const shell = new Hono<ShellEnv>();
@@ -77,7 +81,7 @@ shell.use(
       "HEAD",
       "OPTIONS",
     ],
-    allowHeaders: ["Accept", "Authorization", "Content-Type"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
     maxAge: 86400,
     credentials: true,
