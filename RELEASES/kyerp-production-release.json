@@ -2,18 +2,21 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-09T06:12:00+03:00",
-  "attempt": 21,
+  "requestedAt": "2026-08-09T12:19:00+03:00",
+  "attempt": 22,
   "scope": [
-    "relational-ik-live-routes",
-    "ik-mobile-current-week",
-    "real-d1-auth-only",
-    "remove-fixed-2582-login",
-    "active-company-display",
-    "design-r2-migration-metadata",
-    "design-d1-index-foundation",
-    "mobile-runtime-smoke"
+    "desen-uxp-folder-bridge",
+    "secure-desktop-auth",
+    "webp-preview-1600",
+    "webp-thumbnail-420",
+    "r2-low-size-storage-policy",
+    "d1-auto-model-index",
+    "model-name-deduplication",
+    "revision-retention",
+    "bridge-online-status",
+    "mobile-thumbnail-loading",
+    "windows-startup-sync"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Canlı Worker'a gerçek ilişkisel İK D1 rotalarını geri bağla; telefondaki eski Mayıs varsayılanını güncel haftaya taşı; sabit 2582 admin girişini frontend ve Worker'dan kaldır; aktif firma görünümünü Hakan Emprime ile hizala; yaklaşık 700 yerel desenin R2 dosya deposu + D1 model indeksiyle aktarılabilmesi için migration metadata desteğini yayınla."
+  "note": "UXP/Photoshop gelen klasorunu Windows Desen Koprusu ile izle; orijinali yerelde tut; canli R2'ye yalniz 1600px WebP preview ve 420px thumbnail gonder; dosya adindan D1 model kartini otomatik olustur veya mevcut modele bagla; hash tekrarlarini engelle; ayni baski bolgesinde son iki kucuk revizyonu tut; Desen ekraninda yerel kopru durumunu goster; Windows acilisinda otomatik calisan tek tik kurulum araclarini yayinla."
 }
