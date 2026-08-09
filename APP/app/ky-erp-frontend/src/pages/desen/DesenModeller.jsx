@@ -95,10 +95,10 @@ export default function DesenModeller({ activeMainCompany }) {
   const analyzeVisible = async () => {
     const ids = selectedIds.length ? selectedIds : visibleModels.map((model) => model.id);
     if (!ids.length) return;
-    setAnalyzing(true); setMessage(`${ids.length} desen OCR, Pantone ve tema için taranıyor…`);
+    setAnalyzing(true); setMessage(`${ids.length} desen OCR, Pantone, figür ve desen tarifi için taranıyor…`);
     try {
       const result = await analyzeDesignModels(activeMainCompany, ids, { force: true, useVision: true });
-      setMessage(`${result?.analyzed || 0} desen indekslendi${result?.errors ? `, ${result.errors} hata var` : ""}. Pantone, yazı ve tema araması hazır.`);
+      setMessage(`${result?.analyzed || 0} desen indekslendi${result?.errors ? `, ${result.errors} hata var` : ""}. Pantone, yazı, figür, karakter ve desen tarifi araması hazır.`);
       await load();
     } catch (error) { setMessage(error?.message || "Akıllı desen taraması tamamlanamadı."); }
     finally { setAnalyzing(false); }
@@ -107,7 +107,7 @@ export default function DesenModeller({ activeMainCompany }) {
   return <>
     <section className="dsg-toolbar-card dsg-pool-toolbar">
       <div className="dsg-filter-grid">
-        <label className="dsg-search"><Search size={16} /><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Model, Pantone 13-0530, yazı veya tema ara" /></label>
+        <label className="dsg-search"><Search size={16} /><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Model, Pantone, yazı, figür, karakter veya desen tarifi ara" /></label>
         <select value={filters.companyId} onChange={(event) => setFilters((current) => ({ ...current, companyId: event.target.value }))}><option value="">Tüm firmalar</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select>
         <select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}><option value="">Tüm durumlar</option>{MODEL_STATUSES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>
         <select value={filters.printAreaCode} onChange={(event) => setFilters((current) => ({ ...current, printAreaCode: event.target.value }))}><option value="">Tüm baskı bölgeleri</option>{PRINT_AREAS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>

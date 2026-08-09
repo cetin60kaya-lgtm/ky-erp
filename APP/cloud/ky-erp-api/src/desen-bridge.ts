@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { analyzeDesignWithAi } from "./desen-ai";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -467,6 +468,16 @@ export function registerDesenBridgeRoutes(app: Hono<AppEnv>) {
         },
       },
     });
+
+    try {
+      const analysis = await analyzeDesignWithAi(c, saved);
+      await saveModel(c, slug, {
+        ...saved,
+        metadata: { ...objectOf(saved.metadata), analysis },
+      });
+    } catch (error) {
+      console.error("DESEN_AUTO_AI_FAILED", error);
+    }
 
     await Promise.all(dropped.map((row: Row) => deleteR2File(c, row)));
     const status = await saveBridgeStatus(c, slug, text(c.req.header("X-KYERP-Device") || "windows"), {

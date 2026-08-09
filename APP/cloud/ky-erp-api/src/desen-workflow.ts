@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { analyzeDesignWithAi, needsAiAnalysis } from "./desen-ai";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -600,7 +601,7 @@ async function processInboxModel(c: Context<AppEnv>, body: Row, slug: string) {
     );
     await storePut(c, INBOX_SCOPE, text(item.id), { ...item, status: "PROCESSED", modelId: id }, slug);
   }
-  return saveModel(
+  const saved = await saveModel(
     c,
     id,
     {
@@ -615,6 +616,7 @@ async function processInboxModel(c: Context<AppEnv>, body: Row, slug: string) {
     },
     slug,
   );
+  return analyzeAndSave(c, saved, slug);
 }
 
 function analysisFromModel(model: Row) {
@@ -635,6 +637,20 @@ function analysisFromModel(model: Row) {
     analysisMode: "METADATA_INDEX",
     note: "Görsel OCR yapılmadı; model, kanal ve açıklama metinleri indekslendi.",
   };
+}
+
+async function analyzeAndSave(c: Context<AppEnv>, model: Row, slug: string) {
+  const view = modelView(model);
+  const analysis = await analyzeDesignWithAi(c, view);
+  return saveModel(
+    c,
+    view.id,
+    {
+      ...view,
+      metadata: { ...view.metadata, analysis },
+    },
+    slug,
+  );
 }
 
 async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
@@ -1093,7 +1109,8 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
       createdAt: nowIso(),
     });
     const saved = await saveModel(c, model.id, { ...model, files: [...model.files, row] }, slug);
-    return c.json({ ok: true, success: true, data: { file: row, model: saved } }, 201);
+    const analyzed = await analyzeAndSave(c, saved, slug);
+    return c.json({ ok: true, success: true, data: { file: row, model: analyzed } }, 201);
   });
 
   app.get("/api/desen/workflow/files/:id/preview", async (c) => {
@@ -1268,9 +1285,10 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
       success: true,
       data: {
         total: rows.length,
-        analyzed: rows.filter((row) => row.metadata?.analysis?.analyzedAt).length,
-        pending: rows.filter((row) => !row.metadata?.analysis?.analyzedAt).length,
-        mode: "METADATA_INDEX",
+        analyzed: rows.filter((row) => !needsAiAnalysis(row) && row.metadata?.analysis?.visionStatus === "COMPLETED").length,
+        pending: rows.filter((row) => needsAiAnalysis(row)).length,
+        failed: rows.filter((row) => row.metadata?.analysis?.visionStatus === "FAILED").length,
+        mode: "CLOUDFLARE_AI_VISION_OCR",
       },
     });
   });
@@ -1281,16 +1299,27 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const ids = Array.isArray(body.ids) ? body.ids.map(text) : [];
     const models = (await storeList(c, MODEL_SCOPE, slug)).map(modelView);
     const targets = ids.length ? models.filter((row) => ids.includes(row.id)) : models;
-    for (const model of targets) {
-      await saveModel(c, model.id, {
-        ...model,
-        metadata: { ...model.metadata, analysis: analysisFromModel(model) },
-      }, slug);
+    let analyzed = 0;
+    let errors = 0;
+    for (let index = 0; index < targets.length; index += 4) {
+      const batch = targets.slice(index, index + 4);
+      const results = await Promise.all(
+        batch.map(async (model) => {
+          try {
+            const saved = await analyzeAndSave(c, model, slug);
+            return saved.metadata?.analysis?.visionStatus === "COMPLETED";
+          } catch {
+            return false;
+          }
+        }),
+      );
+      analyzed += results.filter(Boolean).length;
+      errors += results.filter((value) => !value).length;
     }
     return c.json({
       ok: true,
       success: true,
-      data: { analyzed: targets.length, errors: 0, mode: "METADATA_INDEX" },
+      data: { analyzed, errors, mode: "CLOUDFLARE_AI_VISION_OCR" },
     });
   });
 
@@ -1299,10 +1328,7 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c, body);
     const model = await getModel(c, c.req.param("id"), slug);
     if (!model) return c.json(errorBody("NOT_FOUND", "Desen modeli bulunamadı."), 404);
-    const saved = await saveModel(c, model.id, {
-      ...model,
-      metadata: { ...model.metadata, analysis: analysisFromModel(model) },
-    }, slug);
+    const saved = await analyzeAndSave(c, model, slug);
     return c.json({ ok: true, success: true, data: saved });
   });
 
