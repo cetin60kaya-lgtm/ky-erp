@@ -21,6 +21,7 @@ import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
 import { registerProductionCenterRoutes } from "./production-center";
+import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
@@ -45,6 +46,9 @@ function allowedOrigin(origin: string) {
   return undefined;
 }
 
+// Temiz üretim runtime'ı aynı endpointleri legacy katmandan önce karşılar.
+// Günlük imalat işlemleri doğrudan D1 üzerinde çalışır; GitHub Actions kullanılmaz.
+registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
