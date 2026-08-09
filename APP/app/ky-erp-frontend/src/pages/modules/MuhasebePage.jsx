@@ -29,17 +29,17 @@ export const MUHASEBE_TABS = [
     key: "tedarikci-faturalar",
     title: "Gelen Tedarikçi Faturaları",
     description:
-      "İşNet faturalarını kontrol edin; boya ve kimyasal alımlarını onaylı ürün, firma aliası, lot ve stok hareketiyle Boyahaneye aktarın.",
+      "İşNet'ten gelen tedarikçi faturalarını kontrol edin; onaylı ürün, firma aliası, lot ve stok hareketiyle ilgili akışlara aktarın.",
   },
   {
     key: "kesilen-faturalar",
     title: "Kesilen Faturalar",
-    description: "Kesilen faturaların İşNet, model, adet ve belge durumlarını izleyin.",
+    description: "Bizim kestiğimiz faturaların İşNet, model, adet ve belge durumlarını izleyin.",
   },
   {
     key: "irsaliye-fatura-kontrol",
-    title: "İrsaliye / Fatura Kontrolü",
-    description: "Model, sipariş ve adet farklarını tek listede karşılaştırın.",
+    title: "Gelen Müşteri İrsaliyeleri / Fatura Kontrolü",
+    description: "TAHA, REN FASHION, MIND ve diğer müşterilerden gelen irsaliyeleri; model, sipariş, adet ve kesilen fatura eşleşmesiyle takip edin.",
   },
   {
     key: "cek-odeme",
