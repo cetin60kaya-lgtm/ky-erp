@@ -1,5 +1,6 @@
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
+import { registerAuthCloudRoutes } from "./auth-cloud";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -2484,5 +2485,7 @@ app.get("/api/files/*", async (c) => {
   headers.set("etag", object.httpEtag);
   return new Response(object.body, { headers });
 });
+
+registerAuthCloudRoutes(app);
 
 export default app;
