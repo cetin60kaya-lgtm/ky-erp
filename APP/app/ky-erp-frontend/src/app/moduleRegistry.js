@@ -15,9 +15,9 @@ export const MODULES = [
       {
         label: "Fatura ve Belge",
         tabs: [
-          ["tedarikci-faturalar", "Gelen Tedarikçi Faturaları", "tedarikci-fatura"],
-          ["kesilen-faturalar", "Kesilen Faturalar", "dosya"],
-          ["irsaliye-fatura-kontrol", "Gelen Müşteri İrsaliyeleri / Fatura Kontrolü", "file-check"],
+          ["tedarikci-faturalar", "Tedarikçi İrsaliye / Faturaları", "tedarikci-fatura"],
+          ["kesilen-faturalar", "Bizim Kesilen Faturalarımız", "dosya"],
+          ["irsaliye-fatura-kontrol", "Müşteri İrsaliye / Bizim Belgeler", "file-check"],
         ],
       },
       {
@@ -56,8 +56,8 @@ export const MODULES = [
       {
         label: "Belge İşlemleri",
         tabs: [
-          ["belge-akisi", "Gelen / Giden Belgeler", "dosya"],
-          ["irsaliyeden-faturaya", "İrsaliye ve Fatura İş Akışı", "file-check"],
+          ["belge-akisi", "Belge ve İş Akışları", "dosya"],
+          ["irsaliyeden-faturaya", "Müşteri İş Akışı", "file-check"],
         ],
       },
       {
