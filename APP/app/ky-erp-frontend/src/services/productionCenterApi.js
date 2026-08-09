@@ -40,14 +40,14 @@ function isCustomerCompany(row) {
   const role = normalize(
     `${row?.type || ""} ${row?.companyType || row?.company_type || ""}`,
   );
-  if (/BOTH|CUSTOMER|MUSTERI|ALICI|HER IKISI/.test(role)) return true;
-  if (/SUPPLIER|TEDARIK/.test(role)) return false;
-  return true;
+  return /MUSTERI|CUSTOMER|ALICI/.test(role) &&
+    !/SUPPLIER|TEDARIK|SATICI|VENDOR/.test(role);
 }
 
 function customerCompanies(rows) {
   return (Array.isArray(rows) ? rows : [])
     .filter((row) => row?.isActive !== false && row?.is_active !== 0)
+    .filter((row) => !row?.deletedAt && !row?.deleted_at)
     .filter(isCustomerCompany)
     .sort((a, b) => {
       const aTaha = /^TAHA\b/.test(normalize(a?.name || a?.firmaAdi));
