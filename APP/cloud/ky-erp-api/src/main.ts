@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
+import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
@@ -51,7 +52,8 @@ function allowedOrigin(origin: string) {
   return undefined;
 }
 
-// Günlük muhasebe firma profili / alias işlemleri doğrudan D1 üzerinde çalışır.
+// Firma kartları İşNet'ten bağımsız kalıcı ana rehberdir; manuel oluşturma ve muhasebe profili D1'de tutulur.
+registerAccountingCompanyDirectoryRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
 // Temiz üretim runtime'ı aynı endpointleri legacy katmandan önce karşılar.
 // Günlük imalat işlemleri doğrudan D1 üzerinde çalışır; GitHub Actions kullanılmaz.
