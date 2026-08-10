@@ -40,7 +40,11 @@ export async function listUsers() {
 }
 
 export async function createUser(payload = {}) {
-  return unwrap(await apiPost("/admin/users", payload));
+  const created = unwrap(await apiPost("/admin/users", payload));
+  if (created?.id && Array.isArray(payload?.permissions)) {
+    await updateUserPermissions(created.id, payload.permissions);
+  }
+  return created;
 }
 
 export async function updateUser(id, payload = {}) {
