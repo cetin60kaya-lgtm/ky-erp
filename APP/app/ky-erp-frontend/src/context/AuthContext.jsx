@@ -37,22 +37,31 @@ function normalizePermissionRows(rows) {
     .filter((row) => MODULE_KEYS.includes(row?.moduleKey));
 }
 
+function cleanLegacyAuthStorage() {
+  const legacyKeys = [
+    "kyerp.auth",
+    "kyerp_user",
+    "token",
+    "authToken",
+    AUTH_TOKEN_KEY,
+    AUTH_USER_KEY,
+  ];
+  legacyKeys.forEach((key) => {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // noop
+    }
+  });
+}
+
 function readStoredAuth() {
   try {
-    const legacyKeys = ["kyerp.auth", "kyerp_user", "token", "authToken"];
-    legacyKeys.forEach(key => {
-      try {
-        window.localStorage.removeItem(key);
-      } catch {
-        // noop
-      }
-    });
-
-    const token = window.localStorage.getItem(AUTH_TOKEN_KEY) || "";
-    const userRaw = window.localStorage.getItem(AUTH_USER_KEY);
+    cleanLegacyAuthStorage();
+    const token = window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const userRaw = window.sessionStorage.getItem(AUTH_USER_KEY);
     const user = userRaw ? JSON.parse(userRaw) : null;
     const permissions = normalizePermissionRows(user?.permissions);
-
     return { token, user, permissions };
   } catch {
     return { token: "", user: null, permissions: [] };
@@ -63,13 +72,11 @@ function parseJwtPayload(token) {
   const raw = String(token || "").trim();
   if (!raw) return null;
   const parts = raw.split(".");
-  if (parts.length < 2) return null;
-
+  if (parts.length !== 3) return null;
   try {
     const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = payload + "=".repeat((4 - (payload?.length % 4)) % 4);
-    const decoded = window.atob(padded);
-    return JSON.parse(decoded);
+    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+    return JSON.parse(window.atob(padded));
   } catch {
     return null;
   }
@@ -78,9 +85,11 @@ function parseJwtPayload(token) {
 function isTokenUsable(token) {
   const payload = parseJwtPayload(token);
   if (!payload || typeof payload?.exp !== "number") return false;
+  return payload.exp > Math.floor(Date.now() / 1000) + 5;
+}
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  return payload?.exp > nowSeconds + 5;
+function isSuperAdmin(role) {
+  return ["SUPER_ADMIN", "ADMIN"].includes(String(role || "").toUpperCase());
 }
 
 export function AuthProvider({ children }) {
@@ -91,39 +100,54 @@ export function AuthProvider({ children }) {
 
   const clearAuth = useCallback(() => {
     setAuthState({ token: "", user: null, permissions: [] });
-    setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => clearAuth() });
     try {
-      window.localStorage.removeItem(AUTH_TOKEN_KEY);
-      window.localStorage.removeItem(AUTH_USER_KEY);
-      const legacyKeys = ["kyerp.auth", "kyerp_user", "token", "authToken"];
-      legacyKeys.forEach(key => window.localStorage.removeItem(key));
+      window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+      window.sessionStorage.removeItem(AUTH_USER_KEY);
+      cleanLegacyAuthStorage();
     } catch {
       // noop
     }
   }, []);
 
-  const saveAuth = useCallback((nextToken, nextUser, nextPermissions) => {
-    const normalizedPermissions = normalizePermissionRows(nextPermissions);
-    const payload = {
-      token: String(nextToken || ""),
-      user: nextUser || null,
-      permissions: normalizedPermissions,
-    };
-    setAuthState(payload);
-    setApiAuthHandlers({ getToken: () => payload?.token, onUnauthorized: () => clearAuth() });
-    try {
-      window.localStorage.setItem(AUTH_TOKEN_KEY, payload?.token);
-      window.localStorage.setItem(
-        AUTH_USER_KEY,
-        JSON.stringify({ ...payload?.user, permissions: payload?.permissions }),
+  const saveAuth = useCallback(
+    (nextToken, nextUser, nextPermissions) => {
+      const normalizedPermissions = normalizePermissionRows(nextPermissions);
+      const payload = {
+        token: String(nextToken || ""),
+        user: nextUser || null,
+        permissions: normalizedPermissions,
+      };
+      if (!payload.token || !payload.user) return false;
+      setAuthState(payload);
+      try {
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
+        window.sessionStorage.setItem(
+          AUTH_USER_KEY,
+          JSON.stringify({ ...payload.user, permissions: payload.permissions }),
+        );
+      } catch {
+        // noop
+      }
+      return true;
+    },
+    [],
+  );
+
+  const finalizeResponse = useCallback(
+    (response) => {
+      if (!response?.token || !response?.user) return response;
+      saveAuth(
+        response.token,
+        response.user,
+        response.user?.permissions || response.permissions || [],
       );
-    } catch {
-      // noop
-    }
-  }, [clearAuth]);
+      return response;
+    },
+    [saveAuth],
+  );
 
   useEffect(() => {
-    setApiAuthHandlers({ getToken: () => token, onUnauthorized: () => clearAuth() });
+    setApiAuthHandlers({ getToken: () => token, onUnauthorized: clearAuth });
   }, [clearAuth, token]);
 
   useEffect(() => {
@@ -134,7 +158,6 @@ export function AuthProvider({ children }) {
         if (!cancelled) setLoading(false);
         return;
       }
-
       if (!isTokenUsable(token)) {
         if (!cancelled) {
           clearAuth();
@@ -144,9 +167,8 @@ export function AuthProvider({ children }) {
       }
 
       const snapshot = authSnapshotRef.current;
-
       try {
-        const response = await apiFetch("/auth/me");
+        const response = await apiFetch("/auth/me", { suppressUnauthorized: true });
         if (cancelled) return;
         saveAuth(
           token,
@@ -166,50 +188,90 @@ export function AuthProvider({ children }) {
     };
   }, [clearAuth, saveAuth, token]);
 
-  const login = useCallback(async function login(username, password) {
-    const response = await apiFetch("/auth/login", {
-      method: "POST",
-      body: { username, password },
-      skipAuth: true,
-    });
+  const login = useCallback(
+    async (identity, password, deviceLabel = "") => {
+      const response = await apiFetch("/auth/login", {
+        method: "POST",
+        body: { username: identity, password, deviceLabel },
+        skipAuth: true,
+        suppressUnauthorized: true,
+      });
+      return finalizeResponse(response);
+    },
+    [finalizeResponse],
+  );
 
-    saveAuth(
-      response?.token,
-      response?.user || null,
-      response?.user?.permissions || response?.permissions || [],
-    );
+  const verifyMfa = useCallback(
+    async ({ challengeId, challengeToken, code }) => {
+      const response = await apiFetch("/auth/mfa/verify", {
+        method: "POST",
+        body: { challengeId, challengeToken, code },
+        skipAuth: true,
+        suppressUnauthorized: true,
+      });
+      return finalizeResponse(response);
+    },
+    [finalizeResponse],
+  );
 
-    return response;
-  }, [saveAuth]);
+  const checkApproval = useCallback(
+    async ({ approvalId, approvalToken }) => {
+      const response = await apiFetch(`/auth/approval/${approvalId}/status`, {
+        method: "POST",
+        body: { approvalToken },
+        skipAuth: true,
+        suppressUnauthorized: true,
+      });
+      return finalizeResponse(response);
+    },
+    [finalizeResponse],
+  );
 
-  const logout = useCallback(function logout() {
-    clearAuth();
-  }, [clearAuth]);
+  const logout = useCallback(async () => {
+    try {
+      if (token) {
+        await apiFetch("/auth/logout", {
+          method: "POST",
+          suppressUnauthorized: true,
+        });
+      }
+    } catch {
+      // Sunucuya ulaşılamasa da cihazdaki oturum kapatılır.
+    } finally {
+      clearAuth();
+    }
+  }, [clearAuth, token]);
 
-  const hasModule = useCallback(function hasModule(moduleKey) {
-    const key = String(moduleKey || "").toUpperCase();
-    if (!key) return false;
-    if (String(user?.role || "").toUpperCase() === "ADMIN") return true;
-    const permission = permissions.find((row) => row.moduleKey === key);
-    return Boolean(permission?.canView);
-  }, [permissions, user?.role]);
+  const hasModule = useCallback(
+    (moduleKey) => {
+      const key = String(moduleKey || "").toUpperCase();
+      if (!key) return false;
+      if (isSuperAdmin(user?.role)) return true;
+      if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") return true;
+      return Boolean(permissions.find((row) => row.moduleKey === key)?.canView);
+    },
+    [permissions, user?.role],
+  );
 
-  const can = useCallback(function can(moduleKey, action) {
-    const key = String(moduleKey || "").toUpperCase();
-    const actionKey = {
-      view: "canView",
-      create: "canCreate",
-      update: "canUpdate",
-      delete: "canDelete",
-      approve: "canApprove",
-    }[String(action || "").toLowerCase()];
-
-    if (!key || !actionKey) return false;
-    if (String(user?.role || "").toUpperCase() === "ADMIN") return true;
-
-    const permission = permissions.find((row) => row.moduleKey === key);
-    return Boolean(permission?.[actionKey]);
-  }, [permissions, user?.role]);
+  const can = useCallback(
+    (moduleKey, action) => {
+      const key = String(moduleKey || "").toUpperCase();
+      const actionKey = {
+        view: "canView",
+        create: "canCreate",
+        update: "canUpdate",
+        delete: "canDelete",
+        approve: "canApprove",
+      }[String(action || "").toLowerCase()];
+      if (!key || !actionKey) return false;
+      if (isSuperAdmin(user?.role)) return true;
+      if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") {
+        return actionKey !== "canDelete";
+      }
+      return Boolean(permissions.find((row) => row.moduleKey === key)?.[actionKey]);
+    },
+    [permissions, user?.role],
+  );
 
   const value = useMemo(
     () => ({
@@ -217,13 +279,15 @@ export function AuthProvider({ children }) {
       user,
       permissions,
       login,
+      verifyMfa,
+      checkApproval,
       logout,
       hasModule,
       can,
       isAuthenticated: Boolean(token && user),
       loading,
     }),
-    [token, user, permissions, login, logout, hasModule, can, loading],
+    [token, user, permissions, login, verifyMfa, checkApproval, logout, hasModule, can, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

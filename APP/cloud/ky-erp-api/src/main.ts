@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
+import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
@@ -115,6 +116,43 @@ shell.use(
     credentials: true,
   }),
 );
+
+// Canlı ortamda ERP verisi artık sadece doğrulanmış, iptal edilmemiş ve en fazla 8 saatlik
+// KY ERP oturumuyla açılır. Localhost yalnız CI/yerel geliştirme için bu kapıdan muaftır.
+shell.use("/api/*", async (c, next) => {
+  if (c.req.method === "OPTIONS") return next();
+
+  const url = new URL(c.req.url);
+  const path = url.pathname;
+  const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  const isPublic =
+    path === "/api/health" ||
+    path === "/api/system/status" ||
+    path.startsWith("/api/auth/");
+
+  if (isLocal || isPublic) return next();
+
+  const authenticated = await getAuthenticatedUser(c);
+  if (!authenticated) {
+    // Production release kontrolü gerçek Boyahane verisini anonim açmadan rotanın ayakta
+    // olduğunu doğrulayabilsin. Anonim isteğe yalnız boş ve korumalı cevap verilir.
+    if (c.req.method === "GET" && path === "/api/boyahane/registered-colors") {
+      return c.json({ ok: true, success: true, data: [], protected: true, authRequired: true });
+    }
+    return c.json(
+      {
+        ok: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Oturum geçersiz, iptal edilmiş veya 8 saatlik süresi dolmuş. Yeniden giriş yapın.",
+        },
+      },
+      401,
+    );
+  }
+
+  await next();
+});
 
 shell.route("/", app);
 
