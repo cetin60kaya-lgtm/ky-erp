@@ -10,8 +10,8 @@
 }
 
 .login-card {
-  width: min(420px, 100%);
-  background: rgba(255, 255, 255, 0.96);
+  width: min(460px, 100%);
+  background: rgba(255, 255, 255, 0.97);
   border: 1px solid #dbe3ef;
   border-radius: 18px;
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
@@ -32,13 +32,21 @@
   color: #0f172a;
 }
 
+.login-card h2 {
+  margin: 8px 0 4px;
+  font-size: 20px;
+  color: #0f172a;
+}
+
 .login-card p {
   margin: 8px 0 20px;
   color: #475569;
   font-size: 14px;
+  line-height: 1.55;
 }
 
-.login-card form {
+.login-card form,
+.login-approval {
   display: grid;
   gap: 14px;
 }
@@ -75,10 +83,19 @@
   background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%);
   color: #fff;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .login-card button:disabled {
-  opacity: 0.75;
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.login-card button.login-secondary {
+  margin-top: 0;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
 }
 
 .login-error {
@@ -88,6 +105,72 @@
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 13px;
+}
+
+.login-security-box {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.login-security-box.compact {
+  border-color: #dbe3ef;
+  background: #f8fafc;
+}
+
+.login-security-box code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 10px;
+  border-radius: 9px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.login-auth-link {
+  color: #1d4ed8;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.login-approval {
+  text-align: center;
+}
+
+.login-approval .login-security-box {
+  text-align: left;
+}
+
+.login-approval-icon {
+  width: 48px;
+  height: 48px;
+  margin: 4px auto 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.login-security-note {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 @media (max-width: 600px) {
