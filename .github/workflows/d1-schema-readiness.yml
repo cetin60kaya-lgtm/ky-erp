@@ -59,23 +59,32 @@ jobs:
       - name: Paketleri kur
         run: npm ci
 
-      - name: Temiz yerel D1 oluştur ve migration uygula
+      - name: Güncel izole D1 şemasını kur
         run: |
-          rm -rf .local-d1-readiness
-          npx wrangler d1 migrations apply ky-erp-production-local \
-            --local \
-            --config wrangler.production-local.jsonc \
-            --persist-to .local-d1-readiness
-
-      - name: İzole test verilerini yükle
-        run: |
-          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql; do
+          rm -rf .local-d1-readiness .readiness-migrations wrangler.readiness.jsonc
+          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql migrations/0008_hr_relational_bootstrap.sql; do
             npx wrangler d1 execute ky-erp-production-local \
               --local \
               --config wrangler.production-local.jsonc \
               --persist-to .local-d1-readiness \
               --file "$sql"
           done
+
+      - name: Yeni güvenlik migrationını güncel şema üzerinde uygula
+        run: |
+          mkdir -p .readiness-migrations
+          cp migrations/0018_auth_mfa_sessions.sql .readiness-migrations/0001_auth_mfa_sessions.sql
+          node <<'NODE'
+          const fs = require('node:fs');
+          const config = JSON.parse(fs.readFileSync('wrangler.production-local.jsonc', 'utf8'));
+          config.d1_databases[0].migrations_dir = '.readiness-migrations';
+          config.d1_databases[0].migrations_table = 'd1_migrations';
+          fs.writeFileSync('wrangler.readiness.jsonc', JSON.stringify(config, null, 2));
+          NODE
+          npx wrangler d1 migrations apply ky-erp-production-local \
+            --local \
+            --config wrangler.readiness.jsonc \
+            --persist-to .local-d1-readiness
 
       - name: D1 şemasını ve quick_check sonucunu doğrula
         run: >-
@@ -85,6 +94,25 @@ jobs:
           --config wrangler.production-local.jsonc
           --persist-to .local-d1-readiness
           --require-migrations
+
+      - name: MFA ve oturum tablolarını doğrula
+        run: |
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-d1-readiness \
+            --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit') ORDER BY name;" \
+            --json > /tmp/auth-schema.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const raw = JSON.parse(fs.readFileSync('/tmp/auth-schema.json', 'utf8'));
+          const rows = Array.isArray(raw) ? raw.flatMap((item) => item.results || []) : [];
+          const names = new Set(rows.map((row) => row.name));
+          const required = ['auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit'];
+          const missing = required.filter((name) => !names.has(name));
+          if (missing.length) throw new Error(`Eksik auth tablosu: ${missing.join(', ')}`);
+          console.log('MFA, admin onayı ve aktif oturum tabloları hazır.');
+          NODE
 
       - name: Worker typecheck
         run: npm run typecheck
