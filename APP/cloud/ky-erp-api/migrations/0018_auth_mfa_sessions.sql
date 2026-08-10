@@ -1,8 +1,39 @@
--- KY ERP kimlik dogrulama guvenlik katmani.
--- Mevcut auth_users ve parola kayitlarina dokunmaz; MFA, firma kapsami,
--- admin onayi ve iptal edilebilir 8 saatlik oturumlar ayri tablolarda tutulur.
+-- KY ERP kimlik doğrulama güvenlik katmanı.
+-- Mevcut auth_users ve parola kayıtlarını korur. Temiz D1 kurulumunda eksikse
+-- yalnız temel kullanıcı/yetki tablolarını oluşturur; parola veya kullanıcı seed etmez.
+-- MFA, firma kapsamı, admin onayı ve iptal edilebilir 8 saatlik oturumlar
+-- ayrı güvenlik tablolarında tutulur.
 
 PRAGMA defer_foreign_keys = true;
+
+CREATE TABLE IF NOT EXISTS auth_users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'VIEWER',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  must_change_password INTEGER NOT NULL DEFAULT 0,
+  last_login_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_user_module_permissions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  module_key TEXT NOT NULL,
+  can_view INTEGER NOT NULL DEFAULT 0,
+  can_create INTEGER NOT NULL DEFAULT 0,
+  can_update INTEGER NOT NULL DEFAULT 0,
+  can_delete INTEGER NOT NULL DEFAULT 0,
+  can_approve INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, module_key)
+);
+CREATE INDEX IF NOT EXISTS idx_auth_user_module_permissions_user
+  ON auth_user_module_permissions (user_id);
 
 CREATE TABLE IF NOT EXISTS auth_user_security (
   user_id TEXT PRIMARY KEY,
