@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-11T19:59:00+03:00",
-  "attempt": 39,
+  "requestedAt": "2026-08-11T20:14:00+03:00",
+  "attempt": 40,
   "scope": [
     "signed-auth-sessions",
     "totp-authenticator-mfa",
@@ -11,6 +11,10 @@
     "authenticator-qr-enrollment",
     "local-private-qr-generator",
     "manual-totp-key-fallback",
+    "mfa-session-loop-fix",
+    "immediate-api-token-handoff",
+    "authenticated-login-stage",
+    "session-reload-fallback",
     "admin-login-approval",
     "eight-hour-session-limit",
     "super-admin-company-admin",
@@ -27,5 +31,5 @@
     "preserve-accounting-isnet-company-card-rules"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "KY ERP Authenticator ilk kurulumunu kullanıcı için doğrudan QR okutma akışına geçir. MFA_SETUP ekranında sunucunun ürettiği standart otpauth TOTP URI'sini tarayıcıda yerel QRCode.js ile QR olarak üret; secret hiçbir harici QR servisine gönderilmesin. Google Authenticator ve Microsoft Authenticator'da Hesap ekle / QR kodu tara ile tek taramada KY ERP hesabı oluşsun ve uygulamanın ürettiği 6 haneli kod KY ERP doğrulama alanına girilsin. Manuel TOTP anahtarını yalnız QR okunamazsa açılabilen yedek seçenek olarak tut. Mevcut kullanıcı parolalarını, MFA secret/verifikasyon mantığını, 8 saatlik imzalı oturumları, yönetici onayını, SUPER_ADMIN/COMPANY_ADMIN yetkilerini ve mevcut işletme verilerini değiştirme. İşNet, Muhasebe ve firma kartı kurallarını koru. Production yayında frontend lint/build, gerçek Chrome kontrolü, D1 yedeği ve şema denetimi, Worker ve Pages canlı kontrolleri başarıyla tamamlanmadan yayını başarılı sayma."
+  "note": "Canlıda kullanıcı Authenticator kodunu doğru girdikten sonra tekrar MFA_REQUIRED ekranına düşebiliyor. MFA veya yönetici onayı imzalı oturum tokenı döndürdüğü anda tokenı React useEffect döngüsünü beklemeden API katmanına aktar; böylece uygulamanın ilk açılış istekleri boş/eski token ile 401 alıp oturumu düşürmesin. Başarılı MFA cevabında LoginPage eski MFA aşamasında kalmasın, AUTHENTICATED durumunu gösterip uygulamaya geçsin; render zamanlama sorunu olursa sessionStorage'daki imzalı oturumla kontrollü reload fallback'i kullan. Mevcut kullanıcı parolalarını, TOTP secretlarını, QR kurulumunu, 8 saatlik oturum sınırını, SUPER_ADMIN/COMPANY_ADMIN kurallarını, yönetici onayını ve mevcut verileri değiştirme. Production yayında frontend lint/build, gerçek Chrome kontrolü, D1 tam yedeği ve şema denetimi, Worker ve Pages canlı kontrolleri başarıyla tamamlanmadan yayını başarılı sayma."
 }
