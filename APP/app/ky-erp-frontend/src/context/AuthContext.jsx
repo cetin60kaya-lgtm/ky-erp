@@ -96,9 +96,13 @@ export function AuthProvider({ children }) {
   const [{ token, user, permissions }, setAuthState] = useState(() => readStoredAuth());
   const [loading, setLoading] = useState(true);
   const authSnapshotRef = useRef({ user, permissions });
+  const tokenRef = useRef(token);
   authSnapshotRef.current = { user, permissions };
+  tokenRef.current = token;
 
   const clearAuth = useCallback(() => {
+    tokenRef.current = "";
+    setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
     setAuthState({ token: "", user: null, permissions: [] });
     try {
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
@@ -118,7 +122,16 @@ export function AuthProvider({ children }) {
         permissions: normalizedPermissions,
       };
       if (!payload.token || !payload.user) return false;
-      setAuthState(payload);
+
+      // MFA/yonetici onayi tamamlandigi anda yeni tokeni API katmanina ver.
+      // React effect'ini beklemek ilk ekran isteklerinin eski/bos tokenla 401 almasina
+      // ve kullanicinin tekrar MFA ekranina dusmesine neden olabilir.
+      tokenRef.current = payload.token;
+      setApiAuthHandlers({
+        getToken: () => tokenRef.current,
+        onUnauthorized: clearAuth,
+      });
+
       try {
         window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
         window.sessionStorage.setItem(
@@ -128,9 +141,11 @@ export function AuthProvider({ children }) {
       } catch {
         // noop
       }
+
+      setAuthState(payload);
       return true;
     },
-    [],
+    [clearAuth],
   );
 
   const finalizeResponse = useCallback(
@@ -147,7 +162,11 @@ export function AuthProvider({ children }) {
   );
 
   useEffect(() => {
-    setApiAuthHandlers({ getToken: () => token, onUnauthorized: clearAuth });
+    tokenRef.current = token;
+    setApiAuthHandlers({
+      getToken: () => tokenRef.current,
+      onUnauthorized: clearAuth,
+    });
   }, [clearAuth, token]);
 
   useEffect(() => {
