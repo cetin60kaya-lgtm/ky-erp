@@ -2,12 +2,15 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-10T07:55:00+03:00",
-  "attempt": 38,
+  "requestedAt": "2026-08-11T19:59:00+03:00",
+  "attempt": 39,
   "scope": [
     "signed-auth-sessions",
     "totp-authenticator-mfa",
     "google-microsoft-authenticator-compatible",
+    "authenticator-qr-enrollment",
+    "local-private-qr-generator",
+    "manual-totp-key-fallback",
     "admin-login-approval",
     "eight-hour-session-limit",
     "super-admin-company-admin",
@@ -24,5 +27,5 @@
     "preserve-accounting-isnet-company-card-rules"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "KY ERP canlı giriş güvenliğini tam devreye al. Run #37'de tespit edilen mevcut canlı auth_sessions tenant şemasını veri kaybetmeden auth_sessions_legacy_v1 altında koru ve MFA/8 saatlik imzalı oturum runtime'ının beklediği yeni aktif auth_sessions şemasını kur. Mevcut kullanıcı parolalarını ve hashlerini aynen koru; parola tek başına oturum açmasın. Canlı auth_users e-postalarını, SUPER_ADMIN rolünü, COMPANY_ADMIN firma üyeliğini ve mevcut firma izinlerini yeni güvenlik profiline köprüle. İlk başarılı parola girişinde Google Authenticator veya Microsoft Authenticator ile uyumlu standart TOTP kurulumu zorunlu olsun, sonraki girişlerde 6 haneli Authenticator kodu istensin. Normal kullanıcı MFA sonrasında Firma Admini veya Uygulama Admini onayı beklesin. Onaylı oturum mutlak en fazla 8 saat geçerli olsun ve Yönetim ekranından tek oturum veya kullanıcının tüm oturumları anında iptal edilebilsin. SUPER_ADMIN tüm firmaları, COMPANY_ADMIN yalnız kendi firmasındaki normal kullanıcıları, giriş onaylarını ve oturumları yönetsin. E-posta kullanıcı güvenlik kimliği ve giriş alternatifi olarak saklansın; doğrulanmış mail gönderim sağlayıcısı olmadığı için e-posta OTP/gönderimi uydurma. Eski imzasız aktif oturumlar yeni oturum doğrulamasında kullanılmasın ancak geçmiş kayıtları silinmesin. Canlı API verisini doğrulanmış ve iptal edilmemiş oturumla koru. İşNet, Muhasebe, firma kartları ve işletme verilerini değiştirme. Tek production run kullan, yayın öncesi tam D1 yedeği al, migration sonrası denetim, Worker ve frontend gerçek Chrome kontrollerini tamamla."
+  "note": "KY ERP Authenticator ilk kurulumunu kullanıcı için doğrudan QR okutma akışına geçir. MFA_SETUP ekranında sunucunun ürettiği standart otpauth TOTP URI'sini tarayıcıda yerel QRCode.js ile QR olarak üret; secret hiçbir harici QR servisine gönderilmesin. Google Authenticator ve Microsoft Authenticator'da Hesap ekle / QR kodu tara ile tek taramada KY ERP hesabı oluşsun ve uygulamanın ürettiği 6 haneli kod KY ERP doğrulama alanına girilsin. Manuel TOTP anahtarını yalnız QR okunamazsa açılabilen yedek seçenek olarak tut. Mevcut kullanıcı parolalarını, MFA secret/verifikasyon mantığını, 8 saatlik imzalı oturumları, yönetici onayını, SUPER_ADMIN/COMPANY_ADMIN yetkilerini ve mevcut işletme verilerini değiştirme. İşNet, Muhasebe ve firma kartı kurallarını koru. Production yayında frontend lint/build, gerçek Chrome kontrolü, D1 yedeği ve şema denetimi, Worker ve Pages canlı kontrolleri başarıyla tamamlanmadan yayını başarılı sayma."
 }
