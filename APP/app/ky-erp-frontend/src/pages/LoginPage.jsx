@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./LoginPage.css";
 
@@ -24,6 +24,8 @@ export default function LoginPage() {
   const [flow, setFlow] = useState({ stage: "CREDENTIALS" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [qrError, setQrError] = useState("");
+  const qrRef = useRef(null);
   const deviceLabel = useMemo(() => deviceName(), []);
 
   function applyResponse(response) {
@@ -97,6 +99,46 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
+    if (flow.stage !== "MFA_SETUP") {
+      setQrError("");
+      return undefined;
+    }
+
+    const holder = qrRef.current;
+    const setupUri = String(flow.otpauthUri || "").trim();
+    if (!holder || !setupUri) {
+      setQrError("Authenticator kurulum bağlantısı hazırlanamadı. Geri dönüp yeniden giriş yapın.");
+      return undefined;
+    }
+
+    holder.replaceChildren();
+    const QRCodeCtor = window.QRCode;
+    if (typeof QRCodeCtor !== "function") {
+      setQrError("QR bileşeni yüklenemedi. Sayfayı Ctrl+F5 ile yenileyip tekrar deneyin.");
+      return undefined;
+    }
+
+    try {
+      new QRCodeCtor(holder, {
+        text: setupUri,
+        width: 220,
+        height: 220,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCodeCtor.CorrectLevel?.M,
+      });
+      setQrError("");
+    } catch {
+      holder.replaceChildren();
+      setQrError("QR kodu oluşturulamadı. Geri dönüp yeniden giriş yapın.");
+    }
+
+    return () => {
+      holder.replaceChildren();
+    };
+  }, [flow.stage, flow.otpauthUri]);
+
+  useEffect(() => {
     if (flow.stage !== "APPROVAL_PENDING") return undefined;
     const timer = window.setInterval(refreshApproval, 3000);
     return () => window.clearInterval(timer);
@@ -150,22 +192,36 @@ export default function LoginPage() {
           <>
             <p>
               {flow.stage === "MFA_SETUP"
-                ? "İlk güvenli girişiniz. KY ERP hesabını Google Authenticator veya Microsoft Authenticator'a ekleyin."
+                ? "İlk güvenli girişiniz. QR kodunu Google Authenticator veya Microsoft Authenticator ile bir kez okutun."
                 : "Authenticator uygulamanızdaki güncel 6 haneli kodu girin."}
             </p>
 
             {flow.stage === "MFA_SETUP" ? (
-              <div className="login-security-box">
-                <strong>Authenticator kurulumu</strong>
-                <span>1. Google Authenticator veya Microsoft Authenticator'ı açın.</span>
-                <span>2. Hesap ekle → Kurulum anahtarı seçin.</span>
-                <span>3. Aşağıdaki anahtarı girin ve zaman tabanlı kodu seçin.</span>
-                <code>{flow.secret}</code>
-                {flow.otpauthUri ? (
-                  <a className="login-auth-link" href={flow.otpauthUri}>
-                    Telefonda Authenticator ile aç
-                  </a>
-                ) : null}
+              <div className="login-security-box login-setup-box">
+                <strong>QR ile hızlı kurulum</strong>
+                <span>1. Telefonda Google Authenticator veya Microsoft Authenticator'ı açın.</span>
+                <span>2. + / Hesap ekle → QR kodu tara seçin.</span>
+                <span>3. Aşağıdaki QR kodunu okutun. Telefonda KY ERP için 6 haneli kod otomatik oluşur.</span>
+
+                <div className="login-qr-shell" aria-label="KY ERP Authenticator QR kodu">
+                  <div className="login-qr-code" ref={qrRef} />
+                </div>
+
+                <div className="login-qr-help">
+                  QR'ı okuttuktan sonra telefonda görünen 6 haneli kodu aşağıya yazın. Elle kurulum anahtarı girmeniz gerekmez.
+                </div>
+                {qrError ? <div className="login-error">{qrError}</div> : null}
+
+                <details className="login-manual-setup">
+                  <summary>QR okunmazsa manuel kurulum anahtarını göster</summary>
+                  <span>Hesap türü: Zaman tabanlı (TOTP)</span>
+                  <code>{flow.secret}</code>
+                  {flow.otpauthUri ? (
+                    <a className="login-auth-link" href={flow.otpauthUri}>
+                      Bu ekran telefondaysa Authenticator ile doğrudan aç
+                    </a>
+                  ) : null}
+                </details>
               </div>
             ) : null}
 
@@ -173,7 +229,7 @@ export default function LoginPage() {
               <label>
                 6 Haneli Authenticator Kodu
                 <input
-                  autoFocus
+                  autoFocus={flow.stage === "MFA_REQUIRED"}
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   maxLength={6}
@@ -194,6 +250,7 @@ export default function LoginPage() {
                   setFlow({ stage: "CREDENTIALS" });
                   setCode("");
                   setError("");
+                  setQrError("");
                 }}
               >
                 Geri Dön
