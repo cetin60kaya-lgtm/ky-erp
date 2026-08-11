@@ -212,42 +212,43 @@ export default function LoginPage() {
           <>
             <p>
               {flow.stage === "MFA_SETUP"
-                ? "İlk güvenli girişiniz. QR kodunu Google Authenticator veya Microsoft Authenticator ile bir kez okutun."
-                : "Authenticator uygulamanızdaki güncel 6 haneli kodu girin."}
+                ? "İlk güvenli girişiniz. Telefonunuzda Google Authenticator veya Microsoft Authenticator'dan hangisi varsa onu kullanın."
+                : "Google veya Microsoft Authenticator'dan hangisini kurduysanız o uygulamadaki güncel 6 haneli kodu girin."}
             </p>
 
             {flow.stage === "MFA_SETUP" ? (
               <div className="login-security-box login-setup-box">
-                <strong>QR ile hızlı kurulum</strong>
-                <span>1. Telefonda Google Authenticator veya Microsoft Authenticator'ı açın.</span>
+                <strong>Google / Microsoft Authenticator</strong>
+                <span>Telefonunuzda hangisi yüklüyse onu kullanın. İkisini birden kurmanız gerekmez.</span>
+                <span>1. Authenticator uygulamasını açın.</span>
                 <span>2. + / Hesap ekle → QR kodu tara seçin.</span>
-                <span>3. Aşağıdaki QR kodunu okutun. Telefonda KY ERP için 6 haneli kod otomatik oluşur.</span>
+                <span>3. Aşağıdaki QR kodunu okutun. KY ERP için 6 haneli kod otomatik oluşur.</span>
 
                 <div className="login-qr-shell" aria-label="KY ERP Authenticator QR kodu">
                   <div className="login-qr-code" ref={qrRef} />
                 </div>
 
                 <div className="login-qr-help">
-                  QR'ı okuttuktan sonra telefonda görünen 6 haneli kodu aşağıya yazın. Elle kurulum anahtarı girmeniz gerekmez.
+                  QR'ı Google Authenticator veya Microsoft Authenticator'dan hangisi varsa onunla okutun. Telefonda oluşan 6 haneli kodu aşağıya yazın.
                 </div>
+                {flow.otpauthUri ? (
+                  <a className="login-auth-link" href={flow.otpauthUri}>
+                    Telefonda yüklü Authenticator uygulamasını aç
+                  </a>
+                ) : null}
                 {qrError ? <div className="login-error">{qrError}</div> : null}
 
                 <details className="login-manual-setup">
                   <summary>QR okunmazsa manuel kurulum anahtarını göster</summary>
                   <span>Hesap türü: Zaman tabanlı (TOTP)</span>
                   <code>{flow.secret}</code>
-                  {flow.otpauthUri ? (
-                    <a className="login-auth-link" href={flow.otpauthUri}>
-                      Bu ekran telefondaysa Authenticator ile doğrudan aç
-                    </a>
-                  ) : null}
                 </details>
               </div>
             ) : null}
 
             <form onSubmit={handleMfa}>
               <label>
-                6 Haneli Authenticator Kodu
+                Google / Microsoft Authenticator Kodu
                 <input
                   autoFocus={flow.stage === "MFA_REQUIRED"}
                   inputMode="numeric"
