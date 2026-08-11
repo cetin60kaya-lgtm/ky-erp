@@ -2,12 +2,13 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-11T20:14:00+03:00",
-  "attempt": 40,
+  "requestedAt": "2026-08-11T20:23:00+03:00",
+  "attempt": 41,
   "scope": [
     "signed-auth-sessions",
     "totp-authenticator-mfa",
     "google-microsoft-authenticator-compatible",
+    "authenticator-any-installed-app",
     "authenticator-qr-enrollment",
     "local-private-qr-generator",
     "manual-totp-key-fallback",
@@ -31,5 +32,5 @@
     "preserve-accounting-isnet-company-card-rules"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Canlıda kullanıcı Authenticator kodunu doğru girdikten sonra tekrar MFA_REQUIRED ekranına düşebiliyor. MFA veya yönetici onayı imzalı oturum tokenı döndürdüğü anda tokenı React useEffect döngüsünü beklemeden API katmanına aktar; böylece uygulamanın ilk açılış istekleri boş/eski token ile 401 alıp oturumu düşürmesin. Başarılı MFA cevabında LoginPage eski MFA aşamasında kalmasın, AUTHENTICATED durumunu gösterip uygulamaya geçsin; render zamanlama sorunu olursa sessionStorage'daki imzalı oturumla kontrollü reload fallback'i kullan. Mevcut kullanıcı parolalarını, TOTP secretlarını, QR kurulumunu, 8 saatlik oturum sınırını, SUPER_ADMIN/COMPANY_ADMIN kurallarını, yönetici onayını ve mevcut verileri değiştirme. Production yayında frontend lint/build, gerçek Chrome kontrolü, D1 tam yedeği ve şema denetimi, Worker ve Pages canlı kontrolleri başarıyla tamamlanmadan yayını başarılı sayma."
+  "note": "KY ERP Authenticator kurulumunu uygulama sağlayıcısından bağımsız tut. Kullanıcının telefonunda Google Authenticator veya Microsoft Authenticator'dan hangisi varsa aynı standart TOTP QR kodunu onunla kullanabilsin; ikisini birden kurma zorunluluğu olmasın. Mobil cihazdaki otpauth bağlantısını işletim sistemine bırak; yüklü uyumlu Authenticator uygulaması açılsın veya birden fazla uygulama varsa cihaz seçim sunsun. Masaüstünde aynı QR telefondaki mevcut Google/Microsoft Authenticator ile okutulsun. Mevcut MFA secretlarını, kullanıcı parolalarını, 6 haneli TOTP doğrulamasını, 8 saat oturum sınırını, yönetici onayını, SUPER_ADMIN/COMPANY_ADMIN kurallarını ve mevcut işletme verilerini değiştirme. Production yayında frontend lint/build, gerçek Chrome kontrolü, D1 tam yedeği ve şema denetimi, Worker ve Pages canlı kontrolleri başarıyla tamamlanmadan yayını başarılı sayma."
 }
