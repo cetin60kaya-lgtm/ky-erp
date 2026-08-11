@@ -30,7 +30,13 @@ export default function LoginPage() {
 
   function applyResponse(response) {
     const stage = String(response?.stage || "").toUpperCase();
-    if (!stage || stage === "AUTHENTICATED") return;
+    if (!stage) return;
+    if (stage === "AUTHENTICATED") {
+      setFlow({ stage: "AUTHENTICATED" });
+      setCode("");
+      setError("");
+      return;
+    }
     setFlow({ ...response, stage });
     setCode("");
   }
@@ -97,6 +103,20 @@ export default function LoginPage() {
       setError(requestError?.message || "Onay durumu kontrol edilemedi.");
     }
   }
+
+  useEffect(() => {
+    if (flow.stage !== "AUTHENTICATED") return undefined;
+
+    // Normalde AuthProvider state degisimi LoginPage'i hemen unmount eder.
+    // Herhangi bir render zamanlama sorununda eski MFA ekraninda kalmak yerine
+    // sessionStorage'a yazilmis imzali oturumu yeniden yukleyerek uygulamayi ac.
+    const timer = window.setTimeout(() => {
+      window.location.replace(
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
+      );
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [flow.stage]);
 
   useEffect(() => {
     if (flow.stage !== "MFA_SETUP") {
@@ -287,6 +307,14 @@ export default function LoginPage() {
             >
               Giriş İsteğini Kapat
             </button>
+          </div>
+        ) : null}
+
+        {flow.stage === "AUTHENTICATED" ? (
+          <div className="login-approval">
+            <div className="login-approval-icon">✓</div>
+            <h2>Doğrulama Tamamlandı</h2>
+            <p>Güvenli oturum açıldı. KY ERP yükleniyor...</p>
           </div>
         ) : null}
 
