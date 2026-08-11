@@ -10,7 +10,7 @@
 }
 
 .login-card {
-  width: min(460px, 100%);
+  width: min(500px, 100%);
   background: rgba(255, 255, 255, 0.97);
   border: 1px solid #dbe3ef;
   border-radius: 18px;
@@ -124,6 +124,69 @@
   background: #f8fafc;
 }
 
+.login-setup-box {
+  margin-bottom: 14px;
+}
+
+.login-qr-shell {
+  width: 252px;
+  max-width: 100%;
+  margin: 8px auto 4px;
+  padding: 15px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.login-qr-code {
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #fff;
+}
+
+.login-qr-code canvas,
+.login-qr-code img,
+.login-qr-code svg {
+  display: block;
+  width: 220px !important;
+  height: 220px !important;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.login-qr-help {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-weight: 600;
+  text-align: center;
+}
+
+.login-manual-setup {
+  margin-top: 4px;
+  border-top: 1px solid #bfdbfe;
+  padding-top: 8px;
+}
+
+.login-manual-setup summary {
+  cursor: pointer;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.login-manual-setup[open] {
+  display: grid;
+  gap: 8px;
+}
+
 .login-security-box code {
   display: block;
   overflow-wrap: anywhere;
@@ -174,6 +237,10 @@
 }
 
 @media (max-width: 600px) {
+  .login-page {
+    padding: 14px;
+  }
+
   .login-card {
     padding: 22px;
     border-radius: 14px;
@@ -181,5 +248,18 @@
 
   .login-card h1 {
     font-size: 24px;
+  }
+
+  .login-qr-shell {
+    width: 232px;
+    padding: 10px;
+  }
+
+  .login-qr-code,
+  .login-qr-code canvas,
+  .login-qr-code img,
+  .login-qr-code svg {
+    width: 210px !important;
+    height: 210px !important;
   }
 }
