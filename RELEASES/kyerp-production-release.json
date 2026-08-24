@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-23T23:20:00+03:00",
-  "attempt": 43,
+  "requestedAt": "2026-08-24T08:20:00+03:00",
+  "attempt": 44,
   "scope": [
     "boyahane-production-serial-final",
     "model-based-production-workspace",
@@ -21,8 +21,14 @@
     "save-and-next-color",
     "rf-leftover-stock-product",
     "manual-production-job-open",
-    "preserve-sample-registered-colors-inventory-reports"
+    "preserve-sample-registered-colors-inventory-reports",
+    "authenticated-private-asset-bridge",
+    "desen-card-image-auth-fix",
+    "desen-preview-image-auth-fix",
+    "boyahane-model-image-auth-fix",
+    "protected-asset-link-auth-fix",
+    "general-production-build-and-smoke-check"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Boyahane İmalat Boyaları ekranını onaylanan tam ekran seri çalışma düzenine geçir. Model tek ana iş, renkler modelin alt işlemleri olsun. Renk seçildiğinde kayıtlı son reçetenin bileşenleri çekmeden önce açıkça görülsün; renk geçmişi sağ tarafta sürekli görünsün, yalnız detay içeriği modal açılsın; model işlem logu sayfanın altında sürekli görünsün. SUBAZLI yeni veya bileşenli kayıtlı reçetesi bulunmayan renkte çalışma alanı hiçbir zaman boş açılmasın: 1 S10 CLEAR sabit, 2 S20 WHITE sabit, 3 Renk 1 boş, 4 Renk 2 boş. Her bileşen gerçek lotuyla stok düşsün. RF kalan boya ayrı stok ürünü/lotu olarak kaydedilebilsin ve ilk hammadde sarfı ikinci kez düşülmesin. Numune, Kayıtlı Renkler, Stok/Lot/Ürünler, raporlar ve mevcut işletme verileri korunmalı. Production yayında frontend lint/build ve gerçek Chrome kontrolü, D1 tam yedeği, şema denetimi, Worker ve Pages canlı kontrolleri başarıyla tamamlanmadan yayın başarılı sayılmasın. Bu kayıt canlı yayını yeniden tetiklemek için attempt 43 olarak güncellendi."
+  "note": "Attempt 44: Boyahane production düzeni korunarak genel production kontrolü yap. Desen Havuzu ve özel API görsellerinde ham img/a href isteklerinin Bearer token göndermemesi nedeniyle oluşan 401 kırık görsel problemini merkezi authenticated asset bridge ile düzelt. Bridge yalnız api.kyerp.net /api özel varlıklarını KY ERP sessionStorage oturum tokenı ile güvenli fetch edip blob URL üzerinden göstermeli; token query stringe yazılmamalı ve özel ERP görselleri public yapılmamalı. Aynı çözüm Desen kart/preview ve Boyahane model görsellerini ortak kapsamalı. Production yayında frontend lint/build ve gerçek Chrome kontrolü, D1 tam yedeği, migration/schema audit, Worker health/system/Boyahane rota kontrolü ve Pages canlı smoke başarıyla tamamlanmadan yayın başarılı sayılmasın."
 }
