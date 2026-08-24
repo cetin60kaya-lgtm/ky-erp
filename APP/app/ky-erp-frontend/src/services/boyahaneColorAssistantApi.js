@@ -30,6 +30,11 @@ export async function suggestBoyahaneColor(activeMainCompany, body) {
 }
 
 export async function confirmBoyahaneColorSuggestion(activeMainCompany, body) {
+  const colorHex = String(body?.colorHex || body?.hex || "").trim();
+  const pantone = String(body?.pantone || "").trim();
+  if (!colorHex || !pantone) {
+    return { skipped: true, reason: "HEX_PANTONE_PAIR_INCOMPLETE" };
+  }
   return unwrap(
     await apiPost(
       "/boyahane/color-assistant/confirm",
