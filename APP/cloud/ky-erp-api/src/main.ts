@@ -4,6 +4,7 @@ import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
+import { registerBoyahaneColorAssistantRoutes } from "./boyahane-color-assistant";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
 import { registerBoyahaneColorResolveRoutes } from "./boyahane-color-resolve";
@@ -67,6 +68,7 @@ registerBoyahaneManualJobRoutes(app);
 registerBoyahaneSampleRoutes(app);
 registerBoyahaneColorResolveRoutes(app);
 registerBoyahaneColorIdentityRoutes(app);
+registerBoyahaneColorAssistantRoutes(app);
 registerBoyahaneColorJobRoutes(app);
 // Reçetesi olmayan renk tamamlandı sayılmaz; genel workflow GET rotalarından önce çalışır.
 registerBoyahaneJobIntegrityRoutes(app);
