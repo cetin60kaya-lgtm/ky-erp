@@ -6,6 +6,7 @@ on:
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "RELEASES/kyerp-production-release.json"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -92,6 +93,49 @@ jobs:
           echo "name=$project_name" >> "$GITHUB_OUTPUT"
           echo "branch=$production_branch" >> "$GITHUB_OUTPUT"
           echo "Pages projesi doğrulandı: $project_name / $production_branch"
+
+      - name: kyerp.net ana alan adını Pages projesine doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_name="${{ steps.pages.outputs.name }}"
+          domain="kyerp.net"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${project_name}"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+
+          domains_json="$(curl --fail --silent --show-error -H "$auth" "$base/domains")"
+          if ! jq -e --arg domain "$domain" 'any(.result[]?; (.name // "") == $domain)' \
+            <<<"$domains_json" >/dev/null; then
+            create_json="$(curl --fail --silent --show-error \
+              -X POST \
+              -H "$auth" \
+              -H "Content-Type: application/json" \
+              --data "{\"name\":\"${domain}\"}" \
+              "$base/domains")"
+            jq -e '.success == true' <<<"$create_json" >/dev/null
+          fi
+
+          active=0
+          for attempt in $(seq 1 60); do
+            status_json="$(curl --fail --silent --show-error \
+              -H "$auth" \
+              "$base/domains/${domain}")"
+            status="$(jq -r '.result.status // ""' <<<"$status_json")"
+            echo "kyerp.net Pages durumu: ${status:-unknown} (deneme $attempt)"
+            if [ "$status" = "active" ]; then
+              active=1
+              break
+            fi
+            if [ "$status" = "failed" ] || [ "$status" = "error" ]; then
+              jq '.' <<<"$status_json"
+              exit 1
+            fi
+            sleep 5
+          done
+          test "$active" -eq 1 || {
+            echo "kyerp.net Pages custom domain 300 saniyede active olmadı." >&2
+            exit 1
+          }
 
       - name: Worker paketlerini kur
         working-directory: APP/cloud/ky-erp-api
@@ -247,15 +291,26 @@ jobs:
           set -euo pipefail
           ready=0
           for attempt in $(seq 1 30); do
-            if curl --location --fail --silent --show-error https://kyerp.net/ \
-              >/tmp/kyerp-home.html; then
+            code="$(curl --silent --show-error --output /tmp/kyerp-home.html \
+              --write-out '%{http_code}' https://kyerp.net/ || true)"
+            if [ "$code" = "200" ] && [ -s /tmp/kyerp-home.html ]; then
               ready=1
               break
             fi
             sleep 2
           done
           test "$ready" -eq 1
-          test -s /tmp/kyerp-home.html
+
+          app_ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://app.kyerp.net/ \
+              >/tmp/kyerp-app-home.html; then
+              app_ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$app_ready" -eq 1
 
       - name: Canlı siteyi gerçek Chrome ile doğrula
         working-directory: APP/app/ky-erp-frontend
