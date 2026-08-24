@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-24T08:20:00+03:00",
-  "attempt": 44,
+  "requestedAt": "2026-08-24T08:36:00+03:00",
+  "attempt": 45,
   "scope": [
     "boyahane-production-serial-final",
     "model-based-production-workspace",
@@ -27,8 +27,9 @@
     "desen-preview-image-auth-fix",
     "boyahane-model-image-auth-fix",
     "protected-asset-link-auth-fix",
-    "general-production-build-and-smoke-check"
+    "general-production-build-and-smoke-check",
+    "real-app-domain-post-release-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 44: Boyahane production düzeni korunarak genel production kontrolü yap. Desen Havuzu ve özel API görsellerinde ham img/a href isteklerinin Bearer token göndermemesi nedeniyle oluşan 401 kırık görsel problemini merkezi authenticated asset bridge ile düzelt. Bridge yalnız api.kyerp.net /api özel varlıklarını KY ERP sessionStorage oturum tokenı ile güvenli fetch edip blob URL üzerinden göstermeli; token query stringe yazılmamalı ve özel ERP görselleri public yapılmamalı. Aynı çözüm Desen kart/preview ve Boyahane model görsellerini ortak kapsamalı. Production yayında frontend lint/build ve gerçek Chrome kontrolü, D1 tam yedeği, migration/schema audit, Worker health/system/Boyahane rota kontrolü ve Pages canlı smoke başarıyla tamamlanmadan yayın başarılı sayılmasın."
+  "note": "Attempt 45: 24.08.2026 tarihli KY_ERP_IMALAT_SERI_STANDART_4_BILESEN_FIX.html ile doğrulanan son Boyahane seri üretim düzenini aynen koru; Boyahane fonksiyonel düzenini yeniden yazma. Desen Havuzu ve özel API görsellerindeki Bearer token eksikliğini merkezi authenticated asset bridge ile düzelt. Token query stringe yazılmasın, özel ERP görselleri public yapılmasın. Frontend lint/build ve gerçek Chrome kontrolü, canlı D1 tam yedeği, migration/schema audit, Worker health/system/Boyahane rota kontrolü ve Pages deploy başarıyla tamamlanmadan yayın başarılı sayılmasın. Production workflow tamamlandıktan sonra ayrı son denetim gerçek uygulama adresi app.kyerp.net, /desen/desen-modeller rotası ve canlı JS bundle içinde authenticated asset bridge varlığını doğrulasın."
 }
