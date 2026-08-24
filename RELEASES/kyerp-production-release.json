@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-24T08:55:00+03:00",
-  "attempt": 47,
+  "requestedAt": "2026-08-24T09:02:00+03:00",
+  "attempt": 48,
   "scope": [
     "boyahane-production-serial-final-preserved",
     "boyahane-spacious-production-ui",
@@ -19,6 +19,7 @@
     "kyerp-assistant-tenant-d1-context",
     "kyerp-assistant-color-context-integration",
     "cloudflare-llama-3-3-70b-fast",
+    "boyahane-ai-hook-lint-clean",
     "subazli-four-row-starter-preserved",
     "real-component-lot-consumption-preserved",
     "rf-leftover-stock-preserved",
@@ -26,5 +27,5 @@
     "app-kyerp-live-post-release-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 47: Son paket. 23.08.2026 gecesi repoya giren BoyahaneProductionSerialPage ve kullanıcının 24.08.2026 KY_ERP_IMALAT_SERI_STANDART_4_BILESEN_FIX.html referansındaki model bazlı seri çalışma korunmalı. Üstte ferah/açılır Akıllı Renk & Pantone Merkezi bulunmalı. Renk motoru canlı D1 kayıtlı renk, reçete, model rengi, üretim geçmişi ve kullanıcı doğrulama geri beslemelerini her analizde yeniden taramalı; sRGB HEX -> Lab -> CIEDE2000 ile yalnız gerçek HEX eşlemesi bulunan Pantone adaylarını bilimsel renk yakınlığıyla sıralamalı, Pantone-only kayıtlar için uydurma HEX üretmemeli. Kullanıcı onaylı HEX-Pantone bağları kalıcı feedback scope'unda öğrenilmeli. Reçete önerisi aktif/default gerçek lotları önizlemeli ancak doğrudan stok sarfı yapmamalı; Onayla+Taslağa Aktar yalnız productionDraft yazmalı ve mevcut seri imalat ekranındaki doğrulama/lot/sarf akışına bırakmalı. KY ERP Asistan artık Cloudflare Worker AI binding ile gerçek /api/ai/status, /api/ai/chat ve tenant bazlı D1 konuşma geçmişi üzerinden çalışmalı; model olarak aktif @cf/meta/llama-3.3-70b-instruct-fp8-fast kullanılmalı. Boyahane renk ekranından AI'ye model, renk, HEX, Pantone adayları, reçete ve lot bağlamı taşınmalı. Desen özel görsel Bearer/blob düzeltmesi korunmalı. Frontend lint/build + gerçek Chromium smoke, Worker audit/typecheck/build, canlı D1 tam yedek, migration/schema audit, Worker health/system/Boyahane kontrolü, Pages deploy ve canlı smoke başarılı olmadan tamamlandı denmemeli. Son workflow_run denetimi app.kyerp.net, Desen rotası ve authenticated asset bridge bundle varlığını ayrıca doğrulasın."
+  "note": "Attempt 48 final: Attempt 47 kapsamının tamamını, BoyahaneProductionIntelligencePage React hook dependency lint düzeltmesi dahil yayınla. Dünkü Boyahane seri iş akışı değişmeden korunmalı. Akıllı Renk & Pantone Merkezi canlı D1 renk/reçete/model/üretim/feedback kaynaklarını dinamik taramalı; sRGB->Lab CIEDE2000 yalnız gerçek HEX eşleşmelerinde kullanılmalı; bilinmeyen Pantone HEX'i uydurulmamalı. Kullanıcı doğrulaması HEX-Pantone feedback kataloğunu kalıcı büyütmeli. Reçete gerçek lotları göstermeli fakat onaysız sarf yapmamalı; öneri yalnız productionDraft'a aktarılmalı. KY ERP Asistan gerçek Cloudflare Workers AI binding ve @cf/meta/llama-3.3-70b-instruct-fp8-fast ile /api/ai/status ve /api/ai/chat üzerinden çalışmalı, sohbet D1 tenant kaynağında kalıcı olmalı. Desen protected image authenticated blob bridge korunmalı. Frontend lint/build/Chromium, Worker audit/typecheck/build, D1 tam yedek + migration/schema audit, API health/Boyahane, Pages deploy ve canlı smoke tamamlanmadan yayın başarılı sayılmasın; main üzerindeki workflow_run denetimi app.kyerp.net, Desen, Boyahane ve canlı bundle özelliklerini ayrıca doğrulasın."
 }
