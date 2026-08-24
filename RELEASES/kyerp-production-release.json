@@ -1,15 +1,16 @@
 {
   "approved": true,
   "target": "production",
-  "mode": "pages-domain-repair",
-  "requestedAt": "2026-08-24T12:46:00+03:00",
-  "attempt": 52,
+  "mode": "production",
+  "requestedAt": "2026-08-24T16:36:00+03:00",
+  "attempt": 53,
   "scope": [
     "kyerp-net-direct-pages-domain",
+    "app-kyerp-clean-root-before-auth",
+    "all-deep-links-cleaned-before-auth",
     "clean-root-login-entry",
-    "no-internal-route-before-auth",
     "corporate-login-title",
-    "app-kyerp-deep-routes-after-auth-only",
+    "manual-production-release-fallback",
     "boyahane-production-serial-final-preserved",
     "boyahane-ai-color-center-preserved",
     "pantone-hex-ciede2000-preserved",
@@ -18,5 +19,5 @@
     "root-domain-no-redirect-live-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 52: Kullanıcı kyerp.net yazdığında doğrudan KY ERP giriş ekranı kök adreste açılmalı; oturum açılmadan /muhasebe/yonetim-ozeti veya başka iç modül yolu browser URL'sine yazılmamalı. kyerp.net Cloudflare Pages ky-erp-frontend projesine doğrudan custom domain olarak bağlı ve active olmalı; başka Pages/Worker çakışması varsa güvenli şekilde fail et, veri veya mevcut app.kyerp.net alanını bozma. LoginPage eski varsayılan /muhasebe/yonetim-ozeti giriş adresini köke normalize eder; giriş sonrası mevcut yetki ve modül yönlendirmesi aynen devam eder. Mevcut Boyahane AI/Pantone/lot, Workers AI ve Desen protected image düzeltmeleri korunmalı. Frontend lint/build/Chromium, Worker audit/typecheck/build, canlı D1 tam yedek+migration/schema audit, API health/Boyahane, Pages deploy ve canlı smoke başarılı olmadan tamamlandı sayılmasın. Default main workflow_run son denetimi kyerp.net ilk cevabının doğrudan HTTP 200 olduğunu (301/302 redirect olmadığını), app.kyerp.net, temiz giriş bundle, Desen, Boyahane ve AI renk merkezini doğrulasın."
+  "note": "Attempt 53 FINAL ENTRY FIX: Kullanıcının canlı ekran görüntüsünde app.kyerp.net/muhasebe/yonetim-ozeti adresi giriş ekranında görünmeye devam ettiği doğrulandı. Kök neden kodun repoda düzeltilmiş olmasına rağmen connector commitinin KY ERP Canlı Yayın workflowunu tetiklememesi ve eski canlı bundleın kalmasıdır. LoginPage artık oturum açılmadan hangi deep-link ile gelinirse gelinsin pathname'i / köküne replaceState ile temizler; AppV3 de unauthenticated durumda modül yolunu yazmaz. kyerp.net ky-erp-frontend Pages custom domaini olarak active olmak zorundadır. Production workflowa workflow_dispatch manuel yedeği eklendi ve main üzerinde de görünür hale getirildi. Yayın; frontend lint/build/Chromium, Worker audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, API health/Boyahane, Worker deploy, Pages production deploy, kyerp.net HTTP 200 root kontrolü ve app.kyerp.net erişimi başarılı olmadan tamamlanmış sayılmaz. Mevcut Boyahane AI/Pantone/lot, Workers AI ve Desen protected image düzeltmeleri korunur."
 }
