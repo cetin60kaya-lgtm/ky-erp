@@ -30,7 +30,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     document.title = "KY ERP | Kurumsal Giriş";
-    if (window.location.pathname === "/muhasebe/yonetim-ozeti") {
+
+    // Oturum açılmadan hiçbir iç modül yolu adres çubuğunda görünmesin.
+    // kyerp.net veya app.kyerp.net hangi deep-link ile açılırsa açılsın
+    // güvenli giriş ekranı kök adreste kalır. Giriş tamamlanınca AppV3
+    // yetkili kullanıcının gerçek modül yolunu yeniden yazar.
+    if (window.location.pathname !== "/") {
       window.history.replaceState(
         {},
         "",
