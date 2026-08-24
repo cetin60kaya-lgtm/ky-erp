@@ -28,6 +28,17 @@ export default function LoginPage() {
   const qrRef = useRef(null);
   const deviceLabel = useMemo(() => deviceName(), []);
 
+  useEffect(() => {
+    document.title = "KY ERP | Kurumsal Giriş";
+    if (window.location.pathname === "/muhasebe/yonetim-ozeti") {
+      window.history.replaceState(
+        {},
+        "",
+        `/${window.location.search}${window.location.hash}`,
+      );
+    }
+  }, []);
+
   function applyResponse(response) {
     const stage = String(response?.stage || "").toUpperCase();
     if (!stage) return;
