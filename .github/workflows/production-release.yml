@@ -6,6 +6,7 @@ on:
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "RELEASES/kyerp-production-release.json"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -93,6 +94,49 @@ jobs:
           echo "branch=$production_branch" >> "$GITHUB_OUTPUT"
           echo "Pages projesi doğrulandı: $project_name / $production_branch"
 
+      - name: kyerp.net ana alan adını Pages projesine doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_name="${{ steps.pages.outputs.name }}"
+          domain="kyerp.net"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${project_name}"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+
+          domains_json="$(curl --fail --silent --show-error -H "$auth" "$base/domains")"
+          if ! jq -e --arg domain "$domain" 'any(.result[]?; (.name // "") == $domain)' \
+            <<<"$domains_json" >/dev/null; then
+            create_json="$(curl --fail --silent --show-error \
+              -X POST \
+              -H "$auth" \
+              -H "Content-Type: application/json" \
+              --data "{\"name\":\"${domain}\"}" \
+              "$base/domains")"
+            jq -e '.success == true' <<<"$create_json" >/dev/null
+          fi
+
+          active=0
+          for attempt in $(seq 1 60); do
+            status_json="$(curl --fail --silent --show-error \
+              -H "$auth" \
+              "$base/domains/${domain}")"
+            status="$(jq -r '.result.status // ""' <<<"$status_json")"
+            echo "kyerp.net Pages durumu: ${status:-unknown} (deneme $attempt)"
+            if [ "$status" = "active" ]; then
+              active=1
+              break
+            fi
+            if [ "$status" = "failed" ] || [ "$status" = "error" ]; then
+              jq '.' <<<"$status_json"
+              exit 1
+            fi
+            sleep 5
+          done
+          test "$active" -eq 1 || {
+            echo "kyerp.net Pages custom domain 300 saniyede active olmadı." >&2
+            exit 1
+          }
+
       - name: Worker paketlerini kur
         working-directory: APP/cloud/ky-erp-api
         run: npm ci
@@ -118,6 +162,40 @@ jobs:
         run: |
           npm run lint
           npm run build
+
+      - name: Gerçek Chrome paketini kur
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Yerel production paketini gerçek Chrome ile doğrula
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/kyerp-vite-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          SMOKE_URL=http://127.0.0.1:4173 node scripts/runtime-smoke.mjs
+
+      - name: Yerel tarayıcı sonucunu sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-local-runtime-${{ github.run_id }}
+          path: |
+            APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
+            /tmp/kyerp-vite-preview.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Canlı D1 tam yedeğini al
         working-directory: APP/cloud/ky-erp-api
@@ -207,18 +285,46 @@ jobs:
           --commit-hash "${{ github.sha }}"
           --commit-message "KY ERP production release ${{ github.sha }}"
 
-      - name: Canlı siteyi doğrula
+      - name: Canlı site HTML kontrolü
         shell: bash
         run: |
           set -euo pipefail
           ready=0
           for attempt in $(seq 1 30); do
-            if curl --location --fail --silent --show-error https://kyerp.net/ \
-              >/tmp/kyerp-home.html; then
+            code="$(curl --silent --show-error --output /tmp/kyerp-home.html \
+              --write-out '%{http_code}' https://kyerp.net/ || true)"
+            if [ "$code" = "200" ] && [ -s /tmp/kyerp-home.html ]; then
               ready=1
               break
             fi
             sleep 2
           done
           test "$ready" -eq 1
-          test -s /tmp/kyerp-home.html
+
+          app_ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://app.kyerp.net/ \
+              >/tmp/kyerp-app-home.html; then
+              app_ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$app_ready" -eq 1
+
+      - name: Canlı siteyi gerçek Chrome ile doğrula
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          SMOKE_URL: https://kyerp.net
+        run: node scripts/runtime-smoke.mjs
+
+      - name: Canlı tarayıcı sonucunu sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-live-runtime-${{ github.run_id }}
+          path: |
+            APP/app/ky-erp-frontend/runtime-smoke.png
+            APP/app/ky-erp-frontend/runtime-result.json
+          if-no-files-found: warn
+          retention-days: 7
