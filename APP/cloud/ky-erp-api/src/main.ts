@@ -4,6 +4,7 @@ import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
+import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerBoyahaneColorAssistantRoutes } from "./boyahane-color-assistant";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
@@ -57,6 +58,8 @@ function allowedOrigin(origin: string) {
 // Firma kartları İşNet'ten bağımsız kalıcı ana rehberdir; manuel oluşturma ve muhasebe profili D1'de tutulur.
 registerAccountingCompanyDirectoryRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
+// KY ERP Asistan canlı Workers AI binding'i üzerinden çalışır; sohbet geçmişi tenant bazlı D1'de tutulur.
+registerAiCloudRoutes(app);
 // Temiz üretim runtime'ı aynı endpointleri legacy katmandan önce karşılar.
 // Günlük imalat işlemleri doğrudan D1 üzerinde çalışır; GitHub Actions kullanılmaz.
 registerProductionRuntimeV2Routes(app);
