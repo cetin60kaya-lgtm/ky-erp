@@ -307,9 +307,9 @@ export default function AppV3() {
   }, []);
 
   useEffect(() => {
-    if (!activeRoute.moduleKey || !activeRoute.tabKey) return;
+    if (!isAuthenticated || !activeRoute.moduleKey || !activeRoute.tabKey) return;
     updateBrowserPath(activeRoute, true);
-  }, [activeRoute]);
+  }, [activeRoute, isAuthenticated]);
 
   useEffect(() => {
     window.requestAnimationFrame(() => {
