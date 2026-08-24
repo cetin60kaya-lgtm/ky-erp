@@ -1,7 +1,7 @@
 {
-  "requestedAt": "2026-08-03T01:27:00+03:00",
+  "requestedAt": "2026-08-24T08:28:00+03:00",
   "domain": "kyerp.net",
   "targetProject": "ky-erp-frontend",
   "mode": "audit-only",
-  "attempt": 3
+  "attempt": 4
 }
