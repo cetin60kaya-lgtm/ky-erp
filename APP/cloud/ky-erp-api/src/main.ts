@@ -21,6 +21,7 @@ import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
+import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
@@ -98,6 +99,8 @@ registerIsnetInvoiceRuntimeRoutes(app);
 registerIsnetRuntimeV2Routes(app);
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
+// İK Personel Kontrol Merkezi, Denetim kapsamını ve kart/puantaj güvenliğini legacy rotalardan önce uygular.
+registerIkPersonnelControlRoutes(app);
 // İK'nın gerçek D1 ilişkisel rotaları genel/legacy İK rotalarından önce kayıt edilir.
 // Böylece /api/ik/advanced/* ve aylık personel ekranları JSON fallback'e düşmez.
 registerIkRelationalCloudRoutes(app);
