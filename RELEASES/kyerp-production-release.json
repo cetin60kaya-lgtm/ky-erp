@@ -2,10 +2,12 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-25T20:26:35+03:00",
-  "attempt": 57,
+  "requestedAt": "2026-08-25T20:34:00+03:00",
+  "attempt": 58,
   "scope": [
     "kyerp-net-direct-pages-domain",
+    "pages-production-branch-canonical-source",
+    "exact-live-frontend-asset-gate",
     "admin-users-company-centered-workspace",
     "single-application-owner-super-admin",
     "company-user-role-permission-management",
@@ -40,5 +42,5 @@
     "boyahane-preserve-approved-recipes-lots-stock-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 57: Google Authenticator ve Microsoft Authenticator artık iki bağımsız MFA yöntemidir; ayrı secret, QR ve aktiflik kaydı kullanır. Çalışan sağlayıcı diğerini güvenli şekilde yeniden kurabilir. İki sağlayıcıya da erişim yoksa SHA-256 hash ile saklanan 8 tek kullanımlık kurtarma kodu kullanılır; kodlar kullanıcı açıkça onaylayana kadar kaybolmuş kabul edilerek yeniden üretilip gösterilir. MFA/kurtarma/parola sıfırlamalarında aktif session, challenge ve tüketilmemiş PENDING/APPROVED login approval kayıtları güvenlik için geçersizleştirilir. Eski tek MFA kullanan hesaplar mevcut kodlarını bir kez doğruladıktan sonra veri kaybetmeden Google ve Microsoft'u ayrı ayrı kurar. Yönetim ekranında Google Yeniden Kur, Microsoft Yeniden Kur ve Tüm MFA'yı Sıfırla ayrı işlemlerdir. Önceki Attempt 56 kapsamındaki Boyahane, İşNet, Desen, İK, Muhasebe ve canlı veri düzenleri aynen korunur. Yayın; tam canlı D1 yedeği, 0019 migration, şema denetimi, Worker ve Pages deploy ile canlı sağlık kontrolleri başarılı olmadan bitmiş sayılmaz."
+  "note": "Attempt 58: Attempt 57 çift MFA güvenlik düzeninin tamamını korur. Önceki yayında Worker/D1 güncel olmasına rağmen kyerp.net Pages custom domaini eski frontend assetini sunmaya devam ettiği için yayın hattı düzeltilmiştir. Cloudflare Pages production_branch artık canonical sourceBranch olan codex/model-uretim-kontrol-merkezi-final ile otomatik eşitlenir. Pages deploy sonrası kyerp.net ve app.kyerp.net üzerinde sunulan ana index asset hash'i yerel production build ile birebir eşleşmeden ve canlı JS içinde Google/Microsoft ayrı Authenticator metinleri doğrulanmadan yayın başarılı sayılmaz. D1 0019 migration zaten uygulanmıştır; yeni koşu yine tam canlı yedek, şema audit, Worker/API sağlık, Pages deploy ve gerçek Chrome smoke kontrollerini eksiksiz çalıştırır. Önceki Boyahane, İşNet, Desen, İK, Muhasebe ve canlı veri düzenleri aynen korunur."
 }
