@@ -1,0 +1,46 @@
+name: KY ERP Boyahane Renk UI Kontrol
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/app/ky-erp-frontend/src/pages/boyahane/workflow/KayitliRenklerWorkspace.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/boyahane/boyahaneColorIdentity.css"
+      - "APP/app/ky-erp-frontend/src/services/boyahaneColorIdentityApi.js"
+      - ".github/workflows/boyahane-color-ui-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Boyahane renk UI lint ve build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - name: Install
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+      - name: Lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+      - name: Build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+      - name: Verify color workspace markers
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          grep -R -q "BİLEŞEN FORMÜLÜ DÜZENLE" dist/assets
+          grep -R -q "Onaylı Reçete Versiyonu Oluştur" dist/assets
+          grep -R -q "Formül ·" dist/assets
+          if grep -R -q "Bileşenler:" dist/assets; then
+            echo "Legacy card component preview marker still exists in bundle."
+            exit 1
+          fi
