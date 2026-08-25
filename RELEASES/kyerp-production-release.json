@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-24T16:36:00+03:00",
-  "attempt": 53,
+  "requestedAt": "2026-08-25T09:23:00+03:00",
+  "attempt": 54,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "app-kyerp-clean-root-before-auth",
@@ -19,5 +19,5 @@
     "root-domain-no-redirect-live-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 53 FINAL ENTRY FIX: Kullanıcının canlı ekran görüntüsünde app.kyerp.net/muhasebe/yonetim-ozeti adresi giriş ekranında görünmeye devam ettiği doğrulandı. Kök neden kodun repoda düzeltilmiş olmasına rağmen connector commitinin KY ERP Canlı Yayın workflowunu tetiklememesi ve eski canlı bundleın kalmasıdır. LoginPage artık oturum açılmadan hangi deep-link ile gelinirse gelinsin pathname'i / köküne replaceState ile temizler; AppV3 de unauthenticated durumda modül yolunu yazmaz. kyerp.net ky-erp-frontend Pages custom domaini olarak active olmak zorundadır. Production workflowa workflow_dispatch manuel yedeği eklendi ve main üzerinde de görünür hale getirildi. Yayın; frontend lint/build/Chromium, Worker audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, API health/Boyahane, Worker deploy, Pages production deploy, kyerp.net HTTP 200 root kontrolü ve app.kyerp.net erişimi başarılı olmadan tamamlanmış sayılmaz. Mevcut Boyahane AI/Pantone/lot, Workers AI ve Desen protected image düzeltmeleri korunur."
+  "note": "Attempt 54: GitHub abonelik/Actions ödeme engeli kullanıcı tarafından giderildi. Attempt 53 ile hazır olan final paket aynı kapsamla yeniden yayınlanıyor. LoginPage oturum açılmadan deep-link pathname'ini / köküne temizler; AppV3 unauthenticated durumda modül yolunu yazmaz. kyerp.net ky-erp-frontend Pages custom domaini olarak active olmak zorundadır. Yayın; frontend lint/build/Chromium, Worker audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, API health/Boyahane, Worker deploy, Pages production deploy, kyerp.net HTTP 200 root kontrolü ve app.kyerp.net erişimi başarılı olmadan tamamlanmış sayılmaz. Boyahane AI/Pantone/lot, Workers AI ve Desen protected image düzeltmeleri korunur."
 }
