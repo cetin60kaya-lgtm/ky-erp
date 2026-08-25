@@ -70,10 +70,11 @@ jobs:
               --file "$sql"
           done
 
-      - name: Yeni güvenlik migrationını güncel şema üzerinde uygula
+      - name: Güncel güvenlik migrationlarını izole şema üzerinde uygula
         run: |
           mkdir -p .readiness-migrations
           cp migrations/0018_auth_mfa_sessions.sql .readiness-migrations/0001_auth_mfa_sessions.sql
+          cp migrations/0019_auth_dual_mfa_recovery.sql .readiness-migrations/0002_auth_dual_mfa_recovery.sql
           node <<'NODE'
           const fs = require('node:fs');
           const config = JSON.parse(fs.readFileSync('wrangler.production-local.jsonc', 'utf8'));
@@ -95,23 +96,36 @@ jobs:
           --persist-to .local-d1-readiness
           --require-migrations
 
-      - name: MFA ve oturum tablolarını doğrula
+      - name: MFA, kurtarma ve oturum şemasını doğrula
         run: |
           npx wrangler d1 execute ky-erp-production-local \
             --local \
             --config wrangler.production-local.jsonc \
             --persist-to .local-d1-readiness \
-            --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit') ORDER BY name;" \
+            --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit','auth_recovery_codes') ORDER BY name;" \
             --json > /tmp/auth-schema.json
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-d1-readiness \
+            --command "PRAGMA table_info(auth_user_security);" \
+            --json > /tmp/auth-security-columns.json
           node <<'NODE'
           const fs = require('node:fs');
           const raw = JSON.parse(fs.readFileSync('/tmp/auth-schema.json', 'utf8'));
           const rows = Array.isArray(raw) ? raw.flatMap((item) => item.results || []) : [];
           const names = new Set(rows.map((row) => row.name));
-          const required = ['auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit'];
+          const required = ['auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit','auth_recovery_codes'];
           const missing = required.filter((name) => !names.has(name));
           if (missing.length) throw new Error(`Eksik auth tablosu: ${missing.join(', ')}`);
-          console.log('MFA, admin onayı ve aktif oturum tabloları hazır.');
+
+          const columnRaw = JSON.parse(fs.readFileSync('/tmp/auth-security-columns.json', 'utf8'));
+          const columnRows = Array.isArray(columnRaw) ? columnRaw.flatMap((item) => item.results || []) : [];
+          const columns = new Set(columnRows.map((row) => row.name));
+          const requiredColumns = ['google_mfa_secret','google_mfa_enabled','microsoft_mfa_secret','microsoft_mfa_enabled'];
+          const missingColumns = requiredColumns.filter((name) => !columns.has(name));
+          if (missingColumns.length) throw new Error(`Eksik çift MFA kolonu: ${missingColumns.join(', ')}`);
+          console.log('Google/Microsoft çift MFA, kurtarma kodu, admin onayı ve oturum şeması hazır.');
           NODE
 
       - name: Worker typecheck
