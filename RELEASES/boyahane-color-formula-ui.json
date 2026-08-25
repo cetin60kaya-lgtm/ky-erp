@@ -1,0 +1,8 @@
+{
+  "approved": true,
+  "target": "production-source",
+  "requestedAt": "2026-08-25T11:48:00+03:00",
+  "attempt": 1,
+  "formulaRows": 737,
+  "note": "Canlı D1'de 737 arşiv formülü doğrulandı. Yalnız Kayıtlı Renkler arayüzüne bileşen özetleri ve detay gramaj tablosu eklenir; lint/build sonrası production dalına kaydedilir."
+}
