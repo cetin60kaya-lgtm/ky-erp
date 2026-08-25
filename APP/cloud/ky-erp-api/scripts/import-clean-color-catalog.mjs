@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -12,6 +12,22 @@ const COLOR_SCOPE = "BOYAHANE_REGISTERED_COLOR";
 const EXPECTED_ROWS = 908;
 const EXPECTED_UNIQUE_PANTONES = 893;
 const CLEAN_SOURCE = "RENK_KAYIT_XLSM_CLEAN_2026_08_25";
+const EXPECTED_SEED_SHA256 = "9b6f9b0f684362bcf7542273862bc659cb13d3d061c4e345a1abaf2d97c65dab";
+const PART_FILES = [
+  "part-00.b64",
+  "part-01.b64",
+  "part-02.b64",
+  "part-03.b64",
+  "part-04-00.b64",
+  "part-04-01.b64",
+  "part-04-02.b64",
+  "part-04-03.b64",
+  "part-05.b64",
+  "part-06-00.b64",
+  "part-06-01.b64",
+  "part-06-02.b64",
+  "part-06-03.b64",
+];
 
 function normalize(value) {
   return String(value ?? "")
@@ -33,17 +49,14 @@ function stableId(pantone, paintType) {
   return `rk-color-${hash}`;
 }
 
-const partFiles = readdirSync(SEED_DIR)
-  .filter((name) => /^part-\d+\.b64$/.test(name))
-  .sort();
-
-if (partFiles.length !== 7) {
-  throw new Error(`Seed parça sayısı 7 olmalı; bulunan: ${partFiles.length}`);
-}
-
-const encoded = partFiles
+const encoded = PART_FILES
   .map((name) => readFileSync(join(SEED_DIR, name), "utf8").trim())
   .join("");
+const seedSha256 = createHash("sha256").update(encoded).digest("hex");
+if (seedSha256 !== EXPECTED_SEED_SHA256) {
+  throw new Error(`Seed SHA256 uyuşmuyor: ${seedSha256}`);
+}
+
 const payload = JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8"));
 const rows = Array.isArray(payload.rows) ? payload.rows : [];
 const slug = String(payload.mainCompanySlug || "").trim();
@@ -122,13 +135,11 @@ for (const row of rows) {
     `trim(COALESCE(json_extract(data, '$.dyeType'), json_extract(data, '$.paintType'), json_extract(data, '$.paintTypes[0]'), '')) = ${sqlString(paintType)}`,
   ].join(" AND ");
 
-  // Var olan tek kanonik kaydın kimlik alanlarını güncelle. json_patch diğer tarihçeyi korur.
   sql.push(
     `UPDATE json_store SET data = json_patch(CASE WHEN json_valid(data) THEN data ELSE '{}' END, ${sqlString(identityJson)}), updated_at = ${sqlString(now)} ` +
       `WHERE id = (SELECT id FROM json_store WHERE ${matchWhere} ORDER BY updated_at DESC, id DESC LIMIT 1);`,
   );
 
-  // Aynı Pantone + boya türü yoksa yeni kanonik kart oluştur.
   sql.push(
     `INSERT INTO json_store (id, scope, main_company_slug, file_name, data, created_at, updated_at) ` +
       `SELECT ${sqlString(id)}, ${sqlString(COLOR_SCOPE)}, ${sqlString(slug)}, ${sqlString(id)}, ${sqlString(JSON.stringify({ ...identity, createdAt: now }))}, ${sqlString(now)}, ${sqlString(now)} ` +
@@ -143,11 +154,12 @@ const audit = {
   mainCompanySlug: slug,
   scope: COLOR_SCOPE,
   source: CLEAN_SOURCE,
+  seedSha256,
   rows: rows.length,
   uniquePantones: pantones.size,
   uniquePantonePaintTypeKeys: keys.size,
   paintTypes: Object.fromEntries([...paintTypeCounts.entries()].sort()),
-  seedParts: partFiles,
+  seedParts: PART_FILES,
   output: OUTPUT,
 };
 writeFileSync(AUDIT_OUTPUT, `${JSON.stringify(audit, null, 2)}\n`, "utf8");
