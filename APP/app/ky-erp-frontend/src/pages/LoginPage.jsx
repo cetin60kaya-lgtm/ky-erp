@@ -16,6 +16,32 @@ function deviceName() {
   return `${platform} · ${mobile}`.slice(0, 160);
 }
 
+function authenticatorCompatibleUri(value) {
+  const raw = String(value || "").trim();
+  const prefix = "otpauth://totp/";
+  if (!raw.toLowerCase().startsWith(prefix)) return raw;
+  try {
+    const remainder = raw.slice(prefix.length);
+    const questionIndex = remainder.indexOf("?");
+    const encodedLabel = questionIndex >= 0 ? remainder.slice(0, questionIndex) : remainder;
+    const query = questionIndex >= 0 ? remainder.slice(questionIndex + 1) : "";
+    const decodedLabel = decodeURIComponent(encodedLabel);
+    const separatorIndex = decodedLabel.indexOf(":");
+    if (separatorIndex < 0) return raw;
+    const issuer = decodedLabel.slice(0, separatorIndex).trim();
+    const account = decodedLabel.slice(separatorIndex + 1).trim();
+    if (!issuer || !account) return raw;
+
+    // Google Authenticator yeni surumlerinde en sorunsuz bicim:
+    // issuer ve hesap ayri encode edilir, aradaki ':' literal kalir.
+    // Microsoft Authenticator da ayni standart TOTP URI'sini kabul eder.
+    const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
+    return `${prefix}${label}${query ? `?${query}` : ""}`;
+  } catch {
+    return raw;
+  }
+}
+
 export default function LoginPage() {
   const { login, verifyMfa, checkApproval } = useAuth();
   const [username, setUsername] = useState("");
@@ -27,6 +53,10 @@ export default function LoginPage() {
   const [qrError, setQrError] = useState("");
   const qrRef = useRef(null);
   const deviceLabel = useMemo(() => deviceName(), []);
+  const compatibleOtpUri = useMemo(
+    () => authenticatorCompatibleUri(flow.otpauthUri),
+    [flow.otpauthUri],
+  );
 
   useEffect(() => {
     document.title = "KY ERP | Kurumsal Giriş";
@@ -141,7 +171,7 @@ export default function LoginPage() {
     }
 
     const holder = qrRef.current;
-    const setupUri = String(flow.otpauthUri || "").trim();
+    const setupUri = compatibleOtpUri;
     if (!holder || !setupUri) {
       setQrError("Authenticator kurulum bağlantısı hazırlanamadı. Geri dönüp yeniden giriş yapın.");
       return undefined;
@@ -172,7 +202,7 @@ export default function LoginPage() {
     return () => {
       holder.replaceChildren();
     };
-  }, [flow.stage, flow.otpauthUri]);
+  }, [compatibleOtpUri, flow.stage]);
 
   useEffect(() => {
     if (flow.stage !== "APPROVAL_PENDING") return undefined;
@@ -228,8 +258,8 @@ export default function LoginPage() {
           <>
             <p>
               {flow.stage === "MFA_SETUP"
-                ? "İlk güvenli girişiniz. Telefonunuzda Google Authenticator veya Microsoft Authenticator'dan hangisi varsa onu kullanın."
-                : "Google veya Microsoft Authenticator'dan hangisini kurduysanız o uygulamadaki güncel 6 haneli kodu girin."}
+                ? "İlk güvenli girişiniz. Google Authenticator veya Microsoft Authenticator'dan birini kullanabilirsiniz."
+                : "Kurulu Authenticator uygulamasındaki güncel 6 haneli kodu girin."}
             </p>
 
             {flow.stage === "MFA_SETUP" ? (
@@ -245,10 +275,10 @@ export default function LoginPage() {
                 </div>
 
                 <div className="login-qr-help">
-                  QR'ı Google Authenticator veya Microsoft Authenticator'dan hangisi varsa onunla okutun. Telefonda oluşan 6 haneli kodu aşağıya yazın.
+                  Google Authenticator'da daha önce eklenmiş eski bir KY ERP hesabı varsa önce onu silin, sonra bu yeni QR kodunu okutun. Microsoft Authenticator için de aynı QR geçerlidir.
                 </div>
-                {flow.otpauthUri ? (
-                  <a className="login-auth-link" href={flow.otpauthUri}>
+                {compatibleOtpUri ? (
+                  <a className="login-auth-link" href={compatibleOtpUri}>
                     Telefonda yüklü Authenticator uygulamasını aç
                   </a>
                 ) : null}
@@ -256,7 +286,7 @@ export default function LoginPage() {
 
                 <details className="login-manual-setup">
                   <summary>QR okunmazsa manuel kurulum anahtarını göster</summary>
-                  <span>Hesap türü: Zaman tabanlı (TOTP)</span>
+                  <span>Hesap türü: Zaman tabanlı (TOTP) · 6 hane · 30 saniye</span>
                   <code>{flow.secret}</code>
                 </details>
               </div>
