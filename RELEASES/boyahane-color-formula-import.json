@@ -1,12 +1,12 @@
 {
   "approved": true,
   "target": "production-d1",
-  "requestedAt": "2026-08-25T11:30:00+03:00",
-  "attempt": 1,
+  "requestedAt": "2026-08-25T11:45:00+03:00",
+  "attempt": 2,
   "colorRows": 908,
   "formulaRows": 737,
   "mode": "non-destructive-formula-preview",
   "source": "Renk Kayıt(2).xlsm / PANTONE FORMUL",
   "companySlug": "mecit-hakan",
-  "note": "908 temiz renk kartı korunur. PANTONE FORMUL sayfasında güvenilir bileşen kaydı bulunan 737 renk kartına yalnız arşiv referans formülü eklenir. S10 CLEAR, S20 WHITE ve pigment adları gramajlarıyla gösterilir. Bu veri doğrudan stok sarfı veya üretim reçetesi oluşturmaz; üretimde gerçek ürün ve lot doğrulaması devam eder. Mevcut reçete, lot, stok, üretim ve geçmiş kayıtları silinmez. Canlı D1 tam yedeği alınmadan aktarım başlamaz."
+  "note": "İkinci doğrulama: 737 formül canlı D1'de zaten doğrulandı. UI patch scripti düzeltildi. Aynı non-destructive formüller idempotent olarak tekrar doğrulanır; sonra Kayıtlı Renkler kartlarına bileşen özeti ve detay tablosu eklenir, lint/build yapılır. Mevcut reçete, lot, stok, üretim ve geçmiş kayıtları korunur."
 }
