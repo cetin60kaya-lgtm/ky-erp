@@ -18,11 +18,10 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - name: Pages domain, deployment ve DNS teşhisi
+      - name: Canonical Pages production deploy tamamlanana kadar bekle
         shell: bash
         run: |
           set -euo pipefail
-          echo "Diagnostic rerun: ${GITHUB_SHA}"
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
           database_id="b504b712-6927-499d-815d-0b954c8ee246"
           accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
@@ -35,36 +34,61 @@ jobs:
             fi
           done < <(jq -r '.result[]?.id' <<<"$accounts_json")
           test -n "$account_id"
-          echo "ACCOUNT_ID=$account_id"
+          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
 
           base="https://api.cloudflare.com/client/v4/accounts/${account_id}/pages/projects/ky-erp-frontend"
-          echo '--- PROJECT ---'
-          curl --fail --silent --show-error -H "$auth" "$base" \
-            | jq '{success, result:{name:.result.name,subdomain:.result.subdomain,production_branch:.result.production_branch,latest_deployment:.result.latest_deployment,canonical_deployment:.result.canonical_deployment,deployment_configs:.result.deployment_configs}}'
+          found=0
+          for attempt in $(seq 1 180); do
+            deployments="$(curl --fail --silent --show-error -H "$auth" "$base/deployments?per_page=25")"
+            deployment="$(jq -c --arg sha "$GITHUB_SHA" '.result[]? | select(.deployment_trigger.metadata.commit_hash == $sha and .environment == "production")' <<<"$deployments" | head -n1)"
+            if [ -n "$deployment" ]; then
+              id="$(jq -r '.id' <<<"$deployment")"
+              stage="$(jq -r '.latest_stage.name // ""' <<<"$deployment")"
+              status="$(jq -r '.latest_stage.status // ""' <<<"$deployment")"
+              echo "Pages production ${id}: ${stage}/${status} (deneme ${attempt})"
+              if [ "$stage" = "deploy" ] && [ "$status" = "success" ]; then
+                found=1
+                echo "PAGES_DEPLOYMENT_ID=$id" >> "$GITHUB_ENV"
+                break
+              fi
+              if [ "$status" = "failure" ]; then
+                jq '.' <<<"$deployment"
+                exit 1
+              fi
+            else
+              echo "GITHUB_SHA production deployment henüz görünmedi (deneme ${attempt})"
+            fi
+            sleep 4
+          done
+          test "$found" -eq 1 || {
+            echo "Canonical production deployment süresinde tamamlanmadı." >&2
+            exit 1
+          }
 
-          echo '--- DOMAINS ---'
-          curl --fail --silent --show-error -H "$auth" "$base/domains" | jq '.'
+      - name: Production alias ve canlı dual MFA içeriğini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/ky-erp-frontend"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          canonical_id="$(jq -r '.result.canonical_deployment.id // ""' <<<"$project")"
+          test "$canonical_id" = "$PAGES_DEPLOYMENT_ID"
+          jq -e '.result.canonical_deployment.aliases | index("https://kyerp.net") != null' <<<"$project" >/dev/null
+          jq -e '.result.canonical_deployment.aliases | index("https://app.kyerp.net") != null' <<<"$project" >/dev/null
 
-          echo '--- DEPLOYMENTS ---'
-          curl --fail --silent --show-error -H "$auth" "$base/deployments?per_page=25" \
-            | jq '[.result[] | {id,environment,url,aliases,created_on,modified_on,latest_stage,source,deployment_trigger,project_name}]'
-
-          echo '--- HOST HEADERS / ASSET ---'
           for host in kyerp.net app.kyerp.net ky-erp-frontend.pages.dev; do
-            echo "### $host"
-            curl --silent --show-error -D - -o "/tmp/${host//./_}.html" -H 'Cache-Control: no-cache' "https://${host}/?diag=$(date +%s)" | sed -n '1,40p'
-            grep -oE 'src="/assets/index-[^"]+\.js"' "/tmp/${host//./_}.html" | head -n1 || true
+            stamp="${GITHUB_SHA}-$(date +%s)"
+            html="$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}/?verify=${stamp}")"
+            script="$(printf '%s' "$html" | grep -oE 'src="/assets/index-[^"]+\.js"' | head -n1 | cut -d'"' -f2)"
+            test -n "$script"
+            js="$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}${script}?verify=${stamp}")"
+            printf '%s' "$js" | grep -Fq 'iki ayrı Authenticator güvenlik düzeniyle oturum açın'
+            printf '%s' "$js" | grep -Fq 'Google Authenticator'
+            printf '%s' "$js" | grep -Fq 'Microsoft Authenticator'
+            printf '%s' "$js" | grep -Fq 'KYERP-'
+            echo "${host}: DUAL_MFA_CANLI=EVET script=${script}"
           done
 
-          echo '--- ZONE / DNS / WORKER ROUTES ---'
-          zones="$(curl --silent --show-error -H "$auth" 'https://api.cloudflare.com/client/v4/zones?name=kyerp.net')"
-          echo "$zones" | jq '{success,result:[.result[]? | {id,name,status}]}'
-          zone_id="$(jq -r '.result[0].id // empty' <<<"$zones")"
-          if [ -n "$zone_id" ]; then
-            echo 'DNS:'
-            curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?per_page=100" \
-              | jq '{success,result:[.result[]? | select(.name=="kyerp.net" or .name=="app.kyerp.net") | {id,type,name,content,proxied,ttl,comment}]}'
-            echo 'WORKER ROUTES:'
-            curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones/${zone_id}/workers/routes" \
-              | jq '{success,result:[.result[]? | select((.pattern // "") | contains("kyerp.net"))]}'
-          fi
+          curl --fail --silent https://api.kyerp.net/api/health | jq -e '.ok == true' >/dev/null
+          echo "API_HEALTH=OK"
