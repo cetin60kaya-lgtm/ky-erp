@@ -1,0 +1,70 @@
+name: KY ERP Alan Adi Teshis
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "RELEASES/domain-diagnostics-trigger.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: kyerp.net ve app.kyerp.net teshis
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: HTTP ve DNS sonucunu yaz
+        shell: bash
+        run: |
+          set -u
+          for url in \
+            "https://kyerp.net/" \
+            "https://app.kyerp.net/" \
+            "https://api.kyerp.net/api/health" \
+            "https://b9bbf587.ky-erp-frontend.pages.dev/"; do
+            echo "===== $url ====="
+            curl --connect-timeout 10 --max-time 20 --silent --show-error \
+              --output /tmp/body \
+              --dump-header /tmp/headers \
+              --write-out 'HTTP=%{http_code} REMOTE_IP=%{remote_ip} REDIRECT=%{redirect_url}\n' \
+              "$url" || echo "CURL_EXIT=$?"
+            sed -n '1,12p' /tmp/headers 2>/dev/null || true
+            head -c 180 /tmp/body 2>/dev/null | tr '\n' ' ' || true
+            echo
+          done
+
+      - name: Cloudflare Pages domain durumunu yaz
+        shell: bash
+        run: |
+          set -u
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "Cloudflare token yok; API teshisi atlandi."
+            exit 0
+          fi
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          account="${CLOUDFLARE_ACCOUNT_ID:-ab49b099fee10183fa65951e5077d14a}"
+          base="https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/ky-erp-frontend"
+          echo "===== PAGES DOMAINS ====="
+          curl --fail --silent --show-error -H "$auth" "$base/domains" \
+            | jq '{success, domains: [.result[]? | {name,status,verification_data,validation_data}]}' || true
+
+          echo "===== ZONE / DNS ====="
+          zones="$(curl --fail --silent --show-error -H "$auth" \
+            'https://api.cloudflare.com/client/v4/zones?name=kyerp.net' || true)"
+          echo "$zones" | jq '{success, zones: [.result[]? | {id,name,status,name_servers}]}' || true
+          zone_id="$(echo "$zones" | jq -r '.result[0].id // empty' 2>/dev/null || true)"
+          if [ -n "$zone_id" ]; then
+            curl --fail --silent --show-error -H "$auth" \
+              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=kyerp.net&per_page=100" \
+              | jq '{success, records: [.result[]? | {id,type,name,content,proxied,ttl}]}' || true
+            curl --fail --silent --show-error -H "$auth" \
+              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=app.kyerp.net&per_page=100" \
+              | jq '{success, records: [.result[]? | {id,type,name,content,proxied,ttl}]}' || true
+          fi
