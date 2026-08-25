@@ -22,6 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Diagnostic rerun: ${GITHUB_SHA}"
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
           database_id="b504b712-6927-499d-815d-0b954c8ee246"
           accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
