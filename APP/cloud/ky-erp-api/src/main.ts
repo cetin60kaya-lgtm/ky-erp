@@ -23,6 +23,7 @@ import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
+import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
 import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
 import { registerIsnetInvoiceRuntimeRoutes } from "./isnet-invoice-runtime";
 import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
@@ -82,6 +83,8 @@ registerDesenVisualSearchRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 
+// İşNet ayar sayfasındaki taşıyıcı, departman, kişi ve model eşleşmeleri canlı D1 üzerinde tutulur.
+registerIsnetBusinessSettingsCloudRoutes(app);
 // İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
 // Güncel NetteFatura portalı efatura.isnet.net.tr kullanılır; API 401 olsa bile portal fallback devam eder.
 // Şifre D1'e yazılmaz; geçici girişten API tokenı / firma seçilmiş portal oturumu alınır.
