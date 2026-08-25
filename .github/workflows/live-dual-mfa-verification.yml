@@ -1,0 +1,50 @@
+name: KY ERP Live Dual MFA Verification
+
+on:
+  push:
+    branches:
+      - codex/dual-mfa-google-microsoft-recovery
+    paths:
+      - ".github/workflows/live-dual-mfa-verification.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: kyerp.net ve app.kyerp.net yeni MFA paketini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='iki ayrı Authenticator güvenlik düzeniyle oturum açın'
+          for host in kyerp.net app.kyerp.net; do
+            ok=0
+            for attempt in $(seq 1 18); do
+              stamp="$(date +%s)-${attempt}"
+              html="$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}/?dual-mfa-live-check=${stamp}")"
+              script="$(printf '%s' "$html" | grep -oE 'src="/assets/index-[^"]+\.js"' | head -n1 | cut -d'"' -f2 || true)"
+              echo "${host} deneme ${attempt}: script=${script:-bulunamadi}"
+              if [ -n "$script" ]; then
+                js="$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}${script}?v=${stamp}")"
+                if printf '%s' "$js" | grep -Fq "$expected"; then
+                  echo "${host}: YENI_DUAL_MFA_CANLI=EVET"
+                  ok=1
+                  break
+                fi
+              fi
+              sleep 5
+            done
+            test "$ok" -eq 1 || {
+              echo "${host}: yeni dual MFA paketine geçmedi" >&2
+              exit 1
+            }
+          done
+
+      - name: Canlı API sağlık kontrolü
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error https://api.kyerp.net/api/health | tee /tmp/health.json
+          jq -e '.ok == true' /tmp/health.json >/dev/null
