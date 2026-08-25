@@ -79,14 +79,19 @@ jobs:
 
           for host in kyerp.net app.kyerp.net ky-erp-frontend.pages.dev; do
             stamp="${GITHUB_SHA}-$(date +%s)"
-            html="$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}/?verify=${stamp}")"
-            script="$(printf '%s' "$html" | grep -oE 'src="/assets/index-[^"]+\.js"' | head -n1 | cut -d'"' -f2)"
+            safe_host="${host//./_}"
+            html_file="/tmp/${safe_host}.html"
+            js_file="/tmp/${safe_host}.js"
+            curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
+              "https://${host}/?verify=${stamp}" -o "$html_file"
+            script="$(grep -m1 -oE 'src="/assets/index-[^"]+\.js"' "$html_file" | cut -d'"' -f2)"
             test -n "$script"
-            js="$(curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}${script}?verify=${stamp}")"
-            printf '%s' "$js" | grep -Fq 'iki ayrı Authenticator güvenlik düzeniyle oturum açın'
-            printf '%s' "$js" | grep -Fq 'Google Authenticator'
-            printf '%s' "$js" | grep -Fq 'Microsoft Authenticator'
-            printf '%s' "$js" | grep -Fq 'KYERP-'
+            curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
+              "https://${host}${script}?verify=${stamp}" -o "$js_file"
+            grep -Fq 'iki ayrı Authenticator güvenlik düzeniyle oturum açın' "$js_file"
+            grep -Fq 'Google Authenticator' "$js_file"
+            grep -Fq 'Microsoft Authenticator' "$js_file"
+            grep -Fq 'KYERP-' "$js_file"
             echo "${host}: DUAL_MFA_CANLI=EVET script=${script}"
           done
 
