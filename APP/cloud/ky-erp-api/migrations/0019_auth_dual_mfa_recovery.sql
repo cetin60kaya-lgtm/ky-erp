@@ -2,6 +2,7 @@
 -- Google ve Microsoft TOTP kayıtları birbirinden bağımsız tutulur.
 -- Eski mfa_secret/mfa_enabled alanları veri kaybı olmadan yalnız geçiş için korunur;
 -- ilk başarılı eski MFA doğrulamasından sonra kullanıcı iki sağlayıcıyı ayrı ayrı kurar.
+-- Kurtarma kodları kullanıcı tarafından açıkça onaylanana kadar yeniden üretilip gösterilir.
 
 ALTER TABLE auth_user_security ADD COLUMN google_mfa_secret TEXT;
 ALTER TABLE auth_user_security ADD COLUMN google_mfa_enabled INTEGER NOT NULL DEFAULT 0;
