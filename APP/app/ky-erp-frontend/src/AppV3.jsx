@@ -22,6 +22,10 @@ const IkPage = lazyWithRetry(
   () => import("./pages/modules/IkPage"),
   "ik-v3",
 );
+const IkPersonnelCenterPage = lazyWithRetry(
+  () => import("./pages/modules/ik/IkPersonnelCenterPage"),
+  "ik-personnel-center-v2",
+);
 const UretimPage = lazyWithRetry(
   () => import("./pages/modules/UretimPage"),
   "uretim-v3",
@@ -75,7 +79,11 @@ const MODULE_LOADERS = {
   muhasebe: () =>
     Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
   admin: () => import("./pages/modules/AdminPage"),
-  ik: () => import("./pages/modules/IkPage"),
+  ik: () =>
+    Promise.all([
+      import("./pages/modules/IkPage"),
+      import("./pages/modules/ik/IkPersonnelCenterPage"),
+    ]),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
@@ -92,11 +100,18 @@ const MODULE_LOADERS = {
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
 
+const IK_AUDIT_TABS = [
+  ["personel-kartlari", "SGK Personeller", "users"],
+  ["puantaj-izin", "Kart & Puantaj", "takvim"],
+  ["denetim-raporu", "Denetim Raporları", "raporlar"],
+];
+
 function preloadModule(moduleKey) {
   MODULE_LOADERS[moduleKey]?.().catch(() => {});
 }
 
 function resolveLabel(moduleKey, tabKey) {
+  if (moduleKey === "ik" && tabKey === "denetim-raporu") return "Denetim Raporları";
   const module = findModule(moduleKey);
   return findTab(module, tabKey)?.[1] || module?.label || "Ekran";
 }
@@ -199,10 +214,25 @@ export default function AppV3() {
   const [moduleMenuOpen, setModuleMenuOpen] = useState(keepSidebarExpanded);
   const [moduleActionContext, setModuleActionContext] = useState({});
 
-  const visibleModules = useMemo(
-    () => MODULES.filter((item) => hasModule(item.permissionKey)),
-    [hasModule],
-  );
+  const isAuditAccount = useMemo(() => {
+    const username = String(user?.username || "").trim().toLocaleLowerCase("tr-TR");
+    return username === "denetim" || String(user?.hrScope || "").toUpperCase() === "AUDIT";
+  }, [user]);
+
+  const visibleModules = useMemo(() => {
+    const allowed = MODULES.filter((item) => hasModule(item.permissionKey));
+    if (!isAuditAccount) return allowed;
+    return allowed.map((item) =>
+      item.key === "ik"
+        ? {
+            ...item,
+            groups: [{ label: "Denetim", tabs: IK_AUDIT_TABS }],
+            tabs: undefined,
+            hiddenTabs: [],
+          }
+        : item,
+    );
+  }, [hasModule, isAuditAccount]);
 
   const initialRoute = useMemo(() => {
     const requested = getInitialRoute(window.location.pathname);
@@ -454,6 +484,9 @@ export default function AppV3() {
       return <BoyahanePage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule?.key === "ik") {
+      if (isAuditAccount || activeTab === "personel-kartlari") {
+        return <IkPersonnelCenterPage activeTab={activeTab} {...sharedProps} />;
+      }
       return <IkPage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule?.key === "uretim") {
