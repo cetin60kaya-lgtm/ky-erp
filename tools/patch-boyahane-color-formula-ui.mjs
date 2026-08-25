@@ -31,14 +31,14 @@ function catalogFormulaOf(row) {
 
 function gramText(value) {
   const number = Number(value || 0);
-  return Number.isInteger(number) ? String(number) : number.toFixed(number < 10 ? 2 : 1).replace(/\\.0+$/, "");
+  return Number.isInteger(number) ? String(number) : number.toFixed(number < 10 ? 2 : 1).replace(/\.0+$/, "");
 }
 `,
     "formula helpers",
   );
 }
 
-if (!source.includes("catalogFormula?.lines")) {
+if (!source.includes("...safeArray(row.catalogFormula?.lines)")) {
   replaceOnce(
 `      row.sourceLabel,
       row.cardPaintType,
@@ -51,7 +51,7 @@ if (!source.includes("catalogFormula?.lines")) {
   );
 }
 
-if (!source.includes("Bileşenler:")) {
+if (!source.includes("<b>Bileşenler:</b>")) {
   replaceOnce(
 `                <div className="bh-color-card-meta">
                   <span>Boya türü <b>{row.cardPaintType || "-"}</b></span>
@@ -66,7 +66,7 @@ if (!source.includes("Bileşenler:")) {
                   <span>Reçete <b>{row.recipeCount || 0}</b></span>
                 </div>
                 {catalogFormulaOf(row) ? (
-                  <small><b>Bileşenler:</b> {safeArray(row.catalogFormula.lines).slice(0, 5).map((line) => `${line.productName} ${gramText(line.referenceGram)} gr`).join(" · ")}{safeArray(row.catalogFormula.lines).length > 5 ? ` · +${safeArray(row.catalogFormula.lines).length - 5}` : ""}</small>
+                  <small><b>Bileşenler:</b> {safeArray(row.catalogFormula.lines).slice(0, 5).map((line) => (line.productName || "-") + " " + gramText(line.referenceGram) + " gr").join(" · ")}{safeArray(row.catalogFormula.lines).length > 5 ? " · +" + (safeArray(row.catalogFormula.lines).length - 5) : ""}</small>
                 ) : <small>Bileşen kaydı yok.</small>}`,
     "formula card preview",
   );
