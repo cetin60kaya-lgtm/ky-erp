@@ -123,9 +123,6 @@ export function AuthProvider({ children }) {
       };
       if (!payload.token || !payload.user) return false;
 
-      // MFA/yonetici onayi tamamlandigi anda yeni tokeni API katmanina ver.
-      // React effect'ini beklemek ilk ekran isteklerinin eski/bos tokenla 401 almasina
-      // ve kullanicinin tekrar MFA ekranina dusmesine neden olabilir.
       tokenRef.current = payload.token;
       setApiAuthHandlers({
         getToken: () => tokenRef.current,
@@ -221,10 +218,36 @@ export function AuthProvider({ children }) {
   );
 
   const verifyMfa = useCallback(
-    async ({ challengeId, challengeToken, code }) => {
+    async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
       const response = await apiFetch("/auth/mfa/verify", {
         method: "POST",
-        body: { challengeId, challengeToken, code },
+        body: { challengeId, challengeToken, code, provider, resetProvider },
+        skipAuth: true,
+        suppressUnauthorized: true,
+      });
+      return finalizeResponse(response);
+    },
+    [finalizeResponse],
+  );
+
+  const recoverMfa = useCallback(
+    async ({ challengeId, challengeToken, recoveryCode }) => {
+      const response = await apiFetch("/auth/mfa/recovery", {
+        method: "POST",
+        body: { challengeId, challengeToken, recoveryCode },
+        skipAuth: true,
+        suppressUnauthorized: true,
+      });
+      return finalizeResponse(response);
+    },
+    [finalizeResponse],
+  );
+
+  const acknowledgeRecoveryCodes = useCallback(
+    async ({ challengeId, challengeToken }) => {
+      const response = await apiFetch("/auth/mfa/recovery/ack", {
+        method: "POST",
+        body: { challengeId, challengeToken },
         skipAuth: true,
         suppressUnauthorized: true,
       });
@@ -299,6 +322,8 @@ export function AuthProvider({ children }) {
       permissions,
       login,
       verifyMfa,
+      recoverMfa,
+      acknowledgeRecoveryCodes,
       checkApproval,
       logout,
       hasModule,
@@ -306,7 +331,20 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token && user),
       loading,
     }),
-    [token, user, permissions, login, verifyMfa, checkApproval, logout, hasModule, can, loading],
+    [
+      token,
+      user,
+      permissions,
+      login,
+      verifyMfa,
+      recoverMfa,
+      acknowledgeRecoveryCodes,
+      checkApproval,
+      logout,
+      hasModule,
+      can,
+      loading,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
