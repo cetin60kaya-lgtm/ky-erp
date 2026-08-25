@@ -6,6 +6,12 @@ on:
       - "KY ERP Canlı Yayın"
     types:
       - completed
+  push:
+    branches:
+      - main
+    paths:
+      - "RELEASES/live-audit-trigger.json"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,8 +26,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Production workflow sonucu: ${{ github.event.workflow_run.conclusion }}"
-          test "${{ github.event.workflow_run.conclusion }}" = "success"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "Production workflow sonucu: ${{ github.event.workflow_run.conclusion }}"
+            test "${{ github.event.workflow_run.conclusion }}" = "success"
+          else
+            echo "Bağımsız canlı denetim tetiklendi; mevcut canlı sürüm doğrulanacak."
+          fi
 
       - name: Ana alan adı yönlendirmesiz kökte açılıyor mu doğrula
         shell: bash
@@ -29,7 +39,7 @@ jobs:
           set -euo pipefail
           ready=0
           for attempt in $(seq 1 30); do
-            status="$(curl --silent --show-error --output /tmp/kyerp-root.html --write-out '%{http_code}' https://kyerp.net/ || true)"
+            status="$(curl --silent --show-error --output /tmp/kyerp-root.html --dump-header /tmp/kyerp-root.headers --write-out '%{http_code}' https://kyerp.net/ || true)"
             if [ "$status" = "200" ] && [ -s /tmp/kyerp-root.html ]; then
               ready=1
               break
@@ -38,6 +48,8 @@ jobs:
             sleep 2
           done
           test "$ready" -eq 1
+          ! grep -qi '^location:' /tmp/kyerp-root.headers
+          ! grep -qi '^x-kyerp-redirect-release:' /tmp/kyerp-root.headers
           echo "kyerp.net doğrudan 200 ve yönlendirmesiz açılıyor."
 
       - name: Gerçek uygulama alan adlarını doğrula
@@ -63,42 +75,75 @@ jobs:
             | tee /tmp/kyerp-health.json \
             | jq -e '.ok == true' >/dev/null
 
-      - name: Canlı JS paketinde yeni güvenli, giriş ve Boyahane kodunu doğrula
+      - name: Tüm canlı JS chunklarında güvenli giriş, Desen ve Boyahane kodunu doğrula
         shell: bash
         run: |
           set -euo pipefail
-          curl --location --fail --silent --show-error \
-            "https://app.kyerp.net/" > /tmp/kyerp-home.html
-          script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
-          test -n "$script"
-          case "$script" in
-            http://*|https://*) script_url="$script" ;;
-            /*) script_url="https://app.kyerp.net${script}" ;;
-            *) script_url="https://app.kyerp.net/${script#./}" ;;
-          esac
-          curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js
-          grep -q "kyerp_auth_token" /tmp/kyerp-live.js
-          grep -q "kyerpSecureOriginal" /tmp/kyerp-live.js
-          grep -q "KY ERP | Kurumsal Giriş" /tmp/kyerp-live.js
-          grep -q "Akıllı Renk & Pantone Merkezi" /tmp/kyerp-live.js
-          grep -q "Tüm Kayıtlı Renkleri Tara" /tmp/kyerp-live.js
-          grep -q "KY ERP AI ile Yorumla" /tmp/kyerp-live.js
-          echo "Canlı bundle doğrulandı: $script_url"
+          base="https://app.kyerp.net"
+          curl --location --fail --silent --show-error "$base/" > /tmp/kyerp-home.html
+          : > /tmp/js-queue
+          : > /tmp/js-seen
+          : > /tmp/kyerp-all.js
+
+          grep -oE '(src|href)="[^"]+\.js"' /tmp/kyerp-home.html \
+            | sed -E 's/^[^=]+="([^"]+)"/\1/' \
+            | sed 's#^\./#/#' \
+            >> /tmp/js-queue || true
+
+          processed=0
+          while [ -s /tmp/js-queue ] && [ "$processed" -lt 120 ]; do
+            path="$(head -1 /tmp/js-queue)"
+            tail -n +2 /tmp/js-queue > /tmp/js-queue.next || true
+            mv /tmp/js-queue.next /tmp/js-queue
+            [ -n "$path" ] || continue
+            if grep -Fxq "$path" /tmp/js-seen; then
+              continue
+            fi
+            echo "$path" >> /tmp/js-seen
+            processed=$((processed + 1))
+
+            case "$path" in
+              http://*|https://*) url="$path" ;;
+              /*) url="$base$path" ;;
+              *) url="$base/${path#./}" ;;
+            esac
+            echo "JS chunk: $url"
+            curl --location --fail --silent --show-error "$url" > /tmp/current.js
+            cat /tmp/current.js >> /tmp/kyerp-all.js
+            printf '\n' >> /tmp/kyerp-all.js
+
+            grep -oE 'assets/[A-Za-z0-9._-]+\.js' /tmp/current.js \
+              | sed 's#^#/#' \
+              | sort -u \
+              >> /tmp/js-queue || true
+          done
+
+          echo "Taranan JS chunk sayısı: $processed"
+          test "$processed" -gt 0
+          grep -q "kyerp_auth_token" /tmp/kyerp-all.js
+          grep -q "kyerpSecureOriginal" /tmp/kyerp-all.js
+          grep -q "KY ERP | Kurumsal Giriş" /tmp/kyerp-all.js
+          grep -q "Akıllı Renk & Pantone Merkezi" /tmp/kyerp-all.js
+          grep -q "Tüm Kayıtlı Renkleri Tara" /tmp/kyerp-all.js
+          grep -q "KY ERP AI ile Yorumla" /tmp/kyerp-all.js
+          echo "Canlı chunk seti: giriş + auth asset bridge + Boyahane AI/Pantone işaretleri doğrulandı."
 
       - name: Başarılı sonucu PR kaydına yaz
         if: success()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" \
-            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- kyerp.net kök ve yönlendirmesiz: ✅\n- app.kyerp.net: ✅\n- Temiz kurumsal giriş bundle: ✅\n- Desen rotası: ✅\n- Boyahane İmalat Boyaları rotası: ✅\n- Authenticated asset bridge canlı bundle: ✅\n- Akıllı Renk & Pantone Merkezi canlı bundle: ✅\n- KY ERP AI renk entegrasyonu frontend: ✅\n- API health: ✅\n- Sonuç: **success**"
+            -f body="## KY ERP canlı son denetim\n\n- kyerp.net kök ve yönlendirmesiz: ✅\n- app.kyerp.net: ✅\n- Temiz kurumsal giriş: ✅\n- Desen rotası: ✅\n- Boyahane İmalat Boyaları: ✅\n- Authenticated asset bridge: ✅\n- Akıllı Renk & Pantone Merkezi: ✅\n- KY ERP AI renk entegrasyonu: ✅\n- API health: ✅\n- Sonuç: **success**" || true
 
       - name: Başarısız sonucu PR kaydına yaz
         if: failure()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/17/comments" \
-            -f body="## KY ERP ana alan adı ve uygulama son denetim\n\n- Production run: ${{ github.event.workflow_run.id }}\n- Commit: ${{ github.event.workflow_run.head_sha }}\n- Production sonucu: ${{ github.event.workflow_run.conclusion }}\n- Sonuç: **failure**\n- Kontrol: kyerp.net kök yönlendirme / app.kyerp.net / giriş bundle / Desen / Boyahane / authenticated asset bridge / AI renk merkezi"
+            -f body="## KY ERP canlı son denetim\n\n- Sonuç: **failure**\n- Kontrol: kyerp.net / app.kyerp.net / giriş / Desen / Boyahane / authenticated asset bridge / AI renk merkezi" || true
