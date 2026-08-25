@@ -1,0 +1,13 @@
+{
+  "approved": true,
+  "target": "production-d1",
+  "requestedAt": "2026-08-25T11:00:00+03:00",
+  "scope": "BOYAHANE_REGISTERED_COLOR",
+  "source": "Renk Kayıt(2).xlsm",
+  "cleanRows": 908,
+  "uniquePantones": 893,
+  "companySlug": "mecit-hakan",
+  "mode": "non-destructive-upsert",
+  "canonicalNameRule": "one-color-name-per-pantone",
+  "note": "Yalnız Pantone referansında karşılığı ve geçerli HEX kodu bulunan temiz renkler. Boya türü ayrı tutulur, Pantone başına tek kanonik renk adı kullanılır. Mevcut reçete, lot, üretim ve renk geçmişi korunur; silme yapılmaz. D1 tam yedek alınmadan aktarım başlamaz."
+}
