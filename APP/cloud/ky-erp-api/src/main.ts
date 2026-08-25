@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthPolicyCompatRoutes } from "./auth-policy-compat";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
@@ -45,11 +46,8 @@ const LIVE_ORIGINS = new Set([
   "https://www.kyerp.net",
   "https://app.kyerp.net",
 ]);
-
-const LOCAL_DEV_ORIGIN =
-  /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
-const PAGES_PREVIEW_ORIGIN =
-  /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
+const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
+const PAGES_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 
 function allowedOrigin(origin: string) {
   if (LIVE_ORIGINS.has(origin)) return origin;
@@ -103,19 +101,14 @@ shell.use(
   }),
 );
 
-// Oturum süresi artık kullanıcı güvenlik profiline göre sunucuda uygulanır.
-// PASSWORD_ONLY profili en fazla 30 dakika; diğer profiller sahibi tarafından 30 dk-24 saat aralığında seçilir.
+// Oturum süresi kullanıcı güvenlik profiline göre hem JWT hem auth_sessions kaydında uygulanır.
+// PASSWORD_ONLY profili sunucuda kesin olarak en fazla 30 dakika tutulur.
 shell.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
-
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic =
-    path === "/api/health" ||
-    path === "/api/system/status" ||
-    path.startsWith("/api/auth/");
-
+  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/");
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);
@@ -123,22 +116,13 @@ shell.use("/api/*", async (c, next) => {
     if (c.req.method === "GET" && path === "/api/boyahane/registered-colors") {
       return c.json({ ok: true, success: true, data: [], protected: true, authRequired: true });
     }
-    return c.json(
-      {
-        ok: false,
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın.",
-        },
-      },
-      401,
-    );
+    return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın." } }, 401);
   }
-
   await next();
 });
 
-// Önce legacy MFA geçişi ve uygulama-sahibi güvenlik sınırları; sonra yeni esnek politika motoru.
+// Sıra önemlidir: acil fallback zenginleştiricisi -> legacy/owner guard -> yeni politika motoru -> legacy uygulama.
+registerAuthRecoveryCodeFallbackRoutes(shell);
 registerAuthPolicyCompatRoutes(shell);
 registerAuthPolicyRoutes(shell);
 shell.route("/", app);
