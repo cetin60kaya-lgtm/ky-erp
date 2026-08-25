@@ -1,0 +1,60 @@
+name: KY ERP Boyahane Renk Bilesen UI Tamamlama
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "RELEASES/boyahane-color-formula-ui.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyerp-boyahane-color-formula-ui
+  cancel-in-progress: false
+
+jobs:
+  ui:
+    name: Kayitli Renkler bilesen kartlari lint build commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: UI onayini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.approved == true and .formulaRows == 737 and .target == "production-source"' RELEASES/boyahane-color-formula-ui.json >/dev/null
+
+      - name: Kayitli Renkler arayuzunu bilesenlerle genislet
+        run: node tools/patch-boyahane-color-formula-ui.mjs
+
+      - name: Frontend bagimliliklarini kur
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint ve build
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm run lint
+          npm run build
+
+      - name: Degisikligi production dalina kaydet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test -n "$(git status --porcelain APP/app/ky-erp-frontend/src/pages/boyahane/workflow/KayitliRenklerWorkspace.jsx)" || { echo "UI degisikligi olusmadi."; exit 1; }
+          git config user.name "ky-erp-release-bot"
+          git config user.email "ky-erp-release-bot@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/boyahane/workflow/KayitliRenklerWorkspace.jsx
+          git commit -m "feat(boyahane): show archived formula components on color cards"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
