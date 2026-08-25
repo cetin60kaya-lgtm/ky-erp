@@ -2,13 +2,17 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-25T23:11:40+03:00",
-  "attempt": 59,
+  "requestedAt": "2026-08-25T23:35:00+03:00",
+  "attempt": 60,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "pages-production-branch-canonical-source",
     "cloudflare-pages-canonical-git-production-deploy",
     "live-dual-mfa-content-gate",
+    "isnet-settings-save-404-fix",
+    "isnet-business-settings-cloud-routes",
+    "isnet-department-contact-model-settings-d1",
+    "isnet-live-portal-session-preserved",
     "admin-users-company-centered-workspace",
     "single-application-owner-super-admin",
     "company-user-role-permission-management",
@@ -43,5 +47,5 @@
     "boyahane-preserve-approved-recipes-lots-stock-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 59: Önceki çift MFA güvenlik düzeni ve tüm canlı iş modülleri korunur. Cloudflare Pages Git entegrasyonunda gerçek production kaynağı canonical branch olan codex/model-uretim-kontrol-merkezi-final olarak sabitlenmiştir. Release hattı artık Git-integrated Pages projesine preview oluşturan manuel wrangler pages deploy adımını kullanmaz; aynı release commit SHA için Cloudflare'ın native production deploymentını bekler, deployment deploy/success olmadan devam etmez, canonical_deployment ID'sinin bu deployment ile aynı olduğunu ve kyerp.net ile app.kyerp.net aliaslarının canonical production deployment üzerinde bulunduğunu doğrular. Ardından kyerp.net, app.kyerp.net ve ky-erp-frontend.pages.dev üzerindeki gerçek JS bundle içinde iki ayrı Authenticator giriş metni, Google Authenticator, Microsoft Authenticator ve KY ERP kurtarma kodu akışı doğrulanmadan yayın başarılı sayılmaz. Doğrulama pipefail kaynaklı yanlış negatif üretmeyecek şekilde dosya üzerinden yapılır. Yayın ayrıca frontend lint/build/Chrome, Worker dependency audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, Worker deploy, API/Boyahane sağlık kontrolü ve canlı Chrome smoke aşamalarının tamamını zorunlu tutar."
+  "note": "Attempt 60: İşNet Ayarlar ve Bağlantı ekranında firma seçimi kaydedildikten sonra görünen 404 giderilir. Sorunun kaynağı canlı Cloudflare Worker katmanında frontend'in kullandığı /api/isnet/business-settings rotalarının bulunmamasıydı; kayıt işlemi sonrası ekran yeniden yüklenirken bu eksik rota 404 üretiyordu. Taşıyıcı sabitleri, departmanlar, kişiler ve model/departman eşleşmeleri için tenant bazlı D1 json_store canlı rotaları eklendi ve main.ts içinde İşNet canlı adaptöründen önce kayıt edildi. Mevcut İşNet API/portal bağlantısı, firma seçimi, şifre saklamama kuralı, PDF/XML arşivi ve muhasebe akışı korunur. Yayın yine Worker typecheck/build, frontend lint/build/Chrome, tam D1 yedeği, migration/schema audit, Worker deploy, canlı API ve Pages/Chrome kontrollerinin tamamını zorunlu tutar."
 }
