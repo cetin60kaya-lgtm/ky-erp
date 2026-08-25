@@ -13,58 +13,82 @@ permissions:
 
 jobs:
   diagnose:
-    name: kyerp.net ve app.kyerp.net teshis
+    name: kyerp.net eski yonlendirme kaynagini bul
     runs-on: ubuntu-latest
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: HTTP ve DNS sonucunu yaz
+      - name: HTTP sonucunu yaz
         shell: bash
         run: |
           set -u
           for url in \
             "https://kyerp.net/" \
             "https://app.kyerp.net/" \
-            "https://api.kyerp.net/api/health" \
-            "https://b9bbf587.ky-erp-frontend.pages.dev/"; do
+            "https://api.kyerp.net/api/health"; do
             echo "===== $url ====="
             curl --connect-timeout 10 --max-time 20 --silent --show-error \
               --output /tmp/body \
               --dump-header /tmp/headers \
               --write-out 'HTTP=%{http_code} REMOTE_IP=%{remote_ip} REDIRECT=%{redirect_url}\n' \
               "$url" || echo "CURL_EXIT=$?"
-            sed -n '1,12p' /tmp/headers 2>/dev/null || true
-            head -c 180 /tmp/body 2>/dev/null | tr '\n' ' ' || true
+            sed -n '1,16p' /tmp/headers 2>/dev/null || true
+            head -c 220 /tmp/body 2>/dev/null | tr '\n' ' ' || true
             echo
           done
 
-      - name: Cloudflare Pages domain durumunu yaz
+      - name: Cloudflare eski yonlendirme katmanlarini tara
         shell: bash
         run: |
           set -u
-          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo "Cloudflare token yok; API teshisi atlandi."
-            exit 0
-          fi
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-          account="${CLOUDFLARE_ACCOUNT_ID:-ab49b099fee10183fa65951e5077d14a}"
-          base="https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/ky-erp-frontend"
-          echo "===== PAGES DOMAINS ====="
-          curl --fail --silent --show-error -H "$auth" "$base/domains" \
-            | jq '{success, domains: [.result[]? | {name,status,verification_data,validation_data}]}' || true
+          api="https://api.cloudflare.com/client/v4"
 
-          echo "===== ZONE / DNS ====="
-          zones="$(curl --fail --silent --show-error -H "$auth" \
-            'https://api.cloudflare.com/client/v4/zones?name=kyerp.net' || true)"
-          echo "$zones" | jq '{success, zones: [.result[]? | {id,name,status,name_servers}]}' || true
+          echo "===== ZONE ====="
+          zones="$(curl --fail --silent --show-error -H "$auth" "$api/zones?name=kyerp.net" || true)"
+          echo "$zones" | jq '{success, zones: [.result[]? | {id,name,status}]}' || true
           zone_id="$(echo "$zones" | jq -r '.result[0].id // empty' 2>/dev/null || true)"
-          if [ -n "$zone_id" ]; then
-            curl --fail --silent --show-error -H "$auth" \
-              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=kyerp.net&per_page=100" \
-              | jq '{success, records: [.result[]? | {id,type,name,content,proxied,ttl}]}' || true
-            curl --fail --silent --show-error -H "$auth" \
-              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=app.kyerp.net&per_page=100" \
-              | jq '{success, records: [.result[]? | {id,type,name,content,proxied,ttl}]}' || true
-          fi
+          test -n "$zone_id" || { echo "ZONE_ID bulunamadi"; exit 0; }
+
+          echo "===== WORKER ROUTES ====="
+          curl --silent --show-error -H "$auth" "$api/zones/${zone_id}/workers/routes" \
+            | jq '{success, errors, routes: [.result[]? | {id,pattern,script,script_name,environment} ]}' || true
+
+          echo "===== PAGE RULES ====="
+          curl --silent --show-error -H "$auth" "$api/zones/${zone_id}/pagerules?status=active&per_page=100" \
+            | jq '{success, errors, rules: [.result[]? | {id,status,priority,targets,actions} ]}' || true
+
+          echo "===== ZONE RULESETS ====="
+          zone_rulesets="$(curl --silent --show-error -H "$auth" "$api/zones/${zone_id}/rulesets" || true)"
+          echo "$zone_rulesets" | jq '{success, errors, rulesets: [.result[]? | {id,name,kind,phase,version,last_updated} ]}' || true
+          for rid in $(echo "$zone_rulesets" | jq -r '.result[]?.id' 2>/dev/null); do
+            detail="$(curl --silent --show-error -H "$auth" "$api/zones/${zone_id}/rulesets/${rid}" || true)"
+            if echo "$detail" | grep -Eqi 'kyerp\.net|app\.kyerp\.net|redirect'; then
+              echo "--- ZONE RULESET DETAIL ${rid} ---"
+              echo "$detail" | jq '{success, errors, result: {id:.result.id,name:.result.name,kind:.result.kind,phase:.result.phase,rules:[.result.rules[]? | {id,version,action,expression,description,enabled,action_parameters}]}}' || true
+            fi
+          done
+
+          echo "===== ACCOUNTS / ACCOUNT RULESETS ====="
+          accounts="$(curl --fail --silent --show-error -H "$auth" "$api/accounts" || true)"
+          echo "$accounts" | jq '{success, accounts: [.result[]? | {id,name}]}' || true
+          for aid in $(echo "$accounts" | jq -r '.result[]?.id' 2>/dev/null); do
+            ars="$(curl --silent --show-error -H "$auth" "$api/accounts/${aid}/rulesets" || true)"
+            echo "--- ACCOUNT ${aid} RULESETS ---"
+            echo "$ars" | jq '{success, errors, rulesets: [.result[]? | {id,name,kind,phase,version,last_updated}]}' || true
+            for rid in $(echo "$ars" | jq -r '.result[]?.id' 2>/dev/null); do
+              detail="$(curl --silent --show-error -H "$auth" "$api/accounts/${aid}/rulesets/${rid}" || true)"
+              if echo "$detail" | grep -Eqi 'kyerp\.net|app\.kyerp\.net|redirect'; then
+                echo "--- ACCOUNT RULESET DETAIL ${aid}/${rid} ---"
+                echo "$detail" | jq '{success, errors, result: {id:.result.id,name:.result.name,kind:.result.kind,phase:.result.phase,rules:[.result.rules[]? | {id,version,action,expression,description,enabled,action_parameters}]}}' || true
+              fi
+            done
+          done
+
+          echo "===== WORKER CUSTOM DOMAINS ====="
+          for aid in $(echo "$accounts" | jq -r '.result[]?.id' 2>/dev/null); do
+            curl --silent --show-error -H "$auth" "$api/accounts/${aid}/workers/domains" \
+              | jq --arg aid "$aid" '{account:$aid,success,errors,domains:[.result[]? | {id,hostname,service,environment,zone_id,zone_name}]}' || true
+          done
