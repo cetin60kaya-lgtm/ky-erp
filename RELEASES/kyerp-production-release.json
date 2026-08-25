@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-25T23:35:00+03:00",
-  "attempt": 60,
+  "requestedAt": "2026-08-25T23:42:00+03:00",
+  "attempt": 61,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "pages-production-branch-canonical-source",
@@ -42,10 +42,17 @@
     "boyahane-legacy-formula-preview-737",
     "boyahane-formula-component-lines-3407",
     "boyahane-s10-s20-pigment-gram-display",
-    "boyahane-registered-color-card-component-summary",
     "boyahane-registered-color-detail-formula-table",
-    "boyahane-preserve-approved-recipes-lots-stock-production"
+    "boyahane-preserve-approved-recipes-lots-stock-production",
+    "boyahane-color-cards-clean-summary-no-component-preview",
+    "boyahane-color-detail-tabbed-workspace",
+    "boyahane-archive-formula-full-editor",
+    "boyahane-formula-add-remove-component-lines",
+    "boyahane-formula-gram-and-percentage-live-calculation",
+    "boyahane-approved-inventory-product-mapping",
+    "boyahane-archive-formula-version-history",
+    "boyahane-formula-to-approved-recipe-version"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 60: İşNet Ayarlar ve Bağlantı ekranında firma seçimi kaydedildikten sonra görünen 404 giderilir. Sorunun kaynağı canlı Cloudflare Worker katmanında frontend'in kullandığı /api/isnet/business-settings rotalarının bulunmamasıydı; kayıt işlemi sonrası ekran yeniden yüklenirken bu eksik rota 404 üretiyordu. Taşıyıcı sabitleri, departmanlar, kişiler ve model/departman eşleşmeleri için tenant bazlı D1 json_store canlı rotaları eklendi ve main.ts içinde İşNet canlı adaptöründen önce kayıt edildi. Mevcut İşNet API/portal bağlantısı, firma seçimi, şifre saklamama kuralı, PDF/XML arşivi ve muhasebe akışı korunur. Yayın yine Worker typecheck/build, frontend lint/build/Chrome, tam D1 yedeği, migration/schema audit, Worker deploy, canlı API ve Pages/Chrome kontrollerinin tamamını zorunlu tutar."
+  "note": "Attempt 61: Boyahane Kayıtlı Renkler arayüzü sadeleştirildi. Kartlardaki uzun bileşen ön izlemesi kaldırıldı; kart yalnız renk, Pantone/kod, boya türü, versiyon, reçete ve formül durumu özeti gösterir. Kart seçilince sağda sekmeli Renk Çalışma Alanı açılır. Arşiv bileşen formülü ayrı geniş düzenleyicide satır ekle/sil, bileşen adı, onaylı stok ürünü eşlemesi, gramaj, otomatik yüzde/toplam, S10+S20 başlangıcı ve formül notuyla yönetilir. Arşiv formülü kaydedildiğinde önceki sürüm catalogFormulaHistory içinde korunur ve stok düşümü yapılmaz. Tüm bileşenler onaylı ürünle eşleştirildiyse kullanıcı ayrıca yeni aktif onaylı reçete versiyonu oluşturabilir; mevcut backend V1/V2/V3 arşivleme mantığı ve üretimde gerçek lot doğrulaması korunur. 908 temiz renk, 737 arşiv formülü, 3407 bileşen, mevcut reçete/lot/stok/üretim geçmişi korunur. Boyahane odaklı CI lint/build ve bundle marker kontrolü SUCCESS oldu. Tam production yayınında D1 yedek, migration/schema audit, Worker ve Pages deploy, canlı API/HTML/Chrome kontrolleri zorunludur."
 }
