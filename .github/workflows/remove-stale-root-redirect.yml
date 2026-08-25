@@ -1,0 +1,92 @@
+name: KY ERP Eski Kok Yonlendirmesini Kaldir
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "RELEASES/remove-stale-root-redirect.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Yalniz eski kyerp.net Worker Route kaydini kaldir
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Hedef route'u birebir dogrula ve kaldir
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          zone_id="b258d9aa8fd4f24aad86fedbda9c2938"
+          route_id="b8bb1befc83847b9bcd7df88d2193a9b"
+          expected_pattern="kyerp.net/*"
+          expected_script="ky-erp-root-redirect"
+
+          routes="$(curl --fail --silent --show-error -H "$auth" \
+            "$api/zones/${zone_id}/workers/routes")"
+          route="$(echo "$routes" | jq -c --arg id "$route_id" '.result[]? | select(.id == $id)')"
+
+          if [ -z "$route" ]; then
+            echo "Hedef eski route zaten yok; silme gerekmiyor."
+          else
+            pattern="$(echo "$route" | jq -r '.pattern // ""')"
+            script="$(echo "$route" | jq -r '.script // ""')"
+            echo "Bulunan route: $pattern -> $script"
+            test "$pattern" = "$expected_pattern"
+            test "$script" = "$expected_script"
+
+            result="$(curl --fail --silent --show-error \
+              -X DELETE \
+              -H "$auth" \
+              "$api/zones/${zone_id}/workers/routes/${route_id}")"
+            echo "$result" | jq -e '.success == true' >/dev/null
+            echo "Eski kyerp.net Worker Route kaldirildi."
+          fi
+
+          after="$(curl --fail --silent --show-error -H "$auth" \
+            "$api/zones/${zone_id}/workers/routes")"
+          if echo "$after" | jq -e --arg id "$route_id" 'any(.result[]?; .id == $id)' >/dev/null; then
+            echo "Route hala mevcut; islem durduruldu." >&2
+            exit 1
+          fi
+
+      - name: kyerp.net Pages'e dogrudan dusuyor mu dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 60); do
+            code="$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+              --output /tmp/kyerp-root.html \
+              --dump-header /tmp/kyerp-root.headers \
+              --write-out '%{http_code}' \
+              https://kyerp.net/ || true)"
+            location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {gsub(/\r/,""); print $2}' /tmp/kyerp-root.headers | tail -1)"
+            echo "Deneme $attempt: HTTP ${code:-0} Location=${location:-yok}"
+            if [ "$code" = "200" ] && [ -s /tmp/kyerp-root.html ]; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          ! grep -qi '^x-kyerp-redirect-release:' /tmp/kyerp-root.headers
+          echo "kyerp.net artik yonlendirmesiz HTTP 200."
+
+      - name: app ve API sagligini koru
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error https://app.kyerp.net/ >/tmp/app.html
+          test -s /tmp/app.html
+          curl --fail --silent --show-error https://api.kyerp.net/api/health \
+            | jq -e '.ok == true' >/dev/null
+          echo "app.kyerp.net ve api.kyerp.net saglikli."
