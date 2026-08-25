@@ -77,22 +77,39 @@ jobs:
           }
           echo "CLOUDFLARE_ACCOUNT_ID=$resolved_account_id" >> "$GITHUB_ENV"
 
-      - name: Mevcut Cloudflare Pages projesini doğrula
+      - name: Cloudflare Pages production branchini canonical kaynakla eşitle
         id: pages
         shell: bash
         run: |
           set -euo pipefail
-          project_json="$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/ky-erp-frontend")"
-          jq -e '.success == true and .result.name == "ky-erp-frontend"' \
+          project_name="ky-erp-frontend"
+          canonical_branch="codex/model-uretim-kontrol-merkezi-final"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${project_name}"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+
+          project_json="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          jq -e --arg project "$project_name" '.success == true and .result.name == $project' \
             <<<"$project_json" >/dev/null
-          project_name="$(jq -r '.result.name' <<<"$project_json")"
-          production_branch="$(jq -r '.result.production_branch // "main"' <<<"$project_json")"
-          test -n "$production_branch" && test "$production_branch" != "null"
+          current_branch="$(jq -r '.result.production_branch // ""' <<<"$project_json")"
+
+          if [ "$current_branch" != "$canonical_branch" ]; then
+            echo "Pages production branch düzeltiliyor: ${current_branch:-yok} -> $canonical_branch"
+            project_json="$(curl --fail --silent --show-error \
+              -X PATCH \
+              -H "$auth" \
+              -H "Content-Type: application/json" \
+              --data "{\"production_branch\":\"${canonical_branch}\"}" \
+              "$base")"
+            jq -e --arg branch "$canonical_branch" \
+              '.success == true and .result.production_branch == $branch' \
+              <<<"$project_json" >/dev/null
+          fi
+
+          production_branch="$(jq -r '.result.production_branch // ""' <<<"$project_json")"
+          test "$production_branch" = "$canonical_branch"
           echo "name=$project_name" >> "$GITHUB_OUTPUT"
           echo "branch=$production_branch" >> "$GITHUB_OUTPUT"
-          echo "Pages projesi doğrulandı: $project_name / $production_branch"
+          echo "Pages production kaynağı doğrulandı: $project_name / $production_branch"
 
       - name: kyerp.net ana alan adını Pages projesine doğrula
         shell: bash
@@ -284,6 +301,46 @@ jobs:
           --branch "${{ steps.pages.outputs.branch }}"
           --commit-hash "${{ github.sha }}"
           --commit-message "KY ERP production release ${{ github.sha }}"
+
+      - name: Canlı domainlerin tam olarak yeni frontend paketini sunduğunu doğrula
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_script="$(grep -oE 'src="/assets/index-[^"]+\.js"' dist/index.html | head -n1 | cut -d'"' -f2)"
+          test -n "$expected_script"
+          echo "Beklenen frontend paketi: $expected_script"
+
+          for host in kyerp.net app.kyerp.net; do
+            matched=0
+            for attempt in $(seq 1 60); do
+              stamp="$(date +%s)-${attempt}"
+              html="$(curl --fail --silent --show-error \
+                -H 'Cache-Control: no-cache' \
+                "https://${host}/?release=${GITHUB_SHA}-${stamp}")"
+              live_script="$(printf '%s' "$html" \
+                | grep -oE 'src="/assets/index-[^"]+\.js"' \
+                | head -n1 \
+                | cut -d'"' -f2 || true)"
+              echo "${host} deneme ${attempt}: ${live_script:-script-yok}"
+              if [ "$live_script" = "$expected_script" ]; then
+                js="$(curl --fail --silent --show-error \
+                  -H 'Cache-Control: no-cache' \
+                  "https://${host}${live_script}?release=${GITHUB_SHA}-${stamp}")"
+                printf '%s' "$js" | grep -Fq 'iki ayrı Authenticator güvenlik düzeniyle oturum açın'
+                printf '%s' "$js" | grep -Fq 'Google Authenticator'
+                printf '%s' "$js" | grep -Fq 'Microsoft Authenticator'
+                matched=1
+                echo "${host}: yeni frontend paketi canlı."
+                break
+              fi
+              sleep 3
+            done
+            test "$matched" -eq 1 || {
+              echo "${host} 180 saniye içinde yeni production paketine geçmedi." >&2
+              exit 1
+            }
+          done
 
       - name: Canlı site HTML kontrolü
         shell: bash
