@@ -1,0 +1,75 @@
+name: KY ERP Dual MFA Hardening Push
+
+on:
+  push:
+    branches:
+      - codex/dual-mfa-google-microsoft-recovery
+    paths:
+      - ".github/workflows/dual-mfa-hardening-push.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/dual-mfa-google-microsoft-recovery
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Daha önce test edilen güvenlik yamasını uygula
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/dual-mfa-hardening-fix.yml').read_text(encoding='utf-8').splitlines()
+          marker = '      - name: Güvenlik geri bildirimlerini uygula'
+          start = source.index(marker)
+          run_index = next(i for i in range(start + 1, len(source)) if source[i] == '        run: |')
+          body = []
+          for line in source[run_index + 1:]:
+              if line.startswith('      - name:'):
+                  break
+              body.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/apply-hardening.sh').write_text('\n'.join(body) + '\n', encoding='utf-8')
+          PY
+          bash /tmp/apply-hardening.sh
+
+      - name: Güvenlik sabitlerini doğrula
+        run: |
+          grep -q "recovery_codes_acknowledged" APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q "invalidateUserLoginArtifacts(c, user.id, user.id)" APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q "status IN ('PENDING','APPROVED')" APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q "Google Yeniden Kur" APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+          grep -q "Microsoft Yeniden Kur" APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+
+      - name: API doğrulaması
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Frontend doğrulaması
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Uygulama dosyalarını commitle
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/auth-cloud.ts \
+                  APP/cloud/ky-erp-api/migrations/0019_auth_dual_mfa_recovery.sql \
+                  APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+          git commit -m "fix: close dual MFA recovery security gaps"
+          git push origin HEAD:codex/dual-mfa-google-microsoft-recovery
