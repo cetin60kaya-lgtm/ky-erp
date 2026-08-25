@@ -45,7 +45,15 @@ function compatibleOtpUri(value) {
 }
 
 export default function LoginPage() {
-  const { login, verifyMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval } = useAuth();
+  const {
+    login,
+    verifyMfa,
+    recoverMfa,
+    startOwnerRecovery,
+    verifyOwnerRecovery,
+    checkApproval,
+  } = useAuth();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -55,6 +63,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [qrError, setQrError] = useState("");
+  const [showRecoveryCode, setShowRecoveryCode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [recoveryAnswers, setRecoveryAnswers] = useState(["", ""]);
   const qrRef = useRef(null);
@@ -85,8 +95,10 @@ export default function LoginPage() {
     if (!stage) return;
     setError("");
     setCode("");
-    setQrError("");
     setResetProvider("");
+    setQrError("");
+    setShowRecoveryCode(false);
+    setRecoveryCode("");
     if (["MFA_REQUIRED", "MFA_SETUP"].includes(stage)) setSelectedProvider(chooseNextProvider(response));
     if (stage === "OWNER_RECOVERY_VERIFY") {
       setRecoveryOtp("");
@@ -99,9 +111,11 @@ export default function LoginPage() {
     setFlow({ stage: "CREDENTIALS" });
     setPassword("");
     setCode("");
+    setRecoveryCode("");
     setRecoveryOtp("");
     setRecoveryAnswers(["", ""]);
     setResetProvider("");
+    setShowRecoveryCode(false);
     setError(message);
   }
 
@@ -143,6 +157,28 @@ export default function LoginPage() {
       }));
     } catch (requestError) {
       setError(requestError?.message || "Authenticator doğrulaması başarısız oldu.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRecoveryCode(event) {
+    event?.preventDefault();
+    const clean = String(recoveryCode || "").trim().toUpperCase();
+    if (!/^KYERP-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(clean)) {
+      setError("Geçerli tek kullanımlık KY ERP kurtarma kodunu girin.");
+      return;
+    }
+    try {
+      setLoading(true);
+      setError("");
+      applyResponse(await recoverMfa({
+        challengeId: flow.challengeId,
+        challengeToken: flow.challengeToken,
+        recoveryCode: clean,
+      }));
+    } catch (requestError) {
+      setError(requestError?.message || "Kurtarma kodu doğrulanamadı.");
     } finally {
       setLoading(false);
     }
@@ -229,7 +265,14 @@ export default function LoginPage() {
       return undefined;
     }
     try {
-      new QRCodeCtor(holder, { text: otpUri, width: 220, height: 220, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCodeCtor.CorrectLevel?.M });
+      new QRCodeCtor(holder, {
+        text: otpUri,
+        width: 220,
+        height: 220,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCodeCtor.CorrectLevel?.M,
+      });
     } catch {
       setQrError("QR kodu oluşturulamadı. Geri dönüp yeniden deneyin.");
     }
@@ -274,23 +317,37 @@ export default function LoginPage() {
           </>
         ) : null}
 
+        {flow.stage === "MFA_LEGACY_REQUIRED" ? (
+          <>
+            <p><strong>Mevcut Authenticator doğrulaması</strong></p>
+            <div className="login-security-box">
+              <strong>Güvenli geçiş</strong>
+              <span>Eski tek Authenticator kaydınız bulundu. Bu kod bir kez doğrulandıktan sonra yeni Google/Microsoft güvenlik düzenine taşınacaksınız.</span>
+            </div>
+            <form onSubmit={handleMfa}>
+              <label>Mevcut 6 Haneli Authenticator Kodu
+                <input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+              </label>
+              {error ? <div className="login-error">{error}</div> : null}
+              <button type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Mevcut Kodu Doğrula"}</button>
+              {flow.recoveryCodeAvailable ? <button type="button" className="login-secondary" onClick={() => setShowRecoveryCode((value) => !value)}>Acil kurtarma kodu kullan</button> : null}
+              <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button>
+            </form>
+          </>
+        ) : null}
+
         {flow.stage === "MFA_SETUP" ? (
           <>
             <p><strong>{flow.providerLabel || currentLabel}</strong> bu hesap için kuruluyor.</p>
-            {flow.recoveryReenroll ? (
-              <div className="login-security-box"><strong>Güvenli kurtarma yeniden kurulumu</strong><span>Bu işlem uygulamaya doğrudan giriş vermez. İki Authenticator tamamlandıktan sonra yeniden parola ile giriş yapacaksınız.</span></div>
-            ) : null}
+            {flow.recoveryReenroll ? <div className="login-security-box"><strong>Güvenli yeniden kurulum</strong><span>Bu işlem doğrudan oturum açmaz. Gerekli Authenticator kayıtları tamamlanır ve ardından yeniden parola ile giriş yapılır.</span></div> : null}
             <div className={`login-security-box login-setup-box provider-${String(currentProvider).toLowerCase()}`}>
               <strong>{flow.providerLabel || currentLabel}</strong>
               <span>1. İlgili Authenticator uygulamasını açın.</span>
               <span>2. Hesap ekle → QR kodu tara seçin.</span>
-              <span>3. QR kodunu okutun ve oluşan 6 haneli kodu aşağıya girin.</span>
+              <span>3. Aşağıdaki QR kodunu okutun ve oluşan 6 haneli kodu girin.</span>
               <div className="login-qr-shell"><div className="login-qr-code" ref={qrRef} /></div>
               {qrError ? <div className="login-error">{qrError}</div> : null}
-              <details className="login-manual-setup">
-                <summary>QR okunmazsa manuel kurulum</summary>
-                <code>{flow.secret || ""}</code>
-              </details>
+              <details className="login-manual-setup"><summary>QR okunmazsa manuel kurulum</summary><code>{flow.secret || ""}</code></details>
             </div>
             <form onSubmit={handleMfa}>
               <label>6 Haneli Kod
@@ -306,16 +363,8 @@ export default function LoginPage() {
         {flow.stage === "MFA_REQUIRED" ? (
           <>
             <p><strong>{flow.policyLabel || "Authenticator doğrulaması"}</strong></p>
-            {flow.requireBoth ? <div className="login-security-box"><strong>İki doğrulama gerekli</strong><span>Google ve Microsoft kodları birbirinden bağımsız olarak doğrulanır.</span><span>Doğrulanan: {verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") : "Henüz yok"}</span></div> : null}
-            {availableProviders.length > 1 ? (
-              <div className="login-provider-tabs">
-                {availableProviders.map((provider) => (
-                  <button key={provider} type="button" className={selectedProvider === provider ? "active" : ""} disabled={verifiedProviders.includes(provider)} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); }}>
-                    {PROVIDER_LABELS[provider]}{verifiedProviders.includes(provider) ? " ✓" : ""}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            {flow.requireBoth ? <div className="login-security-box"><strong>İki doğrulama gerekli</strong><span>Google ve Microsoft kodları bağımsız olarak doğrulanır.</span><span>Doğrulanan: {verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") : "Henüz yok"}</span></div> : null}
+            {availableProviders.length > 1 ? <div className="login-provider-tabs">{availableProviders.map((provider) => <button key={provider} type="button" className={selectedProvider === provider ? "active" : ""} disabled={verifiedProviders.includes(provider)} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); }}>{PROVIDER_LABELS[provider]}{verifiedProviders.includes(provider) ? " ✓" : ""}</button>)}</div> : null}
             <form onSubmit={handleMfa}>
               <label>{currentLabel} Kodu
                 <input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
@@ -323,41 +372,51 @@ export default function LoginPage() {
               {resetProvider ? <div className="login-security-box"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Önce {currentLabel} kodunuzla kimliğinizi doğrulayın.</span></div> : null}
               {error ? <div className="login-error">{error}</div> : null}
               <button type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : `${currentLabel} ile Doğrula`}</button>
-              {!flow.requireBoth && alternativeAvailable ? (
-                <button type="button" className="login-secondary" onClick={() => setSelectedProvider(alternative)}>Diğer Authenticator ile doğrula</button>
-              ) : null}
-              {!flow.requireBoth && availableProviders.includes(alternative) ? (
-                <button type="button" className="login-secondary" onClick={() => setResetProvider(currentProvider)}>{currentLabel} erişilemiyor · diğer yöntemle yeniden kur</button>
-              ) : null}
+              {!flow.requireBoth && alternativeAvailable ? <button type="button" className="login-secondary" onClick={() => setSelectedProvider(alternative)}>Diğer Authenticator ile doğrula</button> : null}
+              {!flow.requireBoth && availableProviders.includes(alternative) ? <button type="button" className="login-secondary" onClick={() => setResetProvider(currentProvider)}>{currentLabel} erişilemiyor · diğer yöntemle yeniden kur</button> : null}
               <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button>
             </form>
 
             {flow.ownerRecoveryAvailable ? (
               <div className="login-recovery-panel">
                 <strong>Authenticator'lara erişemiyor musunuz?</strong>
-                <span>Uygulama sahibi hesabı doğrulanmış iletişim kanalı + iki özel güvenlik sorusu ile yalnızca Authenticator'ları yeniden kurabilir.</span>
+                <span>Doğrulanmış telefon veya e-posta + iki özel güvenlik sorusu yalnız Authenticator'ları yeniden kurar; doğrudan uygulamaya giriş vermez.</span>
                 <div className="login-provider-tabs">
                   {flow.recoveryChannels?.email ? <button type="button" onClick={() => handleOwnerRecovery("EMAIL")} disabled={loading}>E-posta ile Kurtar</button> : null}
                   {flow.recoveryChannels?.sms ? <button type="button" onClick={() => handleOwnerRecovery("SMS")} disabled={loading}>Telefon / SMS ile Kurtar</button> : null}
                 </div>
               </div>
             ) : null}
+
+            {flow.recoveryCodeAvailable ? (
+              <div className="login-recovery-panel">
+                <strong>Acil yedek kurtarma</strong>
+                <span>Telefon/e-posta kurtarma tam kurulana kadar mevcut tek kullanımlık KY ERP kodları kilitlenmeyi önlemek için acil yedek olarak korunur.</span>
+                <button type="button" className="login-secondary" onClick={() => setShowRecoveryCode((value) => !value)}>{showRecoveryCode ? "Kurtarma kodunu kapat" : "Tek kullanımlık kurtarma kodu kullan"}</button>
+              </div>
+            ) : null}
           </>
+        ) : null}
+
+        {showRecoveryCode && ["MFA_REQUIRED", "MFA_LEGACY_REQUIRED"].includes(flow.stage) ? (
+          <form onSubmit={handleRecoveryCode} className="login-recovery-panel">
+            <label>KY ERP Tek Kullanımlık Kurtarma Kodu
+              <input autoFocus value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value.toUpperCase())} placeholder="KYERP-ABCD-2345" />
+            </label>
+            {error ? <div className="login-error">{error}</div> : null}
+            <button type="submit" disabled={loading}>{loading ? "Kontrol ediliyor..." : "Kodu Doğrula ve Authenticator'ı Yeniden Kur"}</button>
+          </form>
         ) : null}
 
         {flow.stage === "OWNER_RECOVERY_VERIFY" ? (
           <>
             <p>Doğrulama kodu <strong>{flow.maskedDestination}</strong> kanalına gönderildi.</p>
-            <div className="login-security-box"><strong>Hesap kurtarma</strong><span>Kod ve iki özel soru birlikte doğru olmalıdır. Başarılı olursa mevcut oturumlar kapanır ve Google/Microsoft yeniden kurulur.</span></div>
+            <div className="login-security-box"><strong>Uygulama sahibi kurtarma</strong><span>Kod ve iki özel soru birlikte doğru olmalıdır. Başarılı olursa tüm eski oturumlar kapanır ve Google/Microsoft yeniden kurulur.</span></div>
             <form onSubmit={handleOwnerRecoveryVerify}>
               <label>6 Haneli Doğrulama Kodu
                 <input autoFocus inputMode="numeric" maxLength={6} value={recoveryOtp} onChange={(event) => setRecoveryOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
               </label>
-              {(flow.questions || []).slice(0, 2).map((question, index) => (
-                <label key={question.id || index}>{question.question}
-                  <input type="password" autoComplete="off" value={recoveryAnswers[index] || ""} onChange={(event) => setRecoveryAnswers((previous) => previous.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Cevabınız" />
-                </label>
-              ))}
+              {(flow.questions || []).slice(0, 2).map((question, index) => <label key={question.id || index}>{question.question}<input type="password" autoComplete="off" value={recoveryAnswers[index] || ""} onChange={(event) => setRecoveryAnswers((previous) => previous.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Cevabınız" /></label>)}
               {error ? <div className="login-error">{error}</div> : null}
               <button type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Kurtarmayı Doğrula"}</button>
               <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>İptal</button>
@@ -375,13 +434,7 @@ export default function LoginPage() {
           </>
         ) : null}
 
-        {flow.stage === "RECOVERY_COMPLETE" ? (
-          <>
-            <div className="login-security-box"><strong>Kurtarma tamamlandı</strong><span>{flow.message}</span></div>
-            <button type="button" onClick={() => resetToCredentials()}>Yeniden Giriş Yap</button>
-          </>
-        ) : null}
-
+        {flow.stage === "RECOVERY_COMPLETE" ? <><div className="login-security-box"><strong>Güvenlik kurulumu tamamlandı</strong><span>{flow.message}</span></div><button type="button" onClick={() => resetToCredentials()}>Yeniden Giriş Yap</button></> : null}
         {flow.stage === "AUTHENTICATED" ? <div className="login-security-box"><strong>Giriş başarılı</strong><span>KY ERP açılıyor...</span></div> : null}
 
         <div className="login-footer">KY ERP · Oturum süresi kullanıcı güvenlik profiline göre sunucu tarafından uygulanır.</div>
