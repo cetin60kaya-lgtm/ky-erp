@@ -2,12 +2,13 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-25T20:34:00+03:00",
-  "attempt": 58,
+  "requestedAt": "2026-08-25T23:11:40+03:00",
+  "attempt": 59,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "pages-production-branch-canonical-source",
-    "exact-live-frontend-asset-gate",
+    "cloudflare-pages-canonical-git-production-deploy",
+    "live-dual-mfa-content-gate",
     "admin-users-company-centered-workspace",
     "single-application-owner-super-admin",
     "company-user-role-permission-management",
@@ -42,5 +43,5 @@
     "boyahane-preserve-approved-recipes-lots-stock-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 58: Attempt 57 çift MFA güvenlik düzeninin tamamını korur. Önceki yayında Worker/D1 güncel olmasına rağmen kyerp.net Pages custom domaini eski frontend assetini sunmaya devam ettiği için yayın hattı düzeltilmiştir. Cloudflare Pages production_branch artık canonical sourceBranch olan codex/model-uretim-kontrol-merkezi-final ile otomatik eşitlenir. Pages deploy sonrası kyerp.net ve app.kyerp.net üzerinde sunulan ana index asset hash'i yerel production build ile birebir eşleşmeden ve canlı JS içinde Google/Microsoft ayrı Authenticator metinleri doğrulanmadan yayın başarılı sayılmaz. D1 0019 migration zaten uygulanmıştır; yeni koşu yine tam canlı yedek, şema audit, Worker/API sağlık, Pages deploy ve gerçek Chrome smoke kontrollerini eksiksiz çalıştırır. Önceki Boyahane, İşNet, Desen, İK, Muhasebe ve canlı veri düzenleri aynen korunur."
+  "note": "Attempt 59: Önceki çift MFA güvenlik düzeni ve tüm canlı iş modülleri korunur. Cloudflare Pages Git entegrasyonunda gerçek production kaynağı canonical branch olan codex/model-uretim-kontrol-merkezi-final olarak sabitlenmiştir. Release hattı artık Git-integrated Pages projesine preview oluşturan manuel wrangler pages deploy adımını kullanmaz; aynı release commit SHA için Cloudflare'ın native production deploymentını bekler, deployment deploy/success olmadan devam etmez, canonical_deployment ID'sinin bu deployment ile aynı olduğunu ve kyerp.net ile app.kyerp.net aliaslarının canonical production deployment üzerinde bulunduğunu doğrular. Ardından kyerp.net, app.kyerp.net ve ky-erp-frontend.pages.dev üzerindeki gerçek JS bundle içinde iki ayrı Authenticator giriş metni, Google Authenticator, Microsoft Authenticator ve KY ERP kurtarma kodu akışı doğrulanmadan yayın başarılı sayılmaz. Doğrulama pipefail kaynaklı yanlış negatif üretmeyecek şekilde dosya üzerinden yapılır. Yayın ayrıca frontend lint/build/Chrome, Worker dependency audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, Worker deploy, API/Boyahane sağlık kontrolü ve canlı Chrome smoke aşamalarının tamamını zorunlu tutar."
 }
