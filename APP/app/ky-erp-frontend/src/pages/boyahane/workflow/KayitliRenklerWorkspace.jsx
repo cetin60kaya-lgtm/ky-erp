@@ -32,6 +32,16 @@ function displayCode(row) {
   return row.pantone || "Pantone yok";
 }
 
+function catalogFormulaOf(row) {
+  const formula = row?.catalogFormula;
+  return formula && safeArray(formula.lines).length ? formula : null;
+}
+
+function gramText(value) {
+  const number = Number(value || 0);
+  return Number.isInteger(number) ? String(number) : number.toFixed(number < 10 ? 2 : 1).replace(/.0+$/, "");
+}
+
 function editDraft(row) {
   return {
     sourceType: sourceTypeOf(row),
@@ -118,6 +128,7 @@ export default function KayitliRenklerWorkspace({
       row.colorFamily,
       row.sourceLabel,
       row.cardPaintType,
+      ...safeArray(row.catalogFormula?.lines).map((line) => line.productName),
     ].join(" ").toLocaleLowerCase("tr-TR");
     return (
       (!query || text.includes(query.toLocaleLowerCase("tr-TR"))) &&
@@ -169,6 +180,7 @@ export default function KayitliRenklerWorkspace({
   const recipes = safeArray(selected?.recipes).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   const productions = safeArray(selected?.productions);
   const activeRecipe = recipes.find((row) => row.status === "ACTIVE") || recipes[0];
+  const catalogFormula = catalogFormulaOf(selected);
   const selectedSource = sourceTypeOf(selected);
 
   return (
@@ -217,6 +229,9 @@ export default function KayitliRenklerWorkspace({
                   <span>Son model <b>{row.lastModelName || row.lastUsedModel || "-"}</b></span>
                   <span>Reçete <b>{row.recipeCount || 0}</b></span>
                 </div>
+                {catalogFormulaOf(row) ? (
+                  <small><b>Bileşenler:</b> {safeArray(row.catalogFormula.lines).slice(0, 5).map((line) => (line.productName || "-") + " " + gramText(line.referenceGram) + " gr").join(" · ")}{safeArray(row.catalogFormula.lines).length > 5 ? " · +" + (safeArray(row.catalogFormula.lines).length - 5) : ""}</small>
+                ) : <small>Bileşen kaydı yok.</small>}
               </div>
             </button>
           );
@@ -265,6 +280,8 @@ export default function KayitliRenklerWorkspace({
             <button type="button" className="bh-btn" onClick={() => openModule?.("boyahane", { tabKey: "receteler", actionContext: { registeredColorId: selected.id } })}>Kayıtlı Gramajla Numuneye Çek</button>
             <button type="button" className="bh-btn primary" onClick={() => openModule?.("boyahane", { tabKey: "uretim-gecmisi", actionContext: { registeredColorId: selected.id } })}>Kayıtlı Gramajla İmalat Hazırla</button>
           </div>
+
+          <section className="bh-card"><div className="bh-card-head"><div><h2>Arşiv Bileşen Formülü</h2><small>Eski PANTONE FORMUL kaydından temizlenmiştir; üretimde gerçek ürün ve lot tekrar doğrulanır.</small></div></div><div className="bh-card-body">{catalogFormula ? <div className="bh-table-wrap"><table><thead><tr><th>Bileşen</th><th>GR</th><th>Oran</th></tr></thead><tbody>{safeArray(catalogFormula.lines).map((line) => <tr key={line.id || line.productName}><td><strong>{line.productName || "-"}</strong></td><td>{gramText(line.referenceGram)}</td><td>{Number(line.percentage || (Number(catalogFormula.totalGr || 0) ? Number(line.referenceGram || 0) / Number(catalogFormula.totalGr) * 100 : 0)).toFixed(2)}%</td></tr>)}</tbody><tfoot><tr><th>Toplam</th><th>{gramText(catalogFormula.totalGr)} gr</th><th>100%</th></tr></tfoot></table></div> : <div className="bh-empty">Bu temiz renk kartında arşiv bileşen kaydı bulunmuyor.</div>}</div></section>
 
           <section className="bh-card"><div className="bh-card-head"><div><h2>Onaylı Reçete</h2><small>{SOURCE_LABELS[selectedSource]} · ürünler ve gramajlar aynen kullanılır.</small></div></div><div className="bh-card-body">{activeRecipe ? <div className="bh-table-wrap"><table><thead><tr><th>Ürün / Bileşen</th><th>Referans GR</th><th>Yüzde</th></tr></thead><tbody>{safeArray(activeRecipe.lines).map((line) => <tr key={line.id}><td>{line.productName || "-"}</td><td>{Number(line.referenceGram || line.totalGr || 0).toFixed(2)}</td><td>{Number(activeRecipe.totalGr || 0) ? (Number(line.referenceGram || line.totalGr || 0) / Number(activeRecipe.totalGr) * 100).toFixed(2) : "0.00"}%</td></tr>)}</tbody></table></div> : <div className="bh-empty">Onaylı reçete bulunmuyor.</div>}</div></section>
 
