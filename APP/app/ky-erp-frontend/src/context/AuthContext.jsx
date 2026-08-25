@@ -111,8 +111,6 @@ export function AuthProvider({ children }) {
     setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
   }, [clearAuth, token]);
 
-  // Sunucu TTL'si ne ise tarayıcı da aynı saniyede oturumu kapatır. Özellikle PASSWORD_ONLY
-  // kullanıcılar 30 dakika dolunca başka API çağrısını beklemeden giriş ekranına düşer.
   useEffect(() => {
     if (!token) return undefined;
     const payload = parseJwtPayload(token);
@@ -168,7 +166,7 @@ export function AuthProvider({ children }) {
   }, [finalizeResponse]);
 
   const recoverMfa = useCallback(async ({ challengeId, challengeToken, recoveryCode }) => {
-    const response = await apiFetch("/auth/mfa/recovery", {
+    const response = await apiFetch("/auth/v2/recovery-code", {
       method: "POST", body: { challengeId, challengeToken, recoveryCode }, skipAuth: true, suppressUnauthorized: true,
     });
     return finalizeResponse(response);
