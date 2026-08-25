@@ -7,6 +7,7 @@ ALTER TABLE auth_user_security ADD COLUMN google_mfa_secret TEXT;
 ALTER TABLE auth_user_security ADD COLUMN google_mfa_enabled INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE auth_user_security ADD COLUMN microsoft_mfa_secret TEXT;
 ALTER TABLE auth_user_security ADD COLUMN microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE auth_user_security ADD COLUMN recovery_codes_acknowledged INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS auth_recovery_codes (
   id TEXT PRIMARY KEY,

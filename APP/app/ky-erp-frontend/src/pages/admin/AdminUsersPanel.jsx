@@ -461,15 +461,23 @@ export default function AdminUsersPanel() {
     }
   }
 
-  async function handleResetMfa(user) {
+  async function handleResetMfa(user, provider = "ALL") {
     if (!user) return;
+    const normalized = String(provider || "ALL").toUpperCase();
+    const label = normalized === "GOOGLE"
+      ? "Google Authenticator"
+      : normalized === "MICROSOFT"
+        ? "Microsoft Authenticator"
+        : "tüm Authenticator kayıtları";
     const approved = window.confirm(
-      `${user.fullName || user.username} için Authenticator eşleşmesi sıfırlanacak. Telefonda eski KY ERP hesabı varsa silin; sonraki girişte yeni QR okutulacak. Devam edilsin mi?`,
+      `${user.fullName || user.username} için ${label} sıfırlanacak. Eski kayıt artık kullanılamaz ve ilgili giriş/oturumlar güvenlik için kapatılır. Devam edilsin mi?`,
     );
     if (!approved) return;
     await runSecurityAction(
-      () => resetUserMfa(user.id),
-      "Authenticator kaydı sıfırlandı. Google/Microsoft Authenticator'daki eski KY ERP kaydını silip yeni QR ile yeniden eşleştirin.",
+      () => resetUserMfa(user.id, normalized),
+      normalized === "ALL"
+        ? "Google ve Microsoft Authenticator kayıtları sıfırlandı. Sonraki girişte iki yöntem de ayrı QR ile yeniden kurulacak."
+        : `${label} sıfırlandı. Diğer aktif Authenticator ile doğrulandıktan sonra yalnız bu yöntem yeni QR ile yeniden kurulacak.`,
     );
   }
 
@@ -656,9 +664,14 @@ export default function AdminUsersPanel() {
 
             {selectedUser ? (
               <div className="security-user-actions">
-                <div><strong>Authenticator ve oturum</strong><span>{selectedUser.mfaEnabled ? "MFA eşleşmesi aktif." : "İlk girişte MFA kurulacak."}</span></div>
+                <div>
+                  <strong>Authenticator ve oturum</strong>
+                  <span>Google: {selectedUser.googleMfaEnabled ? "Aktif" : "Kurulum gerekli"} · Microsoft: {selectedUser.microsoftMfaEnabled ? "Aktif" : "Kurulum gerekli"}</span>
+                </div>
                 <div className="form-actions">
-                  <button type="button" onClick={() => handleResetMfa(selectedUser)}>MFA Yeniden Kur</button>
+                  <button type="button" onClick={() => handleResetMfa(selectedUser, "GOOGLE")}>Google Yeniden Kur</button>
+                  <button type="button" onClick={() => handleResetMfa(selectedUser, "MICROSOFT")}>Microsoft Yeniden Kur</button>
+                  <button type="button" className="danger-light" onClick={() => handleResetMfa(selectedUser, "ALL")}>Tüm MFA'yı Sıfırla</button>
                   <button type="button" onClick={() => runSecurityAction(() => revokeAllUserSessions(selectedUser.id), "Kullanıcının bütün aktif oturumları kapatıldı.")}>Tüm Oturumları Kapat</button>
                 </div>
               </div>

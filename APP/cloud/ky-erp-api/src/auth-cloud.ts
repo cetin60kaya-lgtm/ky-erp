@@ -198,7 +198,7 @@ async function tableExists(c: any, table: string) {
 async function ensureAuthSchema(c: any) {
   if (authSchemaReady) return;
   const statements = [
-    `CREATE TABLE IF NOT EXISTS auth_user_security (user_id TEXT PRIMARY KEY,email TEXT,main_company_slug TEXT,role_override TEXT,mfa_secret TEXT,mfa_enabled INTEGER NOT NULL DEFAULT 0,email_verified INTEGER NOT NULL DEFAULT 0,approval_required INTEGER NOT NULL DEFAULT 1,google_mfa_secret TEXT,google_mfa_enabled INTEGER NOT NULL DEFAULT 0,microsoft_mfa_secret TEXT,microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS auth_user_security (user_id TEXT PRIMARY KEY,email TEXT,main_company_slug TEXT,role_override TEXT,mfa_secret TEXT,mfa_enabled INTEGER NOT NULL DEFAULT 0,email_verified INTEGER NOT NULL DEFAULT 0,approval_required INTEGER NOT NULL DEFAULT 1,google_mfa_secret TEXT,google_mfa_enabled INTEGER NOT NULL DEFAULT 0,microsoft_mfa_secret TEXT,microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0,recovery_codes_acknowledged INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_user_security_email ON auth_user_security (LOWER(email)) WHERE email IS NOT NULL AND TRIM(email) <> ''`,
     `CREATE TABLE IF NOT EXISTS auth_system_secrets (secret_key TEXT PRIMARY KEY,secret_value TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS auth_login_challenges (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,challenge_type TEXT NOT NULL,challenge_token_hash TEXT NOT NULL,device_label TEXT,user_agent TEXT,ip_address TEXT,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,consumed_at TEXT)`,
@@ -462,6 +462,7 @@ async function hasUnusedRecoveryCodes(c: any, userId: string) {
 async function generateRecoveryCodes(c: any, userId: string) {
   const timestamp = nowIso();
   await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=? WHERE user_id=? AND used_at IS NULL").bind(timestamp, userId).run();
+  await c.env.DB.prepare("UPDATE auth_user_security SET recovery_codes_acknowledged=0,updated_at=? WHERE user_id=?").bind(timestamp, userId).run();
   const codes: string[] = [];
   for (let index = 0; index < RECOVERY_CODE_COUNT; index += 1) {
     const code = recoveryCode();
@@ -547,7 +548,7 @@ async function finishVerifiedMfa(c: any, user: AnyRow, challenge: AnyRow) {
     await audit(c, "MFA_LEGACY_RETIRED", user.id, user.id, text(security.main_company_slug));
   }
 
-  if (!(await hasUnusedRecoveryCodes(c, user.id))) {
+  if (!Boolean(security.recovery_codes_acknowledged) || !(await hasUnusedRecoveryCodes(c, user.id))) {
     const recoveryCodes = await generateRecoveryCodes(c, user.id);
     const ack = await createLoginChallenge(c, user, "RECOVERY_CODES_ACK", challenge);
     await audit(c, "RECOVERY_CODES_GENERATED", user.id, user.id, text(security.main_company_slug), "", { count: recoveryCodes.length });
@@ -588,6 +589,18 @@ async function revokeUserSessions(c: any, userId: string, actorId: string) {
     `UPDATE auth_sessions SET revoked_at=?,revoked_by=?
       WHERE user_id=? AND revoked_at IS NULL AND expires_at>?`,
   ).bind(timestamp, actorId || userId, userId, timestamp).run();
+}
+async function invalidateUserLoginArtifacts(c: any, userId: string, actorId: string) {
+  const timestamp = nowIso();
+  await c.env.DB.prepare(
+    "UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL",
+  ).bind(timestamp, userId).run();
+  await c.env.DB.prepare(
+    `UPDATE auth_login_approvals
+        SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?)
+      WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')`,
+  ).bind(timestamp, actorId || userId, userId).run();
+  await revokeUserSessions(c, userId, actorId || userId);
 }
 
 export function registerAuthCloudRoutes(app: any) {
@@ -702,6 +715,7 @@ export function registerAuthCloudRoutes(app: any) {
       } else {
         await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=NULL,google_mfa_enabled=0,updated_at=? WHERE user_id=?").bind(nowIso(), user.id).run();
       }
+      await invalidateUserLoginArtifacts(c, user.id, user.id);
       await audit(c, "MFA_PROVIDER_CROSS_RESET", user.id, user.id, text(security.main_company_slug), "", { verifiedWith: provider, resetProvider });
       return c.json(await beginProviderSetup(c, user, resetProvider, challenge));
     }
@@ -739,7 +753,7 @@ export function registerAuthCloudRoutes(app: any) {
               updated_at=?
         WHERE user_id=?`,
     ).bind(nowIso(), user.id).run();
-    await revokeUserSessions(c, user.id, user.id);
+    await invalidateUserLoginArtifacts(c, user.id, user.id);
     await audit(c, "RECOVERY_CODE_USED", user.id, user.id, text(security.main_company_slug), "", { recoveryCodeId: row.id });
     return c.json(await beginProviderSetup(c, user, "GOOGLE", challenge));
   });
@@ -752,6 +766,7 @@ export function registerAuthCloudRoutes(app: any) {
     const user = await findUserById(c, text(challenge.user_id));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("UNAUTHORIZED", "Kullanıcı pasif veya bulunamadı."), 401);
     await consumeChallenge(c, challenge);
+    await c.env.DB.prepare("UPDATE auth_user_security SET recovery_codes_acknowledged=1,updated_at=? WHERE user_id=?").bind(nowIso(), user.id).run();
     const security = await securityFor(c, user);
     await audit(c, "RECOVERY_CODES_ACKNOWLEDGED", user.id, user.id, text(security.main_company_slug));
     return c.json(await afterMfa(c, user, challenge));
@@ -919,7 +934,7 @@ export function registerAuthCloudRoutes(app: any) {
     const password = String(body.password || "");
     if (password.length < 6) return c.json(jsonError("PASSWORD_TOO_SHORT", "Parola en az 6 karakter olmalıdır."), 400);
     await c.env.DB.prepare("UPDATE auth_users SET password_hash=?,must_change_password=0,updated_at=? WHERE id=?").bind(await hash(password, 10), nowIso(), target.id).run();
-    await revokeUserSessions(c, target.id, current.id);
+    await invalidateUserLoginArtifacts(c, target.id, current.id);
     await audit(c, "PASSWORD_RESET", current.id, target.id, target.mainCompanySlug);
     return c.json({ ok: true });
   });
@@ -1068,8 +1083,7 @@ export function registerAuthCloudRoutes(app: any) {
     } else {
       await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=NULL,google_mfa_enabled=0,updated_at=? WHERE user_id=?").bind(nowIso(), target.id).run();
     }
-    await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(nowIso(), target.id).run();
-    await revokeUserSessions(c, target.id, current.id);
+    await invalidateUserLoginArtifacts(c, target.id, current.id);
     await audit(c, "MFA_PROVIDER_RESET", current.id, target.id, target.mainCompanySlug, "", { provider });
     return c.json({ ok: true, provider });
   });
@@ -1086,8 +1100,8 @@ export function registerAuthCloudRoutes(app: any) {
               updated_at=? WHERE user_id=?`,
     ).bind(nowIso(), target.id).run();
     await invalidateRecoveryCodes(c, target.id);
-    await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(nowIso(), target.id).run();
-    await revokeUserSessions(c, target.id, current.id);
+    await c.env.DB.prepare("UPDATE auth_user_security SET recovery_codes_acknowledged=0,updated_at=? WHERE user_id=?").bind(nowIso(), target.id).run();
+    await invalidateUserLoginArtifacts(c, target.id, current.id);
     await audit(c, "MFA_RESET", current.id, target.id, target.mainCompanySlug, "", { scope: "ALL" });
     return c.json({ ok: true });
   });
