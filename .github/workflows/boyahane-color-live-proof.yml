@@ -47,8 +47,8 @@ jobs:
           jq -e '.success == true and (.result[0].success == true)' <<<"$response" >/dev/null
           jq -e '(.result[0].results | length) == 5' <<<"$response" >/dev/null
           jq -e '[.result[0].results[] | {name:.productName, gram:(.gram|tonumber)}] as $r |
-            any($r[]; .name == "S10 ŞEFFAF" and ((.gram - 3000)|fabs) < 0.001) and
-            any($r[]; .name == "S20 BEYAZ" and ((.gram - 1170)|fabs) < 0.001) and
+            any($r[]; .name == "S10 CLEAR" and ((.gram - 3000)|fabs) < 0.001) and
+            any($r[]; .name == "S20 WHITE" and ((.gram - 1170)|fabs) < 0.001) and
             any($r[]; .name == "LACİVERT KRL-E" and ((.gram - 143)|fabs) < 0.001) and
             any($r[]; .name == "SİYAH KNG" and ((.gram - 8.8)|fabs) < 0.001) and
             any($r[]; .name == "FUŞYA KB" and ((.gram - 22)|fabs) < 0.001)' <<<"$response" >/dev/null
