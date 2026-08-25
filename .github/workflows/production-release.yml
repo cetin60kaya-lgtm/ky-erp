@@ -293,53 +293,70 @@ jobs:
             "https://api.kyerp.net/api/boyahane/registered-colors?mainCompanySlug=mecit-hakan&mainCompanyId=main-mecit-hakan" \
             >/tmp/boyahane-registered-colors.json
 
-      - name: Frontendi Cloudflare Pages production ortamına dağıt
-        working-directory: APP/app/ky-erp-frontend
-        run: >-
-          npx --yes wrangler@4.118.0 pages deploy dist
-          --project-name "${{ steps.pages.outputs.name }}"
-          --branch "${{ steps.pages.outputs.branch }}"
-          --commit-hash "${{ github.sha }}"
-          --commit-message "KY ERP production release ${{ github.sha }}"
-
-      - name: Canlı domainlerin tam olarak yeni frontend paketini sunduğunu doğrula
-        working-directory: APP/app/ky-erp-frontend
+      - name: Cloudflare Pages Git production yayınının tamamlanmasını bekle
         shell: bash
         run: |
           set -euo pipefail
-          expected_script="$(grep -oE 'src="/assets/index-[^"]+\.js"' dist/index.html | head -n1 | cut -d'"' -f2)"
-          test -n "$expected_script"
-          echo "Beklenen frontend paketi: $expected_script"
-
-          for host in kyerp.net app.kyerp.net; do
-            matched=0
-            for attempt in $(seq 1 60); do
-              stamp="$(date +%s)-${attempt}"
-              html="$(curl --fail --silent --show-error \
-                -H 'Cache-Control: no-cache' \
-                "https://${host}/?release=${GITHUB_SHA}-${stamp}")"
-              live_script="$(printf '%s' "$html" \
-                | grep -oE 'src="/assets/index-[^"]+\.js"' \
-                | head -n1 \
-                | cut -d'"' -f2 || true)"
-              echo "${host} deneme ${attempt}: ${live_script:-script-yok}"
-              if [ "$live_script" = "$expected_script" ]; then
-                js="$(curl --fail --silent --show-error \
-                  -H 'Cache-Control: no-cache' \
-                  "https://${host}${live_script}?release=${GITHUB_SHA}-${stamp}")"
-                printf '%s' "$js" | grep -Fq 'iki ayrı Authenticator güvenlik düzeniyle oturum açın'
-                printf '%s' "$js" | grep -Fq 'Google Authenticator'
-                printf '%s' "$js" | grep -Fq 'Microsoft Authenticator'
-                matched=1
-                echo "${host}: yeni frontend paketi canlı."
+          project_name="${{ steps.pages.outputs.name }}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${project_name}"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          found=0
+          for attempt in $(seq 1 180); do
+            deployments="$(curl --fail --silent --show-error -H "$auth" "$base/deployments?per_page=25")"
+            deployment="$(jq -c --arg sha "$GITHUB_SHA" '[.result[]? | select(.environment == "production" and .deployment_trigger.metadata.commit_hash == $sha)][0] // empty' <<<"$deployments")"
+            if [ -n "$deployment" ]; then
+              id="$(jq -r '.id' <<<"$deployment")"
+              stage="$(jq -r '.latest_stage.name // ""' <<<"$deployment")"
+              status="$(jq -r '.latest_stage.status // ""' <<<"$deployment")"
+              echo "Pages production ${id}: ${stage}/${status} (deneme ${attempt})"
+              if [ "$stage" = "deploy" ] && [ "$status" = "success" ]; then
+                found=1
+                echo "PAGES_DEPLOYMENT_ID=$id" >> "$GITHUB_ENV"
                 break
               fi
-              sleep 3
-            done
-            test "$matched" -eq 1 || {
-              echo "${host} 180 saniye içinde yeni production paketine geçmedi." >&2
-              exit 1
-            }
+              if [ "$status" = "failure" ]; then
+                jq '.' <<<"$deployment"
+                exit 1
+              fi
+            else
+              echo "Bu release SHA için production deployment henüz görünmedi (deneme ${attempt})"
+            fi
+            sleep 4
+          done
+          test "$found" -eq 1 || {
+            echo "Canonical Pages production deployment süresinde tamamlanmadı." >&2
+            exit 1
+          }
+
+      - name: Canonical Pages alias ve canlı dual MFA içeriğini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_name="${{ steps.pages.outputs.name }}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${project_name}"
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          canonical_id="$(jq -r '.result.canonical_deployment.id // ""' <<<"$project")"
+          test "$canonical_id" = "$PAGES_DEPLOYMENT_ID"
+          jq -e '.result.canonical_deployment.aliases | index("https://kyerp.net") != null' <<<"$project" >/dev/null
+          jq -e '.result.canonical_deployment.aliases | index("https://app.kyerp.net") != null' <<<"$project" >/dev/null
+
+          for host in kyerp.net app.kyerp.net ky-erp-frontend.pages.dev; do
+            stamp="${GITHUB_SHA}-$(date +%s)"
+            safe_host="${host//./_}"
+            html_file="/tmp/${safe_host}.html"
+            js_file="/tmp/${safe_host}.js"
+            curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
+              "https://${host}/?release=${stamp}" -o "$html_file"
+            script="$(grep -m1 -oE 'src="/assets/index-[^"]+\.js"' "$html_file" | cut -d'"' -f2)"
+            test -n "$script"
+            curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
+              "https://${host}${script}?release=${stamp}" -o "$js_file"
+            grep -Fq 'iki ayrı Authenticator güvenlik düzeniyle oturum açın' "$js_file"
+            grep -Fq 'Google Authenticator' "$js_file"
+            grep -Fq 'Microsoft Authenticator' "$js_file"
+            grep -Fq 'KYERP-' "$js_file"
+            echo "${host}: DUAL_MFA_CANLI=EVET script=${script}"
           done
 
       - name: Canlı site HTML kontrolü
