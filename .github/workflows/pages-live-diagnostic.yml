@@ -1,0 +1,69 @@
+name: KY ERP Pages Live Diagnostic
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - ".github/workflows/pages-live-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Pages domain, deployment ve DNS teşhisi
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          database_id="b504b712-6927-499d-815d-0b954c8ee246"
+          accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+          account_id=""
+          while IFS= read -r candidate; do
+            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${candidate}/d1/database?per_page=100")"
+            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
+              account_id="$candidate"
+              break
+            fi
+          done < <(jq -r '.result[]?.id' <<<"$accounts_json")
+          test -n "$account_id"
+          echo "ACCOUNT_ID=$account_id"
+
+          base="https://api.cloudflare.com/client/v4/accounts/${account_id}/pages/projects/ky-erp-frontend"
+          echo '--- PROJECT ---'
+          curl --fail --silent --show-error -H "$auth" "$base" \
+            | jq '{success, result:{name:.result.name,subdomain:.result.subdomain,production_branch:.result.production_branch,latest_deployment:.result.latest_deployment,canonical_deployment:.result.canonical_deployment,deployment_configs:.result.deployment_configs}}'
+
+          echo '--- DOMAINS ---'
+          curl --fail --silent --show-error -H "$auth" "$base/domains" | jq '.'
+
+          echo '--- DEPLOYMENTS ---'
+          curl --fail --silent --show-error -H "$auth" "$base/deployments?per_page=25" \
+            | jq '[.result[] | {id,environment,url,aliases,created_on,modified_on,latest_stage,source,deployment_trigger,project_name}]'
+
+          echo '--- HOST HEADERS / ASSET ---'
+          for host in kyerp.net app.kyerp.net ky-erp-frontend.pages.dev; do
+            echo "### $host"
+            curl --silent --show-error -D - -o "/tmp/${host//./_}.html" -H 'Cache-Control: no-cache' "https://${host}/?diag=$(date +%s)" | sed -n '1,40p'
+            grep -oE 'src="/assets/index-[^"]+\.js"' "/tmp/${host//./_}.html" | head -n1 || true
+          done
+
+          echo '--- ZONE / DNS / WORKER ROUTES ---'
+          zones="$(curl --silent --show-error -H "$auth" 'https://api.cloudflare.com/client/v4/zones?name=kyerp.net')"
+          echo "$zones" | jq '{success,result:[.result[]? | {id,name,status}]}'
+          zone_id="$(jq -r '.result[0].id // empty' <<<"$zones")"
+          if [ -n "$zone_id" ]; then
+            echo 'DNS:'
+            curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?per_page=100" \
+              | jq '{success,result:[.result[]? | select(.name=="kyerp.net" or .name=="app.kyerp.net") | {id,type,name,content,proxied,ttl,comment}]}'
+            echo 'WORKER ROUTES:'
+            curl --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/zones/${zone_id}/workers/routes" \
+              | jq '{success,result:[.result[]? | select((.pattern // "") | contains("kyerp.net"))]}'
+          fi
