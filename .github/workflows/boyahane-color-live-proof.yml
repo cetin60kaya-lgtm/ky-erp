@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   prove:
-    name: 18-3920 D1 ve canli UI kaniti
+    name: Renk formulu D1 ve canli UI kaniti
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -43,7 +43,6 @@ jobs:
             -H 'Content-Type: application/json' \
             --data "$(jq -nc --arg sql "$sql" '{sql:$sql}')" \
             "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database/${database_id}/query")"
-          echo "$response" | jq '{success,errors,result:[.result[]? | {success,results}]}'
           jq -e '.success == true and (.result[0].success == true)' <<<"$response" >/dev/null
           jq -e '(.result[0].results | length) == 5' <<<"$response" >/dev/null
           jq -e '[.result[0].results[] | {name:.productName, gram:(.gram|tonumber)}] as $r |
@@ -54,7 +53,7 @@ jobs:
             any($r[]; .name == "FUŞYA KB" and ((.gram - 22)|fabs) < 0.001)' <<<"$response" >/dev/null
           echo "D1 18-3920 SUBAZLI formulu 5/5 birebir dogrulandi."
 
-      - name: kyerp.net ve app.kyerp.net yeni Boyahane bundleina gecene kadar bekle
+      - name: Iki canli alan adinda yeni sade kart ve formül editorunu dogrula
         shell: bash
         run: |
           set -euo pipefail
@@ -62,7 +61,7 @@ jobs:
             host="$1"
             for attempt in $(seq 1 90); do
               stamp="$(date +%s)-${RANDOM}"
-              curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}/?color-proof=${stamp}" > /tmp/home.html || true
+              curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}/?color-redesign-proof=${stamp}" > /tmp/home.html || true
               root_js="$(grep -oE 'src="/assets/index-[^"]+\.js"' /tmp/home.html | head -1 | sed -E 's/src="([^"]+)"/\1/' || true)"
               if [ -n "$root_js" ]; then
                 : > /tmp/queue
@@ -70,7 +69,7 @@ jobs:
                 : > /tmp/all.js
                 echo "$root_js" > /tmp/queue
                 processed=0
-                while [ -s /tmp/queue ] && [ "$processed" -lt 140 ]; do
+                while [ -s /tmp/queue ] && [ "$processed" -lt 160 ]; do
                   path="$(head -1 /tmp/queue)"
                   tail -n +2 /tmp/queue > /tmp/queue.next || true
                   mv /tmp/queue.next /tmp/queue
@@ -89,14 +88,17 @@ jobs:
                     grep -oE 'assets/[A-Za-z0-9._-]+\.js' /tmp/current.js | sed 's#^#/#' | sort -u >> /tmp/queue || true
                   fi
                 done
-                if grep -q 'Arşiv Bileşen Formülü' /tmp/all.js && grep -q 'Bileşenler:' /tmp/all.js; then
-                  echo "$host yeni renk-formul UI bundleini servis ediyor: $root_js"
-                  cp /tmp/home.html "/tmp/${host//./_}-home.html"
+                if grep -Fq 'BİLEŞEN FORMÜLÜ DÜZENLE' /tmp/all.js \
+                  && grep -Fq 'Onaylı Reçete Versiyonu Oluştur' /tmp/all.js \
+                  && grep -Fq 'Arşiv Bileşen Formülü' /tmp/all.js \
+                  && grep -Fq 'Formül ·' /tmp/all.js \
+                  && ! grep -Fq 'Bileşenler:' /tmp/all.js; then
+                  echo "$host yeni sade renk karti ve formül editorunu servis ediyor: $root_js"
                   echo "$root_js" > "/tmp/${host//./_}-root-js.txt"
                   return 0
                 fi
               fi
-              echo "$host henuz yeni renk-formul bundleinda degil (deneme $attempt/90, root=${root_js:-yok})."
+              echo "$host henuz yeni renk workspace bundleinda degil (deneme $attempt/90, root=${root_js:-yok})."
               sleep 5
             done
             return 1
@@ -113,4 +115,4 @@ jobs:
           echo "kyerp.net: $root_a"
           echo "app.kyerp.net: $root_b"
           test "$root_a" = "$root_b"
-          echo "FINAL: 18-3920 D1 formulu + iki canli alan adi + renk bilesen UI birebir dogrulandi."
+          echo "FINAL: D1 renk formulu + sade kart + ayri formül editoru iki canli alanda birebir dogrulandi."
