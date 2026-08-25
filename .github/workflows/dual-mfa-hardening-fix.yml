@@ -1,0 +1,162 @@
+name: KY ERP Dual MFA Hardening Fix
+
+on:
+  push:
+    branches:
+      - codex/dual-mfa-google-microsoft-recovery
+    paths:
+      - ".github/workflows/dual-mfa-hardening-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/dual-mfa-google-microsoft-recovery
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Güvenlik geri bildirimlerini uygula
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Beklenen blok bulunamadı: {path}\n---\n{old[:240]}')
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding='utf-8')
+
+          auth = 'APP/cloud/ky-erp-api/src/auth-cloud.ts'
+          migration = 'APP/cloud/ky-erp-api/migrations/0019_auth_dual_mfa_recovery.sql'
+          readiness = '.github/workflows/d1-schema-readiness.yml'
+          admin = 'APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx'
+
+          replace_once(
+              auth,
+              'approval_required INTEGER NOT NULL DEFAULT 1,google_mfa_secret TEXT,google_mfa_enabled INTEGER NOT NULL DEFAULT 0,microsoft_mfa_secret TEXT,microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0,created_at TEXT',
+              'approval_required INTEGER NOT NULL DEFAULT 1,google_mfa_secret TEXT,google_mfa_enabled INTEGER NOT NULL DEFAULT 0,microsoft_mfa_secret TEXT,microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0,recovery_codes_acknowledged INTEGER NOT NULL DEFAULT 0,created_at TEXT',
+          )
+
+          replace_once(
+              auth,
+              '''async function generateRecoveryCodes(c: any, userId: string) {\n  const timestamp = nowIso();\n  await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=? WHERE user_id=? AND used_at IS NULL").bind(timestamp, userId).run();''',
+              '''async function generateRecoveryCodes(c: any, userId: string) {\n  const timestamp = nowIso();\n  await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=? WHERE user_id=? AND used_at IS NULL").bind(timestamp, userId).run();\n  await c.env.DB.prepare("UPDATE auth_user_security SET recovery_codes_acknowledged=0,updated_at=? WHERE user_id=?").bind(timestamp, userId).run();''',
+          )
+
+          replace_once(
+              auth,
+              '''  if (!(await hasUnusedRecoveryCodes(c, user.id))) {\n    const recoveryCodes = await generateRecoveryCodes(c, user.id);''',
+              '''  if (!Boolean(security.recovery_codes_acknowledged) || !(await hasUnusedRecoveryCodes(c, user.id))) {\n    const recoveryCodes = await generateRecoveryCodes(c, user.id);''',
+          )
+
+          replace_once(
+              auth,
+              '''    await consumeChallenge(c, challenge);\n    const security = await securityFor(c, user);\n    await audit(c, "RECOVERY_CODES_ACKNOWLEDGED", user.id, user.id, text(security.main_company_slug));''',
+              '''    await consumeChallenge(c, challenge);\n    await c.env.DB.prepare("UPDATE auth_user_security SET recovery_codes_acknowledged=1,updated_at=? WHERE user_id=?").bind(nowIso(), user.id).run();\n    const security = await securityFor(c, user);\n    await audit(c, "RECOVERY_CODES_ACKNOWLEDGED", user.id, user.id, text(security.main_company_slug));''',
+          )
+
+          replace_once(
+              auth,
+              '''async function revokeUserSessions(c: any, userId: string, actorId: string) {\n  const timestamp = nowIso();\n  await c.env.DB.prepare(\n    `UPDATE auth_sessions SET revoked_at=?,revoked_by=?\n      WHERE user_id=? AND revoked_at IS NULL AND expires_at>?`,\n  ).bind(timestamp, actorId || userId, userId, timestamp).run();\n}\n''',
+              '''async function revokeUserSessions(c: any, userId: string, actorId: string) {\n  const timestamp = nowIso();\n  await c.env.DB.prepare(\n    `UPDATE auth_sessions SET revoked_at=?,revoked_by=?\n      WHERE user_id=? AND revoked_at IS NULL AND expires_at>?`,\n  ).bind(timestamp, actorId || userId, userId, timestamp).run();\n}\nasync function invalidateUserLoginArtifacts(c: any, userId: string, actorId: string) {\n  const timestamp = nowIso();\n  await c.env.DB.prepare(\n    "UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL",\n  ).bind(timestamp, userId).run();\n  await c.env.DB.prepare(\n    `UPDATE auth_login_approvals\n        SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?)\n      WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')`,\n  ).bind(timestamp, actorId || userId, userId).run();\n  await revokeUserSessions(c, userId, actorId || userId);\n}\n''',
+          )
+
+          replace_once(
+              auth,
+              '''      await audit(c, "MFA_PROVIDER_CROSS_RESET", user.id, user.id, text(security.main_company_slug), "", { verifiedWith: provider, resetProvider });\n      return c.json(await beginProviderSetup(c, user, resetProvider, challenge));''',
+              '''      await invalidateUserLoginArtifacts(c, user.id, user.id);\n      await audit(c, "MFA_PROVIDER_CROSS_RESET", user.id, user.id, text(security.main_company_slug), "", { verifiedWith: provider, resetProvider });\n      return c.json(await beginProviderSetup(c, user, resetProvider, challenge));''',
+          )
+
+          replace_once(
+              auth,
+              '''    await revokeUserSessions(c, user.id, user.id);\n    await audit(c, "RECOVERY_CODE_USED", user.id, user.id, text(security.main_company_slug), "", { recoveryCodeId: row.id });''',
+              '''    await invalidateUserLoginArtifacts(c, user.id, user.id);\n    await audit(c, "RECOVERY_CODE_USED", user.id, user.id, text(security.main_company_slug), "", { recoveryCodeId: row.id });''',
+          )
+
+          replace_once(
+              auth,
+              '''    await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(nowIso(), target.id).run();\n    await revokeUserSessions(c, target.id, current.id);\n    await audit(c, "MFA_PROVIDER_RESET", current.id, target.id, target.mainCompanySlug, "", { provider });''',
+              '''    await invalidateUserLoginArtifacts(c, target.id, current.id);\n    await audit(c, "MFA_PROVIDER_RESET", current.id, target.id, target.mainCompanySlug, "", { provider });''',
+          )
+
+          replace_once(
+              auth,
+              '''    await invalidateRecoveryCodes(c, target.id);\n    await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(nowIso(), target.id).run();\n    await revokeUserSessions(c, target.id, current.id);\n    await audit(c, "MFA_RESET", current.id, target.id, target.mainCompanySlug, "", { scope: "ALL" });''',
+              '''    await invalidateRecoveryCodes(c, target.id);\n    await c.env.DB.prepare("UPDATE auth_user_security SET recovery_codes_acknowledged=0,updated_at=? WHERE user_id=?").bind(nowIso(), target.id).run();\n    await invalidateUserLoginArtifacts(c, target.id, current.id);\n    await audit(c, "MFA_RESET", current.id, target.id, target.mainCompanySlug, "", { scope: "ALL" });''',
+          )
+
+          replace_once(
+              auth,
+              '''    await c.env.DB.prepare("UPDATE auth_users SET password_hash=?,must_change_password=0,updated_at=? WHERE id=?").bind(await hash(password, 10), nowIso(), target.id).run();\n    await revokeUserSessions(c, target.id, current.id);''',
+              '''    await c.env.DB.prepare("UPDATE auth_users SET password_hash=?,must_change_password=0,updated_at=? WHERE id=?").bind(await hash(password, 10), nowIso(), target.id).run();\n    await invalidateUserLoginArtifacts(c, target.id, current.id);''',
+          )
+
+          replace_once(
+              migration,
+              '''ALTER TABLE auth_user_security ADD COLUMN microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0;\n''',
+              '''ALTER TABLE auth_user_security ADD COLUMN microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0;\nALTER TABLE auth_user_security ADD COLUMN recovery_codes_acknowledged INTEGER NOT NULL DEFAULT 0;\n''',
+          )
+
+          replace_once(
+              readiness,
+              "const requiredColumns = ['google_mfa_secret','google_mfa_enabled','microsoft_mfa_secret','microsoft_mfa_enabled'];",
+              "const requiredColumns = ['google_mfa_secret','google_mfa_enabled','microsoft_mfa_secret','microsoft_mfa_enabled','recovery_codes_acknowledged'];",
+          )
+
+          replace_once(
+              admin,
+              '''  async function handleResetMfa(user) {\n    if (!user) return;\n    const approved = window.confirm(\n      `${user.fullName || user.username} için Authenticator eşleşmesi sıfırlanacak. Telefonda eski KY ERP hesabı varsa silin; sonraki girişte yeni QR okutulacak. Devam edilsin mi?`,\n    );\n    if (!approved) return;\n    await runSecurityAction(\n      () => resetUserMfa(user.id),\n      "Authenticator kaydı sıfırlandı. Google/Microsoft Authenticator'daki eski KY ERP kaydını silip yeni QR ile yeniden eşleştirin.",\n    );\n  }''',
+              '''  async function handleResetMfa(user, provider = "ALL") {\n    if (!user) return;\n    const normalized = String(provider || "ALL").toUpperCase();\n    const label = normalized === "GOOGLE"\n      ? "Google Authenticator"\n      : normalized === "MICROSOFT"\n        ? "Microsoft Authenticator"\n        : "tüm Authenticator kayıtları";\n    const approved = window.confirm(\n      `${user.fullName || user.username} için ${label} sıfırlanacak. Eski kayıt artık kullanılamaz ve ilgili giriş/oturumlar güvenlik için kapatılır. Devam edilsin mi?`,\n    );\n    if (!approved) return;\n    await runSecurityAction(\n      () => resetUserMfa(user.id, normalized),\n      normalized === "ALL"\n        ? "Google ve Microsoft Authenticator kayıtları sıfırlandı. Sonraki girişte iki yöntem de ayrı QR ile yeniden kurulacak."\n        : `${label} sıfırlandı. Diğer aktif Authenticator ile doğrulandıktan sonra yalnız bu yöntem yeni QR ile yeniden kurulacak.`,\n    );\n  }''',
+          )
+
+          replace_once(
+              admin,
+              '''              <div className="security-user-actions">\n                <div><strong>Authenticator ve oturum</strong><span>{selectedUser.mfaEnabled ? "MFA eşleşmesi aktif." : "İlk girişte MFA kurulacak."}</span></div>\n                <div className="form-actions">\n                  <button type="button" onClick={() => handleResetMfa(selectedUser)}>MFA Yeniden Kur</button>\n                  <button type="button" onClick={() => runSecurityAction(() => revokeAllUserSessions(selectedUser.id), "Kullanıcının bütün aktif oturumları kapatıldı.")}>Tüm Oturumları Kapat</button>\n                </div>\n              </div>''',
+              '''              <div className="security-user-actions">\n                <div>\n                  <strong>Authenticator ve oturum</strong>\n                  <span>Google: {selectedUser.googleMfaEnabled ? "Aktif" : "Kurulum gerekli"} · Microsoft: {selectedUser.microsoftMfaEnabled ? "Aktif" : "Kurulum gerekli"}</span>\n                </div>\n                <div className="form-actions">\n                  <button type="button" onClick={() => handleResetMfa(selectedUser, "GOOGLE")}>Google Yeniden Kur</button>\n                  <button type="button" onClick={() => handleResetMfa(selectedUser, "MICROSOFT")}>Microsoft Yeniden Kur</button>\n                  <button type="button" className="danger-light" onClick={() => handleResetMfa(selectedUser, "ALL")}>Tüm MFA'yı Sıfırla</button>\n                  <button type="button" onClick={() => runSecurityAction(() => revokeAllUserSessions(selectedUser.id), "Kullanıcının bütün aktif oturumları kapatıldı.")}>Tüm Oturumları Kapat</button>\n                </div>\n              </div>''',
+          )
+          PY
+
+      - name: Güvenlik sabitlerini doğrula
+        run: |
+          grep -q "recovery_codes_acknowledged" APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q "invalidateUserLoginArtifacts(c, user.id, user.id)" APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q "status IN ('PENDING','APPROVED')" APP/cloud/ky-erp-api/src/auth-cloud.ts
+          grep -q "Google Yeniden Kur" APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+          grep -q "Microsoft Yeniden Kur" APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+
+      - name: API test ve build
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Frontend lint ve build
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Değişiklikleri commitle
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/auth-cloud.ts \
+                  APP/cloud/ky-erp-api/migrations/0019_auth_dual_mfa_recovery.sql \
+                  APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx \
+                  .github/workflows/d1-schema-readiness.yml
+          git commit -m "fix: close dual MFA recovery security gaps"
+          git push origin HEAD:codex/dual-mfa-google-microsoft-recovery
