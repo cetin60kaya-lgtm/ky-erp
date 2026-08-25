@@ -1,0 +1,162 @@
+name: KY ERP Boyahane Renk Bilesen Formulu Aktarimi
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "RELEASES/boyahane-color-formula-import.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyerp-boyahane-color-formula-import
+  cancel-in-progress: false
+
+jobs:
+  import-and-ui:
+    name: D1 formulleri aktar ve Kayitli Renkler arayuzunu hazirla
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Aktarim onayini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .approved == true and
+            .target == "production-d1" and
+            .colorRows == 908 and
+            .formulaRows == 737 and
+            .mode == "non-destructive-formula-preview"
+          ' RELEASES/boyahane-color-formula-import.json >/dev/null
+
+      - name: Worker araclarini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Cloudflare hesabini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          database_id="b504b712-6927-499d-815d-0b954c8ee246"
+          auth_header="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          accounts_json="$(curl --fail --silent --show-error -H "$auth_header" https://api.cloudflare.com/client/v4/accounts)"
+          mapfile -t account_ids < <(jq -r '.result[]?.id' <<<"$accounts_json")
+          resolved=""
+          for account_id in "${account_ids[@]}"; do
+            databases_json="$(curl --fail --silent --show-error -H "$auth_header" "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?per_page=100")"
+            if jq -e --arg database_id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $database_id))' <<<"$databases_json" >/dev/null; then
+              resolved="$account_id"
+              break
+            fi
+          done
+          test -n "$resolved"
+          echo "CLOUDFLARE_ACCOUNT_ID=$resolved" >> "$GITHUB_ENV"
+
+      - name: Canli D1 tam yedegini al
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p database-backup
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          output="database-backup/ky-erp-db-before-color-formulas-${stamp}.sql"
+          npx wrangler d1 export ky-erp-db --remote --config wrangler.jsonc --skip-confirmation --output "$output"
+          test -s "$output"
+
+      - name: D1 yedegini sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-before-color-formulas-${{ github.run_id }}
+          path: APP/cloud/ky-erp-api/database-backup/*.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Formul SQL dosyasini olustur ve dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/import-color-formula-preview.mjs /tmp/kyerp-color-formulas.sql /tmp/kyerp-color-formulas-audit.json
+          jq -e '.ok == true and .records == 737 and .uniqueKeys == 737 and .componentLines > 2500' /tmp/kyerp-color-formulas-audit.json >/dev/null
+          test -s /tmp/kyerp-color-formulas.sql
+          cat /tmp/kyerp-color-formulas-audit.json
+
+      - name: 737 arşiv formulunu canli D1e aktar
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --file /tmp/kyerp-color-formulas.sql
+
+      - name: Canli D1 renk ve formul sayimlarini dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          scalar() {
+            local query="$1"
+            npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --json --command "$query" \
+              | jq -er '(if type == "array" then .[0] else . end) | .results[0].value | tonumber'
+          }
+          scope="BOYAHANE_REGISTERED_COLOR"
+          slug="mecit-hakan"
+          color_source="RENK_KAYIT_XLSM_CLEAN_2026_08_25"
+          formula_source="RENK_KAYIT_XLSM_PANTONE_FORMUL_2026_08_25"
+          colors="$(scalar "SELECT COUNT(*) AS value FROM json_store WHERE scope='${scope}' AND main_company_slug='${slug}' AND json_valid(data)=1 AND json_extract(data,'$.source')='${color_source}';")"
+          formulas="$(scalar "SELECT COUNT(*) AS value FROM json_store WHERE scope='${scope}' AND main_company_slug='${slug}' AND json_valid(data)=1 AND json_extract(data,'$.catalogFormula.source')='${formula_source}';")"
+          invalid="$(scalar "SELECT COUNT(*) AS value FROM json_store WHERE scope='${scope}' AND main_company_slug='${slug}' AND json_valid(data)=1 AND json_extract(data,'$.catalogFormula.source')='${formula_source}' AND (COALESCE(json_array_length(json_extract(data,'$.catalogFormula.lines')),0)=0 OR COALESCE(json_extract(data,'$.catalogFormula.totalGr'),0)<=0); ")"
+          echo "Clean colors: $colors"
+          echo "Formula previews: $formulas"
+          echo "Invalid formula previews: $invalid"
+          test "$colors" -eq 908
+          test "$formulas" -eq 737
+          test "$invalid" -eq 0
+
+      - name: Kayitli Renkler arayuzunu bilesenlerle genislet
+        run: node tools/patch-boyahane-color-formula-ui.mjs
+
+      - name: Frontend bagimliliklarini kur
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint ve build
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm run lint
+          npm run build
+
+      - name: Arayuz degisikligini production dalina kaydet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet; then
+            echo "UI zaten guncel."
+            exit 0
+          fi
+          git config user.name "ky-erp-release-bot"
+          git config user.email "ky-erp-release-bot@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/src/pages/boyahane/workflow/KayitliRenklerWorkspace.jsx
+          git commit -m "feat(boyahane): show archived formula components on color cards"
+          git push origin HEAD:codex/model-uretim-kontrol-merkezi-final
+
+      - name: Uygulama ve API sagligini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error https://api.kyerp.net/api/health | jq -e '.ok == true' >/dev/null
+          curl --fail --silent --show-error https://kyerp.net/ >/dev/null
+          curl --fail --silent --show-error https://app.kyerp.net/boyahane/kayitli-renkler >/dev/null
