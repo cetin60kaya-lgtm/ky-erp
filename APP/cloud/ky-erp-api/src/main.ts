@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAiCloudRoutes } from "./ai-cloud";
@@ -86,20 +87,12 @@ registerDesenOperationRoutes(app);
 // İşNet ayar sayfasındaki taşıyıcı, departman, kişi ve model eşleşmeleri canlı D1 üzerinde tutulur.
 registerIsnetBusinessSettingsCloudRoutes(app);
 // İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
-// Güncel NetteFatura portalı efatura.isnet.net.tr kullanılır; API 401 olsa bile portal fallback devam eder.
-// Şifre D1'e yazılmaz; geçici girişten API tokenı / firma seçilmiş portal oturumu alınır.
 registerIsnetLiveSyncRoutes(app);
-// Arşivlenen İşNet PDF/XML dosyaları doğrudan R2'den açılır.
 registerIsnetFileRuntimeRoutes(app);
-// Doğrulanmış fatura taslağı SaveInvoice ile oluşur; resmî gönderim yalnız son kullanıcı onayı sonrası SendStagingInvoice kullanır.
 registerIsnetInvoiceRuntimeRoutes(app);
-// Müşteri: gelen irsaliye -> model/üretim -> bizim giden irsaliye -> bizim fatura.
-// Tedarikçi: gelen irsaliye -> gelen fatura -> muhasebe/KDV/stok/cari.
 registerIsnetRuntimeV2Routes(app);
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
-// İK'nın gerçek D1 ilişkisel rotaları genel/legacy İK rotalarından önce kayıt edilir.
-// Böylece /api/ik/advanced/* ve aylık personel ekranları JSON fallback'e düşmez.
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 
@@ -109,15 +102,7 @@ shell.use(
   "/api/*",
   cors({
     origin: allowedOrigin,
-    allowMethods: [
-      "GET",
-      "POST",
-      "PATCH",
-      "PUT",
-      "DELETE",
-      "HEAD",
-      "OPTIONS",
-    ],
+    allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
     allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
     maxAge: 86400,
@@ -125,8 +110,9 @@ shell.use(
   }),
 );
 
-// Canlı ortamda ERP verisi artık sadece doğrulanmış, iptal edilmemiş ve en fazla 8 saatlik
-// KY ERP oturumuyla açılır. Localhost yalnız CI/yerel geliştirme için bu kapıdan muaftır.
+// Canlı ortamda ERP verisi yalnız doğrulanmış ve süresi dolmamış KY ERP oturumuyla açılır.
+// Oturum üst sınırı artık kullanıcı güvenlik politikasına göre 30 dakika - 24 saat arasında belirlenir;
+// sadece parola profili sunucu tarafından en fazla 30 dakikaya sabitlenir.
 shell.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
 
@@ -142,8 +128,6 @@ shell.use("/api/*", async (c, next) => {
 
   const authenticated = await getAuthenticatedUser(c);
   if (!authenticated) {
-    // Production release kontrolü gerçek Boyahane verisini anonim açmadan rotanın ayakta
-    // olduğunu doğrulayabilsin. Anonim isteğe yalnız boş ve korumalı cevap verilir.
     if (c.req.method === "GET" && path === "/api/boyahane/registered-colors") {
       return c.json({ ok: true, success: true, data: [], protected: true, authRequired: true });
     }
@@ -152,7 +136,7 @@ shell.use("/api/*", async (c, next) => {
         ok: false,
         error: {
           code: "UNAUTHORIZED",
-          message: "Oturum geçersiz, iptal edilmiş veya 8 saatlik süresi dolmuş. Yeniden giriş yapın.",
+          message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın.",
         },
       },
       401,
@@ -162,6 +146,9 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
+// Yeni esnek kimlik doğrulama katmanı legacy rotaları bozmadan ayrı v2 endpointleriyle çalışır.
+// Yönetici güvenlik politikası rotaları aynı shell auth kapısının arkasındadır.
+registerAuthPolicyRoutes(shell);
 shell.route("/", app);
 
 export default shell;
