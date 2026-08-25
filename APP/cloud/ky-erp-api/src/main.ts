@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAuthPolicyCompatRoutes } from "./auth-policy-compat";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
@@ -57,13 +58,9 @@ function allowedOrigin(origin: string) {
   return undefined;
 }
 
-// Firma kartları İşNet'ten bağımsız kalıcı ana rehberdir; manuel oluşturma ve muhasebe profili D1'de tutulur.
 registerAccountingCompanyDirectoryRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
-// KY ERP Asistan canlı Workers AI binding'i üzerinden çalışır; sohbet geçmişi tenant bazlı D1'de tutulur.
 registerAiCloudRoutes(app);
-// Temiz üretim runtime'ı aynı endpointleri legacy katmandan önce karşılar.
-// Günlük imalat işlemleri doğrudan D1 üzerinde çalışır; GitHub Actions kullanılmaz.
 registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
@@ -75,7 +72,6 @@ registerBoyahaneColorResolveRoutes(app);
 registerBoyahaneColorIdentityRoutes(app);
 registerBoyahaneColorAssistantRoutes(app);
 registerBoyahaneColorJobRoutes(app);
-// Reçetesi olmayan renk tamamlandı sayılmaz; genel workflow GET rotalarından önce çalışır.
 registerBoyahaneJobIntegrityRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
@@ -83,10 +79,7 @@ registerDesenBridgeRoutes(app);
 registerDesenVisualSearchRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
-
-// İşNet ayar sayfasındaki taşıyıcı, departman, kişi ve model eşleşmeleri canlı D1 üzerinde tutulur.
 registerIsnetBusinessSettingsCloudRoutes(app);
-// İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
 registerIsnetLiveSyncRoutes(app);
 registerIsnetFileRuntimeRoutes(app);
 registerIsnetInvoiceRuntimeRoutes(app);
@@ -110,9 +103,8 @@ shell.use(
   }),
 );
 
-// Canlı ortamda ERP verisi yalnız doğrulanmış ve süresi dolmamış KY ERP oturumuyla açılır.
-// Oturum üst sınırı artık kullanıcı güvenlik politikasına göre 30 dakika - 24 saat arasında belirlenir;
-// sadece parola profili sunucu tarafından en fazla 30 dakikaya sabitlenir.
+// Oturum süresi artık kullanıcı güvenlik profiline göre sunucuda uygulanır.
+// PASSWORD_ONLY profili en fazla 30 dakika; diğer profiller sahibi tarafından 30 dk-24 saat aralığında seçilir.
 shell.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
 
@@ -146,8 +138,8 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
-// Yeni esnek kimlik doğrulama katmanı legacy rotaları bozmadan ayrı v2 endpointleriyle çalışır.
-// Yönetici güvenlik politikası rotaları aynı shell auth kapısının arkasındadır.
+// Önce legacy MFA geçişi ve uygulama-sahibi güvenlik sınırları; sonra yeni esnek politika motoru.
+registerAuthPolicyCompatRoutes(shell);
 registerAuthPolicyRoutes(shell);
 shell.route("/", app);
 
