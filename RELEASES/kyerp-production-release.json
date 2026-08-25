@@ -2,15 +2,20 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-25T09:23:00+03:00",
-  "attempt": 54,
+  "requestedAt": "2026-08-25T11:14:00+03:00",
+  "attempt": 55,
   "scope": [
     "kyerp-net-direct-pages-domain",
+    "admin-users-company-centered-workspace",
+    "single-application-owner-super-admin",
+    "company-user-role-permission-management",
+    "company-user-active-passive-management",
+    "admin-mfa-session-management",
+    "google-microsoft-authenticator-totp-compatibility",
     "app-kyerp-clean-root-before-auth",
     "all-deep-links-cleaned-before-auth",
     "clean-root-login-entry",
     "corporate-login-title",
-    "manual-production-release-fallback",
     "boyahane-production-serial-final-preserved",
     "boyahane-ai-color-center-preserved",
     "pantone-hex-ciede2000-preserved",
@@ -19,5 +24,5 @@
     "root-domain-no-redirect-live-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 54: GitHub abonelik/Actions ödeme engeli kullanıcı tarafından giderildi. Attempt 53 ile hazır olan final paket aynı kapsamla yeniden yayınlanıyor. LoginPage oturum açılmadan deep-link pathname'ini / köküne temizler; AppV3 unauthenticated durumda modül yolunu yazmaz. kyerp.net ky-erp-frontend Pages custom domaini olarak active olmak zorundadır. Yayın; frontend lint/build/Chromium, Worker audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, API health/Boyahane, Worker deploy, Pages production deploy, kyerp.net HTTP 200 root kontrolü ve app.kyerp.net erişimi başarılı olmadan tamamlanmış sayılmaz. Boyahane AI/Pantone/lot, Workers AI ve Desen protected image düzeltmeleri korunur."
+  "note": "Attempt 55: Kullanıcı açık onayıyla Yönetim > Kullanıcılar ekranı firma merkezli hale getirildi. Tek Uygulama Sahibi SUPER_ADMIN/legacy ADMIN tüm firmaların üstünde tam yetkili ve UI üzerinden pasife alınamaz/rolü düşürülemez. Firma kullanıcıları gerçek ana firma listesine bağlanır; firma/durum/arama filtreleri, rol ve modül yetki şablonları, MFA yeniden kurulum, oturum kapatma ve güvenli pasife alma aynı merkezde yönetilir. Google ve Microsoft Authenticator için standart TOTP otpauth etiketi issuer:account biçiminde normalize edildi. D1 şeması değişmedi. Yayın; frontend lint/build/Chromium, Worker audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, API health/Boyahane, Worker deploy, Pages production deploy, kyerp.net/app.kyerp.net HTTP ve canlı Chromium smoke başarılı olmadan tamamlanmış sayılmaz."
 }
