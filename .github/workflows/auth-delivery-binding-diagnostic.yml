@@ -17,18 +17,15 @@ jobs:
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
     steps:
-      - name: List only Worker binding names and types
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: List only Worker secret names
+        working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
-          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-          account_id="${CLOUDFLARE_ACCOUNT_ID:-}"
-          if [ -z "$account_id" ]; then
-            accounts="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
-            account_id="$(jq -r '.result[0].id // empty' <<<"$accounts")"
-          fi
-          test -n "$account_id"
-          settings="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${account_id}/workers/scripts/ky-erp-api/settings")"
-          jq -r '.result.bindings[]? | [.name, .type] | @tsv' <<<"$settings" | sort
+          npx --yes wrangler@4.119.0 secret list --name ky-erp-api | jq -r '.[]?.name' | sort
