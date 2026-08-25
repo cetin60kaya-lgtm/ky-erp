@@ -55,16 +55,16 @@ const ROLE_LABELS = {
 };
 
 const OWNER_ROLES = new Set(["SUPER_ADMIN", "ADMIN"]);
-const ALL_MANAGED_ROLES = [
+const MANAGED_ROLES = [
   "COMPANY_ADMIN", "MUHASEBE", "DESEN", "IMALAT", "BOYAHANE", "IK", "VIEWER",
 ];
 
-function normalizedRole(value) {
+function roleOf(value) {
   const role = String(value || "VIEWER").toUpperCase();
   return role === "ADMIN" ? "SUPER_ADMIN" : role;
 }
 
-function emptyPermissionRow(moduleKey) {
+function emptyPermission(moduleKey) {
   return {
     moduleKey,
     canView: false,
@@ -76,7 +76,7 @@ function emptyPermissionRow(moduleKey) {
 }
 
 function normalizePermissions(rows) {
-  const map = new Map(MODULE_KEYS.map((key) => [key, emptyPermissionRow(key)]));
+  const map = new Map(MODULE_KEYS.map((key) => [key, emptyPermission(key)]));
   for (const row of Array.isArray(rows) ? rows : []) {
     const key = String(row?.moduleKey || "").toUpperCase();
     if (!map.has(key)) continue;
@@ -95,55 +95,25 @@ function normalizePermissions(rows) {
 function permissionPreset(type) {
   const full = new Set();
   const viewOnly = new Set();
-
-  if (type === "FULL" || type === "COMPANY_ADMIN") {
-    MODULE_KEYS.forEach((key) => full.add(key));
-  } else if (type === "VIEW") {
-    MODULE_KEYS.forEach((key) => viewOnly.add(key));
-  } else if (type === "MUHASEBE") {
-    ["DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME", "ISNET", "RAPORLAR"].forEach((key) => full.add(key));
-  } else if (type === "DESEN") {
-    ["DASHBOARD", "DESEN", "ASISTAN", "RAPORLAR"].forEach((key) => full.add(key));
-  } else if (type === "IMALAT") {
-    ["DASHBOARD", "IMALAT", "DESEN", "RAPORLAR"].forEach((key) => full.add(key));
-  } else if (type === "BOYAHANE") {
-    ["DASHBOARD", "BOYAHANE", "DESEN", "RAPORLAR"].forEach((key) => full.add(key));
-  } else if (type === "IK") {
-    ["DASHBOARD", "IK", "RAPORLAR"].forEach((key) => full.add(key));
-  }
+  if (type === "FULL" || type === "COMPANY_ADMIN") MODULE_KEYS.forEach((key) => full.add(key));
+  if (type === "VIEW") MODULE_KEYS.forEach((key) => viewOnly.add(key));
+  if (type === "MUHASEBE") ["DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME", "ISNET", "RAPORLAR"].forEach((key) => full.add(key));
+  if (type === "DESEN") ["DASHBOARD", "DESEN", "ASISTAN", "RAPORLAR"].forEach((key) => full.add(key));
+  if (type === "IMALAT") ["DASHBOARD", "IMALAT", "DESEN", "RAPORLAR"].forEach((key) => full.add(key));
+  if (type === "BOYAHANE") ["DASHBOARD", "BOYAHANE", "DESEN", "RAPORLAR"].forEach((key) => full.add(key));
+  if (type === "IK") ["DASHBOARD", "IK", "RAPORLAR"].forEach((key) => full.add(key));
 
   return MODULE_KEYS.map((moduleKey) => {
     if (type === "COMPANY_ADMIN" && moduleKey === "ADMIN") {
-      return {
-        moduleKey,
-        canView: true,
-        canCreate: true,
-        canUpdate: true,
-        canDelete: false,
-        canApprove: true,
-      };
+      return { moduleKey, canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true };
     }
     if (full.has(moduleKey)) {
-      return {
-        moduleKey,
-        canView: true,
-        canCreate: true,
-        canUpdate: true,
-        canDelete: true,
-        canApprove: true,
-      };
+      return { moduleKey, canView: true, canCreate: true, canUpdate: true, canDelete: true, canApprove: true };
     }
     if (viewOnly.has(moduleKey)) {
-      return {
-        moduleKey,
-        canView: true,
-        canCreate: false,
-        canUpdate: false,
-        canDelete: false,
-        canApprove: false,
-      };
+      return { moduleKey, canView: true, canCreate: false, canUpdate: false, canDelete: false, canApprove: false };
     }
-    return emptyPermissionRow(moduleKey);
+    return emptyPermission(moduleKey);
   });
 }
 
@@ -162,20 +132,7 @@ function emptyForm(companySlug = "mecit-hakan") {
   };
 }
 
-function dateText(value) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("tr-TR");
-}
-
-function remainingText(seconds) {
-  const total = Math.max(0, Number(seconds || 0));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  return `${hours} sa ${minutes} dk`;
-}
-
-function companyRows(value) {
+function normalizeCompanies(value) {
   const rows = Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : [];
   return rows
     .map((item) => ({
@@ -187,20 +144,31 @@ function companyRows(value) {
     .filter((item) => item.slug);
 }
 
+function dateText(value) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("tr-TR");
+}
+
+function remainingText(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  return `${Math.floor(total / 3600)} sa ${Math.floor((total % 3600) / 60)} dk`;
+}
+
 export default function AdminUsersPanel() {
   const { user: currentUser } = useAuth();
-  const currentRole = normalizedRole(currentUser?.role);
+  const currentRole = roleOf(currentUser?.role);
   const isOwnerAdmin = OWNER_ROLES.has(currentRole);
   const roleOptions = isOwnerAdmin
-    ? ALL_MANAGED_ROLES
-    : ALL_MANAGED_ROLES.filter((role) => role !== "COMPANY_ADMIN");
+    ? MANAGED_ROLES
+    : MANAGED_ROLES.filter((role) => role !== "COMPANY_ADMIN");
 
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [permissions, setPermissions] = useState(permissionPreset("VIEW"));
+  const [permissions, setPermissions] = useState(() => permissionPreset("VIEW"));
   const [form, setForm] = useState(() => emptyForm(currentUser?.mainCompanySlug));
   const [companyFilter, setCompanyFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ACTIVE");
@@ -209,22 +177,20 @@ export default function AdminUsersPanel() {
   const [message, setMessage] = useState("Kullanıcılar, firmalar ve güvenlik durumu yükleniyor...");
 
   const companyMap = useMemo(
-    () => new Map(companies.map((item) => [item.slug, item])),
+    () => new Map(companies.map((company) => [company.slug, company])),
     [companies],
   );
 
   const selectedUser = useMemo(
-    () => users.find((item) => item.id === selectedUserId) || null,
-    [users, selectedUserId],
+    () => users.find((user) => user.id === selectedUserId) || null,
+    [selectedUserId, users],
   );
-
-  const selectedIsOwner = Boolean(selectedUser && OWNER_ROLES.has(normalizedRole(selectedUser.role)));
-  const selectedIsCurrentUser = Boolean(selectedUser && selectedUser.id === currentUser?.id);
+  const selectedIsOwner = Boolean(selectedUser && OWNER_ROLES.has(roleOf(selectedUser.role)));
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("tr-TR");
     return users.filter((user) => {
-      const role = normalizedRole(user.role);
+      const role = roleOf(user.role);
       const owner = OWNER_ROLES.has(role);
       if (companyFilter !== "ALL" && !owner && user.mainCompanySlug !== companyFilter) return false;
       if (statusFilter === "ACTIVE" && user.isActive === false) return false;
@@ -238,12 +204,25 @@ export default function AdminUsersPanel() {
     });
   }, [companyFilter, companyMap, search, statusFilter, users]);
 
-  const activeUsers = users.filter((item) => item.isActive !== false).length;
-  const mfaUsers = users.filter((item) => item.mfaEnabled).length;
-  const companyCount = new Set(users.filter((item) => !OWNER_ROLES.has(normalizedRole(item.role))).map((item) => item.mainCompanySlug).filter(Boolean)).size;
+  const activeUsers = users.filter((user) => user.isActive !== false).length;
+  const mfaUsers = users.filter((user) => user.mfaEnabled).length;
+  const linkedCompanyCount = new Set(
+    users
+      .filter((user) => !OWNER_ROLES.has(roleOf(user.role)))
+      .map((user) => user.mainCompanySlug)
+      .filter(Boolean),
+  ).size;
 
   function companyName(slug) {
     return companyMap.get(slug)?.name || slug || "Firma seçilmedi";
+  }
+
+  function defaultCompanySlug() {
+    if (companyFilter !== "ALL") return companyFilter;
+    return currentUser?.mainCompanySlug
+      || companies.find((company) => company.isActive)?.slug
+      || companies[0]?.slug
+      || "mecit-hakan";
   }
 
   const loadSecurity = useCallback(async () => {
@@ -260,15 +239,18 @@ export default function AdminUsersPanel() {
   }, []);
 
   const loadCompanies = useCallback(async () => {
-    try {
-      const data = await getMainCompanies();
-      const rows = companyRows(data);
-      if (rows.length) setCompanies(rows);
-    } catch {
-      const fallbackSlug = String(currentUser?.mainCompanySlug || "mecit-hakan");
-      setCompanies([{ id: fallbackSlug, name: fallbackSlug, slug: fallbackSlug, isActive: true }]);
+    const ownSlug = String(currentUser?.mainCompanySlug || "mecit-hakan");
+    if (!isOwnerAdmin) {
+      setCompanies([{ id: ownSlug, name: ownSlug, slug: ownSlug, isActive: true }]);
+      return;
     }
-  }, [currentUser?.mainCompanySlug]);
+    try {
+      const rows = normalizeCompanies(await getMainCompanies());
+      setCompanies(rows.length ? rows : [{ id: ownSlug, name: ownSlug, slug: ownSlug, isActive: true }]);
+    } catch {
+      setCompanies([{ id: ownSlug, name: ownSlug, slug: ownSlug, isActive: true }]);
+    }
+  }, [currentUser?.mainCompanySlug, isOwnerAdmin]);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -277,19 +259,17 @@ export default function AdminUsersPanel() {
       const rows = Array.isArray(data) ? data : data?.items || [];
       setUsers(rows);
       setSelectedUserId((previous) => (
-        previous && rows.some((item) => item.id === previous)
-          ? previous
-          : rows.find((item) => item.id === currentUser?.id)?.id || rows[0]?.id || ""
+        previous && rows.some((user) => user.id === previous) ? previous : ""
       ));
       setMessage("Kullanıcı ve firma yetkileri güncel.");
     } catch (error) {
-      setMessage(`Hata: ${error?.message || "Kullanıcılar alınamadı."}`);
       setUsers([]);
       setSelectedUserId("");
+      setMessage(`Hata: ${error?.message || "Kullanıcılar alınamadı."}`);
     } finally {
       setBusy(false);
     }
-  }, [currentUser?.id]);
+  }, []);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([loadCompanies(), loadUsers(), loadSecurity()]);
@@ -300,10 +280,7 @@ export default function AdminUsersPanel() {
   }, [refreshAll]);
 
   useEffect(() => {
-    if (!selectedUserId) {
-      setPermissions(permissionPreset("VIEW"));
-      return undefined;
-    }
+    if (!selectedUserId) return undefined;
     let alive = true;
     getUserPermissions(selectedUserId)
       .then((rows) => {
@@ -322,22 +299,8 @@ export default function AdminUsersPanel() {
     return () => window.clearInterval(timer);
   }, [loadSecurity]);
 
-  useEffect(() => {
-    if (!selectedUser) return;
-    if (!form.id || form.id !== selectedUser.id) return;
-    setForm((previous) => ({
-      ...previous,
-      isActive: selectedUser.isActive !== false,
-      approvalRequired: selectedUser.approvalRequired !== false,
-    }));
-  }, [form.id, selectedUser]);
-
-  function defaultCompanySlug() {
-    if (companyFilter !== "ALL") return companyFilter;
-    return currentUser?.mainCompanySlug || companies.find((item) => item.isActive)?.slug || companies[0]?.slug || "mecit-hakan";
-  }
-
-  function beginCreate() {
+  function resetEditor() {
+    setSelectedUserId("");
     setForm(emptyForm(defaultCompanySlug()));
     setPermissions(permissionPreset("VIEW"));
   }
@@ -351,7 +314,7 @@ export default function AdminUsersPanel() {
       email: user.email || "",
       password: "",
       fullName: user.fullName || "",
-      role: normalizedRole(user.role),
+      role: roleOf(user.role),
       mainCompanySlug: user.mainCompanySlug || defaultCompanySlug(),
       isActive: user.isActive !== false,
       approvalRequired: user.approvalRequired !== false,
@@ -367,8 +330,7 @@ export default function AdminUsersPanel() {
   }
 
   function applyPreset(type) {
-    if (selectedIsOwner) return;
-    setPermissions(permissionPreset(type));
+    if (!selectedIsOwner) setPermissions(permissionPreset(type));
   }
 
   function editForm(field, value) {
@@ -378,7 +340,7 @@ export default function AdminUsersPanel() {
       }
       const next = { ...previous, [field]: value };
       if (field === "role") {
-        const role = normalizedRole(value);
+        const role = roleOf(value);
         next.approvalRequired = role !== "COMPANY_ADMIN";
         if (["COMPANY_ADMIN", "MUHASEBE", "DESEN", "IMALAT", "BOYAHANE", "IK"].includes(role)) {
           setPermissions(permissionPreset(role));
@@ -421,15 +383,14 @@ export default function AdminUsersPanel() {
         if (!selectedIsOwner) await updateUserPermissions(form.id, permissions);
         if (form.password.trim()) await resetUserPassword(form.id, form.password.trim());
         setMessage(selectedIsOwner
-          ? "Uygulama sahibi hesabı güncellendi. Sahip rolü ve aktif durumu korunur."
-          : "Kullanıcı, firma bağlantısı ve modül yetkileri tek işlemde güncellendi.");
+          ? "Uygulama sahibi hesabı güncellendi; sahip rolü ve aktif durumu korundu."
+          : "Kullanıcı, firma bağlantısı ve yetkileri güncellendi.");
       } else {
-        const created = await createUser({ ...payload, password: form.password, permissions });
-        if (created?.id) setSelectedUserId(created.id);
+        await createUser({ ...payload, password: form.password, permissions });
         setMessage("Kullanıcı oluşturuldu ve seçilen firmaya bağlandı. İlk girişte Authenticator kurulumu yapılacak.");
       }
 
-      setForm(emptyForm(defaultCompanySlug()));
+      resetEditor();
       await Promise.all([loadUsers(), loadSecurity()]);
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Kullanıcı kaydedilemedi."}`);
@@ -440,12 +401,14 @@ export default function AdminUsersPanel() {
 
   async function handleToggleActive(user) {
     if (!user) return;
-    if (OWNER_ROLES.has(normalizedRole(user.role))) {
-      setMessage("Uygulama sahibi hesabı pasife alınamaz. Bu hesap sistemin üst yöneticisidir.");
+    if (OWNER_ROLES.has(roleOf(user.role))) {
+      setMessage("Uygulama sahibi hesabı pasife alınamaz.");
       return;
     }
     if (user.isActive) {
-      const approved = window.confirm(`${user.fullName || user.username} kullanıcısı firmadan çıkarılıp pasife alınsın mı? Aktif oturumları da kapanır.`);
+      const approved = window.confirm(
+        `${user.fullName || user.username} kullanıcısı firmadan çıkarılıp pasife alınsın mı? Aktif oturumları da kapanır.`,
+      );
       if (!approved) return;
     }
     try {
@@ -453,8 +416,9 @@ export default function AdminUsersPanel() {
       if (user.isActive) await deactivateUser(user.id);
       else await activateUser(user.id);
       setMessage(user.isActive
-        ? "Kullanıcı pasife alındı; kayıt ve işlem geçmişi korunarak firmadan erişimi kesildi."
+        ? "Kullanıcı pasife alındı; kayıt ve işlem geçmişi korunarak erişimi kesildi."
         : "Kullanıcı yeniden aktifleştirildi.");
+      resetEditor();
       await Promise.all([loadUsers(), loadSecurity()]);
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Durum değiştirilemedi."}`);
@@ -469,13 +433,13 @@ export default function AdminUsersPanel() {
       return;
     }
     if (selectedIsOwner) {
-      setMessage("Uygulama sahibinin yetkileri tam ve sabittir; modül bazında kısıtlanmaz.");
+      setMessage("Uygulama sahibinin yetkileri tam ve sabittir.");
       return;
     }
     try {
       setBusy(true);
       await updateUserPermissions(selectedUserId, permissions);
-      setMessage("Modül yetkileri kaydedildi. Kullanıcının eski oturumları kapatıldı.");
+      setMessage("Modül yetkileri kaydedildi. Eski oturumlar güvenlik için kapatıldı.");
       await loadSecurity();
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Yetkiler kaydedilemedi."}`);
@@ -500,12 +464,12 @@ export default function AdminUsersPanel() {
   async function handleResetMfa(user) {
     if (!user) return;
     const approved = window.confirm(
-      `${user.fullName || user.username} için Authenticator eşleşmesi sıfırlanacak. Telefonda eski KY ERP kaydı varsa silin; sonraki girişte Google veya Microsoft Authenticator ile yeni QR tekrar okutulacak. Devam edilsin mi?`,
+      `${user.fullName || user.username} için Authenticator eşleşmesi sıfırlanacak. Telefonda eski KY ERP hesabı varsa silin; sonraki girişte yeni QR okutulacak. Devam edilsin mi?`,
     );
     if (!approved) return;
     await runSecurityAction(
       () => resetUserMfa(user.id),
-      "Authenticator kaydı sıfırlandı. Eski Google/Microsoft KY ERP kaydını telefondan silip sonraki girişte yeni QR ile yeniden eşleştirin.",
+      "Authenticator kaydı sıfırlandı. Google/Microsoft Authenticator'daki eski KY ERP kaydını silip yeni QR ile yeniden eşleştirin.",
     );
   }
 
@@ -518,7 +482,7 @@ export default function AdminUsersPanel() {
           <p>{message}</p>
         </div>
         <div className="admin-header-actions">
-          <button type="button" className="primary" onClick={beginCreate} disabled={busy}>+ Yeni Kullanıcı</button>
+          <button type="button" className="primary" onClick={resetEditor} disabled={busy}>+ Yeni Kullanıcı</button>
           <button type="button" onClick={refreshAll} disabled={busy}>Yenile</button>
         </div>
       </header>
@@ -544,7 +508,7 @@ export default function AdminUsersPanel() {
 
       <section className="security-summary">
         <div><span>Aktif kullanıcı</span><strong>{activeUsers}</strong></div>
-        <div><span>Bağlı firma</span><strong>{companyCount || companies.length}</strong></div>
+        <div><span>Bağlı firma</span><strong>{linkedCompanyCount || companies.length}</strong></div>
         <div><span>MFA aktif</span><strong>{mfaUsers}</strong></div>
         <div><span>Bekleyen giriş</span><strong>{approvals.length}</strong></div>
         <div><span>Aktif oturum</span><strong>{sessions.length}</strong></div>
@@ -553,10 +517,7 @@ export default function AdminUsersPanel() {
       {approvals.length ? (
         <section className="admin-panel security-panel attention-panel">
           <div className="panel-head">
-            <div>
-              <h3>Bekleyen Giriş Onayları</h3>
-              <p>Authenticator doğrulamasını tamamlayan kullanıcıların yeni cihaz girişleri.</p>
-            </div>
+            <div><h3>Bekleyen Giriş Onayları</h3><p>Authenticator doğrulamasını tamamlayan yeni cihaz girişleri.</p></div>
           </div>
           <div className="security-table-wrap">
             <table>
@@ -583,7 +544,7 @@ export default function AdminUsersPanel() {
         <aside className="admin-panel users-directory">
           <div className="panel-head directory-head">
             <div><h3>Kullanıcılar</h3><p>{filteredUsers.length} kayıt gösteriliyor</p></div>
-            <button type="button" className="compact" onClick={beginCreate}>Ekle</button>
+            <button type="button" className="compact" onClick={resetEditor}>Ekle</button>
           </div>
 
           <div className="directory-filters">
@@ -591,9 +552,7 @@ export default function AdminUsersPanel() {
             {isOwnerAdmin ? (
               <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
                 <option value="ALL">Tüm firmalar</option>
-                {companies.map((company) => (
-                  <option key={company.slug} value={company.slug}>{company.name}</option>
-                ))}
+                {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
               </select>
             ) : null}
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -605,17 +564,14 @@ export default function AdminUsersPanel() {
 
           <div className="list-wrap">
             {filteredUsers.map((user) => {
-              const role = normalizedRole(user.role);
+              const role = roleOf(user.role);
               const owner = OWNER_ROLES.has(role);
               return (
                 <button
                   key={user.id}
                   type="button"
                   className={`list-row ${selectedUserId === user.id ? "active" : ""} ${user.isActive === false ? "passive" : ""}`}
-                  onClick={() => {
-                    setSelectedUserId(user.id);
-                    startEdit(user);
-                  }}
+                  onClick={() => startEdit(user)}
                 >
                   <div className="user-main">
                     <div className="user-title-row">
@@ -640,11 +596,7 @@ export default function AdminUsersPanel() {
               <h3>{form.id ? "Kullanıcıyı Düzenle" : "Yeni Kullanıcı"}</h3>
               <p>{form.id ? "Firma, rol, güvenlik ve erişim ayarlarını tek yerden yönetin." : "Kullanıcıyı doğrudan doğru ana firmaya bağlayın."}</p>
             </div>
-            {selectedUser ? (
-              <span className={`status-chip ${selectedUser.isActive === false ? "passive" : "active"}`}>
-                {selectedUser.isActive === false ? "Pasif" : "Aktif"}
-              </span>
-            ) : null}
+            {selectedUser ? <span className={`status-chip ${selectedUser.isActive === false ? "passive" : "active"}`}>{selectedUser.isActive === false ? "Pasif" : "Aktif"}</span> : null}
           </div>
 
           <form onSubmit={handleSaveUser} className="user-form">
@@ -659,9 +611,9 @@ export default function AdminUsersPanel() {
               <label>
                 Ana Firma
                 <select value={form.mainCompanySlug} onChange={(event) => editForm("mainCompanySlug", event.target.value)} disabled={!isOwnerAdmin || selectedIsOwner}>
-                  {companies.length ? companies.map((company) => (
-                    <option key={company.slug} value={company.slug}>{company.name}{company.isActive ? "" : " (Pasif)"}</option>
-                  )) : <option value={form.mainCompanySlug}>{form.mainCompanySlug || "Firma"}</option>}
+                  {companies.length
+                    ? companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}{company.isActive ? "" : " (Pasif)"}</option>)
+                    : <option value={form.mainCompanySlug}>{form.mainCompanySlug || "Firma"}</option>}
                 </select>
                 {selectedIsOwner ? <small>Uygulama sahibi firma sınırı olmadan tüm sistemi yönetir.</small> : null}
               </label>
@@ -694,7 +646,7 @@ export default function AdminUsersPanel() {
 
             <div className="form-actions primary-actions">
               <button type="submit" className="primary" disabled={busy}>{form.id ? "Kullanıcıyı Kaydet" : "Kullanıcı Oluştur"}</button>
-              <button type="button" onClick={beginCreate}>Yeni Kayıt</button>
+              <button type="button" onClick={resetEditor}>Yeni Kayıt</button>
               {selectedUser && !selectedIsOwner ? (
                 <button type="button" className={selectedUser.isActive ? "danger-light" : "approve"} onClick={() => handleToggleActive(selectedUser)}>
                   {selectedUser.isActive ? "Firmadan Çıkar / Pasife Al" : "Tekrar Aktifleştir"}
@@ -704,10 +656,7 @@ export default function AdminUsersPanel() {
 
             {selectedUser ? (
               <div className="security-user-actions">
-                <div>
-                  <strong>Authenticator ve oturum</strong>
-                  <span>{selectedUser.mfaEnabled ? "MFA eşleşmesi aktif." : "İlk girişte MFA kurulacak."}</span>
-                </div>
+                <div><strong>Authenticator ve oturum</strong><span>{selectedUser.mfaEnabled ? "MFA eşleşmesi aktif." : "İlk girişte MFA kurulacak."}</span></div>
                 <div className="form-actions">
                   <button type="button" onClick={() => handleResetMfa(selectedUser)}>MFA Yeniden Kur</button>
                   <button type="button" onClick={() => runSecurityAction(() => revokeAllUserSessions(selectedUser.id), "Kullanıcının bütün aktif oturumları kapatıldı.")}>Tüm Oturumları Kapat</button>
@@ -722,7 +671,7 @@ export default function AdminUsersPanel() {
         <div className="panel-head permissions-head">
           <div>
             <h3>Modül Yetkileri</h3>
-            <p>{selectedIsOwner ? "Uygulama sahibinin tüm yetkileri zorunlu olarak açıktır." : "Seçili kullanıcının görme, ekleme, güncelleme, silme ve onay hakları."}</p>
+            <p>{selectedIsOwner ? "Uygulama sahibinin tüm yetkileri zorunlu olarak açıktır." : form.id ? "Seçili kullanıcının yetkilerini düzenleyin." : "Yeni kullanıcı için başlangıç yetkilerini seçin."}</p>
           </div>
           {!selectedIsOwner ? (
             <div className="permission-presets">
@@ -740,14 +689,13 @@ export default function AdminUsersPanel() {
               <tr key={row.moduleKey}>
                 <td><strong>{MODULE_LABELS[row.moduleKey] || row.moduleKey}</strong><small>{row.moduleKey}</small></td>
                 {["canView", "canCreate", "canUpdate", "canDelete", "canApprove"].map((field) => {
-                  const forcedOwner = selectedIsOwner;
                   const companyAdminDeleteLock = form.role === "COMPANY_ADMIN" && row.moduleKey === "ADMIN" && field === "canDelete";
                   return (
                     <td key={field}>
                       <input
                         type="checkbox"
-                        checked={forcedOwner ? true : companyAdminDeleteLock ? false : row[field]}
-                        disabled={forcedOwner || companyAdminDeleteLock}
+                        checked={selectedIsOwner ? true : companyAdminDeleteLock ? false : row[field]}
+                        disabled={selectedIsOwner || companyAdminDeleteLock}
                         onChange={(event) => editPermission(row.moduleKey, field, event.target.checked)}
                       />
                     </td>
@@ -771,7 +719,7 @@ export default function AdminUsersPanel() {
               <tbody>{sessions.map((session) => (
                 <tr key={session.id}>
                   <td><strong>{session.fullName || session.username}</strong><small>{session.email || `@${session.username}`}</small></td>
-                  <td>{ROLE_LABELS[normalizedRole(session.role)] || session.role}<small>{OWNER_ROLES.has(normalizedRole(session.role)) ? "Tüm firmalar" : companyName(session.mainCompanySlug)}</small></td>
+                  <td>{ROLE_LABELS[roleOf(session.role)] || session.role}<small>{OWNER_ROLES.has(roleOf(session.role)) ? "Tüm firmalar" : companyName(session.mainCompanySlug)}</small></td>
                   <td>{session.deviceLabel || "-"}</td>
                   <td>{session.ipAddress || "-"}</td>
                   <td>{dateText(session.createdAt)}</td>
