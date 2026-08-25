@@ -1,0 +1,68 @@
+name: KY ERP Auth Policy Validation
+
+on:
+  push:
+    branches:
+      - codex/auth-policy-owner-recovery
+    paths:
+      - "APP/cloud/ky-erp-api/**"
+      - "APP/app/ky-erp-frontend/**"
+      - ".github/workflows/auth-policy-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: API paketleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Tüm D1 migrationlarını boş yerel veritabanına uygula
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run db:migrations:local
+
+      - name: D1 şema ve güvenlik politikası denetimi
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run db:audit:local
+
+      - name: API typecheck, test ve dry-run build
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Frontend paketleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend lint ve production build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          npm run lint
+          npm run build
+
+      - name: Güvenlik işaretlerini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'PASSWORD_ONLY' APP/cloud/ky-erp-api/src/auth-policy-cloud.ts
+          grep -Fq 'session_seconds' APP/cloud/ky-erp-api/migrations/0020_auth_security_policy_owner_recovery.sql
+          grep -Fq 'owner_recovery_enabled' APP/cloud/ky-erp-api/migrations/0020_auth_security_policy_owner_recovery.sql
+          grep -Fq 'Sadece parola' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+          grep -Fq '30 dakika' APP/app/ky-erp-frontend/src/pages/LoginPage.jsx
