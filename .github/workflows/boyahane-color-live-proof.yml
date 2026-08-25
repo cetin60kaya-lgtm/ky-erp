@@ -1,0 +1,116 @@
+name: KY ERP Boyahane Renk Canli Kanit
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - ".github/workflows/boyahane-color-live-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    name: 18-3920 D1 ve canli UI kaniti
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Canli D1 kaydinda 18-3920 formulu birebir dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          database_id="b504b712-6927-499d-815d-0b954c8ee246"
+          accounts_json="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+          account_id=""
+          while IFS= read -r candidate; do
+            dbs="$(curl --fail --silent --show-error -H "$auth" "https://api.cloudflare.com/client/v4/accounts/${candidate}/d1/database?per_page=100")"
+            if jq -e --arg id "$database_id" 'any(.result[]?; ((.uuid // .id // "") == $id))' <<<"$dbs" >/dev/null; then
+              account_id="$candidate"
+              break
+            fi
+          done < <(jq -r '.result[]?.id' <<<"$accounts_json")
+          test -n "$account_id"
+
+          sql="SELECT json_extract(data,'$.pantone') AS pantone, trim(COALESCE(json_extract(data,'$.dyeType'),json_extract(data,'$.paintType'),'')) AS paintType, json_extract(data,'$.catalogFormula.totalGr') AS totalGr, json_extract(j.value,'$.productName') AS productName, json_extract(j.value,'$.referenceGram') AS gram FROM json_store, json_each(json_extract(data,'$.catalogFormula.lines')) AS j WHERE scope='BOYAHANE_REGISTERED_COLOR' AND main_company_slug='mecit-hakan' AND trim(COALESCE(json_extract(data,'$.pantone'),''))='18-3920' AND trim(COALESCE(json_extract(data,'$.dyeType'),json_extract(data,'$.paintType'),''))='SUBAZLI' ORDER BY CAST(j.key AS INTEGER);"
+          response="$(curl --fail --silent --show-error \
+            -X POST \
+            -H "$auth" \
+            -H 'Content-Type: application/json' \
+            --data "$(jq -nc --arg sql "$sql" '{sql:$sql}')" \
+            "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database/${database_id}/query")"
+          echo "$response" | jq '{success,errors,result:[.result[]? | {success,results}]}'
+          jq -e '.success == true and (.result[0].success == true)' <<<"$response" >/dev/null
+          jq -e '(.result[0].results | length) == 5' <<<"$response" >/dev/null
+          jq -e '[.result[0].results[] | {name:.productName, gram:(.gram|tonumber)}] as $r |
+            any($r[]; .name == "S10 ŞEFFAF" and ((.gram - 3000)|fabs) < 0.001) and
+            any($r[]; .name == "S20 BEYAZ" and ((.gram - 1170)|fabs) < 0.001) and
+            any($r[]; .name == "LACİVERT KRL-E" and ((.gram - 143)|fabs) < 0.001) and
+            any($r[]; .name == "SİYAH KNG" and ((.gram - 8.8)|fabs) < 0.001) and
+            any($r[]; .name == "FUŞYA KB" and ((.gram - 22)|fabs) < 0.001)' <<<"$response" >/dev/null
+          echo "D1 18-3920 SUBAZLI formulu 5/5 birebir dogrulandi."
+
+      - name: kyerp.net ve app.kyerp.net yeni Boyahane bundleina gecene kadar bekle
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_host() {
+            host="$1"
+            for attempt in $(seq 1 90); do
+              stamp="$(date +%s)-${RANDOM}"
+              curl --fail --silent --show-error -H 'Cache-Control: no-cache' "https://${host}/?color-proof=${stamp}" > /tmp/home.html || true
+              root_js="$(grep -oE 'src="/assets/index-[^"]+\.js"' /tmp/home.html | head -1 | sed -E 's/src="([^"]+)"/\1/' || true)"
+              if [ -n "$root_js" ]; then
+                : > /tmp/queue
+                : > /tmp/seen
+                : > /tmp/all.js
+                echo "$root_js" > /tmp/queue
+                processed=0
+                while [ -s /tmp/queue ] && [ "$processed" -lt 140 ]; do
+                  path="$(head -1 /tmp/queue)"
+                  tail -n +2 /tmp/queue > /tmp/queue.next || true
+                  mv /tmp/queue.next /tmp/queue
+                  [ -n "$path" ] || continue
+                  grep -Fxq "$path" /tmp/seen && continue
+                  echo "$path" >> /tmp/seen
+                  processed=$((processed + 1))
+                  case "$path" in
+                    http://*|https://*) url="$path" ;;
+                    /*) url="https://${host}${path}" ;;
+                    *) url="https://${host}/${path#./}" ;;
+                  esac
+                  if curl --fail --silent --show-error -H 'Cache-Control: no-cache' "${url}?proof=${stamp}" > /tmp/current.js; then
+                    cat /tmp/current.js >> /tmp/all.js
+                    printf '\n' >> /tmp/all.js
+                    grep -oE 'assets/[A-Za-z0-9._-]+\.js' /tmp/current.js | sed 's#^#/#' | sort -u >> /tmp/queue || true
+                  fi
+                done
+                if grep -q 'Arşiv Bileşen Formülü' /tmp/all.js && grep -q 'Bileşenler:' /tmp/all.js; then
+                  echo "$host yeni renk-formul UI bundleini servis ediyor: $root_js"
+                  cp /tmp/home.html "/tmp/${host//./_}-home.html"
+                  echo "$root_js" > "/tmp/${host//./_}-root-js.txt"
+                  return 0
+                fi
+              fi
+              echo "$host henuz yeni renk-formul bundleinda degil (deneme $attempt/90, root=${root_js:-yok})."
+              sleep 5
+            done
+            return 1
+          }
+          check_host kyerp.net
+          check_host app.kyerp.net
+
+      - name: Iki alan adinin ayni canonical frontend paketini verdigini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          root_a="$(cat /tmp/kyerp_net-root-js.txt)"
+          root_b="$(cat /tmp/app_kyerp_net-root-js.txt)"
+          echo "kyerp.net: $root_a"
+          echo "app.kyerp.net: $root_b"
+          test "$root_a" = "$root_b"
+          echo "FINAL: 18-3920 D1 formulu + iki canli alan adi + renk bilesen UI birebir dogrulandi."
