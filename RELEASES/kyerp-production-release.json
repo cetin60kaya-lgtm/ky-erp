@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-25T11:50:00+03:00",
-  "attempt": 56,
+  "requestedAt": "2026-08-25T20:26:35+03:00",
+  "attempt": 57,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "admin-users-company-centered-workspace",
@@ -12,6 +12,14 @@
     "company-user-active-passive-management",
     "admin-mfa-session-management",
     "google-microsoft-authenticator-totp-compatibility",
+    "dual-independent-google-microsoft-mfa",
+    "provider-specific-qr-and-secret",
+    "cross-provider-mfa-recovery",
+    "hashed-one-time-recovery-codes",
+    "recovery-code-acknowledgement-hardening",
+    "mfa-reset-session-challenge-approval-revocation",
+    "legacy-single-mfa-safe-migration",
+    "provider-specific-admin-mfa-reset",
     "app-kyerp-clean-root-before-auth",
     "all-deep-links-cleaned-before-auth",
     "clean-root-login-entry",
@@ -32,5 +40,5 @@
     "boyahane-preserve-approved-recipes-lots-stock-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 56: Attempt 55 kapsamındaki Yönetim/Kullanıcı/MFA ve mevcut canlı özellikler aynen korunur. Boyahane Kayıtlı Renkler için Renk Kayıt(2).xlsm kaynağından temizlenmiş 908 renk kartı / 893 benzersiz Pantone canlı D1'de tutulur. Bunların Excel PANTONE FORMUL sayfasında güvenilir bileşen kaydı bulunan 737 tanesine toplam 3407 bileşen satırlık arşiv referans formülü bağlandı. S10 CLEAR, S20 WHITE, MAVİ KBT, KIRMIZI KGC, KARMEN KBD, SİYAH KNG gibi bileşenler gramajlarıyla renk kartında özet ve detayda tam tablo olarak gösterilir. Kaynakta formülü olmayan 171 renge sahte bileşen oluşturulmaz. Arşiv formülü productionSafe=false'dır; gerçek üretimde ürün/lot doğrulaması ve mevcut onaylı reçete mekanizması devam eder. Mevcut reçete, lot, stok, üretim ve geçmiş kayıtları silinmez. Yayın; frontend lint/build/Chromium, Worker audit/typecheck/build, tam canlı D1 yedeği, migration/schema audit, API health/Boyahane, Worker deploy, Pages deploy ve canlı smoke başarıyla tamamlanmadan bitmiş sayılmaz."
+  "note": "Attempt 57: Google Authenticator ve Microsoft Authenticator artık iki bağımsız MFA yöntemidir; ayrı secret, QR ve aktiflik kaydı kullanır. Çalışan sağlayıcı diğerini güvenli şekilde yeniden kurabilir. İki sağlayıcıya da erişim yoksa SHA-256 hash ile saklanan 8 tek kullanımlık kurtarma kodu kullanılır; kodlar kullanıcı açıkça onaylayana kadar kaybolmuş kabul edilerek yeniden üretilip gösterilir. MFA/kurtarma/parola sıfırlamalarında aktif session, challenge ve tüketilmemiş PENDING/APPROVED login approval kayıtları güvenlik için geçersizleştirilir. Eski tek MFA kullanan hesaplar mevcut kodlarını bir kez doğruladıktan sonra veri kaybetmeden Google ve Microsoft'u ayrı ayrı kurar. Yönetim ekranında Google Yeniden Kur, Microsoft Yeniden Kur ve Tüm MFA'yı Sıfırla ayrı işlemlerdir. Önceki Attempt 56 kapsamındaki Boyahane, İşNet, Desen, İK, Muhasebe ve canlı veri düzenleri aynen korunur. Yayın; tam canlı D1 yedeği, 0019 migration, şema denetimi, Worker ve Pages deploy ile canlı sağlık kontrolleri başarılı olmadan bitmiş sayılmaz."
 }
