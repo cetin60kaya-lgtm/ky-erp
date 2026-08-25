@@ -107,8 +107,12 @@ export async function denyLogin(id) {
   );
 }
 
-export async function resetUserMfa(id) {
+export async function resetUserMfa(id, provider = "ALL") {
+  const normalized = String(provider || "ALL").toUpperCase();
+  const suffix = normalized === "GOOGLE" || normalized === "MICROSOFT"
+    ? `/${normalized.toLowerCase()}`
+    : "";
   return unwrap(
-    await apiPost(`/admin/security/users/${encodeURIComponent(id)}/reset-mfa`, {}),
+    await apiPost(`/admin/security/users/${encodeURIComponent(id)}/reset-mfa${suffix}`, {}),
   );
 }
