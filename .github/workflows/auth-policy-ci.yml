@@ -74,6 +74,10 @@ jobs:
           npm test
           npm run build
 
+      - name: Gerçek yerel Worker ile auth runtime smoke
+        working-directory: APP/cloud/ky-erp-api
+        run: node scripts/auth-policy-runtime-smoke.mjs
+
       - name: Frontend paketleri
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
@@ -92,6 +96,7 @@ jobs:
           set -euo pipefail
           grep -Fq 'PASSWORD_ONLY' APP/cloud/ky-erp-api/src/auth-policy-cloud.ts
           grep -Fq 'POLICY_MFA_LEGACY_REQUIRED' APP/cloud/ky-erp-api/src/auth-policy-compat.ts
+          grep -Fq 'OWNER_PROFILE_UPDATED_SECURITY_FIELDS_LOCKED' APP/cloud/ky-erp-api/src/auth-policy-owner-guard.ts
           grep -Fq 'session_seconds' APP/cloud/ky-erp-api/migrations/0020_auth_security_policy_owner_recovery.sql
           grep -Fq 'owner_recovery_enabled' APP/cloud/ky-erp-api/migrations/0020_auth_security_policy_owner_recovery.sql
           grep -Fq 'Sadece parola' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
