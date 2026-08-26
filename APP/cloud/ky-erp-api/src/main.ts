@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
+import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
 import { registerAuthPolicyCompatRoutes } from "./auth-policy-compat";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
@@ -121,8 +122,9 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
-// Sıra önemlidir: acil fallback zenginleştiricisi -> legacy/owner guard -> yeni politika motoru -> legacy uygulama.
+// Sıra önemlidir: acil fallback -> owner profil kilidi -> legacy/company guard -> yeni politika motoru -> legacy uygulama.
 registerAuthRecoveryCodeFallbackRoutes(shell);
+registerAuthOwnerGuardRoutes(shell);
 registerAuthPolicyCompatRoutes(shell);
 registerAuthPolicyRoutes(shell);
 shell.route("/", app);
