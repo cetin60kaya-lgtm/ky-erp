@@ -224,6 +224,12 @@ async function attendanceMonth(c: Context<AppEnv>, auth: Row, employeeId: string
   const overrideByDate = new Map(overrides.map((row) => [dateOnly(row.work_date), row]));
   const inBase = minutesOf(EXPECTED_IN)!;
   const outBase = minutesOf(EXPECTED_OUT)!;
+  const todayTr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
   const days = dates.map((date) => {
     const dayEvents = byDate.get(date) || [];
     const override = overrideByDate.get(date);
@@ -231,9 +237,15 @@ async function attendanceMonth(c: Context<AppEnv>, auth: Row, employeeId: string
     const firstTime = text(override?.manual_in) || times[0] || "";
     const lastTime = text(override?.manual_out) || (times.length > 1 ? times.at(-1)! : "");
     const wd = weekday(date);
+    const outsideEmployment = Boolean(
+      (person.startDate && date < person.startDate) ||
+      (person.exitDate && date > person.exitDate),
+    );
+    const futureDay = date > todayTr;
     let status = text(override?.status);
     if (!status || status === "AUTO") {
       if (leaves.has(date)) status = upper(leaves.get(date)).includes("YILLIK") ? "YILLIK_IZIN" : "IZIN";
+      else if (outsideEmployment || futureDay) status = "DONEM_DISI";
       else if (holidays.has(date)) status = "RESMI_TATIL";
       else if (wd === 0 || wd === 6) status = "HAFTA_SONU";
       else if (!times.length) status = "KART_YOK";

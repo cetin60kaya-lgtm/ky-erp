@@ -58,6 +58,7 @@ function statusLabel(value) {
     KART_YOK: "Kart Yok",
     EKSIK_BASIM: "Eksik Basım",
     DEVAMSIZ: "Devamsız",
+    DONEM_DISI: "Dönem Dışı",
   };
   return map[value] || value || "-";
 }

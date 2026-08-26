@@ -147,6 +147,9 @@ export const MODULES = [
         ],
       },
     ],
+    hiddenTabs: [
+      ["denetim-raporu", "Denetim Raporları", "raporlar"],
+    ],
   },
   {
     key: "uretim",
