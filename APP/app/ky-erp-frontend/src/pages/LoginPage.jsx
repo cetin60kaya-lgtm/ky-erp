@@ -13,24 +13,17 @@ function normalizeCredential(value) {
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .trim();
 }
-
 function normalizeProvider(value) {
   const provider = String(value || "").toUpperCase();
   return provider === "GOOGLE" || provider === "MICROSOFT" ? provider : "";
 }
-
-function otherProvider(provider) {
-  return provider === "MICROSOFT" ? "GOOGLE" : "MICROSOFT";
-}
-
 function deviceName() {
   if (typeof navigator === "undefined") return "KY ERP cihazı";
   const platform = navigator.userAgentData?.platform || navigator.platform || "Cihaz";
   const mobile = navigator.userAgentData?.mobile ? "Telefon" : "Tarayıcı";
   return `${platform} · ${mobile}`.slice(0, 160);
 }
-
-function authenticatorCompatibleUri(value) {
+function compatibleOtpUri(value) {
   const raw = String(value || "").trim();
   const prefix = "otpauth://totp/";
   if (!raw.toLowerCase().startsWith(prefix)) return raw;
@@ -45,8 +38,7 @@ function authenticatorCompatibleUri(value) {
     const issuer = decodedLabel.slice(0, separatorIndex).trim();
     const account = decodedLabel.slice(separatorIndex + 1).trim();
     if (!issuer || !account) return raw;
-    const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
-    return `${prefix}${label}${query ? `?${query}` : ""}`;
+    return `${prefix}${encodeURIComponent(issuer)}:${encodeURIComponent(account)}${query ? `?${query}` : ""}`;
   } catch {
     return raw;
   }
@@ -57,26 +49,27 @@ export default function LoginPage() {
     login,
     verifyMfa,
     recoverMfa,
-    acknowledgeRecoveryCodes,
+    startOwnerRecovery,
+    verifyOwnerRecovery,
     checkApproval,
   } = useAuth();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [recoveryCode, setRecoveryCode] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("GOOGLE");
   const [resetProvider, setResetProvider] = useState("");
   const [flow, setFlow] = useState({ stage: "CREDENTIALS" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [qrError, setQrError] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [showRecoveryCode, setShowRecoveryCode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryOtp, setRecoveryOtp] = useState("");
+  const [recoveryAnswers, setRecoveryAnswers] = useState(["", ""]);
   const qrRef = useRef(null);
   const deviceLabel = useMemo(() => deviceName(), []);
-  const compatibleOtpUri = useMemo(
-    () => authenticatorCompatibleUri(flow.otpauthUri),
-    [flow.otpauthUri],
-  );
+  const otpUri = useMemo(() => compatibleOtpUri(flow.otpauthUri), [flow.otpauthUri]);
 
   useEffect(() => {
     document.title = "KY ERP | Kurumsal Giriş";
@@ -85,55 +78,59 @@ export default function LoginPage() {
     }
   }, []);
 
+  function chooseNextProvider(response) {
+    const available = Array.isArray(response?.availableProviders)
+      ? response.availableProviders.map(normalizeProvider).filter(Boolean)
+      : [];
+    const verified = Array.isArray(response?.verifiedProviders)
+      ? response.verifiedProviders.map(normalizeProvider).filter(Boolean)
+      : [];
+    const direct = normalizeProvider(response?.provider);
+    if (direct) return direct;
+    return available.find((item) => !verified.includes(item)) || available[0] || "GOOGLE";
+  }
+
   function applyResponse(response) {
     const stage = String(response?.stage || "").toUpperCase();
     if (!stage) return;
-    if (stage === "AUTHENTICATED") {
-      setFlow({ stage: "AUTHENTICATED" });
-      setCode("");
-      setRecoveryCode("");
-      setResetProvider("");
-      setError("");
-      return;
-    }
-    const provider = normalizeProvider(response?.provider);
-    const availableProviders = Array.isArray(response?.availableProviders)
-      ? response.availableProviders.map(normalizeProvider).filter(Boolean)
-      : [];
-    if (provider) setSelectedProvider(provider);
-    else if (availableProviders.length && !availableProviders.includes(selectedProvider)) {
-      setSelectedProvider(availableProviders[0]);
+    setError("");
+    setCode("");
+    setResetProvider("");
+    setQrError("");
+    setShowRecoveryCode(false);
+    setRecoveryCode("");
+    if (["MFA_REQUIRED", "MFA_SETUP"].includes(stage)) setSelectedProvider(chooseNextProvider(response));
+    if (stage === "OWNER_RECOVERY_VERIFY") {
+      setRecoveryOtp("");
+      setRecoveryAnswers(["", ""]);
     }
     setFlow({ ...response, stage });
-    setCode("");
-    setRecoveryCode("");
-    setCopied(false);
-    if (stage !== "MFA_REQUIRED") setResetProvider("");
   }
 
-  function goBackToCredentials() {
+  function resetToCredentials(message = "") {
     setFlow({ stage: "CREDENTIALS" });
+    setPassword("");
     setCode("");
     setRecoveryCode("");
+    setRecoveryOtp("");
+    setRecoveryAnswers(["", ""]);
     setResetProvider("");
-    setError("");
-    setQrError("");
-    setCopied(false);
+    setShowRecoveryCode(false);
+    setError(message);
   }
 
-  async function handleSubmit(event) {
+  async function handleLogin(event) {
     event?.preventDefault();
-    const cleanUsername = normalizeCredential(username);
+    const identity = normalizeCredential(username);
     const cleanPassword = normalizeCredential(password);
-    if (!cleanUsername || !cleanPassword) {
+    if (!identity || !cleanPassword) {
       setError("E-posta/kullanıcı adı ve şifre zorunludur.");
       return;
     }
     try {
       setLoading(true);
       setError("");
-      const response = await login(cleanUsername, cleanPassword, deviceLabel);
-      applyResponse(response);
+      applyResponse(await login(identity, cleanPassword, deviceLabel));
     } catch (requestError) {
       setError(requestError?.message || "Giriş yapılamadı.");
     } finally {
@@ -143,7 +140,7 @@ export default function LoginPage() {
 
   async function handleMfa(event) {
     event?.preventDefault();
-    const cleanCode = String(code || "").replace(/\s+/g, "");
+    const cleanCode = String(code || "").replace(/\D/g, "");
     if (!/^\d{6}$/.test(cleanCode)) {
       setError("Authenticator uygulamasındaki 6 haneli kodu girin.");
       return;
@@ -151,14 +148,13 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError("");
-      const response = await verifyMfa({
+      applyResponse(await verifyMfa({
         challengeId: flow.challengeId,
         challengeToken: flow.challengeToken,
         code: cleanCode,
-        provider: flow.stage === "MFA_LEGACY_REQUIRED" ? "" : selectedProvider,
+        provider: normalizeProvider(flow.provider) || selectedProvider,
         resetProvider,
-      });
-      applyResponse(response);
+      }));
     } catch (requestError) {
       setError(requestError?.message || "Authenticator doğrulaması başarısız oldu.");
     } finally {
@@ -166,22 +162,21 @@ export default function LoginPage() {
     }
   }
 
-  async function handleRecovery(event) {
+  async function handleRecoveryCode(event) {
     event?.preventDefault();
-    const cleanRecovery = String(recoveryCode || "").trim().toUpperCase();
-    if (!/^KYERP-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(cleanRecovery)) {
-      setError("Geçerli KY ERP kurtarma kodunu girin. Örnek: KYERP-ABCD-2345");
+    const clean = String(recoveryCode || "").trim().toUpperCase();
+    if (!/^KYERP-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(clean)) {
+      setError("Geçerli tek kullanımlık KY ERP kurtarma kodunu girin.");
       return;
     }
     try {
       setLoading(true);
       setError("");
-      const response = await recoverMfa({
+      applyResponse(await recoverMfa({
         challengeId: flow.challengeId,
         challengeToken: flow.challengeToken,
-        recoveryCode: cleanRecovery,
-      });
-      applyResponse(response);
+        recoveryCode: clean,
+      }));
     } catch (requestError) {
       setError(requestError?.message || "Kurtarma kodu doğrulanamadı.");
     } finally {
@@ -189,45 +184,52 @@ export default function LoginPage() {
     }
   }
 
-  async function handleRecoveryCodesAck() {
+  async function handleOwnerRecovery(channel) {
     try {
       setLoading(true);
       setError("");
-      const response = await acknowledgeRecoveryCodes({
+      applyResponse(await startOwnerRecovery({
         challengeId: flow.challengeId,
         challengeToken: flow.challengeToken,
-      });
-      applyResponse(response);
+        channel,
+      }));
     } catch (requestError) {
-      setError(requestError?.message || "Kurtarma kodu onayı tamamlanamadı.");
+      setError(requestError?.message || "Hesap kurtarma başlatılamadı.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function copyRecoveryCodes() {
-    const value = (flow.recoveryCodes || []).join("\n");
-    if (!value) return;
+  async function handleOwnerRecoveryVerify(event) {
+    event?.preventDefault();
+    const otp = String(recoveryOtp || "").replace(/\D/g, "");
+    if (!/^\d{6}$/.test(otp) || recoveryAnswers.some((answer) => !String(answer || "").trim())) {
+      setError("6 haneli doğrulama kodunu ve iki güvenlik sorusunun cevabını girin.");
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      setCopied(false);
+      setLoading(true);
+      setError("");
+      applyResponse(await verifyOwnerRecovery({
+        recoveryId: flow.recoveryId,
+        recoveryToken: flow.recoveryToken,
+        otp,
+        answers: recoveryAnswers,
+      }));
+    } catch (requestError) {
+      setError(requestError?.message || "Hesap kurtarma doğrulanamadı.");
+    } finally {
+      setLoading(false);
     }
   }
 
   async function refreshApproval() {
     if (!flow.approvalId || !flow.approvalToken) return;
     try {
-      const response = await checkApproval({
-        approvalId: flow.approvalId,
-        approvalToken: flow.approvalToken,
-      });
+      const response = await checkApproval({ approvalId: flow.approvalId, approvalToken: flow.approvalToken });
       const stage = String(response?.stage || "").toUpperCase();
-      if (stage === "APPROVAL_DENIED" || stage === "APPROVAL_EXPIRED") {
-        setError(response?.message || "Giriş onayı tamamlanmadı. Yeniden giriş yapın.");
-        setFlow({ stage: "CREDENTIALS" });
-        setPassword("");
+      if (["APPROVAL_DENIED", "APPROVAL_EXPIRED"].includes(stage)) {
+        resetToCredentials(response?.message || "Giriş onayı tamamlanmadı. Yeniden giriş yapın.");
         return;
       }
       applyResponse(response);
@@ -237,10 +239,15 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
+    if (flow.stage !== "APPROVAL_PENDING") return undefined;
+    const timer = window.setInterval(refreshApproval, 3000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.stage, flow.approvalId, flow.approvalToken]);
+
+  useEffect(() => {
     if (flow.stage !== "AUTHENTICATED") return undefined;
-    const timer = window.setTimeout(() => {
-      window.location.replace(`${window.location.pathname}${window.location.search}${window.location.hash}`);
-    }, 350);
+    const timer = window.setTimeout(() => window.location.replace(`${window.location.pathname}${window.location.search}${window.location.hash}`), 250);
     return () => window.clearTimeout(timer);
   }, [flow.stage]);
 
@@ -250,49 +257,38 @@ export default function LoginPage() {
       return undefined;
     }
     const holder = qrRef.current;
-    const setupUri = compatibleOtpUri;
-    if (!holder || !setupUri) {
-      setQrError("Authenticator kurulum bağlantısı hazırlanamadı. Geri dönüp yeniden giriş yapın.");
-      return undefined;
-    }
+    if (!holder || !otpUri) return undefined;
     holder.replaceChildren();
     const QRCodeCtor = window.QRCode;
     if (typeof QRCodeCtor !== "function") {
-      setQrError("QR bileşeni yüklenemedi. Sayfayı Ctrl+F5 ile yenileyip tekrar deneyin.");
+      setQrError("QR bileşeni yüklenemedi. Sayfayı Ctrl+F5 ile yenileyin.");
       return undefined;
     }
     try {
       new QRCodeCtor(holder, {
-        text: setupUri,
+        text: otpUri,
         width: 220,
         height: 220,
         colorDark: "#0f172a",
         colorLight: "#ffffff",
         correctLevel: QRCodeCtor.CorrectLevel?.M,
       });
-      setQrError("");
     } catch {
-      holder.replaceChildren();
-      setQrError("QR kodu oluşturulamadı. Geri dönüp yeniden giriş yapın.");
+      setQrError("QR kodu oluşturulamadı. Geri dönüp yeniden deneyin.");
     }
     return () => holder.replaceChildren();
-  }, [compatibleOtpUri, flow.stage]);
-
-  useEffect(() => {
-    if (flow.stage !== "APPROVAL_PENDING") return undefined;
-    const timer = window.setInterval(refreshApproval, 3000);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flow.stage, flow.approvalId, flow.approvalToken]);
+  }, [flow.stage, otpUri]);
 
   const availableProviders = Array.isArray(flow.availableProviders)
     ? flow.availableProviders.map(normalizeProvider).filter(Boolean)
     : [];
-  const selectedAvailable = availableProviders.includes(selectedProvider);
-  const alternative = otherProvider(selectedProvider);
-  const alternativeAvailable = availableProviders.includes(alternative);
-  const selectedLabel = PROVIDER_LABELS[selectedProvider] || "Authenticator";
-  const resetLabel = resetProvider ? PROVIDER_LABELS[resetProvider] : "";
+  const verifiedProviders = Array.isArray(flow.verifiedProviders)
+    ? flow.verifiedProviders.map(normalizeProvider).filter(Boolean)
+    : [];
+  const currentProvider = normalizeProvider(flow.provider) || selectedProvider;
+  const currentLabel = PROVIDER_LABELS[currentProvider] || "Authenticator";
+  const alternative = currentProvider === "GOOGLE" ? "MICROSOFT" : "GOOGLE";
+  const alternativeAvailable = availableProviders.includes(alternative) && !verifiedProviders.includes(alternative);
 
   return (
     <div className="login-page">
@@ -302,289 +298,159 @@ export default function LoginPage() {
 
         {flow.stage === "CREDENTIALS" ? (
           <>
-            <p>Parolanız ve iki ayrı Authenticator güvenlik düzeniyle oturum açın.</p>
-            <form onSubmit={handleSubmit}>
-              <label>
-                E-posta veya Kullanıcı Adı
-                <input
-                  name="username"
-                  autoFocus
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="kullanici veya mail@firma.com"
-                />
+            <p>Giriş güvenliği hesabınıza özel olarak sistem yöneticisi tarafından belirlenir.</p>
+            <form onSubmit={handleLogin}>
+              <label>E-posta veya Kullanıcı Adı
+                <input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="kullanici veya mail@firma.com" />
               </label>
-              <label>
-                Şifre
-                <input
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="********"
-                />
+              <label>Şifre
+                <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="********" />
               </label>
               {error ? <div className="login-error">{error}</div> : null}
-              <button type="submit" disabled={loading}>
-                {loading ? "Kontrol ediliyor..." : "Giriş Yap"}
-              </button>
+              <button type="submit" disabled={loading}>{loading ? "Kontrol ediliyor..." : "Giriş Yap"}</button>
             </form>
+            <div className="login-security-box">
+              <strong>Kullanıcıya özel güvenlik</strong>
+              <span>Sadece parola kullanan hesaplar en fazla 30 dakika açık kalır.</span>
+              <span>Google ve Microsoft için iki ayrı Authenticator güvenlik düzeniyle oturum açın; kullanıcı bazında biri veya ikisi zorunlu tutulabilir.</span>
+            </div>
           </>
         ) : null}
 
         {flow.stage === "MFA_LEGACY_REQUIRED" ? (
           <>
-            <p>
-              Eski tek Authenticator kaydınız bulundu. Bu kodu bir kez doğruladıktan sonra Google ve Microsoft kayıtları ayrı ayrı oluşturulacak.
-            </p>
+            <p><strong>Mevcut Authenticator doğrulaması</strong></p>
             <div className="login-security-box">
               <strong>Güvenli geçiş</strong>
-              <span>Mevcut Authenticator kaydı silinmeden önce doğrulanır.</span>
-              <span>Ardından Google Authenticator ve Microsoft Authenticator için iki farklı QR oluşturulur.</span>
+              <span>Eski tek Authenticator kaydınız bulundu. Bu kod bir kez doğrulandıktan sonra yeni Google/Microsoft güvenlik düzenine taşınacaksınız.</span>
             </div>
             <form onSubmit={handleMfa}>
-              <label>
-                Mevcut Authenticator Kodu
-                <input
-                  autoFocus
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                />
+              <label>Mevcut 6 Haneli Authenticator Kodu
+                <input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
               </label>
               {error ? <div className="login-error">{error}</div> : null}
               <button type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Mevcut Kodu Doğrula"}</button>
-              <button type="button" className="login-secondary" disabled={loading} onClick={goBackToCredentials}>Geri Dön</button>
+              {flow.recoveryCodeAvailable ? <button type="button" className="login-secondary" onClick={() => setShowRecoveryCode((value) => !value)}>Acil kurtarma kodu kullan</button> : null}
+              <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button>
             </form>
           </>
         ) : null}
 
         {flow.stage === "MFA_SETUP" ? (
           <>
-            <p>
-              <strong>{PROVIDER_LABELS[normalizeProvider(flow.provider)] || flow.providerLabel || "Authenticator"}</strong> ayrı bir KY ERP güvenlik yöntemi olarak kuruluyor.
-            </p>
-            <div className={`login-security-box login-setup-box provider-${String(flow.provider || "").toLowerCase()}`}>
-              <strong>{flow.providerLabel || PROVIDER_LABELS[normalizeProvider(flow.provider)]}</strong>
-              <span>1. Telefonunuzda yalnız bu Authenticator uygulamasını açın.</span>
-              <span>2. + / Hesap ekle → QR kodu tara seçin.</span>
+            <p><strong>{flow.providerLabel || currentLabel}</strong> bu hesap için kuruluyor.</p>
+            {flow.recoveryReenroll ? <div className="login-security-box"><strong>Güvenli yeniden kurulum</strong><span>Bu işlem doğrudan oturum açmaz. Gerekli Authenticator kayıtları tamamlanır ve ardından yeniden parola ile giriş yapılır.</span></div> : null}
+            <div className={`login-security-box login-setup-box provider-${String(currentProvider).toLowerCase()}`}>
+              <strong>{flow.providerLabel || currentLabel}</strong>
+              <span>1. İlgili Authenticator uygulamasını açın.</span>
+              <span>2. Hesap ekle → QR kodu tara seçin.</span>
               <span>3. Aşağıdaki QR kodunu okutun ve oluşan 6 haneli kodu girin.</span>
-              <div className="login-qr-shell" aria-label={`${flow.providerLabel || "KY ERP Authenticator"} QR kodu`}>
-                <div className="login-qr-code" ref={qrRef} />
-              </div>
-              <div className="login-qr-help">
-                Google ve Microsoft için aynı QR kullanılmaz. Her sağlayıcının kendi ayrı anahtarı ve QR kodu vardır.
-              </div>
-              {compatibleOtpUri ? (
-                <a className="login-auth-link" href={compatibleOtpUri}>
-                  Telefonda {flow.providerLabel || "Authenticator"} uygulamasını aç
-                </a>
-              ) : null}
+              <div className="login-qr-shell"><div className="login-qr-code" ref={qrRef} /></div>
               {qrError ? <div className="login-error">{qrError}</div> : null}
-              <details className="login-manual-setup">
-                <summary>QR okunmazsa manuel kurulum anahtarını göster</summary>
-                <span>Hesap türü: Zaman tabanlı (TOTP) · 6 hane · 30 saniye</span>
-                <code>{flow.secret}</code>
-              </details>
+              <details className="login-manual-setup"><summary>QR okunmazsa manuel kurulum</summary><code>{flow.secret || ""}</code></details>
             </div>
             <form onSubmit={handleMfa}>
-              <label>
-                {flow.providerLabel || "Authenticator"} Kodu
-                <input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                />
+              <label>6 Haneli Kod
+                <input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
               </label>
               {error ? <div className="login-error">{error}</div> : null}
-              <button type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : `${flow.providerLabel || "Authenticator"} Kurulumunu Doğrula`}</button>
-              <button type="button" className="login-secondary" disabled={loading} onClick={goBackToCredentials}>Kurulumu İptal Et</button>
+              <button type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : `${flow.providerLabel || currentLabel} Kurulumunu Doğrula`}</button>
+              {!flow.recoveryReenroll ? <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button> : null}
             </form>
           </>
         ) : null}
 
         {flow.stage === "MFA_REQUIRED" ? (
           <>
-            <p>Google ve Microsoft kayıtları birbirinden bağımsızdır. Çalışan doğrulama aracını seçin.</p>
-            <div className="login-provider-tabs" role="tablist" aria-label="Authenticator seçimi">
-              {Object.entries(PROVIDER_LABELS).map(([provider, label]) => {
-                const active = selectedProvider === provider;
-                const enabled = availableProviders.includes(provider);
-                return (
-                  <button
-                    key={provider}
-                    type="button"
-                    className={`login-provider-tab ${active ? "active" : ""} ${enabled ? "enabled" : "disabled"}`}
-                    onClick={() => {
-                      if (!enabled) return;
-                      setSelectedProvider(provider);
-                      setResetProvider("");
-                      setCode("");
-                      setError("");
-                    }}
-                    disabled={!enabled || loading}
-                  >
-                    <span>{label}</span>
-                    <small>{enabled ? "Aktif" : "Kurulum gerekli"}</small>
-                  </button>
-                );
-              })}
-            </div>
+            <p><strong>{flow.policyLabel || "Authenticator doğrulaması"}</strong></p>
+            {flow.requireBoth ? <div className="login-security-box"><strong>İki doğrulama gerekli</strong><span>Google ve Microsoft kodları bağımsız olarak doğrulanır.</span><span>Doğrulanan: {verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") : "Henüz yok"}</span></div> : null}
+            {availableProviders.length > 1 ? <div className="login-provider-tabs">{availableProviders.map((provider) => <button key={provider} type="button" className={selectedProvider === provider ? "active" : ""} disabled={verifiedProviders.includes(provider)} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); }}>{PROVIDER_LABELS[provider]}{verifiedProviders.includes(provider) ? " ✓" : ""}</button>)}</div> : null}
+            <form onSubmit={handleMfa}>
+              <label>{currentLabel} Kodu
+                <input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+              </label>
+              {resetProvider ? <div className="login-security-box"><strong>{PROVIDER_LABELS[resetProvider]} yeniden kurulacak</strong><span>Önce {currentLabel} kodunuzla kimliğinizi doğrulayın.</span></div> : null}
+              {error ? <div className="login-error">{error}</div> : null}
+              <button type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : `${currentLabel} ile Doğrula`}</button>
+              {!flow.requireBoth && alternativeAvailable ? <button type="button" className="login-secondary" onClick={() => setSelectedProvider(alternative)}>Diğer Authenticator ile doğrula</button> : null}
+              {!flow.requireBoth && availableProviders.includes(alternative) ? (
+                <button
+                  type="button"
+                  className="login-secondary"
+                  onClick={() => {
+                    const providerToReset = currentProvider;
+                    setSelectedProvider(alternative);
+                    setResetProvider(providerToReset);
+                    setCode("");
+                  }}
+                >
+                  {currentLabel} erişilemiyor · diğer yöntemle yeniden kur
+                </button>
+              ) : null}
+              <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button>
+            </form>
 
-            {resetProvider ? (
-              <div className="login-warning-box">
-                <strong>{resetLabel} yeniden kurulacak.</strong>
-                <span>Önce {selectedLabel} koduyla kimliğinizi doğrulayın. Doğrulama geçerse eski {resetLabel} anahtarı iptal edilip yeni QR üretilecek.</span>
+            {flow.ownerRecoveryAvailable ? (
+              <div className="login-recovery-panel">
+                <strong>Authenticator'lara erişemiyor musunuz?</strong>
+                <span>Doğrulanmış telefon veya e-posta + iki özel güvenlik sorusu yalnız Authenticator'ları yeniden kurar; doğrudan uygulamaya giriş vermez.</span>
+                <div className="login-provider-tabs">
+                  {flow.recoveryChannels?.email ? <button type="button" onClick={() => handleOwnerRecovery("EMAIL")} disabled={loading}>E-posta ile Kurtar</button> : null}
+                  {flow.recoveryChannels?.sms ? <button type="button" onClick={() => handleOwnerRecovery("SMS")} disabled={loading}>Telefon / SMS ile Kurtar</button> : null}
+                </div>
               </div>
             ) : null}
 
-            <form onSubmit={handleMfa}>
-              <label>
-                {selectedLabel} Kodu
-                <input
-                  autoFocus
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}
-                  disabled={!selectedAvailable}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                />
-              </label>
-              {error ? <div className="login-error">{error}</div> : null}
-              <button type="submit" disabled={loading || !selectedAvailable}>
-                {loading ? "Doğrulanıyor..." : `${selectedLabel} ile Doğrula`}
-              </button>
-
-              {alternativeAvailable ? (
-                <button
-                  type="button"
-                  className="login-secondary login-recovery-action"
-                  disabled={loading}
-                  onClick={() => {
-                    setResetProvider(selectedProvider);
-                    setSelectedProvider(alternative);
-                    setCode("");
-                    setError("");
-                  }}
-                >
-                  {selectedLabel}&apos;a erişemiyorum · {PROVIDER_LABELS[alternative]} ile doğrula ve yeniden kur
-                </button>
-              ) : null}
-
-              {flow.recoveryAvailable ? (
-                <button
-                  type="button"
-                  className="login-link-button"
-                  disabled={loading}
-                  onClick={() => {
-                    setFlow((previous) => ({ ...previous, stage: "RECOVERY_CODE" }));
-                    setResetProvider("");
-                    setError("");
-                  }}
-                >
-                  İki Authenticator&apos;a da erişemiyorum · Kurtarma kodu kullan
-                </button>
-              ) : null}
-
-              <button type="button" className="login-secondary" disabled={loading} onClick={goBackToCredentials}>Geri Dön</button>
-            </form>
+            {flow.recoveryCodeAvailable ? (
+              <div className="login-recovery-panel">
+                <strong>Acil yedek kurtarma</strong>
+                <span>Telefon/e-posta kurtarma tam kurulana kadar mevcut tek kullanımlık KY ERP kodları kilitlenmeyi önlemek için acil yedek olarak korunur.</span>
+                <button type="button" className="login-secondary" onClick={() => setShowRecoveryCode((value) => !value)}>{showRecoveryCode ? "Kurtarma kodunu kapat" : "Tek kullanımlık kurtarma kodu kullan"}</button>
+              </div>
+            ) : null}
           </>
         ) : null}
 
-        {flow.stage === "RECOVERY_CODE" ? (
-          <>
-            <p>İki Authenticator&apos;a da erişemiyorsanız daha önce kaydettiğiniz tek kullanımlık KY ERP kurtarma kodlarından birini girin.</p>
-            <div className="login-warning-box danger">
-              <strong>Kurtarma işlemi iki Authenticator kaydını da yeniler.</strong>
-              <span>Doğrulama başarılı olursa eski Google ve Microsoft anahtarları iptal edilir ve iki yeni QR sırayla oluşturulur.</span>
-            </div>
-            <form onSubmit={handleRecovery}>
-              <label>
-                Kurtarma Kodu
-                <input
-                  autoFocus
-                  autoComplete="off"
-                  value={recoveryCode}
-                  onChange={(event) => setRecoveryCode(event.target.value.toUpperCase().slice(0, 15))}
-                  placeholder="KYERP-ABCD-2345"
-                />
-              </label>
-              {error ? <div className="login-error">{error}</div> : null}
-              <button type="submit" disabled={loading}>{loading ? "Kontrol ediliyor..." : "Kurtarma Kodunu Doğrula"}</button>
-              <button
-                type="button"
-                className="login-secondary"
-                disabled={loading}
-                onClick={() => {
-                  setFlow((previous) => ({ ...previous, stage: "MFA_REQUIRED" }));
-                  setRecoveryCode("");
-                  setError("");
-                }}
-              >
-                Authenticator Seçimine Dön
-              </button>
-            </form>
-          </>
-        ) : null}
-
-        {flow.stage === "RECOVERY_CODES" ? (
-          <div className="login-approval recovery-codes-panel">
-            <div className="login-approval-icon">✓</div>
-            <h2>Kurtarma Kodlarınız Hazır</h2>
-            <p>Telefon sıfırlanır, kaybolur veya iki Authenticator&apos;a da erişemezseniz bu kodlardan biriyle hesabınızı kurtarabilirsiniz.</p>
-            <div className="login-recovery-grid">
-              {(flow.recoveryCodes || []).map((item) => <code key={item}>{item}</code>)}
-            </div>
-            <div className="login-warning-box">
-              <strong>Bu ekran tekrar gösterilmez.</strong>
-              <span>Kodları güvenli bir yere kaydedin. Her kod tek kullanımlıktır ve bir kurtarma işlemi başladığında eski kod seti iptal edilir.</span>
-            </div>
+        {showRecoveryCode && ["MFA_REQUIRED", "MFA_LEGACY_REQUIRED"].includes(flow.stage) ? (
+          <form onSubmit={handleRecoveryCode} className="login-recovery-panel">
+            <label>KY ERP Tek Kullanımlık Kurtarma Kodu
+              <input autoFocus value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value.toUpperCase())} placeholder="KYERP-ABCD-2345" />
+            </label>
             {error ? <div className="login-error">{error}</div> : null}
-            <button type="button" className="login-secondary" onClick={copyRecoveryCodes}>{copied ? "Kodlar Kopyalandı" : "Kurtarma Kodlarını Kopyala"}</button>
-            <button type="button" disabled={loading} onClick={handleRecoveryCodesAck}>{loading ? "Devam ediliyor..." : "Kodları Kaydettim · Girişe Devam Et"}</button>
-          </div>
+            <button type="submit" disabled={loading}>{loading ? "Kontrol ediliyor..." : "Kodu Doğrula ve Authenticator'ı Yeniden Kur"}</button>
+          </form>
+        ) : null}
+
+        {flow.stage === "OWNER_RECOVERY_VERIFY" ? (
+          <>
+            <p>Doğrulama kodu <strong>{flow.maskedDestination}</strong> kanalına gönderildi.</p>
+            <div className="login-security-box"><strong>Uygulama sahibi kurtarma</strong><span>Kod ve iki özel soru birlikte doğru olmalıdır. Başarılı olursa tüm eski oturumlar kapanır ve Google/Microsoft yeniden kurulur.</span></div>
+            <form onSubmit={handleOwnerRecoveryVerify}>
+              <label>6 Haneli Doğrulama Kodu
+                <input autoFocus inputMode="numeric" maxLength={6} value={recoveryOtp} onChange={(event) => setRecoveryOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+              </label>
+              {(flow.questions || []).slice(0, 2).map((question, index) => <label key={question.id || index}>{question.question}<input type="password" autoComplete="off" value={recoveryAnswers[index] || ""} onChange={(event) => setRecoveryAnswers((previous) => previous.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Cevabınız" /></label>)}
+              {error ? <div className="login-error">{error}</div> : null}
+              <button type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Kurtarmayı Doğrula"}</button>
+              <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>İptal</button>
+            </form>
+          </>
         ) : null}
 
         {flow.stage === "APPROVAL_PENDING" ? (
-          <div className="login-approval">
-            <div className="login-approval-icon">✓</div>
-            <h2>Authenticator Onaylandı</h2>
-            <p>
-              Giriş isteğiniz firma yöneticisine / uygulama yöneticisine gönderildi.
-              Onay verildiğinde bu ekran otomatik açılır.
-            </p>
-            <div className="login-security-box compact">
-              <span><strong>Cihaz:</strong> {deviceLabel}</span>
-              <span><strong>Oturum:</strong> Onaydan sonra en fazla 8 saat</span>
-              <span><strong>Güvenlik:</strong> Yönetici oturumu istediği anda iptal edebilir</span>
-            </div>
+          <>
+            <p>Kimlik doğrulaması tamamlandı. Yeni cihaz girişi için yönetici onayı bekleniyor.</p>
+            <div className="login-security-box"><strong>Giriş onayı bekleniyor</strong><span>Bu ekran otomatik kontrol edilir. Onay verildiğinde uygulama açılır.</span></div>
             {error ? <div className="login-error">{error}</div> : null}
-            <button type="button" disabled={loading} onClick={refreshApproval}>Onay Durumunu Kontrol Et</button>
-            <button type="button" className="login-secondary" onClick={goBackToCredentials}>Giriş İsteğini Kapat</button>
-          </div>
+            <button type="button" onClick={refreshApproval} disabled={loading}>Şimdi Kontrol Et</button>
+            <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button>
+          </>
         ) : null}
 
-        {flow.stage === "AUTHENTICATED" ? (
-          <div className="login-approval">
-            <div className="login-approval-icon">✓</div>
-            <h2>Doğrulama Tamamlandı</h2>
-            <p>Güvenli oturum açıldı. KY ERP yükleniyor...</p>
-          </div>
-        ) : null}
+        {flow.stage === "RECOVERY_COMPLETE" ? <><div className="login-security-box"><strong>Güvenlik kurulumu tamamlandı</strong><span>{flow.message}</span></div><button type="button" onClick={() => resetToCredentials()}>Yeniden Giriş Yap</button></> : null}
+        {flow.stage === "AUTHENTICATED" ? <div className="login-security-box"><strong>Giriş başarılı</strong><span>KY ERP açılıyor...</span></div> : null}
 
-        <div className="login-security-note">
-          Google ve Microsoft doğrulamaları ayrı anahtarlardır. Birisi bozulursa diğeriyle giriş yapıp sorunlu olanı yeniden kurabilirsiniz. KY ERP oturumları en fazla 8 saat geçerlidir.
-        </div>
+        <div className="login-footer">KY ERP · Oturum süresi kullanıcı güvenlik profiline göre sunucu tarafından uygulanır.</div>
       </div>
     </div>
   );

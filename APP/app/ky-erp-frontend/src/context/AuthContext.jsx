@@ -5,20 +5,8 @@ const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
 
 const MODULE_KEYS = [
-  "DASHBOARD",
-  "MUHASEBE",
-  "FIRMA_CARI",
-  "BELGE_ISLEM",
-  "KDV",
-  "CEK_ODEME",
-  "DESEN",
-  "IMALAT",
-  "BOYAHANE",
-  "IK",
-  "ISNET",
-  "ASISTAN",
-  "ADMIN",
-  "RAPORLAR",
+  "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
 const AuthContext = createContext(null);
@@ -38,20 +26,8 @@ function normalizePermissionRows(rows) {
 }
 
 function cleanLegacyAuthStorage() {
-  const legacyKeys = [
-    "kyerp.auth",
-    "kyerp_user",
-    "token",
-    "authToken",
-    AUTH_TOKEN_KEY,
-    AUTH_USER_KEY,
-  ];
-  legacyKeys.forEach((key) => {
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      // noop
-    }
+  ["kyerp.auth", "kyerp_user", "token", "authToken"].forEach((key) => {
+    try { window.localStorage.removeItem(key); } catch { /* noop */ }
   });
 }
 
@@ -61,8 +37,7 @@ function readStoredAuth() {
     const token = window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
     const userRaw = window.sessionStorage.getItem(AUTH_USER_KEY);
     const user = userRaw ? JSON.parse(userRaw) : null;
-    const permissions = normalizePermissionRows(user?.permissions);
-    return { token, user, permissions };
+    return { token, user, permissions: normalizePermissionRows(user?.permissions) };
   } catch {
     return { token: "", user: null, permissions: [] };
   }
@@ -108,244 +83,146 @@ export function AuthProvider({ children }) {
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
       window.sessionStorage.removeItem(AUTH_USER_KEY);
       cleanLegacyAuthStorage();
-    } catch {
-      // noop
-    }
+    } catch { /* noop */ }
   }, []);
 
-  const saveAuth = useCallback(
-    (nextToken, nextUser, nextPermissions) => {
-      const normalizedPermissions = normalizePermissionRows(nextPermissions);
-      const payload = {
-        token: String(nextToken || ""),
-        user: nextUser || null,
-        permissions: normalizedPermissions,
-      };
-      if (!payload.token || !payload.user) return false;
+  const saveAuth = useCallback((nextToken, nextUser, nextPermissions) => {
+    const normalizedPermissions = normalizePermissionRows(nextPermissions);
+    const payload = { token: String(nextToken || ""), user: nextUser || null, permissions: normalizedPermissions };
+    if (!payload.token || !payload.user) return false;
+    tokenRef.current = payload.token;
+    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+    try {
+      window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
+      window.sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify({ ...payload.user, permissions: payload.permissions }));
+    } catch { /* noop */ }
+    setAuthState(payload);
+    return true;
+  }, [clearAuth]);
 
-      tokenRef.current = payload.token;
-      setApiAuthHandlers({
-        getToken: () => tokenRef.current,
-        onUnauthorized: clearAuth,
-      });
-
-      try {
-        window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
-        window.sessionStorage.setItem(
-          AUTH_USER_KEY,
-          JSON.stringify({ ...payload.user, permissions: payload.permissions }),
-        );
-      } catch {
-        // noop
-      }
-
-      setAuthState(payload);
-      return true;
-    },
-    [clearAuth],
-  );
-
-  const finalizeResponse = useCallback(
-    (response) => {
-      if (!response?.token || !response?.user) return response;
-      saveAuth(
-        response.token,
-        response.user,
-        response.user?.permissions || response.permissions || [],
-      );
-      return response;
-    },
-    [saveAuth],
-  );
+  const finalizeResponse = useCallback((response) => {
+    if (!response?.token || !response?.user) return response;
+    saveAuth(response.token, response.user, response.user?.permissions || response.permissions || []);
+    return response;
+  }, [saveAuth]);
 
   useEffect(() => {
     tokenRef.current = token;
-    setApiAuthHandlers({
-      getToken: () => tokenRef.current,
-      onUnauthorized: clearAuth,
-    });
+    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+  }, [clearAuth, token]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    const payload = parseJwtPayload(token);
+    const expiresAtMs = Number(payload?.exp || 0) * 1000;
+    if (!expiresAtMs) return undefined;
+    const remaining = expiresAtMs - Date.now();
+    if (remaining <= 0) {
+      clearAuth();
+      return undefined;
+    }
+    const timer = window.setTimeout(clearAuth, Math.min(remaining + 150, 2_147_000_000));
+    return () => window.clearTimeout(timer);
   }, [clearAuth, token]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function restoreSession() {
       if (!token) {
         if (!cancelled) setLoading(false);
         return;
       }
       if (!isTokenUsable(token)) {
-        if (!cancelled) {
-          clearAuth();
-          setLoading(false);
-        }
+        if (!cancelled) { clearAuth(); setLoading(false); }
         return;
       }
-
       const snapshot = authSnapshotRef.current;
       try {
         const response = await apiFetch("/auth/me", { suppressUnauthorized: true });
         if (cancelled) return;
-        saveAuth(
-          token,
-          response.user || snapshot.user,
-          response.user?.permissions || snapshot.permissions,
-        );
+        saveAuth(token, response.user || snapshot.user, response.user?.permissions || snapshot.permissions);
       } catch {
         if (!cancelled) clearAuth();
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-
     restoreSession();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [clearAuth, saveAuth, token]);
 
-  const login = useCallback(
-    async (identity, password, deviceLabel = "") => {
-      const response = await apiFetch("/auth/login", {
-        method: "POST",
-        body: { username: identity, password, deviceLabel },
-        skipAuth: true,
-        suppressUnauthorized: true,
-      });
-      return finalizeResponse(response);
-    },
-    [finalizeResponse],
-  );
+  const login = useCallback(async (identity, password, deviceLabel = "") => {
+    const response = await apiFetch("/auth/v2/login", {
+      method: "POST", body: { username: identity, password, deviceLabel }, skipAuth: true, suppressUnauthorized: true,
+    });
+    return finalizeResponse(response);
+  }, [finalizeResponse]);
 
-  const verifyMfa = useCallback(
-    async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
-      const response = await apiFetch("/auth/mfa/verify", {
-        method: "POST",
-        body: { challengeId, challengeToken, code, provider, resetProvider },
-        skipAuth: true,
-        suppressUnauthorized: true,
-      });
-      return finalizeResponse(response);
-    },
-    [finalizeResponse],
-  );
+  const verifyMfa = useCallback(async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
+    const response = await apiFetch("/auth/v2/mfa/verify", {
+      method: "POST", body: { challengeId, challengeToken, code, provider, resetProvider }, skipAuth: true, suppressUnauthorized: true,
+    });
+    return finalizeResponse(response);
+  }, [finalizeResponse]);
 
-  const recoverMfa = useCallback(
-    async ({ challengeId, challengeToken, recoveryCode }) => {
-      const response = await apiFetch("/auth/mfa/recovery", {
-        method: "POST",
-        body: { challengeId, challengeToken, recoveryCode },
-        skipAuth: true,
-        suppressUnauthorized: true,
-      });
-      return finalizeResponse(response);
-    },
-    [finalizeResponse],
-  );
+  const recoverMfa = useCallback(async ({ challengeId, challengeToken, recoveryCode }) => {
+    const response = await apiFetch("/auth/v2/recovery-code", {
+      method: "POST", body: { challengeId, challengeToken, recoveryCode }, skipAuth: true, suppressUnauthorized: true,
+    });
+    return finalizeResponse(response);
+  }, [finalizeResponse]);
 
-  const acknowledgeRecoveryCodes = useCallback(
-    async ({ challengeId, challengeToken }) => {
-      const response = await apiFetch("/auth/mfa/recovery/ack", {
-        method: "POST",
-        body: { challengeId, challengeToken },
-        skipAuth: true,
-        suppressUnauthorized: true,
-      });
-      return finalizeResponse(response);
-    },
-    [finalizeResponse],
-  );
+  const acknowledgeRecoveryCodes = useCallback(async ({ challengeId, challengeToken }) => {
+    const response = await apiFetch("/auth/mfa/recovery/ack", {
+      method: "POST", body: { challengeId, challengeToken }, skipAuth: true, suppressUnauthorized: true,
+    });
+    return finalizeResponse(response);
+  }, [finalizeResponse]);
 
-  const checkApproval = useCallback(
-    async ({ approvalId, approvalToken }) => {
-      const response = await apiFetch(`/auth/approval/${approvalId}/status`, {
-        method: "POST",
-        body: { approvalToken },
-        skipAuth: true,
-        suppressUnauthorized: true,
-      });
-      return finalizeResponse(response);
-    },
-    [finalizeResponse],
-  );
+  const startOwnerRecovery = useCallback(async ({ challengeId, challengeToken, channel }) => apiFetch("/auth/v2/owner-recovery/start", {
+    method: "POST", body: { challengeId, challengeToken, channel }, skipAuth: true, suppressUnauthorized: true,
+  }), []);
+
+  const verifyOwnerRecovery = useCallback(async ({ recoveryId, recoveryToken, otp, answers }) => apiFetch("/auth/v2/owner-recovery/verify", {
+    method: "POST", body: { recoveryId, recoveryToken, otp, answers }, skipAuth: true, suppressUnauthorized: true,
+  }), []);
+
+  const checkApproval = useCallback(async ({ approvalId, approvalToken }) => {
+    const response = await apiFetch(`/auth/v2/approval/${approvalId}/status`, {
+      method: "POST", body: { approvalToken }, skipAuth: true, suppressUnauthorized: true,
+    });
+    return finalizeResponse(response);
+  }, [finalizeResponse]);
 
   const logout = useCallback(async () => {
     try {
-      if (token) {
-        await apiFetch("/auth/logout", {
-          method: "POST",
-          suppressUnauthorized: true,
-        });
-      }
-    } catch {
-      // Sunucuya ulaşılamasa da cihazdaki oturum kapatılır.
-    } finally {
-      clearAuth();
-    }
+      if (token) await apiFetch("/auth/logout", { method: "POST", suppressUnauthorized: true });
+    } catch { /* cihaz oturumu yine kapanır */ }
+    finally { clearAuth(); }
   }, [clearAuth, token]);
 
-  const hasModule = useCallback(
-    (moduleKey) => {
-      const key = String(moduleKey || "").toUpperCase();
-      if (!key) return false;
-      if (isSuperAdmin(user?.role)) return true;
-      if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") return true;
-      return Boolean(permissions.find((row) => row.moduleKey === key)?.canView);
-    },
-    [permissions, user?.role],
-  );
+  const hasModule = useCallback((moduleKey) => {
+    const key = String(moduleKey || "").toUpperCase();
+    if (!key) return false;
+    if (isSuperAdmin(user?.role)) return true;
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") return true;
+    return Boolean(permissions.find((row) => row.moduleKey === key)?.canView);
+  }, [permissions, user?.role]);
 
-  const can = useCallback(
-    (moduleKey, action) => {
-      const key = String(moduleKey || "").toUpperCase();
-      const actionKey = {
-        view: "canView",
-        create: "canCreate",
-        update: "canUpdate",
-        delete: "canDelete",
-        approve: "canApprove",
-      }[String(action || "").toLowerCase()];
-      if (!key || !actionKey) return false;
-      if (isSuperAdmin(user?.role)) return true;
-      if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") {
-        return actionKey !== "canDelete";
-      }
-      return Boolean(permissions.find((row) => row.moduleKey === key)?.[actionKey]);
-    },
-    [permissions, user?.role],
-  );
+  const can = useCallback((moduleKey, action) => {
+    const key = String(moduleKey || "").toUpperCase();
+    const actionKey = { view: "canView", create: "canCreate", update: "canUpdate", delete: "canDelete", approve: "canApprove" }[String(action || "").toLowerCase()];
+    if (!key || !actionKey) return false;
+    if (isSuperAdmin(user?.role)) return true;
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") return actionKey !== "canDelete";
+    return Boolean(permissions.find((row) => row.moduleKey === key)?.[actionKey]);
+  }, [permissions, user?.role]);
 
-  const value = useMemo(
-    () => ({
-      token,
-      user,
-      permissions,
-      login,
-      verifyMfa,
-      recoverMfa,
-      acknowledgeRecoveryCodes,
-      checkApproval,
-      logout,
-      hasModule,
-      can,
-      isAuthenticated: Boolean(token && user),
-      loading,
-    }),
-    [
-      token,
-      user,
-      permissions,
-      login,
-      verifyMfa,
-      recoverMfa,
-      acknowledgeRecoveryCodes,
-      checkApproval,
-      logout,
-      hasModule,
-      can,
-      loading,
-    ],
-  );
+  const value = useMemo(() => ({
+    token, user, permissions, login, verifyMfa, recoverMfa, acknowledgeRecoveryCodes,
+    startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can,
+    isAuthenticated: Boolean(token && user), loading,
+  }), [token, user, permissions, login, verifyMfa, recoverMfa, acknowledgeRecoveryCodes, startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

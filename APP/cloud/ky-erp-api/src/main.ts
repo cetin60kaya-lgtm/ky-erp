@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
+import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
+import { registerAuthPolicyCompatRoutes } from "./auth-policy-compat";
+import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAiCloudRoutes } from "./ai-cloud";
@@ -128,8 +132,9 @@ shell.use(
   }),
 );
 
-// Canlı ortamda ERP verisi artık sadece doğrulanmış, iptal edilmemiş ve en fazla 8 saatlik
-// KY ERP oturumuyla açılır. Localhost yalnız CI/yerel geliştirme için bu kapıdan muaftır.
+// Canlı ERP verisi yalnız doğrulanmış ve iptal edilmemiş KY ERP oturumuyla açılır.
+// Oturum süresi kullanıcı güvenlik profiline göre JWT ve auth_sessions üzerinde sunucuda uygulanır;
+// PASSWORD_ONLY hesaplarda üst sınır 30 dakikadır. Localhost yalnız CI/yerel geliştirme için muaftır.
 shell.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
 
@@ -155,7 +160,7 @@ shell.use("/api/*", async (c, next) => {
         ok: false,
         error: {
           code: "UNAUTHORIZED",
-          message: "Oturum geçersiz, iptal edilmiş veya 8 saatlik süresi dolmuş. Yeniden giriş yapın.",
+          message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın.",
         },
       },
       401,
@@ -165,6 +170,12 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
+// Sıra önemlidir: acil recovery-code fallback -> owner profil kilidi -> legacy/company guard
+// -> yeni kullanıcı bazlı güvenlik politika motoru -> mevcut uygulama rotaları.
+registerAuthRecoveryCodeFallbackRoutes(shell);
+registerAuthOwnerGuardRoutes(shell);
+registerAuthPolicyCompatRoutes(shell);
+registerAuthPolicyRoutes(shell);
 shell.route("/", app);
 
 export default shell;
