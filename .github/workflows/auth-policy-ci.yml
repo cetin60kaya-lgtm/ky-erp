@@ -1,5 +1,6 @@
 name: KY ERP Auth Policy Validation
 
+# Kalıcı regresyon kapısı: auth değişikliği production'a gitmeden migration, gerçek Worker ve frontend birlikte doğrulanır.
 on:
   push:
     branches:
