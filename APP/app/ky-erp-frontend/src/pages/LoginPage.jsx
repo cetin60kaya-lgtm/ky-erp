@@ -312,7 +312,7 @@ export default function LoginPage() {
             <div className="login-security-box">
               <strong>Kullanıcıya özel güvenlik</strong>
               <span>Sadece parola kullanan hesaplar en fazla 30 dakika açık kalır.</span>
-              <span>Google, Microsoft, ikisinden biri veya ikisi birden kullanıcı bazında zorunlu tutulabilir.</span>
+              <span>Google ve Microsoft için iki ayrı Authenticator güvenlik düzeniyle oturum açın; kullanıcı bazında biri veya ikisi zorunlu tutulabilir.</span>
             </div>
           </>
         ) : null}
@@ -373,7 +373,20 @@ export default function LoginPage() {
               {error ? <div className="login-error">{error}</div> : null}
               <button type="submit" disabled={loading || verifiedProviders.includes(currentProvider)}>{loading ? "Doğrulanıyor..." : resetProvider ? "Doğrula ve Yeniden Kur" : `${currentLabel} ile Doğrula`}</button>
               {!flow.requireBoth && alternativeAvailable ? <button type="button" className="login-secondary" onClick={() => setSelectedProvider(alternative)}>Diğer Authenticator ile doğrula</button> : null}
-              {!flow.requireBoth && availableProviders.includes(alternative) ? <button type="button" className="login-secondary" onClick={() => setResetProvider(currentProvider)}>{currentLabel} erişilemiyor · diğer yöntemle yeniden kur</button> : null}
+              {!flow.requireBoth && availableProviders.includes(alternative) ? (
+                <button
+                  type="button"
+                  className="login-secondary"
+                  onClick={() => {
+                    const providerToReset = currentProvider;
+                    setSelectedProvider(alternative);
+                    setResetProvider(providerToReset);
+                    setCode("");
+                  }}
+                >
+                  {currentLabel} erişilemiyor · diğer yöntemle yeniden kur
+                </button>
+              ) : null}
               <button type="button" className="login-secondary" onClick={() => resetToCredentials()} disabled={loading}>Geri Dön</button>
             </form>
 
