@@ -5,18 +5,20 @@ const PORT = 8789;
 const BASE = `http://127.0.0.1:${PORT}`;
 const CONFIG = "wrangler.production-local.jsonc";
 const DATABASE = "ky-erp-production-local";
+const IS_WINDOWS = process.platform === "win32";
 
 function sqlQuote(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
 function runSql(sql) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const command = IS_WINDOWS ? "npx.cmd" : "npx";
   const result = spawnSync(
     command,
     ["wrangler", "d1", "execute", DATABASE, "--local", "--config", CONFIG, "--command", sql, "--json"],
-    { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 45_000 },
   );
+  if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(`D1 seed başarısız:\n${result.stdout || ""}\n${result.stderr || ""}`);
   }
@@ -25,6 +27,7 @@ function runSql(sql) {
 async function request(path, options = {}) {
   const response = await fetch(`${BASE}${path}`, {
     ...options,
+    signal: AbortSignal.timeout(12_000),
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
@@ -50,7 +53,7 @@ async function waitForServer(child) {
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`wrangler dev erken kapandı: ${child.exitCode}`);
     try {
-      const response = await fetch(`${BASE}/api/health`);
+      const response = await fetch(`${BASE}/api/health`, { signal: AbortSignal.timeout(2500) });
       if (response.ok) return;
       lastError = `HTTP ${response.status}`;
     } catch (error) {
@@ -59,6 +62,19 @@ async function waitForServer(child) {
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
   throw new Error(`Yerel Worker 45 saniyede hazır olmadı: ${lastError}`);
+}
+
+function stopProcessTree(child) {
+  if (!child?.pid || child.exitCode !== null) return;
+  try {
+    if (IS_WINDOWS) {
+      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", timeout: 10_000 });
+    } else {
+      process.kill(-child.pid, "SIGTERM");
+    }
+  } catch {
+    try { child.kill("SIGTERM"); } catch { /* noop */ }
+  }
 }
 
 const password = "Smoke-Auth-2026!";
@@ -89,15 +105,28 @@ runSql(`
     ('smoke-mfa','smoke-mfa@example.test','mecit-hakan',NULL,0,0,0,0,0,0,'ANY_MFA',28800,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)});
 `);
 
-const command = process.platform === "win32" ? "npx.cmd" : "npx";
+const command = IS_WINDOWS ? "npx.cmd" : "npx";
 const child = spawn(
   command,
   ["wrangler", "dev", "--local", "--config", CONFIG, "--ip", "127.0.0.1", "--port", String(PORT)],
-  { cwd: process.cwd(), env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"] },
+  {
+    cwd: process.cwd(),
+    env: { ...process.env },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: !IS_WINDOWS,
+  },
 );
 let logs = "";
 child.stdout.on("data", (chunk) => { logs += chunk.toString(); process.stdout.write(chunk); });
 child.stderr.on("data", (chunk) => { logs += chunk.toString(); process.stderr.write(chunk); });
+
+let failed = false;
+const hardStop = setTimeout(() => {
+  failed = true;
+  console.error("Auth runtime smoke 90 saniyelik üst sınıra ulaştı.");
+  stopProcessTree(child);
+}, 90_000);
+hardStop.unref();
 
 try {
   await waitForServer(child);
@@ -147,11 +176,14 @@ try {
     mfaStage: mfa.body.stage,
   }, null, 2));
 } catch (error) {
+  failed = true;
   console.error(error?.stack || error);
   console.error("\n--- wrangler dev logs ---\n", logs.slice(-12_000));
-  process.exitCode = 1;
 } finally {
-  child.kill("SIGTERM");
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  if (child.exitCode === null) child.kill("SIGKILL");
+  clearTimeout(hardStop);
+  stopProcessTree(child);
+  await new Promise((resolve) => setTimeout(resolve, 800));
 }
+
+if (failed) process.exit(1);
+process.exit(0);
