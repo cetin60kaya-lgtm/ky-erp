@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/auth-policy-owner-recovery
+      - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "APP/cloud/ky-erp-api/**"
       - "APP/app/ky-erp-frontend/**"
@@ -39,7 +40,7 @@ jobs:
           for migration in \
             migrations/0018_auth_mfa_sessions.sql \
             migrations/0019_auth_dual_mfa_recovery.sql \
-            migrations/0020_auth_security_policy_owner_recovery.sql; do
+            migrations/0021_auth_security_policy_owner_recovery.sql; do
             npx wrangler d1 execute ky-erp-production-local \
               --local \
               --config wrangler.production-local.jsonc \
@@ -97,7 +98,7 @@ jobs:
           grep -Fq 'PASSWORD_ONLY' APP/cloud/ky-erp-api/src/auth-policy-cloud.ts
           grep -Fq 'POLICY_MFA_LEGACY_REQUIRED' APP/cloud/ky-erp-api/src/auth-policy-compat.ts
           grep -Fq 'OWNER_PROFILE_UPDATED_SECURITY_FIELDS_LOCKED' APP/cloud/ky-erp-api/src/auth-policy-owner-guard.ts
-          grep -Fq 'session_seconds' APP/cloud/ky-erp-api/migrations/0020_auth_security_policy_owner_recovery.sql
-          grep -Fq 'owner_recovery_enabled' APP/cloud/ky-erp-api/migrations/0020_auth_security_policy_owner_recovery.sql
+          grep -Fq 'session_seconds' APP/cloud/ky-erp-api/migrations/0021_auth_security_policy_owner_recovery.sql
+          grep -Fq 'owner_recovery_enabled' APP/cloud/ky-erp-api/migrations/0021_auth_security_policy_owner_recovery.sql
           grep -Fq 'Sadece parola' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
           grep -Fq '30 dakika' APP/app/ky-erp-frontend/src/pages/LoginPage.jsx
