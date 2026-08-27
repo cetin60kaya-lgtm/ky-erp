@@ -1,11 +1,11 @@
 import { useCallback, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE, clearApiGetCache, setApiAuthHandlers } from "../utils/api";
 import { clearResilientDataCache } from "../utils/resilientDataLoader";
-import { legacyAuthPath, shouldTryLegacyAuth } from "./authRoutePolicy";
 import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
+const AUTH_VERSION = "canonical-v3";
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
@@ -54,13 +54,25 @@ function isTokenUsable(token) {
   return payload.exp > Math.floor(Date.now() / 1000) + 5;
 }
 
-function authErrorMessage(status, payload) {
+function requestPathText(requestUrl) {
+  try {
+    const url = new URL(String(requestUrl || ""), window.location.origin);
+    return url.pathname;
+  } catch {
+    return String(requestUrl || "");
+  }
+}
+
+function authErrorMessage(status, payload, requestUrl = "") {
   const serverMessage = String(payload?.error?.message || payload?.message || "").trim();
   if (serverMessage) return serverMessage;
   if (status === 400) return "Girilen bilgileri kontrol edip tekrar deneyin.";
   if (status === 401) return "Kullanıcı adı/e-posta veya şifre hatalı.";
   if (status === 403) return "Bu hesapla girişe izin verilmiyor.";
-  if (status === 404 || status === 405) return "KY ERP giriş servisi sürümü eşleşmiyor. Sayfayı yenileyip tekrar deneyin.";
+  if (status === 404 || status === 405) {
+    const path = requestPathText(requestUrl);
+    return `KY ERP giriş endpointi yanıt vermedi (HTTP ${status}${path ? ` · ${path}` : ""}).`;
+  }
   if (status === 409) return "Giriş doğrulaması mevcut durumla çakıştı. Yeniden giriş yapın.";
   if (status === 422) return "Giriş bilgileri sunucu tarafından işlenemedi. Tekrar deneyin.";
   if (status === 429) return "Çok fazla giriş denemesi yapıldı. Kısa bir süre sonra tekrar deneyin.";
@@ -80,71 +92,72 @@ async function directAuthRequest(path, options = {}) {
   const normalizedPath = String(path || "").startsWith("/")
     ? String(path || "")
     : `/${String(path || "")}`;
-  const fallbackPath = legacyAuthPath(normalizedPath);
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-  let activeRequestUrl = `${API_BASE}${normalizedPath}`;
+  const requestUrl = `${API_BASE}${normalizedPath}`;
 
   try {
     const headers = { Accept: "application/json" };
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (body !== undefined) {
+      // Login/MFA/kurtarma çağrılarında özel header ve application/json preflight'ı
+      // gereksizdir. Request.json() text/plain JSON gövdesini de güvenle ayrıştırır.
+      // Token taşıyan çağrılar Authorization nedeniyle zaten preflight kullanır.
+      headers["Content-Type"] = token ? "application/json" : "text/plain;charset=UTF-8";
+    }
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (body?.deviceLabel) headers["X-KYERP-Device"] = String(body.deviceLabel).slice(0, 180);
 
-    const paths = [normalizedPath];
-    if (fallbackPath) paths.push(fallbackPath);
+    const response = await fetch(requestUrl, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+      cache: "no-store",
+      mode: "cors",
+    });
 
-    for (let index = 0; index < paths.length; index += 1) {
-      const currentPath = paths[index];
-      activeRequestUrl = `${API_BASE}${currentPath}`;
-      const response = await fetch(activeRequestUrl, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: controller.signal,
-        cache: "no-store",
-        mode: "cors",
-      });
-
-      const raw = await response.text();
-      let payload = null;
-      try {
-        payload = raw ? JSON.parse(raw) : null;
-      } catch {
-        payload = null;
-      }
-
-      const validJsonPayload = payload && typeof payload === "object" && !Array.isArray(payload);
-      if (response.ok && !validJsonPayload) {
-        const error = new Error("KY ERP giriş servisi geçerli bir yanıt döndürmedi. Sayfayı yenileyip tekrar deneyin.");
-        error.status = response.status;
-        error.code = "AUTH_INVALID_RESPONSE";
-        error.requestUrl = activeRequestUrl;
-        error.responseText = String(raw || "").slice(0, 240);
-        throw error;
-      }
-
-      if (!response.ok || payload?.ok === false) {
-        if (index === 0 && fallbackPath && shouldTryLegacyAuth(response.status, payload)) {
-          continue;
-        }
-        const error = new Error(authErrorMessage(response.status, payload));
-        error.status = response.status;
-        error.code = payload?.error?.code || payload?.code || "AUTH_HTTP_ERROR";
-        error.payload = payload;
-        error.requestId = payload?.error?.details?.requestId || payload?.requestId || "";
-        error.requestUrl = activeRequestUrl;
-        throw error;
-      }
-
-      return payload;
+    const raw = await response.text();
+    let payload = null;
+    try {
+      payload = raw ? JSON.parse(raw) : null;
+    } catch {
+      payload = null;
     }
 
-    const unavailable = new Error("KY ERP giriş servisi kullanıma hazır değil. Sayfayı yenileyip tekrar deneyin.");
-    unavailable.status = 404;
-    unavailable.code = "AUTH_ROUTE_UNAVAILABLE";
-    unavailable.requestUrl = activeRequestUrl;
-    throw unavailable;
+    const requestId = response.headers.get("X-Request-Id") || payload?.error?.details?.requestId || payload?.requestId || "";
+    const authVersion = response.headers.get("X-KYERP-Auth-Version") || payload?.authVersion || "";
+    const validJsonPayload = payload && typeof payload === "object" && !Array.isArray(payload);
+
+    if (response.ok && !validJsonPayload) {
+      const error = new Error("KY ERP giriş servisi geçerli JSON yanıtı döndürmedi. Sayfayı yenileyip tekrar deneyin.");
+      error.status = response.status;
+      error.code = "AUTH_INVALID_RESPONSE";
+      error.requestUrl = requestUrl;
+      error.requestId = requestId;
+      error.responseText = String(raw || "").slice(0, 240);
+      throw error;
+    }
+
+    if (!response.ok || payload?.ok === false) {
+      const error = new Error(authErrorMessage(response.status, payload, requestUrl));
+      error.status = response.status;
+      error.code = payload?.error?.code || payload?.code || "AUTH_HTTP_ERROR";
+      error.payload = payload;
+      error.requestId = requestId;
+      error.requestUrl = requestUrl;
+      error.responseText = String(raw || "").slice(0, 240);
+      throw error;
+    }
+
+    if (normalizedPath === "/auth/status" && authVersion && authVersion !== AUTH_VERSION) {
+      const mismatch = new Error("KY ERP giriş servisi ile uygulama sürümü uyuşmuyor. Canlı dağıtımı yenileyin.");
+      mismatch.status = 409;
+      mismatch.code = "AUTH_VERSION_MISMATCH";
+      mismatch.requestUrl = requestUrl;
+      mismatch.requestId = requestId;
+      throw mismatch;
+    }
+
+    return payload;
   } catch (error) {
     if (Number(error?.status || 0) > 0) throw error;
     const wrapped = new Error(
@@ -155,7 +168,7 @@ async function directAuthRequest(path, options = {}) {
     wrapped.status = 0;
     wrapped.code = error?.name === "AbortError" ? "REQUEST_TIMEOUT" : "NETWORK_ERROR";
     wrapped.cause = error;
-    wrapped.requestUrl = activeRequestUrl;
+    wrapped.requestUrl = requestUrl;
     throw wrapped;
   } finally {
     window.clearTimeout(timer);
@@ -323,9 +336,14 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("storage", syncFromStorage);
   }, []);
 
-  // Önce canonical auth rotası kullanılır. Yalnız rota gerçekten mevcut değilse
-  // aynı Worker'ın eski v2 alias'ı denenir; 5xx veya timeout'ta POST tekrarlanmaz.
   const login = useCallback(async (identity, password, deviceLabel = "") => {
+    const service = await directAuthRequest("/auth/status", { method: "GET", timeoutMs: 10000 });
+    if (String(service?.authVersion || "") !== AUTH_VERSION) {
+      const mismatch = new Error("KY ERP giriş servisi güncel değil. Canlı dağıtımı yenileyin.");
+      mismatch.status = 409;
+      mismatch.code = "AUTH_VERSION_MISMATCH";
+      throw mismatch;
+    }
     const body = { username: identity, password, deviceLabel };
     const response = await directAuthRequest("/auth/login", { body });
     return finalizeResponse(response);
