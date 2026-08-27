@@ -198,10 +198,10 @@ try {
   });
   assert(passwordOnly.status === 200, "PASSWORD_ONLY login HTTP 200 olmalı", passwordOnly);
   assert(passwordOnly.body?.stage === "AUTHENTICATED", "PASSWORD_ONLY doğrudan AUTHENTICATED olmalı", passwordOnly.body);
-  assert(passwordOnly.body?.expiresIn === 1800, "PASSWORD_ONLY sunucuda kesin 1800 saniyeye clamp edilmeli", passwordOnly.body);
+  assert(passwordOnly.body?.expiresIn === 28800, "PASSWORD_ONLY sunucuda kesin 8 saat olmalı", passwordOnly.body);
   assert(Boolean(passwordOnly.body?.token), "PASSWORD_ONLY token üretmeli", passwordOnly.body);
   const passwordPayload = decodePayload(passwordOnly.body.token);
-  assert(passwordPayload.exp - passwordPayload.iat === 1800, "PASSWORD_ONLY JWT exp-iat tam 1800 saniye olmalı", passwordPayload);
+  assert(passwordPayload.exp - passwordPayload.iat === 28800, "PASSWORD_ONLY JWT exp-iat tam 8 saat olmalı", passwordPayload);
   assert(passwordPayload.policy === "PASSWORD_ONLY", "JWT policy PASSWORD_ONLY olmalı", passwordPayload);
 
   const me = await request("/api/auth/me", {
@@ -244,6 +244,7 @@ try {
   const approvalConsumed = approvalAttempts.filter((result) => result.status === 409 && result.body?.error?.code === "APPROVAL_CONSUMED");
   assert(approvalAuthenticated.length === 1, "Eşzamanlı iki onay isteğinden yalnız biri oturum açmalı", approvalAttempts);
   assert(approvalConsumed.length === 1, "Eşzamanlı ikinci onay isteği APPROVAL_CONSUMED dönmeli", approvalAttempts);
+  assert(approvalAuthenticated[0]?.body?.expiresIn === 28800, "Onaylı PASSWORD_ONLY oturumu 8 saat olmalı", approvalAuthenticated[0]?.body);
 
   const owner = await request("/api/auth/login", {
     method: "POST",
@@ -263,6 +264,9 @@ try {
   });
   assert(ownerVerified.status === 200 && ownerVerified.body?.stage === "AUTHENTICATED", "Admin MFA sonrası oturum açmalı", ownerVerified);
   assert(ownerVerified.body?.user?.role === "SUPER_ADMIN", "Admin rolü korunmalı", ownerVerified.body);
+  assert(ownerVerified.body?.expiresIn === 36000, "Admin MFA oturumu kesin 10 saat olmalı", ownerVerified.body);
+  const ownerPayload = decodePayload(ownerVerified.body.token);
+  assert(ownerPayload.exp - ownerPayload.iat === 36000, "Admin MFA JWT exp-iat tam 10 saat olmalı", ownerPayload);
 
   const mfaSetup = await request("/api/auth/login", {
     method: "POST",
@@ -282,7 +286,7 @@ try {
     }),
   });
   assert(mfaSetupVerify.status === 200 && mfaSetupVerify.body?.stage === "AUTHENTICATED", "Yeni Google kurulumu gerçek TOTP ile doğrulanıp oturum açmalı", mfaSetupVerify);
-  assert(mfaSetupVerify.body?.expiresIn === 28800, "ANY_MFA seçili 8 saat TTL uygulamalı", mfaSetupVerify.body);
+  assert(mfaSetupVerify.body?.expiresIn === 36000, "ANY_MFA oturumu 10 saat olmalı", mfaSetupVerify.body);
 
   const bothLogin = await request("/api/auth/login", {
     method: "POST",
@@ -314,9 +318,9 @@ try {
     }),
   });
   assert(bothMicrosoft.status === 200 && bothMicrosoft.body?.stage === "AUTHENTICATED", "İki BOTH_MFA kodu sonrası oturum açılmalı", bothMicrosoft);
-  assert(bothMicrosoft.body?.expiresIn === 7200, "BOTH_MFA kullanıcıya seçilen 2 saat TTL uygulanmalı", bothMicrosoft.body);
+  assert(bothMicrosoft.body?.expiresIn === 36000, "BOTH_MFA oturumu 10 saat olmalı", bothMicrosoft.body);
   const bothPayload = decodePayload(bothMicrosoft.body.token);
-  assert(bothPayload.exp - bothPayload.iat === 7200, "BOTH_MFA JWT TTL 7200 saniye olmalı", bothPayload);
+  assert(bothPayload.exp - bothPayload.iat === 36000, "BOTH_MFA JWT TTL tam 10 saat olmalı", bothPayload);
 
   const crossLogin = await request("/api/auth/login", {
     method: "POST",
@@ -348,12 +352,12 @@ try {
     }),
   });
   assert(crossSetupVerify.status === 200 && crossSetupVerify.body?.stage === "AUTHENTICATED", "Yeni Google secret gerçek TOTP ile doğrulanınca oturum açılmalı", crossSetupVerify);
-  assert(crossSetupVerify.body?.expiresIn === 14400, "Çapraz kurtarma sonrası seçili 4 saat TTL korunmalı", crossSetupVerify.body);
+  assert(crossSetupVerify.body?.expiresIn === 36000, "Çapraz kurtarma sonrası MFA oturumu 10 saat olmalı", crossSetupVerify.body);
 
   console.log(JSON.stringify({
     ok: true,
     passwordOnlyTtl: passwordOnly.body.expiresIn,
-    ownerStage: owner.body.stage,
+    ownerMfaTtl: ownerVerified.body.expiresIn,
     enrollmentStage: mfaSetupVerify.body.stage,
     concurrentApproval: `${approvalAuthenticated.length} authenticated / ${approvalConsumed.length} consumed`,
     bothMfaTtl: bothMicrosoft.body.expiresIn,
