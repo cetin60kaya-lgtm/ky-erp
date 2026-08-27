@@ -45,18 +45,22 @@ const ROLE_LABELS = {
 };
 const OWNER_ROLES = new Set(["SUPER_ADMIN", "ADMIN"]);
 const MANAGED_ROLES = ["COMPANY_ADMIN", "MUHASEBE", "DESEN", "IMALAT", "BOYAHANE", "IK", "VIEWER"];
+const PASSWORD_SESSION_SECONDS = 28_800;
+const MFA_SESSION_SECONDS = 36_000;
 const LOGIN_POLICIES = [
-  ["PASSWORD_ONLY", "Sadece parola", "Maksimum 30 dakika; süre sunucu tarafından zorunlu uygulanır."],
-  ["GOOGLE", "Parola + Google Authenticator", "Google kodu zorunludur."],
-  ["MICROSOFT", "Parola + Microsoft Authenticator", "Microsoft kodu zorunludur."],
-  ["ANY_MFA", "Parola + Google veya Microsoft", "Kayıtlı iki uygulamadan herhangi biriyle giriş yapılabilir."],
-  ["BOTH_MFA", "Parola + Google ve Microsoft", "Her girişte iki ayrı kod da doğrulanır."],
-];
-const SESSION_OPTIONS = [
-  [1800, "30 dakika"], [3600, "1 saat"], [7200, "2 saat"], [14400, "4 saat"],
-  [28800, "8 saat"], [43200, "12 saat"], [86400, "24 saat"],
+  ["PASSWORD_ONLY", "Sadece parola", "Oturum sunucu tarafından 8 saat uygulanır."],
+  ["GOOGLE", "Parola + Google Authenticator", "Google kodu zorunludur; başarılı doğrulama sonrası oturum 10 saattir."],
+  ["MICROSOFT", "Parola + Microsoft Authenticator", "Microsoft kodu zorunludur; başarılı doğrulama sonrası oturum 10 saattir."],
+  ["ANY_MFA", "Parola + Google veya Microsoft", "Kayıtlı iki uygulamadan herhangi biriyle doğrulama sonrası oturum 10 saattir."],
+  ["BOTH_MFA", "Parola + Google ve Microsoft", "Her yeni oturumda iki ayrı kod doğrulanır; başarılı giriş sonrası oturum 10 saattir."],
 ];
 
+function fixedSessionSeconds(policy) {
+  return policy === "PASSWORD_ONLY" ? PASSWORD_SESSION_SECONDS : MFA_SESSION_SECONDS;
+}
+function fixedSessionLabel(policy) {
+  return policy === "PASSWORD_ONLY" ? "8 saat" : "10 saat";
+}
 function roleOf(value) {
   const role = String(value || "VIEWER").toUpperCase();
   return role === "ADMIN" ? "SUPER_ADMIN" : role;
@@ -98,7 +102,7 @@ function emptyForm(companySlug = "mecit-hakan") {
   return {
     id: "", username: "", email: "", password: "", fullName: "", role: "VIEWER",
     mainCompanySlug: companySlug || "mecit-hakan", isActive: true, emailVerified: false,
-    loginPolicy: "ANY_MFA", sessionSeconds: 28800, approvalRequired: true,
+    loginPolicy: "ANY_MFA", sessionSeconds: MFA_SESSION_SECONDS, approvalRequired: true,
   };
 }
 function normalizeCompanies(value) {
@@ -117,9 +121,6 @@ function remainingText(seconds) {
   const total = Math.max(0, Number(seconds || 0));
   if (total < 3600) return `${Math.max(0, Math.ceil(total / 60))} dk`;
   return `${Math.floor(total / 3600)} sa ${Math.floor((total % 3600) / 60)} dk`;
-}
-function sessionLabel(seconds) {
-  return SESSION_OPTIONS.find(([value]) => Number(value) === Number(seconds))?.[1] || `${Math.round(Number(seconds || 0) / 60)} dk`;
 }
 function policyLabel(policy) {
   return LOGIN_POLICIES.find(([key]) => key === policy)?.[1] || "Parola + Google veya Microsoft";
@@ -284,13 +285,14 @@ export default function AdminUsersPanel() {
     if (!user) return;
     const policy = policyMap.get(user.id) || {};
     const owner = OWNER_ROLES.has(roleOf(user.role));
+    const loginPolicy = owner ? "ANY_MFA" : policy.loginPolicy || "ANY_MFA";
     setSelectedUserId(user.id);
     setForm({
       id: user.id || "", username: user.username || "", email: user.email || "", password: "",
       fullName: user.fullName || "", role: roleOf(user.role), mainCompanySlug: user.mainCompanySlug || defaultCompanySlug(),
       isActive: user.isActive !== false, emailVerified: user.emailVerified === true,
-      loginPolicy: owner ? "ANY_MFA" : policy.loginPolicy || "ANY_MFA",
-      sessionSeconds: Number(policy.configuredSessionSeconds || 28800),
+      loginPolicy,
+      sessionSeconds: fixedSessionSeconds(loginPolicy),
       approvalRequired: policy.approvalRequired ?? user.approvalRequired !== false,
     });
   }
@@ -303,7 +305,7 @@ export default function AdminUsersPanel() {
     setForm((previous) => {
       if (previous.id && selectedIsOwner && ["role", "mainCompanySlug", "isActive", "loginPolicy", "approvalRequired"].includes(field)) return previous;
       const next = { ...previous, [field]: value };
-      if (field === "loginPolicy" && value === "PASSWORD_ONLY") next.sessionSeconds = 1800;
+      if (field === "loginPolicy") next.sessionSeconds = fixedSessionSeconds(value);
       if (field === "role") {
         const role = roleOf(value);
         if (["COMPANY_ADMIN", "MUHASEBE", "DESEN", "IMALAT", "BOYAHANE", "IK"].includes(role)) setPermissions(permissionPreset(role));
@@ -327,15 +329,16 @@ export default function AdminUsersPanel() {
       if (form.id) {
         await updateUser(form.id, corePayload);
         if (!selectedIsOwner) await updateUserPermissions(form.id, permissions);
-        if (form.password.trim()) await resetUserPassword(form.id, form.password.trim());
+        if (form.password) await resetUserPassword(form.id, form.password);
       } else {
         const created = await createUser({ ...corePayload, password: form.password, permissions });
         userId = created?.id;
       }
       if (isOwnerAdmin && userId) {
+        const loginPolicy = selectedIsOwner ? "ANY_MFA" : form.loginPolicy;
         await updateLoginSecurityPolicy(userId, {
-          loginPolicy: selectedIsOwner ? "ANY_MFA" : form.loginPolicy,
-          sessionSeconds: form.loginPolicy === "PASSWORD_ONLY" ? 1800 : Number(form.sessionSeconds),
+          loginPolicy,
+          sessionSeconds: fixedSessionSeconds(loginPolicy),
           approvalRequired: selectedIsOwner ? false : form.approvalRequired,
         });
       }
@@ -420,9 +423,9 @@ export default function AdminUsersPanel() {
       </header>
 
       {isOwnerAdmin ? (
-        <section className="owner-banner"><div className="owner-badge">SAHİP</div><div><strong>{currentUser?.fullName || currentUser?.username || "Uygulama Sahibi"}</strong><span>Uygulama güvenliği, kullanıcı giriş yöntemleri ve oturum süreleri bu hesap tarafından yönetilir.</span></div><div className="owner-scope">Tüm firmalara tam erişim</div></section>
+        <section className="owner-banner"><div className="owner-badge">SAHİP</div><div><strong>{currentUser?.fullName || currentUser?.username || "Uygulama Sahibi"}</strong><span>Uygulama güvenliği ve kullanıcı giriş yöntemleri bu hesap tarafından yönetilir.</span></div><div className="owner-scope">Tüm firmalara tam erişim</div></section>
       ) : (
-        <section className="owner-banner company-admin-banner"><div className="owner-badge">FİRMA</div><div><strong>{companyName(currentUser?.mainCompanySlug)}</strong><span>Firma yöneticisi modül yetkilerini yönetebilir; giriş güvenliğini zayıflatamaz veya oturum süresini uzatamaz.</span></div></section>
+        <section className="owner-banner company-admin-banner"><div className="owner-badge">FİRMA</div><div><strong>{companyName(currentUser?.mainCompanySlug)}</strong><span>Firma yöneticisi modül yetkilerini yönetebilir; giriş güvenliğini zayıflatamaz.</span></div></section>
       )}
 
       <section className="security-summary">
@@ -480,10 +483,10 @@ export default function AdminUsersPanel() {
 
             {isOwnerAdmin ? (
               <div className="login-policy-card">
-                <div className="security-v2-title"><div><strong>Giriş Güvenliği ve Oturum</strong><span>{selectedIsOwner ? "Uygulama sahibi parola-only kullanamaz; Google veya Microsoft zorunludur." : "Bu kullanıcı için giriş yöntemini ve oturum süresini siz belirlersiniz."}</span></div><span className="security-owner-only">SAHİP KONTROLÜ</span></div>
+                <div className="security-v2-title"><div><strong>Giriş Güvenliği ve Oturum</strong><span>{selectedIsOwner ? "Uygulama sahibi parola-only kullanamaz; Google veya Microsoft zorunludur." : "Giriş yöntemini seçin; oturum süresi güvenlik türüne göre otomatik uygulanır."}</span></div><span className="security-owner-only">SAHİP KONTROLÜ</span></div>
                 <div className="form-grid two-col">
                   <label>Giriş Güvenliği<select value={selectedIsOwner ? "ANY_MFA" : form.loginPolicy} disabled={selectedIsOwner} onChange={(event) => editForm("loginPolicy", event.target.value)}>{LOGIN_POLICIES.filter(([key]) => !selectedIsOwner || key === "ANY_MFA").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><small>{LOGIN_POLICIES.find(([key]) => key === (selectedIsOwner ? "ANY_MFA" : form.loginPolicy))?.[2]}</small></label>
-                  <label>Oturum Süresi<select value={form.loginPolicy === "PASSWORD_ONLY" ? 1800 : form.sessionSeconds} disabled={form.loginPolicy === "PASSWORD_ONLY"} onChange={(event) => editForm("sessionSeconds", Number(event.target.value))}>{SESSION_OPTIONS.filter(([seconds]) => !selectedIsOwner || seconds <= 28800).map(([seconds, label]) => <option key={seconds} value={seconds}>{label}</option>)}</select><small>{form.loginPolicy === "PASSWORD_ONLY" ? "Sadece parola: sunucu en fazla 30 dakika izin verir ve süre dolunca ekran otomatik kapanır." : `Seçili süre: ${sessionLabel(form.sessionSeconds)}`}</small></label>
+                  <label>Oturum Süresi<input value={fixedSessionLabel(selectedIsOwner ? "ANY_MFA" : form.loginPolicy)} disabled /><small>{form.loginPolicy === "PASSWORD_ONLY" && !selectedIsOwner ? "Parola-only oturum: 8 saat." : "MFA doğrulanmış oturum: 10 saat. Aynı geçerli tarayıcı oturumu boyunca tekrar MFA istenmez."}</small></label>
                 </div>
                 {!selectedIsOwner ? <label className="check-field standalone-check"><input type="checkbox" checked={form.approvalRequired} onChange={(event) => editForm("approvalRequired", event.target.checked)} /><span><strong>Yeni cihaz girişinde yönetici onayı</strong><small>Parola/MFA bittikten sonra ayrıca yönetici onayı bekler.</small></span></label> : null}
                 {selectedUser ? <div className="security-user-actions"><div><strong>Authenticator kayıt durumu</strong><span>Google: {selectedUser.googleMfaEnabled ? "Aktif" : "Kurulum gerekli"} · Microsoft: {selectedUser.microsoftMfaEnabled ? "Aktif" : "Kurulum gerekli"}</span><small>Politikayı kapatmak kayıtlı anahtarı silmez; “Yeniden Kur” yalnız açıkça seçildiğinde secret değişir.</small></div><div className="form-actions"><button type="button" onClick={() => handleResetMfa(selectedUser, "GOOGLE")}>Google Yeniden Kur</button><button type="button" onClick={() => handleResetMfa(selectedUser, "MICROSOFT")}>Microsoft Yeniden Kur</button><button type="button" className="danger-light" onClick={() => handleResetMfa(selectedUser, "ALL")}>Tüm MFA'yı Sıfırla</button><button type="button" onClick={() => runSecurityAction(() => revokeAllUserSessions(selectedUser.id), "Kullanıcının bütün aktif oturumları kapatıldı.")}>Tüm Oturumları Kapat</button></div></div> : null}
@@ -530,7 +533,7 @@ export default function AdminUsersPanel() {
       </section>
 
       <section className="admin-panel security-panel">
-        <div className="panel-head"><div><h3>Aktif Oturumlar</h3><p>Her kullanıcının kalan süresi kendi güvenlik profiline göre hesaplanır; istenen oturum anında kapatılabilir.</p></div><button type="button" onClick={loadSecurity} disabled={busy}>Oturumları Yenile</button></div>
+        <div className="panel-head"><div><h3>Aktif Oturumlar</h3><p>Parola-only oturumlar 8 saat, MFA ile doğrulanmış oturumlar 10 saat geçerlidir; istenen oturum anında kapatılabilir.</p></div><button type="button" onClick={loadSecurity} disabled={busy}>Oturumları Yenile</button></div>
         {sessions.length ? <div className="security-table-wrap"><table><thead><tr><th>Kullanıcı</th><th>Rol / Firma</th><th>Cihaz</th><th>IP</th><th>Giriş</th><th>Son Hareket</th><th>Kalan</th><th>İşlem</th></tr></thead><tbody>{sessions.map((session) => <tr key={session.id}><td><strong>{session.fullName || session.username}</strong><small>{session.email || `@${session.username}`}</small></td><td>{ROLE_LABELS[roleOf(session.role)] || session.role}<small>{OWNER_ROLES.has(roleOf(session.role)) ? "Tüm firmalar" : companyName(session.mainCompanySlug)}</small></td><td>{session.deviceLabel || "-"}</td><td>{session.ipAddress || "-"}</td><td>{dateText(session.createdAt)}</td><td>{dateText(session.lastSeenAt)}</td><td><strong>{remainingText(session.remainingSeconds)}</strong></td><td><button type="button" className="danger-light" onClick={() => runSecurityAction(() => revokeSession(session.id), "Oturum anında kapatıldı.")}>Oturumu Sonlandır</button></td></tr>)}</tbody></table></div> : <div className="security-empty">Aktif oturum bulunmuyor.</div>}
       </section>
     </div>
