@@ -99,10 +99,10 @@ async function directAuthRequest(path, options = {}) {
   try {
     const headers = { Accept: "application/json" };
     if (body !== undefined) {
-      // Login/MFA/kurtarma çağrılarında özel header ve application/json preflight'ı
-      // gereksizdir. Request.json() text/plain JSON gövdesini de güvenle ayrıştırır.
-      // Token taşıyan çağrılar Authorization nedeniyle zaten preflight kullanır.
-      headers["Content-Type"] = token ? "application/json" : "text/plain;charset=UTF-8";
+      // Auth mutasyonları standart JSON taşır. Cloudflare/Hono CORS katmanı
+      // Content-Type application/json preflight'ını açıkça destekler.
+      // Özel cihaz header'ı ve otomatik POST retry kullanılmaz.
+      headers["Content-Type"] = "application/json";
     }
     if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -128,7 +128,8 @@ async function directAuthRequest(path, options = {}) {
     const validJsonPayload = payload && typeof payload === "object" && !Array.isArray(payload);
 
     if (response.ok && !validJsonPayload) {
-      const error = new Error("KY ERP giriş servisi geçerli JSON yanıtı döndürmedi. Sayfayı yenileyip tekrar deneyin.");
+      const contentType = String(response.headers.get("Content-Type") || "");
+      const error = new Error(`KY ERP giriş servisi JSON yerine geçersiz yanıt döndürdü${contentType ? ` (${contentType})` : ""}.`);
       error.status = response.status;
       error.code = "AUTH_INVALID_RESPONSE";
       error.requestUrl = requestUrl;
