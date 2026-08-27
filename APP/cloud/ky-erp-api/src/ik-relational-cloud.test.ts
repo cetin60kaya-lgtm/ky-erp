@@ -9,9 +9,18 @@ import {
 } from "./ik-relational-cloud.ts";
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
-  assert.equal(canonicalHrCompanyId("mecit-hakan"), "mecit-hakan");
-  assert.equal(canonicalHrCompanyId("main-mecit-hakan"), "mecit-hakan");
-  assert.equal(canonicalHrCompanyId("MAIN_MECIT_HAKAN"), "mecit-hakan");
+  for (const alias of [
+    "mecit-hakan",
+    "main-mecit-hakan",
+    "mecit-hakan-gursu",
+    "hakan-baski",
+    "main-hakan",
+    "main-hakan-baski",
+    "hkn-baski",
+    "MAIN_MECIT_HAKAN",
+  ]) {
+    assert.equal(canonicalHrCompanyId(alias), "mecit-hakan");
+  }
   assert.equal(canonicalHrCompanyId(undefined), "mecit-hakan");
 });
 

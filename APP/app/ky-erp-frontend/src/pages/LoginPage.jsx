@@ -301,12 +301,12 @@ export default function LoginPage() {
             <p>Giriş güvenliği hesabınıza özel olarak sistem yöneticisi tarafından belirlenir.</p>
             <form onSubmit={handleLogin}>
               <label>E-posta veya Kullanıcı Adı
-                <input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="kullanici veya mail@firma.com" />
+                <input name="username" autoFocus autoComplete="username" autoCapitalize="none" spellCheck="false" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="kullanici veya mail@firma.com" />
               </label>
               <label>Şifre
-                <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="********" />
+                <input name="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="********" />
               </label>
-              {error ? <div className="login-error">{error}</div> : null}
+              {error ? <div className="login-error" role="alert" aria-live="polite">{error}</div> : null}
               <button type="submit" disabled={loading}>{loading ? "Kontrol ediliyor..." : "Giriş Yap"}</button>
             </form>
             <div className="login-security-box">
@@ -364,7 +364,7 @@ export default function LoginPage() {
           <>
             <p><strong>{flow.policyLabel || "Authenticator doğrulaması"}</strong></p>
             {flow.requireBoth ? <div className="login-security-box"><strong>İki doğrulama gerekli</strong><span>Google ve Microsoft kodları bağımsız olarak doğrulanır.</span><span>Doğrulanan: {verifiedProviders.length ? verifiedProviders.map((item) => PROVIDER_LABELS[item]).join(", ") : "Henüz yok"}</span></div> : null}
-            {availableProviders.length > 1 ? <div className="login-provider-tabs">{availableProviders.map((provider) => <button key={provider} type="button" className={selectedProvider === provider ? "active" : ""} disabled={verifiedProviders.includes(provider)} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); }}>{PROVIDER_LABELS[provider]}{verifiedProviders.includes(provider) ? " ✓" : ""}</button>)}</div> : null}
+            {availableProviders.length > 1 ? <div className="login-provider-tabs">{availableProviders.map((provider) => <button key={provider} type="button" className={`login-provider-tab${selectedProvider === provider ? " active" : ""}`} disabled={verifiedProviders.includes(provider)} onClick={() => { setSelectedProvider(provider); setCode(""); setResetProvider(""); }}><span>{PROVIDER_LABELS[provider]}</span>{verifiedProviders.includes(provider) ? <small>Doğrulandı ✓</small> : <small>Kod ile doğrula</small>}</button>)}</div> : null}
             <form onSubmit={handleMfa}>
               <label>{currentLabel} Kodu
                 <input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />

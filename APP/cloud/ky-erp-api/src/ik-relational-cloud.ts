@@ -6,6 +6,15 @@ type AppEnv = { Bindings: Bindings; Variables: Variables };
 type Row = Record<string, unknown>;
 
 const CANONICAL_COMPANY_ID = "mecit-hakan";
+const CANONICAL_COMPANY_ALIASES = new Set([
+  "mecit-hakan",
+  "main-mecit-hakan",
+  "mecit-hakan-gursu",
+  "hakan-baski",
+  "main-hakan",
+  "main-hakan-baski",
+  "hkn-baski",
+]);
 
 const text = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
@@ -23,7 +32,7 @@ export function canonicalHrCompanyId(value: unknown) {
     .replace(/_/g, "-")
     .replace(/\s+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (!normalized || normalized === "main-mecit-hakan" || normalized === "mecit-hakan") {
+  if (!normalized || CANONICAL_COMPANY_ALIASES.has(normalized)) {
     return CANONICAL_COMPANY_ID;
   }
   return normalized;

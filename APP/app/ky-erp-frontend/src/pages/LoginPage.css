@@ -91,6 +91,15 @@
   cursor: not-allowed;
 }
 
+.login-card button:not(:disabled):hover {
+  filter: brightness(0.97);
+}
+
+.login-card button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 2px;
+}
+
 .login-card button.login-secondary {
   margin-top: 0;
   color: #334155;
@@ -120,6 +129,23 @@
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 13px;
+}
+
+.login-recovery-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.login-recovery-panel > span {
+  color: #64748b;
 }
 
 .login-security-box,
@@ -313,6 +339,16 @@
 }
 
 .login-security-note {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.login-footer {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid #e2e8f0;

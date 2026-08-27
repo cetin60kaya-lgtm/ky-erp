@@ -137,9 +137,6 @@ shell.use("/api/*", async (c, next) => {
 
   const authenticated = await getAuthenticatedUser(c);
   if (!authenticated) {
-    if (c.req.method === "GET" && path === "/api/boyahane/registered-colors") {
-      return c.json({ ok: true, success: true, data: [], protected: true, authRequired: true });
-    }
     return c.json(
       {
         ok: false,
