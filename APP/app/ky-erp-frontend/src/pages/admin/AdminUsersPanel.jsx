@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
   activateUser,
   approveLogin,
@@ -206,9 +207,23 @@ export default function AdminUsersPanel() {
   }, []);
 
   const loadSecurity = useCallback(async () => {
-    const [sessionRows, approvalRows] = await Promise.all([listActiveSessions(), listLoginApprovals()]);
-    setSessions(Array.isArray(sessionRows) ? sessionRows : sessionRows?.items || []);
-    setApprovals(Array.isArray(approvalRows) ? approvalRows : approvalRows?.items || []);
+    const result = await loadModuleData({
+      scope: "admin:security",
+      sources: {
+        sessions: { critical: true, load: () => listActiveSessions() },
+        approvals: { fallback: [], load: () => listLoginApprovals() },
+      },
+    });
+    if (result.states.sessions.status !== "error") {
+      const rows = result.data.sessions;
+      setSessions(Array.isArray(rows) ? rows : rows?.items || []);
+    }
+    if (result.states.approvals.status !== "error") {
+      const rows = result.data.approvals;
+      setApprovals(Array.isArray(rows) ? rows : rows?.items || []);
+    }
+    const warning = moduleLoadMessage(result, "Aktif oturumlar alınamadı; son başarılı liste korunuyor.", "Giriş onayları yenilenemedi; aktif oturumlar kullanılabilir.");
+    if (warning) setMessage(warning);
   }, []);
 
   const loadPolicies = useCallback(async () => {
@@ -235,8 +250,10 @@ export default function AdminUsersPanel() {
   const refreshAll = useCallback(async () => {
     try {
       setBusy(true);
-      await Promise.all([loadCompanies(), loadUsers(), loadSecurity(), loadPolicies(), loadOwnerRecovery()]);
-      setMessage("Kullanıcı, yetki, giriş güvenliği ve oturum bilgileri güncel.");
+      const results = await Promise.allSettled([loadCompanies(), loadUsers(), loadSecurity(), loadPolicies(), loadOwnerRecovery()]);
+      const rejected = results.find((result) => result.status === "rejected");
+      if (rejected) throw rejected.reason;
+      setMessage((current) => current || "Kullanıcı, yetki, giriş güvenliği ve oturum bilgileri güncel.");
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Yönetim bilgileri alınamadı."}`);
     } finally {

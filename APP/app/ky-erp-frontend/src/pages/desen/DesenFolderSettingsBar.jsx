@@ -12,6 +12,7 @@ import {
   getDesenFolderSettings,
   testDesenFolderSettings,
 } from "../../services/desenFolderSettingsApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 
 const numberText = (value) =>
   Number(value || 0).toLocaleString("tr-TR", {
@@ -41,19 +42,26 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
       setMessage("");
       try {
         const company = { id: companyId, slug: companySlug };
-        const [data, bridgeData] = await Promise.all([
-          test
-            ? testDesenFolderSettings(company)
-            : getDesenFolderSettings(company),
-          getDesenBridgeStatus(company).catch(() => null),
-        ]);
-        setResult(data || null);
-        setBridge(bridgeData || null);
-        setMessage(
-          test
-            ? `R2 bağlantısı doğrulandı. ${Number(data?.pendingFileCount || 0)} gelen dosya hazır.`
-            : "",
+        const loadResult = await loadModuleData({
+          scope: `desen:${companySlug || companyId}:depolama:${test ? "test" : "durum"}`,
+          sources: {
+            storage: {
+              critical: true,
+              load: () => test ? testDesenFolderSettings(company) : getDesenFolderSettings(company),
+            },
+            bridge: { fallback: null, load: () => getDesenBridgeStatus(company) },
+          },
+        });
+        if (loadResult.states.storage.status !== "error") setResult(loadResult.data.storage || null);
+        if (loadResult.states.bridge.status !== "error") setBridge(loadResult.data.bridge || null);
+        const warning = moduleLoadMessage(
+          loadResult,
+          "Desen R2 ana alanı kontrol edilemedi; son başarılı durum korunuyor.",
+          "Yerel köprü durumu yenilenemedi; R2 depolama bağlantısı kullanılabilir.",
         );
+        setMessage(warning || (test
+          ? `R2 bağlantısı doğrulandı. ${Number(loadResult.data.storage?.pendingFileCount || 0)} gelen dosya hazır.`
+          : ""));
       } catch (error) {
         setMessage(error?.message || "Desen R2 alanı kontrol edilemedi.");
       } finally {

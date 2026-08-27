@@ -22,6 +22,7 @@ import {
 } from "../../../services/boyahaneColorAssistantApi";
 import BoyahaneProductionSerialPage from "./BoyahaneProductionSerialPage";
 import { formatKg, safeArray } from "./boyahaneFormat";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "../boyahaneProductionIntelligence.css";
 
 const OPEN_LOTS = new Set(["AVAILABLE", "ACTIVE"]);
@@ -149,37 +150,28 @@ function ColorAssistantDock({
     setLoadingData(true);
     setError("");
     try {
-      const [jobRows, productRows, lotRows] = await Promise.all([
-        listBoyahaneJobs(activeMainCompany),
-        listBoyahaneProducts(activeMainCompany),
-        listBoyahaneLots(activeMainCompany),
-      ]);
-      const productionJobs = safeArray(jobRows).filter(isProduction);
-      setJobs(productionJobs);
-      setProducts(safeArray(productRows));
-      setLots(safeArray(lotRows));
-      setJobId((current) => {
-        if (
-          current &&
-          productionJobs.some((row) => txt(row.id) === txt(current))
-        ) {
-          return current;
-        }
-        const preferred = moduleActionContext?.boyahaneJobId;
-        if (
-          preferred &&
-          productionJobs.some((row) => txt(row.id) === txt(preferred))
-        ) {
-          return preferred;
-        }
-        return (
-          productionJobs.find(
-            (row) => txt(row.status).toUpperCase() !== "COMPLETED",
-          )?.id ||
-          productionJobs[0]?.id ||
-          ""
-        );
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id || "main";
+      const loadResult = await loadModuleData({
+        scope: `boyahane:${tenant}:renk-asistani`,
+        sources: {
+          jobs: { critical: true, load: () => listBoyahaneJobs(activeMainCompany) },
+          products: { fallback: [], load: () => listBoyahaneProducts(activeMainCompany) },
+          lots: { fallback: [], load: () => listBoyahaneLots(activeMainCompany) },
+        },
       });
+      if (loadResult.states.jobs.status !== "error") {
+        const productionJobs = safeArray(loadResult.data.jobs).filter(isProduction);
+        setJobs(productionJobs);
+        setJobId((current) => {
+          if (current && productionJobs.some((row) => txt(row.id) === txt(current))) return current;
+          const preferred = moduleActionContext?.boyahaneJobId;
+          if (preferred && productionJobs.some((row) => txt(row.id) === txt(preferred))) return preferred;
+          return productionJobs.find((row) => txt(row.status).toUpperCase() !== "COMPLETED")?.id || productionJobs[0]?.id || "";
+        });
+      }
+      if (loadResult.states.products.status !== "error") setProducts(safeArray(loadResult.data.products));
+      if (loadResult.states.lots.status !== "error") setLots(safeArray(loadResult.data.lots));
+      setError(moduleLoadMessage(loadResult, "Boyahane iş ana listesi alınamadı; son başarılı işler korunuyor.", "Ürün veya lot bilgisi yenilenemedi; iş listesi kullanılabilir."));
     } catch (requestError) {
       setError(requestError?.message || "Renk asistanı verileri yüklenemedi.");
     } finally {

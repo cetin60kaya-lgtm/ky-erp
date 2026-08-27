@@ -35,6 +35,7 @@ import "./ik.css";
 import "./ik.safe-row.css";
 import IkAdvancedMonthly from "./IkAdvancedMonthly";
 import { exportRowsToExcelFile } from "../../utils/excelExport";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
   createAylikPersonel,
   createGunlukPersonel,
@@ -8167,7 +8168,7 @@ export default function IkPage({
   const [daily, setDaily] = useState([]);
   const [selectedMonthlyId, setSelectedMonthlyId] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
-  const [, setNotice] = useState("");
+  const [notice, setNotice] = useState("");
   const [, setLeaves] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
   const [, setDocs] = useState([]);
@@ -8185,38 +8186,42 @@ export default function IkPage({
     let cancelled = false;
     async function loadIkData() {
       try {
-        const skillRequest = getIkSkills({ mainCompanyId: companyId }).catch(
-          () => [],
-        );
-        const holidayRequest = getResmiTatiller({ year: CURRENT_YEAR }).catch(
-          () => DEFAULT_OFFICIAL_HOLIDAYS_2026,
-        );
-        const [
-          monthlyRows,
-          leaveRows,
-          adjustmentRows,
-          documentRows,
-          dailyRows,
-          attendanceRows,
-          skillRows,
-          holidayRows,
-          logRows,
-        ] = await Promise.all([
-          getAylikPersonel({ mainCompanyId: companyId }),
-          getAylikIzinler({ mainCompanyId: companyId }),
-          getAylikMesailer({ mainCompanyId: companyId }),
-          getAylikEvraklar({ mainCompanyId: companyId }),
-          getGunlukPersonel({ mainCompanyId: companyId }),
-          getGunlukDurum({
-            mainCompanyId: companyId,
-            start: dailyDateRange.start,
-            end: dailyDateRange.end,
-          }),
-          skillRequest,
-          holidayRequest,
-          getAylikLoglar({ mainCompanyId: companyId, limit: 200 }).catch(() => []),
-        ]);
+        const result = await loadModuleData({
+          scope: `ik:${companyId}:${dailyDateRange.start}:${dailyDateRange.end}`,
+          sources: {
+            monthly: { critical: true, fallback: [], load: () => getAylikPersonel({ mainCompanyId: companyId }) },
+            leaves: { fallback: [], load: () => getAylikIzinler({ mainCompanyId: companyId }) },
+            adjustments: { fallback: [], load: () => getAylikMesailer({ mainCompanyId: companyId }) },
+            documents: { fallback: [], load: () => getAylikEvraklar({ mainCompanyId: companyId }) },
+            daily: { critical: true, fallback: [], load: () => getGunlukPersonel({ mainCompanyId: companyId }) },
+            attendance: {
+              fallback: [],
+              load: () => getGunlukDurum({
+                mainCompanyId: companyId,
+                start: dailyDateRange.start,
+                end: dailyDateRange.end,
+              }),
+            },
+            skills: { fallback: [], load: () => getIkSkills({ mainCompanyId: companyId }) },
+            holidays: {
+              fallback: DEFAULT_OFFICIAL_HOLIDAYS_2026,
+              load: () => getResmiTatiller({ year: CURRENT_YEAR }),
+            },
+            logs: { fallback: [], load: () => getAylikLoglar({ mainCompanyId: companyId, limit: 200 }) },
+          },
+        });
         if (cancelled) return;
+        const {
+          monthly: monthlyRows,
+          leaves: leaveRows,
+          adjustments: adjustmentRows,
+          documents: documentRows,
+          daily: dailyRows,
+          attendance: attendanceRows,
+          skills: skillRows,
+          holidays: holidayRows,
+          logs: logRows,
+        } = result.data;
         const normalized = Array.isArray(monthlyRows)
            ? monthlyRows.map(normalizeMonthlyPerson)
           : [];
@@ -8263,6 +8268,11 @@ export default function IkPage({
              ? current
             : normalized[0]?.id || "",
         );
+        setNotice(moduleLoadMessage(
+          result,
+          "İK ana personel kaynağı geçici olarak okunamadı; diğer başarılı bilgiler korunuyor.",
+          "Bazı yardımcı İK bilgileri yenilenemedi; personel havuzu ve son başarılı veriler korunuyor.",
+        ));
       } catch (error) {
         setNotice(error?.message || "İK verisi okunamadı.");
       }
@@ -8567,6 +8577,7 @@ export default function IkPage({
     <div className="kyik-page notranslate" translate="no">
       <style>{IK_STYLE}</style>
       <main className="kyik-content">
+        {notice ? <div className="kyik-save-notice kyik-load-notice">{notice}</div> : null}
         {renderScreen()}
       </main>
     </div>
@@ -8626,6 +8637,7 @@ const IK_STYLE = `
 .kyik-shift-mode{display:flex;border:1px solid #d6e1f0;border-radius:8px;overflow:hidden;background:#fff;min-height:38px}.kyik-shift-mode button{border:0;border-right:1px solid #d6e1f0;background:#fff;color:#475569;display:inline-flex;align-items:center;gap:7px;padding:0 12px;font-weight:900;cursor:pointer}.kyik-shift-mode button:last-child{border-right:0}.kyik-shift-mode button.active.day{background:#f97316;color:#fff}.kyik-shift-mode button.active.night{background:#2563eb;color:#fff}
 .kyik-shift-banner{display:flex;align-items:center;gap:10px;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-weight:800}.kyik-shift-banner span{color:#475569;font-weight:700}.kyik-shift-banner.day{border:1px solid #fed7aa;background:#fff7ed;color:#c2410c}.kyik-shift-banner.night{border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8}
 .kyik-save-notice{background:#ecfdf5;color:#15803d;border:1px solid #bbf7d0;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-weight:800}
+.kyik-load-notice{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
 .kyik-daily-entry-grid{display:grid;grid-template-columns:320px minmax(0,1fr) 310px;gap:12px;align-items:start}.kyik-section-kicker{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:900;margin-bottom:8px}
 .kyik-daily-left,.kyik-daily-right,.kyik-daily-table-shell{min-width:0}.kyik-daily-left{display:grid;gap:8px;max-height:calc(100vh - 325px);overflow:auto;padding-right:4px}
 .kyik-daily-person{border:1px solid #dce6f4;background:#fff;border-radius:8px;padding:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;cursor:pointer}.kyik-daily-person.active{border-color:#1d63ee;background:#eaf2ff}.kyik-daily-person.removed{opacity:.55}.kyik-daily-person strong,.kyik-daily-person small,.kyik-daily-person em{display:block}.kyik-daily-person strong{line-height:1.3}.kyik-daily-person small{color:#64748b;margin-top:4px;line-height:1.35}.kyik-daily-person em{margin-top:5px;color:#b91c1c;font-size:11px;font-style:normal;font-weight:900}.kyik-mini-buttons{display:grid;gap:6px}.kyik-mini-buttons button{min-width:58px;height:32px;border:1px solid #d6e1f0;background:#fff;border-radius:8px;display:grid;place-items:center;cursor:pointer;font-size:11px;font-weight:900;padding:0 8px}

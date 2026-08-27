@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileImage, LoaderCircle, Palette, RefreshCw, Search } from "lucide-react";
 import { downloadDesignReport, getDesignCompanies, getDesignReports } from "../../services/desenWorkflowApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import { assetUrl, EmptyState, formatDate, ModelDetailModal, MODEL_STATUSES, Pager, PRINT_AREAS, StatusBadge } from "./DesenWorkflowShared";
 
 export default function DesenRaporlari({ activeMainCompany }) {
@@ -12,12 +13,20 @@ export default function DesenRaporlari({ activeMainCompany }) {
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState({ q: "", companyId: "", status: "", printAreaCode: "", placementStatus: "", dyehouseStatus: "", dateField: "createdAt", dateFrom: "", dateTo: "", sort: "created_desc" });
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true);
     try {
-      const [payload, firms] = await Promise.all([getDesignReports(activeMainCompany, filters), getDesignCompanies(activeMainCompany)]);
-      setReport(payload || { rows: [], summary: {} }); setCompanies(firms || []);
-      setMessage("");
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `desen:${tenant}:rapor:${JSON.stringify(filters)}`,
+        sources: {
+          report: { critical: true, load: () => getDesignReports(activeMainCompany, filters) },
+          companies: { fallback: [], load: () => getDesignCompanies(activeMainCompany) },
+        },
+      });
+      if (result.states.report.status !== "error") setReport(result.data.report || { rows: [], summary: {} });
+      if (result.states.companies.status !== "error") setCompanies(result.data.companies || []);
+      setMessage(moduleLoadMessage(result, "Desen raporu alınamadı; son başarılı rapor korunuyor.", "Firma filtresi yenilenemedi; rapor verileri kullanılabilir."));
     } catch (error) { setMessage(error?.message || "Desen raporları yüklenemedi."); }
     finally { setLoading(false); }
   }, [activeMainCompany, filters]);

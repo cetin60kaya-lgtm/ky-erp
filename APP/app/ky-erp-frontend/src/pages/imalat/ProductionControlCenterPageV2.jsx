@@ -29,6 +29,7 @@ import {
 } from "../../services/productionCenterApi";
 import { getDesignModels } from "../../services/desenWorkflowApi";
 import { assetUrl } from "../desen/DesenWorkflowShared";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
 import "./productionControlCenterV2.css";
 
@@ -176,27 +177,42 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
     if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true);
     try {
-      const [result, dict] = await Promise.all([
-        getProductionCenter(activeMainCompany, {
-          search,
-          status,
-          page: 1,
-          pageSize: PAGE_SIZE,
-          _ts: Date.now(),
-        }),
-        getProductionCenterDictionaries(activeMainCompany),
-      ]);
-      setCenter(result || { rows: [], summary: {}, pagination: {} });
-      setDictionaries({
-        models: Array.isArray(dict?.models) ? dict.models : [],
-        machines: Array.isArray(dict?.machines) ? dict.machines : [],
-        operators: Array.isArray(dict?.operators) ? dict.operators : [],
-        companies: Array.isArray(dict?.companies) ? dict.companies : [],
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const loadResult = await loadModuleData({
+        scope: `imalat:${tenant}:merkez:${search}:${status}`,
+        sources: {
+          center: {
+            critical: true,
+            load: () => getProductionCenter(activeMainCompany, {
+              search,
+              status,
+              page: 1,
+              pageSize: PAGE_SIZE,
+              _ts: Date.now(),
+            }),
+          },
+          dictionaries: { fallback: {}, load: () => getProductionCenterDictionaries(activeMainCompany) },
+        },
       });
-      setMessage("");
+      if (loadResult.states.center.status !== "error") {
+        setCenter(loadResult.data.center || { rows: [], summary: {}, pagination: {} });
+      }
+      if (loadResult.states.dictionaries.status !== "error") {
+        const dict = loadResult.data.dictionaries;
+        setDictionaries({
+          models: Array.isArray(dict?.models) ? dict.models : [],
+          machines: Array.isArray(dict?.machines) ? dict.machines : [],
+          operators: Array.isArray(dict?.operators) ? dict.operators : [],
+          companies: Array.isArray(dict?.companies) ? dict.companies : [],
+        });
+      }
+      setMessage(moduleLoadMessage(
+        loadResult,
+        "İmalat ana listesi yüklenemedi; son başarılı üretim verisi korunuyor.",
+        "Makine veya sözlük bilgileri geçici olarak yenilenemedi; imalat listesi kullanılabilir.",
+      ));
     } catch (error) {
       setMessage(error?.message || "İmalat merkezi yüklenemedi.");
-      setCenter({ rows: [], summary: {}, pagination: {} });
     } finally {
       setLoading(false);
     }

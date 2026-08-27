@@ -159,13 +159,18 @@ function compactSourceRow(row: Row) {
 async function sourceContext(c: Context<AppEnv>, slug: string, moduleKey: unknown) {
   const patterns = moduleScopePatterns(moduleKey);
   const clauses = patterns.map(() => "scope LIKE ?").join(" OR ");
-  const result = await c.env.DB.prepare(
-    `SELECT scope, file_name, data, updated_at FROM json_store
-      WHERE (${clauses}) AND (main_company_slug = ? OR main_company_slug IS NULL)
-      ORDER BY updated_at DESC LIMIT ?`,
-  ).bind(...patterns, slug, MAX_CONTEXT_ROWS).all<Row>();
-  const rows = result.results || [];
-  return { rows: rows.map(compactSourceRow), count: rows.length };
+  try {
+    const result = await c.env.DB.prepare(
+      `SELECT scope, file_name, data, updated_at FROM json_store
+        WHERE (${clauses}) AND (main_company_slug = ? OR main_company_slug IS NULL)
+        ORDER BY updated_at DESC LIMIT ?`,
+    ).bind(...patterns, slug, MAX_CONTEXT_ROWS).all<Row>();
+    const rows = result.results || [];
+    return { rows: rows.map(compactSourceRow), count: rows.length, degraded: false };
+  } catch (error) {
+    console.error("KY ERP AI tenant context read failed", error);
+    return { rows: [], count: 0, degraded: true };
+  }
 }
 
 function systemPrompt(pageContext: Row, sourceCount: number) {
@@ -261,7 +266,7 @@ export function registerAiCloudRoutes(app: Hono<AppEnv>) {
 
     let result: unknown;
     try {
-      result = await (c.env.AI as any).run(MODEL, {
+      result = await c.env.AI.run(MODEL, {
         messages,
         temperature: 0.2,
         max_tokens: 1600,
@@ -292,6 +297,7 @@ export function registerAiCloudRoutes(app: Hono<AppEnv>) {
       answer,
       actions: [],
       sourceCount: source.count,
+      sourceContextDegraded: source.degraded,
       usage: (result as Row)?.usage || null,
       model: MODEL,
       provider: "Cloudflare Workers AI",

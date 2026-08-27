@@ -29,6 +29,7 @@ import {
   saveIkControlChanges,
   saveIkDayOverride,
 } from "../../../services/ikPersonnelControlApi";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./ik-personnel-center.css";
 
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
@@ -138,14 +139,20 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
   const companyKey = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
 
   const loadPeople = useCallback(async () => {
-    const [scope, rows] = await Promise.all([
-      getIkControlProfile(),
-      getIkControlPeople({ mainCompanyId: companyKey }),
-    ]);
-    setProfile(scope || { audit: false, scope: "FULL" });
-    const list = Array.isArray(rows) ? rows : [];
-    setPeople(list);
-    setSelectedId((current) => list.some((row) => row.id === current) ? current : list[0]?.id || "");
+    const result = await loadModuleData({
+      scope: `ik:${companyKey}:personel-merkezi`,
+      sources: {
+        people: { critical: true, load: () => getIkControlPeople({ mainCompanyId: companyKey }) },
+        profile: { fallback: { audit: false, scope: "FULL" }, load: () => getIkControlProfile() },
+      },
+    });
+    if (result.states.profile.status !== "error") setProfile(result.data.profile || { audit: false, scope: "FULL" });
+    if (result.states.people.status !== "error") {
+      const list = Array.isArray(result.data.people) ? result.data.people : [];
+      setPeople(list);
+      setSelectedId((current) => list.some((row) => row.id === current) ? current : list[0]?.id || "");
+    }
+    setError(moduleLoadMessage(result, "Personel ana listesi alınamadı; son başarılı liste korunuyor.", "Yetki profili yenilenemedi; personel listesi kullanılabilir."));
   }, [companyKey]);
 
   useEffect(() => {
@@ -158,14 +165,21 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
   const loadSelected = useCallback(async () => {
     if (!selectedId) { setDetail(null); setAttendance(null); return; }
     setError("");
-    const [personDetail, monthData] = await Promise.all([
-      getIkControlPerson(selectedId),
-      getIkAttendanceMonth(selectedId, { year, month, mainCompanyId: companyKey }),
-    ]);
-    setDetail(personDetail || null);
-    setAttendance(monthData || null);
-    setDraft(personDetail?.person ? { ...personDetail.person } : null);
-    setEditing(false);
+    const result = await loadModuleData({
+      scope: `ik:${companyKey}:personel:${selectedId}:${year}:${month}`,
+      sources: {
+        detail: { critical: true, load: () => getIkControlPerson(selectedId) },
+        attendance: { fallback: null, load: () => getIkAttendanceMonth(selectedId, { year, month, mainCompanyId: companyKey }) },
+      },
+    });
+    if (result.states.detail.status !== "error") {
+      const personDetail = result.data.detail;
+      setDetail(personDetail || null);
+      setDraft(personDetail?.person ? { ...personDetail.person } : null);
+      setEditing(false);
+    }
+    if (result.states.attendance.status !== "error") setAttendance(result.data.attendance || null);
+    setError(moduleLoadMessage(result, "Personel kartı alınamadı; son başarılı detay korunuyor.", "Aylık puantaj yenilenemedi; personel kartı kullanılabilir."));
   }, [companyKey, month, selectedId, year]);
 
   useEffect(() => {
@@ -202,9 +216,11 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
     setBusy(true); setError(""); setNotice("");
     try {
       await saveIkControlChanges(selected.id, { effectiveDate, note: changeNote, changes });
-      await Promise.all([loadPeople(), loadSelected()]);
+      const refreshes = await Promise.allSettled([loadPeople(), loadSelected()]);
       setEditing(false);
-      setNotice("Personel değişikliği tarihli geçmiş kaydıyla kaydedildi.");
+      setNotice(refreshes.some((result) => result.status === "rejected")
+        ? "Personel değişikliği kaydedildi; ekran bilgilerinin bir bölümü yenilenemedi."
+        : "Personel değişikliği tarihli geçmiş kaydıyla kaydedildi.");
     } catch (cause) { setError(cause?.message || "Değişiklik kaydedilemedi."); }
     finally { setBusy(false); }
   };

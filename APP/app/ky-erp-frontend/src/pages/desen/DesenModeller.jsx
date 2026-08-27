@@ -25,6 +25,7 @@ import {
   syncDesignDyehouse,
   updateDesignModel,
 } from "../../services/desenWorkflowApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
   assetUrl,
   EmptyState,
@@ -54,20 +55,30 @@ export default function DesenModeller({ activeMainCompany }) {
   const [filters, setFilters] = useState({ q: new URLSearchParams(window.location.search).get("q") || "", companyId: "", status: "", printAreaCode: "", placementStatus: "", dateField: "createdAt", dateFrom: "", dateTo: "", sort: "created_desc" });
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true); setMessage("");
     try {
-      const [modelPayload, companyRows] = await Promise.all([
-        getDesignModels(activeMainCompany, filters),
-        getDesignCompanies(activeMainCompany),
-      ]);
-      setModels(modelPayload?.rows || []);
-      setCompanies(companyRows || []);
-      setDetail((current) =>
-        current
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `desen:${tenant}:modeller:${JSON.stringify(filters)}`,
+        sources: {
+          models: { critical: true, load: () => getDesignModels(activeMainCompany, filters) },
+          companies: { fallback: [], load: () => getDesignCompanies(activeMainCompany) },
+        },
+      });
+      if (result.states.models.status !== "error") {
+        const modelPayload = result.data.models;
+        setModels(modelPayload?.rows || []);
+        setDetail((current) => current
           ? (modelPayload?.rows || []).find((item) => item.id === current.id) || null
-          : current,
-      );
+          : current);
+      }
+      if (result.states.companies.status !== "error") setCompanies(result.data.companies || []);
+      setMessage(moduleLoadMessage(
+        result,
+        "Desen Havuzu ana listesi yüklenemedi; son başarılı modeller korunuyor.",
+        "Firma filtresi geçici olarak yenilenemedi; Desen Havuzu kullanılabilir.",
+      ));
     } catch (error) { setMessage(error?.message || "Desen Havuzu yüklenemedi."); }
     finally { setLoading(false); }
   }, [activeMainCompany, filters]);

@@ -31,6 +31,7 @@ import {
   updateIsnetContact,
   updateIsnetDepartment,
 } from "../../../services/isnetBusinessSettingsApi";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./IsnetSettingsMasterPage.css";
 
 const SECTIONS = [
@@ -129,27 +130,38 @@ export default function IsnetSettingsMasterPage({
     setLoading(true);
     setNotice(null);
     try {
-      const [connectionResult, businessResult, companyResult, modelResult] =
-        await Promise.all([
-          getIsnetSettings(),
-          getIsnetBusinessSettings(activeMainCompany),
-          getFirmaKartlari(activeMainCompany),
-          getDesenSimpleModels(activeMainCompany, { limit: 3000 }),
-        ]);
-      setConnection((current) => ({
-        ...current,
-        username: connectionResult?.username || "",
-        password: "",
-        companyId: connectionResult?.companyId || "",
-        companies: rowsOf(connectionResult?.companies),
-        connectionMode: connectionResult?.connectionMode || "portal",
-        hasPassword: connectionResult?.hasPassword === true,
-      }));
-      setBusiness(businessResult?.settings || businessResult || {});
-      setDepartments(rowsOf(businessResult?.departments));
-      setContacts(rowsOf(businessResult?.contacts));
-      setCompanies(rowsOf(companyResult));
-      setModels(rowsOf(modelResult));
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `isnet:${tenant}:ayarlar`,
+        sources: {
+          connection: { critical: true, load: () => getIsnetSettings() },
+          business: { critical: true, load: () => getIsnetBusinessSettings(activeMainCompany) },
+          companies: { fallback: [], load: () => getFirmaKartlari(activeMainCompany) },
+          models: { fallback: [], load: () => getDesenSimpleModels(activeMainCompany, { limit: 3000 }) },
+        },
+      });
+      if (result.states.connection.status !== "error") {
+        const connectionResult = result.data.connection;
+        setConnection((current) => ({
+          ...current,
+          username: connectionResult?.username || "",
+          password: "",
+          companyId: connectionResult?.companyId || "",
+          companies: rowsOf(connectionResult?.companies),
+          connectionMode: connectionResult?.connectionMode || "portal",
+          hasPassword: connectionResult?.hasPassword === true,
+        }));
+      }
+      if (result.states.business.status !== "error") {
+        const businessResult = result.data.business;
+        setBusiness(businessResult?.settings || businessResult || {});
+        setDepartments(rowsOf(businessResult?.departments));
+        setContacts(rowsOf(businessResult?.contacts));
+      }
+      if (result.states.companies.status !== "error") setCompanies(rowsOf(result.data.companies));
+      if (result.states.models.status !== "error") setModels(rowsOf(result.data.models));
+      const warning = moduleLoadMessage(result, "İşNet bağlantı veya iş ayarlarından biri alınamadı; diğer başarılı ayarlar korunuyor.", "Firma veya model yardımcı listesi yenilenemedi; İşNet ayarları kullanılabilir.");
+      if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "İşNet ayarları yüklenemedi." });
     } finally {

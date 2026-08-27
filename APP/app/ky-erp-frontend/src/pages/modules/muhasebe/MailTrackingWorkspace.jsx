@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Clipboard, Mail, RefreshCcw, Search, X } from "lucide-react";
 import { apiGet, apiPatch } from "../../../utils/api";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./mailTrackingWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -68,13 +69,23 @@ export default function MailTrackingWorkspace({ activeMainCompany, refreshKey })
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const [trackingResponse, templateResponse] = await Promise.all([
-        apiGet("/muhasebe/mail-ekstre", { ...params, _ts: Date.now() }),
-        apiGet("/muhasebe/mail/templates", { ...params, _ts: Date.now() }).catch(() => ({ data: [] })),
-      ]);
-      const templateData = unwrap(templateResponse);
-      setTemplates(Array.isArray(templateData) ? templateData : []);
-      setState({ loading: false, error: "", data: unwrap(trackingResponse) });
+      const tenant = params.mainCompanySlug || params.mainCompanyId || "main";
+      const result = await loadModuleData({
+        scope: `muhasebe:${tenant}:mail-ekstre`,
+        sources: {
+          tracking: { critical: true, load: () => apiGet("/muhasebe/mail-ekstre", { ...params, _ts: Date.now() }) },
+          templates: { fallback: [], load: () => apiGet("/muhasebe/mail/templates", { ...params, _ts: Date.now() }) },
+        },
+      });
+      if (result.states.templates.status !== "error") {
+        const templateData = unwrap(result.data.templates);
+        setTemplates(Array.isArray(templateData) ? templateData : []);
+      }
+      setState((current) => ({
+        loading: false,
+        error: moduleLoadMessage(result, "Ekstre ve mail ana listesi alınamadı; son başarılı liste korunuyor.", "Mail şablonları yenilenemedi; ekstre listesi kullanılabilir."),
+        data: result.states.tracking.status === "error" ? current.data : unwrap(result.data.tracking),
+      }));
     } catch (error) {
       setState({
         loading: false,

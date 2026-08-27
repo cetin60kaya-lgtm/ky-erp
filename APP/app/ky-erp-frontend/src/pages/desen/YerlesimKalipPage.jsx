@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileImage, Filter, Layers3, LoaderCircle, Pencil, RefreshCw, Ruler, Search, Upload } from "lucide-react";
 import { getDesignCompanies, getDesignModels, updateDesignOperation, uploadDesignWorkflowFile } from "../../services/desenWorkflowApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import { assetUrl, EmptyState, ImagePreview, Pager, StatusBadge, WideModal } from "./DesenWorkflowShared";
 
 export default function YerlesimKalipPage({ activeMainCompany }) {
@@ -12,12 +13,20 @@ export default function YerlesimKalipPage({ activeMainCompany }) {
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState({ q: "", companyId: "", placementStatus: "WAITING", moldType: "" });
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true);
     try {
-      const [payload, firms] = await Promise.all([getDesignModels(activeMainCompany, { q: filters.q, companyId: filters.companyId, placementStatus: filters.placementStatus }), getDesignCompanies(activeMainCompany)]);
-      setModels(payload?.rows || []); setCompanies(firms || []);
-      setMessage("");
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `desen:${tenant}:yerlesim:${filters.q}:${filters.companyId}:${filters.placementStatus}`,
+        sources: {
+          models: { critical: true, load: () => getDesignModels(activeMainCompany, { q: filters.q, companyId: filters.companyId, placementStatus: filters.placementStatus }) },
+          companies: { fallback: [], load: () => getDesignCompanies(activeMainCompany) },
+        },
+      });
+      if (result.states.models.status !== "error") setModels(result.data.models?.rows || []);
+      if (result.states.companies.status !== "error") setCompanies(result.data.companies || []);
+      setMessage(moduleLoadMessage(result, "Yerleşim ana kuyruğu yüklenemedi; son başarılı kayıtlar korunuyor.", "Firma filtresi yenilenemedi; yerleşim kuyruğu kullanılabilir."));
     } catch (error) { setMessage(error?.message || "Yerleşim kuyruğu yüklenemedi."); }
     finally { setLoading(false); }
   }, [activeMainCompany, filters.companyId, filters.placementStatus, filters.q]);

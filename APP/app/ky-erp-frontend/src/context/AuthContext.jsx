@@ -1,5 +1,6 @@
 import { useCallback, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { API_BASE, setApiAuthHandlers } from "../utils/api";
+import { API_BASE, clearApiGetCache, setApiAuthHandlers } from "../utils/api";
+import { clearResilientDataCache } from "../utils/resilientDataLoader";
 import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
@@ -178,6 +179,8 @@ export function AuthProvider({ children }) {
   const clearAuth = useCallback(() => {
     tokenRef.current = "";
     setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
+    clearApiGetCache();
+    clearResilientDataCache();
     setAuthState({ token: "", user: null, permissions: [] });
     removeStoredAuth();
     cleanLegacyAuthStorage();
@@ -188,6 +191,10 @@ export function AuthProvider({ children }) {
     const payload = { token: String(nextToken || ""), user: nextUser || null, permissions: normalizedPermissions };
     if (!payload.token || !payload.user || !isTokenUsable(payload.token)) return false;
 
+    if (tokenRef.current && tokenRef.current !== payload.token) {
+      clearApiGetCache();
+      clearResilientDataCache();
+    }
     tokenRef.current = payload.token;
     setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
 

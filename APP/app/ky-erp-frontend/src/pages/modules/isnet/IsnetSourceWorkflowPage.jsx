@@ -20,6 +20,7 @@ import {
   prepareInvoiceFromSourceIntake,
 } from "../../../services/isnetSourceIntakeApi";
 import IsnetSourceIntakePanel from "./IsnetSourceIntakePanel";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "../IsnetPage.css";
 
 const todayText = () => new Date().toISOString().slice(0, 10);
@@ -75,16 +76,25 @@ export default function IsnetSourceWorkflowPage({ activeMainCompany, openModule 
     }
     setLoading(true);
     try {
-      const [companyResult, modelResult, portalResult, intakeResult] = await Promise.all([
-        getFirmaKartlari(activeMainCompany),
-        getDesenSimpleModels(activeMainCompany, { limit: 2000 }),
-        getIsnetLocalDocuments({ ...range, page: 1, pageSize: 100 }),
-        getIsnetSourceIntakes({ page: 1, pageSize: 100 }),
-      ]);
-      setCompanies(rowsOf(companyResult));
-      setModels(rowsOf(modelResult));
-      setPortalDocuments(rowsOf(portalResult));
-      setIntakes(rowsOf(intakeResult));
+      const result = await loadModuleData({
+        scope: `isnet:${companySlug}:kaynak:${range.startDate}:${range.endDate}`,
+        sources: {
+          portalDocuments: { critical: true, load: () => getIsnetLocalDocuments({ ...range, page: 1, pageSize: 100 }) },
+          intakes: { critical: true, load: () => getIsnetSourceIntakes({ page: 1, pageSize: 100 }) },
+          companies: { fallback: [], load: () => getFirmaKartlari(activeMainCompany) },
+          models: { fallback: [], load: () => getDesenSimpleModels(activeMainCompany, { limit: 2000 }) },
+        },
+      });
+      if (result.states.companies.status !== "error") setCompanies(rowsOf(result.data.companies));
+      if (result.states.models.status !== "error") setModels(rowsOf(result.data.models));
+      if (result.states.portalDocuments.status !== "error") setPortalDocuments(rowsOf(result.data.portalDocuments));
+      if (result.states.intakes.status !== "error") setIntakes(rowsOf(result.data.intakes));
+      const warning = moduleLoadMessage(
+        result,
+        "İşNet ana belge kaynaklarından biri alınamadı; diğer başarılı kayıtlar korunuyor.",
+        "Firma veya model yardımcı listesi yenilenemedi; İşNet belgeleri kullanılabilir.",
+      );
+      if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "İşNet kaynak ekranı yüklenemedi." });
     } finally {

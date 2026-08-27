@@ -8,6 +8,7 @@ import {
   findDesignByImage, getAiConversations, getAiStatus, sendAiMessage,
 } from "../../services/aiApi";
 import { apiUrl } from "../../utils/api";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import "./AiAssistantPage.css";
 
 const QUICK_QUESTIONS = [
@@ -159,11 +160,25 @@ export default function AiAssistantPage({ activeMainCompany, moduleActionContext
 
   const refreshSidebar = useCallback(async () => {
     try {
-      const [statusPayload, conversationsPayload] = await Promise.all([getAiStatus(), getAiConversations()]);
-      setStatus(statusPayload); setConversations(conversationsPayload?.conversations || []);
+      const result = await loadModuleData({
+        scope: `ai:${companySlug || "main"}:sidebar`,
+        sources: {
+          conversations: { critical: true, load: () => getAiConversations() },
+          status: { fallback: null, load: () => getAiStatus() },
+        },
+      });
+      if (result.states.status.status !== "error") setStatus(result.data.status);
+      if (result.states.conversations.status !== "error") {
+        setConversations(result.data.conversations?.conversations || []);
+      }
+      setError(moduleLoadMessage(
+        result,
+        "Asistan konuşma geçmişi alınamadı; son başarılı geçmiş korunuyor.",
+        "Asistan servis durumu geçici olarak yenilenemedi; konuşmalar kullanılabilir.",
+      ));
     } catch (requestError) { setError(requestError?.message || "Asistan durumu alınamadı."); }
     finally { setHistoryLoading(false); }
-  }, []);
+  }, [companySlug]);
 
   useEffect(() => { refreshSidebar(); }, [refreshSidebar]);
   useEffect(() => {

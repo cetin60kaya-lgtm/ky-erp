@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../utils/api";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import "./DosyaKlasorYonetimi.css";
 
 const RULE_TYPES = [
@@ -110,17 +111,23 @@ export default function DosyaKlasorYonetimi({ activeMainCompany }) {
     if (!companyParams.mainCompanyId && !companyParams.mainCompanySlug) return;
     setLoading(true);
     try {
-      const [statusPayload, settingsPayload, rulesPayload, filesPayload] = await Promise.all([
-        apiGet("/admin/file-storage/status", companyParams),
-        apiGet("/admin/file-storage/settings", {}),
-        apiGet("/admin/file-storage/rules", companyParams),
-        apiGet("/admin/file-storage/files", { ...companyParams, take: 100 }),
-      ]);
-      setStatus(statusPayload);
-      setSettings({ storageRoot: settingsPayload.storageRoot || statusPayload.storageRoot || "" });
-      setRules(normalizeRules(rulesPayload));
-      setFiles(toRows(filesPayload));
-      setMessage("Güncellendi.");
+      const tenant = companyParams.mainCompanySlug || companyParams.mainCompanyId;
+      const result = await loadModuleData({
+        scope: `admin:${tenant}:dosya-depolama`,
+        sources: {
+          status: { critical: true, load: () => apiGet("/admin/file-storage/status", companyParams) },
+          settings: { fallback: {}, load: () => apiGet("/admin/file-storage/settings", {}) },
+          rules: { fallback: [], load: () => apiGet("/admin/file-storage/rules", companyParams) },
+          files: { fallback: [], load: () => apiGet("/admin/file-storage/files", { ...companyParams, take: 100 }) },
+        },
+      });
+      if (result.states.status.status !== "error") setStatus(result.data.status);
+      if (result.states.settings.status !== "error" || result.states.status.status !== "error") {
+        setSettings({ storageRoot: result.data.settings?.storageRoot || result.data.status?.storageRoot || "" });
+      }
+      if (result.states.rules.status !== "error") setRules(normalizeRules(result.data.rules));
+      if (result.states.files.status !== "error") setFiles(toRows(result.data.files));
+      setMessage(moduleLoadMessage(result, "Dosya depolama ana durumu alınamadı; son başarılı durum korunuyor.", "Bazı dosya kuralları veya listeler yenilenemedi; ana depolama durumu kullanılabilir.") || "Güncellendi.");
     } catch (error) {
       setMessage(`Hata: ${error?.message}`);
     } finally {

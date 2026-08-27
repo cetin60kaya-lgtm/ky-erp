@@ -25,6 +25,7 @@ import {
   scanDesignInbox,
 } from "../../services/desenWorkflowApi";
 import { openDesenImportFolder } from "../../services/desenApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import {
   assetUrl,
   EmptyState,
@@ -54,16 +55,24 @@ export default function DesenModelMasasi({ activeMainCompany }) {
   const [showErrors, setShowErrors] = useState(false);
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true);
     try {
-      const [inboxData, companyRows] = await Promise.all([
-        getDesignInbox(activeMainCompany),
-        getDesignCompanies(activeMainCompany),
-      ]);
-      setInbox(inboxData || EMPTY_INBOX);
-      setCompanies(companyRows || []);
-      setMessage("");
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `desen:${tenant}:model-masasi`,
+        sources: {
+          inbox: { critical: true, load: () => getDesignInbox(activeMainCompany) },
+          companies: { fallback: [], load: () => getDesignCompanies(activeMainCompany) },
+        },
+      });
+      if (result.states.inbox.status !== "error") setInbox(result.data.inbox || EMPTY_INBOX);
+      if (result.states.companies.status !== "error") setCompanies(result.data.companies || []);
+      setMessage(moduleLoadMessage(
+        result,
+        "Gelen Desenler ana listesi yüklenemedi; son başarılı içerik korunuyor.",
+        "Firma listesi geçici olarak yenilenemedi; Gelen Desenler görünmeye devam ediyor.",
+      ));
     } catch (error) { setMessage(error?.message || "Gelen Desenler yüklenemedi."); }
     finally { setLoading(false); }
   }, [activeMainCompany]);

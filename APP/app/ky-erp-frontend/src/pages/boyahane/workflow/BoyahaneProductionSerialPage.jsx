@@ -23,6 +23,7 @@ import {
 import ModelThumbnail from "./ModelThumbnail";
 import ProductSearchInput from "./ProductSearchInput";
 import { formatDate, formatKg, safeArray } from "./boyahaneFormat";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "../boyahaneProductionSerial.css";
 
 const OPEN_LOTS = new Set(["AVAILABLE", "ACTIVE"]);
@@ -716,16 +717,27 @@ export default function BoyahaneProductionSerialPage({ activeMainCompany, module
     setLoading(true);
     setError("");
     try {
-      const [jobs, products, lots, registeredColors, productions, logs] = await Promise.all([
-        listBoyahaneJobs(activeMainCompany),
-        listBoyahaneProducts(activeMainCompany),
-        listBoyahaneLots(activeMainCompany),
-        listRegisteredColors(activeMainCompany),
-        listBoyahaneProductions(activeMainCompany),
-        listBoyahaneLogs(activeMainCompany),
-      ]);
-      const productionJobs = safeArray(jobs).filter(isProduction);
-      setData({ jobs: productionJobs, products: safeArray(products), lots: safeArray(lots), registeredColors: safeArray(registeredColors), productions: safeArray(productions), logs: safeArray(logs) });
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id || "main";
+      const result = await loadModuleData({
+        scope: `boyahane:${tenant}:uretim-seri`,
+        sources: {
+          jobs: { critical: true, load: () => listBoyahaneJobs(activeMainCompany) },
+          products: { fallback: [], load: () => listBoyahaneProducts(activeMainCompany) },
+          lots: { fallback: [], load: () => listBoyahaneLots(activeMainCompany) },
+          registeredColors: { fallback: [], load: () => listRegisteredColors(activeMainCompany) },
+          productions: { fallback: [], load: () => listBoyahaneProductions(activeMainCompany) },
+          logs: { fallback: [], load: () => listBoyahaneLogs(activeMainCompany) },
+        },
+      });
+      setData((current) => ({
+        jobs: result.states.jobs.status === "error" ? current.jobs : safeArray(result.data.jobs).filter(isProduction),
+        products: result.states.products.status === "error" ? current.products : safeArray(result.data.products),
+        lots: result.states.lots.status === "error" ? current.lots : safeArray(result.data.lots),
+        registeredColors: result.states.registeredColors.status === "error" ? current.registeredColors : safeArray(result.data.registeredColors),
+        productions: result.states.productions.status === "error" ? current.productions : safeArray(result.data.productions),
+        logs: result.states.logs.status === "error" ? current.logs : safeArray(result.data.logs),
+      }));
+      setError(moduleLoadMessage(result, "Boyahane üretim iş listesi alınamadı; son başarılı işler korunuyor.", "Bazı reçete, lot veya log bilgileri yenilenemedi; üretim iş listesi kullanılabilir."));
       if (keepJobId) {
         try {
           const detail = await getBoyahaneJob(activeMainCompany, keepJobId);

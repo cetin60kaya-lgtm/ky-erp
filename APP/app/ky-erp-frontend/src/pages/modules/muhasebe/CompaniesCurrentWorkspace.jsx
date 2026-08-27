@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./companiesCurrentWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -148,25 +149,43 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     setLoading(true);
     setError("");
     try {
-      const [firmsPayload, profilesPayload] = await Promise.all([
-        apiGet("/muhasebe/firmalar", {
-          ...params,
-          search: query,
-          limit: 10000,
-          _ts: Date.now(),
-        }),
-        apiGet("/muhasebe/firma-profilleri", {
-          ...params,
-          _ts: Date.now(),
-        }),
-      ]);
+      const result = await loadModuleData({
+        scope: `muhasebe:${params.mainCompanySlug || params.mainCompanyId || "main"}:firmalar:${query}`,
+        sources: {
+          firms: {
+            critical: true,
+            load: () => apiGet("/muhasebe/firmalar", {
+              ...params,
+              search: query,
+              limit: 10000,
+              _ts: Date.now(),
+            }),
+          },
+          profiles: {
+            fallback: [],
+            load: () => apiGet("/muhasebe/firma-profilleri", {
+              ...params,
+              _ts: Date.now(),
+            }),
+          },
+        },
+      });
+      const firmsPayload = result.data.firms;
+      const profilesPayload = result.data.profiles;
       const profiles = new Map(listOf(profilesPayload).map((item) => [String(item.id), item]));
-      setFirms(
-        listOf(firmsPayload).map((firm) => ({
-          ...firm,
-          ...(profiles.get(String(firm.id)) || {}),
-        })),
-      );
+      if (result.states.firms.status !== "error") {
+        setFirms(
+          listOf(firmsPayload).map((firm) => ({
+            ...firm,
+            ...(profiles.get(String(firm.id)) || {}),
+          })),
+        );
+      }
+      setError(moduleLoadMessage(
+        result,
+        "Firma ve cari ana listesi alınamadı; ekrandaki son başarılı veri korunuyor.",
+        "Firma profilleri geçici olarak yenilenemedi; firma ve cari listesi kullanılabilir.",
+      ));
     } catch (requestError) {
       setFirms([]);
       setError(requestError?.message || "Firma ve cari listesi alınamadı.");
@@ -215,24 +234,40 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setNotice("");
       setTransactionOpen(false);
       try {
-        const [movementPayload, profilePayload] = await Promise.all([
-          apiGet("/muhasebe/cari-hareketler", {
-            ...params,
-            companyId: firm.id,
-            limit: 500,
-            _ts: Date.now(),
-          }),
-          apiGet(`/muhasebe/firma-profilleri/${firm.id}`, {
-            ...params,
-            _ts: Date.now(),
-          }),
-        ]);
+        const result = await loadModuleData({
+          scope: `muhasebe:${params.mainCompanySlug || params.mainCompanyId || "main"}:firma:${firm.id}`,
+          sources: {
+            movements: {
+              critical: true,
+              load: () => apiGet("/muhasebe/cari-hareketler", {
+                ...params,
+                companyId: firm.id,
+                limit: 500,
+                _ts: Date.now(),
+              }),
+            },
+            profile: {
+              fallback: {},
+              load: () => apiGet(`/muhasebe/firma-profilleri/${firm.id}`, {
+                ...params,
+                _ts: Date.now(),
+              }),
+            },
+          },
+        });
+        const movementPayload = result.data.movements;
+        const profilePayload = result.data.profile;
         const profile = objectOf(profilePayload);
         const merged = { ...firm, ...profile };
         setSelected(merged);
         setProfileDraft(profileDraftOf(merged));
         setAliases(Array.isArray(profile.aliases) ? profile.aliases : []);
-        setMovements(listOf(movementPayload));
+        if (result.states.movements.status !== "error") setMovements(listOf(movementPayload));
+        setNotice(moduleLoadMessage(
+          result,
+          "Cari hareketler alınamadı; varsa son başarılı detay korunuyor.",
+          "Firma profilinin bazı yardımcı bilgileri yenilenemedi; cari hareketler kullanılabilir.",
+        ));
       } catch (requestError) {
         setProfileDraft(profileDraftOf(firm));
         setNotice(requestError?.message || "Firma detayları alınamadı.");

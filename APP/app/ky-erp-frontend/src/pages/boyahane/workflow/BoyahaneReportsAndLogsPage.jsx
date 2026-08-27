@@ -9,6 +9,7 @@ import {
   listBoyahaneProductions,
 } from "../../../services/boyahaneWorkflowApi";
 import { formatDate, formatKg, safeArray } from "./boyahaneFormat";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import ModelThumbnail from "./ModelThumbnail";
 
 const TABS = [
@@ -68,24 +69,29 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
     setLoading(true);
     setError("");
     try {
-      const [jobRows, productionRows, productRows, lotRows, logRows, reportRow] = await Promise.all([
-        listBoyahaneJobs(activeMainCompany),
-        listBoyahaneProductions(activeMainCompany),
-        listBoyahaneProducts(activeMainCompany),
-        listBoyahaneLots(activeMainCompany),
-        listBoyahaneLogs(activeMainCompany),
-        getBoyahaneReports(activeMainCompany),
-      ]);
-      setJobs(safeArray(jobRows));
-      setProductions(safeArray(productionRows));
-      setProducts(safeArray(productRows));
-      setLots(safeArray(lotRows));
-      setLogs(safeArray(logRows));
-      setReport(reportRow || { summary: {}, expenses: [] });
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id;
+      const result = await loadModuleData({
+        scope: `boyahane:${tenant}:raporlar`,
+        sources: {
+          jobs: { critical: true, load: () => listBoyahaneJobs(activeMainCompany) },
+          productions: { critical: true, load: () => listBoyahaneProductions(activeMainCompany) },
+          products: { fallback: [], load: () => listBoyahaneProducts(activeMainCompany) },
+          lots: { fallback: [], load: () => listBoyahaneLots(activeMainCompany) },
+          logs: { fallback: [], load: () => listBoyahaneLogs(activeMainCompany) },
+          report: { fallback: {}, load: () => getBoyahaneReports(activeMainCompany) },
+        },
+      });
+      if (result.states.jobs.status !== "error") setJobs(safeArray(result.data.jobs));
+      if (result.states.productions.status !== "error") setProductions(safeArray(result.data.productions));
+      if (result.states.products.status !== "error") setProducts(safeArray(result.data.products));
+      if (result.states.lots.status !== "error") setLots(safeArray(result.data.lots));
+      if (result.states.logs.status !== "error") setLogs(safeArray(result.data.logs));
+      if (result.states.report.status !== "error") setReport(result.data.report || { summary: {}, expenses: [] });
+      setError(moduleLoadMessage(result, "Boyahane ana rapor kaynaklarından biri alınamadı; diğer başarılı veriler korunuyor.", "Bazı yardımcı rapor kaynakları yenilenemedi; ana rapor kullanılabilir."));
     } catch (requestError) {
       console.error("Boyahane reports load failed", requestError);
       setError("Boyahane raporları alınamadı. Bağlantıyı kontrol edip yeniden deneyin.");

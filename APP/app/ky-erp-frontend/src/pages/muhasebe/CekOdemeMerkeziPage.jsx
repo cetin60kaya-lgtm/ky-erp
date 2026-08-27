@@ -25,6 +25,7 @@ import {
   saveOdemeIslem,
   uploadOdemeCekDosyalari,
 } from "../../services/cekOdemeApi";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import "./CekOdemeMerkeziPage.css";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -182,22 +183,25 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   const [notice, setNotice] = useState(null);
 
   const loadBase = useCallback(async () => {
-    const [firmResult, overviewResult] = await Promise.all([
-      getOdemeFirmalar({ ...baseParams, active: "all", limit: 500, _ts: Date.now() }),
-      getOdemeCekOzeti({ ...baseParams, _ts: Date.now() }),
-    ]);
-    const firmRows = asArray(firmResult);
-    setFirms(firmRows);
-    setOverview({
-      summary: overviewResult?.summary || {},
-      months: asArray(overviewResult?.months),
-      rows: asArray(overviewResult?.rows),
+    const tenant = baseParams.mainCompanySlug || baseParams.mainCompanyId || "main";
+    const result = await loadModuleData({
+      scope: `muhasebe:${tenant}:cek-odeme`,
+      sources: {
+        overview: { critical: true, load: () => getOdemeCekOzeti({ ...baseParams, _ts: Date.now() }) },
+        firms: { fallback: [], load: () => getOdemeFirmalar({ ...baseParams, active: "all", limit: 500, _ts: Date.now() }) },
+      },
     });
-    setSelectedFirmId((current) =>
-      current && firmRows.some((row) => String(row.id || row.firmaId) === String(current))
-        ? current
-        : "",
-    );
+    if (result.states.firms.status !== "error") {
+      const firmRows = asArray(result.data.firms);
+      setFirms(firmRows);
+      setSelectedFirmId((current) => current && firmRows.some((row) => String(row.id || row.firmaId) === String(current)) ? current : "");
+    }
+    if (result.states.overview.status !== "error") {
+      const overviewResult = result.data.overview;
+      setOverview({ summary: overviewResult?.summary || {}, months: asArray(overviewResult?.months), rows: asArray(overviewResult?.rows) });
+    }
+    const warning = moduleLoadMessage(result, "Çek ve ödeme ana özeti alınamadı; son başarılı özet korunuyor.", "Firma yardımcı listesi yenilenemedi; çek özeti kullanılabilir.");
+    if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
   }, [baseParams]);
 
   const loadFirm = useCallback(
@@ -207,20 +211,26 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         setDetailRows({ debts: [], cards: [], cash: [], movements: [] });
         return;
       }
-      const [summary, debts, cards, cash, movements] = await Promise.all([
-        getOdemeFirmaOzet(firmId, baseParams),
-        getOdemeFirmaAcikBorclar(firmId, baseParams),
-        getOdemeFirmaKartlar(firmId, baseParams),
-        getOdemeFirmaNakitHavale(firmId, baseParams),
-        getOdemeFirmaHareketler(firmId, baseParams),
-      ]);
-      setFirmSummary(summary || null);
-      setDetailRows({
-        debts: asArray(debts),
-        cards: asArray(cards),
-        cash: asArray(cash),
-        movements: asArray(movements),
+      const tenant = baseParams.mainCompanySlug || baseParams.mainCompanyId || "main";
+      const result = await loadModuleData({
+        scope: `muhasebe:${tenant}:cek-odeme:firma:${firmId}`,
+        sources: {
+          summary: { critical: true, load: () => getOdemeFirmaOzet(firmId, baseParams) },
+          debts: { fallback: [], load: () => getOdemeFirmaAcikBorclar(firmId, baseParams) },
+          cards: { fallback: [], load: () => getOdemeFirmaKartlar(firmId, baseParams) },
+          cash: { fallback: [], load: () => getOdemeFirmaNakitHavale(firmId, baseParams) },
+          movements: { fallback: [], load: () => getOdemeFirmaHareketler(firmId, baseParams) },
+        },
       });
+      if (result.states.summary.status !== "error") setFirmSummary(result.data.summary || null);
+      setDetailRows((current) => ({
+        debts: result.states.debts.status === "error" ? current.debts : asArray(result.data.debts),
+        cards: result.states.cards.status === "error" ? current.cards : asArray(result.data.cards),
+        cash: result.states.cash.status === "error" ? current.cash : asArray(result.data.cash),
+        movements: result.states.movements.status === "error" ? current.movements : asArray(result.data.movements),
+      }));
+      const warning = moduleLoadMessage(result, "Firma ödeme özeti alınamadı; son başarılı detay korunuyor.", "Bazı ödeme detayları yenilenemedi; diğer firma bilgileri kullanılabilir.");
+      if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
     },
     [baseParams],
   );

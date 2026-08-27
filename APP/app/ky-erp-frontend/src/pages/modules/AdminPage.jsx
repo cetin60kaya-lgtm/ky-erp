@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpModuleWorkspace from "../../components/erp/ErpModuleWorkspace";
 import { apiFetch } from "../../utils/api";
+import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
 import DosyaKlasorYonetimi from "../admin/DosyaKlasorYonetimi";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 
@@ -217,14 +218,16 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     try {
       setCompanyAliasLoading(true);
       setCompanyAliasError("");
-      const [aliases, companies] = await Promise.all([
-        apiRequest(
-          `admin/company-aliases${query}&includeDeleted=${aliasShowDeleted ? "true" : "false"}`,
-        ),
-        apiRequest(`muhasebe/firma-kartlari${query}`),
-      ]);
-      setAliasRows(toRows(aliases));
-      setCompanyOptions(toRows(companies));
+      const result = await loadModuleData({
+        scope: `admin:${activeMainCompanySlug || activeMainCompanyId}:firma-alias:${aliasShowDeleted}`,
+        sources: {
+          aliases: { critical: true, load: () => apiRequest(`admin/company-aliases${query}&includeDeleted=${aliasShowDeleted ? "true" : "false"}`) },
+          companies: { fallback: [], load: () => apiRequest(`muhasebe/firma-kartlari${query}`) },
+        },
+      });
+      if (result.states.aliases.status !== "error") setAliasRows(toRows(result.data.aliases));
+      if (result.states.companies.status !== "error") setCompanyOptions(toRows(result.data.companies));
+      setCompanyAliasError(moduleLoadMessage(result, "Firma eşleştirmeleri alınamadı; son başarılı liste korunuyor.", "Firma seçenekleri yenilenemedi; eşleştirme listesi kullanılabilir."));
     } catch (error) {
       setCompanyAliasError("Firma eşleştirmeleri alınamadı.");
       setInfo(`Hata: ${error?.message}`);
@@ -249,14 +252,16 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     try {
       setProductAliasLoading(true);
       setProductAliasError("");
-      const [aliases, products] = await Promise.all([
-        apiRequest(
-          `admin/product-aliases${query}&includeDeleted=${productAliasShowDeleted ? "true" : "false"}`,
-        ),
-        apiRequest(`muhasebe/urunler${query}`),
-      ]);
-      setProductAliasRows(toRows(aliases));
-      setProductOptions(toRows(products));
+      const result = await loadModuleData({
+        scope: `admin:${activeMainCompanySlug || activeMainCompanyId}:urun-alias:${productAliasShowDeleted}`,
+        sources: {
+          aliases: { critical: true, load: () => apiRequest(`admin/product-aliases${query}&includeDeleted=${productAliasShowDeleted ? "true" : "false"}`) },
+          products: { fallback: [], load: () => apiRequest(`muhasebe/urunler${query}`) },
+        },
+      });
+      if (result.states.aliases.status !== "error") setProductAliasRows(toRows(result.data.aliases));
+      if (result.states.products.status !== "error") setProductOptions(toRows(result.data.products));
+      setProductAliasError(moduleLoadMessage(result, "Ürün eşleştirmeleri alınamadı; son başarılı liste korunuyor.", "Ürün seçenekleri yenilenemedi; eşleştirme listesi kullanılabilir."));
     } catch (error) {
       setProductAliasError("Ürün eşleştirmeleri alınamadı.");
       setInfo(`Hata: ${error?.message}`);

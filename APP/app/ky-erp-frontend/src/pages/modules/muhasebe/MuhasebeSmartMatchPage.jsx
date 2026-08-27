@@ -24,6 +24,7 @@ import {
   setSmartProductRule,
   synchronizeSupplierRouting,
 } from "../../../services/muhasebeSmartMatchApi";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./MuhasebeSmartMatchPage.css";
 
 const SECTIONS = [
@@ -299,41 +300,56 @@ export default function MuhasebeSmartMatchPage({ activeMainCompany }) {
       setLoading(section);
       setNotice(null);
       try {
+        let result = null;
         if (section === "pending") {
-          const [companyRows, pendingResult] = await Promise.all([
-            fetchCompanies(activeMainCompany),
-            getPendingProductLines(activeMainCompany, { limit: 50 }),
-          ]);
-          setCompanies(rowsOf(companyRows));
-          setPendingLines(rowsOf(pendingResult));
+          result = await loadModuleData({
+            scope: `muhasebe:${companyKey}:akilli-esleme:pending`,
+            sources: {
+              pending: { critical: true, load: () => getPendingProductLines(activeMainCompany, { limit: 50 }) },
+              companies: { fallback: [], load: () => fetchCompanies(activeMainCompany) },
+            },
+          });
+          if (result.states.companies.status !== "error") setCompanies(rowsOf(result.data.companies));
+          if (result.states.pending.status !== "error") setPendingLines(rowsOf(result.data.pending));
         }
         if (section === "product") {
-          const [companyRows, productRows, aliasRows] = await Promise.all([
-            fetchCompanies(activeMainCompany),
-            fetchProducts(activeMainCompany),
-            getProductAliasesSmart(activeMainCompany, { limit: 100 }),
-          ]);
-          setCompanies(rowsOf(companyRows));
-          setProducts(rowsOf(productRows));
-          setProductAliases(rowsOf(aliasRows));
+          result = await loadModuleData({
+            scope: `muhasebe:${companyKey}:akilli-esleme:product`,
+            sources: {
+              aliases: { critical: true, load: () => getProductAliasesSmart(activeMainCompany, { limit: 100 }) },
+              companies: { fallback: [], load: () => fetchCompanies(activeMainCompany) },
+              products: { fallback: [], load: () => fetchProducts(activeMainCompany) },
+            },
+          });
+          if (result.states.companies.status !== "error") setCompanies(rowsOf(result.data.companies));
+          if (result.states.products.status !== "error") setProducts(rowsOf(result.data.products));
+          if (result.states.aliases.status !== "error") setProductAliases(rowsOf(result.data.aliases));
         }
         if (section === "rules") {
-          const [productRows, categoryRows] = await Promise.all([
-            fetchProducts(activeMainCompany),
-            getExpenseCategoriesForMatch(activeMainCompany),
-          ]);
-          setProducts(rowsOf(productRows));
-          setCategories(rowsOf(categoryRows));
+          result = await loadModuleData({
+            scope: `muhasebe:${companyKey}:akilli-esleme:rules`,
+            sources: {
+              products: { critical: true, load: () => fetchProducts(activeMainCompany) },
+              categories: { fallback: [], load: () => getExpenseCategoriesForMatch(activeMainCompany) },
+            },
+          });
+          if (result.states.products.status !== "error") setProducts(rowsOf(result.data.products));
+          if (result.states.categories.status !== "error") setCategories(rowsOf(result.data.categories));
         }
         if (section === "lots") {
-          const [companyRows, lotRows] = await Promise.all([
-            fetchCompanies(activeMainCompany),
-            getSmartLotStock(activeMainCompany, { limit: 100 }),
-          ]);
-          setCompanies(rowsOf(companyRows));
-          setLots(rowsOf(lotRows));
+          result = await loadModuleData({
+            scope: `muhasebe:${companyKey}:akilli-esleme:lots`,
+            sources: {
+              lots: { critical: true, load: () => getSmartLotStock(activeMainCompany, { limit: 100 }) },
+              companies: { fallback: [], load: () => fetchCompanies(activeMainCompany) },
+            },
+          });
+          if (result.states.companies.status !== "error") setCompanies(rowsOf(result.data.companies));
+          if (result.states.lots.status !== "error") setLots(rowsOf(result.data.lots));
         }
-        loadedRef.current[section] = true;
+        loadedRef.current[section] = !result?.hasCriticalError;
+        const warning = moduleLoadMessage(result, "Seçili bölümün ana verisi alınamadı; son başarılı liste korunuyor.", "Bazı yardımcı listeler yenilenemedi; ana bölüm kullanılabilir.");
+        if (warning) setNotice({ tone: result?.hasCriticalError ? "error" : "warning", text: warning });
       } catch (error) {
         setNotice({
           tone: "error",
@@ -370,7 +386,7 @@ export default function MuhasebeSmartMatchPage({ activeMainCompany }) {
 
   async function refreshCurrent() {
     loadedRef.current[activeSection] = false;
-    await Promise.all([loadSummary(), loadSection(activeSection, true)]);
+    await Promise.allSettled([loadSummary(), loadSection(activeSection, true)]);
   }
 
   async function runAction(key, action, successText) {
@@ -379,7 +395,10 @@ export default function MuhasebeSmartMatchPage({ activeMainCompany }) {
     try {
       await action();
       setNotice({ tone: "success", text: successText });
-      await Promise.all([loadSummary(), loadSection(activeSection, true)]);
+      const refreshes = await Promise.allSettled([loadSummary(), loadSection(activeSection, true)]);
+      if (refreshes.some((result) => result.status === "rejected")) {
+        setNotice({ tone: "warning", text: `${successText} Ekranın bir bölümü yenilenemedi.` });
+      }
       return true;
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "İşlem tamamlanamadı." });

@@ -35,6 +35,7 @@ import {
   prepareInvoiceFromSourceIntake,
 } from "../../../services/isnetSourceIntakeApi";
 import { resolveIsnetBusinessContext } from "../../../services/isnetBusinessSettingsApi";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "../IsnetPage.css";
 import "./IsnetAutomationWorkflowPage.css";
 
@@ -250,20 +251,23 @@ export default function IsnetWorkflowFinalPage({
     if (!companySlug) return;
     setLoading(true);
     try {
-      const [documentResult, flowResult, intakeResult, companyResult, modelResult] =
-        await Promise.all([
-          getIsnetLocalDocuments({ ...range, page: 1, pageSize: 100 }),
-          getIsnetAutoFlows(),
-          getIsnetSourceIntakes({ mainCompanySlug: companySlug }),
-          getFirmaKartlari({ mainCompanyId: companySlug }),
-          getDesenSimpleModels({ mainCompanySlug: companySlug }),
-        ]);
-      setPortalDocuments(rowsOf(documentResult));
-      setFlows(rowsOf(flowResult));
-      setManualRows(rowsOf(intakeResult));
-      setCompanies(rowsOf(companyResult));
-      setModels(rowsOf(modelResult));
-      setNotice(null);
+      const result = await loadModuleData({
+        scope: `isnet:${companySlug}:otomasyon:${range.startDate}:${range.endDate}`,
+        sources: {
+          documents: { critical: true, load: () => getIsnetLocalDocuments({ ...range, page: 1, pageSize: 100 }) },
+          flows: { critical: true, load: () => getIsnetAutoFlows() },
+          intakes: { critical: true, load: () => getIsnetSourceIntakes({ mainCompanySlug: companySlug }) },
+          companies: { fallback: [], load: () => getFirmaKartlari({ mainCompanyId: companySlug }) },
+          models: { fallback: [], load: () => getDesenSimpleModels({ mainCompanySlug: companySlug }) },
+        },
+      });
+      if (result.states.documents.status !== "error") setPortalDocuments(rowsOf(result.data.documents));
+      if (result.states.flows.status !== "error") setFlows(rowsOf(result.data.flows));
+      if (result.states.intakes.status !== "error") setManualRows(rowsOf(result.data.intakes));
+      if (result.states.companies.status !== "error") setCompanies(rowsOf(result.data.companies));
+      if (result.states.models.status !== "error") setModels(rowsOf(result.data.models));
+      const warning = moduleLoadMessage(result, "İşNet ana akış kaynaklarından biri alınamadı; diğer başarılı kayıtlar korunuyor.", "Firma veya model yardımcı listesi yenilenemedi; belge akışı kullanılabilir.");
+      setNotice(warning ? { tone: result.hasCriticalError ? "error" : "warning", text: warning } : null);
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "İşNet akış kayıtları yüklenemedi." });
     } finally {

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, setApiActiveMainCompany } from "../utils/api";
+import { canonicalCompanySlug } from "../utils/companyIdentity";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "kyerp.activeCompany";
@@ -9,13 +10,8 @@ const DEFAULT_MAIN_COMPANY = {
   slug: "mecit-hakan",
   isActive: true,
 };
-const LEGACY_HAKAN_SLUGS = new Set([
-  "hakan-baski",
-  "main-hakan",
-  "main-hakan-baski",
-  "hkn-baski",
-]);
 const LEGACY_COMPANY_SLUG_MAP = {
+  "main-mecit-hakan": "mecit-hakan",
   "mecit-hakan-gursu": "mecit-hakan",
   "hakan-baski": "mecit-hakan",
   "main-hakan": "mecit-hakan",
@@ -110,10 +106,7 @@ function sanitizeLegacyCompanyStorage() {
 
 function normalizeCompanySlug(value) {
   const slug = String(value || "").trim();
-  const normalized = LEGACY_COMPANY_SLUG_MAP[slug] || slug;
-  return LEGACY_HAKAN_SLUGS.has(normalized)
-     ? DEFAULT_MAIN_COMPANY.slug
-    : normalized;
+  return canonicalCompanySlug(LEGACY_COMPANY_SLUG_MAP[slug] || slug);
 }
 
 const ActiveCompanyContext = createContext(null);

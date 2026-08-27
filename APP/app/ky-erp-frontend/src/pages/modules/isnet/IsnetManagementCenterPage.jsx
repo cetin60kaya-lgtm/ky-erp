@@ -22,6 +22,7 @@ import {
 } from "../../../services/isnetApi";
 import { getIsnetAutoFlows } from "../../../services/isnetAutoFlowApi";
 import { quickCreateCanonicalModel } from "../../../services/modelFlowApi";
+import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "../IsnetPage.css";
 import "./IsnetManagementCenterPage.css";
 
@@ -75,23 +76,39 @@ export default function IsnetManagementCenterPage({ openModule, activeMainCompan
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingResult, statusResult, documentResult, flowResult] = await Promise.all([
-        getIsnetSettings(),
-        getIsnetFullSyncStatus().catch(() => null),
-        getIsnetLocalDocuments({ ...range, page: 1, pageSize: 100 }),
-        getIsnetAutoFlows(),
-      ]);
-      setSettings(settingResult);
-      setSyncStatus(statusResult);
-      setDocuments(rowsOf(documentResult));
-      setDocumentTotal(Number(documentResult?.totalLocal || documentResult?.total || rowsOf(documentResult).length));
-      setFlows(rowsOf(flowResult));
+      const tenant = activeMainCompany?.slug || activeMainCompany?.id || "main";
+      const result = await loadModuleData({
+        scope: `isnet:${tenant}:${range.startDate}:${range.endDate}`,
+        sources: {
+          documents: {
+            critical: true,
+            load: () => getIsnetLocalDocuments({ ...range, page: 1, pageSize: 100 }),
+          },
+          settings: { fallback: null, load: () => getIsnetSettings() },
+          status: { fallback: null, load: () => getIsnetFullSyncStatus() },
+          flows: { fallback: [], load: () => getIsnetAutoFlows() },
+        },
+      });
+      if (result.states.settings.status !== "error") setSettings(result.data.settings);
+      if (result.states.status.status !== "error") setSyncStatus(result.data.status);
+      if (result.states.documents.status !== "error") {
+        const documentResult = result.data.documents;
+        setDocuments(rowsOf(documentResult));
+        setDocumentTotal(Number(documentResult?.totalLocal || documentResult?.total || rowsOf(documentResult).length));
+      }
+      if (result.states.flows.status !== "error") setFlows(rowsOf(result.data.flows));
+      const warning = moduleLoadMessage(
+        result,
+        "İşNet belge ana listesi alınamadı; ekrandaki son başarılı belgeler korunuyor.",
+        "İşNet yardımcı durumlarından bazıları yenilenemedi; belge listesi kullanılabilir.",
+      );
+      if (warning) setNotice({ tone: result.hasCriticalError ? "error" : "warning", text: warning });
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "İşNet yönetim bilgileri alınamadı." });
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [activeMainCompany?.id, activeMainCompany?.slug, range]);
 
   useEffect(() => {
     void load();

@@ -1,4 +1,5 @@
 import { shouldClearStoredAuthForStatus } from "../context/authSessionPolicy";
+import { canonicalCompanySlug } from "./companyIdentity";
 
 const PRODUCTION_API_ORIGIN = "https://api.kyerp.net";
 const DEFAULT_API_ORIGIN =
@@ -82,13 +83,13 @@ export function setApiActiveMainCompany(company) {
 }
 
 export function getApiActiveMainCompanySlug() {
-  return String(
+  return canonicalCompanySlug(
     activeMainCompany?.slug ||
       activeMainCompany?.mainCompanySlug ||
       activeMainCompany ||
       readStoredCompanySlug() ||
       "",
-  ).trim();
+  );
 }
 
 function shouldAutoAttachCompany(path) {
