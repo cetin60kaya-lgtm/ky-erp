@@ -2,6 +2,8 @@
 import { getAuthenticatedUser } from "./auth-cloud";
 
 const CHALLENGE_SECONDS = 10 * 60;
+const PASSWORD_SESSION_SECONDS = 28_800;
+const MFA_SESSION_SECONDS = 36_000;
 const ISSUER = "KY ERP";
 const MFA_PROVIDERS = ["GOOGLE", "MICROSOFT"];
 
@@ -20,6 +22,9 @@ function normalizePolicy(value: unknown, role: string) {
   if (isOwner(role)) return "ANY_MFA";
   const policy = upper(value);
   return ["PASSWORD_ONLY", "GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"].includes(policy) ? policy : "ANY_MFA";
+}
+function sessionSecondsForPolicy(policy: string) {
+  return policy === "PASSWORD_ONLY" ? PASSWORD_SESSION_SECONDS : MFA_SESSION_SECONDS;
 }
 function randomToken(bytes = 24) {
   const data = new Uint8Array(bytes); crypto.getRandomValues(data);
@@ -93,10 +98,11 @@ async function beginSetup(c: any, user: AnyRow, provider: string, recoveryMode: 
   const challengeToken = randomToken(24);
   const type = `${recoveryMode ? "OWNER_RECOVERY" : "POLICY"}_MFA_SETUP_${provider}`;
   const policy = normalizePolicy(user.login_policy, roleOf(user));
+  const sessionSeconds = sessionSecondsForPolicy(policy);
   await c.env.DB.prepare(
     `INSERT INTO auth_login_challenges(id,user_id,challenge_type,challenge_token_hash,created_at,expires_at,policy_snapshot,session_seconds_snapshot)
      VALUES (?,?,?,?,?,?,?,?)`,
-  ).bind(challengeId, user.id, type, await sha256(challengeToken), timestamp, addSeconds(CHALLENGE_SECONDS), policy, Number(user.session_seconds || 28800)).run();
+  ).bind(challengeId, user.id, type, await sha256(challengeToken), timestamp, addSeconds(CHALLENGE_SECONDS), policy, sessionSeconds).run();
   return {
     ok: true, stage: "MFA_SETUP", provider, providerLabel: providerLabel(provider),
     challengeId, challengeToken, challengeExpiresAt: addSeconds(CHALLENGE_SECONDS), secret,
@@ -146,8 +152,8 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
 
     const role = roleOf(user);
     if (isOwner(role)) {
-      await c.env.DB.prepare("UPDATE auth_user_security SET login_policy='ANY_MFA',session_seconds=CASE WHEN session_seconds>28800 THEN 28800 ELSE session_seconds END,updated_at=? WHERE user_id=?").bind(timestamp, user.id).run();
-      return c.json(await beginSetup(c, user, "GOOGLE", true));
+      await c.env.DB.prepare("UPDATE auth_user_security SET login_policy='ANY_MFA',session_seconds=?,updated_at=? WHERE user_id=?").bind(MFA_SESSION_SECONDS, timestamp, user.id).run();
+      return c.json(await beginSetup(c, { ...user, login_policy: "ANY_MFA", session_seconds: MFA_SESSION_SECONDS }, "GOOGLE", true));
     }
     const policy = normalizePolicy(user.login_policy, role);
     const provider = policy === "MICROSOFT" ? "MICROSOFT" : "GOOGLE";
