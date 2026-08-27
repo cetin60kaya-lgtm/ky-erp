@@ -1,118 +1,117 @@
-# KY ERP geliştirme kuralları
+# KY ERP — AI Agent Ana Kuralları
 
-## Sabit çalışma kaynağı
+Bu dosya GitHub Copilot, Copilot CLI, VS Code agent mode ve diğer AI geliştirme araçları için ortak ana çalışma sözleşmesidir.
 
-- GitHub deposu: `cetin60kaya-lgtm/ky-erp`.
-- Windows ana yerel çalışma klasörü: `D:\KYERP-GITHUB\KY-ERP-AKTIF`.
-- Kullanıcı yeni bir karar vermedikçe geliştirme, GitHub eşitleme, derleme ve yerel uygulama kontrolü yalnız bu klasörden yapılır.
-- Kararlı çalışma dalı: `tasarim-final-v1`. Onaylı özellik çalışmaları ayrı dal ve taslak PR üzerinde yürütülür; kullanıcı onayı olmadan `main` dalına birleştirilmez.
-- Her Git işleminden önce aşağıdakiler doğrulanır:
-  - `git rev-parse --show-toplevel`
-  - `git remote get-url origin`
-  - `git branch --show-current`
-  - `git status -sb`
-- Beklenen remote: `https://github.com/cetin60kaya-lgtm/ky-erp.git`.
-- Yerel çalışma ağacı temiz değilse veya dal GitHub'dan ilerideyse `pull`, `merge`, `reset`, `clean`, `checkout` ya da `switch` uygulanmaz; önce değişiklikler raporlanır ve korunur.
+## Canonical kaynak
 
-## Tek model merkezi ve modüller arası iş akışı
+- Repo: `cetin60kaya-lgtm/ky-erp`
+- Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
+- Canlı uygulama: `https://kyerp.net`
+- Canlı API: `https://api.kyerp.net`
+- Cloudflare Pages projesi: `ky-erp-frontend`
+- Windows çalışma kökü bu makinede çoğunlukla `D:\onedrive\KY-ERP-MERKEZ` altında bulunur. Her işlemden önce gerçek repo kökünü `git rev-parse --show-toplevel` ile doğrula; yolu varsayarak destructive işlem yapma.
+- `main` production kaynağı değildir. Kullanıcı açıkça değiştirmedikçe production çalışmaları yalnız yukarıdaki production branch üzerinde yapılır.
+
+## Çalışmaya başlamadan önce
+
+Her agent önce şunları kontrol eder:
+
+1. `git rev-parse --show-toplevel`
+2. `git remote get-url origin`
+3. `git branch --show-current`
+4. `git status -sb`
+5. Gerekirse `git fetch origin`
+
+Beklenen remote `https://github.com/cetin60kaya-lgtm/ky-erp.git` olmalıdır. Çalışma ağacı temiz değilse kullanıcının yerel değişikliklerini silme, `reset --hard`, `clean -fd`, zorla checkout veya zorla pull yapma.
+
+## En önemli güvenlik kuralları
+
+- Birinci öncelik veri kaybını önlemektir.
+- Production D1/SQLite verisini test için değiştirme.
+- Gerçek personel, muhasebe, fatura, irsaliye, desen, boyahane, stok, lot, reçete, imalat ve kullanıcı kayıtlarını silme veya sıfırlama.
+- Migration gerekiyorsa önce mevcut migration zincirini ve canlı şemayı salt-okunur denetle; production migration/write için açık kullanıcı onayı gerekir.
+- Şifre, MFA secret, API token, `.env`, recovery code ve benzeri sırları repoya, loga veya kullanıcıya açık çıktıya yazma.
+- POST/PATCH/PUT/DELETE isteklerini otomatik retry ederek mükerrer kayıt üretme.
+- Resmî İşNet belge/fatura gönderimi ve kritik production write kullanıcı onayı olmadan yapılmaz.
+- GitHub Actions kotası doluysa workflow tetikleme veya tekrar çalıştırma. Yetki varsa testlerden sonra doğrudan Wrangler/Cloudflare deploy kullanılabilir; yoksa deploy yapılmış gibi raporlama.
+
+## Canlı auth standardı
+
+Canonical giriş akışı:
+
+`POST /api/auth/login` → gerekiyorsa `POST /api/auth/mfa/verify` → session → `GET /api/auth/me`
+
+- Admin/super admin için MFA zorunluluğunu kaldırma.
+- Uygulama sahibi için session en fazla 8 saattir.
+- Geçerli JWT tarayıcı kapanıp açıldığında gerçek `exp` süresine kadar korunabilir.
+- Geçici network/5xx hatası geçerli sessionı temizlememeli.
+- Gerçek 401/403 sessionı temizleyebilir.
+- Logout hem sunucu sessionını iptal etmeli hem yerel tokenı temizlemeli.
+- Runtime request yolunda DDL/schema oluşturma geri getirilmez.
+- Duplicate/compat auth router yalnız gerçekten gerekli ve testli ise kullanılabilir; canonical akış tek olmalıdır.
+
+## API ve tenant standardı
+
+- Production API origin: `https://api.kyerp.net`.
+- Frontend normal veri trafiği doğrudan API custom domainine gider.
+- Canonical ana firma: slug `mecit-hakan`, id `main-mecit-hakan`.
+- Eski aliaslar read-compatibility ile normalize edilebilir; canlı veriyi topluca UPDATE ederek alias problemi çözme.
+- Bir yardımcı GET endpointinin hatası bütün modülün ana verisini boşaltmamalı. Kritik ana liste, yardımcı veri ve özet/sayaç verilerini bağımsız yükle.
+- 401/403 yetki hatasını cache veya fallback ile gizleme.
+- Başarılı son GET verisi geçici 5xx/network durumunda kısa süreli korunabilir; gerçek boş liste ile hata birbirinden ayrılmalıdır.
+
+## Modül ana kuralları
+
+### İK
+
+- Günlük Giriş tam `IkPage` çalışma alanını korur; sade geçici ekranla değiştirme.
+- Personel Havuzu tüm aktif günlük personeli gösterebilir.
+- Çalışma listesi yalnız kayıtlı roster + tarih aralığında gerçekten çalışmış kişileri içerir.
+- Boş roster tüm aktif personel demek değildir.
+- Hızlı Giriş, Yeni Personel, Günlük Kaydet, Haftalık Liste, Excel, gündüz/gece, ücret, not ve toplamlar korunur.
+- Bir izin/evrak/özet endpointi hata verince `daily-employees` havuzu kaybolmamalıdır.
+
+### Boyahane
+
+- Ürün, lot, reçete, kayıtlı renk, imalat boyası ve stok geçmişi gerçek veriden gelir; production’da demo fallback gösterme.
+- Lot takibi ürün bazlıdır. Lot numarası olmayan gerçek girişler `Lot Bekleyenler` olarak izlenir; veri uydurma.
+- Kayıtlı renk/ürün/lot listelerinde tenant alias yüzünden veri kaybolmamalıdır.
+
+### Desen
 
 - Model ana kaydının tek merkezi Desen modülüdür.
-- İşNet, Desen, Boyahane, İmalat ve Muhasebe aynı değişmeyen `canonicalModelId` kimliğini kullanır; modüller içinde ikinci bağımsız model kartı oluşturulmaz.
-- Model adına göre kalıcı bağlantı kurulmaz. Model adı yalnız arama ve gösterim içindir; işlemler model kimliğiyle bağlanır.
-- Model tekilliğinde ana firma, kayıtlı müşteri firma ve normalize model adı birlikte dikkate alınır. Farklı müşterilerde aynı model adı yanlışlıkla birleştirilmez.
-- Hızlı model açma işleminde kayıtlı müşteri firma kartı zorunludur; serbest firma adıyla model oluşturulmaz.
-- İşNet gelen irsaliyesi modele bağlandığında aynı işlem içinde üretim planı oluşturulur veya güncellenir.
-- İrsaliye müşterisi ile model kartındaki müşteri farklıysa bağlantı engellenir ve kullanıcıya açık hata gösterilir.
-- Desen baskı bölgeleri, Boyahane işleri, üretim operasyonları, sakat kayıtları ve fatura satırları aynı model kimliğini taşır.
-- Model zaman çizelgesi model açılışı, Desen, İşNet, Boyahane, üretim ve Muhasebe olaylarını aynı kimlik altında gösterir.
-- Çok operasyonlu modelde tamamlanan model adedi operasyonların toplamı değil, zorunlu operasyonlar içindeki en düşük ortak adettir.
-- Üretim denklemi: `Net sağlam = Brüt üretim - Baskı sakatı - Kumaş sakatı`.
-- Gelen irsaliye adedi, tamamlanan brüt, net sağlam, eksik, fazla, Boyahane durumu, faturalanan ve fatura bekleyen adet birlikte izlenir.
+- İşNet, Desen, Boyahane, İmalat ve Muhasebe aynı `canonicalModelId` ilişkisini kullanmalıdır.
+- Model adı kalıcı kimlik değildir; arama/gösterim içindir.
+- PSD/görsel/dosya arşivi gerçek STORAGE/Drive yapısında tutulur, GitHub'a gerçek kullanıcı dosyası eklenmez.
 
-## En az kullanıcı girdisi ve hızlı işlem kuralı
+### İmalat
 
-- Sistem bildiği veya güvenli biçimde çıkarabildiği alanı kullanıcıya yeniden sordurmaz.
-- Ana firma, müşteri, irsaliye no, sipariş no, model kimliği, açık üretim planı ve baskı bölgeleri mümkün olduğunda kaynak kayıttan otomatik taşınır.
-- Makineye bağlı makinacı ve vardiya varsayılanları otomatik önerilir; belirsizlik varsa kullanıcı seçimi istenir.
-- Çok alanlı veya sık kullanılan her modülde hızlı işlem girişi bulunur. Ortak `Ctrl+K / Hızlı İşlem` merkezi normal ekranlarla aynı servisleri kullanır.
-- Hızlı girişler veri doğrulamasını atlamaz. Belirsiz model/firma, adet farkı veya resmî işlemde kullanıcı onayı zorunludur.
-- Gerçek İşNet giden irsaliye ve resmî fatura gönderimi son kullanıcı onayı olmadan çalıştırılmaz.
+- Üretim, model, makine, vardiya, gündüz/gece, hızlı fiş, irsaliye ve sakat adet ilişkilerini bozma.
+- Net sağlam = brüt üretim - baskı sakatı - kumaş sakatı.
+- Çok operasyonlu modelde tamamlanan model adedi zorunlu operasyonların minimum ortak adedidir.
 
-## İşNet bağlantısı ve Desen klasör ayarı
+### Muhasebe ve İşNet
 
-- İşNet bağlantı testi önce resmî API girişini dener; API 404/500, ağ, zaman aşımı, geçersiz yanıt, eksik token veya firma listesi hatasında NetFatura portalına otomatik geçer.
-- API başarısızlığı portal denemesini engellemez; kullanıcıya API ve portal aşamalarının ayrı ve anlaşılır sonucu gösterilir.
-- İşNet kullanıcı adı ve şifresi GitHub'a, loglara veya frontend kaynak koduna yazılmaz. Şifre yalnız yerel anahtarla AES-256-GCM formatında saklanır.
-- İşNet firma seçimi bağlantı testinden dönen gerçek yetkili firma listesinden yapılır; serbest firma kimliği kaydedilmez.
-- Canlı portal oturumu doğrulanmadan sistem “uçtan uca tamamlandı” sayılmaz. Resmî irsaliye/fatura gönderimi kullanıcı onayı olmadan yapılmaz.
-- Desen görsel klasörleri Desen > Gelen Desenler ekranındaki klasör ayar merkezinden yönetilir.
-- Gelen Görsel, Model Arşivi, İşlenen, İşlenemeyen ve Arşiv klasörleri ayrı, tam ve birbirinden farklı Windows yolları olmalıdır.
-- Mevcut Desen tarama ve model oluşturma motoru standart `STORAGE\desen` yollarını kullanmaya devam eder; seçilen harici klasörler Windows junction ile bu standart yollara güvenli bağlanır.
-- Klasör değişikliğinde mevcut dosyalar silinmez. Hedefe güvenli taşınır; aynı isim varsa üzerine yazılmaz ve `-aktarilan-N` adıyla korunur.
-- Klasör ayarı kaydedilmeden önce erişim ve yazma testi yapılabilir; bağlantı başarısızsa model taraması başlatılmaz.
+- İşNet belge operasyon merkezidir; Muhasebe aynı resmî belge operasyonunu ikinci kez yaptırmaz.
+- Muhasebe finansal sonucu, cari/KDV/ödeme/çek durumunu gösterir.
+- Firma/model/belge ilişkilerinde duplicate kart üretme.
+- Gerçek belge gönderimi kullanıcı onayı ister.
 
-## Canlı veri ve dosya kaynağı
+## Kod ve test standardı
 
-- Gerçek canlı veritabanı Git reposunda tutulmaz.
-- Canlı DATA kökü: `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\DATA`.
-- Canlı SQLite veritabanı: `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\DATA\KYERP.db`.
-- Aktif repo içindeki `DATA` yolu, `SCRIPTS\KYERP_DATA_BAGLA.ps1` ile canlı DATA köküne Windows junction olarak bağlanır.
-- Veritabanı aktif repo içine kopyalanmaz, taşınmaz, yeniden oluşturulmaz veya GitHub'a eklenmez.
-- DATA bağlantısı kurulmadan uygulama başlatılmaz.
-- Canlı STORAGE kökü OneDrive merkezinde kalır; gerçek PDF, XML, görsel, rapor ve kullanıcı dosyaları GitHub'a girmez.
+- Önce kök nedeni bul, sonra minimum güvenli düzeltmeyi yap.
+- Kullanıcı istemedikçe çalışan ekranı baştan tasarlama veya özellik kaldırma.
+- Demo veri ile production sorununu gizleme.
+- Yeni bağımlılık eklemeden önce gerçekten gerekli olduğunu doğrula.
+- Frontend değişikliğinde mümkün olduğunda: lint + test + production build.
+- Worker değişikliğinde mümkün olduğunda: typecheck + test + build/dry-run.
+- API sözleşmesi veya route değişikliğinde frontend/backend eşleşmesini kontrol et.
+- Değişiklik sonunda: kök neden, değişen dosyalar, testler, deploy durumu ve son commit SHA raporlanır.
 
-## Eski ve referans klasörler
+## Production deploy standardı
 
-Aşağıdaki klasörler ana çalışma kaynağı değildir; otomatik eşitlenmez, silinmez veya sıfırlanmaz:
-
-- `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ` — eski `arayuz-kabuk-v3` çalışma kopyası ve canlı DATA/STORAGE merkezi.
-- `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\TEMP\ky-erp-git-sync` — eski `main` çalışma kopyası.
-- `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\TEMP\ky-erp-git-sync-yeni` — `work/ik-muhasebe-final` dalında GitHub'a gönderilmemiş yerel commitler içerebilir; özellikle korunur.
-- `D:\KY-ERP` — Git deposu değildir.
-
-## Yerel uygulama kontrolü
-
-- Backend klasörü: `APP\app\ky-erp-backend`.
-- Frontend klasörü: `APP\app\ky-erp-frontend`.
-- Backend geliştirme portu: `3101`.
-- Frontend geliştirme portu: `5173`.
-- İlk kurulum veya DATA bağlantısı eksikse:
-  - `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_DATA_BAGLA.ps1`
-- Repo içindeki güvenli yaşam döngüsü komutu kullanılır:
-  - Başlat: `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_LIFECYCLE.ps1 start`
-  - Durum: `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_LIFECYCLE.ps1 status`
-  - Durdur: `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_LIFECYCLE.ps1 stop`
-- Başlatma öncesinde bağlı `DATA\KYERP.db`, gerekli `.env` ayarları, Node/npm bağımlılıkları ve `sqlite3` komutu kontrol edilir.
-- Yaşam döngüsü betiği backend için `DATABASE_URL` değerini bağlı veritabanından otomatik oluşturur.
-
-## Genel mühendislik kuralları
-
-- Bu proje KY ERP üretim sistemidir.
-- Öncelik sırası: sıfır veri kaybı, sıfır hata, hızlı işlem, sade arayüz.
-- Mevcut özellikleri kaldırma ve demo veri üretme.
-- API anahtarlarını açığa çıkarma; frontend'e gizli anahtar koyma.
-- Migration öncesi yedek ve geri dönüş planı hazırla.
-- Her değişiklikten sonra ilgili testleri çalıştır.
-- TypeScript ve lint hatası bırakma.
-- Kullanılmayan veya gereksiz paket ekleme.
-- Büyük değişiklikleri küçük ve denetlenebilir parçalara ayır.
-- Kullanıcı istemedikçe tasarımı baştan değiştirme.
-- Kod içinde Türkçe karakter kaynaklı bozulma oluşturma.
-- Cloudflare D1, R2, Workers ve Pages uyumluluğunu koru.
-- Production API adresi `https://api.kyerp.net` olarak kalmalıdır.
-- İş tamamlandığında değiştirilen dosyaları ve test sonuçlarını raporla.
-
-
-## Muhasebe, İşNet, cari, alias ve çek merkezi
-
-- İşNet belge operasyonunun tek merkezidir: portal senkronu, gelen/giden belge, irsaliyeden faturaya, PDF/XML ve yerel arşiv İşNet altında yürür. Muhasebe aynı belge operasyonunu ikinci kez yaptırmaz.
-- Muhasebe günlük menüsü sade tutulur: Yönetim Özeti, Firmalar ve Cari, Tedarikçi Faturaları, Gelir/Gider/Kâr Zarar, KDV, Çek/Kart/Ödeme, Ekstre/Mail ve Raporlar.
-- Muhasebe yalnız finansal sonucu ve istisnayı gösterir: cari işlendi mi, KDV işlendi mi, gider kategorisi var mı, ödeme/çek durumu nedir.
-- Firma kartı müşteri/tedarikçi, resmi/gayri, gider kategorisi, yetkili/e-posta, boya-kimya tedarikçisi ve cari bilgisinin ortak kaynağıdır.
-- Firma aliası aynı firmaya yazılan farklı adları tek firma kimliğine bağlar. Örnek: Taha Giyim ve Taha Tekstil aynı firma kartına alias olabilir.
-- Ürün aliası yalnız boya/kimya tedarik akışında kullanılır. Örnek: S 20 White ve S 20 Beyaz aynı S 20 ürün kartına bağlanabilir.
-- Boya/kimya tedarikçisi olmayan faturalar ürün/lot beklemeden gider kategorisi, cari ve KDV akışına gider.
-- Çek merkezi büyük aylık denetim ekranıdır; bu ay, gelecek ay, geciken, açık ve yıllık toplamlar atlanmaz.
-- Çek kaydında firma, verilen tarih, vade, banka, hesap no, çek no, tutar, müşteri/kendi çeki, alınan/verilen, resmi/gayri ve not tutulur.
-- Çek ön/arka görseli ve tahsilat makbuzu JPG, PNG, WEBP veya PDF olarak STORAGE altında saklanır; GitHub'a girmez.
-- Hızlı Cari, Hızlı Çek ve Hızlı Ödeme/Tahsilat normal ekranlarla aynı doğrulama ve servisleri kullanır.
+- "Kaynak hazır" ile "canlıya çıktı" aynı şey değildir.
+- Canlı deploy iddia edilmeden önce Worker/Pages deployment ve `kyerp.net` asset hash doğrulanmalıdır.
+- Direct deploy gerekiyorsa önce build/test geçmeli.
+- D1 migration bu deploy işinin parçası değilse çalıştırma.
+- `https://api.kyerp.net/api/health` 200 ve canlı frontend yeni asset hash kullanmadan işi bitmiş sayma.
