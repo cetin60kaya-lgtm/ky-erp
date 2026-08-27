@@ -2,12 +2,13 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-26T21:06:30+03:00",
-  "attempt": 62,
+  "requestedAt": "2026-08-27T14:36:00+03:00",
+  "attempt": 63,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "pages-production-branch-canonical-source",
     "cloudflare-pages-canonical-git-production-deploy",
+    "login-api-connectivity-redeploy",
     "per-user-login-security-policy",
     "password-only-30-minute-hard-session",
     "server-jwt-and-session-expiry-policy",
@@ -48,5 +49,5 @@
     "root-domain-no-redirect-live-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 62: Kullanıcı bazlı giriş güvenliği tamamlandı. Uygulama sahibi dışındaki kullanıcılar için sadece parola, parola+Google, parola+Microsoft, Google veya Microsoft ve Google+Microsoft seçenekleri tanımlanabilir. Sadece parola profili JWT ve auth_sessions seviyesinde kesin 1800 saniyeye sabitlenir; frontend token exp zamanında ayrıca otomatik çıkış yapar. MFA kullanıcılarında 30 dk-24 saat oturum seçilebilir; uygulama sahibi parola-only kullanamaz ve en fazla 8 saat tutulur. Google/Microsoft secretları bağımsızdır; çalışan sağlayıcıyla doğrulayıp erişilemeyen sağlayıcı yeni secret/QR ile yeniden kurulabilir. Legacy tek MFA güvenli geçişle korunur. Uygulama sahibi ve firma yöneticisinin kritik güvenlik alanları crafted API isteğiyle zayıflatılamaz. Owner recovery 3 özel soru, rastgele 2 soru, PBKDF2-SHA256 hash, OTP deneme/kilit limitleri ve tüm oturumların iptali ile hazırlanmıştır; e-posta/SMS kurtarma gerçek delivery binding bağlanmadıkça bilinçli olarak kapalıdır ve sahte doğrulama yapılmaz. Mevcut tek kullanımlık KY ERP recovery kodları acil fallback olarak hashli tutulur ve kullanımdan sonra MFA yeniden kurulumuna yönlendirir, doğrudan oturum vermez. Güncel İK Personel Kontrol Merkezi production değişiklikleri auth dalına iki-parent merge ile dahil edilip korunmuştur. Final CI'da auth migration şeması, API typecheck/test/dry-run, gerçek yerel Worker üzerinde 30 dk parola oturumu, gerçek TOTP enrollment, BOTH_MFA ve çapraz sağlayıcı reset senaryoları, frontend lint/build ve güvenlik markerları SUCCESS olmuştur. Production yayını D1 yedeği, remote migration/schema audit, Worker/Pages deploy ve canlı Chrome doğrulaması olmadan başarılı sayılmaz. Bu commit onaylı Attempt 62 canlı yayın workflow'unu gerçek production branch push'u ile tetiklemek için oluşturuldu."
+  "note": "Attempt 63: Kullanıcının canlı kyerp.net giriş ekranında görülen NETWORK_ERROR / API bağlantı hatası için production yeniden yayını tetiklendi. D1 verisine dokunulmaz; mevcut auth, MFA ve tüm modül davranışları korunur. Workflow önce tam D1 yedeği alır, migration ve şema denetimini çalıştırır, ardından Worker api.kyerp.net custom domain dağıtımını ve Pages production yayını ile gerçek Chrome kontrolünü tekrar doğrular. Amaç giriş/API erişim katmanını yeniden yayınlayarak canlı bağlantı sorununu güvenli biçimde gidermektir."
 }
