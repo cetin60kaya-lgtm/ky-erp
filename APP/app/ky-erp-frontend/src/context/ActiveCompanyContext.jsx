@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiGet, setApiActiveMainCompany } from "../utils/api";
-import { canonicalCompanySlug } from "../utils/companyIdentity";
+import { canonicalCompanySlug, resolveCompanyIdentity } from "../utils/companyIdentity";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "kyerp.activeCompany";
@@ -112,13 +112,26 @@ function normalizeCompanySlug(value) {
 const ActiveCompanyContext = createContext(null);
 
 function mapBackendCompany(row) {
-  const slug = String(row?.slug || "").trim();
+  const identity = resolveCompanyIdentity(row || {});
+  const slug = identity.mainCompanySlug || normalizeCompanySlug(row?.slug || row?.id || "");
+  const id = identity.mainCompanyId || String(row?.id || slug || "").trim();
   return {
-    id: String(row?.id || slug || ""),
+    id,
     name: String(row?.name || slug || "").trim(),
     slug,
     isActive: row?.isActive !== false,
   };
+}
+
+function canonicalCompanyList(rows) {
+  const unique = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const company = mapBackendCompany(row);
+    if (!company.isActive || !company.slug) continue;
+    const key = normalizeCompanySlug(company.slug);
+    if (!unique.has(key)) unique.set(key, { ...company, slug: key });
+  }
+  return [...unique.values()];
 }
 
 export function ActiveCompanyProvider({ children }) {
@@ -159,20 +172,13 @@ export function ActiveCompanyProvider({ children }) {
     apiGet("/admin/main-companies")
       .then((rows) => {
         if (!alive) return;
-        const mapped = Array.isArray(rows)
-          ? rows
-              .map(mapBackendCompany)
-              .filter(
-                (x) =>
-                  x.isActive &&
-                  x.slug !== "hakan-baski" &&
-                  x.id !== "main-hakan-baski",
-              )
-          : [];
+        const mapped = canonicalCompanyList(rows);
         if (mapped.length > 0) {
           setCompanies(mapped);
           const normalizedCurrent = normalizeCompanySlug(activeCompanySlug);
-          const hasCurrent = mapped.some((x) => x.slug === normalizedCurrent);
+          const hasCurrent = mapped.some(
+            (x) => normalizeCompanySlug(x.slug) === normalizedCurrent,
+          );
           if (!hasCurrent) setActiveCompanySlug(mapped[0].slug);
         } else {
           setCompanies(DEFAULT_COMPANIES);
@@ -187,9 +193,10 @@ export function ActiveCompanyProvider({ children }) {
   }, [activeCompanySlug, isAuthenticated]);
 
   const activeCompany = useMemo(() => {
+    const target = normalizeCompanySlug(activeCompanySlug);
     return (
       companies.find(
-        (x) => x.slug === normalizeCompanySlug(activeCompanySlug),
+        (x) => normalizeCompanySlug(x.slug) === target,
       ) ||
       companies[0] ||
       null
@@ -240,22 +247,21 @@ export function getRecordCompanyCode(record) {
 
 export function filterByActiveCompany(list, activeCompanyCode) {
   if (!Array.isArray(list)) return [];
+  const activeSlug = canonicalCompanySlug(activeCompanyCode);
   return list.filter((item) => {
     const code = getRecordCompanyCode(item);
     if (!code) return false;
-    return (
-      String(code).toLocaleUpperCase("tr-TR") ===
-      String(activeCompanyCode || "").toLocaleUpperCase("tr-TR")
-    );
+    return canonicalCompanySlug(code) === activeSlug;
   });
 }
 
 export function injectCompanyCode(payload, activeCompanyCode) {
   if (!payload || typeof payload !== "object") return payload;
+  const identity = resolveCompanyIdentity(activeCompanyCode || {});
   return {
     ...payload,
-    mainCompanySlug: activeCompanyCode.slug || activeCompanyCode || "",
-    mainCompanyId: activeCompanyCode.id || "",
-    mainCompanyName: activeCompanyCode.name || "",
+    mainCompanySlug: identity.mainCompanySlug,
+    mainCompanyId: identity.mainCompanyId,
+    mainCompanyName: activeCompanyCode?.name || "",
   };
 }
