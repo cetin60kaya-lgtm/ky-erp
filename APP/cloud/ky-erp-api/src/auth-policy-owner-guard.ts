@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 
+const OWNER_MFA_SESSION_SECONDS = 36_000;
+
 type AnyRow = Record<string, any>;
 
 function text(value: unknown) {
@@ -116,7 +118,7 @@ export function registerAuthOwnerGuardRoutes(app: any) {
         emailVerified: Boolean(updated.email_verified),
         approvalRequired: Boolean(updated.approval_required),
         loginPolicy: "ANY_MFA",
-        sessionSeconds: Math.min(Number(updated.session_seconds || 28800), 28800),
+        sessionSeconds: OWNER_MFA_SESSION_SECONDS,
         googleMfaEnabled: Boolean(updated.google_mfa_enabled),
         microsoftMfaEnabled: Boolean(updated.microsoft_mfa_enabled),
       },
