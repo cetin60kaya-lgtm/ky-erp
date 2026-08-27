@@ -31,18 +31,6 @@ function cleanLegacyAuthStorage() {
   });
 }
 
-function readStoredAuth() {
-  try {
-    cleanLegacyAuthStorage();
-    const token = window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
-    const userRaw = window.sessionStorage.getItem(AUTH_USER_KEY);
-    const user = userRaw ? JSON.parse(userRaw) : null;
-    return { token, user, permissions: normalizePermissionRows(user?.permissions) };
-  } catch {
-    return { token: "", user: null, permissions: [] };
-  }
-}
-
 function parseJwtPayload(token) {
   const raw = String(token || "").trim();
   if (!raw) return null;
@@ -63,6 +51,45 @@ function isTokenUsable(token) {
   return payload.exp > Math.floor(Date.now() / 1000) + 5;
 }
 
+function removeStoredAuth() {
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.localStorage.removeItem(AUTH_USER_KEY);
+    window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    window.sessionStorage.removeItem(AUTH_USER_KEY);
+  } catch { /* noop */ }
+}
+
+function readStoredAuth() {
+  try {
+    cleanLegacyAuthStorage();
+
+    const persistentToken = window.localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const sessionToken = window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const token = persistentToken || sessionToken;
+
+    const persistentUserRaw = window.localStorage.getItem(AUTH_USER_KEY);
+    const sessionUserRaw = window.sessionStorage.getItem(AUTH_USER_KEY);
+    const userRaw = persistentUserRaw || sessionUserRaw;
+    const user = userRaw ? JSON.parse(userRaw) : null;
+
+    if (!token || !user || !isTokenUsable(token)) {
+      removeStoredAuth();
+      return { token: "", user: null, permissions: [] };
+    }
+
+    // Eski açık sekmelerde sessionStorage'da kalan geçerli oturumu kalıcı tarayıcı
+    // oturumuna terfi ettir. Token kendi exp süresinden daha uzun yaşayamaz.
+    if (!persistentToken) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    if (!persistentUserRaw) window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+
+    return { token, user, permissions: normalizePermissionRows(user?.permissions) };
+  } catch {
+    removeStoredAuth();
+    return { token: "", user: null, permissions: [] };
+  }
+}
+
 function isSuperAdmin(role) {
   return ["SUPER_ADMIN", "ADMIN"].includes(String(role || "").toUpperCase());
 }
@@ -79,23 +106,29 @@ export function AuthProvider({ children }) {
     tokenRef.current = "";
     setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
     setAuthState({ token: "", user: null, permissions: [] });
-    try {
-      window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
-      window.sessionStorage.removeItem(AUTH_USER_KEY);
-      cleanLegacyAuthStorage();
-    } catch { /* noop */ }
+    removeStoredAuth();
+    cleanLegacyAuthStorage();
   }, []);
 
   const saveAuth = useCallback((nextToken, nextUser, nextPermissions) => {
     const normalizedPermissions = normalizePermissionRows(nextPermissions);
     const payload = { token: String(nextToken || ""), user: nextUser || null, permissions: normalizedPermissions };
-    if (!payload.token || !payload.user) return false;
+    if (!payload.token || !payload.user || !isTokenUsable(payload.token)) return false;
+
     tokenRef.current = payload.token;
     setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+
+    const storedUser = JSON.stringify({ ...payload.user, permissions: payload.permissions });
     try {
+      // Aynı tarayıcı/profil, tokenın sunucudaki gerçek bitiş süresine kadar onaylı
+      // oturumu korur. Pencere kapanıp açılsa bile yeniden MFA istemez.
+      window.localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
+      window.localStorage.setItem(AUTH_USER_KEY, storedUser);
+      // Açık sekme uyumluluğu için sessionStorage da aynalanır.
       window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
-      window.sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify({ ...payload.user, permissions: payload.permissions }));
+      window.sessionStorage.setItem(AUTH_USER_KEY, storedUser);
     } catch { /* noop */ }
+
     setAuthState(payload);
     return true;
   }, [clearAuth]);
@@ -136,13 +169,25 @@ export function AuthProvider({ children }) {
         if (!cancelled) { clearAuth(); setLoading(false); }
         return;
       }
+
       const snapshot = authSnapshotRef.current;
       try {
         const response = await apiFetch("/auth/me", { suppressUnauthorized: true });
         if (cancelled) return;
         saveAuth(token, response.user || snapshot.user, response.user?.permissions || snapshot.permissions);
-      } catch {
-        if (!cancelled) clearAuth();
+      } catch (error) {
+        if (cancelled) return;
+        const status = Number(error?.status || 0);
+        if (status === 401 || status === 403) {
+          // Sunucu oturumu gerçekten reddetti/revoke ettiyse yeniden giriş gerekir.
+          clearAuth();
+        } else if (isTokenUsable(token) && snapshot.user) {
+          // Geçici ağ/Cloudflare/5xx kesintisinde kullanıcıyı dışarı atma.
+          // Geçerli token ve son doğrulanmış kullanıcı ile oturumu koru.
+          saveAuth(token, snapshot.user, snapshot.permissions);
+        } else {
+          clearAuth();
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -150,6 +195,20 @@ export function AuthProvider({ children }) {
     restoreSession();
     return () => { cancelled = true; };
   }, [clearAuth, saveAuth, token]);
+
+  useEffect(() => {
+    const syncFromStorage = (event) => {
+      if (![AUTH_TOKEN_KEY, AUTH_USER_KEY].includes(String(event.key || ""))) return;
+      const stored = readStoredAuth();
+      tokenRef.current = stored.token;
+      setAuthState(stored);
+      if (!stored.token) {
+        setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
+      }
+    };
+    window.addEventListener("storage", syncFromStorage);
+    return () => window.removeEventListener("storage", syncFromStorage);
+  }, []);
 
   const login = useCallback(async (identity, password, deviceLabel = "") => {
     const response = await apiFetch("/auth/v2/login", {
