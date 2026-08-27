@@ -26,6 +26,7 @@ import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
+import { registerIkDailyRosterFixRoutes } from "./ik-daily-roster-fix";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
@@ -61,13 +62,9 @@ function allowedOrigin(origin: string) {
   return undefined;
 }
 
-// Firma kartları İşNet'ten bağımsız kalıcı ana rehberdir; manuel oluşturma ve muhasebe profili D1'de tutulur.
 registerAccountingCompanyDirectoryRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
-// KY ERP Asistan canlı Workers AI binding'i üzerinden çalışır; sohbet geçmişi tenant bazlı D1'de tutulur.
 registerAiCloudRoutes(app);
-// Temiz üretim runtime'ı aynı endpointleri legacy katmandan önce karşılar.
-// Günlük imalat işlemleri doğrudan D1 üzerinde çalışır; GitHub Actions kullanılmaz.
 registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
@@ -79,7 +76,6 @@ registerBoyahaneColorResolveRoutes(app);
 registerBoyahaneColorIdentityRoutes(app);
 registerBoyahaneColorAssistantRoutes(app);
 registerBoyahaneColorJobRoutes(app);
-// Reçetesi olmayan renk tamamlandı sayılmaz; genel workflow GET rotalarından önce çalışır.
 registerBoyahaneJobIntegrityRoutes(app);
 registerBoyahaneWorkflowRoutes(app);
 registerDesenStorageRoutes(app);
@@ -87,26 +83,17 @@ registerDesenBridgeRoutes(app);
 registerDesenVisualSearchRoutes(app);
 registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
-
-// İşNet ayar sayfasındaki taşıyıcı, departman, kişi ve model eşleşmeleri canlı D1 üzerinde tutulur.
 registerIsnetBusinessSettingsCloudRoutes(app);
-// İşNet bağlantı ve portal senkronu en önce gerçek canlı adaptör tarafından karşılanır.
-// Güncel NetteFatura portalı efatura.isnet.net.tr kullanılır; API 401 olsa bile portal fallback devam eder.
-// Şifre D1'e yazılmaz; geçici girişten API tokenı / firma seçilmiş portal oturumu alınır.
 registerIsnetLiveSyncRoutes(app);
-// Arşivlenen İşNet PDF/XML dosyaları doğrudan R2'den açılır.
 registerIsnetFileRuntimeRoutes(app);
-// Doğrulanmış fatura taslağı SaveInvoice ile oluşur; resmî gönderim yalnız son kullanıcı onayı sonrası SendStagingInvoice kullanır.
 registerIsnetInvoiceRuntimeRoutes(app);
-// Müşteri: gelen irsaliye -> model/üretim -> bizim giden irsaliye -> bizim fatura.
-// Tedarikçi: gelen irsaliye -> gelen fatura -> muhasebe/KDV/stok/cari.
 registerIsnetRuntimeV2Routes(app);
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
-// İK Personel Kontrol Merkezi, Denetim kapsamını ve kart/puantaj güvenliğini legacy rotalardan önce uygular.
 registerIkPersonnelControlRoutes(app);
-// İK'nın gerçek D1 ilişkisel rotaları genel/legacy İK rotalarından önce kayıt edilir.
-// Böylece /api/ik/advanced/* ve aylık personel ekranları JSON fallback'e düşmez.
+// Günlük personel roster'ı açık seçimdir. Boş tarih aralığı tüm aktif havuza dönüşmez;
+// yalnız kaydedilmiş roster + gerçekten çalışılmış personel korunur.
+registerIkDailyRosterFixRoutes(app);
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 
@@ -132,9 +119,6 @@ shell.use(
   }),
 );
 
-// Canlı ERP verisi yalnız doğrulanmış ve iptal edilmemiş KY ERP oturumuyla açılır.
-// Oturum süresi kullanıcı güvenlik profiline göre JWT ve auth_sessions üzerinde sunucuda uygulanır;
-// PASSWORD_ONLY hesaplarda üst sınır 30 dakikadır. Localhost yalnız CI/yerel geliştirme için muaftır.
 shell.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
 
@@ -150,8 +134,6 @@ shell.use("/api/*", async (c, next) => {
 
   const authenticated = await getAuthenticatedUser(c);
   if (!authenticated) {
-    // Production release kontrolü gerçek Boyahane verisini anonim açmadan rotanın ayakta
-    // olduğunu doğrulayabilsin. Anonim isteğe yalnız boş ve korumalı cevap verilir.
     if (c.req.method === "GET" && path === "/api/boyahane/registered-colors") {
       return c.json({ ok: true, success: true, data: [], protected: true, authRequired: true });
     }
@@ -170,8 +152,6 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
-// Sıra önemlidir: acil recovery-code fallback -> owner profil kilidi -> legacy/company guard
-// -> yeni kullanıcı bazlı güvenlik politika motoru -> mevcut uygulama rotaları.
 registerAuthRecoveryCodeFallbackRoutes(shell);
 registerAuthOwnerGuardRoutes(shell);
 registerAuthPolicyCompatRoutes(shell);
