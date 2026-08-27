@@ -7,6 +7,11 @@ const WRANGLER_BIN = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangle
 const STATE_ROOT = fileURLToPath(new URL("../.wrangler/state", import.meta.url));
 const CONFIG = "wrangler.production-local.jsonc";
 const DATABASE = "ky-erp-production-local";
+const AUTH_SCHEMA_FILES = [
+  "migrations/0018_auth_mfa_sessions.sql",
+  "migrations/0019_auth_dual_mfa_recovery.sql",
+  "migrations/0021_auth_security_policy_owner_recovery.sql",
+];
 
 function run(label, args) {
   console.log(`\n=== ${label} ===`);
@@ -27,21 +32,28 @@ function run(label, args) {
   }
 }
 
-// This directory belongs only to Wrangler local emulation. It is never the remote D1 database.
-// Starting clean makes every auth integration run deterministic and prevents stale local schemas.
-rmSync(STATE_ROOT, { recursive: true, force: true });
-
-try {
-  run("LOCAL D1 MIGRATIONS (DISPOSABLE)", [
+function applyLocalSql(file) {
+  run(`LOCAL AUTH SCHEMA: ${file}`, [
     WRANGLER_BIN,
     "d1",
-    "migrations",
-    "apply",
+    "execute",
     DATABASE,
     "--local",
     "--config",
     CONFIG,
+    "--file",
+    file,
   ]);
+}
+
+// This directory belongs only to Wrangler local emulation. It is never the remote D1 database.
+// Auth integration deliberately does NOT run the full production migration chain because unrelated
+// historical accounting/production migrations are neither required nor safe prerequisites for auth tests.
+rmSync(STATE_ROOT, { recursive: true, force: true });
+
+try {
+  console.log("\n=== LOCAL AUTH-ONLY D1 SETUP (DISPOSABLE) ===");
+  for (const file of AUTH_SCHEMA_FILES) applyLocalSql(file);
 
   run("LOCAL AUTH RUNTIME SMOKE", [
     fileURLToPath(new URL("./auth-policy-runtime-smoke.mjs", import.meta.url)),
@@ -50,4 +62,4 @@ try {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 }
 
-console.log("\nLocal auth integration tamamlandi. Production D1'e hicbir istek gonderilmedi.");
+console.log("\nLocal auth integration tamamlandi. Yalniz auth semasi kullanildi; production D1'e hicbir istek gonderilmedi.");
