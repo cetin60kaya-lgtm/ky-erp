@@ -287,12 +287,15 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("storage", syncFromStorage);
   }, []);
 
+  // Stabil interaktif giriş motoru: eski auth rotası aynı 8 saatlik imzalı oturumu,
+  // Google/Microsoft MFA'yı ve sunucu tarafı session tablosunu kullanır; yeni policy
+  // challenge şemasındaki geçici 5xx hatalarını login yolundan çıkarır.
   const login = useCallback(async (identity, password, deviceLabel = "") => {
     const body = { username: identity, password, deviceLabel };
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const response = await directAuthRequest("/auth/v2/login", { body });
+        const response = await directAuthRequest("/auth/login", { body });
         return finalizeResponse(response);
       } catch (error) {
         lastError = error;
@@ -304,14 +307,14 @@ export function AuthProvider({ children }) {
   }, [finalizeResponse]);
 
   const verifyMfa = useCallback(async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
-    const response = await directAuthRequest("/auth/v2/mfa/verify", {
+    const response = await directAuthRequest("/auth/mfa/verify", {
       body: { challengeId, challengeToken, code, provider, resetProvider },
     });
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
   const recoverMfa = useCallback(async ({ challengeId, challengeToken, recoveryCode }) => {
-    const response = await directAuthRequest("/auth/v2/recovery-code", {
+    const response = await directAuthRequest("/auth/mfa/recovery", {
       body: { challengeId, challengeToken, recoveryCode },
     });
     return finalizeResponse(response);
@@ -333,7 +336,7 @@ export function AuthProvider({ children }) {
   }), []);
 
   const checkApproval = useCallback(async ({ approvalId, approvalToken }) => {
-    const response = await directAuthRequest(`/auth/v2/approval/${approvalId}/status`, {
+    const response = await directAuthRequest(`/auth/approval/${approvalId}/status`, {
       body: { approvalToken },
     });
     return finalizeResponse(response);
