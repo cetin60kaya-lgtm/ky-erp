@@ -51,6 +51,12 @@ function isTokenUsable(token) {
   return payload.exp > Math.floor(Date.now() / 1000) + 5;
 }
 
+function isTransientLoginError(error) {
+  const status = Number(error?.status || 0);
+  return [0, 500, 502, 503, 504].includes(status) ||
+    ["NETWORK_ERROR", "REQUEST_TIMEOUT", "API_PROXY_ERROR"].includes(String(error?.code || ""));
+}
+
 function removeStoredAuth() {
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -78,8 +84,6 @@ function readStoredAuth() {
       return { token: "", user: null, permissions: [] };
     }
 
-    // Eski açık sekmelerde sessionStorage'da kalan geçerli oturumu kalıcı tarayıcı
-    // oturumuna terfi ettir. Token kendi exp süresinden daha uzun yaşayamaz.
     if (!persistentToken) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
     if (!persistentUserRaw) window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
 
@@ -120,11 +124,8 @@ export function AuthProvider({ children }) {
 
     const storedUser = JSON.stringify({ ...payload.user, permissions: payload.permissions });
     try {
-      // Aynı tarayıcı/profil, tokenın sunucudaki gerçek bitiş süresine kadar onaylı
-      // oturumu korur. Pencere kapanıp açılsa bile yeniden MFA istemez.
       window.localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
       window.localStorage.setItem(AUTH_USER_KEY, storedUser);
-      // Açık sekme uyumluluğu için sessionStorage da aynalanır.
       window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
       window.sessionStorage.setItem(AUTH_USER_KEY, storedUser);
     } catch { /* noop */ }
@@ -179,11 +180,8 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
         const status = Number(error?.status || 0);
         if (status === 401 || status === 403) {
-          // Sunucu oturumu gerçekten reddetti/revoke ettiyse yeniden giriş gerekir.
           clearAuth();
         } else if (isTokenUsable(token) && snapshot.user) {
-          // Geçici ağ/Cloudflare/5xx kesintisinde kullanıcıyı dışarı atma.
-          // Geçerli token ve son doğrulanmış kullanıcı ile oturumu koru.
           saveAuth(token, snapshot.user, snapshot.permissions);
         } else {
           clearAuth();
@@ -211,10 +209,24 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (identity, password, deviceLabel = "") => {
-    const response = await apiFetch("/auth/v2/login", {
-      method: "POST", body: { username: identity, password, deviceLabel }, skipAuth: true, suppressUnauthorized: true,
-    });
-    return finalizeResponse(response);
+    const body = { username: identity, password, deviceLabel };
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await apiFetch("/auth/v2/login", {
+          method: "POST",
+          body,
+          skipAuth: true,
+          suppressUnauthorized: true,
+        });
+        return finalizeResponse(response);
+      } catch (error) {
+        lastError = error;
+        if (!isTransientLoginError(error) || attempt === 1) throw error;
+        await new Promise((resolve) => window.setTimeout(resolve, 450));
+      }
+    }
+    throw lastError;
   }, [finalizeResponse]);
 
   const verifyMfa = useCallback(async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
