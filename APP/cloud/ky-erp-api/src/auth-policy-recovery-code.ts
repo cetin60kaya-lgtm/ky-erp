@@ -109,8 +109,8 @@ async function beginSetup(c: any, user: AnyRow, provider: string, recoveryMode: 
 }
 
 export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
-  // Enrich every v2 login challenge with emergency-code availability without exposing account data.
-  app.use("/api/auth/v2/login", async (c: any, next: any) => {
+  // Enrich the canonical login challenge with emergency-code availability without exposing account data.
+  app.use("/api/auth/login", async (c: any, next: any) => {
     await next();
     try {
       const clone = c.res.clone();
@@ -124,7 +124,7 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     } catch { /* leave original response */ }
   });
 
-  app.post("/api/auth/v2/recovery-code", async (c: any) => {
+  app.post("/api/auth/recovery-code", async (c: any) => {
     const body = await bodyOf(c);
     const challenge = await challengeById(c, text(body.challengeId));
     if (!challenge || !(await challengeValid(challenge, body.challengeToken))) return c.json(jsonError("RECOVERY_CHALLENGE_INVALID", "Kurtarma isteği geçersiz veya süresi dolmuş."), 401);
@@ -134,7 +134,7 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     const candidateHash = await sha256(normalizeRecoveryCode(body.recoveryCode));
     const row = await c.env.DB.prepare("SELECT id FROM auth_recovery_codes WHERE user_id=? AND code_hash=? AND used_at IS NULL LIMIT 1").bind(user.id, candidateHash).first<AnyRow>();
     if (!row?.id) {
-      await audit(c, "RECOVERY_CODE_REJECTED_V2", user.id, {});
+      await audit(c, "RECOVERY_CODE_REJECTED", user.id, {});
       return c.json(jsonError("RECOVERY_CODE_INVALID", "Kurtarma kodu geçersiz veya daha önce kullanılmış."), 401);
     }
 
@@ -142,7 +142,7 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=COALESCE(used_at,?) WHERE user_id=? AND used_at IS NULL").bind(timestamp, user.id).run();
     await revokeSecurityState(c, user.id);
     await c.env.DB.prepare("UPDATE auth_user_security SET mfa_secret=NULL,mfa_enabled=0,google_mfa_secret=NULL,google_mfa_enabled=0,microsoft_mfa_secret=NULL,microsoft_mfa_enabled=0,updated_at=? WHERE user_id=?").bind(timestamp, user.id).run();
-    await audit(c, "RECOVERY_CODE_USED_V2", user.id, { recoveryCodeId: row.id, emergencyFallback: true });
+    await audit(c, "RECOVERY_CODE_USED", user.id, { recoveryCodeId: row.id, emergencyFallback: true });
 
     const role = roleOf(user);
     if (isOwner(role)) {

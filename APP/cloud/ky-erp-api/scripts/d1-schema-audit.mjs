@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const argv = process.argv.slice(2);
 const has = (flag) => argv.includes(flag);
@@ -12,6 +13,7 @@ const database = option("--database", mode === "remote" ? "ky-erp-db" : "ky-erp-
 const config = option("--config", mode === "remote" ? "wrangler.jsonc" : "wrangler.production-local.jsonc");
 const persistTo = option("--persist-to", "");
 const requireMigrations = has("--require-migrations");
+const wranglerBin = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 
 const requiredSchema = {
   main_companies: ["id", "slug", "name"],
@@ -87,8 +89,8 @@ function isRetryableRemoteError(text) {
   return /code:\s*7500|internal error|rate.?limit|too many requests|\b429\b|\b5\d\d\b/i.test(text);
 }
 function execute(sql) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
-  const args = ["wrangler", "d1", "execute", database, mode === "remote" ? "--remote" : "--local", "--config", config, "--command", sql, "--json"];
+  const command = process.execPath;
+  const args = [wranglerBin, "d1", "execute", database, mode === "remote" ? "--remote" : "--local", "--config", config, "--command", sql, "--json"];
   if (mode === "local" && persistTo) args.push("--persist-to", persistTo);
   const maxAttempts = mode === "remote" ? 5 : 1;
   let lastResult = null;

@@ -69,6 +69,16 @@ export function hrListResponse<T>(rows: T[]) {
   return { ok: true as const, success: true as const, data: rows, items: rows };
 }
 
+export function mergeDailyRosterIds(
+  savedIds: string[],
+  workedIds: string[],
+  knownIds: string[],
+) {
+  const known = new Set(knownIds.filter(Boolean));
+  return [...new Set([...savedIds, ...workedIds])]
+    .filter((employeeId) => employeeId && known.has(employeeId));
+}
+
 function okData(c: Context<AppEnv>, data: unknown, status: 200 | 201 = 200) {
   return c.json({ ok: true, success: true, data }, status);
 }
@@ -322,8 +332,11 @@ async function focusedDailyRoster(c: Context<AppEnv>) {
     .filter((row) => row.dayShift || row.nightShift)
     .map((row) => text(row.employeeId))
     .filter(Boolean);
-  const activeIds = people.filter((row) => row.active !== false).map((row) => text(row.id));
-  const employeeIds = [...new Set([...(savedIds.length ? savedIds : activeIds), ...workedIds])];
+  const employeeIds = mergeDailyRosterIds(
+    savedIds,
+    workedIds,
+    people.map((row) => text(row.id)),
+  );
   return okDataItems(c, { startDate, endDate, employeeIds }, employeeIds);
 }
 

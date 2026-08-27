@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { hash } from "bcryptjs";
 
 const PORT = 8789;
@@ -7,7 +8,8 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const CONFIG = "wrangler.production-local.jsonc";
 const DATABASE = "ky-erp-production-local";
 const IS_WINDOWS = process.platform === "win32";
-const TEST_USERS = ["smoke-password", "smoke-owner", "smoke-mfa", "smoke-both", "smoke-cross"];
+const WRANGLER_BIN = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
+const TEST_USERS = ["smoke-password", "smoke-owner", "smoke-mfa", "smoke-both", "smoke-cross", "smoke-approval"];
 const GOOGLE_SECRET = "JBSWY3DPEHPK3PXP";
 const MICROSOFT_SECRET = "KRSXG5DSNFXGOIDB";
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -17,10 +19,9 @@ function sqlQuote(value) {
 }
 
 function runSql(sql) {
-  const command = IS_WINDOWS ? "npx.cmd" : "npx";
   const result = spawnSync(
-    command,
-    ["wrangler", "d1", "execute", DATABASE, "--local", "--config", CONFIG, "--command", sql, "--json"],
+    process.execPath,
+    [WRANGLER_BIN, "d1", "execute", DATABASE, "--local", "--config", CONFIG, "--command", sql, "--json"],
     { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 45_000 },
   );
   if (result.error) throw result.error;
@@ -137,7 +138,8 @@ runSql(`
     ('smoke-owner','smoke-owner',${sqlQuote(passwordHash)},'Smoke Owner','ADMIN',1,0,${sqlQuote(now)},${sqlQuote(now)}),
     ('smoke-mfa','smoke-mfa',${sqlQuote(passwordHash)},'Smoke MFA','VIEWER',1,0,${sqlQuote(now)},${sqlQuote(now)}),
     ('smoke-both','smoke-both',${sqlQuote(passwordHash)},'Smoke Both','VIEWER',1,0,${sqlQuote(now)},${sqlQuote(now)}),
-    ('smoke-cross','smoke-cross',${sqlQuote(passwordHash)},'Smoke Cross','VIEWER',1,0,${sqlQuote(now)},${sqlQuote(now)});
+    ('smoke-cross','smoke-cross',${sqlQuote(passwordHash)},'Smoke Cross','VIEWER',1,0,${sqlQuote(now)},${sqlQuote(now)}),
+    ('smoke-approval','smoke-approval',${sqlQuote(passwordHash)},'Smoke Approval','VIEWER',1,0,${sqlQuote(now)},${sqlQuote(now)});
 
   INSERT INTO auth_user_security(
     user_id,email,main_company_slug,role_override,mfa_enabled,email_verified,approval_required,
@@ -146,16 +148,16 @@ runSql(`
     created_at,updated_at
   ) VALUES
     ('smoke-password','smoke-password@example.test','mecit-hakan',NULL,0,0,0,NULL,0,NULL,0,0,'PASSWORD_ONLY',86400,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)}),
-    ('smoke-owner','smoke-owner@example.test','mecit-hakan','SUPER_ADMIN',0,0,0,NULL,0,NULL,0,0,'PASSWORD_ONLY',86400,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)}),
+    ('smoke-owner','smoke-owner@example.test','mecit-hakan','SUPER_ADMIN',0,0,0,${sqlQuote(GOOGLE_SECRET)},1,NULL,0,0,'PASSWORD_ONLY',86400,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)}),
     ('smoke-mfa','smoke-mfa@example.test','mecit-hakan',NULL,0,0,0,NULL,0,NULL,0,0,'ANY_MFA',28800,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)}),
     ('smoke-both','smoke-both@example.test','mecit-hakan',NULL,0,0,0,${sqlQuote(GOOGLE_SECRET)},1,${sqlQuote(MICROSOFT_SECRET)},1,0,'BOTH_MFA',7200,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)}),
-    ('smoke-cross','smoke-cross@example.test','mecit-hakan',NULL,0,0,0,${sqlQuote(GOOGLE_SECRET)},1,${sqlQuote(MICROSOFT_SECRET)},1,0,'ANY_MFA',14400,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)});
+    ('smoke-cross','smoke-cross@example.test','mecit-hakan',NULL,0,0,0,${sqlQuote(GOOGLE_SECRET)},1,${sqlQuote(MICROSOFT_SECRET)},1,0,'ANY_MFA',14400,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)}),
+    ('smoke-approval','smoke-approval@example.test','mecit-hakan',NULL,0,0,1,NULL,0,NULL,0,0,'PASSWORD_ONLY',1800,NULL,0,0,${sqlQuote(now)},${sqlQuote(now)});
 `);
 
-const command = IS_WINDOWS ? "npx.cmd" : "npx";
 const child = spawn(
-  command,
-  ["wrangler", "dev", "--local", "--config", CONFIG, "--ip", "127.0.0.1", "--port", String(PORT)],
+  process.execPath,
+  [WRANGLER_BIN, "dev", "--local", "--config", CONFIG, "--ip", "127.0.0.1", "--port", String(PORT)],
   {
     cwd: process.cwd(),
     env: { ...process.env },
@@ -178,7 +180,19 @@ hardStop.unref();
 try {
   await waitForServer(child);
 
-  const passwordOnly = await request("/api/auth/v2/login", {
+  const unknownUser = await request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "smoke-missing", password, deviceLabel: "Auth Smoke" }),
+  });
+  assert(unknownUser.status === 401, "Bilinmeyen kullanıcı kesin 401 dönmeli", unknownUser);
+
+  const wrongPassword = await request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "smoke-password", password: `${password}-wrong`, deviceLabel: "Auth Smoke" }),
+  });
+  assert(wrongPassword.status === 401, "Doğru kullanıcı ve yanlış parola kesin 401 dönmeli", wrongPassword);
+
+  const passwordOnly = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "smoke-password", password, deviceLabel: "Auth Smoke" }),
   });
@@ -195,21 +209,62 @@ try {
   });
   assert(me.status === 200 && me.body?.ok === true, "Yeni policy tokenı legacy /auth/me ile uyumlu olmalı", me);
 
+  const meAgain = await request("/api/auth/me", {
+    headers: { Authorization: `Bearer ${passwordOnly.body.token}` },
+  });
+  assert(meAgain.status === 200 && meAgain.body?.ok === true, "Aynı token ile ikinci /auth/me 200 olmalı", meAgain);
+
   const forbiddenPolicies = await request("/api/admin/security/policies", {
     headers: { Authorization: `Bearer ${passwordOnly.body.token}` },
   });
   assert(forbiddenPolicies.status === 403, "Normal kullanıcı owner policy endpointine erişememeli", forbiddenPolicies);
 
-  const owner = await request("/api/auth/v2/login", {
+  const logout = await request("/api/auth/logout", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${passwordOnly.body.token}` },
+  });
+  assert(logout.status === 200 && logout.body?.ok === true, "Logout sunucu session'ını iptal etmeli", logout);
+  const meAfterLogout = await request("/api/auth/me", {
+    headers: { Authorization: `Bearer ${passwordOnly.body.token}` },
+  });
+  assert(meAfterLogout.status === 401, "Logout sonrası aynı token ile /auth/me 401 olmalı", meAfterLogout);
+
+  const approvalLogin = await request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "smoke-approval", password, deviceLabel: "Approval Smoke" }),
+  });
+  assert(approvalLogin.status === 200 && approvalLogin.body?.stage === "APPROVAL_PENDING", "Onay zorunlu kullanıcı APPROVAL_PENDING olmalı", approvalLogin);
+  runSql(`UPDATE auth_login_approvals SET status='APPROVED',decided_at=${sqlQuote(now)},decided_by='smoke-owner' WHERE id=${sqlQuote(approvalLogin.body.approvalId)};`);
+  const approvalBody = JSON.stringify({ approvalToken: approvalLogin.body.approvalToken });
+  const approvalAttempts = await Promise.all([
+    request(`/api/auth/approval/${approvalLogin.body.approvalId}/status`, { method: "POST", body: approvalBody }),
+    request(`/api/auth/approval/${approvalLogin.body.approvalId}/status`, { method: "POST", body: approvalBody }),
+  ]);
+  const approvalAuthenticated = approvalAttempts.filter((result) => result.status === 200 && result.body?.stage === "AUTHENTICATED");
+  const approvalConsumed = approvalAttempts.filter((result) => result.status === 409 && result.body?.error?.code === "APPROVAL_CONSUMED");
+  assert(approvalAuthenticated.length === 1, "Eşzamanlı iki onay isteğinden yalnız biri oturum açmalı", approvalAttempts);
+  assert(approvalConsumed.length === 1, "Eşzamanlı ikinci onay isteği APPROVAL_CONSUMED dönmeli", approvalAttempts);
+
+  const owner = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "smoke-owner", password, deviceLabel: "Owner Smoke" }),
   });
   assert(owner.status === 200, "Owner login ilk aşaması HTTP 200 olmalı", owner);
-  assert(owner.body?.stage === "MFA_SETUP", "Owner DB'de PASSWORD_ONLY yazsa bile MFA_SETUP'a zorlanmalı", owner.body);
-  assert(owner.body?.provider === "GOOGLE", "Owner ilk modern MFA kurulumu Google olmalı", owner.body);
+  assert(owner.body?.stage === "MFA_REQUIRED", "Owner DB'de PASSWORD_ONLY yazsa bile MFA zorunlu olmalı", owner.body);
   assert(!owner.body?.token, "Owner MFA olmadan token alamamalı", owner.body);
+  const ownerVerified = await request("/api/auth/mfa/verify", {
+    method: "POST",
+    body: JSON.stringify({
+      challengeId: owner.body.challengeId,
+      challengeToken: owner.body.challengeToken,
+      provider: "GOOGLE",
+      code: totp(GOOGLE_SECRET),
+    }),
+  });
+  assert(ownerVerified.status === 200 && ownerVerified.body?.stage === "AUTHENTICATED", "Admin MFA sonrası oturum açmalı", ownerVerified);
+  assert(ownerVerified.body?.user?.role === "SUPER_ADMIN", "Admin rolü korunmalı", ownerVerified.body);
 
-  const mfaSetup = await request("/api/auth/v2/login", {
+  const mfaSetup = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "smoke-mfa", password, deviceLabel: "MFA Smoke" }),
   });
@@ -217,7 +272,7 @@ try {
   assert(/^otpauth:\/\/totp\//.test(String(mfaSetup.body?.otpauthUri || "")), "MFA_SETUP geçerli otpauth URI üretmeli", mfaSetup.body);
   assert(Boolean(mfaSetup.body?.secret), "MFA_SETUP yalnız kurulum aşamasında secret döndürmeli", mfaSetup.body);
 
-  const mfaSetupVerify = await request("/api/auth/v2/mfa/verify", {
+  const mfaSetupVerify = await request("/api/auth/mfa/verify", {
     method: "POST",
     body: JSON.stringify({
       challengeId: mfaSetup.body.challengeId,
@@ -229,14 +284,14 @@ try {
   assert(mfaSetupVerify.status === 200 && mfaSetupVerify.body?.stage === "AUTHENTICATED", "Yeni Google kurulumu gerçek TOTP ile doğrulanıp oturum açmalı", mfaSetupVerify);
   assert(mfaSetupVerify.body?.expiresIn === 28800, "ANY_MFA seçili 8 saat TTL uygulamalı", mfaSetupVerify.body);
 
-  const bothLogin = await request("/api/auth/v2/login", {
+  const bothLogin = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "smoke-both", password, deviceLabel: "Both Smoke" }),
   });
   assert(bothLogin.status === 200 && bothLogin.body?.stage === "MFA_REQUIRED", "BOTH_MFA iki kod istemeli", bothLogin);
   assert(bothLogin.body?.requireBoth === true, "BOTH_MFA requireBoth=true dönmeli", bothLogin.body);
 
-  const bothGoogle = await request("/api/auth/v2/mfa/verify", {
+  const bothGoogle = await request("/api/auth/mfa/verify", {
     method: "POST",
     body: JSON.stringify({
       challengeId: bothLogin.body.challengeId,
@@ -249,7 +304,7 @@ try {
   assert(Array.isArray(bothGoogle.body?.verifiedProviders) && bothGoogle.body.verifiedProviders.includes("GOOGLE"), "Google doğrulaması challenge üzerinde tutulmalı", bothGoogle.body);
   assert(!bothGoogle.body?.token, "Tek BOTH_MFA koduyla token verilmemeli", bothGoogle.body);
 
-  const bothMicrosoft = await request("/api/auth/v2/mfa/verify", {
+  const bothMicrosoft = await request("/api/auth/mfa/verify", {
     method: "POST",
     body: JSON.stringify({
       challengeId: bothLogin.body.challengeId,
@@ -263,13 +318,13 @@ try {
   const bothPayload = decodePayload(bothMicrosoft.body.token);
   assert(bothPayload.exp - bothPayload.iat === 7200, "BOTH_MFA JWT TTL 7200 saniye olmalı", bothPayload);
 
-  const crossLogin = await request("/api/auth/v2/login", {
+  const crossLogin = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username: "smoke-cross", password, deviceLabel: "Cross Smoke" }),
   });
   assert(crossLogin.status === 200 && crossLogin.body?.stage === "MFA_REQUIRED", "Çapraz kurtarma hesabı MFA_REQUIRED olmalı", crossLogin);
 
-  const crossReset = await request("/api/auth/v2/mfa/verify", {
+  const crossReset = await request("/api/auth/mfa/verify", {
     method: "POST",
     body: JSON.stringify({
       challengeId: crossLogin.body.challengeId,
@@ -283,7 +338,7 @@ try {
   assert(crossReset.body?.provider === "GOOGLE", "Çapraz kurtarmada resetProvider Google olmalı", crossReset.body);
   assert(Boolean(crossReset.body?.secret), "Çapraz kurtarma yeni Google secret üretmeli", crossReset.body);
 
-  const crossSetupVerify = await request("/api/auth/v2/mfa/verify", {
+  const crossSetupVerify = await request("/api/auth/mfa/verify", {
     method: "POST",
     body: JSON.stringify({
       challengeId: crossReset.body.challengeId,
@@ -300,6 +355,7 @@ try {
     passwordOnlyTtl: passwordOnly.body.expiresIn,
     ownerStage: owner.body.stage,
     enrollmentStage: mfaSetupVerify.body.stage,
+    concurrentApproval: `${approvalAuthenticated.length} authenticated / ${approvalConsumed.length} consumed`,
     bothMfaTtl: bothMicrosoft.body.expiresIn,
     crossProviderReset: `${crossReset.body.provider}->${crossSetupVerify.body.stage}`,
   }, null, 2));

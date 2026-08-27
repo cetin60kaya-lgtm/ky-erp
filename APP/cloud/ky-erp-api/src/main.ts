@@ -4,7 +4,6 @@ import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
-import { registerAuthPolicyCompatRoutes } from "./auth-policy-compat";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
@@ -26,7 +25,6 @@ import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
-import { registerIkDailyRosterFixRoutes } from "./ik-daily-roster-fix";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
@@ -93,11 +91,16 @@ registerIsnetCloudRoutes(app);
 registerIkPersonnelControlRoutes(app);
 // Günlük personel roster'ı açık seçimdir. Boş tarih aralığı tüm aktif havuza dönüşmez;
 // yalnız kaydedilmiş roster + gerçekten çalışılmış personel korunur.
-registerIkDailyRosterFixRoutes(app);
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 
 const shell = new Hono<ShellEnv>();
+
+shell.use("/api/*", async (c, next) => {
+  c.set("requestId", c.get("requestId") || crypto.randomUUID());
+  c.header("X-Request-Id", c.get("requestId"));
+  await next();
+});
 
 shell.use(
   "/api/*",
@@ -154,8 +157,26 @@ shell.use("/api/*", async (c, next) => {
 
 registerAuthRecoveryCodeFallbackRoutes(shell);
 registerAuthOwnerGuardRoutes(shell);
-registerAuthPolicyCompatRoutes(shell);
 registerAuthPolicyRoutes(shell);
 shell.route("/", app);
+
+shell.onError((error, c) => {
+  const requestId = c.get("requestId") || crypto.randomUUID();
+  console.error(JSON.stringify({
+    level: "error",
+    requestId,
+    method: c.req.method,
+    path: c.req.path,
+    message: error instanceof Error ? error.message : String(error),
+  }));
+  return c.json({
+    ok: false,
+    error: {
+      code: "INTERNAL_ERROR",
+      message: "Beklenmeyen bir sunucu hatası oluştu.",
+      requestId,
+    },
+  }, 500);
+});
 
 export default shell;

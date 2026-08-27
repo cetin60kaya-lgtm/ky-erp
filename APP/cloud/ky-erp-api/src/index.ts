@@ -1,6 +1,6 @@
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
-import { registerAuthCloudRoutes } from "./auth-cloud";
+import { registerAuthManagementRoutes } from "./auth-cloud";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -29,7 +29,7 @@ const jsonError = (code: string, message: string, details?: unknown) => ({
 });
 
 app.use("/api/*", async (c, next) => {
-  c.set("requestId", crypto.randomUUID());
+  if (!c.get("requestId")) c.set("requestId", crypto.randomUUID());
   await next();
 });
 
@@ -55,7 +55,9 @@ app.onError((error, c) => {
     }),
   );
   return c.json(
-    jsonError("INTERNAL_ERROR", "Beklenmeyen bir sunucu hatası oluştu."),
+    jsonError("INTERNAL_ERROR", "Beklenmeyen bir sunucu hatası oluştu.", {
+      requestId: c.get("requestId"),
+    }),
     500,
   );
 });
@@ -2486,6 +2488,6 @@ app.get("/api/files/*", async (c) => {
   return new Response(object.body, { headers });
 });
 
-registerAuthCloudRoutes(app);
+registerAuthManagementRoutes(app);
 
 export default app;

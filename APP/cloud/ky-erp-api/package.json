@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",
-    "test:auth:integration": "node scripts/auth-integration-test.mjs",
+    "test:auth:integration": "node scripts/auth-policy-runtime-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/pages-domain-preflight.mjs && wrangler deploy --dry-run",
     "dev": "wrangler dev --remote",

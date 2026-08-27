@@ -49,6 +49,19 @@ function userAgent(c: any) {
 function deviceLabel(c: any, body: AnyRow = {}) {
   return text(body.deviceLabel || c.req.header("X-KYERP-Device") || userAgent(c)).slice(0, 180);
 }
+function requestId(c: any) {
+  return text(c.get?.("requestId")) || "unknown";
+}
+function logAuthError(c: any, phase: string, error: unknown, detail: AnyRow = {}) {
+  console.error(JSON.stringify({
+    level: "error",
+    requestId: requestId(c),
+    phase,
+    path: c.req.path,
+    message: error instanceof Error ? error.message : String(error),
+    ...detail,
+  }));
+}
 async function bodyOf(c: any) {
   try {
     const body = await c.req.json();
@@ -311,11 +324,15 @@ async function publicUser(c: any, user: AnyRow) {
   };
 }
 async function audit(c: any, action: string, actorUserId = "", targetUserId = "", companySlug = "", sessionId = "", detail: AnyRow = {}) {
-  if (!(await tableExists(c, "auth_security_audit"))) return;
-  await c.env.DB.prepare(
-    `INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-  ).bind(crypto.randomUUID(), actorUserId || null, targetUserId || null, companySlug || null, action, sessionId || null, clientIp(c) || null, JSON.stringify(detail || {}), nowIso()).run();
+  try {
+    if (!(await tableExists(c, "auth_security_audit"))) return;
+    await c.env.DB.prepare(
+      `INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).bind(crypto.randomUUID(), actorUserId || null, targetUserId || null, companySlug || null, action, sessionId || null, clientIp(c) || null, JSON.stringify(detail || {}), nowIso()).run();
+  } catch (error) {
+    logAuthError(c, "AUTH_AUDIT_WRITE", error, { action, targetUserId });
+  }
 }
 
 async function sessionSecret(c: any) {
@@ -362,7 +379,11 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
     text(source.ipAddress || source.ip_address || clientIp(c)), timestamp, timestamp, expiresAt, timestamp,
     text(source.approvalRequestId || source.approval_request_id) || null,
   ).run();
-  await c.env.DB.prepare("UPDATE auth_users SET last_login_at=?,updated_at=? WHERE id=?").bind(timestamp, timestamp, user.id).run();
+  try {
+    await c.env.DB.prepare("UPDATE auth_users SET last_login_at=?,updated_at=? WHERE id=?").bind(timestamp, timestamp, user.id).run();
+  } catch (error) {
+    logAuthError(c, "AUTH_LAST_LOGIN_WRITE", error, { userId: user.id, sessionId: sid });
+  }
   await audit(c, "SESSION_CREATED_POLICY", user.id, user.id, text(security.main_company_slug), sid, { policy, ttl, expiresAt });
   return { ok: true, stage: "AUTHENTICATED", token, expiresIn: ttl, expiresAt, user: await publicUser(c, security) };
 }
@@ -379,12 +400,17 @@ async function createChallenge(c: any, user: AnyRow, type: string, source: AnyRo
   const challengeToken = randomToken(24);
   const timestamp = nowIso();
   const resolved = challengeSource(c, source);
-  await c.env.DB.prepare(
-    `INSERT INTO auth_login_challenges
-     (id,user_id,challenge_type,challenge_token_hash,device_label,user_agent,ip_address,created_at,expires_at,policy_snapshot,session_seconds_snapshot,google_verified_at,microsoft_verified_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).bind(id, user.id, type, await sha256(challengeToken), resolved.deviceLabel, resolved.userAgent, resolved.ipAddress,
-    timestamp, addSeconds(CHALLENGE_SECONDS), policy || null, ttl || null, null, null).run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO auth_login_challenges
+       (id,user_id,challenge_type,challenge_token_hash,device_label,user_agent,ip_address,created_at,expires_at,policy_snapshot,session_seconds_snapshot,google_verified_at,microsoft_verified_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).bind(id, user.id, type, await sha256(challengeToken), resolved.deviceLabel, resolved.userAgent, resolved.ipAddress,
+      timestamp, addSeconds(CHALLENGE_SECONDS), policy || null, ttl || null, null, null).run();
+  } catch (error) {
+    logAuthError(c, "AUTH_CHALLENGE_INSERT", error, { userId: user.id, challengeType: type });
+    throw error;
+  }
   return { id, challengeToken, ...resolved };
 }
 async function challengeFromRequest(c: any, body: AnyRow) {
@@ -460,6 +486,18 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}) {
   const ttl = effectiveSessionSeconds(refreshed || user, role);
   const available = enabledProviders(refreshed || user);
   const ownerRecovery = isSuper(role) ? await ownerRecoveryReadiness(c, refreshed || user) : { ready: false };
+
+  if (Boolean(refreshed?.mfa_enabled) && text(refreshed?.mfa_secret) && !available.length) {
+    const challenge = await createChallenge(c, refreshed || user, "POLICY_MFA_LEGACY_REQUIRED", source, policy, ttl);
+    return {
+      ok: true,
+      stage: "MFA_LEGACY_REQUIRED",
+      challengeId: challenge.id,
+      challengeToken: challenge.challengeToken,
+      challengeExpiresAt: addSeconds(CHALLENGE_SECONDS),
+      message: "Mevcut Authenticator kodunuzu doğrulayın. Ardından güvenli MFA kaydınız korunarak güncellenecektir.",
+    };
+  }
 
   if (policy === "PASSWORD_ONLY") {
     await audit(c, "PASSWORD_ONLY_LOGIN_ACCEPTED", user.id, user.id, text(refreshed?.main_company_slug), "", { ttl });
@@ -594,7 +632,7 @@ async function updateOwnerRecoveryEnabled(c: any, userId: string) {
 }
 
 export function registerAuthPolicyRoutes(app: any) {
-  app.post("/api/auth/v2/login", async (c: any) => {
+  app.post("/api/auth/login", async (c: any) => {
     const body = await bodyOf(c);
     const identity = text(body.username || body.email);
     const password = text(body.password);
@@ -609,13 +647,21 @@ export function registerAuthPolicyRoutes(app: any) {
     return c.json(await beginPolicyLogin(c, user, { deviceLabel: deviceLabel(c, body), userAgent: userAgent(c), ipAddress: clientIp(c) }));
   });
 
-  app.post("/api/auth/v2/mfa/verify", async (c: any) => {
+  app.post("/api/auth/mfa/verify", async (c: any) => {
     const body = await bodyOf(c);
     const challenge = await challengeFromRequest(c, body);
     if (!challenge) return c.json(jsonError("MFA_CHALLENGE_INVALID", "Doğrulama isteği geçersiz veya süresi dolmuş."), 401);
     const user = await userById(c, text(challenge.user_id));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     const type = text(challenge.challenge_type);
+    if (type === "POLICY_MFA_LEGACY_REQUIRED") {
+      if (!(await verifyTotp(text(user.mfa_secret), body.code))) {
+        return c.json(jsonError("MFA_CODE_INVALID", "Mevcut Authenticator kodu doğrulanamadı."), 401);
+      }
+      await consumeChallenge(c, challenge);
+      await audit(c, "MFA_LEGACY_VERIFIED_POLICY", user.id, user.id, text(user.main_company_slug));
+      return c.json(await beginProviderSetup(c, user, "GOOGLE", challenge));
+    }
     const setupMatch = type.match(/^(POLICY|OWNER_RECOVERY)_MFA_SETUP_(GOOGLE|MICROSOFT)$/);
     if (setupMatch) {
       const prefix = setupMatch[1];
@@ -624,6 +670,7 @@ export function registerAuthPolicyRoutes(app: any) {
       const timestamp = nowIso();
       if (provider === "MICROSOFT") await c.env.DB.prepare("UPDATE auth_user_security SET microsoft_mfa_enabled=1,updated_at=? WHERE user_id=?").bind(timestamp, user.id).run();
       else await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_enabled=1,updated_at=? WHERE user_id=?").bind(timestamp, user.id).run();
+      await c.env.DB.prepare("UPDATE auth_user_security SET mfa_secret=NULL,mfa_enabled=0,updated_at=? WHERE user_id=?").bind(timestamp, user.id).run();
       await consumeChallenge(c, challenge);
       await audit(c, "MFA_PROVIDER_ENABLED_POLICY", user.id, user.id, text(user.main_company_slug), "", { provider, prefix });
       const refreshed = await userById(c, user.id);
@@ -675,7 +722,7 @@ export function registerAuthPolicyRoutes(app: any) {
     return c.json(await afterFactors(c, user, challenge));
   });
 
-  app.post("/api/auth/v2/approval/:id/status", async (c: any) => {
+  app.post("/api/auth/approval/:id/status", async (c: any) => {
     const body = await bodyOf(c);
     const approval = await c.env.DB.prepare("SELECT * FROM auth_login_approvals WHERE id=? LIMIT 1").bind(text(c.req.param("id"))).first<AnyRow>();
     if (!approval || !safeEqual(text(approval.approval_token_hash), await sha256(text(body.approvalToken)))) return c.json(jsonError("APPROVAL_INVALID", "Giriş onayı bulunamadı."), 401);
@@ -683,10 +730,25 @@ export function registerAuthPolicyRoutes(app: any) {
     if (approval.status === "DENIED") return c.json({ ok: true, stage: "APPROVAL_DENIED", message: "Giriş isteği reddedildi." });
     if (approval.status !== "APPROVED") return c.json({ ok: true, stage: "APPROVAL_PENDING", approvalId: approval.id, approvalToken: text(body.approvalToken), approvalExpiresAt: approval.expires_at });
     if (approval.consumed_at) return c.json(jsonError("APPROVAL_CONSUMED", "Bu giriş onayı daha önce kullanıldı."), 409);
-    await c.env.DB.prepare("UPDATE auth_login_approvals SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(nowIso(), approval.id).run();
     const user = await userById(c, text(approval.user_id));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
-    return c.json(await issueSession(c, user, { ...approval, approvalRequestId: approval.id }));
+    const claimedAt = nowIso();
+    const claim = await c.env.DB.prepare(
+      "UPDATE auth_login_approvals SET consumed_at=? WHERE id=? AND status='APPROVED' AND consumed_at IS NULL",
+    ).bind(claimedAt, approval.id).run();
+    if (!Number(claim?.meta?.changes)) return c.json(jsonError("APPROVAL_CONSUMED", "Bu giriş onayı daha önce kullanıldı."), 409);
+    try {
+      return c.json(await issueSession(c, user, { ...approval, approvalRequestId: approval.id }));
+    } catch (error) {
+      try {
+        await c.env.DB.prepare("UPDATE auth_login_approvals SET consumed_at=NULL WHERE id=? AND consumed_at=?")
+          .bind(approval.id, claimedAt).run();
+      } catch (rollbackError) {
+        logAuthError(c, "AUTH_APPROVAL_CLAIM_ROLLBACK", rollbackError, { approvalId: approval.id, userId: user.id });
+      }
+      logAuthError(c, "AUTH_APPROVAL_SESSION", error, { approvalId: approval.id, userId: user.id });
+      throw error;
+    }
   });
 
   app.get("/api/admin/security/policies", async (c: any) => {
@@ -818,7 +880,7 @@ export function registerAuthPolicyRoutes(app: any) {
     return c.json({ ok: true, data: { verified: true, recoveryEnabled: enabled } });
   });
 
-  app.post("/api/auth/v2/owner-recovery/start", async (c: any) => {
+  app.post("/api/auth/owner-recovery/start", async (c: any) => {
     const body = await bodyOf(c);
     const loginChallenge = await challengeFromRequest(c, body);
     if (!loginChallenge || text(loginChallenge.challenge_type) !== "POLICY_MFA_REQUIRED") return c.json(jsonError("LOGIN_CHALLENGE_INVALID", "Önce kullanıcı adı ve şifrenizi doğrulayın."), 401);
@@ -842,7 +904,7 @@ export function registerAuthPolicyRoutes(app: any) {
     }
   });
 
-  app.post("/api/auth/v2/owner-recovery/verify", async (c: any) => {
+  app.post("/api/auth/owner-recovery/verify", async (c: any) => {
     const body = await bodyOf(c);
     const recovery = await recoveryChallengeFromBody(c, body);
     if (!recovery || recovery.purpose !== "OWNER_ACCOUNT_RECOVERY") return c.json(jsonError("RECOVERY_CHALLENGE_INVALID", "Kurtarma isteği geçersiz veya süresi dolmuş."), 401);

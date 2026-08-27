@@ -1,9 +1,9 @@
 import { useCallback, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { setApiAuthHandlers } from "../utils/api";
+import { API_BASE, setApiAuthHandlers } from "../utils/api";
+import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
-const DIRECT_AUTH_BASE = "https://api.kyerp.net/api";
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
@@ -63,12 +63,6 @@ function authErrorMessage(status, payload) {
   return "Giriş işlemi tamamlanamadı.";
 }
 
-function isTransientLoginError(error) {
-  const status = Number(error?.status || 0);
-  return [0, 500, 502, 503, 504].includes(status) ||
-    ["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || ""));
-}
-
 async function directAuthRequest(path, options = {}) {
   const {
     method = "POST",
@@ -79,7 +73,7 @@ async function directAuthRequest(path, options = {}) {
   const normalizedPath = String(path || "").startsWith("/")
     ? String(path || "")
     : `/${String(path || "")}`;
-  const requestUrl = `${DIRECT_AUTH_BASE}${normalizedPath}`;
+  const requestUrl = `${API_BASE}${normalizedPath}`;
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
@@ -258,7 +252,7 @@ export function AuthProvider({ children }) {
       } catch (error) {
         if (cancelled) return;
         const status = Number(error?.status || 0);
-        if (status === 401 || status === 403) {
+        if (shouldClearStoredAuthForStatus(status)) {
           clearAuth();
         } else if (isTokenUsable(token) && snapshot.user) {
           saveAuth(token, snapshot.user, snapshot.permissions);
@@ -287,23 +281,12 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("storage", syncFromStorage);
   }, []);
 
-  // Stabil interaktif giriş motoru: eski auth rotası aynı 8 saatlik imzalı oturumu,
-  // Google/Microsoft MFA'yı ve sunucu tarafı session tablosunu kullanır; yeni policy
-  // challenge şemasındaki geçici 5xx hatalarını login yolundan çıkarır.
+  // Tek canonical giriş isteği sunucudaki parola, MFA ve oturum politikasını başlatır.
+  // POST isteği otomatik tekrarlanmaz; kullanıcı bilinçli olarak yeniden deneyebilir.
   const login = useCallback(async (identity, password, deviceLabel = "") => {
     const body = { username: identity, password, deviceLabel };
-    let lastError;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await directAuthRequest("/auth/login", { body });
-        return finalizeResponse(response);
-      } catch (error) {
-        lastError = error;
-        if (!isTransientLoginError(error) || attempt === 1) throw error;
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
-      }
-    }
-    throw lastError;
+    const response = await directAuthRequest("/auth/login", { body });
+    return finalizeResponse(response);
   }, [finalizeResponse]);
 
   const verifyMfa = useCallback(async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
@@ -314,24 +297,17 @@ export function AuthProvider({ children }) {
   }, [finalizeResponse]);
 
   const recoverMfa = useCallback(async ({ challengeId, challengeToken, recoveryCode }) => {
-    const response = await directAuthRequest("/auth/mfa/recovery", {
+    const response = await directAuthRequest("/auth/recovery-code", {
       body: { challengeId, challengeToken, recoveryCode },
     });
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
-  const acknowledgeRecoveryCodes = useCallback(async ({ challengeId, challengeToken }) => {
-    const response = await directAuthRequest("/auth/mfa/recovery/ack", {
-      body: { challengeId, challengeToken },
-    });
-    return finalizeResponse(response);
-  }, [finalizeResponse]);
-
-  const startOwnerRecovery = useCallback(async ({ challengeId, challengeToken, channel }) => directAuthRequest("/auth/v2/owner-recovery/start", {
+  const startOwnerRecovery = useCallback(async ({ challengeId, challengeToken, channel }) => directAuthRequest("/auth/owner-recovery/start", {
     body: { challengeId, challengeToken, channel },
   }), []);
 
-  const verifyOwnerRecovery = useCallback(async ({ recoveryId, recoveryToken, otp, answers }) => directAuthRequest("/auth/v2/owner-recovery/verify", {
+  const verifyOwnerRecovery = useCallback(async ({ recoveryId, recoveryToken, otp, answers }) => directAuthRequest("/auth/owner-recovery/verify", {
     body: { recoveryId, recoveryToken, otp, answers },
   }), []);
 
@@ -367,10 +343,10 @@ export function AuthProvider({ children }) {
   }, [permissions, user?.role]);
 
   const value = useMemo(() => ({
-    token, user, permissions, login, verifyMfa, recoverMfa, acknowledgeRecoveryCodes,
+    token, user, permissions, login, verifyMfa, recoverMfa,
     startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can,
     isAuthenticated: Boolean(token && user), loading,
-  }), [token, user, permissions, login, verifyMfa, recoverMfa, acknowledgeRecoveryCodes, startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can, loading]);
+  }), [token, user, permissions, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

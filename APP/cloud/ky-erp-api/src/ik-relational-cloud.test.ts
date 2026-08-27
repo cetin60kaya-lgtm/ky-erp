@@ -4,6 +4,7 @@ import {
   canonicalHrCompanyId,
   hrDateOnly,
   hrListResponse,
+  mergeDailyRosterIds,
   calculateAnnualLeaveRange,
 } from "./ik-relational-cloud.ts";
 
@@ -30,6 +31,17 @@ test("list responses expose both frontend-compatible list keys", () => {
     items: rows,
   });
   assert.equal(response.data, response.items);
+});
+
+test("empty roster never falls back to every active daily employee", () => {
+  assert.deepEqual(mergeDailyRosterIds([], [], ["one", "two", "three"]), []);
+});
+
+test("daily roster keeps explicit and actually worked employees only", () => {
+  assert.deepEqual(
+    mergeDailyRosterIds(["selected", "missing"], ["worked", "selected"], ["selected", "worked", "pool-only"]),
+    ["selected", "worked"],
+  );
 });
 
 

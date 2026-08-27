@@ -1,3 +1,5 @@
+import { shouldClearStoredAuthForStatus } from "../context/authSessionPolicy";
+
 const PRODUCTION_API_ORIGIN = "https://api.kyerp.net";
 const DEFAULT_API_ORIGIN =
   typeof import.meta !== "undefined" && import.meta.env.PROD
@@ -24,13 +26,6 @@ function ensureLeadingSlash(value) {
   return text.startsWith("/") ? text : `/${text}`;
 }
 
-function runtimeOrigin() {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return trimTrailingSlash(window.location.origin);
-  }
-  return "https://kyerp.net";
-}
-
 function normalizeApiBase(value) {
   const clean = trimTrailingSlash(String(value || "").trim());
   if (!clean) return "";
@@ -48,9 +43,7 @@ export function getApiBase() {
       : "";
   const envBase = normalizeApiBase(envBaseRaw);
 
-  // Canlı sistemde asıl taşıma yolu doğrudan API custom domainidir.
-  // Pages /api proxy'si yalnız güvenli GET yedeği olarak tutulur; giriş ve yazma
-  // işlemleri ek bir Worker hop'una girmez.
+  // Canlı sistemin tek canonical taşıma yolu doğrudan API custom domainidir.
   if (isProd) return `${PRODUCTION_API_ORIGIN}/api`;
   return envBase || `${DEFAULT_API_ORIGIN}/api`;
 }
@@ -147,13 +140,6 @@ function attachCompanyToBody(body) {
 export function buildApiUrl(path, params) {
   const withParams = appendParams(path, params);
   return /^https:\/\//i.test(withParams) ? withParams : apiUrl(withParams);
-}
-
-function sameOriginFallbackUrl(requestPath) {
-  const isProd = typeof import.meta !== "undefined" && import.meta.env.PROD;
-  if (!isProd || typeof window === "undefined") return "";
-  const normalized = ensureLeadingSlash(requestPath);
-  return `${runtimeOrigin()}/api${normalized}`;
 }
 
 function createTimeoutSignal(timeoutMs, existingSignal) {
@@ -273,16 +259,9 @@ function isNetworkFailure(error) {
 }
 
 async function fetchTransport(requestUrl, requestPath, method, init) {
-  try {
-    return await fetch(requestUrl, init);
-  } catch (error) {
-    // Yalnız idempotent okumalarda Pages proxy yedeğine düş. Yazma isteklerini
-    // otomatik tekrar göndermeyerek mükerrer kayıt riskini engelle.
-    if (!["GET", "HEAD"].includes(method) || !isNetworkFailure(error)) throw error;
-    const fallbackUrl = sameOriginFallbackUrl(requestPath);
-    if (!fallbackUrl || fallbackUrl === requestUrl) throw error;
-    return fetch(fallbackUrl, init);
-  }
+  void requestPath;
+  void method;
+  return fetch(requestUrl, init);
 }
 
 export async function apiFetch(path, options = {}) {
@@ -330,7 +309,7 @@ export async function apiFetch(path, options = {}) {
     });
 
     const payload = await parseResponsePayload(response, responseType);
-    if (response.status === 401 && !suppressUnauthorized) onUnauthorized?.();
+    if (shouldClearStoredAuthForStatus(response.status) && !suppressUnauthorized) onUnauthorized?.();
 
     if (!response.ok) {
       throw createRequestError(buildApiErrorMessage(response, payload), {
@@ -510,7 +489,7 @@ export async function downloadFile(path, params, fileName = "export.xlsx") {
       cache: "no-store",
       mode: "cors",
     });
-    if (response.status === 401) onUnauthorized?.();
+    if (shouldClearStoredAuthForStatus(response.status)) onUnauthorized?.();
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       let payload = text;
