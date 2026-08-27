@@ -1,7 +1,4 @@
 {
-  "git.autoRepositoryDetection": "subFolders",
-  "git.repositoryScanMaxDepth": 3,
-  "git.scanRepositories": [
-    "TEMP/ky-erp-git-sync"
-  ]
+  "git.autoRepositoryDetection": true,
+  "git.repositoryScanMaxDepth": 2
 }
