@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types --test src/*.test.ts",
-    "test:auth:integration": "node scripts/auth-policy-runtime-smoke.mjs",
+    "test": "npm run test:unit && npm run test:auth:integration",
+    "test:unit": "node --experimental-strip-types --test src/*.test.ts",
+    "test:auth:integration": "wrangler d1 migrations apply ky-erp-production-local --local --config wrangler.production-local.jsonc && node scripts/auth-policy-runtime-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/pages-domain-preflight.mjs && wrangler deploy --dry-run",
     "dev": "wrangler dev --remote",
