@@ -11,8 +11,9 @@ test("frontend auth uses the canonical status handshake and no legacy v2 route",
   assert.doesNotMatch(source, /legacyAuthPath|shouldTryLegacyAuth/);
 });
 
-test("credential and MFA POSTs avoid unnecessary browser preflight headers", () => {
-  assert.match(source, /text\/plain;charset=UTF-8/);
+test("credential and MFA POSTs use canonical application/json transport without custom device headers", () => {
+  assert.match(source, /Content-Type.*application\/json/s);
+  assert.doesNotMatch(source, /text\/plain;charset=UTF-8/);
   assert.doesNotMatch(source, /X-KYERP-Device/);
 });
 
