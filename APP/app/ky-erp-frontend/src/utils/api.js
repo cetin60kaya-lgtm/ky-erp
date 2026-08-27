@@ -1,6 +1,8 @@
 const DEFAULT_API_ORIGIN =
   typeof import.meta !== "undefined" && import.meta.env.PROD
-    ? "https://api.kyerp.net"
+    ? typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://kyerp.net"
     : "http://localhost:8787";
 
 const API_GET_CACHE_TTL_MS = 60 * 1000;
@@ -24,6 +26,13 @@ function ensureLeadingSlash(value) {
   return text.startsWith("/") ? text : `/${text}`;
 }
 
+function runtimeProductionOrigin() {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return trimTrailingSlash(window.location.origin);
+  }
+  return "https://kyerp.net";
+}
+
 export function getApiBase() {
   const envBaseRaw =
     typeof import.meta !== "undefined"
@@ -33,6 +42,23 @@ export function getApiBase() {
         ""
       : "";
   const envBase = trimTrailingSlash(String(envBaseRaw || "").trim());
+  const isProd = typeof import.meta !== "undefined" && import.meta.env.PROD;
+
+  // Production'da tarayıcı API'ye aynı origin üzerinden gider. Cloudflare Pages
+  // _worker.js /api isteklerini api.kyerp.net'e proxy'ler. Böylece CORS/DNS/HTTP3
+  // kaynaklı tarayıcıya özel kopmalar login dahil tüm modülleri kilitlemez.
+  if (isProd) {
+    const runtimeOrigin = runtimeProductionOrigin();
+    if (
+      !envBase ||
+      envBase === "/" ||
+      envBase === "." ||
+      /^(?:https:\/\/)?api\.kyerp\.net(?:\/api)?$/i.test(envBase)
+    ) {
+      return `${runtimeOrigin}/api`;
+    }
+  }
+
   if (!envBase || envBase === "/" || envBase === ".") {
     return `${DEFAULT_API_ORIGIN}/api`;
   }
@@ -257,7 +283,8 @@ function statusMessage(status) {
   if (status === 413) return "Gönderilen dosya izin verilen boyutu aşıyor.";
   if (status === 422) return "Bilgiler doğrulanamadı. Zorunlu alanları kontrol edin.";
   if (status === 429) return "Çok fazla işlem yapıldı. Kısa bir süre sonra tekrar deneyin.";
-  if (status >= 500) return "Sunucu işlemi tamamlayamadı. Biraz sonra tekrar deneyin.";
+  if ([502, 503, 504].includes(status)) return "KY ERP API geçici olarak yanıt veremedi. İstek güvenli biçimde durduruldu; tekrar deneyin.";
+  if (status >= 500) return "KY ERP sunucusunda geçici bir işlem hatası oluştu. Tekrar deneyin.";
   return "İşlem tamamlanamadı. Tekrar deneyin.";
 }
 
@@ -360,7 +387,7 @@ export async function apiFetch(path, options = {}) {
       if (error.requestPath) throw error;
       if (error.name === "AbortError" && didTimeout()) {
         throw createRequestError(
-          "Sunucu zamanında yanıt vermedi. Bağlantıyı kontrol edip tekrar deneyin.",
+          "Sunucu zamanında yanıt vermedi. İstek iptal edildi; tekrar deneyin.",
           { code: "REQUEST_TIMEOUT", method, requestPath, requestUrl },
         );
       }
@@ -369,7 +396,7 @@ export async function apiFetch(path, options = {}) {
         /fetch|network|failed|connection|load/i.test(String(error.message || ""))
       ) {
         throw createRequestError(
-          "KY ERP sunucusuna bağlanılamadı. Yerel kontrolde API penceresinin açık olduğunu doğrulayın.",
+          "KY ERP API bağlantısı geçici olarak kurulamadı. Bağlantı yeniden geldiğinde işlemi tekrar deneyin.",
           {
             code: "NETWORK_ERROR",
             method,
@@ -408,12 +435,24 @@ export async function apiGet(path, params, options = {}) {
   if (apiGetInFlight.has(url)) return apiGetInFlight.get(url);
 
   const requestPromise = (async () => {
-    const payload = await apiFetch(path, {
-      params,
-      ...(timeoutMs ? { timeoutMs } : {}),
-    });
-    apiGetCache.set(url, { timestamp: Date.now(), payload });
-    return payload;
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const payload = await apiFetch(path, {
+          params,
+          ...(timeoutMs ? { timeoutMs } : {}),
+        });
+        apiGetCache.set(url, { timestamp: Date.now(), payload });
+        return payload;
+      } catch (error) {
+        lastError = error;
+        const status = Number(error?.status || 0);
+        const transient = [0, 500, 502, 503, 504].includes(status);
+        if (!transient || attempt === 1) throw error;
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      }
+    }
+    throw lastError;
   })();
 
   apiGetInFlight.set(url, requestPromise);
