@@ -1,8 +1,9 @@
 import { useCallback, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch, setApiAuthHandlers } from "../utils/api";
+import { setApiAuthHandlers } from "../utils/api";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
+const DIRECT_AUTH_BASE = "https://api.kyerp.net/api";
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
@@ -51,10 +52,84 @@ function isTokenUsable(token) {
   return payload.exp > Math.floor(Date.now() / 1000) + 5;
 }
 
+function authErrorMessage(status, payload) {
+  const serverMessage = String(payload?.error?.message || payload?.message || "").trim();
+  if (serverMessage) return serverMessage;
+  if (status === 400) return "Girilen bilgileri kontrol edip tekrar deneyin.";
+  if (status === 401) return "Kullanıcı adı/e-posta veya şifre hatalı.";
+  if (status === 403) return "Bu hesapla girişe izin verilmiyor.";
+  if (status === 429) return "Çok fazla giriş denemesi yapıldı. Kısa bir süre sonra tekrar deneyin.";
+  if (status >= 500) return "KY ERP giriş servisi geçici olarak yanıt veremedi. Tekrar deneyin.";
+  return "Giriş işlemi tamamlanamadı.";
+}
+
 function isTransientLoginError(error) {
   const status = Number(error?.status || 0);
   return [0, 500, 502, 503, 504].includes(status) ||
-    ["NETWORK_ERROR", "REQUEST_TIMEOUT", "API_PROXY_ERROR"].includes(String(error?.code || ""));
+    ["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || ""));
+}
+
+async function directAuthRequest(path, options = {}) {
+  const {
+    method = "POST",
+    body,
+    token = "",
+    timeoutMs = 20000,
+  } = options;
+  const normalizedPath = String(path || "").startsWith("/")
+    ? String(path || "")
+    : `/${String(path || "")}`;
+  const requestUrl = `${DIRECT_AUTH_BASE}${normalizedPath}`;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const headers = { Accept: "application/json" };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch(requestUrl, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+      cache: "no-store",
+      mode: "cors",
+    });
+
+    const raw = await response.text();
+    let payload = null;
+    try {
+      payload = raw ? JSON.parse(raw) : null;
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok || payload?.ok === false) {
+      const error = new Error(authErrorMessage(response.status, payload));
+      error.status = response.status;
+      error.code = payload?.error?.code || payload?.code || "AUTH_HTTP_ERROR";
+      error.payload = payload;
+      error.requestUrl = requestUrl;
+      throw error;
+    }
+
+    return payload;
+  } catch (error) {
+    if (Number(error?.status || 0) > 0) throw error;
+    const wrapped = new Error(
+      error?.name === "AbortError"
+        ? "KY ERP giriş servisi zamanında yanıt vermedi. Tekrar deneyin."
+        : "KY ERP giriş servisine bağlanılamadı. Tekrar deneyin.",
+    );
+    wrapped.status = 0;
+    wrapped.code = error?.name === "AbortError" ? "REQUEST_TIMEOUT" : "NETWORK_ERROR";
+    wrapped.cause = error;
+    wrapped.requestUrl = requestUrl;
+    throw wrapped;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function removeStoredAuth() {
@@ -173,9 +248,13 @@ export function AuthProvider({ children }) {
 
       const snapshot = authSnapshotRef.current;
       try {
-        const response = await apiFetch("/auth/me", { suppressUnauthorized: true });
+        const response = await directAuthRequest("/auth/me", {
+          method: "GET",
+          token,
+          timeoutMs: 12000,
+        });
         if (cancelled) return;
-        saveAuth(token, response.user || snapshot.user, response.user?.permissions || snapshot.permissions);
+        saveAuth(token, response?.user || snapshot.user, response?.user?.permissions || snapshot.permissions);
       } catch (error) {
         if (cancelled) return;
         const status = Number(error?.status || 0);
@@ -213,12 +292,7 @@ export function AuthProvider({ children }) {
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const response = await apiFetch("/auth/v2/login", {
-          method: "POST",
-          body,
-          skipAuth: true,
-          suppressUnauthorized: true,
-        });
+        const response = await directAuthRequest("/auth/v2/login", { body });
         return finalizeResponse(response);
       } catch (error) {
         lastError = error;
@@ -230,44 +304,44 @@ export function AuthProvider({ children }) {
   }, [finalizeResponse]);
 
   const verifyMfa = useCallback(async ({ challengeId, challengeToken, code, provider = "", resetProvider = "" }) => {
-    const response = await apiFetch("/auth/v2/mfa/verify", {
-      method: "POST", body: { challengeId, challengeToken, code, provider, resetProvider }, skipAuth: true, suppressUnauthorized: true,
+    const response = await directAuthRequest("/auth/v2/mfa/verify", {
+      body: { challengeId, challengeToken, code, provider, resetProvider },
     });
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
   const recoverMfa = useCallback(async ({ challengeId, challengeToken, recoveryCode }) => {
-    const response = await apiFetch("/auth/v2/recovery-code", {
-      method: "POST", body: { challengeId, challengeToken, recoveryCode }, skipAuth: true, suppressUnauthorized: true,
+    const response = await directAuthRequest("/auth/v2/recovery-code", {
+      body: { challengeId, challengeToken, recoveryCode },
     });
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
   const acknowledgeRecoveryCodes = useCallback(async ({ challengeId, challengeToken }) => {
-    const response = await apiFetch("/auth/mfa/recovery/ack", {
-      method: "POST", body: { challengeId, challengeToken }, skipAuth: true, suppressUnauthorized: true,
+    const response = await directAuthRequest("/auth/mfa/recovery/ack", {
+      body: { challengeId, challengeToken },
     });
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
-  const startOwnerRecovery = useCallback(async ({ challengeId, challengeToken, channel }) => apiFetch("/auth/v2/owner-recovery/start", {
-    method: "POST", body: { challengeId, challengeToken, channel }, skipAuth: true, suppressUnauthorized: true,
+  const startOwnerRecovery = useCallback(async ({ challengeId, challengeToken, channel }) => directAuthRequest("/auth/v2/owner-recovery/start", {
+    body: { challengeId, challengeToken, channel },
   }), []);
 
-  const verifyOwnerRecovery = useCallback(async ({ recoveryId, recoveryToken, otp, answers }) => apiFetch("/auth/v2/owner-recovery/verify", {
-    method: "POST", body: { recoveryId, recoveryToken, otp, answers }, skipAuth: true, suppressUnauthorized: true,
+  const verifyOwnerRecovery = useCallback(async ({ recoveryId, recoveryToken, otp, answers }) => directAuthRequest("/auth/v2/owner-recovery/verify", {
+    body: { recoveryId, recoveryToken, otp, answers },
   }), []);
 
   const checkApproval = useCallback(async ({ approvalId, approvalToken }) => {
-    const response = await apiFetch(`/auth/v2/approval/${approvalId}/status`, {
-      method: "POST", body: { approvalToken }, skipAuth: true, suppressUnauthorized: true,
+    const response = await directAuthRequest(`/auth/v2/approval/${approvalId}/status`, {
+      body: { approvalToken },
     });
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
   const logout = useCallback(async () => {
     try {
-      if (token) await apiFetch("/auth/logout", { method: "POST", suppressUnauthorized: true });
+      if (token) await directAuthRequest("/auth/logout", { token });
     } catch { /* cihaz oturumu yine kapanır */ }
     finally { clearAuth(); }
   }, [clearAuth, token]);
