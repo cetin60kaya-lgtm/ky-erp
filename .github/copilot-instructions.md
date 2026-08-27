@@ -32,11 +32,17 @@ Use the root `AGENTS.md` as the shared project contract. These instructions are 
 ## Auth invariants
 
 - Canonical flow: `/api/auth/login` → optional `/api/auth/mfa/verify` → `/api/auth/me`.
-- Keep owner/admin MFA enforcement and hard session expiry.
+- Owner/admin accounts must continue to require MFA; a database `PASSWORD_ONLY` value must never bypass owner/admin MFA.
+- Effective PASSWORD_ONLY session lifetime is exactly 8 hours (`28800` seconds).
+- Effective Google, Microsoft, ANY_MFA, BOTH_MFA and owner/admin MFA session lifetime is exactly 10 hours (`36000` seconds).
+- Session lifetime is absolute from successful authentication, not tied to midnight or browser close.
+- After MFA succeeds, the same browser profile reuses the valid stored JWT/session until its real server expiry; closing and reopening the browser must not ask for MFA again during that valid session.
+- Logout, real expiry, session revocation, password reset, MFA reset/re-enrollment or a new browser/session requires authentication again.
 - Temporary network/5xx errors must not erase a still-valid local session.
 - 401/403 may clear invalid sessions.
 - Do not reintroduce runtime DDL into login requests.
 - Do not add automatic POST retry or duplicate login challenge creation.
+- Do not normalize or trim the password value in the frontend; only the username/e-mail identity may be normalized.
 
 ## Data-loading invariants
 
