@@ -26,10 +26,6 @@ const IkPersonnelCenterPage = lazyWithRetry(
   () => import("./pages/modules/ik/IkPersonnelCenterPage"),
   "ik-personnel-center-v2",
 );
-const IkDailyEntryPage = lazyWithRetry(
-  () => import("./pages/modules/ik/IkDailyEntryPage"),
-  "ik-daily-entry-v3",
-);
 const UretimPage = lazyWithRetry(
   () => import("./pages/modules/UretimPage"),
   "uretim-v3",
@@ -87,7 +83,6 @@ const MODULE_LOADERS = {
     Promise.all([
       import("./pages/modules/IkPage"),
       import("./pages/modules/ik/IkPersonnelCenterPage"),
-      import("./pages/modules/ik/IkDailyEntryPage"),
     ]),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
@@ -492,9 +487,6 @@ export default function AppV3() {
       if (isAuditAccount || activeTab === "personel-kartlari") {
         return <IkPersonnelCenterPage activeTab={activeTab} {...sharedProps} />;
       }
-      if (activeTab === "gunluk-personel") {
-        return <IkDailyEntryPage {...sharedProps} />;
-      }
       return <IkPage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule?.key === "uretim") {
@@ -539,8 +531,10 @@ export default function AppV3() {
       onCloseMobileMenu={() => setModuleMenuOpen(false)}
       onLogout={logout}
     >
-      <ModuleErrorBoundary key={`${activeModule?.key}:${activeTab}`}>
-        <Suspense fallback={<LoadingCard />}>{renderPage()}</Suspense>
+      <ModuleErrorBoundary>
+        <Suspense fallback={<LoadingCard />}>
+          {renderPage()}
+        </Suspense>
       </ModuleErrorBoundary>
     </AppShellV3>
   );
