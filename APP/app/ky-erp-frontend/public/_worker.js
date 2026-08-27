@@ -1,4 +1,5 @@
 const API_HOST = "api.kyerp.net";
+const TRANSIENT_STATUSES = new Set([500, 502, 503, 504]);
 
 function jsonResponse(status, code, message) {
   return new Response(
@@ -13,6 +14,25 @@ function jsonResponse(status, code, message) {
   );
 }
 
+function mayRetry(request, url) {
+  const method = String(request.method || "GET").toUpperCase();
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
+  return method === "POST" && url.pathname === "/api/auth/v2/login";
+}
+
+async function proxyFetch(request, upstreamUrl) {
+  const upstreamRequest = new Request(upstreamUrl.toString(), request);
+  const retryRequest = upstreamRequest.clone();
+  let response = await fetch(upstreamRequest);
+
+  if (mayRetry(request, upstreamUrl) && TRANSIENT_STATUSES.has(response.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    response = await fetch(retryRequest);
+  }
+
+  return response;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -24,9 +44,7 @@ export default {
       upstreamUrl.port = "";
 
       try {
-        const upstreamRequest = new Request(upstreamUrl.toString(), request);
-        const upstreamResponse = await fetch(upstreamRequest);
-
+        const upstreamResponse = await proxyFetch(request, upstreamUrl);
         const headers = new Headers(upstreamResponse.headers);
         headers.set("Cache-Control", "no-store");
 
