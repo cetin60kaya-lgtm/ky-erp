@@ -1,8 +1,7 @@
+const PRODUCTION_API_ORIGIN = "https://api.kyerp.net";
 const DEFAULT_API_ORIGIN =
   typeof import.meta !== "undefined" && import.meta.env.PROD
-    ? typeof window !== "undefined" && window.location?.origin
-      ? window.location.origin
-      : "https://kyerp.net"
+    ? PRODUCTION_API_ORIGIN
     : "http://localhost:8787";
 
 const API_GET_CACHE_TTL_MS = 60 * 1000;
@@ -13,7 +12,6 @@ const COMPANY_PARAM_NAME = "mainCompanySlug";
 const apiGetCache = new Map();
 const apiGetInFlight = new Map();
 let activeMainCompany = null;
-
 let authTokenGetter = () => "";
 let onUnauthorized = () => {};
 
@@ -26,14 +24,21 @@ function ensureLeadingSlash(value) {
   return text.startsWith("/") ? text : `/${text}`;
 }
 
-function runtimeProductionOrigin() {
+function runtimeOrigin() {
   if (typeof window !== "undefined" && window.location?.origin) {
     return trimTrailingSlash(window.location.origin);
   }
   return "https://kyerp.net";
 }
 
+function normalizeApiBase(value) {
+  const clean = trimTrailingSlash(String(value || "").trim());
+  if (!clean) return "";
+  return /\/api$/i.test(clean) ? clean : `${clean}/api`;
+}
+
 export function getApiBase() {
+  const isProd = typeof import.meta !== "undefined" && import.meta.env.PROD;
   const envBaseRaw =
     typeof import.meta !== "undefined"
       ? import.meta.env.VITE_API_URL ||
@@ -41,74 +46,32 @@ export function getApiBase() {
         import.meta.env.VITE_API_BASE ||
         ""
       : "";
-  const envBase = trimTrailingSlash(String(envBaseRaw || "").trim());
-  const isProd = typeof import.meta !== "undefined" && import.meta.env.PROD;
+  const envBase = normalizeApiBase(envBaseRaw);
 
-  // Production'da tarayıcı API'ye aynı origin üzerinden gider. Cloudflare Pages
-  // _worker.js /api isteklerini api.kyerp.net'e proxy'ler. Böylece CORS/DNS/HTTP3
-  // kaynaklı tarayıcıya özel kopmalar login dahil tüm modülleri kilitlemez.
-  if (isProd) {
-    const runtimeOrigin = runtimeProductionOrigin();
-    if (
-      !envBase ||
-      envBase === "/" ||
-      envBase === "." ||
-      /^(?:https:\/\/)?api\.kyerp\.net(?:\/api)?$/i.test(envBase)
-    ) {
-      return `${runtimeOrigin}/api`;
-    }
-  }
-
-  if (!envBase || envBase === "/" || envBase === ".") {
-    return `${DEFAULT_API_ORIGIN}/api`;
-  }
-  return /\/api$/i.test(envBase) ? envBase : `${envBase}/api`;
+  // Canlı sistemde asıl taşıma yolu doğrudan API custom domainidir.
+  // Pages /api proxy'si yalnız güvenli GET yedeği olarak tutulur; giriş ve yazma
+  // işlemleri ek bir Worker hop'una girmez.
+  if (isProd) return `${PRODUCTION_API_ORIGIN}/api`;
+  return envBase || `${DEFAULT_API_ORIGIN}/api`;
 }
 
 export const API_BASE = getApiBase();
-
-const MODULE_PREFIXES = [
-  "/muhasebe",
-  "/ik",
-  "/desen",
-  "/imalat",
-  "/uretim",
-  "/boyahane",
-  "/admin",
-  "/storage",
-  "/models",
-  "/model-takip",
-  "/auth",
-  "/ai",
-  "/isnet",
-  "/health",
-  "/erp",
-];
 
 export function apiUrl(path) {
   const raw = String(path || "").trim();
   if (!raw) return API_BASE;
   if (/^https:\/\//i.test(raw)) return raw;
-
   const normalized = ensureLeadingSlash(raw);
   if (normalized === "/api" || normalized.startsWith("/api/")) {
     return `${API_BASE.replace(/\/api$/i, "")}${normalized}`;
   }
-
-  const shouldPrefix = MODULE_PREFIXES.some((prefix) =>
-    normalized.startsWith(prefix),
-  );
-
-  if (shouldPrefix) return `${API_BASE}${normalized}`;
   return `${API_BASE}${normalized}`;
 }
 
 function readStoredCompanySlug() {
   try {
     if (typeof window === "undefined") return "";
-    return String(
-      window.localStorage.getItem(ACTIVE_COMPANY_STORAGE_KEY) || "",
-    ).trim();
+    return String(window.localStorage.getItem(ACTIVE_COMPANY_STORAGE_KEY) || "").trim();
   } catch {
     return "";
   }
@@ -118,9 +81,7 @@ export function setApiAuthHandlers(handlers = {}) {
   authTokenGetter =
     typeof handlers.getToken === "function" ? handlers.getToken : () => "";
   onUnauthorized =
-    typeof handlers.onUnauthorized === "function"
-      ? handlers.onUnauthorized
-      : () => {};
+    typeof handlers.onUnauthorized === "function" ? handlers.onUnauthorized : () => {};
 }
 
 export function setApiActiveMainCompany(company) {
@@ -140,15 +101,24 @@ export function getApiActiveMainCompanySlug() {
 function shouldAutoAttachCompany(path) {
   const normalizedPath = String(path || "");
   if (/^https:\/\//i.test(normalizedPath)) return false;
-  return !/^\/(?:api\/)?(health|auth\/login|admin\/main-companies)(\/|$)/i.test(
+  return !/^\/(?:api\/)?(health|system\/status|auth(?:\/|$)|admin\/main-companies)(\/|$)/i.test(
     normalizedPath,
   );
 }
 
 function appendParams(path, params = {}) {
-  const normalizedPath = String(path || "").startsWith("/")
-    ? String(path || "")
-    : `/${String(path || "")}`;
+  const raw = String(path || "");
+  if (/^https:\/\//i.test(raw)) {
+    const url = new URL(raw);
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    });
+    return url.toString();
+  }
+
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
   const [basePath, queryString = ""] = normalizedPath.split("?");
   const searchParams = new URLSearchParams(queryString);
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -168,53 +138,49 @@ function appendParams(path, params = {}) {
 }
 
 function attachCompanyToBody(body) {
-  if (!body || typeof body !== "object" || body instanceof FormData)
-    return body;
-  if (Object.prototype.hasOwnProperty.call(body, COMPANY_PARAM_NAME))
-    return body;
+  if (!body || typeof body !== "object" || body instanceof FormData) return body;
+  if (Object.prototype.hasOwnProperty.call(body, COMPANY_PARAM_NAME)) return body;
   const slug = getApiActiveMainCompanySlug();
   return slug ? { ...body, [COMPANY_PARAM_NAME]: slug } : body;
 }
 
 export function buildApiUrl(path, params) {
-  return apiUrl(appendParams(path, params));
+  const withParams = appendParams(path, params);
+  return /^https:\/\//i.test(withParams) ? withParams : apiUrl(withParams);
+}
+
+function sameOriginFallbackUrl(requestPath) {
+  const isProd = typeof import.meta !== "undefined" && import.meta.env.PROD;
+  if (!isProd || typeof window === "undefined") return "";
+  const normalized = ensureLeadingSlash(requestPath);
+  return `${runtimeOrigin()}/api${normalized}`;
 }
 
 function createTimeoutSignal(timeoutMs, existingSignal) {
   if (!(timeoutMs > 0)) {
-    return {
-      signal: existingSignal,
-      cleanup: () => {},
-      didTimeout: () => false,
-    };
+    return { signal: existingSignal, cleanup: () => {}, didTimeout: () => false };
   }
 
   const controller = new AbortController();
   let timedOut = false;
   let timeoutId = null;
+  const abortFromParent = () => controller.abort(existingSignal?.reason);
 
-  const abortFromParent = () => {
-    controller.abort(existingSignal?.reason);
-  };
-
-  if (existingSignal?.aborted) {
-    abortFromParent();
-  } else if (existingSignal) {
+  if (existingSignal?.aborted) abortFromParent();
+  else if (existingSignal) {
     existingSignal.addEventListener("abort", abortFromParent, { once: true });
   }
 
   timeoutId = window.setTimeout(() => {
     timedOut = true;
-    controller.abort(new Error("İstek zaman aşımına uğradı."));
+    controller.abort();
   }, timeoutMs);
 
   return {
     signal: controller.signal,
     cleanup: () => {
       if (timeoutId !== null) window.clearTimeout(timeoutId);
-      if (existingSignal) {
-        existingSignal.removeEventListener("abort", abortFromParent);
-      }
+      if (existingSignal) existingSignal.removeEventListener("abort", abortFromParent);
     },
     didTimeout: () => timedOut,
   };
@@ -241,9 +207,7 @@ function extractPlainText(value) {
 }
 
 function isLikelyHtml(value) {
-  return (
-    typeof value === "string" && /<\/?(html|body|head|doctype)\b/i.test(value)
-  );
+  return typeof value === "string" && /<\/?(html|body|head|doctype)\b/i.test(value);
 }
 
 function cleanServerMessage(value) {
@@ -259,13 +223,9 @@ function cleanServerMessage(value) {
 
 function payloadMessage(payload) {
   if (!payload || typeof payload !== "object") return "";
-  const candidates = [payload?.error?.message, payload?.message];
-  for (const candidate of candidates) {
+  for (const candidate of [payload?.error?.message, payload?.message]) {
     if (Array.isArray(candidate)) {
-      const merged = candidate
-        .map((item) => cleanServerMessage(item))
-        .filter(Boolean)
-        .join(", ");
+      const merged = candidate.map(cleanServerMessage).filter(Boolean).join(", ");
       if (merged) return merged;
     }
     const message = cleanServerMessage(candidate);
@@ -283,7 +243,7 @@ function statusMessage(status) {
   if (status === 413) return "Gönderilen dosya izin verilen boyutu aşıyor.";
   if (status === 422) return "Bilgiler doğrulanamadı. Zorunlu alanları kontrol edin.";
   if (status === 429) return "Çok fazla işlem yapıldı. Kısa bir süre sonra tekrar deneyin.";
-  if ([502, 503, 504].includes(status)) return "KY ERP API geçici olarak yanıt veremedi. İstek güvenli biçimde durduruldu; tekrar deneyin.";
+  if ([502, 503, 504].includes(status)) return "KY ERP API geçici olarak yanıt veremedi. Tekrar deneyin.";
   if (status >= 500) return "KY ERP sunucusunda geçici bir işlem hatası oluştu. Tekrar deneyin.";
   return "İşlem tamamlanamadı. Tekrar deneyin.";
 }
@@ -291,12 +251,10 @@ function statusMessage(status) {
 function buildApiErrorMessage(response, payload) {
   const fromPayload = payloadMessage(payload);
   if (fromPayload) return fromPayload;
-
   if (typeof payload === "string" && !isLikelyHtml(payload)) {
     const plain = cleanServerMessage(payload);
     if (plain) return plain;
   }
-
   return statusMessage(response.status);
 }
 
@@ -306,6 +264,25 @@ function createRequestError(message, details = {}) {
     if (value !== undefined) error[key] = value;
   });
   return error;
+}
+
+function isNetworkFailure(error) {
+  return error instanceof Error &&
+    error.name === "TypeError" &&
+    /fetch|network|failed|connection|load/i.test(String(error.message || ""));
+}
+
+async function fetchTransport(requestUrl, requestPath, method, init) {
+  try {
+    return await fetch(requestUrl, init);
+  } catch (error) {
+    // Yalnız idempotent okumalarda Pages proxy yedeğine düş. Yazma isteklerini
+    // otomatik tekrar göndermeyerek mükerrer kayıt riskini engelle.
+    if (!["GET", "HEAD"].includes(method) || !isNetworkFailure(error)) throw error;
+    const fallbackUrl = sameOriginFallbackUrl(requestPath);
+    if (!fallbackUrl || fallbackUrl === requestUrl) throw error;
+    return fetch(fallbackUrl, init);
+  }
 }
 
 export async function apiFetch(path, options = {}) {
@@ -322,38 +299,37 @@ export async function apiFetch(path, options = {}) {
   } = options;
 
   const requestPath = appendParams(path, params);
-  const requestUrl = buildApiUrl(requestPath);
+  const requestUrl = /^https:\/\//i.test(requestPath) ? requestPath : apiUrl(requestPath);
   const method = String(fetchOptions.method || "GET").toUpperCase();
-
-  const finalHeaders = { ...(headers || {}) };
+  const finalHeaders = { Accept: "application/json", ...(headers || {}) };
   const token = skipAuth ? "" : String(authTokenGetter?.() || "").trim();
-  if (token && !finalHeaders.Authorization) {
-    finalHeaders.Authorization = `Bearer ${token}`;
+  const companySlug = getApiActiveMainCompanySlug();
+
+  if (token && !finalHeaders.Authorization) finalHeaders.Authorization = `Bearer ${token}`;
+  if (companySlug && !finalHeaders["X-KYERP-Tenant-Slug"] && shouldAutoAttachCompany(path)) {
+    finalHeaders["X-KYERP-Tenant-Slug"] = companySlug;
   }
 
   let finalBody = body;
   if (body && !(body instanceof FormData) && typeof body === "object") {
-    finalHeaders["Content-Type"] =
-      finalHeaders["Content-Type"] || "application/json";
+    finalHeaders["Content-Type"] = finalHeaders["Content-Type"] || "application/json";
     finalBody = JSON.stringify(attachCompanyToBody(body));
   }
 
-  const { signal, cleanup, didTimeout } = createTimeoutSignal(
-    timeoutMs,
-    existingSignal,
-  );
+  const { signal, cleanup, didTimeout } = createTimeoutSignal(timeoutMs, existingSignal);
 
   try {
-    const response = await fetch(requestUrl, {
+    const response = await fetchTransport(requestUrl, requestPath, method, {
       ...fetchOptions,
       method,
       headers: finalHeaders,
       body: finalBody,
       signal,
+      cache: fetchOptions.cache || "no-store",
+      mode: /^https:\/\//i.test(requestUrl) ? "cors" : fetchOptions.mode,
     });
 
     const payload = await parseResponsePayload(response, responseType);
-
     if (response.status === 401 && !suppressUnauthorized) onUnauthorized?.();
 
     if (!response.ok) {
@@ -368,17 +344,14 @@ export async function apiFetch(path, options = {}) {
     }
 
     if (payload && typeof payload === "object" && payload.ok === false) {
-      throw createRequestError(
-        payloadMessage(payload) || "İşlem sunucu tarafından tamamlanamadı.",
-        {
-          status: response.status,
-          code: payload?.error?.code || payload?.code,
-          payload,
-          method,
-          requestPath,
-          requestUrl,
-        },
-      );
+      throw createRequestError(payloadMessage(payload) || "İşlem sunucu tarafından tamamlanamadı.", {
+        status: response.status,
+        code: payload?.error?.code || payload?.code,
+        payload,
+        method,
+        requestPath,
+        requestUrl,
+      });
     }
 
     return payload;
@@ -386,25 +359,21 @@ export async function apiFetch(path, options = {}) {
     if (error instanceof Error) {
       if (error.requestPath) throw error;
       if (error.name === "AbortError" && didTimeout()) {
-        throw createRequestError(
-          "Sunucu zamanında yanıt vermedi. İstek iptal edildi; tekrar deneyin.",
-          { code: "REQUEST_TIMEOUT", method, requestPath, requestUrl },
-        );
+        throw createRequestError("Sunucu zamanında yanıt vermedi. Tekrar deneyin.", {
+          code: "REQUEST_TIMEOUT",
+          method,
+          requestPath,
+          requestUrl,
+        });
       }
-      if (
-        error.name === "TypeError" &&
-        /fetch|network|failed|connection|load/i.test(String(error.message || ""))
-      ) {
-        throw createRequestError(
-          "KY ERP API bağlantısı geçici olarak kurulamadı. Bağlantı yeniden geldiğinde işlemi tekrar deneyin.",
-          {
-            code: "NETWORK_ERROR",
-            method,
-            requestPath,
-            requestUrl,
-            cause: error,
-          },
-        );
+      if (isNetworkFailure(error)) {
+        throw createRequestError("KY ERP API bağlantısı geçici olarak kurulamadı. Tekrar deneyin.", {
+          code: "NETWORK_ERROR",
+          method,
+          requestPath,
+          requestUrl,
+          cause: error,
+        });
       }
       error.method = error.method || method;
       error.requestPath = error.requestPath || requestPath;
@@ -423,15 +392,11 @@ export async function apiFetch(path, options = {}) {
 }
 
 export async function apiGet(path, params, options = {}) {
-  const timeoutMs =
-    Number(options.timeoutMs || 0) > 0 ? Number(options.timeoutMs) : undefined;
+  const timeoutMs = Number(options.timeoutMs || 0) > 0 ? Number(options.timeoutMs) : undefined;
   const url = buildApiUrl(path, params);
   const now = Date.now();
   const cached = apiGetCache.get(url);
-  if (cached && now - cached.timestamp < API_GET_CACHE_TTL_MS) {
-    return cached.payload;
-  }
-
+  if (cached && now - cached.timestamp < API_GET_CACHE_TTL_MS) return cached.payload;
   if (apiGetInFlight.has(url)) return apiGetInFlight.get(url);
 
   const requestPromise = (async () => {
@@ -447,7 +412,8 @@ export async function apiGet(path, params, options = {}) {
       } catch (error) {
         lastError = error;
         const status = Number(error?.status || 0);
-        const transient = [0, 500, 502, 503, 504].includes(status);
+        const transient = [0, 500, 502, 503, 504].includes(status) ||
+          ["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || ""));
         if (!transient || attempt === 1) throw error;
         await new Promise((resolve) => window.setTimeout(resolve, 300));
       }
@@ -468,11 +434,7 @@ export function clearApiGetCache() {
   apiGetInFlight.clear();
 }
 
-export async function apiPost(
-  path,
-  body,
-  { timeoutMs, suppressUnauthorized = false } = {},
-) {
+export async function apiPost(path, body, { timeoutMs, suppressUnauthorized = false } = {}) {
   const payload = await apiFetch(path, {
     method: "POST",
     body,
@@ -535,22 +497,24 @@ function downloadBlob(blob, fileName) {
 
 export async function downloadFile(path, params, fileName = "export.xlsx") {
   const requestPath = appendParams(path, params);
-  const requestUrl = buildApiUrl(requestPath);
+  const requestUrl = /^https:\/\//i.test(requestPath) ? requestPath : apiUrl(requestPath);
   const headers = {};
   const token = String(authTokenGetter?.() || "").trim();
+  const companySlug = getApiActiveMainCompanySlug();
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (companySlug) headers["X-KYERP-Tenant-Slug"] = companySlug;
 
   try {
-    const response = await fetch(requestUrl, { headers });
+    const response = await fetchTransport(requestUrl, requestPath, "GET", {
+      headers,
+      cache: "no-store",
+      mode: "cors",
+    });
     if (response.status === 401) onUnauthorized?.();
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       let payload = text;
-      try {
-        payload = text ? JSON.parse(text) : null;
-      } catch {
-        // Plain-text errors are handled by buildApiErrorMessage.
-      }
+      try { payload = text ? JSON.parse(text) : null; } catch { /* plain text */ }
       throw createRequestError(buildApiErrorMessage(response, payload), {
         status: response.status,
         payload,
@@ -564,10 +528,12 @@ export async function downloadFile(path, params, fileName = "export.xlsx") {
     return true;
   } catch (error) {
     if (error?.requestPath) throw error;
-    throw createRequestError(
-      "Dosya indirilemedi. Sunucu bağlantısını kontrol edip tekrar deneyin.",
-      { code: "DOWNLOAD_FAILED", method: "GET", requestPath, requestUrl },
-    );
+    throw createRequestError("Dosya indirilemedi. Sunucu bağlantısını kontrol edip tekrar deneyin.", {
+      code: "DOWNLOAD_FAILED",
+      method: "GET",
+      requestPath,
+      requestUrl,
+    });
   }
 }
 
