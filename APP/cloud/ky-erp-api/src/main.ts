@@ -42,6 +42,10 @@ type ShellEnv = {
   Variables: { requestId: string };
 };
 
+const AUTH_VERSION = "canonical-v3";
+const PASSWORD_SESSION_SECONDS = 28_800;
+const MFA_SESSION_SECONDS = 36_000;
+
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
@@ -116,7 +120,7 @@ shell.use(
       "OPTIONS",
     ],
     allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device"],
-    exposeHeaders: ["Content-Length", "Content-Type", "ETag"],
+    exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id", "X-KYERP-Auth-Version"],
     maxAge: 86400,
     credentials: true,
   }),
@@ -150,6 +154,56 @@ shell.use("/api/*", async (c, next) => {
   }
 
   await next();
+});
+
+shell.use("/api/auth/*", async (c, next) => {
+  c.header("X-KYERP-Auth-Version", AUTH_VERSION);
+  c.header("Cache-Control", "no-store, no-cache, must-revalidate");
+  await next();
+});
+
+// Read-only handshake. Frontend her girişten önce bu endpoint ile doğru Worker sürümüne
+// bağlı olduğunu doğrular; kullanıcı, challenge veya audit kaydı oluşturmaz.
+shell.get("/api/auth/status", (c) => c.json({
+  ok: true,
+  authVersion: AUTH_VERSION,
+  transport: "canonical",
+  endpoints: {
+    login: "/api/auth/login",
+    mfaVerify: "/api/auth/mfa/verify",
+    me: "/api/auth/me",
+    logout: "/api/auth/logout",
+  },
+  sessionPolicy: {
+    passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
+    mfaSeconds: MFA_SESSION_SECONDS,
+  },
+}));
+
+// Tek canonical session read endpointi. Secret/security satırı istemciye hiçbir zaman açılmaz.
+shell.get("/api/auth/me", async (c) => {
+  const current = await getAuthenticatedUser(c);
+  if (!current) {
+    return c.json({
+      ok: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Oturum geçersiz, iptal edilmiş veya süresi dolmuş. Yeniden giriş yapın.",
+      },
+    }, 401);
+  }
+  const { security, session, ...user } = current as any;
+  void security;
+  return c.json({
+    ok: true,
+    authVersion: AUTH_VERSION,
+    user,
+    session: {
+      id: session.id,
+      expiresAt: session.expires_at,
+      lastSeenAt: session.last_seen_at,
+    },
+  });
 });
 
 registerAuthRecoveryCodeFallbackRoutes(shell);
