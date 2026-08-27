@@ -13,7 +13,7 @@ const OWNER_RECOVERY_RESEND_SECONDS = 60;
 const QUESTION_ITERATIONS = 180000;
 const MFA_PROVIDERS = ["GOOGLE", "MICROSOFT"];
 const LOGIN_POLICIES = ["PASSWORD_ONLY", "GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"];
-const SESSION_PRESETS = [1800, 3600, 7200, 14400, 28800, 43200, 86400];
+const SESSION_PRESETS = [1800, 3600, 7200, 14400, 28800, 36000, 43200, 86400];
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
   "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "ASISTAN", "ADMIN", "RAPORLAR",
@@ -99,16 +99,14 @@ function policyLabel(policy: string) {
     BOTH_MFA: "Parola + Google ve Microsoft",
   }[policy] || "Parola + Google veya Microsoft";
 }
-function normalizeSessionSeconds(value: unknown, fallback = 28800) {
+function normalizeSessionSeconds(value: unknown, fallback = 36000) {
   const parsed = Number(value);
   return SESSION_PRESETS.includes(parsed) ? parsed : fallback;
 }
 function effectiveSessionSeconds(security: AnyRow, role: string) {
   const policy = effectivePolicy(security, role);
-  const configured = normalizeSessionSeconds(security.session_seconds, 28800);
-  if (policy === "PASSWORD_ONLY") return Math.min(configured, 1800);
-  if (isSuper(role)) return Math.min(configured, 28800);
-  return configured;
+  if (policy === "PASSWORD_ONLY") return 28800;
+  return 36000;
 }
 function effectivePolicy(security: AnyRow, role: string) {
   if (isSuper(role)) return "ANY_MFA";
@@ -763,7 +761,7 @@ export function registerAuthPolicyRoutes(app: any) {
     return c.json({ ok: true, data: rows.map((row: AnyRow) => {
       const role = roleOf(row); const policy = effectivePolicy(row, role); return {
         userId: text(row.id), role, loginPolicy: policy, loginPolicyLabel: policyLabel(policy),
-        configuredSessionSeconds: normalizeSessionSeconds(row.session_seconds, 28800), effectiveSessionSeconds: effectiveSessionSeconds(row, role),
+        configuredSessionSeconds: normalizeSessionSeconds(row.session_seconds, 36000), effectiveSessionSeconds: effectiveSessionSeconds(row, role),
         approvalRequired: Boolean(row.approval_required), googleMfaEnabled: Boolean(row.google_mfa_enabled), microsoftMfaEnabled: Boolean(row.microsoft_mfa_enabled),
         ownerRecoveryEnabled: Boolean(row.owner_recovery_enabled),
       };
@@ -779,12 +777,13 @@ export function registerAuthPolicyRoutes(app: any) {
     const body = await bodyOf(c);
     const targetRole = roleOf(target);
     let policy = normalizePolicy(body.loginPolicy, effectivePolicy(target, targetRole));
-    let sessionSeconds = normalizeSessionSeconds(body.sessionSeconds, normalizeSessionSeconds(target.session_seconds, 28800));
+    let sessionSeconds = policy === "PASSWORD_ONLY" ? 28800 : 36000;
     if (isSuper(targetRole)) {
       policy = "ANY_MFA";
-      sessionSeconds = Math.min(sessionSeconds, 28800);
+      sessionSeconds = 36000;
+    } else if (policy !== "PASSWORD_ONLY") {
+      sessionSeconds = 36000;
     }
-    if (policy === "PASSWORD_ONLY") sessionSeconds = 1800;
     const approvalRequired = isSuper(targetRole) || isCompanyAdmin(targetRole) ? 0 : (boolValue(body.approvalRequired, Boolean(target.approval_required)) ? 1 : 0);
     await c.env.DB.prepare(
       "UPDATE auth_user_security SET login_policy=?,session_seconds=?,approval_required=?,updated_at=? WHERE user_id=?",
@@ -924,7 +923,7 @@ export function registerAuthPolicyRoutes(app: any) {
     const timestamp = nowIso();
     await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET verified_at=?,consumed_at=? WHERE id=?").bind(timestamp, timestamp, recovery.id).run();
     await revokeSecurityState(c, recovery.user_id, recovery.user_id, "OWNER_ACCOUNT_RECOVERED");
-    await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=NULL,google_mfa_enabled=0,microsoft_mfa_secret=NULL,microsoft_mfa_enabled=0,login_policy='ANY_MFA',session_seconds=CASE WHEN session_seconds>28800 THEN 28800 ELSE session_seconds END,updated_at=? WHERE user_id=?").bind(timestamp, recovery.user_id).run();
+    await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=NULL,google_mfa_enabled=0,microsoft_mfa_secret=NULL,microsoft_mfa_enabled=0,login_policy='ANY_MFA',session_seconds=36000,updated_at=? WHERE user_id=?").bind(timestamp, recovery.user_id).run();
     await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=COALESCE(used_at,?) WHERE user_id=? AND used_at IS NULL").bind(timestamp, recovery.user_id).run();
     const user = await userById(c, recovery.user_id);
     await audit(c, "OWNER_RECOVERY_VERIFIED_REENROLL_REQUIRED", recovery.user_id, recovery.user_id, text(user?.main_company_slug), "", { channel: recovery.channel });
