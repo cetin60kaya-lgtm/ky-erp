@@ -8,8 +8,43 @@ function unwrap(payload) {
     typeof payload === "object" &&
     payload.ok === true &&
     Object.prototype.hasOwnProperty.call(payload, "data")
-     ? payload?.data
+    ? payload?.data
     : payload;
+}
+
+// İK ana ekranı çok sayıda bağımsız listeyi aynı anda yükler. Yardımcı bir
+// listenin geçici olarak hata vermesi Günlük Personel Havuzu gibi çalışan bir
+// kaynağı boşaltmamalıdır. Başarılı son listeyi bellek içinde tutar; 401/403
+// ise gerçek oturum/yetki hatası olduğu için aynen yukarı taşınır.
+const stableIkListCache = new Map();
+
+function stableListKey(path, params = {}) {
+  const query = Object.entries(params || {})
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join("&");
+  return `${path}?${query}`;
+}
+
+async function stableIkList(path, params = {}) {
+  const key = stableListKey(path, params);
+  try {
+    const value = unwrap(await apiGet(path, params));
+    const rows = Array.isArray(value) ? value : [];
+    stableIkListCache.set(key, rows);
+    return rows;
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    if (status === 401 || status === 403) throw error;
+    const cached = stableIkListCache.get(key);
+    if (Array.isArray(cached)) return cached;
+    console.warn(
+      `[KY ERP][IK] ${path} okunamadı; diğer İK listeleri çalışmaya devam ediyor.`,
+      error?.message || error,
+    );
+    return [];
+  }
 }
 
 export async function getIkPersonel(params = {}) {
@@ -43,23 +78,23 @@ export async function hesaplaGunlukOdeme(payload = {}) {
 }
 
 export async function getAylikPersonel(params = {}) {
-  return unwrap(await apiGet("/ik/monthly-employees", params));
+  return stableIkList("/ik/monthly-employees", params);
 }
 
 export async function getAylikIzinler(params = {}) {
-  return unwrap(await apiGet("/ik/leaves", params));
+  return stableIkList("/ik/leaves", params);
 }
 
 export async function getAylikMesailer(params = {}) {
-  return unwrap(await apiGet("/ik/monthly-adjustments", params));
+  return stableIkList("/ik/monthly-adjustments", params);
 }
 
 export async function getAylikLoglar(params = {}) {
-  return unwrap(await apiGet("/ik/monthly-audit-logs", params));
+  return stableIkList("/ik/monthly-audit-logs", params);
 }
 
 export async function getResmiTatiller(params = {}) {
-  return unwrap(await apiGet("/ik/official-holidays", params));
+  return stableIkList("/ik/official-holidays", params);
 }
 
 export async function saveResmiTatil(payload = {}) {
@@ -73,7 +108,7 @@ export async function updateResmiTatil(id, payload = {}) {
 }
 
 export async function getAylikEvraklar(params = {}) {
-  return unwrap(await apiGet("/ik/documents", params));
+  return stableIkList("/ik/documents", params);
 }
 
 export async function saveAylikEvrak(payload = {}) {
@@ -146,7 +181,7 @@ export async function deleteAylikIzin(id) {
 }
 
 export async function getGunlukPersonel(params = {}) {
-  return unwrap(await apiGet("/ik/daily-employees", params));
+  return stableIkList("/ik/daily-employees", params);
 }
 
 export async function createGunlukPersonel(payload = {}) {
@@ -175,7 +210,7 @@ export async function uploadGunlukPersonelExcel(file, params = {}) {
 }
 
 export async function getIkSkills(params = {}) {
-  return unwrap(await apiGet("/ik/skills", params));
+  return stableIkList("/ik/skills", params);
 }
 
 export async function createIkSkill(payload = {}) {
@@ -195,7 +230,7 @@ export async function mergeIkSkills(payload = {}) {
 }
 
 export async function getGunlukPuantaj(params = {}) {
-  return unwrap(await apiGet("/ik/daily-attendance", params));
+  return stableIkList("/ik/daily-attendance", params);
 }
 
 export async function saveGunlukPuantaj(payload = {}) {
