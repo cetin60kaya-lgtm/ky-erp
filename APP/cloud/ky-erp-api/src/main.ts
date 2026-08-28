@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAuthAdminHistoryRoutes } from "./auth-admin-history";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
@@ -53,10 +54,8 @@ const LIVE_ORIGINS = new Set([
   "https://app.kyerp.net",
 ]);
 
-const LOCAL_DEV_ORIGIN =
-  /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
-const PAGES_PREVIEW_ORIGIN =
-  /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
+const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
+const PAGES_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 
 function allowedOrigin(origin: string) {
   if (LIVE_ORIGINS.has(origin)) return origin;
@@ -95,10 +94,9 @@ registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
 registerIkAuditReadonlyRoutes(app);
 registerIkPersonnelControlRoutes(app);
-// Günlük personel roster'ı açık seçimdir. Boş tarih aralığı tüm aktif havuza dönüşmez;
-// yalnız kaydedilmiş roster + gerçekten çalışılmış personel korunur.
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
+registerAuthAdminHistoryRoutes(app);
 
 const shell = new Hono<ShellEnv>();
 
@@ -112,15 +110,7 @@ shell.use(
   "/api/*",
   cors({
     origin: allowedOrigin,
-    allowMethods: [
-      "GET",
-      "POST",
-      "PATCH",
-      "PUT",
-      "DELETE",
-      "HEAD",
-      "OPTIONS",
-    ],
+    allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
     allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id", "X-KYERP-Auth-Version"],
     maxAge: 86400,
@@ -134,30 +124,14 @@ shell.use("/api/*", async (c, next) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic =
-    path === "/api/health" ||
-    path === "/api/system/status" ||
-    path.startsWith("/api/auth/");
-
+  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/");
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);
   if (!authenticated) {
-    return c.json(
-      {
-        ok: false,
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın.",
-        },
-      },
-      401,
-    );
+    return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın." } }, 401);
   }
 
-  // DENETIM ayrı ve fail-closed bir roldür. Modül izinleri yanlışlıkla genişletilse
-  // bile sunucu veri değiştiren hiçbir isteği kabul etmez. İK verisi yalnız özel,
-  // SGK kapsamlı read-only endpointten okunabilir; gizli alt alanlara route erişimi yoktur.
   const auditRole = String(authenticated.role || "").toUpperCase() === "DENETIM";
   if (auditRole) {
     const method = String(c.req.method || "GET").toUpperCase();
@@ -178,47 +152,22 @@ shell.use("/api/auth/*", async (c, next) => {
   await next();
 });
 
-// İsteğe bağlı, salt-okunur sürüm/sağlık handshake'i. Giriş işleminin önkoşulu değildir.
 shell.get("/api/auth/status", (c) => c.json({
   ok: true,
   authVersion: AUTH_VERSION,
   transport: "canonical",
-  endpoints: {
-    login: "/api/auth/login",
-    mfaVerify: "/api/auth/mfa/verify",
-    me: "/api/auth/me",
-    logout: "/api/auth/logout",
-  },
-  sessionPolicy: {
-    passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
-    mfaSeconds: MFA_SESSION_SECONDS,
-  },
+  endpoints: { login: "/api/auth/login", mfaVerify: "/api/auth/mfa/verify", me: "/api/auth/me", logout: "/api/auth/logout" },
+  sessionPolicy: { passwordOnlySeconds: PASSWORD_SESSION_SECONDS, mfaSeconds: MFA_SESSION_SECONDS },
 }));
 
-// Tek canonical session read endpointi. Secret/security satırı istemciye hiçbir zaman açılmaz.
 shell.get("/api/auth/me", async (c) => {
   const current = await getAuthenticatedUser(c);
   if (!current) {
-    return c.json({
-      ok: false,
-      error: {
-        code: "UNAUTHORIZED",
-        message: "Oturum geçersiz, iptal edilmiş veya süresi dolmuş. Yeniden giriş yapın.",
-      },
-    }, 401);
+    return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Oturum geçersiz, iptal edilmiş veya süresi dolmuş. Yeniden giriş yapın." } }, 401);
   }
   const { security, session, ...user } = current as any;
   void security;
-  return c.json({
-    ok: true,
-    authVersion: AUTH_VERSION,
-    user,
-    session: {
-      id: session.id,
-      expiresAt: session.expires_at,
-      lastSeenAt: session.last_seen_at,
-    },
-  });
+  return c.json({ ok: true, authVersion: AUTH_VERSION, user, session: { id: session.id, expiresAt: session.expires_at, lastSeenAt: session.last_seen_at } });
 });
 
 registerAuthRecoveryCodeFallbackRoutes(shell);
@@ -228,21 +177,8 @@ shell.route("/", app);
 
 shell.onError((error, c) => {
   const requestId = c.get("requestId") || crypto.randomUUID();
-  console.error(JSON.stringify({
-    level: "error",
-    requestId,
-    method: c.req.method,
-    path: c.req.path,
-    message: error instanceof Error ? error.message : String(error),
-  }));
-  return c.json({
-    ok: false,
-    error: {
-      code: "INTERNAL_ERROR",
-      message: "Beklenmeyen bir sunucu hatası oluştu.",
-      requestId,
-    },
-  }, 500);
+  console.error(JSON.stringify({ level: "error", requestId, method: c.req.method, path: c.req.path, message: error instanceof Error ? error.message : String(error) }));
+  return c.json({ ok: false, error: { code: "INTERNAL_ERROR", message: "Beklenmeyen bir sunucu hatası oluştu.", requestId } }, 500);
 });
 
 export default shell;
