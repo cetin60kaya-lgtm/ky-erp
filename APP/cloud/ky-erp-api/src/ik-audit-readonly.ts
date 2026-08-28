@@ -43,6 +43,9 @@ function safePerson(row: Row) {
   };
 }
 
+// DENETIM için tek görünür personel kümesi:
+// 1) SGK durumu açıkça VAR olmalı; null/belirsiz kayıt güvenli tarafta kalır ve gösterilmez.
+// 2) Kart numarası bulunmalı; günlük/harici/kartsız personel denetim listesine giremez.
 const PERSON_SQL = `
   SELECT e.id,e.code,e.full_name,e.department,e.title,e.sgk_status,e.status,e.hire_date,
          s.exit_date,s.card_no,s.phone
@@ -50,7 +53,8 @@ const PERSON_SQL = `
     LEFT JOIN ik_person_card_settings s
       ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
    WHERE e.main_company_id=?
-     AND UPPER(COALESCE(e.sgk_status,'VAR')) <> 'YOK'
+     AND UPPER(TRIM(COALESCE(e.sgk_status,''))) = 'VAR'
+     AND TRIM(COALESCE(s.card_no,'')) <> ''
 `;
 
 export function registerIkAuditReadonlyRoutes(app: Hono<AppEnv>) {
