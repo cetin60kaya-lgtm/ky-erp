@@ -1,7 +1,6 @@
 (() => {
   const RANGE_KEY = "ikDailyDateRange.v2";
   const SELECTED_DATE_KEY = "ikDailySelectedDate.v2";
-  const CURRENT_WEEK_KEY = "ikDailyCurrentWeek.v1";
   const BUTTON_ID = "kyerp-current-work-week";
 
   function pad(value) {
@@ -28,6 +27,18 @@
     return { start, end, selected };
   }
 
+  function readRange() {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(RANGE_KEY) || "null");
+      return {
+        start: String(parsed?.startDate || parsed?.start || ""),
+        end: String(parsed?.endDate || parsed?.end || ""),
+      };
+    } catch {
+      return { start: "", end: "" };
+    }
+  }
+
   function writeRange(week) {
     try {
       window.localStorage.setItem(
@@ -43,40 +54,11 @@
     }
   }
 
-  function readRange() {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(RANGE_KEY) || "null");
-      return {
-        start: String(parsed?.startDate || parsed?.start || ""),
-        end: String(parsed?.endDate || parsed?.end || ""),
-      };
-    } catch {
-      return { start: "", end: "" };
-    }
-  }
-
-  function isCurrentWeekMode() {
-    try {
-      return window.localStorage.getItem(CURRENT_WEEK_KEY) === "1";
-    } catch {
-      return false;
-    }
-  }
-
-  function setCurrentWeekMode(active) {
-    try {
-      if (active) window.localStorage.setItem(CURRENT_WEEK_KEY, "1");
-      else window.localStorage.removeItem(CURRENT_WEEK_KEY);
-    } catch {
-      // noop
-    }
-  }
-
-  // İlk kullanımda varsayılan aralık Cumartesi/Pazar içermeyen güncel iş haftasıdır.
-  const weekAtBoot = currentWorkWeek();
+  // Yalnız daha önce hiç tarih aralığı kaydedilmemişse ilk açılış varsayılanı
+  // güncel Pazartesi-Cuma iş haftasıdır. Kayıtlı aralık varsa ASLA değiştirilmez.
   const storedAtBoot = readRange();
-  if (!storedAtBoot.start || !storedAtBoot.end || isCurrentWeekMode()) {
-    writeRange(weekAtBoot);
+  if (!storedAtBoot.start || !storedAtBoot.end) {
+    writeRange(currentWorkWeek());
   }
 
   function updateButtonState(button, active) {
@@ -88,12 +70,11 @@
     button.style.fontWeight = active ? "700" : "600";
   }
 
-  function syncModeFromInputs(actions, button) {
+  function syncButtonFromInputs(actions, button) {
     const inputs = [...actions.querySelectorAll('input[type="date"]')];
     if (inputs.length < 2) return;
     const week = currentWorkWeek();
     const active = inputs[0].value === week.start && inputs[1].value === week.end;
-    setCurrentWeekMode(active);
     updateButtonState(button, active);
   }
 
@@ -107,7 +88,7 @@
       button.id = BUTTON_ID;
       button.type = "button";
       button.textContent = "Bu Hafta";
-      button.title = "Güncel haftayı Pazartesi-Cuma (5 gün) aç";
+      button.title = "Yalnız tıklayınca güncel Pazartesi-Cuma (5 gün) aralığına geç";
       button.style.height = "34px";
       button.style.padding = "0 12px";
       button.style.border = "1px solid #cbd5e1";
@@ -123,25 +104,18 @@
       else actions.appendChild(button);
 
       button.addEventListener("click", () => {
-        const week = currentWorkWeek();
-        setCurrentWeekMode(true);
-        writeRange(week);
+        // Tek otomatik değişim noktası budur: kullanıcı açıkça "Bu Hafta"ya basmıştır.
+        writeRange(currentWorkWeek());
         window.location.reload();
       });
 
       actions.addEventListener("change", (event) => {
         if (!(event.target instanceof HTMLInputElement) || event.target.type !== "date") return;
-        window.setTimeout(() => syncModeFromInputs(actions, button), 0);
+        window.setTimeout(() => syncButtonFromInputs(actions, button), 0);
       });
     }
 
-    const inputs = [...actions.querySelectorAll('input[type="date"]')];
-    if (inputs.length >= 2) {
-      const week = currentWorkWeek();
-      const active = inputs[0].value === week.start && inputs[1].value === week.end;
-      updateButtonState(button, active);
-      if (active) setCurrentWeekMode(true);
-    }
+    syncButtonFromInputs(actions, button);
   }
 
   const observer = new MutationObserver(ensureButton);
