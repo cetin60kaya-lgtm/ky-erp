@@ -29,6 +29,7 @@ export async function getUserPermissions(id) { return unwrap(await apiGet(`/admi
 export async function updateUserPermissions(id, permissions) { return unwrap(await apiPut(`/admin/users/${encodeURIComponent(id)}/permissions`, { permissions })); }
 
 export async function listActiveSessions() { return unwrap(await apiGet("/admin/security/sessions", { _ts: Date.now() })); }
+export async function listSessionHistory(limit = 250) { return unwrap(await apiGet("/admin/security/session-history", { limit, _ts: Date.now() })); }
 export async function revokeSession(id) { return unwrap(await apiPost(`/admin/security/sessions/${encodeURIComponent(id)}/revoke`, {})); }
 export async function revokeAllUserSessions(id) { return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/revoke-all`, {})); }
 export async function listLoginApprovals() { return unwrap(await apiGet("/admin/security/approvals", { _ts: Date.now() })); }
