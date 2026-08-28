@@ -9,10 +9,16 @@ KY ERP uygulaması ve veritabanı Cloudflare altyapısında çalışmaya devam e
 
 Google Drive; büyük, kalıcı ve kullanıcı tarafından erişilmesi gereken dosyaların ana depolama alanıdır.
 
-- Desen dosyaları: Google Drive / Desinatör
-- İşNet PDF/XML ve belge arşivi: Google Drive / KY-ERP / STORAGE / ISNET
-- KY ERP: indeks, ilişki, durum, eşleştirme, işlem geçmişi ve kullanıcı arayüzü
+Tek ana Google Drive kökü: `KY-ERP`
+
+- Desen dosyaları: `KY-ERP / Desinatör`
+- İşNet PDF/XML ve belge arşivi: `KY-ERP / İŞNET`
+- Deploy yardımcıları: `KY-ERP / KY ERP DEPLOY`
+- Proje kaynakları: `KY-ERP / KY ERP - CHATGPT PROJE KAYNAKLARI`
+- KY ERP uygulaması: indeks, ilişki, durum, eşleştirme, işlem geçmişi ve kullanıcı arayüzü
 - Gmail: desen gönderimlerinin gerçek gönderim kanıtı
+
+Google Drive kökünde KY ERP ile ilgili dağınık klasör bırakılmaz; ERP kapsamındaki klasörler `KY-ERP` altında toplanır.
 
 Dosyalar gereksiz yere R2/D1 içine ikinci kez tam boy kopyalanmaz. Gereken yerde yalnız küçük önizleme/cache tutulabilir.
 
@@ -20,7 +26,7 @@ Dosyalar gereksiz yere R2/D1 içine ikinci kez tam boy kopyalanmaz. Gereken yerd
 
 ## 2. Desen — sabit Google Drive klasörleri
 
-Ana kök: `Desinatör`
+Ana yol: `KY-ERP / Desinatör`
 
 Sabit klasör görevleri:
 
@@ -35,7 +41,7 @@ Sabit klasör görevleri:
 
 ### 2.1 Model oluşturma kuralı
 
-Yalnız `Desinatör/görsel` içindeki JPG/JPEG dosyaları model kartını oluşturur veya mevcut modeli günceller.
+Yalnız `KY-ERP/Desinatör/görsel` içindeki JPG/JPEG dosyaları model kartını oluşturur veya mevcut modeli günceller.
 
 Örnek:
 
@@ -173,7 +179,7 @@ uyarısı üretmelidir.
 
 Ana Drive yolu:
 
-`KY-ERP / STORAGE / ISNET`
+`KY-ERP / İŞNET`
 
 Sabit alt klasörler:
 
@@ -197,19 +203,40 @@ PDF ve XML aynı belge kaydı altında ilişkilendirilir. Kullanıcı arayüzü 
 - firma/model
 - PDF Drive fileId
 - XML Drive fileId
-- Drive webViewLink
+- PDF Drive webViewLink
+- XML Drive webViewLink
 - indirme/senkron zamanı
 - kaynak İşNet kaydı
 - durum
 - hata/eksik bilgisi
 
-### 5.1 İşNet dosya kuralları
+### 5.1 İşNet tek sefer indirme ve Drive'dan açma kuralı
 
-- İşNet'ten indirilen PDF/XML doğrudan Drive'a yazılabilir.
-- Aynı belge tekrar indirilirse belge no + tür + kaynak kimliği ile mükerrer dosya oluşturulmamalı; mevcut kayıt güncellenmeli veya sürüm bilgisi tutulmalıdır.
-- Drive'a başarılı kayıt olmadan belge `ARŞİVLENDİ` sayılmamalıdır.
+Bu kural zorunludur:
+
+1. İşNet belgesi ilk kez bulunduğunda PDF ve varsa XML İşNet'ten indirilir.
+2. PDF/XML başarıyla Google Drive'a yüklenir.
+3. Drive `fileId` ve `webViewLink` ERP belge kaydına yazılır.
+4. Bu aşamadan sonra belge `ARŞİVLENDİ` kabul edilir ve İşNet tarafındaki dosya alma işi tamamlanmış sayılır.
+5. Kullanıcı PDF ikonuna veya `PDF Aç` işlemine bastığında İşNet'e yeniden bağlanılmaz ve belge yeniden indirilmez.
+6. PDF doğrudan kayıtlı Google Drive `webViewLink` üzerinden açılır.
+7. XML için de aynı prensip geçerlidir; gerekiyorsa Drive'da açılır/indirilir ancak tekrar İşNet'e gidilmez.
+8. Yazdırma, mail gönderimi ve belge önizleme akışlarının ana dosya kaynağı arşivlenmiş Drive dosyasıdır.
+9. İşNet'e ancak yeni belge senkronu, açıkça istenen portal işlemi veya Drive arşivinde hiç dosya bulunmayan eksik kayıt için gidilir.
+
+Sonuç:
+
+`İŞNET → BİR KEZ PDF/XML AL → DRIVE'A ARŞİVLE → SONRA HER İŞLEM DRIVE'DAN`
+
+### 5.2 İşNet dosya kuralları
+
+- İşNet'ten indirilen PDF/XML doğrudan Drive'a yazılır.
+- Aynı belge tekrar indirilmez; belge no + tür + kaynak kimliği + Drive fileId ile mükerrerlik engellenir.
+- Drive'a başarılı kayıt olmadan belge `ARŞİVLENDİ` sayılmaz.
 - Drive dosyası silinirse ERP kaydı sessizce silinmez; `DRIVE_MISSING` olarak işaretlenir.
-- Yazdırma ve mail gönderimi Drive'daki belge kaydı üzerinden yapılabilir.
+- `DRIVE_MISSING` durumda kullanıcıya açık hata gösterilir; sessizce İşNet'ten tekrar indirme yapılmaz. Yeniden alma ayrıca kullanıcı işlemi olmalıdır.
+- PDF butonu doğrudan Drive dosyasını açar.
+- Yazdırma ve mail gönderimi Drive'daki belge kaydı üzerinden yapılır.
 - Büyük dosyalar D1/R2 içine gereksiz yere kopyalanmaz.
 
 ---
@@ -238,8 +265,8 @@ ERP Worker tarafında sunucu kimliği/OAuth kullanır.
 
 Yetki minimum olmalıdır:
 
-- Desen için yalnız `Desinatör` alanı
-- İşNet için yalnız ilgili `KY-ERP/STORAGE/ISNET` alanı
+- Desen için `KY-ERP/Desinatör`
+- İşNet için `KY-ERP/İŞNET`
 - Gmail için yalnız gerekli okuma/gönderme kapsamı
 
 Dosya silme otomasyonu varsayılan olarak kapalıdır.
@@ -266,9 +293,9 @@ Desen modülü yalnız resim galerisi değil; modelin tüm yaşam döngüsünün
 
 `MODEL → Görsel → Desen Dosyaları → Yerleşim/Kalıp → Giden Desen → Gmail Gönderimi → Revize → İmalat/Boyahane → Tam Geçmiş`
 
-İşNet tarafında da:
+İşNet tarafında:
 
-`İŞNET BELGESİ → PDF/XML İNDİR → GOOGLE DRIVE ARŞİVLE → ERP İNDEKSLE → YAZDIR/MAIL/İŞ AKIŞI → LOG`
+`İŞNET BELGESİ → PDF/XML BİR KEZ İNDİR → GOOGLE DRIVE ARŞİVLE → ERP İNDEKSLE → PDF/XML/YAZDIR/MAIL DRIVE'DAN → LOG`
 
 Ana kullanıcı ilkesi:
 
