@@ -17,8 +17,19 @@ function nowIso() {
 function isOwnerRole(role: unknown) {
   return ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
 }
+function isCompanyAdminRole(role: unknown) {
+  return upper(role) === "COMPANY_ADMIN";
+}
 function jsonError(code: string, message: string) {
   return { ok: false, error: { code, message } };
+}
+function parseDetail(value: unknown) {
+  try {
+    const parsed = JSON.parse(text(value) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 async function bodyOf(c: any) {
   try {
@@ -63,7 +74,109 @@ async function audit(c: any, current: AnyRow, target: AnyRow, action: string, de
   }
 }
 
+function sessionPolicyFromAudit(events: AnyRow[], session: AnyRow) {
+  const created = events.find((event) => event.session_id === session.id && event.action === "SESSION_CREATED_POLICY");
+  const detail = parseDetail(created?.detail);
+  return upper(detail.policy || session.login_policy || "");
+}
+
+function verificationMethod(events: AnyRow[], session: AnyRow, policy: string) {
+  if (policy === "PASSWORD_ONLY") return "Sadece parola";
+  if (policy === "GOOGLE") return "Google Authenticator";
+  if (policy === "MICROSOFT") return "Microsoft Authenticator";
+  if (policy === "BOTH_MFA") return "Google + Microsoft Authenticator";
+
+  const createdAt = Date.parse(text(session.created_at));
+  const candidate = events.find((event) => {
+    if (event.action !== "MFA_VERIFIED_POLICY" || text(event.target_user_id) !== text(session.user_id)) return false;
+    const eventAt = Date.parse(text(event.created_at));
+    return Number.isFinite(createdAt) && Number.isFinite(eventAt) && eventAt <= createdAt + 5_000 && eventAt >= createdAt - (15 * 60 * 1000);
+  });
+  const detail = parseDetail(candidate?.detail);
+  const provider = upper(detail.provider);
+  if (provider === "GOOGLE") return "Google Authenticator";
+  if (provider === "MICROSOFT") return "Microsoft Authenticator";
+  if (policy === "ANY_MFA") return "Google veya Microsoft MFA";
+  return "MFA / Güvenli giriş";
+}
+
+function closeReason(events: AnyRow[], session: AnyRow) {
+  const sessionEvents = events.filter((event) => text(event.session_id) === text(session.id));
+  if (sessionEvents.some((event) => event.action === "SESSION_LOGOUT")) return "Kullanıcı çıkış yaptı";
+  if (sessionEvents.some((event) => event.action === "SESSION_REVOKED")) return "Yönetici oturumu sonlandırdı";
+  if (session.revoked_at) {
+    if (text(session.revoked_by) && text(session.revoked_by) !== text(session.user_id)) return "Yönetici / güvenlik işlemi ile kapatıldı";
+    return "Çıkış / güvenlik işlemi ile kapatıldı";
+  }
+  if (Date.parse(text(session.expires_at)) <= Date.now()) return "Oturum süresi doldu";
+  return "Aktif";
+}
+
 export function registerAuthOwnerGuardRoutes(app: any) {
+  // Tam oturum geçmişi: aktif + kapanmış + süresi dolmuş oturumlar.
+  // Yalnız okuma yapar; migration veya production write içermez.
+  app.get("/api/admin/security/session-history", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current || (!isOwnerRole(current.role) && !isCompanyAdminRole(current.role))) {
+      return c.json(jsonError("FORBIDDEN", "Yönetici yetkisi gereklidir."), 403);
+    }
+
+    const requested = Number(c.req.query("limit") || 250);
+    const limit = Math.max(25, Math.min(500, Number.isFinite(requested) ? Math.floor(requested) : 250));
+    const sessionResult = await c.env.DB.prepare(
+      `SELECT s.*,u.username,u.full_name,u.role,us.email,us.role_override,us.login_policy
+         FROM auth_sessions s
+         JOIN auth_users u ON u.id=s.user_id
+         LEFT JOIN auth_user_security us ON us.user_id=u.id
+        ORDER BY s.created_at DESC
+        LIMIT ?`,
+    ).bind(limit).all<AnyRow>();
+
+    const auditResult = await c.env.DB.prepare(
+      `SELECT id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at
+         FROM auth_security_audit
+        ORDER BY created_at DESC
+        LIMIT 1500`,
+    ).all<AnyRow>();
+    const events = auditResult.results || [];
+
+    const rows = (sessionResult.results || []).filter((row: AnyRow) => {
+      if (isOwnerRole(current.role)) return true;
+      const targetRole = effectiveRole(row);
+      return text(row.main_company_slug) === text(current.mainCompanySlug) && !isOwnerRole(targetRole);
+    }).map((row: AnyRow) => {
+      const policy = sessionPolicyFromAudit(events, row);
+      const active = !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now();
+      const endedAt = row.revoked_at || (!active ? row.expires_at : null);
+      return {
+        id: row.id,
+        userId: row.user_id,
+        username: row.username,
+        fullName: row.full_name,
+        email: row.email,
+        role: effectiveRole(row),
+        mainCompanySlug: row.main_company_slug,
+        deviceLabel: row.device_label,
+        userAgent: row.user_agent,
+        ipAddress: row.ip_address,
+        createdAt: row.created_at,
+        approvedAt: row.approved_at,
+        lastSeenAt: row.last_seen_at,
+        expiresAt: row.expires_at,
+        endedAt,
+        revokedAt: row.revoked_at,
+        revokedBy: row.revoked_by,
+        active,
+        policy,
+        verificationMethod: verificationMethod(events, row, policy),
+        closeReason: closeReason(events, row),
+        durationSeconds: Math.max(0, Math.floor(((Date.parse(text(endedAt || nowIso()))) - Date.parse(text(row.created_at))) / 1000)),
+      };
+    });
+
+    return c.json({ ok: true, data: rows });
+  });
+
   // Uygulama sahibinin kritik güvenlik alanları genel kullanıcı düzenleme rotasından değiştirilemez.
   // E-posta doğrulama/değiştirme yalnız MFA step-up kullanan owner-recovery rotasıyla yapılır.
   app.patch("/api/admin/users/:id", async (c: any, next: any) => {
