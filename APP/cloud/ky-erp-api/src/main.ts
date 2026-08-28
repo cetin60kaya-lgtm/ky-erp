@@ -24,6 +24,7 @@ import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
+import { registerIkAuditReadonlyRoutes } from "./ik-audit-readonly";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
@@ -92,6 +93,7 @@ registerIsnetInvoiceRuntimeRoutes(app);
 registerIsnetRuntimeV2Routes(app);
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
+registerIkAuditReadonlyRoutes(app);
 registerIkPersonnelControlRoutes(app);
 // Günlük personel roster'ı açık seçimdir. Boş tarih aralığı tüm aktif havuza dönüşmez;
 // yalnız kaydedilmiş roster + gerçekten çalışılmış personel korunur.
@@ -153,6 +155,20 @@ shell.use("/api/*", async (c, next) => {
     );
   }
 
+  // DENETIM ayrı ve fail-closed bir roldür. Modül izinleri yanlışlıkla genişletilse
+  // bile sunucu veri değiştiren hiçbir isteği kabul etmez. İK verisi yalnız özel,
+  // SGK kapsamlı read-only endpointten okunabilir; gizli alt alanlara route erişimi yoktur.
+  const auditRole = String(authenticated.role || "").toUpperCase() === "DENETIM";
+  if (auditRole) {
+    const method = String(c.req.method || "GET").toUpperCase();
+    if (!["GET", "HEAD"].includes(method)) {
+      return c.json({ ok: false, error: { code: "READ_ONLY", message: "Bu hesap yalnız görüntüleme yetkisine sahiptir." } }, 403);
+    }
+    if (path.startsWith("/api/ik/") && !path.startsWith("/api/ik/audit/")) {
+      return c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
+    }
+  }
+
   await next();
 });
 
@@ -162,8 +178,7 @@ shell.use("/api/auth/*", async (c, next) => {
   await next();
 });
 
-// Read-only handshake. Frontend her girişten önce bu endpoint ile doğru Worker sürümüne
-// bağlı olduğunu doğrular; kullanıcı, challenge veya audit kaydı oluşturmaz.
+// İsteğe bağlı, salt-okunur sürüm/sağlık handshake'i. Giriş işleminin önkoşulu değildir.
 shell.get("/api/auth/status", (c) => c.json({
   ok: true,
   authVersion: AUTH_VERSION,
