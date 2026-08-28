@@ -30,6 +30,7 @@ export async function updateUserPermissions(id, permissions) { return unwrap(awa
 
 export async function listActiveSessions() { return unwrap(await apiGet("/admin/security/sessions", { _ts: Date.now() })); }
 export async function listSessionHistory(limit = 250) { return unwrap(await apiGet("/admin/security/session-history", { limit, _ts: Date.now() })); }
+export async function listSecurityAuditLog(limit = 250) { return unwrap(await apiGet("/admin/security/audit-log", { limit, _ts: Date.now() })); }
 export async function revokeSession(id) { return unwrap(await apiPost(`/admin/security/sessions/${encodeURIComponent(id)}/revoke`, {})); }
 export async function revokeAllUserSessions(id) { return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/revoke-all`, {})); }
 export async function listLoginApprovals() { return unwrap(await apiGet("/admin/security/approvals", { _ts: Date.now() })); }
@@ -42,21 +43,9 @@ export async function resetUserMfa(id, provider = "ALL") {
   return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/reset-mfa${suffix}`, {}));
 }
 
-export async function listLoginSecurityPolicies() {
-  return unwrap(await apiGet("/admin/security/policies", { _ts: Date.now() }));
-}
-export async function updateLoginSecurityPolicy(id, payload = {}) {
-  return unwrap(await apiPatch(`/admin/security/users/${encodeURIComponent(id)}/policy`, payload));
-}
-export async function getOwnerRecoveryConfig() {
-  return unwrap(await apiGet("/admin/security/owner-recovery", { _ts: Date.now() }));
-}
-export async function saveOwnerRecoveryQuestions(payload = {}) {
-  return unwrap(await apiPut("/admin/security/owner-recovery/questions", payload));
-}
-export async function startOwnerRecoveryContactVerification(payload = {}) {
-  return unwrap(await apiPost("/admin/security/owner-recovery/contact/start", payload));
-}
-export async function verifyOwnerRecoveryContact(payload = {}) {
-  return unwrap(await apiPost("/admin/security/owner-recovery/contact/verify", payload));
-}
+export async function listLoginSecurityPolicies() { return unwrap(await apiGet("/admin/security/policies", { _ts: Date.now() })); }
+export async function updateLoginSecurityPolicy(id, payload = {}) { return unwrap(await apiPatch(`/admin/security/users/${encodeURIComponent(id)}/policy`, payload)); }
+export async function getOwnerRecoveryConfig() { return unwrap(await apiGet("/admin/security/owner-recovery", { _ts: Date.now() })); }
+export async function saveOwnerRecoveryQuestions(payload = {}) { return unwrap(await apiPut("/admin/security/owner-recovery/questions", payload)); }
+export async function startOwnerRecoveryContactVerification(payload = {}) { return unwrap(await apiPost("/admin/security/owner-recovery/contact/start", payload)); }
+export async function verifyOwnerRecoveryContact(payload = {}) { return unwrap(await apiPost("/admin/security/owner-recovery/contact/verify", payload)); }
