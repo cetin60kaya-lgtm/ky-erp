@@ -5,6 +5,7 @@ import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
+const AUTH_DEVICE_KEY = "kyerp_auth_device_v1";
 const AUTH_VERSION = "canonical-v3";
 
 const MODULE_KEYS = [
@@ -32,6 +33,23 @@ function cleanLegacyAuthStorage() {
   ["kyerp.auth", "kyerp_user", "token", "authToken"].forEach((key) => {
     try { window.localStorage.removeItem(key); } catch { /* noop */ }
   });
+}
+
+function stableBrowserDeviceLabel() {
+  try {
+    const stored = String(window.localStorage.getItem(AUTH_DEVICE_KEY) || "").trim();
+    if (stored) return `BROWSER:${stored}`;
+    const generated = typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+    window.localStorage.setItem(AUTH_DEVICE_KEY, generated);
+    return `BROWSER:${generated}`;
+  } catch {
+    const generated = typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+    return `BROWSER:${generated}`;
+  }
 }
 
 function parseJwtPayload(token) {
@@ -149,7 +167,7 @@ async function directAuthRequest(path, options = {}) {
       throw error;
     }
 
-    if (normalizedPath === "/auth/status" && authVersion && authVersion !== AUTH_VERSION) {
+    if (authVersion && authVersion !== AUTH_VERSION) {
       const mismatch = new Error("KY ERP giriş servisi ile uygulama sürümü uyuşmuyor. Canlı dağıtımı yenileyin.");
       mismatch.status = 409;
       mismatch.code = "AUTH_VERSION_MISMATCH";
@@ -338,14 +356,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (identity, password, deviceLabel = "") => {
-    const service = await directAuthRequest("/auth/status", { method: "GET", timeoutMs: 10000 });
-    if (String(service?.authVersion || "") !== AUTH_VERSION) {
-      const mismatch = new Error("KY ERP giriş servisi güncel değil. Canlı dağıtımı yenileyin.");
-      mismatch.status = 409;
-      mismatch.code = "AUTH_VERSION_MISMATCH";
-      throw mismatch;
-    }
-    const body = { username: identity, password, deviceLabel };
+    const body = {
+      username: identity,
+      password,
+      deviceLabel: String(deviceLabel || "").trim() || stableBrowserDeviceLabel(),
+    };
     const response = await directAuthRequest("/auth/login", { body });
     return finalizeResponse(response);
   }, [finalizeResponse]);
