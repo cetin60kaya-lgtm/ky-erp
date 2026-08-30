@@ -30,6 +30,24 @@ function Read-SecretPlain([string]$Prompt) {
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
 }
 
+function Get-HttpErrorDetail($ErrorRecord) {
+    $detail = [string]$ErrorRecord.Exception.Message
+    try {
+        $response = $ErrorRecord.Exception.Response
+        if ($null -ne $response -and $null -ne $response.Content) {
+            $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            if ($body) { $detail = "$detail | $body" }
+        }
+    } catch {}
+    try {
+        if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+            $body = [string]$ErrorRecord.ErrorDetails.Message
+            if ($body -and $detail -notlike "*$body*") { $detail = "$detail | $body" }
+        }
+    } catch {}
+    return $detail
+}
+
 function Invoke-ResendApi([string]$Method, [string]$Path, $Body = $null) {
     if (-not $script:ResendKey) { Fail "Resend API anahtari hazir degil." }
     $headers = @{ Authorization = "Bearer $($script:ResendKey)"; Accept = "application/json" }
@@ -41,11 +59,7 @@ function Invoke-ResendApi([string]$Method, [string]$Path, $Body = $null) {
         }
         return Invoke-RestMethod -Uri $uri -Method $Method -Headers $headers -TimeoutSec 40
     } catch {
-        $detail = $_.Exception.Message
-        try {
-            $stream = $_.Exception.Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-            if ($stream) { $detail = "$detail | $stream" }
-        } catch {}
+        $detail = Get-HttpErrorDetail $_
         Fail "Resend API istegi basarisiz [$Method $Path]: $detail"
     }
 }
@@ -151,11 +165,9 @@ function Ensure-ResendDomain {
     $domain = @($list.data | Where-Object { ([string]$_.name).Trim().ToLowerInvariant() -eq $DOMAIN }) | Select-Object -First 1
     if ($null -eq $domain) {
         Write-Host "$DOMAIN Resend hesabina ekleniyor..." -ForegroundColor Yellow
-        $domain = Invoke-ResendApi "POST" "/domains" @{
-            name = $DOMAIN
-            region = "eu-west-1"
-            capabilities = @{ sending = "enabled"; receiving = "disabled" }
-        }
+        # Resend'in guncel create-domain sozlesmesinde en guvenli temel istek yalniz domain adidir.
+        # Sending/receiving capabilities arayuzden veya domain update ile ayrica yonetilebilir.
+        $domain = Invoke-ResendApi "POST" "/domains" @{ name = $DOMAIN }
     }
     $domainId = [string]$domain.id
     if (-not $domainId) { Fail "Resend domain kimligi alinmadi." }
