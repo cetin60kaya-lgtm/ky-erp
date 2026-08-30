@@ -38,8 +38,13 @@ test("DENETIM system account bootstrap is active, unknown-password, identity-loc
   assert.match(source, /'AUDIT'/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS ik_user_hr_scope/);
   assert.match(source, /must_change_password/);
-  assert.match(source, /CREATE TRIGGER IF NOT EXISTS trg_denetime_system_identity_guard/);
+  assert.match(source, /DROP TRIGGER IF EXISTS trg_denetime_system_identity_guard/);
+  assert.match(source, /CREATE TRIGGER trg_denetime_system_identity_guard/);
   assert.match(source, /AFTER UPDATE OF username,role ON auth_users/);
   assert.match(source, /username='denetim'/);
   assert.match(source, /role='DENETIM'/);
+  assert.match(source, /DROP TRIGGER IF EXISTS trg_denetime_security_role_guard/);
+  assert.match(source, /CREATE TRIGGER trg_denetime_security_role_guard/);
+  assert.match(source, /AFTER UPDATE OF role_override ON auth_user_security/);
+  assert.match(source, /role_override=NULL/);
 });
