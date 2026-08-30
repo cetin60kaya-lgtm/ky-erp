@@ -4,9 +4,9 @@ import { getAuthenticatedUser } from "./auth-cloud";
 type AnyRow = Record<string, any>;
 
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
-const OWNER_ROLLING_SECONDS = 86_400;
-const PASSWORD_SECONDS = 28_800;
-const MFA_SECONDS = 36_000;
+export const OWNER_ROLLING_SECONDS = 86_400;
+export const PASSWORD_SESSION_SECONDS = 28_800;
+export const MFA_SESSION_SECONDS = 36_000;
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -19,6 +19,10 @@ function nowIso() {
 }
 function isOwner(role: unknown) {
   return ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
+}
+export function sessionRefreshSeconds(role: unknown, policy: unknown) {
+  if (isOwner(role)) return OWNER_ROLLING_SECONDS;
+  return upper(policy) === "PASSWORD_ONLY" ? PASSWORD_SESSION_SECONDS : MFA_SESSION_SECONDS;
 }
 function bearerToken(c: any) {
   const match = text(c.req.header("Authorization")).match(/^Bearer\s+(.+)$/i);
@@ -65,9 +69,8 @@ async function signToken(c: any, payload: AnyRow) {
   return `${input}.${signature}`;
 }
 function ttlFor(current: AnyRow, oldPayload: AnyRow) {
-  if (isOwner(current?.role)) return OWNER_ROLLING_SECONDS;
-  const policy = upper(oldPayload?.policy || current?.loginPolicy || current?.security?.login_policy || "ANY_MFA");
-  return policy === "PASSWORD_ONLY" ? PASSWORD_SECONDS : MFA_SECONDS;
+  const policy = oldPayload?.policy || current?.loginPolicy || current?.security?.login_policy || "ANY_MFA";
+  return sessionRefreshSeconds(current?.role, policy);
 }
 
 export function registerAuthSessionRefreshRoutes(app: any) {
