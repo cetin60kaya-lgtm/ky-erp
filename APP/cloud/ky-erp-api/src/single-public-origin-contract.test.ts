@@ -24,7 +24,8 @@ test("normal user writes cannot create ADMIN permission or unsupported forced-pa
   const hardening = frontend("pages/admin/AdminUsersPanelHardening.css");
   const delegate = frontend("pages/admin/AdminUsersPanel.jsx");
   assert.match(entry, /url\.pathname === "\/api\/admin\/users\/create-complete"/);
-  assert.match(entry, /\/\^\\\/api\\\/admin\\\/users\\\/\[\^\/\]\+\\\/permissions\$\//);
+  assert.match(entry, /isPermissionWrite = method === "PUT"/);
+  assert.match(entry, /users\\\/\[\^\/\]\+\\\/permissions\$/);
   assert.match(entry, /body\.mustChangePassword = false/);
   assert.match(entry, /!== "ADMIN"/);
   assert.match(delegate, /AdminUsersPanelHardening\.css/);
