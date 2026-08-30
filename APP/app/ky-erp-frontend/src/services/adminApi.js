@@ -49,3 +49,7 @@ export async function getOwnerRecoveryConfig() { return unwrap(await apiGet("/ad
 export async function saveOwnerRecoveryQuestions(payload = {}) { return unwrap(await apiPut("/admin/security/owner-recovery/questions", payload)); }
 export async function startOwnerRecoveryContactVerification(payload = {}) { return unwrap(await apiPost("/admin/security/owner-recovery/contact/start", payload)); }
 export async function verifyOwnerRecoveryContact(payload = {}) { return unwrap(await apiPost("/admin/security/owner-recovery/contact/verify", payload)); }
+
+export async function getDeliveryCapabilities() { return unwrap(await apiGet("/admin/security/delivery-capabilities", { _ts: Date.now() })); }
+export async function startUserEmailVerification(id) { return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/email-verification/start`, {})); }
+export async function verifyUserEmail(id, payload = {}) { return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/email-verification/verify`, payload)); }
