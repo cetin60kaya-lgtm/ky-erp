@@ -15,6 +15,7 @@ test("main registers the complete owner management backend", () => {
     "registerAdminMappingRoutes",
     "registerAdminStorageRoutes",
     "registerAdminBackupRoutes",
+    "registerAdminBackupSqlRoutes",
     "registerAdminManagementRoutes",
   ]) {
     assert.match(source, new RegExp(`${name}\\(app\\)`));
@@ -58,6 +59,31 @@ test("backup backend creates real R2 manifests and requires guarded restore", ()
   assert.match(ui, /safetyBackupId/);
 });
 
+test("tenant SQL backup is owner-only, multipart and excludes auth state", () => {
+  const backend = api("admin-backup-sql.ts");
+  const ui = frontend("pages/admin/AdminBackupLogs.jsx");
+  const client = frontend("services/adminApi.js");
+  assert.match(backend, /createMultipartUpload/);
+  assert.match(backend, /tenant-backup\.sql/);
+  assert.match(backend, /value\.startsWith\("auth_"\)/);
+  assert.match(backend, /value === "json_store"/);
+  assert.match(backend, /\/api\/admin\/backups\/:id\/sql/);
+  assert.match(backend, /\/api\/admin\/backups\/:id\/sql\/download/);
+  assert.match(ui, /SQL İndir/);
+  assert.match(ui, /SQL Hazırla/);
+  assert.match(client, /generateBackupSql/);
+  assert.match(client, /downloadBackupSql/);
+});
+
+test("main company card exposes backup, SQL and guarded recovery", () => {
+  const ui = frontend("pages/admin/AdminCompanySettings.jsx");
+  assert.match(ui, /Firma Yedek & Geri Dönüş/);
+  assert.match(ui, /Tam Yedek Al/);
+  assert.match(ui, /SQL Hazırla & İndir/);
+  assert.match(ui, /GERI YUKLE/);
+  assert.match(ui, /PRE_RESTORE/);
+});
+
 test("tenant slug rename and transfer are D1 batch atomic", () => {
   const source = api("admin-core-cloud.ts");
   assert.match(source, /c\.env\.DB\.batch\(statements\)/);
@@ -71,6 +97,8 @@ test("all admin backup client calls are implemented", () => {
   assert.match(source, /\/admin\/backups/);
   assert.match(source, /restoreBackup/);
   assert.match(source, /listBackups/);
+  assert.match(source, /generateBackupSql/);
+  assert.match(source, /downloadBackupSql/);
 });
 
 test("direct deploy avoids full migration chain and runs unit contracts", () => {
