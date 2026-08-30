@@ -6,10 +6,14 @@ import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
 const AUTH_DEVICE_KEY = "kyerp_auth_device_v1";
+const AUTH_REFRESH_PENDING_KEY = "kyerp_auth_refresh_pending_v1";
+const AUTH_REFRESH_LOCK_KEY = "kyerp_auth_refresh_lock_v1";
+const AUTH_TAB_KEY = "kyerp_auth_tab_v1";
 const AUTH_VERSION = "canonical-v3";
 const NORMAL_REFRESH_BEFORE_MS = 30 * 60 * 1000;
 const OWNER_ROLLING_REFRESH_BEFORE_MS = 12 * 60 * 60 * 1000;
 const REFRESH_RETRY_MS = 60 * 1000;
+const REFRESH_LOCK_MS = 30 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
@@ -51,6 +55,42 @@ function stableBrowserDeviceLabel() {
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
     return `BROWSER:${generated}`;
   }
+}
+
+function stableTabId() {
+  try {
+    const stored = String(window.sessionStorage.getItem(AUTH_TAB_KEY) || "").trim();
+    if (stored) return stored;
+    const generated = typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+    window.sessionStorage.setItem(AUTH_TAB_KEY, generated);
+    return generated;
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+  }
+}
+
+function acquireRefreshLock(ownerId) {
+  try {
+    const now = Date.now();
+    let current = null;
+    try { current = JSON.parse(window.localStorage.getItem(AUTH_REFRESH_LOCK_KEY) || "null"); } catch { current = null; }
+    if (current?.owner && current.owner !== ownerId && Number(current.expiresAt || 0) > now) return false;
+    const next = { owner: ownerId, expiresAt: now + REFRESH_LOCK_MS };
+    window.localStorage.setItem(AUTH_REFRESH_LOCK_KEY, JSON.stringify(next));
+    const confirmed = JSON.parse(window.localStorage.getItem(AUTH_REFRESH_LOCK_KEY) || "null");
+    return confirmed?.owner === ownerId;
+  } catch {
+    return true;
+  }
+}
+
+function releaseRefreshLock(ownerId) {
+  try {
+    const current = JSON.parse(window.localStorage.getItem(AUTH_REFRESH_LOCK_KEY) || "null");
+    if (!current || current.owner === ownerId) window.localStorage.removeItem(AUTH_REFRESH_LOCK_KEY);
+  } catch { /* noop */ }
 }
 
 function parseJwtPayload(token) {
@@ -141,7 +181,7 @@ async function directAuthRequest(path, options = {}) {
       if (body !== undefined) {
         // JSON metni text/plain ile taşınır. Bu Content-Type CORS safelist kapsamındadır;
         // kyerp.net -> api.kyerp.net girişinde gereksiz OPTIONS/preflight oluşmaz.
-        // Backend Hono c.req.json() gövdeyi aynı JSON olarak okumaya devam eder.
+        // Backend Request.json() gövdeyi aynı JSON olarak okumaya devam eder.
         headers["Content-Type"] = "text/plain;charset=UTF-8";
       }
       if (token) headers.Authorization = `Bearer ${token}`;
@@ -207,7 +247,21 @@ function removeStoredAuth() {
     window.localStorage.removeItem(AUTH_USER_KEY);
     window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
     window.sessionStorage.removeItem(AUTH_USER_KEY);
+    window.sessionStorage.removeItem(AUTH_REFRESH_PENDING_KEY);
   } catch { /* noop */ }
+}
+
+function storePendingRefresh(value) {
+  try { window.sessionStorage.setItem(AUTH_REFRESH_PENDING_KEY, JSON.stringify(value)); } catch { /* noop */ }
+}
+function readPendingRefresh() {
+  try {
+    const value = JSON.parse(window.sessionStorage.getItem(AUTH_REFRESH_PENDING_KEY) || "null");
+    return value && typeof value === "object" ? value : null;
+  } catch { return null; }
+}
+function clearPendingRefresh() {
+  try { window.sessionStorage.removeItem(AUTH_REFRESH_PENDING_KEY); } catch { /* noop */ }
 }
 
 function readStoredAuth() {
@@ -221,7 +275,14 @@ function readStoredAuth() {
     const userRaw = persistentUserRaw || sessionUserRaw;
     const user = userRaw ? JSON.parse(userRaw) : null;
     if (!token || !user || !isTokenUsable(token)) {
-      removeStoredAuth();
+      // Hazırlanmış iki-aşamalı refresh varsa eski token süresi dolmuş olsa bile
+      // restoreSession commit'i tamamlamaya çalışabilsin diye pending kayıt korunur.
+      try {
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.localStorage.removeItem(AUTH_USER_KEY);
+        window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+        window.sessionStorage.removeItem(AUTH_USER_KEY);
+      } catch { /* noop */ }
       return { token: "", user: null, permissions: [] };
     }
     if (!persistentToken) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
@@ -239,6 +300,7 @@ export function AuthProvider({ children }) {
   const authSnapshotRef = useRef({ user, permissions });
   const tokenRef = useRef(token);
   const authMutationRef = useRef(new Map());
+  const tabIdRef = useRef(stableTabId());
   authSnapshotRef.current = { user, permissions };
   tokenRef.current = token;
 
@@ -289,23 +351,86 @@ export function AuthProvider({ children }) {
     return response;
   }, [saveAuth]);
 
+  const commitPreparedRefresh = useCallback(async (prepared) => {
+    if (!prepared?.refreshId || !prepared?.refreshSecret || !prepared?.token) return null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await directAuthRequest("/auth/refresh/commit", {
+          body: { refreshId: prepared.refreshId, refreshSecret: prepared.refreshSecret },
+          timeoutMs: 12000,
+        });
+        clearPendingRefresh();
+        return finalizeResponse({ ...prepared, stage: "AUTHENTICATED" });
+      } catch (error) {
+        lastError = error;
+        const status = Number(error?.status || 0);
+        const code = String(error?.code || "");
+        if (status === 409 && code === "SESSION_ROTATED") {
+          clearPendingRefresh();
+          return null;
+        }
+        if (shouldClearStoredAuthForStatus(status, code, "/api/auth/refresh/commit")) {
+          clearPendingRefresh();
+          clearAuth();
+          return null;
+        }
+        if (status > 0 && ![500, 502, 503, 504].includes(status)) {
+          clearPendingRefresh();
+          return null;
+        }
+        if (attempt < 2) await wait(attempt === 0 ? 300 : 1200);
+      }
+    }
+
+    // Commit cevabı ağda kaybolmuş olabilir. Hazırlanan yeni token sunucuda geçerliyse
+    // /auth/me bunu kanıtlar ve token güvenle kaydedilir. Değilse eski tokena dokunulmaz;
+    // pending kayıt sonraki denemede idempotent commit için saklanır.
+    try {
+      const probe = await directAuthRequest("/auth/me", { method: "GET", token: prepared.token, timeoutMs: 6000 });
+      if (probe?.user) {
+        clearPendingRefresh();
+        return finalizeResponse({ ...prepared, user: probe.user, stage: "AUTHENTICATED" });
+      }
+    } catch { /* pending korunur */ }
+    void lastError;
+    return null;
+  }, [clearAuth, finalizeResponse]);
+
   const refreshSession = useCallback(() => runAuthOnce("SESSION_REFRESH", async () => {
+    const pending = readPendingRefresh();
+    if (pending?.token && isTokenUsable(pending.token)) {
+      const committed = await commitPreparedRefresh(pending);
+      if (committed) return committed;
+    }
+
     const currentToken = tokenRef.current;
     if (!currentToken || !isTokenUsable(currentToken)) return null;
     try {
-      return finalizeResponse(await directAuthRequest("/auth/refresh", {
+      const prepared = await directAuthRequest("/auth/refresh", {
         token: currentToken,
         timeoutMs: 12000,
-      }));
+      });
+      if (!prepared?.refreshId || !prepared?.refreshSecret || !prepared?.token) return null;
+      storePendingRefresh(prepared);
+      return await commitPreparedRefresh(prepared);
     } catch (error) {
       const status = Number(error?.status || 0);
       const code = String(error?.code || "");
-      if (shouldClearStoredAuthForStatus(status, code, "/api/auth/refresh")) clearAuth();
-      // Ağ/5xx/409 gibi geçici durumlarda mevcut geçerli token korunur. Başka sekme
-      // tokenı çevirdiyse localStorage storage olayı kazanan tokenı bu sekmeye taşır.
+      if (shouldClearStoredAuthForStatus(status, code, "/api/auth/refresh")) {
+        // Başka sekme tokenı tam bu anda yenilemiş olabilir. Storage olayına kısa bir
+        // pencere ver; yeni token geldiyse logout yerine onu kullan.
+        await wait(500);
+        const stored = readStoredAuth();
+        if (stored.token && stored.token !== currentToken && isTokenUsable(stored.token)) {
+          saveAuth(stored.token, stored.user, stored.permissions);
+          return { syncedFromOtherTab: true };
+        }
+        clearAuth();
+      }
       return null;
     }
-  }), [clearAuth, finalizeResponse, runAuthOnce]);
+  }), [clearAuth, commitPreparedRefresh, runAuthOnce, saveAuth]);
 
   useEffect(() => {
     tokenRef.current = token;
@@ -326,9 +451,26 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     async function restoreSession() {
-      if (!token) { if (!cancelled) setLoading(false); return; }
-      if (!isTokenUsable(token)) { if (!cancelled) { clearAuth(); setLoading(false); } return; }
       const snapshot = authSnapshotRef.current;
+      const pending = readPendingRefresh();
+
+      if (!token) {
+        if (pending?.token && isTokenUsable(pending.token)) {
+          const recovered = await commitPreparedRefresh(pending);
+          if (recovered && !cancelled) { setLoading(false); return; }
+        }
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      if (!isTokenUsable(token)) {
+        if (pending?.token && isTokenUsable(pending.token)) {
+          const recovered = await commitPreparedRefresh(pending);
+          if (recovered && !cancelled) { setLoading(false); return; }
+        }
+        if (!cancelled) { clearAuth(); setLoading(false); }
+        return;
+      }
+
       try {
         const response = await directAuthRequest("/auth/me", { method: "GET", token, timeoutMs: 12000 });
         if (cancelled) return;
@@ -337,26 +479,41 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
         const status = Number(error?.status || 0);
         const code = String(error?.code || "");
-        if (shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) clearAuth();
-        else if (isTokenUsable(token) && snapshot.user) saveAuth(token, snapshot.user, snapshot.permissions);
+        if (shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) {
+          if (pending?.token && isTokenUsable(pending.token)) {
+            const recovered = await commitPreparedRefresh(pending);
+            if (recovered || cancelled) return;
+          }
+          await wait(400);
+          const stored = readStoredAuth();
+          if (stored.token && stored.token !== token && isTokenUsable(stored.token)) saveAuth(stored.token, stored.user, stored.permissions);
+          else clearAuth();
+        } else if (isTokenUsable(token) && snapshot.user) saveAuth(token, snapshot.user, snapshot.permissions);
         else clearAuth();
       } finally { if (!cancelled) setLoading(false); }
     }
     restoreSession();
     return () => { cancelled = true; };
-  }, [clearAuth, saveAuth, token]);
+  }, [clearAuth, commitPreparedRefresh, saveAuth, token]);
 
   useEffect(() => {
     if (!token || !user || !isTokenUsable(token)) return undefined;
     let cancelled = false;
     let timer = null;
     const scheduledToken = token;
+    const lockOwner = tabIdRef.current;
 
     const runRefresh = async () => {
       if (cancelled || tokenRef.current !== scheduledToken || !isTokenUsable(scheduledToken)) return;
-      const result = await refreshSession();
+      if (!acquireRefreshLock(lockOwner)) {
+        timer = window.setTimeout(runRefresh, 1500);
+        return;
+      }
+      let result = null;
+      try { result = await refreshSession(); }
+      finally { releaseRefreshLock(lockOwner); }
       if (cancelled) return;
-      // Başarılı yenilemede saveAuth yeni token state'i oluşturur ve bu effect yeniden kurulur.
+      // Başarılı yenilemede saveAuth yeni token state'i oluşturur ve effect yeniden kurulur.
       // Geçici bağlantı hatasında mevcut token halen geçerliyse 60 sn sonra tekrar denenir.
       if (!result && tokenRef.current === scheduledToken && isTokenUsable(scheduledToken)) {
         timer = window.setTimeout(runRefresh, REFRESH_RETRY_MS);
@@ -369,6 +526,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
+      releaseRefreshLock(lockOwner);
     };
   }, [refreshSession, token, user]);
 
