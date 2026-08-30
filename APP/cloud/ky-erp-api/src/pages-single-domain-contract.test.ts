@@ -6,8 +6,14 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const deployRoot = resolve(here, "../../../../DEPLOY");
+const repoRoot = resolve(here, "../../../..");
 const canonical = readFileSync(resolve(deployRoot, "KYERP_DIRECT_PRODUCTION.ps1"), "utf8");
 const v5 = readFileSync(resolve(deployRoot, "KYERP_DIRECT_PRODUCTION_V5.ps1"), "utf8");
+const agents = readFileSync(resolve(repoRoot, "AGENTS.md"), "utf8");
+
+test("repository exposes a machine-readable one-public-app contract", () => {
+  assert.match(agents, /KYERP_PUBLIC_APP=https:\/\/kyerp\.net\//);
+});
 
 test("canonical production entrypoint delegates to V5 single-address deploy", () => {
   assert.match(canonical, /KYERP_DIRECT_PRODUCTION_V5\.ps1/);
