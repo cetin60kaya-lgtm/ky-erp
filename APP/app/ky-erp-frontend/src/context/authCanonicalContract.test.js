@@ -25,6 +25,13 @@ test("auth mutations are de-duplicated so double click does not create parallel 
   assert.match(source, /runAuthOnce\("LOGIN"/);
 });
 
+test("only the first password login transport gets one automatic network retry", () => {
+  assert.match(source, /loginTransportRetry/);
+  assert.match(source, /normalizedPath === "\/auth\/login"/);
+  assert.match(source, /maxAttempts = loginTransportRetry \? 2 : 1/);
+  assert.match(source, /await wait\(250\)/);
+});
+
 test("valid stored JWT survives browser restart until its real exp", () => {
   assert.match(source, /localStorage\.setItem\(AUTH_TOKEN_KEY/);
   assert.match(source, /payload\.exp/);
