@@ -90,7 +90,10 @@ jobs:
           grep -Fq 'PASSWORD_SESSION_SECONDS = 28_800' APP/cloud/ky-erp-api/src/main.ts
           grep -Fq 'UPPER(TRIM(COALESCE(e.sgk_status,' APP/cloud/ky-erp-api/src/ik-audit-readonly.ts
           grep -Fq 'TRIM(COALESCE(s.card_no,' APP/cloud/ky-erp-api/src/ik-audit-readonly.ts
-          grep -Fq 'const AUDIT_VIEW_MODULES=new Set(["IK"])' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+          grep -Fq 'DENETİM profili sabittir: yalnız İK / SGK kartlı PDKS görüntüleme.' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx
+          grep -Fq 'createUserComplete({...createForm,permissions:createPermissions})' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx
+          grep -Fq 'KY ERP <admin@kyerp.net>' APP/cloud/ky-erp-api/wrangler.jsonc
+          ! grep -Fq 'RECOVERY_EMAIL_WEBHOOK_URL' APP/cloud/ky-erp-api/src/admin-management-cloud.ts
           ! grep -Fq 'wrangler d1 migrations apply' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
 
       - name: Sonuç
