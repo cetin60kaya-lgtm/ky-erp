@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost, apiPut } from "../utils/api";
+import { apiGet, apiPatch, apiPost, apiPut, downloadFile } from "../utils/api";
 
 export { fetchErpModuleData, runErpApprovedAction } from "./erpApi";
 
@@ -17,6 +17,8 @@ export async function createBackup(payload = {}) { return unwrap(await apiPost("
 export async function listBackups(params = {}) { return unwrap(await apiGet("/admin/backups", params)); }
 export async function getBackup(id) { return unwrap(await apiGet(`/admin/backups/${encodeURIComponent(id)}`, { _ts: Date.now() })); }
 export async function restoreBackup(id, payload = {}) { return unwrap(await apiPost(`/admin/backups/${encodeURIComponent(id)}/restore`, payload)); }
+export async function generateBackupSql(id, payload = {}) { return unwrap(await apiPost(`/admin/backups/${encodeURIComponent(id)}/sql`, payload, { timeoutMs: 120000 })); }
+export async function downloadBackupSql(id, fileName = "KYERP-firma-yedek.sql") { return downloadFile(`/admin/backups/${encodeURIComponent(id)}/sql/download`, undefined, fileName); }
 export async function listUsers() { return unwrap(await apiGet("/admin/users")); }
 
 export async function createUser(payload = {}) {
