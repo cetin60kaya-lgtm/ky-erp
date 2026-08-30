@@ -122,13 +122,14 @@ async function rewriteJsonResponse(c: any, transform: (payload: unknown) => unkn
   });
 }
 
-async function targetRole(c: any, userId: string) {
-  return c.env.DB.prepare(
+async function targetRole(c: any, userId: string): Promise<AnyRow | null> {
+  const row = await c.env.DB.prepare(
     `SELECT COALESCE(NULLIF(TRIM(s.role_override),''),u.role,'VIEWER') AS role
        FROM auth_users u
        LEFT JOIN auth_user_security s ON s.user_id=u.id
       WHERE u.id=? LIMIT 1`,
-  ).bind(userId).first<AnyRow>();
+  ).bind(userId).first();
+  return (row as AnyRow | null) || null;
 }
 
 registerAccountingCompanyDirectoryRoutes(app);
