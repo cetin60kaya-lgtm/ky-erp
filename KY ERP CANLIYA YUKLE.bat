@@ -13,7 +13,8 @@ echo.
 echo ============================================================
 echo   KY ERP - CANONICAL TEK TIK PRODUCTION
 echo ============================================================
-echo   Public : https://kyerp.net/
+echo   Site   : https://kyerp.net/
+echo   ERP    : https://app.kyerp.net/
 echo   Mail   : KY ERP ^<admin@kyerp.net^>
 echo   Branch : %BRANCH%
 echo ============================================================
@@ -123,8 +124,9 @@ if not "!RC!"=="0" (
 echo.
 echo ============================================================
 echo   KY ERP PRODUCTION BASARILI
-echo   https://kyerp.net/
-echo   Mail: KY ERP ^<admin@kyerp.net^>
+echo   Site : https://kyerp.net/
+echo   ERP  : https://app.kyerp.net/
+echo   Mail : KY ERP ^<admin@kyerp.net^>
 echo ============================================================
 echo.
 pause
