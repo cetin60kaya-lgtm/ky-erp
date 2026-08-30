@@ -1,0 +1,95 @@
+-- KY ERP DENETIM / PDKS sabit sistem hesabi.
+-- Hesap kaynakta hazir gelir ancak ilk kurulumda PASIF ve parolasi kullanilamaz durumdadir.
+-- Uygulama sahibi Kullanici Merkezi'nden sifre/MFA ayarlayip aktifleştirir.
+-- DENETIM yetkisi sabittir: yalniz IK goruntuleme; yazma/onay/silme yoktur.
+
+INSERT INTO auth_users
+  (id,username,password_hash,full_name,role,is_active,must_change_password,created_at,updated_at,email,backup_email,platform_role)
+SELECT
+  'system-denetim',
+  'denetim',
+  'DISABLED_UNTIL_OWNER_RESETS_PASSWORD',
+  'DENETİM / PDKS',
+  'DENETIM',
+  0,
+  1,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP,
+  NULL,
+  NULL,
+  'USER'
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth_users WHERE LOWER(TRIM(username))='denetim'
+);
+
+-- Daha once manuel acilmis denetim hesabi varsa kimligini/parolasini/aktiflik durumunu koru,
+-- yalniz rol ve guvenlik kapsamını canonical DENETIM olarak sabitle.
+UPDATE auth_users
+   SET role='DENETIM',
+       full_name=CASE WHEN TRIM(COALESCE(full_name,''))='' THEN 'DENETİM / PDKS' ELSE full_name END,
+       updated_at=CURRENT_TIMESTAMP
+ WHERE LOWER(TRIM(username))='denetim';
+
+INSERT OR IGNORE INTO auth_user_security
+  (user_id,email,main_company_slug,role_override,mfa_enabled,email_verified,approval_required,created_at,updated_at)
+SELECT
+  id,
+  NULL,
+  'mecit-hakan',
+  NULL,
+  0,
+  0,
+  0,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+FROM auth_users
+WHERE LOWER(TRIM(username))='denetim'
+LIMIT 1;
+
+UPDATE auth_user_security
+   SET main_company_slug=COALESCE(NULLIF(TRIM(main_company_slug),''),'mecit-hakan'),
+       role_override=NULL,
+       approval_required=0,
+       updated_at=CURRENT_TIMESTAMP
+ WHERE user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' LIMIT 1);
+
+DELETE FROM auth_user_module_permissions
+ WHERE user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' LIMIT 1)
+   AND UPPER(module_key)<>'IK';
+
+INSERT INTO auth_user_module_permissions
+  (id,user_id,module_key,can_view,can_create,can_update,can_delete,can_approve,created_at,updated_at)
+SELECT
+  'system-denetim-ik',
+  id,
+  'IK',
+  1,0,0,0,0,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+FROM auth_users
+WHERE LOWER(TRIM(username))='denetim'
+LIMIT 1
+ON CONFLICT(user_id,module_key) DO UPDATE SET
+  can_view=1,
+  can_create=0,
+  can_update=0,
+  can_delete=0,
+  can_approve=0,
+  updated_at=CURRENT_TIMESTAMP;
+
+INSERT INTO ik_user_hr_scope
+  (user_id,main_company_id,scope,updated_by,updated_at)
+SELECT
+  id,
+  COALESCE((SELECT NULLIF(TRIM(main_company_slug),'') FROM auth_user_security s WHERE s.user_id=auth_users.id),'mecit-hakan'),
+  'AUDIT',
+  'SYSTEM',
+  CURRENT_TIMESTAMP
+FROM auth_users
+WHERE LOWER(TRIM(username))='denetim'
+LIMIT 1
+ON CONFLICT(user_id) DO UPDATE SET
+  main_company_id=excluded.main_company_id,
+  scope='AUDIT',
+  updated_by='SYSTEM',
+  updated_at=CURRENT_TIMESTAMP;
