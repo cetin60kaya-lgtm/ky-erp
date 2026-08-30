@@ -4,6 +4,17 @@
 -- Kullanici Merkezi'nden yeni parola/MFA belirler. must_change_password=1 korunur.
 -- DENETIM yetkisi sabittir: yalniz IK goruntuleme; yazma/onay/silme yoktur.
 
+-- 0024 tek basina uygulanabilsin; mevcut 0020 kurulumuna dokunmaz.
+CREATE TABLE IF NOT EXISTS ik_user_hr_scope (
+  user_id TEXT PRIMARY KEY,
+  main_company_id TEXT NOT NULL DEFAULT 'mecit-hakan',
+  scope TEXT NOT NULL DEFAULT 'FULL',
+  updated_by TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ik_user_hr_scope_company
+  ON ik_user_hr_scope(main_company_id, scope);
+
 INSERT INTO auth_users
   (id,username,password_hash,full_name,role,is_active,must_change_password,created_at,updated_at,email,backup_email,platform_role)
 SELECT
