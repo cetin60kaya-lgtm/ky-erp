@@ -47,8 +47,11 @@ test("email verification does not claim delivery without provider acceptance ide
   assert.match(ui, /Gerçek e-posta servisi bağlı değil; sahte başarı mesajı gösterilmez/);
 });
 
-test("system email sender is owner-controlled admin@kyerp.net and verification route is owner-only", () => {
+test("system email sender is Resend-only owner-controlled admin@kyerp.net", () => {
   assert.match(workerConfig, /"RECOVERY_EMAIL_FROM"\s*:\s*"KY ERP <admin@kyerp\.net>"/);
+  assert.match(management, /const ADMIN_EMAIL_FROM = "KY ERP <admin@kyerp\.net>"/);
+  assert.match(management, /https:\/\/api\.resend\.com\/emails/);
+  assert.doesNotMatch(management, /RECOVERY_EMAIL_WEBHOOK_URL/);
   assert.match(management, /E-posta doğrulaması yalnız uygulama sahibi tarafından başlatılabilir/);
   assert.match(management, /!current \|\| !isOwner\(current\.role\)/);
 });
