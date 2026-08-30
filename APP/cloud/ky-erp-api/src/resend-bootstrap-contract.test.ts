@@ -24,18 +24,22 @@ test("production launcher requires proven admin@kyerp.net mail before deploy", (
 });
 
 test("resend bootstrap proves DNS, domain verification, worker secret and a real owner test", () => {
-  assert.match(bootstrap, /POST" "/domains"/);
-  assert.match(bootstrap, /POST" "/domains\/\$DomainId\/verify"/);
+  assert.match(bootstrap, /Invoke-ResendApi "POST" "\/domains"/);
+  assert.match(bootstrap, /Invoke-ResendApi "POST" "\/domains\/\$DomainId\/verify"/);
   assert.match(bootstrap, /Ensure-CloudflareDnsRecord/);
   assert.match(bootstrap, /wrangler secret put RESEND_API_KEY/);
   assert.match(bootstrap, /KY ERP sistem e-posta testi/);
   assert.match(bootstrap, /SYSTEM_EMAIL_READY_V1/);
   assert.match(bootstrap, /VERIFIED \+ GERCEK TEST/);
-  const verify = bootstrap.indexOf("Wait-ResendVerification");
-  const secret = bootstrap.indexOf("Install-WorkerResendSecret");
-  const testMail = bootstrap.indexOf("Send-OwnerTestMail");
-  const proof = bootstrap.indexOf("Set-MailReadyMarker");
-  assert.ok(verify >= 0 && secret > verify && testMail > secret && proof > testMail);
+
+  const verifyCall = bootstrap.lastIndexOf("$domain = Wait-ResendVerification");
+  const secretCall = bootstrap.lastIndexOf("Install-WorkerResendSecret");
+  const testMailCall = bootstrap.lastIndexOf("$messageId = Send-OwnerTestMail");
+  const proofCall = bootstrap.lastIndexOf("Set-MailReadyMarker $messageId");
+  assert.ok(verifyCall >= 0, "domain verification call must exist");
+  assert.ok(secretCall > verifyCall, "worker secret must be installed after verified domain");
+  assert.ok(testMailCall > secretCall, "real owner test must run after Worker secret installation");
+  assert.ok(proofCall > testMailCall, "D1 readiness proof must be written only after real test acceptance");
 });
 
 test("admin verification is resend-only and sender is canonical owner address", () => {
