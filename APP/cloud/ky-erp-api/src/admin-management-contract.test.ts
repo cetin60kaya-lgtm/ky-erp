@@ -164,7 +164,8 @@ test("v3 deploy runs all code tests before any live D1 or Worker write", () => {
   assert.match(source, /0022_auth_same_browser_session_guard\.sql/);
   assert.match(source, /Assert-Remote-Schema-Readiness/);
   assert.match(source, /Assert-Denetime-System-User/);
-  assert.match(source, /pragma_table_info\('hr_monthly_employees'\)/);
+  assert.match(source, /function Remote-Column-Exists/);
+  assert.match(source, /Table = "hr_monthly_employees"; Column = "sgk_status"/);
   assert.match(source, /30x preflight-free login transport kontrolu/);
   assert.doesNotMatch(source, /wrangler d1 migrations apply/);
   const workerPreflight = source.indexOf("=== 3/11 WORKER PREFLIGHT ===");
