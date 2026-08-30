@@ -2,15 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import {
   activateUser,
-  approveLogin,
   createUser,
   deactivateUser,
-  denyLogin,
+  getDeliveryCapabilities,
   getMainCompanies,
   getOwnerRecoveryConfig,
   getUserPermissions,
   listActiveSessions,
-  listLoginApprovals,
   listLoginSecurityPolicies,
   listSecurityAuditLog,
   listSessionHistory,
@@ -21,489 +19,68 @@ import {
   revokeSession,
   saveOwnerRecoveryQuestions,
   startOwnerRecoveryContactVerification,
+  startUserEmailVerification,
   updateLoginSecurityPolicy,
   updateUser,
   updateUserPermissions,
   verifyOwnerRecoveryContact,
+  verifyUserEmail,
 } from "../../services/adminApi";
 import { saveIkUserScope } from "../../services/ikPersonnelControlApi";
-import "./AdminUsersPanelV3.css";
+import "./AdminUserCenter.css";
 
-const MODULE_KEYS = [
-  "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "ASISTAN", "ADMIN", "RAPORLAR",
-];
-const MODULE_LABELS = {
-  DASHBOARD: "Yönetim Özeti", MUHASEBE: "Muhasebe", FIRMA_CARI: "Firma / Cari", BELGE_ISLEM: "Belge İşlemleri",
-  KDV: "KDV", CEK_ODEME: "Çek / Ödeme", DESEN: "Desen", IMALAT: "İmalat", BOYAHANE: "Boyahane",
-  IK: "İK", ISNET: "İşNet", ASISTAN: "KY ERP Asistan", ADMIN: "Yönetim", RAPORLAR: "Raporlar",
-};
-const ROLE_LABELS = {
-  SUPER_ADMIN: "Uygulama Sahibi", ADMIN: "Uygulama Sahibi", COMPANY_ADMIN: "Firma Yöneticisi",
-  MUHASEBE: "Muhasebe Kullanıcısı", DESEN: "Desen Kullanıcısı", IMALAT: "İmalat Kullanıcısı",
-  BOYAHANE: "Boyahane Kullanıcısı", IK: "İK Kullanıcısı", DENETIM: "Denetim Kullanıcısı", VIEWER: "Özel Yetkili Kullanıcı",
-};
-const MANAGED_ROLES = ["COMPANY_ADMIN", "MUHASEBE", "DESEN", "IMALAT", "BOYAHANE", "IK", "DENETIM", "VIEWER"];
-const OWNER_ROLES = new Set(["SUPER_ADMIN", "ADMIN"]);
-const LOGIN_POLICIES = [
-  ["PASSWORD_ONLY", "Sadece parola", "8 saat"],
-  ["GOOGLE", "Parola + Google Authenticator", "10 saat"],
-  ["MICROSOFT", "Parola + Microsoft Authenticator", "10 saat"],
-  ["ANY_MFA", "Parola + Google veya Microsoft", "10 saat"],
-  ["BOTH_MFA", "Parola + Google ve Microsoft", "10 saat"],
-];
-const AUDIT_VIEW_MODULES = new Set(["MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME", "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "RAPORLAR"]);
+const MODULE_KEYS=["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","ISNET","ASISTAN","ADMIN","RAPORLAR"];
+const MODULE_LABELS={DASHBOARD:"Yönetim Merkezi",MUHASEBE:"Muhasebe",FIRMA_CARI:"Firma / Cari",BELGE_ISLEM:"Belge İşlemleri",KDV:"KDV",CEK_ODEME:"Çek / Ödeme",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",ISNET:"İşNet",ASISTAN:"KY ERP Asistan",ADMIN:"Yönetim",RAPORLAR:"Raporlar"};
+const ROLE_LABELS={SUPER_ADMIN:"Uygulama Sahibi",ADMIN:"Uygulama Sahibi",COMPANY_ADMIN:"Firma Yöneticisi",MUHASEBE:"Muhasebe Kullanıcısı",DESEN:"Desen Kullanıcısı",IMALAT:"İmalat Kullanıcısı",BOYAHANE:"Boyahane Kullanıcısı",IK:"İK Kullanıcısı",DENETIM:"Denetim Kullanıcısı",VIEWER:"Özel Yetkili Kullanıcı"};
+const MANAGED_ROLES=["COMPANY_ADMIN","MUHASEBE","DESEN","IMALAT","BOYAHANE","IK","DENETIM","VIEWER"];
+const OWNER_ROLES=new Set(["SUPER_ADMIN","ADMIN"]);
+const AUDIT_VIEW_MODULES=new Set(["MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","ISNET","RAPORLAR"]);
+const LOGIN_POLICIES=[["PASSWORD_ONLY","Sadece parola"],["GOOGLE","Parola + Google Authenticator"],["MICROSOFT","Parola + Microsoft Authenticator"],["ANY_MFA","Parola + Google veya Microsoft"],["BOTH_MFA","Parola + Google ve Microsoft"]];
 
-function roleOf(value) {
-  const role = String(value || "VIEWER").toUpperCase();
-  return role === "ADMIN" ? "SUPER_ADMIN" : role;
-}
-function emptyPermission(moduleKey) {
-  return { moduleKey, canView: false, canCreate: false, canUpdate: false, canDelete: false, canApprove: false };
-}
-function normalizePermissions(rows) {
-  const map = new Map(MODULE_KEYS.map((key) => [key, emptyPermission(key)]));
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const key = String(row?.moduleKey || "").toUpperCase();
-    if (!map.has(key)) continue;
-    map.set(key, {
-      moduleKey: key,
-      canView: row.canView === true,
-      canCreate: row.canCreate === true,
-      canUpdate: row.canUpdate === true,
-      canDelete: row.canDelete === true,
-      canApprove: row.canApprove === true,
-    });
-  }
-  return Array.from(map.values());
-}
-function permissionPreset(type) {
-  const full = new Set();
-  const view = new Set();
-  if (type === "COMPANY_ADMIN") MODULE_KEYS.forEach((key) => full.add(key));
-  if (type === "MUHASEBE") ["DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME", "ISNET", "RAPORLAR"].forEach((key) => full.add(key));
-  if (type === "DESEN") ["DASHBOARD", "DESEN", "ASISTAN", "RAPORLAR"].forEach((key) => full.add(key));
-  if (type === "IMALAT") ["DASHBOARD", "IMALAT", "DESEN", "RAPORLAR"].forEach((key) => full.add(key));
-  if (type === "BOYAHANE") ["DASHBOARD", "BOYAHANE", "DESEN", "RAPORLAR"].forEach((key) => full.add(key));
-  if (type === "IK") ["DASHBOARD", "IK", "RAPORLAR"].forEach((key) => full.add(key));
-  if (type === "DENETIM") AUDIT_VIEW_MODULES.forEach((key) => view.add(key));
-  if (type === "VIEW") MODULE_KEYS.filter((key) => key !== "ADMIN").forEach((key) => view.add(key));
-  return MODULE_KEYS.map((moduleKey) => {
-    if (type === "COMPANY_ADMIN" && moduleKey === "ADMIN") return { moduleKey, canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true };
-    if (full.has(moduleKey)) return { moduleKey, canView: true, canCreate: true, canUpdate: true, canDelete: true, canApprove: true };
-    if (view.has(moduleKey)) return { moduleKey, canView: true, canCreate: false, canUpdate: false, canDelete: false, canApprove: false };
-    return emptyPermission(moduleKey);
-  });
-}
-function emptyForm(companySlug = "mecit-hakan") {
-  return { id: "", username: "", fullName: "", email: "", password: "", role: "VIEWER", mainCompanySlug: companySlug, isActive: true, emailVerified: false };
-}
-function dateText(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("tr-TR");
-}
-function durationText(start, end) {
-  const a = Date.parse(start || ""); const b = Date.parse(end || "");
-  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return "-";
-  const minutes = Math.max(0, Math.floor((b - a) / 60000));
-  if (minutes < 60) return `${minutes} dk`;
-  return `${Math.floor(minutes / 60)} sa ${minutes % 60} dk`;
-}
-function remainingText(seconds) {
-  const value = Math.max(0, Number(seconds || 0));
-  if (value < 3600) return `${Math.ceil(value / 60)} dk`;
-  return `${Math.floor(value / 3600)} sa ${Math.floor((value % 3600) / 60)} dk`;
-}
-function policyLabel(value) { return LOGIN_POLICIES.find(([key]) => key === value)?.[1] || "Parola + Google veya Microsoft"; }
-function companyRows(value) {
-  const rows = Array.isArray(value) ? value : value?.items || [];
-  return rows.map((row) => ({ id: String(row.id || ""), slug: String(row.slug || row.kod || ""), name: String(row.name || row.ad || row.slug || "Firma"), isActive: row.isActive !== false })).filter((row) => row.slug);
-}
-function initials(value) { return String(value || "U").split(" ").filter(Boolean).slice(0, 2).map((item) => item[0]).join("").toUpperCase(); }
-function friendlyDevice(row) {
-  const label = String(row?.deviceLabel || "");
-  if (label && !label.startsWith("BROWSER:")) return label;
-  const ua = String(row?.userAgent || "");
-  const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "Tarayıcı";
-  const os = /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "macOS" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : "";
-  return [browser, os].filter(Boolean).join(" / ") || "Tarayıcı";
-}
-function closureLabel(value) {
-  return ({ ACTIVE: "Aktif", EXPIRED: "Süresi doldu", REVOKED: "Sonlandırıldı", ADMIN_REVOKED: "Yönetici sonlandırdı", ALL_SESSIONS_REVOKED: "Tüm oturumlar kapatıldı", SAME_BROWSER_REPLACED: "Aynı tarayıcıda yenilendi" })[value] || value || "-";
-}
+function roleOf(value){const role=String(value||"VIEWER").toUpperCase();return role==="ADMIN"?"SUPER_ADMIN":role}
+function emptyPermission(moduleKey){return{moduleKey,canView:false,canCreate:false,canUpdate:false,canDelete:false,canApprove:false}}
+function normalizePermissions(rows){const map=new Map(MODULE_KEYS.map(key=>[key,emptyPermission(key)]));for(const row of Array.isArray(rows)?rows:[]){const key=String(row?.moduleKey||"").toUpperCase();if(!map.has(key))continue;map.set(key,{moduleKey:key,canView:row.canView===true,canCreate:row.canCreate===true,canUpdate:row.canUpdate===true,canDelete:row.canDelete===true,canApprove:row.canApprove===true})}return [...map.values()]}
+function permissionPreset(type){const role=roleOf(type);const full=new Set(),view=new Set();if(role==="COMPANY_ADMIN")MODULE_KEYS.forEach(k=>full.add(k));if(role==="MUHASEBE")["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","ISNET","RAPORLAR"].forEach(k=>full.add(k));if(role==="DESEN")["DASHBOARD","DESEN","ASISTAN","RAPORLAR"].forEach(k=>full.add(k));if(role==="IMALAT")["DASHBOARD","IMALAT","DESEN","RAPORLAR"].forEach(k=>full.add(k));if(role==="BOYAHANE")["DASHBOARD","BOYAHANE","DESEN","RAPORLAR"].forEach(k=>full.add(k));if(role==="IK")["DASHBOARD","IK","RAPORLAR"].forEach(k=>full.add(k));if(role==="DENETIM")AUDIT_VIEW_MODULES.forEach(k=>view.add(k));if(role==="VIEWER")MODULE_KEYS.filter(k=>k!=="ADMIN").forEach(k=>view.add(k));return MODULE_KEYS.map(moduleKey=>{if(role==="COMPANY_ADMIN"&&moduleKey==="ADMIN")return{moduleKey,canView:true,canCreate:true,canUpdate:true,canDelete:false,canApprove:true};if(full.has(moduleKey))return{moduleKey,canView:true,canCreate:true,canUpdate:true,canDelete:true,canApprove:true};if(view.has(moduleKey))return{moduleKey,canView:true,canCreate:false,canUpdate:false,canDelete:false,canApprove:false};return emptyPermission(moduleKey)})}
+function initials(value){return String(value||"U").split(" ").filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase()}
+function dateText(value){if(!value)return"-";const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleString("tr-TR")}
+function emptyForm(company="mecit-hakan"){return{id:"",username:"",fullName:"",email:"",password:"",role:"VIEWER",mainCompanySlug:company,isActive:true}}
+function policyLabel(value){return LOGIN_POLICIES.find(([key])=>key===value)?.[1]||"Parola + Google veya Microsoft"}
+function rowsOf(v){if(Array.isArray(v))return v;if(Array.isArray(v?.items))return v.items;return[]}
+function friendlyDevice(row){const label=String(row?.deviceLabel||"");if(label&&!label.startsWith("BROWSER:"))return label;const ua=String(row?.userAgent||"");const browser=/Edg\//.test(ua)?"Edge":/Chrome\//.test(ua)?"Chrome":/Firefox\//.test(ua)?"Firefox":/Safari\//.test(ua)?"Safari":"Tarayıcı";const os=/Windows/.test(ua)?"Windows":/Mac OS/.test(ua)?"macOS":/Android/.test(ua)?"Android":/iPhone|iPad/.test(ua)?"iOS":"";return[browser,os].filter(Boolean).join(" / ")||"Tarayıcı"}
 
-export default function AdminUsersPanel() {
-  const { user: currentUser } = useAuth();
-  const currentRole = roleOf(currentUser?.role);
-  const isOwner = OWNER_ROLES.has(currentRole);
-  const roleOptions = isOwner ? MANAGED_ROLES : MANAGED_ROLES.filter((role) => role !== "COMPANY_ADMIN");
-
-  const [tab, setTab] = useState("USERS");
-  const [users, setUsers] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [sessionHistory, setSessionHistory] = useState([]);
-  const [auditLog, setAuditLog] = useState([]);
-  const [approvals, setApprovals] = useState([]);
-  const [policies, setPolicies] = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [permissions, setPermissions] = useState(() => permissionPreset("VIEW"));
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [form, setForm] = useState(() => emptyForm(currentUser?.mainCompanySlug || "mecit-hakan"));
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ACTIVE");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Kullanıcı yönetimi hazır.");
-  const [securityPassword, setSecurityPassword] = useState("");
-  const [ownerRecovery, setOwnerRecovery] = useState(null);
-  const [ownerQuestions, setOwnerQuestions] = useState([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }]);
-  const [stepUp, setStepUp] = useState({ provider: "GOOGLE", code: "" });
-  const [contactDraft, setContactDraft] = useState({ email: "", phone: "" });
-  const [contactChallenge, setContactChallenge] = useState(null);
-  const [contactOtp, setContactOtp] = useState("");
-
-  const companyMap = useMemo(() => new Map(companies.map((row) => [row.slug, row.name])), [companies]);
-  const policyMap = useMemo(() => new Map(policies.map((row) => [row.userId, row])), [policies]);
-  const selectedUser = useMemo(() => users.find((row) => row.id === selectedUserId) || null, [selectedUserId, users]);
-  const selectedRole = roleOf(selectedUser?.role);
-  const selectedIsOwner = OWNER_ROLES.has(selectedRole);
-  const selectedPolicy = policyMap.get(selectedUserId) || {};
-
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("tr-TR");
-    return users.filter((row) => {
-      if (statusFilter === "ACTIVE" && row.isActive === false) return false;
-      if (statusFilter === "PASSIVE" && row.isActive !== false) return false;
-      if (!q) return true;
-      return [row.fullName, row.username, row.email, ROLE_LABELS[roleOf(row.role)], companyMap.get(row.mainCompanySlug)]
-        .join(" ").toLocaleLowerCase("tr-TR").includes(q);
-    });
-  }, [companyMap, search, statusFilter, users]);
-
-  const companyName = (slug) => companyMap.get(slug) || slug || "-";
-  const defaultCompany = () => currentUser?.mainCompanySlug || companies.find((row) => row.isActive)?.slug || companies[0]?.slug || "mecit-hakan";
-
-  const loadUsers = useCallback(async () => {
-    const rows = await listUsers();
-    const list = Array.isArray(rows) ? rows : rows?.items || [];
-    setUsers(list);
-    setSelectedUserId((current) => list.some((row) => row.id === current) ? current : (list[0]?.id || ""));
-  }, []);
-
-  const loadCompanies = useCallback(async () => {
-    const own = currentUser?.mainCompanySlug || "mecit-hakan";
-    if (!isOwner) { setCompanies([{ id: own, slug: own, name: own, isActive: true }]); return; }
-    try {
-      const rows = companyRows(await getMainCompanies());
-      setCompanies(rows.length ? rows : [{ id: own, slug: own, name: own, isActive: true }]);
-    } catch { setCompanies([{ id: own, slug: own, name: own, isActive: true }]); }
-  }, [currentUser?.mainCompanySlug, isOwner]);
-
-  const loadSecurity = useCallback(async () => {
-    const jobs = [listActiveSessions(), listLoginApprovals(), listSessionHistory(300), listSecurityAuditLog(300)];
-    const [active, pending, history, log] = await Promise.allSettled(jobs);
-    if (active.status === "fulfilled") setSessions(Array.isArray(active.value) ? active.value : []);
-    if (pending.status === "fulfilled") setApprovals(Array.isArray(pending.value) ? pending.value : []);
-    if (history.status === "fulfilled") setSessionHistory(Array.isArray(history.value) ? history.value : []);
-    if (log.status === "fulfilled") setAuditLog(Array.isArray(log.value) ? log.value : []);
-  }, []);
-
-  const loadPolicies = useCallback(async () => {
-    if (!isOwner) { setPolicies([]); return; }
-    try {
-      const rows = await listLoginSecurityPolicies();
-      setPolicies(Array.isArray(rows) ? rows : rows?.items || []);
-    } catch { setPolicies([]); }
-  }, [isOwner]);
-
-  const loadOwnerRecovery = useCallback(async () => {
-    if (!isOwner) return;
-    try {
-      const data = await getOwnerRecoveryConfig();
-      setOwnerRecovery(data);
-      setContactDraft({ email: data?.email || "", phone: data?.phone || "" });
-      setOwnerQuestions([0, 1, 2].map((index) => ({ question: data?.questions?.[index]?.question || "", answer: "" })));
-    } catch { setOwnerRecovery(null); }
-  }, [isOwner]);
-
-  const refreshAll = useCallback(async () => {
-    setBusy(true);
-    try {
-      await Promise.allSettled([loadCompanies(), loadUsers(), loadSecurity(), loadPolicies(), loadOwnerRecovery()]);
-      setMessage("Kullanıcı, yetki ve güvenlik bilgileri güncel.");
-    } finally { setBusy(false); }
-  }, [loadCompanies, loadOwnerRecovery, loadPolicies, loadSecurity, loadUsers]);
-
-  useEffect(() => { refreshAll(); }, [refreshAll]);
-  useEffect(() => {
-    if (!selectedUserId) return;
-    let alive = true;
-    getUserPermissions(selectedUserId)
-      .then((rows) => { if (alive) setPermissions(normalizePermissions(rows)); })
-      .catch(() => { if (alive) setPermissions(permissionPreset("VIEW")); });
-    return () => { alive = false; };
-  }, [selectedUserId]);
-
-  function selectUser(id) {
-    setSelectedUserId(id);
-    setEditorOpen(false);
-    setSecurityPassword("");
-  }
-  function newUser() {
-    setForm(emptyForm(defaultCompany()));
-    setEditorOpen(true);
-    setTab("USERS");
-  }
-  function editUser() {
-    if (!selectedUser) return;
-    setForm({
-      id: selectedUser.id, username: selectedUser.username || "", fullName: selectedUser.fullName || "", email: selectedUser.email || "",
-      password: "", role: roleOf(selectedUser.role), mainCompanySlug: selectedUser.mainCompanySlug || defaultCompany(),
-      isActive: selectedUser.isActive !== false, emailVerified: selectedUser.emailVerified === true,
-    });
-    setEditorOpen(true);
-    setTab("USERS");
-  }
-
-  async function applyHrScope(userId, role, companySlug) {
-    try {
-      await saveIkUserScope({ userId, mainCompanySlug: companySlug, scope: roleOf(role) === "DENETIM" ? "AUDIT" : "FULL" });
-    } catch (error) {
-      if (roleOf(role) === "DENETIM") throw error;
-    }
-  }
-
-  async function saveUser(event) {
-    event?.preventDefault();
-    if (!form.username.trim() || !form.fullName.trim()) { setMessage("Kullanıcı adı ve ad soyad zorunludur."); return; }
-    if (!form.id && form.password.length < 6) { setMessage("Yeni kullanıcı için en az 6 karakter şifre girin."); return; }
-    setBusy(true);
-    try {
-      const payload = {
-        username: form.username.trim(), fullName: form.fullName.trim(), email: form.email.trim(), role: form.role,
-        mainCompanySlug: form.mainCompanySlug, isActive: form.isActive, emailVerified: form.emailVerified,
-      };
-      let id = form.id;
-      const oldRole = selectedUser ? roleOf(selectedUser.role) : "";
-      if (form.id) {
-        await updateUser(form.id, payload);
-        if (form.password) await resetUserPassword(form.id, form.password);
-      } else {
-        const created = await createUser({ ...payload, password: form.password });
-        id = created?.id;
-        if (!id) throw new Error("Kullanıcı kimliği alınamadı.");
-        await updateUserPermissions(id, permissionPreset(form.role));
-      }
-      await applyHrScope(id, form.role, form.mainCompanySlug);
-      if (roleOf(form.role) === "DENETIM") await updateUserPermissions(id, permissionPreset("DENETIM"));
-      if (form.id && oldRole !== roleOf(form.role)) await revokeAllUserSessions(id);
-      if (isOwner && !form.id) {
-        await updateLoginSecurityPolicy(id, { loginPolicy: "ANY_MFA", sessionSeconds: 36000, approvalRequired: false });
-      }
-      setEditorOpen(false);
-      setMessage(form.id ? "Kullanıcı bilgileri kaydedildi." : "Kullanıcı oluşturuldu. Modül yetkileri ayrı sekmeden yönetilebilir.");
-      await Promise.all([loadUsers(), loadPolicies(), loadSecurity()]);
-      setSelectedUserId(id);
-    } catch (error) {
-      setMessage(`Hata: ${error?.message || "Kullanıcı kaydedilemedi."}`);
-    } finally { setBusy(false); }
-  }
-
-  function editPermission(moduleKey, field, checked) {
-    if (!selectedUser || selectedIsOwner) return;
-    setPermissions((rows) => rows.map((row) => {
-      if (row.moduleKey !== moduleKey) return row;
-      if (selectedRole === "DENETIM") {
-        if (field !== "canView" || !AUDIT_VIEW_MODULES.has(moduleKey)) return row;
-        return { ...row, canView: checked, canCreate: false, canUpdate: false, canDelete: false, canApprove: false };
-      }
-      return { ...row, [field]: checked };
-    }));
-  }
-
-  function applyPermissionPreset(type) {
-    if (!selectedUser || selectedIsOwner) return;
-    if (selectedRole === "DENETIM") setPermissions(permissionPreset("DENETIM"));
-    else setPermissions(permissionPreset(type));
-  }
-
-  async function savePermissions() {
-    if (!selectedUser || selectedIsOwner) return;
-    setBusy(true);
-    try {
-      const clean = selectedRole === "DENETIM"
-        ? permissions.map((row) => ({ ...row, canView: AUDIT_VIEW_MODULES.has(row.moduleKey) && row.canView, canCreate: false, canUpdate: false, canDelete: false, canApprove: false }))
-        : permissions;
-      await updateUserPermissions(selectedUser.id, clean);
-      await applyHrScope(selectedUser.id, selectedRole, selectedUser.mainCompanySlug);
-      setPermissions(clean);
-      setMessage(`${selectedUser.fullName || selectedUser.username} için modül yetkileri kaydedildi.`);
-      await loadSecurity();
-    } catch (error) { setMessage(`Hata: ${error?.message || "Yetkiler kaydedilemedi."}`); }
-    finally { setBusy(false); }
-  }
-
-  async function run(action, success, refresh = true) {
-    setBusy(true);
-    try {
-      await action();
-      setMessage(success);
-      if (refresh) await Promise.allSettled([loadUsers(), loadPolicies(), loadSecurity()]);
-    } catch (error) { setMessage(`Hata: ${error?.message || "İşlem tamamlanamadı."}`); }
-    finally { setBusy(false); }
-  }
-
-  async function savePolicy() {
-    if (!selectedUser || !isOwner || selectedIsOwner) return;
-    const loginPolicy = selectedPolicy.loginPolicy || "ANY_MFA";
-    await run(() => updateLoginSecurityPolicy(selectedUser.id, {
-      loginPolicy,
-      sessionSeconds: loginPolicy === "PASSWORD_ONLY" ? 28800 : 36000,
-      approvalRequired: Boolean(selectedPolicy.approvalRequired),
-    }), "Giriş güvenliği kaydedildi.");
-  }
-
-  function updateLocalPolicy(field, value) {
-    if (!selectedUserId) return;
-    setPolicies((rows) => {
-      const exists = rows.some((row) => row.userId === selectedUserId);
-      if (!exists) return [...rows, { userId: selectedUserId, loginPolicy: "ANY_MFA", approvalRequired: false, [field]: value }];
-      return rows.map((row) => row.userId === selectedUserId ? { ...row, [field]: value } : row);
-    });
-  }
-
-  async function saveOwnerQuestionsHandler() {
-    if (!/^\d{6}$/.test(stepUp.code)) { setMessage("6 haneli Authenticator kodunu girin."); return; }
-    await run(async () => {
-      await saveOwnerRecoveryQuestions({ provider: stepUp.provider, code: stepUp.code, questions: ownerQuestions });
-      setStepUp((old) => ({ ...old, code: "" }));
-      await loadOwnerRecovery();
-    }, "3 güvenlik sorusu kaydedildi.", false);
-  }
-
-  async function startContact(channel) {
-    if (!/^\d{6}$/.test(stepUp.code)) { setMessage("6 haneli Authenticator kodunu girin."); return; }
-    await run(async () => {
-      const value = channel === "EMAIL" ? contactDraft.email : contactDraft.phone;
-      const data = await startOwnerRecoveryContactVerification({ channel, value, provider: stepUp.provider, code: stepUp.code });
-      setContactChallenge({ ...data, channel });
-      setContactOtp("");
-    }, "Doğrulama kodu gönderildi.", false);
-  }
-
-  async function verifyContactHandler() {
-    if (!contactChallenge || !/^\d{6}$/.test(contactOtp)) { setMessage("6 haneli doğrulama kodunu girin."); return; }
-    await run(async () => {
-      await verifyOwnerRecoveryContact({ recoveryId: contactChallenge.recoveryId, recoveryToken: contactChallenge.recoveryToken, otp: contactOtp });
-      setContactChallenge(null); setContactOtp(""); setStepUp((old) => ({ ...old, code: "" }));
-      await loadOwnerRecovery();
-    }, "İletişim kanalı doğrulandı.", false);
-  }
-
-  const summary = {
-    activeUsers: users.filter((row) => row.isActive !== false).length,
-    auditUsers: users.filter((row) => roleOf(row.role) === "DENETIM" && row.isActive !== false).length,
-    sessions: sessions.length,
-    pending: approvals.length,
-  };
-
-  return (
-    <div className="auv3-page">
-      <header className="auv3-header">
-        <div><span>YÖNETİM / KULLANICILAR</span><h2>Firma Kullanıcıları ve Yetkilendirme</h2><p>{message}</p></div>
-        <div><button type="button" className="primary" onClick={newUser} disabled={busy}>+ Yeni Kullanıcı</button><button type="button" onClick={refreshAll} disabled={busy}>Yenile</button></div>
-      </header>
-
-      <section className="auv3-summary">
-        <div><span>Aktif kullanıcı</span><strong>{summary.activeUsers}</strong></div>
-        <div><span>Denetim profili</span><strong>{summary.auditUsers}</strong></div>
-        <div><span>Aktif oturum</span><strong>{summary.sessions}</strong></div>
-        <div><span>Bekleyen onay</span><strong>{summary.pending}</strong></div>
-      </section>
-
-      <nav className="auv3-tabs">
-        {[['USERS','Kullanıcılar'],['SECURITY','Güvenlik & Kurtarma'],['PERMISSIONS','Modül Yetkileri'],['SESSIONS','Aktif Oturumlar & Log']].map(([key,label]) => (
-          <button type="button" key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>
-        ))}
-      </nav>
-
-      {tab === "USERS" ? (
-        <section className="auv3-users-layout">
-          <aside className="auv3-panel auv3-directory">
-            <div className="auv3-panel-title"><div><h3>Kullanıcılar</h3><p>{filteredUsers.length} kayıt</p></div></div>
-            <div className="auv3-filters"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ad, kullanıcı, e-posta veya rol ara" /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="ACTIVE">Aktif</option><option value="ALL">Tümü</option><option value="PASSIVE">Pasif</option></select></div>
-            <div className="auv3-user-list">
-              {filteredUsers.map((row) => <button type="button" key={row.id} className={selectedUserId === row.id ? "active" : ""} onClick={() => selectUser(row.id)}><b>{initials(row.fullName || row.username)}</b><span><strong>{row.fullName || row.username}</strong><small>@{row.username}{row.email ? ` · ${row.email}` : ""}</small><em>{ROLE_LABELS[roleOf(row.role)] || row.role} · {companyName(row.mainCompanySlug)}</em></span>{row.isActive === false ? <i>Pasif</i> : null}</button>)}
-            </div>
-          </aside>
-
-          <main className="auv3-panel auv3-user-main">
-            {editorOpen ? (
-              <form className="auv3-user-form" onSubmit={saveUser}>
-                <div className="auv3-panel-title"><div><h3>{form.id ? "Kullanıcıyı Düzenle" : "Yeni Kullanıcı"}</h3><p>Bu form yalnız kullanıcı kimliği ve rolü içindir.</p></div><button type="button" onClick={() => setEditorOpen(false)}>Formu Kapat</button></div>
-                <div className="auv3-form-grid">
-                  <label>Kullanıcı Adı<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
-                  <label>Ad Soyad<input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} /></label>
-                  <label>E-posta<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
-                  <label>{form.id ? "Yeni Şifre (isteğe bağlı)" : "Şifre"}<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
-                  <label>Ana Firma<select value={form.mainCompanySlug} onChange={(e) => setForm({ ...form, mainCompanySlug: e.target.value })}>{companies.map((row) => <option key={row.slug} value={row.slug}>{row.name}</option>)}</select></label>
-                  <label>Rol<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>{roleOptions.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}</select></label>
-                </div>
-                <div className="auv3-switches"><label><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} /> Aktif kullanıcı</label><label><input type="checkbox" checked={form.emailVerified} onChange={(e) => setForm({ ...form, emailVerified: e.target.checked })} /> E-posta doğrulandı</label></div>
-                <div className="auv3-form-actions"><button type="submit" className="primary" disabled={busy}>{form.id ? "Kullanıcıyı Kaydet" : "Kullanıcı Oluştur"}</button><button type="button" onClick={() => setEditorOpen(false)}>Vazgeç</button></div>
-              </form>
-            ) : selectedUser ? (
-              <div className="auv3-profile">
-                <div className="auv3-selected"><b>{initials(selectedUser.fullName || selectedUser.username)}</b><div><span>SEÇİLİ KULLANICI</span><h3>{selectedUser.fullName || selectedUser.username}</h3><p>@{selectedUser.username}{selectedUser.email ? ` · ${selectedUser.email}` : ""}</p></div><em>{selectedUser.isActive === false ? "Pasif" : "Aktif"}</em></div>
-                <div className="auv3-profile-grid"><div><span>Rol</span><strong>{ROLE_LABELS[selectedRole] || selectedRole}</strong></div><div><span>Firma</span><strong>{companyName(selectedUser.mainCompanySlug)}</strong></div><div><span>Giriş Güvenliği</span><strong>{policyLabel(selectedPolicy.loginPolicy)}</strong></div><div><span>E-posta</span><strong>{selectedUser.email || "-"}</strong></div></div>
-                <div className="auv3-profile-actions"><button type="button" className="primary" onClick={editUser}>Kullanıcı Bilgilerini Düzenle</button>{!selectedIsOwner ? <button type="button" onClick={() => setTab("PERMISSIONS")}>Modül Yetkilerini Aç</button> : null}{!selectedIsOwner ? <button type="button" className={selectedUser.isActive === false ? "" : "danger"} onClick={() => run(() => selectedUser.isActive === false ? activateUser(selectedUser.id) : deactivateUser(selectedUser.id), selectedUser.isActive === false ? "Kullanıcı aktifleştirildi." : "Kullanıcı pasife alındı.")}>{selectedUser.isActive === false ? "Aktifleştir" : "Pasife Al"}</button> : null}</div>
-              </div>
-            ) : <div className="auv3-empty">Kullanıcı seçin veya yeni kullanıcı oluşturun.</div>}
-          </main>
-        </section>
-      ) : null}
-
-      {tab === "PERMISSIONS" ? (
-        <section className="auv3-panel">
-          <div className="auv3-panel-title"><div><h3>Modül Yetkileri</h3><p>Önce kullanıcıyı seçin; bu ekrandaki bütün değişiklikler yalnız seçili kullanıcıya uygulanır.</p></div><select className="auv3-user-select" value={selectedUserId} onChange={(e) => selectUser(e.target.value)}><option value="">Kullanıcı seçin</option>{users.map((row) => <option key={row.id} value={row.id}>{row.fullName || row.username} — {ROLE_LABELS[roleOf(row.role)] || row.role}</option>)}</select></div>
-          {selectedUser ? <>
-            <div className="auv3-selected permission"><b>{initials(selectedUser.fullName || selectedUser.username)}</b><div><span>YETKİSİ DÜZENLENEN KULLANICI</span><h3>{selectedUser.fullName || selectedUser.username}</h3><p>@{selectedUser.username} · {ROLE_LABELS[selectedRole] || selectedRole} · {companyName(selectedUser.mainCompanySlug)}</p></div></div>
-            {!selectedIsOwner ? <div className="auv3-permission-tools"><button type="button" onClick={() => applyPermissionPreset(selectedRole)}>Role Göre</button>{selectedRole !== "DENETIM" ? <><button type="button" onClick={() => applyPermissionPreset("VIEW")}>Sadece Görüntüleme</button><button type="button" onClick={() => setPermissions(MODULE_KEYS.map(emptyPermission))}>Temizle</button></> : null}<button type="button" className="primary" onClick={savePermissions} disabled={busy}>Yetkileri Kaydet</button></div> : null}
-            <div className="auv3-permission-table"><table><thead><tr><th>Modül</th><th>Görüntüle</th><th>Ekle</th><th>Güncelle</th><th>Sil</th><th>Onayla</th></tr></thead><tbody>{permissions.map((row) => <tr key={row.moduleKey}><td><strong>{MODULE_LABELS[row.moduleKey]}</strong></td>{["canView","canCreate","canUpdate","canDelete","canApprove"].map((field) => { const lock = selectedIsOwner || (selectedRole === "DENETIM" && (field !== "canView" || !AUDIT_VIEW_MODULES.has(row.moduleKey))); return <td key={field}><input type="checkbox" checked={selectedIsOwner ? true : Boolean(row[field])} disabled={lock} onChange={(e) => editPermission(row.moduleKey, field, e.target.checked)} /></td>; })}</tr>)}</tbody></table></div>
-          </> : <div className="auv3-empty">Yetkileri görüntülemek için kullanıcı seçin.</div>}
-        </section>
-      ) : null}
-
-      {tab === "SECURITY" ? (
-        <section className="auv3-security-grid">
-          <div className="auv3-panel">
-            <div className="auv3-panel-title"><div><h3>Giriş Güvenliği</h3><p>Güvenlik işlemi yapılacak kullanıcıyı açıkça seçin.</p></div><select className="auv3-user-select" value={selectedUserId} onChange={(e) => selectUser(e.target.value)}><option value="">Kullanıcı seçin</option>{users.map((row) => <option key={row.id} value={row.id}>{row.fullName || row.username}</option>)}</select></div>
-            {selectedUser ? <>
-              <div className="auv3-selected"><b>{initials(selectedUser.fullName || selectedUser.username)}</b><div><span>GÜVENLİK PROFİLİ</span><h3>{selectedUser.fullName || selectedUser.username}</h3><p>@{selectedUser.username} · {ROLE_LABELS[selectedRole] || selectedRole}</p></div></div>
-              {isOwner && !selectedIsOwner ? <div className="auv3-security-form"><label>Giriş Yöntemi<select value={selectedPolicy.loginPolicy || "ANY_MFA"} onChange={(e) => updateLocalPolicy("loginPolicy", e.target.value)}>{LOGIN_POLICIES.map(([key,label,time]) => <option key={key} value={key}>{label} — {time}</option>)}</select></label><label className="check"><input type="checkbox" checked={Boolean(selectedPolicy.approvalRequired)} onChange={(e) => updateLocalPolicy("approvalRequired", e.target.checked)} /> Yeni cihaz girişinde yönetici onayı</label><button type="button" className="primary" onClick={savePolicy}>Giriş Güvenliğini Kaydet</button></div> : null}
-              <div className="auv3-security-actions"><button type="button" onClick={() => run(() => resetUserMfa(selectedUser.id, "GOOGLE"), "Google Authenticator yeniden kurulum için sıfırlandı.")}>Google QR Yenile</button><button type="button" onClick={() => run(() => resetUserMfa(selectedUser.id, "MICROSOFT"), "Microsoft Authenticator yeniden kurulum için sıfırlandı.")}>Microsoft QR Yenile</button><button type="button" onClick={() => run(() => resetUserMfa(selectedUser.id, "ALL"), "Authenticator kayıtları sıfırlandı.")}>Tüm MFA'yı Yenile</button></div>
-              <div className="auv3-password-reset"><input type="password" value={securityPassword} onChange={(e) => setSecurityPassword(e.target.value)} placeholder="Yeni şifre" /><button type="button" onClick={() => { if (securityPassword.length < 6) { setMessage("Yeni şifre en az 6 karakter olmalıdır."); return; } run(async () => { await resetUserPassword(selectedUser.id, securityPassword); setSecurityPassword(""); }, "Şifre güncellendi."); }}>Şifreyi Değiştir</button><button type="button" className="danger" onClick={() => run(() => revokeAllUserSessions(selectedUser.id), "Kullanıcının aktif oturumları kapatıldı.")}>Tüm Oturumları Sonlandır</button></div>
-            </> : <div className="auv3-empty">Kullanıcı seçin.</div>}
-          </div>
-
-          {isOwner ? <div className="auv3-panel auv3-recovery">
-            <div className="auv3-panel-title"><div><h3>Sahip Hesabı Kurtarma</h3><p>İletişim doğrulama ve güvenlik soruları birbirinden ayrı yönetilir.</p></div></div>
-            <div className="auv3-stepup"><select value={stepUp.provider} onChange={(e) => setStepUp({ ...stepUp, provider: e.target.value })}><option value="GOOGLE">Google Authenticator</option><option value="MICROSOFT">Microsoft Authenticator</option></select><input value={stepUp.code} onChange={(e) => setStepUp({ ...stepUp, code: e.target.value.replace(/\D/g, "").slice(0, 6) })} placeholder="6 haneli mevcut kod" /></div>
-            <details><summary>İletişim Doğrulama</summary><div className="auv3-details-body"><label>E-posta<input type="email" value={contactDraft.email} onChange={(e) => setContactDraft({ ...contactDraft, email: e.target.value })} /></label><button type="button" onClick={() => startContact("EMAIL")}>E-postayı Doğrula</button><label>Telefon<input value={contactDraft.phone} onChange={(e) => setContactDraft({ ...contactDraft, phone: e.target.value })} /></label><button type="button" onClick={() => startContact("SMS")}>Telefonu Doğrula</button>{contactChallenge ? <div className="auv3-otp"><input value={contactOtp} onChange={(e) => setContactOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Doğrulama kodu" /><button type="button" className="primary" onClick={verifyContactHandler}>Kodu Doğrula</button></div> : null}<small>{ownerRecovery?.emailVerified ? "E-posta doğrulandı" : ""}{ownerRecovery?.phoneVerified ? " · Telefon doğrulandı" : ""}</small></div></details>
-            <details><summary>3 Güvenlik Sorusu</summary><div className="auv3-details-body">{ownerQuestions.map((row,index) => <div className="auv3-question" key={index}><label>{index + 1}. Soru<input value={row.question} onChange={(e) => setOwnerQuestions((items) => items.map((item,i) => i === index ? { ...item, question: e.target.value } : item))} /></label><label>Cevap<input type="password" value={row.answer} onChange={(e) => setOwnerQuestions((items) => items.map((item,i) => i === index ? { ...item, answer: e.target.value } : item))} /></label></div>)}<button type="button" className="primary" onClick={saveOwnerQuestionsHandler}>Soruları Kaydet</button></div></details>
-          </div> : null}
-        </section>
-      ) : null}
-
-      {tab === "SESSIONS" ? (
-        <div className="auv3-session-stack">
-          {approvals.length ? <section className="auv3-panel"><div className="auv3-panel-title"><div><h3>Bekleyen Giriş Onayları</h3><p>{approvals.length} istek</p></div></div><div className="auv3-table"><table><thead><tr><th>Kullanıcı</th><th>Cihaz</th><th>IP</th><th>İstek</th><th></th></tr></thead><tbody>{approvals.map((row) => <tr key={row.id}><td>{row.fullName || row.username}</td><td>{row.deviceLabel || "-"}</td><td>{row.ipAddress || "-"}</td><td>{dateText(row.requestedAt)}</td><td><button type="button" onClick={() => run(() => approveLogin(row.id), "Giriş onaylandı.")}>Onayla</button><button type="button" className="danger" onClick={() => run(() => denyLogin(row.id), "Giriş reddedildi.")}>Reddet</button></td></tr>)}</tbody></table></div></section> : null}
-          <section className="auv3-panel"><div className="auv3-panel-title"><div><h3>Aktif Oturumlar</h3><p>Şu anda sunucu tarafından geçerli kabul edilen oturumlar.</p></div><button type="button" onClick={loadSecurity}>Oturumları Yenile</button></div><div className="auv3-table"><table><thead><tr><th>Kullanıcı</th><th>Rol / Firma</th><th>Cihaz</th><th>IP</th><th>Giriş</th><th>Son Hareket</th><th>Kalan</th><th></th></tr></thead><tbody>{sessions.map((row) => <tr key={row.id}><td><strong>{row.fullName || row.username}</strong><small>{row.email || ""}</small></td><td>{ROLE_LABELS[roleOf(row.role)] || row.role}<small>{companyName(row.mainCompanySlug)}</small></td><td>{friendlyDevice(row)}</td><td>{row.ipAddress || "-"}</td><td>{dateText(row.createdAt)}</td><td>{dateText(row.lastSeenAt)}</td><td>{remainingText(row.remainingSeconds)}</td><td><button type="button" className="danger" onClick={() => run(() => revokeSession(row.id), "Oturum sonlandırıldı.")}>Sonlandır</button></td></tr>)}{!sessions.length ? <tr><td colSpan="8">Aktif oturum bulunmuyor.</td></tr> : null}</tbody></table></div></section>
-          <section className="auv3-panel"><div className="auv3-panel-title"><div><h3>Oturum Geçmişi</h3><p>Aktif, kapanmış ve süresi dolmuş oturumlar.</p></div></div><div className="auv3-table tall"><table><thead><tr><th>Durum</th><th>Kullanıcı</th><th>Giriş</th><th>Son Hareket</th><th>Çıkış</th><th>Süre</th><th>Cihaz / IP</th><th>Kapanış</th></tr></thead><tbody>{sessionHistory.map((row) => { const end = row.revokedAt || (row.closureReason === "EXPIRED" ? row.expiresAt : row.lastSeenAt); return <tr key={row.id}><td><span className={`auv3-state ${row.closureReason === "ACTIVE" ? "active" : ""}`}>{closureLabel(row.closureReason)}</span></td><td>{row.fullName || row.username}</td><td>{dateText(row.createdAt)}</td><td>{dateText(row.lastSeenAt)}</td><td>{row.closureReason === "ACTIVE" ? "-" : dateText(row.revokedAt || row.expiresAt)}</td><td>{durationText(row.createdAt, end)}</td><td>{friendlyDevice(row)}<small>{row.ipAddress || ""}</small></td><td>{closureLabel(row.closureReason)}{row.closureActorName ? <small>{row.closureActorName}</small> : null}</td></tr>; })}</tbody></table></div></section>
-          <section className="auv3-panel"><div className="auv3-panel-title"><div><h3>Güvenlik Logu</h3><p>Giriş, oturum ve kullanıcı güvenliği hareketleri.</p></div></div><div className="auv3-table tall"><table><thead><tr><th>Zaman</th><th>İşlem</th><th>Uygulayan</th><th>Hedef</th><th>IP</th></tr></thead><tbody>{auditLog.map((row) => <tr key={row.id}><td>{dateText(row.createdAt)}</td><td>{row.action}</td><td>{row.actorName || "Sistem"}</td><td>{row.targetName || "-"}</td><td>{row.ipAddress || "-"}</td></tr>)}</tbody></table></div></section>
-        </div>
-      ) : null}
-    </div>
-  );
+export default function AdminUsersPanel(){
+ const {user:currentUser}=useAuth();const currentRole=roleOf(currentUser?.role);const isOwner=OWNER_ROLES.has(currentRole);const roleOptions=isOwner?MANAGED_ROLES:MANAGED_ROLES.filter(r=>r!=="COMPANY_ADMIN");
+ const [users,setUsers]=useState([]),[companies,setCompanies]=useState([]),[sessions,setSessions]=useState([]),[history,setHistory]=useState([]),[audit,setAudit]=useState([]),[policies,setPolicies]=useState([]),[delivery,setDelivery]=useState(null),[ownerRecovery,setOwnerRecovery]=useState(null);
+ const [selectedUserId,setSelectedUserId]=useState(""),[section,setSection]=useState("OVERVIEW"),[permissions,setPermissions]=useState(()=>permissionPreset("VIEWER")),[editing,setEditing]=useState(false),[creating,setCreating]=useState(false),[form,setForm]=useState(()=>emptyForm(currentUser?.mainCompanySlug)),[search,setSearch]=useState(""),[statusFilter,setStatusFilter]=useState("ACTIVE"),[busy,setBusy]=useState(false),[message,setMessage]=useState("Kullanıcı merkezi hazırlanıyor...");
+ const [password,setPassword]=useState(""),[emailChallenge,setEmailChallenge]=useState(null),[emailOtp,setEmailOtp]=useState("");
+ const [stepUp,setStepUp]=useState({provider:"GOOGLE",code:""}),[contactDraft,setContactDraft]=useState({email:"",phone:""}),[contactChallenge,setContactChallenge]=useState(null),[contactOtp,setContactOtp]=useState(""),[ownerQuestions,setOwnerQuestions]=useState([{question:"",answer:""},{question:"",answer:""},{question:"",answer:""}]);
+ const companyMap=useMemo(()=>new Map(companies.map(r=>[String(r.slug||r.kod||""),r.name||r.ad||r.slug])),[companies]);const policyMap=useMemo(()=>new Map(policies.map(r=>[r.userId,r])),[policies]);const selectedUser=useMemo(()=>users.find(r=>r.id===selectedUserId)||null,[users,selectedUserId]);const selectedRole=roleOf(selectedUser?.role);const selectedIsOwner=OWNER_ROLES.has(selectedRole);const selectedPolicy=policyMap.get(selectedUserId)||{};
+ const filteredUsers=useMemo(()=>{const q=search.trim().toLocaleLowerCase("tr-TR");return users.filter(r=>{if(statusFilter==="ACTIVE"&&r.isActive===false)return false;if(statusFilter==="PASSIVE"&&r.isActive!==false)return false;return!q||`${r.fullName||""} ${r.username||""} ${r.email||""} ${ROLE_LABELS[roleOf(r.role)]||""}`.toLocaleLowerCase("tr-TR").includes(q)})},[users,search,statusFilter]);
+ const selectedSessions=useMemo(()=>sessions.filter(r=>String(r.userId||r.user_id||"")===String(selectedUserId)),[sessions,selectedUserId]);const selectedHistory=useMemo(()=>history.filter(r=>String(r.userId||r.user_id||"")===String(selectedUserId)),[history,selectedUserId]);const selectedAudit=useMemo(()=>audit.filter(r=>String(r.targetUserId||r.target_user_id||"")===String(selectedUserId)),[audit,selectedUserId]);
+ const loadAll=useCallback(async()=>{setBusy(true);const jobs=await Promise.allSettled([listUsers(),getMainCompanies(),listActiveSessions(),listSessionHistory(300),listSecurityAuditLog(300),listLoginSecurityPolicies(),getDeliveryCapabilities(),getOwnerRecoveryConfig()]);if(jobs[0].status==="fulfilled"){const list=rowsOf(jobs[0].value);setUsers(list);setSelectedUserId(cur=>list.some(r=>r.id===cur)?cur:(list[0]?.id||""))}if(jobs[1].status==="fulfilled")setCompanies(rowsOf(jobs[1].value));if(jobs[2].status==="fulfilled")setSessions(rowsOf(jobs[2].value));if(jobs[3].status==="fulfilled")setHistory(rowsOf(jobs[3].value));if(jobs[4].status==="fulfilled")setAudit(rowsOf(jobs[4].value));if(jobs[5].status==="fulfilled")setPolicies(rowsOf(jobs[5].value));if(jobs[6].status==="fulfilled")setDelivery(jobs[6].value);if(jobs[7].status==="fulfilled"){const d=jobs[7].value;setOwnerRecovery(d);setContactDraft({email:d?.email||"",phone:d?.phone||""});setOwnerQuestions([0,1,2].map(i=>({question:d?.questions?.[i]?.question||"",answer:""})))}const failed=jobs.filter(j=>j.status==="rejected").length;setMessage(failed?`${failed} kullanıcı/güvenlik kaynağı alınamadı; erişilen bilgiler gösteriliyor.`:"Kullanıcı, yetki ve güvenlik bilgileri güncel.");setBusy(false)},[]);
+ useEffect(()=>{loadAll()},[loadAll]);
+ useEffect(()=>{if(!selectedUserId){setPermissions(permissionPreset("VIEWER"));return}let cancelled=false;getUserPermissions(selectedUserId).then(rows=>{if(!cancelled)setPermissions(normalizePermissions(rows))}).catch(()=>{if(!cancelled)setPermissions(permissionPreset(selectedRole))});return()=>{cancelled=true}},[selectedUserId,selectedRole]);
+ function selectUser(id){setSelectedUserId(id);setCreating(false);setEditing(false);setEmailChallenge(null);setEmailOtp("");setPassword("");setSection("OVERVIEW")}
+ function startNew(){setCreating(true);setEditing(true);setSelectedUserId("");setSection("OVERVIEW");setForm(emptyForm(currentUser?.mainCompanySlug||companies[0]?.slug||"mecit-hakan"));setPermissions(permissionPreset("VIEWER"));setMessage("Yeni kullanıcı bilgilerini girin; kayıt sonrası aynı kişi üzerinde yetki ve güvenlik düzeni devam eder.")}
+ function startEdit(){if(!selectedUser)return;setCreating(false);setEditing(true);setForm({id:selectedUser.id,username:selectedUser.username||"",fullName:selectedUser.fullName||"",email:selectedUser.email||"",password:"",role:selectedRole,mainCompanySlug:selectedUser.mainCompanySlug||currentUser?.mainCompanySlug||"mecit-hakan",isActive:selectedUser.isActive!==false})}
+ async function applyHrScope(userId,role,slug){try{await saveIkUserScope({userId,mainCompanySlug:slug,scope:roleOf(role)==="DENETIM"?"AUDIT":"FULL"})}catch(error){if(roleOf(role)==="DENETIM")throw error}}
+ async function saveUser(e){e?.preventDefault();if(!form.username.trim()||!form.fullName.trim())return setMessage("Kullanıcı adı ve ad soyad zorunludur.");if(!form.id&&form.password.length<6)return setMessage("Yeni kullanıcı için en az 6 karakter şifre girin.");setBusy(true);try{const old=users.find(r=>r.id===form.id);const emailChanged=Boolean(form.id)&&String(old?.email||"").trim().toLowerCase()!==form.email.trim().toLowerCase();const payload={username:form.username.trim(),fullName:form.fullName.trim(),email:form.email.trim(),role:form.role,mainCompanySlug:form.mainCompanySlug,isActive:form.isActive,emailVerified:form.id&&!emailChanged&&old?.emailVerified===true};let id=form.id;if(id){await updateUser(id,payload);if(form.password)await resetUserPassword(id,form.password)}else{const created=await createUser({...payload,password:form.password});id=created?.id;if(!id)throw new Error("Kullanıcı kimliği alınamadı.");await updateUserPermissions(id,permissionPreset(form.role));if(isOwner)await updateLoginSecurityPolicy(id,{loginPolicy:"ANY_MFA",sessionSeconds:36000,approvalRequired:false})}await applyHrScope(id,form.role,form.mainCompanySlug);if(roleOf(form.role)==="DENETIM")await updateUserPermissions(id,permissionPreset("DENETIM"));if(form.id&&roleOf(old?.role)!==roleOf(form.role))await revokeAllUserSessions(id);setEditing(false);setCreating(false);setMessage(form.id?"Kullanıcı profili kaydedildi.":"Kullanıcı oluşturuldu; yetki ve güvenlik düzeni aynı kişi üzerinde devam ediyor.");await loadAll();setSelectedUserId(id);setSection("OVERVIEW")}catch(error){setMessage(`Hata: ${error?.message||"Kullanıcı kaydedilemedi."}`)}finally{setBusy(false)}}
+ function editPermission(moduleKey,field,value){if(!selectedUser||selectedIsOwner)return;setPermissions(rows=>rows.map(r=>{if(r.moduleKey!==moduleKey)return r;if(selectedRole==="DENETIM"){if(field!=="canView"||!AUDIT_VIEW_MODULES.has(moduleKey))return r;return{...r,canView:value,canCreate:false,canUpdate:false,canDelete:false,canApprove:false}}return{...r,[field]:value}}))}
+ async function savePermissions(){if(!selectedUser||selectedIsOwner)return;setBusy(true);try{const clean=selectedRole==="DENETIM"?permissions.map(r=>({...r,canView:AUDIT_VIEW_MODULES.has(r.moduleKey)&&r.canView,canCreate:false,canUpdate:false,canDelete:false,canApprove:false})):permissions;await updateUserPermissions(selectedUser.id,clean);await applyHrScope(selectedUser.id,selectedRole,selectedUser.mainCompanySlug);setPermissions(clean);setMessage(`${selectedUser.fullName||selectedUser.username} yetkileri kaydedildi.`)}catch(error){setMessage(`Hata: ${error?.message||"Yetkiler kaydedilemedi."}`)}finally{setBusy(false)}}
+ async function run(action,success){setBusy(true);try{await action();setMessage(success);await loadAll()}catch(error){setMessage(`Hata: ${error?.message||"İşlem tamamlanamadı."}`)}finally{setBusy(false)}}
+ function updateLocalPolicy(field,value){setPolicies(rows=>{const exists=rows.some(r=>r.userId===selectedUserId);if(!exists)return[...rows,{userId:selectedUserId,loginPolicy:"ANY_MFA",approvalRequired:false,[field]:value}];return rows.map(r=>r.userId===selectedUserId?{...r,[field]:value}:r)})}
+ async function savePolicy(){if(!selectedUser||!isOwner||selectedIsOwner)return;const loginPolicy=selectedPolicy.loginPolicy||"ANY_MFA";await run(()=>updateLoginSecurityPolicy(selectedUser.id,{loginPolicy,sessionSeconds:loginPolicy==="PASSWORD_ONLY"?28800:36000,approvalRequired:Boolean(selectedPolicy.approvalRequired)}),"Giriş güvenliği kaydedildi.")}
+ async function sendEmailVerification(){if(!selectedUser?.email)return setMessage("Önce kullanıcıya e-posta adresi kaydedin.");setBusy(true);try{const c=await startUserEmailVerification(selectedUser.id);if(c?.alreadyVerified){setMessage("E-posta zaten doğrulanmış.");await loadAll();return}setEmailChallenge(c);setEmailOtp("");setMessage(`${c?.masked||selectedUser.email} adresine 6 haneli doğrulama kodu gönderildi.`)}catch(error){setMessage(`Hata: ${error?.message||"Doğrulama kodu gönderilemedi."}`)}finally{setBusy(false)}}
+ async function confirmEmail(){if(!emailChallenge||!/^[0-9]{6}$/.test(emailOtp))return setMessage("6 haneli e-posta doğrulama kodunu girin.");setBusy(true);try{await verifyUserEmail(selectedUser.id,{verificationId:emailChallenge.verificationId,verificationToken:emailChallenge.verificationToken,otp:emailOtp});setEmailChallenge(null);setEmailOtp("");setMessage("E-posta doğrulandı.");await loadAll()}catch(error){setMessage(`Hata: ${error?.message||"E-posta doğrulanamadı."}`)}finally{setBusy(false)}}
+ async function saveOwnerQuestionsHandler(){if(!/^\d{6}$/.test(stepUp.code))return setMessage("Mevcut Authenticator'dan 6 haneli kodu girin.");await run(async()=>{await saveOwnerRecoveryQuestions({provider:stepUp.provider,code:stepUp.code,questions:ownerQuestions});setStepUp(s=>({...s,code:""}))},"3 güvenlik sorusu kaydedildi.")}
+ async function startOwnerContact(channel){if(!/^\d{6}$/.test(stepUp.code))return setMessage("Mevcut Authenticator'dan 6 haneli kodu girin.");setBusy(true);try{const value=channel==="EMAIL"?contactDraft.email:contactDraft.phone;const data=await startOwnerRecoveryContactVerification({channel,value,provider:stepUp.provider,code:stepUp.code});setContactChallenge({...data,channel});setContactOtp("");setMessage("Doğrulama kodu gönderildi.")}catch(error){setMessage(`Hata: ${error?.message||"Doğrulama başlatılamadı."}`)}finally{setBusy(false)}}
+ async function verifyOwnerContactHandler(){if(!contactChallenge||!/^\d{6}$/.test(contactOtp))return setMessage("6 haneli doğrulama kodunu girin.");setBusy(true);try{await verifyOwnerRecoveryContact({recoveryId:contactChallenge.recoveryId,recoveryToken:contactChallenge.recoveryToken,otp:contactOtp});setContactChallenge(null);setContactOtp("");setStepUp(s=>({...s,code:""}));setMessage("Kurtarma iletişim kanalı doğrulandı.");await loadAll()}catch(error){setMessage(`Hata: ${error?.message||"Doğrulama tamamlanamadı."}`)}finally{setBusy(false)}}
+ const summary={active:users.filter(r=>r.isActive!==false).length,unverified:users.filter(r=>r.email&&r.emailVerified!==true).length,sessions:sessions.length,audit:users.filter(r=>roleOf(r.role)==="DENETIM"&&r.isActive!==false).length};
+ return <div className="auc-page"><header className="auc-head"><div><span>YÖNETİM / KULLANICI & YETKİ MERKEZİ</span><h2>Kullanıcı, Yetki ve Güvenlik Merkezi</h2><p>Kullanıcı seçilir; profil, yetki, MFA, oturum ve geçmiş aynı kişi bağlamından ayrılmadan yönetilir.</p></div><div className="auc-actions"><button onClick={startNew}>+ Yeni Kullanıcı</button><button className="primary" onClick={loadAll} disabled={busy}>Yenile</button></div></header><div className={`auc-notice ${message.startsWith("Hata")?"error":message.includes("alınamadı")?"warn":"success"}`}>{message}</div><section className="auc-stats"><div className="auc-stat"><span>Aktif Kullanıcı</span><strong>{summary.active}</strong></div><div className="auc-stat"><span>Denetim Profili</span><strong>{summary.audit}</strong></div><div className="auc-stat"><span>Aktif Oturum</span><strong>{summary.sessions}</strong></div><div className="auc-stat"><span>Doğrulanmamış E-posta</span><strong>{summary.unverified}</strong></div></section>
+ <section className="auc-workspace"><aside className="auc-panel auc-directory"><div className="auc-panel-head"><div><h3>Kullanıcılar</h3><p>{filteredUsers.length} kayıt gösteriliyor</p></div></div><div className="auc-filters"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ad, kullanıcı, e-posta veya rol"/><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="ACTIVE">Aktif</option><option value="ALL">Tümü</option><option value="PASSIVE">Pasif</option></select></div><div className="auc-list">{filteredUsers.map(r=><button type="button" key={r.id} className={`auc-user ${selectedUserId===r.id?"active":""}`} onClick={()=>selectUser(r.id)}><b className="auc-avatar">{initials(r.fullName||r.username)}</b><span className="auc-user-info"><strong>{r.fullName||r.username}</strong><small>@{r.username}{r.email?` · ${r.email}`:""}</small><em>{ROLE_LABELS[roleOf(r.role)]||r.role} · {companyMap.get(r.mainCompanySlug)||r.mainCompanySlug||"-"}</em></span><i className={`auc-badge ${r.isActive===false?"warn":"ok"}`}>{r.isActive===false?"Pasif":"Aktif"}</i></button>)}</div></aside>
+ <main className="auc-main">{editing?<section className="auc-panel"><div className="auc-panel-head"><div><h3>{creating?"Yeni Kullanıcı Oluştur":"Kullanıcı Bilgilerini Düzenle"}</h3><p>Kimlik, rol ve firma burada; ayrıntılı yetki/güvenlik kayıt sonrası aynı kişi kartında.</p></div><button onClick={()=>{setEditing(false);setCreating(false)}}>Formu Kapat</button></div><form onSubmit={saveUser}><div className="auc-grid-2"><label className="auc-field">Kullanıcı Adı<input value={form.username} onChange={e=>setForm(o=>({...o,username:e.target.value}))}/></label><label className="auc-field">Ad Soyad<input value={form.fullName} onChange={e=>setForm(o=>({...o,fullName:e.target.value}))}/></label><label className="auc-field">E-posta<input type="email" value={form.email} onChange={e=>setForm(o=>({...o,email:e.target.value}))}/></label><label className="auc-field">{form.id?"Yeni Şifre (isteğe bağlı)":"İlk Şifre"}<input type="password" value={form.password} onChange={e=>setForm(o=>({...o,password:e.target.value}))}/></label><label className="auc-field">Ana Firma<select value={form.mainCompanySlug} onChange={e=>setForm(o=>({...o,mainCompanySlug:e.target.value}))}>{companies.map(c=><option key={c.slug||c.id} value={c.slug||c.kod}>{c.name||c.ad||c.slug}</option>)}</select></label><label className="auc-field">Rol<select value={form.role} onChange={e=>setForm(o=>({...o,role:e.target.value}))}>{roleOptions.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></label><label className="auc-check"><input type="checkbox" checked={form.isActive} onChange={e=>setForm(o=>({...o,isActive:e.target.checked}))}/> Aktif kullanıcı</label></div><div className="auc-actions" style={{marginTop:12}}><button className="primary" type="submit" disabled={busy}>{form.id?"Kullanıcıyı Kaydet":"Kullanıcı Oluştur"}</button><button type="button" onClick={()=>{setEditing(false);setCreating(false)}}>Vazgeç</button></div></form></section>:selectedUser?<><section className="auc-person"><b className="auc-avatar">{initials(selectedUser.fullName||selectedUser.username)}</b><div><span>DÜZENLENEN KULLANICI</span><h3>{selectedUser.fullName||selectedUser.username}</h3><p>@{selectedUser.username}{selectedUser.email?` · ${selectedUser.email}`:""}</p><div className="auc-person-meta"><i className="auc-badge">{ROLE_LABELS[selectedRole]||selectedRole}</i><i className="auc-badge">{companyMap.get(selectedUser.mainCompanySlug)||selectedUser.mainCompanySlug||"-"}</i><i className={`auc-badge ${selectedUser.isActive===false?"warn":"ok"}`}>{selectedUser.isActive===false?"Pasif":"Aktif"}</i><i className={`auc-badge ${selectedUser.emailVerified?"ok":"warn"}`}>{selectedUser.emailVerified?"E-posta doğrulandı":"E-posta doğrulanmadı"}</i></div></div><div className="auc-row-actions"><button className="primary" onClick={startEdit}>Profili Düzenle</button>{!selectedIsOwner?<button className={selectedUser.isActive===false?"":"danger"} onClick={()=>run(()=>selectedUser.isActive===false?activateUser(selectedUser.id):deactivateUser(selectedUser.id),selectedUser.isActive===false?"Kullanıcı aktifleştirildi.":"Kullanıcı pasife alındı.")}>{selectedUser.isActive===false?"Aktifleştir":"Pasife Al"}</button>:null}</div></section><nav className="auc-tabs">{[["OVERVIEW","Genel"],["PERMISSIONS","Yetkiler"],["SECURITY","Giriş & MFA"],["SESSIONS","Oturumlar & Geçmiş"]].map(([k,l])=><button key={k} className={section===k?"active":""} onClick={()=>setSection(k)}>{l}</button>)}</nav>
+ {section==="OVERVIEW"?<section className="auc-panel"><div className="auc-profile-cards"><div className="auc-profile-card"><span>Rol</span><strong>{ROLE_LABELS[selectedRole]||selectedRole}</strong></div><div className="auc-profile-card"><span>Ana Firma</span><strong>{companyMap.get(selectedUser.mainCompanySlug)||selectedUser.mainCompanySlug||"-"}</strong></div><div className="auc-profile-card"><span>Giriş Güvenliği</span><strong>{selectedIsOwner?"Sahip MFA zorunlu":policyLabel(selectedPolicy.loginPolicy)}</strong></div><div className="auc-profile-card"><span>Aktif Oturum</span><strong>{selectedSessions.length}</strong></div></div><div className="auc-section"><div className="auc-section-head"><div><h4>E-posta Kimliği</h4><p>Adres kaydı ile doğrulama durumu ayrıdır; doğrulama yalnız gerçek OTP koduyla tamamlanır.</p></div></div><div className="auc-email"><div><strong>{selectedUser.email||"E-posta tanımlı değil"}</strong><small>{selectedUser.emailVerified?"Bu adres doğrulanmış.":selectedUser.email?"Adres kayıtlı fakat doğrulanmamış.":"Profili düzenleyerek adres ekleyin."}</small></div><div className="auc-email-actions"><span className={`auc-badge ${selectedUser.emailVerified?"ok":"warn"}`}>{selectedUser.emailVerified?"Doğrulandı":"Doğrulanmadı"}</span>{selectedUser.email&&!selectedUser.emailVerified?<button className="primary" onClick={sendEmailVerification} disabled={busy||delivery?.email===false}>Doğrulama Kodu Gönder</button>:null}</div></div>{delivery?.email===false?<div className="auc-notice warn" style={{marginTop:8}}>E-posta gönderim servisi Worker'a bağlı değil. Adres kayıtlı olsa bile doğrulanmış sayılmaz; sistem ayarlarında Resend/webhook kurulumu tamamlanmalı.</div>:null}{emailChallenge?<div className="auc-code"><input value={emailOtp} onChange={e=>setEmailOtp(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="000000"/><button className="primary" onClick={confirmEmail}>Kodu Doğrula</button><button onClick={()=>{setEmailChallenge(null);setEmailOtp("")}}>Vazgeç</button></div>:null}</div></section>:null}
+ {section==="PERMISSIONS"?<section className="auc-panel"><div className="auc-section-head"><div><h4>Modül Yetkileri · {selectedUser.fullName||selectedUser.username}</h4><p>Bu tablodaki bütün değişiklikler yalnız yukarıda adı yazan kullanıcıya uygulanır.</p></div></div>{selectedIsOwner?<div className="auc-notice success"><strong>Tam Yetki · Sistem Sahibi</strong><br/>Uygulama sahibi tüm modüllerde görüntüleme, ekleme, güncelleme, silme ve onay yetkisine sahiptir; gereksiz kutucuk matrisiyle kısıtlanmaz.</div>:<><div className="auc-perm-tools"><button onClick={()=>setPermissions(permissionPreset(selectedRole))}>Role Göre Başlangıç</button>{selectedRole!=="DENETIM"?<><button onClick={()=>setPermissions(permissionPreset("VIEWER"))}>Sadece Görüntüleme</button><button onClick={()=>setPermissions(MODULE_KEYS.map(emptyPermission))}>Temizle</button></>:null}<button className="primary" onClick={savePermissions} disabled={busy}>Yetkileri Kaydet</button></div><div className="auc-perm-table"><table><thead><tr><th>Modül</th><th>Gör</th><th>Ekle</th><th>Güncelle</th><th>Sil</th><th>Onayla</th></tr></thead><tbody>{permissions.map(r=><tr key={r.moduleKey}><td><strong>{MODULE_LABELS[r.moduleKey]}</strong>{selectedRole==="DENETIM"&&r.moduleKey==="IK"?<small style={{display:"block",color:"#64748b"}}>Yalnız SGK + kartlı personel görünümü</small>:null}</td>{["canView","canCreate","canUpdate","canDelete","canApprove"].map(field=>{const lock=selectedRole==="DENETIM"&&(field!=="canView"||!AUDIT_VIEW_MODULES.has(r.moduleKey));return<td key={field}><input type="checkbox" checked={Boolean(r[field])} disabled={lock} onChange={e=>editPermission(r.moduleKey,field,e.target.checked)}/></td>})}</tr>)}</tbody></table></div></>}</section>:null}
+ {section==="SECURITY"?<section className="auc-panel"><div className="auc-section"><div className="auc-section-head"><div><h4>Giriş Politikası & MFA</h4><p>{selectedUser.fullName||selectedUser.username} için parola, MFA ve yeni cihaz kuralları.</p></div></div>{isOwner&&!selectedIsOwner?<div className="auc-grid-2"><label className="auc-field">Giriş Yöntemi<select value={selectedPolicy.loginPolicy||"ANY_MFA"} onChange={e=>updateLocalPolicy("loginPolicy",e.target.value)}>{LOGIN_POLICIES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label><label className="auc-check"><input type="checkbox" checked={Boolean(selectedPolicy.approvalRequired)} onChange={e=>updateLocalPolicy("approvalRequired",e.target.checked)}/> Yeni cihaz girişinde yönetici onayı</label><div className="auc-actions"><button className="primary" onClick={savePolicy}>Giriş Politikasını Kaydet</button></div></div>:selectedIsOwner?<div className="auc-notice success">Sistem sahibi parola + Google veya Microsoft Authenticator kullanır. Sahip hesabı parola-only moda düşürülemez.</div>:null}<div className="auc-actions" style={{marginTop:10}}><button onClick={()=>run(()=>resetUserMfa(selectedUser.id,"GOOGLE"),"Google Authenticator yeniden kurulum için sıfırlandı.")}>Google QR Yenile</button><button onClick={()=>run(()=>resetUserMfa(selectedUser.id,"MICROSOFT"),"Microsoft Authenticator yeniden kurulum için sıfırlandı.")}>Microsoft QR Yenile</button><button onClick={()=>run(()=>resetUserMfa(selectedUser.id,"ALL"),"Tüm Authenticator kayıtları yeniden kurulum için sıfırlandı.")}>Tüm MFA'yı Yenile</button></div></div><div className="auc-section"><div className="auc-section-head"><div><h4>Şifre & Oturum Güvenliği</h4><p>Şifre değişikliği ve tüm cihaz oturumlarını sonlandırma.</p></div></div><div className="auc-grid-2"><label className="auc-field">Yeni Şifre<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="En az 6 karakter"/></label><div className="auc-actions" style={{alignSelf:"end"}}><button onClick={()=>{if(password.length<6)return setMessage("Yeni şifre en az 6 karakter olmalıdır.");run(async()=>{await resetUserPassword(selectedUser.id,password);setPassword("")},"Şifre güncellendi.")}}>Şifreyi Değiştir</button><button className="danger" onClick={()=>run(()=>revokeAllUserSessions(selectedUser.id),"Kullanıcının tüm aktif oturumları kapatıldı.")}>Tüm Oturumları Sonlandır</button></div></div></div>{selectedIsOwner&&isOwner?<div className="auc-section auc-owner"><div className="auc-section-head"><div><h4>Uygulama Sahibi Kurtarma Güvenliği</h4><p>MFA kaybında doğrudan giriş açılmaz; doğrulanmış iletişim + güvenlik soruları yeni MFA kurulumuna izin verir.</p></div><span className={`auc-badge ${ownerRecovery?.recoveryEnabled?"ok":"warn"}`}>{ownerRecovery?.recoveryEnabled?"Hazır":"Kurulum Eksik"}</span></div><div className="auc-grid-2"><label className="auc-field">Step-up Authenticator<select value={stepUp.provider} onChange={e=>setStepUp(o=>({...o,provider:e.target.value}))}><option value="GOOGLE">Google Authenticator</option><option value="MICROSOFT">Microsoft Authenticator</option></select></label><label className="auc-field">Mevcut 6 Haneli Kod<input value={stepUp.code} onChange={e=>setStepUp(o=>({...o,code:e.target.value.replace(/\D/g,"").slice(0,6)}))} placeholder="000000"/></label></div><details className="auc-details" open><summary>İletişim Doğrulama</summary><div className="auc-details-body"><div className="auc-grid-2"><label className="auc-field">Kurtarma E-postası<input type="email" value={contactDraft.email} onChange={e=>setContactDraft(o=>({...o,email:e.target.value}))}/></label><div className="auc-actions" style={{alignSelf:"end"}}><span className={`auc-badge ${ownerRecovery?.emailVerified?"ok":"warn"}`}>{ownerRecovery?.emailVerified?"Doğrulandı":"Doğrulanmadı"}</span><button onClick={()=>startOwnerContact("EMAIL")} disabled={delivery?.email===false}>E-posta Kodu Gönder</button></div><label className="auc-field">Kurtarma Telefonu<input value={contactDraft.phone} onChange={e=>setContactDraft(o=>({...o,phone:e.target.value}))}/></label><div className="auc-actions" style={{alignSelf:"end"}}><span className={`auc-badge ${ownerRecovery?.phoneVerified?"ok":"warn"}`}>{ownerRecovery?.phoneVerified?"Doğrulandı":"Doğrulanmadı"}</span><button onClick={()=>startOwnerContact("SMS")} disabled={delivery?.sms===false}>SMS Kodu Gönder</button></div></div>{contactChallenge?<div className="auc-code"><input value={contactOtp} onChange={e=>setContactOtp(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="000000"/><button className="primary" onClick={verifyOwnerContactHandler}>Kodu Doğrula</button></div>:null}</div></details><details className="auc-details"><summary>3 Güvenlik Sorusu</summary><div className="auc-details-body">{ownerQuestions.map((r,i)=><div className="auc-question" key={i}><label className="auc-field">{i+1}. Soru<input value={r.question} onChange={e=>setOwnerQuestions(rows=>rows.map((x,j)=>j===i?{...x,question:e.target.value}:x))}/></label><label className="auc-field">Cevap<input type="password" value={r.answer} onChange={e=>setOwnerQuestions(rows=>rows.map((x,j)=>j===i?{...x,answer:e.target.value}:x))}/></label></div>)}<button className="primary" onClick={saveOwnerQuestionsHandler}>Güvenlik Sorularını Kaydet</button></div></details></div>:null}</section>:null}
+ {section==="SESSIONS"?<section className="auc-panel"><div className="auc-section"><div className="auc-section-head"><div><h4>Aktif Oturumlar · {selectedSessions.length}</h4><p>Yalnız seçili kullanıcının şu anda geçerli oturumları.</p></div></div><div className="auc-table"><table><thead><tr><th>Cihaz</th><th>IP</th><th>Giriş</th><th>Son Hareket</th><th>İşlem</th></tr></thead><tbody>{selectedSessions.map(r=><tr key={r.id}><td>{friendlyDevice(r)}<small>{r.deviceLabel?.startsWith("BROWSER:")?r.deviceLabel:""}</small></td><td>{r.ipAddress||"-"}</td><td>{dateText(r.createdAt)}</td><td>{dateText(r.lastSeenAt)}</td><td><button className="danger" onClick={()=>run(()=>revokeSession(r.id),"Oturum sonlandırıldı.")}>Sonlandır</button></td></tr>)}{!selectedSessions.length?<tr><td colSpan="5">Aktif oturum yok.</td></tr>:null}</tbody></table></div></div><div className="auc-section"><div className="auc-section-head"><div><h4>Oturum Geçmişi</h4><p>Seçili kullanıcının aktif, yenilenmiş, kapatılmış ve süresi dolmuş oturumları.</p></div></div><div className="auc-table"><table><thead><tr><th>Durum</th><th>Giriş</th><th>Son Hareket</th><th>Kapanış</th><th>Cihaz / IP</th></tr></thead><tbody>{selectedHistory.slice(0,100).map(r=><tr key={r.id}><td><span className={`auc-badge ${r.closureReason==="ACTIVE"?"ok":""}`}>{r.closureReason||"-"}</span></td><td>{dateText(r.createdAt)}</td><td>{dateText(r.lastSeenAt)}</td><td>{dateText(r.revokedAt||r.expiresAt)}</td><td>{friendlyDevice(r)}<small>{r.ipAddress||""}</small></td></tr>)}{!selectedHistory.length?<tr><td colSpan="5">Oturum geçmişi yok.</td></tr>:null}</tbody></table></div></div><div className="auc-section"><div className="auc-section-head"><div><h4>Kullanıcı Güvenlik Hareketleri</h4><p>Yetki, MFA, oturum ve güvenlik işlemleri.</p></div></div><div className="auc-table"><table><thead><tr><th>Zaman</th><th>İşlem</th><th>Uygulayan</th><th>IP</th></tr></thead><tbody>{selectedAudit.slice(0,100).map(r=><tr key={r.id}><td>{dateText(r.createdAt)}</td><td>{r.action||"-"}</td><td>{r.actorName||"Sistem"}</td><td>{r.ipAddress||"-"}</td></tr>)}{!selectedAudit.length?<tr><td colSpan="4">Bu kullanıcı için güvenlik olayı yok.</td></tr>:null}</tbody></table></div></div></section>:null}</>:<div className="auc-panel auc-empty">Soldan kullanıcı seçin veya yeni kullanıcı oluşturun.</div>}</main></section></div>
 }
