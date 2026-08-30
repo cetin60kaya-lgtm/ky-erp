@@ -7,6 +7,9 @@ const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
 const AUTH_DEVICE_KEY = "kyerp_auth_device_v1";
 const AUTH_VERSION = "canonical-v3";
+const NORMAL_REFRESH_BEFORE_MS = 30 * 60 * 1000;
+const OWNER_ROLLING_REFRESH_BEFORE_MS = 12 * 60 * 60 * 1000;
+const REFRESH_RETRY_MS = 60 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
@@ -66,6 +69,34 @@ function isTokenUsable(token) {
   const payload = parseJwtPayload(token);
   if (!payload || typeof payload?.exp !== "number") return false;
   return payload.exp > Math.floor(Date.now() / 1000) + 5;
+}
+
+function isSuperAdmin(role) {
+  return ["SUPER_ADMIN", "ADMIN"].includes(String(role || "").toUpperCase());
+}
+
+function sessionRefreshDelay(token, role) {
+  const payload = parseJwtPayload(token);
+  const expiresAtMs = Number(payload?.exp || 0) * 1000;
+  const issuedAtMs = Number(payload?.iat || 0) * 1000;
+  const remaining = expiresAtMs - Date.now();
+  if (!(remaining > 5000)) return 0;
+
+  const tokenLifetime = Math.max(0, expiresAtMs - issuedAtMs);
+  const owner = isSuperAdmin(role);
+  let target;
+  if (owner && tokenLifetime < 20 * 60 * 60 * 1000) {
+    // İlk owner oturumu mevcut MFA politikasından 10 saat gelir. Bir dakika içinde
+    // rolling 24 saatlik aktif-cihaz oturumuna yükseltilir.
+    target = 60 * 1000;
+  } else if (owner) {
+    target = remaining - OWNER_ROLLING_REFRESH_BEFORE_MS;
+  } else {
+    target = remaining - NORMAL_REFRESH_BEFORE_MS;
+  }
+
+  const latestSafe = Math.max(5000, remaining - 5000);
+  return Math.min(Math.max(5000, target), latestSafe);
 }
 
 function requestPathText(requestUrl) {
@@ -202,10 +233,6 @@ function readStoredAuth() {
   }
 }
 
-function isSuperAdmin(role) {
-  return ["SUPER_ADMIN", "ADMIN"].includes(String(role || "").toUpperCase());
-}
-
 export function AuthProvider({ children }) {
   const [{ token, user, permissions }, setAuthState] = useState(() => readStoredAuth());
   const [loading, setLoading] = useState(true);
@@ -262,6 +289,24 @@ export function AuthProvider({ children }) {
     return response;
   }, [saveAuth]);
 
+  const refreshSession = useCallback(() => runAuthOnce("SESSION_REFRESH", async () => {
+    const currentToken = tokenRef.current;
+    if (!currentToken || !isTokenUsable(currentToken)) return null;
+    try {
+      return finalizeResponse(await directAuthRequest("/auth/refresh", {
+        token: currentToken,
+        timeoutMs: 12000,
+      }));
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      const code = String(error?.code || "");
+      if (shouldClearStoredAuthForStatus(status, code, "/api/auth/refresh")) clearAuth();
+      // Ağ/5xx/409 gibi geçici durumlarda mevcut geçerli token korunur. Başka sekme
+      // tokenı çevirdiyse localStorage storage olayı kazanan tokenı bu sekmeye taşır.
+      return null;
+    }
+  }), [clearAuth, finalizeResponse, runAuthOnce]);
+
   useEffect(() => {
     tokenRef.current = token;
     setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
@@ -291,7 +336,8 @@ export function AuthProvider({ children }) {
       } catch (error) {
         if (cancelled) return;
         const status = Number(error?.status || 0);
-        if (shouldClearStoredAuthForStatus(status)) clearAuth();
+        const code = String(error?.code || "");
+        if (shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) clearAuth();
         else if (isTokenUsable(token) && snapshot.user) saveAuth(token, snapshot.user, snapshot.permissions);
         else clearAuth();
       } finally { if (!cancelled) setLoading(false); }
@@ -301,16 +347,43 @@ export function AuthProvider({ children }) {
   }, [clearAuth, saveAuth, token]);
 
   useEffect(() => {
+    if (!token || !user || !isTokenUsable(token)) return undefined;
+    let cancelled = false;
+    let timer = null;
+    const scheduledToken = token;
+
+    const runRefresh = async () => {
+      if (cancelled || tokenRef.current !== scheduledToken || !isTokenUsable(scheduledToken)) return;
+      const result = await refreshSession();
+      if (cancelled) return;
+      // Başarılı yenilemede saveAuth yeni token state'i oluşturur ve bu effect yeniden kurulur.
+      // Geçici bağlantı hatasında mevcut token halen geçerliyse 60 sn sonra tekrar denenir.
+      if (!result && tokenRef.current === scheduledToken && isTokenUsable(scheduledToken)) {
+        timer = window.setTimeout(runRefresh, REFRESH_RETRY_MS);
+      }
+    };
+
+    const delay = sessionRefreshDelay(token, user.role);
+    if (delay <= 0) return undefined;
+    timer = window.setTimeout(runRefresh, delay);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [refreshSession, token, user]);
+
+  useEffect(() => {
     const syncFromStorage = (event) => {
       if (![AUTH_TOKEN_KEY, AUTH_USER_KEY].includes(String(event.key || ""))) return;
       const stored = readStoredAuth();
       tokenRef.current = stored.token;
       setAuthState(stored);
-      if (!stored.token) setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
+      if (stored.token) setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+      else setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
     };
     window.addEventListener("storage", syncFromStorage);
     return () => window.removeEventListener("storage", syncFromStorage);
-  }, []);
+  }, [clearAuth]);
 
   const login = useCallback((identity, password, deviceLabel = "") => runAuthOnce("LOGIN", async () => {
     const body = { username: identity, password, deviceLabel: String(deviceLabel || "").trim() || stableBrowserDeviceLabel() };
