@@ -133,25 +133,16 @@ function Ensure-CloudflareDnsRecord($Record) {
         return
     }
 
+    if ($existing.Count -gt 0) {
+        $current = try { $existing | Select-Object id,type,name,content,priority | ConvertTo-Json -Depth 5 -Compress } catch { "" }
+        Fail "DNS cakismasi: $type $name adinda Resend'den farkli mevcut kayit var. Guvenlik icin otomatik ustune yazilmadi. Mevcut=$current"
+    }
+
     $payload = @{ type = $type; name = $name; content = $content; ttl = 1 }
     if ($type -eq "MX") { $payload.priority = $priority }
     if ($type -eq "CNAME") { $payload.proxied = $false }
-
-    $replaceCandidate = $null
-    if ($existing.Count -eq 1) {
-        if ($type -eq "CNAME") { $replaceCandidate = $existing[0] }
-        elseif ($type -eq "TXT" -and (([string]$Record.record).Trim().ToUpperInvariant() -in @("SPF","DKIM"))) { $replaceCandidate = $existing[0] }
-        elseif ($type -eq "MX") { $replaceCandidate = $existing[0] }
-    }
-
-    if ($null -ne $replaceCandidate) {
-        $id = [uri]::EscapeDataString([string]$replaceCandidate.id)
-        Invoke-CfApi "PUT" "/zones/$($script:CfZoneId)/dns_records/$id" $payload | Out-Null
-        Write-Host "DNS guncellendi: $type $name" -ForegroundColor Green
-    } else {
-        Invoke-CfApi "POST" "/zones/$($script:CfZoneId)/dns_records" $payload | Out-Null
-        Write-Host "DNS eklendi: $type $name" -ForegroundColor Green
-    }
+    Invoke-CfApi "POST" "/zones/$($script:CfZoneId)/dns_records" $payload | Out-Null
+    Write-Host "DNS eklendi: $type $name" -ForegroundColor Green
 }
 
 function Ensure-ResendDomain {
