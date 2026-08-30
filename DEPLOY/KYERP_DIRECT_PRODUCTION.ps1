@@ -1,11 +1,14 @@
 $ErrorActionPreference = "Stop"
 
 $ROOT = Split-Path $PSScriptRoot -Parent
-$EXPECTED_ROOT = "D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ"
 $BRANCH = "codex/model-uretim-kontrol-merkezi-final"
 $WORKER = Join-Path $ROOT "APP\cloud\ky-erp-api"
 $FRONTEND = Join-Path $ROOT "APP\app\ky-erp-frontend"
 $AUTH_VERSION = "canonical-v3"
+$DB_NAME = "ky-erp-db"
+$DB_CONFIG = "wrangler.jsonc"
+$SESSION_GUARD_FILE = Join-Path $WORKER "migrations\0022_auth_same_browser_session_guard.sql"
+$BACKUP_DIR = Join-Path $ROOT "BACKUPS\D1\PRE_DEPLOY"
 
 function Fail($message) {
     Write-Host ""
@@ -28,6 +31,20 @@ function Live-Asset($url) {
     return ""
 }
 
+function Remote-Trigger-Exists($triggerName) {
+    Set-Location $WORKER
+    $sql = "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$triggerName';"
+    $raw = & wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --command $sql --json 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail "Canli D1 trigger kontrolu yapilamadi: $raw" }
+    try {
+        $json = $raw | ConvertFrom-Json
+        $total = [int]$json[0].results[0].total
+        return ($total -gt 0)
+    } catch {
+        Fail "Canli D1 trigger kontrol cevabi okunamadi: $raw"
+    }
+}
+
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host " KY ERP - CANONICAL DIRECT PRODUCTION DEPLOY" -ForegroundColor Cyan
@@ -35,7 +52,10 @@ Write-Host "==================================================" -ForegroundColor
 Write-Host "Repo: $ROOT"
 Write-Host ""
 Write-Host "KORUMA:" -ForegroundColor Yellow
-Write-Host "- Production D1 migration/reset YOK." -ForegroundColor Yellow
+Write-Host "- Production D1 RESET YOK." -ForegroundColor Yellow
+Write-Host "- Genel migration zinciri YOK." -ForegroundColor Yellow
+Write-Host "- Yalniz gerekli same-browser session guard eksikse 0022 uygulanir." -ForegroundColor Yellow
+Write-Host "- D1 yedegi alinmadan 0022 uygulanmaz." -ForegroundColor Yellow
 Write-Host "- Production test INSERT/UPDATE/DELETE YOK." -ForegroundColor Yellow
 Write-Host "- Kirli tracked Git agaci otomatik resetlenmez." -ForegroundColor Yellow
 Write-Host ""
@@ -43,8 +63,9 @@ Write-Host ""
 if (-not (Test-Path (Join-Path $ROOT ".git"))) { Fail "Bu klasor Git reposu degil: $ROOT" }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "Git bulunamadi." }
 if (-not (Get-Command wrangler -ErrorAction SilentlyContinue)) { Fail "Wrangler bulunamadi. npm install -g wrangler calistirin." }
+if (-not (Test-Path $SESSION_GUARD_FILE)) { Fail "0022 session guard dosyasi bulunamadi: $SESSION_GUARD_FILE" }
 
-Write-Host "=== 1/9 REPO ===" -ForegroundColor Cyan
+Write-Host "=== 1/11 REPO ===" -ForegroundColor Cyan
 Set-Location $ROOT
 $origin = (git remote get-url origin 2>$null)
 Check-Exit "Git origin okunamadi."
@@ -70,12 +91,34 @@ if ($LOCAL_SHA -ne $REMOTE_SHA) { Fail "Local ve origin SHA ayni degil." }
 Write-Host "SHA: $LOCAL_SHA" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "=== 2/9 CLOUDFLARE ===" -ForegroundColor Cyan
+Write-Host "=== 2/11 CLOUDFLARE ===" -ForegroundColor Cyan
 wrangler whoami
 Check-Exit "Cloudflare OAuth oturumu bulunamadi. wrangler login calistirin."
 
 Write-Host ""
-Write-Host "=== 3/9 WORKER TYPECHECK + UNIT + FULL LOCAL AUTH ===" -ForegroundColor Cyan
+Write-Host "=== 3/11 D1 YEDEK + SAME-BROWSER GUARD ===" -ForegroundColor Cyan
+Set-Location $WORKER
+New-Item -ItemType Directory -Force -Path $BACKUP_DIR | Out-Null
+$backupStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$backupFile = Join-Path $BACKUP_DIR "ky-erp-db-predeploy-$backupStamp.sql"
+wrangler d1 export $DB_NAME --remote --config $DB_CONFIG --output $backupFile
+Check-Exit "Canli D1 yedegi alinamadi. Session guard uygulanmadi."
+if (-not (Test-Path $backupFile)) { Fail "D1 yedek dosyasi olusmadi: $backupFile" }
+if ((Get-Item $backupFile).Length -lt 100) { Fail "D1 yedek dosyasi beklenenden kucuk; deploy durduruldu." }
+Write-Host "D1 yedek: $backupFile" -ForegroundColor Green
+
+$guardName = "trg_auth_sessions_replace_same_browser"
+if (-not (Remote-Trigger-Exists $guardName)) {
+    Write-Host "Same-browser guard eksik. Yalniz 0022 uygulanacak..." -ForegroundColor Yellow
+    Set-Location $WORKER
+    wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $SESSION_GUARD_FILE
+    Check-Exit "0022 same-browser session guard uygulanamadi."
+}
+if (-not (Remote-Trigger-Exists $guardName)) { Fail "Same-browser session guard canli D1'de dogrulanamadi." }
+Write-Host "Same-browser session guard: HAZIR" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "=== 4/11 WORKER TYPECHECK + UNIT + FULL LOCAL AUTH ===" -ForegroundColor Cyan
 Set-Location $WORKER
 npm ci
 Check-Exit "Worker npm ci basarisiz."
@@ -87,12 +130,12 @@ npm run build
 Check-Exit "Worker dry-run basarisiz."
 
 Write-Host ""
-Write-Host "=== 4/9 WORKER PRODUCTION DEPLOY ===" -ForegroundColor Green
-wrangler deploy --config wrangler.jsonc
+Write-Host "=== 5/11 WORKER PRODUCTION DEPLOY ===" -ForegroundColor Green
+wrangler deploy --config $DB_CONFIG
 Check-Exit "Worker production deploy basarisiz."
 
 Write-Host ""
-Write-Host "=== 5/9 CANLI API + AUTH CONTRACT ===" -ForegroundColor Cyan
+Write-Host "=== 6/11 CANLI API + AUTH CONTRACT ===" -ForegroundColor Cyan
 Start-Sleep -Seconds 4
 
 $health = Invoke-WebRequest "https://api.kyerp.net/api/health?deploy=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" -UseBasicParsing -TimeoutSec 20
@@ -107,15 +150,19 @@ if ([int]$statusJson.sessionPolicy.passwordOnlySeconds -ne 28800) { Fail "Passwo
 if ([int]$statusJson.sessionPolicy.mfaSeconds -ne 36000) { Fail "MFA session 10 saat degil." }
 Write-Host "Auth: $AUTH_VERSION | parola 8h | MFA 10h" -ForegroundColor Green
 
-try {
-    Invoke-WebRequest "https://api.kyerp.net/api/auth/login" -Method POST -ContentType "text/plain;charset=UTF-8" -Body "{}" -Headers @{ Origin = "https://kyerp.net" } -UseBasicParsing -TimeoutSec 20 | Out-Null
-    Fail "Bos auth login istegi 400 yerine basarili oldu."
-} catch {
-    $code = $null
-    if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
-    if ($code -ne 400) { Fail "Canonical login bos istekte beklenen HTTP 400 yerine $code dondu." }
-    Write-Host "Canonical login: HTTP 400 beklenen" -ForegroundColor Green
+Write-Host "30x preflight-free login transport kontrolu..."
+for ($i = 1; $i -le 30; $i++) {
+    $ok = $false
+    try {
+        Invoke-WebRequest "https://api.kyerp.net/api/auth/login?transport=$i-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" -Method POST -ContentType "text/plain;charset=UTF-8" -Body "{}" -Headers @{ Origin = "https://kyerp.net"; Accept = "application/json" } -UseBasicParsing -TimeoutSec 20 | Out-Null
+    } catch {
+        $code = $null
+        if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
+        if ($code -eq 400) { $ok = $true }
+    }
+    if (-not $ok) { Fail "Login transport testi $i/30 beklenen HTTP 400 cevabini alamadi." }
 }
+Write-Host "Login transport: 30/30 HTTP cevap" -ForegroundColor Green
 
 try {
     $preflight = Invoke-WebRequest "https://api.kyerp.net/api/auth/login" -Method OPTIONS -Headers @{
@@ -124,11 +171,11 @@ try {
         "Access-Control-Request-Headers" = "content-type"
     } -UseBasicParsing -TimeoutSec 20
     if ($preflight.StatusCode -notin @(200,204)) { Fail "CORS preflight basarisiz: HTTP $($preflight.StatusCode)" }
-    Write-Host "CORS preflight: HTTP $($preflight.StatusCode)" -ForegroundColor Green
-} catch { Fail "CORS preflight kontrolu basarisiz: $($_.Exception.Message)" }
+    Write-Host "CORS fallback: HTTP $($preflight.StatusCode)" -ForegroundColor Green
+} catch { Fail "CORS fallback kontrolu basarisiz: $($_.Exception.Message)" }
 
 Write-Host ""
-Write-Host "=== 6/9 FRONTEND LINT + TEST + BUILD ===" -ForegroundColor Cyan
+Write-Host "=== 7/11 FRONTEND LINT + TEST + BUILD ===" -ForegroundColor Cyan
 Set-Location $FRONTEND
 npm ci
 Check-Exit "Frontend npm ci basarisiz."
@@ -148,12 +195,12 @@ $EXPECTED_ASSET = $assetMatch.Value
 Write-Host "Build asset: $EXPECTED_ASSET" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "=== 7/9 PAGES PRODUCTION DEPLOY ===" -ForegroundColor Green
+Write-Host "=== 8/11 PAGES PRODUCTION DEPLOY ===" -ForegroundColor Green
 wrangler pages deploy dist --project-name=ky-erp-frontend --branch=$BRANCH --commit-hash=$LOCAL_SHA
 Check-Exit "Cloudflare Pages deploy basarisiz."
 
 Write-Host ""
-Write-Host "=== 8/9 CUSTOM DOMAIN ASSET DOGRULAMA ===" -ForegroundColor Cyan
+Write-Host "=== 9/11 CUSTOM DOMAIN ASSET DOGRULAMA ===" -ForegroundColor Cyan
 $kyerpAsset = ""
 $appAsset = ""
 for ($i = 1; $i -le 20; $i++) {
@@ -167,13 +214,23 @@ if ($kyerpAsset -ne $EXPECTED_ASSET) { Fail "kyerp.net yeni build assetini goste
 if ($appAsset -ne $EXPECTED_ASSET) { Fail "app.kyerp.net yeni build assetini gostermiyor." }
 
 Write-Host ""
-Write-Host "=== 9/9 SONUC ===" -ForegroundColor Cyan
+Write-Host "=== 10/11 SON CANLI API KONTROL ===" -ForegroundColor Cyan
+$finalHealth = Invoke-WebRequest "https://api.kyerp.net/api/health?final=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" -UseBasicParsing -TimeoutSec 20
+if ($finalHealth.StatusCode -ne 200) { Fail "Son API health kontrolu basarisiz." }
+if (-not (Remote-Trigger-Exists $guardName)) { Fail "Deploy sonunda same-browser guard kayip." }
+Write-Host "API + same-browser guard son kontrol: HAZIR" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "=== 11/11 SONUC ===" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Green
 Write-Host " KY ERP PRODUCTION DEPLOY BASARILI " -ForegroundColor Green
 Write-Host "==================================================" -ForegroundColor Green
 Write-Host "Repo SHA       : $LOCAL_SHA"
 Write-Host "Auth           : $AUTH_VERSION"
 Write-Host "Worker API     : HTTP 200"
+Write-Host "Login transport: 30/30"
+Write-Host "Session guard  : HAZIR"
+Write-Host "D1 pre-backup  : $backupFile"
 Write-Host "Build asset    : $EXPECTED_ASSET"
 Write-Host "kyerp.net      : $kyerpAsset"
 Write-Host "app.kyerp.net  : $appAsset"
