@@ -1,5 +1,9 @@
 $ErrorActionPreference = "Stop"
 
+# Canonical production entrypoint:
+# - KYERP_DIRECT_PRODUCTION_V4.ps1 resolves the real Cloudflare Pages project/domain/production environment.
+# - KYERP_DIRECT_PRODUCTION_V3.ps1 remains the guarded Worker/D1/Pages production engine used by V4 as a runtime template.
+
 function Stop-Deploy($message) {
     Write-Host ""
     Write-Host "HATA: $message" -ForegroundColor Red
