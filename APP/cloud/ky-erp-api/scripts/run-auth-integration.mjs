@@ -11,6 +11,7 @@ const AUTH_SCHEMA_FILES = [
   "migrations/0018_auth_mfa_sessions.sql",
   "migrations/0019_auth_dual_mfa_recovery.sql",
   "migrations/0021_auth_security_policy_owner_recovery.sql",
+  "migrations/0022_auth_same_browser_session_guard.sql",
 ];
 
 function run(label, args) {
