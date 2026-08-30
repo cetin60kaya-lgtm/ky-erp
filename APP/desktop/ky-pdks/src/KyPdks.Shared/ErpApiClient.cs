@@ -19,7 +19,7 @@ public sealed class ErpApiClient : IDisposable
     {
         _http = new HttpClient { BaseAddress = new Uri(baseAddress.TrimEnd('/')), Timeout = TimeSpan.FromSeconds(20) };
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.1");
     }
 
     public async Task<AuthFlow> LoginAsync(string identity, string password, string deviceLabel, CancellationToken ct = default)
@@ -148,6 +148,58 @@ public sealed class ErpApiClient : IDisposable
                 missingPunch,
                 note = note ?? "",
             }, token, ct);
+    }
+
+    public async Task SaveLeaveAsync(string token, CachedPerson person, string startDate, string endDate, string type, string note, string userName, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
+        if (!DateOnly.TryParse(startDate, out var start) || !DateOnly.TryParse(endDate, out var end) || end < start)
+            throw new InvalidOperationException("İzin tarihleri geçersiz.");
+
+        var annual = string.Equals(type, "YILLIK_IZIN", StringComparison.OrdinalIgnoreCase);
+        object body = annual
+            ? new
+            {
+                employeeId = person.Id,
+                recordType = "Yıllık izin",
+                startDate = start.ToString("yyyy-MM-dd"),
+                returnDate = end.AddDays(1).ToString("yyyy-MM-dd"),
+                status = "APPROVED",
+                effectType = "Ücretli",
+                note = note ?? "",
+                userName = userName ?? "KY PDKS",
+                allowDepartmentConflict = false,
+            }
+            : new
+            {
+                employeeId = person.Id,
+                recordType = "İzin",
+                startDate = start.ToString("yyyy-MM-dd"),
+                endDate = end.ToString("yyyy-MM-dd"),
+                effectType = "Kayıt",
+                note = note ?? "",
+                userName = userName ?? "KY PDKS",
+            };
+
+        using var _ = await SendAsync(HttpMethod.Post, "/api/ik/advanced/leave", body, token, ct);
+    }
+
+    public async Task SaveAdvanceAsync(string token, CachedPerson person, string date, decimal amount, string note, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
+        if (amount <= 0) throw new InvalidOperationException("Avans tutarı sıfırdan büyük olmalıdır.");
+        using var _ = await SendAsync(HttpMethod.Post, "/api/ik/advanced/finance-movement", new
+        {
+            employeeId = person.Id,
+            date,
+            adjustmentType = "Avans",
+            amount,
+            hourOrDay = 0,
+            paymentMethod = "Elden",
+            payrollEffect = "Bordrodan düş",
+            note = note ?? "",
+            status = "APPROVED",
+        }, token, ct);
     }
 
     public async Task<SyncResult> SyncPunchesAsync(string token, IReadOnlyList<PunchRow> punches, string deviceLabel, CancellationToken ct = default)
