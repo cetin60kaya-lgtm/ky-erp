@@ -51,6 +51,8 @@ type ShellEnv = {
   Variables: { requestId: string };
 };
 
+type AnyRow = Record<string, any>;
+
 const AUTH_VERSION = "canonical-v3";
 const PASSWORD_SESSION_SECONDS = 28_800;
 const MFA_SESSION_SECONDS = 36_000;
@@ -70,6 +72,63 @@ function allowedOrigin(origin: string) {
   if (LOCAL_DEV_ORIGIN.test(origin)) return origin;
   if (PAGES_PREVIEW_ORIGIN.test(origin)) return origin;
   return undefined;
+}
+
+function ownerRole(role: unknown) {
+  const value = String(role || "").trim().toUpperCase();
+  return value === "SUPER_ADMIN" || value === "ADMIN";
+}
+
+function stripSystemAdminPermission(rows: unknown) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.filter((row: AnyRow) => String(row?.moduleKey || row?.module_key || "").trim().toUpperCase() !== "ADMIN");
+}
+
+function sanitizeNonOwnerUser(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const user = value as AnyRow;
+  if (ownerRole(user.role)) return user;
+  return { ...user, permissions: stripSystemAdminPermission(user.permissions) };
+}
+
+function sanitizeAuthPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const result = { ...(payload as AnyRow) };
+  if (result.user) result.user = sanitizeNonOwnerUser(result.user);
+  if (Array.isArray(result.permissions) && !ownerRole(result.user?.role)) {
+    result.permissions = stripSystemAdminPermission(result.permissions);
+  }
+  if (result.data && typeof result.data === "object" && !Array.isArray(result.data) && result.data.user) {
+    result.data = { ...result.data, user: sanitizeNonOwnerUser(result.data.user) };
+  }
+  return result;
+}
+
+async function rewriteJsonResponse(c: any, transform: (payload: unknown) => unknown) {
+  const response = c.res;
+  const contentType = String(response.headers.get("Content-Type") || "").toLowerCase();
+  if (!contentType.includes("application/json")) return;
+  let payload: unknown;
+  try { payload = await response.clone().json(); }
+  catch { return; }
+  const nextPayload = transform(payload);
+  if (nextPayload === payload) return;
+  const headers = new Headers(response.headers);
+  headers.delete("Content-Length");
+  c.res = new Response(JSON.stringify(nextPayload), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function targetRole(c: any, userId: string) {
+  return c.env.DB.prepare(
+    `SELECT COALESCE(NULLIF(TRIM(s.role_override),''),u.role,'VIEWER') AS role
+       FROM auth_users u
+       LEFT JOIN auth_user_security s ON s.user_id=u.id
+      WHERE u.id=? LIMIT 1`,
+  ).bind(userId).first<AnyRow>();
 }
 
 registerAccountingCompanyDirectoryRoutes(app);
@@ -160,10 +219,46 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
+// Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
+// izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
 shell.use("/api/auth/*", async (c, next) => {
   c.header("X-KYERP-Auth-Version", AUTH_VERSION);
   c.header("Cache-Control", "no-store, no-cache, must-revalidate");
   await next();
+  await rewriteJsonResponse(c, sanitizeAuthPayload);
+});
+
+// Kullanıcı yetki ekranında da owner olmayan hesaba ADMIN izni kalıcılaştırılmaz.
+// Bu, eski COMPANY_ADMIN permission satırlarını temizler ve tekrar açılmasını engeller.
+shell.use("/api/admin/users/*", async (c, next) => {
+  await next();
+  const path = new URL(c.req.url).pathname;
+  const match = path.match(/^\/api\/admin\/users\/([^/]+)\/permissions$/i);
+  if (!match) return;
+  const userId = decodeURIComponent(match[1]);
+  const row = await targetRole(c, userId);
+  if (!row || ownerRole(row.role)) return;
+
+  if (c.req.method.toUpperCase() === "PUT" && c.res.status >= 200 && c.res.status < 300) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE auth_user_module_permissions
+            SET can_view=0,can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=?
+          WHERE user_id=? AND UPPER(module_key)='ADMIN'`,
+      ).bind(new Date().toISOString(), userId).run();
+    } catch {
+      // Auth cevabı yine owner-only filtrelidir; cleanup hatası ana işlemi bozmaz.
+    }
+  }
+
+  await rewriteJsonResponse(c, (payload) => {
+    if (Array.isArray(payload)) return stripSystemAdminPermission(payload);
+    if (!payload || typeof payload !== "object") return payload;
+    const nextPayload = { ...(payload as AnyRow) };
+    if (Array.isArray(nextPayload.data)) nextPayload.data = stripSystemAdminPermission(nextPayload.data);
+    if (Array.isArray(nextPayload.permissions)) nextPayload.permissions = stripSystemAdminPermission(nextPayload.permissions);
+    return nextPayload;
+  });
 });
 
 shell.get("/api/auth/status", (c) => c.json({
@@ -191,7 +286,7 @@ shell.get("/api/auth/me", async (c) => {
   }
   const { security, session, ...user } = current as any;
   void security;
-  return c.json({ ok: true, authVersion: AUTH_VERSION, user, session: { id: session.id, expiresAt: session.expires_at, lastSeenAt: session.last_seen_at } });
+  return c.json({ ok: true, authVersion: AUTH_VERSION, user: sanitizeNonOwnerUser(user), session: { id: session.id, expiresAt: session.expires_at, lastSeenAt: session.last_seen_at } });
 });
 
 registerAuthRecoveryCodeFallbackRoutes(shell);
