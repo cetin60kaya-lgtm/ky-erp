@@ -2,13 +2,12 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-27T14:36:00+03:00",
-  "attempt": 63,
+  "requestedAt": "2026-08-30T05:48:00+03:00",
+  "attempt": 64,
   "scope": [
     "kyerp-net-direct-pages-domain",
     "pages-production-branch-canonical-source",
     "cloudflare-pages-canonical-git-production-deploy",
-    "login-api-connectivity-redeploy",
     "per-user-login-security-policy",
     "password-only-30-minute-hard-session",
     "server-jwt-and-session-expiry-policy",
@@ -41,6 +40,11 @@
     "auth-clean-migration-0018-0019-0021-chain",
     "auth-production-regression-workflow",
     "ik-personnel-control-current-production-preserved",
+    "ik-denetim-pdks-sgk-only",
+    "ik-denetim-pdks-read-only",
+    "ik-denetim-pdks-monthly-attendance",
+    "ik-denetim-pdks-missing-punch-report",
+    "ik-denetim-pdks-csv-report",
     "isnet-live-runtime-preserved",
     "muhasebe-runtime-preserved",
     "boyahane-production-runtime-preserved",
@@ -49,5 +53,5 @@
     "root-domain-no-redirect-live-audit"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Attempt 63: Kullanıcının canlı kyerp.net giriş ekranında görülen NETWORK_ERROR / API bağlantı hatası için production yeniden yayını tetiklendi. D1 verisine dokunulmaz; mevcut auth, MFA ve tüm modül davranışları korunur. Workflow önce tam D1 yedeği alır, migration ve şema denetimini çalıştırır, ardından Worker api.kyerp.net custom domain dağıtımını ve Pages production yayını ile gerçek Chrome kontrolünü tekrar doğrular. Amaç giriş/API erişim katmanını yeniden yayınlayarak canlı bağlantı sorununu güvenli biçimde gidermektir."
+  "note": "Attempt 64: Denetim kullanıcısı için mevcut İK salt-okunur görünümü SGK durumu kesin VAR ve kart numarası bulunan aylık personelle sınırlı PDKS Denetim Merkezine dönüştürülür. Günlük/haftalık personel, maaş, banka ve kimlik alanları denetim görünümüne girmez. PDKS Genel, Canlı Kart, Giriş/Çıkış, Eksik Kartlar, Puantaj ve Raporlar tek ekranda salt okunur çalışır. Workflow önce Worker typecheck/build ve frontend lint/build/Chrome smoke testlerini çalıştırır; ardından tam D1 yedeği alır, mevcut migration zincirini denetler ve Worker + Pages canlı yayını yapar. Mevcut auth, MFA, İşNet, Muhasebe, Boyahane, Desen ve üretim akışları korunur."
 }
