@@ -22,6 +22,17 @@ test("main registers the complete owner management backend", () => {
   }
 });
 
+test("system management permission is stripped from every non-owner auth response", () => {
+  const source = api("main.ts");
+  assert.match(source, /function ownerRole/);
+  assert.match(source, /stripSystemAdminPermission/);
+  assert.match(source, /moduleKey \|\| row\?\.module_key/);
+  assert.match(source, /sanitizeAuthPayload/);
+  assert.match(source, /\/api\/auth\/\*/);
+  assert.match(source, /UPDATE auth_user_module_permissions/);
+  assert.match(source, /UPPER\(module_key\)='ADMIN'/);
+});
+
 test("mapping UI uses implemented company profile and product catalog APIs", () => {
   const source = frontend("pages/admin/AdminMappings.jsx");
   assert.match(source, /\/muhasebe\/firma-profilleri/);
