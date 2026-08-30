@@ -45,10 +45,15 @@ function sqlLiteral(value: unknown): string {
 function safeSqlTable(name: unknown) {
   const value = text(name);
   if (!value) return false;
-  if (value === "json_store") return false;
   if (value.startsWith("auth_")) return false;
   if (value === "d1_migrations") return false;
   return true;
+}
+function tenantDeleteSql(table: string, slug: string) {
+  if (table === "json_store") {
+    return `DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier("main_company_slug")}=${sqlLiteral(slug)} AND ${quoteIdentifier("scope")}<>${sqlLiteral(BACKUP_SCOPE)};\n`;
+  }
+  return `DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier("main_company_slug")}=${sqlLiteral(slug)};\n`;
 }
 async function ownerCurrent(c: any) {
   const current = await getAuthenticatedUser(c);
@@ -199,7 +204,8 @@ async function materializeSqlBackup(c: any, current: Row, record: Row, force = f
     await append(`-- Backup ID: ${backupId}\n`);
     await append(`-- Ana firma: ${slug}\n`);
     await append(`-- Olusturma: ${text(record.createdAt || manifest.createdAt || nowIso())}\n`);
-    await append("-- Not: Sema KY ERP migrationlari tarafindan yonetilir; bu dosya firma verisini birebir geri yuklemek icindir.\n\n");
+    await append("-- Not: Sema KY ERP migrationlari tarafindan yonetilir; bu dosya firma verisini birebir geri yuklemek icindir.\n");
+    await append("-- Auth/session/MFA kayitlari haric; json_store is ayarlari dahil, ADMIN_BACKUP gecmisi korunur.\n\n");
     await append("PRAGMA foreign_keys=OFF;\nBEGIN IMMEDIATE;\n\n");
 
     if (manifest.mainCompany && typeof manifest.mainCompany === "object") {
@@ -212,11 +218,12 @@ async function materializeSqlBackup(c: any, current: Row, record: Row, force = f
       const table = text(entry?.name);
       if (!safeSqlTable(table)) continue;
       await append(`-- Tablo: ${table}\n`);
-      await append(`DELETE FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier("main_company_slug")}=${sqlLiteral(slug)};\n`);
+      await append(tenantDeleteSql(table, slug));
       for (const key of Array.isArray(entry?.chunks) ? entry.chunks : []) {
         const payload = await readJsonObject(await bucket.get(text(key)));
         for (const sourceRow of Array.isArray(payload?.rows) ? payload.rows : []) {
           const row = { ...sourceRow, main_company_slug: slug };
+          if (table === "json_store" && text(row.scope) === BACKUP_SCOPE) continue;
           await append(rowInsertSql(table, row));
           sqlRows += 1;
         }
