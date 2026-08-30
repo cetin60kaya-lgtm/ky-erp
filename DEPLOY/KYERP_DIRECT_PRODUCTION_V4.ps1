@@ -130,7 +130,9 @@ try {
     $source = $source.Replace($oldDeploy, $newDeploy)
 
     # Canonical deploy da BAT'tan bagimsiz tam auth integration testini gecsin.
-    $source = $source.Replace('npm run test:unit' + [Environment]::NewLine + 'Check-Exit "Worker unit/contract testleri basarisiz."', 'npm test' + [Environment]::NewLine + 'Check-Exit "Worker tam unit/auth integration testleri basarisiz."')
+    if (-not $source.Contains('npm run test:unit')) { Fail "V3 Worker unit test satiri bulunamadi; tam test runtime patch uygulanamadi." }
+    $source = $source.Replace('npm run test:unit', 'npm test')
+    $source = $source.Replace('Check-Exit "Worker unit/contract testleri basarisiz."', 'Check-Exit "Worker tam unit/auth integration testleri basarisiz."')
 
     Set-Content -LiteralPath $RUNTIME -Value $source -Encoding utf8NoBOM
     & $RUNTIME
