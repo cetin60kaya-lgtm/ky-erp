@@ -13,3 +13,7 @@ export async function getAuditPeople() {
 export async function getAuditPerson(employeeId) {
   return unwrap(await apiGet(`/ik/audit/people/${encodeURIComponent(employeeId)}`, { _ts: Date.now() }));
 }
+
+export async function getAuditPdksMonth(params = {}) {
+  return unwrap(await apiGet("/ik/audit/pdks/month", { ...params, _ts: Date.now() }));
+}
