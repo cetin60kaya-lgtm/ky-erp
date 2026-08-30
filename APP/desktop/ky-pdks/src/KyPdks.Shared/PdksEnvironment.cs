@@ -16,7 +16,8 @@ public sealed class PdksPaths
     public string Database => Path.Combine(Data, "pdks.db");
     public string ConfigFile => Path.Combine(Root, "config.json");
     public string DeviceFile => Path.Combine(Root, "device.id");
-    public string SessionFile => Path.Combine(Root, "session.bin");
+    public string UserRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KY ERP", "PDKS");
+    public string SessionFile => Path.Combine(UserRoot, "session.bin");
     public string DeviceId { get; }
     public string DeviceLabel => $"PDKS-WINDOWS:{Environment.MachineName}:{DeviceId}";
 
@@ -69,6 +70,8 @@ public sealed class ConfigStore(PdksPaths paths)
     }
 }
 
+// ERP oturumu yalnız masaüstünde giriş yapan Windows kullanıcısına aittir.
+// Agent bu dosyayı okumaz; uygulama kapalıyken yalnız kart toplama devam eder.
 public sealed class SecureSessionStore(PdksPaths paths)
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
@@ -78,9 +81,10 @@ public sealed class SecureSessionStore(PdksPaths paths)
     {
         var exp = JwtExpiry(token);
         if (exp <= 0) throw new InvalidOperationException("KY ERP oturum tokenı geçerli bir süre bilgisi taşımıyor.");
+        Directory.CreateDirectory(paths.UserRoot);
         var payload = new StoredSession(token, userName, fullName, role, exp, paths.DeviceLabel, DateTimeOffset.Now);
         var clear = JsonSerializer.SerializeToUtf8Bytes(payload, Json);
-        var encrypted = ProtectedData.Protect(clear, Entropy, DataProtectionScope.LocalMachine);
+        var encrypted = ProtectedData.Protect(clear, Entropy, DataProtectionScope.CurrentUser);
         var temp = paths.SessionFile + ".tmp";
         File.WriteAllBytes(temp, encrypted);
         File.Move(temp, paths.SessionFile, true);
@@ -92,7 +96,7 @@ public sealed class SecureSessionStore(PdksPaths paths)
         {
             if (!File.Exists(paths.SessionFile)) return null;
             var encrypted = File.ReadAllBytes(paths.SessionFile);
-            var clear = ProtectedData.Unprotect(encrypted, Entropy, DataProtectionScope.LocalMachine);
+            var clear = ProtectedData.Unprotect(encrypted, Entropy, DataProtectionScope.CurrentUser);
             var session = JsonSerializer.Deserialize<StoredSession>(clear, Json);
             return session?.DeviceLabel == paths.DeviceLabel ? session : null;
         }
