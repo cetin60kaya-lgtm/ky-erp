@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows.Threading;
+using KyPdks.Shared;
 
 namespace KyPdks.Desktop;
 
@@ -15,12 +16,28 @@ public partial class PdksWorkbenchWindow
         _liveTimer.Tick += LiveTimer_Tick;
         _liveTimer.Start();
         ApplyWorkbenchRoleGuard();
+        _ = EnsureDefaultNormalShiftAsync();
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _liveTimer.Stop();
         base.OnClosed(e);
+    }
+
+    private async Task EnsureDefaultNormalShiftAsync()
+    {
+        try
+        {
+            var normal = (await _operations.GetGroupsAsync(_lifetime.Token))
+                .FirstOrDefault(x => string.Equals(x.Id, "NORMAL", StringComparison.OrdinalIgnoreCase));
+            if (normal is null) return;
+            if (!string.Equals(normal.EntryTime, "08:30", StringComparison.Ordinal)
+                || !string.Equals(normal.ExitTime, "19:00", StringComparison.Ordinal)
+                || normal.LateTolerance != 0 || normal.EarlyTolerance != 0) return;
+            await _operations.SaveGroupAsync(normal with { LateTolerance = 5, EarlyTolerance = 10 }, "SYSTEM", _lifetime.Token);
+        }
+        catch { }
     }
 
     private async void LiveTimer_Tick(object? sender, EventArgs e)
