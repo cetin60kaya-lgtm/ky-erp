@@ -1,8 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-# Canonical production entrypoint:
-# - KYERP_DIRECT_PRODUCTION_V4.ps1 resolves the real Cloudflare Pages project/domain/production environment.
-# - KYERP_DIRECT_PRODUCTION_V3.ps1 remains the guarded Worker/D1/Pages production engine used by V4 as a runtime template.
+# KY ERP canonical production entrypoint.
+# Tek kullanici uygulama adresi: https://kyerp.net/
+# Backend servis origin'i: https://api.kyerp.net
+# V5 tek-domain Cloudflare/Pages orkestrasyonudur.
+# V3 korumali Worker/D1/frontend motoru V5 tarafindan runtime template olarak kullanilir:
+# KYERP_DIRECT_PRODUCTION_V3.ps1
 
 function Stop-Deploy($message) {
     Write-Host ""
@@ -27,9 +30,9 @@ if ($isWindowsHost -and $nodeVersion.Major -ne 22) {
     Stop-Deploy "Windows production deploy icin Node.js 22 LTS gerekiyor. Mevcut surum: $nodeText"
 }
 
-$script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V4.ps1"
+$script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V5.ps1"
 if (-not (Test-Path $script)) {
-    Stop-Deploy "Production V4 deploy scripti bulunamadi: $script"
+    Stop-Deploy "Production V5 tek-adres deploy scripti bulunamadi: $script"
 }
 
 if ($isWindowsHost) {
