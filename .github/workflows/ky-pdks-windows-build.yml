@@ -7,6 +7,12 @@ on:
     paths:
       - "APP/desktop/ky-pdks/**"
       - ".github/workflows/ky-pdks-windows-build.yml"
+  pull_request:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/desktop/ky-pdks/**"
+      - ".github/workflows/ky-pdks-windows-build.yml"
   workflow_dispatch:
 
 permissions:
