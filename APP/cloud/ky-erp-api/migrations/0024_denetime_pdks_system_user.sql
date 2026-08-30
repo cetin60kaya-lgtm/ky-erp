@@ -35,7 +35,7 @@ WHERE NOT EXISTS (
 );
 
 -- Daha once manuel acilmis denetim hesabi varsa kimligini/parolasini/aktiflik durumunu koru,
--- yalniz rol ve guvenlik kapsamını canonical DENETIM olarak sabitle.
+-- yalniz rol ve guvenlik kapsamini canonical DENETIM olarak sabitle.
 UPDATE auth_users
    SET role='DENETIM',
        full_name=CASE WHEN TRIM(COALESCE(full_name,''))='' THEN 'DENETİM / PDKS' ELSE full_name END,
@@ -105,3 +105,17 @@ ON CONFLICT(user_id) DO UPDATE SET
   scope='AUDIT',
   updated_by='SYSTEM',
   updated_at=CURRENT_TIMESTAMP;
+
+-- Sistem hesabinin kimligi ve rolu yanlislikla degistirilemez.
+-- Sifre, MFA, e-posta ve aktif/pasif durumu bu trigger tarafindan kilitlenmez.
+CREATE TRIGGER IF NOT EXISTS trg_denetime_system_identity_guard
+AFTER UPDATE OF username,role ON auth_users
+WHEN OLD.id='system-denetim'
+ AND (LOWER(TRIM(COALESCE(NEW.username,'')))<>'denetim' OR UPPER(TRIM(COALESCE(NEW.role,'')))<>'DENETIM')
+BEGIN
+  UPDATE auth_users
+     SET username='denetim',
+         role='DENETIM',
+         updated_at=CURRENT_TIMESTAMP
+   WHERE id='system-denetim';
+END;
