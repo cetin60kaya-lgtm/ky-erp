@@ -25,7 +25,13 @@ public partial class PdksWorkbenchWindow
         MonthCombo.SelectionChanged += PeriodCombo_SelectionChanged;
         YearCombo.SelectionChanged -= PeriodCombo_SelectionChanged;
         YearCombo.SelectionChanged += PeriodCombo_SelectionChanged;
+        AccountPanel.IsVisibleChanged -= AccountPanel_IsVisibleChanged;
+        AccountPanel.IsVisibleChanged += AccountPanel_IsVisibleChanged;
 
+        ProcessButton.Click -= ProcessPunchesButton_Click;
+        ProcessButton.Click += SafeProcessPunchesButton_Click;
+        CalculateButton.Click -= CalculateAttendanceButton_Click;
+        CalculateButton.Click += SafeCalculateAttendanceButton_Click;
         ClosePeriodButton.Click -= ClosePeriodWorkflowButton_Click;
         ClosePeriodButton.Click += SafeClosePeriodButton_Click;
         PayrollButton.Click -= ExportPayrollWorkflowButton_Click;
@@ -43,6 +49,11 @@ public partial class PdksWorkbenchWindow
     {
         _liveTimer.Stop();
         base.OnClosed(e);
+    }
+
+    private async void AccountPanel_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (AccountPanel.Visibility == Visibility.Visible) await RefreshServerScopeAsync();
     }
 
     private async void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -148,6 +159,57 @@ public partial class PdksWorkbenchWindow
         }
     }
 
+    private async Task<IReadOnlyList<PunchRow>> PendingForPeriodAsync(int year, int month)
+    {
+        var prefix = $"{year:D4}-{month:D2}-";
+        return (await _store.GetPendingAsync(5000, _lifetime.Token))
+            .Where(x => x.WorkDate.StartsWith(prefix, StringComparison.Ordinal))
+            .ToArray();
+    }
+
+    private async Task<HashSet<string>> ClosedPeriodsWithPendingAsync()
+    {
+        var closed = (await _operations.GetPeriodsAsync(_lifetime.Token))
+            .Where(x => string.Equals(x.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
+            .Select(x => $"{x.Year:D4}-{x.Month:D2}-")
+            .ToHashSet(StringComparer.Ordinal);
+        if (closed.Count == 0) return new HashSet<string>(StringComparer.Ordinal);
+        var pending = await _store.GetPendingAsync(5000, _lifetime.Token);
+        return pending.Select(x => x.WorkDate.Length >= 8 ? x.WorkDate[..8] : "")
+            .Where(closed.Contains)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private async void SafeProcessPunchesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        await BusyAsync("Bekleyen kartlar kontrol ediliyor...", async () =>
+        {
+            if (_serverAudit || !CanWrite) throw new InvalidOperationException("Kart işleme için yazma yetkisi gerekir.");
+            var locked = await ClosedPeriodsWithPendingAsync();
+            if (locked.Count > 0)
+                throw new InvalidOperationException($"Kapalı döneme ait bekleyen kart var: {string.Join(", ", locked.Select(x => x.TrimEnd('-')))}. Önce ilgili dönemi açıp kontrol edin.");
+            await SyncPendingAsync();
+        });
+    }
+
+    private async void SafeCalculateAttendanceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        await BusyAsync("Puantaj hesaplanıyor...", async () =>
+        {
+            var (year, month) = SelectedPeriod();
+            var period = (await _operations.GetPeriodsAsync(_lifetime.Token)).FirstOrDefault(x => x.Year == year && x.Month == month);
+            var closed = string.Equals(period?.Status, "CLOSED", StringComparison.OrdinalIgnoreCase);
+            if (!closed && !string.IsNullOrWhiteSpace(_token)) await RefreshErpAttendanceCacheAsync(year, month);
+            await RefreshAllAsync();
+            ShowAllDays();
+            StatusText.Text = closed
+                ? $"{month:D2}/{year} kapalı dönem sonucu görüntülendi; ERP'den yeniden hesaplanmadı."
+                : $"{month:D2}/{year} puantajı hesaplandı · {_timesheet.Count} personel.";
+        });
+    }
+
     private async void SafeClosePeriodButton_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -158,6 +220,10 @@ public partial class PdksWorkbenchWindow
             var periodEnd = new DateTime(year, month, DateTime.DaysInMonth(year, month));
             if (periodEnd > DateTime.Today)
                 throw new InvalidOperationException($"{month:D2}/{year} dönemi henüz tamamlanmadı. Son gün {periodEnd:dd.MM.yyyy}.");
+
+            var pending = await PendingForPeriodAsync(year, month);
+            if (pending.Count > 0)
+                throw new InvalidOperationException($"Dönem kapatılmadı: bu aya ait {pending.Count} bekleyen/hatalı kart önce ERP'ye işlenmelidir.");
 
             if (!string.IsNullOrWhiteSpace(_token)) await RefreshErpAttendanceCacheAsync(year, month);
             _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
@@ -186,6 +252,9 @@ public partial class PdksWorkbenchWindow
             var period = (await _operations.GetPeriodsAsync(_lifetime.Token)).FirstOrDefault(x => x.Year == year && x.Month == month);
             if (!string.Equals(period?.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Bordro aktarımı için önce dönemi eksiksiz kontrol edip kapatın.");
+            var pending = await PendingForPeriodAsync(year, month);
+            if (pending.Count > 0)
+                throw new InvalidOperationException($"Bordro üretilmedi: kapalı döneme sonradan gelen {pending.Count} kart var. Dönemi açıp kontrol edin.");
 
             _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
             _timesheet = AttendanceStore.BuildTimesheet(_attendanceRows);
