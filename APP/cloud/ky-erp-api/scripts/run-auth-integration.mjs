@@ -59,6 +59,10 @@ try {
   run("LOCAL AUTH RUNTIME SMOKE", [
     fileURLToPath(new URL("./auth-policy-runtime-smoke.mjs", import.meta.url)),
   ]);
+
+  run("LOCAL SAME-BROWSER SESSION GUARD SMOKE", [
+    fileURLToPath(new URL("./auth-same-browser-session-smoke.mjs", import.meta.url)),
+  ]);
 } finally {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 }
