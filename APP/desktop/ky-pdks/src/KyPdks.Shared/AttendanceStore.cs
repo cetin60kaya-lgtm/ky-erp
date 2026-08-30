@@ -7,6 +7,8 @@ public sealed class AttendanceStore(PdksPaths paths)
 {
     private const string DefaultIn = "08:30";
     private const string DefaultOut = "19:00";
+    private const int DefaultLateTolerance = 5;
+    private const int DefaultEarlyTolerance = 10;
 
     private string ConnectionString => new SqliteConnectionStringBuilder
     {
@@ -112,7 +114,9 @@ public sealed class AttendanceStore(PdksPaths paths)
 
         foreach (var person in people)
         {
-            var schedule = schedules.TryGetValue(person.Id, out var configured) ? configured : new Schedule(DefaultIn, DefaultOut, 0, 0);
+            var schedule = schedules.TryGetValue(person.Id, out var configured)
+                ? configured
+                : new Schedule(DefaultIn, DefaultOut, DefaultLateTolerance, DefaultEarlyTolerance);
             for (var date = start; date <= end; date = date.AddDays(1))
             {
                 var day = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
