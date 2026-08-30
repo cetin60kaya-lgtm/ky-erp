@@ -37,6 +37,7 @@ const dateText = (value) => {
     : parsed.toLocaleDateString("tr-TR");
 };
 const normalize = (value) => String(value || "").trim().toLocaleUpperCase("tr-TR");
+const validEmail = (value) => !String(value || "").trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 
 function roleLabel(row) {
   const value = normalize(`${row.type || ""} ${row.companyType || ""}`);
@@ -110,6 +111,10 @@ function profileDraftOf(firm = {}) {
     vatTrackingEnabled: defaultRecordType === "RESMI" && firm.vatTrackingEnabled !== false,
     expenseCategory: firm.expenseCategory || "",
     defaultRecordType,
+    phone: firm.phone || "",
+    email: firm.email || "",
+    address: firm.address || "",
+    note: firm.note || "",
   };
 }
 
@@ -283,6 +288,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setError("Firma adı zorunludur.");
       return;
     }
+    if (!validEmail(companyForm.email)) {
+      setError("Geçerli bir firma e-posta adresi girin.");
+      return;
+    }
     setCompanySaving(true);
     setError("");
     try {
@@ -312,6 +321,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
   const saveProfile = async () => {
     if (!selected?.id) return;
+    if (!validEmail(profileDraft.email)) {
+      setNotice("Geçerli bir firma e-posta adresi girin.");
+      return;
+    }
     setProfileSaving(true);
     setNotice("");
     try {
@@ -330,7 +343,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       const profile = objectOf(payload);
       setSelected((current) => ({ ...current, ...profile }));
       setProfileDraft(profileDraftOf(profile));
-      setNotice("Firma muhasebe tanımı kaydedildi.");
+      setNotice("Firma kartı, iletişim ve muhasebe tanımı kaydedildi.");
       await loadFirms();
     } catch (requestError) {
       setNotice(requestError?.message || "Firma tanımı kaydedilemedi.");
@@ -598,8 +611,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
               <section className="ccw-profile-card">
                 <header>
-                  <div><h3>Firma Muhasebe Tanımı</h3><p>Borç, KDV ve gider davranışı bu tanımdan otomatik belirlenir.</p></div>
-                  <button type="button" className="ccw-save-profile" disabled={profileSaving} onClick={saveProfile}>Tanımı Kaydet</button>
+                  <div><h3>Firma Kartı ve Muhasebe Tanımı</h3><p>İletişim bilgileri mail/ekstre akışında; borç, KDV ve gider ayarları muhasebe akışında kullanılır.</p></div>
+                  <button type="button" className="ccw-save-profile" disabled={profileSaving} onClick={saveProfile}>Firma Kartını Kaydet</button>
                 </header>
                 <div className="ccw-profile-grid">
                   <label>Firma türü
@@ -624,6 +637,18 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   <label>Gider kategorisi
                     <input value={profileDraft.expenseCategory} onChange={(event) => setProfileDraft((current) => ({ ...current, expenseCategory: event.target.value }))} placeholder="Gıda / Market, Elektrik, Kimyasal..." />
                   </label>
+                  <label>Telefon
+                    <input value={profileDraft.phone} onChange={(event) => setProfileDraft((current) => ({ ...current, phone: event.target.value }))} placeholder="05xx xxx xx xx" />
+                  </label>
+                  <label>E-posta
+                    <input type="email" value={profileDraft.email} onChange={(event) => setProfileDraft((current) => ({ ...current, email: event.target.value }))} placeholder="firma@ornek.com" />
+                  </label>
+                  <label>Adres
+                    <input value={profileDraft.address} onChange={(event) => setProfileDraft((current) => ({ ...current, address: event.target.value }))} placeholder="Firma adresi" />
+                  </label>
+                  <label>Not
+                    <input value={profileDraft.note} onChange={(event) => setProfileDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Firma kartı notu" />
+                  </label>
                 </div>
                 <div className="ccw-check-row">
                   {profileDraft.companyType !== "CUSTOMER" ? (
@@ -633,6 +658,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     <label><input type="checkbox" checked={profileDraft.customerReceivableTracking} onChange={(event) => setProfileDraft((current) => ({ ...current, customerReceivableTracking: event.target.checked }))} /> Müşteri alacağını caride takip et</label>
                   ) : null}
                   <label><input type="checkbox" checked={profileDraft.vatTrackingEnabled && profileDraft.defaultRecordType === "RESMI"} disabled={profileDraft.defaultRecordType !== "RESMI"} onChange={(event) => setProfileDraft((current) => ({ ...current, vatTrackingEnabled: event.target.checked }))} /> Resmî belgede KDV takibi</label>
+                </div>
+                <div className="ccw-rule-note">
+                  {profileDraft.email
+                    ? `Mail ve ekstre gönderimlerinde varsayılan alıcı: ${profileDraft.email}`
+                    : "Firma e-postası boşsa mail/ekstre ekranında alıcı eksik olarak işaretlenir."}
                 </div>
                 <div className="ccw-rule-note">
                   {selected.isActive === false
