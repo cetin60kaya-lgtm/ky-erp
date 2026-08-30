@@ -28,7 +28,7 @@ test("DENETIM API can read only the strict SGK-card audit namespace", () => {
   assert.match(audit, /TRIM\(COALESCE\(s\.card_no,''\)\) <> ''/);
 });
 
-test("DENETIM system account bootstrap is active, unknown-password and IK-only", () => {
+test("DENETIM system account bootstrap is active, unknown-password, identity-locked and IK-only", () => {
   const source = migration("0024_denetime_pdks_system_user.sql");
   assert.match(source, /'system-denetim'/);
   assert.match(source, /'denetim'/);
@@ -38,4 +38,8 @@ test("DENETIM system account bootstrap is active, unknown-password and IK-only",
   assert.match(source, /'AUDIT'/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS ik_user_hr_scope/);
   assert.match(source, /must_change_password/);
+  assert.match(source, /CREATE TRIGGER IF NOT EXISTS trg_denetime_system_identity_guard/);
+  assert.match(source, /AFTER UPDATE OF username,role ON auth_users/);
+  assert.match(source, /username='denetim'/);
+  assert.match(source, /role='DENETIM'/);
 });
