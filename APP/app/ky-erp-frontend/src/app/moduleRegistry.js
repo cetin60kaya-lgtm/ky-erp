@@ -152,6 +152,33 @@ export const MODULES = [
     ],
   },
   {
+    key: "pdks",
+    permissionKey: "IK",
+    label: "PDKS",
+    icon: "takvim",
+    groups: [
+      {
+        label: "Personel Devam Kontrol",
+        tabs: [
+          ["genel-bakis", "Genel Bakış", "dashboard"],
+          ["canli-kart", "Canlı Kart", "users"],
+          ["giris-cikis", "Giriş / Çıkış", "takvim"],
+          ["eksik-kart", "Eksik Kartlar", "file-check"],
+          ["puantaj", "Puantaj", "takvim"],
+          ["calisma-takvimi", "Çalışma Takvimi", "takvim"],
+        ],
+      },
+      {
+        label: "Sistem",
+        tabs: [
+          ["terminal", "Terminal", "ayarlar"],
+          ["raporlar", "Raporlar", "raporlar"],
+          ["ayarlar", "Ayarlar", "ayarlar"],
+        ],
+      },
+    ],
+  },
+  {
     key: "uretim",
     permissionKey: "IMALAT",
     label: "İmalat",
@@ -313,6 +340,12 @@ export const MODULE_ROUTE_ALIASES = {
     "gun-odemeler": "gunluk-odeme-fisleri",
     odemeler: "gunluk-odeme-fisleri",
     "daily-payments": "gunluk-odeme-fisleri",
+  },
+  pdks: {
+    "ana-ekran": "genel-bakis",
+    "kart-hareketleri": "giris-cikis",
+    "eksik-basimlar": "eksik-kart",
+    "terminal-ayarlari": "terminal",
   },
   uretim: {
     "uretim-hizli-giris": "uretim-merkezi",
