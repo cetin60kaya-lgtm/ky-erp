@@ -1,306 +1,72 @@
-name: KY ERP D1 Şema ve Canlı Yayın Hazırlığı
+name: KY ERP D1 Schema Readiness - Check Only
 
 on:
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/migrations/**"
-      - "APP/cloud/ky-erp-api/scripts/d1-schema-audit.mjs"
-      - "APP/cloud/ky-erp-api/wrangler.jsonc"
-      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
-      - "APP/cloud/ky-erp-api/package.json"
-      - ".github/workflows/d1-schema-readiness.yml"
   push:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "APP/cloud/ky-erp-api/migrations/**"
-      - "APP/cloud/ky-erp-api/scripts/d1-schema-audit.mjs"
-      - "APP/cloud/ky-erp-api/wrangler.jsonc"
-      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
-      - "APP/cloud/ky-erp-api/package.json"
+      - "APP/cloud/ky-erp-api/src/**"
+      - "DEPLOY/**"
+      - ".github/workflows/d1-schema-readiness.yml"
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/migrations/**"
+      - "APP/cloud/ky-erp-api/src/**"
+      - "DEPLOY/**"
       - ".github/workflows/d1-schema-readiness.yml"
   workflow_dispatch:
-    inputs:
-      action:
-        description: "Canlı D1 işlemi"
-        required: true
-        default: "check"
-        type: choice
-        options:
-          - check
-          - apply
-          - apply-and-deploy-worker
 
 permissions:
   contents: read
 
 concurrency:
-  group: kyerp-d1-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  group: kyerp-d1-check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  local-schema:
-    name: İzole D1 migration ve şema denetimi
+  check-only:
+    name: D1 güvenlik ve hedefli şema sözleşmesi
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: APP/cloud/ky-erp-api
+    timeout-minutes: 15
+
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
 
-      - name: Node.js kur
+      - name: Node.js 22 LTS
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
 
-      - name: Paketleri kur
+      - name: Worker paketleri
+        working-directory: APP/cloud/ky-erp-api
         run: npm ci
 
-      - name: Güncel izole D1 şemasını kur
+      - name: Worker typecheck ve test
+        working-directory: APP/cloud/ky-erp-api
         run: |
-          rm -rf .local-d1-readiness .readiness-migrations wrangler.readiness.jsonc
-          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql migrations/0008_hr_relational_bootstrap.sql; do
-            npx wrangler d1 execute ky-erp-production-local \
-              --local \
-              --config wrangler.production-local.jsonc \
-              --persist-to .local-d1-readiness \
-              --file "$sql"
-          done
-
-      - name: Güncel güvenlik migrationlarını izole şema üzerinde uygula
-        run: |
-          mkdir -p .readiness-migrations
-          cp migrations/0018_auth_mfa_sessions.sql .readiness-migrations/0001_auth_mfa_sessions.sql
-          cp migrations/0019_auth_dual_mfa_recovery.sql .readiness-migrations/0002_auth_dual_mfa_recovery.sql
-          node <<'NODE'
-          const fs = require('node:fs');
-          const config = JSON.parse(fs.readFileSync('wrangler.production-local.jsonc', 'utf8'));
-          config.d1_databases[0].migrations_dir = '.readiness-migrations';
-          config.d1_databases[0].migrations_table = 'd1_migrations';
-          fs.writeFileSync('wrangler.readiness.jsonc', JSON.stringify(config, null, 2));
-          NODE
-          npx wrangler d1 migrations apply ky-erp-production-local \
-            --local \
-            --config wrangler.readiness.jsonc \
-            --persist-to .local-d1-readiness
-
-      - name: D1 şemasını ve quick_check sonucunu doğrula
-        run: >-
-          node scripts/d1-schema-audit.mjs
-          --local
-          --database ky-erp-production-local
-          --config wrangler.production-local.jsonc
-          --persist-to .local-d1-readiness
-          --require-migrations
-
-      - name: MFA, kurtarma ve oturum şemasını doğrula
-        run: |
-          npx wrangler d1 execute ky-erp-production-local \
-            --local \
-            --config wrangler.production-local.jsonc \
-            --persist-to .local-d1-readiness \
-            --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit','auth_recovery_codes') ORDER BY name;" \
-            --json > /tmp/auth-schema.json
-          npx wrangler d1 execute ky-erp-production-local \
-            --local \
-            --config wrangler.production-local.jsonc \
-            --persist-to .local-d1-readiness \
-            --command "PRAGMA table_info(auth_user_security);" \
-            --json > /tmp/auth-security-columns.json
-          node <<'NODE'
-          const fs = require('node:fs');
-          const raw = JSON.parse(fs.readFileSync('/tmp/auth-schema.json', 'utf8'));
-          const rows = Array.isArray(raw) ? raw.flatMap((item) => item.results || []) : [];
-          const names = new Set(rows.map((row) => row.name));
-          const required = ['auth_users','auth_user_security','auth_login_challenges','auth_login_approvals','auth_sessions','auth_security_audit','auth_recovery_codes'];
-          const missing = required.filter((name) => !names.has(name));
-          if (missing.length) throw new Error(`Eksik auth tablosu: ${missing.join(', ')}`);
-
-          const columnRaw = JSON.parse(fs.readFileSync('/tmp/auth-security-columns.json', 'utf8'));
-          const columnRows = Array.isArray(columnRaw) ? columnRaw.flatMap((item) => item.results || []) : [];
-          const columns = new Set(columnRows.map((row) => row.name));
-          const requiredColumns = ['google_mfa_secret','google_mfa_enabled','microsoft_mfa_secret','microsoft_mfa_enabled'];
-          const missingColumns = requiredColumns.filter((name) => !columns.has(name));
-          if (missingColumns.length) throw new Error(`Eksik çift MFA kolonu: ${missingColumns.join(', ')}`);
-          console.log('Google/Microsoft çift MFA, kurtarma kodu, admin onayı ve oturum şeması hazır.');
-          NODE
-
-      - name: Worker typecheck
-        run: npm run typecheck
+          npm run typecheck
+          npm test
 
       - name: Worker dry-run build
+        working-directory: APP/cloud/ky-erp-api
         run: npm run build
 
-  remote-readiness:
-    name: Canlı D1 şema kontrolü ve isteğe bağlı yayın
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    needs: local-schema
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    defaults:
-      run:
-        working-directory: APP/cloud/ky-erp-api
-    steps:
-      - name: Kaynak kodu al
-        uses: actions/checkout@v4
-
-      - name: Node.js kur
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
-
-      - name: Cloudflare kimlik bilgilerini doğrula
-        run: |
-          test -n "$CLOUDFLARE_API_TOKEN" || (echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1)
-
-      - name: Gerçek Cloudflare hesabını ve D1 sahibini otomatik çöz
+      - name: D1 production güvenlik sözleşmesini doğrula
         shell: bash
         run: |
           set -euo pipefail
-          database_id="b504b712-6927-499d-815d-0b954c8ee246"
-          auth_header="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-          accounts_json="$(curl --fail --silent --show-error \
-            -H "$auth_header" \
-            https://api.cloudflare.com/client/v4/accounts)"
-
-          mapfile -t account_ids < <(jq -r '.result[]?.id' <<<"$accounts_json")
-          test "${#account_ids[@]}" -gt 0 || {
-            echo "Tokenın erişebildiği Cloudflare hesabı bulunamadı." >&2
-            exit 1
-          }
-
-          resolved_account_id=""
-          for account_id in "${account_ids[@]}"; do
-            databases_json="$(curl --fail --silent --show-error \
-              -H "$auth_header" \
-              "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?per_page=100")"
-
-            if jq -e --arg database_id "$database_id" \
-              'any(.result[]?; ((.uuid // .id // "") == $database_id))' \
-              <<<"$databases_json" >/dev/null; then
-              resolved_account_id="$account_id"
-              break
-            fi
-          done
-
-          test -n "$resolved_account_id" || {
-            echo "ky-erp-db veritabanının sahibi olan Cloudflare hesabı bulunamadı." >&2
-            exit 1
-          }
-
-          echo "CLOUDFLARE_ACCOUNT_ID=$resolved_account_id" >> "$GITHUB_ENV"
-          echo "D1 sahibi Cloudflare hesabı otomatik doğrulandı."
-
-      - name: Paketleri kur
-        run: npm ci
-
-      - name: Canlı D1 şemasını dışa aktar
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p database-backup
-          stamp="$(date -u +%Y%m%d-%H%M%S)"
-          output="database-backup/ky-erp-db-schema-before-${stamp}.sql"
-          success=0
-          for attempt in 1 2 3 4 5 6; do
-            rm -f "$output"
-            if npx wrangler d1 export ky-erp-db \
-              --remote \
-              --config wrangler.jsonc \
-              --skip-confirmation \
-              --no-data \
-              --output "$output"; then
-              success=1
-              break
-            fi
-            wait_seconds=$((attempt * 20))
-            echo "D1 export henüz müsait değil; ${wait_seconds} saniye sonra yeniden denenecek."
-            sleep "$wait_seconds"
-          done
-          test "$success" -eq 1 || {
-            echo "Canlı D1 şema exportu tekrar denemelere rağmen tamamlanamadı." >&2
-            exit 1
-          }
-
-      - name: Migration öncesi tam D1 yedeğini al
-        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
-        shell: bash
-        run: |
-          set -euo pipefail
-          stamp="$(date -u +%Y%m%d-%H%M%S)"
-          output="database-backup/ky-erp-db-full-before-${stamp}.sql"
-          success=0
-          for attempt in 1 2 3 4 5 6; do
-            rm -f "$output"
-            if npx wrangler d1 export ky-erp-db \
-              --remote \
-              --config wrangler.jsonc \
-              --skip-confirmation \
-              --output "$output"; then
-              success=1
-              break
-            fi
-            wait_seconds=$((attempt * 30))
-            echo "Tam D1 yedeği henüz müsait değil; ${wait_seconds} saniye sonra yeniden denenecek."
-            sleep "$wait_seconds"
-          done
-          test "$success" -eq 1 || {
-            echo "Canlı D1 tam yedeği tekrar denemelere rağmen tamamlanamadı." >&2
-            exit 1
-          }
-
-      - name: Canlı D1 mevcut şemasını denetle
-        run: >-
-          node scripts/d1-schema-audit.mjs
-          --remote
-          --database ky-erp-db
-          --config wrangler.jsonc
-        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.action != 'check' }}
-
-      - name: Bekleyen migration listesini göster
-        run: npx wrangler d1 migrations list ky-erp-db --remote --config wrangler.jsonc
-
-      - name: Canlı D1 migrationlarını uygula
-        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
-        run: npx wrangler d1 migrations apply ky-erp-db --remote --config wrangler.jsonc
-
-      - name: Migration sonrası canlı D1 denetimi
-        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'apply-and-deploy-worker')
-        run: >-
-          node scripts/d1-schema-audit.mjs
-          --remote
-          --database ky-erp-db
-          --config wrangler.jsonc
-          --require-migrations
-
-      - name: Worker'ı canlıya dağıt
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply-and-deploy-worker'
-        run: npx wrangler deploy --config wrangler.jsonc
-
-      - name: Canlı API sağlık kontrolü
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply-and-deploy-worker'
-        run: |
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent https://api.kyerp.net/api/health | tee /tmp/health.json | jq -e '.ok == true'; then
-              break
-            fi
-            sleep 2
-          done
-          curl --fail --silent https://api.kyerp.net/api/system/status | tee /tmp/system-status.json | jq -e '.ok == true'
-
-      - name: Veritabanı yedeğini sakla
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ky-erp-d1-backup-${{ github.run_id }}
-          path: APP/cloud/ky-erp-api/database-backup/*.sql
-          if-no-files-found: warn
-          retention-days: 14
+          test -f APP/cloud/ky-erp-api/migrations/0022_auth_same_browser_session_guard.sql
+          test -f APP/cloud/ky-erp-api/migrations/0023_admin_company_alias_schema.sql
+          test -f APP/cloud/ky-erp-api/migrations/0024_denetime_pdks_system_user.sql
+          grep -Fq 'D1 tam yedek' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq 'Remote-Column-Exists' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq '0022_auth_same_browser_session_guard.sql' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq '0023_admin_company_alias_schema.sql' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq '0024_denetime_pdks_system_user.sql' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          ! grep -Fq 'wrangler d1 migrations apply' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          ! grep -Fq 'wrangler d1 reset' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          echo 'D1 check-only contract PASSED; production write yok.'
