@@ -1,0 +1,11 @@
+/* KY ERP Kullanıcı Merkezi güvenlik sertleştirmesi.
+   - İlk girişte şifre değiştirme akışı uygulanmadığı için çalışmayan seçenek gösterilmez.
+   - ADMIN/Yönetim modülü normal permission matrisi değildir; yalnız owner rolünden gelir. */
+
+.auc2-create-card .auc2-check-stack > label:nth-child(2) {
+  display: none;
+}
+
+.auc2-permissions .auc2-perm-row:nth-last-child(2) {
+  display: none;
+}
