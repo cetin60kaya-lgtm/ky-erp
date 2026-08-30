@@ -1,26 +1,33 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import AppV3 from "./AppV3.jsx";
-import { ActiveCompanyProvider } from "./context/ActiveCompanyContext";
-import { AuthProvider } from "./context/AuthContext";
 import PublicLandingPage from "./pages/PublicLandingPage.jsx";
-import { installAuthenticatedAssetBridge } from "./utils/installAuthenticatedAssetBridge";
-import { installMuhasebeDocumentSanitizer } from "./utils/installMuhasebeDocumentSanitizer";
-import { installPersistentModalSizing } from "./utils/installPersistentModalSizing";
-import "./App.css";
-import "./styles/shell-v3-isnet.css";
 
 const PUBLIC_SITE_HOSTS = new Set(["kyerp.net", "www.kyerp.net"]);
 const APP_URL = "https://app.kyerp.net/";
 const hostname = String(window.location.hostname || "").toLowerCase();
 const isPublicSite = PUBLIC_SITE_HOSTS.has(hostname);
 const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
+const rootElement = document.getElementById("root");
 
-if (isPublicSite && publicRedirectPaths.has(window.location.pathname.toLowerCase())) {
-  window.location.replace(APP_URL);
-} else if (isPublicSite) {
-  ReactDOM.createRoot(document.getElementById("root")).render(<PublicLandingPage />);
-} else {
+async function renderErpApp() {
+  const [
+    { default: AppV3 },
+    { ActiveCompanyProvider },
+    { AuthProvider },
+    { installAuthenticatedAssetBridge },
+    { installMuhasebeDocumentSanitizer },
+    { installPersistentModalSizing },
+  ] = await Promise.all([
+    import("./AppV3.jsx"),
+    import("./context/ActiveCompanyContext"),
+    import("./context/AuthContext"),
+    import("./utils/installAuthenticatedAssetBridge"),
+    import("./utils/installMuhasebeDocumentSanitizer"),
+    import("./utils/installPersistentModalSizing"),
+    import("./App.css"),
+    import("./styles/shell-v3-isnet.css"),
+  ]);
+
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
   installPersistentModalSizing();
@@ -37,9 +44,26 @@ if (isPublicSite && publicRedirectPaths.has(window.location.pathname.toLowerCase
     );
   }
 
-  ReactDOM.createRoot(document.getElementById("root")).render(
+  ReactDOM.createRoot(rootElement).render(
     <RootWrapper>
       <RootApp />
     </RootWrapper>,
   );
+}
+
+if (isPublicSite && publicRedirectPaths.has(window.location.pathname.toLowerCase())) {
+  window.location.replace(APP_URL);
+} else if (isPublicSite) {
+  ReactDOM.createRoot(rootElement).render(<PublicLandingPage />);
+} else {
+  renderErpApp().catch((error) => {
+    console.error("KY ERP uygulama kabugu yuklenemedi", error);
+    ReactDOM.createRoot(rootElement).render(
+      <main style={{ maxWidth: 560, margin: "64px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+        <h1 style={{ fontSize: 24 }}>KY ERP açılamadı</h1>
+        <p>Uygulama dosyaları yüklenemedi. İnternet bağlantınızı kontrol edip sayfayı yeniden açın.</p>
+        <button type="button" onClick={() => window.location.reload()}>Yeniden Dene</button>
+      </main>,
+    );
+  });
 }
