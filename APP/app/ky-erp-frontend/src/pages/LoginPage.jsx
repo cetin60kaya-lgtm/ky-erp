@@ -400,11 +400,11 @@ export default function LoginPage() {
                 </label>
                 <ErrorBox message={error} />
                 <button className="auth-primary" type="submit" disabled={loading}>
-                  {loading ? "Güvenli bağlantı kuruluyor..." : "Giriş Yap"}
+                  {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
                 </button>
                 <div className="auth-inline-note">
                   <span className="auth-dot" />
-                  <span>Admin hesaplarında MFA zorunludur. Oturum süresi güvenlik profiline göre uygulanır.</span>
+                  <span>Giriş güvenliği ve gerekli doğrulama adımları hesabınıza göre otomatik uygulanır.</span>
                 </div>
               </form>
             ) : null}
