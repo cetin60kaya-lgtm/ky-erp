@@ -10,12 +10,12 @@ const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-e
 const migration = (name: string) => readFileSync(resolve(here, "../migrations", name), "utf8");
 
 test("DENETIM UI is fixed to IK view-only and cannot enable other modules", () => {
-  const source = frontend("pages/admin/AdminUsersPanel.jsx");
-  assert.match(source, /const AUDIT_VIEW_MODULES=new Set\(\["IK"\]\)/);
+  const source = frontend("pages/admin/AdminUsersPanelV2.jsx");
+  assert.match(source, /if\(role==="DENETIM"\)view\.add\("IK"\)/);
+  assert.match(source, /roleOf\(createForm\.role\)==="DENETIM"/);
   assert.match(source, /selectedRole==="DENETIM"\?permissionPreset\("DENETIM"\)/);
   assert.match(source, /selectedRole==="DENETIM"\)return/);
-  assert.match(source, /const clean=selectedRole==="DENETIM"\?permissionPreset\("DENETIM"\)/);
-  assert.match(source, /Sabit DENETİM \/ PDKS/);
+  assert.match(source, /DENETİM profili sabittir: yalnız İK \/ SGK kartlı PDKS görüntüleme/);
   assert.match(source, /Günlük personel ve diğer modüller kapalıdır/);
 });
 
