@@ -16,7 +16,6 @@ public sealed record RawPunch(
     public string EventTime => EventAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
     public string ApiEventTime => EventAt.ToString("HH:mm", CultureInfo.InvariantCulture);
 
-    // Aynı fiziksel kart basımı farklı dosya/kanaldan tekrar gelse bile tek kayıt kalsın.
     public string Fingerprint
     {
         get
@@ -53,6 +52,40 @@ public sealed record CachedPerson(
     string CardNo,
     string StartDate,
     string ExitDate);
+
+public sealed record AttendanceDayRow(
+    string EmployeeId,
+    string PersonnelCode,
+    string FullName,
+    string Department,
+    string CardNo,
+    string Date,
+    string Status,
+    string Entry,
+    string Exit,
+    int LateMinutes,
+    int EarlyMinutes,
+    int OvertimeMinutes,
+    bool MissingPunch,
+    int EventCount,
+    string Note,
+    string DataSource = "LOCAL");
+
+public sealed record TimesheetRow(
+    string EmployeeId,
+    string PersonnelCode,
+    string FullName,
+    string Department,
+    string CardNo,
+    int WorkedDays,
+    int AnnualLeaveDays,
+    int LeaveDays,
+    int MissingPunchDays,
+    int NoPunchDays,
+    int LateDays,
+    int LateMinutes,
+    int EarlyMinutes,
+    int OvertimeMinutes);
 
 public sealed record LocalSnapshot(
     int PendingCount,
