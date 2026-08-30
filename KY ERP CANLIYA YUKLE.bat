@@ -96,6 +96,10 @@ if not exist "%ROOT%DEPLOY\KYERP_RESEND_BOOTSTRAP.ps1" (
   echo [HATA] Resend bootstrap scripti bulunamadi.
   goto :fail
 )
+if not exist "%ROOT%DEPLOY\KYERP_RESEND_BOOTSTRAP_SAFE.ps1" (
+  echo [HATA] Resend versioned Worker uyumluluk scripti bulunamadi.
+  goto :fail
+)
 if not exist "%ROOT%DEPLOY\KYERP_DIRECT_PRODUCTION.ps1" (
   echo [HATA] Canonical deploy scripti bulunamadi.
   goto :fail
@@ -103,7 +107,7 @@ if not exist "%ROOT%DEPLOY\KYERP_DIRECT_PRODUCTION.ps1" (
 
 echo.
 echo [MAIL] admin@kyerp.net production mail on-kosulu kontrol ediliyor...
-"!PWSH!" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%DEPLOY\KYERP_RESEND_BOOTSTRAP.ps1"
+"!PWSH!" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%DEPLOY\KYERP_RESEND_BOOTSTRAP_SAFE.ps1"
 set "MAIL_RC=!ERRORLEVEL!"
 if not "!MAIL_RC!"=="0" (
   echo.
