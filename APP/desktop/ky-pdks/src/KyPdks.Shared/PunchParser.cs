@@ -24,6 +24,7 @@ public static class PunchParser
         var cardIndex = Array.FindIndex(parts, IsCard);
         if (cardIndex < 0) return false;
         var card = NormalizeCard(parts[cardIndex]);
+        if (card.Length == 0) return false;
 
         // KY ERP/Hedef: KartNo,Saat,GGAAYY,1,001
         if (cardIndex + 2 < parts.Length && TryTime(parts[cardIndex + 1], out var compactTime) && TryDate(parts[cardIndex + 2], out var compactDate))
@@ -60,6 +61,7 @@ public static class PunchParser
     public static string NormalizeCard(string value)
     {
         var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+        if (digits.Length == 0) return "";
         return digits.Length <= 5 ? digits.PadLeft(5, '0') : digits;
     }
 
