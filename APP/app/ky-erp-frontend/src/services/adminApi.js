@@ -14,6 +14,9 @@ export async function getSettings(params = {}) { return unwrap(await apiGet("/ad
 export async function saveSetting(payload = {}) { return unwrap(await apiPost("/admin/settings", payload)); }
 export async function getLogs(params = {}) { return unwrap(await apiGet("/admin/logs", params)); }
 export async function createBackup(payload = {}) { return unwrap(await apiPost("/admin/backup", payload)); }
+export async function listBackups(params = {}) { return unwrap(await apiGet("/admin/backups", params)); }
+export async function getBackup(id) { return unwrap(await apiGet(`/admin/backups/${encodeURIComponent(id)}`, { _ts: Date.now() })); }
+export async function restoreBackup(id, payload = {}) { return unwrap(await apiPost(`/admin/backups/${encodeURIComponent(id)}/restore`, payload)); }
 export async function listUsers() { return unwrap(await apiGet("/admin/users")); }
 
 export async function createUser(payload = {}) {
