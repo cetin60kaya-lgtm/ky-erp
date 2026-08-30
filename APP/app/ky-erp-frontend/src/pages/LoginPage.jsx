@@ -296,11 +296,9 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow.stage, flow.approvalId, flow.approvalToken]);
 
-  useEffect(() => {
-    if (flow.stage !== "AUTHENTICATED") return undefined;
-    const timer = window.setTimeout(() => window.location.replace("/"), 180);
-    return () => window.clearTimeout(timer);
-  }, [flow.stage]);
+  // AUTHENTICATED olduğunda AuthContext tokenı zaten kaydeder ve AppV3 aynı React
+  // ağacında uygulamaya geçer. Burada window.location.replace/reload yapılmaz;
+  // böylece başarılı girişten hemen sonra gereksiz ikinci /auth/me/ağ bağlantısı oluşmaz.
 
   useEffect(() => {
     if (flow.stage !== "MFA_SETUP") {
