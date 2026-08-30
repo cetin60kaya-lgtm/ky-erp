@@ -20,7 +20,8 @@ test("explicit invalid-session codes clear stored auth", () => {
   }
 });
 
-test("auth me 401 clears stored auth even if the backend omitted an error code", () => {
+test("auth me and legacy status-only restore 401 clear stored auth", () => {
+  assert.equal(shouldClearStoredAuthForStatus(401), true);
   assert.equal(shouldClearStoredAuthForStatus(401, "", "/api/auth/me"), true);
   assert.equal(shouldClearStoredAuthForStatus(401, "", "https://api.kyerp.net/api/auth/me"), true);
 });
