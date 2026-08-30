@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $ROOT = Split-Path $PSScriptRoot -Parent
 $WORKER_DIR = Join-Path $ROOT "APP\cloud\ky-erp-api"
 $WRANGLER_CONFIG = Join-Path $WORKER_DIR "wrangler.jsonc"
-$DOMAIN = "kyerp.net"
+$MAIL_DOMAIN = "kyerp.net"
 $FROM_ADDRESS = "KY ERP <admin@kyerp.net>"
 $RESEND_BASE = "https://api.resend.com"
 $READY_KEY = "SYSTEM_EMAIL_READY_V1"
@@ -96,19 +96,19 @@ function Initialize-CloudflareContext {
     if (-not $token) { Fail "Wrangler OAuth/API tokeni okunamadi." }
     $script:CfToken = $token
 
-    $zones = Invoke-CfApi "GET" "/zones?name=$DOMAIN"
+    $zones = Invoke-CfApi "GET" "/zones?name=$MAIL_DOMAIN"
     $rows = @($zones.result)
-    if ($rows.Count -ne 1) { Fail "$DOMAIN Cloudflare zone kaydi tekil bulunamadi." }
+    if ($rows.Count -ne 1) { Fail "$MAIL_DOMAIN Cloudflare zone kaydi tekil bulunamadi." }
     $script:CfZoneId = [string]$rows[0].id
     if (-not $script:CfZoneId) { Fail "Cloudflare zone kimligi okunamadi." }
 }
 
 function Normalize-DnsName([string]$Name) {
     $n = $Name.Trim().TrimEnd('.')
-    if (-not $n -or $n -eq "@") { return $DOMAIN }
-    if ($n.ToLowerInvariant() -eq $DOMAIN) { return $DOMAIN }
-    if ($n.ToLowerInvariant().EndsWith(".$DOMAIN")) { return $n }
-    return "$n.$DOMAIN"
+    if (-not $n -or $n -eq "@") { return $MAIL_DOMAIN }
+    if ($n.ToLowerInvariant() -eq $MAIL_DOMAIN) { return $MAIL_DOMAIN }
+    if ($n.ToLowerInvariant().EndsWith(".$MAIL_DOMAIN")) { return $n }
+    return "$n.$MAIL_DOMAIN"
 }
 
 function Normalize-DnsContent([string]$Type, [string]$Value) {
@@ -162,12 +162,12 @@ function Ensure-CloudflareDnsRecord($Record) {
 function Ensure-ResendDomain {
     Write-Step "RESEND DOMAIN"
     $list = Invoke-ResendApi "GET" "/domains"
-    $domain = @($list.data | Where-Object { ([string]$_.name).Trim().ToLowerInvariant() -eq $DOMAIN }) | Select-Object -First 1
+    $domain = @($list.data | Where-Object { ([string]$_.name).Trim().ToLowerInvariant() -eq $MAIL_DOMAIN }) | Select-Object -First 1
     if ($null -eq $domain) {
-        Write-Host "$DOMAIN Resend hesabina ekleniyor..." -ForegroundColor Yellow
+        Write-Host "$MAIL_DOMAIN Resend hesabina ekleniyor..." -ForegroundColor Yellow
         # Resend'in guncel create-domain sozlesmesinde en guvenli temel istek yalniz domain adidir.
         # Sending/receiving capabilities arayuzden veya domain update ile ayrica yonetilebilir.
-        $domain = Invoke-ResendApi "POST" "/domains" @{ name = $DOMAIN }
+        $domain = Invoke-ResendApi "POST" "/domains" @{ name = $MAIL_DOMAIN }
     }
     $domainId = [string]$domain.id
     if (-not $domainId) { Fail "Resend domain kimligi alinmadi." }
@@ -201,7 +201,7 @@ function Wait-ResendVerification([string]$DomainId) {
         $status = ([string]$detail.status).Trim().ToLowerInvariant()
         Write-Host "[$attempt/180] Resend domain durumu: $status"
         if ($status -eq "verified") {
-            Write-Host "$DOMAIN Resend: VERIFIED" -ForegroundColor Green
+            Write-Host "$MAIL_DOMAIN Resend: VERIFIED" -ForegroundColor Green
             return $detail
         }
         if ($status -in @("failed","failure","blocked")) {
@@ -328,7 +328,7 @@ try {
 
     Write-Host ""
     Write-Host "RESEND KURULUMU TAMAM" -ForegroundColor Green
-    Write-Host "Domain       : $DOMAIN / VERIFIED" -ForegroundColor Green
+    Write-Host "Domain       : $MAIL_DOMAIN / VERIFIED" -ForegroundColor Green
     Write-Host "Gonderici    : $FROM_ADDRESS" -ForegroundColor Green
     Write-Host "Worker secret: RESEND_API_KEY / HAZIR" -ForegroundColor Green
     Write-Host "D1 kanit     : VERIFIED + GERCEK TEST / HAZIR" -ForegroundColor Green
