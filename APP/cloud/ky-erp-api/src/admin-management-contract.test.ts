@@ -113,14 +113,28 @@ test("all admin backup client calls are implemented", () => {
   assert.match(source, /downloadBackupSql/);
 });
 
-test("direct deploy avoids full migration chain, checks schema read-only and runs unit contracts", () => {
-  const source = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION.ps1"), "utf8");
+test("canonical deploy entrypoint delegates to v3", () => {
+  const wrapper = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION.ps1"), "utf8");
+  assert.match(wrapper, /KYERP_DIRECT_PRODUCTION_V3\.ps1/);
+});
+
+test("v3 deploy runs all code tests before any live D1 or Worker write", () => {
+  const source = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1"), "utf8");
   assert.match(source, /npm run test:unit/);
-  assert.match(source, /Local migration entegrasyon testi YOK/);
+  assert.match(source, /npm run lint/);
+  assert.match(source, /npm test/);
+  assert.match(source, /npm run build/);
+  assert.match(source, /0023_admin_company_alias_schema\.sql/);
+  assert.match(source, /0022_auth_same_browser_session_guard\.sql/);
   assert.match(source, /Assert-Remote-Schema-Readiness/);
   assert.match(source, /pragma_table_info\('hr_monthly_employees'\)/);
-  assert.match(source, /company_aliases/);
-  assert.match(source, /auth_owner_recovery_challenges/);
-  assert.match(source, /0022_auth_same_browser_session_guard\.sql/);
+  assert.match(source, /30x preflight-free login transport kontrolu/);
   assert.doesNotMatch(source, /wrangler d1 migrations apply/);
+  const workerPreflight = source.indexOf("=== 3/11 WORKER PREFLIGHT ===");
+  const frontendPreflight = source.indexOf("=== 4/11 FRONTEND PREFLIGHT ===");
+  const d1WriteStage = source.indexOf("=== 5/11 D1 YEDEK + HEDEFLI UYUMLULUK ===");
+  const workerDeploy = source.indexOf("=== 6/11 WORKER PRODUCTION DEPLOY ===");
+  assert.ok(workerPreflight >= 0 && frontendPreflight > workerPreflight);
+  assert.ok(d1WriteStage > frontendPreflight);
+  assert.ok(workerDeploy > d1WriteStage);
 });
