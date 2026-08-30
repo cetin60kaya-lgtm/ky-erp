@@ -59,14 +59,15 @@ test("backup backend creates real R2 manifests and requires guarded restore", ()
   assert.match(ui, /safetyBackupId/);
 });
 
-test("tenant SQL backup is owner-only, multipart and excludes auth state", () => {
+test("tenant SQL backup is owner-only, multipart and excludes auth state while keeping business settings", () => {
   const backend = api("admin-backup-sql.ts");
   const ui = frontend("pages/admin/AdminBackupLogs.jsx");
   const client = frontend("services/adminApi.js");
   assert.match(backend, /createMultipartUpload/);
   assert.match(backend, /tenant-backup\.sql/);
   assert.match(backend, /value\.startsWith\("auth_"\)/);
-  assert.match(backend, /value === "json_store"/);
+  assert.match(backend, /table === "json_store"/);
+  assert.match(backend, /scope.*ADMIN_BACKUP|BACKUP_SCOPE/);
   assert.match(backend, /\/api\/admin\/backups\/:id\/sql/);
   assert.match(backend, /\/api\/admin\/backups\/:id\/sql\/download/);
   assert.match(ui, /SQL İndir/);
