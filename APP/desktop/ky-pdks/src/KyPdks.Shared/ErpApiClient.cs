@@ -69,7 +69,7 @@ public sealed class ErpApiClient : IDisposable
     public async Task LogoutAsync(string token, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(token)) return;
-        using var _ = await SendAsync(HttpMethod.Post, "/api/auth/logout", new { }, token, ct);
+        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/auth/logout", new { }, token, ct);
     }
 
     public async Task<IReadOnlyList<CachedPerson>> GetPdksPeopleAsync(string token, CancellationToken ct = default)
@@ -117,7 +117,7 @@ public sealed class ErpApiClient : IDisposable
         if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
         if (!DateOnly.TryParse(workDate, out _)) throw new InvalidOperationException("Tarih geçersiz.");
         if (eventTime.Length < 5 || !TimeOnly.TryParse(eventTime[..5], out _)) throw new InvalidOperationException("Saat geçersiz. Örnek: 08:30");
-        using var _ = await SendAsync(HttpMethod.Post,
+        using var responseDocument = await SendAsync(HttpMethod.Post,
             $"/api/ik/personnel-control/people/{Uri.EscapeDataString(person.Id)}/time-event",
             new
             {
@@ -134,7 +134,7 @@ public sealed class ErpApiClient : IDisposable
         int lateMinutes, int earlyMinutes, int overtimeMinutes, bool missingPunch, string note, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
-        using var _ = await SendAsync(HttpMethod.Post,
+        using var responseDocument = await SendAsync(HttpMethod.Post,
             $"/api/ik/personnel-control/people/{Uri.EscapeDataString(person.Id)}/day-override",
             new
             {
@@ -181,14 +181,14 @@ public sealed class ErpApiClient : IDisposable
                 userName = userName ?? "KY PDKS",
             };
 
-        using var _ = await SendAsync(HttpMethod.Post, "/api/ik/advanced/leave", body, token, ct);
+        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/ik/advanced/leave", body, token, ct);
     }
 
     public async Task SaveAdvanceAsync(string token, CachedPerson person, string date, decimal amount, string note, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
         if (amount <= 0) throw new InvalidOperationException("Avans tutarı sıfırdan büyük olmalıdır.");
-        using var _ = await SendAsync(HttpMethod.Post, "/api/ik/advanced/finance-movement", new
+        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/ik/advanced/finance-movement", new
         {
             employeeId = person.Id,
             date,
