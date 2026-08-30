@@ -120,6 +120,25 @@ public partial class MainWindow : Window
         return (year, month);
     }
 
+    private async Task EnsurePeriodOpenAsync(DateTime date)
+    {
+        var periods = await _operations.GetPeriodsAsync(_lifetime.Token);
+        var period = periods.FirstOrDefault(x => x.Year == date.Year && x.Month == date.Month);
+        if (period is not null && string.Equals(period.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"{date:MM/yyyy} PDKS dönemi kapalı. Değişiklik yapmak için önce Dönemler ekranından açın.");
+    }
+
+    private async Task EnsureRangeOpenAsync(DateTime start, DateTime end)
+    {
+        var cursor = new DateTime(start.Year, start.Month, 1);
+        var last = new DateTime(end.Year, end.Month, 1);
+        while (cursor <= last)
+        {
+            await EnsurePeriodOpenAsync(cursor);
+            cursor = cursor.AddMonths(1);
+        }
+    }
+
     private async void ReloadPeriodButton_Click(object sender, RoutedEventArgs e)
     {
         if (_periodLoading) return;
@@ -550,6 +569,7 @@ public partial class MainWindow : Window
         if (ManualDatePicker.SelectedDate is not DateTime date) { NoticeText.Text = "Tarih seçin."; return; }
         try
         {
+            await EnsurePeriodOpenAsync(date);
             var time = NormalizeTimeText(ManualTimeBox.Text);
             await _erp.AddTimeEventAsync(_token, person, date.ToString("yyyy-MM-dd"), time, SelectedTag(ManualDirectionCombo), ManualNoteBox.Text, _lifetime.Token);
             await _operations.AuditAsync("MANUAL_EVENT", person.Id, $"Manuel kart: {date:yyyy-MM-dd} {time}", _userName, _lifetime.Token);
@@ -567,6 +587,7 @@ public partial class MainWindow : Window
         if (OverrideDatePicker.SelectedDate is not DateTime date) { NoticeText.Text = "Tarih seçin."; return; }
         try
         {
+            await EnsurePeriodOpenAsync(date);
             var entry = NormalizeOptionalTime(OverrideInBox.Text);
             var exit = NormalizeOptionalTime(OverrideOutBox.Text);
             var late = entry.Length == 0 ? 0 : Math.Max(0, Minutes(entry) - Minutes("08:30"));
@@ -664,9 +685,14 @@ public partial class MainWindow : Window
         { NoticeText.Text = "Personel ve izin tarihlerini seçin."; return; }
         try
         {
-            await _operations.SaveLeaveAsync(person.Id, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), SelectedTag(LeaveTypeCombo), LeaveNoteBox.Text, _userName, _lifetime.Token);
+            await EnsureRangeOpenAsync(start, end);
+            var type = SelectedTag(LeaveTypeCombo);
+            await _erp.SaveLeaveAsync(_token, person, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), type, LeaveNoteBox.Text, _userName, _lifetime.Token);
+            await _operations.SaveLeaveAsync(person.Id, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), type, LeaveNoteBox.Text, _userName, _lifetime.Token);
+            await RefreshOnePersonMonthAsync(person, start.Year, start.Month);
+            if (end.Year != start.Year || end.Month != start.Month) await RefreshOnePersonMonthAsync(person, end.Year, end.Month);
             await RefreshOperationsAsync();
-            NoticeText.Text = $"{person.FullName} izin kaydı oluşturuldu.";
+            NoticeText.Text = $"{person.FullName} izin kaydı ERP ve yerel PDKS'ye kaydedildi.";
         }
         catch (Exception error) { NoticeText.Text = $"İzin kaydedilemedi: {error.Message}"; }
     }
@@ -677,9 +703,10 @@ public partial class MainWindow : Window
         if (HolidayDatePicker.SelectedDate is not DateTime date) { NoticeText.Text = "Tatil tarihi seçin."; return; }
         try
         {
+            await EnsurePeriodOpenAsync(date);
             await _operations.SaveHolidayAsync(date.ToString("yyyy-MM-dd"), HolidayNameBox.Text, HolidayHalfCheck.IsChecked == true, _userName, _lifetime.Token);
             await RefreshOperationsAsync();
-            NoticeText.Text = "Tatil kaydedildi.";
+            NoticeText.Text = "PDKS tatili kaydedildi. Resmî tatil kaynağı ERP'den ayrıca okunmaya devam eder.";
         }
         catch (Exception error) { NoticeText.Text = $"Tatil kaydedilemedi: {error.Message}"; }
     }
@@ -693,10 +720,12 @@ public partial class MainWindow : Window
         { NoticeText.Text = "Avans tutarı geçersiz."; return; }
         try
         {
+            await EnsurePeriodOpenAsync(date);
+            await _erp.SaveAdvanceAsync(_token, person, date.ToString("yyyy-MM-dd"), amount, AdvanceNoteBox.Text, _lifetime.Token);
             await _operations.SaveAdvanceAsync(person.Id, date.ToString("yyyy-MM-dd"), amount, AdvanceNoteBox.Text, _userName, _lifetime.Token);
             AdvanceAmountBox.Clear();
             await RefreshOperationsAsync();
-            NoticeText.Text = $"{person.FullName} avansı kaydedildi.";
+            NoticeText.Text = $"{person.FullName} avansı ERP ve yerel PDKS'ye kaydedildi.";
         }
         catch (Exception error) { NoticeText.Text = $"Avans kaydedilemedi: {error.Message}"; }
     }
@@ -752,7 +781,7 @@ public partial class MainWindow : Window
         return Path.Combine(dir, $"KY-PDKS-{prefix}-{year:D4}-{month:D2}-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
     }
 
-    private static string CsvLine(params object?[] values) => string.Join(';', values.Select(Csv));
+    private static string CsvLine(params object?[] values) => string.Join(";", values.Select(Csv));
     private static string Csv(object? value)
     {
         var text = Convert.ToString(value, CultureInfo.GetCultureInfo("tr-TR")) ?? "";
