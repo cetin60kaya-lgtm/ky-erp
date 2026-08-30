@@ -117,6 +117,9 @@ public sealed class AttendanceStore(PdksPaths paths)
             var schedule = schedules.TryGetValue(person.Id, out var configured)
                 ? configured
                 : new Schedule(DefaultIn, DefaultOut, DefaultLateTolerance, DefaultEarlyTolerance);
+            var expectedIn = Minutes(schedule.Entry) ?? Minutes(DefaultIn)!.Value;
+            var expectedOut = Minutes(schedule.Exit) ?? Minutes(DefaultOut)!.Value;
+
             for (var date = start; date <= end; date = date.AddDays(1))
             {
                 var day = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -133,8 +136,14 @@ public sealed class AttendanceStore(PdksPaths paths)
                 {
                     var entry = rawTimes[0][..Math.Min(5, rawTimes[0].Length)];
                     var exit = rawTimes.Count > 1 ? rawTimes[^1][..Math.Min(5, rawTimes[^1].Length)] : "";
-                    var expectedIn = Minutes(schedule.Entry) ?? Minutes(DefaultIn)!.Value;
-                    var expectedOut = Minutes(schedule.Exit) ?? Minutes(DefaultOut)!.Value;
+                    if (outside || future)
+                    {
+                        rows.Add(new AttendanceDayRow(person.Id, person.PersonnelCode, person.FullName, person.Department, person.CardNo,
+                            day, "DONEM_DISI", entry, exit, 0, 0, 0, false, rawTimes.Count,
+                            "Çalışma dönemi dışındaki ham kart; puantaja dahil edilmedi.", "LOCAL_CONTROL"));
+                        continue;
+                    }
+
                     var late = Minutes(entry) is int inMin ? Math.Max(0, inMin - expectedIn - schedule.LateTolerance) : 0;
                     var early = Minutes(exit) is int outMin ? Math.Max(0, expectedOut - outMin - schedule.EarlyTolerance) : 0;
                     var overtime = Minutes(exit) is int overtimeMin ? Math.Max(0, overtimeMin - expectedOut) : 0;
@@ -160,12 +169,19 @@ public sealed class AttendanceStore(PdksPaths paths)
 
                 if (erp is not null)
                 {
+                    var working = erp.Status is "CALISTI" or "EKSIK_BASIM";
+                    var late = working && Minutes(erp.Entry) is int inMin ? Math.Max(0, inMin - expectedIn - schedule.LateTolerance) : 0;
+                    var early = working && Minutes(erp.Exit) is int outMin ? Math.Max(0, expectedOut - outMin - schedule.EarlyTolerance) : 0;
+                    var overtime = working && Minutes(erp.Exit) is int overtimeMin ? Math.Max(0, overtimeMin - expectedOut) : 0;
                     rows.Add(erp with
                     {
                         PersonnelCode = person.PersonnelCode,
                         FullName = person.FullName,
                         Department = person.Department,
                         CardNo = person.CardNo,
+                        LateMinutes = late,
+                        EarlyMinutes = early,
+                        OvertimeMinutes = overtime,
                         DataSource = "ERP_CACHE",
                     });
                     continue;
@@ -213,12 +229,16 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, AttendanceDayRow>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT employee_id,work_date,status,entry_time,exit_time,late_minutes,early_minutes,overtime_minutes,missing_punch,event_count,note FROM attendance_cache WHERE work_date BETWEEN $start AND $end";
-        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start);
+        command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            var employeeId = reader.GetString(0); var date = reader.GetString(1);
-            result[Key(employeeId, date)] = new AttendanceDayRow(employeeId, "", "", "", "", date, reader.GetString(2), Text(reader, 3), Text(reader, 4), reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8) != 0, reader.GetInt32(9), Text(reader, 10), "ERP_CACHE");
+            var employeeId = reader.GetString(0);
+            var date = reader.GetString(1);
+            result[Key(employeeId, date)] = new AttendanceDayRow(employeeId, "", "", "", "", date, reader.GetString(2),
+                Text(reader, 3), Text(reader, 4), reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8) != 0,
+                reader.GetInt32(9), Text(reader, 10), "ERP_CACHE");
         }
         return result;
     }
@@ -233,7 +253,8 @@ public sealed class AttendanceStore(PdksPaths paths)
                AND NOT EXISTS (SELECT 1 FROM voided_events v WHERE v.event_id=p.id)
              ORDER BY p.work_date,p.event_time;
             """;
-        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start);
+        command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
@@ -259,7 +280,8 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT work_date,name,half_day FROM holidays_local WHERE work_date BETWEEN $start AND $end";
-        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start);
+        command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) result[reader.GetString(0)] = reader.GetInt32(2) != 0 ? $"{reader.GetString(1)} · Yarım gün" : reader.GetString(1);
         return result;
@@ -270,14 +292,16 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, LocalLeave>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT employee_id,start_date,end_date,leave_type,COALESCE(note,'') FROM leaves_local WHERE start_date<=$end AND end_date>=$start";
-        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start);
+        command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
             var employee = reader.GetString(0);
             if (!DateTime.TryParseExact(reader.GetString(1), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var from)) continue;
             if (!DateTime.TryParseExact(reader.GetString(2), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var to)) continue;
-            var type = reader.GetString(3); var note = reader.GetString(4);
+            var type = reader.GetString(3);
+            var note = reader.GetString(4);
             for (var date = from; date <= to; date = date.AddDays(1))
             {
                 var day = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -290,12 +314,14 @@ public sealed class AttendanceStore(PdksPaths paths)
 
     private static string Text(SqliteDataReader reader, int index) => reader.IsDBNull(index) ? "" : reader.GetString(index);
     private static string Key(string first, string second) => $"{first}\u001f{second}";
+
     private static int? Minutes(string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var parts = value.Split(':');
         return parts.Length >= 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m) ? h * 60 + m : null;
     }
+
     private sealed record Schedule(string Entry, string Exit, int LateTolerance, int EarlyTolerance);
     private sealed record LocalLeave(string Type, string Note);
 }
