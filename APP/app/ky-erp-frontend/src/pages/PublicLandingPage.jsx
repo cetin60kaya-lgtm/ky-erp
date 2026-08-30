@@ -17,9 +17,11 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import PublicReferencesSection from "../components/public/PublicReferencesSection";
 import "../styles/public-landing.css";
 
 const APP_URL = "https://app.kyerp.net/";
+const CONTACT_EMAIL = "admin@kyerp.net";
 
 const MODULES = [
   {
@@ -154,6 +156,7 @@ export default function PublicLandingPage() {
           <a href="#ozellikler" onClick={() => setMenuOpen(false)}>Özellikler</a>
           <a href="#moduller" onClick={() => setMenuOpen(false)}>Modüller</a>
           <a href="#surec" onClick={() => setMenuOpen(false)}>İş Akışı</a>
+          <a href="#referanslar" onClick={() => setMenuOpen(false)}>Referanslar</a>
           <a href="#guvenlik" onClick={() => setMenuOpen(false)}>Güvenlik</a>
         </nav>
 
@@ -243,6 +246,8 @@ export default function PublicLandingPage() {
           </div>
         </section>
 
+        <PublicReferencesSection />
+
         <section className="ky-public-section ky-public-security" id="guvenlik">
           <div className="ky-public-security__panel">
             <div className="ky-public-security__icon"><LockKeyhole size={32} /></div>
@@ -275,6 +280,7 @@ export default function PublicLandingPage() {
           <span>KY</span><div><strong>KY ERP</strong><small>Enterprise Resource Planning</small></div>
         </a>
         <p>Tekstil üretim ve işletme yönetim sistemi.</p>
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         <a href={APP_URL}>app.kyerp.net <ArrowRight size={15} /></a>
       </footer>
     </div>
