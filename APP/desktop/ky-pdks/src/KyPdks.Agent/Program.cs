@@ -8,7 +8,7 @@ using KyPdks.Shared;
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddWindowsService(options => options.ServiceName = "KY ERP PDKS Agent");
+builder.Services.AddWindowsService(options => options.ServiceName = "KYERP.PDKS.Agent");
 builder.Services.AddSingleton<PdksPaths>();
 builder.Services.AddSingleton<ConfigStore>();
 builder.Services.AddSingleton<LocalPdksStore>();
@@ -25,14 +25,16 @@ sealed class TextFileLog(PdksPaths paths)
 
     public async Task WriteAsync(string level, string message, CancellationToken ct = default)
     {
+        var acquired = false;
         try
         {
             await _gate.WaitAsync(ct);
+            acquired = true;
             var path = Path.Combine(paths.Logs, $"agent-{DateTime.Today:yyyyMMdd}.log");
             await File.AppendAllTextAsync(path, $"{DateTimeOffset.Now:O}\t{level}\t{message}{Environment.NewLine}", new UTF8Encoding(false), ct);
         }
         catch { }
-        finally { if (_gate.CurrentCount == 0) _gate.Release(); }
+        finally { if (acquired) _gate.Release(); }
     }
 }
 
