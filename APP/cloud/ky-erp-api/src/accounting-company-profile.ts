@@ -21,6 +21,7 @@ const normalize = (value: unknown) =>
     .replace(/\s+/g, " ")
     .trim();
 const nowIso = () => new Date().toISOString();
+const validEmail = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
   return text(
@@ -84,6 +85,10 @@ function profileView(row: Row, aliasCount = 0) {
     defaultRecordType: text(row.default_record_type || "RESMI"),
     taxNo: text(row.tax_no),
     taxOffice: text(row.tax_office),
+    phone: text(row.phone),
+    email: text(row.email),
+    address: text(row.address),
+    note: text(row.note),
     aliasCount,
     accountingMode:
       role === "SUPPLIER" && Number(row.supplier_debt_tracking || 0) === 1
@@ -223,6 +228,11 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
     const row = await companyOf(c, c.req.param("id"), slug);
     if (!row) return c.json(errorBody("NOT_FOUND", "Firma bulunamadı."), 404);
 
+    const email = body.email === undefined ? text(row.email) : text(body.email).toLocaleLowerCase("tr-TR");
+    if (!validEmail(email)) {
+      return c.json(errorBody("INVALID_EMAIL", "Geçerli bir firma e-posta adresi girin."), 400);
+    }
+
     const requestedRole = upper(body.companyType || row.company_type || row.type);
     const role = requestedRole === "BOTH"
       ? "BOTH"
@@ -246,6 +256,9 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
     const defaultRecordType = upper(body.defaultRecordType || row.default_record_type || "RESMI").includes("GAYRI")
       ? "GAYRI_RESMI"
       : "RESMI";
+    const phone = body.phone === undefined ? text(row.phone) : text(body.phone);
+    const address = body.address === undefined ? text(row.address) : text(body.address);
+    const note = body.note === undefined ? text(row.note) : text(body.note);
     const timestamp = nowIso();
 
     await c.env.DB.prepare(
@@ -258,6 +271,10 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
               vat_tracking_enabled = ?,
               expense_category = ?,
               default_record_type = ?,
+              phone = ?,
+              email = ?,
+              address = ?,
+              note = ?,
               updated_at = ?
         WHERE id = ? AND main_company_slug = ?`,
     )
@@ -268,8 +285,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
         customerReceivableTracking ? 1 : 0,
         paymentMode,
         vatTrackingEnabled ? 1 : 0,
-        text(body.expenseCategory || row.expense_category) || null,
+        body.expenseCategory === undefined ? (text(row.expense_category) || null) : (text(body.expenseCategory) || null),
         defaultRecordType,
+        phone || null,
+        email || null,
+        address || null,
+        note || null,
         timestamp,
         row.id,
         slug,
