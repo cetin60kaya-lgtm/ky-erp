@@ -31,9 +31,8 @@ function Live-Asset($url) {
     return ""
 }
 
-function Remote-Trigger-Exists($triggerName) {
+function Invoke-Remote-D1Json($sql, $label) {
     Set-Location $WORKER
-    $sql = "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$triggerName';"
     $stdoutFile = [System.IO.Path]::GetTempFileName()
     $stderrFile = [System.IO.Path]::GetTempFileName()
     try {
@@ -41,17 +40,86 @@ function Remote-Trigger-Exists($triggerName) {
         $exitCode = $LASTEXITCODE
         $raw = Get-Content $stdoutFile -Raw -ErrorAction SilentlyContinue
         $stderr = Get-Content $stderrFile -Raw -ErrorAction SilentlyContinue
-        if ($exitCode -ne 0) { Fail "Canli D1 trigger kontrolu yapilamadi: $stderr $raw" }
-        try {
-            $json = $raw | ConvertFrom-Json
-            $total = [int]$json[0].results[0].total
-            return ($total -gt 0)
-        } catch {
-            Fail "Canli D1 trigger kontrol cevabi okunamadi. STDOUT: $raw STDERR: $stderr"
-        }
+        if ($exitCode -ne 0) { Fail "$label yapilamadi: $stderr $raw" }
+        try { return ($raw | ConvertFrom-Json) }
+        catch { Fail "$label cevabi okunamadi. STDOUT: $raw STDERR: $stderr" }
     } finally {
         Remove-Item $stdoutFile,$stderrFile -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Remote-Trigger-Exists($triggerName) {
+    $sql = "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$triggerName';"
+    $json = Invoke-Remote-D1Json $sql "Canli D1 trigger kontrolu"
+    $total = [int]$json[0].results[0].total
+    return ($total -gt 0)
+}
+
+function Assert-Remote-Schema-Readiness {
+    $tableSql = @"
+WITH required(name) AS (
+  VALUES
+    ('main_companies'),
+    ('companies'),
+    ('json_store'),
+    ('company_aliases'),
+    ('invoice_items'),
+    ('auth_users'),
+    ('auth_user_security'),
+    ('auth_user_module_permissions'),
+    ('auth_system_secrets'),
+    ('auth_login_challenges'),
+    ('auth_login_approvals'),
+    ('auth_sessions'),
+    ('auth_security_audit'),
+    ('auth_owner_recovery_challenges'),
+    ('hr_monthly_employees'),
+    ('ik_person_card_settings')
+)
+SELECT r.name AS missing
+  FROM required r
+ WHERE NOT EXISTS (
+   SELECT 1 FROM sqlite_master s WHERE s.type='table' AND s.name=r.name
+ )
+ ORDER BY r.name;
+"@
+    $tableJson = Invoke-Remote-D1Json $tableSql "Canli D1 tablo hazirlik kontrolu"
+    $missingTables = @($tableJson[0].results | ForEach-Object { [string]$_.missing } | Where-Object { $_ })
+    if ($missingTables.Count -gt 0) {
+        Fail ("Canli D1 gerekli tablolar eksik. Genel migration otomatik calistirilmadi. Eksik: " + ($missingTables -join ", "))
+    }
+
+    $columnSql = @"
+SELECT 'hr_monthly_employees.sgk_status' AS missing
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('hr_monthly_employees') WHERE name='sgk_status')
+UNION ALL
+SELECT 'ik_person_card_settings.card_no'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('ik_person_card_settings') WHERE name='card_no')
+UNION ALL
+SELECT 'company_aliases.main_company_slug'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('company_aliases') WHERE name='main_company_slug')
+UNION ALL
+SELECT 'company_aliases.normalized_name'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('company_aliases') WHERE name='normalized_name')
+UNION ALL
+SELECT 'company_aliases.deleted_at'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('company_aliases') WHERE name='deleted_at')
+UNION ALL
+SELECT 'auth_sessions.device_label'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('auth_sessions') WHERE name='device_label')
+UNION ALL
+SELECT 'auth_sessions.token_hash'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('auth_sessions') WHERE name='token_hash')
+UNION ALL
+SELECT 'auth_user_security.email_verified'
+ WHERE NOT EXISTS (SELECT 1 FROM pragma_table_info('auth_user_security') WHERE name='email_verified');
+"@
+    $columnJson = Invoke-Remote-D1Json $columnSql "Canli D1 kolon hazirlik kontrolu"
+    $missingColumns = @($columnJson[0].results | ForEach-Object { [string]$_.missing } | Where-Object { $_ })
+    if ($missingColumns.Count -gt 0) {
+        Fail ("Canli D1 gerekli kolonlar eksik. Genel migration otomatik calistirilmadi. Eksik: " + ($missingColumns -join ", "))
+    }
+    Write-Host "D1 yonetim/auth/IK sema hazirligi: HAZIR" -ForegroundColor Green
 }
 
 Write-Host ""
@@ -64,6 +132,7 @@ Write-Host "KORUMA:" -ForegroundColor Yellow
 Write-Host "- Production D1 RESET YOK." -ForegroundColor Yellow
 Write-Host "- Genel migration zinciri YOK." -ForegroundColor Yellow
 Write-Host "- Local migration entegrasyon testi YOK." -ForegroundColor Yellow
+Write-Host "- Canli sema kontrolu salt-okumadir; eksikte deploy durur." -ForegroundColor Yellow
 Write-Host "- Yalniz gerekli same-browser session guard eksikse 0022 uygulanir." -ForegroundColor Yellow
 Write-Host "- D1 yedegi alinmadan 0022 uygulanmaz." -ForegroundColor Yellow
 Write-Host "- Production test INSERT/UPDATE/DELETE YOK." -ForegroundColor Yellow
@@ -106,16 +175,18 @@ wrangler whoami
 Check-Exit "Cloudflare OAuth oturumu bulunamadi. wrangler login calistirin."
 
 Write-Host ""
-Write-Host "=== 3/11 D1 YEDEK + SAME-BROWSER GUARD ===" -ForegroundColor Cyan
+Write-Host "=== 3/11 D1 YEDEK + SEMA + SAME-BROWSER GUARD ===" -ForegroundColor Cyan
 Set-Location $WORKER
 New-Item -ItemType Directory -Force -Path $BACKUP_DIR | Out-Null
 $backupStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $backupFile = Join-Path $BACKUP_DIR "ky-erp-db-predeploy-$backupStamp.sql"
 wrangler d1 export $DB_NAME --remote --config $DB_CONFIG --output $backupFile
-Check-Exit "Canli D1 yedegi alinamadi. Session guard uygulanmadi."
+Check-Exit "Canli D1 yedegi alinamadi. Deploy ve session guard uygulanmadi."
 if (-not (Test-Path $backupFile)) { Fail "D1 yedek dosyasi olusmadi: $backupFile" }
 if ((Get-Item $backupFile).Length -lt 100) { Fail "D1 yedek dosyasi beklenenden kucuk; deploy durduruldu." }
 Write-Host "D1 yedek: $backupFile" -ForegroundColor Green
+
+Assert-Remote-Schema-Readiness
 
 $guardName = "trg_auth_sessions_replace_same_browser"
 if (-not (Remote-Trigger-Exists $guardName)) {
@@ -259,6 +330,7 @@ Write-Host "==================================================" -ForegroundColor
 Write-Host "Repo SHA       : $LOCAL_SHA"
 Write-Host "Auth           : $AUTH_VERSION"
 Write-Host "Worker API     : HTTP 200"
+Write-Host "D1 schema      : HAZIR"
 Write-Host "Login transport: 30/30"
 Write-Host "Session refresh: HAZIR"
 Write-Host "Session guard  : HAZIR"
