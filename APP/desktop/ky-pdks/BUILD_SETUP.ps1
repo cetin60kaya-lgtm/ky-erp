@@ -53,9 +53,10 @@ if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $Desk
 if (-not (Test-Path $AgentExe)) { throw "Agent oluşmadı: $AgentExe" }
 
 Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
+$ProgramFilesX86 = ${env:ProgramFiles(x86)}
 $InnoCandidates = @(
-    "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+    $(if ($ProgramFilesX86) { Join-Path $ProgramFilesX86 'Inno Setup 6\ISCC.exe' }),
+    $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
 ) | Where-Object { $_ -and (Test-Path $_) }
 
 if (-not $InnoCandidates) {
