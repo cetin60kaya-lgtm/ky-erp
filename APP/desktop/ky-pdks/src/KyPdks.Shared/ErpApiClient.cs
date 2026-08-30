@@ -14,7 +14,6 @@ public sealed class ErpApiException(string message, HttpStatusCode statusCode, s
 public sealed class ErpApiClient : IDisposable
 {
     private readonly HttpClient _http;
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     public ErpApiClient(string baseAddress = "https://api.kyerp.net")
     {
@@ -88,6 +87,27 @@ public sealed class ErpApiClient : IDisposable
                 Text(row, "id"), Text(row, "personnelCode", "code"), Text(row, "fullName", "full_name"),
                 Text(row, "department"), Text(row, "title"), "VAR", Text(row, "status"), card,
                 Text(row, "startDate", "hire_date"), Text(row, "exitDate", "exit_date")));
+        }
+        return list;
+    }
+
+    public async Task<IReadOnlyList<AttendanceDayRow>> GetAttendanceMonthAsync(string token, CachedPerson person, int year, int month, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(person.Id)) return Array.Empty<AttendanceDayRow>();
+        var path = $"/api/ik/personnel-control/people/{Uri.EscapeDataString(person.Id)}/attendance?year={year}&month={month}";
+        using var document = await SendAsync(HttpMethod.Get, path, null, token, ct);
+        var data = Unwrap(document.RootElement);
+        if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty("days", out var days) || days.ValueKind != JsonValueKind.Array)
+            return Array.Empty<AttendanceDayRow>();
+
+        var list = new List<AttendanceDayRow>();
+        foreach (var row in days.EnumerateArray())
+        {
+            list.Add(new AttendanceDayRow(
+                person.Id, person.PersonnelCode, person.FullName, person.Department, person.CardNo,
+                Text(row, "date"), Text(row, "status"), Text(row, "entry"), Text(row, "exit"),
+                Number(row, "lateMinutes", 0), Number(row, "earlyMinutes", 0), Number(row, "overtimeMinutes", 0),
+                Bool(row, "missingPunch"), Number(row, "eventCount", 0), Text(row, "note"), "ERP"));
         }
         return list;
     }
@@ -203,6 +223,19 @@ public sealed class ErpApiClient : IDisposable
     {
         if (node.ValueKind == JsonValueKind.Object && node.TryGetProperty(name, out var value) && value.TryGetInt32(out var number)) return number;
         return fallback;
+    }
+
+    private static bool Bool(JsonElement node, string name)
+    {
+        if (node.ValueKind != JsonValueKind.Object || !node.TryGetProperty(name, out var value)) return false;
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number => value.TryGetInt32(out var number) && number != 0,
+            JsonValueKind.String => value.GetString() is string text && (text.Equals("true", StringComparison.OrdinalIgnoreCase) || text == "1"),
+            _ => false,
+        };
     }
 
     public void Dispose() => _http.Dispose();
