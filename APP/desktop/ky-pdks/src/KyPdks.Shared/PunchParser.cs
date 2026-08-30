@@ -19,39 +19,43 @@ public static class PunchParser
         if (line.Length == 0) return false;
 
         var parts = Split(line);
-        if (parts.Length < 2) return false;
-
-        var cardIndex = Array.FindIndex(parts, IsCard);
-        if (cardIndex < 0) return false;
-        var card = NormalizeCard(parts[cardIndex]);
-        if (card.Length == 0) return false;
-
-        // KY ERP/Hedef: KartNo,Saat,GGAAYY,1,001
-        if (cardIndex + 2 < parts.Length && TryTime(parts[cardIndex + 1], out var compactTime) && TryDate(parts[cardIndex + 2], out var compactDate))
+        if (parts.Length >= 2)
         {
-            punch = new RawPunch(card, compactDate.Date.Add(compactTime), "IMPORT_FILE", sourceRef, line);
-            return true;
+            var cardIndex = Array.FindIndex(parts, IsCard);
+            if (cardIndex >= 0)
+            {
+                var card = NormalizeCard(parts[cardIndex]);
+                if (card.Length > 0)
+                {
+                    // KY ERP/Hedef: KartNo,Saat,GGAAYY,1,001
+                    if (cardIndex + 2 < parts.Length && TryTime(parts[cardIndex + 1], out var compactTime) && TryDate(parts[cardIndex + 2], out var compactDate))
+                    {
+                        punch = new RawPunch(card, compactDate.Date.Add(compactTime), "IMPORT_FILE", sourceRef, line);
+                        return true;
+                    }
+
+                    // KartNo,Tarih,Saat veya KartNo;Tarih;Saat
+                    if (cardIndex + 2 < parts.Length && TryDate(parts[cardIndex + 1], out var date) && TryTime(parts[cardIndex + 2], out var time))
+                    {
+                        punch = new RawPunch(card, date.Date.Add(time), "IMPORT_FILE", sourceRef, line);
+                        return true;
+                    }
+
+                    // Tarih,Saat,KartNo
+                    if (cardIndex >= 2 && TryDate(parts[cardIndex - 2], out date) && TryTime(parts[cardIndex - 1], out time))
+                    {
+                        punch = new RawPunch(card, date.Date.Add(time), "IMPORT_FILE", sourceRef, line);
+                        return true;
+                    }
+                }
+            }
         }
 
-        // KartNo,Tarih,Saat veya KartNo;Tarih;Saat
-        if (cardIndex + 2 < parts.Length && TryDate(parts[cardIndex + 1], out var date) && TryTime(parts[cardIndex + 2], out var time))
-        {
-            punch = new RawPunch(card, date.Date.Add(time), "IMPORT_FILE", sourceRef, line);
-            return true;
-        }
-
-        // Tarih,Saat,KartNo
-        if (cardIndex >= 2 && TryDate(parts[cardIndex - 2], out date) && TryTime(parts[cardIndex - 1], out time))
-        {
-            punch = new RawPunch(card, date.Date.Add(time), "IMPORT_FILE", sourceRef, line);
-            return true;
-        }
-
-        // Cihazların yaygın tek alanlı çıktıları: 00004 2026-08-30 08:28[:14]
+        // Cihazların yaygın boşluklu çıktıları: 00004 2026-08-30 08:28[:14]
         var free = Regex.Match(line, @"(?<!\d)(?<card>\d{1,10})\s+[-|,;\t ]*\s*(?<date>\d{2}[.\-/]\d{2}[.\-/]\d{4}|\d{4}[.\-/]\d{2}[.\-/]\d{2}|\d{6,8})\s+(?<time>\d{1,2}:\d{2}(?::\d{2})?)(?!\d)");
-        if (free.Success && IsCard(free.Groups["card"].Value) && TryDate(free.Groups["date"].Value, out date) && TryTime(free.Groups["time"].Value, out time))
+        if (free.Success && IsCard(free.Groups["card"].Value) && TryDate(free.Groups["date"].Value, out var freeDate) && TryTime(free.Groups["time"].Value, out var freeTime))
         {
-            punch = new RawPunch(NormalizeCard(free.Groups["card"].Value), date.Date.Add(time), "TERMINAL_LINE", sourceRef, line);
+            punch = new RawPunch(NormalizeCard(free.Groups["card"].Value), freeDate.Date.Add(freeTime), "TERMINAL_LINE", sourceRef, line);
             return true;
         }
 
