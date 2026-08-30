@@ -6,6 +6,8 @@ $WRANGLER_CONFIG = Join-Path $WORKER_DIR "wrangler.jsonc"
 $DOMAIN = "kyerp.net"
 $FROM_ADDRESS = "KY ERP <admin@kyerp.net>"
 $RESEND_BASE = "https://api.resend.com"
+$READY_KEY = "SYSTEM_EMAIL_READY_V1"
+$READY_PREFIX = "RESEND|admin@kyerp.net|VERIFIED|"
 
 $script:ResendKey = ""
 $script:CfToken = ""
@@ -166,8 +168,7 @@ function Ensure-ResendDomain {
     }
     $domainId = [string]$domain.id
     if (-not $domainId) { Fail "Resend domain kimligi alinmadi." }
-    $detail = Invoke-ResendApi "GET" "/domains/$domainId"
-    return $detail
+    return Invoke-ResendApi "GET" "/domains/$domainId"
 }
 
 function Ensure-ResendDns($DomainDetail) {
@@ -220,22 +221,55 @@ function Install-WorkerResendSecret {
     Write-Host "RESEND_API_KEY Cloudflare Worker secret olarak kaydedildi." -ForegroundColor Green
 }
 
-function Get-OwnerEmail {
+function Get-WorkerSecretReady {
     Push-Location $WORKER_DIR
     try {
-        $sql = "SELECT COALESCE(s.email,'') AS email FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 AND COALESCE(s.email,'')<>'' AND (UPPER(COALESCE(s.role_override,''))='SUPER_ADMIN' OR UPPER(COALESCE(u.role,''))='ADMIN') ORDER BY u.created_at LIMIT 1;"
-        $raw = (& wrangler d1 execute ky-erp-db --remote --config $WRANGLER_CONFIG --command $sql --json 2>$null | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0 -or -not $raw) { return "" }
-        try { $data = $raw | ConvertFrom-Json } catch { return "" }
-        $groups = @($data)
-        foreach ($group in $groups) {
-            foreach ($row in @($group.results)) {
-                $email = ([string]$row.email).Trim()
-                if ($email -match '^[^\s@]+@[^\s@]+\.[^\s@]+$') { return $email }
-            }
-        }
-        return ""
+        $raw = (& wrangler secret list --config $WRANGLER_CONFIG --format json 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $raw) { return $false }
+        try { $rows = @($raw | ConvertFrom-Json) } catch { return $false }
+        return @($rows | Where-Object { ([string]$_.name).Trim() -eq "RESEND_API_KEY" }).Count -gt 0
     } finally { Pop-Location }
+}
+
+function Invoke-D1Json([string]$Sql) {
+    Push-Location $WORKER_DIR
+    try {
+        $raw = (& wrangler d1 execute ky-erp-db --remote --config $WRANGLER_CONFIG --command $Sql --json 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $raw) { return @() }
+        try { return @($raw | ConvertFrom-Json) } catch { return @() }
+    } finally { Pop-Location }
+}
+
+function Get-MailReadyMarker {
+    $escapedKey = $READY_KEY.Replace("'", "''")
+    $groups = Invoke-D1Json "SELECT secret_value FROM auth_system_secrets WHERE secret_key='$escapedKey' LIMIT 1;"
+    foreach ($group in $groups) {
+        foreach ($row in @($group.results)) {
+            $value = ([string]$row.secret_value).Trim()
+            if ($value.StartsWith($READY_PREFIX, [System.StringComparison]::Ordinal)) { return $true }
+        }
+    }
+    return $false
+}
+
+function Set-MailReadyMarker([string]$MessageId) {
+    $safeValue = ($READY_PREFIX + $MessageId).Replace("'", "''")
+    $safeKey = $READY_KEY.Replace("'", "''")
+    $sql = "INSERT INTO auth_system_secrets(secret_key,secret_value,created_at,updated_at) VALUES ('$safeKey','$safeValue',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(secret_key) DO UPDATE SET secret_value=excluded.secret_value,updated_at=CURRENT_TIMESTAMP;"
+    $result = Invoke-D1Json $sql
+    if ($result.Count -eq 0) { Fail "Mail hazirlik kaniti D1'e yazilamadi." }
+}
+
+function Get-OwnerEmail {
+    $sql = "SELECT COALESCE(s.email,'') AS email FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1 AND COALESCE(s.email,'')<>'' AND (UPPER(COALESCE(s.role_override,''))='SUPER_ADMIN' OR UPPER(COALESCE(u.role,''))='ADMIN') ORDER BY u.created_at LIMIT 1;"
+    $groups = Invoke-D1Json $sql
+    foreach ($group in $groups) {
+        foreach ($row in @($group.results)) {
+            $email = ([string]$row.email).Trim()
+            if ($email -match '^[^\s@]+@[^\s@]+\.[^\s@]+$') { return $email }
+        }
+    }
+    return ""
 }
 
 function Send-OwnerTestMail {
@@ -253,6 +287,7 @@ function Send-OwnerTestMail {
     Write-Host "Test alicisi : $ownerEmail" -ForegroundColor Green
     Write-Host "Resend ID    : $id" -ForegroundColor Green
     Write-Host "Gonderici    : $FROM_ADDRESS" -ForegroundColor Green
+    return $id
 }
 
 try {
@@ -260,22 +295,21 @@ try {
     if (-not (Test-Path $WRANGLER_CONFIG)) { Fail "Worker wrangler config bulunamadi: $WRANGLER_CONFIG" }
     if (-not (Get-Command wrangler -ErrorAction SilentlyContinue)) { Fail "Wrangler bulunamadi." }
 
-    Push-Location $WORKER_DIR
-    try {
-        $secretRaw = (& wrangler secret list --config $WRANGLER_CONFIG --format json 2>$null | Out-String).Trim()
-        if ($LASTEXITCODE -eq 0 -and $secretRaw) {
-            try {
-                $secretRows = @($secretRaw | ConvertFrom-Json)
-                if (@($secretRows | Where-Object { ([string]$_.name).Trim() -eq "RESEND_API_KEY" }).Count -gt 0) {
-                    Write-Host "RESEND_API_KEY Worker'da zaten mevcut. Anahtar guvenlik geregi geri okunamaz." -ForegroundColor Green
-                    Write-Host "Mevcut secret silinmedi veya degistirilmedi." -ForegroundColor Green
-                    exit 0
-                }
-            } catch {}
-        }
-    } finally { Pop-Location }
+    $secretReady = Get-WorkerSecretReady
+    $markerReady = Get-MailReadyMarker
+    if ($secretReady -and $markerReady) {
+        Write-Host "RESEND_API_KEY Worker secret: HAZIR" -ForegroundColor Green
+        Write-Host "D1 mail kaniti              : VERIFIED + GERCEK TEST GECMIS" -ForegroundColor Green
+        Write-Host "Sistem gondericisi           : $FROM_ADDRESS" -ForegroundColor Green
+        exit 0
+    }
 
-    Write-Host "Resend API anahtari Worker'da henuz yok." -ForegroundColor Yellow
+    if ($secretReady -and -not $markerReady) {
+        Write-Host "Worker'da RESEND_API_KEY var ancak VERIFIED + gercek test kaniti yok." -ForegroundColor Yellow
+        Write-Host "Anahtar guvenlik geregi geri okunamadigi icin bir kez Resend API key tekrar girilerek kanal dogrulanacak." -ForegroundColor Yellow
+    } else {
+        Write-Host "Resend API anahtari Worker'da henuz yok." -ForegroundColor Yellow
+    }
     Write-Host "Resend hesabinda bir API key olusturun. Anahtar ekranda gorundugunde buraya yapistirin." -ForegroundColor Yellow
     $script:ResendKey = Read-SecretPlain "RESEND API KEY"
     if (-not $script:ResendKey -or -not $script:ResendKey.StartsWith("re_")) { Fail "Gecerli Resend API key girilmedi." }
@@ -284,13 +318,17 @@ try {
     Ensure-ResendDns $domain
     $domain = Wait-ResendVerification ([string]$domain.id)
     Install-WorkerResendSecret
-    Send-OwnerTestMail
+    $messageId = Send-OwnerTestMail
+    Set-MailReadyMarker $messageId
+
+    if (-not (Get-WorkerSecretReady) -or -not (Get-MailReadyMarker)) { Fail "Mail kurulumu son kanit kontrolunden gecmedi." }
 
     Write-Host ""
     Write-Host "RESEND KURULUMU TAMAM" -ForegroundColor Green
     Write-Host "Domain       : $DOMAIN / VERIFIED" -ForegroundColor Green
     Write-Host "Gonderici    : $FROM_ADDRESS" -ForegroundColor Green
     Write-Host "Worker secret: RESEND_API_KEY / HAZIR" -ForegroundColor Green
+    Write-Host "D1 kanit     : VERIFIED + GERCEK TEST / HAZIR" -ForegroundColor Green
     exit 0
 } catch {
     Write-Host ""
