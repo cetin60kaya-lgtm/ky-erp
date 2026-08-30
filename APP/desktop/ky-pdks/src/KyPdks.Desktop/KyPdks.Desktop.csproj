@@ -14,6 +14,7 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
+    <Using Include="System.IO" />
     <ProjectReference Include="..\KyPdks.Shared\KyPdks.Shared.csproj" />
   </ItemGroup>
 </Project>
