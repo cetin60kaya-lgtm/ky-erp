@@ -3,7 +3,7 @@
   "target": "production",
   "mode": "production",
   "requestedAt": "2026-08-30T06:45:00+03:00",
-  "attempt": 65,
+  "attempt": 66,
   "scope": [
     "canonical-v3-auth",
     "password-only-session-8h",
@@ -15,6 +15,13 @@
     "microsoft-authenticator",
     "owner-recovery-protection",
     "owner-only-system-management",
+    "admin-user-list-autofill-isolation",
+    "admin-user-create-complete-atomic",
+    "admin-user-company-role-permissions-security-single-step",
+    "admin-email-verification-provider-accepted-only",
+    "admin-system-email-resend-only",
+    "admin-system-email-from-admin-at-kyerp-net",
+    "admin-system-email-resend-domain-dns-real-test-proof",
     "ik-denetim-system-user",
     "ik-denetim-pdks-sgk-var-card-only",
     "ik-denetim-pdks-read-only",
@@ -31,7 +38,9 @@
     "frontend-lint-test-build-before-live",
     "cloudflare-worker-production",
     "cloudflare-pages-production",
-    "kyerp-net-and-app-domain-asset-verification",
+    "kyerp-net-single-public-domain",
+    "kyerp-net-single-domain-asset-verification",
+    "legacy-app-domain-not-production-target",
     "isnet-runtime-preserved",
     "muhasebe-runtime-preserved",
     "boyahane-runtime-preserved",
@@ -39,5 +48,5 @@
     "production-runtime-preserved"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "Canonical V3 production release. Windows deploy standardı Node.js 22 LTS + PowerShell 7'dir. Worker typecheck/unit-contract test/dry-run ve frontend lint/test/build tamamlanmadan canlı kod yazılmaz. Canlı D1 tam SQL yedeği alınır; yalnız hedefli/idempotent 0022 same-browser guard, 0023 firma alias şeması ve 0024 DENETIM/PDKS sistem hesabı uyumluluğu uygulanabilir. Genel migration zinciri ve D1 reset yasaktır. DENETIM hesabı yalnız SGK durumu VAR ve kart numarası bulunan aylık personelin PDKS görünümünü salt-okunur kullanır; günlük/haftalık personel ve diğer ERP API'leri kapalıdır."
+  "note": "Canonical production release. Tek kullanıcı uygulama adresi https://kyerp.net/; api.kyerp.net yalnız backend servisidir ve eski app.kyerp.net production hedefi değildir. Windows deploy standardı Node.js 22 LTS + PowerShell 7'dir. Production launcher önce Resend üzerinden KY ERP <admin@kyerp.net> sistem e-posta kanalını domain/DNS/gerçek test kabul kimliği ile kanıtlar; ardından Worker typecheck/tam test/dry-run ve frontend lint/test/build tamamlanmadan canlı kod yazılmaz. Canlı D1 tam SQL yedeği alınır; yalnız hedefli/idempotent 0022 same-browser guard, 0023 firma alias şeması ve 0024 DENETIM/PDKS sistem hesabı uyumluluğu uygulanabilir. Genel migration zinciri ve D1 reset yasaktır. DENETIM hesabı yalnız SGK durumu VAR ve kart numarası bulunan aylık personelin PDKS görünümünü salt-okunur kullanır; günlük/haftalık personel ve diğer ERP API'leri kapalıdır. Yönetim/Kullanıcı Merkezi kullanıcı listesi autofill'den izole, yeni kullanıcı oluşturma firma+rol+yetki+giriş politikası ile tek atomik işlem, e-posta doğrulama yalnız gerçek Resend provider kabulü sonrası OTP aşamasına geçer."
 }
