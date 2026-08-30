@@ -135,21 +135,30 @@ async function tenantDataCounts(c: any, slug: string) {
   }
   return counts;
 }
-async function moveTenantSlug(c: any, sourceSlug: string, targetSlug: string) {
-  if (!sourceSlug || !targetSlug || sourceSlug === targetSlug) return [];
+async function tenantMovePlan(c: any, sourceSlug: string, targetSlug: string) {
   const changed: Row[] = [];
+  const statements: any[] = [];
+  if (!sourceSlug || !targetSlug || sourceSlug === targetSlug) return { changed, statements };
   for (const table of await tenantTables(c)) {
     const countRow = await c.env.DB.prepare(
       `SELECT COUNT(*) AS total FROM ${quoteIdentifier(table)} WHERE main_company_slug=?`,
     ).bind(sourceSlug).first<Row>();
     const total = Number(countRow?.total || 0);
     if (!total) continue;
-    const result = await c.env.DB.prepare(
-      `UPDATE ${quoteIdentifier(table)} SET main_company_slug=? WHERE main_company_slug=?`,
-    ).bind(targetSlug, sourceSlug).run();
-    changed.push({ table, rows: Number(result?.meta?.changes || total) });
+    statements.push(
+      c.env.DB.prepare(
+        `UPDATE ${quoteIdentifier(table)} SET main_company_slug=? WHERE main_company_slug=?`,
+      ).bind(targetSlug, sourceSlug),
+    );
+    changed.push({ table, rows: total });
   }
-  return changed;
+  return { changed, statements };
+}
+async function atomicBatch(c: any, statements: any[]) {
+  if (!statements.length) return [];
+  // Cloudflare D1 batch bir transaction olarak uygulanır. Bir statement hata verirse
+  // batch bütünü geri alınır; tenant aktarımı yarım durumda bırakılamaz.
+  return c.env.DB.batch(statements);
 }
 function companyView(row: Row) {
   return {
@@ -232,19 +241,26 @@ export function registerAdminCoreRoutes(app: any) {
     const name = text(body.name || row.name);
     const nextSlug = slugify(body.slug || row.slug || name);
     if (!name || !nextSlug) return c.json(errorBody("INVALID_COMPANY", "Firma adı ve geçerli kısa kod zorunludur."), 400);
-    if (nextSlug !== text(row.slug)) {
-      const conflict = await c.env.DB.prepare("SELECT id FROM main_companies WHERE slug=? AND id<>? LIMIT 1").bind(nextSlug, id).first<Row>();
-      if (conflict?.id) return c.json(errorBody("COMPANY_SLUG_EXISTS", "Bu firma kısa kodu başka bir ana firmada kullanılıyor."), 409);
-      try {
-        await moveTenantSlug(c, text(row.slug), nextSlug);
-      } catch (error) {
-        return c.json(errorBody("COMPANY_SLUG_MOVE_FAILED", "Firma kısa kodu değiştirilemedi; bağlı veriler korunarak işlem durduruldu.", { message: error instanceof Error ? error.message : String(error) }), 409);
-      }
-    }
     const timestamp = nowIso();
-    await c.env.DB.prepare(
-      `UPDATE main_companies SET slug=?,name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
-    ).bind(nextSlug, name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+    try {
+      if (nextSlug !== text(row.slug)) {
+        const conflict = await c.env.DB.prepare("SELECT id FROM main_companies WHERE slug=? AND id<>? LIMIT 1").bind(nextSlug, id).first<Row>();
+        if (conflict?.id) return c.json(errorBody("COMPANY_SLUG_EXISTS", "Bu firma kısa kodu başka bir ana firmada kullanılıyor."), 409);
+        const plan = await tenantMovePlan(c, text(row.slug), nextSlug);
+        plan.statements.push(
+          c.env.DB.prepare(
+            `UPDATE main_companies SET slug=?,name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
+          ).bind(nextSlug, name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
+        );
+        await atomicBatch(c, plan.statements);
+      } else {
+        await c.env.DB.prepare(
+          `UPDATE main_companies SET name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
+        ).bind(name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id).run();
+      }
+    } catch (error) {
+      return c.json(errorBody("COMPANY_SLUG_MOVE_FAILED", "Firma değişikliği atomik olarak uygulanamadı; hiçbir tablo yarım taşınmadı.", { message: error instanceof Error ? error.message : String(error) }), 409);
+    }
     await audit(c, "MAIN_COMPANY_UPDATED", current.id, id, { mainCompanySlug: nextSlug, previousSlug: text(row.slug), name });
     return c.json({ ok: true, data: companyView(await companyById(c, id) || row) });
   });
@@ -258,14 +274,19 @@ export function registerAdminCoreRoutes(app: any) {
     const target = await companyById(c, text(body.targetId));
     if (!source || !target) return c.json(errorBody("COMPANY_NOT_FOUND", "Kaynak veya hedef ana firma bulunamadı."), 404);
     if (source.id === target.id) return c.json(errorBody("SAME_COMPANY", "Kaynak ve hedef firma aynı olamaz."), 400);
+    const timestamp = nowIso();
     let changed: Row[] = [];
     try {
-      changed = await moveTenantSlug(c, text(source.slug), text(target.slug));
+      const plan = await tenantMovePlan(c, text(source.slug), text(target.slug));
+      changed = plan.changed;
+      plan.statements.push(
+        c.env.DB.prepare("UPDATE main_companies SET is_active=0,updated_at=? WHERE id=?")
+          .bind(timestamp, source.id),
+      );
+      await atomicBatch(c, plan.statements);
     } catch (error) {
-      return c.json(errorBody("COMPANY_TRANSFER_CONFLICT", "Veri aktarımı benzersiz kayıt çakışması veya şema kısıtı nedeniyle tamamlanamadı. Hiçbir tablo zorla silinmedi.", { message: error instanceof Error ? error.message : String(error) }), 409);
+      return c.json(errorBody("COMPANY_TRANSFER_CONFLICT", "Firma veri aktarımı atomik olarak tamamlanamadı. Bir tablo bile hata verirse tüm aktarım geri alınır.", { message: error instanceof Error ? error.message : String(error) }), 409);
     }
-    const timestamp = nowIso();
-    await c.env.DB.prepare("UPDATE main_companies SET is_active=0,updated_at=? WHERE id=?").bind(timestamp, source.id).run();
     await audit(c, "MAIN_COMPANY_TRANSFERRED", current.id, source.id, { mainCompanySlug: text(source.slug), targetId: target.id, targetSlug: text(target.slug), tables: changed });
     return c.json({ ok: true, data: { source: companyView(source), target: companyView(target), transferredTables: changed, sourceDeactivated: true, transferredAt: timestamp } });
   });
