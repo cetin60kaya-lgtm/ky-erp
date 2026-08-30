@@ -48,6 +48,31 @@ function Get-HttpErrorDetail($ErrorRecord) {
     return $detail
 }
 
+function Test-WranglerSession {
+    try {
+        $raw = (& wrangler auth token --json 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $raw) { return $false }
+        $auth = $raw | ConvertFrom-Json
+        return -not [string]::IsNullOrWhiteSpace([string]$auth.token)
+    } catch {
+        return $false
+    }
+}
+
+function Ensure-WranglerSession {
+    Write-Step "WRANGLER OTURUM KONTROLU"
+    if (Test-WranglerSession) {
+        Write-Host "Wrangler OAuth oturumu: HAZIR" -ForegroundColor Green
+        return
+    }
+
+    Write-Host "Wrangler oturumu yok. Standart Worker/Pages/D1 yetkilendirmesi aciliyor..." -ForegroundColor Yellow
+    & wrangler login | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail "Wrangler login tamamlanmadi." }
+    if (-not (Test-WranglerSession)) { Fail "Wrangler login sonrasi oturum dogrulanamadi." }
+    Write-Host "Wrangler OAuth oturumu: YENILENDI" -ForegroundColor Green
+}
+
 function Invoke-ResendApi([string]$Method, [string]$Path, $Body = $null) {
     if (-not $script:ResendKey) { Fail "Resend API anahtari hazir degil." }
     $headers = @{ Authorization = "Bearer $($script:ResendKey)"; Accept = "application/json" }
@@ -65,7 +90,7 @@ function Invoke-ResendApi([string]$Method, [string]$Path, $Body = $null) {
 }
 
 function Invoke-CfApi([string]$Method, [string]$Path, $Body = $null) {
-    if (-not $script:CfToken) { Fail "Cloudflare tokeni hazir degil." }
+    if (-not $script:CfToken) { Fail "Cloudflare DNS API tokeni hazir degil." }
     $headers = @{ Authorization = "Bearer $($script:CfToken)"; Accept = "application/json" }
     $uri = "https://api.cloudflare.com/client/v4$Path"
     try {
@@ -77,53 +102,36 @@ function Invoke-CfApi([string]$Method, [string]$Path, $Body = $null) {
         }
     } catch {
         $detail = Get-HttpErrorDetail $_
-        if ($detail -match "401|403|Forbidden|permission|authentication|authorization") {
-            throw "CF_DNS_PERMISSION_REQUIRED"
-        }
-        Fail "Cloudflare API istegi basarisiz [$Method $Path]: $detail"
+        Fail "Cloudflare DNS API istegi basarisiz [$Method $Path]: $detail"
     }
     if ($null -ne $response.success -and -not [bool]$response.success) {
         $errors = try { $response.errors | ConvertTo-Json -Depth 8 -Compress } catch { "" }
-        if ($errors -match "permission|auth|forbidden|unauthorized") { throw "CF_DNS_PERMISSION_REQUIRED" }
-        Fail "Cloudflare API basarisiz [$Method $Path]: $errors"
+        Fail "Cloudflare DNS API basarisiz [$Method $Path]: $errors"
     }
     return $response
 }
 
-function Get-WranglerOAuthToken {
-    $raw = (& wrangler auth token --json 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $raw) { Fail "Wrangler oturumu yok. Once wrangler login yapilmalidir." }
-    try { $auth = $raw | ConvertFrom-Json } catch { Fail "Wrangler auth token JSON okunamadi." }
-    $token = [string]$auth.token
-    if (-not $token) { Fail "Wrangler OAuth/API tokeni okunamadi." }
-    return $token
-}
-
-function Initialize-CloudflareContext {
-    $script:CfToken = Get-WranglerOAuthToken
-    $zones = Invoke-CfApi "GET" "/zones?name=$MAIL_DOMAIN"
-    $rows = @($zones.result)
-    if ($rows.Count -ne 1) { Fail "$MAIL_DOMAIN Cloudflare zone kaydi tekil bulunamadi." }
-    $script:CfZoneId = [string]$rows[0].id
-    if (-not $script:CfZoneId) { Fail "Cloudflare zone kimligi okunamadi." }
-}
-
-function Request-CloudflareDnsApiToken {
+function Initialize-CloudflareDnsContext {
     Write-Host ""
-    Write-Host "Wrangler OAuth tokeninda DNS yazma izni yok." -ForegroundColor Yellow
-    Write-Host "Cloudflare Dashboard > API Tokens > Create Token > Edit zone DNS sablonunu kullanin." -ForegroundColor Yellow
-    Write-Host "Zone kaynagini yalniz kyerp.net ile sinirlayin." -ForegroundColor Yellow
-    Write-Host "Olusan tokeni yalniz bu terminale yapistirin. Token diske veya repoya kaydedilmez." -ForegroundColor Yellow
+    Write-Host "Cloudflare DNS icin Wrangler OAuth kullanilmayacak." -ForegroundColor DarkGray
+    Write-Host "Yalniz kyerp.net ile sinirli 'DNS Bolgesini duzenle' API tokenini girin." -ForegroundColor Yellow
+    Write-Host "Token sadece bu kurulum sirasinda bellekte kullanilir; diske veya repoya yazilmaz." -ForegroundColor Yellow
+
     $token = Read-SecretPlain "CLOUDFLARE DNS API TOKEN"
     if (-not $token) { Fail "Cloudflare DNS API token girilmedi." }
     $script:CfToken = $token
 
-    if (-not $script:CfZoneId) { Fail "Cloudflare zone kimligi hazir degil." }
     try {
+        $zones = Invoke-CfApi "GET" "/zones?name=$MAIL_DOMAIN"
+        $rows = @($zones.result)
+        if ($rows.Count -ne 1) { Fail "$MAIL_DOMAIN zone kaydi bu token ile tekil okunamadi." }
+        $script:CfZoneId = [string]$rows[0].id
+        if (-not $script:CfZoneId) { Fail "Cloudflare zone kimligi okunamadi." }
         Invoke-CfApi "GET" "/zones/$($script:CfZoneId)/dns_records?per_page=1" | Out-Null
     } catch {
-        Fail "Girilen Cloudflare tokeni kyerp.net icin DNS yetkisine sahip degil. Edit zone DNS sablonu ve kyerp.net zone secimini kontrol edin."
+        Fail "Cloudflare tokeni kyerp.net icin DNS yetkisine sahip degil. Cloudflare > API Tokens > DNS Bolgesini duzenle sablonu; Katmak > Belirli bolge > kyerp.net secilmelidir. Ayrinti: $($_.Exception.Message)"
     }
+
     Write-Host "Cloudflare DNS API tokeni: DOGRULANDI" -ForegroundColor Green
 }
 
@@ -140,7 +148,7 @@ function Normalize-DnsContent([string]$Type, [string]$Value) {
     if ($Type -eq "TXT" -and $content.Length -ge 2 -and $content.StartsWith('"') -and $content.EndsWith('"')) {
         $content = $content.Substring(1, $content.Length - 2)
     }
-    if ($Type -in @("MX","CNAME")) { $content = $content.TrimEnd('.') }
+    if ($Type -in @("MX", "CNAME")) { $content = $content.TrimEnd('.') }
     return $content
 }
 
@@ -150,7 +158,7 @@ function Dns-ContentEqual([string]$Type, [string]$Left, [string]$Right) {
 
 function Ensure-CloudflareDnsRecord($Record) {
     $type = ([string]$Record.type).Trim().ToUpperInvariant()
-    if ($type -notin @("TXT","MX","CNAME")) { return }
+    if ($type -notin @("TXT", "MX", "CNAME")) { return }
     if (([string]$Record.record).Trim().ToLowerInvariant() -eq "tracking") { return }
 
     $name = Normalize-DnsName ([string]$Record.name)
@@ -166,14 +174,15 @@ function Ensure-CloudflareDnsRecord($Record) {
     $match = @($existing | Where-Object {
         (Dns-ContentEqual $type ([string]$_.content) $content) -and ($type -ne "MX" -or [int]$_.priority -eq $priority)
     }) | Select-Object -First 1
+
     if ($null -ne $match) {
         Write-Host "DNS hazir: $type $name" -ForegroundColor DarkGreen
         return
     }
 
     if ($existing.Count -gt 0) {
-        $current = try { $existing | Select-Object id,type,name,content,priority | ConvertTo-Json -Depth 5 -Compress } catch { "" }
-        Fail "DNS cakismasi: $type $name adinda Resend'den farkli mevcut kayit var. Guvenlik icin otomatik ustune yazilmadi. Mevcut=$current"
+        $current = try { $existing | Select-Object id, type, name, content, priority | ConvertTo-Json -Depth 5 -Compress } catch { "" }
+        Fail "DNS cakismasi: $type $name adinda Resend'den farkli mevcut kayit var. Otomatik ustune yazilmadi. Mevcut=$current"
     }
 
     $payload = @{ type = $type; name = $name; content = $content; ttl = 1 }
@@ -190,6 +199,8 @@ function Ensure-ResendDomain {
     if ($null -eq $domain) {
         Write-Host "$MAIL_DOMAIN Resend hesabina ekleniyor..." -ForegroundColor Yellow
         $domain = Invoke-ResendApi "POST" "/domains" @{ name = $MAIL_DOMAIN }
+    } else {
+        Write-Host "$MAIL_DOMAIN Resend hesabinda mevcut." -ForegroundColor Green
     }
     $domainId = [string]$domain.id
     if (-not $domainId) { Fail "Resend domain kimligi alinmadi." }
@@ -198,18 +209,15 @@ function Ensure-ResendDomain {
 
 function Ensure-ResendDns($DomainDetail) {
     Write-Step "RESEND DNS -> CLOUDFLARE"
-    Initialize-CloudflareContext
     $records = @($DomainDetail.records | Where-Object { ([string]$_.record).Trim().ToLowerInvariant() -ne "tracking" })
     if ($records.Count -eq 0) { Fail "Resend SPF/DKIM kayitlari bulunamadi." }
 
+    Initialize-CloudflareDnsContext
     try {
-        foreach ($record in $records) { Ensure-CloudflareDnsRecord $record }
-    } catch {
-        if ([string]$_ -notmatch "CF_DNS_PERMISSION_REQUIRED") { throw }
-        Request-CloudflareDnsApiToken
         foreach ($record in $records) { Ensure-CloudflareDnsRecord $record }
     } finally {
         $script:CfToken = ""
+        $script:CfZoneId = ""
     }
 }
 
@@ -224,8 +232,8 @@ function Wait-ResendVerification([string]$DomainId) {
             Write-Host "$MAIL_DOMAIN Resend: VERIFIED" -ForegroundColor Green
             return $detail
         }
-        if ($status -in @("failed","failure","blocked")) {
-            $bad = @($detail.records | Where-Object { ([string]$_.status).Trim().ToLowerInvariant() -notin @("verified","success") })
+        if ($status -in @("failed", "failure", "blocked")) {
+            $bad = @($detail.records | Where-Object { ([string]$_.status).Trim().ToLowerInvariant() -notin @("verified", "success") })
             $summary = try { $bad | ConvertTo-Json -Depth 6 -Compress } catch { "" }
             Fail "Resend domain dogrulamasi basarisiz: $summary"
         }
@@ -240,7 +248,9 @@ function Install-WorkerResendSecret {
     try {
         $script:ResendKey | & wrangler secret put RESEND_API_KEY --config $WRANGLER_CONFIG
         if ($LASTEXITCODE -ne 0) { Fail "RESEND_API_KEY Worker secret olarak kaydedilemedi." }
-    } finally { Pop-Location }
+    } finally {
+        Pop-Location
+    }
     Write-Host "RESEND_API_KEY Cloudflare Worker secret olarak kaydedildi." -ForegroundColor Green
 }
 
@@ -251,7 +261,9 @@ function Get-WorkerSecretReady {
         if ($LASTEXITCODE -ne 0 -or -not $raw) { return $false }
         try { $rows = @($raw | ConvertFrom-Json) } catch { return $false }
         return @($rows | Where-Object { ([string]$_.name).Trim() -eq "RESEND_API_KEY" }).Count -gt 0
-    } finally { Pop-Location }
+    } finally {
+        Pop-Location
+    }
 }
 
 function Invoke-D1Json([string]$Sql) {
@@ -260,7 +272,9 @@ function Invoke-D1Json([string]$Sql) {
         $raw = (& wrangler d1 execute ky-erp-db --remote --config $WRANGLER_CONFIG --command $Sql --json 2>$null | Out-String).Trim()
         if ($LASTEXITCODE -ne 0 -or -not $raw) { return @() }
         try { return @($raw | ConvertFrom-Json) } catch { return @() }
-    } finally { Pop-Location }
+    } finally {
+        Pop-Location
+    }
 }
 
 function Get-MailReadyMarker {
@@ -298,7 +312,7 @@ function Get-OwnerEmail {
 function Send-OwnerTestMail {
     Write-Step "GERCEK TEST MAILI"
     $ownerEmail = Get-OwnerEmail
-    if (-not $ownerEmail) { Fail "Aktif uygulama sahibinin kayitli e-posta adresi D1'den bulunamadi; test maili atlanmadi, kurulum durduruldu." }
+    if (-not $ownerEmail) { Fail "Aktif uygulama sahibinin kayitli e-posta adresi D1'den bulunamadi; test maili atlanmadi." }
     $sent = Invoke-ResendApi "POST" "/emails" @{
         from = $FROM_ADDRESS
         to = @($ownerEmail)
@@ -318,22 +332,25 @@ try {
     if (-not (Test-Path $WRANGLER_CONFIG)) { Fail "Worker wrangler config bulunamadi: $WRANGLER_CONFIG" }
     if (-not (Get-Command wrangler -ErrorAction SilentlyContinue)) { Fail "Wrangler bulunamadi." }
 
+    Ensure-WranglerSession
+
     $secretReady = Get-WorkerSecretReady
     $markerReady = Get-MailReadyMarker
     if ($secretReady -and $markerReady) {
         Write-Host "RESEND_API_KEY Worker secret: HAZIR" -ForegroundColor Green
         Write-Host "D1 mail kaniti              : VERIFIED + GERCEK TEST GECMIS" -ForegroundColor Green
-        Write-Host "Sistem gondericisi           : $FROM_ADDRESS" -ForegroundColor Green
+        Write-Host "Sistem gondericisi          : $FROM_ADDRESS" -ForegroundColor Green
         exit 0
     }
 
     if ($secretReady -and -not $markerReady) {
         Write-Host "Worker'da RESEND_API_KEY var ancak VERIFIED + gercek test kaniti yok." -ForegroundColor Yellow
-        Write-Host "Anahtar guvenlik geregi geri okunamadigi icin bir kez Resend API key tekrar girilerek kanal dogrulanacak." -ForegroundColor Yellow
+        Write-Host "Anahtar guvenlik geregi geri okunamadigi icin bir kez Resend API key tekrar girilecek." -ForegroundColor Yellow
     } else {
         Write-Host "Resend API anahtari Worker'da henuz yok." -ForegroundColor Yellow
     }
-    Write-Host "Resend hesabinda bir API key olusturun. Anahtar ekranda gorundugunde buraya yapistirin." -ForegroundColor Yellow
+
+    Write-Host "Resend hesabindaki gecerli API key'i yalniz bu terminale yapistirin." -ForegroundColor Yellow
     $script:ResendKey = Read-SecretPlain "RESEND API KEY"
     if (-not $script:ResendKey -or -not $script:ResendKey.StartsWith("re_")) { Fail "Gecerli Resend API key girilmedi." }
 
@@ -344,7 +361,9 @@ try {
     $messageId = Send-OwnerTestMail
     Set-MailReadyMarker $messageId
 
-    if (-not (Get-WorkerSecretReady) -or -not (Get-MailReadyMarker)) { Fail "Mail kurulumu son kanit kontrolunden gecmedi." }
+    if (-not (Get-WorkerSecretReady) -or -not (Get-MailReadyMarker)) {
+        Fail "Mail kurulumu son kanit kontrolunden gecmedi."
+    }
 
     Write-Host ""
     Write-Host "RESEND KURULUMU TAMAM" -ForegroundColor Green
@@ -360,4 +379,5 @@ try {
 } finally {
     $script:ResendKey = ""
     $script:CfToken = ""
+    $script:CfZoneId = ""
 }
