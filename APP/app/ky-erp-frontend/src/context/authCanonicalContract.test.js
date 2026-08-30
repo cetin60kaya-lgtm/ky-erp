@@ -9,6 +9,7 @@ test("frontend auth uses canonical v3 routes and no legacy v2 fallback", () => {
   assert.match(source, /\/auth\/login/);
   assert.match(source, /\/auth\/mfa\/verify/);
   assert.match(source, /\/auth\/me/);
+  assert.match(source, /\/auth\/refresh/);
   assert.doesNotMatch(source, /\/auth\/v2\//);
   assert.doesNotMatch(source, /legacyAuthPath|shouldTryLegacyAuth/);
 });
@@ -23,6 +24,7 @@ test("auth mutations are de-duplicated so double click does not create parallel 
   assert.match(source, /authMutationRef/);
   assert.match(source, /runAuthOnce/);
   assert.match(source, /runAuthOnce\("LOGIN"/);
+  assert.match(source, /runAuthOnce\("SESSION_REFRESH"/);
 });
 
 test("only the first password login transport gets one automatic network retry", () => {
@@ -30,6 +32,14 @@ test("only the first password login transport gets one automatic network retry",
   assert.match(source, /normalizedPath === "\/auth\/login"/);
   assert.match(source, /maxAttempts = loginTransportRetry \? 2 : 1/);
   assert.match(source, /await wait\(250\)/);
+});
+
+test("active sessions are refreshed silently while temporary refresh failures preserve the valid token", () => {
+  assert.match(source, /sessionRefreshDelay/);
+  assert.match(source, /NORMAL_REFRESH_BEFORE_MS/);
+  assert.match(source, /OWNER_ROLLING_REFRESH_BEFORE_MS/);
+  assert.match(source, /REFRESH_RETRY_MS/);
+  assert.match(source, /tokenRef\.current === scheduledToken/);
 });
 
 test("valid stored JWT survives browser restart until its real exp", () => {
