@@ -28,25 +28,13 @@ function browserKey(row = {}) {
 }
 
 export default function AdminSystemOverview({ activeMainCompany }) {
-  const [state, setState] = useState({
-    system: null,
-    users: [],
-    sessions: [],
-    approvals: [],
-    audit: [],
-    recovery: null,
-    storage: null,
-    delivery: null,
-  });
+  const [state, setState] = useState({ system: null, users: [], sessions: [], approvals: [], audit: [], recovery: null, storage: null, delivery: null });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Yönetim merkezi hazırlanıyor...");
 
   const load = useCallback(async () => {
     setBusy(true);
-    const companyParams = {
-      mainCompanyId: activeMainCompany?.id || "",
-      mainCompanySlug: activeMainCompany?.slug || "",
-    };
+    const companyParams = { mainCompanyId: activeMainCompany?.id || "", mainCompanySlug: activeMainCompany?.slug || "" };
     const jobs = await Promise.allSettled([
       apiGet("/system/status", { _ts: Date.now() }),
       listUsers(),
@@ -76,75 +64,46 @@ export default function AdminSystemOverview({ activeMainCompany }) {
   useEffect(() => { load(); }, [load]);
 
   const metrics = useMemo(() => {
-    const users = state.users;
-    const activeUsers = users.filter((row) => row.isActive !== false).length;
-    const unverified = users.filter((row) => row.email && row.emailVerified !== true).length;
+    const activeUsers = state.users.filter((row) => row.isActive !== false).length;
+    const unverified = state.users.filter((row) => row.email && row.emailVerified !== true).length;
     const keys = new Map();
-    state.sessions.forEach((row) => {
-      const key = browserKey(row);
-      if (!key) return;
-      keys.set(key, (keys.get(key) || 0) + 1);
-    });
+    state.sessions.forEach((row) => { const key = browserKey(row); if (key) keys.set(key, (keys.get(key) || 0) + 1); });
     const duplicateBrowserSessions = [...keys.values()].filter((count) => count > 1).reduce((sum, count) => sum + count - 1, 0);
     return { activeUsers, unverified, duplicateBrowserSessions };
   }, [state.sessions, state.users]);
-
-  const recommendations = useMemo(() => {
-    const result = [];
-    if (metrics.duplicateBrowserSessions) result.push({ severity: "critical", title: "Aynı tarayıcıda birden fazla aktif oturum", detail: `${metrics.duplicateBrowserSessions} fazla oturum bulundu. Tek-browser tek-session koruması kontrol edilmeli.`, action: "Oturumları incele" });
-    if (state.approvals.length) result.push({ severity: "warn", title: "Bekleyen giriş onayları", detail: `${state.approvals.length} giriş isteği karar bekliyor.`, action: "Kullanıcı merkezini aç" });
-    if (metrics.unverified) result.push({ severity: "warn", title: "Doğrulanmamış kullanıcı e-postaları", detail: `${metrics.unverified} kullanıcıda e-posta var ancak doğrulama tamamlanmamış.`, action: "Doğrulama gönder" });
-    if (state.delivery && state.delivery.email === false) result.push({ severity: "warn", title: "E-posta gönderim servisi bağlı değil", detail: "Kayıtlı e-posta tek başına doğrulanmış sayılmaz. Resend veya doğrulama webhook'u Worker'a bağlanmalı.", action: "Entegrasyonu tamamla" });
-    if (state.recovery && state.recovery.recoveryEnabled !== true) result.push({ severity: "warn", title: "Sahip hesabı kurtarma tam hazır değil", detail: "Doğrulanmış iletişim kanalı ve 3 güvenlik sorusu tamamlanmalı.", action: "Kurtarma güvenliğini tamamla" });
-    if (state.storage && state.storage.accessible === false) result.push({ severity: "warn", title: "Dosya depolama kontrol istiyor", detail: "Dosya saklama katmanı erişilebilir görünmüyor. Kural ve R2/depolama durumu doğrulanmalı.", action: "Dosya & Depolama'yı aç" });
-    if (!result.length) result.push({ severity: "ok", title: "Kritik yönetim uyarısı yok", detail: "Kullanıcı, oturum, kurtarma ve depolama kontrollerinde acil aksiyon görünmüyor.", action: "İzlemeye devam" });
-    return result;
-  }, [metrics.duplicateBrowserSessions, metrics.unverified, state.approvals.length, state.delivery, state.recovery, state.storage]);
 
   const system = state.system?.data || state.system || {};
   const storage = state.storage?.data || state.storage || {};
   const delivery = state.delivery?.data || state.delivery || {};
   const recovery = state.recovery?.data || state.recovery || {};
 
+  const recommendations = useMemo(() => {
+    const result = [];
+    if (metrics.duplicateBrowserSessions) result.push({ severity: "critical", title: "Aynı tarayıcıda birden fazla aktif oturum", detail: `${metrics.duplicateBrowserSessions} fazla oturum bulundu. Tek-browser tek-session koruması kontrol edilmeli.`, action: "Oturumları incele" });
+    if (state.approvals.length) result.push({ severity: "warn", title: "Bekleyen giriş onayları", detail: `${state.approvals.length} giriş isteği karar bekliyor.`, action: "Kullanıcı merkezini aç" });
+    if (metrics.unverified) result.push({ severity: "warn", title: "Doğrulanmamış kullanıcı e-postaları", detail: `${metrics.unverified} kullanıcıda e-posta var ancak doğrulama tamamlanmamış.`, action: "Doğrulama gönder" });
+    if (delivery.email === false) result.push({ severity: "warn", title: "E-posta gönderim servisi bağlı değil", detail: "Kayıtlı e-posta tek başına doğrulanmış sayılmaz. Gönderim servisi Worker secret olarak bağlanmalı.", action: "Entegrasyonu tamamla" });
+    if (state.recovery && recovery.recoveryEnabled !== true) result.push({ severity: "warn", title: "Sahip hesabı kurtarma tam hazır değil", detail: "Doğrulanmış iletişim kanalı ve 3 güvenlik sorusu tamamlanmalı.", action: "Kurtarma güvenliğini tamamla" });
+    if (state.storage && storage.accessible === false) result.push({ severity: "warn", title: "Dosya depolama kontrol istiyor", detail: "R2 dosya saklama katmanı erişilebilir görünmüyor.", action: "Dosya & Depolama'yı aç" });
+    if (!result.length) result.push({ severity: "ok", title: "Kritik yönetim uyarısı yok", detail: "Kullanıcı, oturum, kurtarma ve depolama kontrollerinde acil aksiyon görünmüyor.", action: "İzlemeye devam" });
+    return result;
+  }, [delivery.email, metrics.duplicateBrowserSessions, metrics.unverified, recovery.recoveryEnabled, state.approvals.length, state.recovery, state.storage, storage.accessible]);
+
   return (
     <div className="admpro-page">
-      <header className="admpro-head">
-        <div><span className="admpro-kicker">YÖNETİM / KONTROL MERKEZİ</span><h2>KY ERP Yönetim Merkezi</h2><p>Gerçek sistem durumu, güvenlik, depolama ve önerilen aksiyonlar tek ekranda.</p></div>
-        <div className="admpro-actions"><button type="button" className="primary" onClick={load} disabled={busy}>{busy ? "Kontrol Ediliyor..." : "Tümünü Kontrol Et"}</button></div>
-      </header>
-
+      <header className="admpro-head"><div><span className="admpro-kicker">YÖNETİM / KONTROL MERKEZİ</span><h2>KY ERP Yönetim Merkezi</h2><p>Gerçek sistem durumu, güvenlik, depolama ve önerilen aksiyonlar tek ekranda.</p></div><div className="admpro-actions"><button type="button" className="primary" onClick={load} disabled={busy}>{busy ? "Kontrol Ediliyor..." : "Tümünü Kontrol Et"}</button></div></header>
       <div className={`admpro-notice ${message.includes("yanıt vermedi") ? "warn" : "success"}`}>{message}</div>
-
-      <section className="admpro-stats">
-        <div className="admpro-stat"><span>Aktif Kullanıcı</span><strong>{metrics.activeUsers}</strong><small>{state.users.length} toplam kullanıcı</small></div>
-        <div className="admpro-stat"><span>Aktif Oturum</span><strong>{state.sessions.length}</strong><small>{metrics.duplicateBrowserSessions ? `${metrics.duplicateBrowserSessions} tekrar kontrolü gerekli` : "Tekrarlı browser görünmüyor"}</small></div>
-        <div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{state.approvals.length}</strong><small>Güvenlik karar kuyruğu</small></div>
-        <div className="admpro-stat"><span>Doğrulanmamış E-posta</span><strong>{metrics.unverified}</strong><small>Adres var, doğrulama eksik</small></div>
-      </section>
-
+      <section className="admpro-stats"><div className="admpro-stat"><span>Aktif Kullanıcı</span><strong>{metrics.activeUsers}</strong><small>{state.users.length} toplam kullanıcı</small></div><div className="admpro-stat"><span>Aktif Oturum</span><strong>{state.sessions.length}</strong><small>{metrics.duplicateBrowserSessions ? `${metrics.duplicateBrowserSessions} tekrar kontrolü gerekli` : "Tekrarlı browser görünmüyor"}</small></div><div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{state.approvals.length}</strong><small>Güvenlik karar kuyruğu</small></div><div className="admpro-stat"><span>Doğrulanmamış E-posta</span><strong>{metrics.unverified}</strong><small>Adres var, doğrulama eksik</small></div></section>
       <section className="admpro-grid-2">
-        <div className="admpro-card admpro-smart">
-          <div className="admpro-card-head"><div><div className="admpro-smart-title"><b>AI</b><h3>Akıllı Yönetim Kontrolü</h3></div><p>Kurallı sağlık analizi; kritik işlemleri otomatik uygulamaz, güvenli aksiyon önerir.</p></div></div>
-          <div className="admpro-health-list">
-            {recommendations.map((item, index) => <div key={`${item.title}-${index}`} className={`admpro-health-item ${item.severity}`}><span className="dot"/><div><strong>{item.title}</strong><small>{item.detail}</small></div><span className={`admpro-badge ${item.severity === "ok" ? "ok" : item.severity === "critical" ? "bad" : "warn"}`}>{item.action}</span></div>)}
-          </div>
-        </div>
-
-        <div className="admpro-card">
-          <div className="admpro-card-head"><div><h3>Sistem Sağlığı</h3><p>D1, dosya depolama, e-posta ve kurtarma hazır olma durumu.</p></div></div>
-          <div className="admpro-health-list">
-            <div className={`admpro-health-item ${system.tables ? "ok" : "warn"}`}><span className="dot"/><div><strong>Cloud D1</strong><small>{system.tables ? `${system.tables} tablo · ${system.documents || 0} belge · ${system.personnel || 0} personel` : "Sistem durum verisi alınamadı"}</small></div><span className={`admpro-badge ${system.tables ? "ok" : "warn"}`}>{system.tables ? "Hazır" : "Kontrol"}</span></div>
-            <div className={`admpro-health-item ${storage.accessible ? "ok" : "warn"}`}><span className="dot"/><div><strong>Dosya / Depolama</strong><small>{storage.storageRoot || "Depolama kökü raporlanmadı"}</small></div><span className={`admpro-badge ${storage.accessible ? "ok" : "warn"}`}>{storage.accessible ? "Erişilebilir" : "Kontrol"}</span></div>
-            <div className={`admpro-health-item ${delivery.email ? "ok" : "warn"}`}><span className="dot"/><div><strong>E-posta Doğrulama</strong><small>{delivery.email ? `${delivery.emailProvider || "Gönderim servisi"} bağlı` : "Gönderim servisi bağlı değil"}</small></div><span className={`admpro-badge ${delivery.email ? "ok" : "warn"}`}>{delivery.email ? "Hazır" : "Eksik"}</span></div>
-            <div className={`admpro-health-item ${recovery.recoveryEnabled ? "ok" : "warn"}`}><span className="dot"/><div><strong>Sahip Hesabı Kurtarma</strong><small>{recovery.recoveryEnabled ? "Kurtarma kanalları aktif" : "Kurtarma kurulumu tamamlanmamış"}</small></div><span className={`admpro-badge ${recovery.recoveryEnabled ? "ok" : "warn"}`}>{recovery.recoveryEnabled ? "Hazır" : "Kurulum"}</span></div>
-          </div>
-        </div>
+        <div className="admpro-card admpro-smart"><div className="admpro-card-head"><div><div className="admpro-smart-title"><b>AI</b><h3>Akıllı Yönetim Kontrolü</h3></div><p>Kurallı sağlık analizi; kritik işlemleri otomatik uygulamaz, güvenli aksiyon önerir.</p></div></div><div className="admpro-health-list">{recommendations.map((item,index)=><div key={`${item.title}-${index}`} className={`admpro-health-item ${item.severity}`}><span className="dot"/><div><strong>{item.title}</strong><small>{item.detail}</small></div><span className={`admpro-badge ${item.severity==="ok"?"ok":item.severity==="critical"?"bad":"warn"}`}>{item.action}</span></div>)}</div></div>
+        <div className="admpro-card"><div className="admpro-card-head"><div><h3>Sistem Sağlığı</h3><p>D1, R2, e-posta ve kurtarma hazır olma durumu.</p></div></div><div className="admpro-health-list">
+          <div className={`admpro-health-item ${system.tables?"ok":"warn"}`}><span className="dot"/><div><strong>Cloud D1</strong><small>{system.tables?`${system.tables} tablo · ${system.documents||0} belge · ${system.personnel||0} personel`:"Sistem durum verisi alınamadı"}</small></div><span className={`admpro-badge ${system.tables?"ok":"warn"}`}>{system.tables?"Hazır":"Kontrol"}</span></div>
+          <div className={`admpro-health-item ${storage.accessible?"ok":"warn"}`}><span className="dot"/><div><strong>Cloudflare R2</strong><small>{storage.storageRoot||"Depolama kökü raporlanmadı"}</small></div><span className={`admpro-badge ${storage.accessible?"ok":"warn"}`}>{storage.accessible?"Erişilebilir":"Kontrol"}</span></div>
+          <div className={`admpro-health-item ${delivery.email?"ok":"warn"}`}><span className="dot"/><div><strong>E-posta Doğrulama</strong><small>{delivery.email?`${delivery.emailProvider||"Gönderim servisi"} bağlı`:"Gönderim servisi bağlı değil"}</small></div><span className={`admpro-badge ${delivery.email?"ok":"warn"}`}>{delivery.email?"Hazır":"Eksik"}</span></div>
+          <div className={`admpro-health-item ${recovery.recoveryEnabled?"ok":"warn"}`}><span className="dot"/><div><strong>Sahip Hesabı Kurtarma</strong><small>{recovery.recoveryEnabled?"Kurtarma kanalları aktif":"Kurtarma kurulumu tamamlanmamış"}</small></div><span className={`admpro-badge ${recovery.recoveryEnabled?"ok":"warn"}`}>{recovery.recoveryEnabled?"Hazır":"Kurulum"}</span></div>
+        </div></div>
       </section>
-
-      <section className="admpro-card">
-        <div className="admpro-card-head"><div><h3>Son Güvenlik Hareketleri</h3><p>Giriş, oturum ve yönetici güvenliğiyle ilgili son olaylar.</p></div></div>
-        <div className="admpro-table"><table><thead><tr><th>Zaman</th><th>İşlem</th><th>Uygulayan</th><th>Hedef</th><th>IP</th></tr></thead><tbody>{state.audit.slice(0, 12).map((row) => <tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.action || "-"}</td><td>{row.actorName || "Sistem"}</td><td>{row.targetName || "-"}</td><td>{row.ipAddress || "-"}</td></tr>)}{!state.audit.length ? <tr><td colSpan="5">Güvenlik hareketi alınamadı veya kayıt yok.</td></tr> : null}</tbody></table></div>
-      </section>
+      <section className="admpro-card"><div className="admpro-card-head"><div><h3>Son Güvenlik Hareketleri</h3><p>Giriş, oturum ve yönetici güvenliğiyle ilgili son olaylar.</p></div></div><div className="admpro-table"><table><thead><tr><th>Zaman</th><th>İşlem</th><th>Uygulayan</th><th>Hedef</th><th>IP</th></tr></thead><tbody>{state.audit.slice(0,12).map((row)=><tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.action||"-"}</td><td>{row.actorName||"Sistem"}</td><td>{row.targetName||"-"}</td><td>{row.ipAddress||"-"}</td></tr>)}{!state.audit.length?<tr><td colSpan="5">Güvenlik hareketi alınamadı veya kayıt yok.</td></tr>:null}</tbody></table></div></section>
     </div>
   );
 }
