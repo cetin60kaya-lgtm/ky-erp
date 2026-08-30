@@ -112,6 +112,44 @@ public sealed class ErpApiClient : IDisposable
         return list;
     }
 
+    public async Task AddTimeEventAsync(string token, CachedPerson person, string workDate, string eventTime, string direction, string note, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
+        if (!DateOnly.TryParse(workDate, out _)) throw new InvalidOperationException("Tarih geçersiz.");
+        if (eventTime.Length < 5 || !TimeOnly.TryParse(eventTime[..5], out _)) throw new InvalidOperationException("Saat geçersiz. Örnek: 08:30");
+        using var _ = await SendAsync(HttpMethod.Post,
+            $"/api/ik/personnel-control/people/{Uri.EscapeDataString(person.Id)}/time-event",
+            new
+            {
+                cardNo = person.CardNo,
+                workDate,
+                eventTime = eventTime[..5],
+                direction = string.IsNullOrWhiteSpace(direction) ? "AUTO" : direction.Trim().ToUpperInvariant(),
+                source = "KY_PDKS_WINDOWS",
+                note = string.IsNullOrWhiteSpace(note) ? "KY PDKS manuel kart kaydı" : note.Trim(),
+            }, token, ct);
+    }
+
+    public async Task SaveDayOverrideAsync(string token, CachedPerson person, string workDate, string status, string entry, string exit,
+        int lateMinutes, int earlyMinutes, int overtimeMinutes, bool missingPunch, string note, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
+        using var _ = await SendAsync(HttpMethod.Post,
+            $"/api/ik/personnel-control/people/{Uri.EscapeDataString(person.Id)}/day-override",
+            new
+            {
+                workDate,
+                status = string.IsNullOrWhiteSpace(status) ? "AUTO" : status.Trim().ToUpperInvariant(),
+                entry = string.IsNullOrWhiteSpace(entry) ? null : entry.Trim()[..Math.Min(5, entry.Trim().Length)],
+                exit = string.IsNullOrWhiteSpace(exit) ? null : exit.Trim()[..Math.Min(5, exit.Trim().Length)],
+                lateMinutes = Math.Max(0, lateMinutes),
+                earlyMinutes = Math.Max(0, earlyMinutes),
+                overtimeMinutes = Math.Max(0, overtimeMinutes),
+                missingPunch,
+                note = note ?? "",
+            }, token, ct);
+    }
+
     public async Task<SyncResult> SyncPunchesAsync(string token, IReadOnlyList<PunchRow> punches, string deviceLabel, CancellationToken ct = default)
     {
         if (punches.Count == 0) return new SyncResult(new HashSet<string>(), new Dictionary<string, string>(), 0, 0);
