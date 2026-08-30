@@ -16,7 +16,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "KY ERP production GitHub Actions yolu bilerek devre disidir."
-          echo "Neden: production D1 icin genel migration zinciri uygulanmaz; eski ikinci-domain kontrolu kullanilmaz."
+          echo "Neden: production D1 icin genel migration zinciri uygulanmaz; eski GitHub production yolu kullanilmaz."
           echo "Canonical tek production yolu: repo kokundeki 'KY ERP CANLIYA YUKLE.bat'."
-          echo "Bu launcher: kaynak guncelleme -> admin@kyerp.net Resend kaniti -> tum preflight testleri -> hedefli D1 -> Worker -> kyerp.net Pages -> canli asset dogrulamasi sirasini uygular."
+          echo "Bu launcher: kaynak guncelleme -> admin@kyerp.net Resend kaniti -> tum preflight testleri -> hedefli D1 -> Worker -> Pages -> kyerp.net tanitim sitesi + app.kyerp.net ERP uygulamasi -> canli asset dogrulamasi sirasini uygular."
           exit 1
