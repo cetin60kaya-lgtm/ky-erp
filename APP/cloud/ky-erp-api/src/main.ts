@@ -79,6 +79,21 @@ function ownerRole(role: unknown) {
   return value === "SUPER_ADMIN" || value === "ADMIN";
 }
 
+function auditRole(role: unknown) {
+  return String(role || "").trim().toUpperCase() === "DENETIM";
+}
+
+function auditPermissionRows() {
+  return [{
+    moduleKey: "IK",
+    canView: true,
+    canCreate: false,
+    canUpdate: false,
+    canDelete: false,
+    canApprove: false,
+  }];
+}
+
 function stripSystemAdminPermission(rows: unknown) {
   if (!Array.isArray(rows)) return rows;
   return rows.filter((row: AnyRow) => String(row?.moduleKey || row?.module_key || "").trim().toUpperCase() !== "ADMIN");
@@ -88,6 +103,7 @@ function sanitizeNonOwnerUser(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const user = value as AnyRow;
   if (ownerRole(user.role)) return user;
+  if (auditRole(user.role)) return { ...user, permissions: auditPermissionRows() };
   return { ...user, permissions: stripSystemAdminPermission(user.permissions) };
 }
 
@@ -95,8 +111,13 @@ function sanitizeAuthPayload(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
   const result = { ...(payload as AnyRow) };
   if (result.user) result.user = sanitizeNonOwnerUser(result.user);
-  if (Array.isArray(result.permissions) && !ownerRole(result.user?.role)) {
-    result.permissions = stripSystemAdminPermission(result.permissions);
+  const responseRole = result.user?.role || result.data?.user?.role;
+  if (Array.isArray(result.permissions)) {
+    result.permissions = auditRole(responseRole)
+      ? auditPermissionRows()
+      : ownerRole(responseRole)
+        ? result.permissions
+        : stripSystemAdminPermission(result.permissions);
   }
   if (result.data && typeof result.data === "object" && !Array.isArray(result.data) && result.data.user) {
     result.data = { ...result.data, user: sanitizeNonOwnerUser(result.data.user) };
@@ -206,14 +227,13 @@ shell.use("/api/*", async (c, next) => {
     return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Oturum geçersiz, iptal edilmiş veya güvenlik politikasındaki süresi dolmuş. Yeniden giriş yapın." } }, 401);
   }
 
-  const auditRole = String(authenticated.role || "").toUpperCase() === "DENETIM";
-  if (auditRole) {
+  if (auditRole(authenticated.role)) {
     const method = String(c.req.method || "GET").toUpperCase();
-    if (!["GET", "HEAD"].includes(method)) {
-      return c.json({ ok: false, error: { code: "READ_ONLY", message: "Bu hesap yalnız görüntüleme yetkisine sahiptir." } }, 403);
-    }
-    if (path.startsWith("/api/ik/") && !path.startsWith("/api/ik/audit/")) {
+    if (!path.startsWith("/api/ik/audit/")) {
       return c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
+    }
+    if (!["GET", "HEAD"].includes(method)) {
+      return c.json({ ok: false, error: { code: "READ_ONLY", message: "Denetim hesabı yalnız SGK'lı kart personelinin PDKS görünümünü okuyabilir." } }, 403);
     }
   }
 
@@ -222,6 +242,7 @@ shell.use("/api/*", async (c, next) => {
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
 // izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
+// DENETIM ise daha da dardır: auth cevabında her zaman yalnız IK/Goruntuleme gelir.
 shell.use("/api/auth/*", async (c, next) => {
   c.header("X-KYERP-Auth-Version", AUTH_VERSION);
   c.header("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -229,8 +250,8 @@ shell.use("/api/auth/*", async (c, next) => {
   await rewriteJsonResponse(c, sanitizeAuthPayload);
 });
 
-// Kullanıcı yetki ekranında da owner olmayan hesaba ADMIN izni kalıcılaştırılmaz.
-// Bu, eski COMPANY_ADMIN permission satırlarını temizler ve tekrar açılmasını engeller.
+// Kullanıcı yetki ekranında owner olmayan hesaba ADMIN izni kalıcılaştırılmaz.
+// DENETIM hedefinde eski/geniş izinler de temizlenir; yalnız IK görüntüleme sabit kalır.
 shell.use("/api/admin/users/*", async (c, next) => {
   await next();
   const path = new URL(c.req.url).pathname;
@@ -240,19 +261,47 @@ shell.use("/api/admin/users/*", async (c, next) => {
   const row = await targetRole(c, userId);
   if (!row || ownerRole(row.role)) return;
 
+  const isAuditTarget = auditRole(row.role);
   if (c.req.method.toUpperCase() === "PUT" && c.res.status >= 200 && c.res.status < 300) {
     try {
-      await c.env.DB.prepare(
-        `UPDATE auth_user_module_permissions
-            SET can_view=0,can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=?
-          WHERE user_id=? AND UPPER(module_key)='ADMIN'`,
-      ).bind(new Date().toISOString(), userId).run();
+      const timestamp = new Date().toISOString();
+      if (isAuditTarget) {
+        await c.env.DB.prepare(
+          `DELETE FROM auth_user_module_permissions
+            WHERE user_id=? AND UPPER(module_key)<>'IK'`,
+        ).bind(userId).run();
+        await c.env.DB.prepare(
+          `UPDATE auth_user_module_permissions
+              SET can_view=1,can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=?
+            WHERE user_id=? AND UPPER(module_key)='IK'`,
+        ).bind(timestamp, userId).run();
+        await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO auth_user_module_permissions
+           (id,user_id,module_key,can_view,can_create,can_update,can_delete,can_approve,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        ).bind(crypto.randomUUID(), userId, "IK", 1, 0, 0, 0, 0, timestamp, timestamp).run();
+      } else {
+        await c.env.DB.prepare(
+          `UPDATE auth_user_module_permissions
+              SET can_view=0,can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=?
+            WHERE user_id=? AND UPPER(module_key)='ADMIN'`,
+        ).bind(timestamp, userId).run();
+      }
     } catch {
-      // Auth cevabı yine owner-only filtrelidir; cleanup hatası ana işlemi bozmaz.
+      // Auth cevabi yine rol bazli filtrelidir; cleanup hatasi ana islemi bozmaz.
     }
   }
 
   await rewriteJsonResponse(c, (payload) => {
+    if (isAuditTarget) {
+      const fixed = auditPermissionRows();
+      if (Array.isArray(payload)) return fixed;
+      if (!payload || typeof payload !== "object") return payload;
+      const nextPayload = { ...(payload as AnyRow) };
+      if (Array.isArray(nextPayload.data)) nextPayload.data = fixed;
+      if (Array.isArray(nextPayload.permissions)) nextPayload.permissions = fixed;
+      return nextPayload;
+    }
     if (Array.isArray(payload)) return stripSystemAdminPermission(payload);
     if (!payload || typeof payload !== "object") return payload;
     const nextPayload = { ...(payload as AnyRow) };
