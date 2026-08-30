@@ -23,10 +23,10 @@ test("worker entry exposes only kyerp.net as the production browser origin", () 
 test("normal user writes cannot create ADMIN permission or unsupported forced-password flag", () => {
   const hardening = frontend("pages/admin/AdminUsersPanelHardening.css");
   const delegate = frontend("pages/admin/AdminUsersPanel.jsx");
+  assert.match(entry, /url\.pathname === "\/api\/admin\/users\/create-complete"/);
+  assert.match(entry, /\/\^\\\/api\\\/admin\\\/users\\\/\[\^\/\]\+\\\/permissions\$\//);
   assert.match(entry, /body\.mustChangePassword = false/);
   assert.match(entry, /!== "ADMIN"/);
-  assert.match(entry, /\/api\/admin\/users\/create-complete/);
-  assert.match(entry, /\/permissions\$/.source ? /canonicalizeAdminWrite/ : /canonicalizeAdminWrite/);
   assert.match(delegate, /AdminUsersPanelHardening\.css/);
   assert.match(hardening, /auc2-check-stack > label:nth-child\(2\)/);
   assert.match(hardening, /auc2-perm-row:nth-last-child\(2\)/);
