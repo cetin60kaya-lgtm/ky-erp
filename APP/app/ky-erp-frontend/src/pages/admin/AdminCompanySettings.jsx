@@ -3,8 +3,9 @@ import { apiGet, apiPatch, apiPost } from "../../utils/api";
 import "./AdminManagement.css";
 
 function rowsOf(value) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.items)) return value.items;
+  const data = value?.data ?? value;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
   return [];
 }
 function slugify(value) {
