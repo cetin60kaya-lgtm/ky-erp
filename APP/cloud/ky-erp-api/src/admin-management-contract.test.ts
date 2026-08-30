@@ -50,6 +50,10 @@ test("backup backend creates real R2 manifests and requires guarded restore", ()
   assert.match(backend, /PRE_RESTORE:/);
   assert.match(backend, /GERI YUKLE/);
   assert.match(backend, /verifyOwnerPassword/);
+  assert.match(backend, /name\.startsWith\("auth_"\)/);
+  assert.match(backend, /scope<>\?/);
+  assert.match(backend, /rollbackRestored/);
+  assert.match(backend, /restoreManifestData/);
   assert.match(ui, /GERI YUKLE/);
   assert.match(ui, /safetyBackupId/);
 });
@@ -67,4 +71,12 @@ test("all admin backup client calls are implemented", () => {
   assert.match(source, /\/admin\/backups/);
   assert.match(source, /restoreBackup/);
   assert.match(source, /listBackups/);
+});
+
+test("direct deploy avoids full migration chain and runs unit contracts", () => {
+  const source = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION.ps1"), "utf8");
+  assert.match(source, /npm run test:unit/);
+  assert.match(source, /Local migration entegrasyon testi YOK/);
+  assert.match(source, /0022_auth_same_browser_session_guard\.sql/);
+  assert.doesNotMatch(source, /wrangler d1 migrations apply/);
 });
