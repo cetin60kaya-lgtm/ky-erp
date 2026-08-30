@@ -106,16 +106,35 @@ ON CONFLICT(user_id) DO UPDATE SET
   updated_by='SYSTEM',
   updated_at=CURRENT_TIMESTAMP;
 
--- Sistem hesabinin kimligi ve rolu yanlislikla degistirilemez.
--- Sifre, MFA, e-posta ve aktif/pasif durumu bu trigger tarafindan kilitlenmez.
-CREATE TRIGGER IF NOT EXISTS trg_denetime_system_identity_guard
+-- DENETIM hesabinin auth_users kimligi/rolu degistirilemez.
+-- OLD.username kontrolu manuel olusturulmus eski denetim hesabini da kapsar.
+DROP TRIGGER IF EXISTS trg_denetime_system_identity_guard;
+CREATE TRIGGER trg_denetime_system_identity_guard
 AFTER UPDATE OF username,role ON auth_users
-WHEN OLD.id='system-denetim'
+WHEN (OLD.id='system-denetim' OR LOWER(TRIM(COALESCE(OLD.username,'')))='denetim')
  AND (LOWER(TRIM(COALESCE(NEW.username,'')))<>'denetim' OR UPPER(TRIM(COALESCE(NEW.role,'')))<>'DENETIM')
 BEGIN
   UPDATE auth_users
      SET username='denetim',
          role='DENETIM',
          updated_at=CURRENT_TIMESTAMP
-   WHERE id='system-denetim';
+   WHERE id=OLD.id;
+END;
+
+-- Efektif rol role_override alanindan da degistirilemez.
+-- Sifre, MFA, e-posta ve aktif/pasif durumu bu triggerlar tarafindan kilitlenmez.
+DROP TRIGGER IF EXISTS trg_denetime_security_role_guard;
+CREATE TRIGGER trg_denetime_security_role_guard
+AFTER UPDATE OF role_override ON auth_user_security
+WHEN EXISTS (
+       SELECT 1 FROM auth_users u
+        WHERE u.id=NEW.user_id
+          AND (u.id='system-denetim' OR LOWER(TRIM(COALESCE(u.username,'')))='denetim')
+     )
+ AND NULLIF(TRIM(COALESCE(NEW.role_override,'')),'') IS NOT NULL
+BEGIN
+  UPDATE auth_user_security
+     SET role_override=NULL,
+         updated_at=CURRENT_TIMESTAMP
+   WHERE user_id=NEW.user_id;
 END;
