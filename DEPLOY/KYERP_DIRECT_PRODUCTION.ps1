@@ -1,10 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 # KY ERP canonical production entrypoint.
-# Tek kullanici uygulama adresi: https://kyerp.net/
+# Tanitim sitesi: https://kyerp.net/
+# ERP uygulamasi: https://app.kyerp.net/
 # Backend servis origin'i: https://api.kyerp.net
-# V5 tek-domain Cloudflare/Pages orkestrasyonudur.
-# V3 korumali Worker/D1/frontend motoru V5 tarafindan runtime template olarak kullanilir:
+# V6 site + uygulama Cloudflare/Pages orkestrasyonudur.
+# Korunan Worker/D1/frontend motoru runtime template olarak kullanilir:
 # KYERP_DIRECT_PRODUCTION_V3.ps1
 
 function Stop-Deploy($message) {
@@ -30,9 +31,9 @@ if ($isWindowsHost -and $nodeVersion.Major -ne 22) {
     Stop-Deploy "Windows production deploy icin Node.js 22 LTS gerekiyor. Mevcut surum: $nodeText"
 }
 
-$script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V5.ps1"
+$script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V6.ps1"
 if (-not (Test-Path $script)) {
-    Stop-Deploy "Production V5 tek-adres deploy scripti bulunamadi: $script"
+    Stop-Deploy "Production V6 site + uygulama deploy scripti bulunamadi: $script"
 }
 
 if ($isWindowsHost) {
