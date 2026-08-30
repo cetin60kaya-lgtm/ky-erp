@@ -210,15 +210,16 @@ sealed class CardCaptureWorker(LocalPdksStore store, PdksPaths paths, ILogger<Ca
         var line = source.Trim().TrimStart('\uFEFF');
         if (line.Length == 0) return false;
         var parts = line.Split(',', StringSplitOptions.TrimEntries);
+        var validCard = parts.Length > 0 && "^\\d{5}$".IsMatch(parts[0]);
 
-        if (parts.Length >= 3 && /^\d{5}$/.IsMatch(parts[0]) && TimeSpan.TryParseExact(parts[1], @"hh\:mm", CultureInfo.InvariantCulture, out var time) &&
+        if (parts.Length >= 3 && validCard && TimeSpan.TryParseExact(parts[1], @"hh\:mm", CultureInfo.InvariantCulture, out var time) &&
             DateTime.TryParseExact(parts[2], "ddMMyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var compactDate))
         {
             punch = new RawPunch(parts[0], compactDate.Date.Add(time), "IMPORT_FILE", sourceRef, line);
             return true;
         }
 
-        if (parts.Length >= 3 && /^\d{5}$/.IsMatch(parts[0]) &&
+        if (parts.Length >= 3 && validCard &&
             DateTime.TryParseExact(parts[1], new[] { "dd.MM.yyyy", "dd-MM-yyyy", "yyyy-MM-dd" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
             TimeSpan.TryParseExact(parts[2], @"hh\:mm", CultureInfo.InvariantCulture, out time))
         {
