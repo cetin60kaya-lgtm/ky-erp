@@ -7,6 +7,7 @@ import { registerAuthAdminHistoryRoutes } from "./auth-admin-history";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
+import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAiCloudRoutes } from "./ai-cloud";
@@ -48,6 +49,7 @@ type ShellEnv = {
 const AUTH_VERSION = "canonical-v3";
 const PASSWORD_SESSION_SECONDS = 28_800;
 const MFA_SESSION_SECONDS = 36_000;
+const OWNER_ROLLING_SESSION_SECONDS = 86_400;
 
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
@@ -158,8 +160,18 @@ shell.get("/api/auth/status", (c) => c.json({
   ok: true,
   authVersion: AUTH_VERSION,
   transport: "canonical",
-  endpoints: { login: "/api/auth/login", mfaVerify: "/api/auth/mfa/verify", me: "/api/auth/me", logout: "/api/auth/logout" },
-  sessionPolicy: { passwordOnlySeconds: PASSWORD_SESSION_SECONDS, mfaSeconds: MFA_SESSION_SECONDS },
+  endpoints: {
+    login: "/api/auth/login",
+    mfaVerify: "/api/auth/mfa/verify",
+    me: "/api/auth/me",
+    refresh: "/api/auth/refresh",
+    logout: "/api/auth/logout",
+  },
+  sessionPolicy: {
+    passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
+    mfaSeconds: MFA_SESSION_SECONDS,
+    ownerRollingSeconds: OWNER_ROLLING_SESSION_SECONDS,
+  },
 }));
 
 shell.get("/api/auth/me", async (c) => {
@@ -174,6 +186,7 @@ shell.get("/api/auth/me", async (c) => {
 
 registerAuthRecoveryCodeFallbackRoutes(shell);
 registerAuthOwnerGuardRoutes(shell);
+registerAuthSessionRefreshRoutes(shell);
 registerAuthPolicyRoutes(shell);
 shell.route("/", app);
 
