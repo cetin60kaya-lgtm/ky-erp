@@ -1,0 +1,9 @@
+SourceMode=FILE
+TcpHost=127.0.0.1
+TcpPort=4370
+SerialPort=COM1
+SerialBaud=9600
+SyncIntervalSeconds=30
+AutoSync=true
+FileImportEnabled=true
+LineEncoding=windows-1254
