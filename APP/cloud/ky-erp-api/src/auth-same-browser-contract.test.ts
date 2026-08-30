@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(resolve(here, "../migrations/0022_auth_same_browser_session_guard.sql"), "utf8");
 const refresh = readFileSync(resolve(here, "auth-session-refresh.ts"), "utf8");
+const smoke = readFileSync(resolve(here, "../scripts/auth-same-browser-session-smoke.mjs"), "utf8");
 
 test("same-browser guard applies to every role through user + BROWSER identity", () => {
   assert.match(migration, /BEFORE INSERT ON auth_sessions/);
@@ -31,4 +32,13 @@ test("silent refresh rotates the existing session row instead of inserting a com
   assert.match(refresh, /SET token_hash=/);
   assert.match(refresh, /WHERE id=\?/);
   assert.doesNotMatch(refresh, /INSERT INTO auth_sessions/);
+});
+
+test("same-browser smoke uses globally unique token hashes per synthetic session", () => {
+  assert.match(smoke, /const tokenOther = `smoke-\$\{userId\}-other`/);
+  assert.match(smoke, /const tokenOld = `smoke-\$\{userId\}-old`/);
+  assert.match(smoke, /const tokenNew = `smoke-\$\{userId\}-new`/);
+  assert.doesNotMatch(smoke, /'hash-other'/);
+  assert.doesNotMatch(smoke, /'hash-old'/);
+  assert.doesNotMatch(smoke, /'hash-new'/);
 });
