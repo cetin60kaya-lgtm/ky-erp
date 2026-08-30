@@ -1,190 +1,128 @@
 using System.Globalization;
-using System.Security.Cryptography;
+using System.IO.Ports;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
-using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Hosting.WindowsServices;
+using KyPdks.Shared;
+
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "KY ERP PDKS Agent");
 builder.Services.AddSingleton<PdksPaths>();
+builder.Services.AddSingleton<ConfigStore>();
 builder.Services.AddSingleton<LocalPdksStore>();
-builder.Services.AddHostedService<CardCaptureWorker>();
+builder.Services.AddSingleton<TextFileLog>();
+builder.Services.AddHostedService<HeartbeatWorker>();
+builder.Services.AddHostedService<FileImportWorker>();
+builder.Services.AddHostedService<TerminalCaptureWorker>();
+builder.Services.AddHostedService<MaintenanceWorker>();
 await builder.Build().RunAsync();
 
-sealed class PdksPaths
+sealed class TextFileLog(PdksPaths paths)
 {
-    public string Root { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "KY ERP", "PDKS");
-    public string Data => Path.Combine(Root, "Data");
-    public string Import => Path.Combine(Root, "Import");
-    public string Archive => Path.Combine(Root, "Archive");
-    public string Logs => Path.Combine(Root, "Logs");
-    public string Database => Path.Combine(Data, "pdks.db");
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public PdksPaths()
+    public async Task WriteAsync(string level, string message, CancellationToken ct = default)
     {
-        Directory.CreateDirectory(Data);
-        Directory.CreateDirectory(Import);
-        Directory.CreateDirectory(Archive);
-        Directory.CreateDirectory(Logs);
-    }
-}
-
-sealed record RawPunch(string CardNo, DateTime EventAt, string Source, string SourceRef, string RawLine)
-{
-    public string WorkDate => EventAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-    public string EventTime => EventAt.ToString("HH:mm", CultureInfo.InvariantCulture);
-    public string Fingerprint
-    {
-        get
+        try
         {
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{CardNo}|{EventAt:O}|{Source}|{SourceRef}|{RawLine}"));
-            return Convert.ToHexString(bytes).ToLowerInvariant();
+            await _gate.WaitAsync(ct);
+            var path = Path.Combine(paths.Logs, $"agent-{DateTime.Today:yyyyMMdd}.log");
+            await File.AppendAllTextAsync(path, $"{DateTimeOffset.Now:O}\t{level}\t{message}{Environment.NewLine}", new UTF8Encoding(false), ct);
         }
+        catch { }
+        finally { if (_gate.CurrentCount == 0) _gate.Release(); }
     }
 }
 
-sealed class LocalPdksStore(PdksPaths paths)
-{
-    private string ConnectionString => new SqliteConnectionStringBuilder
-    {
-        DataSource = paths.Database,
-        Mode = SqliteOpenMode.ReadWriteCreate,
-        Cache = SqliteCacheMode.Shared,
-    }.ToString();
-
-    public async Task InitializeAsync(CancellationToken ct)
-    {
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync(ct);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            PRAGMA journal_mode=WAL;
-            PRAGMA synchronous=NORMAL;
-            PRAGMA foreign_keys=ON;
-            CREATE TABLE IF NOT EXISTS raw_punches (
-              id TEXT PRIMARY KEY,
-              fingerprint TEXT NOT NULL UNIQUE,
-              card_no TEXT NOT NULL,
-              event_at TEXT NOT NULL,
-              work_date TEXT NOT NULL,
-              event_time TEXT NOT NULL,
-              source TEXT NOT NULL,
-              source_ref TEXT,
-              raw_line TEXT,
-              sync_state TEXT NOT NULL DEFAULT 'PENDING',
-              sync_error TEXT,
-              received_at TEXT NOT NULL,
-              synced_at TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_raw_punches_pending ON raw_punches(sync_state, work_date, event_time);
-            CREATE TABLE IF NOT EXISTS agent_state (
-              state_key TEXT PRIMARY KEY,
-              state_value TEXT,
-              updated_at TEXT NOT NULL
-            );
-            """;
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    public async Task<bool> AddAsync(RawPunch punch, CancellationToken ct)
-    {
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync(ct);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            INSERT OR IGNORE INTO raw_punches
-              (id,fingerprint,card_no,event_at,work_date,event_time,source,source_ref,raw_line,sync_state,received_at)
-            VALUES
-              ($id,$fingerprint,$card,$eventAt,$workDate,$eventTime,$source,$sourceRef,$rawLine,'PENDING',$receivedAt);
-            """;
-        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-        command.Parameters.AddWithValue("$fingerprint", punch.Fingerprint);
-        command.Parameters.AddWithValue("$card", punch.CardNo);
-        command.Parameters.AddWithValue("$eventAt", punch.EventAt.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$workDate", punch.WorkDate);
-        command.Parameters.AddWithValue("$eventTime", punch.EventTime);
-        command.Parameters.AddWithValue("$source", punch.Source);
-        command.Parameters.AddWithValue("$sourceRef", punch.SourceRef);
-        command.Parameters.AddWithValue("$rawLine", punch.RawLine);
-        command.Parameters.AddWithValue("$receivedAt", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
-        return await command.ExecuteNonQueryAsync(ct) > 0;
-    }
-
-    public async Task TouchAsync(string key, string value, CancellationToken ct)
-    {
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync(ct);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            INSERT INTO agent_state(state_key,state_value,updated_at) VALUES($key,$value,$now)
-            ON CONFLICT(state_key) DO UPDATE SET state_value=excluded.state_value,updated_at=excluded.updated_at;
-            """;
-        command.Parameters.AddWithValue("$key", key);
-        command.Parameters.AddWithValue("$value", value);
-        command.Parameters.AddWithValue("$now", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
-        await command.ExecuteNonQueryAsync(ct);
-    }
-}
-
-sealed class CardCaptureWorker(LocalPdksStore store, PdksPaths paths, ILogger<CardCaptureWorker> logger) : BackgroundService
+sealed class HeartbeatWorker(LocalPdksStore store, ConfigStore configStore, TextFileLog fileLog, ILogger<HeartbeatWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await store.InitializeAsync(stoppingToken);
-        logger.LogInformation("KY PDKS Agent started. Import={Import}", paths.Import);
-
+        await fileLog.WriteAsync("INFO", "KY PDKS Agent başladı.", stoppingToken);
+        logger.LogInformation("KY PDKS Agent started");
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await ScanImportFolder(stoppingToken);
-                await store.TouchAsync("heartbeat", DateTimeOffset.Now.ToString("O"), stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception error)
-            {
-                logger.LogError(error, "PDKS import scan failed");
-            }
+            var config = configStore.Load();
+            await store.TouchStateAsync("heartbeat", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture), stoppingToken);
+            await store.TouchStateAsync("capture_mode", config.NormalizedMode, stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        }
+    }
+}
 
-            await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore configStore, TextFileLog fileLog, ILogger<FileImportWorker> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await store.InitializeAsync(stoppingToken);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var config = configStore.Load();
+            if (config.FileImportEnabled)
+            {
+                try { await ScanAsync(config, stoppingToken); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+                catch (Exception error)
+                {
+                    await store.TouchStateAsync("last_message", $"Dosya aktarım hatası: {error.Message}", stoppingToken);
+                    await fileLog.WriteAsync("ERROR", $"Dosya aktarım hatası: {error}", stoppingToken);
+                    logger.LogError(error, "PDKS file scan failed");
+                }
+            }
+            await Task.Delay(config.ScanIntervalMs, stoppingToken);
         }
     }
 
-    private async Task ScanImportFolder(CancellationToken ct)
+    private async Task ScanAsync(PdksConfig config, CancellationToken ct)
     {
         var files = Directory.EnumerateFiles(paths.Import)
-            .Where(path => new[] { ".txt", ".csv", ".dat" }.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
-            .OrderBy(path => File.GetCreationTimeUtc(path))
+            .Where(path => new[] { ".txt", ".csv", ".dat", ".log" }.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            .OrderBy(File.GetCreationTimeUtc)
             .ToArray();
 
         foreach (var file in files)
         {
             ct.ThrowIfCancellationRequested();
             if (!await IsReadyAsync(file, ct)) continue;
-
-            var imported = 0;
-            var rejected = 0;
-            foreach (var line in await File.ReadAllLinesAsync(file, ct))
+            var accepted = 0;
+            var duplicate = 0;
+            var rejected = new List<string>();
+            var encoding = ResolveEncoding(config.LineEncoding);
+            foreach (var line in await File.ReadAllLinesAsync(file, encoding, ct))
             {
-                if (TryParse(line, Path.GetFileName(file), out var punch))
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!PunchParser.TryParse(line, Path.GetFileName(file), out var parsed) || parsed is null)
                 {
-                    if (await store.AddAsync(punch!, ct)) imported++;
+                    rejected.Add(line);
+                    continue;
                 }
-                else if (!string.IsNullOrWhiteSpace(line))
-                {
-                    rejected++;
-                }
+                var punch = parsed with { Source = "FILE", SourceRef = Path.GetFileName(file) };
+                if (await store.AddAsync(punch, ct)) accepted++; else duplicate++;
             }
 
             var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmssfff", CultureInfo.InvariantCulture);
-            var archived = Path.Combine(paths.Archive, $"{stamp}_{Path.GetFileName(file)}");
-            File.Move(file, archived, true);
-            await store.TouchAsync("last_import", $"{Path.GetFileName(file)}|ok={imported}|reject={rejected}", ct);
-            logger.LogInformation("PDKS file imported: {File} accepted={Accepted} rejected={Rejected}", file, imported, rejected);
+            if (rejected.Count > 0)
+            {
+                var rejectPath = Path.Combine(paths.Reject, $"{stamp}_{Path.GetFileNameWithoutExtension(file)}_REJECT.txt");
+                await File.WriteAllLinesAsync(rejectPath, rejected, new UTF8Encoding(false), ct);
+            }
+            var archivePath = Path.Combine(paths.Archive, $"{stamp}_{Path.GetFileName(file)}");
+            File.Move(file, archivePath, true);
+            var message = $"{Path.GetFileName(file)}: alınan={accepted}, tekrar={duplicate}, reddedilen={rejected.Count}";
+            await store.TouchStateAsync("last_import", message, ct);
+            await store.TouchStateAsync("last_message", message, ct);
+            await fileLog.WriteAsync("INFO", message, ct);
+            logger.LogInformation("{Message}", message);
         }
+    }
+
+    private static Encoding ResolveEncoding(string name)
+    {
+        try { return Encoding.GetEncoding(string.IsNullOrWhiteSpace(name) ? "windows-1254" : name); }
+        catch { return new UTF8Encoding(false); }
     }
 
     private static async Task<bool> IsReadyAsync(string file, CancellationToken ct)
@@ -198,40 +136,154 @@ sealed class CardCaptureWorker(LocalPdksStore store, PdksPaths paths, ILogger<Ca
             using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None);
             return stream.Length >= 0;
         }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool TryParse(string source, string sourceRef, out RawPunch? punch)
-    {
-        punch = null;
-        var line = source.Trim().TrimStart('\uFEFF');
-        if (line.Length == 0) return false;
-        var parts = line.Split(',', StringSplitOptions.TrimEntries);
-        var validCard = parts.Length > 0 && "^\\d{5}$".IsMatch(parts[0]);
-
-        if (parts.Length >= 3 && validCard && TimeSpan.TryParseExact(parts[1], @"hh\:mm", CultureInfo.InvariantCulture, out var time) &&
-            DateTime.TryParseExact(parts[2], "ddMMyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var compactDate))
-        {
-            punch = new RawPunch(parts[0], compactDate.Date.Add(time), "IMPORT_FILE", sourceRef, line);
-            return true;
-        }
-
-        if (parts.Length >= 3 && validCard &&
-            DateTime.TryParseExact(parts[1], new[] { "dd.MM.yyyy", "dd-MM-yyyy", "yyyy-MM-dd" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
-            TimeSpan.TryParseExact(parts[2], @"hh\:mm", CultureInfo.InvariantCulture, out time))
-        {
-            punch = new RawPunch(parts[0], date.Date.Add(time), "IMPORT_FILE", sourceRef, line);
-            return true;
-        }
-
-        return false;
+        catch { return false; }
     }
 }
 
-static class RegexExtensions
+sealed class TerminalCaptureWorker(LocalPdksStore store, PdksPaths paths, ConfigStore configStore, TextFileLog fileLog, ILogger<TerminalCaptureWorker> logger) : BackgroundService
 {
-    public static bool IsMatch(this string pattern, string value) => System.Text.RegularExpressions.Regex.IsMatch(value, pattern);
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await store.InitializeAsync(stoppingToken);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var config = configStore.Load();
+            try
+            {
+                switch (config.NormalizedMode)
+                {
+                    case "TCP_SERVER": await RunTcpServerAsync(config, stoppingToken); break;
+                    case "TCP_CLIENT": await RunTcpClientAsync(config, stoppingToken); break;
+                    case "SERIAL": await RunSerialAsync(config, stoppingToken); break;
+                    default:
+                        await store.TouchStateAsync("terminal_state", "Dosya modu", stoppingToken);
+                        await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+                        break;
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception error)
+            {
+                var message = $"{config.NormalizedMode} bağlantı hatası: {error.Message}";
+                await store.TouchStateAsync("terminal_state", message, stoppingToken);
+                await store.TouchStateAsync("last_message", message, stoppingToken);
+                await fileLog.WriteAsync("WARN", message, stoppingToken);
+                logger.LogWarning(error, "Terminal capture connection failed");
+                await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+            }
+        }
+    }
+
+    private async Task RunTcpServerAsync(PdksConfig config, CancellationToken ct)
+    {
+        var listener = new TcpListener(IPAddress.Any, config.TcpPort);
+        listener.Start();
+        await StateAsync($"TCP sunucu dinliyor · 0.0.0.0:{config.TcpPort}", ct);
+        try
+        {
+            while (!ct.IsCancellationRequested && configStore.Load().NormalizedMode == "TCP_SERVER")
+            {
+                using var client = await listener.AcceptTcpClientAsync(ct);
+                var remote = client.Client.RemoteEndPoint?.ToString() ?? "TCP";
+                await StateAsync($"TCP cihaz bağlı · {remote}", ct);
+                await ConsumeStreamAsync(client.GetStream(), "TCP_SERVER", remote, config, ct);
+            }
+        }
+        finally { listener.Stop(); }
+    }
+
+    private async Task RunTcpClientAsync(PdksConfig config, CancellationToken ct)
+    {
+        using var client = new TcpClient();
+        await StateAsync($"TCP cihaza bağlanıyor · {config.TcpHost}:{config.TcpPort}", ct);
+        await client.ConnectAsync(config.TcpHost, config.TcpPort, ct);
+        await StateAsync($"TCP cihaz bağlı · {config.TcpHost}:{config.TcpPort}", ct);
+        await ConsumeStreamAsync(client.GetStream(), "TCP_CLIENT", $"{config.TcpHost}:{config.TcpPort}", config, ct);
+    }
+
+    private async Task RunSerialAsync(PdksConfig config, CancellationToken ct)
+    {
+        using var port = new SerialPort(config.SerialPort, config.SerialBaud)
+        {
+            NewLine = "\n",
+            ReadTimeout = 2000,
+            WriteTimeout = 2000,
+            DtrEnable = true,
+            RtsEnable = true,
+        };
+        port.Open();
+        await StateAsync($"Seri cihaz bağlı · {config.SerialPort} / {config.SerialBaud}", ct);
+        using var reader = new StreamReader(port.BaseStream, ResolveEncoding(config.LineEncoding), false, 1024, leaveOpen: true);
+        while (!ct.IsCancellationRequested && configStore.Load().NormalizedMode == "SERIAL")
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+            await CaptureLineAsync(line, "SERIAL", $"{config.SerialPort}:{config.SerialBaud}", ct);
+        }
+    }
+
+    private async Task ConsumeStreamAsync(Stream stream, string source, string sourceRef, PdksConfig config, CancellationToken ct)
+    {
+        using var reader = new StreamReader(stream, ResolveEncoding(config.LineEncoding), false, 2048, leaveOpen: true);
+        while (!ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+            await CaptureLineAsync(line, source, sourceRef, ct);
+        }
+    }
+
+    private async Task CaptureLineAsync(string line, string source, string sourceRef, CancellationToken ct)
+    {
+        if (!PunchParser.TryParse(line, sourceRef, out var parsed) || parsed is null)
+        {
+            var reject = Path.Combine(paths.Reject, $"terminal-{DateTime.Today:yyyyMMdd}.log");
+            await File.AppendAllTextAsync(reject, $"{DateTimeOffset.Now:O}\t{sourceRef}\t{line}{Environment.NewLine}", new UTF8Encoding(false), ct);
+            await store.TouchStateAsync("last_message", $"Terminal satırı tanınmadı · {sourceRef}", ct);
+            return;
+        }
+        var punch = parsed with { Source = source, SourceRef = sourceRef };
+        var inserted = await store.AddAsync(punch, ct);
+        if (inserted)
+        {
+            var message = $"Kart {punch.CardNo} · {punch.WorkDate} {punch.EventTime[..5]} · {source}";
+            await store.TouchStateAsync("last_terminal_punch", message, ct);
+            await store.TouchStateAsync("last_message", message, ct);
+            await fileLog.WriteAsync("PUNCH", message, ct);
+        }
+    }
+
+    private async Task StateAsync(string value, CancellationToken ct)
+    {
+        await store.TouchStateAsync("terminal_state", value, ct);
+        await store.TouchStateAsync("last_message", value, ct);
+    }
+
+    private static Encoding ResolveEncoding(string name)
+    {
+        try { return Encoding.GetEncoding(string.IsNullOrWhiteSpace(name) ? "windows-1254" : name); }
+        catch { return new UTF8Encoding(false); }
+    }
+}
+
+sealed class MaintenanceWorker(LocalPdksStore store, TextFileLog fileLog, ILogger<MaintenanceWorker> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var backup = await store.BackupAsync(stoppingToken);
+                await fileLog.WriteAsync("BACKUP", backup, stoppingToken);
+                logger.LogInformation("PDKS backup created {Backup}", backup);
+            }
+            catch (Exception error)
+            {
+                await fileLog.WriteAsync("ERROR", $"Yedek hatası: {error.Message}", stoppingToken);
+            }
+            await Task.Delay(TimeSpan.FromHours(12), stoppingToken);
+        }
+    }
 }
