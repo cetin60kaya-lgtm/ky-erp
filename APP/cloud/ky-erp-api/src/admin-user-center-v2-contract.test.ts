@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const api = (name: string) => readFileSync(resolve(here, name), "utf8");
 const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
+const workerConfig = readFileSync(resolve(here, "../wrangler.jsonc"), "utf8");
 
 const ui = frontend("pages/admin/AdminUsersPanelV2.jsx");
 const service = frontend("services/adminApi.js");
@@ -44,4 +45,10 @@ test("email verification does not claim delivery without provider acceptance ide
   assert.match(ui, /deliveryStatus!=="PROVIDER_ACCEPTED"\|\|!result\?\.providerMessageId/);
   assert.match(ui, /teslimat henüz ayrıca doğrulanmış değildir/);
   assert.match(ui, /Gerçek e-posta servisi bağlı değil; sahte başarı mesajı gösterilmez/);
+});
+
+test("system email sender is owner-controlled admin@kyerp.net and verification route is owner-only", () => {
+  assert.match(workerConfig, /"RECOVERY_EMAIL_FROM"\s*:\s*"KY ERP <admin@kyerp\.net>"/);
+  assert.match(management, /E-posta doğrulaması yalnız uygulama sahibi tarafından başlatılabilir/);
+  assert.match(management, /!current \|\| !isOwner\(current\.role\)/);
 });
