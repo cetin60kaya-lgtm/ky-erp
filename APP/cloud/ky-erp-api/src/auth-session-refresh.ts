@@ -4,6 +4,8 @@ import { getAuthenticatedUser } from "./auth-cloud";
 type AnyRow = Record<string, any>;
 
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
+const REFRESH_SCOPE = "AUTH_SESSION_REFRESH";
+const REFRESH_PREPARE_SECONDS = 120;
 export const OWNER_ROLLING_SECONDS = 86_400;
 export const PASSWORD_SESSION_SECONDS = 28_800;
 export const MFA_SESSION_SECONDS = 36_000;
@@ -16,6 +18,9 @@ function upper(value: unknown) {
 }
 function nowIso() {
   return new Date().toISOString();
+}
+function addSeconds(seconds: number) {
+  return new Date(Date.now() + seconds * 1000).toISOString();
 }
 function isOwner(role: unknown) {
   return ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
@@ -51,9 +56,28 @@ function decodePayload(token: string) {
     return {};
   }
 }
+function randomToken(bytes = 24) {
+  const value = new Uint8Array(bytes);
+  crypto.getRandomValues(value);
+  return bytesToBase64Url(value);
+}
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function safeEqual(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return diff === 0;
+}
+async function bodyOf(c: any) {
+  try {
+    const value = await c.req.json();
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
 }
 async function sessionSecret(c: any) {
   const row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key='SESSION_HMAC' LIMIT 1").first<AnyRow>();
@@ -72,12 +96,42 @@ function ttlFor(current: AnyRow, oldPayload: AnyRow) {
   const policy = oldPayload?.policy || current?.loginPolicy || current?.security?.login_policy || "ANY_MFA";
   return sessionRefreshSeconds(current?.role, policy);
 }
+async function storePreparedRefresh(c: any, refreshId: string, company: string, data: AnyRow) {
+  const timestamp = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?)`,
+  ).bind(crypto.randomUUID(), REFRESH_SCOPE, company || null, refreshId, JSON.stringify(data), timestamp, timestamp).run();
+  c.executionCtx?.waitUntil?.(
+    c.env.DB.prepare("DELETE FROM json_store WHERE scope=? AND updated_at<?")
+      .bind(REFRESH_SCOPE, new Date(Date.now() - 86_400_000).toISOString()).run(),
+  );
+}
+async function preparedRefresh(c: any, refreshId: string) {
+  const row = await c.env.DB.prepare(
+    `SELECT id,data,updated_at FROM json_store
+      WHERE scope=? AND file_name=? ORDER BY updated_at DESC LIMIT 1`,
+  ).bind(REFRESH_SCOPE, refreshId).first<AnyRow>();
+  if (!row?.id) return null;
+  try {
+    const data = JSON.parse(text(row.data) || "{}");
+    return { rowId: row.id, ...data };
+  } catch {
+    return null;
+  }
+}
+async function markPreparedRefresh(c: any, rowId: string, data: AnyRow) {
+  await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=?")
+    .bind(JSON.stringify(data), nowIso(), rowId).run();
+}
 
 export function registerAuthSessionRefreshRoutes(app: any) {
+  // Aşama 1: yeni token hazırlanır; canlı session henüz değiştirilmez.
+  // Böylece cevap ağda kaybolursa mevcut token çalışmaya devam eder.
   app.post("/api/auth/refresh", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current?.session?.id) {
-      return c.json({ ok: false, error: { code: "SESSION_INVALID", message: "Oturum yenilenemedi. Yeniden giriş yapın." } }, 401);
+      return c.json({ ok: false, error: { code: "SESSION_INVALID", message: "Oturum yenilenemedi. Mevcut oturum doğrulanamadı." } }, 401);
     }
 
     const oldToken = bearerToken(c);
@@ -103,31 +157,101 @@ export function registerAuthSessionRefreshRoutes(app: any) {
       exp: now + ttl,
     });
 
-    const oldHash = await sha256(oldToken);
-    const result = await c.env.DB.prepare(
-      `UPDATE auth_sessions
-          SET token_hash=?,role_at_login=?,main_company_slug=?,expires_at=?,last_seen_at=?
-        WHERE id=? AND user_id=? AND token_hash=? AND revoked_at IS NULL AND expires_at>?`,
-    ).bind(
-      await sha256(newToken), role, company, expiresAt, nowIso(),
-      current.session.id, current.id, oldHash, nowIso(),
-    ).run();
-
-    if (Number(result?.meta?.changes || 0) !== 1) {
-      return c.json({ ok: false, error: { code: "SESSION_ROTATED", message: "Oturum başka bir sekmede yenilendi. Uygulamayı yeniden deneyin." } }, 409);
-    }
+    const refreshId = crypto.randomUUID();
+    const refreshSecret = randomToken(24);
+    const prepareExpiresAt = addSeconds(REFRESH_PREPARE_SECONDS);
+    await storePreparedRefresh(c, refreshId, company, {
+      refreshId,
+      sessionId: current.session.id,
+      userId: current.id,
+      company,
+      role,
+      oldTokenHash: await sha256(oldToken),
+      newTokenHash: await sha256(newToken),
+      refreshSecretHash: await sha256(refreshSecret),
+      expiresAt,
+      prepareExpiresAt,
+      committedAt: null,
+    });
 
     const { security, session, ...user } = current;
     void security;
     return c.json({
       ok: true,
-      stage: "AUTHENTICATED",
+      stage: "REFRESH_PREPARED",
+      refreshId,
+      refreshSecret,
       token: newToken,
       expiresIn: ttl,
       expiresAt,
+      prepareExpiresAt,
       rolling: true,
       user,
-      session: { id: session.id, expiresAt, lastSeenAt: nowIso() },
+      session: { id: session.id, expiresAt: session.expires_at, lastSeenAt: session.last_seen_at },
     });
+  });
+
+  // Aşama 2: istemci hazırlanan tokenı aldığını kanıtlar; token ancak şimdi devreye girer.
+  // Endpoint refreshSecret ile korunur ve idempotenttir. Commit cevabı kaybolursa aynı
+  // refreshId/secret ile tekrar çağrılabilir.
+  app.post("/api/auth/refresh/commit", async (c: any) => {
+    const body = await bodyOf(c);
+    const refreshId = text(body.refreshId);
+    const refreshSecret = text(body.refreshSecret);
+    if (!refreshId || !refreshSecret) {
+      return c.json({ ok: false, error: { code: "REFRESH_COMMIT_REQUIRED", message: "Oturum yenileme onayı eksik." } }, 400);
+    }
+
+    const prepared = await preparedRefresh(c, refreshId);
+    if (!prepared || Date.parse(text(prepared.prepareExpiresAt)) <= Date.now()) {
+      return c.json({ ok: false, error: { code: "REFRESH_EXPIRED", message: "Oturum yenileme isteğinin süresi doldu." } }, 410);
+    }
+    if (!safeEqual(text(prepared.refreshSecretHash), await sha256(refreshSecret))) {
+      return c.json({ ok: false, error: { code: "REFRESH_SECRET_INVALID", message: "Oturum yenileme onayı geçersiz." } }, 401);
+    }
+
+    const session = await c.env.DB.prepare(
+      `SELECT id,user_id,token_hash,revoked_at,expires_at FROM auth_sessions
+        WHERE id=? AND user_id=? LIMIT 1`,
+    ).bind(prepared.sessionId, prepared.userId).first<AnyRow>();
+    if (!session || session.revoked_at) {
+      return c.json({ ok: false, error: { code: "SESSION_REVOKED", message: "Oturum kapatılmış." } }, 401);
+    }
+
+    const currentHash = text(session.token_hash);
+    const oldHash = text(prepared.oldTokenHash);
+    const newHash = text(prepared.newTokenHash);
+    if (safeEqual(currentHash, newHash)) {
+      if (!prepared.committedAt) {
+        prepared.committedAt = nowIso();
+        await markPreparedRefresh(c, prepared.rowId, prepared);
+      }
+      return c.json({ ok: true, stage: "REFRESH_COMMITTED", idempotent: true, expiresAt: prepared.expiresAt });
+    }
+    if (!safeEqual(currentHash, oldHash)) {
+      return c.json({ ok: false, error: { code: "SESSION_ROTATED", message: "Oturum başka bir sekmede yenilendi." } }, 409);
+    }
+
+    const timestamp = nowIso();
+    const result = await c.env.DB.prepare(
+      `UPDATE auth_sessions
+          SET token_hash=?,role_at_login=?,main_company_slug=?,expires_at=?,last_seen_at=?
+        WHERE id=? AND user_id=? AND token_hash=? AND revoked_at IS NULL AND expires_at>?`,
+    ).bind(
+      newHash, prepared.role, prepared.company, prepared.expiresAt, timestamp,
+      prepared.sessionId, prepared.userId, oldHash, timestamp,
+    ).run();
+    if (Number(result?.meta?.changes || 0) !== 1) {
+      const after = await c.env.DB.prepare("SELECT token_hash,revoked_at FROM auth_sessions WHERE id=? LIMIT 1")
+        .bind(prepared.sessionId).first<AnyRow>();
+      if (after && !after.revoked_at && safeEqual(text(after.token_hash), newHash)) {
+        return c.json({ ok: true, stage: "REFRESH_COMMITTED", idempotent: true, expiresAt: prepared.expiresAt });
+      }
+      return c.json({ ok: false, error: { code: "SESSION_ROTATED", message: "Oturum aynı anda başka bir işlemle değişti." } }, 409);
+    }
+
+    prepared.committedAt = timestamp;
+    await markPreparedRefresh(c, prepared.rowId, prepared);
+    return c.json({ ok: true, stage: "REFRESH_COMMITTED", idempotent: false, expiresAt: prepared.expiresAt });
   });
 }
