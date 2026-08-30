@@ -223,7 +223,7 @@ function payloadMessage(payload) {
 
 function statusMessage(status) {
   if (status === 400) return "Girilen bilgileri kontrol edip tekrar deneyin.";
-  if (status === 401) return "Oturum süreniz doldu. Yeniden giriş yapın.";
+  if (status === 401) return "İşlem için kimlik doğrulaması tamamlanamadı. Bilgileri kontrol edip tekrar deneyin.";
   if (status === 403) return "Bu işlem için yetkiniz bulunmuyor.";
   if (status === 404) return "İstenen kayıt veya işlem bulunamadı.";
   if (status === 409) return "Kayıt güncel durumuyla çakışıyor. Ekranı yenileyip tekrar deneyin.";
@@ -310,12 +310,18 @@ export async function apiFetch(path, options = {}) {
     });
 
     const payload = await parseResponsePayload(response, responseType);
-    if (shouldClearStoredAuthForStatus(response.status) && !suppressUnauthorized) onUnauthorized?.();
+    const responseCode = payload?.error?.code || payload?.code || "";
+    if (
+      shouldClearStoredAuthForStatus(response.status, responseCode, requestPath) &&
+      !suppressUnauthorized
+    ) {
+      onUnauthorized?.();
+    }
 
     if (!response.ok) {
       throw createRequestError(buildApiErrorMessage(response, payload), {
         status: response.status,
-        code: payload?.error?.code || payload?.code,
+        code: responseCode,
         payload,
         method,
         requestPath,
@@ -326,7 +332,7 @@ export async function apiFetch(path, options = {}) {
     if (payload && typeof payload === "object" && payload.ok === false) {
       throw createRequestError(payloadMessage(payload) || "İşlem sunucu tarafından tamamlanamadı.", {
         status: response.status,
-        code: payload?.error?.code || payload?.code,
+        code: responseCode,
         payload,
         method,
         requestPath,
@@ -490,13 +496,15 @@ export async function downloadFile(path, params, fileName = "export.xlsx") {
       cache: "no-store",
       mode: "cors",
     });
-    if (shouldClearStoredAuthForStatus(response.status)) onUnauthorized?.();
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       let payload = text;
       try { payload = text ? JSON.parse(text) : null; } catch { /* plain text */ }
+      const responseCode = payload?.error?.code || payload?.code || "";
+      if (shouldClearStoredAuthForStatus(response.status, responseCode, requestPath)) onUnauthorized?.();
       throw createRequestError(buildApiErrorMessage(response, payload), {
         status: response.status,
+        code: responseCode,
         payload,
         method: "GET",
         requestPath,
