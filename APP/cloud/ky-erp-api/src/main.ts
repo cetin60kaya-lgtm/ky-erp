@@ -7,6 +7,7 @@ import { registerAdminCoreRoutes } from "./admin-core-cloud";
 import { registerAdminMappingRoutes } from "./admin-mappings-cloud";
 import { registerAdminStorageRoutes } from "./admin-storage-cloud";
 import { registerAdminBackupRoutes } from "./admin-backup-cloud";
+import { registerAdminBackupSqlRoutes } from "./admin-backup-sql";
 import { registerAuthAdminHistoryRoutes } from "./auth-admin-history";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
@@ -109,6 +110,7 @@ registerAdminCoreRoutes(app);
 registerAdminMappingRoutes(app);
 registerAdminStorageRoutes(app);
 registerAdminBackupRoutes(app);
+registerAdminBackupSqlRoutes(app);
 
 const shell = new Hono<ShellEnv>();
 
