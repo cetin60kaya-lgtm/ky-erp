@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Cloud,
   Database,
+  FolderOpen,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
@@ -56,14 +57,14 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
         if (loadResult.states.bridge.status !== "error") setBridge(loadResult.data.bridge || null);
         const warning = moduleLoadMessage(
           loadResult,
-          "Desen R2 ana alanı kontrol edilemedi; son başarılı durum korunuyor.",
-          "Yerel köprü durumu yenilenemedi; R2 depolama bağlantısı kullanılabilir.",
+          "Desen R2 canlı alanı kontrol edilemedi; son başarılı durum korunuyor.",
+          "Yerel DESINATOR köprüsü yenilenemedi; R2 canlı alanı kullanılabilir.",
         );
         setMessage(warning || (test
           ? `R2 bağlantısı doğrulandı. ${Number(loadResult.data.storage?.pendingFileCount || 0)} gelen dosya hazır.`
           : ""));
       } catch (error) {
-        setMessage(error?.message || "Desen R2 alanı kontrol edilemedi.");
+        setMessage(error?.message || "Desen depolama alanı kontrol edilemedi.");
       } finally {
         setBusy(false);
       }
@@ -77,6 +78,7 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
 
   const connected = result?.connected === true || result?.ok === true;
   const settings = result?.settings || {};
+  const localRoot = bridge?.latest?.rootName || "DESINATOR";
 
   return (
     <>
@@ -90,7 +92,11 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
             ) : (
               <Cloud size={16} />
             )}
-            {connected ? "R2 Desen Alanı Bağlı" : "R2 Bağlantısı Kontrol Edilecek"}
+            {connected ? "R2 Canlı Görsel Alanı Bağlı" : "R2 Bağlantısı Kontrol Edilecek"}
+          </span>
+          <span className={`dsg-btn ${bridge?.online ? "active" : ""}`}>
+            <FolderOpen size={16} />
+            DESINATOR Köprüsü {bridge?.online ? "Çevrimiçi" : "Çevrimdışı"}
           </span>
           <button
             className="dsg-btn"
@@ -103,28 +109,25 @@ export default function DesenFolderSettingsBar({ activeMainCompany }) {
             ) : (
               <RefreshCw size={16} />
             )}
-            Bağlantıyı Test Et
+            Bağlantıları Yenile
           </button>
         </div>
         <div className="dsg-scan-meta">
           <Database size={16} />
-          <span>Gelen R2 alanı</span>
+          <span>R2 gelen alanı</span>
           <strong>{Number(result?.pendingFileCount || 0)} dosya</strong>
           <code>{settings.incomingFolder || "R2/desen/inbox"}</code>
         </div>
         <div className="dsg-storage-facts">
-          <span>
-            <CheckCircle2 size={14} /> Kalıcı bulut depolama
-          </span>
-          <span>
-            <CheckCircle2 size={14} /> Yerel köprü: {bridge?.online ? "Çevrimiçi" : "Çevrimdışı"}
-          </span>
-          {bridge?.latest?.lastModelName ? (
-            <span>Son aktarım: {bridge.latest.lastModelName}</span>
-          ) : null}
-          <span>{sizeText(result?.totalBytes)} bekleyen veri</span>
-          <span>Model: {settings.modelsFolder || "R2/desen/models"}</span>
-          <span>Hata: {settings.errorFolder || "R2/desen/error"}</span>
+          <span><CheckCircle2 size={14} /> Orijinal kaynak: {localRoot}</span>
+          <span><CheckCircle2 size={14} /> Gelen: DESINATOR/Gelen Desenler</span>
+          <span><CheckCircle2 size={14} /> Model arşivi: DESINATOR/Modeller</span>
+          <span><CheckCircle2 size={14} /> Hata: DESINATOR/Hata</span>
+          <span><CheckCircle2 size={14} /> İşlenemeyen: DESINATOR/İşlenemeyen</span>
+          {bridge?.latest?.lastModelName ? <span>Son yerel aktarım: {bridge.latest.lastModelName}</span> : null}
+          <span>{sizeText(result?.totalBytes)} R2 bekleyen veri</span>
+          <span>R2 model: {settings.modelsFolder || "R2/desen/models"}</span>
+          <span>R2 hata: {settings.errorFolder || "R2/desen/error"}</span>
         </div>
       </section>
       {message ? <div className="dsg-page-message">{message}</div> : null}
