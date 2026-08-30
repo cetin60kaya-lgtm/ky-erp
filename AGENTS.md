@@ -6,6 +6,7 @@ Bu dosya GitHub Copilot, Copilot CLI, VS Code agent mode ve diğer AI geliştirm
 
 - Repo: `cetin60kaya-lgtm/ky-erp`
 - Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
+- Makine-okunur sabit: `KYERP_PUBLIC_APP=https://kyerp.net/`
 - **TEK kullanıcı uygulama adresi: `https://kyerp.net/`**
 - Canlı API servis origin'i: `https://api.kyerp.net` — yalnız backend içindir; kullanıcıya ikinci uygulama adresi olarak gösterilmez.
 - **`https://app.kyerp.net` canonical değildir, production hedefi/şartı değildir ve kullanıcı açıkça yeniden istemedikçe oluşturulmaz, doğrulanmaz veya deploy başarısının şartı yapılmaz.**
