@@ -1,9 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 function Stop-Deploy($message) {
-    Write-Host "" 
+    Write-Host ""
     Write-Host "HATA: $message" -ForegroundColor Red
-    Write-Host "" 
+    Write-Host ""
     Read-Host "Kapatmak icin ENTER"
     exit 1
 }
@@ -18,12 +18,11 @@ try {
     Stop-Deploy "Node.js surumu okunamadi."
 }
 
-# Windows + Node 24'ün eski minor sürümlerinde libuv UV_HANDLE_CLOSING
-# assertion hatasi Wrangler islemi basarili olduktan sonra process exit sirasinda
-# sahte exit-code 1 uretebiliyor. 24.20.0 ve sonrasi bu Windows assertion
-# duzeltmesini icerir. Node 22 LTS ve daha yeni duzeltilmis surumler engellenmez.
-if ($nodeVersion.Major -eq 24 -and $nodeVersion -lt [Version]"24.20.0") {
-    Stop-Deploy "Node.js $nodeText Windows/libuv cikis hatasindan etkileniyor. Node.js LTS 24.20.0 veya daha yeni surume guncelleyin; sonra deploy'u tekrar calistirin."
+# Windows production deploy standardi Node 22 LTS'tir.
+# Node 24 Windows'ta Wrangler/D1 islemi basarili olduktan sonra process exit
+# sirasinda UV_HANDLE_CLOSING assertion ile sahte exit-code 1 uretebiliyor.
+if ($IsWindows -and $nodeVersion.Major -ne 22) {
+    Stop-Deploy "Windows production deploy icin Node.js 22 LTS gerekiyor. Mevcut surum: $nodeText"
 }
 
 $script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V3.ps1"
