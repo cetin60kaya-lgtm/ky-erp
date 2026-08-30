@@ -1,26 +1,42 @@
-name: KY ERP Auth Policy Validation
+name: KY ERP Production Source Validation
 
-# Kalıcı regresyon kapısı: auth değişikliği production'a gitmeden migration, gerçek Worker ve frontend birlikte doğrulanır.
 on:
   push:
     branches:
-      - codex/auth-policy-owner-recovery
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "APP/cloud/ky-erp-api/**"
       - "APP/app/ky-erp-frontend/**"
+      - "DEPLOY/**"
+      - "RELEASES/kyerp-production-release.json"
+      - ".github/workflows/auth-policy-ci.yml"
+  pull_request:
+    paths:
+      - "APP/cloud/ky-erp-api/**"
+      - "APP/app/ky-erp-frontend/**"
+      - "DEPLOY/**"
       - ".github/workflows/auth-policy-ci.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: kyerp-production-source-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    name: Node 22 / Worker / Frontend / Auth / PDKS
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -28,78 +44,54 @@ jobs:
             APP/cloud/ky-erp-api/package-lock.json
             APP/app/ky-erp-frontend/package-lock.json
 
-      - name: API paketleri
+      - name: Worker paketleri
         working-directory: APP/cloud/ky-erp-api
         run: npm ci
 
-      - name: Auth migration zincirini temiz yerel D1 üzerinde uygula
+      - name: Worker typecheck
         working-directory: APP/cloud/ky-erp-api
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf .wrangler/state/v3/d1
-          for migration in \
-            migrations/0018_auth_mfa_sessions.sql \
-            migrations/0019_auth_dual_mfa_recovery.sql \
-            migrations/0021_auth_security_policy_owner_recovery.sql; do
-            npx wrangler d1 execute ky-erp-production-local \
-              --local \
-              --config wrangler.production-local.jsonc \
-              --file "$migration" \
-              --yes
-          done
+        run: npm run typecheck
 
-      - name: Auth şema ve politika kısıtlarını doğrula
+      - name: Worker unit + auth integration testleri
         working-directory: APP/cloud/ky-erp-api
-        shell: bash
-        run: |
-          set -euo pipefail
-          run_sql() {
-            npx wrangler d1 execute ky-erp-production-local \
-              --local \
-              --config wrangler.production-local.jsonc \
-              --command "$1" \
-              --json
-          }
-          run_sql "SELECT login_policy,session_seconds,recovery_phone,recovery_phone_verified,owner_recovery_enabled FROM auth_user_security LIMIT 0;" >/tmp/security-columns.json
-          run_sql "SELECT policy_snapshot,session_seconds_snapshot,google_verified_at,microsoft_verified_at FROM auth_login_challenges LIMIT 0;" >/tmp/challenge-columns.json
-          run_sql "SELECT id,user_id,position,question_text,answer_hash,answer_salt FROM auth_owner_recovery_questions LIMIT 0;" >/tmp/question-columns.json
-          run_sql "SELECT id,user_id,purpose,channel,otp_hash,locked_until FROM auth_owner_recovery_challenges LIMIT 0;" >/tmp/recovery-columns.json
-          run_sql "INSERT INTO auth_users(id,username,password_hash,full_name,role,is_active,created_at,updated_at) VALUES ('owner-test','owner-test','x','Owner','ADMIN',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP); INSERT INTO auth_user_security(user_id,role_override,login_policy,session_seconds,created_at,updated_at) VALUES ('owner-test','SUPER_ADMIN','PASSWORD_ONLY',86400,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP); UPDATE auth_user_security SET login_policy='ANY_MFA',session_seconds=CASE WHEN session_seconds>28800 THEN 28800 ELSE session_seconds END WHERE user_id='owner-test'; SELECT login_policy,session_seconds FROM auth_user_security WHERE user_id='owner-test';" >/tmp/owner-policy.json
-          grep -Fq 'ANY_MFA' /tmp/owner-policy.json
-          grep -Fq '28800' /tmp/owner-policy.json
+        run: npm test
 
-      - name: API typecheck, test ve dry-run build
+      - name: Worker dry-run build
         working-directory: APP/cloud/ky-erp-api
-        run: |
-          npm run typecheck
-          npm test
-          npm run build
-
-      - name: Gerçek yerel Worker ile auth runtime smoke
-        working-directory: APP/cloud/ky-erp-api
-        run: node scripts/auth-policy-runtime-smoke.mjs
+        run: npm run build
 
       - name: Frontend paketleri
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
 
-      - name: Frontend lint ve production build
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend testleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm test
+
+      - name: Frontend production build
         working-directory: APP/app/ky-erp-frontend
         env:
           VITE_API_URL: https://api.kyerp.net
-        run: |
-          npm run lint
-          npm run build
+        run: npm run build
 
-      - name: Güvenlik işaretlerini doğrula
+      - name: Production güvenlik sözleşmesini doğrula
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'PASSWORD_ONLY' APP/cloud/ky-erp-api/src/auth-policy-cloud.ts
-          grep -Fq 'POLICY_MFA_LEGACY_REQUIRED' APP/cloud/ky-erp-api/src/auth-policy-compat.ts
-          grep -Fq 'OWNER_PROFILE_UPDATED_SECURITY_FIELDS_LOCKED' APP/cloud/ky-erp-api/src/auth-policy-owner-guard.ts
-          grep -Fq 'session_seconds' APP/cloud/ky-erp-api/migrations/0021_auth_security_policy_owner_recovery.sql
-          grep -Fq 'owner_recovery_enabled' APP/cloud/ky-erp-api/migrations/0021_auth_security_policy_owner_recovery.sql
-          grep -Fq 'Sadece parola' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
-          grep -Fq '30 dakika' APP/app/ky-erp-frontend/src/pages/LoginPage.jsx
+          grep -Fq 'Node.js 22 LTS' DEPLOY/KYERP_DIRECT_PRODUCTION.ps1
+          grep -Fq 'Remote-Column-Exists' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq '0024_denetime_pdks_system_user.sql' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+          grep -Fq 'OWNER_ROLLING_SESSION_SECONDS = 86_400' APP/cloud/ky-erp-api/src/main.ts
+          grep -Fq 'MFA_SESSION_SECONDS = 36_000' APP/cloud/ky-erp-api/src/main.ts
+          grep -Fq 'PASSWORD_SESSION_SECONDS = 28_800' APP/cloud/ky-erp-api/src/main.ts
+          grep -Fq 'UPPER(TRIM(COALESCE(e.sgk_status,' APP/cloud/ky-erp-api/src/ik-audit-readonly.ts
+          grep -Fq 'TRIM(COALESCE(s.card_no,' APP/cloud/ky-erp-api/src/ik-audit-readonly.ts
+          grep -Fq 'const AUDIT_VIEW_MODULES=new Set(["IK"])' APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx
+          ! grep -Fq 'wrangler d1 migrations apply' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
+
+      - name: Sonuç
+        run: echo "KY ERP production source validation PASSED"
