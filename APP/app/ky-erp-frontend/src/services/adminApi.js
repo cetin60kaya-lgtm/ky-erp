@@ -26,6 +26,7 @@ export async function createUser(payload = {}) {
   if (created?.id && Array.isArray(payload?.permissions)) await updateUserPermissions(created.id, payload.permissions);
   return created;
 }
+export async function createUserComplete(payload = {}) { return unwrap(await apiPost("/admin/users/create-complete", payload)); }
 export async function updateUser(id, payload = {}) { return unwrap(await apiPatch(`/admin/users/${encodeURIComponent(id)}`, payload)); }
 export async function resetUserPassword(id, password) { return unwrap(await apiPost(`/admin/users/${encodeURIComponent(id)}/reset-password`, { password })); }
 export async function activateUser(id) { return unwrap(await apiPost(`/admin/users/${encodeURIComponent(id)}/activate`, {})); }
