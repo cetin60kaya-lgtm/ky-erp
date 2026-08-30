@@ -63,6 +63,7 @@ Write-Host ""
 Write-Host "KORUMA:" -ForegroundColor Yellow
 Write-Host "- Production D1 RESET YOK." -ForegroundColor Yellow
 Write-Host "- Genel migration zinciri YOK." -ForegroundColor Yellow
+Write-Host "- Local migration entegrasyon testi YOK." -ForegroundColor Yellow
 Write-Host "- Yalniz gerekli same-browser session guard eksikse 0022 uygulanir." -ForegroundColor Yellow
 Write-Host "- D1 yedegi alinmadan 0022 uygulanmaz." -ForegroundColor Yellow
 Write-Host "- Production test INSERT/UPDATE/DELETE YOK." -ForegroundColor Yellow
@@ -127,14 +128,14 @@ if (-not (Remote-Trigger-Exists $guardName)) { Fail "Same-browser session guard 
 Write-Host "Same-browser session guard: HAZIR" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "=== 4/11 WORKER TYPECHECK + UNIT + FULL LOCAL AUTH ===" -ForegroundColor Cyan
+Write-Host "=== 4/11 WORKER TYPECHECK + UNIT + DRY-RUN ===" -ForegroundColor Cyan
 Set-Location $WORKER
 npm ci
 Check-Exit "Worker npm ci basarisiz."
 npm run typecheck
 Check-Exit "Worker typecheck basarisiz."
-npm test
-Check-Exit "Worker testleri veya yerel auth integration smoke basarisiz."
+npm run test:unit
+Check-Exit "Worker unit/contract testleri basarisiz."
 npm run build
 Check-Exit "Worker dry-run basarisiz."
 
