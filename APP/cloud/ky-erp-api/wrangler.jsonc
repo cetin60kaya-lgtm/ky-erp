@@ -17,6 +17,9 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "vars": {
+    "RECOVERY_EMAIL_FROM": "KY ERP <admin@kyerp.net>"
+  },
   "d1_databases": [
     {
       "binding": "DB",
