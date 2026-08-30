@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using KyPdks.Shared;
 
@@ -14,6 +15,10 @@ public partial class PdksWorkbenchWindow
         base.OnContentRendered(e);
         _liveTimer.Tick -= LiveTimer_Tick;
         _liveTimer.Tick += LiveTimer_Tick;
+        MonthCombo.SelectionChanged -= PeriodCombo_SelectionChanged;
+        MonthCombo.SelectionChanged += PeriodCombo_SelectionChanged;
+        YearCombo.SelectionChanged -= PeriodCombo_SelectionChanged;
+        YearCombo.SelectionChanged += PeriodCombo_SelectionChanged;
         _liveTimer.Start();
         ApplyWorkbenchRoleGuard();
         _ = EnsureDefaultNormalShiftAsync();
@@ -23,6 +28,18 @@ public partial class PdksWorkbenchWindow
     {
         _liveTimer.Stop();
         base.OnClosed(e);
+    }
+
+    private async void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_busy || !IsLoaded) return;
+        await BusyAsync("Seçilen dönem yükleniyor...", async () =>
+        {
+            await RefreshAllAsync();
+            ShowAllDays();
+            var (year, month) = SelectedPeriod();
+            StatusText.Text = $"{month:D2}/{year} dönemi yüklendi.";
+        });
     }
 
     private async Task EnsureDefaultNormalShiftAsync()
