@@ -1,7 +1,7 @@
 import AdminSystemOverview from "../admin/AdminSystemOverview";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
-import DosyaKlasorYonetimi from "../admin/DosyaKlasorYonetimi";
+import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminMappings from "../admin/AdminMappings";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
 
@@ -16,7 +16,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     return <AdminCompanySettings activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "dosya-klasor-yonetimi") {
-    return <DosyaKlasorYonetimi activeMainCompany={activeMainCompany} />;
+    return <AdminStorageCenter activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "eslestirmeler") {
     return <AdminMappings activeMainCompany={activeMainCompany} />;
