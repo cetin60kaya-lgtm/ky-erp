@@ -63,7 +63,7 @@ async function tenantTables(c: any) {
   const rows: Row[] = [];
   for (const item of result.results || []) {
     const name = text(item.name);
-    if (!name) continue;
+    if (!name || name.startsWith("auth_")) continue;
     const columns = await columnsOf(c, name);
     if (columns.some((column: Row) => column.name === "main_company_slug")) rows.push({ name, columns });
   }
@@ -133,15 +133,25 @@ async function storeGet(c: any, fileName: string, slug = "") {
     : await c.env.DB.prepare(query).bind(BACKUP_SCOPE, fileName).first<Row>();
   return row ? { ...objectOf(row.data), storeId: row.id, mainCompanySlug: row.main_company_slug, fileName: row.file_name, createdAt: row.created_at, updatedAt: row.updated_at } : null;
 }
+function tenantWhere(table: string) {
+  return table === "json_store"
+    ? "main_company_slug=? AND scope<>?"
+    : "main_company_slug=?";
+}
+function tenantBindings(table: string, slug: string) {
+  return table === "json_store" ? [slug, BACKUP_SCOPE] : [slug];
+}
 async function backupRows(c: any, table: string, slug: string, prefix: string) {
-  const countRow = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM ${quoteIdentifier(table)} WHERE main_company_slug=?`).bind(slug).first<Row>();
+  const where = tenantWhere(table);
+  const bindings = tenantBindings(table, slug);
+  const countRow = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM ${quoteIdentifier(table)} WHERE ${where}`).bind(...bindings).first<Row>();
   const total = Number(countRow?.total || 0);
   const chunks: string[] = [];
   let offset = 0;
   while (offset < total) {
     const result = await c.env.DB.prepare(
-      `SELECT * FROM ${quoteIdentifier(table)} WHERE main_company_slug=? LIMIT ? OFFSET ?`,
-    ).bind(slug, PAGE_SIZE, offset).all<Row>();
+      `SELECT * FROM ${quoteIdentifier(table)} WHERE ${where} LIMIT ? OFFSET ?`,
+    ).bind(...bindings, PAGE_SIZE, offset).all<Row>();
     const rows = result.results || [];
     if (!rows.length) break;
     const key = `${prefix}tables/${table}/${String(offset / PAGE_SIZE + 1).padStart(6, "0")}.json`;
@@ -323,6 +333,7 @@ async function createBackupInternal(c: any, current: Row, slug: string, reason: 
     totalRows,
     files,
     totalFiles: files.length,
+    excludes: { authTables: true, backupRegistry: true },
   };
   await c.env.FILES.put(manifestKey, JSON.stringify(manifest), {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
@@ -359,15 +370,15 @@ function sqlValue(value: unknown) {
   if (typeof value === "boolean") return value ? 1 : 0;
   return JSON.stringify(value);
 }
-async function restoreTable(c: any, table: string, targetSlug: string, chunks: string[], columns: Row[]) {
+async function restoreTable(c: any, table: string, targetSlug: string, chunks: string[]) {
   const liveColumns = new Set((await columnsOf(c, table)).map((column: Row) => column.name));
   if (!liveColumns.has("main_company_slug")) return { table, skipped: true, reason: "TENANT_COLUMN_MISSING" };
-  await c.env.DB.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE main_company_slug=?`).bind(targetSlug).run();
   let inserted = 0;
   for (const key of chunks || []) {
     const payload = await readJsonObject(await c.env.FILES.get(key));
     for (const sourceRow of payload?.rows || []) {
       const row = { ...sourceRow, main_company_slug: targetSlug };
+      if (table === "json_store" && text(row.scope) === BACKUP_SCOPE) continue;
       const entries = Object.entries(row).filter(([name]) => liveColumns.has(name));
       if (!entries.length) continue;
       const names = entries.map(([name]) => quoteIdentifier(name));
@@ -390,6 +401,32 @@ async function restoreFiles(c: any, files: Row[]) {
     restored += 1;
   }
   return restored;
+}
+async function restoreManifestData(c: any, manifest: Row, targetSlug: string) {
+  const entries = Array.isArray(manifest.tables) ? manifest.tables : [];
+  const parentsByTable = new Map<string, string[]>();
+  for (const entry of entries) parentsByTable.set(text(entry.name), await foreignParents(c, text(entry.name)));
+  const order = dependencyOrder(entries, parentsByTable);
+  const entryMap = new Map(entries.map((entry: Row) => [text(entry.name), entry]));
+  const restoredTables: Row[] = [];
+
+  for (const table of order.deleteOrder) {
+    if (!(await tableExists(c, table))) continue;
+    const liveColumns = new Set((await columnsOf(c, table)).map((column: Row) => column.name));
+    if (!liveColumns.has("main_company_slug")) continue;
+    if (table === "json_store" && liveColumns.has("scope")) {
+      await c.env.DB.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE main_company_slug=? AND scope<>?`).bind(targetSlug, BACKUP_SCOPE).run();
+    } else {
+      await c.env.DB.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE main_company_slug=?`).bind(targetSlug).run();
+    }
+  }
+  for (const table of order.insertOrder) {
+    const entry = entryMap.get(table);
+    if (!entry || !(await tableExists(c, table))) continue;
+    restoredTables.push(await restoreTable(c, table, targetSlug, entry.chunks || []));
+  }
+  const restoredFiles = await restoreFiles(c, manifest.files || []);
+  return { restoredTables, restoredFiles };
 }
 
 export function registerAdminBackupRoutes(app: any) {
@@ -448,33 +485,40 @@ export function registerAdminBackupRoutes(app: any) {
       return c.json(errorBody("PRE_RESTORE_BACKUP_FAILED", "Geri yükleme öncesi güvenlik yedeği alınamadığı için işlem başlatılmadı.", { message: error instanceof Error ? error.message : String(error) }), 500);
     }
 
-    const entries = Array.isArray(manifest.tables) ? manifest.tables : [];
-    const parentsByTable = new Map<string, string[]>();
-    for (const entry of entries) parentsByTable.set(text(entry.name), await foreignParents(c, text(entry.name)));
-    const order = dependencyOrder(entries, parentsByTable);
-    const entryMap = new Map(entries.map((entry: Row) => [text(entry.name), entry]));
-    const restoredTables: Row[] = [];
     try {
-      for (const table of order.deleteOrder) {
-        const exists = await tableExists(c, table);
-        if (!exists) continue;
-        const liveColumns = new Set((await columnsOf(c, table)).map((column: Row) => column.name));
-        if (!liveColumns.has("main_company_slug")) continue;
-        await c.env.DB.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE main_company_slug=?`).bind(targetSlug).run();
-      }
-      for (const table of order.insertOrder) {
-        const entry = entryMap.get(table);
-        if (!entry || !(await tableExists(c, table))) continue;
-        // restoreTable normalde silme de yapar; bu aşamada silme zaten tamamlandığı için
-        // çağrıdan önce tablo boş. Aynı DELETE idempotenttir ve güvenlidir.
-        restoredTables.push(await restoreTable(c, table, targetSlug, entry.chunks || [], entry.columns || []));
-      }
-      const restoredFiles = await restoreFiles(c, manifest.files || []);
-      await audit(c, "TENANT_BACKUP_RESTORED", current.id, targetSlug, { backupId: backup.id, safetyBackupId: safetyBackup.id, restoredTables, restoredFiles });
-      return c.json({ ok: true, data: { restored: true, backupId: backup.id, targetSlug, safetyBackupId: safetyBackup.id, restoredTables, restoredFiles, restoredAt: nowIso() } });
+      const restored = await restoreManifestData(c, manifest, targetSlug);
+      await audit(c, "TENANT_BACKUP_RESTORED", current.id, targetSlug, { backupId: backup.id, safetyBackupId: safetyBackup.id, ...restored });
+      return c.json({ ok: true, data: { restored: true, backupId: backup.id, targetSlug, safetyBackupId: safetyBackup.id, ...restored, restoredAt: nowIso() } });
     } catch (error) {
-      await audit(c, "TENANT_BACKUP_RESTORE_FAILED", current.id, targetSlug, { backupId: backup.id, safetyBackupId: safetyBackup?.id, message: error instanceof Error ? error.message : String(error) });
-      return c.json(errorBody("RESTORE_FAILED", "Geri yükleme tamamlanamadı. İşlem öncesi alınan güvenlik yedeği korunuyor.", { safetyBackupId: safetyBackup?.id, message: error instanceof Error ? error.message : String(error) }), 500);
+      let rollbackRestored = false;
+      let rollbackError = "";
+      try {
+        const safetyManifest = await readJsonObject(await c.env.FILES.get(text(safetyBackup?.manifestKey)));
+        if (!safetyManifest || Number(safetyManifest.version || 0) !== BACKUP_VERSION) throw new Error("PRE_RESTORE manifesti okunamadı.");
+        await restoreManifestData(c, safetyManifest, targetSlug);
+        rollbackRestored = true;
+      } catch (rollback) {
+        rollbackError = rollback instanceof Error ? rollback.message : String(rollback);
+      }
+      await audit(c, "TENANT_BACKUP_RESTORE_FAILED", current.id, targetSlug, {
+        backupId: backup.id,
+        safetyBackupId: safetyBackup?.id,
+        rollbackRestored,
+        rollbackError,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return c.json(errorBody(
+        "RESTORE_FAILED",
+        rollbackRestored
+          ? "Geri yükleme tamamlanamadı; sistem PRE_RESTORE güvenlik yedeğine otomatik geri döndü."
+          : "Geri yükleme tamamlanamadı ve otomatik geri dönüş de tamamlanamadı. PRE_RESTORE yedeği R2 üzerinde korunuyor.",
+        {
+          safetyBackupId: safetyBackup?.id,
+          rollbackRestored,
+          rollbackError: rollbackError || undefined,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      ), 500);
     }
   });
 }
