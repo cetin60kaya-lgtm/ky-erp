@@ -6,14 +6,25 @@ Bu dosya GitHub Copilot, Copilot CLI, VS Code agent mode ve diğer AI geliştirm
 
 - Repo: `cetin60kaya-lgtm/ky-erp`
 - Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
-- Canlı uygulama: `https://kyerp.net`
-- İkinci canlı alan adı: `https://app.kyerp.net`
-- Canlı API: `https://api.kyerp.net`
+- **TEK kullanıcı uygulama adresi: `https://kyerp.net/`**
+- Canlı API servis origin'i: `https://api.kyerp.net` — yalnız backend içindir; kullanıcıya ikinci uygulama adresi olarak gösterilmez.
+- **`https://app.kyerp.net` canonical değildir, production hedefi/şartı değildir ve kullanıcı açıkça yeniden istemedikçe oluşturulmaz, doğrulanmaz veya deploy başarısının şartı yapılmaz.**
 - Cloudflare Worker: `ky-erp-api`
-- Cloudflare Pages projesi: `ky-erp-frontend`
+- Frontend yayın altyapısında Pages kullanılabilir; **Pages proje adı veya mevcut proje varlığı sabit varsayılmaz.** Canlı yayın için esas sonuç `https://kyerp.net/` adresidir.
 - Windows canonical repo kökü: `D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ`
 - Her işlemden önce gerçek repo kökünü `git rev-parse --show-toplevel` ile doğrula; destructive işlemde yalnız path varsayımına güvenme.
 - `main` production kaynağı değildir. Kullanıcı açıkça değiştirmedikçe production çalışmaları yalnız yukarıdaki production branch üzerinde yapılır.
+
+## Tek adres kuralı — kritik
+
+Bu bölüm diğer tüm eski notların önündedir:
+
+1. Kullanıcının açacağı ve paylaşacağı tek KY ERP adresi `https://kyerp.net/` adresidir.
+2. `https://api.kyerp.net` arka plandaki API servisidir; ikinci uygulama/domain gibi sunulmaz.
+3. `https://app.kyerp.net` eski/yardımcı bir geçmiş domain olarak kabul edilir; kullanıcı açıkça istemedikçe yeniden bağlanmaz veya deploy kontrolüne eklenmez.
+4. Yeni deploy/script/CI/test yazarken başarı şartı yalnız `kyerp.net` frontend + `api.kyerp.net` backend sağlığıdır.
+5. Bir agent eski doküman, workflow veya scriptte `app.kyerp.net` görürse bunu canonical gerçek kabul etmez; bu dosyadaki tek-adres kuralını uygular.
+6. Cloudflare Pages projesi yoksa veya adı değişmişse sabit proje adı varsayılmaz. Önce Cloudflare gerçek durumu salt-okunur teşhis edilir; kullanıcı onaylı deploy sırasında yalnız `kyerp.net` için gerekli frontend yayın altyapısı kurulur/onarılır.
 
 ## Çalışmaya başlamadan önce
 
@@ -139,13 +150,16 @@ Deploy sırası:
 1. Doğru repo/remote/branch/SHA ve temiz tracked çalışma ağacı.
 2. Cloudflare OAuth (`wrangler whoami`).
 3. Worker typecheck + unit + local auth integration + dry-run.
-4. Worker direct deploy.
-5. `api.kyerp.net` health + `auth/status` + canonical login 400 smoke + CORS.
-6. Frontend lint + test + build.
-7. Pages direct deploy.
-8. `kyerp.net` ve `app.kyerp.net` build asset hash eşleşmesi.
+4. Frontend lint + test + production build.
+5. Gerekliyse hedefli/idempotent D1 uyumluluğu; önce tam remote D1 yedeği. D1 reset ve genel migration zinciri yoktur.
+6. Worker direct deploy.
+7. `api.kyerp.net` health + `auth/status` + canonical login smoke + CORS.
+8. Frontend'i Cloudflare'da `https://kyerp.net/` adresine yayınla. Pages proje adı sabit varsayılmaz; gerekirse güvenli şekilde tespit/oluştur/onar.
+9. **Yalnız `https://kyerp.net/` yeni frontend build asset hashini göstermeden deploy başarılı sayılmaz.**
 
 - "Kaynak hazır" ile "canlıya çıktı" aynı şey değildir.
-- D1 migration canonical deploy scriptinin parçası değildir.
-- Production D1 write testi canonical deploy scriptinin parçası değildir.
-- `https://api.kyerp.net/api/health` 200, auth contract doğru ve iki canlı domain yeni asset hash kullanmadan işi bitmiş sayma.
+- Production D1 reset yasaktır.
+- Genel production migration zinciri yasaktır; yalnız açıkça hedeflenmiş additive/idempotent uyumluluk kullanılabilir.
+- Production D1 write smoke testi yasaktır.
+- `https://api.kyerp.net/api/health` 200, auth contract doğru ve `https://kyerp.net/` yeni asset hash kullanmadan işi bitmiş sayma.
+- `app.kyerp.net` deploy başarısının parçası değildir.
