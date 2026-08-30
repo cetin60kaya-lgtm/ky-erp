@@ -18,10 +18,8 @@ try {
     Stop-Deploy "Node.js surumu okunamadi."
 }
 
-# Windows production deploy standardi Node 22 LTS'tir.
-# Node 24 Windows'ta Wrangler/D1 islemi basarili olduktan sonra process exit
-# sirasinda UV_HANDLE_CLOSING assertion ile sahte exit-code 1 uretebiliyor.
-if ($IsWindows -and $nodeVersion.Major -ne 22) {
+$isWindowsHost = $env:OS -eq "Windows_NT"
+if ($isWindowsHost -and $nodeVersion.Major -ne 22) {
     Stop-Deploy "Windows production deploy icin Node.js 22 LTS gerekiyor. Mevcut surum: $nodeText"
 }
 
@@ -30,5 +28,13 @@ if (-not (Test-Path $script)) {
     Stop-Deploy "Production V3 deploy scripti bulunamadi: $script"
 }
 
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
+if ($isWindowsHost) {
+    $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+    if (-not $pwsh) {
+        Stop-Deploy "PowerShell 7 bulunamadi. Son KY ERP BAT dosyasini calistirarak PowerShell 7 kurulumunu tamamlayin."
+    }
+    & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $script
+} else {
+    & pwsh -NoProfile -File $script
+}
 exit $LASTEXITCODE
