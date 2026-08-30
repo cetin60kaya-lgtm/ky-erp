@@ -102,10 +102,14 @@ test("all admin backup client calls are implemented", () => {
   assert.match(source, /downloadBackupSql/);
 });
 
-test("direct deploy avoids full migration chain and runs unit contracts", () => {
+test("direct deploy avoids full migration chain, checks schema read-only and runs unit contracts", () => {
   const source = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION.ps1"), "utf8");
   assert.match(source, /npm run test:unit/);
   assert.match(source, /Local migration entegrasyon testi YOK/);
+  assert.match(source, /Assert-Remote-Schema-Readiness/);
+  assert.match(source, /pragma_table_info\('hr_monthly_employees'\)/);
+  assert.match(source, /company_aliases/);
+  assert.match(source, /auth_owner_recovery_challenges/);
   assert.match(source, /0022_auth_same_browser_session_guard\.sql/);
   assert.doesNotMatch(source, /wrangler d1 migrations apply/);
 });
