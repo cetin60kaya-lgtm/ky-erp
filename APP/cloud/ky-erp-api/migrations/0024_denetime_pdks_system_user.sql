@@ -1,6 +1,7 @@
 -- KY ERP DENETIM / PDKS sabit sistem hesabi.
--- Hesap kaynakta hazir gelir ancak ilk kurulumda PASIF ve parolasi kullanilamaz durumdadir.
--- Uygulama sahibi Kullanici Merkezi'nden sifre/MFA ayarlayip aktifleştirir.
+-- Hesap kaynakta hazir ve Kullanici Merkezi'nde gorunur gelir.
+-- Ilk parola kriptografik olarak rastgele ve bilinmezdir; uygulama sahibi kullanmadan once
+-- Kullanici Merkezi'nden yeni parola/MFA belirler. must_change_password=1 korunur.
 -- DENETIM yetkisi sabittir: yalniz IK goruntuleme; yazma/onay/silme yoktur.
 
 INSERT INTO auth_users
@@ -8,10 +9,10 @@ INSERT INTO auth_users
 SELECT
   'system-denetim',
   'denetim',
-  'DISABLED_UNTIL_OWNER_RESETS_PASSWORD',
+  '$2b$12$xKGYPI/Uh61nsApDKalSp.9hKevLyaSv4tBaQlzhufK6xvtVRTdle',
   'DENETİM / PDKS',
   'DENETIM',
-  0,
+  1,
   1,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP,
