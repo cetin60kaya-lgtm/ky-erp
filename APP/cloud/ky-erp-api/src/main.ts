@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAdminManagementRoutes } from "./admin-management-cloud";
 import { registerAuthAdminHistoryRoutes } from "./auth-admin-history";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
@@ -97,6 +98,7 @@ registerIkPersonnelControlRoutes(app);
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
+registerAdminManagementRoutes(app);
 
 const shell = new Hono<ShellEnv>();
 
