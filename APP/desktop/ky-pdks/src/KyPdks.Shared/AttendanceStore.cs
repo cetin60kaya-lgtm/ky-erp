@@ -22,7 +22,6 @@ public sealed class AttendanceStore(PdksPaths paths)
         await baseStore.InitializeAsync(ct);
         var operations = new PdksOperationsStore(paths);
         await operations.InitializeAsync(ct);
-
         await using var connection = new SqliteConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using var command = connection.CreateCommand();
@@ -63,7 +62,6 @@ public sealed class AttendanceStore(PdksPaths paths)
             clear.Parameters.AddWithValue("$prefix", prefix);
             await clear.ExecuteNonQueryAsync(ct);
         }
-
         foreach (var day in days)
         {
             await using var command = connection.CreateCommand();
@@ -101,7 +99,6 @@ public sealed class AttendanceStore(PdksPaths paths)
         var end = start.AddMonths(1).AddDays(-1);
         var startText = start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var endText = end.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
         await using var connection = new SqliteConnection(ConnectionString);
         await connection.OpenAsync(ct);
         var people = await LoadPeopleAsync(connection, ct);
@@ -115,10 +112,7 @@ public sealed class AttendanceStore(PdksPaths paths)
 
         foreach (var person in people)
         {
-            var schedule = schedules.TryGetValue(person.Id, out var configured)
-                ? configured
-                : new Schedule(DefaultIn, DefaultOut, 0, 0);
-
+            var schedule = schedules.TryGetValue(person.Id, out var configured) ? configured : new Schedule(DefaultIn, DefaultOut, 0, 0);
             for (var date = start; date <= end; date = date.AddDays(1))
             {
                 var day = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -127,7 +121,6 @@ public sealed class AttendanceStore(PdksPaths paths)
                 raw.TryGetValue(Key(person.CardNo, day), out var rawTimes);
                 rawTimes ??= new List<string>();
                 rawTimes.Sort(StringComparer.Ordinal);
-
                 var outside = (!string.IsNullOrWhiteSpace(person.StartDate) && string.CompareOrdinal(day, person.StartDate) < 0)
                     || (!string.IsNullOrWhiteSpace(person.ExitDate) && string.CompareOrdinal(day, person.ExitDate) > 0);
                 var future = string.CompareOrdinal(day, today) > 0;
@@ -147,6 +140,20 @@ public sealed class AttendanceStore(PdksPaths paths)
                     continue;
                 }
 
+                if (!outside && !future && leaves.TryGetValue(key, out var leave))
+                {
+                    rows.Add(new AttendanceDayRow(person.Id, person.PersonnelCode, person.FullName, person.Department, person.CardNo,
+                        day, leave.Type, "", "", 0, 0, 0, false, 0, leave.Note, "LOCAL_OPERATION"));
+                    continue;
+                }
+
+                if (!outside && !future && holidays.TryGetValue(day, out var holiday))
+                {
+                    rows.Add(new AttendanceDayRow(person.Id, person.PersonnelCode, person.FullName, person.Department, person.CardNo,
+                        day, "RESMI_TATIL", "", "", 0, 0, 0, false, 0, holiday, "LOCAL_OPERATION"));
+                    continue;
+                }
+
                 if (erp is not null)
                 {
                     rows.Add(erp with
@@ -160,24 +167,11 @@ public sealed class AttendanceStore(PdksPaths paths)
                     continue;
                 }
 
-                string status;
-                string note = "";
-                if (outside || future) status = "DONEM_DISI";
-                else if (leaves.TryGetValue(key, out var leave))
-                {
-                    status = leave.Type;
-                    note = leave.Note;
-                }
-                else if (holidays.TryGetValue(day, out var holiday))
-                {
-                    status = "RESMI_TATIL";
-                    note = holiday;
-                }
-                else if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) status = "HAFTA_SONU";
-                else status = "KART_YOK";
-
+                var status = outside || future ? "DONEM_DISI"
+                    : date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ? "HAFTA_SONU"
+                    : "KART_YOK";
                 rows.Add(new AttendanceDayRow(person.Id, person.PersonnelCode, person.FullName, person.Department, person.CardNo,
-                    day, status, "", "", 0, 0, 0, false, 0, note, "LOCAL"));
+                    day, status, "", "", 0, 0, 0, false, 0, "", "LOCAL"));
             }
         }
         return rows;
@@ -185,25 +179,18 @@ public sealed class AttendanceStore(PdksPaths paths)
 
     public static IReadOnlyList<TimesheetRow> BuildTimesheet(IEnumerable<AttendanceDayRow> source)
     {
-        return source
-            .GroupBy(row => row.EmployeeId)
-            .Select(group =>
-            {
-                var first = group.First();
-                return new TimesheetRow(
-                    first.EmployeeId, first.PersonnelCode, first.FullName, first.Department, first.CardNo,
-                    group.Count(row => row.Status is "CALISTI" or "EKSIK_BASIM"),
-                    group.Count(row => row.Status == "YILLIK_IZIN"),
-                    group.Count(row => row.Status == "IZIN"),
-                    group.Count(row => row.Status == "EKSIK_BASIM"),
-                    group.Count(row => row.Status is "KART_YOK" or "DEVAMSIZ"),
-                    group.Count(row => row.LateMinutes > 0),
-                    group.Sum(row => row.LateMinutes),
-                    group.Sum(row => row.EarlyMinutes),
-                    group.Sum(row => row.OvertimeMinutes));
-            })
-            .OrderBy(row => row.FullName, StringComparer.Create(new CultureInfo("tr-TR"), true))
-            .ToArray();
+        return source.GroupBy(row => row.EmployeeId).Select(group =>
+        {
+            var first = group.First();
+            return new TimesheetRow(first.EmployeeId, first.PersonnelCode, first.FullName, first.Department, first.CardNo,
+                group.Count(row => row.Status is "CALISTI" or "EKSIK_BASIM"),
+                group.Count(row => row.Status == "YILLIK_IZIN"),
+                group.Count(row => row.Status == "IZIN"),
+                group.Count(row => row.Status == "EKSIK_BASIM"),
+                group.Count(row => row.Status is "KART_YOK" or "DEVAMSIZ"),
+                group.Count(row => row.LateMinutes > 0),
+                group.Sum(row => row.LateMinutes), group.Sum(row => row.EarlyMinutes), group.Sum(row => row.OvertimeMinutes));
+        }).OrderBy(row => row.FullName, StringComparer.Create(new CultureInfo("tr-TR"), true)).ToArray();
     }
 
     private static async Task<List<CachedPerson>> LoadPeopleAsync(SqliteConnection connection, CancellationToken ct)
@@ -222,15 +209,12 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, AttendanceDayRow>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT employee_id,work_date,status,entry_time,exit_time,late_minutes,early_minutes,overtime_minutes,missing_punch,event_count,note FROM attendance_cache WHERE work_date BETWEEN $start AND $end";
-        command.Parameters.AddWithValue("$start", start);
-        command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            var employeeId = reader.GetString(0);
-            var date = reader.GetString(1);
-            result[Key(employeeId, date)] = new AttendanceDayRow(employeeId, "", "", "", "", date, reader.GetString(2), Text(reader, 3), Text(reader, 4),
-                reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8) != 0, reader.GetInt32(9), Text(reader, 10), "ERP_CACHE");
+            var employeeId = reader.GetString(0); var date = reader.GetString(1);
+            result[Key(employeeId, date)] = new AttendanceDayRow(employeeId, "", "", "", "", date, reader.GetString(2), Text(reader, 3), Text(reader, 4), reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8) != 0, reader.GetInt32(9), Text(reader, 10), "ERP_CACHE");
         }
         return result;
     }
@@ -240,14 +224,12 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT p.card_no,p.work_date,p.event_time
-              FROM raw_punches p
+            SELECT p.card_no,p.work_date,p.event_time FROM raw_punches p
              WHERE p.work_date BETWEEN $start AND $end
                AND NOT EXISTS (SELECT 1 FROM voided_events v WHERE v.event_id=p.id)
              ORDER BY p.work_date,p.event_time;
             """;
-        command.Parameters.AddWithValue("$start", start);
-        command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
@@ -262,14 +244,9 @@ public sealed class AttendanceStore(PdksPaths paths)
     {
         var result = new Dictionary<string, Schedule>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT eg.employee_id,w.entry_time,w.exit_time,w.late_tolerance,w.early_tolerance
-              FROM employee_groups eg JOIN work_groups w ON w.id=eg.group_id
-             WHERE w.active=1;
-            """;
+        command.CommandText = "SELECT eg.employee_id,w.entry_time,w.exit_time,w.late_tolerance,w.early_tolerance FROM employee_groups eg JOIN work_groups w ON w.id=eg.group_id WHERE w.active=1";
         await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
-            result[reader.GetString(0)] = new Schedule(reader.GetString(1), reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4));
+        while (await reader.ReadAsync(ct)) result[reader.GetString(0)] = new Schedule(reader.GetString(1), reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4));
         return result;
     }
 
@@ -278,11 +255,9 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT work_date,name,half_day FROM holidays_local WHERE work_date BETWEEN $start AND $end";
-        command.Parameters.AddWithValue("$start", start);
-        command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
-            result[reader.GetString(0)] = reader.GetInt32(2) != 0 ? $"{reader.GetString(1)} · Yarım gün" : reader.GetString(1);
+        while (await reader.ReadAsync(ct)) result[reader.GetString(0)] = reader.GetInt32(2) != 0 ? $"{reader.GetString(1)} · Yarım gün" : reader.GetString(1);
         return result;
     }
 
@@ -291,16 +266,14 @@ public sealed class AttendanceStore(PdksPaths paths)
         var result = new Dictionary<string, LocalLeave>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT employee_id,start_date,end_date,leave_type,COALESCE(note,'') FROM leaves_local WHERE start_date<=$end AND end_date>=$start";
-        command.Parameters.AddWithValue("$start", start);
-        command.Parameters.AddWithValue("$end", end);
+        command.Parameters.AddWithValue("$start", start); command.Parameters.AddWithValue("$end", end);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
             var employee = reader.GetString(0);
             if (!DateTime.TryParseExact(reader.GetString(1), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var from)) continue;
             if (!DateTime.TryParseExact(reader.GetString(2), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var to)) continue;
-            var type = reader.GetString(3);
-            var note = reader.GetString(4);
+            var type = reader.GetString(3); var note = reader.GetString(4);
             for (var date = from; date <= to; date = date.AddDays(1))
             {
                 var day = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -319,7 +292,6 @@ public sealed class AttendanceStore(PdksPaths paths)
         var parts = value.Split(':');
         return parts.Length >= 2 && int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m) ? h * 60 + m : null;
     }
-
     private sealed record Schedule(string Entry, string Exit, int LateTolerance, int EarlyTolerance);
     private sealed record LocalLeave(string Type, string Note);
 }
