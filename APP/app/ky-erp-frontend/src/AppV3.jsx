@@ -12,6 +12,7 @@ const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admi
 const IkPage = lazyWithRetry(() => import("./pages/modules/IkPage"), "ik-v3");
 const IkPersonnelCenterPage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelCenterPage"), "ik-personnel-center-v2");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
+const PdksPage = lazyWithRetry(() => import("./pages/modules/pdks/PdksPage"), "pdks-v1");
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
@@ -33,6 +34,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/ik/IkPersonnelCenterPage"),
     import("./pages/modules/ik/IkAuditPersonnelPage"),
   ]),
+  pdks: () => import("./pages/modules/pdks/PdksPage"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
@@ -270,6 +272,7 @@ export default function AppV3() {
       if (activeTab === "personel-kartlari") return <IkPersonnelCenterPage activeTab={activeTab} {...sharedProps} />;
       return <IkPage activeTab={activeTab} {...sharedProps} />;
     }
+    if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "asistan") return <AiAssistantPage {...sharedProps} />;
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
