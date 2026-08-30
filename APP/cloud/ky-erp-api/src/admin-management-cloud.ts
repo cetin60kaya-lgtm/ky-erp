@@ -3,10 +3,12 @@ import { hash } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
 
 type AnyRow = Record<string, any>;
+
 const OTP_SECONDS = 10 * 60;
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS_HOUR = 5;
 const RESEND_SECONDS = 60;
+const ADMIN_EMAIL_FROM = "KY ERP <admin@kyerp.net>";
 const MODULE_KEYS = ["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","ISNET","ASISTAN","ADMIN","RAPORLAR"];
 const MANAGED_ROLES = ["COMPANY_ADMIN","MUHASEBE","DESEN","IMALAT","BOYAHANE","IK","DENETIM","VIEWER"];
 const LOGIN_POLICIES = ["PASSWORD_ONLY","GOOGLE","MICROSOFT","ANY_MFA","BOTH_MFA"];
@@ -34,16 +36,14 @@ async function tableExists(c: any, table: string) { const row = await c.env.DB.p
 
 function deliveryCapabilities(c: any) {
   const env = c.env as AnyRow;
-  const resend = Boolean(env.RESEND_API_KEY && env.RECOVERY_EMAIL_FROM);
-  const webhook = Boolean(env.RECOVERY_EMAIL_WEBHOOK_URL);
-  const twilio = Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER);
-  const smsWebhook = Boolean(env.RECOVERY_SMS_WEBHOOK_URL);
+  const resend = Boolean(env.RESEND_API_KEY);
   return {
-    email: resend || webhook,
-    emailProvider: resend ? "RESEND" : webhook ? "WEBHOOK" : "NONE",
+    email: resend,
+    emailProvider: resend ? "RESEND" : "NONE",
     emailConfirmation: "PROVIDER_ACCEPTED",
-    sms: twilio || smsWebhook,
-    smsProvider: twilio ? "TWILIO" : smsWebhook ? "WEBHOOK" : "NONE",
+    emailSender: ADMIN_EMAIL_FROM,
+    sms: false,
+    smsProvider: "NONE",
   };
 }
 
@@ -56,23 +56,12 @@ async function acceptedMessageId(response: Response) {
 
 async function sendEmail(c: any, destination: string, code: string) {
   const env = c.env as AnyRow;
-  if (env.RECOVERY_EMAIL_WEBHOOK_URL) {
-    const response = await fetch(text(env.RECOVERY_EMAIL_WEBHOOK_URL), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(env.RECOVERY_EMAIL_WEBHOOK_TOKEN ? { Authorization: `Bearer ${text(env.RECOVERY_EMAIL_WEBHOOK_TOKEN)}` } : {}) },
-      body: JSON.stringify({ channel: "email", to: destination, code, purpose: "KY ERP e-posta doğrulama" }),
-    });
-    if (!response.ok) throw new Error("E-posta doğrulama webhook'u isteği kabul etmedi.");
-    const messageId = await acceptedMessageId(response);
-    if (!messageId) throw new Error("E-posta servisi kabul kimliği döndürmedi; gönderim doğrulanamadı.");
-    return { provider: "WEBHOOK", messageId };
-  }
-  if (!env.RESEND_API_KEY || !env.RECOVERY_EMAIL_FROM) throw new Error("E-posta doğrulama servisi bağlı değil.");
+  if (!env.RESEND_API_KEY) throw new Error("Resend API anahtarı Worker'a bağlı değil.");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${text(env.RESEND_API_KEY)}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: text(env.RECOVERY_EMAIL_FROM),
+      from: ADMIN_EMAIL_FROM,
       to: [destination],
       subject: "KY ERP e-posta doğrulama kodu",
       text: `KY ERP e-posta doğrulama kodunuz: ${code}\n\nBu kod 10 dakika geçerlidir. Bu işlemi siz başlatmadıysanız kodu paylaşmayın.`,
@@ -85,7 +74,7 @@ async function sendEmail(c: any, destination: string, code: string) {
   }
   const messageId = await acceptedMessageId(response);
   if (!messageId) throw new Error("Resend kabul kimliği dönmedi; gönderim doğrulanamadı.");
-  return { provider: "RESEND", messageId };
+  return { provider: "RESEND", messageId, sender: ADMIN_EMAIL_FROM };
 }
 
 async function audit(c: any, action: string, actorId: string, targetId: string, detail: AnyRow = {}) {
@@ -198,8 +187,7 @@ export function registerAdminManagementRoutes(app: any) {
   app.get("/api/admin/security/delivery-capabilities", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current || !isOwner(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu bilgi yalnız uygulama sahibine açıktır."), current ? 403 : 401);
-    const caps = deliveryCapabilities(c);
-    return c.json({ ok: true, data: caps });
+    return c.json({ ok: true, data: deliveryCapabilities(c) });
   });
 
   app.post("/api/admin/security/users/:id/email-verification/start", async (c: any) => {
@@ -207,12 +195,12 @@ export function registerAdminManagementRoutes(app: any) {
     if (!current || !isOwner(current.role)) return c.json(jsonError("OWNER_ONLY", "E-posta doğrulaması yalnız uygulama sahibi tarafından başlatılabilir."), current ? 403 : 401);
     if (!(await tableExists(c, "auth_owner_recovery_challenges"))) return c.json(jsonError("EMAIL_VERIFICATION_SCHEMA_MISSING", "Doğrulama tablosu hazır değil."), 503);
     const caps = deliveryCapabilities(c);
-    if (!caps.email) return c.json(jsonError("DELIVERY_NOT_CONFIGURED", "E-posta doğrulama servisi Worker'a bağlı değil."), 503);
+    if (!caps.email) return c.json(jsonError("DELIVERY_NOT_CONFIGURED", "Resend e-posta servisi Worker'a bağlı değil."), 503);
     const user = await targetUser(c, c.req.param("id"));
     if (!user) return c.json(jsonError("USER_NOT_FOUND", "Kullanıcı bulunamadı."), 404);
     const email = text(user.email);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json(jsonError("EMAIL_NOT_CONFIGURED", "Kullanıcıda geçerli bir e-posta adresi kayıtlı değil."), 400);
-    if (Boolean(user.email_verified)) return c.json({ ok: true, data: { alreadyVerified: true, masked: maskEmail(email), deliveryStatus:"ALREADY_VERIFIED" } });
+    if (Boolean(user.email_verified)) return c.json({ ok: true, data: { alreadyVerified: true, masked: maskEmail(email), sender: ADMIN_EMAIL_FROM } });
 
     const recent = await c.env.DB.prepare(
       `SELECT COUNT(*) AS total,MAX(created_at) AS latest
@@ -232,15 +220,16 @@ export function registerAdminManagementRoutes(app: any) {
        (id,user_id,purpose,channel,destination_masked,challenge_token_hash,otp_hash,otp_salt,question_ids,attempt_count,answer_attempt_count,send_count,created_at,expires_at,ip_address)
        VALUES (?,?,?,?,?,?,?,?,?,0,0,1,?,?,?)`,
     ).bind(id,user.id,"USER_EMAIL_VERIFY","EMAIL",maskEmail(email),await sha256(challengeToken),await sha256(`${salt}:${otp}`),salt,"[]",timestamp,addSeconds(OTP_SECONDS),clientIp(c)||null).run();
-    let accepted: AnyRow;
+
+    let accepted: { provider: string; messageId: string; sender: string };
     try {
       accepted = await sendEmail(c,email,otp);
     } catch (error) {
       await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET consumed_at=? WHERE id=?").bind(nowIso(),id).run();
-      return c.json(jsonError("DELIVERY_FAILED", error?.message || "Doğrulama kodu gönderim servisi tarafından kabul edilmedi."),503);
+      return c.json(jsonError("DELIVERY_FAILED", error?.message || "Doğrulama kodu gönderilemedi."),503);
     }
-    await audit(c,"USER_EMAIL_VERIFICATION_ACCEPTED",current.id,user.id,{masked:maskEmail(email),provider:accepted.provider,messageId:accepted.messageId});
-    return c.json({ ok:true,data:{ verificationId:id,verificationToken:challengeToken,masked:maskEmail(email),expiresAt:addSeconds(OTP_SECONDS),deliveryStatus:"PROVIDER_ACCEPTED",provider:accepted.provider,providerMessageId:accepted.messageId } });
+    await audit(c,"USER_EMAIL_VERIFICATION_ACCEPTED",current.id,user.id,{masked:maskEmail(email),provider:accepted.provider,providerMessageId:accepted.messageId,sender:accepted.sender});
+    return c.json({ok:true,data:{verificationId:id,verificationToken:challengeToken,masked:maskEmail(email),expiresAt:addSeconds(OTP_SECONDS),deliveryStatus:"PROVIDER_ACCEPTED",provider:accepted.provider,providerMessageId:accepted.messageId,sender:accepted.sender}});
   });
 
   app.post("/api/admin/security/users/:id/email-verification/verify", async (c: any) => {
@@ -265,7 +254,7 @@ export function registerAdminManagementRoutes(app: any) {
     const timestamp = nowIso();
     await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET verified_at=?,consumed_at=? WHERE id=?").bind(timestamp,timestamp,row.id).run();
     await c.env.DB.prepare("UPDATE auth_user_security SET email_verified=1,updated_at=? WHERE user_id=?").bind(timestamp,c.req.param("id")).run();
-    await audit(c,"USER_EMAIL_VERIFIED",current.id,c.req.param("id"),{masked:row.destination_masked});
-    return c.json({ok:true,data:{verified:true,verifiedAt:timestamp}});
+    await audit(c,"USER_EMAIL_VERIFIED",current.id,c.req.param("id"),{masked:row.destination_masked,sender:ADMIN_EMAIL_FROM});
+    return c.json({ok:true,data:{verified:true,verifiedAt:timestamp,sender:ADMIN_EMAIL_FROM}});
   });
 }
