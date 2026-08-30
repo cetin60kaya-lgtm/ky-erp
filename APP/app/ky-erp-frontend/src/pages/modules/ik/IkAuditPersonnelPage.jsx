@@ -178,8 +178,8 @@ export default function IkAuditPersonnelPage() {
     }
   }
 
-  const people = data?.people || [];
-  const rows = data?.rows || [];
+  const people = useMemo(() => data?.people || [], [data?.people]);
+  const rows = useMemo(() => data?.rows || [], [data?.rows]);
   const summary = data?.summary || {};
   const today = data?.today || localToday();
   const selectedPerson = people.find((person) => person.id === selectedId) || null;
