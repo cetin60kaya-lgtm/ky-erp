@@ -17,9 +17,7 @@ $InstallerOut = Join-Path $Dist 'setup'
 
 Write-Host 'KY PDKS Windows build başlıyor...' -ForegroundColor Cyan
 
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw '.NET 8 SDK bulunamadı.'
-}
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 8 SDK bulunamadı.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 New-Item $DesktopOut -ItemType Directory -Force | Out-Null
@@ -55,6 +53,7 @@ if (-not (Test-Path $AgentExe)) { throw "Agent oluşmadı: $AgentExe" }
 Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
 $InnoCandidates = @(
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }),
     $(if ($ProgramFilesX86) { Join-Path $ProgramFilesX86 'Inno Setup 6\ISCC.exe' }),
     $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
 ) | Where-Object { $_ -and (Test-Path $_) }
@@ -80,7 +79,7 @@ $HashFile = "$($Setup.FullName).sha256.txt"
 
 $BuildInfo = [ordered]@{
     product = 'KY PDKS'
-    version = '1.0.0'
+    version = '1.1.0'
     builtAt = (Get-Date).ToString('o')
     setup = $Setup.Name
     sha256 = $Hash
