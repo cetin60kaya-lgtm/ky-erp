@@ -38,10 +38,20 @@ test("V5 can safely recover a missing Pages project after preflight", () => {
   assert.match(v5, /Pages custom domain: ACTIVE/);
 });
 
-test("V5 keeps full Worker auth integration before any D1 stage and rejects a second frontend domain at runtime", () => {
+test("V5 keeps full Worker auth integration and injects Pages preparation before the D1 stage", () => {
   assert.match(v5, /\$source\.Replace\('npm run test:unit', 'npm test'\)/);
   assert.match(v5, /Worker tam unit\/auth integration testleri basarisiz/);
-  assert.match(v5, /Pages altyapisi ancak Worker\/frontend preflight bittikten sonra, D1 yazimindan once hazirlanir/);
+  assert.match(v5, /\$d1Marker = 'Write-Host "=== 5\/11 D1 YEDEK \+ HEDEFLI UYUMLULUK ===" -ForegroundColor Cyan'/);
+  assert.match(v5, /\$pagesInit = @'/);
+  assert.match(v5, /Resolve-Or-Create-KyPagesProject/);
+  assert.match(v5, /\$source = \$source\.Replace\(\$d1Marker, \$pagesInit \+ "`r`n" \+ \$d1Marker\)/);
   assert.match(v5, /Runtime deploy scriptinde ikinci frontend domain referansi kaldi/);
   assert.match(v5, /=== 9\/11 TEK DOMAIN ASSET DOGRULAMA ===/);
+
+  const d1MarkerDefinition = v5.indexOf("$d1Marker =");
+  const pagesInitDefinition = v5.indexOf("$pagesInit =");
+  const d1Injection = v5.indexOf("$source = $source.Replace($d1Marker");
+  assert.ok(d1MarkerDefinition >= 0);
+  assert.ok(pagesInitDefinition > d1MarkerDefinition);
+  assert.ok(d1Injection > pagesInitDefinition);
 });
