@@ -14,6 +14,7 @@ echo ============================================================
 echo   KY ERP - CANONICAL TEK TIK PRODUCTION
 echo ============================================================
 echo   Public : https://kyerp.net/
+echo   Mail   : KY ERP ^<admin@kyerp.net^>
 echo   Branch : %BRANCH%
 echo ============================================================
 echo.
@@ -90,8 +91,22 @@ if /i not "!LOCAL_SHA!"=="!REMOTE_SHA!" (
 )
 echo [OK] Production SHA: !LOCAL_SHA!
 
+if not exist "%ROOT%DEPLOY\KYERP_RESEND_BOOTSTRAP.ps1" (
+  echo [HATA] Resend bootstrap scripti bulunamadi.
+  goto :fail
+)
 if not exist "%ROOT%DEPLOY\KYERP_DIRECT_PRODUCTION.ps1" (
   echo [HATA] Canonical deploy scripti bulunamadi.
+  goto :fail
+)
+
+echo.
+echo [MAIL] admin@kyerp.net production mail on-kosulu kontrol ediliyor...
+"!PWSH!" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%DEPLOY\KYERP_RESEND_BOOTSTRAP.ps1"
+set "MAIL_RC=!ERRORLEVEL!"
+if not "!MAIL_RC!"=="0" (
+  echo.
+  echo [HATA] Resend/admin@kyerp.net hazir olmadan production deploy baslatilmadi.
   goto :fail
 )
 
@@ -109,6 +124,7 @@ echo.
 echo ============================================================
 echo   KY ERP PRODUCTION BASARILI
 echo   https://kyerp.net/
+echo   Mail: KY ERP ^<admin@kyerp.net^>
 echo ============================================================
 echo.
 pause
