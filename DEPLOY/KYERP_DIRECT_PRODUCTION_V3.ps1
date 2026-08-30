@@ -9,6 +9,7 @@ $DB_NAME = "ky-erp-db"
 $DB_CONFIG = "wrangler.jsonc"
 $SESSION_GUARD_FILE = Join-Path $WORKER "migrations\0022_auth_same_browser_session_guard.sql"
 $ALIAS_SCHEMA_FILE = Join-Path $WORKER "migrations\0023_admin_company_alias_schema.sql"
+$AUDIT_USER_FILE = Join-Path $WORKER "migrations\0024_denetime_pdks_system_user.sql"
 $BACKUP_DIR = Join-Path $ROOT "BACKUPS\D1\PRE_DEPLOY"
 
 function Fail($message) {
@@ -55,6 +56,40 @@ function Remote-Trigger-Exists($triggerName) {
     return ([int]$json[0].results[0].total -gt 0)
 }
 
+function Assert-Denetime-System-User {
+    $userSql = @"
+SELECT u.id,u.username,u.role,u.is_active,
+       COALESCE(s.main_company_slug,'') AS main_company_slug,
+       COALESCE(h.scope,'') AS hr_scope
+  FROM auth_users u
+  LEFT JOIN auth_user_security s ON s.user_id=u.id
+  LEFT JOIN ik_user_hr_scope h ON h.user_id=u.id
+ WHERE LOWER(TRIM(u.username))='denetim'
+ LIMIT 1;
+"@
+    $userJson = Invoke-Remote-D1Json $userSql "DENETIM sistem hesabi kontrolu"
+    $rows = @($userJson[0].results)
+    if ($rows.Count -ne 1) { Fail "DENETIM sistem hesabi canli D1'de bulunamadi." }
+    $auditUser = $rows[0]
+    if ([string]$auditUser.role -ne "DENETIM") { Fail "denetim kullanicisinin rolu DENETIM degil: $($auditUser.role)" }
+    if ([string]$auditUser.hr_scope -ne "AUDIT") { Fail "denetim kullanicisinin IK kapsami AUDIT degil: $($auditUser.hr_scope)" }
+
+    $permSql = @"
+SELECT
+  SUM(CASE WHEN UPPER(module_key)<>'IK' AND (can_view<>0 OR can_create<>0 OR can_update<>0 OR can_delete<>0 OR can_approve<>0) THEN 1 ELSE 0 END) AS foreign_permissions,
+  SUM(CASE WHEN UPPER(module_key)='IK' AND can_view=1 AND can_create=0 AND can_update=0 AND can_delete=0 AND can_approve=0 THEN 1 ELSE 0 END) AS valid_ik_permissions,
+  SUM(CASE WHEN can_create<>0 OR can_update<>0 OR can_delete<>0 OR can_approve<>0 THEN 1 ELSE 0 END) AS write_permissions
+FROM auth_user_module_permissions
+WHERE user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' LIMIT 1);
+"@
+    $permJson = Invoke-Remote-D1Json $permSql "DENETIM izin kilidi kontrolu"
+    $perm = $permJson[0].results[0]
+    if ([int]($perm.foreign_permissions ?? 0) -ne 0) { Fail "DENETIM hesabinda IK disi aktif izin bulundu." }
+    if ([int]($perm.valid_ik_permissions ?? 0) -lt 1) { Fail "DENETIM hesabinda sabit IK goruntuleme izni bulunamadi." }
+    if ([int]($perm.write_permissions ?? 0) -ne 0) { Fail "DENETIM hesabinda yazma/silme/onay yetkisi bulundu." }
+    Write-Host "DENETIM: hazir sistem hesabi | yalniz IK/PDKS | salt-okunur" -ForegroundColor Green
+}
+
 function Assert-Remote-Schema-Readiness {
     $tableSql = @"
 WITH required(name) AS (
@@ -74,7 +109,8 @@ WITH required(name) AS (
     ('auth_security_audit'),
     ('auth_owner_recovery_challenges'),
     ('hr_monthly_employees'),
-    ('ik_person_card_settings')
+    ('ik_person_card_settings'),
+    ('ik_user_hr_scope')
 )
 SELECT r.name AS missing
   FROM required r
@@ -132,8 +168,8 @@ Write-Host "KORUMA:" -ForegroundColor Yellow
 Write-Host "- Tum Worker + frontend test/build bitmeden canliya yazma YOK." -ForegroundColor Yellow
 Write-Host "- Production D1 RESET YOK." -ForegroundColor Yellow
 Write-Host "- Genel migration zinciri YOK." -ForegroundColor Yellow
-Write-Host "- Yalniz additive 0023 firma-eslestirme semasi ve gerekli 0022 session guard uygulanabilir." -ForegroundColor Yellow
-Write-Host "- Her iki D1 uyumluluk adimindan once tam D1 export yedegi alinir." -ForegroundColor Yellow
+Write-Host "- Yalniz additive 0023, DENETIM 0024 ve gerekli 0022 session guard uygulanabilir." -ForegroundColor Yellow
+Write-Host "- D1 uyumluluk adimlarindan once tam D1 export yedegi alinir." -ForegroundColor Yellow
 Write-Host "- Production test INSERT/UPDATE/DELETE YOK." -ForegroundColor Yellow
 Write-Host "- Kirli tracked Git agaci otomatik resetlenmez." -ForegroundColor Yellow
 Write-Host ""
@@ -143,6 +179,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "Git bulunamadi
 if (-not (Get-Command wrangler -ErrorAction SilentlyContinue)) { Fail "Wrangler bulunamadi. npm install -g wrangler calistirin." }
 if (-not (Test-Path $SESSION_GUARD_FILE)) { Fail "0022 session guard dosyasi bulunamadi: $SESSION_GUARD_FILE" }
 if (-not (Test-Path $ALIAS_SCHEMA_FILE)) { Fail "0023 firma eslestirme sema dosyasi bulunamadi: $ALIAS_SCHEMA_FILE" }
+if (-not (Test-Path $AUDIT_USER_FILE)) { Fail "0024 DENETIM sistem kullanicisi dosyasi bulunamadi: $AUDIT_USER_FILE" }
 
 Write-Host "=== 1/11 REPO ===" -ForegroundColor Cyan
 Set-Location $ROOT
@@ -227,8 +264,14 @@ if (-not (Remote-Trigger-Exists $guardName)) {
     Check-Exit "0022 same-browser session guard uygulanamadi. D1 yedegi korunuyor."
 }
 if (-not (Remote-Trigger-Exists $guardName)) { Fail "Same-browser session guard canli D1'de dogrulanamadi." }
+
+Write-Host "0024 DENETIM / PDKS sistem hesabi kontrol/uygulama..." -ForegroundColor Yellow
+wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $AUDIT_USER_FILE
+Check-Exit "0024 DENETIM sistem hesabi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+
 Assert-Remote-Schema-Readiness
-Write-Host "D1 hedefli uyumluluk + sema: HAZIR" -ForegroundColor Green
+Assert-Denetime-System-User
+Write-Host "D1 hedefli uyumluluk + sema + DENETIM: HAZIR" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 6/11 WORKER PRODUCTION DEPLOY ===" -ForegroundColor Green
@@ -314,7 +357,8 @@ $finalHealth = Invoke-WebRequest "https://api.kyerp.net/api/health?final=$([Date
 if ($finalHealth.StatusCode -ne 200) { Fail "Son API health kontrolu basarisiz." }
 if (-not (Remote-Trigger-Exists $guardName)) { Fail "Deploy sonunda same-browser guard kayip." }
 Assert-Remote-Schema-Readiness
-Write-Host "API + D1 sema + session guard son kontrol: HAZIR" -ForegroundColor Green
+Assert-Denetime-System-User
+Write-Host "API + D1 sema + session guard + DENETIM son kontrol: HAZIR" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 11/11 SONUC ===" -ForegroundColor Cyan
@@ -325,6 +369,7 @@ Write-Host "Repo SHA        : $LOCAL_SHA"
 Write-Host "Auth            : $AUTH_VERSION"
 Write-Host "Worker API      : HTTP 200"
 Write-Host "D1 schema       : HAZIR"
+Write-Host "DENETIM         : IK/PDKS salt-okunur"
 Write-Host "Login transport : 30/30"
 Write-Host "Session refresh : HAZIR"
 Write-Host "Session guard   : HAZIR"
