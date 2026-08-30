@@ -3,6 +3,10 @@ import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAdminManagementRoutes } from "./admin-management-cloud";
+import { registerAdminCoreRoutes } from "./admin-core-cloud";
+import { registerAdminMappingRoutes } from "./admin-mappings-cloud";
+import { registerAdminStorageRoutes } from "./admin-storage-cloud";
+import { registerAdminBackupRoutes } from "./admin-backup-cloud";
 import { registerAuthAdminHistoryRoutes } from "./auth-admin-history";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
@@ -101,6 +105,10 @@ registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
 registerAdminManagementRoutes(app);
+registerAdminCoreRoutes(app);
+registerAdminMappingRoutes(app);
+registerAdminStorageRoutes(app);
+registerAdminBackupRoutes(app);
 
 const shell = new Hono<ShellEnv>();
 
