@@ -76,10 +76,14 @@ function Resolve-Pages-Project {
         $repo = @($projects | Where-Object { Project-RepoMatches $_ })
         $branch = @($projects | Where-Object { ([string]$_.production_branch).Trim() -eq $BRANCH })
 
+        if ($root.Count -eq 1 -and $app.Count -eq 1 -and ([string]$root[0].name) -ne ([string]$app[0].name)) {
+            Fail "kyerp.net ve app.kyerp.net iki farkli Pages projesine bagli. Canliya yazmadan durduruldu: kyerp.net=$([string]$root[0].name), app.kyerp.net=$([string]$app[0].name)"
+        }
+
         $selected = $null
         if ($both.Count -eq 1) { $selected = $both[0] }
-        elseif ($root.Count -eq 1) { $selected = $root[0] }
-        elseif ($app.Count -eq 1) { $selected = $app[0] }
+        elseif ($root.Count -eq 1 -and $app.Count -eq 0) { $selected = $root[0] }
+        elseif ($app.Count -eq 1 -and $root.Count -eq 0) { $selected = $app[0] }
         elseif ($repo.Count -eq 1) { $selected = $repo[0] }
         elseif ($branch.Count -eq 1) { $selected = $branch[0] }
         elseif ($projects.Count -eq 1) { $selected = $projects[0] }
