@@ -1,51 +1,127 @@
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text.Json;
+using System.Net;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
-using Microsoft.Data.Sqlite;
+using KyPdks.Shared;
 
 namespace KyPdks.Desktop;
 
 public partial class MainWindow : Window
 {
-    private readonly DesktopPaths _paths = new();
-    private readonly LocalPdksReader _store;
+    private readonly PdksPaths _paths = new();
+    private readonly LocalPdksStore _store;
+    private readonly ConfigStore _configStore;
+    private readonly SecureSessionStore _sessionStore;
     private readonly ErpApiClient _erp = new();
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private readonly DispatcherTimer _autoSyncTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+    private readonly CancellationTokenSource _lifetime = new();
+    private CancellationTokenSource? _approvalCts;
     private AuthFlow? _authFlow;
     private string _token = "";
+    private string _role = "";
+    private bool _syncing;
+    private DateTimeOffset _nextAutoSync = DateTimeOffset.MinValue;
 
     public MainWindow()
     {
         InitializeComponent();
-        _store = new LocalPdksReader(_paths);
-        DeviceText.Text = $"Cihaz: {_paths.DeviceLabel}";
-        _refreshTimer.Tick += async (_, _) => await RefreshLocalAsync();
-        Loaded += async (_, _) =>
+        _store = new LocalPdksStore(_paths);
+        _configStore = new ConfigStore(_paths);
+        _sessionStore = new SecureSessionStore(_paths);
+        _refreshTimer.Tick += async (_, _) => await SafeRefreshAsync();
+        _autoSyncTimer.Tick += async (_, _) => await AutoSyncTickAsync();
+    }
+
+    private async void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        try
         {
-            await _store.InitializeAsync();
+            await _store.InitializeAsync(_lifetime.Token);
+            DeviceText.Text = $"Cihaz: {_paths.DeviceLabel}";
+            DeviceIdText.Text = _paths.DeviceLabel;
+            DatabasePathText.Text = _paths.Database;
+            LoadSettings();
+            await LoadCachedPeopleAsync();
+            await RestoreSessionAsync();
             await RefreshLocalAsync();
             _refreshTimer.Start();
-        };
-        Closed += (_, _) => _refreshTimer.Stop();
+            _autoSyncTimer.Start();
+        }
+        catch (Exception error)
+        {
+            NoticeText.Text = $"Başlatma hatası: {error.Message}";
+        }
+    }
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        _refreshTimer.Stop();
+        _autoSyncTimer.Stop();
+        _approvalCts?.Cancel();
+        _lifetime.Cancel();
+        _erp.Dispose();
+    }
+
+    private async Task RestoreSessionAsync()
+    {
+        var session = _sessionStore.Load();
+        if (session is null || !session.IsUsable)
+        {
+            if (session is not null) _sessionStore.Clear();
+            SetLoggedOutUi();
+            return;
+        }
+
+        _token = session.Token;
+        _role = session.Role;
+        SetLoggedInUi(session.FullName, session.UserName, session.Role, online: false);
+        try
+        {
+            var me = await _erp.GetMeAsync(_token, _lifetime.Token);
+            var fullName = string.IsNullOrWhiteSpace(me.FullName) ? session.FullName : me.FullName;
+            var userName = string.IsNullOrWhiteSpace(me.UserName) ? session.UserName : me.UserName;
+            var role = string.IsNullOrWhiteSpace(me.Role) ? session.Role : me.Role;
+            _role = role;
+            _sessionStore.Save(_token, userName, fullName, role);
+            SetLoggedInUi(fullName, userName, role, online: true);
+            await RefreshPeopleFromErpAsync();
+            _nextAutoSync = DateTimeOffset.Now;
+        }
+        catch (ErpApiException error) when (error.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            ClearSession("ERP oturumunun süresi doldu. Yeniden giriş yapın.");
+        }
+        catch
+        {
+            ErpStateText.Text = "ERP: Çevrimdışı";
+            NoticeText.Text = "İnternet/ERP bağlantısı yok; yerel kart toplama çalışmaya devam ediyor.";
+        }
     }
 
     private async void LoginButton_Click(object sender, RoutedEventArgs e)
     {
+        var identity = UsernameBox.Text.Trim();
+        var password = PasswordBox.Password;
+        if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrEmpty(password))
+        {
+            NoticeText.Text = "Kullanıcı adı/e-posta ve parola zorunludur.";
+            return;
+        }
+
         try
         {
             LoginButton.IsEnabled = false;
-            NoticeText.Text = "KY ERP doğrulanıyor...";
-            _authFlow = await _erp.LoginAsync(UsernameBox.Text.Trim(), PasswordBox.Password, _paths.DeviceLabel);
-            ApplyAuthFlow(_authFlow);
+            NoticeText.Text = "KY ERP hesabı doğrulanıyor...";
+            var flow = await _erp.LoginAsync(identity, password, _paths.DeviceLabel, _lifetime.Token);
+            PasswordBox.Clear();
+            await HandleAuthFlowAsync(flow);
         }
         catch (Exception error)
         {
             NoticeText.Text = error.Message;
-            ErpStateText.Text = "ERP: Giriş başarısız";
         }
         finally
         {
@@ -56,18 +132,13 @@ public partial class MainWindow : Window
     private async void MfaButton_Click(object sender, RoutedEventArgs e)
     {
         if (_authFlow is null) return;
-        var code = new string(MfaCodeBox.Text.Where(char.IsDigit).ToArray());
-        if (code.Length != 6)
-        {
-            NoticeText.Text = "Authenticator uygulamasındaki 6 haneli kodu girin.";
-            return;
-        }
-
         try
         {
-            NoticeText.Text = "Authenticator doğrulanıyor...";
-            _authFlow = await _erp.VerifyMfaAsync(_authFlow, code);
-            ApplyAuthFlow(_authFlow);
+            var provider = SelectedTag(MfaProviderCombo);
+            NoticeText.Text = "Authenticator kodu doğrulanıyor...";
+            var flow = await _erp.VerifyMfaAsync(_authFlow, MfaCodeBox.Text, provider, _lifetime.Token);
+            MfaCodeBox.Clear();
+            await HandleAuthFlowAsync(flow);
         }
         catch (Exception error)
         {
@@ -75,366 +146,364 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyAuthFlow(AuthFlow flow)
+    private async Task HandleAuthFlowAsync(AuthFlow flow)
     {
-        var stage = flow.Stage.ToUpperInvariant();
-        if (stage == "AUTHENTICATED" && !string.IsNullOrWhiteSpace(flow.Token))
+        _authFlow = flow;
+        var stage = (flow.Stage ?? "").Trim().ToUpperInvariant();
+        switch (stage)
         {
-            _token = flow.Token;
-            MfaPanel.Visibility = Visibility.Collapsed;
-            ErpStateText.Text = $"ERP: {flow.UserName} · {flow.Role}";
-            SyncButton.IsEnabled = true;
-            NoticeText.Text = "KY ERP bağlantısı hazır.";
-            return;
-        }
+            case "AUTHENTICATED":
+                if (string.IsNullOrWhiteSpace(flow.Token)) throw new InvalidOperationException("KY ERP geçerli oturum tokenı döndürmedi.");
+                _approvalCts?.Cancel();
+                _token = flow.Token;
+                _role = flow.Role;
+                _sessionStore.Save(flow.Token, flow.UserName, flow.FullName, flow.Role);
+                MfaPanel.Visibility = Visibility.Collapsed;
+                ApprovalPanel.Visibility = Visibility.Collapsed;
+                SetLoggedInUi(flow.FullName, flow.UserName, flow.Role, online: true);
+                NoticeText.Text = "Bu bilgisayar KY ERP hesabıyla doğrulandı.";
+                await RefreshPeopleFromErpAsync();
+                _nextAutoSync = DateTimeOffset.Now;
+                await SyncNowAsync(manual: false);
+                break;
 
-        if (stage is "MFA_REQUIRED" or "MFA_SETUP" or "MFA_LEGACY_REQUIRED")
-        {
-            MfaPanel.Visibility = Visibility.Visible;
-            MfaProviderText.Text = string.IsNullOrWhiteSpace(flow.Provider)
-                ? "Authenticator uygulamasındaki 6 haneli kod"
-                : $"{flow.Provider} Authenticator · 6 haneli kod";
-            NoticeText.Text = "Güvenlik doğrulaması bekleniyor.";
-            return;
-        }
+            case "MFA_REQUIRED":
+            case "MFA_LEGACY_REQUIRED":
+                MfaPanel.Visibility = Visibility.Visible;
+                ApprovalPanel.Visibility = Visibility.Collapsed;
+                SelectProvider(flow.Provider);
+                MfaProviderText.Text = string.IsNullOrWhiteSpace(flow.Provider) ? "Authenticator kodunu girin" : $"{flow.Provider} doğrulaması";
+                NoticeText.Text = "ERP hesabının MFA doğrulamasını tamamlayın.";
+                break;
 
-        if (stage == "APPROVAL_PENDING")
-        {
-            NoticeText.Text = "Bu hesap için yönetici giriş onayı bekleniyor. Masaüstü onay takibi sonraki adımda otomatikleştirilecek.";
-            return;
-        }
+            case "MFA_SETUP":
+                MfaPanel.Visibility = Visibility.Collapsed;
+                ApprovalPanel.Visibility = Visibility.Collapsed;
+                NoticeText.Text = "Bu hesapta Authenticator kurulumu tamamlanmamış. KY ERP web güvenlik ekranından Google/Microsoft Authenticator kurulumunu tamamlayıp tekrar giriş yapın.";
+                break;
 
-        NoticeText.Text = flow.Message ?? $"KY ERP giriş aşaması: {flow.Stage}";
+            case "APPROVAL_PENDING":
+                MfaPanel.Visibility = Visibility.Collapsed;
+                ApprovalPanel.Visibility = Visibility.Visible;
+                ApprovalText.Text = string.IsNullOrWhiteSpace(flow.Message) ? "ERP giriş onayı bekleniyor; durum otomatik kontrol ediliyor." : flow.Message;
+                _approvalCts?.Cancel();
+                _approvalCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+                _ = PollApprovalAsync(flow, _approvalCts.Token);
+                break;
+
+            default:
+                NoticeText.Text = string.IsNullOrWhiteSpace(flow.Message) ? $"Giriş aşaması tamamlanamadı: {flow.Stage}" : flow.Message;
+                break;
+        }
     }
 
-    private async void RefreshLocalButton_Click(object sender, RoutedEventArgs e) => await RefreshLocalAsync();
-
-    private async void SyncButton_Click(object sender, RoutedEventArgs e)
+    private async Task PollApprovalAsync(AuthFlow initial, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_token))
+        var current = initial;
+        var expires = DateTimeOffset.Now.AddMinutes(10);
+        while (!ct.IsCancellationRequested && DateTimeOffset.Now < expires)
         {
-            NoticeText.Text = "Önce KY ERP hesabıyla giriş yapın.";
-            return;
-        }
-
-        try
-        {
-            SyncButton.IsEnabled = false;
-            var pending = await _store.GetPendingAsync(500);
-            if (pending.Count == 0)
+            try
             {
-                NoticeText.Text = "Bekleyen kart kaydı yok.";
+                await Task.Delay(TimeSpan.FromSeconds(3.5), ct);
+                current = await _erp.CheckApprovalAsync(current, ct);
+                var stage = (current.Stage ?? "").Trim().ToUpperInvariant();
+                if (stage == "APPROVAL_PENDING")
+                {
+                    ApprovalText.Text = string.IsNullOrWhiteSpace(current.Message) ? "Onay bekleniyor..." : current.Message;
+                    continue;
+                }
+                await HandleAuthFlowAsync(current);
                 return;
             }
-
-            NoticeText.Text = $"{pending.Count} kart kaydı ERP'ye gönderiliyor...";
-            var result = await _erp.SyncPunchesAsync(_token, pending, _paths.DeviceLabel);
-            await _store.ApplySyncResultAsync(pending, result.RejectedLocalIds, result.RejectedMessage);
-            NoticeText.Text = result.RejectedLocalIds.Count == 0
-                ? $"{pending.Count} kart kaydı ERP'ye senkronlandı."
-                : $"Senkron tamamlandı; {result.RejectedLocalIds.Count} kayıt eşleşmedi ve yerelde bekliyor.";
-            await RefreshLocalAsync();
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+            catch (Exception error)
+            {
+                ApprovalText.Text = $"Onay kontrolü bekliyor: {error.Message}";
+            }
         }
-        catch (Exception error)
-        {
-            NoticeText.Text = error.Message;
-        }
-        finally
-        {
-            SyncButton.IsEnabled = !string.IsNullOrWhiteSpace(_token);
-        }
+        ApprovalPanel.Visibility = Visibility.Collapsed;
+        NoticeText.Text = "Giriş onayı süresi doldu. Yeniden giriş yapın.";
     }
 
-    private void OpenImportButton_Click(object sender, RoutedEventArgs e)
+    private async void LogoutButton_Click(object sender, RoutedEventArgs e)
     {
-        Directory.CreateDirectory(_paths.Import);
-        Process.Start(new ProcessStartInfo("explorer.exe", _paths.Import) { UseShellExecute = true });
+        var token = _token;
+        ClearSession("Oturum kapatıldı. Yerel Agent kart toplamaya devam eder.");
+        try { if (!string.IsNullOrWhiteSpace(token)) await _erp.LogoutAsync(token, _lifetime.Token); } catch { }
+    }
+
+    private void SetLoggedInUi(string fullName, string username, string role, bool online)
+    {
+        LoginPanel.Visibility = Visibility.Collapsed;
+        AuthenticatedPanel.Visibility = Visibility.Visible;
+        AccountNameText.Text = string.IsNullOrWhiteSpace(fullName) ? username : fullName;
+        AccountRoleText.Text = $"{username} · {role}";
+        ActivationStateText.Text = "Cihaz doğrulandı · ERP hesabına bağlı";
+        ErpStateText.Text = online ? "ERP: Bağlı" : "ERP: Çevrimdışı oturum";
+        SyncButton.IsEnabled = !string.Equals(role, "DENETIM", StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(role, "DENETIM", StringComparison.OrdinalIgnoreCase))
+            NoticeText.Text = "DENETİM hesabı salt okunurdur. Kartları ERP'ye göndermek için PDKS yazma yetkili kullanıcıyla giriş yapın.";
+    }
+
+    private void SetLoggedOutUi()
+    {
+        LoginPanel.Visibility = Visibility.Visible;
+        AuthenticatedPanel.Visibility = Visibility.Collapsed;
+        MfaPanel.Visibility = Visibility.Collapsed;
+        ApprovalPanel.Visibility = Visibility.Collapsed;
+        ActivationStateText.Text = "ERP hesabıyla giriş bekleniyor";
+        ErpStateText.Text = "ERP: Oturum yok";
+    }
+
+    private void ClearSession(string message)
+    {
+        _approvalCts?.Cancel();
+        _sessionStore.Clear();
+        _token = "";
+        _role = "";
+        _authFlow = null;
+        SetLoggedOutUi();
+        NoticeText.Text = message;
+    }
+
+    private async Task RefreshPeopleFromErpAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_token)) return;
+        var people = await _erp.GetPdksPeopleAsync(_token, _lifetime.Token);
+        await _store.CachePeopleAsync(people, _lifetime.Token);
+        PeopleGrid.ItemsSource = people;
+        PeopleInfoText.Text = $"{people.Count} SGK'lı + kartlı personel · KY ERP ile güncel";
+    }
+
+    private async Task LoadCachedPeopleAsync()
+    {
+        var people = await _store.GetPeopleAsync(_lifetime.Token);
+        PeopleGrid.ItemsSource = people;
+        PeopleInfoText.Text = people.Count > 0
+            ? $"{people.Count} personel · son ERP önbelleği"
+            : "ERP ile ilk bağlantıda SGK'lı kart personeli alınacak.";
+    }
+
+    private async Task SafeRefreshAsync()
+    {
+        try { await RefreshLocalAsync(); }
+        catch (Exception error) { LocalStatusText.Text = $"Yerel DB okunamadı: {error.Message}"; }
     }
 
     private async Task RefreshLocalAsync()
     {
+        var snapshot = await _store.SnapshotAsync(_lifetime.Token);
+        TodayCountText.Text = snapshot.TodayCount.ToString();
+        PendingBigText.Text = snapshot.PendingCount.ToString();
+        SyncedCountText.Text = snapshot.SyncedCount.ToString();
+        ErrorCountText.Text = snapshot.ErrorCount.ToString();
+        AgentStateText.Text = snapshot.AgentOnline ? $"Agent: Çalışıyor · {snapshot.AgentMode}" : "Agent: Bağlantı yok";
+        TerminalStateText.Text = $"Terminal durumu: {snapshot.LastAgentMessage}";
+        LocalStatusText.Text = snapshot.AgentOnline
+            ? $"Yerel DB sağlam · Agent aktif · bekleyen {snapshot.PendingCount}"
+            : $"Yerel DB sağlam · Agent heartbeat alınamadı · bekleyen {snapshot.PendingCount}";
+        OverviewPunchGrid.ItemsSource = snapshot.Rows.Take(100).ToArray();
+        LivePunchGrid.ItemsSource = snapshot.Rows;
+    }
+
+    private async void RefreshLocalButton_Click(object sender, RoutedEventArgs e) => await SafeRefreshAsync();
+
+    private async void SyncButton_Click(object sender, RoutedEventArgs e) => await SyncNowAsync(manual: true);
+
+    private async Task AutoSyncTickAsync()
+    {
+        if (_syncing || string.IsNullOrWhiteSpace(_token)) return;
+        var config = _configStore.Load();
+        if (!config.AutoSync || DateTimeOffset.Now < _nextAutoSync) return;
+        await SyncNowAsync(manual: false);
+    }
+
+    private async Task SyncNowAsync(bool manual)
+    {
+        if (_syncing) return;
+        if (string.IsNullOrWhiteSpace(_token))
+        {
+            if (manual) NoticeText.Text = "Önce KY ERP hesabıyla giriş yapın.";
+            return;
+        }
+        if (string.Equals(_role, "DENETIM", StringComparison.OrdinalIgnoreCase))
+        {
+            if (manual) NoticeText.Text = "DENETİM hesabı kart verisi yazamaz; bu hesap salt okunurdur.";
+            return;
+        }
+        if (SecureSessionStore.JwtExpiry(_token) <= DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 10)
+        {
+            ClearSession("ERP oturumu sona erdi. Kartlar yerelde güvende; yeniden giriş yaptıktan sonra senkron devam eder.");
+            return;
+        }
+
+        _syncing = true;
+        SyncButton.IsEnabled = false;
+        string historyId = "";
         try
         {
-            var snapshot = await _store.SnapshotAsync();
-            DatabaseStateText.Text = "Hazır";
-            PendingCountText.Text = snapshot.PendingCount.ToString(CultureInfo.InvariantCulture);
-            PendingBigText.Text = snapshot.PendingCount.ToString(CultureInfo.InvariantCulture);
-            SyncedCountText.Text = snapshot.SyncedCount.ToString(CultureInfo.InvariantCulture);
-            TodayCountText.Text = snapshot.TodayCount.ToString(CultureInfo.InvariantCulture);
-            LastPunchText.Text = snapshot.LastPunch is null ? "-" : $"{snapshot.LastPunch.CardNo} {snapshot.LastPunch.EventTime}";
-            PunchGrid.ItemsSource = snapshot.Rows;
-            AgentStateText.Text = snapshot.AgentOnline ? "Agent: Çalışıyor" : "Agent: Bekleniyor";
+            if (manual) NoticeText.Text = "ERP personeli ve kart hareketleri senkronize ediliyor...";
+            await RefreshPeopleFromErpAsync();
+            var people = await _store.GetPeopleAsync(_lifetime.Token);
+            var byCard = people.ToDictionary(person => person.CardNo, StringComparer.OrdinalIgnoreCase);
+            var pending = await _store.GetPendingAsync(500, _lifetime.Token);
+            if (pending.Count == 0)
+            {
+                NoticeText.Text = "Senkron bekleyen kart hareketi yok.";
+                return;
+            }
+
+            var invalid = new List<PunchRow>();
+            var valid = new List<PunchRow>();
+            foreach (var row in pending)
+            {
+                if (!byCard.TryGetValue(row.CardNo, out var person))
+                {
+                    invalid.Add(row);
+                    continue;
+                }
+                if ((!string.IsNullOrWhiteSpace(person.StartDate) && string.CompareOrdinal(row.WorkDate, person.StartDate) < 0) ||
+                    (!string.IsNullOrWhiteSpace(person.ExitDate) && string.CompareOrdinal(row.WorkDate, person.ExitDate) > 0))
+                {
+                    invalid.Add(row);
+                    continue;
+                }
+                valid.Add(row);
+            }
+            if (invalid.Count > 0)
+                await _store.MarkLocalErrorAsync(invalid, "SGK=VAR + kartlı personel veya çalışma dönemi eşleşmesi yok.", _lifetime.Token);
+
+            if (valid.Count == 0)
+            {
+                NoticeText.Text = $"{invalid.Count} kart hareketi personel/dönem eşleşmesi için kontrol bekliyor.";
+                return;
+            }
+
+            historyId = await _store.StartSyncHistoryAsync(valid.Count, _lifetime.Token);
+            var result = await _erp.SyncPunchesAsync(_token, valid, _paths.DeviceLabel, _lifetime.Token);
+            await _store.ApplySyncResultAsync(valid, result, _lifetime.Token);
+            await _store.FinishSyncHistoryAsync(historyId, result.AcceptedCount, result.RejectedCount, "OK", "", _lifetime.Token);
+            NoticeText.Text = $"ERP senkron tamamlandı · kabul {result.AcceptedCount} · reddedilen {result.RejectedCount} · yerel kontrol {invalid.Count}";
+            ErpStateText.Text = "ERP: Bağlı";
+            await RefreshLocalAsync();
+        }
+        catch (ErpApiException error) when (error.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            if (!string.IsNullOrWhiteSpace(historyId)) await _store.FinishSyncHistoryAsync(historyId, 0, 0, "AUTH_REQUIRED", error.Message, CancellationToken.None);
+            ClearSession("ERP oturumu sona erdi. Yerel kartlar silinmedi; yeniden giriş yapın.");
         }
         catch (Exception error)
         {
-            DatabaseStateText.Text = "Hata";
-            AgentStateText.Text = "Agent: Kontrol edilemedi";
-            NoticeText.Text = error.Message;
+            if (!string.IsNullOrWhiteSpace(historyId)) await _store.FinishSyncHistoryAsync(historyId, 0, 0, "FAILED", error.Message, CancellationToken.None);
+            ErpStateText.Text = "ERP: Çevrimdışı";
+            NoticeText.Text = $"Senkron yapılamadı; kartlar yerelde güvende. {error.Message}";
+        }
+        finally
+        {
+            _syncing = false;
+            SyncButton.IsEnabled = !string.IsNullOrWhiteSpace(_token) && !string.Equals(_role, "DENETIM", StringComparison.OrdinalIgnoreCase);
+            var seconds = _configStore.Load().SyncIntervalSeconds;
+            _nextAutoSync = DateTimeOffset.Now.AddSeconds(seconds);
         }
     }
-}
 
-sealed class DesktopPaths
-{
-    public string Root { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "KY ERP", "PDKS");
-    public string Data => Path.Combine(Root, "Data");
-    public string Import => Path.Combine(Root, "Import");
-    public string Database => Path.Combine(Data, "pdks.db");
-    public string DeviceFile => Path.Combine(Root, "device.id");
-    public string DeviceLabel { get; }
-
-    public DesktopPaths()
+    private void LoadSettings()
     {
-        Directory.CreateDirectory(Data);
-        Directory.CreateDirectory(Import);
-        var id = File.Exists(DeviceFile) ? File.ReadAllText(DeviceFile).Trim() : "";
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            id = Guid.NewGuid().ToString("N");
-            Directory.CreateDirectory(Root);
-            File.WriteAllText(DeviceFile, id);
-        }
-        DeviceLabel = $"PDKS-WINDOWS:{Environment.MachineName}:{id}";
-    }
-}
-
-sealed record PunchRow(string Id, string CardNo, string WorkDate, string EventTime, string Source, string SourceRef, string SyncState);
-sealed record LocalSnapshot(int PendingCount, int SyncedCount, int TodayCount, bool AgentOnline, PunchRow? LastPunch, IReadOnlyList<PunchRow> Rows);
-
-sealed class LocalPdksReader(DesktopPaths paths)
-{
-    private string ConnectionString => new SqliteConnectionStringBuilder
-    {
-        DataSource = paths.Database,
-        Mode = SqliteOpenMode.ReadWriteCreate,
-        Cache = SqliteCacheMode.Shared,
-    }.ToString();
-
-    public async Task InitializeAsync()
-    {
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            PRAGMA journal_mode=WAL;
-            PRAGMA synchronous=NORMAL;
-            CREATE TABLE IF NOT EXISTS raw_punches (
-              id TEXT PRIMARY KEY,
-              fingerprint TEXT NOT NULL UNIQUE,
-              card_no TEXT NOT NULL,
-              event_at TEXT NOT NULL,
-              work_date TEXT NOT NULL,
-              event_time TEXT NOT NULL,
-              source TEXT NOT NULL,
-              source_ref TEXT,
-              raw_line TEXT,
-              sync_state TEXT NOT NULL DEFAULT 'PENDING',
-              sync_error TEXT,
-              received_at TEXT NOT NULL,
-              synced_at TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_raw_punches_pending ON raw_punches(sync_state, work_date, event_time);
-            CREATE TABLE IF NOT EXISTS agent_state (
-              state_key TEXT PRIMARY KEY,
-              state_value TEXT,
-              updated_at TEXT NOT NULL
-            );
-            """;
-        await command.ExecuteNonQueryAsync();
+        var config = _configStore.Load();
+        SelectTag(SourceModeCombo, config.NormalizedMode);
+        TcpHostBox.Text = config.TcpHost;
+        TcpPortBox.Text = config.TcpPort.ToString();
+        SerialPortBox.Text = config.SerialPort;
+        SelectContent(SerialBaudCombo, config.SerialBaud.ToString());
+        EncodingBox.Text = config.LineEncoding;
+        FileImportCheck.IsChecked = config.FileImportEnabled;
+        AutoSyncCheck.IsChecked = config.AutoSync;
+        SyncIntervalBox.Text = config.SyncIntervalSeconds.ToString();
     }
 
-    public async Task<LocalSnapshot> SnapshotAsync()
+    private void SaveSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await InitializeAsync();
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-
-        async Task<int> CountAsync(string where, params object[] values)
+        try
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = $"SELECT COUNT(*) FROM raw_punches WHERE {where}";
-            for (var i = 0; i < values.Length; i++) cmd.Parameters.AddWithValue($"$p{i}", values[i]);
-            return Convert.ToInt32(await cmd.ExecuteScalarAsync() ?? 0, CultureInfo.InvariantCulture);
+            var current = _configStore.Load();
+            current.SourceMode = SelectedTag(SourceModeCombo);
+            current.TcpHost = TcpHostBox.Text.Trim();
+            current.TcpPort = ParseInt(TcpPortBox.Text, current.TcpPort);
+            current.SerialPort = SerialPortBox.Text.Trim();
+            current.SerialBaud = ParseInt(SelectedContent(SerialBaudCombo), current.SerialBaud);
+            current.LineEncoding = EncodingBox.Text.Trim();
+            current.FileImportEnabled = FileImportCheck.IsChecked == true;
+            current.AutoSync = AutoSyncCheck.IsChecked == true;
+            current.SyncIntervalSeconds = ParseInt(SyncIntervalBox.Text, current.SyncIntervalSeconds);
+            _configStore.Save(current);
+            _nextAutoSync = DateTimeOffset.Now;
+            NoticeText.Text = "Terminal ve senkron ayarları kaydedildi. Kaynak tipi değiştiyse Agent'ı yeniden başlatın.";
         }
+        catch (Exception error) { NoticeText.Text = $"Ayarlar kaydedilemedi: {error.Message}"; }
+    }
 
-        var today = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var pending = await CountAsync("sync_state<>'SYNCED'");
-        var synced = await CountAsync("sync_state='SYNCED'");
-        var todayCount = await CountAsync("work_date=$p0", today);
-
-        var rows = new List<PunchRow>();
-        await using (var cmd = connection.CreateCommand())
+    private async void BackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
         {
-            cmd.CommandText = "SELECT id,card_no,work_date,event_time,source,COALESCE(source_ref,''),sync_state FROM raw_punches ORDER BY event_at DESC LIMIT 250";
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
+            var path = await _store.BackupAsync(_lifetime.Token);
+            NoticeText.Text = $"Yerel PDKS yedeği oluşturuldu: {path}";
+        }
+        catch (Exception error) { NoticeText.Text = $"Yedek alınamadı: {error.Message}"; }
+    }
+
+    private void RestartAgentButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var info = new ProcessStartInfo
             {
-                rows.Add(new PunchRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6)));
-            }
+                FileName = "cmd.exe",
+                Arguments = "/c sc stop \"KYERP.PDKS.Agent\" & timeout /t 2 /nobreak >nul & sc start \"KYERP.PDKS.Agent\"",
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden,
+            };
+            Process.Start(info);
+            NoticeText.Text = "Windows izin verirse kart Agent servisi yeniden başlatılacak.";
         }
-
-        DateTimeOffset? heartbeat = null;
-        await using (var cmd = connection.CreateCommand())
-        {
-            cmd.CommandText = "SELECT updated_at FROM agent_state WHERE state_key='heartbeat' LIMIT 1";
-            var value = Convert.ToString(await cmd.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
-            if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) heartbeat = parsed;
-        }
-        var online = heartbeat.HasValue && DateTimeOffset.Now - heartbeat.Value < TimeSpan.FromSeconds(15);
-        return new LocalSnapshot(pending, synced, todayCount, online, rows.FirstOrDefault(), rows);
+        catch (Win32Exception) { NoticeText.Text = "Agent yeniden başlatma işlemi iptal edildi."; }
+        catch (Exception error) { NoticeText.Text = $"Agent yeniden başlatılamadı: {error.Message}"; }
     }
 
-    public async Task<List<PunchRow>> GetPendingAsync(int limit)
+    private void OpenImportButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.Import);
+    private void OpenArchiveButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.Archive);
+    private void OpenDataButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.Root);
+    private void OpenWebButton_Click(object sender, RoutedEventArgs e) => Process.Start(new ProcessStartInfo("https://kyerp.net") { UseShellExecute = true });
+
+    private static void OpenFolder(string path)
     {
-        var rows = new List<PunchRow>();
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT id,card_no,work_date,event_time,source,COALESCE(source_ref,''),sync_state FROM raw_punches WHERE sync_state<>'SYNCED' ORDER BY event_at LIMIT $limit";
-        cmd.Parameters.AddWithValue("$limit", limit);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync()) rows.Add(new PunchRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6)));
-        return rows;
+        Directory.CreateDirectory(path);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
     }
 
-    public async Task ApplySyncResultAsync(IReadOnlyList<PunchRow> sent, IReadOnlySet<string> rejectedLocalIds, string rejectedMessage)
+    private static string SelectedTag(ComboBox combo) => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
+    private static string SelectedContent(ComboBox combo) => (combo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
+    private static int ParseInt(string value, int fallback) => int.TryParse(value, out var result) ? result : fallback;
+
+    private static void SelectTag(ComboBox combo, string tag)
     {
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-        foreach (var row in sent)
-        {
-            await using var cmd = connection.CreateCommand();
-            cmd.Transaction = (SqliteTransaction)transaction;
-            var rejected = rejectedLocalIds.Contains(row.Id);
-            cmd.CommandText = rejected
-                ? "UPDATE raw_punches SET sync_state='ERROR',sync_error=$error WHERE id=$id"
-                : "UPDATE raw_punches SET sync_state='SYNCED',sync_error=NULL,synced_at=$now WHERE id=$id";
-            cmd.Parameters.AddWithValue("$id", row.Id);
-            cmd.Parameters.AddWithValue("$error", rejectedMessage);
-            cmd.Parameters.AddWithValue("$now", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
-            await cmd.ExecuteNonQueryAsync();
-        }
-        await transaction.CommitAsync();
-    }
-}
-
-sealed record AuthFlow(
-    string Stage,
-    string Token,
-    string UserName,
-    string Role,
-    string ChallengeId,
-    string ChallengeToken,
-    string Provider,
-    string? Message);
-
-sealed record SyncResult(HashSet<string> RejectedLocalIds, string RejectedMessage);
-
-sealed class ErpApiClient
-{
-    private readonly HttpClient _http = new() { BaseAddress = new Uri("https://api.kyerp.net"), Timeout = TimeSpan.FromSeconds(20) };
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-
-    public async Task<AuthFlow> LoginAsync(string identity, string password, string deviceLabel)
-    {
-        if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrEmpty(password)) throw new InvalidOperationException("Kullanıcı adı/e-posta ve parola zorunludur.");
-        return ParseAuth(await SendJsonAsync(HttpMethod.Post, "/api/auth/login", new { username = identity, password, deviceLabel }, ""));
+        foreach (var item in combo.Items.OfType<ComboBoxItem>())
+            if (string.Equals(item.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase)) { combo.SelectedItem = item; return; }
+        if (combo.Items.Count > 0) combo.SelectedIndex = 0;
     }
 
-    public async Task<AuthFlow> VerifyMfaAsync(AuthFlow flow, string code)
+    private static void SelectContent(ComboBox combo, string content)
     {
-        return ParseAuth(await SendJsonAsync(HttpMethod.Post, "/api/auth/mfa/verify", new
-        {
-            challengeId = flow.ChallengeId,
-            challengeToken = flow.ChallengeToken,
-            code,
-            provider = flow.Provider,
-            resetProvider = "",
-        }, ""));
+        foreach (var item in combo.Items.OfType<ComboBoxItem>())
+            if (string.Equals(item.Content?.ToString(), content, StringComparison.OrdinalIgnoreCase)) { combo.SelectedItem = item; return; }
+        if (combo.Items.Count > 0) combo.SelectedIndex = 0;
     }
 
-    public async Task<SyncResult> SyncPunchesAsync(string token, IReadOnlyList<PunchRow> punches, string deviceLabel)
+    private void SelectProvider(string provider)
     {
-        var rows = punches.Select(row => new
-        {
-            localId = row.Id,
-            cardNo = row.CardNo,
-            workDate = row.WorkDate,
-            eventTime = row.EventTime,
-            direction = "AUTO",
-            source = deviceLabel,
-            note = $"KY PDKS · {row.Source}",
-        }).ToArray();
-        using var document = await SendJsonAsync(HttpMethod.Post, "/api/ik/personnel-control/time-events/import", new { source = deviceLabel, rows }, token);
-        var data = UnwrapData(document.RootElement);
-        var rejected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var messages = new List<string>();
-        if (data.TryGetProperty("rejected", out var rejectedNode) && rejectedNode.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in rejectedNode.EnumerateArray())
-            {
-                var localId = Text(item, "localId");
-                if (!string.IsNullOrWhiteSpace(localId)) rejected.Add(localId);
-                var reason = Text(item, "reason");
-                if (!string.IsNullOrWhiteSpace(reason)) messages.Add(reason);
-            }
-        }
-        return new SyncResult(rejected, messages.FirstOrDefault() ?? "ERP kart eşleştirmesi reddetti.");
-    }
-
-    private async Task<JsonDocument> SendJsonAsync(HttpMethod method, string path, object body, string token)
-    {
-        using var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        if (!string.IsNullOrWhiteSpace(token)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await _http.SendAsync(request);
-        var raw = await response.Content.ReadAsStringAsync();
-        JsonDocument document;
-        try { document = JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw); }
-        catch { throw new InvalidOperationException($"KY ERP geçersiz yanıt döndürdü (HTTP {(int)response.StatusCode})."); }
-        if (!response.IsSuccessStatusCode || (document.RootElement.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.False))
-        {
-            var message = document.RootElement.TryGetProperty("error", out var error) && error.TryGetProperty("message", out var msg)
-                ? msg.GetString()
-                : null;
-            document.Dispose();
-            throw new InvalidOperationException(message ?? $"KY ERP isteği başarısız (HTTP {(int)response.StatusCode}).");
-        }
-        return document;
-    }
-
-    private static AuthFlow ParseAuth(JsonDocument document)
-    {
-        using (document)
-        {
-            var root = UnwrapData(document.RootElement);
-            var user = root.TryGetProperty("user", out var userNode) ? userNode : default;
-            var provider = Text(root, "provider");
-            if (string.IsNullOrWhiteSpace(provider) && root.TryGetProperty("availableProviders", out var providers) && providers.ValueKind == JsonValueKind.Array)
-                provider = providers.EnumerateArray().Select(item => item.GetString()).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "";
-            return new AuthFlow(
-                Text(root, "stage"),
-                Text(root, "token"),
-                user.ValueKind == JsonValueKind.Object ? Text(user, "username") : "",
-                user.ValueKind == JsonValueKind.Object ? Text(user, "role") : "",
-                Text(root, "challengeId"),
-                Text(root, "challengeToken"),
-                provider,
-                Text(root, "message"));
-        }
-    }
-
-    private static JsonElement UnwrapData(JsonElement root)
-    {
-        if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object) return data;
-        return root;
-    }
-
-    private static string Text(JsonElement node, string name)
-    {
-        return node.ValueKind == JsonValueKind.Object && node.TryGetProperty(name, out var value)
-            ? value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.ToString()
-            : "";
+        var normalized = (provider ?? "").Trim().ToUpperInvariant();
+        SelectTag(MfaProviderCombo, normalized == "MICROSOFT" ? "MICROSOFT" : "GOOGLE");
     }
 }
