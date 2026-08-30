@@ -6,26 +6,38 @@ Bu dosya GitHub Copilot, Copilot CLI, VS Code agent mode ve diğer AI geliştirm
 
 - Repo: `cetin60kaya-lgtm/ky-erp`
 - Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
-- Makine-okunur sabit: `KYERP_PUBLIC_APP=https://kyerp.net/`
-- **TEK kullanıcı uygulama adresi: `https://kyerp.net/`**
-- Canlı API servis origin'i: `https://api.kyerp.net` — yalnız backend içindir; kullanıcıya ikinci uygulama adresi olarak gösterilmez.
-- **`https://app.kyerp.net` canonical değildir, production hedefi/şartı değildir ve kullanıcı açıkça yeniden istemedikçe oluşturulmaz, doğrulanmaz veya deploy başarısının şartı yapılmaz.**
+- Makine-okunur sabitler:
+  - `KYERP_PUBLIC_SITE=https://kyerp.net/`
+  - `KYERP_PUBLIC_APP=https://app.kyerp.net/`
+  - `KYERP_API_ORIGIN=https://api.kyerp.net`
+- **Kurumsal tanıtım sitesi:** `https://kyerp.net/`
+- **ERP uygulaması ve login:** `https://app.kyerp.net/`
+- **Canlı API servis origin'i:** `https://api.kyerp.net`
 - Cloudflare Worker: `ky-erp-api`
-- Frontend yayın altyapısında Pages kullanılabilir; **Pages proje adı veya mevcut proje varlığı sabit varsayılmaz.** Canlı yayın için esas sonuç `https://kyerp.net/` adresidir.
+- Canonical Pages hedef projesi: `ky-erp-frontend`. Mevcut domain başka bir Pages projesine bağlıysa körlemesine taşınmaz; önce gerçek sahiplik çözülür.
 - Windows canonical repo kökü: `D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ`
 - Her işlemden önce gerçek repo kökünü `git rev-parse --show-toplevel` ile doğrula; destructive işlemde yalnız path varsayımına güvenme.
 - `main` production kaynağı değildir. Kullanıcı açıkça değiştirmedikçe production çalışmaları yalnız yukarıdaki production branch üzerinde yapılır.
 
-## Tek adres kuralı — kritik
+## Site + ERP domain ayrımı — kritik
 
-Bu bölüm diğer tüm eski notların önündedir:
+Bu bölüm eski tek-domain notlarının önündedir:
 
-1. Kullanıcının açacağı ve paylaşacağı tek KY ERP adresi `https://kyerp.net/` adresidir.
-2. `https://api.kyerp.net` arka plandaki API servisidir; ikinci uygulama/domain gibi sunulmaz.
-3. `https://app.kyerp.net` eski/yardımcı bir geçmiş domain olarak kabul edilir; kullanıcı açıkça istemedikçe yeniden bağlanmaz veya deploy kontrolüne eklenmez.
-4. Yeni deploy/script/CI/test yazarken başarı şartı yalnız `kyerp.net` frontend + `api.kyerp.net` backend sağlığıdır.
-5. Bir agent eski doküman, workflow veya scriptte `app.kyerp.net` görürse bunu canonical gerçek kabul etmez; bu dosyadaki tek-adres kuralını uygular.
-6. Cloudflare Pages projesi yoksa veya adı değişmişse sabit proje adı varsayılmaz. Önce Cloudflare gerçek durumu salt-okunur teşhis edilir; kullanıcı onaylı deploy sırasında yalnız `kyerp.net` için gerekli frontend yayın altyapısı kurulur/onarılır.
+1. `https://kyerp.net/` yalnız kurumsal tanıtım/public site olarak çalışır.
+2. `https://app.kyerp.net/` ERP uygulaması ve kullanıcı login adresidir.
+3. `https://api.kyerp.net` yalnız backend/API servisidir; kullanıcı arayüzü değildir.
+4. Public site üzerindeki `Uygulamaya Giriş`, `/giris`, `/login` ve `/app` akışları `https://app.kyerp.net/` adresine yönlenir.
+5. Yeni deploy/script/CI/test yazarken başarı şartı hem `kyerp.net` hem `app.kyerp.net` frontend asset doğrulaması ve `api.kyerp.net` backend sağlığıdır.
+6. Eski V5/tek-domain belgeleri canonical değildir. Yeni production orkestrasyonu V6 site + app mimarisidir.
+7. Cloudflare Pages projesi/domain sahipliği çakışıyorsa otomatik overwrite yapma; güvenli biçimde tespit et ve yalnız doğrulanmış proje üzerinde ilerle.
+
+## Çoklu ana firma mimarisi
+
+- KY ERP tek firmalık değildir; birden fazla ana işletme/şirket destekler.
+- Muhasebe çekirdeği sağlayıcıdan bağımsızdır.
+- Hakan Emprime İşNet kullanabilir; başka ana firmalar Paraşüt, başka sağlayıcı veya Excel/manuel akış kullanabilir.
+- İşNet, Paraşüt ve benzeri sağlayıcılar çekirdeğin kendisi değil, ana firmaya atanabilen entegrasyon modülleridir.
+- Firma/model/belge ilişkilerinde tenant izolasyonu korunur; farklı ana firmaların verileri karıştırılmaz.
 
 ## Çalışmaya başlamadan önce
 
@@ -77,6 +89,15 @@ Canonical giriş akışı:
 - Browser login/MFA/kurtarma transportu gereksiz özel header/preflight bağımlılığı üretmemelidir.
 - Recovery flow kullanıcıyı doğrulama atlayarak doğrudan uygulamaya sokmaz; güvenlik faktörünü yeniden kurar.
 
+## Sistem e-posta standardı
+
+- KY ERP otomatik sistem göndericisi: `KY ERP <admin@kyerp.net>`.
+- Resend yalnız sistem/uygulama mail gönderim sağlayıcısıdır; gerçek kullanıcı mailbox hizmetinin alternatifi değildir.
+- Resend domain doğrulaması, Worker `RESEND_API_KEY` secret ve gerçek owner test maili kanıtlanmadan mail kanalı hazır sayılmaz.
+- Secret değeri repoya veya loga yazılmaz.
+- Cloudflare versioned Worker yapısında secret gerekiyorsa `wrangler versions secret put` kullanılır; deploy sırasında secret korunmalıdır.
+- Firma kartındaki `companies.email` alanı ekstre/mail iş akışlarının varsayılan alıcısıdır. Aynı firma için ikinci bağımsız mail rehberi oluşturma.
+
 ## API ve tenant standardı
 
 - Production API origin: `https://api.kyerp.net`.
@@ -124,6 +145,7 @@ Canonical giriş akışı:
 - Muhasebe finansal sonucu, cari/KDV/ödeme/çek durumunu gösterir.
 - Firma/model/belge ilişkilerinde duplicate kart üretme.
 - Gerçek belge gönderimi kullanıcı onayı ister.
+- Firma kartındaki telefon/e-posta/adres/not iletişim bilgisinin tek kaynağı `companies` kaydıdır.
 
 ## Kod ve test standardı
 
@@ -134,6 +156,7 @@ Canonical giriş akışı:
 - Worker değişikliğinde: typecheck + unit test + local auth integration smoke + build/dry-run.
 - Auth integration smoke yalnız local D1 (`wrangler.production-local.jsonc`) üzerinde çalışır; production D1 test write yasaktır.
 - API sözleşmesi veya route değişikliğinde frontend/backend eşleşmesini kontrol et.
+- Domain contract testi V6 site + app + api mimarisini doğrulamalıdır; eski V5 tek-domain testleri geri eklenmez.
 - Değişiklik sonunda: kök neden, değişen dosyalar, testler, deploy durumu ve son commit SHA raporlanır.
 
 ## Production deploy standardı
@@ -146,6 +169,10 @@ Asıl script:
 
 `DEPLOY/KYERP_DIRECT_PRODUCTION.ps1`
 
+Canonical production orkestrasyonu:
+
+`DEPLOY/KYERP_DIRECT_PRODUCTION_V6.ps1`
+
 Deploy sırası:
 
 1. Doğru repo/remote/branch/SHA ve temiz tracked çalışma ağacı.
@@ -154,13 +181,13 @@ Deploy sırası:
 4. Frontend lint + test + production build.
 5. Gerekliyse hedefli/idempotent D1 uyumluluğu; önce tam remote D1 yedeği. D1 reset ve genel migration zinciri yoktur.
 6. Worker direct deploy.
-7. `api.kyerp.net` health + `auth/status` + canonical login smoke + CORS.
-8. Frontend'i Cloudflare'da `https://kyerp.net/` adresine yayınla. Pages proje adı sabit varsayılmaz; gerekirse güvenli şekilde tespit/oluştur/onar.
-9. **Yalnız `https://kyerp.net/` yeni frontend build asset hashini göstermeden deploy başarılı sayılmaz.**
+7. `api.kyerp.net` health + `auth/status` + canonical login smoke + CORS. Browser origin `https://app.kyerp.net` olmalıdır.
+8. Frontend build aynı canonical Pages projesine yayınlanır; `kyerp.net` ve `app.kyerp.net` custom domainleri ACTIVE olmalıdır.
+9. **Hem `https://kyerp.net/` hem `https://app.kyerp.net/` aynı yeni frontend build asset hashini göstermeden deploy başarılı sayılmaz.**
+10. Public hostname ayrımı runtime’da doğrulanır: `kyerp.net` public landing, `app.kyerp.net` ERP/login.
 
 - "Kaynak hazır" ile "canlıya çıktı" aynı şey değildir.
 - Production D1 reset yasaktır.
 - Genel production migration zinciri yasaktır; yalnız açıkça hedeflenmiş additive/idempotent uyumluluk kullanılabilir.
 - Production D1 write smoke testi yasaktır.
-- `https://api.kyerp.net/api/health` 200, auth contract doğru ve `https://kyerp.net/` yeni asset hash kullanmadan işi bitmiş sayma.
-- `app.kyerp.net` deploy başarısının parçası değildir.
+- `https://api.kyerp.net/api/health` 200, auth contract doğru, `kyerp.net` ve `app.kyerp.net` yeni asset hash kullanmadan işi bitmiş sayma.
