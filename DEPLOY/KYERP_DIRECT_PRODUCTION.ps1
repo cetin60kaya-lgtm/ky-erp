@@ -34,14 +34,23 @@ function Live-Asset($url) {
 function Remote-Trigger-Exists($triggerName) {
     Set-Location $WORKER
     $sql = "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name='$triggerName';"
-    $raw = & wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --command $sql --json 2>&1
-    if ($LASTEXITCODE -ne 0) { Fail "Canli D1 trigger kontrolu yapilamadi: $raw" }
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
     try {
-        $json = $raw | ConvertFrom-Json
-        $total = [int]$json[0].results[0].total
-        return ($total -gt 0)
-    } catch {
-        Fail "Canli D1 trigger kontrol cevabi okunamadi: $raw"
+        & wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --command $sql --json 1>$stdoutFile 2>$stderrFile
+        $exitCode = $LASTEXITCODE
+        $raw = Get-Content $stdoutFile -Raw -ErrorAction SilentlyContinue
+        $stderr = Get-Content $stderrFile -Raw -ErrorAction SilentlyContinue
+        if ($exitCode -ne 0) { Fail "Canli D1 trigger kontrolu yapilamadi: $stderr $raw" }
+        try {
+            $json = $raw | ConvertFrom-Json
+            $total = [int]$json[0].results[0].total
+            return ($total -gt 0)
+        } catch {
+            Fail "Canli D1 trigger kontrol cevabi okunamadi. STDOUT: $raw STDERR: $stderr"
+        }
+    } finally {
+        Remove-Item $stdoutFile,$stderrFile -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -146,9 +155,30 @@ $statusResponse = Invoke-WebRequest "https://api.kyerp.net/api/auth/status?deplo
 if ($statusResponse.StatusCode -ne 200) { Fail "Auth status HTTP 200 degil." }
 $statusJson = $statusResponse.Content | ConvertFrom-Json
 if ($statusJson.authVersion -ne $AUTH_VERSION) { Fail "Auth version beklenen degil: $($statusJson.authVersion)" }
+if ([string]$statusJson.endpoints.refresh -ne "/api/auth/refresh") { Fail "Auth refresh endpointi canonical degil." }
 if ([int]$statusJson.sessionPolicy.passwordOnlySeconds -ne 28800) { Fail "Password session 8 saat degil." }
 if ([int]$statusJson.sessionPolicy.mfaSeconds -ne 36000) { Fail "MFA session 10 saat degil." }
-Write-Host "Auth: $AUTH_VERSION | parola 8h | MFA 10h" -ForegroundColor Green
+if ([int]$statusJson.sessionPolicy.ownerRollingSeconds -ne 86400) { Fail "Owner rolling session 24 saat degil." }
+Write-Host "Auth: $AUTH_VERSION | parola 8h | MFA 10h | owner rolling 24h" -ForegroundColor Green
+
+$refreshContractOk = $false
+try {
+    Invoke-WebRequest "https://api.kyerp.net/api/auth/refresh" -Method POST -Headers @{ Origin = "https://kyerp.net"; Accept = "application/json" } -UseBasicParsing -TimeoutSec 20 | Out-Null
+} catch {
+    $refreshCode = $null
+    $refreshBody = ""
+    if ($_.Exception.Response) {
+        try { $refreshCode = [int]$_.Exception.Response.StatusCode } catch {}
+        try {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $refreshBody = $reader.ReadToEnd()
+            $reader.Dispose()
+        } catch {}
+    }
+    if ($refreshCode -eq 401) { $refreshContractOk = $true }
+}
+if (-not $refreshContractOk) { Fail "Auth refresh endpointi tokensiz istekte beklenen HTTP 401 cevabini vermedi." }
+Write-Host "Auth refresh contract: HTTP 401 beklenen" -ForegroundColor Green
 
 Write-Host "30x preflight-free login transport kontrolu..."
 for ($i = 1; $i -le 30; $i++) {
@@ -229,6 +259,7 @@ Write-Host "Repo SHA       : $LOCAL_SHA"
 Write-Host "Auth           : $AUTH_VERSION"
 Write-Host "Worker API     : HTTP 200"
 Write-Host "Login transport: 30/30"
+Write-Host "Session refresh: HAZIR"
 Write-Host "Session guard  : HAZIR"
 Write-Host "D1 pre-backup  : $backupFile"
 Write-Host "Build asset    : $EXPECTED_ASSET"
