@@ -6,11 +6,21 @@ Use the root `AGENTS.md` as the shared project contract. These instructions are 
 
 - Production source branch: `codex/model-uretim-kontrol-merkezi-final`.
 - Canonical Windows repo root: `D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ`.
-- Live app: `https://kyerp.net` and `https://app.kyerp.net`.
-- Live API: `https://api.kyerp.net`.
+- **Only user-facing live app URL: `https://kyerp.net/`.**
+- Live API service origin: `https://api.kyerp.net`; backend-only, never present it as a second app URL.
+- **`https://app.kyerp.net` is not canonical and must not be required, recreated, verified or used as a production-success gate unless the user explicitly asks to reactivate it.**
 - Frontend: `APP/app/ky-erp-frontend`.
 - Cloudflare Worker API: `APP/cloud/ky-erp-api`.
+- Do not assume a fixed Cloudflare Pages project name or even that an old Pages project still exists. Diagnose current Cloudflare state before changing frontend hosting.
 - Local legacy backend exists for reference; do not assume it is the live production backend.
+
+## Single-address invariant
+
+- The user's one KY ERP address is `https://kyerp.net/`.
+- `api.kyerp.net` is infrastructure only.
+- Old references to `app.kyerp.net` in workflows, release history or audit files are historical and do not override this rule.
+- New deploy/test code must verify `kyerp.net` only for the frontend.
+- If frontend hosting needs repair, preserve existing Worker/API routing and repair/create only what is required to serve `kyerp.net`.
 
 ## How to work
 
@@ -70,7 +80,7 @@ It must verify:
 - `GET /api/auth/status` returns `canonical-v3`, password 28800, MFA 36000.
 - canonical auth route reachability without real credentials.
 - CORS from `https://kyerp.net`.
-- new frontend asset hash on both `kyerp.net` and `app.kyerp.net`.
-- Worker/Pages deploy success.
+- new frontend asset hash on **`https://kyerp.net/` only**.
+- Worker/frontend deploy success.
 
 Final report should state: root cause, files changed, tests, deploy status, live verification and commit SHA.
