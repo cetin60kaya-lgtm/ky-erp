@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const api = (name: string) => readFileSync(resolve(here, name), "utf8");
 const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
+const migration = (name: string) => readFileSync(resolve(here, "../migrations", name), "utf8");
 
 test("main registers the complete owner management backend", () => {
   const source = api("main.ts");
@@ -31,6 +32,40 @@ test("system management permission is stripped from every non-owner auth respons
   assert.match(source, /\/api\/auth\/\*/);
   assert.match(source, /UPDATE auth_user_module_permissions/);
   assert.match(source, /UPPER\(module_key\)='ADMIN'/);
+});
+
+test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => {
+  const main = api("main.ts");
+  const audit = api("ik-audit-readonly.ts");
+  const app = frontend("AppV3.jsx");
+  const seed = migration("0024_denetime_pdks_system_user.sql");
+  const deploy = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1"), "utf8");
+
+  assert.match(main, /function auditRole/);
+  assert.match(main, /auditPermissionRows/);
+  assert.match(main, /moduleKey:\s*"IK"/);
+  assert.match(main, /if \(!path\.startsWith\("\/api\/ik\/audit\/"\)\)/);
+  assert.match(main, /Denetim hesabı yalnız SGK'lı kart personelinin PDKS görünümünü okuyabilir/);
+  assert.match(main, /DELETE FROM auth_user_module_permissions[\s\S]*UPPER\(module_key\)<>'IK'/);
+
+  assert.match(audit, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\) = 'VAR'/);
+  assert.match(audit, /TRIM\(COALESCE\(s\.card_no,''\)\) <> ''/);
+  assert.match(audit, /\/api\/ik\/audit\/pdks\/month/);
+  assert.doesNotMatch(audit, /salary:/);
+
+  assert.match(app, /const IK_AUDIT_TABS = \[\["personel-kartlari"/);
+  assert.match(app, /if \(isAuditAccount\) return <IkAuditPersonnelPage/);
+
+  assert.match(seed, /'denetim'/);
+  assert.match(seed, /'DENETIM'/);
+  assert.match(seed, /'IK'/);
+  assert.match(seed, /1,0,0,0,0/);
+  assert.match(seed, /'AUDIT'/);
+  assert.match(seed, /must_change_password/);
+
+  assert.match(deploy, /0024_denetime_pdks_system_user\.sql/);
+  assert.match(deploy, /Assert-Denetime-System-User/);
+  assert.match(deploy, /IK\/PDKS \| salt-okunur/);
 });
 
 test("mapping UI uses implemented company profile and product catalog APIs", () => {
@@ -125,8 +160,10 @@ test("v3 deploy runs all code tests before any live D1 or Worker write", () => {
   assert.match(source, /npm test/);
   assert.match(source, /npm run build/);
   assert.match(source, /0023_admin_company_alias_schema\.sql/);
+  assert.match(source, /0024_denetime_pdks_system_user\.sql/);
   assert.match(source, /0022_auth_same_browser_session_guard\.sql/);
   assert.match(source, /Assert-Remote-Schema-Readiness/);
+  assert.match(source, /Assert-Denetime-System-User/);
   assert.match(source, /pragma_table_info\('hr_monthly_employees'\)/);
   assert.match(source, /30x preflight-free login transport kontrolu/);
   assert.doesNotMatch(source, /wrangler d1 migrations apply/);
