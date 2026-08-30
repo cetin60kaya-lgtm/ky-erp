@@ -23,9 +23,9 @@ if ($isWindowsHost -and $nodeVersion.Major -ne 22) {
     Stop-Deploy "Windows production deploy icin Node.js 22 LTS gerekiyor. Mevcut surum: $nodeText"
 }
 
-$script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V3.ps1"
+$script = Join-Path $PSScriptRoot "KYERP_DIRECT_PRODUCTION_V4.ps1"
 if (-not (Test-Path $script)) {
-    Stop-Deploy "Production V3 deploy scripti bulunamadi: $script"
+    Stop-Deploy "Production V4 deploy scripti bulunamadi: $script"
 }
 
 if ($isWindowsHost) {
