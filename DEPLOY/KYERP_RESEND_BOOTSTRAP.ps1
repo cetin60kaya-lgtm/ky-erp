@@ -66,7 +66,7 @@ function Invoke-ResendApi([string]$Method, [string]$Path, $Body = $null) {
 
 function Invoke-CfApi([string]$Method, [string]$Path, $Body = $null) {
     if (-not $script:CfToken) { Fail "Cloudflare tokeni hazir degil." }
-    $headers = @{ Authorization = "Bearer $($script:CfToken)" }
+    $headers = @{ Authorization = "Bearer $($script:CfToken)"; Accept = "application/json" }
     $uri = "https://api.cloudflare.com/client/v4$Path"
     try {
         if ($null -ne $Body) {
@@ -76,31 +76,55 @@ function Invoke-CfApi([string]$Method, [string]$Path, $Body = $null) {
             $response = Invoke-RestMethod -Uri $uri -Method $Method -Headers $headers -TimeoutSec 40
         }
     } catch {
-        $message = $_.Exception.Message
-        if ($message -match "403|Forbidden|permission") { throw "CF_DNS_PERMISSION_REQUIRED" }
-        Fail "Cloudflare API istegi basarisiz [$Method $Path]: $message"
+        $detail = Get-HttpErrorDetail $_
+        if ($detail -match "401|403|Forbidden|permission|authentication|authorization") {
+            throw "CF_DNS_PERMISSION_REQUIRED"
+        }
+        Fail "Cloudflare API istegi basarisiz [$Method $Path]: $detail"
     }
     if ($null -ne $response.success -and -not [bool]$response.success) {
         $errors = try { $response.errors | ConvertTo-Json -Depth 8 -Compress } catch { "" }
-        if ($errors -match "permission|auth|forbidden") { throw "CF_DNS_PERMISSION_REQUIRED" }
+        if ($errors -match "permission|auth|forbidden|unauthorized") { throw "CF_DNS_PERMISSION_REQUIRED" }
         Fail "Cloudflare API basarisiz [$Method $Path]: $errors"
     }
     return $response
 }
 
-function Initialize-CloudflareContext {
+function Get-WranglerOAuthToken {
     $raw = (& wrangler auth token --json 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $raw) { Fail "Wrangler oturumu yok. Once wrangler login yapilmalidir." }
     try { $auth = $raw | ConvertFrom-Json } catch { Fail "Wrangler auth token JSON okunamadi." }
     $token = [string]$auth.token
     if (-not $token) { Fail "Wrangler OAuth/API tokeni okunamadi." }
-    $script:CfToken = $token
+    return $token
+}
 
+function Initialize-CloudflareContext {
+    $script:CfToken = Get-WranglerOAuthToken
     $zones = Invoke-CfApi "GET" "/zones?name=$MAIL_DOMAIN"
     $rows = @($zones.result)
     if ($rows.Count -ne 1) { Fail "$MAIL_DOMAIN Cloudflare zone kaydi tekil bulunamadi." }
     $script:CfZoneId = [string]$rows[0].id
     if (-not $script:CfZoneId) { Fail "Cloudflare zone kimligi okunamadi." }
+}
+
+function Request-CloudflareDnsApiToken {
+    Write-Host ""
+    Write-Host "Wrangler OAuth tokeninda DNS yazma izni yok." -ForegroundColor Yellow
+    Write-Host "Cloudflare Dashboard > API Tokens > Create Token > Edit zone DNS sablonunu kullanin." -ForegroundColor Yellow
+    Write-Host "Zone kaynagini yalniz kyerp.net ile sinirlayin." -ForegroundColor Yellow
+    Write-Host "Olusan tokeni yalniz bu terminale yapistirin. Token diske veya repoya kaydedilmez." -ForegroundColor Yellow
+    $token = Read-SecretPlain "CLOUDFLARE DNS API TOKEN"
+    if (-not $token) { Fail "Cloudflare DNS API token girilmedi." }
+    $script:CfToken = $token
+
+    if (-not $script:CfZoneId) { Fail "Cloudflare zone kimligi hazir degil." }
+    try {
+        Invoke-CfApi "GET" "/zones/$($script:CfZoneId)/dns_records?per_page=1" | Out-Null
+    } catch {
+        Fail "Girilen Cloudflare tokeni kyerp.net icin DNS yetkisine sahip degil. Edit zone DNS sablonu ve kyerp.net zone secimini kontrol edin."
+    }
+    Write-Host "Cloudflare DNS API tokeni: DOGRULANDI" -ForegroundColor Green
 }
 
 function Normalize-DnsName([string]$Name) {
@@ -165,8 +189,6 @@ function Ensure-ResendDomain {
     $domain = @($list.data | Where-Object { ([string]$_.name).Trim().ToLowerInvariant() -eq $MAIL_DOMAIN }) | Select-Object -First 1
     if ($null -eq $domain) {
         Write-Host "$MAIL_DOMAIN Resend hesabina ekleniyor..." -ForegroundColor Yellow
-        # Resend'in guncel create-domain sozlesmesinde en guvenli temel istek yalniz domain adidir.
-        # Sending/receiving capabilities arayuzden veya domain update ile ayrica yonetilebilir.
         $domain = Invoke-ResendApi "POST" "/domains" @{ name = $MAIL_DOMAIN }
     }
     $domainId = [string]$domain.id
@@ -184,12 +206,10 @@ function Ensure-ResendDns($DomainDetail) {
         foreach ($record in $records) { Ensure-CloudflareDnsRecord $record }
     } catch {
         if ([string]$_ -notmatch "CF_DNS_PERMISSION_REQUIRED") { throw }
-        Write-Host "Wrangler OAuth oturumunda DNS duzenleme izni yok." -ForegroundColor Yellow
-        Write-Host "Cloudflare yeniden yetkilendirilecek. Acilan ekranda DNS duzenleme iznini kapatmayin." -ForegroundColor Yellow
-        & wrangler login
-        if ($LASTEXITCODE -ne 0) { Fail "Cloudflare yeniden yetkilendirme tamamlanmadi." }
-        Initialize-CloudflareContext
+        Request-CloudflareDnsApiToken
         foreach ($record in $records) { Ensure-CloudflareDnsRecord $record }
+    } finally {
+        $script:CfToken = ""
     }
 }
 
