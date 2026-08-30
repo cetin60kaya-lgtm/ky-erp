@@ -90,60 +90,84 @@ function authErrorMessage(status, payload, requestUrl = "") {
   return status > 0 ? `Giriş işlemi tamamlanamadı (HTTP ${status}).` : "Giriş işlemi tamamlanamadı.";
 }
 
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 async function directAuthRequest(path, options = {}) {
   const { method = "POST", body, token = "", timeoutMs = 20000 } = options;
   const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   const requestUrl = `${API_BASE}${normalizedPath}`;
-  try {
-    const headers = { Accept: "application/json" };
-    if (body !== undefined) {
-      // JSON metni text/plain ile taşınır. Bu Content-Type CORS safelist kapsamındadır;
-      // kyerp.net -> api.kyerp.net girişinde gereksiz OPTIONS/preflight oluşmaz.
-      // Backend Hono c.req.json() gövdeyi aynı JSON olarak okumaya devam eder.
-      headers["Content-Type"] = "text/plain;charset=UTF-8";
+  const loginTransportRetry = normalizedPath === "/auth/login" && String(method).toUpperCase() === "POST" && !token;
+  const maxAttempts = loginTransportRetry ? 2 : 1;
+  let lastTransportError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const headers = { Accept: "application/json" };
+      if (body !== undefined) {
+        // JSON metni text/plain ile taşınır. Bu Content-Type CORS safelist kapsamındadır;
+        // kyerp.net -> api.kyerp.net girişinde gereksiz OPTIONS/preflight oluşmaz.
+        // Backend Hono c.req.json() gövdeyi aynı JSON olarak okumaya devam eder.
+        headers["Content-Type"] = "text/plain;charset=UTF-8";
+      }
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch(requestUrl, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+        cache: "no-store",
+        mode: "cors",
+      });
+      const raw = await response.text();
+      let payload = null;
+      try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
+      const requestId = response.headers.get("X-Request-Id") || payload?.error?.details?.requestId || payload?.requestId || "";
+      const authVersion = response.headers.get("X-KYERP-Auth-Version") || payload?.authVersion || "";
+      const validJsonPayload = payload && typeof payload === "object" && !Array.isArray(payload);
+      if (response.ok && !validJsonPayload) {
+        const contentType = String(response.headers.get("Content-Type") || "");
+        const error = new Error(`KY ERP giriş servisi JSON yerine geçersiz yanıt döndürdü${contentType ? ` (${contentType})` : ""}.`);
+        Object.assign(error, { status: response.status, code: "AUTH_INVALID_RESPONSE", requestUrl, requestId, responseText: String(raw || "").slice(0, 240) });
+        throw error;
+      }
+      if (!response.ok || payload?.ok === false) {
+        const error = new Error(authErrorMessage(response.status, payload, requestUrl));
+        Object.assign(error, { status: response.status, code: payload?.error?.code || payload?.code || "AUTH_HTTP_ERROR", payload, requestId, requestUrl, responseText: String(raw || "").slice(0, 240) });
+        throw error;
+      }
+      if (authVersion && authVersion !== AUTH_VERSION) {
+        const mismatch = new Error("KY ERP giriş servisi ile uygulama sürümü uyuşmuyor. Canlı dağıtımı yenileyin.");
+        Object.assign(mismatch, { status: 409, code: "AUTH_VERSION_MISMATCH", requestUrl, requestId });
+        throw mismatch;
+      }
+      return payload;
+    } catch (error) {
+      if (Number(error?.status || 0) > 0) throw error;
+      lastTransportError = error;
+      if (attempt + 1 < maxAttempts) {
+        // Yalnız ilk parola logininde HTTP cevabı hiç alınmadıysa bir kez tekrar deneriz.
+        // Aynı BROWSER kimliği için D1 same-browser guard eski olası sessionı kapattığı için
+        // cevap yolda kaybolmuş olsa bile aktif session birikmez.
+        await wait(250);
+        continue;
+      }
+      const wrapped = new Error(error?.name === "AbortError"
+        ? "KY ERP giriş servisi zamanında yanıt vermedi. Tekrar deneyin."
+        : "KY ERP giriş servisine bağlanılamadı. Tekrar deneyin.");
+      Object.assign(wrapped, { status: 0, code: error?.name === "AbortError" ? "REQUEST_TIMEOUT" : "NETWORK_ERROR", cause: error, requestUrl });
+      throw wrapped;
+    } finally {
+      window.clearTimeout(timer);
     }
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const response = await fetch(requestUrl, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
-      cache: "no-store",
-      mode: "cors",
-    });
-    const raw = await response.text();
-    let payload = null;
-    try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
-    const requestId = response.headers.get("X-Request-Id") || payload?.error?.details?.requestId || payload?.requestId || "";
-    const authVersion = response.headers.get("X-KYERP-Auth-Version") || payload?.authVersion || "";
-    const validJsonPayload = payload && typeof payload === "object" && !Array.isArray(payload);
-    if (response.ok && !validJsonPayload) {
-      const contentType = String(response.headers.get("Content-Type") || "");
-      const error = new Error(`KY ERP giriş servisi JSON yerine geçersiz yanıt döndürdü${contentType ? ` (${contentType})` : ""}.`);
-      Object.assign(error, { status: response.status, code: "AUTH_INVALID_RESPONSE", requestUrl, requestId, responseText: String(raw || "").slice(0, 240) });
-      throw error;
-    }
-    if (!response.ok || payload?.ok === false) {
-      const error = new Error(authErrorMessage(response.status, payload, requestUrl));
-      Object.assign(error, { status: response.status, code: payload?.error?.code || payload?.code || "AUTH_HTTP_ERROR", payload, requestId, requestUrl, responseText: String(raw || "").slice(0, 240) });
-      throw error;
-    }
-    if (authVersion && authVersion !== AUTH_VERSION) {
-      const mismatch = new Error("KY ERP giriş servisi ile uygulama sürümü uyuşmuyor. Canlı dağıtımı yenileyin.");
-      Object.assign(mismatch, { status: 409, code: "AUTH_VERSION_MISMATCH", requestUrl, requestId });
-      throw mismatch;
-    }
-    return payload;
-  } catch (error) {
-    if (Number(error?.status || 0) > 0) throw error;
-    const wrapped = new Error(error?.name === "AbortError"
-      ? "KY ERP giriş servisi zamanında yanıt vermedi. Tekrar deneyin."
-      : "KY ERP giriş servisine bağlanılamadı. Tekrar deneyin.");
-    Object.assign(wrapped, { status: 0, code: error?.name === "AbortError" ? "REQUEST_TIMEOUT" : "NETWORK_ERROR", cause: error, requestUrl });
-    throw wrapped;
-  } finally { window.clearTimeout(timer); }
+  }
+
+  const wrapped = new Error("KY ERP giriş servisine bağlanılamadı. Tekrar deneyin.");
+  Object.assign(wrapped, { status: 0, code: "NETWORK_ERROR", cause: lastTransportError, requestUrl });
+  throw wrapped;
 }
 
 function removeStoredAuth() {
