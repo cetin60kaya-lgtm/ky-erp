@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const api = (name: string) => readFileSync(resolve(here, name), "utf8");
+const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
+
+test("main registers the complete owner management backend", () => {
+  const source = api("main.ts");
+  for (const name of [
+    "registerAdminCoreRoutes",
+    "registerAdminMappingRoutes",
+    "registerAdminStorageRoutes",
+    "registerAdminBackupRoutes",
+    "registerAdminManagementRoutes",
+  ]) {
+    assert.match(source, new RegExp(`${name}\\(app\\)`));
+  }
+});
+
+test("mapping UI uses implemented company profile and product catalog APIs", () => {
+  const source = frontend("pages/admin/AdminMappings.jsx");
+  assert.match(source, /\/muhasebe\/firma-profilleri/);
+  assert.match(source, /\/admin\/product-catalog/);
+  assert.doesNotMatch(source, /\/muhasebe\/firma-kartlari/);
+  assert.doesNotMatch(source, /\/muhasebe\/urunler/);
+});
+
+test("storage management is R2-first and does not expose local watch workflow", () => {
+  const backend = api("admin-storage-cloud.ts");
+  const ui = frontend("pages/admin/AdminStorageCenter.jsx");
+  assert.match(backend, /R2:\/\/ky-erp-files/);
+  assert.match(backend, /archive-capabilities/);
+  assert.match(backend, /trash\//);
+  assert.match(ui, /Cloudflare R2/);
+  assert.match(ui, /Google Drive/);
+  assert.match(ui, /OneDrive/);
+  assert.doesNotMatch(ui, /test-watch-path/);
+  assert.doesNotMatch(ui, /import-watch-folder/);
+});
+
+test("backup backend creates real R2 manifests and requires guarded restore", () => {
+  const backend = api("admin-backup-cloud.ts");
+  const ui = frontend("pages/admin/AdminBackupLogs.jsx");
+  assert.match(backend, /backups\/\$\{slug\}/);
+  assert.match(backend, /manifest\.json/);
+  assert.match(backend, /PRE_RESTORE:/);
+  assert.match(backend, /GERI YUKLE/);
+  assert.match(backend, /verifyOwnerPassword/);
+  assert.match(ui, /GERI YUKLE/);
+  assert.match(ui, /safetyBackupId/);
+});
+
+test("tenant slug rename and transfer are D1 batch atomic", () => {
+  const source = api("admin-core-cloud.ts");
+  assert.match(source, /c\.env\.DB\.batch\(statements\)/);
+  assert.match(source, /tenantMovePlan/);
+  assert.match(source, /COMPANY_TRANSFER_CONFLICT/);
+  assert.doesNotMatch(source, /async function moveTenantSlug/);
+});
+
+test("all admin backup client calls are implemented", () => {
+  const source = frontend("services/adminApi.js");
+  assert.match(source, /\/admin\/backups/);
+  assert.match(source, /restoreBackup/);
+  assert.match(source, /listBackups/);
+});
