@@ -39,17 +39,24 @@ runSql(`
 `);
 
 for (const [userId, role] of users) {
+  // auth_sessions.token_hash production'da global UNIQUE'tir. Smoke testi de gerçek
+  // runtime gibi her oturum için benzersiz token hash üretmelidir; kullanıcılar arasında
+  // sabit 'hash-old/hash-new' tekrar kullanmak test verisinin kendi constraint hatasıdır.
+  const tokenOther = `smoke-${userId}-other`;
+  const tokenOld = `smoke-${userId}-old`;
+  const tokenNew = `smoke-${userId}-new`;
+
   runSql(`
     INSERT INTO auth_users(id,username,password_hash,full_name,role,is_active,must_change_password,created_at,updated_at)
     VALUES ('${userId}','${userId}','x','${userId}','${role}',1,0,'${now}','${now}');
 
     INSERT INTO auth_sessions(id,user_id,main_company_slug,token_hash,role_at_login,device_label,user_agent,ip_address,created_at,approved_at,expires_at,last_seen_at)
     VALUES
-      ('${userId}-other','${userId}','mecit-hakan','hash-other','${role}','BROWSER:OTHER-${userId}','Smoke','127.0.0.1','${now}','${now}','${expires}','${now}'),
-      ('${userId}-old','${userId}','mecit-hakan','hash-old','${role}','BROWSER:SAME-${userId}','Smoke','127.0.0.1','${now}','${now}','${expires}','${now}');
+      ('${userId}-other','${userId}','mecit-hakan','${tokenOther}','${role}','BROWSER:OTHER-${userId}','Smoke','127.0.0.1','${now}','${now}','${expires}','${now}'),
+      ('${userId}-old','${userId}','mecit-hakan','${tokenOld}','${role}','BROWSER:SAME-${userId}','Smoke','127.0.0.1','${now}','${now}','${expires}','${now}');
 
     INSERT INTO auth_sessions(id,user_id,main_company_slug,token_hash,role_at_login,device_label,user_agent,ip_address,created_at,approved_at,expires_at,last_seen_at)
-    VALUES ('${userId}-new','${userId}','mecit-hakan','hash-new','${role}','BROWSER:SAME-${userId}','Smoke','127.0.0.1','${later}','${later}','${expires}','${later}');
+    VALUES ('${userId}-new','${userId}','mecit-hakan','${tokenNew}','${role}','BROWSER:SAME-${userId}','Smoke','127.0.0.1','${later}','${later}','${expires}','${later}');
   `);
 
   const sameActive = scalar(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id='${userId}' AND device_label='BROWSER:SAME-${userId}' AND revoked_at IS NULL AND expires_at>'${later}'`, "n");
