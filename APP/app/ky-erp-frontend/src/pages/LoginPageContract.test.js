@@ -15,3 +15,9 @@ test("login UI delegates credentials and MFA to the shared AuthContext engine", 
   assert.match(source, /await login\(identity, rawPassword/);
   assert.match(source, /await verifyMfa\(/);
 });
+
+test("login UI does not expose connection-state wording or admin-only copy", () => {
+  assert.match(source, /Giriş yapılıyor\.\.\./);
+  assert.doesNotMatch(source, /Güvenli bağlantı kuruluyor/);
+  assert.doesNotMatch(source, /Admin hesaplarında MFA zorunludur/);
+});
