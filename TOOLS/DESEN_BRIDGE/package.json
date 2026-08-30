@@ -1,0 +1,16 @@
+{
+  "name": "kyerp-desen-bridge",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node desen-sync.mjs",
+    "check": "node --check desen-sync.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.34.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

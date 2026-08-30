@@ -1,6 +1,7 @@
 import { apiUrl } from "./api";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
+const ACTIVE_COMPANY_KEY = "kyerp.activeCompany";
 const INSTALL_KEY = "__kyerpAuthenticatedAssetBridgeInstalled";
 const API_MODULE_PREFIXES = [
   "/desen/",
@@ -14,7 +15,19 @@ const API_MODULE_PREFIXES = [
 
 function readToken() {
   try {
-    return String(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "").trim();
+    return String(
+      window.sessionStorage.getItem(AUTH_TOKEN_KEY) ||
+        window.localStorage.getItem(AUTH_TOKEN_KEY) ||
+        "",
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function readCompanySlug() {
+  try {
+    return String(window.localStorage.getItem(ACTIVE_COMPANY_KEY) || "").trim();
   } catch {
     return "";
   }
@@ -66,12 +79,16 @@ async function fetchProtectedAsset(url, signal) {
     throw error;
   }
 
+  const companySlug = readCompanySlug();
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "image/*,application/pdf,application/octet-stream,*/*",
+  };
+  if (companySlug) headers["X-KYERP-Tenant-Slug"] = companySlug;
+
   const response = await fetch(url.href, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "image/*,application/pdf,application/octet-stream,*/*",
-    },
+    headers,
     cache: "no-store",
     signal,
   });
