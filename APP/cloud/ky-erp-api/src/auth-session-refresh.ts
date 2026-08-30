@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { getAuthenticatedUser } from "./auth-cloud";
+import { getAuthenticatedUser } from "./auth-cloud.ts";
 
 type AnyRow = Record<string, any>;
 
