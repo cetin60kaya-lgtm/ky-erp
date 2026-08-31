@@ -12,9 +12,9 @@ import DesenRaporlari from "./DesenRaporlari";
 
 const SCREEN_COPY = {
   "desen-klasor-ayarlari": {
-    title: "Desen R2 Depolama Ayarları",
+    title: "Desen Depolama ve Köprü Ayarları",
     description:
-      "Canlı uygulamanın R2 gelen, model, hata ve arşiv alanlarını kontrol edin.",
+      "DESINATOR orijinal arşivini, Windows köprüsünü ve R2 canlı önizleme alanlarını tek yerden kontrol edin.",
   },
   "desen-modeller": {
     title: "Desen Havuzu",
@@ -34,7 +34,7 @@ const SCREEN_COPY = {
   "gelen-desenler": {
     title: "Gelen Desenler",
     description:
-      "UXP / yerel Desen Köprüsü veya telefon yüklemesiyle gelen görselleri düşük boyutlu R2 önizlemelerine dönüştürüp model kartına bağlayın.",
+      "DESINATOR / yerel Desen Köprüsü veya telefon yüklemesiyle gelen görselleri düşük boyutlu R2 önizlemelerine dönüştürüp tek model kartına bağlayın.",
   },
 };
 
