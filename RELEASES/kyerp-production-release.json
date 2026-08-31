@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-31T20:37:00+03:00",
-  "attempt": 68,
+  "requestedAt": "2026-08-31T22:43:00+03:00",
+  "attempt": 69,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -11,6 +11,7 @@
     "public-site-no-auth-bootstrap",
     "public-login-routes-redirect-to-app",
     "dual-pages-domain-verification",
+    "pages-post-deploy-fresh-wrangler-oauth",
     "canonical-v3-auth",
     "password-only-session-8h",
     "mfa-session-10h",
@@ -77,5 +78,5 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "31.08.2026 tek kalem production paketi. kyerp.net kurumsal/tanitim sitesi, app.kyerp.net ERP/login, api.kyerp.net backend API olarak ayridir. Hakan Emprime ilk referans olarak kurumsal sitede yer alir; admin@kyerp.net sistem gondericisi ve kurumsal iletisim adresidir. Firma profillerinde telefon/e-posta/adres/not ayni companies kaydinda tutulur ve firma e-postasi muhasebe/mail akislarinda varsayilan alici kaynagi olarak kullanilir. Resend domain dogrulamasi, versioned Worker secret uyumlulugu ve gercek test-mail kaniti canonical deploy on-kosuludur. Desen finalinde eski tools/desen-sync kaldirildi; tek yerel kopru TOOLS/DESEN_BRIDGE altindadir. Orijinal desenler DESINATOR/Gelen Desenler -> DESINATOR/Modeller/<Model>/Kaynak/YYYY/AA akisi ile korunur; DTF icin ayri ana model arsivi yoktur. R2'ye yalniz web preview/thumbnail gider ve SHA-256 tekrar kontrolu uygulanir. Muhasebe, IsNet, Boyahane, Desen, Imalat, IK/PDKS ve Yonetim mevcut production davranisiyla korunur. Canonical Windows deploy Node.js 22 LTS + PowerShell 7 + Wrangler oturumu ile calisir; once tum Worker/frontend testleri, sonra D1 tam export yedegi, yalniz hedefli/idempotent 0022/0023/0024 uyumluluklari, Worker deploy, Pages deploy ve kyerp.net + app.kyerp.net canli asset dogrulamasi yapilir. Genel D1 migration zinciri ve D1 reset yasaktir. Coklu ana firma/moduler provider v2 calismasi production'a dahil degildir; ayri codex/ky-erp-multicompany-modular-v2 dalinda ele alinacaktir."
+  "note": "31.08.2026 tek kalem production paketi. kyerp.net kurumsal/tanitim sitesi, app.kyerp.net ERP/login, api.kyerp.net backend API olarak ayridir. Hakan Emprime ilk referans olarak kurumsal sitede yer alir; admin@kyerp.net sistem gondericisi ve kurumsal iletisim adresidir. Firma profillerinde telefon/e-posta/adres/not ayni companies kaydinda tutulur ve firma e-postasi muhasebe/mail akislarinda varsayilan alici kaynagi olarak kullanilir. Resend domain dogrulamasi, versioned Worker secret uyumlulugu ve gercek test-mail kaniti canonical deploy on-kosuludur. Desen finalinde eski tools/desen-sync kaldirildi; tek yerel kopru TOOLS/DESEN_BRIDGE altindadir. Orijinal desenler DESINATOR/Gelen Desenler -> DESINATOR/Modeller/<Model>/Kaynak/YYYY/AA akisi ile korunur; DTF icin ayri ana model arsivi yoktur. R2'ye yalniz web preview/thumbnail gider ve SHA-256 tekrar kontrolu uygulanir. Muhasebe, IsNet, Boyahane, Desen, Imalat, IK/PDKS ve Yonetim mevcut production davranisiyla korunur. Canonical Windows deploy Node.js 22 LTS + PowerShell 7 + Wrangler oturumu ile calisir; once tum Worker/frontend testleri, sonra D1 tam export yedegi, yalniz hedefli/idempotent 0022/0023/0024 uyumluluklari, Worker deploy, Pages deploy ve kyerp.net + app.kyerp.net canli asset dogrulamasi yapilir. Genel D1 migration zinciri ve D1 reset yasaktir. Pages deploy Wrangler OAuth tokenini yenileyebildigi icin custom-domain REST dogrulamasi artik deploy sonrasi taze `wrangler auth token --json` tokeni ile yapilir; eski token kaynakli 401 Unauthorized kalici olarak engellenir. Coklu ana firma/moduler provider v2 calismasi production'a dahil degildir; ayri codex/ky-erp-multicompany-modular-v2 dalinda ele alinacaktir."
 }
