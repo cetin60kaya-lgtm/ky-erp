@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-08-30T18:00:00+03:00",
-  "attempt": 67,
+  "requestedAt": "2026-08-31T20:37:00+03:00",
+  "attempt": 68,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -42,8 +42,14 @@
     "isnet-r2-pdf-xml-preserved",
     "muhasebe-current-runtime",
     "company-cari-alias-runtime",
+    "company-contact-email-profile",
     "boyahane-current-runtime",
     "desen-current-runtime",
+    "desinator-bridge-v3",
+    "desinator-single-model-root",
+    "desinator-no-separate-dtf-model-archive",
+    "desinator-r2-web-preview-only",
+    "desinator-source-sha256-dedup",
     "production-runtime-v2",
     "ik-personnel-control-center",
     "ik-denetim-system-user",
@@ -57,6 +63,10 @@
     "ky-pdks-windows-v1-source-integrated",
     "ky-pdks-local-sqlite-and-agent-source",
     "ky-pdks-erp-sync-source",
+    "public-reference-hakan-emprime",
+    "public-corporate-contact-admin-at-kyerp-net",
+    "resend-domain-verified",
+    "resend-worker-secret-versioned",
     "d1-full-predeploy-backup",
     "d1-targeted-0022-0023-0024-only",
     "d1-no-reset",
@@ -67,5 +77,5 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "30.08.2026 birleşik production paketi. kyerp.net kurumsal/tanıtım sitesi, app.kyerp.net gerçek ERP/login, api.kyerp.net backend API olarak ayrılmıştır. İşNet bağlantı ve business-settings düzeltmeleri, Yönetim kullanıcı/firma/yetki/güvenlik merkezi, Google+Microsoft bağımsız MFA ve kurtarma politikası, owner recovery/session güvenliği, İK personel kontrolü ve DENETIM PDKS merkezi, Muhasebe/Boyahane/Desen/İmalat güncel runtime'ları aynı canonical production dalındadır. KY PDKS Windows 1.0 kaynakları da aynı dalda tutulur; masaüstü installer web Pages deployunun parçası değildir. Canonical Windows deploy Node.js 22 LTS + PowerShell 7 + Wrangler oturumu ile çalışır. Önce frontend/Worker test ve build, sonra tam D1 export yedeği alınır; genel migration zinciri veya D1 reset uygulanmaz. Yalnız canlı şema ihtiyacına göre hedefli/idempotent 0022 same-browser guard, 0023 firma alias ve 0024 DENETIM hesabı uyumluluğu uygulanabilir. Cloudflare Pages aynı build'i kyerp.net ve app.kyerp.net alanlarına bağlar ve her iki asseti doğrular."
+  "note": "31.08.2026 tek kalem production paketi. kyerp.net kurumsal/tanitim sitesi, app.kyerp.net ERP/login, api.kyerp.net backend API olarak ayridir. Hakan Emprime ilk referans olarak kurumsal sitede yer alir; admin@kyerp.net sistem gondericisi ve kurumsal iletisim adresidir. Firma profillerinde telefon/e-posta/adres/not ayni companies kaydinda tutulur ve firma e-postasi muhasebe/mail akislarinda varsayilan alici kaynagi olarak kullanilir. Resend domain dogrulamasi, versioned Worker secret uyumlulugu ve gercek test-mail kaniti canonical deploy on-kosuludur. Desen finalinde eski tools/desen-sync kaldirildi; tek yerel kopru TOOLS/DESEN_BRIDGE altindadir. Orijinal desenler DESINATOR/Gelen Desenler -> DESINATOR/Modeller/<Model>/Kaynak/YYYY/AA akisi ile korunur; DTF icin ayri ana model arsivi yoktur. R2'ye yalniz web preview/thumbnail gider ve SHA-256 tekrar kontrolu uygulanir. Muhasebe, IsNet, Boyahane, Desen, Imalat, IK/PDKS ve Yonetim mevcut production davranisiyla korunur. Canonical Windows deploy Node.js 22 LTS + PowerShell 7 + Wrangler oturumu ile calisir; once tum Worker/frontend testleri, sonra D1 tam export yedegi, yalniz hedefli/idempotent 0022/0023/0024 uyumluluklari, Worker deploy, Pages deploy ve kyerp.net + app.kyerp.net canli asset dogrulamasi yapilir. Genel D1 migration zinciri ve D1 reset yasaktir. Coklu ana firma/moduler provider v2 calismasi production'a dahil degildir; ayri codex/ky-erp-multicompany-modular-v2 dalinda ele alinacaktir."
 }
