@@ -3,7 +3,7 @@
   "target": "production",
   "mode": "production",
   "requestedAt": "2026-08-31T22:43:00+03:00",
-  "attempt": 70,
+  "attempt": 71,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -51,6 +51,7 @@
     "isnet-outgoing-portal-field-aliases",
     "isnet-outgoing-dispatch-accounting-document",
     "isnet-outgoing-idempotent-document-upsert",
+    "muhasebe-kesilen-fatura-manual-isnet-refresh",
     "muhasebe-current-runtime",
     "company-cari-alias-runtime",
     "company-contact-email-profile",
@@ -88,5 +89,5 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "note": "31.08.2026 tek kalem production paketi. Mevcut 3e5f859 production 11/11 basariyla canlidir. Bu hotfix paketi app.kyerp.net sayfa yenileme/dogrudan URL acilisinda React child istekleri AuthProvider handler'i kurulmadan once baslayabildigi icin olusan ilk 401 yarisi kapatir: local/session storage'daki canonical kyerp_auth_token ERP renderindan once ortak API katmanina bootstrap edilir; normal AuthProvider daha sonra oturum ve logout yonetimini devralir. Bu ayni cold-start yarisi nedeniyle Resend delivery-capabilities isteginin dusup ekranda yanlis sekilde e-posta servisi yok gorunmesine yol acan durum da giderilir. Resend domain, versioned Worker secret ve gercek test-mail kaniti korunur; sistem gondericisi KY ERP <admin@kyerp.net> olarak kalir. IsNet tarafinda mevcut incoming/tedarikci full-sync degistirilmez; ek bir outgoing recovery katmani giden faturalar icin GetSentStagingInvoiceList + GetEArchiveInvoiceList, giden irsaliyeler icin GetSentStagingDespatchList API kanallarini ve mevcut portal outgoing endpointlerini fallback olarak kullanir. InvoiceId/IdFatura/IdFaturaGiden ile DespatchId/IdIrsaliye/IdIrsaliyeGiden gibi alan varyantlari normalize edilir. Giden faturalar CUSTOMER_INVOICE, giden irsaliyeler OUTGOING_DISPATCH olarak mevcut documents tablosuna main_company_slug + belge no + belge tipi anahtariyla idempotent yazilir; yeni tablo veya genel migration yoktur. IsNet Tek Senkronizasyon mevcut full-sync ile outgoing recovery'yi birlikte calistirir; bir kanal gecici hata verirse digerinin sonucu korunur. Genel D1 migration zinciri ve D1 reset yasaktir. Coklu ana firma/moduler provider v2 bu production hotfixine dahil degildir."
+  "note": "31.08.2026 tek kalem production paketi. Mevcut 3e5f859 production 11/11 basariyla canlidir. Bu hotfix paketi app.kyerp.net sayfa yenileme/dogrudan URL acilisinda React child istekleri AuthProvider handler'i kurulmadan once baslayabildigi icin olusan ilk 401 yarisi kapatir: local/session storage'daki canonical kyerp_auth_token ERP renderindan once ortak API katmanina bootstrap edilir; normal AuthProvider daha sonra oturum ve logout yonetimini devralir. Bu ayni cold-start yarisi nedeniyle Resend delivery-capabilities isteginin dusup ekranda yanlis sekilde e-posta servisi yok gorunmesine yol acan durum da giderilir. Resend domain, versioned Worker secret ve gercek test-mail kaniti korunur; sistem gondericisi KY ERP <admin@kyerp.net> olarak kalir. IsNet tarafinda mevcut incoming/tedarikci full-sync degistirilmez; ek bir outgoing recovery katmani giden faturalar icin GetSentStagingInvoiceList + GetEArchiveInvoiceList, giden irsaliyeler icin GetSentStagingDespatchList API kanallarini ve mevcut portal outgoing endpointlerini fallback olarak kullanir. InvoiceId/IdFatura/IdFaturaGiden ile DespatchId/IdIrsaliye/IdIrsaliyeGiden gibi alan varyantlari normalize edilir. Giden faturalar CUSTOMER_INVOICE, giden irsaliyeler OUTGOING_DISPATCH olarak mevcut documents tablosuna main_company_slug + belge no + belge tipi anahtariyla idempotent yazilir; yeni tablo veya genel migration yoktur. IsNet Tek Senkronizasyon mevcut full-sync ile outgoing recovery'yi birlikte calistirir; bir kanal gecici hata verirse digerinin sonucu korunur. Muhasebe > Bizim Kesilen Faturalarimiz ekranindaki manuel Yenile artik sadece D1 okumaz; 01.08.2026'dan bugune giden IsNet belge recovery'sini calistirip listeyi tekrar yukler. Genel D1 migration zinciri ve D1 reset yasaktir. Coklu ana firma/moduler provider v2 bu production hotfixine dahil degildir."
 }
