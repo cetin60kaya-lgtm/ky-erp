@@ -22,6 +22,19 @@ function Fail($message) {
     exit 1
 }
 
+function Get-KyFreshWranglerToken {
+    $authRaw = (& wrangler auth token --json 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $authRaw) {
+        Fail "Wrangler OAuth tokeni okunamadi. Once wrangler login calistirin."
+    }
+    try { $auth = $authRaw | ConvertFrom-Json }
+    catch { Fail "Wrangler auth token JSON okunamadi." }
+
+    $token = ([string]$auth.token).Trim()
+    if (-not $token) { Fail "OAuth/API token bulunamadi. wrangler login ile OAuth kullanin." }
+    return $token
+}
+
 function Invoke-KyCfApi([string]$Method, [string]$Path, $Body = $null) {
     if (-not $script:CF_TOKEN) { Fail "Cloudflare API tokeni hazir degil." }
     $uri = "https://api.cloudflare.com/client/v4$Path"
@@ -78,14 +91,9 @@ function Assert-NoWorkerConflict([string]$Domain) {
 function Initialize-KyCloudflareContext {
     Write-Host "Cloudflare site + uygulama domain kontrolu..." -ForegroundColor Cyan
 
-    $authRaw = (& wrangler auth token --json 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $authRaw) { Fail "Wrangler OAuth tokeni okunamadi. Once wrangler login calistirin." }
-    try { $auth = $authRaw | ConvertFrom-Json }
-    catch { Fail "Wrangler auth token JSON okunamadi." }
-
-    $token = [string]$auth.token
-    if (-not $token) { Fail "OAuth/API token bulunamadi. wrangler login ile OAuth kullanin." }
-    $script:CF_TOKEN = $token
+    # Wrangler deploy komutlari OAuth tokenini yenileyebilir. Tokeni burada her
+    # production calismasinda Wrangler'in guncel oturumundan al.
+    $script:CF_TOKEN = Get-KyFreshWranglerToken
 
     $zoneResponse = Invoke-KyCfApi "GET" "/zones?name=$SITE_DOMAIN"
     $zones = @($zoneResponse.result)
@@ -152,7 +160,8 @@ function Resolve-Or-Create-KyPagesProject {
     }
     if ($currentBranch -ne $BRANCH) { Fail "Pages production branch canonical branch olarak ayarlanamadi." }
 
-    $env:KYERP_CF_TOKEN = $script:CF_TOKEN
+    # Account/project bilgisi uzun deploy boyunca sabit kalir. OAuth token ise
+    # Pages deploy sonrasinda tekrar Wrangler'dan tazelenecektir.
     $env:KYERP_CF_ACCOUNT_ID = $script:CF_ACCOUNT_ID
     $env:KYERP_PAGES_PROJECT = $script:PAGES_PROJECT
 
@@ -163,13 +172,17 @@ function Resolve-Or-Create-KyPagesProject {
 }
 
 function Ensure-KyPagesDomain([string]$Domain) {
-    if (-not $env:KYERP_CF_TOKEN -or -not $env:KYERP_CF_ACCOUNT_ID -or -not $env:KYERP_PAGES_PROJECT) {
+    if (-not $env:KYERP_CF_ACCOUNT_ID -or -not $env:KYERP_PAGES_PROJECT) {
         Fail "Pages domain baglama bilgisi eksik."
     }
 
-    $script:CF_TOKEN = $env:KYERP_CF_TOKEN
     $script:CF_ACCOUNT_ID = $env:KYERP_CF_ACCOUNT_ID
     $script:PAGES_PROJECT = $env:KYERP_PAGES_PROJECT
+
+    # Kritik: `wrangler pages deploy` OAuth tokenini rotate/refresh edebilir.
+    # Deploy basinda saklanan tokeni kullanma; domain REST kontrolu icin guncel
+    # Wrangler OAuth tokenini yeniden oku. Bu 401 Unauthorized tekrarini kapatir.
+    $script:CF_TOKEN = Get-KyFreshWranglerToken
 
     $domains = Get-KyProjectDomains $script:PAGES_PROJECT
     $row = @($domains | Where-Object { ([string]$_.name).Trim().ToLowerInvariant() -eq $Domain }) | Select-Object -First 1
@@ -234,7 +247,7 @@ Write-Host ""
 
     $oldDeploy = 'wrangler pages deploy dist --project-name=ky-erp-frontend --branch=$BRANCH --commit-hash=$LOCAL_SHA'
     if (-not $source.Contains($oldDeploy)) { Fail "V3 Pages deploy satiri beklenen formatta bulunamadi." }
-    $newDeploy = 'wrangler pages deploy dist --project-name="$PAGES_PROJECT" --branch=$BRANCH --commit-hash=$LOCAL_SHA'
+    $newDeploy = 'wrangler pages deploy dist --project-name="$PAGES_PROJECT" --branch=$BRANCH --commit-hash=$LOCAL_SHA --commit-dirty=true'
     $newDeploy = $newDeploy.Replace('\"','"')
     $source = $source.Replace($oldDeploy, $newDeploy)
 
@@ -248,7 +261,7 @@ Write-Host ""
     if (-not $source.Contains('Live-Asset "https://app.kyerp.net"')) { Fail "V3 app.kyerp.net asset kontrolu bulunamadi." }
 
     $helperText = Get-Content $PSCommandPath -Raw
-    $helperStart = $helperText.IndexOf('function Invoke-KyCfApi')
+    $helperStart = $helperText.IndexOf('function Get-KyFreshWranglerToken')
     $helperEnd = $helperText.IndexOf('if (-not (Test-Path $V3))')
     if ($helperStart -lt 0 -or $helperEnd -le $helperStart) { Fail "V6 helper bolumu okunamadi." }
     $helpers = $helperText.Substring($helperStart, $helperEnd - $helperStart)
@@ -270,7 +283,6 @@ Write-Host ""
     exit $exitCode
 } finally {
     Remove-Item $RUNTIME -Force -ErrorAction SilentlyContinue
-    Remove-Item Env:KYERP_CF_TOKEN -ErrorAction SilentlyContinue
     Remove-Item Env:KYERP_CF_ACCOUNT_ID -ErrorAction SilentlyContinue
     Remove-Item Env:KYERP_PAGES_PROJECT -ErrorAction SilentlyContinue
 }
