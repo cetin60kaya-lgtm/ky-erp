@@ -10,6 +10,9 @@ const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
 const rootElement = document.getElementById("root");
 
 async function renderErpApp() {
+  const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
+  installPersistedAuthBootstrap();
+
   const [
     { default: AppV3 },
     { ActiveCompanyProvider },
