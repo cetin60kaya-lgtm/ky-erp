@@ -40,6 +40,7 @@ import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-setti
 import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
 import { registerIsnetInvoiceRuntimeRoutes } from "./isnet-invoice-runtime";
 import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
+import { registerIsnetOutgoingRecoveryRoutes } from "./isnet-outgoing-recovery";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
@@ -176,6 +177,7 @@ registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 registerIsnetBusinessSettingsCloudRoutes(app);
 registerIsnetLiveSyncRoutes(app);
+registerIsnetOutgoingRecoveryRoutes(app);
 registerIsnetFileRuntimeRoutes(app);
 registerIsnetInvoiceRuntimeRoutes(app);
 registerIsnetRuntimeV2Routes(app);
