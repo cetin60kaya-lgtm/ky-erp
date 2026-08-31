@@ -41,6 +41,13 @@ test("V6 resolves one Pages project and requires both custom domains active", ()
   assert.match(v6, /Pages custom domain: ACTIVE/);
 });
 
+test("V6 refreshes Wrangler OAuth after Pages deploy before REST domain verification", () => {
+  assert.match(v6, /function Get-KyFreshWranglerToken/);
+  assert.match(v6, /function Ensure-KyPagesDomain\(\[string\]\$Domain\)[\s\S]*?\$script:CF_TOKEN = Get-KyFreshWranglerToken/);
+  assert.doesNotMatch(v6, /\$env:KYERP_CF_TOKEN = \$script:CF_TOKEN/);
+  assert.match(v6, /--commit-dirty=true/);
+});
+
 test("V6 keeps full Worker auth integration and verifies both frontend assets", () => {
   assert.match(v6, /\$source\.Replace\('npm run test:unit', 'npm test'\)/);
   assert.match(v6, /Worker tam unit\/auth integration testleri basarisiz/);
