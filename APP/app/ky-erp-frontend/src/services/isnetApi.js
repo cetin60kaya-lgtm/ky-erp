@@ -56,7 +56,46 @@ export const getMailQueue = () => apiGet("/isnet/mail/queue").then(unwrap);
 export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
 export const testIsnetSettings = (payload) => apiPost("/isnet/settings/test", payload, { suppressUnauthorized: true, timeoutMs: 90_000 }).then(unwrap);
 export const saveIsnetSettings = (payload) => apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
-export const startDailySync = (payload = {}) => apiPost("/isnet/full-sync", { ...payload, startDate: floorCleanStart(payload.startDate) }, { timeoutMs: 900_000 }).then(unwrap);
+export const recoverIsnetOutgoingDocuments = (payload = {}) => apiPost(
+  "/isnet/outgoing/recover",
+  { ...payload, startDate: floorCleanStart(payload.startDate) },
+  { timeoutMs: 240_000 },
+).then(unwrap);
+export const getIsnetOutgoingDiagnostics = () => apiGet("/isnet/outgoing/diagnostics").then(unwrap);
+export const startDailySync = async (payload = {}) => {
+  const request = { ...payload, startDate: floorCleanStart(payload.startDate) };
+  const [portalSync, outgoingRecovery] = await Promise.allSettled([
+    apiPost("/isnet/full-sync", request, { timeoutMs: 900_000 }).then(unwrap),
+    recoverIsnetOutgoingDocuments(request),
+  ]);
+
+  if (portalSync.status === "rejected" && outgoingRecovery.status === "rejected") {
+    throw portalSync.reason || outgoingRecovery.reason || new Error("İşNet senkronizasyonu tamamlanamadı.");
+  }
+
+  const primary = portalSync.status === "fulfilled" && portalSync.value && typeof portalSync.value === "object"
+    ? portalSync.value
+    : {};
+  const outgoing = outgoingRecovery.status === "fulfilled" ? outgoingRecovery.value : null;
+  const outgoingCounts = outgoing?.counts || {};
+  const primaryCounts = primary?.counts || {};
+  const warnings = [];
+  if (portalSync.status === "rejected") warnings.push(`Portal senkronu: ${portalSync.reason?.message || "başarısız"}`);
+  if (outgoingRecovery.status === "rejected") warnings.push(`Giden belge doğrulaması: ${outgoingRecovery.reason?.message || "başarısız"}`);
+
+  return {
+    ...primary,
+    status: primary.status || outgoing?.status || "COMPLETED",
+    counts: {
+      ...primaryCounts,
+      outgoingInvoices: Number(outgoingCounts.outgoingInvoices ?? primaryCounts.outgoingInvoices ?? 0),
+      outgoingDispatches: Number(outgoingCounts.outgoingDispatches ?? primaryCounts.outgoingDispatches ?? 0),
+    },
+    outgoingRecovery: outgoing,
+    partial: warnings.length > 0,
+    warning: warnings.join(" | "),
+  };
+};
 export const getIsnetFullSyncStatus = () => apiGet("/isnet/full-sync/status").then(unwrap);
 export const markIsnetDocumentRead = (key, read = true) => apiPost(`/isnet/documents/${encodeURIComponent(key)}/read`, { read }).then(unwrap);
 export const markIsnetDocumentsRead = (documentIds, isRead) => apiFetch("/isnet/documents/read-status", { method: "PATCH", body: { documentIds, isRead } }).then(unwrap);
