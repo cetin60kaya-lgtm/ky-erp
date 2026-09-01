@@ -17,12 +17,13 @@ concurrency:
 
 jobs:
   release:
-    name: Preflight, D1 yedek, hedefli migration, Worker ve Pages
+    name: Preflight, D1 yedek, guvenlik cutover, Worker ve Pages
     runs-on: ubuntu-latest
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       DB_NAME: ky-erp-db
       WORKER_DIR: APP/cloud/ky-erp-api
       FRONTEND_DIR: APP/app/ky-erp-frontend
@@ -55,6 +56,7 @@ jobs:
       - name: Worker paketleri ve tam test
         working-directory: APP/cloud/ky-erp-api
         run: |
+          set -euo pipefail
           npm ci
           npm audit --omit=dev --audit-level=high
           npm run typecheck
@@ -63,6 +65,7 @@ jobs:
 
       - name: File Hub agent syntax kontrolu
         run: |
+          set -euo pipefail
           node --check tools/file-hub-agent/file-hub-agent.mjs
           node --check tools/file-hub-agent/accounting-archive-worker.mjs
 
@@ -71,6 +74,7 @@ jobs:
         env:
           VITE_API_URL: https://api.kyerp.net
         run: |
+          set -euo pipefail
           npm ci
           npm run lint
           npm test
@@ -82,7 +86,6 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler whoami
-          echo "Worker secret listesi deploy kapisi degildir. Mevcut production secretlari Wrangler deploy sirasinda korunur; File Hub agent ve Azure Document Intelligence harici bagimliliklari firma bazinda etkinlestirildiginde ayrica yapilandirilir."
 
       - name: Canli D1 tam yedegini al
         working-directory: APP/cloud/ky-erp-api
@@ -91,7 +94,7 @@ jobs:
           set -euo pipefail
           mkdir -p database-backup
           stamp="$(date -u +%Y%m%d-%H%M%S)"
-          output="database-backup/ky-erp-db-before-filehub-accounting-${stamp}.sql"
+          output="database-backup/ky-erp-db-before-final-${stamp}.sql"
           npx wrangler d1 export "$DB_NAME" --remote --config wrangler.jsonc --skip-confirmation --output "$output"
           test -s "$output"
           echo "D1_BACKUP=$output" >> "$GITHUB_ENV"
@@ -128,7 +131,7 @@ jobs:
               echo "GUVENLIK DURDURMASI: Eski accounting_documents tablosunda $legacy_count kayit var; otomatik donusum yapilmadi." >&2
               exit 1
             fi
-            echo "Eski accounting_documents tablosu bos ve yeni Worker tarafindan kullanilmiyor; canonical sema icin bos legacy tablo kaldiriliyor."
+            echo "Eski accounting_documents tablosu bos; canonical semaya guvenli gecis yapiliyor."
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "DROP TABLE accounting_documents;"
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0034_accounting_document_core.sql
           fi
@@ -166,9 +169,27 @@ jobs:
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
-        run: npx wrangler deploy --config wrangler.jsonc
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler.jsonc
 
-      - name: API canli saglik kontrolu
+      - name: RESEND_API_KEY aktif Worker bindingini dogrula veya GitHub secretiyle kur
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(npx wrangler secret list --config wrangler.jsonc --format json)"
+          if jq -e 'any(.[]?; .name == "RESEND_API_KEY")' <<<"$current" >/dev/null; then
+            echo "RESEND_API_KEY Worker'da mevcut."
+          else
+            test -n "${RESEND_API_KEY:-}" || { echo "RESEND_API_KEY Worker'da ve GitHub production secretlarinda yok." >&2; exit 1; }
+            printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --config wrangler.jsonc
+          fi
+          final="$(npx wrangler secret list --config wrangler.jsonc --format json)"
+          jq -e 'any(.[]?; .name == "RESEND_API_KEY")' <<<"$final" >/dev/null
+
+      - name: API canli saglik ve auth contract kontrolu
         shell: bash
         run: |
           set -euo pipefail
@@ -179,6 +200,35 @@ jobs:
           done
           test "$ready" -eq 1
           curl --fail --silent https://api.kyerp.net/api/system/status | jq -e '.ok == true' >/dev/null
+          auth="$(curl --fail --silent -H 'Origin: https://app.kyerp.net' https://api.kyerp.net/api/auth/status)"
+          jq -e '.authVersion == "canonical-v3" and .sessionPolicy.passwordOnlyEnabled == false and .sessionPolicy.passwordOnlySeconds == 0 and .sessionPolicy.mfaSeconds == 36000' <<<"$auth" >/dev/null
+
+      - name: Auth pre-cutover firma ve security satirlarini dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE s.user_id IS NULL) AS missing_security, (SELECT COUNT(*) FROM auth_user_security WHERE TRIM(COALESCE(main_company_slug,''))='') AS missing_company;" --json)"
+          jq -e '.[0].results[0].missing_security == 0 and .[0].results[0].missing_company == 0' <<<"$out" >/dev/null
+
+      - name: MFA + oturum + IsNet + Auth final D1 cutover
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "$GITHUB_WORKSPACE/DEPLOY/KYERP_FINAL_ROUND_SECURITY_CUTOVER_V1.sql"
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0027_isnet_tenant_scope_backfill.sql
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0028_isnet_tenant_scope_guard.sql
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0029_auth_security_policy_guard.sql
+
+      - name: Final guvenlik ve tenant durumunu D1'den dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql="SELECT (SELECT COUNT(*) FROM auth_system_secrets WHERE secret_key='FINAL_SECURITY_MAIL_ISNET_CUTOVER_20260901_V1') AS cutover_marker, (SELECT COUNT(*) FROM auth_user_security WHERE login_policy NOT IN ('GOOGLE','MICROSOFT','ANY_MFA','BOTH_MFA') OR COALESCE(session_seconds,0)<>36000) AS unsafe_policy, (SELECT COUNT(*) FROM json_store WHERE scope LIKE 'ISNET_%' AND (main_company_slug IS NULL OR TRIM(main_company_slug)='')) AS global_isnet, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('trg_isnet_json_store_tenant_insert','trg_isnet_json_store_tenant_update')) AS isnet_guard_triggers, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('trg_auth_users_role_canonical_insert','trg_auth_users_role_canonical_update','trg_auth_security_mfa_insert','trg_auth_security_mfa_update','trg_auth_module_key_canonical_insert','trg_auth_module_key_canonical_update')) AS auth_guard_triggers;"
+          out="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$sql" --json)"
+          jq -e '.[0].results[0].cutover_marker >= 1 and .[0].results[0].unsafe_policy == 0 and .[0].results[0].global_isnet == 0 and .[0].results[0].isnet_guard_triggers == 2 and .[0].results[0].auth_guard_triggers == 6' <<<"$out" >/dev/null
 
       - name: Mevcut Pages projesini ve iki canonical domaini dogrula
         id: pages
@@ -206,7 +256,7 @@ jobs:
           --project-name "$PAGES_PROJECT"
           --branch "$PROD_BRANCH"
           --commit-hash "$GITHUB_SHA"
-          --commit-message "KY ERP File Hub + Muhasebe production $GITHUB_SHA"
+          --commit-message "KY ERP final production $GITHUB_SHA"
 
       - name: Pages domainleri ACTIVE olana kadar dogrula
         shell: bash
@@ -242,6 +292,10 @@ jobs:
       - name: Canli yayin sonucu
         run: |
           echo "KY ERP production yayini tamamlandi."
+          echo "MFA: zorunlu"
+          echo "Oturum cutover: uygulandi"
+          echo "IsNet tenant guard: aktif"
+          echo "RESEND_API_KEY: aktif Worker bindingi dogrulandi"
           echo "API: https://api.kyerp.net"
           echo "Site: https://kyerp.net"
           echo "App: https://app.kyerp.net"
