@@ -29,8 +29,9 @@ Write-Host "============================================================" -Foreg
 Write-Host "1) Canonical production deploy" -ForegroundColor Gray
 Write-Host "2) Mail verification fix korunur" -ForegroundColor Gray
 Write-Host "3) Password-only kapatilir / MFA zorunlu olur" -ForegroundColor Gray
-Write-Host "4) Mevcut aktif auth oturumlari ilk calismada kapatilir" -ForegroundColor Gray
-Write-Host "5) Is verisi silinmez; tablo/drop/reset yoktur" -ForegroundColor Gray
+Write-Host "4) Teknik rol ve modul kodlari canonical hale getirilir" -ForegroundColor Gray
+Write-Host "5) Mevcut aktif auth oturumlari ilk calismada kapatilir" -ForegroundColor Gray
+Write-Host "6) Is verisi silinmez; tablo/drop/reset yoktur" -ForegroundColor Gray
 Write-Host ""
 
 Write-Host "=== 1/3 CANONICAL PRODUCTION DEPLOY ===" -ForegroundColor Cyan
@@ -53,9 +54,22 @@ try {
     $verifySql = @"
 SELECT
   (SELECT COUNT(*) FROM auth_system_secrets WHERE secret_key='GLOBAL_MFA_ENFORCED_V1') AS marker_count,
+  (SELECT COUNT(*) FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE s.user_id IS NULL) AS missing_security_count,
   (SELECT COUNT(*) FROM auth_user_security
     WHERE UPPER(COALESCE(login_policy,'')) NOT IN ('GOOGLE','MICROSOFT','ANY_MFA','BOTH_MFA')
-       OR COALESCE(session_seconds,0) <> 36000) AS unsafe_policy_count;
+       OR COALESCE(session_seconds,0) <> 36000) AS unsafe_policy_count,
+  (SELECT COUNT(*) FROM auth_users
+    WHERE role IS NOT NULL
+      AND role <> REPLACE(UPPER(TRIM(COALESCE(role,''))), 'İ', 'I')) AS unsafe_role_count,
+  (SELECT COUNT(*) FROM auth_user_security
+    WHERE role_override IS NOT NULL
+      AND COALESCE(role_override,'') <> CASE
+            WHEN TRIM(COALESCE(role_override,''))='' THEN ''
+            ELSE REPLACE(UPPER(TRIM(role_override)), 'İ', 'I')
+          END) AS unsafe_role_override_count,
+  (SELECT COUNT(*) FROM auth_user_module_permissions
+    WHERE module_key IS NOT NULL
+      AND module_key <> REPLACE(UPPER(TRIM(COALESCE(module_key,''))), 'İ', 'I')) AS unsafe_module_key_count;
 "@
     $raw = (& $npx.Source wrangler d1 execute $DATABASE --remote --config $CONFIG --command $verifySql --json 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { Fail "MFA transition dogrulama sorgusu basarisiz." }
@@ -65,13 +79,21 @@ SELECT
         $first = @($json)[0]
         $row = @($first.results)[0]
         $markerCount = [int]$row.marker_count
-        $unsafeCount = [int]$row.unsafe_policy_count
+        $missingSecurityCount = [int]$row.missing_security_count
+        $unsafePolicyCount = [int]$row.unsafe_policy_count
+        $unsafeRoleCount = [int]$row.unsafe_role_count
+        $unsafeRoleOverrideCount = [int]$row.unsafe_role_override_count
+        $unsafeModuleKeyCount = [int]$row.unsafe_module_key_count
     } catch {
         Fail "MFA transition dogrulama JSON'i okunamadi."
     }
 
     if ($markerCount -lt 1) { Fail "GLOBAL_MFA_ENFORCED_V1 marker bulunamadi." }
-    if ($unsafeCount -ne 0) { Fail "MFA zorunlulugu tum kullanicilara uygulanmadi. Kalan guvensiz politika: $unsafeCount" }
+    if ($missingSecurityCount -ne 0) { Fail "Guvenlik kaydi eksik kullanici bulundu. Eksik auth_user_security: $missingSecurityCount" }
+    if ($unsafePolicyCount -ne 0) { Fail "MFA zorunlulugu tum kullanicilara uygulanmadi. Kalan guvensiz politika: $unsafePolicyCount" }
+    if ($unsafeRoleCount -ne 0) { Fail "Canonical olmayan auth_users.role kaydi kaldi: $unsafeRoleCount" }
+    if ($unsafeRoleOverrideCount -ne 0) { Fail "Canonical olmayan role_override kaydi kaldi: $unsafeRoleOverrideCount" }
+    if ($unsafeModuleKeyCount -ne 0) { Fail "Canonical olmayan modul anahtari kaldi: $unsafeModuleKeyCount" }
 } finally {
     Pop-Location
 }
@@ -82,6 +104,7 @@ Write-Host " KY ERP SECURITY RELEASE BASARILI" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "Mail     : Resend dogrulama release icinde" -ForegroundColor Green
 Write-Host "MFA      : Tum kullanicilar icin zorunlu" -ForegroundColor Green
+Write-Host "Roller   : Teknik rol/modul kodlari canonical" -ForegroundColor Green
 Write-Host "Oturum   : Eski aktif oturumlar guvenli olarak iptal edildi" -ForegroundColor Green
 Write-Host "Owner    : Tum aktif oturumlari tek tek yonetebilir" -ForegroundColor Green
 Write-Host "D1 veri  : Is verisi silinmedi / reset yapilmadi" -ForegroundColor Green
