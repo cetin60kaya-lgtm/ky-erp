@@ -40,7 +40,7 @@ export default function AdminStorageCenter({ activeMainCompany }) {
       setOverview(o?.data||{}); setConnections(c?.data||[]); setBindings(b?.data||[]); setFiles(f?.data||[]);
     } catch (e) { setError(e?.message || "Dosya Merkezi yüklenemedi."); }
     finally { setLoading(false); }
-  }, [search,statusFilter,activeMainCompany?.slug]);
+  }, [search,statusFilter]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { setBindingForm(current => ({ ...current, storageConnectionId: current.storageConnectionId || connections.find(x=>x.isActive)?.id || "" })); }, [connections]);
@@ -70,7 +70,7 @@ export default function AdminStorageCenter({ activeMainCompany }) {
 
   return <div className="admin-management-page">
     <section className="admin-management-hero">
-      <div><span className="admin-kicker">KY ERP ORTAK SERVİSİ</span><h2>Dosya Merkezi / File Hub</h2><p>Dosyanın gerçek evi firma tarafından seçilir. Google Drive, OneDrive veya başka bir kaynak kullanılabilir; Desen, İmalat, Boyahane, Muhasebe, İşNet, İK ve diğer modüller aynı File Hub üzerinden çalışır. R2 yalnız web önizleme/cache katmanıdır.</p></div>
+      <div><span className="admin-kicker">KY ERP ORTAK SERVİSİ</span><h2>Dosya Merkezi / File Hub</h2><p>Dosyanın gerçek evi firma tarafından seçilir. Google Drive, OneDrive, sabit bilgisayar yerel klasörü, NAS veya başka bir kaynak kullanılabilir; Desen, İmalat, Boyahane, Muhasebe, İşNet, İK ve diğer modüller aynı File Hub üzerinden çalışır. R2 yalnız web önizleme/cache katmanıdır.</p></div>
       <div className="admin-chip-stack"><span className="admin-chip">Firma: {activeMainCompany?.name || "Aktif Firma"}</span><span className="admin-chip">Sağlayıcı Bağımsız</span><span className="admin-chip">Çoklu Depolama</span></div>
     </section>
 
@@ -87,7 +87,7 @@ export default function AdminStorageCenter({ activeMainCompany }) {
         <article className="admin-stat-card"><span>Eşleşmeyen</span><strong>{overview.unmatchedCount||0}</strong></article>
         <article className="admin-stat-card"><span>Kaynakta Yok</span><strong>{overview.missingCount||0}</strong></article>
       </div>
-      <section className="admin-section-card"><div className="admin-section-heading"><div><h3>Firma Depolama Haritası</h3><p>Bir firma yalnız Google Drive, yalnız OneDrive veya ikisini birden kullanabilir. Modülün hangi kaynağa gideceği aşağıdaki yönlendirmelerle belirlenir.</p></div></div>
+      <section className="admin-section-card"><div className="admin-section-heading"><div><h3>Firma Depolama Haritası</h3><p>Bir firma Google Drive, OneDrive, sabit bir bilgisayar klasörü veya NAS kullanabilir; kaynaklar birlikte de kullanılabilir. Modülün hangi kaynağa gideceği aşağıdaki yönlendirmelerle belirlenir.</p></div></div>
         <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Kaynak</th><th>Sağlayıcı</th><th>Yerel / Senkron Kök</th><th>Durum</th><th>Ana</th></tr></thead><tbody>{connections.length?connections.map(row=><tr key={row.id}><td><strong>{row.name}</strong></td><td>{providerLabel(row.provider_type)}</td><td>{row.local_root_path||row.remote_root_name||"-"}</td><td>{statusLabel(row.connection_status)}</td><td>{row.isPrimary?"Evet":"-"}</td></tr>):<tr><td colSpan="5">Bu firma için depolama kaynağı henüz tanımlı değil.</td></tr>}</tbody></table></div>
       </section>
     </>:null}
@@ -95,8 +95,8 @@ export default function AdminStorageCenter({ activeMainCompany }) {
     {tab==="connections"?<div className="admin-split-grid">
       <section className="admin-section-card"><h3>{editingConnectionId?"Depolama Kaynağını Düzenle":"Yeni Depolama Kaynağı"}</h3><form className="admin-form-grid" onSubmit={saveConnection}>
         <label>Sağlayıcı<select value={connectionForm.providerType} onChange={e=>setConnectionForm({...connectionForm,providerType:e.target.value})}>{PROVIDERS.map(x=><option key={x} value={x}>{providerLabel(x)}</option>)}</select></label>
-        <label>Bağlantı Adı<input value={connectionForm.name} onChange={e=>setConnectionForm({...connectionForm,name:e.target.value})} placeholder="Google Drive - Desinatör"/></label>
-        <label className="span-2">Windows / Senkron Kökü<input value={connectionForm.localRootPath} onChange={e=>setConnectionForm({...connectionForm,localRootPath:e.target.value})} placeholder="D:\\GoogleDrive\\Desinatör"/></label>
+        <label>Bağlantı Adı<input value={connectionForm.name} onChange={e=>setConnectionForm({...connectionForm,name:e.target.value})} placeholder={connectionForm.providerType==="LOCAL_FOLDER"?"Sabit Bilgisayar - Üretim PC":"Google Drive - Desinatör"}/></label>
+        <label className="span-2">Windows / Senkron Kökü<input value={connectionForm.localRootPath} onChange={e=>setConnectionForm({...connectionForm,localRootPath:e.target.value})} placeholder={connectionForm.providerType==="NAS"?"\\\\SUNUCU\\KYERP":"D:\\GoogleDrive\\Desinatör"}/></label>
         <label>Remote Root ID<input value={connectionForm.remoteRootId} onChange={e=>setConnectionForm({...connectionForm,remoteRootId:e.target.value})}/></label>
         <label>Remote Root Adı<input value={connectionForm.remoteRootName} onChange={e=>setConnectionForm({...connectionForm,remoteRootName:e.target.value})}/></label>
         <label className="admin-check"><input type="checkbox" checked={connectionForm.isPrimary} onChange={e=>setConnectionForm({...connectionForm,isPrimary:e.target.checked})}/> Firma varsayılanı</label>
@@ -107,7 +107,7 @@ export default function AdminStorageCenter({ activeMainCompany }) {
     </div>:null}
 
     {tab==="bindings"?<div className="admin-split-grid">
-      <section className="admin-section-card"><h3>Modül → Depolama Yönlendirmesi</h3><p>Modüller Google Drive/OneDrive kodu bilmez; yalnız bu firmanın amaç bazlı File Hub hedefini ister.</p><form className="admin-form-grid" onSubmit={saveBinding}>
+      <section className="admin-section-card"><h3>Modül → Depolama Yönlendirmesi</h3><p>Modüller Google Drive/OneDrive/yerel klasör kodu bilmez; yalnız bu firmanın amaç bazlı File Hub hedefini ister.</p><form className="admin-form-grid" onSubmit={saveBinding}>
         <label>Modül<select value={bindingForm.moduleCode} onChange={e=>setBindingForm({...bindingForm,moduleCode:e.target.value})}>{MODULES.map(x=><option key={x}>{x}</option>)}</select></label>
         <label>Dosya Amacı<select value={bindingForm.purposeCode} onChange={e=>setBindingForm({...bindingForm,purposeCode:e.target.value})}>{PURPOSES.map(x=><option key={x}>{x}</option>)}</select></label>
         <label className="span-2">Depolama<select value={bindingForm.storageConnectionId} onChange={e=>setBindingForm({...bindingForm,storageConnectionId:e.target.value})}><option value="">Seçin</option>{activeConnections.map(x=><option key={x.id} value={x.id}>{x.name} · {providerLabel(x.provider_type)}</option>)}</select></label>
@@ -117,7 +117,7 @@ export default function AdminStorageCenter({ activeMainCompany }) {
       <section className="admin-section-card"><h3>Aktif Yönlendirmeler</h3><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Modül</th><th>Amaç</th><th>Kaynak</th><th>Kök</th></tr></thead><tbody>{bindings.map(row=><tr key={row.id}><td>{row.module_code}</td><td>{row.purpose_code}</td><td>{row.connection_name} / {providerLabel(row.provider_type)}</td><td>{row.root_path||"/"}</td></tr>)}</tbody></table></div></section>
     </div>:null}
 
-    {tab==="files"?<section className="admin-section-card"><div className="admin-section-heading"><div><h3>Ortak Dosya İndeksi</h3><p>Fiziksel dosya Drive/OneDrive/NAS üzerinde kalır; burada kimliği, hash'i, konumu ve ERP ilişkileri tutulur.</p></div><div className="admin-inline-actions"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Dosya / model / yol ara"/><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">Tüm Durumlar</option><option value="AVAILABLE">Mevcut</option><option value="MISSING">Kaynakta Yok</option></select></div></div>
+    {tab==="files"?<section className="admin-section-card"><div className="admin-section-heading"><div><h3>Ortak Dosya İndeksi</h3><p>Fiziksel dosya Drive/OneDrive/yerel klasör/NAS üzerinde kalır; burada kimliği, hash'i, konumu ve ERP ilişkileri tutulur.</p></div><div className="admin-inline-actions"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Dosya / model / yol ara"/><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">Tüm Durumlar</option><option value="AVAILABLE">Mevcut</option><option value="MISSING">Kaynakta Yok</option></select></div></div>
       <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Dosya</th><th>Kaynak</th><th>Konum</th><th>Boyut</th><th>İlişki</th><th>Durum</th></tr></thead><tbody>{files.map(row=><tr key={row.id}><td><strong>{row.file_name}</strong><br/><small>{row.extension||""}</small></td><td>{providerLabel(row.provider_type)}</td><td>{row.relative_path||"-"}</td><td>{formatBytes(row.size_bytes)}</td><td>{row.relation_count||0}</td><td>{statusLabel(row.status)}</td></tr>)}</tbody></table></div>
     </section>:null}
 
