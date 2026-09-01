@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerFileHubRoutes } from "./file-hub";
+import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
 
 type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
@@ -24,6 +25,7 @@ async function legacyStatus(c:any){
 
 export function registerAdminStorageRoutes(app:any){
   registerFileHubRoutes(app);
+  registerPublicFileHubAgentRoutes(app);
 
   // Eski endpoint adlari gecis uyumlulugu icin korunuyor; canonical veri artik File Hub tablolaridir.
   app.get("/api/admin/file-storage/status",async(c:any)=>{
