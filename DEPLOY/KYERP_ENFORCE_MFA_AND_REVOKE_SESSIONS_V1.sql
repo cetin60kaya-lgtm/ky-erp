@@ -1,5 +1,28 @@
 -- KY ERP GLOBAL MFA ENFORCEMENT V1
 -- Idempotent security transition. No business data is deleted.
+-- Technical role/module codes are normalized before the MFA cutover.
+
+UPDATE auth_users
+   SET role = REPLACE(UPPER(TRIM(COALESCE(role,''))), 'İ', 'I')
+ WHERE role IS NOT NULL
+   AND role <> REPLACE(UPPER(TRIM(COALESCE(role,''))), 'İ', 'I');
+
+UPDATE auth_user_security
+   SET role_override = CASE
+         WHEN TRIM(COALESCE(role_override,'')) = '' THEN NULL
+         ELSE REPLACE(UPPER(TRIM(role_override)), 'İ', 'I')
+       END,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ WHERE role_override IS NOT NULL
+   AND COALESCE(role_override,'') <> CASE
+         WHEN TRIM(COALESCE(role_override,'')) = '' THEN ''
+         ELSE REPLACE(UPPER(TRIM(role_override)), 'İ', 'I')
+       END;
+
+UPDATE auth_user_module_permissions
+   SET module_key = REPLACE(UPPER(TRIM(COALESCE(module_key,''))), 'İ', 'I')
+ WHERE module_key IS NOT NULL
+   AND module_key <> REPLACE(UPPER(TRIM(COALESCE(module_key,''))), 'İ', 'I');
 
 UPDATE auth_user_security
    SET login_policy = CASE
