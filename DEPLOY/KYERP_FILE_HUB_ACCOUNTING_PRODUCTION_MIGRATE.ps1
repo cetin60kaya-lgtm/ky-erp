@@ -93,7 +93,8 @@ Write-Host "D1 backup: $backup" -ForegroundColor Green
 
 foreach ($name in $MIGRATIONS) {
   Write-Host "Uygulaniyor: $name" -ForegroundColor Yellow
-  wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file (Join-Path "migrations" $name)
+  $migrationPath = Join-Path "migrations" $name
+  wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $migrationPath
   Check "Migration basarisiz: $name"
 }
 

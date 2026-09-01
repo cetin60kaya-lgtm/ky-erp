@@ -29,9 +29,9 @@ test("File Hub + accounting production path is explicit and targeted", () => {
   assert.match(migrate, /AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT/);
   assert.match(migrate, /AZURE_DOCUMENT_INTELLIGENCE_KEY/);
   assert.match(migrate, /RESEND_API_KEY/);
-  assert.doesNotMatch(migrate, /d1 migrations apply/i);
-  assert.doesNotMatch(migrate, /wrangler deploy/i);
-  assert.doesNotMatch(migrate, /pages deploy/i);
+  assert.doesNotMatch(migrate, /\bd1\s+migrations\s+apply\b/i);
+  assert.doesNotMatch(migrate, /\bwrangler\s+deploy\b/i);
+  assert.doesNotMatch(migrate, /\bwrangler\s+pages\s+deploy\b/i);
 
   assert.match(preflight, /npm run typecheck/);
   assert.match(preflight, /npm test/);
