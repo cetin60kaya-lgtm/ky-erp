@@ -1,5 +1,5 @@
 #define MyAppName "KY PDKS"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyPublisher "KY ERP"
 #define Dist GetEnv("KY_PDKS_DIST")
 #define SetupOut GetEnv("KY_PDKS_SETUP_OUT")
@@ -9,7 +9,7 @@ AppId={{7B558935-8DD5-4D1F-9A62-A1D79EE27C10}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
-VersionInfoVersion=1.2.0.0
+VersionInfoVersion=1.3.0.0
 VersionInfoCompany={#MyPublisher}
 VersionInfoDescription=KY ERP Personel Devam Kontrol Sistemi
 AppPublisher={#MyPublisher}
