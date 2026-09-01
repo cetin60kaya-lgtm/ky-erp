@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-01T21:49:00+03:00",
-  "attempt": 73,
+  "requestedAt": "2026-09-01T21:55:00+03:00",
+  "attempt": 74,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -40,6 +40,6 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "b1286e8b78ecc44f231d82647b4f0d1734005cd7",
-  "note": "01.09.2026 File Hub + Muhasebe final production yayini, attempt 73. Onceki attempt Wrangler secret list --json uyumsuzlugu nedeniyle herhangi bir D1 veya deploy yazimi yapmadan durdu. Bu attempt secret adlarini mevcut Wrangler CLI ile dogrular. File Hub provider-neutral olarak Google Drive, OneDrive, Local Folder, NAS ve SharePoint kaynaklarini destekler; D1 metadata/index/iliski katmanidir, R2 yalniz preview/cache amaciyla kullanilir. Canonical AccountingDocument, Belge Havuzu, Document Intelligence, defter, odeme plani ve accounting archive worker production paketine dahildir. Mevcut IsNet, MFA, DENETIM/PDKS ve production auth guvenlik davranislari korunmustur. Canliya cikmadan once tam D1 export alinir; yalniz 0030-0036 migrationlari hedefli uygulanir; generic wrangler d1 migrations apply ve D1 reset yasaktir."
+  "sourceCommit": "3a221c64c5ff72f04996c7abd56ee6c812e79c4b",
+  "note": "01.09.2026 File Hub + Muhasebe final production yayini, attempt 74. Core production deploy yalniz Cloudflare erisimi, tam test/build, D1 tam yedek ve hedefli 0030-0036 migrationlari ile ilerler. File Hub Agent ve Azure Document Intelligence firma bazinda etkinlestirilen harici entegrasyonlardir; secret listeleme yetkisi core production yayinini bloklamaz. Mevcut production Worker secretlari deploy sirasinda korunur. Generic wrangler d1 migrations apply ve D1 reset yasaktir."
 }
