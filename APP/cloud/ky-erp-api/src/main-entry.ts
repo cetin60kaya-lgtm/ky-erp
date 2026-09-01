@@ -8,6 +8,13 @@ const COMPAT_PATHS = new Set([
   "/api/admin/security/delivery-capabilities",
 ]);
 const MFA_LOGIN_POLICIES = new Set(["GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"]);
+const LIVE_BROWSER_ORIGINS = new Set([
+  "https://kyerp.net",
+  "https://www.kyerp.net",
+  "https://app.kyerp.net",
+]);
+const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
+const PAGES_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 
 function upper(value: unknown) {
   return String(value ?? "")
@@ -35,6 +42,28 @@ function isAdmin(role: unknown) {
 
 function quoteIdentifier(value: string) {
   return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function allowedBrowserOrigin(value: unknown) {
+  const origin = text(value);
+  if (LIVE_BROWSER_ORIGINS.has(origin)) return origin;
+  if (LOCAL_DEV_ORIGIN.test(origin)) return origin;
+  if (PAGES_PREVIEW_ORIGIN.test(origin)) return origin;
+  return "";
+}
+
+function securityErrorResponse(request: Request, code: string, message: string, status = 503) {
+  const headers = new Headers({
+    "Content-Type": "application/json; charset=UTF-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+  });
+  const origin = allowedBrowserOrigin(request.headers.get("Origin"));
+  if (origin) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Credentials", "true");
+    headers.set("Vary", "Origin");
+  }
+  return new Response(JSON.stringify({ ok: false, error: { code, message } }), { status, headers });
 }
 
 async function tableColumns(env: Cloudflare.Env, table: string) {
@@ -210,28 +239,36 @@ async function adminReadCompat(
   return original;
 }
 
-async function enforceMfaBaselineForLogin(request: Request, env: Cloudflare.Env) {
+type MfaBaselineResult = {
+  applicable: boolean;
+  ok: boolean;
+};
+
+async function enforceMfaBaselineForLogin(request: Request, env: Cloudflare.Env): Promise<MfaBaselineResult> {
   const url = new URL(request.url);
-  if (request.method.toUpperCase() !== "POST" || url.pathname !== "/api/auth/login") return;
+  if (request.method.toUpperCase() !== "POST" || url.pathname !== "/api/auth/login") {
+    return { applicable: false, ok: true };
+  }
 
   let body: any = null;
   try {
     body = await request.clone().json();
   } catch {
-    return;
+    return { applicable: false, ok: true };
   }
   const identity = text(body?.username || body?.email);
-  if (!identity) return;
+  if (!identity) return { applicable: false, ok: true };
 
   try {
     const row = await env.DB.prepare(
-      `SELECT u.id
+      `SELECT u.id,s.user_id AS security_user_id
          FROM auth_users u
          LEFT JOIN auth_user_security s ON s.user_id=u.id
         WHERE LOWER(u.username)=LOWER(?) OR LOWER(COALESCE(s.email,''))=LOWER(?)
         LIMIT 1`,
     ).bind(identity, identity).first<any>();
-    if (!row?.id) return;
+    if (!row?.id) return { applicable: false, ok: true };
+    if (!row?.security_user_id) throw new Error("AUTH_USER_SECURITY_ROW_MISSING");
 
     const timestamp = new Date().toISOString();
     await env.DB.prepare(
@@ -245,22 +282,41 @@ async function enforceMfaBaselineForLogin(request: Request, env: Cloudflare.Env)
               updated_at=?
         WHERE user_id=?`,
     ).bind(timestamp, row.id).run();
+
+    const verified = await env.DB.prepare(
+      `SELECT login_policy,session_seconds
+         FROM auth_user_security
+        WHERE user_id=?
+        LIMIT 1`,
+    ).bind(row.id).first<any>();
+    const verifiedPolicy = upper(verified?.login_policy);
+    if (!MFA_LOGIN_POLICIES.has(verifiedPolicy) || Number(verified?.session_seconds || 0) !== 36000) {
+      throw new Error("AUTH_MFA_BASELINE_VERIFY_FAILED");
+    }
+    return { applicable: true, ok: true };
   } catch (error) {
     console.error(JSON.stringify({
       level: "error",
       phase: "GLOBAL_MFA_LOGIN_BASELINE",
       message: error instanceof Error ? error.message : String(error),
     }));
+    return { applicable: true, ok: false };
   }
 }
 
 async function canonicalizeAdminWrite(request: Request) {
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
-  const isCompleteCreate = method === "POST" && url.pathname === "/api/admin/users/create-complete";
-  const isPermissionWrite = method === "PUT" && /^\/api\/admin\/users\/[^/]+\/permissions$/.test(url.pathname);
-  const isPolicyWrite = method === "PATCH" && /^\/api\/admin\/security\/users\/[^/]+\/policy$/.test(url.pathname);
-  if (!isCompleteCreate && !isPermissionWrite && !isPolicyWrite) return request;
+  const path = url.pathname;
+  const isCompleteCreate = method === "POST" && path === "/api/admin/users/create-complete";
+  const isPermissionWrite = method === "PUT" && /^\/api\/admin\/users\/[^/]+\/permissions$/.test(path);
+  const isPolicyWrite = method === "PATCH" && /^\/api\/admin\/security\/users\/[^/]+\/policy$/.test(path);
+  const isUserWrite = ["POST", "PATCH", "PUT"].includes(method) && (
+    path === "/api/admin/users" ||
+    path === "/api/admin/users/create-complete" ||
+    /^\/api\/admin\/users\/[^/]+$/.test(path)
+  );
+  if (!isCompleteCreate && !isPermissionWrite && !isPolicyWrite && !isUserWrite) return request;
 
   let body: any;
   try {
@@ -269,6 +325,13 @@ async function canonicalizeAdminWrite(request: Request) {
     return request;
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) return request;
+
+  if (isUserWrite) {
+    // Teknik rol kodları locale bağımsız ASCII canonical biçimde tutulur.
+    if (body.role !== undefined && text(body.role)) body.role = upper(body.role);
+    if (body.roleOverride !== undefined && text(body.roleOverride)) body.roleOverride = upper(body.roleOverride);
+    if (body.role_override !== undefined && text(body.role_override)) body.role_override = upper(body.role_override);
+  }
 
   if (isCompleteCreate) {
     // Forced-password-change akışı uygulamada yok. Çalışmayan bir bayrak üretmeyiz.
@@ -285,9 +348,17 @@ async function canonicalizeAdminWrite(request: Request) {
   }
 
   if (Array.isArray(body.permissions)) {
-    // Yönetim (ADMIN) modülü yalnız uygulama sahibinin rol tabanlı hakkıdır.
-    // Normal kullanıcı/firma yöneticisi permission matrisi ile ADMIN kazanamaz.
-    body.permissions = body.permissions.filter((row: any) => upper(row?.moduleKey ?? row?.module_key) !== "ADMIN");
+    // Modül anahtarları da locale bağımsız canonical biçime alınır.
+    body.permissions = body.permissions
+      .map((row: any) => {
+        if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+        if (row.moduleKey !== undefined) return { ...row, moduleKey: upper(row.moduleKey) };
+        if (row.module_key !== undefined) return { ...row, module_key: upper(row.module_key) };
+        return row;
+      })
+      // Yönetim (ADMIN) modülü yalnız uygulama sahibinin rol tabanlı hakkıdır.
+      // Normal kullanıcı/firma yöneticisi permission matrisi ile ADMIN kazanamaz.
+      .filter((row: any) => upper(row?.moduleKey ?? row?.module_key) !== "ADMIN");
   }
 
   const headers = new Headers(request.headers);
@@ -298,9 +369,17 @@ async function canonicalizeAdminWrite(request: Request) {
 
 export default {
   async fetch(request: Request, env: Cloudflare.Env, executionCtx: ExecutionContext) {
-    // Eski PASSWORD_ONLY kullanıcıları login anında MFA tabanına yükseltilir.
-    // Bu işlem parola doğrulamasını geçmez; yalnız güvenlik politikasını kuvvetlendirir.
-    await enforceMfaBaselineForLogin(request, env);
+    // Login güvenliği fail-closed: kayıtlı kullanıcı MFA tabanına güvenle yükseltilemez
+    // veya yükseltme doğrulanamazsa parola doğrulama motoruna geçilmez.
+    const mfaBaseline = await enforceMfaBaselineForLogin(request, env);
+    if (mfaBaseline.applicable && !mfaBaseline.ok) {
+      return securityErrorResponse(
+        request,
+        "AUTH_SECURITY_BASELINE_UNAVAILABLE",
+        "Güvenli giriş politikası doğrulanamadı. Giriş kapatıldı; lütfen kısa süre sonra tekrar deneyin.",
+        503,
+      );
+    }
 
     // Browser origin güvenliği main.ts içindeki explicit LIVE_ORIGINS + CORS allowlist
     // tarafından uygulanır. main-entry ikinci ve çelişkili bir domain blacklist tutmaz.
