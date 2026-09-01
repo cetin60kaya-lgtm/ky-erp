@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerFileHubRoutes } from "./file-hub";
+import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
 
 type Row = Record<string, any>;
@@ -46,6 +47,7 @@ export function registerAdminStorageRoutes(app:any){
   });
 
   registerFileHubRoutes(app);
+  registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
 
   // Eski endpoint adlari gecis uyumlulugu icin korunuyor; canonical veri artik File Hub tablolaridir.
