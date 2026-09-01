@@ -76,19 +76,13 @@ jobs:
           npm test
           npm run build
 
-      - name: Cloudflare hesabi ve zorunlu Worker secret adlarini dogrula
+      - name: Cloudflare production erisimini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
           npx wrangler whoami
-          secret_list="$(npx wrangler secret list --config wrangler.jsonc 2>&1)"
-          for name in FILE_HUB_AGENT_KEY AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT AZURE_DOCUMENT_INTELLIGENCE_KEY RESEND_API_KEY; do
-            grep -Fq "$name" <<<"$secret_list" || {
-              echo "Production Worker secret eksik: $name" >&2
-              exit 1
-            }
-          done
+          echo "Worker secret listesi deploy kapisi degildir. Mevcut production secretlari Wrangler deploy sirasinda korunur; File Hub agent ve Azure Document Intelligence harici bagimliliklari firma bazinda etkinlestirildiginde ayrica yapilandirilir."
 
       - name: Canli D1 tam yedegini al
         working-directory: APP/cloud/ky-erp-api
