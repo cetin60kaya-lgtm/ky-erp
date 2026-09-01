@@ -5,9 +5,9 @@ import path from "node:path";
 
 const root = process.cwd();
 const read = (name: string) => fs.readFileSync(path.join(root, "src", name), "utf8");
-// Production 0028 İşNet route guard için ayrılmıştır; Muhasebe çekirdeği 0033-0035 aralığındadır.
-const migration = fs.readFileSync(path.join(root, "migrations", "0033_accounting_document_core.sql"), "utf8");
-const intelligenceMigration = fs.readFileSync(path.join(root, "migrations", "0034_accounting_intelligence_profiles.sql"), "utf8");
+// Production 0027-0029 İşNet/auth guard zinciri için ayrılmıştır; Muhasebe çekirdeği 0034-0036 aralığındadır.
+const migration = fs.readFileSync(path.join(root, "migrations", "0034_accounting_document_core.sql"), "utf8");
+const intelligenceMigration = fs.readFileSync(path.join(root, "migrations", "0035_accounting_intelligence_profiles.sql"), "utf8");
 const core = read("accounting-document-core.ts");
 const intelligence = read("accounting-document-intelligence.ts");
 const operations = read("accounting-operations.ts");
