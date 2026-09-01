@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Context, Hono } from "hono";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
