@@ -9,9 +9,9 @@ const fileHub = readFileSync(resolve(here, "file-hub.ts"), "utf8");
 const agent = readFileSync(resolve(here, "file-hub-agent-public.ts"), "utf8");
 const adminStorage = readFileSync(resolve(here, "admin-storage-cloud.ts"), "utf8");
 const ai = readFileSync(resolve(here, "ai-cloud.ts"), "utf8");
-// Güncel production dalındaki PDKS/İşNet migration numaraları korunur; File Hub 0028-0031 aralığındadır.
-const migration = readFileSync(resolve(here, "../migrations/0028_file_hub_multistorage.sql"), "utf8");
-const teamMigration = readFileSync(resolve(here, "../migrations/0029_file_hub_outgoing_team_links.sql"), "utf8");
+// Production 0028 İşNet route guard için ayrılmıştır; File Hub 0029-0032 aralığındadır.
+const migration = readFileSync(resolve(here, "../migrations/0029_file_hub_multistorage.sql"), "utf8");
+const teamMigration = readFileSync(resolve(here, "../migrations/0030_file_hub_outgoing_team_links.sql"), "utf8");
 
 test("File Hub schema is tenant scoped and separates assets, locations, bindings and relations", () => {
   for (const table of ["file_hub_connections","file_hub_bindings","file_hub_assets","file_hub_locations","file_hub_relations","file_hub_revisions","file_hub_events","file_hub_agent_status"]) assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
