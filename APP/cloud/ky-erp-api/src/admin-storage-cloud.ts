@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "./auth-cloud";
 import { registerFileHubRoutes } from "./file-hub";
 import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
+import { registerPublicFileHubScanRoutes } from "./file-hub-agent-scan";
 
 type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
@@ -28,7 +29,6 @@ async function legacyStatus(c:any){
 }
 
 export function registerAdminStorageRoutes(app:any){
-  // Ortak servis tek API olsa da dosya goruntuleme mevcut ERP modül yetkilerini asamaz.
   app.use("/api/file-hub/*",async(c:any,next:any)=>{
     const path=new URL(c.req.url).pathname, user=await getAuthenticatedUser(c);
     if(!user)return c.json(errorBody("UNAUTHORIZED","Oturum gerekli."),401);
@@ -49,8 +49,8 @@ export function registerAdminStorageRoutes(app:any){
   registerFileHubRoutes(app);
   registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
+  registerPublicFileHubScanRoutes(app);
 
-  // Eski endpoint adlari gecis uyumlulugu icin korunuyor; canonical veri artik File Hub tablolaridir.
   app.get("/api/admin/file-storage/status",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:await legacyStatus(c)});});
   app.get("/api/admin/file-storage/settings",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:{storageRoot:`FILE_HUB://${slugOf(c)}`,storageMode:"FILE_HUB",note:"Ana dosya evi firma bazında Google Drive, OneDrive veya seçilen provider'dır. R2 yalnız preview/cache katmanıdır."}});});
   app.get("/api/admin/file-storage/rules",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya kuralları yalnız uygulama sahibine açıktır."),403);const slug=slugOf(c);const r=await c.env.DB.prepare(`SELECT b.id,b.module_code module,b.purpose_code documentType,b.root_path targetPathTemplate,b.read_enabled,b.write_enabled,b.sync_enabled,c.provider_type,c.name providerName FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? ORDER BY b.module_code,b.purpose_code`).bind(slug).all<Row>();return c.json({ok:true,data:r.results||[]});});
