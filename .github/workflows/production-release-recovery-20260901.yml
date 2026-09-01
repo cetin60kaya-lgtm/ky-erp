@@ -107,7 +107,7 @@ jobs:
               test "$rows_n" = "0" || { echo "GUVENLIK DURDURMASI: legacy accounting_documents dolu ($rows_n)" >&2; exit 1; }
               npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "DROP TABLE accounting_documents;"
             fi
-            sql="$(cat migrations/0034_accounting_document_core.sql)"
+            sql="$(sed '/^[[:space:]]*--/d' migrations/0034_accounting_document_core.sql)"
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$sql"
           fi
           npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0035_accounting_intelligence_profiles.sql
