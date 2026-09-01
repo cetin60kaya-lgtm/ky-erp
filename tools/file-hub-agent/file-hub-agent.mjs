@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const API = String(process.env.KYERP_API_URL || "https://api.kyerp.net").replace(/\/+$/, "");
 const AGENT_KEY = String(process.env.KYERP_AGENT_KEY || "").trim();
 const COMPANY = String(process.env.KYERP_MAIN_COMPANY_SLUG || "mecit-hakan").trim();
@@ -30,18 +30,27 @@ function mimeOf(ext) {
 function logicalKeyOf(fileName) {
   return fileName.replace(/\.[^.]+$/, "").replace(/\b(final|son|yeni|rev\s*\d+)\b/gi, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
 }
-async function loadConfig() {
-  const raw = JSON.parse(await fsp.readFile(CONFIG_PATH, "utf8"));
-  const rows = Array.isArray(raw) ? raw : raw.connections;
-  if (!Array.isArray(rows) || !rows.length) throw new Error("Config içinde connections bulunamadı.");
-  return rows.map((row, index) => ({
-    storageConnectionId: String(row.storageConnectionId || "").trim(),
-    rootPath: path.resolve(String(row.rootPath || "").trim()),
-    providerType: String(row.providerType || "LOCAL_FOLDER").trim().toUpperCase(),
+function normalizeConnections(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    storageConnectionId: String(row.storageConnectionId || row.id || "").trim(),
+    rootPath: path.resolve(String(row.rootPath || row.localRootPath || "").trim()),
+    providerType: String(row.providerType || row.provider_type || "LOCAL_FOLDER").trim().toUpperCase(),
     include: Array.isArray(row.include) ? row.include.map(String) : [],
     exclude: Array.isArray(row.exclude) ? row.exclude.map(String) : [],
     name: String(row.name || `storage-${index+1}`),
-  })).filter(row => row.storageConnectionId && row.rootPath);
+  })).filter(row => row.storageConnectionId && row.rootPath && row.rootPath !== path.resolve(""));
+}
+async function loadConfig() {
+  if (fs.existsSync(CONFIG_PATH)) {
+    const raw = JSON.parse(await fsp.readFile(CONFIG_PATH, "utf8"));
+    const local = normalizeConnections(Array.isArray(raw) ? raw : raw.connections);
+    if (local.length) return local;
+  }
+  const remote = await api("/api/auth/file-hub-agent/config", {});
+  const rows = normalizeConnections(remote?.data?.connections || []);
+  if (!rows.length) throw new Error("KY ERP firma ayarlarında AGENT modunda yerel kökü olan aktif depolama kaynağı bulunamadı.");
+  console.log(`[CONFIG] ${rows.length} kaynak KY ERP Dosya Merkezi ayarlarından alındı.`);
+  return rows;
 }
 async function parseResponse(response) {
   const raw = await response.text();
