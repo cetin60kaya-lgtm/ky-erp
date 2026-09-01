@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const API = String(process.env.KYERP_API_URL || "https://api.kyerp.net").replace(/\/+$/, "");
 const AGENT_KEY = String(process.env.KYERP_AGENT_KEY || "").trim();
 const COMPANY = String(process.env.KYERP_MAIN_COMPANY_SLUG || "mecit-hakan").trim();
@@ -17,6 +17,7 @@ const STABLE_DELAY_MS = Math.max(500, Number(process.env.KYERP_STABLE_DELAY_MS |
 const IMAGE_PREVIEW_MAX = 12_000_000;
 const PDF_PREVIEW_MAX = 25_000_000;
 const IGNORE = /(^|[\\/])(\.git|node_modules|~\$|\.tmp|\.part|\.crdownload|desktop\.ini|thumbs\.db)([\\/]|$)/i;
+const previewDigestCache = new Map();
 
 if (!AGENT_KEY) throw new Error("KYERP_AGENT_KEY zorunludur.");
 
@@ -99,10 +100,10 @@ function previewEligible(extension, size) {
 }
 async function ingestFile(connection, absolute) {
   const rel = normalizeRel(connection.rootPath, absolute);
-  if (!rel || !allowedByRules(connection, rel)) return;
+  if (!rel || !allowedByRules(connection, rel)) return true;
   let stat;
-  try { stat = await statStable(absolute); } catch { return; }
-  if (!stat) return;
+  try { stat = await statStable(absolute); } catch { return false; }
+  if (!stat) return false;
   const fileName = path.basename(absolute), extension = extOf(fileName), mimeType = mimeOf(extension);
   const digest = await sha256(absolute);
   const result = await api("/api/auth/file-hub-agent/ingest", {
@@ -118,9 +119,10 @@ async function ingestFile(connection, absolute) {
     metadata: { agentVersion:VERSION, providerType:connection.providerType, rootName:connection.name },
   });
   const fileAssetId = String(result?.data?.fileAssetId || "");
-  if (fileAssetId && result?.data?.previewRequired === true && previewEligible(extension, stat.size)) {
+  if (fileAssetId && result?.data?.previewRequired === true && previewEligible(extension, stat.size) && previewDigestCache.get(fileAssetId) !== digest) {
     try {
       await apiPreview(fileAssetId, absolute, mimeType);
+      previewDigestCache.set(fileAssetId, digest);
       console.log(`[PREVIEW] ${connection.name}: ${rel}`);
     } catch (error) {
       console.error(`[PREVIEW HATA] ${connection.name}: ${rel}: ${error.message}`);
@@ -128,6 +130,7 @@ async function ingestFile(connection, absolute) {
   }
   const modelInfo = result?.data?.designModel?.modelName ? ` -> Model ${result.data.designModel.modelName}` : "";
   console.log(`[INGEST] ${connection.name}: ${rel}${modelInfo}`);
+  return true;
 }
 async function markMissing(connection, absolute) {
   const rel = normalizeRel(connection.rootPath, absolute);
@@ -137,13 +140,36 @@ async function markMissing(connection, absolute) {
   console.log(`[MISSING] ${connection.name}: ${rel}`);
 }
 async function walk(connection, dir) {
-  let entries; try { entries = await fsp.readdir(dir, { withFileTypes:true }); } catch { return; }
+  let entries;
+  try { entries = await fsp.readdir(dir, { withFileTypes:true }); }
+  catch (error) { console.error(`[TARAMA ERİŞİM HATASI] ${dir}: ${error.message}`); return false; }
+  let complete = true;
   for (const entry of entries) {
     const absolute = path.join(dir, entry.name); const rel = normalizeRel(connection.rootPath, absolute);
     if (!allowedByRules(connection, rel)) continue;
-    if (entry.isDirectory()) await walk(connection, absolute);
-    else if (entry.isFile()) await ingestFile(connection, absolute);
+    if (entry.isDirectory()) {
+      if (!await walk(connection, absolute)) complete = false;
+    } else if (entry.isFile()) {
+      if (!await ingestFile(connection, absolute)) complete = false;
+    }
   }
+  return complete;
+}
+async function scanConnection(connection) {
+  if (!fs.existsSync(connection.rootPath)) {
+    console.error(`[YOK] ${connection.name}: ${connection.rootPath}`);
+    return false;
+  }
+  const begin = await api("/api/auth/file-hub-agent/scan-begin", { storageConnectionId:connection.storageConnectionId });
+  const scanId = String(begin?.data?.scanId || ""), startedAt = String(begin?.data?.startedAt || "");
+  const complete = await walk(connection, connection.rootPath);
+  if (!complete) {
+    console.error(`[TARAMA TAMAMLANMADI] ${connection.name}; eksik dosya işaretleme yapılmadı.`);
+    return false;
+  }
+  const done = await api("/api/auth/file-hub-agent/scan-complete", { storageConnectionId:connection.storageConnectionId, scanId, startedAt });
+  console.log(`[TARAMA TAMAM] ${connection.name} | Kaynakta yok: ${done?.data?.missingCount || 0}`);
+  return true;
 }
 function watchConnection(connection) {
   if (!fs.existsSync(connection.rootPath)) { console.error(`[YOK] ${connection.name}: ${connection.rootPath}`); return null; }
@@ -176,13 +202,14 @@ let lastError = "";
 await heartbeat(connections);
 for (const connection of connections) {
   console.log(`[TARAMA] ${connection.name}: ${connection.rootPath}`);
-  await walk(connection, connection.rootPath);
+  try { await scanConnection(connection); }
+  catch(error){ lastError=error.message; console.error(`[TARAMA HATA] ${connection.name}:`,error.message); }
   watchConnection(connection);
 }
 setInterval(() => heartbeat(connections,lastError).catch(error => { lastError=error.message; console.error("[HEARTBEAT]",error.message); }), HEARTBEAT_MS).unref();
 setInterval(async () => {
   for (const connection of connections) {
-    try { await walk(connection, connection.rootPath); lastError=""; }
+    try { if(await scanConnection(connection)) lastError=""; }
     catch(error){ lastError=error.message; console.error(`[RESCAN HATA] ${connection.name}:`,error.message); }
   }
 }, RESCAN_MS).unref();
