@@ -10,6 +10,7 @@ test("final round: aktif giriş yalnız MFA tabanlıdır", () => {
   const entry = read("APP/cloud/ky-erp-api/src/main-entry.ts");
   const adminUi = read("APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx");
   const cutover = read("DEPLOY/KYERP_FINAL_ROUND_SECURITY_CUTOVER_V1.sql");
+  const authGuard = read("APP/cloud/ky-erp-api/migrations/0029_auth_security_policy_guard.sql");
 
   assert.match(entry, /const MFA_LOGIN_POLICIES = new Set\(\["GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"\]\)/);
   assert.match(entry, /AUTH_SECURITY_BASELINE_UNAVAILABLE/);
@@ -18,6 +19,10 @@ test("final round: aktif giriş yalnız MFA tabanlıdır", () => {
   assert.match(cutover, /login_policy[\s\S]*'ANY_MFA'/);
   assert.match(cutover, /session_seconds = 36000/);
   assert.match(cutover, /FINAL_SECURITY_MAIL_ISNET_CUTOVER_20260901_V1/);
+  assert.match(authGuard, /AUTH_MFA_POLICY_REQUIRED/);
+  assert.match(authGuard, /trg_auth_security_mfa_insert/);
+  assert.match(authGuard, /trg_auth_security_mfa_update/);
+  assert.match(authGuard, /'GOOGLE','MICROSOFT','ANY_MFA','BOTH_MFA'/);
 });
 
 test("final round: owner oturum ve gerçek mail akışı korunur", () => {
@@ -58,4 +63,23 @@ test("final round: İşNet tenant, partial ve D1 guard sözleşmesi", () => {
   assert.match(guard, /trg_isnet_json_store_tenant_insert/);
   assert.match(guard, /trg_isnet_json_store_tenant_update/);
   assert.match(guard, /ISNET_TENANT_REQUIRED/);
+});
+
+test("final round: tek final release bütün doğrulamaları zincirler", () => {
+  const release = read("DEPLOY/KYERP_FINAL_ROUND_RELEASE_20260901_V3.ps1");
+  const bat = read("KY ERP FINAL TUR CANLIYA AL.bat");
+
+  assert.match(release, /KYERP_DIRECT_PRODUCTION\.ps1/);
+  assert.match(release, /wrangler secret put RESEND_API_KEY/);
+  assert.match(release, /api\.resend\.com\/emails/);
+  assert.match(release, /0027_isnet_tenant_scope_backfill\.sql/);
+  assert.match(release, /0028_isnet_tenant_scope_guard\.sql/);
+  assert.match(release, /0029_auth_security_policy_guard\.sql/);
+  assert.match(release, /unsafe_policy/);
+  assert.match(release, /auth_guard_triggers/);
+  assert.match(release, /global_isnet/);
+  assert.match(release, /api\/health/);
+  assert.match(release, /api\/auth\/status/);
+  assert.match(bat, /Language\.Parser/);
+  assert.match(bat, /KYERP_FINAL_ROUND_RELEASE_20260901_V3\.ps1/);
 });
