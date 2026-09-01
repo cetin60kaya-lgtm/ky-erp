@@ -19,13 +19,19 @@ test("DENETIM UI is fixed to IK view-only and cannot enable other modules", () =
   assert.match(source, /Günlük personel ve diğer modüller kapalıdır/);
 });
 
-test("DENETIM API reads only audit namespace or safe personnel-control GET endpoints", () => {
+test("DENETIM API is route-locked to profile, SGK-card people, attendance and PDKS masters", () => {
   const main = api("main.ts");
+  const guard = api("ik-pdks-guard.ts");
   const personnel = api("ik-personnel-control.ts");
   assert.match(main, /const pdksRead = path\.startsWith\("\/api\/ik\/personnel-control\/"\) && \["GET", "HEAD"\]\.includes\(method\)/);
-  assert.match(main, /!path\.startsWith\("\/api\/ik\/audit\/"\) && !pdksRead/);
-  assert.match(main, /!\["GET", "HEAD"\]\.includes\(method\)/);
-  assert.match(personnel, /audit \? " AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\) <> 'YOK' AND TRIM\(COALESCE\(s\.card_no,''\)\) <> ''"/);
+  assert.match(guard, /const safeStatic = new Set\(\[/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/profile"/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
+  assert.match(guard, /people\\\/\(\[\^\/\]\+\)\\\/attendance/);
+  assert.match(guard, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
+  assert.match(guard, /if \(!safeStatic\.has\(path\) && !attendanceMatch\)/);
   assert.match(personnel, /if \(!audit\) \{/);
   assert.match(personnel, /identityNo:/);
   assert.match(personnel, /salary:/);
