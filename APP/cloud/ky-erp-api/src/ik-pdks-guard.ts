@@ -98,8 +98,30 @@ function summaryOf(days: Row[]) {
   }, { workedDays: 0, annualLeaveDays: 0, leaveDays: 0, noPunchDays: 0, missingPunchDays: 0, lateDays: 0, lateMinutes: 0, earlyMinutes: 0, overtimeMinutes: 0 });
 }
 
+async function normalizeSavedOverride(c: Context<AppEnv>, company: string, path: string, body: Row) {
+  const match = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/day-override$/i);
+  if (!match || !c.res.ok) return;
+  const employeeId = decodeURIComponent(match[1]);
+  const workDate = text(body.workDate || body.date).slice(0, 10);
+  if (!employeeId || !workDate) return;
+  const schedule = await scheduleOf(c, company, employeeId);
+  const normalized = recalcDay({
+    status: text(body.status || "AUTO"),
+    entry: text(body.entry || body.manualIn),
+    exit: text(body.exit || body.manualOut),
+  }, schedule);
+  try {
+    await c.env.DB.prepare(`UPDATE ik_attendance_day_overrides
+      SET late_minutes=?,early_minutes=?,overtime_minutes=?,updated_at=?
+      WHERE main_company_id=? AND employee_id=? AND work_date=?`)
+      .bind(normalized.lateMinutes, normalized.earlyMinutes, normalized.overtimeMinutes, new Date().toISOString(), company, employeeId, workDate).run();
+  } catch {
+    // Ana kayıt başarılıysa normalize hatası response'u bozmaz; GET katmanı yine D1 vardiyasına göre hesaplar.
+  }
+}
+
 export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
-  // D1 dönem kilidi tüm PDKS yazma yollarında tek otoritedir.
+  // D1 dönem kilidi tüm PDKS kart/düzeltme yazma yollarında tek otoritedir.
   app.use("/api/ik/personnel-control/*", async (c, next) => {
     if (String(c.req.method).toUpperCase() !== "POST") return next();
     const path = c.req.path;
@@ -121,7 +143,9 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
     if (locked.length) {
       return c.json({ ok: false, error: { code: "PDKS_PERIOD_LOCKED", message: `Dönem kilitli: ${locked.join(", ")}. Önce KY ERP ay sonu ekranından dönemi açın.` } }, 409);
     }
-    return next();
+
+    await next();
+    if (path.endsWith("/day-override")) await normalizeSavedOverride(c, company, path, body);
   });
 
   // Attendance cevabındaki süre hesabı personelin D1 vardiya atamasına göre normalize edilir.
@@ -149,6 +173,7 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
     const nextPayload = payload?.data && typeof payload.data === "object" ? { ...payload, data: nextData } : nextData;
     const headers = new Headers(c.res.headers);
     headers.delete("Content-Length");
+    headers.set("Content-Type", "application/json; charset=UTF-8");
     c.res = new Response(JSON.stringify(nextPayload), { status: c.res.status, headers });
   });
 }
