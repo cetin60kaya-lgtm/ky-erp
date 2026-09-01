@@ -29,6 +29,7 @@ test("PDKS guard blocks locked D1 periods, strict audit reads and normalizes D1 
   assert.match(source, /earlyTolerance/);
   assert.match(source, /overtimeMinutes/);
   assert.match(source, /registerIkPdksOperationRoutes\(app\)/);
+  assert.match(source, /registerIkPdksCardBridgeRoutes\(app\)/);
 });
 
 test("PDKS D1 master schema contains shift, service and employee assignments", () => {
@@ -58,7 +59,19 @@ test("PDKS canonical operations use tenant-first D1 paths and protect business r
   assert.doesNotMatch(source, /payment_method/);
 });
 
-test("Web PDKS uses personnel-control operations, not legacy advanced endpoints", () => {
+test("PDKS Hedef card bridge parses text, enforces strict people/lock and writes only D1 clock events", () => {
+  const source = api("ik-pdks-card-bridge.ts");
+  assert.match(source, /\/api\/ik\/advanced\/card\/preview/);
+  assert.match(source, /\/api\/ik\/advanced\/card\/confirm/);
+  assert.match(source, /PDKS_TEXT_CARD_FILE_REQUIRED/);
+  assert.match(source, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(source, /SELECT is_locked FROM ik_monthly_close/);
+  assert.match(source, /INSERT OR IGNORE INTO ik_time_clock_events/);
+  assert.match(source, /KYERP_WEB_PDKS_FILE/);
+  assert.doesNotMatch(source, /json_store/);
+});
+
+test("Web PDKS uses personnel-control operations, not legacy advanced endpoints for business operations", () => {
   const service = frontend("services/pdksApi.js");
   assert.match(service, /personnel-control\/operations\/month/);
   assert.match(service, /personnel-control\/operations\/leave/);
