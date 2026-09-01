@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const API = String(process.env.KYERP_API_URL || "https://api.kyerp.net").replace(/\/+$/, "");
 const AGENT_KEY = String(process.env.KYERP_AGENT_KEY || "").trim();
 const COMPANY = String(process.env.KYERP_MAIN_COMPANY_SLUG || "mecit-hakan").trim();
@@ -14,6 +14,8 @@ const CONFIG_PATH = process.env.KYERP_FILE_HUB_CONFIG || path.join(process.cwd()
 const HEARTBEAT_MS = Math.max(30_000, Number(process.env.KYERP_HEARTBEAT_MS || 60_000));
 const RESCAN_MS = Math.max(60_000, Number(process.env.KYERP_RESCAN_MS || 10 * 60_000));
 const STABLE_DELAY_MS = Math.max(500, Number(process.env.KYERP_STABLE_DELAY_MS || 1500));
+const IMAGE_PREVIEW_MAX = 12_000_000;
+const PDF_PREVIEW_MAX = 25_000_000;
 const IGNORE = /(^|[\\/])(\.git|node_modules|~\$|\.tmp|\.part|\.crdownload|desktop\.ini|thumbs\.db)([\\/]|$)/i;
 
 if (!AGENT_KEY) throw new Error("KYERP_AGENT_KEY zorunludur.");
@@ -25,7 +27,7 @@ function mimeOf(ext) {
   return ({ JPG:"image/jpeg",JPEG:"image/jpeg",PNG:"image/png",WEBP:"image/webp",PDF:"application/pdf",XML:"application/xml",PSD:"image/vnd.adobe.photoshop",AI:"application/postscript",ZIP:"application/zip",XLSX:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",DOCX:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" })[ext] || "application/octet-stream";
 }
 function logicalKeyOf(fileName) {
-  return fileName.replace(/\.[^.]+$/, "").replace(/\b(final|son|yeni|rev\s*\d+)\b/gi, " ").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
+  return fileName.replace(/\.[^.]+$/, "").replace(/\b(final|son|yeni|rev\s*\d+)\b/gi, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
 }
 async function loadConfig() {
   const raw = JSON.parse(await fsp.readFile(CONFIG_PATH, "utf8"));
@@ -40,16 +42,33 @@ async function loadConfig() {
     name: String(row.name || `storage-${index+1}`),
   })).filter(row => row.storageConnectionId && row.rootPath);
 }
+async function parseResponse(response) {
+  const raw = await response.text();
+  let data = null; try { data = raw ? JSON.parse(raw) : null; } catch { data = { raw }; }
+  if (!response.ok || data?.ok === false) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+  return data;
+}
 async function api(endpoint, payload) {
   const response = await fetch(`${API}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type":"application/json", "X-KYERP-Agent-Key":AGENT_KEY, "X-KYERP-Tenant-Slug":COMPANY },
     body: JSON.stringify({ mainCompanySlug: COMPANY, deviceName: DEVICE, ...payload }),
   });
-  const text = await response.text();
-  let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = { raw:text }; }
-  if (!response.ok || data?.ok === false) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-  return data;
+  return parseResponse(response);
+}
+async function apiPreview(fileAssetId, absolute, mimeType) {
+  const bytes = await fsp.readFile(absolute);
+  const form = new FormData();
+  form.set("mainCompanySlug", COMPANY);
+  form.set("deviceName", DEVICE);
+  form.set("fileAssetId", fileAssetId);
+  form.set("file", new Blob([bytes], { type:mimeType }), path.basename(absolute));
+  const response = await fetch(`${API}/api/auth/file-hub-agent/preview`, {
+    method:"POST",
+    headers:{ "X-KYERP-Agent-Key":AGENT_KEY, "X-KYERP-Tenant-Slug":COMPANY },
+    body:form,
+  });
+  return parseResponse(response);
 }
 async function statStable(file) {
   const first = await fsp.stat(file);
@@ -73,27 +92,42 @@ function allowedByRules(connection, rel) {
   if (connection.include.length && !connection.include.some(v => lower.includes(String(v).toLowerCase()))) return false;
   return true;
 }
+function previewEligible(extension, size) {
+  if (["JPG","JPEG","PNG","WEBP"].includes(extension)) return size <= IMAGE_PREVIEW_MAX;
+  if (extension === "PDF") return size <= PDF_PREVIEW_MAX;
+  return false;
+}
 async function ingestFile(connection, absolute) {
   const rel = normalizeRel(connection.rootPath, absolute);
   if (!rel || !allowedByRules(connection, rel)) return;
   let stat;
   try { stat = await statStable(absolute); } catch { return; }
   if (!stat) return;
-  const fileName = path.basename(absolute), extension = extOf(fileName);
+  const fileName = path.basename(absolute), extension = extOf(fileName), mimeType = mimeOf(extension);
   const digest = await sha256(absolute);
-  await api("/api/auth/file-hub-agent/ingest", {
+  const result = await api("/api/auth/file-hub-agent/ingest", {
     storageConnectionId: connection.storageConnectionId,
     relativePath: rel,
     fileName,
     extension,
-    mimeType: mimeOf(extension),
+    mimeType,
     sizeBytes: stat.size,
     sha256: digest,
     modifiedAt: new Date(stat.mtimeMs).toISOString(),
     logicalKey: logicalKeyOf(fileName),
     metadata: { agentVersion:VERSION, providerType:connection.providerType, rootName:connection.name },
   });
-  console.log(`[INGEST] ${connection.name}: ${rel}`);
+  const fileAssetId = String(result?.data?.fileAssetId || "");
+  if (fileAssetId && result?.data?.previewRequired === true && previewEligible(extension, stat.size)) {
+    try {
+      await apiPreview(fileAssetId, absolute, mimeType);
+      console.log(`[PREVIEW] ${connection.name}: ${rel}`);
+    } catch (error) {
+      console.error(`[PREVIEW HATA] ${connection.name}: ${rel}: ${error.message}`);
+    }
+  }
+  const modelInfo = result?.data?.designModel?.modelName ? ` -> Model ${result.data.designModel.modelName}` : "";
+  console.log(`[INGEST] ${connection.name}: ${rel}${modelInfo}`);
 }
 async function markMissing(connection, absolute) {
   const rel = normalizeRel(connection.rootPath, absolute);
