@@ -14,7 +14,7 @@ const MANAGED_ROLES = ["COMPANY_ADMIN","MUHASEBE","DESEN","IMALAT","BOYAHANE","I
 const LOGIN_POLICIES = ["PASSWORD_ONLY","GOOGLE","MICROSOFT","ANY_MFA","BOTH_MFA"];
 
 function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
-function upper(value: unknown) { return text(value).toLocaleUpperCase("tr-TR"); }
+function upper(value: unknown) { return text(value).toUpperCase().replace(/İ/g, "I"); }
 function nowIso() { return new Date().toISOString(); }
 function addSeconds(seconds: number) { return new Date(Date.now() + seconds * 1000).toISOString(); }
 function isOwner(role: unknown) { return ["SUPER_ADMIN", "ADMIN"].includes(upper(role)); }
