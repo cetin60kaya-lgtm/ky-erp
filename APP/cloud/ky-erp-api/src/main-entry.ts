@@ -7,6 +7,7 @@ const COMPAT_PATHS = new Set([
   "/api/admin/security/audit-log",
   "/api/admin/security/delivery-capabilities",
 ]);
+const MFA_LOGIN_POLICIES = new Set(["GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"]);
 
 function upper(value: unknown) {
   return String(value ?? "")
@@ -17,6 +18,11 @@ function upper(value: unknown) {
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
+}
+
+function normalizeMfaPolicy(value: unknown) {
+  const policy = upper(value);
+  return MFA_LOGIN_POLICIES.has(policy) ? policy : "ANY_MFA";
 }
 
 function isOwner(role: unknown) {
@@ -204,12 +210,57 @@ async function adminReadCompat(
   return original;
 }
 
+async function enforceMfaBaselineForLogin(request: Request, env: Cloudflare.Env) {
+  const url = new URL(request.url);
+  if (request.method.toUpperCase() !== "POST" || url.pathname !== "/api/auth/login") return;
+
+  let body: any = null;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return;
+  }
+  const identity = text(body?.username || body?.email);
+  if (!identity) return;
+
+  try {
+    const row = await env.DB.prepare(
+      `SELECT u.id
+         FROM auth_users u
+         LEFT JOIN auth_user_security s ON s.user_id=u.id
+        WHERE LOWER(u.username)=LOWER(?) OR LOWER(COALESCE(s.email,''))=LOWER(?)
+        LIMIT 1`,
+    ).bind(identity, identity).first<any>();
+    if (!row?.id) return;
+
+    const timestamp = new Date().toISOString();
+    await env.DB.prepare(
+      `UPDATE auth_user_security
+          SET login_policy=CASE
+                WHEN UPPER(COALESCE(login_policy,'')) IN ('GOOGLE','MICROSOFT','ANY_MFA','BOTH_MFA')
+                  THEN UPPER(login_policy)
+                ELSE 'ANY_MFA'
+              END,
+              session_seconds=36000,
+              updated_at=?
+        WHERE user_id=?`,
+    ).bind(timestamp, row.id).run();
+  } catch (error) {
+    console.error(JSON.stringify({
+      level: "error",
+      phase: "GLOBAL_MFA_LOGIN_BASELINE",
+      message: error instanceof Error ? error.message : String(error),
+    }));
+  }
+}
+
 async function canonicalizeAdminWrite(request: Request) {
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   const isCompleteCreate = method === "POST" && url.pathname === "/api/admin/users/create-complete";
   const isPermissionWrite = method === "PUT" && /^\/api\/admin\/users\/[^/]+\/permissions$/.test(url.pathname);
-  if (!isCompleteCreate && !isPermissionWrite) return request;
+  const isPolicyWrite = method === "PATCH" && /^\/api\/admin\/security\/users\/[^/]+\/policy$/.test(url.pathname);
+  if (!isCompleteCreate && !isPermissionWrite && !isPolicyWrite) return request;
 
   let body: any;
   try {
@@ -222,6 +273,15 @@ async function canonicalizeAdminWrite(request: Request) {
   if (isCompleteCreate) {
     // Forced-password-change akışı uygulamada yok. Çalışmayan bir bayrak üretmeyiz.
     body.mustChangePassword = false;
+    // KY ERP'de parola tek başına giriş politikası değildir. Yeni kullanıcı MFA ile başlar.
+    body.loginPolicy = normalizeMfaPolicy(body.loginPolicy);
+    body.sessionSeconds = 36000;
+  }
+
+  if (isPolicyWrite) {
+    // UI veya crafted API isteği PASSWORD_ONLY gönderse bile MFA aşağı çekilemez.
+    body.loginPolicy = normalizeMfaPolicy(body.loginPolicy);
+    body.sessionSeconds = 36000;
   }
 
   if (Array.isArray(body.permissions)) {
@@ -238,6 +298,10 @@ async function canonicalizeAdminWrite(request: Request) {
 
 export default {
   async fetch(request: Request, env: Cloudflare.Env, executionCtx: ExecutionContext) {
+    // Eski PASSWORD_ONLY kullanıcıları login anında MFA tabanına yükseltilir.
+    // Bu işlem parola doğrulamasını geçmez; yalnız güvenlik politikasını kuvvetlendirir.
+    await enforceMfaBaselineForLogin(request, env);
+
     // Browser origin güvenliği main.ts içindeki explicit LIVE_ORIGINS + CORS allowlist
     // tarafından uygulanır. main-entry ikinci ve çelişkili bir domain blacklist tutmaz.
     const canonicalRequest = await canonicalizeAdminWrite(request);
