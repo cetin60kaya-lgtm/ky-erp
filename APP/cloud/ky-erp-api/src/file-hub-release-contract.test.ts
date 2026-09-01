@@ -41,8 +41,12 @@ test("File Hub + accounting production path is explicit and targeted", () => {
 
   assert.match(launcher, /KYERP_FILE_HUB_ACCOUNTING_PREFLIGHT\.ps1/);
   assert.match(launcher, /KYERP_FILE_HUB_ACCOUNTING_PRODUCTION_MIGRATE\.ps1/);
+  const migrationRun = launcher.indexOf('KYERP_FILE_HUB_ACCOUNTING_PRODUCTION_MIGRATE.ps1" -ExpectedBranch');
+  const deployRun = launcher.indexOf('KYERP_DIRECT_PRODUCTION.ps1"');
+  assert.ok(migrationRun >= 0, "targeted D1 migration invocation is missing");
+  assert.ok(deployRun >= 0, "canonical production deploy invocation is missing");
   assert.ok(
-    launcher.indexOf("KYERP_FILE_HUB_ACCOUNTING_PRODUCTION_MIGRATE.ps1") < launcher.indexOf("KYERP_DIRECT_PRODUCTION.ps1"),
+    migrationRun < deployRun,
     "targeted D1 migration must complete before Worker/Pages deploy",
   );
 });
