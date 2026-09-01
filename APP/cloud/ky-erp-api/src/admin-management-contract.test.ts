@@ -36,6 +36,7 @@ test("system management permission is stripped from every non-owner auth respons
 
 test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => {
   const main = api("main.ts");
+  const guard = api("ik-pdks-guard.ts");
   const audit = api("ik-audit-readonly.ts");
   const app = frontend("AppV3.jsx");
   const seed = migration("0024_denetime_pdks_system_user.sql");
@@ -44,9 +45,18 @@ test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => 
   assert.match(main, /function auditRole/);
   assert.match(main, /auditPermissionRows/);
   assert.match(main, /moduleKey:\s*"IK"/);
-  assert.match(main, /if \(!path\.startsWith\("\/api\/ik\/audit\/"\)\)/);
+  assert.match(main, /const pdksRead = path\.startsWith\("\/api\/ik\/personnel-control\/"\)/);
   assert.match(main, /Denetim hesabı yalnız SGK'lı kart personelinin PDKS görünümünü okuyabilir/);
   assert.match(main, /DELETE FROM auth_user_module_permissions[\s\S]*UPPER\(module_key\)<>'IK'/);
+
+  assert.match(guard, /const safeStatic = new Set\(\[/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/profile"/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
+  assert.match(guard, /strictAuditEmployeeIds/);
+  assert.match(guard, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
+  assert.match(guard, /if \(!safeStatic\.has\(path\) && !attendanceMatch\)/);
 
   assert.match(audit, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\) = 'VAR'/);
   assert.match(audit, /TRIM\(COALESCE\(s\.card_no,''\)\) <> ''/);
