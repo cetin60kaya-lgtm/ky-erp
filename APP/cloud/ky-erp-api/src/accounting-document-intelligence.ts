@@ -6,6 +6,7 @@ type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
 
 const text = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
+const upper = (v: unknown) => text(v).toLocaleUpperCase("tr-TR");
 const num = (v: unknown) => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
