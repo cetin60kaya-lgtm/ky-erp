@@ -20,7 +20,8 @@ test("worker accepts canonical V6 browser origins through the explicit CORS allo
   assert.doesNotMatch(entry, /LEGACY_FRONTEND_ORIGIN_BLOCKED/);
   assert.doesNotMatch(entry, /BLOCKED_LEGACY_ORIGINS/);
   assert.match(entry, /const canonicalRequest = await canonicalizeAdminWrite\(request\)/);
-  assert.match(entry, /return shell\.fetch\(canonicalRequest, env, executionCtx\)/);
+  assert.match(entry, /const response = await shell\.fetch\(canonicalRequest, env, executionCtx\)/);
+  assert.match(entry, /return adminReadCompat\(canonicalRequest, env, executionCtx, response\)/);
 });
 
 test("normal user writes cannot create ADMIN permission or unsupported forced-password flag", () => {
