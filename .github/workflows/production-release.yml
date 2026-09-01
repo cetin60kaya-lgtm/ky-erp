@@ -22,7 +22,7 @@ jobs:
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
       DB_NAME: ky-erp-db
       WORKER_DIR: APP/cloud/ky-erp-api
       FRONTEND_DIR: APP/app/ky-erp-frontend
@@ -169,12 +169,6 @@ jobs:
         run: |
           set -euo pipefail
           auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            accounts="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
-            CLOUDFLARE_ACCOUNT_ID="$(jq -r '.result[0].id // empty' <<<"$accounts")"
-            test -n "$CLOUDFLARE_ACCOUNT_ID"
-            echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
-          fi
           base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
           project="$(curl --fail --silent --show-error -H "$auth" "$base")"
           jq -e --arg p "$PAGES_PROJECT" '.success == true and .result.name == $p' <<<"$project" >/dev/null
