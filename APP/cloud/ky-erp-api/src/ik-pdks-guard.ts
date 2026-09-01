@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";
 import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
 
 type Bindings = Cloudflare.Env;
@@ -90,7 +91,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
   if (!(await isAuditRequest(c, company))) return next();
 
   if (!["GET", "HEAD"].includes(method)) {
-    return next(); // Yazma yolları auth/personnel-control katmanında ayrıca reddedilir.
+    return next();
   }
 
   const safeStatic = new Set([
@@ -207,16 +208,12 @@ async function normalizeSavedOverride(c: Context<AppEnv>, company: string, path:
       SET late_minutes=?,early_minutes=?,overtime_minutes=?,updated_at=?
       WHERE main_company_id=? AND employee_id=? AND work_date=?`)
       .bind(normalized.lateMinutes, normalized.earlyMinutes, normalized.overtimeMinutes, new Date().toISOString(), company, employeeId, workDate).run();
-  } catch {
-    // Ana kayıt başarılıysa normalize hatası response'u bozmaz; GET katmanı yine D1 vardiyasına göre hesaplar.
-  }
+  } catch {}
 }
 
 export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
-  // DENETIM çekirdekte de yalnız güvenli PDKS GET'lerine ve kesin SGK=VAR + kartlı personele sınırlandırılır.
   app.use("/api/ik/personnel-control/*", enforceAuditReadScope);
 
-  // D1 dönem kilidi tüm PDKS kart/düzeltme yazma yollarında tek otoritedir.
   app.use("/api/ik/personnel-control/*", async (c, next) => {
     if (String(c.req.method).toUpperCase() !== "POST") return next();
     const path = c.req.path;
@@ -243,7 +240,6 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
     if (path.endsWith("/day-override")) await normalizeSavedOverride(c, company, path, body);
   });
 
-  // Attendance cevabındaki süre hesabı personelin D1 vardiya atamasına göre normalize edilir.
   app.use("/api/ik/personnel-control/people/:employeeId/attendance", async (c, next) => {
     if (String(c.req.method).toUpperCase() !== "GET") return next();
     await next();
@@ -269,6 +265,6 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
     rewriteJson(c, nextPayload);
   });
 
-  // İzin, avans, bordro, tatil ve dönem kapanışı da aynı personnel-control guard zincirinin arkasındadır.
   registerIkPdksOperationRoutes(app);
+  registerIkPdksCardBridgeRoutes(app);
 }
