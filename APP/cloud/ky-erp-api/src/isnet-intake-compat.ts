@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { registerAccountingDocumentCoreRoutes } from "./accounting-document-core";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -189,6 +190,10 @@ async function updateDocumentMetadata(
 }
 
 export function registerIsnetIntakeCompatRoutes(app: Hono<AppEnv>) {
+  // İşNet artık tek veri çekirdeği değildir. Manuel XML/PDF/görsel ve gelecekteki
+  // diğer provider'lar da aynı canonical belge havuzuna düşer.
+  registerAccountingDocumentCoreRoutes(app);
+
   app.post("/api/isnet/incoming-dispatches/:id/import", async (c) => {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
