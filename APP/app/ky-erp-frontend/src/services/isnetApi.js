@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, apiPost, apiPut } from "../utils/api";
+import { apiFetch, apiGet, apiPost, apiPut, getApiActiveMainCompanySlug } from "../utils/api";
 
 const ACCOUNTING_CLEAN_START = "2026-08-01";
 
@@ -14,6 +14,35 @@ function floorCleanStart(value) {
   const requested = String(value || "").trim();
   if (!requested || requested < ACCOUNTING_CLEAN_START) return ACCOUNTING_CLEAN_START;
   return requested;
+}
+
+function resolveMainCompanySlug(payload = {}) {
+  const slug = String(
+    payload?.mainCompanySlug ||
+      payload?.main_company_slug ||
+      getApiActiveMainCompanySlug() ||
+      "",
+  ).trim();
+  if (!slug) {
+    const error = new Error("İşNet işlemi için ana firma seçimi zorunludur.");
+    error.code = "MAIN_COMPANY_REQUIRED";
+    throw error;
+  }
+  return slug;
+}
+
+function reviewRequired(value) {
+  const status = String(value?.status || "").trim().toUpperCase();
+  return value?.requiresReview === true ||
+    value?.partial === true ||
+    status === "PARTIAL_REVIEW_REQUIRED" ||
+    status.includes("PARTIAL") ||
+    status.includes("REVIEW_REQUIRED");
+}
+
+function appendWarning(warnings, value) {
+  const message = String(value || "").trim();
+  if (message && !warnings.includes(message)) warnings.push(message);
 }
 
 export const getIsnetDashboard = () => apiGet("/isnet/dashboard").then(unwrap);
@@ -56,14 +85,18 @@ export const getMailQueue = () => apiGet("/isnet/mail/queue").then(unwrap);
 export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
 export const testIsnetSettings = (payload) => apiPost("/isnet/settings/test", payload, { suppressUnauthorized: true, timeoutMs: 90_000 }).then(unwrap);
 export const saveIsnetSettings = (payload) => apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
-export const recoverIsnetOutgoingDocuments = (payload = {}) => apiPost(
-  "/isnet/outgoing/recover",
-  { ...payload, startDate: floorCleanStart(payload.startDate) },
-  { timeoutMs: 240_000 },
-).then(unwrap);
+export const recoverIsnetOutgoingDocuments = (payload = {}) => {
+  const mainCompanySlug = resolveMainCompanySlug(payload);
+  return apiPost(
+    "/isnet/outgoing/recover",
+    { ...payload, mainCompanySlug, startDate: floorCleanStart(payload.startDate) },
+    { timeoutMs: 240_000 },
+  ).then(unwrap);
+};
 export const getIsnetOutgoingDiagnostics = () => apiGet("/isnet/outgoing/diagnostics").then(unwrap);
 export const startDailySync = async (payload = {}) => {
-  const request = { ...payload, startDate: floorCleanStart(payload.startDate) };
+  const mainCompanySlug = resolveMainCompanySlug(payload);
+  const request = { ...payload, mainCompanySlug, startDate: floorCleanStart(payload.startDate) };
   const [portalSync, outgoingRecovery] = await Promise.allSettled([
     apiPost("/isnet/full-sync", request, { timeoutMs: 900_000 }).then(unwrap),
     recoverIsnetOutgoingDocuments(request),
@@ -76,23 +109,42 @@ export const startDailySync = async (payload = {}) => {
   const primary = portalSync.status === "fulfilled" && portalSync.value && typeof portalSync.value === "object"
     ? portalSync.value
     : {};
-  const outgoing = outgoingRecovery.status === "fulfilled" ? outgoingRecovery.value : null;
+  const outgoing = outgoingRecovery.status === "fulfilled" && outgoingRecovery.value && typeof outgoingRecovery.value === "object"
+    ? outgoingRecovery.value
+    : null;
   const outgoingCounts = outgoing?.counts || {};
   const primaryCounts = primary?.counts || {};
   const warnings = [];
-  if (portalSync.status === "rejected") warnings.push(`Portal senkronu: ${portalSync.reason?.message || "başarısız"}`);
-  if (outgoingRecovery.status === "rejected") warnings.push(`Giden belge doğrulaması: ${outgoingRecovery.reason?.message || "başarısız"}`);
+
+  if (portalSync.status === "rejected") {
+    appendWarning(warnings, `Portal senkronu: ${portalSync.reason?.message || "başarısız"}`);
+  }
+  if (outgoingRecovery.status === "rejected") {
+    appendWarning(warnings, `Giden belge doğrulaması: ${outgoingRecovery.reason?.message || "başarısız"}`);
+  }
+
+  const primaryReview = reviewRequired(primary);
+  const outgoingReview = reviewRequired(outgoing);
+  if (primaryReview) {
+    appendWarning(warnings, primary?.warning || "İşNet ana senkronu kontrol gerektiriyor.");
+  }
+  if (outgoingReview) {
+    appendWarning(warnings, outgoing?.warning || "Giden fatura/irsaliye kapsamı tam doğrulanamadı.");
+  }
+
+  const partial = warnings.length > 0 || primaryReview || outgoingReview;
 
   return {
     ...primary,
-    status: primary.status || outgoing?.status || "COMPLETED",
+    status: partial ? "PARTIAL_REVIEW_REQUIRED" : (primary.status || outgoing?.status || "COMPLETED"),
+    requiresReview: partial,
     counts: {
       ...primaryCounts,
       outgoingInvoices: Number(outgoingCounts.outgoingInvoices ?? primaryCounts.outgoingInvoices ?? 0),
       outgoingDispatches: Number(outgoingCounts.outgoingDispatches ?? primaryCounts.outgoingDispatches ?? 0),
     },
     outgoingRecovery: outgoing,
-    partial: warnings.length > 0,
+    partial,
     warning: warnings.join(" | "),
   };
 };
