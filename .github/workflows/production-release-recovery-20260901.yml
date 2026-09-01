@@ -1,0 +1,194 @@
+name: KY ERP Production Recovery 2026-09-01
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - ".github/workflows/production-release-recovery-20260901.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Safe recovery, D1 canonical accounting, Worker and Pages
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      DB_NAME: ky-erp-db
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+      PAGES_PROJECT: ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Production branch and Cloudflare auth gate
+        shell: bash
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          npx wrangler whoami
+
+      - name: Worker full preflight
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: File Hub agent syntax gate
+        run: |
+          node --check tools/file-hub-agent/file-hub-agent.mjs
+          node --check tools/file-hub-agent/accounting-archive-worker.mjs
+
+      - name: Frontend full preflight
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Backup live D1 before recovery
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p database-backup
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          output="database-backup/ky-erp-db-recovery-${stamp}.sql"
+          npx wrangler d1 export "$DB_NAME" --remote --config wrangler.jsonc --skip-confirmation --output "$output"
+          test -s "$output"
+          echo "D1_BACKUP=$output" >> "$GITHUB_ENV"
+
+      - name: Upload D1 backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-production-recovery-backup-${{ github.run_id }}
+          path: APP/cloud/ky-erp-api/database-backup/*.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Recover canonical accounting schema safely
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          canonical_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_documents') WHERE name='uuid';" --json)"
+          canonical_n="$(jq -r '.[0].results[0].n // 0' <<<"$canonical_json")"
+          if [ "$canonical_n" != "1" ]; then
+            exists_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='accounting_documents';" --json)"
+            exists_n="$(jq -r '.[0].results[0].n // 0' <<<"$exists_json")"
+            if [ "$exists_n" = "1" ]; then
+              rows_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM accounting_documents;" --json)"
+              rows_n="$(jq -r '.[0].results[0].n // -1' <<<"$rows_json")"
+              test "$rows_n" = "0" || { echo "GUVENLIK DURDURMASI: legacy accounting_documents dolu ($rows_n)" >&2; exit 1; }
+              npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "DROP TABLE accounting_documents;"
+            fi
+            sql="$(cat migrations/0034_accounting_document_core.sql)"
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$sql"
+          fi
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0035_accounting_intelligence_profiles.sql
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0036_accounting_document_archive_queue.sql
+
+      - name: Verify D1 File Hub and accounting schema
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          tables=(file_hub_connections file_hub_bindings file_hub_assets file_hub_locations file_hub_relations file_hub_revisions file_hub_events file_hub_agent_status accounting_documents accounting_document_lines accounting_document_taxes accounting_document_relations accounting_document_issues accounting_payment_plans accounting_ledger_entries accounting_extraction_profiles accounting_bank_import_batches accounting_bank_import_rows accounting_document_archive_jobs)
+          for table in "${tables[@]}"; do
+            out="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='$table';" --json)"
+            jq -e '.[0].results[0].n == 1' <<<"$out" >/dev/null || { echo "Eksik tablo: $table" >&2; exit 1; }
+          done
+          canonical="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_documents') WHERE name IN ('uuid','direction','provider_type','record_scope','payable_total');" --json)"
+          jq -e '.[0].results[0].n == 5' <<<"$canonical" >/dev/null
+          trigger="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name='trg_accounting_documents_enqueue_archive';" --json)"
+          jq -e '.[0].results[0].n == 1' <<<"$trigger" >/dev/null
+
+      - name: Deploy Worker to api.kyerp.net
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler deploy --config wrangler.jsonc
+
+      - name: Verify live API
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent https://api.kyerp.net/api/health | jq -e '.ok == true' >/dev/null; then break; fi
+            test "$attempt" -lt 30
+            sleep 2
+          done
+          curl --fail --silent https://api.kyerp.net/api/system/status | jq -e '.ok == true' >/dev/null
+
+      - name: Verify Pages project and domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          jq -e --arg p "$PAGES_PROJECT" '.success == true and .result.name == $p' <<<"$project" >/dev/null
+          test "$(jq -r '.result.production_branch // empty' <<<"$project")" = "$PROD_BRANCH"
+          domains="$(curl --fail --silent --show-error -H "$auth" "$base/domains")"
+          for domain in kyerp.net app.kyerp.net; do
+            jq -e --arg d "$domain" 'any(.result[]?; .name == $d)' <<<"$domains" >/dev/null
+          done
+
+      - name: Deploy frontend to Pages production
+        working-directory: APP/app/ky-erp-frontend
+        run: >-
+          npx --yes wrangler@4.118.0 pages deploy dist
+          --project-name "$PAGES_PROJECT"
+          --branch "$PROD_BRANCH"
+          --commit-hash "$GITHUB_SHA"
+          --commit-message "KY ERP production recovery $GITHUB_SHA"
+
+      - name: Verify live domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          for domain in kyerp.net app.kyerp.net; do
+            active=0
+            for attempt in $(seq 1 60); do
+              row="$(curl --fail --silent --show-error -H "$auth" "$base/domains/$domain")"
+              if [ "$(jq -r '.result.status // empty' <<<"$row")" = "active" ]; then active=1; break; fi
+              sleep 5
+            done
+            test "$active" -eq 1
+          done
+          for url in https://kyerp.net/ https://app.kyerp.net/; do
+            curl --fail --silent --show-error "$url" >/tmp/kyerp-page.html
+            test -s /tmp/kyerp-page.html
+          done
+
+      - name: Production complete
+        run: |
+          echo "KY ERP production recovery completed"
+          echo "https://api.kyerp.net"
+          echo "https://kyerp.net"
+          echo "https://app.kyerp.net"
