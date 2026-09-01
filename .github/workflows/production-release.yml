@@ -1,22 +1,242 @@
-name: KY ERP Canlı Yayın - Eski GitHub Yolu Kapalı
+name: KY ERP Canli Yayin - Hedefli D1 + Worker + Pages
 
 on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "RELEASES/kyerp-production-release.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: kyerp-production-release
+  cancel-in-progress: false
+
 jobs:
-  canonical-deploy-guard:
-    name: Canonical Windows deploy guard
+  release:
+    name: Preflight, D1 yedek, hedefli migration, Worker ve Pages
     runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DB_NAME: ky-erp-db
+      WORKER_DIR: APP/cloud/ky-erp-api
+      FRONTEND_DIR: APP/app/ky-erp-frontend
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+
     steps:
-      - name: Eski GitHub production yolunu engelle
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Release kaydini ve production branchini dogrula
         shell: bash
         run: |
           set -euo pipefail
-          echo "KY ERP production GitHub Actions yolu bilerek devre disidir."
-          echo "Neden: production D1 icin genel migration zinciri uygulanmaz; eski GitHub production yolu kullanilmaz."
-          echo "Canonical tek production yolu: repo kokundeki 'KY ERP CANLIYA YUKLE.bat'."
-          echo "Bu launcher: kaynak guncelleme -> admin@kyerp.net Resend kaniti -> tum preflight testleri -> hedefli D1 -> Worker -> Pages -> kyerp.net tanitim sitesi + app.kyerp.net ERP uygulamasi -> canli asset dogrulamasi sirasini uygular."
-          exit 1
+          test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
+          jq -e '.approved == true and .target == "production" and .sourceBranch == "codex/model-uretim-kontrol-merkezi-final"' RELEASES/kyerp-production-release.json >/dev/null
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1; }
+
+      - name: Worker paketleri ve tam test
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: File Hub agent syntax kontrolu
+        run: |
+          node --check tools/file-hub-agent/file-hub-agent.mjs
+          node --check tools/file-hub-agent/accounting-archive-worker.mjs
+
+      - name: Frontend paketleri, lint, test ve production build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Cloudflare hesabi ve zorunlu Worker secret adlarini dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler whoami
+          secret_json="$(npx wrangler secret list --config wrangler.jsonc --json)"
+          for name in FILE_HUB_AGENT_KEY AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT AZURE_DOCUMENT_INTELLIGENCE_KEY RESEND_API_KEY; do
+            jq -e --arg n "$name" 'any(.[]?; .name == $n)' <<<"$secret_json" >/dev/null || {
+              echo "Production Worker secret eksik: $name" >&2
+              exit 1
+            }
+          done
+
+      - name: Canli D1 tam yedegini al
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p database-backup
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          output="database-backup/ky-erp-db-before-filehub-accounting-${stamp}.sql"
+          npx wrangler d1 export "$DB_NAME" --remote --config wrangler.jsonc --skip-confirmation --output "$output"
+          test -s "$output"
+          echo "D1_BACKUP=$output" >> "$GITHUB_ENV"
+
+      - name: D1 yedegini artifact olarak sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-production-backup-${{ github.run_id }}
+          path: APP/cloud/ky-erp-api/database-backup/*.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Yalniz File Hub + Muhasebe hedefli migrationlarini uygula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          migrations=(
+            0028_file_hub_multistorage.sql
+            0029_file_hub_outgoing_team_links.sql
+            0030_file_hub_provider_defaults.sql
+            0031_file_hub_primary_location_failover.sql
+            0032_accounting_document_core.sql
+            0033_accounting_intelligence_profiles.sql
+            0034_accounting_document_archive_queue.sql
+          )
+          for migration in "${migrations[@]}"; do
+            test -f "migrations/$migration"
+            echo "Uygulaniyor: $migration"
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "migrations/$migration"
+          done
+
+      - name: Migration sonrasi File Hub + Muhasebe semasini dogrula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          tables=(
+            file_hub_connections file_hub_bindings file_hub_assets file_hub_locations
+            file_hub_relations file_hub_revisions file_hub_events file_hub_agent_status
+            accounting_documents accounting_document_lines accounting_document_taxes
+            accounting_document_relations accounting_document_issues accounting_payment_plans
+            accounting_ledger_entries accounting_extraction_profiles accounting_bank_import_batches
+            accounting_bank_import_rows accounting_document_archive_jobs
+          )
+          triggers=(trg_file_hub_outgoing_package_teammates trg_file_hub_primary_location_failover trg_accounting_documents_enqueue_archive)
+          for table in "${tables[@]}"; do
+            out="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='$table';" --json)"
+            jq -e '.[0].results[0].n == 1' <<<"$out" >/dev/null || { echo "Eksik tablo: $table" >&2; exit 1; }
+          done
+          for trigger in "${triggers[@]}"; do
+            out="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name='$trigger';" --json)"
+            jq -e '.[0].results[0].n == 1' <<<"$out" >/dev/null || { echo "Eksik trigger: $trigger" >&2; exit 1; }
+          done
+
+      - name: Worker'i api.kyerp.net production'a dagit
+        working-directory: APP/cloud/ky-erp-api
+        run: npx wrangler deploy --config wrangler.jsonc
+
+      - name: API canli saglik kontrolu
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent https://api.kyerp.net/api/health | jq -e '.ok == true' >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          curl --fail --silent https://api.kyerp.net/api/system/status | jq -e '.ok == true' >/dev/null
+
+      - name: Mevcut Pages projesini ve iki canonical domaini dogrula
+        id: pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            accounts="$(curl --fail --silent --show-error -H "$auth" https://api.cloudflare.com/client/v4/accounts)"
+            CLOUDFLARE_ACCOUNT_ID="$(jq -r '.result[0].id // empty' <<<"$accounts")"
+            test -n "$CLOUDFLARE_ACCOUNT_ID"
+            echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
+          fi
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          jq -e --arg p "$PAGES_PROJECT" '.success == true and .result.name == $p' <<<"$project" >/dev/null
+          production_branch="$(jq -r '.result.production_branch // empty' <<<"$project")"
+          test "$production_branch" = "$PROD_BRANCH"
+          for domain in kyerp.net app.kyerp.net; do
+            domains="$(curl --fail --silent --show-error -H "$auth" "$base/domains")"
+            if ! jq -e --arg d "$domain" 'any(.result[]?; .name == $d)' <<<"$domains" >/dev/null; then
+              created="$(curl --fail --silent --show-error -X POST -H "$auth" -H 'Content-Type: application/json' --data "{\"name\":\"$domain\"}" "$base/domains")"
+              jq -e '.success == true' <<<"$created" >/dev/null
+            fi
+          done
+
+      - name: Frontendi Cloudflare Pages production'a dagit
+        working-directory: APP/app/ky-erp-frontend
+        run: >-
+          npx --yes wrangler@4.118.0 pages deploy dist
+          --project-name "$PAGES_PROJECT"
+          --branch "$PROD_BRANCH"
+          --commit-hash "$GITHUB_SHA"
+          --commit-message "KY ERP File Hub + Muhasebe production $GITHUB_SHA"
+
+      - name: Pages domainleri ACTIVE olana kadar dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          for domain in kyerp.net app.kyerp.net; do
+            active=0
+            for attempt in $(seq 1 60); do
+              row="$(curl --fail --silent --show-error -H "$auth" "$base/domains/$domain")"
+              status="$(jq -r '.result.status // empty' <<<"$row")"
+              if [ "$status" = "active" ]; then active=1; break; fi
+              if [ "$status" = "failed" ] || [ "$status" = "error" ]; then jq '.' <<<"$row"; exit 1; fi
+              sleep 5
+            done
+            test "$active" -eq 1 || { echo "$domain ACTIVE olmadi" >&2; exit 1; }
+          done
+
+      - name: Canli site + uygulama HTTP kontrolu
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://kyerp.net/ https://app.kyerp.net/; do
+            ready=0
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --show-error "$url" >/tmp/kyerp-page.html && test -s /tmp/kyerp-page.html; then ready=1; break; fi
+              sleep 2
+            done
+            test "$ready" -eq 1
+          done
+
+      - name: Canli yayin sonucu
+        run: |
+          echo "KY ERP production yayini tamamlandi."
+          echo "API: https://api.kyerp.net"
+          echo "Site: https://kyerp.net"
+          echo "App: https://app.kyerp.net"
