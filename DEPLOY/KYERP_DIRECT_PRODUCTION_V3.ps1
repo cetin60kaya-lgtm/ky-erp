@@ -291,10 +291,11 @@ if ($statusResponse.StatusCode -ne 200) { Fail "Auth status HTTP 200 degil." }
 $statusJson = $statusResponse.Content | ConvertFrom-Json
 if ($statusJson.authVersion -ne $AUTH_VERSION) { Fail "Auth version beklenen degil: $($statusJson.authVersion)" }
 if ([string]$statusJson.endpoints.refresh -ne "/api/auth/refresh") { Fail "Auth refresh endpointi canonical degil." }
-if ([int]$statusJson.sessionPolicy.passwordOnlySeconds -ne 28800) { Fail "Password session 8 saat degil." }
+if ([bool]$statusJson.sessionPolicy.passwordOnlyEnabled -ne $false) { Fail "Password-only giris kapali degil." }
+if ([int]$statusJson.sessionPolicy.passwordOnlySeconds -ne 0) { Fail "Password-only session suresi 0 degil." }
 if ([int]$statusJson.sessionPolicy.mfaSeconds -ne 36000) { Fail "MFA session 10 saat degil." }
 if ([int]$statusJson.sessionPolicy.ownerRollingSeconds -ne 86400) { Fail "Owner rolling session 24 saat degil." }
-Write-Host "Auth: $AUTH_VERSION | parola 8h | MFA 10h | owner rolling 24h" -ForegroundColor Green
+Write-Host "Auth: $AUTH_VERSION | parola-only KAPALI | MFA 10h | owner rolling 24h" -ForegroundColor Green
 
 $refreshContractOk = $false
 try {
