@@ -14,11 +14,12 @@ test("Fetch Request.json parses preflight-safe text/plain JSON auth bodies", asy
   assert.deepEqual(await request.json(), { username: "test", password: "value" });
 });
 
-test("Worker exposes the canonical-v3 auth handshake and fixed session contract", () => {
+test("Worker exposes the canonical-v3 auth handshake and current MFA session contract", () => {
   assert.match(mainSource, /canonical-v3/);
   assert.match(mainSource, /\/api\/auth\/status/);
-  assert.match(mainSource, /28_800/);
-  assert.match(mainSource, /36_000/);
+  assert.match(mainSource, /PASSWORD_SESSION_SECONDS = 0/);
+  assert.match(mainSource, /MFA_SESSION_SECONDS = 36_000/);
+  assert.match(mainSource, /OWNER_ROLLING_SESSION_SECONDS = 86_400/);
   assert.match(mainSource, /X-KYERP-Auth-Version/);
 });
 
