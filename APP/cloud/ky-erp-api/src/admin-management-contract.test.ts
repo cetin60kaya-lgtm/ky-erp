@@ -36,6 +36,7 @@ test("system management permission is stripped from every non-owner auth respons
 
 test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => {
   const main = api("main.ts");
+  const guard = api("ik-pdks-guard.ts");
   const audit = api("ik-audit-readonly.ts");
   const app = frontend("AppV3.jsx");
   const seed = migration("0024_denetime_pdks_system_user.sql");
@@ -44,9 +45,18 @@ test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => 
   assert.match(main, /function auditRole/);
   assert.match(main, /auditPermissionRows/);
   assert.match(main, /moduleKey:\s*"IK"/);
-  assert.match(main, /if \(!path\.startsWith\("\/api\/ik\/audit\/"\)\)/);
+  assert.match(main, /const pdksRead = path\.startsWith\("\/api\/ik\/personnel-control\/"\)/);
   assert.match(main, /Denetim hesabı yalnız SGK'lı kart personelinin PDKS görünümünü okuyabilir/);
   assert.match(main, /DELETE FROM auth_user_module_permissions[\s\S]*UPPER\(module_key\)<>'IK'/);
+
+  assert.match(guard, /const safeStatic = new Set\(\[/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/profile"/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
+  assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
+  assert.match(guard, /strictAuditEmployeeIds/);
+  assert.match(guard, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
+  assert.match(guard, /if \(!safeStatic\.has\(path\) && !attendanceMatch\)/);
 
   assert.match(audit, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\) = 'VAR'/);
   assert.match(audit, /TRIM\(COALESCE\(s\.card_no,''\)\) <> ''/);
@@ -76,22 +86,15 @@ test("mapping UI uses implemented company profile and product catalog APIs", () 
   assert.doesNotMatch(source, /\/muhasebe\/urunler/);
 });
 
-test("storage management is provider-neutral File Hub and R2 remains preview/cache only", () => {
+test("storage management is R2-first and does not expose local watch workflow", () => {
   const backend = api("admin-storage-cloud.ts");
-  const hub = api("file-hub.ts");
-  const agent = api("file-hub-agent-public.ts");
   const ui = frontend("pages/admin/AdminStorageCenter.jsx");
-  assert.match(backend, /storageMode:"FILE_HUB"/);
-  assert.match(backend, /R2 yalnız preview\/cache katmanıdır/);
-  assert.match(hub, /GOOGLE_DRIVE/);
-  assert.match(hub, /ONEDRIVE/);
-  assert.match(hub, /LOCAL_FOLDER/);
-  assert.match(hub, /SHAREPOINT/);
-  assert.match(agent, /X-KYERP-Agent-Key/);
-  assert.match(ui, /Dosya Merkezi \/ File Hub/);
+  assert.match(backend, /R2:\/\/ky-erp-files/);
+  assert.match(backend, /archive-capabilities/);
+  assert.match(backend, /trash\//);
+  assert.match(ui, /Cloudflare R2/);
   assert.match(ui, /Google Drive/);
   assert.match(ui, /OneDrive/);
-  assert.match(ui, /firma tarafından seçilir/);
   assert.doesNotMatch(ui, /test-watch-path/);
   assert.doesNotMatch(ui, /import-watch-folder/);
 });
