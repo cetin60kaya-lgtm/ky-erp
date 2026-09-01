@@ -73,11 +73,9 @@ test("PDKS Hedef card bridge parses text, enforces strict people/lock and writes
 
 test("Web PDKS uses personnel-control operations, not legacy advanced endpoints for business operations", () => {
   const service = frontend("services/pdksApi.js");
-  assert.match(service, /personnel-control\/operations\/month/);
-  assert.match(service, /personnel-control\/operations\/leave/);
-  assert.match(service, /personnel-control\/operations\/advance/);
-  assert.match(service, /personnel-control\/operations\/payroll/);
-  assert.match(service, /personnel-control\/operations\/period-close/);
+  assert.match(service, /const OPS = "\/ik\/personnel-control\/operations"/);
+  for (const tail of ["month", "payroll", "leaves", "audit-logs", "leave", "advance", "period-close", "holidays"])
+    assert.match(service, new RegExp(`\\$\\{OPS\\}/${tail}`));
   assert.doesNotMatch(service, /\/ik\/advanced\//);
 });
 
