@@ -79,7 +79,7 @@ $HashFile = "$($Setup.FullName).sha256.txt"
 
 $BuildInfo = [ordered]@{
     product = 'KY PDKS'
-    version = '1.2.0'
+    version = '1.3.0'
     builtAt = (Get-Date).ToString('o')
     setup = $Setup.Name
     sha256 = $Hash
