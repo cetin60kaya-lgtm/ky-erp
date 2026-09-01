@@ -46,6 +46,7 @@ import { registerIsnetOutgoingRecoveryRoutes } from "./isnet-outgoing-recovery";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
+import { enforceIsnetTenant } from "./isnet-tenant-guard";
 import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 
@@ -246,6 +247,10 @@ shell.use("/api/*", async (c, next) => {
 
   await next();
 });
+
+// İşNet tek bir sağlayıcı modülü olabilir ancak tenant verisi global değildir.
+// Her İşNet isteği açık ana firma bağlamı taşır; non-owner kullanıcı başka tenant'a geçemez.
+shell.use("/api/isnet/*", enforceIsnetTenant);
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
 // izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
