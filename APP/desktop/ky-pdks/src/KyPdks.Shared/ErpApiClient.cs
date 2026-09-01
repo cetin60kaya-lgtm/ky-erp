@@ -23,7 +23,7 @@ public sealed class ErpApiClient : IDisposable
     {
         _http = new HttpClient { BaseAddress = new Uri(baseAddress.TrimEnd('/')), Timeout = TimeSpan.FromSeconds(30) };
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.3");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.3.0");
     }
 
     public async Task<AuthFlow> LoginAsync(string identity, string password, string deviceLabel, CancellationToken ct = default)
@@ -192,14 +192,14 @@ public sealed class ErpApiClient : IDisposable
                 userName = userName ?? "KY PDKS",
             };
 
-        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/ik/advanced/leave", body, token, ct);
+        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/ik/personnel-control/operations/leave", body, token, ct);
     }
 
     public async Task SaveAdvanceAsync(string token, CachedPerson person, string date, decimal amount, string note, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
         if (amount <= 0) throw new InvalidOperationException("Avans tutarı sıfırdan büyük olmalıdır.");
-        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/ik/advanced/finance-movement", new
+        using var responseDocument = await SendAsync(HttpMethod.Post, "/api/ik/personnel-control/operations/advance", new
         {
             employeeId = person.Id,
             date,
@@ -207,7 +207,7 @@ public sealed class ErpApiClient : IDisposable
             amount,
             hourOrDay = 0,
             paymentMethod = "Elden",
-            payrollEffect = "Bordrodan düş",
+            payrollEffect = "BORDRO_AZALTIR",
             note = note ?? "",
             status = "APPROVED",
         }, token, ct);
@@ -215,7 +215,7 @@ public sealed class ErpApiClient : IDisposable
 
     public async Task<ErpPeriodCloseResult> ClosePeriodAsync(string token, int year, int month, string reason, string userName, CancellationToken ct = default)
     {
-        using var document = await SendAsync(HttpMethod.Post, "/api/ik/advanced/close-check", new
+        using var document = await SendAsync(HttpMethod.Post, "/api/ik/personnel-control/operations/period-close", new
         {
             year,
             month,
@@ -229,7 +229,7 @@ public sealed class ErpApiClient : IDisposable
 
     public async Task<IReadOnlyList<ErpPayrollRow>> GetPayrollAsync(string token, int year, int month, CancellationToken ct = default)
     {
-        using var document = await SendAsync(HttpMethod.Get, $"/api/ik/advanced/payroll?year={year}&month={month}", null, token, ct);
+        using var document = await SendAsync(HttpMethod.Get, $"/api/ik/personnel-control/operations/payroll?year={year}&month={month}", null, token, ct);
         var data = Unwrap(document.RootElement);
         var lines = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("lines", out var node) && node.ValueKind == JsonValueKind.Array
             ? node : default;
