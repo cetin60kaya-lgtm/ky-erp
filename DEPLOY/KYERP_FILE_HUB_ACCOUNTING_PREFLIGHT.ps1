@@ -15,6 +15,12 @@ $MIGRATIONS = @(
   "0030_accounting_intelligence_profiles.sql",
   "0031_accounting_document_archive_queue.sql"
 )
+$REQUIRED_SCHEMA_OBJECTS = @(
+  "file_hub_connections","file_hub_bindings","file_hub_assets","file_hub_locations","file_hub_relations","file_hub_revisions","file_hub_events","file_hub_agent_status",
+  "accounting_documents","accounting_document_lines","accounting_document_taxes","accounting_document_relations","accounting_document_issues","accounting_payment_plans","accounting_ledger_entries",
+  "accounting_extraction_profiles","accounting_bank_import_batches","accounting_bank_import_rows","accounting_document_archive_jobs",
+  "trg_file_hub_outgoing_package_teammates","trg_file_hub_primary_location_failover","trg_accounting_documents_enqueue_archive"
+)
 
 function Fail([string]$Message) {
   Write-Host ""
@@ -73,9 +79,11 @@ Check "Worker dry-run build basarisiz."
 
 Write-Host ""
 Write-Host "[2/6] File Hub Windows Agent syntax" -ForegroundColor Cyan
-node --check (Join-Path $ROOT "tools\file-hub-agent\file-hub-agent.mjs")
+$agentMain = Join-Path $ROOT "tools\file-hub-agent\file-hub-agent.mjs"
+$archiveWorker = Join-Path $ROOT "tools\file-hub-agent\accounting-archive-worker.mjs"
+node --check $agentMain
 Check "file-hub-agent.mjs syntax hatasi."
-node --check (Join-Path $ROOT "tools\file-hub-agent\accounting-archive-worker.mjs")
+node --check $archiveWorker
 Check "accounting-archive-worker.mjs syntax hatasi."
 
 Write-Host ""
@@ -101,24 +109,21 @@ npx wrangler d1 execute $LOCAL_DB --local --config $LOCAL_CONFIG --persist-to $P
 Check "Izole D1 baseline kurulumu basarisiz."
 foreach ($name in $MIGRATIONS) {
   Write-Host "  -> $name"
-  npx wrangler d1 execute $LOCAL_DB --local --config $LOCAL_CONFIG --persist-to $PERSIST --file (Join-Path "migrations" $name)
+  $migrationPath = Join-Path "migrations" $name
+  npx wrangler d1 execute $LOCAL_DB --local --config $LOCAL_CONFIG --persist-to $PERSIST --file $migrationPath
   Check "Yerel migration provasi basarisiz: $name"
 }
 
-$requiredSql = @"
-SELECT name FROM sqlite_master
-WHERE type IN ('table','trigger') AND name IN (
-'file_hub_connections','file_hub_bindings','file_hub_assets','file_hub_locations','file_hub_relations','file_hub_revisions','file_hub_events','file_hub_agent_status',
-'accounting_documents','accounting_document_lines','accounting_document_taxes','accounting_document_relations','accounting_document_issues','accounting_payment_plans','accounting_ledger_entries',
-'accounting_extraction_profiles','accounting_bank_import_batches','accounting_bank_import_rows','accounting_document_archive_jobs',
-'trg_file_hub_outgoing_package_teammates','trg_file_hub_primary_location_failover','trg_accounting_documents_enqueue_archive'
-) ORDER BY name;
-"@
-$tempSql = Join-Path $env:TEMP "kyerp-file-hub-schema-check.sql"
-Set-Content -Path $tempSql -Value $requiredSql -Encoding UTF8
-npx wrangler d1 execute $LOCAL_DB --local --config $LOCAL_CONFIG --persist-to $PERSIST --file $tempSql
-Check "Yerel schema audit basarisiz."
-Remove-Item $tempSql -Force -ErrorAction SilentlyContinue
+$quoted = ($REQUIRED_SCHEMA_OBJECTS | ForEach-Object { "'$_'" }) -join ","
+$requiredSql = "SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ($quoted);"
+$schemaRaw = (& npx wrangler d1 execute $LOCAL_DB --local --config $LOCAL_CONFIG --persist-to $PERSIST --command $requiredSql --json 2>&1 | Out-String).Trim()
+Check "Yerel schema audit sorgusu basarisiz."
+try { $schemaJson = $schemaRaw | ConvertFrom-Json } catch { Fail "Yerel schema audit JSON okunamadi: $schemaRaw" }
+$schemaCount = [int]$schemaJson[0].results[0].n
+if ($schemaCount -ne $REQUIRED_SCHEMA_OBJECTS.Count) {
+  Fail "Yerel schema audit eksik. Beklenen=$($REQUIRED_SCHEMA_OBJECTS.Count) bulunan=$schemaCount"
+}
+Write-Host "Yerel schema audit: $schemaCount/$($REQUIRED_SCHEMA_OBJECTS.Count)" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "[5/6] Production config binding sozlesmesi" -ForegroundColor Cyan
