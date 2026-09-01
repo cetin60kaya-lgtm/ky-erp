@@ -68,13 +68,15 @@ test("final round: IsNet tenant, partial ve D1 guard sozlesmesi", () => {
   assert.match(guard, /ISNET_TENANT_REQUIRED/);
 });
 
-test("final round: clean release Worker'i secret put oncesi aktif eder", () => {
-  const release = read("DEPLOY/KYERP_FINAL_ROUND_RELEASE_20260901_V3.ps1");
+test("final round: clean V4 release Worker'i secret put oncesi aktif eder ve maskeli key penceresi kullanir", () => {
+  const release = read("DEPLOY/KYERP_FINAL_ROUND_RELEASE_20260901_V4.ps1");
+  const prompt = read("DEPLOY/KYERP_RESEND_KEY_PROMPT_GUI.ps1");
   const repair = read("DEPLOY/KYERP_RESEND_ACTIVE_SECRET_REPAIR.ps1");
   const direct = read("DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1");
   const bat = read("KY ERP FINAL TUR CANLIYA AL.bat");
 
   assert.match(release, /KYERP_DIRECT_PRODUCTION\.ps1/);
+  assert.match(release, /KYERP_RESEND_KEY_PROMPT_GUI\.ps1/);
   assert.match(release, /wrangler secret put RESEND_API_KEY/);
   assert.match(release, /api\.resend\.com\/emails/);
   assert.match(release, /worker activation deploy/);
@@ -83,6 +85,9 @@ test("final round: clean release Worker'i secret put oncesi aktif eder", () => {
     release.indexOf("wrangler deploy --config $CONFIG") < release.indexOf("wrangler secret put RESEND_API_KEY"),
     "latest Worker source must be deployed before standard secret put",
   );
+  assert.match(prompt, /UseSystemPasswordChar = \$true/);
+  assert.match(prompt, /StartsWith\("re_"\)/);
+  assert.match(repair, /KYERP_RESEND_KEY_PROMPT_GUI\.ps1/);
   assert.match(repair, /worker activation deploy/);
   assert.match(repair, /wrangler secret put \$SECRET_NAME/);
   assert.doesNotMatch(repair, /versions secret put/);
@@ -105,5 +110,5 @@ test("final round: clean release Worker'i secret put oncesi aktif eder", () => {
   assert.match(bat, /git pull --ff-only/);
   assert.match(bat, /chcp 65001/);
   assert.match(bat, /NO_COLOR=1/);
-  assert.match(bat, /KYERP_FINAL_ROUND_RELEASE_20260901_V3\.ps1/);
+  assert.match(bat, /KYERP_FINAL_ROUND_RELEASE_20260901_V4\.ps1/);
 });
