@@ -22,17 +22,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Read-only live D1 schema inspection
+      - name: Read-only live D1 accounting compatibility inspection
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
           npx wrangler whoami
-          echo '=== accounting_documents columns ==='
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(accounting_documents);" --json
-          echo '=== accounting_documents row count ==='
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM accounting_documents;" --json
-          echo '=== accounting_documents source references ==='
-          grep -RIn --exclude='*.map' --exclude-dir=node_modules 'accounting_documents' src migrations || true
-          echo '=== new file hub tables ==='
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name,type FROM sqlite_master WHERE name LIKE 'file_hub_%' ORDER BY type,name;" --json
+          tables=(
+            accounting_documents accounting_document_lines accounting_document_taxes
+            accounting_document_relations accounting_document_issues accounting_payment_plans
+            accounting_ledger_entries accounting_extraction_profiles accounting_bank_import_batches
+            accounting_bank_import_rows accounting_document_archive_jobs
+          )
+          for table in "${tables[@]}"; do
+            echo "=== $table existence ==="
+            npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name,type FROM sqlite_master WHERE type='table' AND name='$table';" --json
+            echo "=== $table columns ==="
+            npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info($table);" --json
+            exists="$(npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='$table';" --json | jq -r '.[0].results[0].n // 0')"
+            if [ "$exists" = "1" ]; then
+              echo "=== $table row count ==="
+              npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM $table;" --json
+            fi
+          done
