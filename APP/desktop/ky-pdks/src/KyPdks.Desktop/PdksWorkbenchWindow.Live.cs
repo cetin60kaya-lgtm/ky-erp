@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.IO;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -28,20 +26,18 @@ public partial class PdksWorkbenchWindow
         AccountPanel.IsVisibleChanged -= AccountPanel_IsVisibleChanged;
         AccountPanel.IsVisibleChanged += AccountPanel_IsVisibleChanged;
 
+        // Bu üç işlem mevcut handler'ın güvenli D1 sürümüne yönlendirilir.
         ProcessButton.Click -= ProcessPunchesButton_Click;
         ProcessButton.Click += SafeProcessPunchesButton_Click;
         CalculateButton.Click -= CalculateAttendanceButton_Click;
         CalculateButton.Click += SafeCalculateAttendanceButton_Click;
-        ClosePeriodButton.Click -= ClosePeriodWorkflowButton_Click;
-        ClosePeriodButton.Click += SafeClosePeriodButton_Click;
-        PayrollButton.Click -= ExportPayrollWorkflowButton_Click;
-        PayrollButton.Click += SafePayrollButton_Click;
         CorrectionSaveButton.Click -= SaveCorrectionButton_Click;
         CorrectionSaveButton.Click += SafeCorrectionButton_Click;
 
+        // Dönem, bordro, izin ve avans XAML'de doğrudan SingleData handler'larına bağlıdır.
+        // Burada ikinci/local handler eklenmez.
         _liveTimer.Start();
         ApplyWorkbenchRoleGuard();
-        _ = EnsureDefaultNormalShiftAsync();
         _ = RefreshServerScopeAsync();
     }
 
@@ -59,28 +55,14 @@ public partial class PdksWorkbenchWindow
     private async void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_busy || !IsLoaded) return;
-        await BusyAsync("Seçilen dönem yükleniyor...", async () =>
+        await BusyAsync("Seçilen D1 dönemi yükleniyor...", async () =>
         {
-            await RefreshAllAsync();
-            ShowAllDays();
             var (year, month) = SelectedPeriod();
-            StatusText.Text = $"{month:D2}/{year} dönemi yüklendi.";
+            if (!string.IsNullOrWhiteSpace(_token)) await RefreshErpAttendanceCacheAsync(year, month);
+            await RefreshSingleDataVisualAsync(year, month);
+            ShowAllDays();
+            StatusText.Text = $"{month:D2}/{year} · KY ERP D1 dönemi yüklendi.";
         });
-    }
-
-    private async Task EnsureDefaultNormalShiftAsync()
-    {
-        try
-        {
-            var normal = (await _operations.GetGroupsAsync(_lifetime.Token))
-                .FirstOrDefault(x => string.Equals(x.Id, "NORMAL", StringComparison.OrdinalIgnoreCase));
-            if (normal is null) return;
-            if (!string.Equals(normal.EntryTime, "08:30", StringComparison.Ordinal)
-                || !string.Equals(normal.ExitTime, "19:00", StringComparison.Ordinal)
-                || normal.LateTolerance != 0 || normal.EarlyTolerance != 0) return;
-            await _operations.SaveGroupAsync(normal with { LateTolerance = 5, EarlyTolerance = 10 }, "SYSTEM", _lifetime.Token);
-        }
-        catch { }
     }
 
     private async Task RefreshServerScopeAsync()
@@ -95,9 +77,9 @@ public partial class PdksWorkbenchWindow
         if (string.Equals(_scopeToken, _token, StringComparison.Ordinal)) return;
         try
         {
-            var profile = await PdksScopeClient.GetAsync(_token, _lifetime.Token);
+            var profile = await _erp.GetPdksProfileAsync(_token, _lifetime.Token);
             _scopeToken = _token;
-            _serverAudit = profile.Audit;
+            _serverAudit = profile.Audit || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase);
             if (_serverAudit)
             {
                 _role = "DENETIM";
@@ -124,6 +106,11 @@ public partial class PdksWorkbenchWindow
             PendingCountText.Text = snapshot.PendingCount.ToString(CultureInfo.InvariantCulture);
             AgentStateText.Text = snapshot.AgentOnline ? $"Agent: Çalışıyor · {snapshot.AgentMode}" : "Agent: Bağlantı yok";
             if (PunchGrid.Visibility == Visibility.Visible) PunchGrid.ItemsSource = snapshot.Rows;
+            if (!PeriodStateText.Text.StartsWith("KAPALI", StringComparison.OrdinalIgnoreCase))
+            {
+                PeriodStateText.Text = "D1";
+                PeriodStateText.Foreground = Brushes.SteelBlue;
+            }
             ApplyWorkbenchRoleGuard();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
@@ -159,36 +146,12 @@ public partial class PdksWorkbenchWindow
         }
     }
 
-    private async Task<IReadOnlyList<PunchRow>> PendingForPeriodAsync(int year, int month)
-    {
-        var prefix = $"{year:D4}-{month:D2}-";
-        return (await _store.GetPendingAsync(5000, _lifetime.Token))
-            .Where(x => x.WorkDate.StartsWith(prefix, StringComparison.Ordinal))
-            .ToArray();
-    }
-
-    private async Task<HashSet<string>> ClosedPeriodsWithPendingAsync()
-    {
-        var closed = (await _operations.GetPeriodsAsync(_lifetime.Token))
-            .Where(x => string.Equals(x.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
-            .Select(x => $"{x.Year:D4}-{x.Month:D2}-")
-            .ToHashSet(StringComparer.Ordinal);
-        if (closed.Count == 0) return new HashSet<string>(StringComparer.Ordinal);
-        var pending = await _store.GetPendingAsync(5000, _lifetime.Token);
-        return pending.Select(x => x.WorkDate.Length >= 8 ? x.WorkDate[..8] : "")
-            .Where(closed.Contains)
-            .ToHashSet(StringComparer.Ordinal);
-    }
-
     private async void SafeProcessPunchesButton_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        await BusyAsync("Bekleyen kartlar kontrol ediliyor...", async () =>
+        await BusyAsync("Bekleyen kartlar D1'e işleniyor...", async () =>
         {
             if (_serverAudit || !CanWrite) throw new InvalidOperationException("Kart işleme için yazma yetkisi gerekir.");
-            var locked = await ClosedPeriodsWithPendingAsync();
-            if (locked.Count > 0)
-                throw new InvalidOperationException($"Kapalı döneme ait bekleyen kart var: {string.Join(", ", locked.Select(x => x.TrimEnd('-')))}. Önce ilgili dönemi açıp kontrol edin.");
             await SyncPendingAsync();
         });
     }
@@ -196,86 +159,13 @@ public partial class PdksWorkbenchWindow
     private async void SafeCalculateAttendanceButton_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        await BusyAsync("Puantaj hesaplanıyor...", async () =>
+        await BusyAsync("D1 puantajı yenileniyor...", async () =>
         {
             var (year, month) = SelectedPeriod();
-            var period = (await _operations.GetPeriodsAsync(_lifetime.Token)).FirstOrDefault(x => x.Year == year && x.Month == month);
-            var closed = string.Equals(period?.Status, "CLOSED", StringComparison.OrdinalIgnoreCase);
-            if (!closed && !string.IsNullOrWhiteSpace(_token)) await RefreshErpAttendanceCacheAsync(year, month);
-            await RefreshAllAsync();
-            ShowAllDays();
-            StatusText.Text = closed
-                ? $"{month:D2}/{year} kapalı dönem sonucu görüntülendi; ERP'den yeniden hesaplanmadı."
-                : $"{month:D2}/{year} puantajı hesaplandı · {_timesheet.Count} personel.";
-        });
-    }
-
-    private async void SafeClosePeriodButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_busy) return;
-        await BusyAsync("Dönem kapanış kontrolü yapılıyor...", async () =>
-        {
-            if (_serverAudit || !CanWrite) throw new InvalidOperationException("Dönem kapatma için yazma yetkisi gerekir.");
-            var (year, month) = SelectedPeriod();
-            var periodEnd = new DateTime(year, month, DateTime.DaysInMonth(year, month));
-            if (periodEnd > DateTime.Today)
-                throw new InvalidOperationException($"{month:D2}/{year} dönemi henüz tamamlanmadı. Son gün {periodEnd:dd.MM.yyyy}.");
-
-            var pending = await PendingForPeriodAsync(year, month);
-            if (pending.Count > 0)
-                throw new InvalidOperationException($"Dönem kapatılmadı: bu aya ait {pending.Count} bekleyen/hatalı kart önce ERP'ye işlenmelidir.");
-
             if (!string.IsNullOrWhiteSpace(_token)) await RefreshErpAttendanceCacheAsync(year, month);
-            _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
-            var endText = periodEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            var missing = _attendanceRows.Where(x => string.CompareOrdinal(x.Date, endText) <= 0 && IsMissing(x)).ToArray();
-            if (missing.Length > 0)
-            {
-                ShowAttendanceGrid(missing, "Dönem Kapanamaz", $"Önce {missing.Length} kontrol kaydını düzeltin.");
-                throw new InvalidOperationException($"Dönem kapatılmadı: {missing.Length} eksik/kart yok kaydı var.");
-            }
-
-            var backup = await _store.BackupAsync(_lifetime.Token);
-            await _operations.SetPeriodStatusAsync(year, month, "CLOSED", $"Kontrollü kapanış · yedek {Path.GetFileName(backup)}", _userName, _lifetime.Token);
-            await RefreshAllAsync();
-            StatusText.Text = $"{month:D2}/{year} dönemi kapatıldı · kapanış yedeği alındı.";
-        });
-    }
-
-    private async void SafePayrollButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_busy) return;
-        await BusyAsync("Bordro aktarımı kontrol ediliyor...", async () =>
-        {
-            if (_serverAudit || !CanWrite) throw new InvalidOperationException("Bordro aktarımı için yazma yetkisi gerekir.");
-            var (year, month) = SelectedPeriod();
-            var period = (await _operations.GetPeriodsAsync(_lifetime.Token)).FirstOrDefault(x => x.Year == year && x.Month == month);
-            if (!string.Equals(period?.Status, "CLOSED", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Bordro aktarımı için önce dönemi eksiksiz kontrol edip kapatın.");
-            var pending = await PendingForPeriodAsync(year, month);
-            if (pending.Count > 0)
-                throw new InvalidOperationException($"Bordro üretilmedi: kapalı döneme sonradan gelen {pending.Count} kart var. Dönemi açıp kontrol edin.");
-
-            _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
-            _timesheet = AttendanceStore.BuildTimesheet(_attendanceRows);
-            _advances = await _operations.GetAdvancesAsync(_lifetime.Token);
-            var prefix = $"{year:D4}-{month:D2}-";
-            var advances = _advances.Where(x => x.Date.StartsWith(prefix, StringComparison.Ordinal))
-                .GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
-            var reportDir = Path.Combine(_paths.Root, "Reports");
-            Directory.CreateDirectory(reportDir);
-            var path = Path.Combine(reportDir, $"KY-PDKS-BORDRO-{year:D4}-{month:D2}-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
-            var lines = new List<string> { "Kod;Personel;Bolum;Kart;Calisilan;YillikIzin;Izin;EksikBasim;KartYok;GecDk;ErkenDk;FazlaDk;Avans" };
-            foreach (var row in _timesheet)
-            {
-                lines.Add(CsvLine(row.PersonnelCode, row.FullName, row.Department, row.CardNo, row.WorkedDays, row.AnnualLeaveDays,
-                    row.LeaveDays, row.MissingPunchDays, row.NoPunchDays, row.LateMinutes, row.EarlyMinutes, row.OvertimeMinutes,
-                    advances.TryGetValue(row.EmployeeId, out var amount) ? amount.ToString("0.00", CultureInfo.InvariantCulture) : "0.00"));
-            }
-            await File.WriteAllLinesAsync(path, lines, new UTF8Encoding(true), _lifetime.Token);
-            await _operations.AuditAsync("PAYROLL_EXPORT", $"{year:D4}-{month:D2}", path, _userName, _lifetime.Token);
-            StatusText.Text = $"Bordro aktarımı hazır: {path}";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            await RefreshSingleDataVisualAsync(year, month);
+            ShowAllDays();
+            StatusText.Text = $"{month:D2}/{year} D1 puantajı yenilendi · {_timesheet.Count} personel.";
         });
     }
 
@@ -287,10 +177,9 @@ public partial class PdksWorkbenchWindow
             StatusText.Text = "Düzeltme için personel ve tarih seçin.";
             return;
         }
-        await BusyAsync("Gün düzeltmesi ERP'ye kaydediliyor...", async () =>
+        await BusyAsync("Gün düzeltmesi D1'e kaydediliyor...", async () =>
         {
             if (_serverAudit || !CanWrite) throw new InvalidOperationException("Düzeltme için yazma yetkisi gerekir.");
-            await EnsurePeriodOpenAsync(date);
             var status = SelectedTag(CorrectionStatusCombo);
             var working = status is "CALISTI" or "EKSIK_BASIM";
             var entry = working ? NormalizeOptionalTime(CorrectionInBox.Text) : "";
@@ -300,11 +189,31 @@ public partial class PdksWorkbenchWindow
             var overtime = string.IsNullOrEmpty(exit) ? 0 : Math.Max(0, Minutes(exit) - Minutes("19:00"));
             await _erp.SaveDayOverrideAsync(_token, person, date.ToString("yyyy-MM-dd"), status, entry, exit, late, early, overtime,
                 status == "EKSIK_BASIM", CorrectionNoteBox.Text, _lifetime.Token);
-            await _operations.AuditAsync("DAY_OVERRIDE", person.Id, $"{date:yyyy-MM-dd} {entry}-{exit} {status}", _userName, _lifetime.Token);
             await RefreshOnePersonMonthAsync(person, date.Year, date.Month);
-            await RefreshAllAsync();
-            StatusText.Text = $"{person.FullName} · {date:dd.MM.yyyy} düzeltildi.";
+            await RefreshSingleDataVisualAsync(date.Year, date.Month);
+            StatusText.Text = $"{person.FullName} · {date:dd.MM.yyyy} D1 üzerinde düzeltildi.";
         });
+    }
+
+    private async Task RefreshSingleDataVisualAsync(int year, int month)
+    {
+        _people = await _store.GetPeopleAsync(_lifetime.Token);
+        BindPeople();
+        _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
+        _timesheet = AttendanceStore.BuildTimesheet(_attendanceRows);
+        AttendanceGrid.ItemsSource = _attendanceRows.OrderByDescending(x => x.Date).ThenBy(x => x.FullName).ToArray();
+        TimesheetGrid.ItemsSource = _timesheet;
+        var snapshot = await _store.SnapshotAsync(_lifetime.Token);
+        PunchGrid.ItemsSource = snapshot.Rows;
+        PunchCountText.Text = snapshot.TodayCount.ToString(CultureInfo.InvariantCulture);
+        PendingCountText.Text = snapshot.PendingCount.ToString(CultureInfo.InvariantCulture);
+        AgentStateText.Text = snapshot.AgentOnline ? $"Agent: Çalışıyor · {snapshot.AgentMode}" : "Agent: Bağlantı yok";
+        var today = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var relevant = _attendanceRows.Where(x => string.CompareOrdinal(x.Date, today) <= 0).ToArray();
+        MissingCountText.Text = relevant.Count(IsMissing).ToString(CultureInfo.InvariantCulture);
+        WorkedCountText.Text = relevant.Count(x => x.Status is "CALISTI" or "EKSIK_BASIM").ToString(CultureInfo.InvariantCulture);
+        PeriodStateText.Text = "D1";
+        PeriodStateText.Foreground = Brushes.SteelBlue;
     }
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
@@ -314,7 +223,7 @@ public partial class PdksWorkbenchWindow
         {
             var child = VisualTreeHelper.GetChild(root, i);
             if (child is T typed) yield return typed;
-            foreach (var descendant in FindVisualChildren<T>(child)) yield return descendant;
+            foreach (var nested in FindVisualChildren<T>(child)) yield return nested;
         }
     }
 }
