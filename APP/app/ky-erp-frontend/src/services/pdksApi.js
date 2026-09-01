@@ -30,6 +30,26 @@ export async function importPdksTimeEvents(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/time-events/import", payload));
 }
 
+export async function getPdksMasters(params = {}) {
+  return unwrap(await apiGet("/ik/personnel-control/pdks-masters", params));
+}
+
+export async function savePdksWorkGroup(payload = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/work-groups", payload));
+}
+
+export async function assignPdksWorkGroup(employeeId, groupId) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/work-group`, { groupId }));
+}
+
+export async function savePdksService(payload = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/services", payload));
+}
+
+export async function assignPdksService(employeeId, serviceId) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { serviceId }));
+}
+
 export async function getPdksAdvancedMonth(params = {}) {
   return unwrap(await apiGet("/ik/advanced/month", params));
 }
