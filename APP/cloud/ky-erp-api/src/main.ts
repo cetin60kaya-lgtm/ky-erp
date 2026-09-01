@@ -34,6 +34,7 @@ import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkAuditReadonlyRoutes } from "./ik-audit-readonly";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
+import { registerIkPdksMasterRoutes } from "./ik-pdks-master";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
@@ -185,6 +186,7 @@ registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
 registerIkAuditReadonlyRoutes(app);
 registerIkPersonnelControlRoutes(app);
+registerIkPdksMasterRoutes(app);
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
@@ -231,7 +233,8 @@ shell.use("/api/*", async (c, next) => {
 
   if (auditRole(authenticated.role)) {
     const method = String(c.req.method || "GET").toUpperCase();
-    if (!path.startsWith("/api/ik/audit/")) {
+    const pdksRead = path.startsWith("/api/ik/personnel-control/") && ["GET", "HEAD"].includes(method);
+    if (!path.startsWith("/api/ik/audit/") && !pdksRead) {
       return c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
     }
     if (!["GET", "HEAD"].includes(method)) {
