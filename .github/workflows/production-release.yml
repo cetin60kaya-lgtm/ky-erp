@@ -82,9 +82,9 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler whoami
-          secret_json="$(npx wrangler secret list --config wrangler.jsonc --json)"
+          secret_list="$(npx wrangler secret list --config wrangler.jsonc 2>&1)"
           for name in FILE_HUB_AGENT_KEY AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT AZURE_DOCUMENT_INTELLIGENCE_KEY RESEND_API_KEY; do
-            jq -e --arg n "$name" 'any(.[]?; .name == $n)' <<<"$secret_json" >/dev/null || {
+            grep -Fq "$name" <<<"$secret_list" || {
               echo "Production Worker secret eksik: $name" >&2
               exit 1
             }
