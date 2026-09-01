@@ -109,18 +109,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          migrations=(
-            0030_file_hub_multistorage.sql
-            0031_file_hub_outgoing_team_links.sql
-            0032_file_hub_provider_defaults.sql
-            0033_file_hub_primary_location_failover.sql
-            0034_accounting_document_core.sql
-            0035_accounting_intelligence_profiles.sql
-            0036_accounting_document_archive_queue.sql
-          )
-          for migration in "${migrations[@]}"; do
+
+          for migration in 0030_file_hub_multistorage.sql 0031_file_hub_outgoing_team_links.sql 0032_file_hub_provider_defaults.sql 0033_file_hub_primary_location_failover.sql; do
             test -f "migrations/$migration"
-            echo "Uygulaniyor: $migration"
+            echo "Uygulaniyor/idempotent: $migration"
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "migrations/$migration"
+          done
+
+          echo "0034 accounting_documents canli sema uyumlulugu kontrol ediliyor..."
+          canonical="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_documents') WHERE name='uuid';" --json)"
+          canonical_n="$(jq -r '.[0].results[0].n // 0' <<<"$canonical")"
+          if [ "$canonical_n" = "1" ]; then
+            echo "0034 canonical accounting_documents zaten mevcut; tekrar uygulanmiyor."
+          else
+            legacy_count_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM accounting_documents;" --json)"
+            legacy_count="$(jq -r '.[0].results[0].n // -1' <<<"$legacy_count_json")"
+            if [ "$legacy_count" != "0" ]; then
+              echo "GUVENLIK DURDURMASI: Eski accounting_documents tablosunda $legacy_count kayit var; otomatik donusum yapilmadi." >&2
+              exit 1
+            fi
+            echo "Eski accounting_documents tablosu bos ve yeni Worker tarafindan kullanilmiyor; canonical sema icin bos legacy tablo kaldiriliyor."
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "DROP TABLE accounting_documents;"
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0034_accounting_document_core.sql
+          fi
+
+          for migration in 0035_accounting_intelligence_profiles.sql 0036_accounting_document_archive_queue.sql; do
+            test -f "migrations/$migration"
+            echo "Uygulaniyor/idempotent: $migration"
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "migrations/$migration"
           done
 
@@ -146,6 +161,8 @@ jobs:
             out="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name='$trigger';" --json)"
             jq -e '.[0].results[0].n == 1' <<<"$out" >/dev/null || { echo "Eksik trigger: $trigger" >&2; exit 1; }
           done
+          canonical="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_documents') WHERE name IN ('uuid','direction','provider_type','record_scope','payable_total');" --json)"
+          jq -e '.[0].results[0].n == 5' <<<"$canonical" >/dev/null || { echo "accounting_documents canonical kolonlari eksik" >&2; exit 1; }
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
