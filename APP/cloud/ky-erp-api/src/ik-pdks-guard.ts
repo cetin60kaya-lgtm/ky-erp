@@ -1,0 +1,154 @@
+import type { Context, Hono } from "hono";
+import { getAuthenticatedUser } from "./auth-cloud";
+
+type Bindings = Cloudflare.Env;
+type Variables = { requestId: string };
+type AppEnv = { Bindings: Bindings; Variables: Variables };
+type Row = Record<string, any>;
+
+const DEFAULT_COMPANY = "mecit-hakan";
+const text = (value: unknown) => value === undefined || value === null ? "" : String(value).trim();
+const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
+
+function minutesOf(value: unknown) {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(text(value).slice(0, 5));
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+async function companyOf(c: Context<AppEnv>) {
+  const user = await getAuthenticatedUser(c);
+  if (!user) return DEFAULT_COMPANY;
+  return text(c.req.header("X-KYERP-Tenant-Slug") || user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY).toLocaleLowerCase("tr-TR");
+}
+
+function periodOf(date: unknown) {
+  const value = text(date).slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
+  return match ? { year: Number(match[1]), month: Number(match[2]) } : null;
+}
+
+async function lockedPeriods(c: Context<AppEnv>, company: string, dates: string[]) {
+  const periods = [...new Map(dates.map((date) => periodOf(date)).filter(Boolean).map((item: any) => [`${item.year}-${item.month}`, item])).values()] as Array<{year:number;month:number}>;
+  const locked: string[] = [];
+  for (const period of periods) {
+    try {
+      const row = await c.env.DB.prepare("SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1")
+        .bind(company, period.year, period.month).first<Row>();
+      if (Number(row?.is_locked || 0) !== 0) locked.push(`${period.year}-${String(period.month).padStart(2, "0")}`);
+    } catch {
+      // Kapanış tablosu henüz yoksa dönem açık kabul edilir.
+    }
+  }
+  return locked;
+}
+
+async function scheduleOf(c: Context<AppEnv>, company: string, employeeId: string) {
+  const fallback = { code: "NORMAL", name: "Normal Mesai", entryTime: "08:30", exitTime: "19:00", lateTolerance: 5, earlyTolerance: 10 };
+  try {
+    const row = await c.env.DB.prepare(`SELECT g.code,g.name,g.entry_time AS entryTime,g.exit_time AS exitTime,
+      g.late_tolerance AS lateTolerance,g.early_tolerance AS earlyTolerance
+      FROM ik_pdks_employee_groups a
+      JOIN ik_pdks_work_groups g ON g.id=a.group_id AND g.main_company_id=a.main_company_id
+      WHERE a.main_company_id=? AND a.employee_id=? AND g.active=1 LIMIT 1`)
+      .bind(company, employeeId).first<Row>();
+    if (!row) return fallback;
+    return {
+      code: text(row.code) || fallback.code,
+      name: text(row.name) || fallback.name,
+      entryTime: text(row.entryTime) || fallback.entryTime,
+      exitTime: text(row.exitTime) || fallback.exitTime,
+      lateTolerance: Math.max(0, number(row.lateTolerance)),
+      earlyTolerance: Math.max(0, number(row.earlyTolerance)),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function recalcDay(day: Row, schedule: Row) {
+  const working = ["CALISTI", "EKSIK_BASIM"].includes(text(day.status).toUpperCase());
+  if (!working) return { ...day, lateMinutes: 0, earlyMinutes: 0, overtimeMinutes: 0 };
+  const entry = minutesOf(day.entry);
+  const exit = minutesOf(day.exit);
+  const baseIn = minutesOf(schedule.entryTime) ?? 510;
+  const baseOut = minutesOf(schedule.exitTime) ?? 1140;
+  const lateTolerance = Math.max(0, number(schedule.lateTolerance));
+  const earlyTolerance = Math.max(0, number(schedule.earlyTolerance));
+  return {
+    ...day,
+    lateMinutes: entry === null ? 0 : Math.max(0, entry - baseIn - lateTolerance),
+    earlyMinutes: exit === null ? 0 : Math.max(0, baseOut - exit - earlyTolerance),
+    overtimeMinutes: exit === null ? 0 : Math.max(0, exit - baseOut),
+  };
+}
+
+function summaryOf(days: Row[]) {
+  return days.reduce((acc, day) => {
+    const status = text(day.status).toUpperCase();
+    if (status === "CALISTI" || status === "EKSIK_BASIM") acc.workedDays += 1;
+    if (status === "YILLIK_IZIN") acc.annualLeaveDays += 1;
+    if (status === "IZIN") acc.leaveDays += 1;
+    if (status === "KART_YOK") acc.noPunchDays += 1;
+    if (status === "EKSIK_BASIM") acc.missingPunchDays += 1;
+    if (number(day.lateMinutes) > 0) acc.lateDays += 1;
+    acc.lateMinutes += number(day.lateMinutes);
+    acc.earlyMinutes += number(day.earlyMinutes);
+    acc.overtimeMinutes += number(day.overtimeMinutes);
+    return acc;
+  }, { workedDays: 0, annualLeaveDays: 0, leaveDays: 0, noPunchDays: 0, missingPunchDays: 0, lateDays: 0, lateMinutes: 0, earlyMinutes: 0, overtimeMinutes: 0 });
+}
+
+export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
+  // D1 dönem kilidi tüm PDKS yazma yollarında tek otoritedir.
+  app.use("/api/ik/personnel-control/*", async (c, next) => {
+    if (String(c.req.method).toUpperCase() !== "POST") return next();
+    const path = c.req.path;
+    const relevant = path.endsWith("/time-event") || path.endsWith("/day-override") || path.endsWith("/time-events/import");
+    if (!relevant) return next();
+
+    let body: Row = {};
+    try {
+      const clone = c.req.raw.clone();
+      const parsed = await clone.json();
+      body = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Row : {};
+    } catch {}
+
+    const dates = path.endsWith("/time-events/import")
+      ? (Array.isArray(body.rows) ? body.rows.map((row: Row) => text(row.workDate || row.date)).filter(Boolean) : [])
+      : [text(body.workDate || body.date)].filter(Boolean);
+    const company = await companyOf(c);
+    const locked = await lockedPeriods(c, company, dates);
+    if (locked.length) {
+      return c.json({ ok: false, error: { code: "PDKS_PERIOD_LOCKED", message: `Dönem kilitli: ${locked.join(", ")}. Önce KY ERP ay sonu ekranından dönemi açın.` } }, 409);
+    }
+    return next();
+  });
+
+  // Attendance cevabındaki süre hesabı personelin D1 vardiya atamasına göre normalize edilir.
+  app.use("/api/ik/personnel-control/people/:employeeId/attendance", async (c, next) => {
+    if (String(c.req.method).toUpperCase() !== "GET") return next();
+    await next();
+    if (!c.res.ok) return;
+    let payload: any;
+    try { payload = await c.res.clone().json(); } catch { return; }
+    const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+    if (!data || !Array.isArray(data.days)) return;
+
+    const company = await companyOf(c);
+    const employeeId = text(c.req.param("employeeId"));
+    const schedule = await scheduleOf(c, company, employeeId);
+    const days = data.days.map((day: Row) => recalcDay(day, schedule));
+    const nextData = {
+      ...data,
+      expectedIn: schedule.entryTime,
+      expectedOut: schedule.exitTime,
+      workGroup: schedule,
+      days,
+      summary: summaryOf(days),
+    };
+    const nextPayload = payload?.data && typeof payload.data === "object" ? { ...payload, data: nextData } : nextData;
+    const headers = new Headers(c.res.headers);
+    headers.delete("Content-Length");
+    c.res = new Response(JSON.stringify(nextPayload), { status: c.res.status, headers });
+  });
+}
