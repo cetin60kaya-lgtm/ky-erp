@@ -1,5 +1,8 @@
 @echo off
 setlocal EnableExtensions
+chcp 65001 >nul
+set "NO_COLOR=1"
+set "FORCE_COLOR=0"
 title KY ERP - FINAL TUR CANLIYA AL
 
 set "ROOT=D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ"
@@ -41,21 +44,23 @@ for /f "delims=" %%L in ('git status --porcelain --untracked-files=no') do (
 echo [OK] Tracked kaynak temiz.
 
 echo [2/3] Production branch guncelleniyor...
-git fetch origin "%BRANCH%"
+git fetch origin "%BRANCH%" >nul 2>&1
 if errorlevel 1 (
   echo [HATA] git fetch basarisiz.
   goto :FAIL
 )
-git checkout "%BRANCH%"
+git checkout "%BRANCH%" >nul 2>&1
 if errorlevel 1 (
   echo [HATA] Production branch acilamadi.
   goto :FAIL
 )
-git pull --ff-only origin "%BRANCH%"
+git pull --ff-only origin "%BRANCH%" >nul 2>&1
 if errorlevel 1 (
   echo [HATA] Production branch ff-only guncellenemedi.
   goto :FAIL
 )
+for /f "delims=" %%S in ('git rev-parse HEAD') do set "HEAD_SHA=%%S"
+echo [OK] Production HEAD: %HEAD_SHA%
 
 if not exist "%SCRIPT%" (
   echo [HATA] Pull sonrasi final release scripti bulunamadi: %SCRIPT%
