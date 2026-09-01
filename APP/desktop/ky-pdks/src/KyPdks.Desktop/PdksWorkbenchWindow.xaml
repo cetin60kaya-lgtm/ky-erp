@@ -20,7 +20,7 @@
      </Border>
      <StackPanel>
       <TextBlock Text="KY PDKS · İşlem Merkezi" FontSize="23" FontWeight="Bold" Foreground="{StaticResource KyDark}"/>
-      <TextBlock Text="Bilgi aktar → kartları işle → eksikleri düzelt → puantaj → dönem → bordro" Foreground="#708196" FontSize="12"/>
+      <TextBlock Text="Hedef uyumlu kart akışı · tek KY ERP D1 data · Web + Windows" Foreground="#708196" FontSize="12"/>
      </StackPanel>
     </StackPanel>
     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -33,6 +33,7 @@
      <Border Padding="9,6" CornerRadius="11" Background="#F1F6FC" BorderBrush="#CAD8E7" BorderThickness="1" Margin="0,0,5,0">
       <TextBlock x:Name="ErpStateText" Text="ERP: Oturum yok" Foreground="#31587E" FontWeight="SemiBold"/>
      </Border>
+     <Button Content="DENETİM TEMP" Click="ExportAuditTempButton_Click" Margin="0,0,5,0"/>
      <Button Content="Detay Yönetim" Click="OpenAdministrationButton_Click"/>
     </StackPanel>
    </Grid>
@@ -42,7 +43,7 @@
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <TextBlock Text="GÜNLÜK İŞ AKIŞI" FontSize="11" FontWeight="Bold" Foreground="#64788F" Margin="4,0,0,5"/>
-    <UniformGrid Grid.Row="1" Columns="8">
+    <UniformGrid Grid.Row="1" Columns="9">
      <Button x:Name="ImportButton" Click="ImportCardsButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
       <StackPanel><TextBlock Text="1  BİLGİ AKTAR" FontWeight="Bold"/><TextBlock Text="Kart dosyası al" FontSize="11" Foreground="#718399"/></StackPanel>
      </Button>
@@ -53,19 +54,22 @@
       <StackPanel><TextBlock Text="3  KARTLARI İŞLE" FontWeight="Bold"/><TextBlock Text="ERP'ye senkronla" FontSize="11" Foreground="#41688E"/></StackPanel>
      </Button>
      <Button x:Name="CalculateButton" Click="CalculateAttendanceButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
-      <StackPanel><TextBlock Text="4  PUANTAJ HESAPLA" FontWeight="Bold"/><TextBlock Text="Ayı yeniden hesapla" FontSize="11" Foreground="#718399"/></StackPanel>
+      <StackPanel><TextBlock Text="4  PUANTAJ" FontWeight="Bold"/><TextBlock Text="D1 ayını yenile" FontSize="11" Foreground="#718399"/></StackPanel>
      </Button>
      <Button x:Name="MissingButton" Click="FindMissingButton_Click" Margin="4" Padding="8" Background="#FFF7E9" BorderBrush="#E7C683">
-      <StackPanel><TextBlock Text="5  EKSİKLERİ BUL" FontWeight="Bold"/><TextBlock Text="Kart yok / tek basım" FontSize="11" Foreground="#8A6318"/></StackPanel>
+      <StackPanel><TextBlock Text="5  EKSİKLER" FontWeight="Bold"/><TextBlock Text="Kart yok / tek basım" FontSize="11" Foreground="#8A6318"/></StackPanel>
      </Button>
-     <Button x:Name="ClosePeriodButton" Click="ClosePeriodWorkflowButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
-      <StackPanel><TextBlock Text="6  DÖNEMİ KAPAT" FontWeight="Bold"/><TextBlock Text="Kontrol sonrası kilitle" FontSize="11" Foreground="#718399"/></StackPanel>
+     <Button x:Name="ClosePeriodButton" Click="ClosePeriodSingleDataButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
+      <StackPanel><TextBlock Text="6  DÖNEM KAPAT" FontWeight="Bold"/><TextBlock Text="D1 kontrollü kilit" FontSize="11" Foreground="#718399"/></StackPanel>
      </Button>
-     <Button x:Name="PayrollButton" Click="ExportPayrollWorkflowButton_Click" Margin="4" Padding="8" Background="#EEF9F1" BorderBrush="#A9D5B5">
-      <StackPanel><TextBlock Text="7  BORDRO AKTAR" FontWeight="Bold"/><TextBlock Text="Puantaj + avans CSV" FontSize="11" Foreground="#3D754A"/></StackPanel>
+     <Button x:Name="PayrollButton" Click="ExportPayrollSingleDataButton_Click" Margin="4" Padding="8" Background="#EEF9F1" BorderBrush="#A9D5B5">
+      <StackPanel><TextBlock Text="7  BORDRO" FontWeight="Bold"/><TextBlock Text="D1 bordro çıktısı" FontSize="11" Foreground="#3D754A"/></StackPanel>
      </Button>
      <Button x:Name="BackupButton" Click="BackupWorkflowButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
-      <StackPanel><TextBlock Text="8  YEDEK AL" FontWeight="Bold"/><TextBlock Text="Yerel DB güvenliği" FontSize="11" Foreground="#718399"/></StackPanel>
+      <StackPanel><TextBlock Text="8  YEDEK" FontWeight="Bold"/><TextBlock Text="Yerel tampon DB" FontSize="11" Foreground="#718399"/></StackPanel>
+     </Button>
+     <Button Click="ExportAuditTempButton_Click" Margin="4" Padding="8" Background="#F5F0FF" BorderBrush="#C9B8E8">
+      <StackPanel><TextBlock Text="9  DENETİM TEMP" FontWeight="Bold"/><TextBlock Text="Yıl yıl D1 snapshot" FontSize="11" Foreground="#68508C"/></StackPanel>
      </Button>
     </UniformGrid>
    </Grid>
@@ -122,7 +126,7 @@
        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><DatePicker x:Name="LeaveStartPicker"/><DatePicker Grid.Column="1" x:Name="LeaveEndPicker"/></Grid>
        <ComboBox x:Name="LeaveTypeCombo"><ComboBoxItem Content="Yıllık İzin" Tag="YILLIK_IZIN"/><ComboBoxItem Content="İzin" Tag="IZIN"/></ComboBox>
        <TextBox x:Name="LeaveNoteBox" Text="PDKS izin"/>
-       <Button x:Name="LeaveSaveButton" Content="İzni Kaydet" Click="SaveLeaveButton_Click"/>
+       <Button x:Name="LeaveSaveButton" Content="İzni D1'e Kaydet" Click="SaveLeaveSingleDataButton_Click"/>
       </StackPanel>
      </Expander>
 
@@ -132,7 +136,7 @@
        <DatePicker x:Name="AdvanceDatePicker"/>
        <TextBox x:Name="AdvanceAmountBox" ToolTip="Tutar"/>
        <TextBox x:Name="AdvanceNoteBox" Text="PDKS avans"/>
-       <Button x:Name="AdvanceSaveButton" Content="Avansı Kaydet" Click="SaveAdvanceButton_Click"/>
+       <Button x:Name="AdvanceSaveButton" Content="Avansı D1'e Kaydet" Click="SaveAdvanceSingleDataButton_Click"/>
       </StackPanel>
      </Expander>
     </StackPanel>
@@ -146,7 +150,7 @@
      <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="BEKLEYEN" Foreground="#708196"/><TextBlock x:Name="PendingCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#B06A16"/></StackPanel></Border>
      <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="EKSİK" Foreground="#708196"/><TextBlock x:Name="MissingCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#A53232"/></StackPanel></Border>
      <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="ÇALIŞILAN" Foreground="#708196"/><TextBlock x:Name="WorkedCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#267048"/></StackPanel></Border>
-     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10"><StackPanel><TextBlock Text="DÖNEM" Foreground="#708196"/><TextBlock x:Name="PeriodStateText" Text="AÇIK" FontSize="18" FontWeight="Bold"/></StackPanel></Border>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10"><StackPanel><TextBlock Text="DÖNEM" Foreground="#708196"/><TextBlock x:Name="PeriodStateText" Text="D1" FontSize="18" FontWeight="Bold"/></StackPanel></Border>
     </UniformGrid>
 
     <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="12">
