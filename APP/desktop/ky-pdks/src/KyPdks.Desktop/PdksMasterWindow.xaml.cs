@@ -65,6 +65,15 @@ public partial class PdksMasterWindow : Window
         _busy = true;
         try
         {
+            await RefreshD1CoreAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RefreshD1CoreAsync()
+    {
+        try
+        {
             DataStateText.Text = "D1: Yükleniyor";
             _snapshot = await _api.GetAsync(_token);
             GroupsGrid.ItemsSource = _snapshot.Groups;
@@ -80,7 +89,6 @@ public partial class PdksMasterWindow : Window
             DataStateText.Text = "D1: Hata";
             StatusText.Text = error.Message;
         }
-        finally { _busy = false; }
     }
 
     private void GroupsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -121,7 +129,6 @@ public partial class PdksMasterWindow : Window
         {
             await _api.SaveWorkGroupAsync(_token, new PdksWorkGroup(_groupId, code, name, GroupEntryBox.Text.Trim(), GroupExitBox.Text.Trim(), Math.Max(0, late), Math.Max(0, early), GroupActiveCheck.IsChecked != false));
             NewGroupButton_Click(sender, e);
-            await RefreshD1Async();
         });
     }
 
@@ -132,7 +139,6 @@ public partial class PdksMasterWindow : Window
         await RunAsync("Personel vardiyası D1'e atanıyor...", async () =>
         {
             await _api.AssignWorkGroupAsync(_token, person.Id, group.Id);
-            await RefreshD1Async();
             StatusText.Text = $"{person.FullName} → {group.Name} vardiyası D1'e atandı.";
         });
     }
@@ -167,7 +173,6 @@ public partial class PdksMasterWindow : Window
         {
             await _api.SaveServiceAsync(_token, new PdksService(_serviceId, code, name, ServiceRouteBox.Text.Trim(), ServiceActiveCheck.IsChecked != false));
             NewServiceButton_Click(sender, e);
-            await RefreshD1Async();
         });
     }
 
@@ -178,7 +183,6 @@ public partial class PdksMasterWindow : Window
         await RunAsync("Personel servisi D1'e atanıyor...", async () =>
         {
             await _api.AssignServiceAsync(_token, person.Id, service.Id);
-            await RefreshD1Async();
             StatusText.Text = $"{person.FullName} → {service.Name} servisi D1'e atandı.";
         });
     }
@@ -233,13 +237,16 @@ public partial class PdksMasterWindow : Window
     {
         if (_busy) return;
         _busy = true;
+        var succeeded = false;
         try
         {
             StatusText.Text = message;
             await action();
+            succeeded = true;
         }
         catch (Exception error) { StatusText.Text = error.Message; }
         finally { _busy = false; }
+        if (succeeded) await RefreshD1Async();
     }
 
     private static bool ValidTime(string value) => TimeOnly.TryParseExact(value.Trim(), "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
