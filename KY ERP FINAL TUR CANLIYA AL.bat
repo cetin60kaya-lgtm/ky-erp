@@ -3,6 +3,7 @@ setlocal EnableExtensions
 title KY ERP - FINAL TUR CANLIYA AL
 
 set "ROOT=D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ"
+set "BRANCH=codex/model-uretim-kontrol-merkezi-final"
 set "SCRIPT=%ROOT%\DEPLOY\KYERP_FINAL_ROUND_RELEASE_20260901_V3.ps1"
 
 echo.
@@ -19,8 +20,9 @@ if not exist "%ROOT%\.git" (
   echo [HATA] KY ERP repo bulunamadi: %ROOT%
   goto :FAIL
 )
-if not exist "%SCRIPT%" (
-  echo [HATA] Final release scripti bulunamadi: %SCRIPT%
+where git >nul 2>&1
+if errorlevel 1 (
+  echo [HATA] Git bulunamadi.
   goto :FAIL
 )
 where pwsh >nul 2>&1
@@ -29,7 +31,38 @@ if errorlevel 1 (
   goto :FAIL
 )
 
-echo [1/2] Final PowerShell syntax kontrolu...
+cd /d "%ROOT%"
+echo [1/3] Yerel tracked degisiklik kontrolu...
+for /f "delims=" %%L in ('git status --porcelain --untracked-files=no') do (
+  echo [HATA] Tracked yerel degisiklik var: %%L
+  echo Otomatik reset/clean yapilmadi.
+  goto :FAIL
+)
+echo [OK] Tracked kaynak temiz.
+
+echo [2/3] Production branch guncelleniyor...
+git fetch origin "%BRANCH%"
+if errorlevel 1 (
+  echo [HATA] git fetch basarisiz.
+  goto :FAIL
+)
+git checkout "%BRANCH%"
+if errorlevel 1 (
+  echo [HATA] Production branch acilamadi.
+  goto :FAIL
+)
+git pull --ff-only origin "%BRANCH%"
+if errorlevel 1 (
+  echo [HATA] Production branch ff-only guncellenemedi.
+  goto :FAIL
+)
+
+if not exist "%SCRIPT%" (
+  echo [HATA] Pull sonrasi final release scripti bulunamadi: %SCRIPT%
+  goto :FAIL
+)
+
+echo [3/3] Final PowerShell syntax kontrolu...
 pwsh -NoProfile -Command "$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile('%SCRIPT%',[ref]$tokens,[ref]$errors) ^| Out-Null; if($errors.Count -gt 0){ $errors ^| ForEach-Object { Write-Host ('[PARSE HATA] ' + $_.Message) }; exit 1 }"
 if errorlevel 1 (
   echo [HATA] Final release scriptinde PowerShell parse hatasi var. Hicbir canli islem baslatilmadi.
@@ -37,8 +70,8 @@ if errorlevel 1 (
 )
 echo [OK] PowerShell syntax temiz.
 
-echo [2/2] Final release baslatiliyor...
-cd /d "%ROOT%"
+echo.
+echo Final release baslatiliyor...
 pwsh -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%"
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" (
