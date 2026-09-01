@@ -8,12 +8,15 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 test("final round: aktif giriş yalnız MFA tabanlıdır", () => {
   const entry = read("APP/cloud/ky-erp-api/src/main-entry.ts");
+  const main = read("APP/cloud/ky-erp-api/src/main.ts");
   const adminUi = read("APP/app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx");
   const cutover = read("DEPLOY/KYERP_FINAL_ROUND_SECURITY_CUTOVER_V1.sql");
   const authGuard = read("APP/cloud/ky-erp-api/migrations/0029_auth_security_policy_guard.sql");
 
   assert.match(entry, /const MFA_LOGIN_POLICIES = new Set\(\["GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH_MFA"\]\)/);
   assert.match(entry, /AUTH_SECURITY_BASELINE_UNAVAILABLE/);
+  assert.match(main, /const PASSWORD_SESSION_SECONDS = 0/);
+  assert.match(main, /passwordOnlyEnabled: false/);
   assert.match(adminUi, /const LOGIN_POLICIES=\[\["GOOGLE"/);
   assert.doesNotMatch(adminUi, /\["PASSWORD_ONLY","Sadece parola"\]/);
   assert.match(cutover, /login_policy[\s\S]*'ANY_MFA'/);
@@ -67,6 +70,7 @@ test("final round: İşNet tenant, partial ve D1 guard sözleşmesi", () => {
 
 test("final round: tek final release bütün doğrulamaları zincirler", () => {
   const release = read("DEPLOY/KYERP_FINAL_ROUND_RELEASE_20260901_V3.ps1");
+  const direct = read("DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1");
   const bat = read("KY ERP FINAL TUR CANLIYA AL.bat");
 
   assert.match(release, /KYERP_DIRECT_PRODUCTION\.ps1/);
@@ -80,6 +84,9 @@ test("final round: tek final release bütün doğrulamaları zincirler", () => {
   assert.match(release, /global_isnet/);
   assert.match(release, /api\/health/);
   assert.match(release, /api\/auth\/status/);
+  assert.match(direct, /passwordOnlyEnabled/);
+  assert.match(direct, /passwordOnlySeconds -ne 0/);
   assert.match(bat, /Language\.Parser/);
+  assert.match(bat, /git pull --ff-only/);
   assert.match(bat, /KYERP_FINAL_ROUND_RELEASE_20260901_V3\.ps1/);
 });
