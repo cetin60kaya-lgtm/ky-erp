@@ -13,6 +13,13 @@ async function bodyOf(c:Context<AppEnv>):Promise<Row>{try{const b=await c.req.js
 const err=(code:string,message:string)=>({ok:false,error:{code,message}});
 
 export function registerPublicFileHubScanRoutes(app:Hono<AppEnv>){
+  app.post("/api/auth/file-hub-agent/config",async c=>{
+    if(!allowed(c))return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
+    const b=await bodyOf(c),slug=slugOf(c,b);
+    const result=await c.env.DB.prepare(`SELECT id,name,provider_type,local_root_path,sync_mode,is_primary FROM file_hub_connections WHERE main_company_slug=? AND is_active=1 AND UPPER(sync_mode)='AGENT' AND TRIM(COALESCE(local_root_path,''))<>'' ORDER BY is_primary DESC,name COLLATE NOCASE`).bind(slug).all<Row>();
+    return c.json({ok:true,data:{connections:(result.results||[]).map((row:Row)=>({storageConnectionId:row.id,name:row.name,providerType:row.provider_type,rootPath:row.local_root_path,isPrimary:Number(row.is_primary||0)!==0}))}});
+  });
+
   app.post("/api/auth/file-hub-agent/scan-begin",async c=>{
     if(!allowed(c))return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
     const b=await bodyOf(c),slug=slugOf(c,b),connectionId=text(b.storageConnectionId),startedAt=now();
