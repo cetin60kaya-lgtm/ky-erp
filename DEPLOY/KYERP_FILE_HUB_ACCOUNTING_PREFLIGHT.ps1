@@ -7,13 +7,13 @@ $LOCAL_CONFIG = "wrangler.production-local.jsonc"
 $LOCAL_DB = "ky-erp-production-local"
 $PERSIST = Join-Path $WORKER ".file-hub-accounting-preflight"
 $MIGRATIONS = @(
-  "0029_file_hub_multistorage.sql",
-  "0030_file_hub_outgoing_team_links.sql",
-  "0031_file_hub_provider_defaults.sql",
-  "0032_file_hub_primary_location_failover.sql",
-  "0033_accounting_document_core.sql",
-  "0034_accounting_intelligence_profiles.sql",
-  "0035_accounting_document_archive_queue.sql"
+  "0030_file_hub_multistorage.sql",
+  "0031_file_hub_outgoing_team_links.sql",
+  "0032_file_hub_provider_defaults.sql",
+  "0033_file_hub_primary_location_failover.sql",
+  "0034_accounting_document_core.sql",
+  "0035_accounting_intelligence_profiles.sql",
+  "0036_accounting_document_archive_queue.sql"
 )
 $REQUIRED_SCHEMA_OBJECTS = @(
   "file_hub_connections","file_hub_bindings","file_hub_assets","file_hub_locations","file_hub_relations","file_hub_revisions","file_hub_events","file_hub_agent_status",
@@ -103,6 +103,6 @@ Write-Host "- AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT secret/var"
 Write-Host "- AZURE_DOCUMENT_INTELLIGENCE_KEY secret"
 Write-Host "- RESEND_API_KEY mevcut mail standardi"
 Write-Host "- Firma bazli File Hub storage connection + MUHASEBE INVOICE/DELIVERY_NOTE binding"
-Write-Host "- Hedefli 0029-0035 remote D1 migration + tam D1 backup"
+Write-Host "- Hedefli 0030-0036 remote D1 migration + tam D1 backup"
 Write-Host "- Worker/Pages deploy sonrasi canli smoke"
 Write-Host ""; exit 0
