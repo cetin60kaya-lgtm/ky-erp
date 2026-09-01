@@ -13,6 +13,9 @@ async function renderErpApp() {
   const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
   installPersistedAuthBootstrap();
 
+  // PDKS ayrı bir ana modüldür; İK yetkisini paylaşır fakat İK sekmesi değildir.
+  await import("./app/pdksModuleRegistryPatch");
+
   const [
     { default: AppV3 },
     { ActiveCompanyProvider },
