@@ -5,6 +5,10 @@ using System.Text.Json;
 
 namespace KyPdks.Shared;
 
+public sealed record ErpPeriodCloseResult(int BlockingCount, int OkCount, int TotalChecks, bool IsLocked);
+public sealed record ErpPayrollRow(string EmployeeId, string PersonnelCode, string FullName, decimal Salary, decimal Overtime, decimal Advance, decimal Deduction, decimal Bank, decimal Cash, decimal Net);
+public sealed record ErpPdksProfile(string Scope, bool Audit, string UserName, string Role);
+
 public sealed class ErpApiException(string message, HttpStatusCode statusCode, string code = "") : Exception(message)
 {
     public HttpStatusCode StatusCode { get; } = statusCode;
@@ -17,9 +21,9 @@ public sealed class ErpApiClient : IDisposable
 
     public ErpApiClient(string baseAddress = "https://api.kyerp.net")
     {
-        _http = new HttpClient { BaseAddress = new Uri(baseAddress.TrimEnd('/')), Timeout = TimeSpan.FromSeconds(20) };
+        _http = new HttpClient { BaseAddress = new Uri(baseAddress.TrimEnd('/')), Timeout = TimeSpan.FromSeconds(30) };
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.1");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.3");
     }
 
     public async Task<AuthFlow> LoginAsync(string identity, string password, string deviceLabel, CancellationToken ct = default)
@@ -64,6 +68,13 @@ public sealed class ErpApiClient : IDisposable
             user.ValueKind == JsonValueKind.Object ? Text(user, "fullName", "full_name") : "",
             user.ValueKind == JsonValueKind.Object ? Text(user, "role") : "",
             "", "", "", "", "", "");
+    }
+
+    public async Task<ErpPdksProfile> GetPdksProfileAsync(string token, CancellationToken ct = default)
+    {
+        using var document = await SendAsync(HttpMethod.Get, "/api/ik/personnel-control/profile", null, token, ct);
+        var data = Unwrap(document.RootElement);
+        return new ErpPdksProfile(Text(data, "scope"), Bool(data, "audit"), Text(data, "username"), Text(data, "role"));
     }
 
     public async Task LogoutAsync(string token, CancellationToken ct = default)
@@ -115,15 +126,15 @@ public sealed class ErpApiClient : IDisposable
     public async Task AddTimeEventAsync(string token, CachedPerson person, string workDate, string eventTime, string direction, string note, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(person.Id)) throw new InvalidOperationException("Personel seçin.");
-        if (!DateOnly.TryParse(workDate, out _)) throw new InvalidOperationException("Tarih geçersiz.");
-        if (eventTime.Length < 5 || !TimeOnly.TryParse(eventTime[..5], out _)) throw new InvalidOperationException("Saat geçersiz. Örnek: 08:30");
+        if (!DateOnly.TryParse(workDate, out var parsedDate)) throw new InvalidOperationException("Tarih geçersiz.");
+        if (eventTime.Length < 5 || !TimeOnly.TryParse(eventTime[..5], out var parsedTime)) throw new InvalidOperationException("Saat geçersiz. Örnek: 08:30");
         using var responseDocument = await SendAsync(HttpMethod.Post,
             $"/api/ik/personnel-control/people/{Uri.EscapeDataString(person.Id)}/time-event",
             new
             {
                 cardNo = person.CardNo,
-                workDate,
-                eventTime = eventTime[..5],
+                workDate = parsedDate.ToString("yyyy-MM-dd"),
+                eventTime = parsedTime.ToString("HH:mm"),
                 direction = string.IsNullOrWhiteSpace(direction) ? "AUTO" : direction.Trim().ToUpperInvariant(),
                 source = "KY_PDKS_WINDOWS",
                 note = string.IsNullOrWhiteSpace(note) ? "KY PDKS manuel kart kaydı" : note.Trim(),
@@ -202,6 +213,48 @@ public sealed class ErpApiClient : IDisposable
         }, token, ct);
     }
 
+    public async Task<ErpPeriodCloseResult> ClosePeriodAsync(string token, int year, int month, string reason, string userName, CancellationToken ct = default)
+    {
+        using var document = await SendAsync(HttpMethod.Post, "/api/ik/advanced/close-check", new
+        {
+            year,
+            month,
+            lock = true,
+            reason = string.IsNullOrWhiteSpace(reason) ? "KY PDKS kontrollü kapanış" : reason,
+            userName = userName ?? "KY PDKS",
+        }, token, ct);
+        var data = Unwrap(document.RootElement);
+        return new ErpPeriodCloseResult(Number(data, "blockingCount", 0), Number(data, "okCount", 0), Number(data, "totalChecks", 0), Bool(data, "isLocked"));
+    }
+
+    public async Task<IReadOnlyList<ErpPayrollRow>> GetPayrollAsync(string token, int year, int month, CancellationToken ct = default)
+    {
+        using var document = await SendAsync(HttpMethod.Get, $"/api/ik/advanced/payroll?year={year}&month={month}", null, token, ct);
+        var data = Unwrap(document.RootElement);
+        var lines = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("lines", out var node) && node.ValueKind == JsonValueKind.Array
+            ? node : default;
+        if (lines.ValueKind != JsonValueKind.Array) return Array.Empty<ErpPayrollRow>();
+        var result = new List<ErpPayrollRow>();
+        foreach (var row in lines.EnumerateArray())
+        {
+            var employee = row.TryGetProperty("employee", out var employeeNode) && employeeNode.ValueKind == JsonValueKind.Object ? employeeNode : default;
+            var final = row.TryGetProperty("final", out var finalNode) && finalNode.ValueKind == JsonValueKind.Object ? finalNode : default;
+            var system = row.TryGetProperty("system", out var systemNode) && systemNode.ValueKind == JsonValueKind.Object ? systemNode : default;
+            result.Add(new ErpPayrollRow(
+                Text(row, "employeeId"),
+                employee.ValueKind == JsonValueKind.Object ? Text(employee, "code", "personnelCode") : Text(row, "personnelCode"),
+                employee.ValueKind == JsonValueKind.Object ? Text(employee, "fullName") : Text(row, "fullName"),
+                DecimalNumber(row, "salary", DecimalNumber(system, "salary", 0)),
+                DecimalNumber(row, "overtimeAmount", DecimalNumber(system, "overtimeAmount", 0)),
+                DecimalNumber(row, "advanceAmount", DecimalNumber(system, "advanceAmount", 0)),
+                DecimalNumber(row, "deductionAmount", DecimalNumber(system, "deductionAmount", 0)),
+                DecimalNumber(row, "bankAmount", DecimalNumber(final, "bank", 0)),
+                DecimalNumber(row, "cashAmount", DecimalNumber(final, "cash", 0)),
+                DecimalNumber(row, "totalAmount", DecimalNumber(final, "total", DecimalNumber(row, "net", 0)))));
+        }
+        return result;
+    }
+
     public async Task<SyncResult> SyncPunchesAsync(string token, IReadOnlyList<PunchRow> punches, string deviceLabel, CancellationToken ct = default)
     {
         if (punches.Count == 0) return new SyncResult(new HashSet<string>(), new Dictionary<string, string>(), 0, 0);
@@ -225,7 +278,7 @@ public sealed class ErpApiClient : IDisposable
             {
                 var localId = Text(item, "localId");
                 if (string.IsNullOrWhiteSpace(localId)) continue;
-                rejected[localId] = Text(item, "reason") is { Length: > 0 } reason ? reason : "ERP kart kaydını reddetti.";
+                rejected[localId] = Text(item, "reason") is { Length: > 0 } rejectReason ? rejectReason : "ERP kart kaydını reddetti.";
             }
         }
 
@@ -315,6 +368,14 @@ public sealed class ErpApiClient : IDisposable
         return fallback;
     }
 
+    private static decimal DecimalNumber(JsonElement node, string name, decimal fallback)
+    {
+        if (node.ValueKind != JsonValueKind.Object || !node.TryGetProperty(name, out var value)) return fallback;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number)) return number;
+        if (value.ValueKind == JsonValueKind.String && decimal.TryParse(value.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out number)) return number;
+        return fallback;
+    }
+
     private static bool Bool(JsonElement node, string name)
     {
         if (node.ValueKind != JsonValueKind.Object || !node.TryGetProperty(name, out var value)) return false;
@@ -323,7 +384,7 @@ public sealed class ErpApiClient : IDisposable
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Number => value.TryGetInt32(out var number) && number != 0,
-            JsonValueKind.String => value.GetString() is string text && (text.Equals("true", StringComparison.OrdinalIgnoreCase) || text == "1"),
+            JsonValueKind.String => value.GetString() is string stringValue && (stringValue.Equals("true", StringComparison.OrdinalIgnoreCase) || stringValue == "1"),
             _ => false,
         };
     }
