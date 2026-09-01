@@ -58,7 +58,7 @@ type ShellEnv = {
 type AnyRow = Record<string, any>;
 
 const AUTH_VERSION = "canonical-v3";
-const PASSWORD_SESSION_SECONDS = 28_800;
+const PASSWORD_SESSION_SECONDS = 0;
 const MFA_SESSION_SECONDS = 36_000;
 const OWNER_ROLLING_SESSION_SECONDS = 86_400;
 
@@ -335,6 +335,7 @@ shell.get("/api/auth/status", (c) => c.json({
     logout: "/api/auth/logout",
   },
   sessionPolicy: {
+    passwordOnlyEnabled: false,
     passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
     mfaSeconds: MFA_SESSION_SECONDS,
     ownerRollingSeconds: OWNER_ROLLING_SESSION_SECONDS,
