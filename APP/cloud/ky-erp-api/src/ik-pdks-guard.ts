@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -267,4 +268,7 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
     const nextPayload = payload?.data && typeof payload.data === "object" ? { ...payload, data: nextData } : nextData;
     rewriteJson(c, nextPayload);
   });
+
+  // İzin, avans, bordro, tatil ve dönem kapanışı da aynı personnel-control guard zincirinin arkasındadır.
+  registerIkPdksOperationRoutes(app);
 }
