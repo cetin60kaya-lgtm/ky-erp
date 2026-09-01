@@ -34,6 +34,15 @@ public partial class PdksWorkbenchWindow
         CorrectionSaveButton.Click -= SaveCorrectionButton_Click;
         CorrectionSaveButton.Click += SafeCorrectionButton_Click;
 
+        // Eski yerel Detay Yönetim penceresine hiçbir çalışma yolu bırakılmaz.
+        foreach (var button in FindVisualChildren<Button>(this))
+        {
+            if (!string.Equals(button.Content?.ToString(), "Detay Yönetim", StringComparison.OrdinalIgnoreCase)) continue;
+            button.Click -= OpenAdministrationButton_Click;
+            button.Click -= OpenPdksMasterButton_Click;
+            button.Click += OpenPdksMasterButton_Click;
+        }
+
         // Dönem, bordro, izin ve avans XAML'de doğrudan SingleData handler'larına bağlıdır.
         // Burada ikinci/local handler eklenmez.
         _liveTimer.Start();
@@ -142,7 +151,7 @@ public partial class PdksWorkbenchWindow
         foreach (var button in FindVisualChildren<Button>(this))
         {
             if (string.Equals(button.Content?.ToString(), "Detay Yönetim", StringComparison.OrdinalIgnoreCase))
-                button.IsEnabled = !audit;
+                button.IsEnabled = !audit && !string.IsNullOrWhiteSpace(_token);
         }
     }
 
