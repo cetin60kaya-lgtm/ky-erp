@@ -1,0 +1,17 @@
+{
+  "connections": [
+    {
+      "name": "Google Drive - Desinatör",
+      "storageConnectionId": "FILE_HUB_CONNECTION_ID_FROM_KYERP",
+      "providerType": "GOOGLE_DRIVE",
+      "rootPath": "D:\\GoogleDrive\\Desinatör",
+      "exclude": ["\\.tmp", "\\cache"]
+    },
+    {
+      "name": "OneDrive - KY ERP Merkez",
+      "storageConnectionId": "SECOND_CONNECTION_ID_FROM_KYERP",
+      "providerType": "ONEDRIVE",
+      "rootPath": "D:\\onedrive\\KY-ERP-MERKEZ"
+    }
+  ]
+}

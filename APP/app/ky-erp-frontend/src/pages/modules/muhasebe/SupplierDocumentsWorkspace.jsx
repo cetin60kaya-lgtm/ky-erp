@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, RefreshCcw, Truck } from "lucide-react";
 import { getIsnetDocumentCenter } from "../../../services/isnetDocumentCenterApi";
 import SupplierInventoryWorkspace from "./SupplierInventoryWorkspace";
+import DocumentPoolPanel from "./DocumentPoolPanel";
 import "./supplierDocumentsWorkspace.css";
 
 const dateText = (value) => {
@@ -43,10 +44,12 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
 
   return (
     <section className="sdw-root">
+      <DocumentPoolPanel activeMainCompany={activeMainCompany} />
+
       <section className="sdw-flow">
         <div><Truck size={20} /><strong>Tedarikçi Alış Zinciri</strong></div>
         <p><b>Tedarikçiden Gelen İrsaliye</b><span>→</span><b>Tedarikçiden Gelen Fatura</b><span>→</span>Gider / KDV / Stok-Lot / Cari</p>
-        <small>Bu irsaliyeler model ve imalat akışına girmez. Cari borç yalnız cari takipli tedarikçide oluşur.</small>
+        <small>İşNet bu akışın sağlayıcılarından biridir. Manuel XML/PDF/tarama belgeleri Akıllı Belge Havuzu üzerinden aynı canonical muhasebe çekirdeğine girer.</small>
       </section>
 
       <section className="sdw-card">
