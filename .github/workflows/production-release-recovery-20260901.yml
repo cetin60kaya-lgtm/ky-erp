@@ -96,17 +96,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          drop_empty_legacy_table() {
+            table="$1"
+            marker="$2"
+            exists_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='$table';" --json)"
+            exists_n="$(jq -r '.[0].results[0].n // 0' <<<"$exists_json")"
+            [ "$exists_n" = "1" ] || return 0
+            marker_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('$table') WHERE name='$marker';" --json)"
+            marker_n="$(jq -r '.[0].results[0].n // 0' <<<"$marker_json")"
+            [ "$marker_n" = "0" ] || return 0
+            rows_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM $table;" --json)"
+            rows_n="$(jq -r '.[0].results[0].n // -1' <<<"$rows_json")"
+            test "$rows_n" = "0" || { echo "GUVENLIK DURDURMASI: legacy $table dolu ($rows_n)" >&2; exit 1; }
+            echo "Bos legacy tablo canonical sema icin kaldiriliyor: $table"
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "DROP TABLE $table;"
+          }
+
           canonical_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_documents') WHERE name='uuid';" --json)"
           canonical_n="$(jq -r '.[0].results[0].n // 0' <<<"$canonical_json")"
           if [ "$canonical_n" != "1" ]; then
-            exists_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='accounting_documents';" --json)"
-            exists_n="$(jq -r '.[0].results[0].n // 0' <<<"$exists_json")"
-            if [ "$exists_n" = "1" ]; then
-              rows_json="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM accounting_documents;" --json)"
-              rows_n="$(jq -r '.[0].results[0].n // -1' <<<"$rows_json")"
-              test "$rows_n" = "0" || { echo "GUVENLIK DURDURMASI: legacy accounting_documents dolu ($rows_n)" >&2; exit 1; }
-              npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "DROP TABLE accounting_documents;"
-            fi
+            drop_empty_legacy_table accounting_documents uuid
+            drop_empty_legacy_table accounting_document_lines line_no
+            drop_empty_legacy_table accounting_ledger_entries entry_type
             sql="$(sed '/^[[:space:]]*--/d' migrations/0034_accounting_document_core.sql)"
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$sql"
           fi
@@ -125,6 +136,10 @@ jobs:
           done
           canonical="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_documents') WHERE name IN ('uuid','direction','provider_type','record_scope','payable_total');" --json)"
           jq -e '.[0].results[0].n == 5' <<<"$canonical" >/dev/null
+          lines="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_document_lines') WHERE name IN ('line_no','product_id','match_status');" --json)"
+          jq -e '.[0].results[0].n == 3' <<<"$lines" >/dev/null
+          ledger="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('accounting_ledger_entries') WHERE name IN ('entry_type','record_scope','source_document_id');" --json)"
+          jq -e '.[0].results[0].n == 3' <<<"$ledger" >/dev/null
           trigger="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger' AND name='trg_accounting_documents_enqueue_archive';" --json)"
           jq -e '.[0].results[0].n == 1' <<<"$trigger" >/dev/null
 
