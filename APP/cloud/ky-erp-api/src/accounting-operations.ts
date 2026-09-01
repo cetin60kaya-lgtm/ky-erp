@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { registerAccountingDocumentReviewRoutes } from "./accounting-document-review";
+import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -21,6 +22,7 @@ async function matchCompany(c:Context<AppEnv>,slug:string,name:string,iban:strin
 
 export function registerAccountingOperationRoutes(app:Hono<AppEnv>){
  registerAccountingDocumentReviewRoutes(app);
+ registerAccountingDocumentArchiveRoutes(app);
  app.get("/api/muhasebe/odeme-plani/hafta",async c=>{const slug=slugOf(c),range=mondayRange(Number(c.req.query("offset")||0)),r=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE main_company_slug=? AND status NOT IN ('PAID','CANCELLED') AND COALESCE(planned_date,due_date) BETWEEN ? AND ? ORDER BY COALESCE(planned_date,due_date),CASE priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 ELSE 2 END,amount DESC`).bind(slug,range.from,range.to).all<Row>();return c.json({ok:true,data:{...range,rows:r.results||[]}})});
  app.get("/api/muhasebe/odeme-plani/hafta-sonu",async c=>{const slug=slugOf(c),range=weekendRange(Number(c.req.query("offset")||0)),r=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE main_company_slug=? AND status NOT IN ('PAID','CANCELLED') AND COALESCE(planned_date,due_date) BETWEEN ? AND ? ORDER BY COALESCE(planned_date,due_date),amount DESC`).bind(slug,range.from,range.to).all<Row>();return c.json({ok:true,data:{...range,rows:r.results||[]}})});
  app.post("/api/muhasebe/odeme-plani/:id/paid",async c=>{const b=await bodyOf(c),slug=slugOf(c,b),id=c.req.param("id"),ts=now(),plan=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE id=? AND main_company_slug=? LIMIT 1`).bind(id,slug).first<Row>();if(!plan)return c.json(err("NOT_FOUND","Ödeme planı bulunamadı."),404);const paid=num(b.paidAmount||b.amount||plan.amount),status=paid>=num(plan.amount)?"PAID":"PARTIAL";await c.env.DB.prepare(`UPDATE accounting_payment_plans SET paid_amount=?,status=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(paid,status,ts,id,slug).run();const ledgerId=crypto.randomUUID();await c.env.DB.prepare(`INSERT INTO accounting_ledger_entries(id,main_company_slug,entry_date,entry_type,record_scope,company_id,company_name,description,debit,credit,currency,payment_method,bank_account_id,source_document_id,source_payment_plan_id,file_asset_id,note,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(ledgerId,slug,text(b.paymentDate)||ts.slice(0,10),"ODEME","OFFICIAL",text(plan.counterparty_id)||null,text(plan.counterparty_name),text(b.description)||text(plan.description)||"Planlanan ödeme",paid,0,text(plan.currency)||"TRY",text(b.paymentMethod||plan.payment_method)||null,text(b.bankAccountId||plan.bank_account_id)||null,text(plan.source_document_id)||null,id,text(b.fileAssetId)||null,text(b.note)||null,text(b.createdBy)||null,ts,ts).run();return c.json({ok:true,data:{id,status,paidAmount:paid,ledgerEntryId:ledgerId}})});
