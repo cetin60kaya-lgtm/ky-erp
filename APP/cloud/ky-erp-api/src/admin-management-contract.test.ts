@@ -76,15 +76,22 @@ test("mapping UI uses implemented company profile and product catalog APIs", () 
   assert.doesNotMatch(source, /\/muhasebe\/urunler/);
 });
 
-test("storage management is R2-first and does not expose local watch workflow", () => {
+test("storage management is provider-neutral File Hub and R2 remains preview/cache only", () => {
   const backend = api("admin-storage-cloud.ts");
+  const hub = api("file-hub.ts");
+  const agent = api("file-hub-agent-public.ts");
   const ui = frontend("pages/admin/AdminStorageCenter.jsx");
-  assert.match(backend, /R2:\/\/ky-erp-files/);
-  assert.match(backend, /archive-capabilities/);
-  assert.match(backend, /trash\//);
-  assert.match(ui, /Cloudflare R2/);
+  assert.match(backend, /storageMode:"FILE_HUB"/);
+  assert.match(backend, /R2 yalnız preview\/cache katmanıdır/);
+  assert.match(hub, /GOOGLE_DRIVE/);
+  assert.match(hub, /ONEDRIVE/);
+  assert.match(hub, /LOCAL_FOLDER/);
+  assert.match(hub, /SHAREPOINT/);
+  assert.match(agent, /X-KYERP-Agent-Key/);
+  assert.match(ui, /Dosya Merkezi \/ File Hub/);
   assert.match(ui, /Google Drive/);
   assert.match(ui, /OneDrive/);
+  assert.match(ui, /firma tarafından seçilir/);
   assert.doesNotMatch(ui, /test-watch-path/);
   assert.doesNotMatch(ui, /import-watch-folder/);
 });
