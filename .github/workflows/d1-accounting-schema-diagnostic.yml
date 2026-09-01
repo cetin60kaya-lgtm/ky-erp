@@ -30,9 +30,9 @@ jobs:
           npx wrangler whoami
           echo '=== accounting_documents columns ==='
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA table_info(accounting_documents);" --json
-          echo '=== accounting_documents indexes ==='
-          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "PRAGMA index_list(accounting_documents);" --json
           echo '=== accounting_documents row count ==='
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM accounting_documents;" --json
+          echo '=== accounting_documents source references ==='
+          grep -RIn --exclude='*.map' --exclude-dir=node_modules 'accounting_documents' src migrations || true
           echo '=== new file hub tables ==='
           npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT name,type FROM sqlite_master WHERE name LIKE 'file_hub_%' ORDER BY type,name;" --json
