@@ -6,6 +6,8 @@ function unwrap(payload) {
     : payload;
 }
 
+const OPS = "/ik/personnel-control/operations";
+
 export async function getPdksProfile() {
   return unwrap(await apiGet("/ik/personnel-control/profile"));
 }
@@ -50,38 +52,40 @@ export async function assignPdksService(employeeId, serviceId) {
   return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { serviceId }));
 }
 
+// PDKS kritik iş verileri artık /ik/advanced uyumluluk yoluna düşmez.
+// Hepsi personnel-control altında açık D1 operasyon endpointlerinden çalışır.
 export async function getPdksAdvancedMonth(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/month", params));
+  return unwrap(await apiGet(`${OPS}/month`, params));
 }
 
 export async function getPdksPayroll(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/payroll", params));
+  return unwrap(await apiGet(`${OPS}/payroll`, params));
 }
 
 export async function getPdksLeaveCenter(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/leave-center", params));
+  return unwrap(await apiGet(`${OPS}/leaves`, params));
 }
 
 export async function getPdksAuditLogs(params = {}) {
-  return unwrap(await apiGet("/ik/advanced/audit-logs", params));
+  return unwrap(await apiGet(`${OPS}/audit-logs`, params));
 }
 
 export async function savePdksLeave(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/leave", payload));
+  return unwrap(await apiPost(`${OPS}/leave`, payload));
 }
 
 export async function savePdksFinanceMovement(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/finance-movement", payload));
+  return unwrap(await apiPost(`${OPS}/advance`, payload));
 }
 
 export async function closePdksPeriod(payload = {}) {
-  return unwrap(await apiPost("/ik/advanced/close-check", payload));
+  return unwrap(await apiPost(`${OPS}/period-close`, payload));
 }
 
 export async function getPdksHolidays(params = {}) {
-  return unwrap(await apiGet("/ik/official-holidays", params));
+  return unwrap(await apiGet(`${OPS}/holidays`, params));
 }
 
 export async function savePdksHoliday(payload = {}) {
-  return unwrap(await apiPost("/ik/official-holidays", payload));
+  return unwrap(await apiPost(`${OPS}/holidays`, payload));
 }
