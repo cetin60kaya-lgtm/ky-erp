@@ -8,10 +8,12 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { recoverIsnetOutgoingDocuments } from "../../../services/isnetApi";
 import { apiGet, buildApiUrl } from "../../../utils/api";
 import "./KesilenFaturalarTab.css";
 
 const PAGE_SIZES = [25, 50, 100];
+const ACCOUNTING_CLEAN_START = "2026-08-01";
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
 const listOf = (payload) => {
   const value = unwrap(payload);
@@ -68,6 +70,7 @@ function EmptyState({ title, description }) {
 export default function KesilenFaturalarTab({ activeMainCompany }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -109,6 +112,23 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
       setLoading(false);
     }
   }, [page, pageSize, params, search, status]);
+
+  const refreshFromIsnet = useCallback(async () => {
+    setSyncing(true);
+    setError("");
+    try {
+      await recoverIsnetOutgoingDocuments({
+        ...params,
+        startDate: ACCOUNTING_CLEAN_START,
+        endDate: new Date().toISOString().slice(0, 10),
+      });
+      await load();
+    } catch (requestError) {
+      setError(requestError?.message || "İşNet giden fatura/irsaliye kontrolü tamamlanamadı.");
+    } finally {
+      setSyncing(false);
+    }
+  }, [load, params]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 180);
@@ -173,7 +193,9 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
         <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
           {PAGE_SIZES.map((size) => <option key={size} value={size}>{size} kayıt</option>)}
         </select>
-        <button type="button" onClick={load}><RefreshCcw size={16} /> Yenile</button>
+        <button type="button" onClick={refreshFromIsnet} disabled={syncing}>
+          <RefreshCcw size={16} /> {syncing ? "İşNet kontrol ediliyor…" : "İşNet’ten Yenile"}
+        </button>
       </header>
 
       <section className="sif-summary">
@@ -224,7 +246,7 @@ export default function KesilenFaturalarTab({ activeMainCompany }) {
         ) : (
           <EmptyState
             title="Kesilen fatura bulunamadı"
-            description="İşNet’ten alınan kesilen faturalar burada görünür. Bu ekranda manuel ve yinelenen belge işlemi yoktur."
+            description="İşNet’ten Yenile ile giden fatura ve irsaliyeler yeniden kontrol edilir; bulunan satış faturaları burada gösterilir."
           />
         )}
       </section>

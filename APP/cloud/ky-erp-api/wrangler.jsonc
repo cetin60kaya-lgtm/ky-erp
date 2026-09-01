@@ -17,6 +17,11 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "secrets": {
+    "required": [
+      "RESEND_API_KEY"
+    ]
+  },
   "vars": {
     "RECOVERY_EMAIL_FROM": "KY ERP <admin@kyerp.net>"
   },

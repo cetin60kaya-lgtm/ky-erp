@@ -1,0 +1,85 @@
+name: PDKS Final Verify
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/cloud/ky-erp-api/src/ik-pdks-*.ts"
+      - "APP/cloud/ky-erp-api/src/pdks-single-data-contract.test.ts"
+      - "APP/cloud/ky-erp-api/src/denetim-pdks-contract.test.ts"
+      - "APP/cloud/ky-erp-api/src/ik-personnel-control.ts"
+      - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/cloud/ky-erp-api/migrations/0024_denetime_pdks_system_user.sql"
+      - "APP/cloud/ky-erp-api/migrations/0025_pdks_single_data_masters.sql"
+      - "APP/cloud/ky-erp-api/migrations/0026_pdks_operation_core.sql"
+      - "APP/app/ky-erp-frontend/src/app/pdksModuleRegistryPatch.js"
+      - "APP/app/ky-erp-frontend/src/pages/modules/PdksPage*.jsx"
+      - "APP/app/ky-erp-frontend/src/pages/modules/pdks.css"
+      - "APP/app/ky-erp-frontend/src/services/pdksApi.js"
+      - "APP/app/ky-erp-frontend/src/AppV3.jsx"
+      - ".github/workflows/pdks-final-verify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdks-final-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API test / typecheck / dry build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: API bağımlılıkları
+        run: npm ci
+
+      - name: API testleri
+        run: npm test
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Worker dry-run build
+        run: npm run build
+
+  frontend:
+    name: Frontend test / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Frontend bağımlılıkları
+        run: npm ci
+
+      - name: Frontend testleri
+        run: npm test
+
+      - name: Frontend production build
+        run: npm run build

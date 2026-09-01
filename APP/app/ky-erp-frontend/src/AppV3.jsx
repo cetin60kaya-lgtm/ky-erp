@@ -12,6 +12,7 @@ const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admi
 const IkPage = lazyWithRetry(() => import("./pages/modules/IkPage"), "ik-v3");
 const IkPersonnelCenterPage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelCenterPage"), "ik-personnel-center-v2");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
+const PdksPage = lazyWithRetry(() => import("./pages/modules/PdksPage"), "pdks-v1");
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
@@ -33,6 +34,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/ik/IkPersonnelCenterPage"),
     import("./pages/modules/ik/IkAuditPersonnelPage"),
   ]),
+  pdks: () => import("./pages/modules/PdksPage"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
@@ -49,6 +51,15 @@ const MODULE_LOADERS = {
 };
 
 const IK_AUDIT_TABS = [["personel-kartlari", "Personel Kartları", "users"]];
+const PDKS_AUDIT_TABS = [
+  ["ana-ekran", "Ana Ekran", "dashboard"],
+  ["giris-cikislar", "Giriş / Çıkışlar", "takvim"],
+  ["puantaj", "Puantaj", "takvim"],
+  ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
+  ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+  ["raporlar", "Raporlar", "raporlar"],
+  ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
+];
 
 function preloadModule(moduleKey) {
   MODULE_LOADERS[moduleKey]?.().catch(() => {});
@@ -117,11 +128,12 @@ export default function AppV3() {
   const visibleModules = useMemo(() => {
     let allowed = MODULES.filter((item) => hasModule(item.permissionKey));
     if (!isAuditAccount) return allowed;
-    // Yönetim ve asistan, dar kapsamlı rolün veri sınırını dolaylı aşmaması için görünmez.
     allowed = allowed.filter((item) => !["admin", "asistan"].includes(item.key));
-    return allowed.map((item) => item.key === "ik"
-      ? { ...item, groups: [{ label: "Personel", tabs: IK_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] }
-      : item);
+    return allowed.map((item) => {
+      if (item.key === "ik") return { ...item, groups: [{ label: "Personel", tabs: IK_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
+      if (item.key === "pdks") return { ...item, groups: [{ label: "PDKS Denetim", tabs: PDKS_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
+      return item;
+    });
   }, [hasModule, isAuditAccount]);
 
   const initialRoute = useMemo(() => {
@@ -270,6 +282,7 @@ export default function AppV3() {
       if (activeTab === "personel-kartlari") return <IkPersonnelCenterPage activeTab={activeTab} {...sharedProps} />;
       return <IkPage activeTab={activeTab} {...sharedProps} />;
     }
+    if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} isAuditAccount={isAuditAccount} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "asistan") return <AiAssistantPage {...sharedProps} />;
     return <AdminPage activeTab={activeTab} {...sharedProps} />;

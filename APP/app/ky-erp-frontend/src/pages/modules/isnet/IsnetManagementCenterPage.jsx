@@ -58,6 +58,15 @@ function flowStatus(value) {
   }[value] || value || "Hazır";
 }
 
+function syncNeedsReview(result) {
+  const status = String(result?.status || "").trim().toUpperCase();
+  return result?.partial === true ||
+    result?.requiresReview === true ||
+    status === "PARTIAL_REVIEW_REQUIRED" ||
+    status.includes("PARTIAL") ||
+    status.includes("REVIEW_REQUIRED");
+}
+
 export default function IsnetManagementCenterPage({ openModule, activeMainCompany }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -72,13 +81,18 @@ export default function IsnetManagementCenterPage({ openModule, activeMainCompan
   const [quickModelBusy, setQuickModelBusy] = useState(false);
   const [quickModel, setQuickModel] = useState({ modelName: "", companyId: "" });
   const range = useMemo(() => ({ startDate: recentStartText(), endDate: todayText() }), []);
+  const mainCompanySlug = String(activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || "").trim();
 
   const load = useCallback(async () => {
     setLoading(true);
+    if (!mainCompanySlug) {
+      setNotice({ tone: "error", text: "İşNet ekranı için ana firma seçimi zorunludur." });
+      setLoading(false);
+      return;
+    }
     try {
-      const tenant = activeMainCompany?.slug || activeMainCompany?.id || "main";
       const result = await loadModuleData({
-        scope: `isnet:${tenant}:${range.startDate}:${range.endDate}`,
+        scope: `isnet:${mainCompanySlug}:${range.startDate}:${range.endDate}`,
         sources: {
           documents: {
             critical: true,
@@ -108,18 +122,21 @@ export default function IsnetManagementCenterPage({ openModule, activeMainCompan
     } finally {
       setLoading(false);
     }
-  }, [activeMainCompany?.id, activeMainCompany?.slug, range]);
+  }, [mainCompanySlug, range]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
+    if (!mainCompanySlug) {
+      setCompanies([]);
+      return;
+    }
     getDesignCompanies(activeMainCompany)
       .then((rows) => setCompanies(Array.isArray(rows) ? rows : []))
       .catch(() => setCompanies([]));
-  }, [activeMainCompany]);
+  }, [activeMainCompany, mainCompanySlug]);
 
   const metrics = useMemo(() => {
     const missingFiles = documents.filter((row) => !row.pdfSaved || !row.xmlSaved).length;
@@ -146,14 +163,30 @@ export default function IsnetManagementCenterPage({ openModule, activeMainCompan
   const lastSyncAt = syncStatus?.completedAt || syncStatus?.lastRunAt;
 
   async function synchronize() {
+    if (!mainCompanySlug) {
+      setNotice({ tone: "error", text: "İşNet senkronizasyonu için ana firma seçimi zorunludur." });
+      return;
+    }
+
     setBusy(true);
     setNotice(null);
     try {
-      const result = await startDailySync(range);
+      const result = await startDailySync({ ...range, mainCompanySlug });
       const accounting = result?.supplierAccounting || {};
+      const counts = result?.counts || {};
+      const downloaded = Number(result?.automation?.downloaded || 0);
+      const imported = Number(accounting.imported || 0);
+      const failed = Number(accounting.failed || 0);
+      const outgoingInvoices = Number(counts.outgoingInvoices || 0);
+      const outgoingDispatches = Number(counts.outgoingDispatches || 0);
+      const needsReview = syncNeedsReview(result) || failed > 0;
+      const summary = `${downloaded} yeni/eksik dosya, ${imported} yeni tedarikçi faturası, ${outgoingInvoices} giden fatura ve ${outgoingDispatches} giden irsaliye işlendi.`;
+
       setNotice({
-        tone: accounting.failed > 0 ? "warning" : "success",
-        text: `Senkronizasyon tamamlandı: ${Number(result?.automation?.downloaded || 0)} yeni/eksik dosya, ${Number(accounting.imported || 0)} yeni tedarikçi faturası işlendi${accounting.failed ? `, ${accounting.failed} kayıt kontrol bekliyor.` : "."}`,
+        tone: needsReview ? "warning" : "success",
+        text: needsReview
+          ? `Senkronizasyon kontrol bekliyor: ${summary} İşlem tamamlandı sayılmadı. ${result?.warning || (failed > 0 ? `${failed} kayıt kontrol bekliyor.` : "İşNet kapsamı tam doğrulanamadı.")}`
+          : `Senkronizasyon tamamlandı: ${summary}`,
       });
       await load();
     } catch (error) {
@@ -215,9 +248,9 @@ export default function IsnetManagementCenterPage({ openModule, activeMainCompan
           <p>Canlı bağlantıyı, son senkronizasyonu ve yalnız müdahale gereken işleri görün.</p>
         </div>
         <div className="isnet-hero__actions">
-          <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => setQuickModelOpen(true)}><Plus size={15} /> Hızlı Model Aç</button>
+          <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => setQuickModelOpen(true)} disabled={!mainCompanySlug}><Plus size={15} /> Hızlı Model Aç</button>
           <button type="button" className="isnet-btn isnet-btn--secondary" onClick={() => openModule?.("isnet", { tabKey: "ayarlar" })}><Settings2 size={15} /> Bağlantı Ayarları</button>
-          <button type="button" className="isnet-btn isnet-btn--primary" onClick={synchronize} disabled={busy}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />} İşNet'i Senkronize Et</button>
+          <button type="button" className="isnet-btn isnet-btn--primary" onClick={synchronize} disabled={busy || !mainCompanySlug}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />} İşNet'i Senkronize Et</button>
         </div>
       </header>
 

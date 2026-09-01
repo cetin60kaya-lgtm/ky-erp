@@ -33,16 +33,20 @@ import { registerDesenStorageRoutes } from "./desen-storage";
 import { registerDesenWorkflowRoutes } from "./desen-workflow";
 import { registerDesenVisualSearchRoutes } from "./desen-visual-search";
 import { registerIkAuditReadonlyRoutes } from "./ik-audit-readonly";
+import { registerIkPdksGuardRoutes } from "./ik-pdks-guard";
 import { registerIkPersonnelControlRoutes } from "./ik-personnel-control";
+import { registerIkPdksMasterRoutes } from "./ik-pdks-master";
 import { registerIkRelationalCloudRoutes } from "./ik-relational-cloud";
 import { registerIkAdminCloudRoutes } from "./ik-admin-cloud";
 import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-settings-cloud";
 import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
 import { registerIsnetInvoiceRuntimeRoutes } from "./isnet-invoice-runtime";
 import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
+import { registerIsnetOutgoingRecoveryRoutes } from "./isnet-outgoing-recovery";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
+import { enforceIsnetTenant } from "./isnet-tenant-guard";
 import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 
@@ -54,7 +58,7 @@ type ShellEnv = {
 type AnyRow = Record<string, any>;
 
 const AUTH_VERSION = "canonical-v3";
-const PASSWORD_SESSION_SECONDS = 28_800;
+const PASSWORD_SESSION_SECONDS = 0;
 const MFA_SESSION_SECONDS = 36_000;
 const OWNER_ROLLING_SESSION_SECONDS = 86_400;
 
@@ -176,13 +180,16 @@ registerDesenWorkflowRoutes(app);
 registerDesenOperationRoutes(app);
 registerIsnetBusinessSettingsCloudRoutes(app);
 registerIsnetLiveSyncRoutes(app);
+registerIsnetOutgoingRecoveryRoutes(app);
 registerIsnetFileRuntimeRoutes(app);
 registerIsnetInvoiceRuntimeRoutes(app);
 registerIsnetRuntimeV2Routes(app);
 registerIsnetIntakeCompatRoutes(app);
 registerIsnetCloudRoutes(app);
 registerIkAuditReadonlyRoutes(app);
+registerIkPdksGuardRoutes(app);
 registerIkPersonnelControlRoutes(app);
+registerIkPdksMasterRoutes(app);
 registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
@@ -229,7 +236,8 @@ shell.use("/api/*", async (c, next) => {
 
   if (auditRole(authenticated.role)) {
     const method = String(c.req.method || "GET").toUpperCase();
-    if (!path.startsWith("/api/ik/audit/")) {
+    const pdksRead = path.startsWith("/api/ik/personnel-control/") && ["GET", "HEAD"].includes(method);
+    if (!path.startsWith("/api/ik/audit/") && !pdksRead) {
       return c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
     }
     if (!["GET", "HEAD"].includes(method)) {
@@ -239,6 +247,10 @@ shell.use("/api/*", async (c, next) => {
 
   await next();
 });
+
+// İşNet tek bir sağlayıcı modülü olabilir ancak tenant verisi global değildir.
+// Her İşNet isteği açık ana firma bağlamı taşır; non-owner kullanıcı başka tenant'a geçemez.
+shell.use("/api/isnet/*", enforceIsnetTenant);
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
 // izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
@@ -323,6 +335,7 @@ shell.get("/api/auth/status", (c) => c.json({
     logout: "/api/auth/logout",
   },
   sessionPolicy: {
+    passwordOnlyEnabled: false,
     passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
     mfaSeconds: MFA_SESSION_SECONDS,
     ownerRollingSeconds: OWNER_ROLLING_SESSION_SECONDS,
