@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-01T21:59:00+03:00",
-  "attempt": 75,
+  "requestedAt": "2026-09-01T22:08:00+03:00",
+  "attempt": 76,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -40,6 +40,6 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "d819155af59cd50b2a0d7c993136f4a71679e856",
-  "note": "01.09.2026 File Hub + Muhasebe final production yayini, attempt 75. Attempt 74 D1 export oncesinde tum testleri gecti fakat GitHub environment icindeki eski/yanlis CLOUDFLARE_ACCOUNT_ID nedeniyle Cloudflare API 7003 ile durdu; herhangi bir migration veya deploy uygulanmadi. Bu attempt Wrangler whoami ile dogrulanan canonical account id kullanir. Canliya cikmadan once tam D1 export alinir, yalniz 0030-0036 migrationlari uygulanir; generic migration apply ve D1 reset yoktur."
+  "sourceCommit": "7d2d461f20b343af1a73d4aad2fce7a97d009ab9",
+  "note": "01.09.2026 File Hub + Muhasebe final production yayini, attempt 76. Canli D1 read-only kontrolde legacy accounting_documents tablosunun 0 kayit oldugu dogrulandi. 0034 icin bos legacy tabloyu canonical semaya guvenli ceviren korumali release kullanilir. Tam D1 yedegi alinmadan migration veya deploy ilerlemez; yalniz hedefli 0030-0036 uygulanir, generic migration apply ve D1 reset yoktur."
 }
