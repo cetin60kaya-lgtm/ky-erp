@@ -1,6 +1,8 @@
 @echo off
 setlocal EnableExtensions
 chcp 65001 >nul
+set "NO_COLOR=1"
+set "FORCE_COLOR=0"
 title KY ERP - RESEND AKTIF SECRET ONARIMI
 
 set "ROOT=%~dp0"
@@ -12,38 +14,35 @@ if not defined PWSH for /f "delims=" %%P in ('where pwsh.exe 2^>nul') do if not 
 
 if not defined PWSH (
   echo [HATA] PowerShell 7 bulunamadi.
-  goto :fail
+  goto :FAIL
 )
-
 if not exist "%SCRIPT%" (
   echo [HATA] Onarim scripti bulunamadi: %SCRIPT%
-  goto :fail
+  goto :FAIL
 )
 
 echo.
 echo ============================================================
-echo   KY ERP - RESEND AKTIF WORKER SECRET ONARIMI
+echo   KY ERP - RESEND ACTIVE WORKER SECRET REPAIR
 echo ============================================================
-echo   Yalniz RESEND_API_KEY duzeltilir.
-echo   DNS, D1 ve Pages degistirilmez.
-echo   API key sadece acilan terminale girilir.
+echo   Latest Worker activate edilir, sonra standard secret put.
+echo   DNS YOK / D1 YOK / Pages YOK.
 echo ============================================================
 echo.
 
 "%PWSH%" -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%"
 set "RC=%ERRORLEVEL%"
-if not "%RC%"=="0" goto :fail
+if not "%RC%"=="0" goto :FAIL
 
 echo.
-echo [OK] Resend aktif Worker secret onarimi tamamlandi.
-echo app.kyerp.net Admin ^> Kullanicilar ^> Giris ^& MFA ekranini yenileyin.
+echo [OK] Resend active Worker secret repair tamamlandi.
 echo.
 pause
 exit /b 0
 
-:fail
+:FAIL
 echo.
-echo Islem tamamlanamadi. Yukaridaki ilk HATA satirini kontrol edin.
+echo [HATA] Islem tamamlanamadi. Ilk HATA satirini kontrol edin.
 echo.
 pause
 exit /b 1
