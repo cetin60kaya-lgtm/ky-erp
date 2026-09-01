@@ -14,6 +14,7 @@ const bootstrap = deploy("KYERP_RESEND_BOOTSTRAP.ps1");
 const safeBootstrap = deploy("KYERP_RESEND_BOOTSTRAP_SAFE.ps1");
 const repair = deploy("KYERP_RESEND_ACTIVE_SECRET_REPAIR.ps1");
 const repairBat = deploy("KYERP_RESEND_ACTIVE_SECRET_REPAIR.bat");
+const keyPrompt = deploy("KYERP_RESEND_KEY_PROMPT_GUI.ps1");
 const launcher = repoFile("KY ERP CANLIYA YUKLE.bat");
 const wrangler = readFileSync(resolve(here, "../wrangler.jsonc"), "utf8");
 const management = worker("admin-management-cloud.ts");
@@ -54,14 +55,18 @@ test("safe bootstrap never replaces live secret put with a staged-only versions 
   assert.doesNotMatch(safeBootstrap, /[|&]\s*wrangler\s+versions\s+secret\s+put\s+RESEND_API_KEY/i);
 });
 
-test("mail-only repair deploys the secret to active Worker without touching DNS D1 or Pages", () => {
-  assert.match(repair, /Read-Host "RESEND API KEY \(re_\.\.\.\)" -AsSecureString/);
+test("mail-only repair uses masked Windows key input and deploys the secret without touching D1 or Pages", () => {
+  assert.match(repair, /KYERP_RESEND_KEY_PROMPT_GUI\.ps1/);
+  assert.match(repair, /worker activation deploy/);
   assert.match(repair, /wrangler secret put \$SECRET_NAME --config \$WRANGLER_CONFIG/);
   assert.match(repair, /wrangler secret list --config \$WRANGLER_CONFIG --format json/);
+  assert.doesNotMatch(repair, /Read-Host "RESEND API KEY/);
   assert.doesNotMatch(repair, /wrangler\s+versions\s+secret\s+put/i);
   assert.doesNotMatch(repair, /wrangler\s+d1\s+/i);
   assert.doesNotMatch(repair, /wrangler\s+pages\s+/i);
   assert.doesNotMatch(repair, /Ensure-ResendDns|Invoke-CfApi/);
+  assert.match(keyPrompt, /UseSystemPasswordChar = \$true/);
+  assert.match(keyPrompt, /StartsWith\("re_"\)/);
   assert.match(repairBat, /KYERP_RESEND_ACTIVE_SECRET_REPAIR\.ps1/);
 });
 
