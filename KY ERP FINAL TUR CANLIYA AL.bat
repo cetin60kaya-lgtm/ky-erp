@@ -28,6 +28,15 @@ if errorlevel 1 (
   goto :FAIL
 )
 
+echo [1/2] Final PowerShell syntax kontrolu...
+pwsh -NoProfile -Command "$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile('%SCRIPT%',[ref]$tokens,[ref]$errors) ^| Out-Null; if($errors.Count -gt 0){ $errors ^| ForEach-Object { Write-Host ('[PARSE HATA] ' + $_.Message) }; exit 1 }"
+if errorlevel 1 (
+  echo [HATA] Final release scriptinde PowerShell parse hatasi var. Hicbir canli islem baslatilmadi.
+  goto :FAIL
+)
+echo [OK] PowerShell syntax temiz.
+
+echo [2/2] Final release baslatiliyor...
 cd /d "%ROOT%"
 pwsh -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%"
 set "RC=%ERRORLEVEL%"
