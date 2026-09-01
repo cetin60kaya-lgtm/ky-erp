@@ -7,13 +7,14 @@ title KY ERP - FINAL TUR CANLIYA AL
 
 set "ROOT=D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ"
 set "BRANCH=codex/model-uretim-kontrol-merkezi-final"
-set "SCRIPT=%ROOT%\DEPLOY\KYERP_FINAL_ROUND_RELEASE_20260901_V3.ps1"
+set "SCRIPT=%ROOT%\DEPLOY\KYERP_FINAL_ROUND_RELEASE_20260901_V4.ps1"
 
 echo.
 echo ============================================================
 echo   KY ERP - FINAL TUR CANLIYA AL
 echo ============================================================
 echo   Mail + MFA + Oturum + IsNet tenant + Worker + Pages
+echo   Resend key: maskeli Windows penceresi
 echo   Auth DB guard + IsNet DB guard dahil
 echo   D1 reset YOK / git reset YOK / git clean YOK
 echo ============================================================
