@@ -110,7 +110,7 @@ if not "!ERRORLEVEL!"=="0" (
 )
 
 echo.
-echo [D1] File Hub + Muhasebe hedefli 0025-0031 migration + backup...
+echo [D1] File Hub + Muhasebe hedefli 0030-0036 migration + backup...
 "!PWSH!" -NoProfile -ExecutionPolicy Bypass -File "%ROOT%DEPLOY\KYERP_FILE_HUB_ACCOUNTING_PRODUCTION_MIGRATE.ps1" -ExpectedBranch "%BRANCH%"
 if not "!ERRORLEVEL!"=="0" (
   echo [HATA] File Hub + Muhasebe D1 hazirligi gecmedi. Worker/Pages deploy baslatilmadi.
