@@ -9,16 +9,34 @@ type Row = Record<string, any>;
 const DEFAULT_COMPANY = "mecit-hakan";
 const text = (value: unknown) => value === undefined || value === null ? "" : String(value).trim();
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
 
 function minutesOf(value: unknown) {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(text(value).slice(0, 5));
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
-async function companyOf(c: Context<AppEnv>) {
+async function userAndCompany(c: Context<AppEnv>) {
   const user = await getAuthenticatedUser(c);
-  if (!user) return DEFAULT_COMPANY;
-  return text(c.req.header("X-KYERP-Tenant-Slug") || user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY).toLocaleLowerCase("tr-TR");
+  const company = text(c.req.header("X-KYERP-Tenant-Slug") || user?.mainCompanySlug || user?.security?.main_company_slug || DEFAULT_COMPANY).toLocaleLowerCase("tr-TR");
+  return { user, company };
+}
+
+async function companyOf(c: Context<AppEnv>) {
+  return (await userAndCompany(c)).company;
+}
+
+async function isAuditRequest(c: Context<AppEnv>, company: string) {
+  const user = await getAuthenticatedUser(c);
+  if (!user) return false;
+  if (upper(user.role) === "DENETIM" || text(user.username).toLocaleLowerCase("tr-TR") === "denetim") return true;
+  try {
+    const row = await c.env.DB.prepare("SELECT scope FROM ik_user_hr_scope WHERE user_id=? AND main_company_id=? LIMIT 1")
+      .bind(user.id, company).first<Row>();
+    return upper(row?.scope) === "AUDIT";
+  } catch {
+    return false;
+  }
 }
 
 function periodOf(date: unknown) {
@@ -40,6 +58,79 @@ async function lockedPeriods(c: Context<AppEnv>, company: string, dates: string[
     }
   }
   return locked;
+}
+
+async function strictAuditEmployeeIds(c: Context<AppEnv>, company: string) {
+  try {
+    const result = await c.env.DB.prepare(`SELECT e.id
+      FROM hr_monthly_employees e
+      JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+      WHERE e.main_company_id=?
+        AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
+        AND TRIM(COALESCE(s.card_no,''))<>''`)
+      .bind(company).all<Row>();
+    return new Set((result.results || []).map((row) => text(row.id)).filter(Boolean));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function rewriteJson(c: Context<AppEnv>, payload: unknown) {
+  const headers = new Headers(c.res.headers);
+  headers.delete("Content-Length");
+  headers.set("Content-Type", "application/json; charset=UTF-8");
+  c.res = new Response(JSON.stringify(payload), { status: c.res.status, statusText: c.res.statusText, headers });
+}
+
+async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<void>) {
+  const method = String(c.req.method || "GET").toUpperCase();
+  const path = c.req.path;
+  const company = await companyOf(c);
+  if (!(await isAuditRequest(c, company))) return next();
+
+  if (!["GET", "HEAD"].includes(method)) {
+    return next(); // Yazma yolları auth/personnel-control katmanında ayrıca reddedilir.
+  }
+
+  const safeStatic = new Set([
+    "/api/ik/personnel-control/profile",
+    "/api/ik/personnel-control/people",
+    "/api/ik/personnel-control/pdks-masters",
+  ]);
+  const attendanceMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/attendance$/i);
+  if (!safeStatic.has(path) && !attendanceMatch) {
+    c.res = c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
+    return;
+  }
+
+  const allowedIds = await strictAuditEmployeeIds(c, company);
+  if (attendanceMatch && !allowedIds.has(decodeURIComponent(attendanceMatch[1]))) {
+    c.res = c.json({ ok: false, error: { code: "NOT_FOUND", message: "Personel bulunamadı." } }, 404);
+    return;
+  }
+
+  await next();
+  if (!c.res.ok || method === "HEAD") return;
+
+  let payload: any;
+  try { payload = await c.res.clone().json(); } catch { return; }
+  if (path === "/api/ik/personnel-control/people") {
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    const filtered = rows.filter((row: Row) => upper(row.sgkStatus || row.sgk_status) === "VAR" && text(row.cardNo || row.card_no));
+    rewriteJson(c, payload?.data && Array.isArray(payload.data) ? { ...payload, data: filtered } : filtered);
+    return;
+  }
+  if (path === "/api/ik/personnel-control/pdks-masters") {
+    const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+    if (!data || typeof data !== "object") return;
+    const filtered = {
+      ...data,
+      audit: true,
+      groupAssignments: Array.isArray(data.groupAssignments) ? data.groupAssignments.filter((row: Row) => allowedIds.has(text(row.employeeId || row.employee_id))) : [],
+      serviceAssignments: Array.isArray(data.serviceAssignments) ? data.serviceAssignments.filter((row: Row) => allowedIds.has(text(row.employeeId || row.employee_id))) : [],
+    };
+    rewriteJson(c, payload?.data && typeof payload.data === "object" ? { ...payload, data: filtered } : filtered);
+  }
 }
 
 async function scheduleOf(c: Context<AppEnv>, company: string, employeeId: string) {
@@ -121,6 +212,9 @@ async function normalizeSavedOverride(c: Context<AppEnv>, company: string, path:
 }
 
 export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
+  // DENETIM çekirdekte de yalnız güvenli PDKS GET'lerine ve kesin SGK=VAR + kartlı personele sınırlandırılır.
+  app.use("/api/ik/personnel-control/*", enforceAuditReadScope);
+
   // D1 dönem kilidi tüm PDKS kart/düzeltme yazma yollarında tek otoritedir.
   app.use("/api/ik/personnel-control/*", async (c, next) => {
     if (String(c.req.method).toUpperCase() !== "POST") return next();
@@ -171,9 +265,6 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
       summary: summaryOf(days),
     };
     const nextPayload = payload?.data && typeof payload.data === "object" ? { ...payload, data: nextData } : nextData;
-    const headers = new Headers(c.res.headers);
-    headers.delete("Content-Length");
-    headers.set("Content-Type", "application/json; charset=UTF-8");
-    c.res = new Response(JSON.stringify(nextPayload), { status: c.res.status, headers });
+    rewriteJson(c, nextPayload);
   });
 }
