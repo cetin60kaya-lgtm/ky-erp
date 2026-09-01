@@ -11,6 +11,9 @@ const num = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const slugOf = (c: Context<AppEnv>) => text(
+  c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || c.req.header("X-KYERP-Tenant-Slug") || "mecit-hakan",
+);
 
 function fieldValue(field: any): any {
   if (!field || typeof field !== "object") return undefined;
@@ -34,7 +37,7 @@ function itemValue(item: any, key: string) {
   return fieldValue(item?.valueObject?.[key]);
 }
 
-function canonicalFromAzure(result: Row, documentKind: string) {
+function canonicalFromAzure(result: Row, documentKind: string, requestedModel: string) {
   const doc = result?.analyzeResult?.documents?.[0] || result?.documents?.[0] || {};
   const fields = doc?.fields || {};
   const items = Array.isArray(fields?.Items?.valueArray) ? fields.Items.valueArray : [];
@@ -81,7 +84,7 @@ function canonicalFromAzure(result: Row, documentKind: string) {
 
   return {
     extractor: "AZURE_DOCUMENT_INTELLIGENCE",
-    extractorModel: text(doc?.docType) || documentKind,
+    extractorModel: requestedModel || text(doc?.docType) || documentKind,
     extractionConfidence: documentConfidence,
     partyName,
     partyTaxNo,
@@ -102,7 +105,7 @@ function canonicalFromAzure(result: Row, documentKind: string) {
   };
 }
 
-async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string) {
+async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string, modelOverride = "") {
   const env = c.env as any;
   const endpoint = text(env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || env.KYERP_DOCINTEL_ENDPOINT).replace(/\/$/, "");
   const key = text(env.AZURE_DOCUMENT_INTELLIGENCE_KEY || env.KYERP_DOCINTEL_KEY);
@@ -111,7 +114,7 @@ async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string
   }
   const invoiceModel = text(env.KYERP_DOCINTEL_INVOICE_MODEL) || "prebuilt-invoice";
   const dispatchModel = text(env.KYERP_DOCINTEL_DISPATCH_MODEL) || "prebuilt-layout";
-  const model = /IRSALIYE|DISPATCH|DESPATCH/i.test(documentKind) ? dispatchModel : invoiceModel;
+  const model = modelOverride || (/IRSALIYE|DISPATCH|DESPATCH/i.test(documentKind) ? dispatchModel : invoiceModel);
   const apiVersion = text(env.KYERP_DOCINTEL_API_VERSION) || "2024-11-30";
   const url = `${endpoint}/documentintelligence/documentModels/${encodeURIComponent(model)}:analyze?api-version=${encodeURIComponent(apiVersion)}`;
   const bytes = await file.arrayBuffer();
@@ -141,7 +144,7 @@ async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string
     if (!poll.ok) throw Object.assign(new Error(`Belge analiz sonucu alınamadı (${poll.status}).`), { code: "DOCINTEL_POLL_FAILED" });
     const payload = (await poll.json()) as Row;
     const status = text(payload.status).toLowerCase();
-    if (status === "succeeded") return canonicalFromAzure(payload, documentKind);
+    if (status === "succeeded") return canonicalFromAzure(payload, documentKind, model);
     if (status === "failed" || status === "canceled") {
       throw Object.assign(new Error("Belge yapay zeka analizi tamamlanamadı."), { code: "DOCINTEL_FAILED", detail: payload.error });
     }
@@ -149,8 +152,53 @@ async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string
   throw Object.assign(new Error("Belge yapay zeka analizi zaman aşımına uğradı."), { code: "DOCINTEL_TIMEOUT" });
 }
 
+async function extractionProfile(c: Context<AppEnv>, partyTaxNo: string, documentKind: string) {
+  if (!partyTaxNo) return null;
+  try {
+    return await c.env.DB.prepare(
+      `SELECT id, provider_type, provider_model_id, min_confidence
+         FROM accounting_extraction_profiles
+        WHERE main_company_slug=? AND is_active=1 AND party_tax_no=?
+          AND (document_type=? OR document_type='*')
+        ORDER BY CASE WHEN document_type=? THEN 0 ELSE 1 END, updated_at DESC
+        LIMIT 1`,
+    ).bind(slugOf(c), partyTaxNo, documentKind, documentKind).first<Row>();
+  } catch {
+    return null;
+  }
+}
+
 export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, documentKind = "INVOICE") {
-  // Deliberately not a plain OCR call: provider must return structured fields + line items + confidence.
-  // New adapters (Google Document AI/custom model) can be inserted here without changing accounting routes.
-  return azureAnalyze(c, file, documentKind);
+  // This is deliberately not a plain OCR call. First pass uses a structured invoice/layout model
+  // that returns fields, line items and confidences. Recurrent vendor layouts can then route to a
+  // tenant-specific custom model without changing the accounting core.
+  const first = await azureAnalyze(c, file, documentKind);
+  const profile = await extractionProfile(c, text(first.partyTaxNo), documentKind);
+  const customModel = text(profile?.provider_model_id);
+  if (!customModel || upper(profile?.provider_type) !== "AZURE_DOCUMENT_INTELLIGENCE") return first;
+
+  const threshold = num(profile?.min_confidence) || 0.75;
+  // Always prefer a configured supplier-specific model; it is the deliberate learned layout contract.
+  // If it fails, keep the successful generic pass instead of blocking document intake.
+  try {
+    const refined = await azureAnalyze(c, file, documentKind, customModel);
+    await c.env.DB.prepare(
+      `UPDATE accounting_extraction_profiles
+          SET successful_samples=successful_samples+1,last_used_at=?,updated_at=?
+        WHERE id=? AND main_company_slug=?`,
+    ).bind(new Date().toISOString(), new Date().toISOString(), profile.id, slugOf(c)).run();
+    return {
+      ...refined,
+      fallbackExtractionConfidence: first.extractionConfidence,
+      profileId: profile.id,
+      profileThreshold: threshold,
+    };
+  } catch {
+    return {
+      ...first,
+      profileId: profile.id,
+      profileThreshold: threshold,
+      customModelFallbackUsed: true,
+    };
+  }
 }
