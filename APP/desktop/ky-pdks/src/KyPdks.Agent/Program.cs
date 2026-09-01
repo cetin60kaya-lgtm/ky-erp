@@ -63,22 +63,78 @@ sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore
         while (!stoppingToken.IsCancellationRequested)
         {
             var config = configStore.Load();
-            if (config.FileImportEnabled)
+            try
             {
-                try { await ScanAsync(config, stoppingToken); }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-                catch (Exception error)
-                {
-                    await store.TouchStateAsync("last_message", $"Dosya aktarım hatası: {error.Message}", stoppingToken);
-                    await fileLog.WriteAsync("ERROR", $"Dosya aktarım hatası: {error}", stoppingToken);
-                    logger.LogError(error, "PDKS file scan failed");
-                }
+                if (config.NormalizedMode == "HEDEF_TR500") await ScanHedefAsync(config, stoppingToken);
+                if (config.FileImportEnabled) await ScanImportFolderAsync(config, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception error)
+            {
+                await store.TouchStateAsync("last_message", $"Dosya aktarım hatası: {error.Message}", stoppingToken);
+                await fileLog.WriteAsync("ERROR", $"Dosya aktarım hatası: {error}", stoppingToken);
+                logger.LogError(error, "PDKS file scan failed");
             }
             await Task.Delay(config.ScanIntervalMs, stoppingToken);
         }
     }
 
-    private async Task ScanAsync(PdksConfig config, CancellationToken ct)
+    private async Task ScanHedefAsync(PdksConfig config, CancellationToken ct)
+    {
+        var file = config.HedefReadFile;
+        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+        {
+            await store.TouchStateAsync("terminal_state", $"Hedef/TR500 bekleniyor · {file}", ct);
+            return;
+        }
+
+        string[] lines;
+        try
+        {
+            var encoding = ResolveEncoding(config.LineEncoding);
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true);
+            var list = new List<string>();
+            while (!reader.EndOfStream)
+            {
+                ct.ThrowIfCancellationRequested();
+                var line = await reader.ReadLineAsync(ct);
+                if (!string.IsNullOrWhiteSpace(line)) list.Add(line);
+            }
+            lines = list.ToArray();
+        }
+        catch (IOException)
+        {
+            await store.TouchStateAsync("terminal_state", $"Hedef/TR500 dosyası kullanımda · {file}", ct);
+            return;
+        }
+
+        var accepted = 0;
+        var duplicate = 0;
+        var rejected = 0;
+        foreach (var line in lines)
+        {
+            if (!PunchParser.TryParse(line, Path.GetFileName(file), out var parsed) || parsed is null)
+            {
+                rejected++;
+                continue;
+            }
+            var punch = parsed with { Source = "HEDEF_TR500", SourceRef = file };
+            if (await store.AddAsync(punch, ct)) accepted++; else duplicate++;
+        }
+
+        var message = $"Hedef/TR500 · {Path.GetFileName(file)} · yeni={accepted}, tekrar={duplicate}, tanınmayan={rejected}";
+        await store.TouchStateAsync("terminal_state", $"Hedef/TR500 bağlı · {file}", ct);
+        await store.TouchStateAsync("last_import", message, ct);
+        if (accepted > 0)
+        {
+            await store.TouchStateAsync("last_message", message, ct);
+            await fileLog.WriteAsync("PUNCH", message, ct);
+            logger.LogInformation("{Message}", message);
+        }
+    }
+
+    private async Task ScanImportFolderAsync(PdksConfig config, CancellationToken ct)
     {
         var files = Directory.EnumerateFiles(paths.Import)
             .Where(path => new[] { ".txt", ".csv", ".dat", ".log" }.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
@@ -157,6 +213,10 @@ sealed class TerminalCaptureWorker(LocalPdksStore store, PdksPaths paths, Config
                     case "TCP_SERVER": await RunTcpServerAsync(config, stoppingToken); break;
                     case "TCP_CLIENT": await RunTcpClientAsync(config, stoppingToken); break;
                     case "SERIAL": await RunSerialAsync(config, stoppingToken); break;
+                    case "HEDEF_TR500":
+                        await store.TouchStateAsync("terminal_state", $"Hedef/TR500 dosya köprüsü · {config.HedefReadFile}", stoppingToken);
+                        await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+                        break;
                     default:
                         await store.TouchStateAsync("terminal_state", "Dosya modu", stoppingToken);
                         await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);

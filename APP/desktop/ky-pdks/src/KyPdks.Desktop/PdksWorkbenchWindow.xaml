@@ -1,0 +1,202 @@
+<Window x:Class="KyPdks.Desktop.PdksWorkbenchWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="KY PDKS İşlem Merkezi" Height="920" Width="1540" MinHeight="780" MinWidth="1250"
+ WindowStartupLocation="CenterScreen" Background="#F3F6FA" Loaded="Window_Loaded" Closing="Window_Closing">
+ <Grid>
+  <Grid.RowDefinitions>
+   <RowDefinition Height="72"/>
+   <RowDefinition Height="116"/>
+   <RowDefinition Height="*"/>
+   <RowDefinition Height="32"/>
+  </Grid.RowDefinitions>
+
+  <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="0,0,0,1">
+   <Grid Margin="18,0">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+     <Border Width="44" Height="44" CornerRadius="10" Background="{StaticResource KyDark}" Margin="0,0,12,0">
+      <TextBlock Text="KY" Foreground="White" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+     </Border>
+     <StackPanel>
+      <TextBlock Text="KY PDKS · İşlem Merkezi" FontSize="23" FontWeight="Bold" Foreground="{StaticResource KyDark}"/>
+      <TextBlock Text="Hedef uyumlu kart akışı · tek KY ERP D1 data · Web + Windows" Foreground="#708196" FontSize="12"/>
+     </StackPanel>
+    </StackPanel>
+    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+     <TextBlock Text="Dönem" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="#708196"/>
+     <ComboBox x:Name="MonthCombo" Width="120" DisplayMemberPath="Name" SelectedValuePath="Value" Margin="0,0,5,0"/>
+     <ComboBox x:Name="YearCombo" Width="82" Margin="0,0,8,0"/>
+     <Border Padding="9,6" CornerRadius="11" Background="#EEFAF3" BorderBrush="#BFE2CD" BorderThickness="1" Margin="0,0,5,0">
+      <TextBlock x:Name="AgentStateText" Text="Agent kontrol" Foreground="#267048" FontWeight="SemiBold"/>
+     </Border>
+     <Border Padding="9,6" CornerRadius="11" Background="#F1F6FC" BorderBrush="#CAD8E7" BorderThickness="1" Margin="0,0,5,0">
+      <TextBlock x:Name="ErpStateText" Text="ERP: Oturum yok" Foreground="#31587E" FontWeight="SemiBold"/>
+     </Border>
+     <Button Content="DENETİM TEMP" Click="ExportAuditTempButton_Click" Margin="0,0,5,0"/>
+     <Button Content="Detay Yönetim" Click="OpenAdministrationButton_Click"/>
+    </StackPanel>
+   </Grid>
+  </Border>
+
+  <Border Grid.Row="1" Background="#EAF0F7" BorderBrush="{StaticResource KyBorder}" BorderThickness="0,0,0,1" Padding="14,9">
+   <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <TextBlock Text="GÜNLÜK İŞ AKIŞI" FontSize="11" FontWeight="Bold" Foreground="#64788F" Margin="4,0,0,5"/>
+    <UniformGrid Grid.Row="1" Columns="9">
+     <Button x:Name="ImportButton" Click="ImportCardsButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
+      <StackPanel><TextBlock Text="1  BİLGİ AKTAR" FontWeight="Bold"/><TextBlock Text="Kart dosyası al" FontSize="11" Foreground="#718399"/></StackPanel>
+     </Button>
+     <Button x:Name="PeopleButton" Click="RefreshPeopleButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
+      <StackPanel><TextBlock Text="2  PERSONEL" FontWeight="Bold"/><TextBlock Text="ERP listesini yenile" FontSize="11" Foreground="#718399"/></StackPanel>
+     </Button>
+     <Button x:Name="ProcessButton" Click="ProcessPunchesButton_Click" Margin="4" Padding="8" Background="#E9F4FF" BorderBrush="#9CC2E9">
+      <StackPanel><TextBlock Text="3  KARTLARI İŞLE" FontWeight="Bold"/><TextBlock Text="ERP'ye senkronla" FontSize="11" Foreground="#41688E"/></StackPanel>
+     </Button>
+     <Button x:Name="CalculateButton" Click="CalculateAttendanceButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
+      <StackPanel><TextBlock Text="4  PUANTAJ" FontWeight="Bold"/><TextBlock Text="D1 ayını yenile" FontSize="11" Foreground="#718399"/></StackPanel>
+     </Button>
+     <Button x:Name="MissingButton" Click="FindMissingButton_Click" Margin="4" Padding="8" Background="#FFF7E9" BorderBrush="#E7C683">
+      <StackPanel><TextBlock Text="5  EKSİKLER" FontWeight="Bold"/><TextBlock Text="Kart yok / tek basım" FontSize="11" Foreground="#8A6318"/></StackPanel>
+     </Button>
+     <Button x:Name="ClosePeriodButton" Click="ClosePeriodSingleDataButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
+      <StackPanel><TextBlock Text="6  DÖNEM KAPAT" FontWeight="Bold"/><TextBlock Text="D1 kontrollü kilit" FontSize="11" Foreground="#718399"/></StackPanel>
+     </Button>
+     <Button x:Name="PayrollButton" Click="ExportPayrollSingleDataButton_Click" Margin="4" Padding="8" Background="#EEF9F1" BorderBrush="#A9D5B5">
+      <StackPanel><TextBlock Text="7  BORDRO" FontWeight="Bold"/><TextBlock Text="D1 bordro çıktısı" FontSize="11" Foreground="#3D754A"/></StackPanel>
+     </Button>
+     <Button x:Name="BackupButton" Click="BackupWorkflowButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
+      <StackPanel><TextBlock Text="8  YEDEK" FontWeight="Bold"/><TextBlock Text="Yerel tampon DB" FontSize="11" Foreground="#718399"/></StackPanel>
+     </Button>
+     <Button Click="ExportAuditTempButton_Click" Margin="4" Padding="8" Background="#F5F0FF" BorderBrush="#C9B8E8">
+      <StackPanel><TextBlock Text="9  DENETİM TEMP" FontWeight="Bold"/><TextBlock Text="Yıl yıl D1 snapshot" FontSize="11" Foreground="#68508C"/></StackPanel>
+     </Button>
+    </UniformGrid>
+   </Grid>
+  </Border>
+
+  <Grid Grid.Row="2" Margin="12">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="360"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+   <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+    <StackPanel>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,10">
+      <StackPanel>
+       <TextBlock Text="ERP OTURUMU" FontSize="11" FontWeight="Bold" Foreground="#708196"/>
+       <StackPanel x:Name="LoginPanel" Margin="0,6,0,0">
+        <TextBox x:Name="UsernameBox" ToolTip="Kullanıcı adı / e-posta"/>
+        <PasswordBox x:Name="PasswordBox" ToolTip="Parola"/>
+        <Button x:Name="LoginButton" Content="KY ERP ile Giriş" Click="LoginButton_Click" Background="{StaticResource KyBlue}" Foreground="White" BorderThickness="0"/>
+       </StackPanel>
+       <StackPanel x:Name="MfaPanel" Visibility="Collapsed">
+        <TextBlock Text="Authenticator kodu" FontWeight="SemiBold"/>
+        <ComboBox x:Name="MfaProviderCombo"><ComboBoxItem Content="Google" Tag="GOOGLE"/><ComboBoxItem Content="Microsoft" Tag="MICROSOFT"/></ComboBox>
+        <TextBox x:Name="MfaCodeBox" MaxLength="6"/>
+        <Button Content="Doğrula" Click="MfaButton_Click"/>
+       </StackPanel>
+       <StackPanel x:Name="AccountPanel" Visibility="Collapsed">
+        <TextBlock x:Name="AccountText" FontSize="16" FontWeight="Bold"/>
+        <TextBlock x:Name="RoleText" Foreground="#708196"/>
+        <Button Content="Oturumu Kapat" Click="LogoutButton_Click"/>
+       </StackPanel>
+       <TextBlock x:Name="LoginNoticeText" TextWrapping="Wrap" Foreground="#31587E" Margin="0,6,0,0"/>
+      </StackPanel>
+     </Border>
+
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,10">
+      <StackPanel>
+       <TextBlock Text="SEÇİLİ GÜNÜ DÜZELT" FontSize="11" FontWeight="Bold" Foreground="#708196"/>
+       <ComboBox x:Name="CorrectionPersonCombo" DisplayMemberPath="FullName" Margin="0,5,0,4"/>
+       <DatePicker x:Name="CorrectionDatePicker" Margin="0,0,0,4"/>
+       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+        <StackPanel><TextBlock Text="Giriş"/><TextBox x:Name="CorrectionInBox" Text="08:30"/></StackPanel>
+        <StackPanel Grid.Column="1"><TextBlock Text="Çıkış"/><TextBox x:Name="CorrectionOutBox" Text="19:00"/></StackPanel>
+       </Grid>
+       <ComboBox x:Name="CorrectionStatusCombo" Margin="0,0,0,4">
+        <ComboBoxItem Content="Çalıştı" Tag="CALISTI"/><ComboBoxItem Content="Eksik Basım" Tag="EKSIK_BASIM"/><ComboBoxItem Content="Kart Yok" Tag="KART_YOK"/><ComboBoxItem Content="İzin" Tag="IZIN"/><ComboBoxItem Content="Yıllık İzin" Tag="YILLIK_IZIN"/>
+       </ComboBox>
+       <TextBox x:Name="CorrectionNoteBox" Text="PDKS düzeltme"/>
+       <Button x:Name="CorrectionSaveButton" Content="Düzeltmeyi ERP'ye Kaydet" Click="SaveCorrectionButton_Click" Background="{StaticResource KyBlue}" Foreground="White" BorderThickness="0"/>
+      </StackPanel>
+     </Border>
+
+     <Expander Header="Hızlı İzin" IsExpanded="False" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
+      <StackPanel>
+       <ComboBox x:Name="LeavePersonCombo" DisplayMemberPath="FullName"/>
+       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><DatePicker x:Name="LeaveStartPicker"/><DatePicker Grid.Column="1" x:Name="LeaveEndPicker"/></Grid>
+       <ComboBox x:Name="LeaveTypeCombo"><ComboBoxItem Content="Yıllık İzin" Tag="YILLIK_IZIN"/><ComboBoxItem Content="İzin" Tag="IZIN"/></ComboBox>
+       <TextBox x:Name="LeaveNoteBox" Text="PDKS izin"/>
+       <Button x:Name="LeaveSaveButton" Content="İzni D1'e Kaydet" Click="SaveLeaveSingleDataButton_Click"/>
+      </StackPanel>
+     </Expander>
+
+     <Expander Header="Hızlı Avans" IsExpanded="False" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" Padding="10">
+      <StackPanel>
+       <ComboBox x:Name="AdvancePersonCombo" DisplayMemberPath="FullName"/>
+       <DatePicker x:Name="AdvanceDatePicker"/>
+       <TextBox x:Name="AdvanceAmountBox" ToolTip="Tutar"/>
+       <TextBox x:Name="AdvanceNoteBox" Text="PDKS avans"/>
+       <Button x:Name="AdvanceSaveButton" Content="Avansı D1'e Kaydet" Click="SaveAdvanceSingleDataButton_Click"/>
+      </StackPanel>
+     </Expander>
+    </StackPanel>
+   </ScrollViewer>
+
+   <Grid Grid.Column="2">
+    <Grid.RowDefinitions><RowDefinition Height="82"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <UniformGrid Columns="6">
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="PERSONEL" Foreground="#708196"/><TextBlock x:Name="PersonCountText" Text="0" FontSize="24" FontWeight="Bold"/></StackPanel></Border>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="HAM KART" Foreground="#708196"/><TextBlock x:Name="PunchCountText" Text="0" FontSize="24" FontWeight="Bold"/></StackPanel></Border>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="BEKLEYEN" Foreground="#708196"/><TextBlock x:Name="PendingCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#B06A16"/></StackPanel></Border>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="EKSİK" Foreground="#708196"/><TextBlock x:Name="MissingCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#A53232"/></StackPanel></Border>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="ÇALIŞILAN" Foreground="#708196"/><TextBlock x:Name="WorkedCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#267048"/></StackPanel></Border>
+     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="9" Padding="10"><StackPanel><TextBlock Text="DÖNEM" Foreground="#708196"/><TextBlock x:Name="PeriodStateText" Text="D1" FontSize="18" FontWeight="Bold"/></StackPanel></Border>
+    </UniformGrid>
+
+    <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="12">
+     <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock x:Name="GridTitleText" Text="Aylık Giriş / Çıkış Kontrolü" FontSize="20" FontWeight="Bold"/><TextBlock x:Name="GridSubtitleText" Text="Kart hareketleri ve hesaplanan günlük durumlar" Foreground="#708196"/></StackPanel>
+       <StackPanel Grid.Column="1" Orientation="Horizontal"><Button Content="Tüm Günler" Click="ShowAllDaysButton_Click"/><Button Content="Eksikler" Click="FindMissingButton_Click"/><Button Content="Puantaj Sonuç" Click="ShowTimesheetButton_Click"/><Button Content="Ham Kartlar" Click="ShowPunchesButton_Click"/></StackPanel>
+      </Grid>
+      <DataGrid Grid.Row="1" x:Name="AttendanceGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionChanged="AttendanceGrid_SelectionChanged" Margin="0,8,0,0">
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="Tarih" Binding="{Binding Date}" Width="100"/>
+        <DataGridTextColumn Header="Personel" Binding="{Binding FullName}" Width="*"/>
+        <DataGridTextColumn Header="Kart" Binding="{Binding CardNo}" Width="80"/>
+        <DataGridTextColumn Header="Bölüm" Binding="{Binding Department}" Width="130"/>
+        <DataGridTextColumn Header="Durum" Binding="{Binding Status}" Width="115"/>
+        <DataGridTextColumn Header="Giriş" Binding="{Binding Entry}" Width="70"/>
+        <DataGridTextColumn Header="Çıkış" Binding="{Binding Exit}" Width="70"/>
+        <DataGridTextColumn Header="Geç" Binding="{Binding LateMinutes}" Width="60"/>
+        <DataGridTextColumn Header="Erken" Binding="{Binding EarlyMinutes}" Width="60"/>
+        <DataGridTextColumn Header="Fazla" Binding="{Binding OvertimeMinutes}" Width="60"/>
+        <DataGridTextColumn Header="Kaynak" Binding="{Binding DataSource}" Width="100"/>
+        <DataGridTextColumn Header="Not" Binding="{Binding Note}" Width="180"/>
+       </DataGrid.Columns>
+      </DataGrid>
+      <DataGrid Grid.Row="1" x:Name="TimesheetGrid" Visibility="Collapsed" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" Margin="0,8,0,0">
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="Personel" Binding="{Binding FullName}" Width="*"/><DataGridTextColumn Header="Bölüm" Binding="{Binding Department}" Width="130"/><DataGridTextColumn Header="Çalışılan" Binding="{Binding WorkedDays}" Width="75"/><DataGridTextColumn Header="Yıllık İzin" Binding="{Binding AnnualLeaveDays}" Width="80"/><DataGridTextColumn Header="İzin" Binding="{Binding LeaveDays}" Width="65"/><DataGridTextColumn Header="Eksik" Binding="{Binding MissingPunchDays}" Width="65"/><DataGridTextColumn Header="Kart Yok" Binding="{Binding NoPunchDays}" Width="75"/><DataGridTextColumn Header="Geç dk" Binding="{Binding LateMinutes}" Width="70"/><DataGridTextColumn Header="Erken dk" Binding="{Binding EarlyMinutes}" Width="75"/><DataGridTextColumn Header="Fazla dk" Binding="{Binding OvertimeMinutes}" Width="75"/>
+       </DataGrid.Columns>
+      </DataGrid>
+      <DataGrid Grid.Row="1" x:Name="PunchGrid" Visibility="Collapsed" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" Margin="0,8,0,0">
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="Personel" Binding="{Binding FullName}" Width="*"/><DataGridTextColumn Header="Kart" Binding="{Binding CardNo}" Width="85"/><DataGridTextColumn Header="Tarih" Binding="{Binding WorkDate}" Width="100"/><DataGridTextColumn Header="Saat" Binding="{Binding EventTime}" Width="80"/><DataGridTextColumn Header="Yön" Binding="{Binding Direction}" Width="70"/><DataGridTextColumn Header="Kaynak" Binding="{Binding Source}" Width="110"/><DataGridTextColumn Header="ERP" Binding="{Binding SyncState}" Width="85"/><DataGridTextColumn Header="Açıklama" Binding="{Binding SyncError}" Width="220"/>
+       </DataGrid.Columns>
+      </DataGrid>
+     </Grid>
+    </Border>
+   </Grid>
+  </Grid>
+
+  <Border Grid.Row="3" Background="{StaticResource KyDark}">
+   <Grid Margin="12,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <TextBlock x:Name="StatusText" Text="Hazır" Foreground="#D8E5F3" VerticalAlignment="Center"/>
+    <TextBlock Grid.Column="1" x:Name="DeviceText" Text="Cihaz" Foreground="#BFD0E1" VerticalAlignment="Center"/>
+   </Grid>
+  </Border>
+ </Grid>
+</Window>
