@@ -10,6 +10,7 @@ const mail = readFileSync(resolve(here, "admin-management-cloud.ts"), "utf8");
 const panel = readFileSync(resolve(here, "../../../app/ky-erp-frontend/src/pages/admin/AdminUsersPanelV2.jsx"), "utf8");
 const transition = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_ENFORCE_MFA_AND_REVOKE_SESSIONS_V1.sql"), "utf8");
 const securityRelease = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_SECURITY_RELEASE_V1.ps1"), "utf8");
+const finalRelease = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_FINAL_ROUND_RELEASE_20260901_V3.ps1"), "utf8");
 
 test("password-only login cannot be configured through canonical admin writes", () => {
   assert.match(entry, /MFA_LOGIN_POLICIES/);
@@ -63,13 +64,21 @@ test("one-time MFA transition revokes only auth sessions and canonicalizes techn
   assert.doesNotMatch(transition, /DROP\s+TABLE/i);
 });
 
-test("security release verifies missing security rows policies roles and module keys", () => {
-  assert.match(securityRelease, /missing_security_count/);
-  assert.match(securityRelease, /unsafe_policy_count/);
-  assert.match(securityRelease, /unsafe_role_count/);
-  assert.match(securityRelease, /unsafe_role_override_count/);
-  assert.match(securityRelease, /unsafe_module_key_count/);
-  assert.match(securityRelease, /Guvenlik kaydi eksik kullanici bulundu/);
+test("security compatibility entry delegates to the canonical final release", () => {
+  assert.match(securityRelease, /KYERP_FINAL_ROUND_RELEASE_20260901_V3\.ps1/);
+  assert.match(securityRelease, /canonical final zincire yonlendiriliyor/);
+});
+
+test("canonical security release verifies missing security rows policies roles modules and tenant guards", () => {
+  assert.match(finalRelease, /missing_security/);
+  assert.match(finalRelease, /missing_company/);
+  assert.match(finalRelease, /unsafe_policy/);
+  assert.match(finalRelease, /unsafe_role/);
+  assert.match(finalRelease, /unsafe_module/);
+  assert.match(finalRelease, /global_isnet/);
+  assert.match(finalRelease, /isnet_guard_triggers/);
+  assert.match(finalRelease, /auth_guard_triggers/);
+  assert.match(finalRelease, /auth_user_security kaydi eksik kullanici var/);
 });
 
 test("real Resend mail verification remains in the combined security release", () => {
