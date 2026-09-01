@@ -10,6 +10,7 @@ $env:FORCE_COLOR = "0"
 $ROOT = Split-Path $PSScriptRoot -Parent
 $WORKER_DIR = Join-Path $ROOT "APP\cloud\ky-erp-api"
 $WRANGLER_CONFIG = Join-Path $WORKER_DIR "wrangler.jsonc"
+$PROMPT = Join-Path $PSScriptRoot "KYERP_RESEND_KEY_PROMPT_GUI.ps1"
 $SECRET_NAME = "RESEND_API_KEY"
 $LOG = Join-Path $env:USERPROFILE "Desktop\KY_ERP_RESEND_ACTIVE_SECRET_REPAIR.log"
 
@@ -42,21 +43,31 @@ function Test-SecretListed {
     } finally { Pop-Location }
 }
 
+function Read-ResendKeyGui {
+    if (-not (Test-Path $PROMPT)) { Fail "Guvenli Resend key penceresi bulunamadi." }
+    Write-Host "[BILGI] Guvenli Resend key penceresi aciliyor..." -ForegroundColor Yellow
+    $value = (& pwsh -STA -NoProfile -ExecutionPolicy Bypass -File $PROMPT | Out-String).Trim()
+    $code = $LASTEXITCODE
+    if ($code -ne 0) { Fail "Resend key penceresi iptal edildi veya acilamadi. Cikis kodu: $code." }
+    if ([string]::IsNullOrWhiteSpace($value) -or -not $value.StartsWith("re_") -or $value.Length -lt 10) { Fail "Gecerli Resend API key alinamadi." }
+    return $value
+}
+
 Set-Content -LiteralPath $LOG -Value "KY ERP RESEND ACTIVE SECRET REPAIR`r`nStart: $(Get-Date -Format o)" -Encoding UTF8
 $plainKey = $null
-$secure = $null
-$ptr = [IntPtr]::Zero
 try {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host " KY ERP - RESEND ACTIVE WORKER SECRET REPAIR" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host " Worker source activation -> standard secret put"
+    Write-Host " Key input: MASKED WINDOWS DIALOG"
     Write-Host " DNS: NO | D1: NO | Pages: NO" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Cyan
 
     if (-not (Test-Path $WRANGLER_CONFIG)) { Fail "Wrangler config bulunamadi." }
-    foreach ($command in @("wrangler","npm")) {
+    if (-not (Test-Path $PROMPT)) { Fail "Resend key penceresi bulunamadi." }
+    foreach ($command in @("wrangler","npm","pwsh")) {
         if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { Fail "$command bulunamadi." }
     }
 
@@ -68,17 +79,11 @@ try {
         Require-Captured "worker dry-run" { npm run build } "Worker dry-run basarisiz." | Out-Null
         Write-Host "[OK] Worker dry-run." -ForegroundColor Green
 
-        # Wrangler 4.127+ rejects standard secret put if the latest Worker version is not deployed.
-        # Activate tested source first; Worker deployments preserve existing secrets.
         Require-Captured "worker activation deploy" { wrangler deploy --config $WRANGLER_CONFIG } "Latest Worker source aktif edilemedi." | Out-Null
         Write-Host "[OK] Latest Worker source active." -ForegroundColor Green
     } finally { Pop-Location }
 
-    $secure = Read-Host "RESEND API KEY (re_...)" -AsSecureString
-    if ($null -eq $secure -or $secure.Length -eq 0) { Fail "Resend API key girilmedi." }
-    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    $plainKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
-    if ([string]::IsNullOrWhiteSpace($plainKey) -or -not $plainKey.StartsWith("re_")) { Fail "Gecerli Resend API key girilmedi." }
+    $plainKey = Read-ResendKeyGui
 
     Push-Location $WORKER_DIR
     try {
@@ -97,7 +102,5 @@ try {
     Write-Host "[HATA] $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 } finally {
-    if ($ptr -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
     $plainKey = $null
-    $secure = $null
 }
