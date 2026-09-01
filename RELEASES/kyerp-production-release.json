@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-01T22:58:00+03:00",
-  "attempt": 77,
+  "requestedAt": "2026-09-01T23:05:00+03:00",
+  "attempt": 78,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -41,6 +41,6 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "dcaa7343891851997930808f92d5749095e2a5bb",
-  "note": "01.09.2026 attempt 77 final production: tam D1 yedegi alinir; Worker ve frontend test/build gecmeden canliya yazilmaz. File Hub/Muhasebe hedefli 0030-0036 mevcut korumalarla uygulanir. Worker deploy sonrasi RESEND_API_KEY aktif bindingi dogrulanir veya production GitHub secretindan kurulur. Ardindan MFA tum kullanicilar icin zorunlu cutover, eski aktif oturumlarin tek seferlik revoke islemi, IsNet 0027 tenant backfill + 0028 D1 guard ve Auth 0029 D1 guard uygulanir ve D1'den tekrar dogrulanir. D1 reset ve generic migration zinciri yoktur."
+  "sourceCommit": "053d60aa20f20fa37040cc59a7fe5d203b5211e9",
+  "note": "01.09.2026 attempt 78. Attempt 77 canliya yazmadan Worker unit regression testlerinde iki stale V3/terminal-prompt beklentisinde durdu. Testler V4 maskeli key akisi ile guncellendi. Tam D1 yedegi alinmadan migration/deploy yok; Worker + frontend test/build zorunlu. Worker deploy sonrasi RESEND_API_KEY aktif bindingi dogrulanir. Ardindan MFA tum kullanicilar icin zorunlu cutover, eski aktif oturumlarin tek seferlik revoke islemi, IsNet 0027+0028 ve Auth 0029 guard uygulanip D1'den tekrar dogrulanir. D1 reset ve generic migration zinciri yoktur."
 }
