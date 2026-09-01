@@ -168,7 +168,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     setNotice("Web PDKS güncel D1 verisine bağlandı.");
   }), [loadCore, loadFullMonth, run]);
 
-  useEffect(() => { refresh(); }, [companyId, month, year]);
+  useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { run("Kart puantajı yükleniyor...", async () => { await loadSelectedAttendance(); setNotice(""); }); }, [loadSelectedAttendance, run]);
 
   useEffect(() => {
