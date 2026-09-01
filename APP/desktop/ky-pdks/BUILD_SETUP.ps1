@@ -15,6 +15,17 @@ $DesktopOut = Join-Path $Dist 'desktop'
 $AgentOut = Join-Path $Dist 'agent'
 $InstallerOut = Join-Path $Dist 'setup'
 
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][scriptblock]$Command
+    )
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label başarısız oldu. Hata kodu: $LASTEXITCODE"
+    }
+}
+
 Write-Host 'KY PDKS Windows build başlıyor...' -ForegroundColor Cyan
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 8 SDK bulunamadı.' }
@@ -25,25 +36,25 @@ New-Item $AgentOut -ItemType Directory -Force | Out-Null
 New-Item $InstallerOut -ItemType Directory -Force | Out-Null
 
 Write-Host '1/5 Restore ve derleme...' -ForegroundColor Cyan
-dotnet restore $SharedProject
-dotnet restore $AgentProject
-dotnet restore $DesktopProject
-if (Test-Path $TestProject) { dotnet restore $TestProject }
+Invoke-Native 'Shared restore' { dotnet restore $SharedProject }
+Invoke-Native 'Agent restore' { dotnet restore $AgentProject }
+Invoke-Native 'Desktop restore' { dotnet restore $DesktopProject }
+if (Test-Path $TestProject) { Invoke-Native 'Test restore' { dotnet restore $TestProject } }
 
-dotnet build $SharedProject -c Release --no-restore
-dotnet build $AgentProject -c Release --no-restore
-dotnet build $DesktopProject -c Release --no-restore
+Invoke-Native 'Shared build' { dotnet build $SharedProject -c Release --no-restore }
+Invoke-Native 'Agent build' { dotnet build $AgentProject -c Release --no-restore }
+Invoke-Native 'Desktop build' { dotnet build $DesktopProject -c Release --no-restore }
 
 if (-not $SkipTests -and (Test-Path $TestProject)) {
     Write-Host '2/5 Testler...' -ForegroundColor Cyan
-    dotnet test $TestProject -c Release --no-restore
+    Invoke-Native 'xUnit test' { dotnet test $TestProject -c Release --no-restore }
 } else {
     Write-Host '2/5 Testler atlandı.' -ForegroundColor Yellow
 }
 
 Write-Host '3/5 Self-contained Windows publish...' -ForegroundColor Cyan
-dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $DesktopOut
-dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut
+Invoke-Native 'Desktop publish' { dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $DesktopOut }
+Invoke-Native 'Agent publish' { dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut }
 
 $DesktopExe = Join-Path $DesktopOut 'KY PDKS.exe'
 $AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
@@ -59,18 +70,17 @@ $InnoCandidates = @(
 ) | Where-Object { $_ -and (Test-Path $_) }
 
 if (-not $InnoCandidates) {
-    Write-Host 'Desktop ve Agent publish tamamlandı; Inno Setup 6 bulunamadığı için Setup.exe üretilmedi.' -ForegroundColor Yellow
-    Write-Host "Çıktılar: $Dist" -ForegroundColor Cyan
-    exit 0
+    throw 'Inno Setup 6 bulunamadı. Setup.exe üretilemedi.'
 }
 
 $env:KY_PDKS_DIST = $Dist
 $env:KY_PDKS_SETUP_OUT = $InstallerOut
-& $InnoCandidates[0] (Join-Path $Root 'installer\KY-PDKS.iss')
-if ($LASTEXITCODE -ne 0) { throw "Inno Setup hata kodu: $LASTEXITCODE" }
+$InnoExe = $InnoCandidates[0]
+$InnoScript = Join-Path $Root 'installer\KY-PDKS.iss'
+Invoke-Native 'Inno Setup' { & $InnoExe $InnoScript }
 
-$Setup = Get-ChildItem $InstallerOut -Filter 'KY-PDKS-Setup*.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $Setup) { throw 'Setup.exe oluşmadı.' }
+$Setup = Get-ChildItem $InstallerOut -Filter 'KY-PDKS-Setup-1.3.0.exe' | Select-Object -First 1
+if (-not $Setup) { throw 'KY-PDKS-Setup-1.3.0.exe oluşmadı.' }
 
 Write-Host '5/5 Bütünlük özeti...' -ForegroundColor Cyan
 $Hash = (Get-FileHash $Setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -79,7 +89,7 @@ $HashFile = "$($Setup.FullName).sha256.txt"
 
 $BuildInfo = [ordered]@{
     product = 'KY PDKS'
-    version = '1.1.0'
+    version = '1.3.0'
     builtAt = (Get-Date).ToString('o')
     setup = $Setup.Name
     sha256 = $Hash
@@ -89,6 +99,6 @@ $BuildInfo = [ordered]@{
 $BuildInfo | ConvertTo-Json | Set-Content (Join-Path $InstallerOut 'build-info.json') -Encoding utf8
 
 Write-Host ''
-Write-Host 'KY PDKS Windows paketi hazır.' -ForegroundColor Green
+Write-Host 'KY PDKS Windows 1.3.0 paketi hazır.' -ForegroundColor Green
 Write-Host "Setup : $($Setup.FullName)" -ForegroundColor Cyan
 Write-Host "SHA256: $Hash" -ForegroundColor Cyan

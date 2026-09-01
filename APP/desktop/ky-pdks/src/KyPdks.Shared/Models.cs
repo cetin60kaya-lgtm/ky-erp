@@ -131,7 +131,7 @@ public sealed record StoredSession(
 
 public sealed class PdksConfig
 {
-    public string SourceMode { get; set; } = "FILE";
+    public string SourceMode { get; set; } = "HEDEF_TR500";
     public string TcpHost { get; set; } = "127.0.0.1";
     public int TcpPort { get; set; } = 4370;
     public string SerialPort { get; set; } = "COM1";
@@ -141,13 +141,17 @@ public sealed class PdksConfig
     public bool AutoSync { get; set; } = true;
     public bool FileImportEnabled { get; set; } = true;
     public string LineEncoding { get; set; } = "windows-1254";
+    public string HedefReadFile { get; set; } = @"F:\Ekin\bilgi.dat";
+    public string HedefWriteFile { get; set; } = @"F:\Ekin\TR500.txt";
 
-    public string NormalizedMode => (SourceMode ?? "FILE").Trim().ToUpperInvariant() switch
+    public string NormalizedMode => (SourceMode ?? "HEDEF_TR500").Trim().ToUpperInvariant() switch
     {
+        "HEDEF_TR500" => "HEDEF_TR500",
         "TCP_SERVER" => "TCP_SERVER",
         "TCP_CLIENT" => "TCP_CLIENT",
         "SERIAL" => "SERIAL",
-        _ => "FILE",
+        "FILE" => "FILE",
+        _ => "HEDEF_TR500",
     };
 
     public void Normalize()
@@ -160,5 +164,7 @@ public sealed class PdksConfig
         ScanIntervalMs = Math.Clamp(ScanIntervalMs, 250, 30000);
         SyncIntervalSeconds = Math.Clamp(SyncIntervalSeconds, 10, 3600);
         LineEncoding = string.IsNullOrWhiteSpace(LineEncoding) ? "windows-1254" : LineEncoding.Trim();
+        HedefReadFile = string.IsNullOrWhiteSpace(HedefReadFile) ? @"F:\Ekin\bilgi.dat" : HedefReadFile.Trim();
+        HedefWriteFile = string.IsNullOrWhiteSpace(HedefWriteFile) ? @"F:\Ekin\TR500.txt" : HedefWriteFile.Trim();
     }
 }

@@ -1,42 +1,35 @@
-# KY PDKS — Windows Masaüstü
+# KY PDKS 1.3.0 — Windows Masaüstü
 
-KY ERP ile bağlı çalışan, kart toplama ve yerel kayıt için internete bağımlı olmayan gerçek Windows PDKS ürünüdür.
+KY ERP'nin PDKS modülüyle aynı D1 iş verisini kullanan gerçek Windows masaüstü uygulamasıdır. Windows tarafındaki SQLite ikinci personel/izin/avans/bordro veritabanı değildir; yalnız ham kart, offline kuyruk, cache, log ve yedek içindir.
 
 ## Kurulan ürün
 
-- `KY PDKS.exe`: kullanıcının açtığı WPF masaüstü uygulaması.
-- `KYERP.PDKS.Agent`: Windows hizmeti; masaüstü uygulama kapalı olsa bile kart kaydını yerelde toplamaya devam eder.
-- Setup: `KY-PDKS-Setup-1.0.0.exe`.
+- `KY PDKS.exe`: WPF masaüstü uygulaması.
+- `KYERP.PDKS.Agent`: Windows hizmeti; uygulama kapalı olsa bile kart hareketini yerelde toplamaya devam eder.
+- Setup: `KY-PDKS-Setup-1.3.0.exe`.
 - Yerel DB: `C:\ProgramData\KY ERP\PDKS\Data\pdks.db`.
-- Import: `C:\ProgramData\KY ERP\PDKS\Import`.
-- Arşiv: `C:\ProgramData\KY ERP\PDKS\Archive`.
-- Hatalı satırlar: `C:\ProgramData\KY ERP\PDKS\Reject`.
-- Yerel yedekler: `C:\ProgramData\KY ERP\PDKS\Backup`.
-- Agent logları: `C:\ProgramData\KY ERP\PDKS\Logs`.
+- Import/Archive/Reject/Backup/Logs/Reports: `C:\ProgramData\KY ERP\PDKS` altında.
 - ERP API: `https://api.kyerp.net`.
 
-## Çalışma ilkesi
+## Tek DATA kuralı
 
-1. Setup masaüstü programı ve `KY ERP PDKS Agent` hizmetini kurar.
-2. Agent Windows ile sessiz başlar. **KY PDKS penceresi Windows açılışında kendiliğinden açılmaz.**
-3. Kart hareketi önce yerel SQLite/WAL veritabanına yazılır. İnternet ve ERP cevabı kart basımını bekletmez.
-4. Masaüstü uygulamada mevcut KY ERP kullanıcı hesabıyla giriş yapılır. Mevcut MFA ve giriş onayı sözleşmesi kullanılır.
-5. ERP oturum tokenı Windows kullanıcısına özel DPAPI ile şifrelenir; parola hiçbir zaman diske yazılmaz ve Agent'a verilmez.
-6. Uygulama açık ve ERP oturumu geçerliyken bekleyen kartlar otomatik veya elle ERP'ye gönderilir.
-7. Uygulama kapalı/internet kesik olduğunda Agent yalnız yerel kart toplamaya devam eder. Sonraki girişte senkron kaldığı yerden devam eder.
-8. ERP'ye gönderimden önce personel kaynağı yenilenir; yalnız `SGK=VAR` ve kart numarası bulunan personel eşleşmeleri senkrona girer.
-9. İşe giriş/işten çıkış tarihinin dışındaki hareketler otomatik gönderilmez, kontrol durumunda yerelde tutulur.
+İş verisinin ana kaynağı KY ERP D1'dir:
 
-## Kart kaynakları
+- Personel: İK Personel Kartı; PDKS yalnız `SGK=VAR` + kart numarası bulunan kişileri kullanır.
+- Kart olayları: `ik_time_clock_events`.
+- Puantaj düzeltmeleri: `ik_attendance_day_overrides`.
+- Vardiya ve personel vardiyası: PDKS D1 vardiya tabloları.
+- Servis ve personel servisi: PDKS D1 servis tabloları.
+- İzin: D1 izin planları; Cumartesi izin gününe dahildir, Pazar dahil değildir, resmî tatiller düşülür.
+- Avans/bordro: KY ERP İK ile aynı D1 finans/bordro kayıtları.
+- Dönem kilidi: `ik_monthly_close`; kilitli aya kart, düzeltme, import, izin, avans ve tatil yazılmaz.
+- Geç/erken/fazla süre hesabı server tarafında personelin D1 vardiyasına göre normalize edilir.
 
-Agent aynı veri çekirdeğinde dört kaynak modunu destekler:
+`DENETIM` hesabı yalnız SGK=VAR + kartlı personel ile güvenli PDKS görünümünü okuyabilir; personel finansı ve bütün yazma işlemleri kapalıdır.
 
-- `FILE`: kart cihazının/ara yazılımın oluşturduğu `.txt`, `.csv`, `.dat`, `.log` dosyaları.
-- `TCP_SERVER`: cihaz KY PDKS bilgisayarına TCP bağlantısı açar ve satır gönderir.
-- `TCP_CLIENT`: KY PDKS Agent cihazın IP/port adresine bağlanıp satır okur.
-- `SERIAL`: COM/RS232/USB-Serial üzerinden satır okur.
+## Kart kaynağı ve offline çalışma
 
-Dosya Import özelliği doğrudan terminal modu TCP/Serial olsa bile açık tutulabilir. Kaynak ayarları masaüstündeki **Terminal ve Ayarlar** sayfasından yapılır.
+Agent aynı çekirdekte `HEDEF_TR500`, `FILE`, `TCP_SERVER`, `TCP_CLIENT` ve `SERIAL/COM` kaynaklarını destekler. Varsayılan Hedef/TR500 akışı `F:\Ekin\bilgi.dat` dosyasını salt okunur biçimde takip eder; kaynak dosyayı taşımaz veya silmez.
 
 Tanımlı satır örnekleri:
 
@@ -47,45 +40,40 @@ Tanımlı satır örnekleri:
 00004 2026-08-30 08:28:14
 ```
 
-Kart numarası 5 haneden kısaysa başına sıfır eklenir. Aynı kart + aynı saniye farklı kanaldan tekrar gelse bile fingerprint ile tek ham kayıt tutulur.
+Kart numarası 5 haneden kısaysa başına sıfır eklenir. Aynı kart + aynı zaman hareketi farklı kanaldan tekrar gelse bile yerel fingerprint ve D1 tekillik kontrolü mükerrer kaydı önler.
 
-## Masaüstü ekranları
+İnternet kesildiğinde Agent kartı SQLite/WAL kuyruğuna alır. KY ERP oturumu ve bağlantı geldiğinde kuyruk D1'e gönderilir. Parola diske yazılmaz; kullanıcı tokenı Windows DPAPI CurrentUser ile korunur.
 
-- **Genel Bakış:** bugün kart, bekleyen, senkronlanan, kontrol gereken, ERP giriş/aktivasyon ve son hareketler.
-- **Canlı Kart:** son 500 ham kart hareketi, personel eşleşmesi, kaynak ve ERP durumu.
-- **Personel:** KY ERP'den önbelleğe alınan SGK'lı + kartlı personel.
-- **Terminal ve Ayarlar:** FILE/TCP/COM yapılandırması, otomatik senkron, Agent yeniden başlatma, klasörler ve manuel yedek.
+## Masaüstü iş akışı
 
-## Veri güvenliği
+- Genel Bakış / Canlı Kart: yerel ham kart ve senkron durumu.
+- Personel / Puantaj: KY ERP D1 personeli ve aylık D1 sonucu.
+- Detay Yönetim: D1 vardiya, servis ve personel atamaları; terminal ayarı yalnız fiziksel Windows cihaz konfigürasyonudur.
+- İzin / Avans / Dönem / Bordro: doğrudan `/api/ik/personnel-control/operations/*` canonical D1 endpointlerini kullanır.
+- Yıllık TEMP / Denetim: yalnız SGK=VAR + kartlı personelin puantajından üretilir; finans alanı içermez.
 
-- Ham kart hareketi sonradan değiştirilmez; ERP senkronu yalnız `sync_state`, hata ve `synced_at` alanlarını günceller.
-- Aynı ham kayıt ikinci kez alınmaz.
-- SQLite `WAL`, foreign key ve `busy_timeout` ile çok süreçli Desktop + Agent kullanımı için açılır.
-- Agent 12 saatte bir yerel DB yedeği alır; kullanıcı ayrıca elle yedek alabilir.
-- Uninstall yerel PDKS DB ve yedeklerini **silmez**.
-- Canlı ERP/D1 test verisi bu Windows build sürecinde değiştirilmez.
-- `DENETIM` hesabı masaüstünde yerel veriyi görüntüleyebilir fakat ERP kart write işlemi yapamaz; server tarafındaki salt-okunur politika korunur.
+## Build ve Setup
 
-## Cihaz protokolü sınırı
-
-KY PDKS'nin veri alma/saklama/senkron/Setup çekirdeği cihaz markasından bağımsızdır. Bir terminal yalnızca üreticiye özel binary SDK/protokol kullanıyorsa o marka/model için küçük bir adapter gerekir. Marka/model bilinmeden üretici komutu uydurulmaz. Dosya/TCP satır/seri satır veren cihazlarda ek adapter gerekmez.
-
-## Setup üretimi
-
-Windows 10/11 x64 + .NET 8 SDK + Inno Setup 6 olan makinede:
+Windows 10/11 x64 + .NET 8 SDK + Inno Setup 6:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\BUILD_SETUP.ps1
 ```
 
-Build sırası: Shared + Agent + Desktop restore/build → testler → self-contained `win-x64` publish → Inno Setup → SHA256 ve `build-info.json`.
+Build zinciri restore → Shared/Agent/Desktop Release build → xUnit → self-contained win-x64 publish → Inno Setup → SHA256 → `build-info.json` şeklindedir. Her native komutun exit code'u kontrol edilir; herhangi bir build/test/publish hatasında Setup üretimi durur.
 
-CI dosyası: `.github/workflows/ky-pdks-windows-build.yml`.
-
-Başarılı build çıktısı:
+Başarılı çıktı:
 
 ```text
-APP\desktop\ky-pdks\dist\setup\KY-PDKS-Setup-1.0.0.exe
-APP\desktop\ky-pdks\dist\setup\KY-PDKS-Setup-1.0.0.exe.sha256.txt
+APP\desktop\ky-pdks\dist\setup\KY-PDKS-Setup-1.3.0.exe
+APP\desktop\ky-pdks\dist\setup\KY-PDKS-Setup-1.3.0.exe.sha256.txt
 APP\desktop\ky-pdks\dist\setup\build-info.json
 ```
+
+GitHub Actions: `.github/workflows/ky-pdks-windows-build.yml`.
+
+## Kurulum davranışı
+
+Setup yönetici yetkisi ister, uygulamayı `Program Files\KY ERP\KY PDKS` altına kurar, `KYERP.PDKS.Agent` hizmetini Automatic (Delayed Start) olarak oluşturur ve recovery ayarlarını yapar. Uninstall, kart güvenliği için `C:\ProgramData\KY ERP\PDKS` içindeki DB ve yedekleri silmez.
+
+Production D1 migration/deploy işlemleri Windows build sürecinin parçası değildir; önce API/frontend/Windows testleri ve şema readiness doğrulanır.
