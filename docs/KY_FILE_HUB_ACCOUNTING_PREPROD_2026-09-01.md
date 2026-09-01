@@ -45,8 +45,8 @@ Canlıda aktif yeni Muhasebe çekirdeği henüz kullanılmadığı için yeni ac
 
 ## Secret politikası
 
-Gerçek key/token/endpoint değerleri repoya, chat'e veya plaintext config'e yazılmaz. Production secret kurulumu `wrangler secret put` gibi güvenli interaktif yöntemle yapılır.
+Gerçek key/token/endpoint değerleri repoya, chat'e veya plaintext config'e yazılmaz. Production secret kurulumu `wrangler secret put` gibi güvenli yöntemle yapılır.
 
 ## Yayın durumu
 
-Bu dosyanın oluşturulması production deploy anlamına gelmez. Production-target PR yalnız current production koduyla merge/CI sonucunu kanıtlamak için draft tutulur; açık canlıya alma onayı verilene kadar merge/deploy yapılmaz.
+Canlıya alma onayı 01.09.2026 tarihinde verildi. Bu kayıt güncel production SHA ile son PR merge/CI doğrulamasını yeniden tetiklemek ve yalnız yeşil sonuçtan sonra hedefli D1 + Worker + Pages yayınına geçmek için güncellenmiştir. D1 reset/genel migration zinciri kullanılmayacaktır.
