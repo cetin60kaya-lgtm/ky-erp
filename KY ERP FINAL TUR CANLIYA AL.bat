@@ -63,7 +63,7 @@ if not exist "%SCRIPT%" (
 )
 
 echo [3/3] Final PowerShell syntax kontrolu...
-pwsh -NoProfile -Command "$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile('%SCRIPT%',[ref]$tokens,[ref]$errors) ^| Out-Null; if($errors.Count -gt 0){ $errors ^| ForEach-Object { Write-Host ('[PARSE HATA] ' + $_.Message) }; exit 1 }"
+pwsh -NoProfile -Command "$tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile('%SCRIPT%',[ref]$tokens,[ref]$errors); if($errors.Count -gt 0){ foreach($e in $errors){ Write-Host ('[PARSE HATA] ' + $e.Message) }; exit 1 }"
 if errorlevel 1 (
   echo [HATA] Final release scriptinde PowerShell parse hatasi var. Hicbir canli islem baslatilmadi.
   goto :FAIL
