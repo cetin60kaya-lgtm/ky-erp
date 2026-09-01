@@ -7,6 +7,7 @@ import AccountingReportsListWorkspace from "./muhasebe/AccountingReportsListWork
 import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
 import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
+import PaymentPlannerPanel from "./muhasebe/PaymentPlannerPanel";
 import ProfitLossWorkspace from "./muhasebe/ProfitLossWorkspace";
 import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
 import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
@@ -29,7 +30,7 @@ export const MUHASEBE_TABS = [
     key: "tedarikci-faturalar",
     title: "Tedarikçi İrsaliye / Faturaları",
     description:
-      "Tedarikçiden gelen irsaliye ve faturaları satınalma zincirinde izleyin; fatura gider, KDV, stok-lot ve cari kurallarına göre işlenir.",
+      "İşNet veya manuel XML/PDF/tarama kaynağından gelen irsaliye ve faturaları ortak belge havuzunda inceleyin; gider, KDV, stok-lot ve cari kurallarına göre işleyin.",
   },
   {
     key: "kesilen-faturalar",
@@ -44,7 +45,7 @@ export const MUHASEBE_TABS = [
   {
     key: "cek-odeme",
     title: "Çek / Ödeme",
-    description: "Vadeleri, banka ve firma riskini yakından takip edin.",
+    description: "Haftalık ödeme planını, hafta sonu ödenecekleri, vadeleri, banka ve firma riskini birlikte takip edin.",
   },
   {
     key: "mail-ekstre",
@@ -54,7 +55,7 @@ export const MUHASEBE_TABS = [
   {
     key: "kar-zarar",
     title: "Gelir / Gider ve Kâr Zarar",
-    description: "Resmî ve gayri resmî hareketleri aynı dönem görünümünde analiz edin.",
+    description: "Resmî ve iç operasyon hareketlerini aynı dönem görünümünde analiz edin.",
   },
   {
     key: "kdv-kontrol",
@@ -145,11 +146,14 @@ export default function MuhasebePage({
     content = <IrsaliyeFaturaKontrolTab activeMainCompany={activeMainCompany} />;
   } else if (current.key === "cek-odeme") {
     content = (
-      <CekOdemeMerkeziPage
-        activeMainCompany={activeMainCompany}
-        refreshKey={refreshKey}
-        reloadAll={reloadAll}
-      />
+      <>
+        <PaymentPlannerPanel activeMainCompany={activeMainCompany} />
+        <CekOdemeMerkeziPage
+          activeMainCompany={activeMainCompany}
+          refreshKey={refreshKey}
+          reloadAll={reloadAll}
+        />
+      </>
     );
   } else if (current.key === "mail-ekstre") {
     content = <MailTrackingWorkspace {...pageProps} />;
