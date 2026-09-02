@@ -79,7 +79,7 @@ jobs:
             if (!key) return c.json({{ ok: false, error: {{ code: "RESEND_BINDING_MISSING" }} }}, 503);
             const response = await fetch("https://api.resend.com/emails", {{
               method: "POST",
-              headers: {{ Authorization: `Bearer ${{key}}`, "Content-Type": "application/json" }},
+              headers: {{ Authorization: "Bearer " + key, "Content-Type": "application/json" }},
               body: JSON.stringify({{
                 from: "KY ERP <admin@kyerp.net>",
                 to: [destination],
@@ -92,8 +92,8 @@ jobs:
             if (!response.ok) return c.json({{ ok: false, error: {{ code: "RESEND_SEND_FAILED", status: response.status, message: String(payload?.message || "") }} }}, 503);
             const messageId = String(payload?.id || payload?.messageId || "").trim();
             if (!messageId) return c.json({{ ok: false, error: {{ code: "RESEND_MESSAGE_ID_MISSING" }} }}, 503);
-            const [local, domain] = destination.split("@");
-            const masked = `${{String(local || "").slice(0, 1)}}***@${{domain || ""}}`;
+            const parts = destination.split("@");
+            const masked = String(parts[0] || "").slice(0, 1) + "***@" + String(parts[1] || "");
             return c.json({{ ok: true, data: {{ provider: "RESEND", messageId, sender: "KY ERP <admin@kyerp.net>", recipient: masked }} }});
           }});
 
@@ -102,9 +102,9 @@ jobs:
             const key = String(c.env.RESEND_API_KEY || "").trim();
             if (!key) return c.json({{ ok: false, error: {{ code: "RESEND_BINDING_MISSING" }} }}, 503);
             const messageId = String(c.req.param("messageId") || "").trim();
-            const response = await fetch(`https://api.resend.com/emails/${{encodeURIComponent(messageId)}}`, {{
+            const response = await fetch("https://api.resend.com/emails/" + encodeURIComponent(messageId), {{
               method: "GET",
-              headers: {{ Authorization: `Bearer ${{key}}`, "Content-Type": "application/json" }},
+              headers: {{ Authorization: "Bearer " + key, "Content-Type": "application/json" }},
             }});
             let payload: any = {{}};
             try {{ payload = await response.json(); }} catch {{}}
