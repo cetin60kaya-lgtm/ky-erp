@@ -177,6 +177,7 @@ export const MODULES = [
         label: "Sistem Yönetimi",
         tabs: [
           ["admin-yonetim-ozeti", "Yönetim Özeti", "dashboard"],
+          ["uygulama-sahibi", "Uygulama Sahibi", "ayarlar"],
           ["kullanicilar", "Kullanıcılar", "users"],
           ["ana-firma-ayarlar", "Ana Firma / Ayarlar", "ayarlar"],
         ],
