@@ -119,7 +119,7 @@ test("Web PDKS uses personnel-control operations, not legacy advanced endpoints 
   assert.doesNotMatch(service, /\/ik\/advanced\//);
 });
 
-test("Web PDKS keeps one global module entry and compact horizontal grouped navigation", () => {
+test("Web PDKS keeps one global module entry and the approved compact horizontal grouped navigation", () => {
   const registry = frontend("app/pdksModuleRegistryPatch.js");
   const shell = frontend("pages/modules/PdksPage.jsx");
   const css = frontend("pages/modules/pdks-shell.css");
@@ -127,8 +127,15 @@ test("Web PDKS keeps one global module entry and compact horizontal grouped navi
   assert.match(registry, /label: "PDKS"/);
   for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
     assert.match(shell, new RegExp(group));
-  for (const item of ["Puantaj Kuralları", "Bölümler", "Görevler", "Servisler", "Durumlar", "Firmalar", "Kullanıcılar"])
-    assert.match(shell, new RegExp(item));
+  for (const item of [
+    "Ana Ekran", "Bilgi Aktar", "Giriş / Çıkış", "Puantaj Sonuçları",
+    "Personel Bilgileri", "İzinler", "Çalışma Tarihi", "Avans", "Bordro",
+    "Gruplar / Vardiyalar", "Puantaj Kuralları", "Dönemler", "Servisler", "Tatiller",
+    "Saat / Terminal", "Kullanıcı", "Cihaz Bağlantıları", "Senkron",
+    "Raporlar", "Yıllık TEMP / Denetim",
+  ]) assert.match(shell, new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const masterData of ["Bölümler", "Görevler", "Durumlar", "Firmalar"])
+    assert.doesNotMatch(shell, new RegExp(masterData));
   assert.match(shell, /PDKS Hızlı Asistan/);
   assert.match(css, /shell-v3-submenu/);
   assert.match(css, /pdks-command-nav/);
