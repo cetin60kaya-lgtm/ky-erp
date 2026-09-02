@@ -87,8 +87,32 @@ public partial class KyErpShellWindow : Window
             if (!_online) ShowOfflineCenter(true);
             return;
         }
+        await ApplyEmbeddedWebModeAsync();
         await TryRefreshIdentityAsync();
         UpdatePageTitle(ErpWebView.Source?.AbsolutePath ?? "/");
+    }
+
+    private async Task ApplyEmbeddedWebModeAsync()
+    {
+        if (ErpWebView.CoreWebView2 is null) return;
+        const string script = """
+        (() => {
+          const id = 'kyerp-desktop-host-style';
+          if (document.getElementById(id)) return true;
+          const style = document.createElement('style');
+          style.id = id;
+          style.textContent = `
+            .shell-v3{grid-template-columns:minmax(0,1fr)!important}
+            .shell-v3-sidebar,.shell-v3-overlay{display:none!important}
+            .shell-v3-main{grid-column:1!important;min-width:0!important;width:100%!important}
+            .shell-v3-icon.mobile{display:none!important}
+          `;
+          document.head.appendChild(style);
+          document.documentElement.dataset.kyerpDesktopHost = '1';
+          return true;
+        })()
+        """;
+        try { await ErpWebView.CoreWebView2.ExecuteScriptAsync(script); } catch { }
     }
 
     private async void CoreWebView2_WebResourceResponseReceived(object? sender, CoreWebView2WebResourceResponseReceivedEventArgs e)
@@ -102,8 +126,8 @@ public partial class KyErpShellWindow : Window
             using var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false);
             var payload = await reader.ReadToEndAsync(_lifetime.Token);
             if (string.IsNullOrWhiteSpace(payload)) return;
-            var first = payload.AsSpan().TrimStart();
-            if (first.IsEmpty || (first[0] != '{' && first[0] != '[')) return;
+            var trimmed = payload.TrimStart();
+            if (trimmed.Length == 0 || (trimmed[0] != '{' && trimmed[0] != '[')) return;
             string contentType;
             try { contentType = e.Response.Headers.GetHeader("Content-Type"); }
             catch { contentType = "application/json; charset=utf-8"; }
@@ -212,22 +236,71 @@ public partial class KyErpShellWindow : Window
         try
         {
             using var user = JsonDocument.Parse(userJson);
-            CurrentUserText.Text = FirstText(user.RootElement, "fullName", "name", "username") is { Length: > 0 } name ? name : "KY ERP kullanıcısı";
-            var role = FirstText(user.RootElement, "role");
+            var root = user.RootElement;
+            CurrentUserText.Text = FirstText(root, "fullName", "name", "username") is { Length: > 0 } name ? name : "KY ERP kullanıcısı";
+            var role = FirstText(root, "role");
             if (!_audit && !string.IsNullOrWhiteSpace(role)) CurrentRoleText.Text = role;
+            ApplyPermissions(root, role);
         }
         catch { }
     }
 
+    private void ApplyPermissions(JsonElement user, string role)
+    {
+        if (["ADMIN", "SUPER_ADMIN"].Contains(role.Trim().ToUpperInvariant()))
+        {
+            SetAllModuleButtons(Visibility.Visible);
+            return;
+        }
+        if (!user.TryGetProperty("permissions", out var rows) || rows.ValueKind != JsonValueKind.Array) return;
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows.EnumerateArray())
+        {
+            var module = FirstText(row, "moduleKey", "module_key");
+            var canView = row.TryGetProperty("canView", out var view) && view.ValueKind == JsonValueKind.True;
+            if (canView && !string.IsNullOrWhiteSpace(module)) allowed.Add(module);
+        }
+        SetVisible(MuhasebeButton, allowed.Contains("MUHASEBE"));
+        SetVisible(IsnetButton, allowed.Contains("ISNET"));
+        SetVisible(DesenButton, allowed.Contains("DESEN"));
+        SetVisible(BoyahaneButton, allowed.Contains("BOYAHANE"));
+        SetVisible(ImalatButton, allowed.Contains("IMALAT"));
+        SetVisible(IkButton, allowed.Contains("IK"));
+        SetVisible(PdksButton, allowed.Contains("IK"));
+        SetVisible(NativePdksButton, allowed.Contains("IK"));
+        SetVisible(FileHubButton, allowed.Contains("ADMIN"));
+        SetVisible(AssistantButton, allowed.Contains("ASISTAN"));
+        SetVisible(AdminButton, allowed.Contains("ADMIN"));
+        FinanceGroup.Visibility = MuhasebeButton.Visibility == Visibility.Visible || IsnetButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+        ProductionGroup.Visibility = DesenButton.Visibility == Visibility.Visible || BoyahaneButton.Visibility == Visibility.Visible || ImalatButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+        PeopleGroup.Visibility = IkButton.Visibility == Visibility.Visible || PdksButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+        SystemGroup.Visibility = FileHubButton.Visibility == Visibility.Visible || AssistantButton.Visibility == Visibility.Visible || AdminButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void SetAllModuleButtons(Visibility visibility)
+    {
+        foreach (var button in new[] { MuhasebeButton, IsnetButton, DesenButton, BoyahaneButton, ImalatButton, IkButton, PdksButton, NativePdksButton, FileHubButton, AssistantButton, AdminButton })
+            button.Visibility = visibility;
+        FinanceGroup.Visibility = ProductionGroup.Visibility = PeopleGroup.Visibility = SystemGroup.Visibility = visibility;
+    }
+
+    private static void SetVisible(Button button, bool visible) => button.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+
     private void ApplyScope(bool audit)
     {
-        FinanceGroup.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
-        ProductionGroup.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
-        SystemGroup.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
+        if (!audit)
+        {
+            PageSubTitleText.Text = "Web + D1 + File Hub + Offline çalışma kopyası";
+            return;
+        }
+        FinanceGroup.Visibility = Visibility.Collapsed;
+        ProductionGroup.Visibility = Visibility.Collapsed;
+        SystemGroup.Visibility = Visibility.Collapsed;
         PeopleGroup.Visibility = Visibility.Visible;
-        PageSubTitleText.Text = audit
-            ? "DENETİM • yalnız izin verilen SGK/PDKS görünümü • salt okunur"
-            : "Web + D1 + File Hub + Offline çalışma kopyası";
+        IkButton.Visibility = Visibility.Visible;
+        PdksButton.Visibility = Visibility.Visible;
+        NativePdksButton.Visibility = Visibility.Visible;
+        PageSubTitleText.Text = "DENETİM • yalnız izin verilen SGK/PDKS görünümü • salt okunur";
     }
 
     private async void ModuleButton_Click(object sender, RoutedEventArgs e)
