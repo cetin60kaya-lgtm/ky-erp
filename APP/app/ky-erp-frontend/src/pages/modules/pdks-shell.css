@@ -1,0 +1,329 @@
+body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu,
+body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu-group {
+  display: none !important;
+}
+
+.pdks-module-shell {
+  display: block;
+  min-width: 0;
+}
+
+.pdks-command-nav {
+  position: relative;
+  z-index: 35;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid #d8e3ed;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .05);
+}
+
+.pdks-command-brand {
+  display: flex;
+  flex: 0 0 112px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5px 11px;
+  border-right: 1px solid #dfe7ef;
+}
+
+.pdks-command-brand strong {
+  color: #0c4f82;
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+
+.pdks-command-brand span {
+  margin-top: 2px;
+  color: #75879a;
+  font-size: 9.5px;
+}
+
+.pdks-command-groups {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.pdks-command-group {
+  position: relative;
+  min-width: 0;
+}
+
+.pdks-command-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid #d8e3ed;
+  border-radius: 9px;
+  background: #fff;
+  color: #34495e;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+
+.pdks-command-toggle > span {
+  min-width: 0;
+}
+
+.pdks-command-toggle strong,
+.pdks-command-toggle small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdks-command-toggle strong {
+  color: #263d53;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.pdks-command-toggle small {
+  margin-top: 2px;
+  color: #8493a3;
+  font-size: 8.5px;
+  font-weight: 500;
+}
+
+.pdks-command-toggle i {
+  flex: 0 0 auto;
+  color: #7790a7;
+  font-size: 13px;
+  font-style: normal;
+  transition: transform .15s ease;
+}
+
+.pdks-command-toggle:hover,
+.pdks-command-group.current .pdks-command-toggle {
+  border-color: #b8d2e7;
+  background: #f3f8fc;
+}
+
+.pdks-command-group.current .pdks-command-toggle strong {
+  color: #0b5a96;
+}
+
+.pdks-command-toggle.open {
+  border-color: #8ebbdc;
+  background: #edf6fc;
+  box-shadow: 0 0 0 2px rgba(15, 95, 155, .07);
+}
+
+.pdks-command-toggle.open i {
+  transform: rotate(180deg);
+}
+
+.pdks-command-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  width: max(220px, 100%);
+  max-height: min(420px, 62vh);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #cddbe7;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 35px rgba(28, 45, 66, .18);
+}
+
+.pdks-command-menu button {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 1px 0;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #42566b;
+  cursor: pointer;
+  text-align: left;
+  font-size: 10.5px;
+}
+
+.pdks-command-menu button:hover {
+  background: #eef6fc;
+  color: #0c568d;
+}
+
+.pdks-command-menu button.active {
+  background: #e5f1fb;
+  color: #0b5a96;
+  font-weight: 800;
+}
+
+.pdks-command-menu button b {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: #d8ebf8;
+  color: #0b5a96;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.pdks-module-content {
+  min-width: 0;
+}
+
+.pdks-quick-assistant {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cfe0ee;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f9fd 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+
+.pdks-quick-assistant-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pdks-quick-assistant-title strong {
+  display: block;
+  color: #123a5b;
+  font-size: 12px;
+}
+
+.pdks-quick-assistant-title span {
+  display: block;
+  margin-top: 2px;
+  color: #667b91;
+  font-size: 9.5px;
+}
+
+.pdks-quick-assistant-title em {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #fff2d7;
+  color: #8c5b00;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.pdks-assistant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.pdks-assistant-row input {
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid #bfd0df;
+  border-radius: 7px;
+  background: #fff;
+  color: #1f3347;
+}
+
+.pdks-assistant-row button {
+  min-width: 82px;
+  min-height: 34px;
+  border: 1px solid #0f5f9b;
+  border-radius: 7px;
+  background: #0f5f9b;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pdks-assistant-row button:disabled,
+.pdks-assistant-examples button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.pdks-assistant-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.pdks-assistant-examples button {
+  min-height: 25px;
+  padding: 4px 7px;
+  border: 1px solid #d5e0ea;
+  border-radius: 999px;
+  background: #fff;
+  color: #52677b;
+  font-size: 8.8px;
+  cursor: pointer;
+}
+
+.pdks-assistant-examples button:hover {
+  background: #eef6fc;
+  color: #0f5f9b;
+}
+
+.pdks-assistant-success,
+.pdks-assistant-error {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+.pdks-assistant-success {
+  border: 1px solid #c8e7d4;
+  background: #eef9f2;
+  color: #246c43;
+}
+
+.pdks-assistant-error {
+  border: 1px solid #edcaca;
+  background: #fff0f0;
+  color: #9a2929;
+}
+
+@media (max-width: 1220px) {
+  .pdks-command-brand {
+    display: none;
+  }
+  .pdks-command-groups {
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .pdks-command-nav {
+    overflow-x: auto;
+  }
+  .pdks-command-groups {
+    min-width: 650px;
+  }
+  .pdks-command-menu {
+    position: fixed;
+    top: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 55vh;
+  }
+  .pdks-assistant-row {
+    grid-template-columns: 1fr;
+  }
+}

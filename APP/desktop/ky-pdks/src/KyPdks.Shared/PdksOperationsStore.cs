@@ -336,16 +336,17 @@ public sealed class PdksOperationsStore(PdksPaths paths)
     {
         await InitializeAsync(ct);
         if (string.IsNullOrWhiteSpace(eventId)) throw new InvalidOperationException("Kart hareketi seçin.");
+        var normalizedReason = string.IsNullOrWhiteSpace(reason) ? "Manuel iptal" : reason!.Trim();
         await using var connection = new SqliteConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = "INSERT OR REPLACE INTO voided_events(event_id,reason,actor,voided_at) VALUES($id,$reason,$actor,$now)";
         command.Parameters.AddWithValue("$id", eventId);
-        command.Parameters.AddWithValue("$reason", string.IsNullOrWhiteSpace(reason) ? "Manuel iptal" : reason.Trim());
+        command.Parameters.AddWithValue("$reason", normalizedReason);
         command.Parameters.AddWithValue("$actor", actor ?? "");
         command.Parameters.AddWithValue("$now", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
         await command.ExecuteNonQueryAsync(ct);
-        await AuditAsync("VOID_EVENT", eventId, $"Kart hareketi yerel hesaplamadan çıkarıldı: {reason}", actor, ct);
+        await AuditAsync("VOID_EVENT", eventId, $"Kart hareketi yerel hesaplamadan çıkarıldı: {normalizedReason}", actor, ct);
     }
 
     public async Task<IReadOnlyList<AuditRow>> GetAuditAsync(int limit = 300, CancellationToken ct = default)

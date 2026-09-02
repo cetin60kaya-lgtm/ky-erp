@@ -23,7 +23,7 @@ public sealed class ErpApiClient : IDisposable
     {
         _http = new HttpClient { BaseAddress = new Uri(baseAddress.TrimEnd('/')), Timeout = TimeSpan.FromSeconds(30) };
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.3.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Windows/1.4.0");
     }
 
     public async Task<AuthFlow> LoginAsync(string identity, string password, string deviceLabel, CancellationToken ct = default)
@@ -219,7 +219,7 @@ public sealed class ErpApiClient : IDisposable
         {
             year,
             month,
-            lock = true,
+            @lock = true,
             reason = string.IsNullOrWhiteSpace(reason) ? "KY PDKS kontrollü kapanış" : reason,
             userName = userName ?? "KY PDKS",
         }, token, ct);

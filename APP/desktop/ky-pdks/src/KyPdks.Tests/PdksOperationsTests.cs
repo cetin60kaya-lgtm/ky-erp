@@ -6,7 +6,7 @@ namespace KyPdks.Tests;
 public class PdksOperationsTests
 {
     [Fact]
-    public async Task Full_Local_Pdks_Operations_Are_Persisted_And_Calculated()
+    public async Task Local_Legacy_Operations_Do_Not_Override_D1_Or_Offline_Attendance()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-pdks-ops-" + Guid.NewGuid().ToString("N"));
         try
@@ -24,6 +24,7 @@ public class PdksOperationsTests
                 "emp-1", "00004", "ÇETİN KAYA", "Genel", "Personel", "VAR", "Aktif", "00004", "2026-01-01", "");
             await store.CachePeopleAsync(new[] { person });
 
+            // Eski yerel workbench kayıtları hâlâ okunabilir/persist edilir; ancak AttendanceStore için iş kuralı kaynağı değildir.
             await operations.SaveGroupAsync(new WorkGroupRow("SHIFT-A", "Erken Mesai", "08:00", "18:00", 5, 0, true), "TEST");
             await operations.AssignGroupAsync(person.Id, "SHIFT-A", "TEST");
             await operations.SaveLeaveAsync(person.Id, "2026-08-10", "2026-08-11", "YILLIK_IZIN", "Test izin", "TEST");
@@ -34,21 +35,23 @@ public class PdksOperationsTests
             Assert.True(await store.AddAsync(new RawPunch("00004", new DateTime(2026, 8, 13, 18, 30, 0), "TEST", "out", "raw-out")));
 
             var rows = await attendance.BuildMonthAsync(2026, 8);
-            var leave = rows.Single(x => x.EmployeeId == person.Id && x.Date == "2026-08-10");
-            var holiday = rows.Single(x => x.EmployeeId == person.Id && x.Date == "2026-08-30");
+            var localLeave = rows.Single(x => x.EmployeeId == person.Id && x.Date == "2026-08-10");
+            var localHoliday = rows.Single(x => x.EmployeeId == person.Id && x.Date == "2026-08-30");
             var worked = rows.Single(x => x.EmployeeId == person.Id && x.Date == "2026-08-13");
 
-            Assert.Equal("YILLIK_IZIN", leave.Status);
-            Assert.Equal("RESMI_TATIL", holiday.Status);
+            Assert.Equal("KART_YOK", localLeave.Status);
+            Assert.Equal("HAFTA_SONU", localHoliday.Status);
             Assert.Equal("CALISTI", worked.Status);
             Assert.Equal("08:10", worked.Entry);
             Assert.Equal("18:30", worked.Exit);
-            Assert.Equal(5, worked.LateMinutes);
-            Assert.Equal(30, worked.OvertimeMinutes);
+            Assert.Equal(0, worked.LateMinutes);
+            Assert.Equal(20, worked.EarlyMinutes);
+            Assert.Equal(0, worked.OvertimeMinutes);
+            Assert.Equal("OFFLINE_RAW", worked.DataSource);
 
             var timesheet = AttendanceStore.BuildTimesheet(rows).Single(x => x.EmployeeId == person.Id);
             Assert.True(timesheet.WorkedDays >= 1);
-            Assert.Equal(2, timesheet.AnnualLeaveDays);
+            Assert.Equal(0, timesheet.AnnualLeaveDays);
 
             var advances = await operations.GetAdvancesAsync();
             Assert.Single(advances);
