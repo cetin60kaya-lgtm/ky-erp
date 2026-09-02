@@ -10,7 +10,7 @@ const MFA_PROVIDERS = ["GOOGLE", "MICROSOFT"];
 type AnyRow = Record<string, any>;
 
 function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
-function upper(value: unknown) { return text(value).toLocaleUpperCase("tr-TR"); }
+function upper(value: unknown) { return text(value).toUpperCase().replace(/İ/g, "I"); }
 function nowIso() { return new Date().toISOString(); }
 function addSeconds(seconds: number) { return new Date(Date.now() + seconds * 1000).toISOString(); }
 function jsonError(code: string, message: string) { return { ok: false, error: { code, message } }; }

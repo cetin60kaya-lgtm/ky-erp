@@ -19,6 +19,7 @@ const MODULE_KEYS = [
   "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 const ISSUER = "KY ERP";
+const ADMIN_EMAIL_FROM = "KY ERP <admin@kyerp.net>";
 
 type AnyRow = Record<string, any>;
 
@@ -26,7 +27,7 @@ function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
 function upper(value: unknown) {
-  return text(value).toLocaleUpperCase("tr-TR");
+  return text(value).toUpperCase().replace(/İ/g, "I");
 }
 function nowIso() {
   return new Date().toISOString();
@@ -523,7 +524,7 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}) {
 
 function deliveryCapabilities(c: any) {
   const env = c.env as AnyRow;
-  const email = Boolean((env.RESEND_API_KEY && env.RECOVERY_EMAIL_FROM) || env.RECOVERY_EMAIL_WEBHOOK_URL);
+  const email = Boolean(env.RESEND_API_KEY || env.RECOVERY_EMAIL_WEBHOOK_URL);
   const sms = Boolean((env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER) || env.RECOVERY_SMS_WEBHOOK_URL);
   return { email, sms };
 }
@@ -537,10 +538,10 @@ async function sendRecoveryEmail(c: any, destination: string, code: string) {
     if (!response.ok) throw new Error("E-posta doğrulama servisi yanıt vermedi.");
     return;
   }
-  if (!env.RESEND_API_KEY || !env.RECOVERY_EMAIL_FROM) throw new Error("E-posta doğrulama servisi bağlı değil.");
+  if (!env.RESEND_API_KEY) throw new Error("E-posta doğrulama servisi bağlı değil.");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: `Bearer ${text(env.RESEND_API_KEY)}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: text(env.RECOVERY_EMAIL_FROM), to: [destination], subject: "KY ERP güvenlik doğrulama kodu", text: `KY ERP doğrulama kodunuz: ${code}\n\nBu kod 10 dakika geçerlidir. Bu işlemi siz başlatmadıysanız kodu paylaşmayın.` }),
+    body: JSON.stringify({ from: ADMIN_EMAIL_FROM, to: [destination], subject: "KY ERP güvenlik doğrulama kodu", text: `KY ERP doğrulama kodunuz: ${code}\n\nBu kod 10 dakika geçerlidir. Bu işlemi siz başlatmadıysanız kodu paylaşmayın.` }),
   });
   if (!response.ok) throw new Error("E-posta doğrulama kodu gönderilemedi.");
 }

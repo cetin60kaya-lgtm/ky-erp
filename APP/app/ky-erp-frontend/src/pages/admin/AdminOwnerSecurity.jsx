@@ -26,7 +26,7 @@ function friendlyDevice(row) { const label = String(row?.deviceLabel || ""); if 
 function compatibleOtpUri(value) { const raw = String(value || "").trim(); const prefix = "otpauth://totp/"; if (!raw.toLowerCase().startsWith(prefix)) return raw; try { const remainder = raw.slice(prefix.length); const questionIndex = remainder.indexOf("?"); const encodedLabel = questionIndex >= 0 ? remainder.slice(0, questionIndex) : remainder; const query = questionIndex >= 0 ? remainder.slice(questionIndex + 1) : ""; const decodedLabel = decodeURIComponent(encodedLabel); const separatorIndex = decodedLabel.indexOf(":"); if (separatorIndex < 0) return raw; const issuer = decodedLabel.slice(0, separatorIndex).trim(); const account = decodedLabel.slice(separatorIndex + 1).trim(); if (!issuer || !account) return raw; return `${prefix}${encodeURIComponent(issuer)}:${encodeURIComponent(account)}${query ? `?${query}` : ""}`; } catch { return raw; } }
 
 export default function AdminOwnerSecurity() {
-  const { user: currentUser, token, logout } = useAuth();
+  const { token, logout } = useAuth();
   const [owner, setOwner] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [delivery, setDelivery] = useState(null);
@@ -73,7 +73,7 @@ export default function AdminOwnerSecurity() {
     }
   }
 
-  useEffect(() => { loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAll(); }, []);
 
   async function saveProfile(event) {
     event.preventDefault();

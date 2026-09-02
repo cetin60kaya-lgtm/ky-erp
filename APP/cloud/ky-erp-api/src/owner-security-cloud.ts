@@ -188,7 +188,7 @@ async function createChallenge(c: any, options: AnyRow) {
   await c.env.DB.prepare(
     `INSERT INTO auth_owner_recovery_challenges
      (id,user_id,purpose,channel,destination_masked,challenge_token_hash,otp_hash,otp_salt,question_ids,attempt_count,answer_attempt_count,send_count,created_at,expires_at,verified_at,ip_address)
-     VALUES (?,?,?,?,?,?,?,?,?,0,0,1,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,0,0,1,?,?,?,?)`,
   ).bind(
     id, options.userId, options.purpose, options.channel, options.destinationMasked || null,
     await sha256(token), await sha256(`${salt}:${otp}`), salt, JSON.stringify(options.metadata || {}),
@@ -213,18 +213,18 @@ async function markAttemptFailure(c: any, row: AnyRow) {
   return lockedUntil;
 }
 
-async function revokeAfterMfaChange(c: any, current: AnyRow, targetId: string) {
-  const timestamp = nowIso();
-  await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(timestamp, targetId).run();
-  await c.env.DB.prepare(
-    `UPDATE auth_login_approvals SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?),consumed_at=COALESCE(consumed_at,?)
-      WHERE user_id=? AND status IN ('PENDING','APPROVED')`,
-  ).bind(timestamp, current.id, timestamp, targetId).run();
-  if (String(targetId) === String(current.id) && current.session?.id) {
-    await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND id<>? AND revoked_at IS NULL").bind(timestamp, current.id, targetId, current.session.id).run();
-  } else {
-    await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND revoked_at IS NULL").bind(timestamp, current.id, targetId).run();
-  }
+function revokeAfterMfaChangeStatements(c: any, current: AnyRow, targetId: string, timestamp: string) {
+  const sessionStatement = String(targetId) === String(current.id) && current.session?.id
+    ? c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND id<>? AND revoked_at IS NULL").bind(timestamp, current.id, targetId, current.session.id)
+    : c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND revoked_at IS NULL").bind(timestamp, current.id, targetId);
+  return [
+    c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(timestamp, targetId),
+    c.env.DB.prepare(
+      `UPDATE auth_login_approvals SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?),consumed_at=COALESCE(consumed_at,?)
+        WHERE user_id=? AND status IN ('PENDING','APPROVED')`,
+    ).bind(timestamp, current.id, timestamp, targetId),
+    sessionStatement,
+  ];
 }
 
 export function registerOwnerSecurityRoutes(app: any) {
@@ -371,13 +371,14 @@ export function registerOwnerSecurityRoutes(app: any) {
       return c.json(jsonError("MFA_CODE_INVALID", lockedUntil ? "Çok fazla hatalı kod girildi. Yenileme 30 dakika kilitlendi." : "Yeni Authenticator kodu doğrulanamadı; mevcut kayıt değiştirilmedi."), lockedUntil ? 429 : 401);
     }
     const timestamp = nowIso();
-    if (provider === "MICROSOFT") {
-      await c.env.DB.prepare("UPDATE auth_user_security SET microsoft_mfa_secret=?,microsoft_mfa_enabled=1,mfa_secret=NULL,mfa_enabled=0,updated_at=? WHERE user_id=?").bind(text(meta.pendingSecret), timestamp, targetId).run();
-    } else {
-      await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=?,google_mfa_enabled=1,mfa_secret=NULL,mfa_enabled=0,updated_at=? WHERE user_id=?").bind(text(meta.pendingSecret), timestamp, targetId).run();
-    }
-    await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET verified_at=?,consumed_at=? WHERE id=?").bind(timestamp, timestamp, row.id).run();
-    await revokeAfterMfaChange(c, current, targetId);
+    const securityStatement = provider === "MICROSOFT"
+      ? c.env.DB.prepare("UPDATE auth_user_security SET microsoft_mfa_secret=?,microsoft_mfa_enabled=1,mfa_secret=NULL,mfa_enabled=0,updated_at=? WHERE user_id=?").bind(text(meta.pendingSecret), timestamp, targetId)
+      : c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=?,google_mfa_enabled=1,mfa_secret=NULL,mfa_enabled=0,updated_at=? WHERE user_id=?").bind(text(meta.pendingSecret), timestamp, targetId);
+    await c.env.DB.batch([
+      securityStatement,
+      c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET verified_at=?,consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(timestamp, timestamp, row.id),
+      ...revokeAfterMfaChangeStatements(c, current, targetId, timestamp),
+    ]);
     await audit(c, "MFA_PROVIDER_RENEWED_SECURE", current.id, targetId, { provider, currentSessionPreserved: String(targetId) === String(current.id) });
     return c.json({ ok: true, data: { renewed: true, provider, providerLabel: providerLabel(provider), currentSessionPreserved: String(targetId) === String(current.id) } });
   });

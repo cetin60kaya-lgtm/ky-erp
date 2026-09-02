@@ -8,6 +8,17 @@ function unwrap(payload) {
     : payload;
 }
 
+function canonicalRole(value) {
+  return String(value || "").trim().toUpperCase().replace(/İ/g, "I");
+}
+
+function withoutApplicationOwner(value) {
+  const keep = (row) => !["SUPER_ADMIN", "ADMIN"].includes(canonicalRole(row?.role || row?.roleOverride || row?.role_override));
+  if (Array.isArray(value)) return value.filter(keep);
+  if (Array.isArray(value?.items)) return { ...value, items: value.items.filter(keep) };
+  return value;
+}
+
 export async function getMainCompanies(params = {}) { return unwrap(await apiGet("/admin/main-companies", params)); }
 export async function createMainCompany(payload = {}) { return unwrap(await apiPost("/admin/main-companies", payload)); }
 export async function getSettings(params = {}) { return unwrap(await apiGet("/admin/settings", params)); }
@@ -21,7 +32,7 @@ export async function generateBackupSql(id, payload = {}) { return unwrap(await 
 export async function downloadBackupSql(id, fileName = "KYERP-firma-yedek.sql") { return downloadFile(`/admin/backups/${encodeURIComponent(id)}/sql/download`, undefined, fileName); }
 
 // Normal Kullanıcılar ekranı uygulama sahibini bilinçli olarak içermez.
-export async function listUsers() { return unwrap(await apiGet("/admin/managed-users", { _ts: Date.now() })); }
+export async function listUsers() { return withoutApplicationOwner(unwrap(await apiGet("/admin/managed-users", { _ts: Date.now() }))); }
 export async function getApplicationOwner() { return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now() })); }
 
 export async function createUser(payload = {}) {

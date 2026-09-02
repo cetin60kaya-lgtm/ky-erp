@@ -11,7 +11,7 @@ function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
 function upper(value: unknown) {
-  return text(value).toLocaleUpperCase("tr-TR");
+  return text(value).toUpperCase().replace(/İ/g, "I");
 }
 function nowIso() {
   return new Date().toISOString();
