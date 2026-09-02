@@ -49,7 +49,21 @@ function withoutStorageDuplicates(module) {
   };
 }
 
-const baseModules = BASE_MODULES.map(withoutStorageDuplicates);
+function withCompanyBilling(module) {
+  if (module.key !== "admin") return module;
+  const billingTab = ["firma-ucretlendirme", "Firma Paket / Kullanım", "odemeler"];
+  if ((module.groups || []).some((group) => (group.tabs || []).some(([key]) => key === billingTab[0]))) return module;
+  const groups = (module.groups || []).map((group, groupIndex) => {
+    if (groupIndex !== 0) return group;
+    const tabs = [...(group.tabs || [])];
+    const companyIndex = tabs.findIndex(([key]) => key === "ana-firma-ayarlar");
+    tabs.splice(companyIndex >= 0 ? companyIndex + 1 : tabs.length, 0, billingTab);
+    return { ...group, tabs };
+  });
+  return { ...module, groups };
+}
+
+const baseModules = BASE_MODULES.map(withoutStorageDuplicates).map(withCompanyBilling);
 const adminIndex = baseModules.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
