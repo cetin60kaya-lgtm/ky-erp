@@ -6,6 +6,11 @@ Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntıl�
 
 - Repo: `cetin60kaya-lgtm/ky-erp`
 - Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
+- `KYERP_PUBLIC_SITE=https://kyerp.net/`
+- `KYERP_PUBLIC_APP=https://app.kyerp.net/`
+- `KYERP_API_ORIGIN=https://api.kyerp.net`
+- Kurumsal tanıtım sitesi: `https://kyerp.net/`
+- ERP uygulaması ve login: `https://app.kyerp.net/`
 - Canlı API: `https://api.kyerp.net`
 - Frontend: `APP/app/ky-erp-frontend`
 - Cloudflare Worker: `APP/cloud/ky-erp-api`
