@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerIkPersonnelMediaRoutes } from "./ik-personnel-media";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -88,6 +89,8 @@ function normalizeAdjustmentType(value: unknown) {
 }
 
 export function registerIkPdksAdjustmentRoutes(app: Hono<AppEnv>) {
+  registerIkPersonnelMediaRoutes(app);
+
   app.post("/api/ik/personnel-control/operations/adjustment", async (c) => {
     const body = await bodyOf(c);
     const auth = await authContext(c, body);
