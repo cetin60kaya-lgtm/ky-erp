@@ -5,6 +5,7 @@ import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
 import { registerIkPdksAdjustmentRoutes } from "./ik-pdks-adjustments";
 import { registerIkPdksAssistantRoutes } from "./ik-pdks-assistant";
 import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
+import { registerIkPersonnelMediaRoutes } from "./ik-personnel-media";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -93,23 +94,21 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
   const company = await companyOf(c);
   if (!(await isAuditRequest(c, company))) return next();
 
-  if (!["GET", "HEAD"].includes(method)) {
-    return next();
-  }
+  if (!["GET", "HEAD"].includes(method)) return next();
 
   const safeStatic = new Set([
     "/api/ik/personnel-control/profile",
     "/api/ik/personnel-control/people",
     "/api/ik/personnel-control/pdks-masters",
   ]);
-  const attendanceMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/attendance$/i);
-  if (!safeStatic.has(path) && !attendanceMatch) {
+  const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance|photo|photo-meta)$/i);
+  if (!safeStatic.has(path) && !personReadMatch) {
     c.res = c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
     return;
   }
 
   const allowedIds = await strictAuditEmployeeIds(c, company);
-  if (attendanceMatch && !allowedIds.has(decodeURIComponent(attendanceMatch[1]))) {
+  if (personReadMatch && !allowedIds.has(decodeURIComponent(personReadMatch[1]))) {
     c.res = c.json({ ok: false, error: { code: "NOT_FOUND", message: "Personel bulunamadı." } }, 404);
     return;
   }
@@ -273,4 +272,5 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
   registerIkPdksAdjustmentRoutes(app);
   registerIkPdksAssistantRoutes(app);
   registerIkPdksDeviceRoutes(app);
+  registerIkPersonnelMediaRoutes(app);
 }
