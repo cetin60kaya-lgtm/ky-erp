@@ -67,6 +67,11 @@ export default function PdksPage(props) {
   const [openGroup, setOpenGroup] = useState(currentGroup);
 
   useEffect(() => {
+    document.body.classList.add("pdks-compact-active");
+    return () => document.body.classList.remove("pdks-compact-active");
+  }, []);
+
+  useEffect(() => {
     setOpenGroup(currentGroup);
   }, [currentGroup]);
 
