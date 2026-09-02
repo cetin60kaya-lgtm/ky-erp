@@ -8,23 +8,99 @@ import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
 import { registerIkPersonnelMediaRoutes } from "./ik-personnel-media";
 
 type Bindings = Cloudflare.Env;
-type Variables = { requestId: string };
+type Variables = { requestId: string; pdksCompany: string };
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 type Row = Record<string, any>;
 
 const DEFAULT_COMPANY = "mecit-hakan";
 const text = (value: unknown) => value === undefined || value === null ? "" : String(value).trim();
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
-const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
+const upper = (value: unknown) => text(value).toUpperCase().replace(/İ/g, "I");
+const lowerSlug = (value: unknown) => text(value).toLocaleLowerCase("tr-TR");
+const isOwnerRole = (role: unknown) => ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
+const isCompanyAdminRole = (role: unknown) => upper(role) === "COMPANY_ADMIN";
+const isAuditRole = (role: unknown) => upper(role) === "DENETIM";
 
 function minutesOf(value: unknown) {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(text(value).slice(0, 5));
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
+async function requestBodyClone(c: Context<AppEnv>): Promise<Row> {
+  const method = String(c.req.method || "GET").toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return {};
+  const contentType = text(c.req.header("Content-Type")).toLowerCase();
+  if (!contentType.includes("application/json")) return {};
+  try {
+    const parsed = await c.req.raw.clone().json();
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Row : {};
+  } catch {
+    return {};
+  }
+}
+
+function permissionAllows(user: Row, method: string) {
+  if (isOwnerRole(user?.role) || isCompanyAdminRole(user?.role) || upper(user?.role) === "IK") return true;
+  if (isAuditRole(user?.role)) return ["GET", "HEAD"].includes(method);
+  const permission = Array.isArray(user?.permissions)
+    ? user.permissions.find((row: Row) => upper(row?.moduleKey || row?.module_key) === "IK")
+    : null;
+  if (!permission) return false;
+  if (["GET", "HEAD"].includes(method)) return Boolean(permission.canView ?? permission.can_view);
+  if (method === "POST") return Boolean(permission.canCreate ?? permission.can_create ?? permission.canUpdate ?? permission.can_update);
+  if (["PUT", "PATCH"].includes(method)) return Boolean(permission.canUpdate ?? permission.can_update);
+  if (method === "DELETE") return Boolean(permission.canDelete ?? permission.can_delete);
+  return false;
+}
+
+async function enforcePdksTenantAndPermission(c: Context<AppEnv>, next: () => Promise<void>) {
+  const user = await getAuthenticatedUser(c) as Row | null;
+  if (!user) {
+    c.res = c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "PDKS için geçerli KY ERP oturumu gereklidir." } }, 401);
+    return;
+  }
+  const body = await requestBodyClone(c);
+  const requested = lowerSlug(
+    c.req.header("X-KYERP-Tenant-Slug") ||
+    c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") ||
+    body.mainCompanySlug || body.mainCompanyId,
+  );
+  const own = lowerSlug(user?.mainCompanySlug || user?.security?.main_company_slug);
+  let company = requested || own;
+
+  if (!isOwnerRole(user.role)) {
+    if (!own) {
+      c.res = c.json({ ok: false, error: { code: "PDKS_TENANT_REQUIRED", message: "Kullanıcının ana firma bağlamı bulunamadı." } }, 403);
+      return;
+    }
+    if (requested && requested !== own) {
+      c.res = c.json({ ok: false, error: { code: "PDKS_TENANT_FORBIDDEN", message: "Başka firmanın PDKS alanına erişemezsiniz." } }, 403);
+      return;
+    }
+    company = own;
+  } else if (!company) {
+    company = DEFAULT_COMPANY;
+  }
+
+  const companyRow = await c.env.DB.prepare("SELECT slug,is_active FROM main_companies WHERE slug=? LIMIT 1").bind(company).first<Row>();
+  if (!companyRow || Number(companyRow.is_active ?? 1) === 0) {
+    c.res = c.json({ ok: false, error: { code: "PDKS_TENANT_NOT_ACTIVE", message: "Seçilen ana firma bulunamadı veya pasif." } }, 404);
+    return;
+  }
+
+  const method = String(c.req.method || "GET").toUpperCase();
+  if (!permissionAllows(user, method)) {
+    c.res = c.json({ ok: false, error: { code: "PDKS_PERMISSION_DENIED", message: "Bu PDKS işlemi için İK yetkiniz bulunmuyor." } }, 403);
+    return;
+  }
+
+  c.set("pdksCompany", company);
+  await next();
+}
+
 async function userAndCompany(c: Context<AppEnv>) {
   const user = await getAuthenticatedUser(c);
-  const company = text(c.req.header("X-KYERP-Tenant-Slug") || user?.mainCompanySlug || user?.security?.main_company_slug || DEFAULT_COMPANY).toLocaleLowerCase("tr-TR");
+  const company = lowerSlug(c.get("pdksCompany") || c.req.header("X-KYERP-Tenant-Slug") || user?.mainCompanySlug || user?.security?.main_company_slug || DEFAULT_COMPANY);
   return { user, company };
 }
 
@@ -35,7 +111,7 @@ async function companyOf(c: Context<AppEnv>) {
 async function isAuditRequest(c: Context<AppEnv>, company: string) {
   const user = await getAuthenticatedUser(c);
   if (!user) return false;
-  if (upper(user.role) === "DENETIM" || text(user.username).toLocaleLowerCase("tr-TR") === "denetim") return true;
+  if (isAuditRole(user.role) || text(user.username).toLocaleLowerCase("tr-TR") === "denetim") return true;
   try {
     const row = await c.env.DB.prepare("SELECT scope FROM ik_user_hr_scope WHERE user_id=? AND main_company_id=? LIMIT 1")
       .bind(user.id, company).first<Row>();
@@ -214,6 +290,7 @@ async function normalizeSavedOverride(c: Context<AppEnv>, company: string, path:
 }
 
 export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
+  app.use("/api/ik/personnel-control/*", enforcePdksTenantAndPermission);
   app.use("/api/ik/personnel-control/*", enforceAuditReadScope);
 
   app.use("/api/ik/personnel-control/*", async (c, next) => {
