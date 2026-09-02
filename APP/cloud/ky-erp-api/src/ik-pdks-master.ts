@@ -1,7 +1,5 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
-import { registerIkPdksAdjustmentRoutes } from "./ik-pdks-adjustments";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -112,9 +110,6 @@ function normalizeTime(value: unknown, fallback: string) {
 }
 
 export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
-  registerIkPdksOperationRoutes(app);
-  registerIkPdksAdjustmentRoutes(app);
-
   app.get("/api/ik/personnel-control/pdks-masters", async (c) => {
     const auth = await authContext(c);
     if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
