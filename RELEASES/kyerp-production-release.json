@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-02T23:24:52+03:00",
-  "attempt": 82,
+  "requestedAt": "2026-09-02T23:38:14+03:00",
+  "attempt": 83,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -45,17 +45,20 @@
     "accounting-ledger",
     "accounting-payment-planner",
     "accounting-archive-worker",
+    "frontend-dependency-audit-zero-high",
+    "browserslist-4.28.8-security-fix",
     "d1-full-predeploy-backup",
     "d1-targeted-only",
     "d1-no-reset",
     "d1-no-generic-migration-chain",
     "worker-typecheck-test-build-before-live",
+    "frontend-dependency-audit-before-live",
     "frontend-lint-test-build-before-live",
     "frontend-real-browser-smoke",
     "cloudflare-worker-production",
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "c7500a732a1bb5570417da7b1477352ea492b93e",
-  "note": "02.09.2026 attempt 82. PR #48 production source'a alindi. Tek Windows urunu KY ERP Masaustu 1.5.0 tam ERP kabugudur; PDKS ayri Windows urunu degildir, KYERP.PDKS.Agent.exe yalniz cihaz toplama/senkron katmanidir. API contract, D1 schema readiness, PDKS Final Verify, Production Source Validation ve Windows Setup 5/5 yesildir. 0037_pdks_device_sync.sql production release zincirine tam D1 yedeginden sonra eklendi; ik_pdks_devices ve ik_pdks_device_sync_logs tablo/kolonlari dogrulanmadan Worker deploy edilmez. File Hub, Muhasebe, Owner Security, IsNet ve mevcut production verileri korunur. D1 reset veya generic migration zinciri yoktur."
+  "sourceCommit": "939dbe13b0081f4e27dbe1fb40fc9a36c644aeab",
+  "note": "02.09.2026 attempt 83. PR #49 production source'a alindi. Frontend lockfile npm'in kendi audit fix mekanizmasiyla guvenli zincire guncellendi; browserslist 4.28.2 -> 4.28.8 ve ilgili browser metadata bagimliliklari patched surumlere tasindi. Kalici high/critical npm audit kapisi hem frontend dependency workflow'una hem Production Source Validation'a eklendi. Temiz lockfile uzerinde npm audit 0 vulnerability, lint basarili, frontend testleri 30/30 ve production build basarilidir. KY ERP Masaustu 1.5.0, PDKS 0037, File Hub, Muhasebe, Owner Security, IsNet ve mevcut production verileri korunur. Canli yayin yine D1 tam yedek + hedefli idempotent migration + sema dogrulama + Worker + Pages sirasi ile yapilir; D1 reset yoktur."
 }
