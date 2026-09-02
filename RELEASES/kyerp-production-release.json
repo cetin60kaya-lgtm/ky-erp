@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-02T21:27:53+03:00",
-  "attempt": 81,
+  "requestedAt": "2026-09-02T23:24:52+03:00",
+  "attempt": 82,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -35,7 +35,9 @@
     "muhasebe-current-runtime",
     "ik-personnel-control-center",
     "ik-denetim-pdks-sgk-var-card-only",
-    "ky-pdks-erp-sync-source",
+    "ky-erp-desktop-full-1.5.0",
+    "pdks-device-agent-layer",
+    "pdks-device-sync-0037",
     "file-hub-provider-neutral",
     "accounting-document-canonical-core",
     "accounting-document-pool",
@@ -54,6 +56,6 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "8c8c0cc9561e0c0b35370731f4da5dd017efb04d",
-  "note": "02.09.2026 attempt 81. Owner Security MFA step-up ve QR yenileme akisi authenticated uygulama sahibinin yalniz kendi user id'sine kilitlendi. Crafted targetUserId veya route id ile baska kullaniciya reauth/renewal/delivery scope edilmesi OWNER_SELF_ONLY ile fail-closed engelleniyor; email reauth verify metadata scope'u da current owner id ile tekrar dogrulaniyor. PR #47 uzerinde API contract, D1 schema readiness ve tam Production Source Validation yesil: Worker typecheck, unit + auth integration, dry-run build, frontend lint/test/build ve production security contract basarili. Tam D1 yedegi alinmadan migration/deploy yok; yalniz hedefli ve idempotent migrationlar uygulanir. D1 reset, DROP, veri silme ve generic migration zinciri yoktur."
+  "sourceCommit": "c7500a732a1bb5570417da7b1477352ea492b93e",
+  "note": "02.09.2026 attempt 82. PR #48 production source'a alindi. Tek Windows urunu KY ERP Masaustu 1.5.0 tam ERP kabugudur; PDKS ayri Windows urunu degildir, KYERP.PDKS.Agent.exe yalniz cihaz toplama/senkron katmanidir. API contract, D1 schema readiness, PDKS Final Verify, Production Source Validation ve Windows Setup 5/5 yesildir. 0037_pdks_device_sync.sql production release zincirine tam D1 yedeginden sonra eklendi; ik_pdks_devices ve ik_pdks_device_sync_logs tablo/kolonlari dogrulanmadan Worker deploy edilmez. File Hub, Muhasebe, Owner Security, IsNet ve mevcut production verileri korunur. D1 reset veya generic migration zinciri yoktur."
 }
