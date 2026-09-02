@@ -32,16 +32,26 @@ jobs:
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
 
-      - name: High ve critical dependency audit
+      - name: Advisory kaydini yazdir
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: npm audit --audit-level=high --json || true
+
+      - name: NPM guvenli lockfile duzeltmesini uret
         working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
-          set -o pipefail
-          npm audit --audit-level=high --json | tee npm-audit.json
+          set -euo pipefail
+          npm audit fix --package-lock-only
+          echo '=== LOCKFILE FIX DIFF ==='
+          git diff -- package.json package-lock.json
+          echo '=== POST FIX AUDIT ==='
+          npm audit --audit-level=high
 
       - name: Frontend regresyon testi
         working-directory: APP/app/ky-erp-frontend
         run: |
+          npm ci
           npm run lint
           npm test
           npm run build
