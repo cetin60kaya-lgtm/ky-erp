@@ -28,14 +28,33 @@ const DEPOLAMA_MODULE = {
   ],
 };
 
-const adminIndex = BASE_MODULES.findIndex((module) => module.key === "admin");
+function withoutStorageDuplicates(module) {
+  if (module.key !== "admin") return module;
+  const storageKeys = new Set(["dosya-klasor-yonetimi", "yedekleme-loglar"]);
+  const hidden = [...(module.hiddenTabs || [])];
+  for (const group of module.groups || []) {
+    for (const tab of group.tabs || []) {
+      if (storageKeys.has(tab[0]) && !hidden.some((row) => row[0] === tab[0])) hidden.push(tab);
+    }
+  }
+  return {
+    ...module,
+    groups: (module.groups || [])
+      .map((group) => ({ ...group, tabs: (group.tabs || []).filter(([key]) => !storageKeys.has(key)) }))
+      .filter((group) => group.tabs.length),
+    hiddenTabs: hidden,
+  };
+}
+
+const baseModules = BASE_MODULES.map(withoutStorageDuplicates);
+const adminIndex = baseModules.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
-      ...BASE_MODULES.slice(0, adminIndex),
+      ...baseModules.slice(0, adminIndex),
       DEPOLAMA_MODULE,
-      ...BASE_MODULES.slice(adminIndex),
+      ...baseModules.slice(adminIndex),
     ]
-  : [...BASE_MODULES, DEPOLAMA_MODULE];
+  : [...baseModules, DEPOLAMA_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
