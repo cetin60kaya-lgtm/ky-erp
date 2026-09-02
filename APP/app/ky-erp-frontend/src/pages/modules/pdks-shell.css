@@ -1,3 +1,7 @@
+body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
+  display: none;
+}
+
 .pdks-module-shell {
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
