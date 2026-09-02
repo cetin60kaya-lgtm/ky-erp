@@ -46,8 +46,12 @@ async function autoLink(c:Context<AppEnv>,slug:string,connectionId:string,fileAs
     const packageId=`${connectionId}:${parent}`.toLocaleUpperCase("tr-TR");
     await insertRelation(c,slug,fileAssetId,"OUTGOING_PACKAGE",packageId,"PACKAGE_MEMBER","AUTO_RULE",{moduleCode,purposeCode,parent});
   }
-  if(moduleCode==="ISNET"&&purposeCode==="E_DOCUMENT"&&logical) await insertRelation(c,slug,fileAssetId,"DOCUMENT",logical,"E_DOCUMENT","AUTO_RULE",{moduleCode,purposeCode});
-  if(moduleCode==="MUHASEBE"&&purposeCode==="INVOICE"&&logical) await insertRelation(c,slug,fileAssetId,"DOCUMENT",logical,"INVOICE","AUTO_RULE",{moduleCode,purposeCode});
+  if(moduleCode==="ISNET"&&purposeCode==="E_DOCUMENT"&&logical){
+    await insertRelation(c,slug,fileAssetId,"DOCUMENT",logical,"E_DOCUMENT","AUTO_RULE",{moduleCode,purposeCode});
+  }
+  if(moduleCode==="MUHASEBE"&&["INVOICE","DELIVERY_NOTE","PAYMENT_DOCUMENT","E_DOCUMENT"].includes(purposeCode)&&logical){
+    await insertRelation(c,slug,fileAssetId,"DOCUMENT",logical,purposeCode,"AUTO_RULE",{moduleCode,purposeCode});
+  }
   return { moduleCode, purposeCode, logical };
 }
 

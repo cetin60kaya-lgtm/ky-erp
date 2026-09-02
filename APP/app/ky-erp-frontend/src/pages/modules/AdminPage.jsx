@@ -5,8 +5,12 @@ import AdminCompanySettings from "../admin/AdminCompanySettings";
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminMappings from "../admin/AdminMappings";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
+import DepolamaPage from "./DepolamaPage";
 
 export default function AdminPage({ activeTab, activeMainCompany }) {
+  if (String(activeTab || "").startsWith("depolama-")) {
+    return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+  }
   if (activeTab === "admin-yonetim-ozeti") {
     return <AdminSystemOverview activeMainCompany={activeMainCompany} />;
   }

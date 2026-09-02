@@ -1,133 +1,103 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Cloud,
-  Database,
   FolderOpen,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
+  TriangleAlert,
 } from "lucide-react";
-import {
-  getDesenBridgeStatus,
-  getDesenFolderSettings,
-  testDesenFolderSettings,
-} from "../../services/desenFolderSettingsApi";
-import { loadModuleData, moduleLoadMessage } from "../../utils/resilientDataLoader";
+import { resolveFileHubStorage } from "../../components/files/fileHub";
 
-const numberText = (value) =>
-  Number(value || 0).toLocaleString("tr-TR", {
-    maximumFractionDigits: 2,
-  });
+const TARGETS = [
+  ["MODEL_IMAGE", "Model görseli"],
+  ["MODEL_SOURCE", "PSD / AI / kaynak"],
+  ["PLACEMENT", "Yerleşim / kalıp"],
+  ["OUTGOING_DESIGN", "Giden desen / takım"],
+];
 
-function sizeText(value) {
-  const bytes = Number(value || 0);
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${numberText(bytes / 1024)} KB`;
-  return `${numberText(bytes / (1024 * 1024))} MB`;
+const providerLabel = (value) => ({
+  GOOGLE_DRIVE: "Google Drive",
+  ONEDRIVE: "Microsoft OneDrive",
+  SHAREPOINT: "Microsoft SharePoint",
+  LOCAL_FOLDER: "Yerel Klasör",
+  NAS: "NAS / Ağ Klasörü",
+})[value] || value || "-";
+
+function storageView(payload, purposeCode, label) {
+  const row = payload?.data || payload || {};
+  return {
+    purposeCode,
+    label,
+    ok: Boolean(row.storage_connection_id),
+    provider: row.provider_type || "",
+    connectionName: row.connection_name || "",
+    rootPath: row.root_path || "",
+    localRootPath: row.local_root_path || "",
+    remoteRootName: row.remote_root_name || "",
+    exact: Boolean(row.module_code && row.purpose_code),
+  };
 }
 
-export default function DesenFolderSettingsBar({ activeMainCompany }) {
-  const [result, setResult] = useState(null);
-  const [bridge, setBridge] = useState(null);
+export default function DesenFolderSettingsBar() {
+  const [targets, setTargets] = useState([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
-  const companyId = activeMainCompany?.id || "";
-  const companySlug = activeMainCompany?.slug || "";
+  const load = useCallback(async () => {
+    setBusy(true);
+    setMessage("");
+    const settled = await Promise.allSettled(
+      TARGETS.map(([purposeCode]) => resolveFileHubStorage("DESEN", purposeCode)),
+    );
+    const next = settled.map((result, index) => {
+      const [purposeCode, label] = TARGETS[index];
+      return result.status === "fulfilled"
+        ? storageView(result.value, purposeCode, label)
+        : { purposeCode, label, ok: false, error: result.reason?.message || "Depolama hedefi bulunamadı." };
+    });
+    setTargets(next);
+    const missing = next.filter((row) => !row.ok);
+    if (missing.length) {
+      setMessage("Desen için eksik depolama ataması var. Depolama > Bölüm / Dosya Atamaları ekranından hedefi tanımlayın.");
+    }
+    setBusy(false);
+  }, []);
 
-  const load = useCallback(
-    async (test = false) => {
-      if (!companySlug && !companyId) return;
-      setBusy(true);
-      setMessage("");
-      try {
-        const company = { id: companyId, slug: companySlug };
-        const loadResult = await loadModuleData({
-          scope: `desen:${companySlug || companyId}:depolama:${test ? "test" : "durum"}`,
-          sources: {
-            storage: {
-              critical: true,
-              load: () => test ? testDesenFolderSettings(company) : getDesenFolderSettings(company),
-            },
-            bridge: { fallback: null, load: () => getDesenBridgeStatus(company) },
-          },
-        });
-        if (loadResult.states.storage.status !== "error") setResult(loadResult.data.storage || null);
-        if (loadResult.states.bridge.status !== "error") setBridge(loadResult.data.bridge || null);
-        const warning = moduleLoadMessage(
-          loadResult,
-          "Desen R2 canlı alanı kontrol edilemedi; son başarılı durum korunuyor.",
-          "Yerel DESINATOR köprüsü yenilenemedi; R2 canlı alanı kullanılabilir.",
-        );
-        setMessage(warning || (test
-          ? `R2 bağlantısı doğrulandı. ${Number(loadResult.data.storage?.pendingFileCount || 0)} gelen dosya hazır.`
-          : ""));
-      } catch (error) {
-        setMessage(error?.message || "Desen depolama alanı kontrol edilemedi.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [companyId, companySlug],
-  );
+  useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    load(false);
-  }, [load]);
-
-  const connected = result?.connected === true || result?.ok === true;
-  const settings = result?.settings || {};
-  const localRoot = bridge?.latest?.rootName || "DESINATOR";
+  const connected = useMemo(() => targets.filter((row) => row.ok), [targets]);
+  const primaryProvider = connected[0]?.provider || "";
+  const hasGoogle = connected.some((row) => row.provider === "GOOGLE_DRIVE");
+  const hasMicrosoft = connected.some((row) => ["ONEDRIVE", "SHAREPOINT"].includes(row.provider));
 
   return (
     <>
       <section className="dsg-toolbar-card dsg-storage-status">
         <div className="dsg-toolbar-main">
-          <span className={`dsg-btn ${connected ? "active" : ""}`}>
-            {busy ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : connected ? (
-              <ShieldCheck size={16} />
-            ) : (
-              <Cloud size={16} />
-            )}
-            {connected ? "R2 Canlı Görsel Alanı Bağlı" : "R2 Bağlantısı Kontrol Edilecek"}
+          <span className={`dsg-btn ${connected.length ? "active" : ""}`}>
+            {busy ? <LoaderCircle className="spin" size={16} /> : connected.length ? <ShieldCheck size={16} /> : <Cloud size={16} />}
+            {connected.length ? `File Hub bağlı · ${providerLabel(primaryProvider)}` : "Desen depolaması bekliyor"}
           </span>
-          <span className={`dsg-btn ${bridge?.online ? "active" : ""}`}>
-            <FolderOpen size={16} />
-            DESINATOR Köprüsü {bridge?.online ? "Çevrimiçi" : "Çevrimdışı"}
-          </span>
-          <button
-            className="dsg-btn"
-            type="button"
-            disabled={busy}
-            onClick={() => load(true)}
-          >
-            {busy ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            Bağlantıları Yenile
+          {hasGoogle ? <span className="dsg-btn active"><Cloud size={16} />Google Drive aktif</span> : null}
+          {hasMicrosoft ? <span className="dsg-btn active"><Cloud size={16} />Microsoft depolama aktif</span> : null}
+          <button className="dsg-btn" type="button" disabled={busy} onClick={load}>
+            {busy ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
+            Depolamayı Yenile
           </button>
         </div>
-        <div className="dsg-scan-meta">
-          <Database size={16} />
-          <span>R2 gelen alanı</span>
-          <strong>{Number(result?.pendingFileCount || 0)} dosya</strong>
-          <code>{settings.incomingFolder || "R2/desen/inbox"}</code>
-        </div>
+
         <div className="dsg-storage-facts">
-          <span><CheckCircle2 size={14} /> Orijinal kaynak: {localRoot}</span>
-          <span><CheckCircle2 size={14} /> Gelen: DESINATOR/Gelen Desenler</span>
-          <span><CheckCircle2 size={14} /> Model arşivi: DESINATOR/Modeller</span>
-          <span><CheckCircle2 size={14} /> Hata: DESINATOR/Hata</span>
-          <span><CheckCircle2 size={14} /> İşlenemeyen: DESINATOR/İşlenemeyen</span>
-          {bridge?.latest?.lastModelName ? <span>Son yerel aktarım: {bridge.latest.lastModelName}</span> : null}
-          <span>{sizeText(result?.totalBytes)} R2 bekleyen veri</span>
-          <span>R2 model: {settings.modelsFolder || "R2/desen/models"}</span>
-          <span>R2 hata: {settings.errorFolder || "R2/desen/error"}</span>
+          {targets.map((row) => (
+            <span key={row.purposeCode}>
+              {row.ok ? <CheckCircle2 size={14} /> : <TriangleAlert size={14} />}
+              <strong>{row.label}:</strong>{" "}
+              {row.ok ? `${row.connectionName || providerLabel(row.provider)} · ${row.rootPath || row.localRootPath || row.remoteRootName || "/"}${row.exact ? "" : " · firma varsayılanı"}` : "Atama yok"}
+            </span>
+          ))}
+          <span><FolderOpen size={14} /><strong>Orijinal dosya:</strong> seçilen Google / Microsoft / Yerel / NAS kaynağında kalır.</span>
+          <span><Cloud size={14} /><strong>R2:</strong> yalnız web önizleme / cache; Desen ana arşivi değildir.</span>
         </div>
       </section>
       {message ? <div className="dsg-page-message">{message}</div> : null}

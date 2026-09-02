@@ -4,10 +4,11 @@ import { registerFileHubRoutes } from "./file-hub";
 import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
 import { registerPublicFileHubScanRoutes } from "./file-hub-agent-scan";
+import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
 
 type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
-const upper = (v: unknown) => text(v).toLocaleUpperCase("tr-TR");
+const upper = (v: unknown) => text(v).toUpperCase().replace(/İ/g, "I");
 const slugOf = (c: any, b: Row = {}) => text(b.mainCompanySlug || b.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
 const isOwner = (role: unknown) => ["ADMIN","SUPER_ADMIN"].includes(upper(role));
 const errorBody = (code: string, message: string) => ({ ok:false, error:{ code,message } });
@@ -50,6 +51,7 @@ export function registerAdminStorageRoutes(app:any){
   registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
   registerPublicFileHubScanRoutes(app);
+  registerAccountingDocumentArchiveRoutes(app);
 
   app.get("/api/admin/file-storage/status",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:await legacyStatus(c)});});
   app.get("/api/admin/file-storage/settings",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:{storageRoot:`FILE_HUB://${slugOf(c)}`,storageMode:"FILE_HUB",note:"Ana dosya evi firma bazında Google Drive, OneDrive veya seçilen provider'dır. R2 yalnız preview/cache katmanıdır."}});});

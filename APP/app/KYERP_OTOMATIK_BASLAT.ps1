@@ -1,6 +1,6 @@
-﻿$ErrorActionPreference = 'Continue'
+$ErrorActionPreference = 'Continue'
 
-$appRoot = 'D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\APP\app'
+$appRoot = $PSScriptRoot
 $backendWorker  = Join-Path $appRoot 'KYERP_BACKEND_WORKER.cmd'
 $frontendWorker = Join-Path $appRoot 'KYERP_FRONTEND_WORKER.cmd'
 $logDir = 'D:\KYERP-YEDEK\LOGS'
