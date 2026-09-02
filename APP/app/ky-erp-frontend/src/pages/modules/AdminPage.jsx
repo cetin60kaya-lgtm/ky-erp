@@ -1,4 +1,5 @@
 import AdminSystemOverview from "../admin/AdminSystemOverview";
+import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
 import AdminStorageCenter from "../admin/AdminStorageCenter";
@@ -8,6 +9,9 @@ import AdminBackupLogs from "../admin/AdminBackupLogs";
 export default function AdminPage({ activeTab, activeMainCompany }) {
   if (activeTab === "admin-yonetim-ozeti") {
     return <AdminSystemOverview activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "uygulama-sahibi") {
+    return <AdminOwnerSecurity />;
   }
   if (activeTab === "kullanicilar") {
     return <AdminUsersPanel activeMainCompany={activeMainCompany} />;
