@@ -86,7 +86,7 @@ async function writeAudit(c: Context<AppEnv>, company: string, employeeId: strin
     await c.env.DB.prepare(`INSERT INTO ik_audit_logs
       (id,main_company_id,employee_id,period,action_type,source_screen,old_json,new_json,reason,user_name,created_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(crypto.randomUUID(), company, employeeId, "", action, "IK_PERSONNEL_MEDIA", "{}", JSON.stringify(payload || {}), "Personel fotoğrafı", username, nowIso()).run();
+      .bind(crypto.randomUUID(), company, employeeId, "", action, "IK_PERSONNEL_PHOTO", "{}", JSON.stringify(payload || {}), "Personel fotoğrafı", username, nowIso()).run();
   } catch {}
 }
 
