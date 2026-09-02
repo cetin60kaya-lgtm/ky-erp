@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.4.0'
+$Version = '1.5.0'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
@@ -27,7 +27,7 @@ function Invoke-Native {
     }
 }
 
-Write-Host "KY PDKS Windows $Version build başlıyor..." -ForegroundColor Cyan
+Write-Host "KY ERP Masaüstü $Version build başlıyor..." -ForegroundColor Cyan
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 8 SDK bulunamadı.' }
 
@@ -62,7 +62,7 @@ Write-Host '3/5 Self-contained Windows publish...' -ForegroundColor Cyan
 Invoke-Native 'Desktop publish' { dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $DesktopOut }
 Invoke-Native 'Agent publish' { dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut }
 
-$DesktopExe = Join-Path $DesktopOut 'KY PDKS.exe'
+$DesktopExe = Join-Path $DesktopOut 'KY ERP Masaüstü.exe'
 $AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
 if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $DesktopExe" }
 if (-not (Test-Path $AgentExe)) { throw "Agent oluşmadı: $AgentExe" }
@@ -88,7 +88,7 @@ $InnoExe = $InnoCandidates[0]
 $InnoScript = Join-Path $Root 'installer\KY-PDKS.iss'
 Invoke-Native 'Inno Setup' { & $InnoExe $InnoScript }
 
-$ExpectedSetupName = "KY-PDKS-Setup-$Version.exe"
+$ExpectedSetupName = "KY-ERP-Masaustu-Setup-$Version.exe"
 $Setup = Get-ChildItem $InstallerOut -Filter $ExpectedSetupName | Select-Object -First 1
 if (-not $Setup) { throw "$ExpectedSetupName oluşmadı." }
 
@@ -98,7 +98,7 @@ $HashFile = "$($Setup.FullName).sha256.txt"
 "$Hash  $($Setup.Name)" | Set-Content -Path $HashFile -Encoding ascii
 
 $BuildInfo = [ordered]@{
-    product = 'KY PDKS'
+    product = 'KY ERP Masaüstü'
     version = $Version
     builtAt = (Get-Date).ToString('o')
     setup = $Setup.Name
@@ -111,6 +111,6 @@ $BuildInfo = [ordered]@{
 $BuildInfo | ConvertTo-Json | Set-Content (Join-Path $InstallerOut 'build-info.json') -Encoding utf8
 
 Write-Host ''
-Write-Host "KY PDKS Windows $Version paketi hazır." -ForegroundColor Green
+Write-Host "KY ERP Masaüstü $Version paketi hazır." -ForegroundColor Green
 Write-Host "Setup : $($Setup.FullName)" -ForegroundColor Cyan
 Write-Host "SHA256: $Hash" -ForegroundColor Cyan

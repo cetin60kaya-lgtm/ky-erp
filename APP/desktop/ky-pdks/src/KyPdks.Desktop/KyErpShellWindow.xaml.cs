@@ -68,17 +68,15 @@ public partial class KyErpShellWindow : Window
         Directory.CreateDirectory(webRoot);
         var environment = await CoreWebView2Environment.CreateAsync(null, webRoot);
         await ErpWebView.EnsureCoreWebView2Async(environment);
-
         ErpWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
         ErpWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
         ErpWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
         ErpWebView.CoreWebView2.Settings.IsZoomControlEnabled = true;
-
         ErpWebView.CoreWebView2.AddWebResourceRequestedFilter("https://api.kyerp.net/api/*", CoreWebView2WebResourceContext.All);
         ErpWebView.CoreWebView2.WebResourceRequested += CoreWebView2_WebResourceRequested;
         ErpWebView.CoreWebView2.WebResourceResponseReceived += CoreWebView2_WebResourceResponseReceived;
         ErpWebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
-        ErpWebView.CoreWebView2.Source = AppUri;
+        ErpWebView.Source = AppUri;
     }
 
     private async void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -89,7 +87,6 @@ public partial class KyErpShellWindow : Window
             if (!_online) ShowOfflineCenter(true);
             return;
         }
-
         await TryRefreshIdentityAsync();
         UpdatePageTitle(ErpWebView.Source?.AbsolutePath ?? "/");
     }
@@ -100,23 +97,19 @@ public partial class KyErpShellWindow : Window
         {
             if (!string.Equals(e.Request.Method, "GET", StringComparison.OrdinalIgnoreCase)) return;
             if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) || !uri.Host.Equals("api.kyerp.net", StringComparison.OrdinalIgnoreCase)) return;
-            if (e.Response.StatusCode < 200 || e.Response.StatusCode >= 300) return;
-
+            if (e.Response.StatusCode is < 200 or >= 300) return;
             await using var stream = await e.Response.GetContentAsync();
-            using var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, leaveOpen: false);
+            using var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false);
             var payload = await reader.ReadToEndAsync(_lifetime.Token);
             if (string.IsNullOrWhiteSpace(payload)) return;
-
-            var trimmed = payload.TrimStart();
-            if (!(trimmed.StartsWith('{') || trimmed.StartsWith('['))) return;
-
+            var first = payload.AsSpan().TrimStart();
+            if (first.IsEmpty || (first[0] != '{' && first[0] != '[')) return;
             string contentType;
             try { contentType = e.Response.Headers.GetHeader("Content-Type"); }
             catch { contentType = "application/json; charset=utf-8"; }
-
             await _offlineStore.SaveCacheAsync(
                 CacheKey(e.Request.Uri),
-                await GetWebStorageValueAsync("kyerp.active_company"),
+                await GetWebStorageValueAsync("kyerp.activeCompany"),
                 ModuleFromApiUri(uri.AbsolutePath),
                 payload,
                 string.IsNullOrWhiteSpace(contentType) ? "application/json; charset=utf-8" : contentType,
@@ -124,76 +117,56 @@ public partial class KyErpShellWindow : Window
                 _lifetime.Token);
             await _offlineStore.SetStateAsync("last_api_sync", DateTimeOffset.Now.ToString("O"), _lifetime.Token);
         }
-        catch
-        {
-            // Cache hatası canlı ERP yanıtını etkilemez.
-        }
+        catch { }
     }
 
     private async void CoreWebView2_WebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
-        if (_online) return;
-        if (!string.Equals(e.Request.Method, "GET", StringComparison.OrdinalIgnoreCase)) return;
+        if (_online || !string.Equals(e.Request.Method, "GET", StringComparison.OrdinalIgnoreCase)) return;
         if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) || !uri.Host.Equals("api.kyerp.net", StringComparison.OrdinalIgnoreCase)) return;
-
         var deferral = e.GetDeferral();
         try
         {
             var cached = await _offlineStore.GetCacheAsync(CacheKey(e.Request.Uri), _lifetime.Token);
             if (cached is not null)
             {
-                var bytes = Encoding.UTF8.GetBytes(cached.PayloadJson);
-                var stream = new MemoryStream(bytes);
                 var headers = $"Content-Type: {cached.ContentType}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n";
                 e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
-                    stream, cached.HttpStatus, "KY ERP OFFLINE CACHE", headers);
+                    new MemoryStream(Encoding.UTF8.GetBytes(cached.PayloadJson)), cached.HttpStatus, "KY ERP OFFLINE CACHE", headers);
                 return;
             }
-
             const string unavailable = "{\"ok\":false,\"error\":{\"code\":\"KYERP_DESKTOP_OFFLINE_CACHE_MISS\",\"message\":\"Bu veri daha önce masaüstüne senkronlanmamış. İnternet geldiğinde yenileyin.\"}}";
             e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
-                new MemoryStream(Encoding.UTF8.GetBytes(unavailable)),
-                503,
-                "KY ERP OFFLINE",
+                new MemoryStream(Encoding.UTF8.GetBytes(unavailable)), 503, "KY ERP OFFLINE",
                 "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n");
         }
-        catch
-        {
-            // WebView kendi network hatasını gösterir.
-        }
-        finally
-        {
-            deferral.Complete();
-        }
+        catch { }
+        finally { deferral.Complete(); }
     }
 
     private async Task CheckConnectionAsync()
     {
-        var online = false;
+        var next = false;
         try
         {
             using var response = await _probe.GetAsync(HealthUri, HttpCompletionOption.ResponseHeadersRead, _lifetime.Token);
-            online = response.IsSuccessStatusCode;
+            next = response.IsSuccessStatusCode;
         }
-        catch { online = false; }
-
-        var changed = _online != online;
-        _online = online;
-        SidebarConnectionDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(online ? "#35C18A" : "#E35D6A"));
-        SidebarConnectionText.Text = online ? "Cloud bağlı • Senkron aktif" : "Offline • Yerel çalışma";
-        FooterStatusText.Text = online
+        catch { }
+        var changed = next != _online;
+        _online = next;
+        SidebarConnectionDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_online ? "#35C18A" : "#E35D6A"));
+        SidebarConnectionText.Text = _online ? "Cloud bağlı • Senkron aktif" : "Offline • Yerel çalışma";
+        FooterStatusText.Text = _online
             ? "Cloud bağlı. D1 ana kaynak; görüntülenen API verileri masaüstü cache'ine güncelleniyor."
             : "İnternet/Cloud erişimi yok. Son senkronlanan veriler ve PDKS Agent yerel çalışmaya devam eder.";
-
-        if (changed)
+        if (!changed) return;
+        await _offlineStore.SetStateAsync("connection", _online ? "ONLINE" : "OFFLINE", _lifetime.Token);
+        await RefreshOfflineAsync();
+        if (_online && ErpWebView.CoreWebView2 is not null)
         {
-            await _offlineStore.SetStateAsync("connection", online ? "ONLINE" : "OFFLINE", _lifetime.Token);
-            await RefreshOfflineAsync();
-            if (online && ErpWebView.CoreWebView2 is not null)
-            {
-                await TryRefreshIdentityAsync();
-                if (_offlineCenterVisible) ShowOfflineCenter(false);
-            }
+            await TryRefreshIdentityAsync();
+            if (_offlineCenterVisible) ShowOfflineCenter(false);
         }
     }
 
@@ -202,13 +175,12 @@ public partial class KyErpShellWindow : Window
         if (ErpWebView.CoreWebView2 is null) return;
         try
         {
-            var script = "(() => ({ token: localStorage.getItem('kyerp_auth_token') || '', user: localStorage.getItem('kyerp_auth_user') || '' }))()";
-            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync(script);
+            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync(
+                "(() => ({ token: localStorage.getItem('kyerp_auth_token') || '', user: localStorage.getItem('kyerp_auth_user') || '' }))()");
             using var document = JsonDocument.Parse(result);
             if (document.RootElement.ValueKind != JsonValueKind.Object) return;
             var token = document.RootElement.TryGetProperty("token", out var tokenNode) ? tokenNode.GetString() ?? "" : "";
             var userJson = document.RootElement.TryGetProperty("user", out var userNode) ? userNode.GetString() ?? "" : "";
-
             ApplyUserPresentation(userJson);
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -217,7 +189,6 @@ public partial class KyErpShellWindow : Window
                 ApplyScope(false);
                 return;
             }
-
             if (token == _token && _pdksPeople.Count > 0) return;
             _token = token;
             var profile = await _erp.GetPdksProfileAsync(token, _lifetime.Token);
@@ -225,13 +196,10 @@ public partial class KyErpShellWindow : Window
             _pdksPeople = await _erp.GetPdksPeopleAsync(token, _lifetime.Token);
             ApplyScope(_audit);
             CurrentRoleText.Text = _audit
-                ? $"DENETİM • SGK kartlı personel • Salt okunur"
+                ? "DENETİM • SGK/PDKS • Salt okunur"
                 : string.IsNullOrWhiteSpace(profile.Role) ? "KY ERP kullanıcısı" : profile.Role;
         }
-        catch
-        {
-            // Login sayfasında token olmaması normaldir.
-        }
+        catch { }
     }
 
     private void ApplyUserPresentation(string userJson)
@@ -244,9 +212,8 @@ public partial class KyErpShellWindow : Window
         try
         {
             using var user = JsonDocument.Parse(userJson);
-            var root = user.RootElement;
-            CurrentUserText.Text = FirstText(root, "fullName", "name", "username") is { Length: > 0 } name ? name : "KY ERP kullanıcısı";
-            var role = FirstText(root, "role");
+            CurrentUserText.Text = FirstText(user.RootElement, "fullName", "name", "username") is { Length: > 0 } name ? name : "KY ERP kullanıcısı";
+            var role = FirstText(user.RootElement, "role");
             if (!_audit && !string.IsNullOrWhiteSpace(role)) CurrentRoleText.Text = role;
         }
         catch { }
@@ -254,33 +221,20 @@ public partial class KyErpShellWindow : Window
 
     private void ApplyScope(bool audit)
     {
-        if (audit)
-        {
-            FinanceGroup.Visibility = Visibility.Collapsed;
-            ProductionGroup.Visibility = Visibility.Collapsed;
-            SystemGroup.Visibility = Visibility.Collapsed;
-            PeopleGroup.Visibility = Visibility.Visible;
-            IkButton.Visibility = Visibility.Visible;
-            PdksButton.Visibility = Visibility.Visible;
-            NativePdksButton.Visibility = Visibility.Visible;
-            PageSubTitleText.Text = "DENETİM • yalnız izin verilen SGK/PDKS görünümü • salt okunur";
-            return;
-        }
-
-        FinanceGroup.Visibility = Visibility.Visible;
-        ProductionGroup.Visibility = Visibility.Visible;
-        SystemGroup.Visibility = Visibility.Visible;
+        FinanceGroup.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
+        ProductionGroup.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
+        SystemGroup.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
         PeopleGroup.Visibility = Visibility.Visible;
-        PageSubTitleText.Text = "Web + D1 + File Hub + Offline çalışma kopyası";
+        PageSubTitleText.Text = audit
+            ? "DENETİM • yalnız izin verilen SGK/PDKS görünümü • salt okunur"
+            : "Web + D1 + File Hub + Offline çalışma kopyası";
     }
 
     private async void ModuleButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button button || button.Tag is not string path) return;
+        if (sender is not Button button || button.Tag is not string path || ErpWebView.CoreWebView2 is null) return;
         ShowOfflineCenter(false);
-        if (ErpWebView.CoreWebView2 is null) return;
-        var uri = new Uri(AppUri, path);
-        ErpWebView.CoreWebView2.Navigate(uri.ToString());
+        ErpWebView.CoreWebView2.Navigate(new Uri(AppUri, path).ToString());
         UpdatePageTitle(path);
         await TryRefreshIdentityAsync();
     }
@@ -290,15 +244,13 @@ public partial class KyErpShellWindow : Window
         await TryRefreshIdentityAsync();
         if (string.IsNullOrWhiteSpace(_token))
         {
-            MessageBox.Show(this, "Önce KY ERP Web oturumunu açın. Masaüstü PDKS aynı oturumu kullanacaktır.", "KY ERP Masaüstü", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "Önce KY ERP oturumunu açın. Yerel PDKS aynı ERP oturumunu kullanır.", "KY ERP Masaüstü", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-
         try
         {
             if (_pdksPeople.Count == 0) _pdksPeople = await _erp.GetPdksPeopleAsync(_token, _lifetime.Token);
-            var window = new PdksUnifiedWindow(_token, _pdksPeople, _pdksPaths, !_audit) { Owner = this };
-            window.ShowDialog();
+            new PdksUnifiedWindow(_token, _pdksPeople, _pdksPaths, !_audit) { Owner = this }.ShowDialog();
         }
         catch (Exception error)
         {
@@ -318,7 +270,6 @@ public partial class KyErpShellWindow : Window
     }
 
     private void OfflineCenterButton_Click(object sender, RoutedEventArgs e) => ShowOfflineCenter(!_offlineCenterVisible);
-
     private async void RefreshOfflineButton_Click(object sender, RoutedEventArgs e) => await RefreshOfflineAsync();
 
     private async void SaveOfflineDraftButton_Click(object sender, RoutedEventArgs e)
@@ -329,19 +280,12 @@ public partial class KyErpShellWindow : Window
             MessageBox.Show(this, "Offline kayıt için işlem veya not yazın.", "KY ERP Masaüstü", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-
         var module = (OfflineModuleCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "GENEL";
-        var payload = JsonSerializer.Serialize(new
-        {
-            text,
-            createdAt = DateTimeOffset.Now,
-            requiresReview = true,
-            source = "KY_ERP_DESKTOP_OFFLINE",
-        });
+        var payload = JsonSerializer.Serialize(new { text, createdAt = DateTimeOffset.Now, requiresReview = true, source = "KY_ERP_DESKTOP_OFFLINE" });
         await _offlineStore.EnqueueAsync("", module, "DRAFT", "offline://review", payload, ct: _lifetime.Token);
         OfflineDraftText.Clear();
         await RefreshOfflineAsync();
-        FooterStatusText.Text = "Offline işlem taslağı kaydedildi. Bağlantı geldiğinde kontrol edilmeden işletme verisine yazılmaz.";
+        FooterStatusText.Text = "Offline taslak kaydedildi. Bağlantı geldiğinde kontrol edilmeden işletme verisine yazılmaz.";
     }
 
     private async Task RefreshOfflineAsync()
@@ -353,18 +297,12 @@ public partial class KyErpShellWindow : Window
             PendingText.Text = $"{pending.Count} bekleyen";
             OfflinePendingCountText.Text = pending.Count.ToString();
             PendingBadge.Visibility = pending.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-
             var lastSync = await _offlineStore.GetStateAsync("last_api_sync", _lifetime.Token);
             LastSyncText.Text = DateTimeOffset.TryParse(lastSync, out var parsed) ? parsed.LocalDateTime.ToString("dd.MM HH:mm") : "Henüz yok";
-
-            var agentRunning = Process.GetProcessesByName("KYERP.PDKS.Agent").Length > 0;
-            OfflineAgentText.Text = agentRunning ? "Çalışıyor" : "Servis kontrolü";
+            OfflineAgentText.Text = Process.GetProcessesByName("KYERP.PDKS.Agent").Length > 0 ? "Çalışıyor" : "Servis kontrolü";
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception error)
-        {
-            FooterStatusText.Text = error.Message;
-        }
+        catch (Exception error) { FooterStatusText.Text = error.Message; }
     }
 
     private void ShowOfflineCenter(bool visible)
@@ -382,7 +320,7 @@ public partial class KyErpShellWindow : Window
     private void UpdatePageTitle(string path)
     {
         if (_offlineCenterVisible) return;
-        var title = path switch
+        PageTitleText.Text = path switch
         {
             var p when p.StartsWith("/muhasebe", StringComparison.OrdinalIgnoreCase) => "Muhasebe",
             var p when p.StartsWith("/isnet", StringComparison.OrdinalIgnoreCase) => "İşNet / e-Belge",
@@ -395,7 +333,6 @@ public partial class KyErpShellWindow : Window
             var p when p.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) => "Yönetim / Dosya Merkezi",
             _ => "KY ERP Çalışma Merkezi",
         };
-        PageTitleText.Text = title;
     }
 
     private async Task<string> GetWebStorageValueAsync(string key)

@@ -1,4 +1,4 @@
-name: KY PDKS Windows Setup
+name: KY ERP Masaüstü Windows Setup
 
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ky-pdks-windows-${{ github.ref }}
+  group: ky-erp-desktop-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,24 +39,24 @@ jobs:
         shell: powershell
         run: choco install innosetup -y --no-progress
 
-      - name: KY PDKS test ve paket
+      - name: KY ERP Masaüstü test ve paket
         shell: powershell
         run: ./APP/desktop/ky-pdks/BUILD_SETUP.ps1
 
       - name: Setup çıktısını doğrula
         shell: powershell
         run: |
-          $setup = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-PDKS-Setup-*.exe' | Select-Object -First 1
-          if (-not $setup) { throw 'KY PDKS Setup.exe bulunamadı.' }
+          $setup = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-ERP-Masaustu-Setup-*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'KY ERP Masaüstü Setup.exe bulunamadı.' }
           Get-FileHash $setup.FullName -Algorithm SHA256
           Get-Content "$($setup.FullName).sha256.txt"
 
       - name: Windows kurulum paketini sakla
         uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-Windows-Setup-${{ github.run_number }}
+          name: KY-ERP-Masaustu-Windows-Setup-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Masaustu-Setup-*.exe
             APP/desktop/ky-pdks/dist/setup/*.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
