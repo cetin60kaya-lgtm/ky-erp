@@ -9,11 +9,14 @@ const read = (relativePath: string) =>
 
 test("Depolama is a first-class owner module with all storage screens", () => {
   const registry = read("APP/app/ky-erp-frontend/src/app/moduleRegistry.js");
+  const auth = read("APP/app/ky-erp-frontend/src/context/AuthContext.jsx");
   const adminPage = read("APP/app/ky-erp-frontend/src/pages/modules/AdminPage.jsx");
   const depolamaPage = read("APP/app/ky-erp-frontend/src/pages/modules/DepolamaPage.jsx");
 
   assert.match(registry, /key:\s*"depolama"/);
-  assert.match(registry, /permissionKey:\s*"ADMIN"/);
+  assert.match(registry, /permissionKey:\s*"STORAGE_ADMIN"/);
+  assert.match(auth, /if \(isSuperAdmin\(user\?\.role\)\) return true/);
+  assert.match(auth, /COMPANY_ADMIN" && key === "ADMIN"/);
   for (const tab of [
     "depolama-genel",
     "depolama-kaynaklar",
@@ -91,6 +94,7 @@ test("Cloud storage registration includes management, preview, agent, scan and a
   const routes = read("APP/cloud/ky-erp-api/src/admin-storage-cloud.ts");
   const scan = read("APP/cloud/ky-erp-api/src/file-hub-agent-scan.ts");
   const archive = read("APP/cloud/ky-erp-api/src/accounting-document-archive.ts");
+  const agentRoutes = read("APP/cloud/ky-erp-api/src/file-hub-agent-public.ts");
 
   for (const registration of [
     "registerFileHubRoutes",
@@ -107,6 +111,8 @@ test("Cloud storage registration includes management, preview, agent, scan and a
   assert.match(archive, /MUHASEBE/);
   assert.match(archive, /INVOICE/);
   assert.match(archive, /DELIVERY_NOTE|purpose_code/);
+  assert.match(agentRoutes, /\["INVOICE","DELIVERY_NOTE","PAYMENT_DOCUMENT","E_DOCUMENT"\]\.includes\(purposeCode\)/);
+  assert.match(agentRoutes, /insertRelation\(c,slug,fileAssetId,"DOCUMENT",logical,purposeCode/);
 });
 
 test("Desen storage status resolves File Hub instead of owning a second storage system", () => {
