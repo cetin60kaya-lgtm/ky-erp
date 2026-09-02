@@ -2,6 +2,9 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";
 import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
+import { registerIkPdksAdjustmentRoutes } from "./ik-pdks-adjustments";
+import { registerIkPdksAssistantRoutes } from "./ik-pdks-assistant";
+import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -267,4 +270,7 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
 
   registerIkPdksOperationRoutes(app);
   registerIkPdksCardBridgeRoutes(app);
+  registerIkPdksAdjustmentRoutes(app);
+  registerIkPdksAssistantRoutes(app);
+  registerIkPdksDeviceRoutes(app);
 }
