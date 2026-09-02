@@ -34,6 +34,16 @@ test("MFA renewal is step-up scoped, staged and committed in one D1 batch", () =
   assert.match(confirm, /revokeAfterMfaChangeStatements/);
 });
 
+test("owner MFA security flow cannot be crafted for another user", () => {
+  assert.match(owner, /function ownerSelfTargetId\(current: AnyRow, requested: unknown\)/);
+  assert.match(owner, /targetId === currentId \? currentId : ""/);
+  assert.match(owner, /const targetId = ownerSelfTargetId\(current, body\.targetUserId\)/);
+  assert.match(owner, /const targetId = ownerSelfTargetId\(current, c\.req\.param\("id"\)\)/);
+  assert.match(owner, /OWNER_SELF_ONLY/);
+  const emailVerify = owner.slice(owner.indexOf("reauth/email/verify"), owner.indexOf("mfa-renew/:provider/start"));
+  assert.match(emailVerify, /text\(meta\.targetUserId\) !== text\(current\.id\)/);
+});
+
 test("legacy reset cannot bypass secure renewal", () => {
   assert.match(main, /const legacyReset =/);
   assert.match(main, /reset-mfa/);

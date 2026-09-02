@@ -37,6 +37,12 @@ async function ownerCurrent(c: any) {
   return current && isOwner(current.role) ? current : null;
 }
 
+function ownerSelfTargetId(current: AnyRow, requested: unknown) {
+  const currentId = text(current?.id);
+  const targetId = text(requested || currentId);
+  return currentId && targetId === currentId ? currentId : "";
+}
+
 async function targetUser(c: any, id: string) {
   return c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.role,u.is_active,u.must_change_password,u.last_login_at,u.created_at,u.updated_at,
@@ -261,7 +267,8 @@ export function registerOwnerSecurityRoutes(app: any) {
     if (!current) return c.json(jsonError("OWNER_ONLY", "Bu işlem yalnız uygulama sahibine açıktır."), 403);
     const body = await bodyOf(c);
     const provider = normalizeProvider(body.provider);
-    const targetId = text(body.targetUserId || current.id);
+    const targetId = ownerSelfTargetId(current, body.targetUserId);
+    if (!targetId) return c.json(jsonError("OWNER_SELF_ONLY", "Uygulama sahibi güvenlik işlemi yalnız kendi hesabı için yapılabilir."), 403);
     if (!provider) return c.json(jsonError("MFA_PROVIDER_INVALID", "Google veya Microsoft Authenticator seçilmelidir."), 400);
     const target = await targetUser(c, targetId);
     if (!target) return c.json(jsonError("USER_NOT_FOUND", "Kullanıcı bulunamadı."), 404);
@@ -284,7 +291,8 @@ export function registerOwnerSecurityRoutes(app: any) {
     if (!current) return c.json(jsonError("OWNER_ONLY", "Bu işlem yalnız uygulama sahibine açıktır."), 403);
     const body = await bodyOf(c);
     const provider = normalizeProvider(body.provider);
-    const targetId = text(body.targetUserId || current.id);
+    const targetId = ownerSelfTargetId(current, body.targetUserId);
+    if (!targetId) return c.json(jsonError("OWNER_SELF_ONLY", "Uygulama sahibi güvenlik işlemi yalnız kendi hesabı için yapılabilir."), 403);
     if (!provider) return c.json(jsonError("MFA_PROVIDER_INVALID", "Google veya Microsoft Authenticator seçilmelidir."), 400);
     if (!current.emailVerified || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(current.email))) return c.json(jsonError("OWNER_EMAIL_NOT_VERIFIED", "E-posta ile güvenlik doğrulaması için uygulama sahibi e-postası önce doğrulanmalıdır."), 400);
     const target = await targetUser(c, targetId);
@@ -315,6 +323,8 @@ export function registerOwnerSecurityRoutes(app: any) {
     const body = await bodyOf(c);
     const row = await challengeByToken(c, text(body.reauthId), text(body.reauthToken), "SENSITIVE_MFA_REAUTH", current.id);
     if (!row || upper(row.channel) !== "EMAIL") return c.json(jsonError("REAUTH_INVALID", "Güvenlik doğrulama isteği geçersiz veya süresi dolmuş."), 401);
+    const meta = metadataOf(row);
+    if (text(meta.targetUserId) !== text(current.id)) return c.json(jsonError("OWNER_SELF_ONLY", "Uygulama sahibi güvenlik işlemi yalnız kendi hesabı için yapılabilir."), 403);
     if (row.locked_until && Date.parse(text(row.locked_until)) > Date.now()) return c.json(jsonError("REAUTH_LOCKED", "Çok fazla hatalı deneme yapıldı. 30 dakika sonra tekrar deneyin."), 429);
     const otp = text(body.otp).replace(/\D/g, "");
     const valid = /^\d{6}$/.test(otp) && safeEqual(await sha256(`${text(row.otp_salt)}:${otp}`), text(row.otp_hash));
@@ -324,7 +334,6 @@ export function registerOwnerSecurityRoutes(app: any) {
     }
     const timestamp = nowIso();
     await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET verified_at=? WHERE id=? AND consumed_at IS NULL").bind(timestamp, row.id).run();
-    const meta = metadataOf(row);
     await audit(c, "SENSITIVE_REAUTH_EMAIL_VERIFIED", current.id, text(meta.targetUserId), { provider: meta.provider });
     return c.json({ ok: true, data: { reauthId: row.id, reauthToken: text(body.reauthToken), expiresAt: row.expires_at, method: "EMAIL" } });
   });
@@ -332,7 +341,8 @@ export function registerOwnerSecurityRoutes(app: any) {
   app.post("/api/admin/security/users/:id/mfa-renew/:provider/start", async (c: any) => {
     const current = await ownerCurrent(c);
     if (!current) return c.json(jsonError("OWNER_ONLY", "Bu işlem yalnız uygulama sahibine açıktır."), 403);
-    const targetId = text(c.req.param("id"));
+    const targetId = ownerSelfTargetId(current, c.req.param("id"));
+    if (!targetId) return c.json(jsonError("OWNER_SELF_ONLY", "Uygulama sahibi güvenlik işlemi yalnız kendi hesabı için yapılabilir."), 403);
     const provider = normalizeProvider(c.req.param("provider"));
     if (!provider) return c.json(jsonError("MFA_PROVIDER_INVALID", "Google veya Microsoft Authenticator seçilmelidir."), 400);
     const target = await targetUser(c, targetId);
@@ -357,7 +367,8 @@ export function registerOwnerSecurityRoutes(app: any) {
   app.post("/api/admin/security/users/:id/mfa-renew/:provider/confirm", async (c: any) => {
     const current = await ownerCurrent(c);
     if (!current) return c.json(jsonError("OWNER_ONLY", "Bu işlem yalnız uygulama sahibine açıktır."), 403);
-    const targetId = text(c.req.param("id"));
+    const targetId = ownerSelfTargetId(current, c.req.param("id"));
+    if (!targetId) return c.json(jsonError("OWNER_SELF_ONLY", "Uygulama sahibi güvenlik işlemi yalnız kendi hesabı için yapılabilir."), 403);
     const provider = normalizeProvider(c.req.param("provider"));
     if (!provider) return c.json(jsonError("MFA_PROVIDER_INVALID", "Google veya Microsoft Authenticator seçilmelidir."), 400);
     const body = await bodyOf(c);
@@ -386,7 +397,9 @@ export function registerOwnerSecurityRoutes(app: any) {
   app.get("/api/admin/security/users/:id/email-verification/delivery/:messageId", async (c: any) => {
     const current = await ownerCurrent(c);
     if (!current) return c.json(jsonError("OWNER_ONLY", "Bu işlem yalnız uygulama sahibine açıktır."), 403);
-    const target = await targetUser(c, text(c.req.param("id")));
+    const targetId = ownerSelfTargetId(current, c.req.param("id"));
+    if (!targetId) return c.json(jsonError("OWNER_SELF_ONLY", "Uygulama sahibi güvenlik işlemi yalnız kendi hesabı için yapılabilir."), 403);
+    const target = await targetUser(c, targetId);
     if (!target) return c.json(jsonError("USER_NOT_FOUND", "Kullanıcı bulunamadı."), 404);
     try {
       const payload = await resendDelivery(c, text(c.req.param("messageId")));
