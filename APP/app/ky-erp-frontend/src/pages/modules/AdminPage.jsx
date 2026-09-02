@@ -2,6 +2,7 @@ import AdminSystemOverview from "../admin/AdminSystemOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
+import AdminCompanyBilling from "../admin/AdminCompanyBilling";
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminMappings from "../admin/AdminMappings";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
@@ -22,6 +23,9 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   }
   if (activeTab === "ana-firma-ayarlar") {
     return <AdminCompanySettings activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "firma-ucretlendirme") {
+    return <AdminCompanyBilling activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "dosya-klasor-yonetimi") {
     return <AdminStorageCenter activeMainCompany={activeMainCompany} />;
