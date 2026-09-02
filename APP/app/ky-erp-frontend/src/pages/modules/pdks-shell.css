@@ -1,108 +1,182 @@
-body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
-  display: none;
+body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu,
+body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu-group {
+  display: none !important;
 }
 
 .pdks-module-shell {
-  display: grid;
-  grid-template-columns: 210px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.pdks-local-nav {
-  position: sticky;
-  top: 0;
-  border: 1px solid #dce5ef;
-  border-radius: 10px;
-  background: #fff;
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
-}
-
-.pdks-local-nav-head {
-  padding: 13px 14px 11px;
-  border-bottom: 1px solid #e8eef5;
-  background: #f8fafc;
-}
-
-.pdks-local-nav-head strong {
   display: block;
-  color: #102a43;
-  font-size: 13px;
+  min-width: 0;
 }
 
-.pdks-local-nav-head span {
-  display: block;
-  margin-top: 3px;
-  color: #64748b;
-  font-size: 10px;
-}
-
-.pdks-nav-group + .pdks-nav-group {
-  border-top: 1px solid #edf2f7;
-}
-
-.pdks-nav-group-toggle {
-  width: 100%;
-  min-height: 38px;
-  padding: 9px 12px;
-  border: 0;
-  background: #fff;
-  color: #334155;
+.pdks-command-nav {
+  position: relative;
+  z-index: 35;
   display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid #d8e3ed;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .05);
+}
+
+.pdks-command-brand {
+  display: flex;
+  flex: 0 0 112px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5px 11px;
+  border-right: 1px solid #dfe7ef;
+}
+
+.pdks-command-brand strong {
+  color: #0c4f82;
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+
+.pdks-command-brand span {
+  margin-top: 2px;
+  color: #75879a;
+  font-size: 9.5px;
+}
+
+.pdks-command-groups {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.pdks-command-group {
+  position: relative;
+  min-width: 0;
+}
+
+.pdks-command-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid #d8e3ed;
+  border-radius: 9px;
+  background: #fff;
+  color: #34495e;
   cursor: pointer;
   text-align: left;
-  font-size: 11px;
-  font-weight: 700;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 
-.pdks-nav-group-toggle:hover,
-.pdks-nav-group-toggle.open {
-  background: #f1f5f9;
-  color: #0f4c81;
+.pdks-command-toggle > span {
+  min-width: 0;
 }
 
-.pdks-nav-group-toggle i {
-  font-style: normal;
+.pdks-command-toggle strong,
+.pdks-command-toggle small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdks-command-toggle strong {
+  color: #263d53;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.pdks-command-toggle small {
+  margin-top: 2px;
+  color: #8493a3;
+  font-size: 8.5px;
+  font-weight: 500;
+}
+
+.pdks-command-toggle i {
+  flex: 0 0 auto;
+  color: #7790a7;
   font-size: 13px;
-  transition: transform .16s ease;
+  font-style: normal;
+  transition: transform .15s ease;
 }
 
-.pdks-nav-group-toggle.open i {
-  transform: rotate(90deg);
+.pdks-command-toggle:hover,
+.pdks-command-group.current .pdks-command-toggle {
+  border-color: #b8d2e7;
+  background: #f3f8fc;
 }
 
-.pdks-nav-items {
-  padding: 3px 6px 7px;
-  background: #fbfdff;
+.pdks-command-group.current .pdks-command-toggle strong {
+  color: #0b5a96;
 }
 
-.pdks-nav-item {
+.pdks-command-toggle.open {
+  border-color: #8ebbdc;
+  background: #edf6fc;
+  box-shadow: 0 0 0 2px rgba(15, 95, 155, .07);
+}
+
+.pdks-command-toggle.open i {
+  transform: rotate(180deg);
+}
+
+.pdks-command-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  width: max(220px, 100%);
+  max-height: min(420px, 62vh);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #cddbe7;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 35px rgba(28, 45, 66, .18);
+}
+
+.pdks-command-menu button {
+  display: flex;
   width: 100%;
-  min-height: 32px;
-  margin: 2px 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 1px 0;
   padding: 7px 9px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
-  color: #475569;
+  color: #42566b;
   cursor: pointer;
   text-align: left;
   font-size: 10.5px;
 }
 
-.pdks-nav-item:hover {
-  background: #eef5fb;
-  color: #0f4c81;
+.pdks-command-menu button:hover {
+  background: #eef6fc;
+  color: #0c568d;
 }
 
-.pdks-nav-item.active {
+.pdks-command-menu button.active {
   background: #e5f1fb;
   color: #0b5a96;
-  font-weight: 700;
+  font-weight: 800;
+}
+
+.pdks-command-menu button b {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: #d8ebf8;
+  color: #0b5a96;
+  font-size: 8px;
+  font-weight: 800;
 }
 
 .pdks-module-content {
@@ -110,10 +184,10 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
 }
 
 .pdks-quick-assistant {
-  margin-bottom: 12px;
-  padding: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
   border: 1px solid #cfe0ee;
-  border-radius: 12px;
+  border-radius: 10px;
   background: linear-gradient(180deg, #fbfdff 0%, #f5f9fd 100%);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
@@ -128,14 +202,14 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
 .pdks-quick-assistant-title strong {
   display: block;
   color: #123a5b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .pdks-quick-assistant-title span {
   display: block;
   margin-top: 2px;
   color: #667b91;
-  font-size: 10.5px;
+  font-size: 9.5px;
 }
 
 .pdks-quick-assistant-title em {
@@ -143,7 +217,7 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
   border-radius: 999px;
   background: #fff2d7;
   color: #8c5b00;
-  font-size: 10px;
+  font-size: 9px;
   font-style: normal;
   font-weight: 700;
 }
@@ -151,25 +225,25 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
 .pdks-assistant-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  margin-top: 9px;
+  gap: 7px;
+  margin-top: 7px;
 }
 
 .pdks-assistant-row input {
   min-width: 0;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 34px;
+  padding: 7px 9px;
   border: 1px solid #bfd0df;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #fff;
   color: #1f3347;
 }
 
 .pdks-assistant-row button {
-  min-width: 88px;
-  min-height: 38px;
+  min-width: 82px;
+  min-height: 34px;
   border: 1px solid #0f5f9b;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #0f5f9b;
   color: #fff;
   font-weight: 700;
@@ -185,18 +259,18 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
 .pdks-assistant-examples {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 7px;
+  gap: 5px;
+  margin-top: 6px;
 }
 
 .pdks-assistant-examples button {
-  min-height: 28px;
-  padding: 5px 8px;
+  min-height: 25px;
+  padding: 4px 7px;
   border: 1px solid #d5e0ea;
   border-radius: 999px;
   background: #fff;
   color: #52677b;
-  font-size: 9.5px;
+  font-size: 8.8px;
   cursor: pointer;
 }
 
@@ -207,10 +281,10 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
 
 .pdks-assistant-success,
 .pdks-assistant-error {
-  margin-top: 8px;
-  padding: 7px 9px;
+  margin-top: 7px;
+  padding: 6px 8px;
   border-radius: 7px;
-  font-size: 10.5px;
+  font-size: 10px;
 }
 
 .pdks-assistant-success {
@@ -225,19 +299,29 @@ body.pdks-compact-active .shell-v3-module.active .shell-v3-submenu {
   color: #9a2929;
 }
 
-@media (max-width: 1100px) {
-  .pdks-module-shell {
-    grid-template-columns: 180px minmax(0, 1fr);
+@media (max-width: 1220px) {
+  .pdks-command-brand {
+    display: none;
+  }
+  .pdks-command-groups {
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
   }
 }
 
-@media (max-width: 820px) {
-  .pdks-module-shell {
-    display: block;
+@media (max-width: 900px) {
+  .pdks-command-nav {
+    overflow-x: auto;
   }
-  .pdks-local-nav {
-    position: static;
-    margin-bottom: 10px;
+  .pdks-command-groups {
+    min-width: 650px;
+  }
+  .pdks-command-menu {
+    position: fixed;
+    top: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 55vh;
   }
   .pdks-assistant-row {
     grid-template-columns: 1fr;
