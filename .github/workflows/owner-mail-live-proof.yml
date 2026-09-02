@@ -6,6 +6,7 @@ on:
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - ".github/workflows/owner-mail-live-proof.yml"
+      - "APP/cloud/ky-erp-api/scripts/owner-mail-live-proof.mjs"
 
 permissions:
   contents: read
@@ -23,7 +24,6 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
-      WORKER_DIR: APP/cloud/ky-erp-api
 
     steps:
       - name: Kaynak kodu al
@@ -48,135 +48,6 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: npm ci
 
-      - name: Gecici tek kullanimlik proof rotasini hazirla ve deploy et
-        id: temporary
+      - name: Gercek owner mail teslimini kanitla ve Worker'i temizle
         working-directory: APP/cloud/ky-erp-api
-        shell: bash
-        run: |
-          set -euo pipefail
-          PROOF_TOKEN="$(openssl rand -hex 32)"
-          echo "::add-mask::$PROOF_TOKEN"
-          echo "PROOF_TOKEN=$PROOF_TOKEN" >> "$GITHUB_ENV"
-          cp src/main.ts /tmp/kyerp-main-original.ts
-
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-
-          path = Path("src/main.ts")
-          source = path.read_text(encoding="utf-8")
-          marker = 'shell.onError((error, c) => {'
-          if marker not in source:
-              raise SystemExit("main.ts proof insertion marker bulunamadi")
-          token = json.dumps(os.environ["PROOF_TOKEN"])
-          block = f'''
-          shell.post("/api/__kyerp-owner-mail-live-proof", async (c) => {{
-            if (c.req.header("X-KYERP-Live-Proof") !== {token}) return c.json({{ ok: false, error: {{ code: "PROOF_FORBIDDEN" }} }}, 403);
-            const owner = await c.env.DB.prepare(`SELECT s.email AS email FROM auth_users u JOIN auth_user_security s ON s.user_id=u.id WHERE UPPER(TRIM(COALESCE(s.role_override,u.role,''))) IN ('SUPER_ADMIN','ADMIN') AND COALESCE(s.email_verified,0)=1 AND TRIM(COALESCE(s.email,''))<>'' ORDER BY CASE WHEN UPPER(TRIM(COALESCE(s.role_override,u.role,'')))='SUPER_ADMIN' THEN 0 ELSE 1 END LIMIT 1`).first<any>();
-            const destination = String(owner?.email || "").trim();
-            if (!destination) return c.json({{ ok: false, error: {{ code: "OWNER_EMAIL_NOT_FOUND" }} }}, 404);
-            const key = String(c.env.RESEND_API_KEY || "").trim();
-            if (!key) return c.json({{ ok: false, error: {{ code: "RESEND_BINDING_MISSING" }} }}, 503);
-            const response = await fetch("https://api.resend.com/emails", {{
-              method: "POST",
-              headers: {{ Authorization: "Bearer " + key, "Content-Type": "application/json" }},
-              body: JSON.stringify({{
-                from: "KY ERP <admin@kyerp.net>",
-                to: [destination],
-                subject: "KY ERP Canli Mail Teslim Testi",
-                text: "KY ERP production e-posta teslim altyapisi canli olarak dogrulandi. Bu mesaj otomatik canli kabul testidir; herhangi bir islem yapmaniz gerekmez.",
-              }}),
-            }});
-            let payload: any = {{}};
-            try {{ payload = await response.json(); }} catch {{}}
-            if (!response.ok) return c.json({{ ok: false, error: {{ code: "RESEND_SEND_FAILED", status: response.status, message: String(payload?.message || "") }} }}, 503);
-            const messageId = String(payload?.id || payload?.messageId || "").trim();
-            if (!messageId) return c.json({{ ok: false, error: {{ code: "RESEND_MESSAGE_ID_MISSING" }} }}, 503);
-            const parts = destination.split("@");
-            const masked = String(parts[0] || "").slice(0, 1) + "***@" + String(parts[1] || "");
-            return c.json({{ ok: true, data: {{ provider: "RESEND", messageId, sender: "KY ERP <admin@kyerp.net>", recipient: masked }} }});
-          }});
-
-          shell.get("/api/__kyerp-owner-mail-live-proof/:messageId", async (c) => {{
-            if (c.req.header("X-KYERP-Live-Proof") !== {token}) return c.json({{ ok: false, error: {{ code: "PROOF_FORBIDDEN" }} }}, 403);
-            const key = String(c.env.RESEND_API_KEY || "").trim();
-            if (!key) return c.json({{ ok: false, error: {{ code: "RESEND_BINDING_MISSING" }} }}, 503);
-            const messageId = String(c.req.param("messageId") || "").trim();
-            const response = await fetch("https://api.resend.com/emails/" + encodeURIComponent(messageId), {{
-              method: "GET",
-              headers: {{ Authorization: "Bearer " + key, "Content-Type": "application/json" }},
-            }});
-            let payload: any = {{}};
-            try {{ payload = await response.json(); }} catch {{}}
-            if (!response.ok) return c.json({{ ok: false, error: {{ code: "RESEND_STATUS_FAILED", status: response.status, message: String(payload?.message || "") }} }}, 503);
-            const event = String(payload?.last_event || payload?.lastEvent || payload?.status || "unknown").toLowerCase();
-            return c.json({{ ok: true, data: {{ provider: "RESEND", messageId: String(payload?.id || messageId), event }} }});
-          }});
-
-          '''
-          path.write_text(source.replace(marker, block + marker, 1), encoding="utf-8")
-          PY
-
-          grep -Fq '/api/__kyerp-owner-mail-live-proof' src/main.ts
-          npx wrangler deploy --config wrangler.jsonc
-
-      - name: Worker secret binding ile gercek mail gonder ve teslimi kanitla
-        id: delivery
-        shell: bash
-        run: |
-          set -euo pipefail
-          SEND="$(curl --fail-with-body --silent --show-error -X POST https://api.kyerp.net/api/__kyerp-owner-mail-live-proof -H "X-KYERP-Live-Proof: $PROOF_TOKEN" -H "Content-Type: application/json")"
-          MESSAGE_ID="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(String(x?.data?.messageId||""));' "$SEND")"
-          RECIPIENT="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(String(x?.data?.recipient||""));' "$SEND")"
-          test -n "$MESSAGE_ID" || { echo "Worker Resend kabul kimligi donmedi" >&2; echo "$SEND" >&2; exit 1; }
-          echo "::add-mask::$MESSAGE_ID"
-          echo "recipient=$RECIPIENT" >> "$GITHUB_OUTPUT"
-
-          FINAL_EVENT=""
-          for attempt in $(seq 1 30); do
-            STATUS="$(curl --fail-with-body --silent --show-error "https://api.kyerp.net/api/__kyerp-owner-mail-live-proof/$MESSAGE_ID" -H "X-KYERP-Live-Proof: $PROOF_TOKEN")"
-            EVENT="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(String(x?.data?.event||"unknown").toLowerCase());' "$STATUS")"
-            FINAL_EVENT="$EVENT"
-            case "$EVENT" in
-              delivered|opened|clicked)
-                echo "Resend teslim kaniti: $EVENT"
-                break
-                ;;
-              bounced|complained|canceled|failed)
-                echo "Resend teslim basarisiz: $EVENT" >&2
-                exit 1
-                ;;
-            esac
-            sleep 5
-          done
-          case "$FINAL_EVENT" in
-            delivered|opened|clicked) ;;
-            *) echo "Resend teslim kaniti zaman penceresinde gelmedi: $FINAL_EVENT" >&2; exit 1 ;;
-          esac
-          echo "event=$FINAL_EVENT" >> "$GITHUB_OUTPUT"
-
-      - name: Gecici proof rotasini kaldir ve canonical Worker'i geri deploy et
-        if: always()
-        working-directory: APP/cloud/ky-erp-api
-        shell: bash
-        run: |
-          set -euo pipefail
-          git checkout -- src/main.ts
-          ! grep -Fq '/api/__kyerp-owner-mail-live-proof' src/main.ts
-          npx wrangler deploy --config wrangler.jsonc
-          HEALTH="$(curl --fail-with-body --silent --show-error https://api.kyerp.net/api/health)"
-          echo "$HEALTH" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'
-          CODE="$(curl --silent --output /dev/null --write-out '%{http_code}' https://api.kyerp.net/api/__kyerp-owner-mail-live-proof || true)"
-          test "$CODE" = "404"
-
-      - name: Canli kanit ozeti
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "KY ERP OWNER MAIL LIVE PROOF PASSED"
-          echo "Sender: KY ERP <admin@kyerp.net>"
-          echo "Recipient: ${{ steps.delivery.outputs.recipient }}"
-          echo "Provider: RESEND"
-          echo "Delivery: ${{ steps.delivery.outputs.event }}"
-          echo "Temporary route removed: YES"
+        run: node scripts/owner-mail-live-proof.mjs
