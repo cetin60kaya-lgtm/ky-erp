@@ -192,7 +192,6 @@ registerIkPdksGuardRoutes(app);
 registerIkPersonnelControlRoutes(app);
 registerIkPdksMasterRoutes(app);
 registerIkRelationalCloudRoutes(app);
-registerIkAdminCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
 registerAdminManagementRoutes(app);
 registerOwnerSecurityRoutes(app);
@@ -201,6 +200,10 @@ registerAdminMappingRoutes(app);
 registerAdminStorageRoutes(app);
 registerAdminBackupRoutes(app);
 registerAdminBackupSqlRoutes(app);
+// ik-admin-cloud contains the legacy /api/admin/* fallback. Hono resolves
+// matching handlers in registration order, so this fallback must stay after
+// every canonical admin route or it will shadow them with JSON-store records.
+registerIkAdminCloudRoutes(app);
 
 const shell = new Hono<ShellEnv>();
 

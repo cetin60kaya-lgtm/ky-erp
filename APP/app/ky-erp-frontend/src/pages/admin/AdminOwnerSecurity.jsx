@@ -56,16 +56,27 @@ export default function AdminOwnerSecurity() {
   async function loadAll() {
     setBusy(true);
     try {
-      const [ownerResult, sessionResult, deliveryResult] = await Promise.all([
+      const [ownerResult, sessionResult, deliveryResult] = await Promise.allSettled([
         getApplicationOwner(),
         listActiveSessions(),
         getDeliveryCapabilities(),
       ]);
-      setOwner(ownerResult);
-      setSessions(rowsOf(sessionResult));
-      setDelivery(deliveryResult);
-      setProfile({ fullName: ownerResult?.fullName || "", username: ownerResult?.username || "", email: ownerResult?.email || "" });
-      setMessage("Uygulama sahibi hesabı ve güvenlik durumu güncel.");
+      if (ownerResult.status === "rejected") {
+        setOwner(null);
+        setMessage(`Hata: ${ownerResult.reason?.message || "Uygulama sahibi hesabı alınamadı."}`);
+        return;
+      }
+      const ownerData = ownerResult.value;
+      const unavailable = [];
+      setOwner(ownerData);
+      setProfile({ fullName: ownerData?.fullName || "", username: ownerData?.username || "", email: ownerData?.email || "" });
+      if (sessionResult.status === "fulfilled") setSessions(rowsOf(sessionResult.value));
+      else { setSessions([]); unavailable.push("aktif oturumlar"); }
+      if (deliveryResult.status === "fulfilled") setDelivery(deliveryResult.value);
+      else { setDelivery(null); unavailable.push("e-posta servisi"); }
+      setMessage(unavailable.length
+        ? `Uygulama sahibi hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.`
+        : "Uygulama sahibi hesabı ve güvenlik durumu güncel.");
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Uygulama sahibi güvenlik bilgileri alınamadı."}`);
     } finally {

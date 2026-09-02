@@ -95,6 +95,7 @@ export default function AdminUsersPanelV2(){
     const results=await Promise.allSettled(sources.map(([,fn])=>fn()));
     const failed=[];results.forEach((result,index)=>{if(result.status==="rejected")failed.push(sources[index][0])});
     if(results[0].status==="fulfilled"){const list=rowsOf(results[0].value);setUsers(list);setSelectedUserId(cur=>list.some(row=>String(row.id)===String(cur))?cur:(list.find(row=>row.isActive!==false)?.id||list[0]?.id||""))}
+    else{setUsers([]);setSelectedUserId("")}
     if(results[1].status==="fulfilled")setCompanies(rowsOf(results[1].value));
     if(results[2].status==="fulfilled")setSessions(rowsOf(results[2].value));
     if(results[3].status==="fulfilled")setHistory(rowsOf(results[3].value));
@@ -102,7 +103,8 @@ export default function AdminUsersPanelV2(){
     if(results[5].status==="fulfilled")setPolicies(rowsOf(results[5].value));
     if(results[6].status==="fulfilled")setDelivery(results[6].value);
     setWarnings(failed);
-    setMessage(failed.length?`Ana kullanıcı listesi hazır. Alınamayan yardımcı kaynak: ${failed.join(", ")}.`:"Kullanıcı, yetki ve güvenlik bilgileri güncel.");
+    if(results[0].status==="rejected")setMessage(`Hata: Kullanıcı listesi alınamadı. ${results[0].reason?.message||"Yönetim servisi yanıt vermedi."}`);
+    else{const helperFailed=failed.filter(name=>name!=="Kullanıcılar");setMessage(helperFailed.length?`Kullanıcı listesi hazır. Alınamayan yardımcı kaynak: ${helperFailed.join(", ")}.`:"Kullanıcı, yetki ve güvenlik bilgileri güncel.")}
     setBusy(false);
   },[]);
 
