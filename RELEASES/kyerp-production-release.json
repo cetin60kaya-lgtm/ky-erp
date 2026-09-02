@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-02T21:00:40+03:00",
-  "attempt": 80,
+  "requestedAt": "2026-09-02T21:27:53+03:00",
+  "attempt": 81,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -16,6 +16,7 @@
     "owner-security-dedicated-console",
     "owner-hidden-from-managed-users",
     "owner-mfa-reauth-step-up",
+    "owner-mfa-self-target-only",
     "owner-mfa-staged-rotation",
     "owner-mfa-atomic-session-revoke",
     "legacy-mfa-reset-fail-closed",
@@ -53,6 +54,6 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "890e1401298699ce9ddbff3d52453f5bd1e807d6",
-  "note": "02.09.2026 attempt 80. Canli incelemede eski genel /api/admin/* fallback rotasinin kendisinden sonra kayitli canonical yonetim rotalarini golgeledigi dogrulandi. D1 yedeginde 6 aktif kullanici, 1 uygulama sahibi, 5 normal kullanici ve sifir eksik security kaydi bulunarak veri kaybi olmadigi kanitlandi. Legacy admin fallback tum canonical admin rotalarindan sonra calisacak sekilde duzeltildi; Kullanici ve Uygulama Sahibi ekranlari yardimci servis hatalarinda dogru/parsiyel durum gosterecek sekilde saglamlastirildi. Worker 120/120, frontend 30/30, source validation, D1 readiness, PDKS ve gercek Chrome smoke yesil. Tam D1 yedegi alinmadan migration/deploy yok; yalniz hedefli ve idempotent migrationlar uygulanir. D1 reset ve generic migration zinciri yoktur."
+  "sourceCommit": "8c8c0cc9561e0c0b35370731f4da5dd017efb04d",
+  "note": "02.09.2026 attempt 81. Owner Security MFA step-up ve QR yenileme akisi authenticated uygulama sahibinin yalniz kendi user id'sine kilitlendi. Crafted targetUserId veya route id ile baska kullaniciya reauth/renewal/delivery scope edilmesi OWNER_SELF_ONLY ile fail-closed engelleniyor; email reauth verify metadata scope'u da current owner id ile tekrar dogrulaniyor. PR #47 uzerinde API contract, D1 schema readiness ve tam Production Source Validation yesil: Worker typecheck, unit + auth integration, dry-run build, frontend lint/test/build ve production security contract basarili. Tam D1 yedegi alinmadan migration/deploy yok; yalniz hedefli ve idempotent migrationlar uygulanir. D1 reset, DROP, veri silme ve generic migration zinciri yoktur."
 }
