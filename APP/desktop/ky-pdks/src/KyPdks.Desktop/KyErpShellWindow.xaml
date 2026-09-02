@@ -73,7 +73,6 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- SOL MODÜL MENÜSÜ -->
         <Border Grid.Column="0" Background="{StaticResource ShellNavy}">
             <Grid>
                 <Grid.RowDefinitions>
@@ -139,7 +138,6 @@
             </Grid>
         </Border>
 
-        <!-- ANA ÇALIŞMA ALANI -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="62"/>
@@ -162,7 +160,7 @@
                             <TextBlock x:Name="PendingText" Text="0 bekleyen" Foreground="#8A6511" FontWeight="SemiBold" FontSize="11"/>
                         </Border>
                         <Button Style="{StaticResource TopButton}" Click="OfflineCenterButton_Click" Content="Offline Merkez"/>
-                        <Button Style="{StaticResource TopButton}" Click="RefreshButton_Click" Content="Yenile"/>
+                        <Button Style="{StaticResource TopButton}" Click="RefreshButton_Click" Content="Tam Eşitle"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -170,7 +168,6 @@
             <Grid Grid.Row="1" Background="#F3F6FA">
                 <wv2:WebView2 x:Name="ErpWebView" Visibility="Visible"/>
 
-                <!-- Offline / Kesinti merkezi -->
                 <Grid x:Name="OfflineCenter" Visibility="Collapsed" Background="#F3F6FA">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="24">
@@ -181,7 +178,7 @@
 
                             <UniformGrid Columns="3" Margin="0,4,0,14">
                                 <Border Style="{StaticResource Card}">
-                                    <StackPanel><TextBlock Text="SON SENKRON" Foreground="{StaticResource ShellMuted}" FontSize="10" FontWeight="Bold"/><TextBlock x:Name="LastSyncText" Text="—" FontSize="18" FontWeight="Bold" Foreground="{StaticResource ShellText}" Margin="0,8,0,0"/><TextBlock Text="API cevapları local cache" Foreground="{StaticResource ShellMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel><TextBlock Text="SON TAM EŞİTLEME" Foreground="{StaticResource ShellMuted}" FontSize="10" FontWeight="Bold"/><TextBlock x:Name="LastSyncText" Text="—" FontSize="18" FontWeight="Bold" Foreground="{StaticResource ShellText}" Margin="0,8,0,0"/><TextBlock Text="Yetkili GET verileri local cache" Foreground="{StaticResource ShellMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel>
                                 </Border>
                                 <Border Style="{StaticResource Card}">
                                     <StackPanel><TextBlock Text="BEKLEYEN İŞLEM" Foreground="{StaticResource ShellMuted}" FontSize="10" FontWeight="Bold"/><TextBlock x:Name="OfflinePendingCountText" Text="0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource ShellText}" Margin="0,8,0,0"/><TextBlock Text="Çakışmasız senkron kuyruğu" Foreground="{StaticResource ShellMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel>
