@@ -16,6 +16,7 @@ const sql = migration("0038_company_ai_billing.sql");
 const billingPage = frontend("pages/admin/AdminCompanyBilling.jsx");
 const adminPage = frontend("pages/modules/AdminPage.jsx");
 const registry = frontend("app/moduleRegistry.js");
+const shell = frontend("layouts/AppShellV3.jsx");
 
 test("company billing migration is additive and preserves existing tenants", () => {
   assert.match(sql, /CREATE TABLE IF NOT EXISTS company_billing_profiles/);
@@ -98,9 +99,25 @@ test("company billing workspace is reachable from Yönetim and shows required co
   assert.match(registry, /Firma Paket \/ Kullanım/);
   assert.match(adminPage, /AdminCompanyBilling/);
   assert.match(adminPage, /activeTab === "firma-ucretlendirme"/);
+  assert.match(adminPage, /owner \? <AdminCompanyBilling/);
   for (const label of [
     "Pakete Dahil Token", "Aylık Sert Limit", "Firma Özel Aylık Fiyat",
     "1 Milyon Aşım Token Fiyatı", "Ek Token / Kredi", "Ücret Düzeltmesi",
     "Kullanım / Kredi / Ücret Hareketleri", "Aylık Kullanım Özeti",
   ]) assert.match(billingPage, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("owner-only admin workspaces are hidden for non-owner menu users and direct routes are guarded", () => {
+  assert.match(shell, /OWNER_ONLY_ADMIN_TABS = new Set\(\["uygulama-sahibi", "firma-ucretlendirme"\]\)/);
+  assert.match(shell, /return isOwnerUser\(user\)/);
+  assert.match(shell, /visibleGroups\(module, user\)/);
+  assert.match(adminPage, /activeTab === "uygulama-sahibi"/);
+  assert.match(adminPage, /owner \? <AdminOwnerSecurity \/>/);
+});
+
+test("billing amount parser supports comma and dot decimal forms", () => {
+  assert.match(billingPage, /raw\.includes\(","\) && raw\.includes\("\."\)/);
+  assert.match(billingPage, /raw\.lastIndexOf\(","\) > raw\.lastIndexOf\("\."\)/);
+  assert.match(billingPage, /raw\.replace\(\/\\\.\/g, ""\)\.replace\(",", "\."\)/);
+  assert.match(billingPage, /raw\.replace\(",", "\."\)/);
 });
