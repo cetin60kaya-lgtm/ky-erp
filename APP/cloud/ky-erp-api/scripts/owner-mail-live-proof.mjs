@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 
 const mainPath = resolve("src/main.ts");
 const original = readFileSync(mainPath, "utf8");
-const marker = 'shell.route("/", app);';
+const routeMarker = 'shell.route("/", app);';
+const publicMarker = 'const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/");';
 const token = randomBytes(32).toString("hex");
 const apiBase = "https://api.kyerp.net";
 
@@ -99,16 +100,27 @@ let cleanupError = null;
 
 try {
   if (!process.env.CLOUDFLARE_API_TOKEN) throw new Error("CLOUDFLARE_API_TOKEN missing");
-  if (!original.includes(marker)) throw new Error("main.ts proof insertion marker missing");
+  if (!original.includes(routeMarker)) throw new Error("main.ts route insertion marker missing");
+  if (!original.includes(publicMarker)) throw new Error("main.ts public-auth marker missing");
   assertResendBinding();
 
-  const temporary = original.replace(marker, proofBlock(token) + marker);
+  let temporary = original.replace(routeMarker, proofBlock(token) + routeMarker);
+  temporary = temporary.replace(
+    publicMarker,
+    'const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/__kyerp-owner-mail-live-proof");',
+  );
   writeFileSync(mainPath, temporary, "utf8");
-  if (!readFileSync(mainPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("temporary proof route was not inserted");
+  const temporarySource = readFileSync(mainPath, "utf8");
+  if (!temporarySource.includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("temporary proof route was not inserted");
+  if (!temporarySource.includes('path.startsWith("/api/__kyerp-owner-mail-live-proof")')) throw new Error("temporary proof public exception was not inserted");
 
-  console.log("Deploying temporary protected proof route before canonical app routing...");
+  console.log("Deploying temporary protected proof route with a token-gated public middleware exception...");
   run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
   assertResendBinding();
+
+  const forbidden = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, { method: "POST" });
+  if (forbidden.status !== 403) throw new Error(`proof token gate is not fail-closed: HTTP ${forbidden.status}`);
+  console.log("Temporary proof token gate verified: unauthenticated/no-token request => 403.");
 
   const sendPayload = await jsonFetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, {
     method: "POST",
@@ -141,7 +153,8 @@ try {
   try {
     console.log("Restoring canonical Worker source and redeploying...");
     writeFileSync(mainPath, original, "utf8");
-    if (readFileSync(mainPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("proof route remained in canonical source");
+    const restored = readFileSync(mainPath, "utf8");
+    if (restored.includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("proof route remained in canonical source");
     run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
     assertResendBinding();
 
