@@ -25,7 +25,16 @@ function moneyText(minor, currency = "TRY") {
   catch { return `${(num(minor) / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency || "TRY"}`; }
 }
 function amountToMinor(value) {
-  const normalized = String(value ?? "").trim().replace(/\./g, "").replace(",", ".");
+  const raw = String(value ?? "").trim().replace(/\s/g, "");
+  if (!raw) return 0;
+  let normalized = raw;
+  if (raw.includes(",") && raw.includes(".")) {
+    normalized = raw.lastIndexOf(",") > raw.lastIndexOf(".")
+      ? raw.replace(/\./g, "").replace(",", ".")
+      : raw.replace(/,/g, "");
+  } else if (raw.includes(",")) {
+    normalized = raw.replace(",", ".");
+  }
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
 }
