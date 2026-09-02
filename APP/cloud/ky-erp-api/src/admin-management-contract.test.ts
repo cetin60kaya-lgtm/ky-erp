@@ -98,10 +98,10 @@ test("storage management is provider-neutral File Hub and R2 remains preview/cac
   assert.match(hub, /LOCAL_FOLDER/);
   assert.match(hub, /SHAREPOINT/);
   assert.match(agent, /X-KYERP-Agent-Key/);
-  assert.match(ui, /Dosya Merkezi \/ File Hub/);
+  assert.match(ui, /Depolama Merkezi/);
   assert.match(ui, /Google Drive/);
   assert.match(ui, /OneDrive/);
-  assert.match(ui, /firma tarafından seçilir/);
+  assert.match(ui, /Modüller sağlayıcıya sabit bağlanmaz/);
   assert.doesNotMatch(ui, /test-watch-path/);
   assert.doesNotMatch(ui, /import-watch-folder/);
 });
