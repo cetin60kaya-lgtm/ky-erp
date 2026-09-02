@@ -70,12 +70,12 @@ const IK_PERSON_SQL = `
     LEFT JOIN ik_person_card_settings s
       ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
    WHERE e.main_company_id=?
-     AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
+     AND UPPER(TRIM(COALESCE(e.sgk_status,''))) = 'VAR'
 `;
 
 // DENETIM PDKS görünümü: yalnız SGK=VAR + kart numarası bulunan personel.
 const PDKS_PERSON_SQL = `${IK_PERSON_SQL}
-     AND TRIM(COALESCE(s.card_no,''))<>''
+     AND TRIM(COALESCE(s.card_no,'')) <> ''
 `;
 
 async function auditIkPeople(c: Context<AppEnv>, company: string) {
