@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { checkCompanyAiAllowance, recordCompanyAiUsage } from "./company-billing-cloud";
+import { checkCompanyAiAllowance, recordCompanyAiUsage, registerCompanyBillingRoutes } from "./company-billing-cloud";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -113,6 +113,7 @@ function aiText(result:unknown){if(typeof result==="string")return result.trim()
 function titleFrom(message:string){const clean=message.replace(/\s+/g," ").trim();return clean.length>52?`${clean.slice(0,49)}...`:clean||"KY ERP Sohbeti";}
 
 export function registerAiCloudRoutes(app:Hono<AppEnv>){
+  registerCompanyBillingRoutes(app);
   app.get("/api/ai/status",async c=>c.json({ok:true,success:true,enabled:Boolean(c.env.AI),model:MODEL,provider:"Cloudflare Workers AI",persistentConversations:true,fileHubAware:true,fileHubPermissionAware:true,tenantScoped:true,meteredBilling:true}));
   app.get("/api/ai/conversations",async c=>{const user=await getAuthenticatedUser(c) as Row|null;if(!user)return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gerekli."}},401);const scope=await secureSlugOf(c,user);if(!scope.ok)return scopeError(c,scope);return c.json({ok:true,success:true,conversations:await conversationList(c,scope.slug)});});
   app.get("/api/ai/conversations/:id",async c=>{const user=await getAuthenticatedUser(c) as Row|null;if(!user)return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gerekli."}},401);const scope=await secureSlugOf(c,user);if(!scope.ok)return scopeError(c,scope);const conversation=await conversationGet(c,c.req.param("id"),scope.slug);if(!conversation)return c.json({ok:false,error:{code:"NOT_FOUND",message:"Konuşma bulunamadı."}},404);return c.json({ok:true,success:true,conversation});});
