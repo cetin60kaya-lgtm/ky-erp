@@ -77,39 +77,71 @@ function interceptBlock(secretToken) {
     }`;
 }
 
-async function jsonFetch(url, options = {}) {
-  const response = await fetch(url, options);
+async function parseResponse(response) {
   const text = await response.text();
   let payload = {};
   try { payload = JSON.parse(text); } catch {}
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);
-  return payload;
+  return { response, text, payload };
 }
 
 async function waitForProofVersion() {
-  for (let attempt = 1; attempt <= 12; attempt += 1) {
+  let consecutive = 0;
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
     const response = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, { method: "POST" });
     if (response.status === 403) {
-      console.log(`Temporary entrypoint proof is active (${attempt}/12).`);
-      return;
+      consecutive += 1;
+      console.log(`Temporary proof edge check ${attempt}/20: HTTP 403 (${consecutive}/3 consecutive)`);
+      if (consecutive >= 3) return;
+    } else {
+      consecutive = 0;
+      console.log(`Waiting for temporary Worker propagation ${attempt}/20; HTTP ${response.status}`);
     }
-    console.log(`Waiting for temporary Worker propagation ${attempt}/12; HTTP ${response.status}`);
-    await wait(2500);
+    await wait(1500);
   }
-  throw new Error("temporary proof Worker did not become active");
+  throw new Error("temporary proof Worker did not stabilize across edges");
+}
+
+async function sendRealProofMail() {
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    const result = await parseResponse(await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, {
+      method: "POST",
+      headers: { "X-KYERP-Live-Proof": token, "Content-Type": "application/json" },
+    }));
+    if (result.response.ok) return result.payload;
+    if (result.response.status === 401) {
+      console.log(`Tokenli mail istegi eski edge'e denk geldi ${attempt}/20; yeniden deneniyor.`);
+      await wait(1500);
+      continue;
+    }
+    throw new Error(`mail send HTTP ${result.response.status}: ${result.text.slice(0, 500)}`);
+  }
+  throw new Error("tokenli mail istegi yeni Worker edge'ine ulasamadi");
+}
+
+async function deliveryStatus(messageId) {
+  const result = await parseResponse(await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof/${encodeURIComponent(messageId)}`, {
+    headers: { "X-KYERP-Live-Proof": token },
+  }));
+  if (result.response.status === 401) return { event: "edge-propagating", retry: true };
+  if (!result.response.ok) throw new Error(`delivery HTTP ${result.response.status}: ${result.text.slice(0, 500)}`);
+  return { event: String(result.payload?.data?.event || "unknown").toLowerCase(), retry: false };
 }
 
 async function waitForCanonicalVersion() {
-  for (let attempt = 1; attempt <= 12; attempt += 1) {
+  let consecutive = 0;
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
     const response = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, { method: "POST" });
     if ([401, 404].includes(response.status)) {
-      console.log(`Canonical Worker is active; proof endpoint absent, HTTP ${response.status} (${attempt}/12).`);
-      return;
+      consecutive += 1;
+      console.log(`Canonical edge check ${attempt}/20: HTTP ${response.status} (${consecutive}/3 consecutive)`);
+      if (consecutive >= 3) return;
+    } else {
+      consecutive = 0;
+      console.log(`Waiting for canonical Worker propagation ${attempt}/20; HTTP ${response.status}`);
     }
-    console.log(`Waiting for canonical Worker propagation ${attempt}/12; HTTP ${response.status}`);
-    await wait(2500);
+    await wait(1500);
   }
-  throw new Error("canonical Worker did not become active after cleanup");
+  throw new Error("canonical Worker did not stabilize after cleanup");
 }
 
 let deliveryEvent = "";
@@ -133,25 +165,20 @@ try {
   assertResendBinding();
   await waitForProofVersion();
 
-  const sendPayload = await jsonFetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, {
-    method: "POST",
-    headers: { "X-KYERP-Live-Proof": token, "Content-Type": "application/json" },
-  });
+  const sendPayload = await sendRealProofMail();
   const messageId = String(sendPayload?.data?.messageId || "");
   recipient = String(sendPayload?.data?.recipient || "");
   if (!messageId) throw new Error(`Resend message id missing: ${JSON.stringify(sendPayload)}`);
   console.log(`::add-mask::${messageId}`);
   console.log(`Resend accepted the real owner test message; recipient=${recipient}`);
 
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
-    const statusPayload = await jsonFetch(`${apiBase}/api/__kyerp-owner-mail-live-proof/${encodeURIComponent(messageId)}`, {
-      headers: { "X-KYERP-Live-Proof": token },
-    });
-    deliveryEvent = String(statusPayload?.data?.event || "unknown").toLowerCase();
-    console.log(`Resend delivery check ${attempt}/30: ${deliveryEvent}`);
+  for (let attempt = 1; attempt <= 36; attempt += 1) {
+    const status = await deliveryStatus(messageId);
+    deliveryEvent = status.event;
+    console.log(`Resend delivery check ${attempt}/36: ${deliveryEvent}`);
     if (["delivered", "opened", "clicked"].includes(deliveryEvent)) break;
     if (["bounced", "complained", "canceled", "failed"].includes(deliveryEvent)) throw new Error(`Resend delivery failed: ${deliveryEvent}`);
-    await wait(5000);
+    await wait(status.retry ? 1500 : 5000);
   }
 
   if (!["delivered", "opened", "clicked"].includes(deliveryEvent)) throw new Error(`Resend delivery proof timed out: ${deliveryEvent}`);
