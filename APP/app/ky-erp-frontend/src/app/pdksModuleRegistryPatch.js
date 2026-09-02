@@ -53,6 +53,10 @@ MODULE_ROUTE_ALIASES.pdks = {
   "calisma-gruplari": "gruplar-vardiyalar",
   "terminal": "saat-terminal",
   "saat": "saat-terminal",
+  "cihaz-baglantilari": "saat-terminal",
+  "cihaz": "saat-terminal",
+  "senkron": "saat-terminal",
+  "sync": "saat-terminal",
   "denetim": "denetim-yillik-temp",
   "temp": "denetim-yillik-temp",
 };
