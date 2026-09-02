@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$Version = '1.4.0'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
@@ -26,9 +27,14 @@ function Invoke-Native {
     }
 }
 
-Write-Host 'KY PDKS Windows build başlıyor...' -ForegroundColor Cyan
+Write-Host "KY PDKS Windows $Version build başlıyor..." -ForegroundColor Cyan
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 8 SDK bulunamadı.' }
+
+$VersionFile = Join-Path $Root 'VERSION'
+if (-not (Test-Path $VersionFile)) { throw 'VERSION dosyası bulunamadı.' }
+$DeclaredVersion = (Get-Content $VersionFile -Raw).Trim()
+if ($DeclaredVersion -ne $Version) { throw "VERSION uyuşmuyor. Beklenen=$Version Bulunan=$DeclaredVersion" }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 New-Item $DesktopOut -ItemType Directory -Force | Out-Null
@@ -61,6 +67,11 @@ $AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
 if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $DesktopExe" }
 if (-not (Test-Path $AgentExe)) { throw "Agent oluşmadı: $AgentExe" }
 
+$DesktopVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($DesktopExe).ProductVersion
+$AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($AgentExe).ProductVersion
+if (-not ([string]$DesktopVersion).StartsWith($Version)) { throw "Desktop sürümü yanlış: $DesktopVersion" }
+if (-not ([string]$AgentVersion).StartsWith($Version)) { throw "Agent sürümü yanlış: $AgentVersion" }
+
 Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
 $InnoCandidates = @(
@@ -69,9 +80,7 @@ $InnoCandidates = @(
     $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
 ) | Where-Object { $_ -and (Test-Path $_) }
 
-if (-not $InnoCandidates) {
-    throw 'Inno Setup 6 bulunamadı. Setup.exe üretilemedi.'
-}
+if (-not $InnoCandidates) { throw 'Inno Setup 6 bulunamadı. Setup.exe üretilemedi.' }
 
 $env:KY_PDKS_DIST = $Dist
 $env:KY_PDKS_SETUP_OUT = $InstallerOut
@@ -79,8 +88,9 @@ $InnoExe = $InnoCandidates[0]
 $InnoScript = Join-Path $Root 'installer\KY-PDKS.iss'
 Invoke-Native 'Inno Setup' { & $InnoExe $InnoScript }
 
-$Setup = Get-ChildItem $InstallerOut -Filter 'KY-PDKS-Setup-1.3.0.exe' | Select-Object -First 1
-if (-not $Setup) { throw 'KY-PDKS-Setup-1.3.0.exe oluşmadı.' }
+$ExpectedSetupName = "KY-PDKS-Setup-$Version.exe"
+$Setup = Get-ChildItem $InstallerOut -Filter $ExpectedSetupName | Select-Object -First 1
+if (-not $Setup) { throw "$ExpectedSetupName oluşmadı." }
 
 Write-Host '5/5 Bütünlük özeti...' -ForegroundColor Cyan
 $Hash = (Get-FileHash $Setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -89,16 +99,18 @@ $HashFile = "$($Setup.FullName).sha256.txt"
 
 $BuildInfo = [ordered]@{
     product = 'KY PDKS'
-    version = '1.3.0'
+    version = $Version
     builtAt = (Get-Date).ToString('o')
     setup = $Setup.Name
     sha256 = $Hash
+    desktopVersion = [string]$DesktopVersion
+    agentVersion = [string]$AgentVersion
     desktop = (Get-Item $DesktopExe).Length
     agent = (Get-Item $AgentExe).Length
 }
 $BuildInfo | ConvertTo-Json | Set-Content (Join-Path $InstallerOut 'build-info.json') -Encoding utf8
 
 Write-Host ''
-Write-Host 'KY PDKS Windows 1.3.0 paketi hazır.' -ForegroundColor Green
+Write-Host "KY PDKS Windows $Version paketi hazır." -ForegroundColor Green
 Write-Host "Setup : $($Setup.FullName)" -ForegroundColor Cyan
 Write-Host "SHA256: $Hash" -ForegroundColor Cyan
