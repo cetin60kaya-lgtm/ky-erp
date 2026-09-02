@@ -3,10 +3,9 @@ import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-const mainPath = resolve("src/main.ts");
-const original = readFileSync(mainPath, "utf8");
-const routeMarker = 'shell.route("/", app);';
-const publicMarker = 'const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/");';
+const entryPath = resolve("src/main-entry.ts");
+const original = readFileSync(entryPath, "utf8");
+const marker = "  async fetch(request: Request, env: Cloudflare.Env, executionCtx: ExecutionContext) {";
 const token = randomBytes(32).toString("hex");
 const apiBase = "https://api.kyerp.net";
 
@@ -30,56 +29,52 @@ function assertResendBinding() {
   console.log("RESEND_API_KEY live Worker secret binding verified.");
 }
 
-function wait(ms) {
-  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
-}
+const wait = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 
-function proofBlock(secretToken) {
-  return `
-shell.post("/api/__kyerp-owner-mail-live-proof", async (c) => {
-  if (c.req.header("X-KYERP-Live-Proof") !== ${JSON.stringify(secretToken)}) return c.json({ ok: false, error: { code: "PROOF_FORBIDDEN" } }, 403);
-  const owner = await c.env.DB.prepare(\`SELECT s.email AS email FROM auth_users u JOIN auth_user_security s ON s.user_id=u.id WHERE UPPER(TRIM(COALESCE(s.role_override,u.role,''))) IN ('SUPER_ADMIN','ADMIN') AND COALESCE(s.email_verified,0)=1 AND TRIM(COALESCE(s.email,''))<>'' ORDER BY CASE WHEN UPPER(TRIM(COALESCE(s.role_override,u.role,'')))='SUPER_ADMIN' THEN 0 ELSE 1 END LIMIT 1\`).first<any>();
-  const destination = String(owner?.email || "").trim();
-  if (!destination) return c.json({ ok: false, error: { code: "OWNER_EMAIL_NOT_FOUND" } }, 404);
-  const key = String(c.env.RESEND_API_KEY || "").trim();
-  if (!key) return c.json({ ok: false, error: { code: "RESEND_BINDING_MISSING" } }, 503);
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: "KY ERP <admin@kyerp.net>",
-      to: [destination],
-      subject: "KY ERP Canli Mail Teslim Testi",
-      text: "KY ERP production e-posta teslim altyapisi canli olarak dogrulandi. Bu mesaj otomatik canli kabul testidir; herhangi bir islem yapmaniz gerekmez.",
-    }),
-  });
-  let payload: any = {};
-  try { payload = await response.json(); } catch {}
-  if (!response.ok) return c.json({ ok: false, error: { code: "RESEND_SEND_FAILED", status: response.status, message: String(payload?.message || "") } }, 503);
-  const messageId = String(payload?.id || payload?.messageId || "").trim();
-  if (!messageId) return c.json({ ok: false, error: { code: "RESEND_MESSAGE_ID_MISSING" } }, 503);
-  const parts = destination.split("@");
-  const masked = String(parts[0] || "").slice(0, 1) + "***@" + String(parts[1] || "");
-  return c.json({ ok: true, data: { provider: "RESEND", messageId, sender: "KY ERP <admin@kyerp.net>", recipient: masked } });
-});
-
-shell.get("/api/__kyerp-owner-mail-live-proof/:messageId", async (c) => {
-  if (c.req.header("X-KYERP-Live-Proof") !== ${JSON.stringify(secretToken)}) return c.json({ ok: false, error: { code: "PROOF_FORBIDDEN" } }, 403);
-  const key = String(c.env.RESEND_API_KEY || "").trim();
-  if (!key) return c.json({ ok: false, error: { code: "RESEND_BINDING_MISSING" } }, 503);
-  const messageId = String(c.req.param("messageId") || "").trim();
-  const response = await fetch("https://api.resend.com/emails/" + encodeURIComponent(messageId), {
-    method: "GET",
-    headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
-  });
-  let payload: any = {};
-  try { payload = await response.json(); } catch {}
-  if (!response.ok) return c.json({ ok: false, error: { code: "RESEND_STATUS_FAILED", status: response.status, message: String(payload?.message || "") } }, 503);
-  const event = String(payload?.last_event || payload?.lastEvent || payload?.status || "unknown").toLowerCase();
-  return c.json({ ok: true, data: { provider: "RESEND", messageId: String(payload?.id || messageId), event } });
-});
-
-`;
+function interceptBlock(secretToken) {
+  return `${marker}
+    const proofUrl = new URL(request.url);
+    if (proofUrl.pathname === "/api/__kyerp-owner-mail-live-proof" && request.method.toUpperCase() === "POST") {
+      if (request.headers.get("X-KYERP-Live-Proof") !== ${JSON.stringify(secretToken)}) return securityErrorResponse(request, "PROOF_FORBIDDEN", "Live proof token gerekli.", 403);
+      const owner = await env.DB.prepare(\`SELECT s.email AS email FROM auth_users u JOIN auth_user_security s ON s.user_id=u.id WHERE UPPER(TRIM(COALESCE(s.role_override,u.role,''))) IN ('SUPER_ADMIN','ADMIN') AND COALESCE(s.email_verified,0)=1 AND TRIM(COALESCE(s.email,''))<>'' ORDER BY CASE WHEN UPPER(TRIM(COALESCE(s.role_override,u.role,'')))='SUPER_ADMIN' THEN 0 ELSE 1 END LIMIT 1\`).first<any>();
+      const destination = String(owner?.email || "").trim();
+      if (!destination) return securityErrorResponse(request, "OWNER_EMAIL_NOT_FOUND", "Dogrulanmis uygulama sahibi e-postasi bulunamadi.", 404);
+      const key = String((env as any).RESEND_API_KEY || "").trim();
+      if (!key) return securityErrorResponse(request, "RESEND_BINDING_MISSING", "Resend binding eksik.", 503);
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: "KY ERP <admin@kyerp.net>",
+          to: [destination],
+          subject: "KY ERP Canli Mail Teslim Testi",
+          text: "KY ERP production e-posta teslim altyapisi canli olarak dogrulandi. Bu mesaj otomatik canli kabul testidir; herhangi bir islem yapmaniz gerekmez.",
+        }),
+      });
+      let payload: any = {};
+      try { payload = await response.json(); } catch {}
+      if (!response.ok) return securityErrorResponse(request, "RESEND_SEND_FAILED", String(payload?.message || "Resend gonderimi basarisiz."), 503);
+      const messageId = String(payload?.id || payload?.messageId || "").trim();
+      if (!messageId) return securityErrorResponse(request, "RESEND_MESSAGE_ID_MISSING", "Resend kabul kimligi donmedi.", 503);
+      const parts = destination.split("@");
+      const masked = String(parts[0] || "").slice(0, 1) + "***@" + String(parts[1] || "");
+      return Response.json({ ok: true, data: { provider: "RESEND", messageId, sender: "KY ERP <admin@kyerp.net>", recipient: masked } });
+    }
+    if (proofUrl.pathname.startsWith("/api/__kyerp-owner-mail-live-proof/") && request.method.toUpperCase() === "GET") {
+      if (request.headers.get("X-KYERP-Live-Proof") !== ${JSON.stringify(secretToken)}) return securityErrorResponse(request, "PROOF_FORBIDDEN", "Live proof token gerekli.", 403);
+      const key = String((env as any).RESEND_API_KEY || "").trim();
+      if (!key) return securityErrorResponse(request, "RESEND_BINDING_MISSING", "Resend binding eksik.", 503);
+      const messageId = decodeURIComponent(proofUrl.pathname.slice("/api/__kyerp-owner-mail-live-proof/".length));
+      const response = await fetch("https://api.resend.com/emails/" + encodeURIComponent(messageId), {
+        method: "GET",
+        headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+      });
+      let payload: any = {};
+      try { payload = await response.json(); } catch {}
+      if (!response.ok) return securityErrorResponse(request, "RESEND_STATUS_FAILED", String(payload?.message || "Resend durum sorgusu basarisiz."), 503);
+      const event = String(payload?.last_event || payload?.lastEvent || payload?.status || "unknown").toLowerCase();
+      return Response.json({ ok: true, data: { provider: "RESEND", messageId: String(payload?.id || messageId), event } });
+    }`;
 }
 
 async function jsonFetch(url, options = {}) {
@@ -91,6 +86,32 @@ async function jsonFetch(url, options = {}) {
   return payload;
 }
 
+async function waitForProofVersion() {
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    const response = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, { method: "POST" });
+    if (response.status === 403) {
+      console.log(`Temporary entrypoint proof is active (${attempt}/12).`);
+      return;
+    }
+    console.log(`Waiting for temporary Worker propagation ${attempt}/12; HTTP ${response.status}`);
+    await wait(2500);
+  }
+  throw new Error("temporary proof Worker did not become active");
+}
+
+async function waitForCanonicalVersion() {
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    const response = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, { method: "POST" });
+    if ([401, 404].includes(response.status)) {
+      console.log(`Canonical Worker is active; proof endpoint absent, HTTP ${response.status} (${attempt}/12).`);
+      return;
+    }
+    console.log(`Waiting for canonical Worker propagation ${attempt}/12; HTTP ${response.status}`);
+    await wait(2500);
+  }
+  throw new Error("canonical Worker did not become active after cleanup");
+}
+
 let deliveryEvent = "";
 let recipient = "";
 let proofCompleted = false;
@@ -100,27 +121,17 @@ let cleanupError = null;
 
 try {
   if (!process.env.CLOUDFLARE_API_TOKEN) throw new Error("CLOUDFLARE_API_TOKEN missing");
-  if (!original.includes(routeMarker)) throw new Error("main.ts route insertion marker missing");
-  if (!original.includes(publicMarker)) throw new Error("main.ts public-auth marker missing");
+  if (!original.includes(marker)) throw new Error("main-entry fetch marker missing");
   assertResendBinding();
 
-  let temporary = original.replace(routeMarker, proofBlock(token) + routeMarker);
-  temporary = temporary.replace(
-    publicMarker,
-    'const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/__kyerp-owner-mail-live-proof");',
-  );
-  writeFileSync(mainPath, temporary, "utf8");
-  const temporarySource = readFileSync(mainPath, "utf8");
-  if (!temporarySource.includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("temporary proof route was not inserted");
-  if (!temporarySource.includes('path.startsWith("/api/__kyerp-owner-mail-live-proof")')) throw new Error("temporary proof public exception was not inserted");
+  const temporary = original.replace(marker, interceptBlock(token));
+  writeFileSync(entryPath, temporary, "utf8");
+  if (!readFileSync(entryPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("temporary entrypoint proof was not inserted");
 
-  console.log("Deploying temporary protected proof route with a token-gated public middleware exception...");
+  console.log("Deploying temporary token-gated proof at the real Worker entrypoint...");
   run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
   assertResendBinding();
-
-  const forbidden = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, { method: "POST" });
-  if (forbidden.status !== 403) throw new Error(`proof token gate is not fail-closed: HTTP ${forbidden.status}`);
-  console.log("Temporary proof token gate verified: unauthenticated/no-token request => 403.");
+  await waitForProofVersion();
 
   const sendPayload = await jsonFetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, {
     method: "POST",
@@ -151,21 +162,18 @@ try {
   console.error(`PRIMARY LIVE PROOF ERROR: ${error instanceof Error ? error.message : String(error)}`);
 } finally {
   try {
-    console.log("Restoring canonical Worker source and redeploying...");
-    writeFileSync(mainPath, original, "utf8");
-    const restored = readFileSync(mainPath, "utf8");
-    if (restored.includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("proof route remained in canonical source");
+    console.log("Restoring canonical Worker entrypoint and redeploying...");
+    writeFileSync(entryPath, original, "utf8");
+    if (readFileSync(entryPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("proof interceptor remained in canonical entrypoint source");
     run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
     assertResendBinding();
+    await waitForCanonicalVersion();
 
     const healthResponse = await fetch(`${apiBase}/api/health`);
     const healthText = await healthResponse.text();
     if (!healthResponse.ok || !/\"ok\"\s*:\s*true/.test(healthText)) throw new Error(`canonical health check failed: ${healthResponse.status} ${healthText}`);
-
-    const proofRouteResponse = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`);
-    if (![401, 404].includes(proofRouteResponse.status)) throw new Error(`unexpected proof route cleanup response: HTTP ${proofRouteResponse.status}`);
     cleanupCompleted = true;
-    console.log(`Canonical Worker restored; temporary route is absent and canonical fallback returned HTTP ${proofRouteResponse.status}.`);
+    console.log("Canonical Worker health and cleanup verified.");
   } catch (error) {
     cleanupError = error;
     console.error(`CLEANUP ERROR: ${error instanceof Error ? error.message : String(error)}`);
@@ -181,4 +189,4 @@ console.log("Sender: KY ERP <admin@kyerp.net>");
 console.log(`Recipient: ${recipient}`);
 console.log("Provider: RESEND");
 console.log(`Delivery: ${deliveryEvent}`);
-console.log("Temporary route removed: YES");
+console.log("Temporary entrypoint proof removed: YES");
