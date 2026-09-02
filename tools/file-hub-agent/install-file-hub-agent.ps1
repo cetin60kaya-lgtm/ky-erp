@@ -36,7 +36,7 @@ if (-not $company) {
   [Environment]::SetEnvironmentVariable("KYERP_MAIN_COMPANY_SLUG", "mecit-hakan", "User")
 }
 
-$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument ('"{0}"' -f $Launcher)
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument ('"{0}"' -f $Launcher).Replace('\"','"')
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
