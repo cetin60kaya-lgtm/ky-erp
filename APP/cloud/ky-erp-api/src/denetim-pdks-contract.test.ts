@@ -40,6 +40,18 @@ test("DENETIM API is route-locked to strict SGK-card PDKS reads including person
   assert.match(personnel, /salary:/);
 });
 
+test("DENETIM IK is SGK-only while PDKS remains SGK+card", () => {
+  const readonlyApi = api("ik-audit-readonly.ts");
+  const ikScreen = frontend("pages/modules/ik/IkAuditPersonnelPage.jsx");
+  assert.match(readonlyApi, /const IK_PERSON_SQL/);
+  assert.match(readonlyApi, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(readonlyApi, /const PDKS_PERSON_SQL = `\$\{IK_PERSON_SQL\}[\s\S]*TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
+  assert.match(readonlyApi, /await auditIkPeople\(c, auth\.company\)/);
+  assert.match(readonlyApi, /const peopleRows = await auditPdksPeople\(c, company\)/);
+  assert.match(ikScreen, /Kart numarası İK görünümü için şart değildir/);
+  assert.doesNotMatch(ikScreen, /filter\(\(person\) =>[\s\S]{0,160}cardNo/);
+});
+
 test("DENETIM system account bootstrap is active, unknown-password, identity-locked and IK-only", () => {
   const source = migration("0024_denetime_pdks_system_user.sql");
   assert.match(source, /'system-denetim'/);
