@@ -86,7 +86,7 @@ public class PdksWorkflowTests
     }
 
     [Fact]
-    public async Task Erp_Cache_Is_Normalized_To_Local_Shift_Tolerance()
+    public async Task Erp_Cache_Remains_Canonical_For_Attendance_Result()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-pdks-cache-" + Guid.NewGuid().ToString("N"));
         try
@@ -102,13 +102,13 @@ public class PdksWorkflowTests
             await attendance.CacheEmployeeMonthAsync(person.Id, 2026, 8, new[]
             {
                 new AttendanceDayRow(person.Id, person.PersonnelCode, person.FullName, person.Department, person.CardNo,
-                    "2026-08-18", "CALISTI", "08:35", "18:50", 5, 10, 0, false, 2, "ERP eski hesap", "ERP")
+                    "2026-08-18", "CALISTI", "08:35", "18:50", 5, 10, 0, false, 2, "ERP canonical hesap", "ERP")
             });
 
             var row = (await attendance.BuildMonthAsync(2026, 8)).Single(x => x.Date == "2026-08-18");
             Assert.Equal("CALISTI", row.Status);
-            Assert.Equal(0, row.LateMinutes);
-            Assert.Equal(0, row.EarlyMinutes);
+            Assert.Equal(5, row.LateMinutes);
+            Assert.Equal(10, row.EarlyMinutes);
             Assert.Equal("ERP_CACHE", row.DataSource);
         }
         finally

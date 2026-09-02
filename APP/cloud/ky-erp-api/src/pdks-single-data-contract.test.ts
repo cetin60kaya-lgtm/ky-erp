@@ -17,8 +17,9 @@ test("PDKS period/shift guard is registered before personnel-control routes", ()
   assert.ok(guard > 0 && personnel > guard, "PDKS guard must wrap personnel-control routes");
 });
 
-test("PDKS guard blocks locked D1 periods, strict audit reads and normalizes D1 shift", () => {
+test("PDKS guard owns canonical operations, assistant, device, media and D1 shift normalization once", () => {
   const source = api("ik-pdks-guard.ts");
+  const master = api("ik-pdks-master.ts");
   assert.match(source, /SELECT is_locked FROM ik_monthly_close/);
   assert.match(source, /PDKS_PERIOD_LOCKED/);
   assert.match(source, /strictAuditEmployeeIds/);
@@ -28,8 +29,10 @@ test("PDKS guard blocks locked D1 periods, strict audit reads and normalizes D1 
   assert.match(source, /lateTolerance/);
   assert.match(source, /earlyTolerance/);
   assert.match(source, /overtimeMinutes/);
-  assert.match(source, /registerIkPdksOperationRoutes\(app\)/);
-  assert.match(source, /registerIkPdksCardBridgeRoutes\(app\)/);
+  for (const registrar of ["registerIkPdksOperationRoutes", "registerIkPdksCardBridgeRoutes", "registerIkPdksAdjustmentRoutes", "registerIkPdksAssistantRoutes", "registerIkPdksDeviceRoutes", "registerIkPersonnelMediaRoutes"])
+    assert.match(source, new RegExp(`${registrar}\\(app\\)`));
+  assert.doesNotMatch(master, /registerIkPdksOperationRoutes/);
+  assert.doesNotMatch(master, /registerIkPdksAdjustmentRoutes/);
 });
 
 test("PDKS D1 master schema contains shift, service and employee assignments", () => {
@@ -45,6 +48,43 @@ test("PDKS D1 operation schema is migration-backed and idempotent", () => {
     assert.match(source, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
   assert.match(source, /UNIQUE\(main_company_id,year,month,employee_id\)/);
   assert.match(source, /UNIQUE\(main_company_id,period_year,period_month\)/);
+});
+
+test("PDKS enrolled Windows device schema and headless HTTPS sync are explicit", () => {
+  const schema = migration("0037_pdks_device_sync.sql");
+  const device = api("ik-pdks-device.ts");
+  for (const table of ["ik_pdks_devices", "ik_pdks_device_sync_logs"])
+    assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
+  assert.match(device, /\/api\/ik\/personnel-control\/device\/enroll/);
+  assert.match(device, /\/api\/auth\/pdks-device\/heartbeat/);
+  assert.match(device, /\/api\/auth\/pdks-device\/time-events\/import/);
+  assert.match(device, /X-KYERP-PDKS-Device/);
+  assert.match(device, /X-KYERP-PDKS-Secret/);
+  assert.match(device, /secret_hash/);
+  assert.match(device, /INSERT INTO ik_time_clock_events/);
+  assert.match(device, /PDKS_AGENT:/);
+  assert.match(device, /Dönem kilitli/);
+});
+
+test("PDKS quick assistant is preview-first, D1-backed and audit logged", () => {
+  const source = api("ik-pdks-assistant.ts");
+  assert.match(source, /\/api\/ik\/personnel-control\/assistant\/command/);
+  assert.match(source, /body\.commit === true/);
+  assert.match(source, /PDKS_ASSISTANT_COMMAND_UNCLEAR/);
+  assert.match(source, /KART_YOK/);
+  assert.match(source, /KYERP_PDKS_ASSISTANT/);
+  assert.match(source, /hr_monthly_adjustments_v2/);
+  assert.match(source, /PDKS_ASSISTANT_/);
+});
+
+test("Canonical personnel photo is shared by employee id and R2 instead of second PDKS person data", () => {
+  const source = api("ik-personnel-media.ts");
+  assert.match(source, /IK_PERSONNEL_PHOTO/);
+  assert.match(source, /ik\/personnel-photos/);
+  assert.match(source, /c\.env\.FILES\.put/);
+  assert.match(source, /people\/:employeeId\/photo/);
+  assert.match(source, /5 \* 1024 \* 1024/);
+  assert.match(source, /PDKS_AUDIT_READ_ONLY/);
 });
 
 test("PDKS canonical operations use tenant-first D1 paths and protect business rules", () => {
@@ -79,10 +119,25 @@ test("Web PDKS uses personnel-control operations, not legacy advanced endpoints 
   assert.doesNotMatch(service, /\/ik\/advanced\//);
 });
 
-test("Web PDKS is a separate module and keeps Hedef-era operational sections", () => {
-  const source = frontend("app/pdksModuleRegistryPatch.js");
-  assert.match(source, /key: "pdks"/);
-  assert.match(source, /label: "PDKS"/);
-  for (const label of ["Bilgi Aktar", "Giriş \/ Çıkışlar", "Personel Bilgileri", "Puantaj Sonuçları", "İzinler", "Bordro", "Avanslar", "Gruplar \/ Vardiyalar", "Puantaj Kuralları", "Servisler", "Saat \/ Terminal", "Yıllık TEMP \/ Denetim"])
-    assert.match(source, new RegExp(label));
+test("Web PDKS keeps one global module entry and the approved compact horizontal grouped navigation", () => {
+  const registry = frontend("app/pdksModuleRegistryPatch.js");
+  const shell = frontend("pages/modules/PdksPage.jsx");
+  const css = frontend("pages/modules/pdks-shell.css");
+  assert.match(registry, /key: "pdks"/);
+  assert.match(registry, /label: "PDKS"/);
+  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
+    assert.match(shell, new RegExp(group));
+  for (const item of [
+    "Ana Ekran", "Bilgi Aktar", "Giriş / Çıkış", "Puantaj Sonuçları",
+    "Personel Bilgileri", "İzinler", "Çalışma Tarihi", "Avans", "Bordro",
+    "Gruplar / Vardiyalar", "Puantaj Kuralları", "Dönemler", "Servisler", "Tatiller",
+    "Saat / Terminal", "Kullanıcı", "Cihaz Bağlantıları", "Senkron",
+    "Raporlar", "Yıllık TEMP / Denetim",
+  ]) assert.match(shell, new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const masterData of ["Bölümler", "Görevler", "Durumlar", "Firmalar"])
+    assert.doesNotMatch(shell, new RegExp(masterData));
+  assert.match(shell, /PDKS Hızlı Asistan/);
+  assert.match(css, /shell-v3-submenu/);
+  assert.match(css, /pdks-command-nav/);
+  assert.doesNotMatch(css, /grid-template-columns:\s*210px/);
 });

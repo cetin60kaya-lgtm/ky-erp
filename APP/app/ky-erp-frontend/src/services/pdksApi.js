@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "../utils/api";
+import { apiFetch, apiGet, apiPost, apiUpload } from "../utils/api";
 
 function unwrap(payload) {
   return payload && typeof payload === "object" && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -18,6 +18,20 @@ export async function getPdksPeople() {
 
 export async function getPdksAttendance(employeeId, year, month) {
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance`, { year, month }));
+}
+
+export async function getPdksPersonPhotoBlob(employeeId) {
+  return apiFetch(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/photo`, { responseType: "blob" });
+}
+
+export async function getPdksPersonPhotoMeta(employeeId) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/photo-meta`));
+}
+
+export async function uploadPdksPersonPhoto(employeeId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  return unwrap(await apiUpload(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/photo`, form));
 }
 
 export async function addPdksTimeEvent(employeeId, payload = {}) {
@@ -52,8 +66,7 @@ export async function assignPdksService(employeeId, serviceId) {
   return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { serviceId }));
 }
 
-// PDKS kritik iş verileri artık /ik/advanced uyumluluk yoluna düşmez.
-// Hepsi personnel-control altında açık D1 operasyon endpointlerinden çalışır.
+// PDKS kritik iş verileri personnel-control altında açık D1 operasyon endpointlerinden çalışır.
 export async function getPdksAdvancedMonth(params = {}) {
   return unwrap(await apiGet(`${OPS}/month`, params));
 }
@@ -76,6 +89,10 @@ export async function savePdksLeave(payload = {}) {
 
 export async function savePdksFinanceMovement(payload = {}) {
   return unwrap(await apiPost(`${OPS}/advance`, payload));
+}
+
+export async function savePdksAdjustment(payload = {}) {
+  return unwrap(await apiPost(`${OPS}/adjustment`, payload));
 }
 
 export async function closePdksPeriod(payload = {}) {

@@ -1,5 +1,5 @@
-#define MyAppName "KY PDKS"
-#define MyAppVersion "1.3.0"
+#define MyAppName "KY ERP Masaüstü"
+#define MyAppVersion "1.5.0"
 #define MyPublisher "KY ERP"
 #define Dist GetEnv("KY_PDKS_DIST")
 #define SetupOut GetEnv("KY_PDKS_SETUP_OUT")
@@ -9,32 +9,31 @@ AppId={{7B558935-8DD5-4D1F-9A62-A1D79EE27C10}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
-VersionInfoVersion=1.3.0.0
+VersionInfoVersion=1.5.0.0
 VersionInfoCompany={#MyPublisher}
-VersionInfoDescription=KY ERP Personel Devam Kontrol Sistemi
+VersionInfoDescription=KY ERP Masaüstü • ERP + PDKS + offline senkron merkezi
 AppPublisher={#MyPublisher}
 AppPublisherURL=https://kyerp.net
 AppSupportURL=https://kyerp.net
-DefaultDirName={autopf}\KY ERP\KY PDKS
+DefaultDirName={autopf}\KY ERP\Masaüstü
 DefaultGroupName=KY ERP
 DisableProgramGroupPage=yes
 OutputDir={#SetupOut}
-OutputBaseFilename=KY-PDKS-Setup-{#MyAppVersion}
+OutputBaseFilename=KY-ERP-Masaustu-Setup-{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayName=KY PDKS
+UninstallDisplayName=KY ERP Masaüstü
 SetupLogging=yes
-CloseApplications=yes
-RestartApplications=no
-
-[Languages]
-Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 
 [Dirs]
+Name: "{commonappdata}\KY ERP\Desktop"; Permissions: users-modify
+Name: "{commonappdata}\KY ERP\Desktop\Data"; Permissions: users-modify
+Name: "{commonappdata}\KY ERP\Desktop\Backup"; Permissions: users-modify
+Name: "{commonappdata}\KY ERP\Desktop\Logs"; Permissions: users-modify
 Name: "{commonappdata}\KY ERP\PDKS"; Permissions: users-modify
 Name: "{commonappdata}\KY ERP\PDKS\Data"; Permissions: users-modify
 Name: "{commonappdata}\KY ERP\PDKS\Import"; Permissions: users-modify
@@ -45,40 +44,35 @@ Name: "{commonappdata}\KY ERP\PDKS\Logs"; Permissions: users-modify
 Name: "{commonappdata}\KY ERP\PDKS\Reports"; Permissions: users-modify
 
 [Files]
-Source: "{#Dist}\desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
-Source: "{#Dist}\agent\*"; DestDir: "{app}\Agent"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
+Source: "{#Dist}\desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Dist}\agent\*"; DestDir: "{app}\Agent"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\KY PDKS"; Filename: "{app}\KY PDKS.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\KY PDKS"; Filename: "{app}\KY PDKS.exe"; WorkingDir: "{app}"
+Name: "{autoprograms}\KY ERP\KY ERP Masaüstü"; Filename: "{app}\KY ERP Masaüstü.exe"
+Name: "{autodesktop}\KY ERP Masaüstü"; Filename: "{app}\KY ERP Masaüstü.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Masaüstünde KY ERP Masaüstü kısayolu oluştur"; GroupDescription: "Kısayollar:"; Flags: checkedonce
 
 [Run]
-Filename: "{sys}\sc.exe"; Parameters: "create ""KYERP.PDKS.Agent"" binPath= ""{app}\Agent\KYERP.PDKS.Agent.exe"" start= delayed-auto DisplayName= ""KY ERP PDKS Agent"""; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "description ""KYERP.PDKS.Agent"" ""KY PDKS kart terminali yerel veri toplama servisi"""; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "failure ""KYERP.PDKS.Agent"" reset= 86400 actions= restart/5000/restart/15000/restart/60000"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "start ""KYERP.PDKS.Agent"""; Flags: runhidden waituntilterminated
-Filename: "{app}\KY PDKS.exe"; Description: "KY PDKS'yi başlat"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent durduruluyor..."
+Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent kaydı temizleniyor..."
+Filename: "{sys}\sc.exe"; Parameters: "create KYERP.PDKS.Agent binPath= &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; start= delayed-auto DisplayName= &quot;KY ERP PDKS Agent&quot;"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent kuruluyor..."
+Filename: "{sys}\sc.exe"; Parameters: "description KYERP.PDKS.Agent &quot;KY ERP kart cihazı toplama ve D1 arka plan senkron servisi&quot;"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "failure KYERP.PDKS.Agent reset= 86400 actions= restart/5000/restart/15000/restart/30000"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "failureflag KYERP.PDKS.Agent 1"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "start KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent başlatılıyor..."
+Filename: "{app}\KY ERP Masaüstü.exe"; Description: "KY ERP Masaüstü uygulamasını aç"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\sc.exe"; Parameters: "stop ""KYERP.PDKS.Agent"""; Flags: runhidden waituntilterminated; RunOnceId: "StopPdksAgent"
-Filename: "{sys}\sc.exe"; Parameters: "delete ""KYERP.PDKS.Agent"""; Flags: runhidden waituntilterminated; RunOnceId: "DeletePdksAgent"
+Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
 
 [Code]
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  ResultCode: Integer;
+function InitializeSetup(): Boolean;
 begin
-  Exec(ExpandConstant('{sys}\sc.exe'), 'stop "KYERP.PDKS.Agent"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(800);
-  Exec(ExpandConstant('{sys}\sc.exe'), 'delete "KYERP.PDKS.Agent"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(800);
-  Result := '';
-end;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-  if CurUninstallStep = usPostUninstall then
-  begin
-    MsgBox('KY PDKS kaldırıldı. Kart kayıt güvenliği için C:\ProgramData\KY ERP\PDKS içindeki yerel veritabanı ve yedekler silinmedi.', mbInformation, MB_OK);
-  end;
+  Result := True;
 end;

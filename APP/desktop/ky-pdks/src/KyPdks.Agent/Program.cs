@@ -16,6 +16,7 @@ builder.Services.AddSingleton<TextFileLog>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<FileImportWorker>();
 builder.Services.AddHostedService<TerminalCaptureWorker>();
+builder.Services.AddHostedService<ErpSyncWorker>();
 builder.Services.AddHostedService<MaintenanceWorker>();
 await builder.Build().RunAsync();
 

@@ -8,7 +8,7 @@ public partial class PdksWorkbenchWindow
     {
         if (string.IsNullOrWhiteSpace(_token))
         {
-            StatusText.Text = "Detay Yönetim için önce KY ERP hesabıyla giriş yapın.";
+            StatusText.Text = "PDKS Merkezi için önce KY ERP hesabıyla giriş yapın.";
             return;
         }
 
@@ -16,7 +16,7 @@ public partial class PdksWorkbenchWindow
             || string.Equals(_userName, "denetim", StringComparison.OrdinalIgnoreCase)
             || string.Equals(_role, "DENETIM", StringComparison.OrdinalIgnoreCase);
 
-        var window = new PdksMasterWindow(_token, _people, _paths, CanWrite && !audit)
+        var window = new PdksUnifiedWindow(_token, _people, _paths, CanWrite && !audit)
         {
             Owner = this,
         };

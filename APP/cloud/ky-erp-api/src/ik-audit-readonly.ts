@@ -21,6 +21,7 @@ const dateOnly = (value: unknown) => text(value).slice(0, 10);
 function ok(c: Context<AppEnv>, data: unknown) {
   return c.json({ ok: true, success: true, data });
 }
+
 function fail(c: Context<AppEnv>, status: number, code: string, message: string) {
   return c.json({ ok: false, success: false, error: { code, message } }, status as any);
 }
@@ -61,11 +62,8 @@ function safePerson(row: Row) {
   };
 }
 
-// DENETIM için tek görünür personel kümesi:
-// - SGK durumu kesin olarak VAR olmalı.
-// - Kart numarası bulunmalı.
-// - Günlük/haftalık/kartsız personel bu kaynaktan hiçbir zaman dönmez.
-const PERSON_SQL = `
+// DENETIM İK görünümü: SGK=VAR yeterlidir; kart numarası şart değildir.
+const IK_PERSON_SQL = `
   SELECT e.id,e.code,e.full_name,e.department,e.title,e.sgk_status,e.status,e.hire_date,
          s.exit_date,s.card_no,s.phone
     FROM hr_monthly_employees e
@@ -73,13 +71,25 @@ const PERSON_SQL = `
       ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
    WHERE e.main_company_id=?
      AND UPPER(TRIM(COALESCE(e.sgk_status,''))) = 'VAR'
+`;
+
+// DENETIM PDKS görünümü: yalnız SGK=VAR + kart numarası bulunan personel.
+const PDKS_PERSON_SQL = `${IK_PERSON_SQL}
      AND TRIM(COALESCE(s.card_no,'')) <> ''
 `;
 
-async function strictPeople(c: Context<AppEnv>, company: string) {
+async function auditIkPeople(c: Context<AppEnv>, company: string) {
   return all(
     c,
-    `${PERSON_SQL} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`,
+    `${IK_PERSON_SQL} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`,
+    [company],
+  );
+}
+
+async function auditPdksPeople(c: Context<AppEnv>, company: string) {
+  return all(
+    c,
+    `${PDKS_PERSON_SQL} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`,
     [company],
   );
 }
@@ -215,7 +225,7 @@ async function buildPdksMonth(
   const dates = monthDays(year, month);
   const start = dates[0];
   const end = dates.at(-1)!;
-  const peopleRows = await strictPeople(c, company);
+  const peopleRows = await auditPdksPeople(c, company);
   const people = peopleRows.map(safePerson);
 
   const [events, overrides, holidays, leaves] = await Promise.all([
@@ -267,10 +277,7 @@ async function buildPdksMonth(
     eventsByKey.get(key)!.push(event);
   }
   const overrideByKey = new Map(
-    overrides.map((row) => [
-      `${text(row.employee_id)}|${dateOnly(row.work_date)}`,
-      row,
-    ]),
+    overrides.map((row) => [`${text(row.employee_id)}|${dateOnly(row.work_date)}`, row]),
   );
 
   const inBase = minutesOf(EXPECTED_IN)!;
@@ -393,14 +400,14 @@ export function registerIkAuditReadonlyRoutes(app: Hono<AppEnv>) {
     const auth = await auditContext(c);
     if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
     if (!auth.allowed) return fail(c, 403, "FORBIDDEN", "Bu işlem için yetkiniz bulunmuyor.");
-    return ok(c, (await strictPeople(c, auth.company)).map(safePerson));
+    return ok(c, (await auditIkPeople(c, auth.company)).map(safePerson));
   });
 
   app.get("/api/ik/audit/people/:employeeId", async (c) => {
     const auth = await auditContext(c);
     if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
     if (!auth.allowed) return fail(c, 403, "FORBIDDEN", "Bu işlem için yetkiniz bulunmuyor.");
-    const row = await c.env.DB.prepare(`${PERSON_SQL} AND e.id=? LIMIT 1`)
+    const row = await c.env.DB.prepare(`${IK_PERSON_SQL} AND e.id=? LIMIT 1`)
       .bind(auth.company, text(c.req.param("employeeId")))
       .first<Row>();
     if (!row) return fail(c, 404, "NOT_FOUND", "Kayıt bulunamadı.");
