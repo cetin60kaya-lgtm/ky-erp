@@ -7,58 +7,76 @@ const PDKS_MODULE = {
   icon: "takvim",
   groups: [
     {
-      label: "PDKS İşlemleri",
+      label: "Günlük",
+      description: "Kart, giriş/çıkış ve puantaj",
       tabs: [
-        ["ana-ekran", "Ana Ekran", "dashboard"],
+        ["ana-ekran", "PDKS İşlem Merkezi", "dashboard"],
         ["bilgi-aktar", "Bilgi Aktar", "dosya"],
-        ["giris-cikislar", "Giriş / Çıkışlar", "takvim"],
-        ["personel-bilgileri", "Personel Bilgileri", "users"],
+        ["giris-cikislar", "Kart / Giriş / Çıkış", "takvim"],
         ["puantaj", "Puantaj", "takvim"],
         ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
-        ["izinler", "İzinler", "takvim"],
-        ["bordro", "Bordro", "odemeler"],
-        ["avanslar", "Avanslar", "odemeler"],
-        ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+        ["calisma-tarihi", "Çalışma Tarihi / Günlük Onay", "takvim"],
+      ],
+    },
+    {
+      label: "Personel & İK",
+      description: "Personel, izin ve bordro bağlantısı",
+      tabs: [
+        ["personel-bilgileri", "Personel", "users"],
+        ["izinler", "İzin / Devamsızlık", "takvim"],
+        ["avanslar", "Avans / Fazla Mesai", "odemeler"],
+        ["bordro", "Bordro Bağlantısı", "odemeler"],
       ],
     },
     {
       label: "Tanımlar",
+      description: "Vardiya ve çalışma kuralları",
       tabs: [
-        ["gruplar-vardiyalar", "Gruplar / Vardiyalar", "ayarlar"],
-        ["puantaj-kurallari", "Puantaj Kuralları", "ayarlar"],
+        ["gruplar-vardiyalar", "Vardiya / Çalışma Grupları", "ayarlar"],
+        ["puantaj-kurallari", "Çalışma / Puantaj Kuralları", "ayarlar"],
         ["donemler", "Dönemler", "takvim"],
+        ["tatiller", "Resmî Tatiller", "takvim"],
         ["bolumler", "Bölümler", "users"],
         ["gorevler", "Görevler", "users"],
         ["servisler", "Servisler", "users"],
         ["durumlar", "Durumlar", "file-check"],
         ["firmalar", "Firmalar", "firma-kartlari"],
-        ["tatiller", "Tatiller", "takvim"],
       ],
     },
     {
-      label: "Terminal ve Sistem",
+      label: "Terminal & Sistem",
+      description: "Cihaz, saat ve senkron yönetimi",
       tabs: [
-        ["saat-terminal", "Saat / Terminal", "ayarlar"],
-        ["kullanicilar", "Kullanıcılar", "users"],
-        ["raporlar", "Raporlar", "raporlar"],
+        ["cihaz-baglantilari", "Cihaz Bağlantıları", "ayarlar"],
+        ["saat-terminal", "Saat / Terminal", "takvim"],
+        ["senkron", "Senkronizasyon", "file-check"],
+        ["kullanicilar", "PDKS Kullanıcıları", "users"],
       ],
     },
     {
-      label: "Denetim",
-      tabs: [["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"]],
+      label: "Rapor & Denetim",
+      description: "Raporlar ve yıllık denetim paketi",
+      tabs: [
+        ["raporlar", "PDKS Raporları", "raporlar"],
+        ["denetim-yillik-temp", "Yıllık Denetim Paketi", "file-check"],
+      ],
     },
   ],
 };
 
-if (!MODULES.some((item) => item.key === "pdks")) {
+const existingIndex = MODULES.findIndex((item) => item.key === "pdks");
+if (existingIndex >= 0) MODULES.splice(existingIndex, 1, PDKS_MODULE);
+else {
   const ikIndex = MODULES.findIndex((item) => item.key === "ik");
   MODULES.splice(ikIndex >= 0 ? ikIndex + 1 : MODULES.length, 0, PDKS_MODULE);
 }
 
 MODULE_ROUTE_ALIASES.pdks = {
   "genel-bakis": "ana-ekran",
+  "islem-merkezi": "ana-ekran",
   "bilgi-aktarimi": "bilgi-aktar",
   "giris-cikis": "giris-cikislar",
+  "kart-hareketleri": "giris-cikislar",
   "personel": "personel-bilgileri",
   "personel-kartlari": "personel-bilgileri",
   "puantaj-sonuc": "puantaj-sonuclari",
@@ -71,6 +89,10 @@ MODULE_ROUTE_ALIASES.pdks = {
   "calisma-gruplari": "gruplar-vardiyalar",
   "terminal": "saat-terminal",
   "saat": "saat-terminal",
+  "cihaz": "cihaz-baglantilari",
+  "cihazlar": "cihaz-baglantilari",
+  "senkronizasyon": "senkron",
   "denetim": "denetim-yillik-temp",
   "temp": "denetim-yillik-temp",
+  "yillik-denetim": "denetim-yillik-temp",
 };
