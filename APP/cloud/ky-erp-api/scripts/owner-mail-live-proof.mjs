@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const mainPath = resolve("src/main.ts");
 const original = readFileSync(mainPath, "utf8");
-const marker = 'shell.onError((error, c) => {';
+const marker = 'shell.route("/", app);';
 const token = randomBytes(32).toString("hex");
 const apiBase = "https://api.kyerp.net";
 
@@ -14,6 +14,19 @@ console.log(`::add-mask::${token}`);
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit", env: process.env });
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed (${result.status})`);
+}
+
+function capture(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8", env: process.env });
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed (${result.status}): ${String(result.stderr || "").slice(0, 500)}`);
+  return String(result.stdout || "");
+}
+
+function assertResendBinding() {
+  const raw = capture("npx", ["wrangler", "secret", "list", "--config", "wrangler.jsonc", "--format", "json"]);
+  const list = JSON.parse(raw || "[]");
+  if (!Array.isArray(list) || !list.some((item) => item?.name === "RESEND_API_KEY")) throw new Error("RESEND_API_KEY is not present in the live Worker secret bindings");
+  console.log("RESEND_API_KEY live Worker secret binding verified.");
 }
 
 function wait(ms) {
@@ -81,17 +94,21 @@ let deliveryEvent = "";
 let recipient = "";
 let proofCompleted = false;
 let cleanupCompleted = false;
+let primaryError = null;
+let cleanupError = null;
 
 try {
   if (!process.env.CLOUDFLARE_API_TOKEN) throw new Error("CLOUDFLARE_API_TOKEN missing");
   if (!original.includes(marker)) throw new Error("main.ts proof insertion marker missing");
+  assertResendBinding();
 
   const temporary = original.replace(marker, proofBlock(token) + marker);
   writeFileSync(mainPath, temporary, "utf8");
   if (!readFileSync(mainPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("temporary proof route was not inserted");
 
-  console.log("Deploying temporary protected proof route...");
+  console.log("Deploying temporary protected proof route before canonical app routing...");
   run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
+  assertResendBinding();
 
   const sendPayload = await jsonFetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`, {
     method: "POST",
@@ -101,12 +118,14 @@ try {
   recipient = String(sendPayload?.data?.recipient || "");
   if (!messageId) throw new Error(`Resend message id missing: ${JSON.stringify(sendPayload)}`);
   console.log(`::add-mask::${messageId}`);
+  console.log(`Resend accepted the real owner test message; recipient=${recipient}`);
 
   for (let attempt = 1; attempt <= 30; attempt += 1) {
     const statusPayload = await jsonFetch(`${apiBase}/api/__kyerp-owner-mail-live-proof/${encodeURIComponent(messageId)}`, {
       headers: { "X-KYERP-Live-Proof": token },
     });
     deliveryEvent = String(statusPayload?.data?.event || "unknown").toLowerCase();
+    console.log(`Resend delivery check ${attempt}/30: ${deliveryEvent}`);
     if (["delivered", "opened", "clicked"].includes(deliveryEvent)) break;
     if (["bounced", "complained", "canceled", "failed"].includes(deliveryEvent)) throw new Error(`Resend delivery failed: ${deliveryEvent}`);
     await wait(5000);
@@ -114,27 +133,39 @@ try {
 
   if (!["delivered", "opened", "clicked"].includes(deliveryEvent)) throw new Error(`Resend delivery proof timed out: ${deliveryEvent}`);
   proofCompleted = true;
-  console.log(`KY ERP owner mail delivery proof: ${deliveryEvent}; recipient=${recipient}`);
+  console.log(`KY ERP owner mail delivery proof PASSED: ${deliveryEvent}; recipient=${recipient}`);
+} catch (error) {
+  primaryError = error;
+  console.error(`PRIMARY LIVE PROOF ERROR: ${error instanceof Error ? error.message : String(error)}`);
 } finally {
-  console.log("Restoring canonical Worker source and redeploying...");
-  writeFileSync(mainPath, original, "utf8");
-  if (readFileSync(mainPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("proof route remained in canonical source");
-  run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
+  try {
+    console.log("Restoring canonical Worker source and redeploying...");
+    writeFileSync(mainPath, original, "utf8");
+    if (readFileSync(mainPath, "utf8").includes("/api/__kyerp-owner-mail-live-proof")) throw new Error("proof route remained in canonical source");
+    run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);
+    assertResendBinding();
 
-  const healthResponse = await fetch(`${apiBase}/api/health`);
-  const healthText = await healthResponse.text();
-  if (!healthResponse.ok || !/\"ok\"\s*:\s*true/.test(healthText)) throw new Error(`canonical health check failed: ${healthResponse.status} ${healthText}`);
+    const healthResponse = await fetch(`${apiBase}/api/health`);
+    const healthText = await healthResponse.text();
+    if (!healthResponse.ok || !/\"ok\"\s*:\s*true/.test(healthText)) throw new Error(`canonical health check failed: ${healthResponse.status} ${healthText}`);
 
-  const proofRouteResponse = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`);
-  if (proofRouteResponse.status !== 404) throw new Error(`temporary proof route still reachable: HTTP ${proofRouteResponse.status}`);
-  cleanupCompleted = true;
-  console.log("Canonical Worker restored; temporary proof route removed.");
+    const proofRouteResponse = await fetch(`${apiBase}/api/__kyerp-owner-mail-live-proof`);
+    if (![401, 404].includes(proofRouteResponse.status)) throw new Error(`unexpected proof route cleanup response: HTTP ${proofRouteResponse.status}`);
+    cleanupCompleted = true;
+    console.log(`Canonical Worker restored; temporary route is absent and canonical fallback returned HTTP ${proofRouteResponse.status}.`);
+  } catch (error) {
+    cleanupError = error;
+    console.error(`CLEANUP ERROR: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
-if (!proofCompleted || !cleanupCompleted) throw new Error("live proof did not complete cleanly");
+if (primaryError || cleanupError || !proofCompleted || !cleanupCompleted) {
+  throw new Error(`live proof incomplete; proof=${proofCompleted}; cleanup=${cleanupCompleted}; primary=${primaryError instanceof Error ? primaryError.message : primaryError || "none"}; cleanupError=${cleanupError instanceof Error ? cleanupError.message : cleanupError || "none"}`);
+}
+
 console.log("KY ERP OWNER MAIL LIVE PROOF PASSED");
-console.log(`Sender: KY ERP <admin@kyerp.net>`);
+console.log("Sender: KY ERP <admin@kyerp.net>");
 console.log(`Recipient: ${recipient}`);
-console.log(`Provider: RESEND`);
+console.log("Provider: RESEND");
 console.log(`Delivery: ${deliveryEvent}`);
 console.log("Temporary route removed: YES");
