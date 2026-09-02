@@ -28,6 +28,7 @@ function Invoke-Native {
 }
 
 Write-Host "KY ERP Masaüstü $Version build başlıyor..." -ForegroundColor Cyan
+Write-Host "Ürün kapsamı: tüm KY ERP modülleri + İK/PDKS cihaz katmanı" -ForegroundColor DarkCyan
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 8 SDK bulunamadı.' }
 
@@ -65,7 +66,7 @@ Invoke-Native 'Agent publish' { dotnet publish $AgentProject -c Release -r win-x
 $DesktopExe = Join-Path $DesktopOut 'KY ERP Masaüstü.exe'
 $AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
 if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $DesktopExe" }
-if (-not (Test-Path $AgentExe)) { throw "Agent oluşmadı: $AgentExe" }
+if (-not (Test-Path $AgentExe)) { throw "PDKS cihaz agentı oluşmadı: $AgentExe" }
 
 $DesktopVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($DesktopExe).ProductVersion
 $AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($AgentExe).ProductVersion
@@ -75,17 +76,20 @@ if (-not ([string]$AgentVersion).StartsWith($Version)) { throw "Agent sürümü 
 Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
 $InnoCandidates = @(
-    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }),
-    $(if ($ProgramFilesX86) { Join-Path $ProgramFilesX86 'Inno Setup 6\ISCC.exe' }),
-    $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
-) | Where-Object { $_ -and (Test-Path $_) }
+    @(
+        $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }),
+        $(if ($ProgramFilesX86) { Join-Path $ProgramFilesX86 'Inno Setup 6\ISCC.exe' }),
+        $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
+    ) | Where-Object { $_ -and (Test-Path $_) }
+)
 
-if (-not $InnoCandidates) { throw 'Inno Setup 6 bulunamadı. Setup.exe üretilemedi.' }
+if ($InnoCandidates.Count -eq 0) { throw 'Inno Setup 6 bulunamadı. Setup.exe üretilemedi.' }
 
 $env:KY_PDKS_DIST = $Dist
 $env:KY_PDKS_SETUP_OUT = $InstallerOut
-$InnoExe = $InnoCandidates[0]
+$InnoExe = [string]$InnoCandidates[0]
 $InnoScript = Join-Path $Root 'installer\KY-PDKS.iss'
+Write-Host "Inno Setup: $InnoExe" -ForegroundColor DarkGray
 Invoke-Native 'Inno Setup' { & $InnoExe $InnoScript }
 
 $ExpectedSetupName = "KY-ERP-Masaustu-Setup-$Version.exe"
@@ -99,6 +103,8 @@ $HashFile = "$($Setup.FullName).sha256.txt"
 
 $BuildInfo = [ordered]@{
     product = 'KY ERP Masaüstü'
+    productScope = 'FULL_ERP'
+    pdksRole = 'IK_MODULE_DEVICE_AGENT'
     version = $Version
     builtAt = (Get-Date).ToString('o')
     setup = $Setup.Name
@@ -111,6 +117,6 @@ $BuildInfo = [ordered]@{
 $BuildInfo | ConvertTo-Json | Set-Content (Join-Path $InstallerOut 'build-info.json') -Encoding utf8
 
 Write-Host ''
-Write-Host "KY ERP Masaüstü $Version paketi hazır." -ForegroundColor Green
+Write-Host "KY ERP Masaüstü $Version tam ERP paketi hazır." -ForegroundColor Green
 Write-Host "Setup : $($Setup.FullName)" -ForegroundColor Cyan
 Write-Host "SHA256: $Hash" -ForegroundColor Cyan
