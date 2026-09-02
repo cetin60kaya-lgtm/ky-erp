@@ -8,7 +8,7 @@ import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-a
 
 type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
-const upper = (v: unknown) => text(v).toLocaleUpperCase("tr-TR");
+const upper = (v: unknown) => text(v).toUpperCase().replace(/İ/g, "I");
 const slugOf = (c: any, b: Row = {}) => text(b.mainCompanySlug || b.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
 const isOwner = (role: unknown) => ["ADMIN","SUPER_ADMIN"].includes(upper(role));
 const errorBody = (code: string, message: string) => ({ ok:false, error:{ code,message } });
