@@ -52,8 +52,7 @@ export async function assignPdksService(employeeId, serviceId) {
   return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { serviceId }));
 }
 
-// PDKS kritik iş verileri artık /ik/advanced uyumluluk yoluna düşmez.
-// Hepsi personnel-control altında açık D1 operasyon endpointlerinden çalışır.
+// PDKS kritik iş verileri personnel-control altında açık D1 operasyon endpointlerinden çalışır.
 export async function getPdksAdvancedMonth(params = {}) {
   return unwrap(await apiGet(`${OPS}/month`, params));
 }
@@ -76,6 +75,10 @@ export async function savePdksLeave(payload = {}) {
 
 export async function savePdksFinanceMovement(payload = {}) {
   return unwrap(await apiPost(`${OPS}/advance`, payload));
+}
+
+export async function savePdksAdjustment(payload = {}) {
+  return unwrap(await apiPost(`${OPS}/adjustment`, payload));
 }
 
 export async function closePdksPeriod(payload = {}) {
