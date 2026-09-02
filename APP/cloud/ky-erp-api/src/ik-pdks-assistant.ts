@@ -10,7 +10,6 @@ type Row = Record<string, any>;
 const DEFAULT_COMPANY = "mecit-hakan";
 const text = (value: unknown) => value === undefined || value === null ? "" : String(value).trim();
 const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
-const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const nowIso = () => new Date().toISOString();
 const trFold = (value: unknown) => text(value).toLocaleLowerCase("tr-TR").replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c");
 
@@ -60,12 +59,10 @@ function timeFromCommand(command: string) {
 
 async function periodLocked(c: Context<AppEnv>, company: string, date: string) {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
-  if (!match) return false;
-  try {
-    const row = await c.env.DB.prepare("SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1")
-      .bind(company, Number(match[1]), Number(match[2])).first<Row>();
-    return Number(row?.is_locked || 0) !== 0;
-  } catch { return false; }
+  if (!match) throw new Error("INVALID_PDKS_PERIOD_DATE");
+  const row = await c.env.DB.prepare("SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1")
+    .bind(company, Number(match[1]), Number(match[2])).first<Row>();
+  return Number(row?.is_locked || 0) !== 0;
 }
 
 async function writeAudit(c: Context<AppEnv>, company: string, employeeId: string, period: string, actionType: string, payload: unknown, reason: string, userName: string) {
@@ -116,7 +113,14 @@ export function registerIkPdksAssistantRoutes(app: Hono<AppEnv>) {
     const amount = parseAmount(command);
     const hours = parseHours(command);
     const commit = body.commit === true;
-    if (await periodLocked(c, company, date)) return error(c, 409, "PDKS_PERIOD_LOCKED", `Dönem kilitli: ${date.slice(0,7)}.`);
+
+    let locked = false;
+    try {
+      locked = await periodLocked(c, company, date);
+    } catch {
+      return error(c, 503, "PDKS_PERIOD_LOCK_CHECK_FAILED", "Dönem kilidi doğrulanamadı. Güvenlik nedeniyle işlem uygulanmadı; tekrar deneyin.");
+    }
+    if (locked) return error(c, 409, "PDKS_PERIOD_LOCKED", `Dönem kilitli: ${date.slice(0,7)}.`);
 
     let action = "";
     let summary = "";
