@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
