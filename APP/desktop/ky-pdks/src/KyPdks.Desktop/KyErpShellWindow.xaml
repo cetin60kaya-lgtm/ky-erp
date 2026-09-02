@@ -1,0 +1,247 @@
+<Window x:Class="KyPdks.Desktop.KyErpShellWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="KY ERP Masaüstü" Width="1540" Height="940" MinWidth="1180" MinHeight="720"
+        WindowStartupLocation="CenterScreen" Background="#F3F6FA"
+        Loaded="Window_Loaded" Closing="Window_Closing">
+    <Window.Resources>
+        <SolidColorBrush x:Key="ShellNavy" Color="#10243F"/>
+        <SolidColorBrush x:Key="ShellNavy2" Color="#183553"/>
+        <SolidColorBrush x:Key="ShellBlue" Color="#2878C8"/>
+        <SolidColorBrush x:Key="ShellGreen" Color="#188B62"/>
+        <SolidColorBrush x:Key="ShellText" Color="#1D2E42"/>
+        <SolidColorBrush x:Key="ShellMuted" Color="#6F8094"/>
+        <SolidColorBrush x:Key="ShellBorder" Color="#D9E2EC"/>
+
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#EAF2FA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,11"/>
+            <Setter Property="Margin" Value="6,2"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#244767"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bd" Property="Background" Value="#2B5A83"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TopButton" TargetType="Button">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#29435F"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ShellBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ShellBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Margin" Value="6"/>
+        </Style>
+
+        <Style TargetType="Expander" x:Key="NavGroup">
+            <Setter Property="Foreground" Value="#9DB0C4"/>
+            <Setter Property="Margin" Value="8,7,8,0"/>
+            <Setter Property="IsExpanded" Value="True"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- SOL MODÜL MENÜSÜ -->
+        <Border Grid.Column="0" Background="{StaticResource ShellNavy}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Margin="18,18,18,12">
+                    <TextBlock Text="KY ERP" Foreground="White" FontSize="26" FontWeight="Bold"/>
+                    <TextBlock Text="MASAÜSTÜ • 1.5" Foreground="#84A7C8" FontSize="11" FontWeight="SemiBold" Margin="1,2,0,0"/>
+                    <Border Background="#183B5D" CornerRadius="8" Margin="0,14,0,0" Padding="10,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="SidebarConnectionDot" Width="8" Height="8" Fill="#F2B84B" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="SidebarConnectionText" Text="Bağlantı kontrol ediliyor" Foreground="#DDEAF5" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="6,0,6,12">
+                        <Button Style="{StaticResource NavButton}" Tag="/" Click="ModuleButton_Click" Content="⌂   Ana Ekran"/>
+
+                        <Expander x:Name="FinanceGroup" Style="{StaticResource NavGroup}" Header="FİNANS &amp; BELGELER">
+                            <StackPanel>
+                                <Button x:Name="MuhasebeButton" Style="{StaticResource NavButton}" Tag="/muhasebe/yonetim-ozeti" Click="ModuleButton_Click" Content="▣   Muhasebe"/>
+                                <Button x:Name="IsnetButton" Style="{StaticResource NavButton}" Tag="/isnet/yonetim-merkezi" Click="ModuleButton_Click" Content="⇄   İşNet / e-Belge"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="ProductionGroup" Style="{StaticResource NavGroup}" Header="ÜRETİM">
+                            <StackPanel>
+                                <Button x:Name="DesenButton" Style="{StaticResource NavButton}" Tag="/desen/gelen-desenler" Click="ModuleButton_Click" Content="◆   Desen"/>
+                                <Button x:Name="BoyahaneButton" Style="{StaticResource NavButton}" Tag="/boyahane/is-akisi" Click="ModuleButton_Click" Content="●   Boyahane"/>
+                                <Button x:Name="ImalatButton" Style="{StaticResource NavButton}" Tag="/uretim/uretim-merkezi" Click="ModuleButton_Click" Content="⚙   İmalat"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="PeopleGroup" Style="{StaticResource NavGroup}" Header="İNSAN &amp; ZAMAN">
+                            <StackPanel>
+                                <Button x:Name="IkButton" Style="{StaticResource NavButton}" Tag="/ik/ozet" Click="ModuleButton_Click" Content="♙   İK / Personel"/>
+                                <Button x:Name="PdksButton" Style="{StaticResource NavButton}" Tag="/pdks/ana-ekran" Click="ModuleButton_Click" Content="◷   PDKS"/>
+                                <Button x:Name="NativePdksButton" Style="{StaticResource NavButton}" Click="NativePdksButton_Click" Content="↳   Yerel PDKS / Cihaz"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="SystemGroup" Style="{StaticResource NavGroup}" Header="SİSTEM">
+                            <StackPanel>
+                                <Button x:Name="FileHubButton" Style="{StaticResource NavButton}" Tag="/admin/dosya-klasor-yonetimi" Click="ModuleButton_Click" Content="▤   Dosya Merkezi"/>
+                                <Button x:Name="AssistantButton" Style="{StaticResource NavButton}" Tag="/asistan/sohbet" Click="ModuleButton_Click" Content="✦   KY ERP Asistan"/>
+                                <Button x:Name="AdminButton" Style="{StaticResource NavButton}" Tag="/admin/admin-yonetim-ozeti" Click="ModuleButton_Click" Content="⚙   Yönetim"/>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="2" Background="#0B1C30" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock x:Name="CurrentUserText" Text="Oturum bekleniyor" Foreground="#E8F1F9" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="CurrentRoleText" Text="KY ERP Web oturumu" Foreground="#7895AF" FontSize="10" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ANA ÇALIŞMA ALANI -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="62"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="34"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource ShellBorder}" BorderThickness="0,0,0,1">
+                <Grid Margin="18,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="PageTitleText" Text="KY ERP Çalışma Merkezi" FontSize="19" FontWeight="Bold" Foreground="{StaticResource ShellText}"/>
+                        <TextBlock x:Name="PageSubTitleText" Text="Web + D1 + File Hub + Offline çalışma kopyası" FontSize="11" Foreground="{StaticResource ShellMuted}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border x:Name="PendingBadge" Background="#FFF6DF" BorderBrush="#F0D48C" BorderThickness="1" CornerRadius="14" Padding="10,6" Margin="4,0">
+                            <TextBlock x:Name="PendingText" Text="0 bekleyen" Foreground="#8A6511" FontWeight="SemiBold" FontSize="11"/>
+                        </Border>
+                        <Button Style="{StaticResource TopButton}" Click="OfflineCenterButton_Click" Content="Offline Merkez"/>
+                        <Button Style="{StaticResource TopButton}" Click="RefreshButton_Click" Content="Yenile"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" Background="#F3F6FA">
+                <wv2:WebView2 x:Name="ErpWebView" Visibility="Visible"/>
+
+                <!-- Offline / Kesinti merkezi -->
+                <Grid x:Name="OfflineCenter" Visibility="Collapsed" Background="#F3F6FA">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="24">
+                            <StackPanel Margin="6,0,6,12">
+                                <TextBlock Text="Offline Çalışma Merkezi" FontSize="26" FontWeight="Bold" Foreground="{StaticResource ShellText}"/>
+                                <TextBlock Text="Cloud veya internet kesildiğinde son senkronlanan veriyi görüntüleyin; yeni işlemleri güvenli taslak/kuyruk olarak kaydedin. D1 ana kaynak olmaya devam eder." Foreground="{StaticResource ShellMuted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+
+                            <UniformGrid Columns="3" Margin="0,4,0,14">
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel><TextBlock Text="SON SENKRON" Foreground="{StaticResource ShellMuted}" FontSize="10" FontWeight="Bold"/><TextBlock x:Name="LastSyncText" Text="—" FontSize="18" FontWeight="Bold" Foreground="{StaticResource ShellText}" Margin="0,8,0,0"/><TextBlock Text="API cevapları local cache" Foreground="{StaticResource ShellMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel><TextBlock Text="BEKLEYEN İŞLEM" Foreground="{StaticResource ShellMuted}" FontSize="10" FontWeight="Bold"/><TextBlock x:Name="OfflinePendingCountText" Text="0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource ShellText}" Margin="0,8,0,0"/><TextBlock Text="Çakışmasız senkron kuyruğu" Foreground="{StaticResource ShellMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel><TextBlock Text="PDKS AGENT" Foreground="{StaticResource ShellMuted}" FontSize="10" FontWeight="Bold"/><TextBlock x:Name="OfflineAgentText" Text="Kontrol ediliyor" FontSize="18" FontWeight="Bold" Foreground="{StaticResource ShellText}" Margin="0,8,0,0"/><TextBlock Text="Kart toplama internetten bağımsız" Foreground="{StaticResource ShellMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel>
+                                </Border>
+                            </UniformGrid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="Hızlı Offline Kayıt" FontSize="17" FontWeight="Bold" Foreground="{StaticResource ShellText}"/>
+                                        <TextBlock Text="İnternet yokken unutulmaması gereken işlemi kaydedin. Kritik/resmî işlem otomatik tamamlanmaz; bağlantı gelince kullanıcı kontrolüne düşer." Foreground="{StaticResource ShellMuted}" TextWrapping="Wrap" Margin="0,5,0,12"/>
+                                        <TextBlock Text="Modül" Foreground="{StaticResource ShellMuted}" FontWeight="SemiBold"/>
+                                        <ComboBox x:Name="OfflineModuleCombo" Margin="0,5,0,10" Padding="8">
+                                            <ComboBoxItem Content="İK" Tag="IK" IsSelected="True"/>
+                                            <ComboBoxItem Content="Muhasebe" Tag="MUHASEBE"/>
+                                            <ComboBoxItem Content="İmalat" Tag="IMALAT"/>
+                                            <ComboBoxItem Content="Boyahane" Tag="BOYAHANE"/>
+                                            <ComboBoxItem Content="Desen" Tag="DESEN"/>
+                                            <ComboBoxItem Content="PDKS" Tag="PDKS"/>
+                                        </ComboBox>
+                                        <TextBlock Text="İşlem / not" Foreground="{StaticResource ShellMuted}" FontWeight="SemiBold"/>
+                                        <TextBox x:Name="OfflineDraftText" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="120" Margin="0,5,0,10" Padding="10" VerticalScrollBarVisibility="Auto"/>
+                                        <Button Click="SaveOfflineDraftButton_Click" Background="{StaticResource ShellBlue}" Foreground="White" BorderThickness="0" Padding="14,10" FontWeight="Bold" Cursor="Hand" Content="Offline Taslağı Kaydet"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Column="1" Style="{StaticResource Card}">
+                                    <Grid>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Bekleyen / Kontrol Gereken İşlemler" FontSize="17" FontWeight="Bold" Foreground="{StaticResource ShellText}" VerticalAlignment="Center"/>
+                                            <Button Margin="12,0,0,0" Padding="8,4" Click="RefreshOfflineButton_Click" Content="Listeyi Yenile"/>
+                                        </StackPanel>
+                                        <DataGrid x:Name="OfflineOutboxGrid" Grid.Row="1" Margin="0,12,0,0" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderBrush="{StaticResource ShellBorder}">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Modül" Binding="{Binding ModuleCode}" Width="90"/>
+                                                <DataGridTextColumn Header="Durum" Binding="{Binding Status}" Width="90"/>
+                                                <DataGridTextColumn Header="İşlem" Binding="{Binding PayloadJson}" Width="*"/>
+                                                <DataGridTextColumn Header="Tarih" Binding="{Binding CreatedAt}" Width="155"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <Border Grid.Row="2" Background="#EAF0F6" BorderBrush="{StaticResource ShellBorder}" BorderThickness="0,1,0,0">
+                <Grid Margin="14,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="FooterStatusText" Text="KY ERP Masaüstü hazırlanıyor..." VerticalAlignment="Center" Foreground="#587087" FontSize="10"/>
+                    <TextBlock Grid.Column="1" Text="D1 = ana veri • Desktop = cache/outbox • File Hub = dosya katmanı" VerticalAlignment="Center" Foreground="#72869A" FontSize="10"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
