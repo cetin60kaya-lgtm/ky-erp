@@ -12,9 +12,9 @@ import DesenRaporlari from "./DesenRaporlari";
 
 const SCREEN_COPY = {
   "desen-klasor-ayarlari": {
-    title: "Desen Depolama ve Köprü Ayarları",
+    title: "Desen Depolama Ayarları",
     description:
-      "DESINATOR orijinal arşivini, Windows köprüsünü ve R2 canlı önizleme alanlarını tek yerden kontrol edin.",
+      "Desen dosyalarının gerçek depolama hedefini KY ERP File Hub üzerinden kontrol edin. Google Drive, Microsoft, yerel klasör veya NAS bölüm bazında seçilebilir.",
   },
   "desen-modeller": {
     title: "Desen Havuzu",
@@ -34,7 +34,7 @@ const SCREEN_COPY = {
   "gelen-desenler": {
     title: "Gelen Desenler",
     description:
-      "DESINATOR / yerel Desen Köprüsü veya telefon yüklemesiyle gelen görselleri düşük boyutlu R2 önizlemelerine dönüştürüp tek model kartına bağlayın.",
+      "File Hub'a bağlı Google Drive, Microsoft, yerel klasör veya NAS kaynağından gelen desenleri tek model kartına bağlayın. Uygulama içi yüklemelerde R2 yalnız geçici/önizleme alanı olarak kullanılır.",
   },
 };
 
@@ -66,8 +66,7 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
   const screenKey = resolveScreenKey(activeTab);
   const screenCopy = SCREEN_COPY[screenKey];
   const isInbox = screenKey === "gelen-desenler";
-  const showFolderSettings =
-    isInbox || screenKey === "desen-klasor-ayarlari";
+  const showFolderSettings = isInbox || screenKey === "desen-klasor-ayarlari";
   const page = renderScreen(screenKey, activeMainCompany, inboxRevision);
 
   return (
@@ -85,9 +84,7 @@ export default function DesenPage({ activeTab, activeMainCompany }) {
             />
           ) : null}
         </header>
-        {showFolderSettings ? (
-          <DesenFolderSettingsBar activeMainCompany={activeMainCompany} />
-        ) : null}
+        {showFolderSettings ? <DesenFolderSettingsBar activeMainCompany={activeMainCompany} /> : null}
         {page}
       </section>
     </div>
