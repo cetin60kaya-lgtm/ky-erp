@@ -38,6 +38,13 @@ public partial class KyErpShellWindow : Window
     {
         InitializeComponent();
         _connectionTimer.Tick += async (_, _) => await CheckConnectionAsync();
+
+        // Masaüstü tek ürün: KY ERP'nin tamamı. PDKS yalnız İK altındaki cihaz katmanıdır.
+        FileHubButton.Tag = "/depolama/depolama-genel";
+        FileHubButton.Content = "▤   Depolama / Dosya Merkezi";
+        DesenButton.Content = "◆   Desen / Kalıp";
+        BoyahaneButton.Content = "●   Boyahane / Numune / Stok";
+        NativePdksButton.Content = "↳   PDKS Cihaz İşlemleri";
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -49,7 +56,7 @@ public partial class KyErpShellWindow : Window
             await CheckConnectionAsync();
             await RefreshOfflineAsync();
             _connectionTimer.Start();
-            FooterStatusText.Text = "KY ERP Masaüstü hazır. Online ERP ve yerel offline katman birlikte çalışıyor.";
+            FooterStatusText.Text = "KY ERP Masaüstü hazır. Tüm ERP modülleri, online ERP ve yerel offline katman birlikte çalışıyor.";
         }
         catch (Exception error)
         {
@@ -197,7 +204,7 @@ public partial class KyErpShellWindow : Window
         SidebarConnectionText.Text = _online ? "Cloud bağlı • Senkron aktif" : "Offline • Yerel çalışma";
         FooterStatusText.Text = _online
             ? "Cloud bağlı. D1 ana kaynak; görüntülenen API verileri masaüstü cache'ine güncelleniyor."
-            : "İnternet/Cloud erişimi yok. Son senkronlanan veriler ve PDKS Agent yerel çalışmaya devam eder.";
+            : "İnternet/Cloud erişimi yok. Son senkronlanan ERP verileri ve PDKS cihaz agentı yerel çalışmaya devam eder.";
         if (!changed) return;
         await _offlineStore.SetStateAsync("connection", _online ? "ONLINE" : "OFFLINE", _lifetime.Token);
         await RefreshOfflineAsync();
@@ -331,12 +338,9 @@ public partial class KyErpShellWindow : Window
             Add("IK", "/ik/ozet");
             Add("IK", "/pdks/ana-ekran");
         }
+        Add("STORAGE_ADMIN", "/depolama/depolama-genel");
         Add("ASISTAN", "/asistan/sohbet");
-        if (_allowedModules.Contains("ADMIN"))
-        {
-            Add("ADMIN", "/admin/dosya-klasor-yonetimi");
-            Add("ADMIN", "/admin/admin-yonetim-ozeti");
-        }
+        Add("ADMIN", "/admin/admin-yonetim-ozeti");
         return routes;
     }
 
@@ -364,7 +368,7 @@ public partial class KyErpShellWindow : Window
         _allowedModules.Clear();
         if (new[] { "ADMIN", "SUPER_ADMIN" }.Contains(role.Trim().ToUpperInvariant()))
         {
-            foreach (var key in new[] { "MUHASEBE", "ISNET", "DESEN", "BOYAHANE", "IMALAT", "IK", "ADMIN", "ASISTAN" })
+            foreach (var key in new[] { "MUHASEBE", "ISNET", "DESEN", "BOYAHANE", "IMALAT", "IK", "STORAGE_ADMIN", "ADMIN", "ASISTAN" })
                 _allowedModules.Add(key);
             SetAllModuleButtons(Visibility.Visible);
             return;
@@ -384,7 +388,7 @@ public partial class KyErpShellWindow : Window
         SetVisible(IkButton, _allowedModules.Contains("IK"));
         SetVisible(PdksButton, _allowedModules.Contains("IK"));
         SetVisible(NativePdksButton, _allowedModules.Contains("IK"));
-        SetVisible(FileHubButton, _allowedModules.Contains("ADMIN"));
+        SetVisible(FileHubButton, _allowedModules.Contains("STORAGE_ADMIN"));
         SetVisible(AssistantButton, _allowedModules.Contains("ASISTAN"));
         SetVisible(AdminButton, _allowedModules.Contains("ADMIN"));
         FinanceGroup.Visibility = MuhasebeButton.Visibility == Visibility.Visible || IsnetButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
@@ -406,7 +410,7 @@ public partial class KyErpShellWindow : Window
     {
         if (!audit)
         {
-            PageSubTitleText.Text = "Web + D1 + File Hub + Offline çalışma kopyası";
+            PageSubTitleText.Text = "Tüm KY ERP modülleri • Web + D1 + Depolama/File Hub + Offline çalışma kopyası";
             return;
         }
         _allowedModules.Clear();
@@ -435,7 +439,7 @@ public partial class KyErpShellWindow : Window
         await TryRefreshIdentityAsync();
         if (string.IsNullOrWhiteSpace(_token))
         {
-            MessageBox.Show(this, "Önce KY ERP oturumunu açın. Yerel PDKS aynı ERP oturumunu kullanır.", "KY ERP Masaüstü", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "Önce KY ERP oturumunu açın. PDKS cihaz işlemleri aynı ERP oturumunu kullanır.", "KY ERP Masaüstü", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         try
@@ -523,7 +527,7 @@ public partial class KyErpShellWindow : Window
         if (visible)
         {
             PageTitleText.Text = "Offline Çalışma Merkezi";
-            PageSubTitleText.Text = "Kesintide çalışma • cache • güvenli taslak • PDKS Agent";
+            PageSubTitleText.Text = "Tüm ERP için kesinti katmanı • cache • güvenli taslak • PDKS cihaz agentı";
         }
     }
 
@@ -534,13 +538,14 @@ public partial class KyErpShellWindow : Window
         {
             var p when p.StartsWith("/muhasebe", StringComparison.OrdinalIgnoreCase) => "Muhasebe",
             var p when p.StartsWith("/isnet", StringComparison.OrdinalIgnoreCase) => "İşNet / e-Belge",
-            var p when p.StartsWith("/desen", StringComparison.OrdinalIgnoreCase) => "Desen",
-            var p when p.StartsWith("/boyahane", StringComparison.OrdinalIgnoreCase) => "Boyahane",
+            var p when p.StartsWith("/desen", StringComparison.OrdinalIgnoreCase) => "Desen / Kalıp",
+            var p when p.StartsWith("/boyahane", StringComparison.OrdinalIgnoreCase) => "Boyahane / Numune / Stok",
             var p when p.StartsWith("/uretim", StringComparison.OrdinalIgnoreCase) => "İmalat",
             var p when p.StartsWith("/ik", StringComparison.OrdinalIgnoreCase) => "İK / Personel",
-            var p when p.StartsWith("/pdks", StringComparison.OrdinalIgnoreCase) => "PDKS",
+            var p when p.StartsWith("/pdks", StringComparison.OrdinalIgnoreCase) => "İK / PDKS",
+            var p when p.StartsWith("/depolama", StringComparison.OrdinalIgnoreCase) => "Depolama / Dosya Merkezi",
             var p when p.StartsWith("/asistan", StringComparison.OrdinalIgnoreCase) => "KY ERP Asistan",
-            var p when p.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) => "Yönetim / Dosya Merkezi",
+            var p when p.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) => "Yönetim",
             _ => "KY ERP Çalışma Merkezi",
         };
     }
@@ -567,7 +572,7 @@ public partial class KyErpShellWindow : Window
         if (lower.Contains("/boyahane")) return "BOYAHANE";
         if (lower.Contains("production") || lower.Contains("/uretim")) return "IMALAT";
         if (lower.Contains("/ik/") || lower.Contains("personnel")) return "IK";
-        if (lower.Contains("file-hub") || lower.Contains("storage")) return "FILE_HUB";
+        if (lower.Contains("file-hub") || lower.Contains("storage")) return "DEPOLAMA";
         if (lower.Contains("assistant")) return "ASISTAN";
         return "GENEL";
     }
