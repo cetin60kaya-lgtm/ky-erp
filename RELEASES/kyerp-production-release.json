@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-02T13:51:20+03:00",
-  "attempt": 79,
+  "requestedAt": "2026-09-02T21:00:40+03:00",
+  "attempt": 80,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -22,6 +22,8 @@
     "owner-email-otp-verification",
     "resend-canonical-admin-sender",
     "role-ascii-canonicalization",
+    "admin-route-precedence-repair",
+    "admin-screen-partial-failure-resilience",
     "final-active-session-cutover",
     "auth-d1-policy-guard-0029",
     "isnet-stable-connector",
@@ -51,6 +53,6 @@
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "fb25ee69e95b669f91a8818af9d226cdfdf361ca",
-  "note": "02.09.2026 attempt 79. Uygulama sahibi normal kullanici listesinden ayrildi; guvenli MFA yenileme parola veya dogrulanmis e-posta step-up ile baslar, yeni secret TOTP onayina kadar staged kalir ve eski secret korunur. Onaydan sonra diger oturumlar atomik olarak kapatilir; mevcut oturum korunur. Eski dogrudan MFA reset rotalari fail-closed, e-posta dogrulamasi OTP zorunlu, Resend gondereni KY ERP <admin@kyerp.net>. Teknik rol canonicalization ASCII-safe yapildi. Source validation, D1 readiness ve gercek Chrome smoke yesil. Tam D1 yedegi alinmadan migration/deploy yok; yalniz hedefli ve idempotent migrationlar uygulanir. D1 reset ve generic migration zinciri yoktur."
+  "sourceCommit": "890e1401298699ce9ddbff3d52453f5bd1e807d6",
+  "note": "02.09.2026 attempt 80. Canli incelemede eski genel /api/admin/* fallback rotasinin kendisinden sonra kayitli canonical yonetim rotalarini golgeledigi dogrulandi. D1 yedeginde 6 aktif kullanici, 1 uygulama sahibi, 5 normal kullanici ve sifir eksik security kaydi bulunarak veri kaybi olmadigi kanitlandi. Legacy admin fallback tum canonical admin rotalarindan sonra calisacak sekilde duzeltildi; Kullanici ve Uygulama Sahibi ekranlari yardimci servis hatalarinda dogru/parsiyel durum gosterecek sekilde saglamlastirildi. Worker 120/120, frontend 30/30, source validation, D1 readiness, PDKS ve gercek Chrome smoke yesil. Tam D1 yedegi alinmadan migration/deploy yok; yalniz hedefli ve idempotent migrationlar uygulanir. D1 reset ve generic migration zinciri yoktur."
 }
