@@ -56,7 +56,7 @@ test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => 
   assert.match(guard, /strictAuditEmployeeIds/);
   assert.match(guard, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
   assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
-  assert.match(guard, /if \(!safeStatic\.has\(path\) && !attendanceMatch\)/);
+  assert.match(guard, /if \(!safeStatic\.has\(path\) && !personReadMatch\)/);
 
   assert.match(audit, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\) = 'VAR'/);
   assert.match(audit, /TRIM\(COALESCE\(s\.card_no,''\)\) <> ''/);
