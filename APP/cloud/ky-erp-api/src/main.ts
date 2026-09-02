@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import app from "./index";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAdminManagementRoutes } from "./admin-management-cloud";
+import { registerOwnerSecurityRoutes } from "./owner-security-cloud";
 import { registerAdminCoreRoutes } from "./admin-core-cloud";
 import { registerAdminMappingRoutes } from "./admin-mappings-cloud";
 import { registerAdminStorageRoutes } from "./admin-storage-cloud";
@@ -79,12 +80,12 @@ function allowedOrigin(origin: string) {
 }
 
 function ownerRole(role: unknown) {
-  const value = String(role || "").trim().toUpperCase();
+  const value = String(role || "").trim().toUpperCase().replace(/İ/g, "I");
   return value === "SUPER_ADMIN" || value === "ADMIN";
 }
 
 function auditRole(role: unknown) {
-  return String(role || "").trim().toUpperCase() === "DENETIM";
+  return String(role || "").trim().toUpperCase().replace(/İ/g, "I") === "DENETIM";
 }
 
 function auditPermissionRows() {
@@ -100,7 +101,7 @@ function auditPermissionRows() {
 
 function stripSystemAdminPermission(rows: unknown) {
   if (!Array.isArray(rows)) return rows;
-  return rows.filter((row: AnyRow) => String(row?.moduleKey || row?.module_key || "").trim().toUpperCase() !== "ADMIN");
+  return rows.filter((row: AnyRow) => String(row?.moduleKey || row?.module_key || "").trim().toUpperCase().replace(/İ/g, "I") !== "ADMIN");
 }
 
 function sanitizeNonOwnerUser(value: unknown) {
@@ -194,6 +195,7 @@ registerIkRelationalCloudRoutes(app);
 registerIkAdminCloudRoutes(app);
 registerAuthAdminHistoryRoutes(app);
 registerAdminManagementRoutes(app);
+registerOwnerSecurityRoutes(app);
 registerAdminCoreRoutes(app);
 registerAdminMappingRoutes(app);
 registerAdminStorageRoutes(app);
@@ -321,6 +323,18 @@ shell.use("/api/admin/users/*", async (c, next) => {
     if (Array.isArray(nextPayload.permissions)) nextPayload.permissions = stripSystemAdminPermission(nextPayload.permissions);
     return nextPayload;
   });
+});
+
+// Legacy direct MFA reset is intentionally disabled. A valid application session
+// is not sufficient to replace an Authenticator secret. The secure flow requires
+// password or verified-email step-up, then a new QR and a valid TOTP confirmation.
+shell.use("/api/admin/security/users/*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  const legacyReset = c.req.method.toUpperCase() === "POST" && /^\/api\/admin\/security\/users\/[^/]+\/reset-mfa(?:\/[^/]+)?$/i.test(path);
+  if (legacyReset) {
+    return c.json({ ok: false, error: { code: "MFA_REAUTH_REQUIRED", message: "Authenticator yenileme için önce şifre veya doğrulanmış e-posta ile yeniden kimlik doğrulaması gerekir." } }, 409);
+  }
+  await next();
 });
 
 shell.get("/api/auth/status", (c) => c.json({
