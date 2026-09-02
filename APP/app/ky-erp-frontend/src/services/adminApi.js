@@ -19,7 +19,10 @@ export async function getBackup(id) { return unwrap(await apiGet(`/admin/backups
 export async function restoreBackup(id, payload = {}) { return unwrap(await apiPost(`/admin/backups/${encodeURIComponent(id)}/restore`, payload)); }
 export async function generateBackupSql(id, payload = {}) { return unwrap(await apiPost(`/admin/backups/${encodeURIComponent(id)}/sql`, payload, { timeoutMs: 120000 })); }
 export async function downloadBackupSql(id, fileName = "KYERP-firma-yedek.sql") { return downloadFile(`/admin/backups/${encodeURIComponent(id)}/sql/download`, undefined, fileName); }
-export async function listUsers() { return unwrap(await apiGet("/admin/users")); }
+
+// Normal Kullanıcılar ekranı uygulama sahibini bilinçli olarak içermez.
+export async function listUsers() { return unwrap(await apiGet("/admin/managed-users", { _ts: Date.now() })); }
+export async function getApplicationOwner() { return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now() })); }
 
 export async function createUser(payload = {}) {
   const created = unwrap(await apiPost("/admin/users", payload));
@@ -43,10 +46,19 @@ export async function listLoginApprovals() { return unwrap(await apiGet("/admin/
 export async function approveLogin(id) { return unwrap(await apiPost(`/admin/security/approvals/${encodeURIComponent(id)}/approve`, {})); }
 export async function denyLogin(id) { return unwrap(await apiPost(`/admin/security/approvals/${encodeURIComponent(id)}/deny`, {})); }
 
-export async function resetUserMfa(id, provider = "ALL") {
-  const normalized = String(provider || "ALL").toUpperCase();
-  const suffix = normalized === "GOOGLE" || normalized === "MICROSOFT" ? `/${normalized.toLowerCase()}` : "";
-  return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/reset-mfa${suffix}`, {}));
+// Legacy direct reset is intentionally unavailable. The backend also rejects it.
+export async function resetUserMfa() {
+  throw new Error("Doğrudan Authenticator sıfırlama kapalıdır. Yenileme için Uygulama Sahibi güvenlik ekranındaki şifre/e-posta doğrulama akışını kullanın.");
+}
+
+export async function reauthOwnerWithPassword(payload = {}) { return unwrap(await apiPost("/admin/security/reauth/password", payload)); }
+export async function startOwnerEmailReauth(payload = {}) { return unwrap(await apiPost("/admin/security/reauth/email/start", payload)); }
+export async function verifyOwnerEmailReauth(payload = {}) { return unwrap(await apiPost("/admin/security/reauth/email/verify", payload)); }
+export async function startSecureMfaRenewal(id, provider, payload = {}) {
+  return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/mfa-renew/${encodeURIComponent(String(provider || "").toLowerCase())}/start`, payload));
+}
+export async function confirmSecureMfaRenewal(id, provider, payload = {}) {
+  return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/mfa-renew/${encodeURIComponent(String(provider || "").toLowerCase())}/confirm`, payload));
 }
 
 export async function listLoginSecurityPolicies() { return unwrap(await apiGet("/admin/security/policies", { _ts: Date.now() })); }
@@ -59,3 +71,6 @@ export async function verifyOwnerRecoveryContact(payload = {}) { return unwrap(a
 export async function getDeliveryCapabilities() { return unwrap(await apiGet("/admin/security/delivery-capabilities", { _ts: Date.now() })); }
 export async function startUserEmailVerification(id) { return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/email-verification/start`, {})); }
 export async function verifyUserEmail(id, payload = {}) { return unwrap(await apiPost(`/admin/security/users/${encodeURIComponent(id)}/email-verification/verify`, payload)); }
+export async function getUserEmailDeliveryStatus(id, messageId) {
+  return unwrap(await apiGet(`/admin/security/users/${encodeURIComponent(id)}/email-verification/delivery/${encodeURIComponent(messageId)}`, { _ts: Date.now() }));
+}
