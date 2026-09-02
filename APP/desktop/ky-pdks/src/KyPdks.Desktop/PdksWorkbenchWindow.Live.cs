@@ -58,7 +58,17 @@ public partial class PdksWorkbenchWindow
 
     private async void AccountPanel_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (AccountPanel.Visibility == Visibility.Visible) await RefreshServerScopeAsync();
+        if (AccountPanel.Visibility != Visibility.Visible) return;
+        await RefreshServerScopeAsync();
+        try
+        {
+            await EnsureAgentDeviceEnrollmentAsync();
+        }
+        catch (Exception error)
+        {
+            await _store.TouchStateAsync("d1_sync", $"D1 cihaz yetkilendirme bekliyor · {error.Message}", _lifetime.Token);
+            StatusText.Text = $"Agent kart toplamaya devam ediyor; D1 cihaz yetkilendirmesi: {error.Message}";
+        }
     }
 
     private async void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
