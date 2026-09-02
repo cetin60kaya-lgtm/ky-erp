@@ -125,7 +125,7 @@ test("Desen storage status resolves File Hub instead of owning a second storage 
   assert.match(desenBar, /PLACEMENT/);
   assert.match(desenBar, /OUTGOING_DESIGN/);
   assert.doesNotMatch(desenBar, /getDesenFolderSettings/);
-  assert.match(desenPage, /Depolama Bağlantısı/);
+  assert.match(desenPage, /Desen Depolama Ayarları/);
 });
 
 test("Windows File Hub Agent can auto-configure and auto-start without storing secrets in repo", () => {
