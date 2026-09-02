@@ -69,7 +69,7 @@ test("PDKS has exactly the five requested workflow groups and real device routes
   const master = api("ik-pdks-master.ts");
   const deviceAdmin = api("ik-pdks-device-admin.ts");
   for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
-    assert.match(registry, new RegExp(`label: \\"${label.replace(/[&]/g, "&")}\\"`));
+    assert.ok(registry.includes(`label: "${label}"`), `${label} PDKS grubu eksik`);
   }
   assert.match(registry, /cihaz-baglantilari/);
   assert.match(registry, /\["senkron", "Senkronizasyon"/);
