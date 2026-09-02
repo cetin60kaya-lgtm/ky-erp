@@ -3,11 +3,30 @@ import { Bell, ChevronDown, Command, Menu, Plus, Search, X } from "lucide-react"
 import { ErpIcon } from "../components/erp/IconMap";
 import "../styles/shell-v3.css";
 
-function getTabs(module) {
+const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme"]);
+
+function isOwnerUser(user) {
+  return ["SUPER_ADMIN", "ADMIN"].includes(String(user?.role || "").toUpperCase().replace(/İ/g, "I"));
+}
+
+function tabVisible(module, tab, user) {
+  if (!module || !tab) return false;
+  if (module.key === "admin" && OWNER_ONLY_ADMIN_TABS.has(tab[0])) return isOwnerUser(user);
+  return true;
+}
+
+function visibleGroups(module, user) {
+  if (!module?.groups) return [];
+  return module.groups
+    .map((group) => ({ ...group, tabs: (group.tabs || []).filter((tab) => tabVisible(module, tab, user)) }))
+    .filter((group) => group.tabs.length);
+}
+
+function getTabs(module, user) {
   if (!module) return [];
   return module.groups
-    ? module.groups.flatMap((group) => group.tabs)
-    : module.tabs || [];
+    ? visibleGroups(module, user).flatMap((group) => group.tabs)
+    : (module.tabs || []).filter((tab) => tabVisible(module, tab, user));
 }
 
 const QUICK_ACTIONS = [
@@ -50,7 +69,7 @@ export default function AppShellV3({
 }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
-  const activeTabLabel = getTabs(activeModule).find(([key]) => key === activeTab)?.[1] || "";
+  const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
 
   const quickActions = useMemo(() => {
     const moduleMap = new Map(modules.map((item) => [item.key, item]));
@@ -58,12 +77,12 @@ export default function AppShellV3({
     return QUICK_ACTIONS.filter((action) => {
       const module = moduleMap.get(action.moduleKey);
       if (!module) return false;
-      const visibleTabs = new Set(getTabs(module).map(([key]) => key));
+      const visibleTabs = new Set(getTabs(module, user).map(([key]) => key));
       if (!visibleTabs.has(action.tabKey)) return false;
       if (!query) return true;
       return normalize(`${action.label} ${action.description} ${action.keywords}`).includes(query);
     });
-  }, [modules, quickSearch]);
+  }, [modules, quickSearch, user]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -100,6 +119,7 @@ export default function AppShellV3({
           {modules.map((module) => {
             const isActiveModule = activeModule?.key === module.key;
             const isExpanded = isActiveModule && mobileMenuOpen;
+            const groups = visibleGroups(module, user);
             return (
               <section key={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
                 <button type="button" className="shell-v3-module-button" onClick={() => onToggleModuleMenu(module.key)} aria-expanded={isExpanded}>
@@ -108,7 +128,7 @@ export default function AppShellV3({
                 {isExpanded ? (
                   <div className="shell-v3-submenu">
                     {module.groups
-                      ? module.groups.map((group) => (
+                      ? groups.map((group) => (
                           <div key={group.label} className="shell-v3-submenu-group">
                             <h3>{group.label}</h3>
                             {group.tabs.map(([key, label, icon]) => (
@@ -118,7 +138,7 @@ export default function AppShellV3({
                             ))}
                           </div>
                         ))
-                      : getTabs(module).map(([key, label, icon]) => (
+                      : getTabs(module, user).map(([key, label, icon]) => (
                           <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
                             <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
                           </button>
