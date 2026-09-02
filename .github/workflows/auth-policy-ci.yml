@@ -64,6 +64,13 @@ jobs:
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
 
+      - name: Frontend dependency security audit
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -o pipefail
+          npm audit --audit-level=high --json | tee npm-audit.json
+
       - name: Frontend lint
         working-directory: APP/app/ky-erp-frontend
         run: npm run lint
