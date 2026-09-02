@@ -5,7 +5,10 @@ import {
 
 const DEPOLAMA_MODULE = {
   key: "depolama",
-  permissionKey: "ADMIN",
+  // AuthContext gives SUPER_ADMIN/ADMIN every module key automatically, while
+  // COMPANY_ADMIN is special-cased only for the literal ADMIN key. Using a
+  // dedicated owner-only key keeps Depolama aligned with File Hub backend guards.
+  permissionKey: "STORAGE_ADMIN",
   label: "Depolama",
   icon: "dosya",
   groups: [
