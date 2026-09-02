@@ -19,6 +19,8 @@ function withoutApplicationOwner(value) {
   return value;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function getMainCompanies(params = {}) { return unwrap(await apiGet("/admin/main-companies", params)); }
 export async function createMainCompany(payload = {}) { return unwrap(await apiPost("/admin/main-companies", payload)); }
 export async function getSettings(params = {}) { return unwrap(await apiGet("/admin/settings", params)); }
@@ -33,7 +35,20 @@ export async function downloadBackupSql(id, fileName = "KYERP-firma-yedek.sql") 
 
 // Normal Kullanıcılar ekranı uygulama sahibini bilinçli olarak içermez.
 export async function listUsers() { return withoutApplicationOwner(unwrap(await apiGet("/admin/managed-users", { _ts: Date.now() }))); }
-export async function getApplicationOwner() { return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now() })); }
+export async function getApplicationOwner() {
+  try {
+    return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now() }));
+  } catch (firstError) {
+    // İlk oturum bootstrap anında tenant/owner bağlamı henüz yüklenmemiş olabilir.
+    // Backend yetkisi bypass edilmez; aynı korumalı endpoint yalnız bir kez tekrar okunur.
+    await sleep(300);
+    try {
+      return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now(), _ownerRetry: 1 }));
+    } catch {
+      throw firstError;
+    }
+  }
+}
 
 export async function createUser(payload = {}) {
   const created = unwrap(await apiPost("/admin/users", payload));
