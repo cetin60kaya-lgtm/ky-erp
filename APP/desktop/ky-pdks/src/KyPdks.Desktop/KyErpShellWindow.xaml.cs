@@ -247,7 +247,7 @@ public partial class KyErpShellWindow : Window
 
     private void ApplyPermissions(JsonElement user, string role)
     {
-        if (["ADMIN", "SUPER_ADMIN"].Contains(role.Trim().ToUpperInvariant()))
+        if (new[] { "ADMIN", "SUPER_ADMIN" }.Contains(role.Trim().ToUpperInvariant()))
         {
             SetAllModuleButtons(Visibility.Visible);
             return;
