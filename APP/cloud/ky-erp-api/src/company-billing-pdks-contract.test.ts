@@ -81,7 +81,7 @@ test("PDKS central guard rejects cross-tenant access and requires IK permissions
   assert.match(pdks, /SELECT slug,is_active FROM main_companies WHERE slug=\?/);
   assert.match(pdks, /PDKS_TENANT_NOT_ACTIVE/);
   assert.match(pdks, /PDKS_PERMISSION_DENIED/);
-  assert.match(pdks, /moduleKey \|\| row\?\.module_key\) === "IK"/);
+  assert.match(pdks, /upper\(row\?\.moduleKey \|\| row\?\.module_key\) === "IK"/);
   assert.match(pdks, /app\.use\("\/api\/ik\/personnel-control\/\*", enforcePdksTenantAndPermission\)/);
 });
 
