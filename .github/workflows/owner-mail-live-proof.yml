@@ -1,0 +1,109 @@
+name: KY ERP Owner Mail Live Proof
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - ".github/workflows/owner-mail-live-proof.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-owner-mail-live-proof
+  cancel-in-progress: false
+
+jobs:
+  proof:
+    name: Resend owner delivery proof
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      DB_NAME: ky-erp-db
+      WORKER_DIR: APP/cloud/ky-erp-api
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Production baglantilarini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1; }
+          test -n "${RESEND_API_KEY:-}" || { echo "RESEND_API_KEY eksik" >&2; exit 1; }
+
+      - name: Wrangler paketlerini kur
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Dogrulanmis uygulama sahibi e-postasini D1'den al
+        id: owner
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --json --command "SELECT s.email AS email FROM auth_users u JOIN auth_user_security s ON s.user_id=u.id WHERE UPPER(TRIM(COALESCE(s.role_override,u.role,''))) IN ('SUPER_ADMIN','ADMIN') AND COALESCE(s.email_verified,0)=1 AND TRIM(COALESCE(s.email,''))<>'' ORDER BY CASE WHEN UPPER(TRIM(COALESCE(s.role_override,u.role,'')))='SUPER_ADMIN' THEN 0 ELSE 1 END LIMIT 1;")"
+          OWNER_EMAIL="$(node -e 'const v=JSON.parse(process.argv[1]); function find(x){if(Array.isArray(x)){for(const y of x){const r=find(y);if(r)return r;}}else if(x&&typeof x==="object"){if(typeof x.email==="string"&&x.email.includes("@"))return x.email.trim();for(const y of Object.values(x)){const r=find(y);if(r)return r;}}return "";} process.stdout.write(find(v));' "$RAW")"
+          test -n "$OWNER_EMAIL" || { echo "D1'de dogrulanmis uygulama sahibi e-postasi bulunamadi" >&2; exit 1; }
+          echo "::add-mask::$OWNER_EMAIL"
+          MASKED="$(node -e 'const e=process.argv[1]; const [l,d]=e.split("@"); process.stdout.write(`${(l||"").slice(0,1)}***@${d||""}`);' "$OWNER_EMAIL")"
+          echo "OWNER_EMAIL=$OWNER_EMAIL" >> "$GITHUB_ENV"
+          echo "masked=$MASKED" >> "$GITHUB_OUTPUT"
+          echo "D1 owner e-posta kaydi bulundu ve loglarda maskelendi."
+
+      - name: admin@kyerp.net ile gercek test mesaji gonder ve teslimi dogrula
+        id: delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          SUBJECT="KY ERP Canli Mail Teslim Testi"
+          BODY="$(node -e 'process.stdout.write(JSON.stringify({from:"KY ERP <admin@kyerp.net>",to:[process.env.OWNER_EMAIL],subject:"KY ERP Canli Mail Teslim Testi",text:"KY ERP production e-posta teslim altyapisi canli olarak dogrulandi. Bu mesaj otomatik canli kabul testidir; herhangi bir islem yapmaniz gerekmez."}))')"
+          SEND="$(curl --fail-with-body --silent --show-error https://api.resend.com/emails -X POST -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" -d "$BODY")"
+          MESSAGE_ID="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(String(x.id||x.messageId||""));' "$SEND")"
+          test -n "$MESSAGE_ID" || { echo "Resend kabul kimligi donmedi" >&2; exit 1; }
+          echo "::add-mask::$MESSAGE_ID"
+
+          FINAL_EVENT=""
+          for attempt in $(seq 1 24); do
+            STATUS="$(curl --fail-with-body --silent --show-error "https://api.resend.com/emails/$MESSAGE_ID" -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json")"
+            EVENT="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(String(x.last_event||x.lastEvent||x.status||"unknown").toLowerCase());' "$STATUS")"
+            FINAL_EVENT="$EVENT"
+            case "$EVENT" in
+              delivered|opened|clicked)
+                echo "Resend teslim kaniti: $EVENT"
+                break
+                ;;
+              bounced|complained|canceled|failed)
+                echo "Resend teslim basarisiz: $EVENT" >&2
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+
+          case "$FINAL_EVENT" in
+            delivered|opened|clicked) ;;
+            *) echo "Resend sağlayici kabul etti fakat fiziksel teslim kaniti zaman penceresinde gelmedi: $FINAL_EVENT" >&2; exit 1 ;;
+          esac
+          echo "event=$FINAL_EVENT" >> "$GITHUB_OUTPUT"
+
+      - name: Canli kanit ozeti
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "KY ERP OWNER MAIL LIVE PROOF PASSED"
+          echo "Sender: KY ERP <admin@kyerp.net>"
+          echo "Recipient: ${{ steps.owner.outputs.masked }}"
+          echo "Provider: RESEND"
+          echo "Delivery: ${{ steps.delivery.outputs.event }}"
