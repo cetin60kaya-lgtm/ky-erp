@@ -4,6 +4,7 @@ import { registerFileHubRoutes } from "./file-hub";
 import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
 import { registerPublicFileHubScanRoutes } from "./file-hub-agent-scan";
+import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
 
 type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
@@ -50,6 +51,7 @@ export function registerAdminStorageRoutes(app:any){
   registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
   registerPublicFileHubScanRoutes(app);
+  registerAccountingDocumentArchiveRoutes(app);
 
   app.get("/api/admin/file-storage/status",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:await legacyStatus(c)});});
   app.get("/api/admin/file-storage/settings",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:{storageRoot:`FILE_HUB://${slugOf(c)}`,storageMode:"FILE_HUB",note:"Ana dosya evi firma bazında Google Drive, OneDrive veya seçilen provider'dır. R2 yalnız preview/cache katmanıdır."}});});
