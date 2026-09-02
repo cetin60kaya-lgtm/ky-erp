@@ -1,4 +1,6 @@
 @echo off
-cd /d "D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ"
-powershell -NoProfile -ExecutionPolicy Bypass -File "D:\onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\SCRIPTS\KYERP_LIFECYCLE.ps1" stop
+setlocal
+set "ROOT=%~dp0"
+cd /d "%ROOT%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%SCRIPTS\KYERP_LIFECYCLE.ps1" stop
 pause
