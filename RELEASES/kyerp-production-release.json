@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-01T23:05:00+03:00",
-  "attempt": 78,
+  "requestedAt": "2026-09-02T13:51:20+03:00",
+  "attempt": 79,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -13,6 +13,15 @@
     "mfa-session-10h",
     "password-only-disabled",
     "owner-all-session-control",
+    "owner-security-dedicated-console",
+    "owner-hidden-from-managed-users",
+    "owner-mfa-reauth-step-up",
+    "owner-mfa-staged-rotation",
+    "owner-mfa-atomic-session-revoke",
+    "legacy-mfa-reset-fail-closed",
+    "owner-email-otp-verification",
+    "resend-canonical-admin-sender",
+    "role-ascii-canonicalization",
     "final-active-session-cutover",
     "auth-d1-policy-guard-0029",
     "isnet-stable-connector",
@@ -37,10 +46,11 @@
     "d1-no-generic-migration-chain",
     "worker-typecheck-test-build-before-live",
     "frontend-lint-test-build-before-live",
+    "frontend-real-browser-smoke",
     "cloudflare-worker-production",
     "cloudflare-pages-production"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "053d60aa20f20fa37040cc59a7fe5d203b5211e9",
-  "note": "01.09.2026 attempt 78. Attempt 77 canliya yazmadan Worker unit regression testlerinde iki stale V3/terminal-prompt beklentisinde durdu. Testler V4 maskeli key akisi ile guncellendi. Tam D1 yedegi alinmadan migration/deploy yok; Worker + frontend test/build zorunlu. Worker deploy sonrasi RESEND_API_KEY aktif bindingi dogrulanir. Ardindan MFA tum kullanicilar icin zorunlu cutover, eski aktif oturumlarin tek seferlik revoke islemi, IsNet 0027+0028 ve Auth 0029 guard uygulanip D1'den tekrar dogrulanir. D1 reset ve generic migration zinciri yoktur."
+  "sourceCommit": "fb25ee69e95b669f91a8818af9d226cdfdf361ca",
+  "note": "02.09.2026 attempt 79. Uygulama sahibi normal kullanici listesinden ayrildi; guvenli MFA yenileme parola veya dogrulanmis e-posta step-up ile baslar, yeni secret TOTP onayina kadar staged kalir ve eski secret korunur. Onaydan sonra diger oturumlar atomik olarak kapatilir; mevcut oturum korunur. Eski dogrudan MFA reset rotalari fail-closed, e-posta dogrulamasi OTP zorunlu, Resend gondereni KY ERP <admin@kyerp.net>. Teknik rol canonicalization ASCII-safe yapildi. Source validation, D1 readiness ve gercek Chrome smoke yesil. Tam D1 yedegi alinmadan migration/deploy yok; yalniz hedefli ve idempotent migrationlar uygulanir. D1 reset ve generic migration zinciri yoktur."
 }
