@@ -23,11 +23,15 @@ public partial class KyErpShellWindow : Window
     private readonly HttpClient _probe = new() { Timeout = TimeSpan.FromSeconds(4) };
     private readonly DispatcherTimer _connectionTimer = new() { Interval = TimeSpan.FromSeconds(12) };
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly HashSet<string> _allowedModules = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _online;
     private bool _offlineCenterVisible;
     private bool _audit;
+    private bool _preloadMode;
+    private bool _syncInProgress;
     private string _token = "";
+    private string _preloadedToken = "";
     private IReadOnlyList<CachedPerson> _pdksPeople = Array.Empty<CachedPerson>();
 
     public KyErpShellWindow()
@@ -146,8 +150,18 @@ public partial class KyErpShellWindow : Window
 
     private async void CoreWebView2_WebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
-        if (_online || !string.Equals(e.Request.Method, "GET", StringComparison.OrdinalIgnoreCase)) return;
         if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) || !uri.Host.Equals("api.kyerp.net", StringComparison.OrdinalIgnoreCase)) return;
+
+        if (_preloadMode && !string.Equals(e.Request.Method, "GET", StringComparison.OrdinalIgnoreCase) && !string.Equals(e.Request.Method, "HEAD", StringComparison.OrdinalIgnoreCase))
+        {
+            const string blocked = "{\"ok\":false,\"error\":{\"code\":\"KYERP_DESKTOP_PRELOAD_READ_ONLY\",\"message\":\"Tam Eşitle yalnız okuma isteği çalıştırır.\"}}";
+            e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
+                new MemoryStream(Encoding.UTF8.GetBytes(blocked)), 409, "KY ERP PRELOAD READ ONLY",
+                "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n");
+            return;
+        }
+
+        if (_online || !string.Equals(e.Request.Method, "GET", StringComparison.OrdinalIgnoreCase)) return;
         var deferral = e.GetDeferral();
         try
         {
@@ -159,7 +173,7 @@ public partial class KyErpShellWindow : Window
                     new MemoryStream(Encoding.UTF8.GetBytes(cached.PayloadJson)), cached.HttpStatus, "KY ERP OFFLINE CACHE", headers);
                 return;
             }
-            const string unavailable = "{\"ok\":false,\"error\":{\"code\":\"KYERP_DESKTOP_OFFLINE_CACHE_MISS\",\"message\":\"Bu veri daha önce masaüstüne senkronlanmamış. İnternet geldiğinde yenileyin.\"}}";
+            const string unavailable = "{\"ok\":false,\"error\":{\"code\":\"KYERP_DESKTOP_OFFLINE_CACHE_MISS\",\"message\":\"Bu veri daha önce masaüstüne senkronlanmamış. İnternet geldiğinde Tam Eşitle çalıştırın.\"}}";
             e.Response = ErpWebView.CoreWebView2.Environment.CreateWebResourceResponse(
                 new MemoryStream(Encoding.UTF8.GetBytes(unavailable)), 503, "KY ERP OFFLINE",
                 "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://app.kyerp.net\r\n");
@@ -209,11 +223,17 @@ public partial class KyErpShellWindow : Window
             if (string.IsNullOrWhiteSpace(token))
             {
                 _token = "";
+                _preloadedToken = "";
                 _audit = false;
+                _allowedModules.Clear();
                 ApplyScope(false);
                 return;
             }
-            if (token == _token && _pdksPeople.Count > 0) return;
+            if (token == _token && _pdksPeople.Count > 0)
+            {
+                await PreloadAuthorizedModulesAsync(false);
+                return;
+            }
             _token = token;
             var profile = await _erp.GetPdksProfileAsync(token, _lifetime.Token);
             _audit = profile.Audit || profile.Scope.Equals("AUDIT", StringComparison.OrdinalIgnoreCase) || profile.Role.Equals("DENETIM", StringComparison.OrdinalIgnoreCase);
@@ -222,8 +242,102 @@ public partial class KyErpShellWindow : Window
             CurrentRoleText.Text = _audit
                 ? "DENETİM • SGK/PDKS • Salt okunur"
                 : string.IsNullOrWhiteSpace(profile.Role) ? "KY ERP kullanıcısı" : profile.Role;
+            await PreloadAuthorizedModulesAsync(false);
         }
         catch { }
+    }
+
+    private async Task PreloadAuthorizedModulesAsync(bool force)
+    {
+        if (!_online || ErpWebView.CoreWebView2 is null || string.IsNullOrWhiteSpace(_token) || _syncInProgress) return;
+        if (!force && string.Equals(_preloadedToken, _token, StringComparison.Ordinal)) return;
+
+        var routes = BuildPreloadRoutes();
+        if (routes.Count == 0) return;
+
+        _syncInProgress = true;
+        _preloadMode = true;
+        try
+        {
+            FooterStatusText.Text = $"Tam Eşitle çalışıyor • {routes.Count} yetkili çalışma alanı okunuyor...";
+            var routesJson = JsonSerializer.Serialize(routes);
+            var script = $$"""
+            (async () => {
+              const routes = {{routesJson}};
+              const rootId = 'kyerp-desktop-preload-root';
+              document.getElementById(rootId)?.remove();
+              const root = document.createElement('div');
+              root.id = rootId;
+              root.style.cssText = 'position:fixed;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;left:-10000px;top:-10000px';
+              document.body.appendChild(root);
+              for (const route of routes) {
+                await new Promise((resolve) => {
+                  const frame = document.createElement('iframe');
+                  frame.style.cssText = 'width:1280px;height:800px;border:0';
+                  let finished = false;
+                  const done = () => {
+                    if (finished) return;
+                    finished = true;
+                    try { frame.remove(); } catch {}
+                    resolve(true);
+                  };
+                  frame.onload = () => setTimeout(done, 900);
+                  root.appendChild(frame);
+                  frame.src = new URL(route, location.origin).href;
+                  setTimeout(done, 2600);
+                });
+              }
+              root.remove();
+              return routes.length;
+            })()
+            """;
+            await ErpWebView.CoreWebView2.ExecuteScriptAsync(script);
+            _preloadedToken = _token;
+            var now = DateTimeOffset.Now.ToString("O");
+            await _offlineStore.SetStateAsync("last_full_sync", now, _lifetime.Token);
+            await _offlineStore.SetStateAsync("last_api_sync", now, _lifetime.Token);
+            await RefreshOfflineAsync();
+            FooterStatusText.Text = $"Tam Eşitle tamamlandı • {routes.Count} yetkili alanın GET verileri offline cache'e alındı.";
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            FooterStatusText.Text = $"Tam Eşitle tamamlanamadı: {error.Message}";
+        }
+        finally
+        {
+            _preloadMode = false;
+            _syncInProgress = false;
+        }
+    }
+
+    private List<string> BuildPreloadRoutes()
+    {
+        if (_audit)
+            return new List<string> { "/ik/personel-kartlari", "/pdks/ana-ekran" };
+
+        var routes = new List<string> { "/" };
+        void Add(string permission, string route)
+        {
+            if (_allowedModules.Contains(permission) && !routes.Contains(route, StringComparer.OrdinalIgnoreCase)) routes.Add(route);
+        }
+        Add("MUHASEBE", "/muhasebe/yonetim-ozeti");
+        Add("ISNET", "/isnet/yonetim-merkezi");
+        Add("DESEN", "/desen/gelen-desenler");
+        Add("BOYAHANE", "/boyahane/is-akisi");
+        Add("IMALAT", "/uretim/uretim-merkezi");
+        if (_allowedModules.Contains("IK"))
+        {
+            Add("IK", "/ik/ozet");
+            Add("IK", "/pdks/ana-ekran");
+        }
+        Add("ASISTAN", "/asistan/sohbet");
+        if (_allowedModules.Contains("ADMIN"))
+        {
+            Add("ADMIN", "/admin/dosya-klasor-yonetimi");
+            Add("ADMIN", "/admin/admin-yonetim-ozeti");
+        }
+        return routes;
     }
 
     private void ApplyUserPresentation(string userJson)
@@ -247,30 +361,32 @@ public partial class KyErpShellWindow : Window
 
     private void ApplyPermissions(JsonElement user, string role)
     {
+        _allowedModules.Clear();
         if (new[] { "ADMIN", "SUPER_ADMIN" }.Contains(role.Trim().ToUpperInvariant()))
         {
+            foreach (var key in new[] { "MUHASEBE", "ISNET", "DESEN", "BOYAHANE", "IMALAT", "IK", "ADMIN", "ASISTAN" })
+                _allowedModules.Add(key);
             SetAllModuleButtons(Visibility.Visible);
             return;
         }
         if (!user.TryGetProperty("permissions", out var rows) || rows.ValueKind != JsonValueKind.Array) return;
-        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows.EnumerateArray())
         {
             var module = FirstText(row, "moduleKey", "module_key");
             var canView = row.TryGetProperty("canView", out var view) && view.ValueKind == JsonValueKind.True;
-            if (canView && !string.IsNullOrWhiteSpace(module)) allowed.Add(module);
+            if (canView && !string.IsNullOrWhiteSpace(module)) _allowedModules.Add(module);
         }
-        SetVisible(MuhasebeButton, allowed.Contains("MUHASEBE"));
-        SetVisible(IsnetButton, allowed.Contains("ISNET"));
-        SetVisible(DesenButton, allowed.Contains("DESEN"));
-        SetVisible(BoyahaneButton, allowed.Contains("BOYAHANE"));
-        SetVisible(ImalatButton, allowed.Contains("IMALAT"));
-        SetVisible(IkButton, allowed.Contains("IK"));
-        SetVisible(PdksButton, allowed.Contains("IK"));
-        SetVisible(NativePdksButton, allowed.Contains("IK"));
-        SetVisible(FileHubButton, allowed.Contains("ADMIN"));
-        SetVisible(AssistantButton, allowed.Contains("ASISTAN"));
-        SetVisible(AdminButton, allowed.Contains("ADMIN"));
+        SetVisible(MuhasebeButton, _allowedModules.Contains("MUHASEBE"));
+        SetVisible(IsnetButton, _allowedModules.Contains("ISNET"));
+        SetVisible(DesenButton, _allowedModules.Contains("DESEN"));
+        SetVisible(BoyahaneButton, _allowedModules.Contains("BOYAHANE"));
+        SetVisible(ImalatButton, _allowedModules.Contains("IMALAT"));
+        SetVisible(IkButton, _allowedModules.Contains("IK"));
+        SetVisible(PdksButton, _allowedModules.Contains("IK"));
+        SetVisible(NativePdksButton, _allowedModules.Contains("IK"));
+        SetVisible(FileHubButton, _allowedModules.Contains("ADMIN"));
+        SetVisible(AssistantButton, _allowedModules.Contains("ASISTAN"));
+        SetVisible(AdminButton, _allowedModules.Contains("ADMIN"));
         FinanceGroup.Visibility = MuhasebeButton.Visibility == Visibility.Visible || IsnetButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
         ProductionGroup.Visibility = DesenButton.Visibility == Visibility.Visible || BoyahaneButton.Visibility == Visibility.Visible || ImalatButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
         PeopleGroup.Visibility = IkButton.Visibility == Visibility.Visible || PdksButton.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
@@ -293,6 +409,8 @@ public partial class KyErpShellWindow : Window
             PageSubTitleText.Text = "Web + D1 + File Hub + Offline çalışma kopyası";
             return;
         }
+        _allowedModules.Clear();
+        _allowedModules.Add("IK");
         FinanceGroup.Visibility = Visibility.Collapsed;
         ProductionGroup.Visibility = Visibility.Collapsed;
         SystemGroup.Visibility = Visibility.Collapsed;
@@ -300,7 +418,7 @@ public partial class KyErpShellWindow : Window
         IkButton.Visibility = Visibility.Visible;
         PdksButton.Visibility = Visibility.Visible;
         NativePdksButton.Visibility = Visibility.Visible;
-        PageSubTitleText.Text = "DENETİM • yalnız izin verilen SGK/PDKS görünümü • salt okunur";
+        PageSubTitleText.Text = "DENETİM • İK=SGK VAR • PDKS=SGK VAR+kart • salt okunur";
     }
 
     private async void ModuleButton_Click(object sender, RoutedEventArgs e)
@@ -333,13 +451,31 @@ public partial class KyErpShellWindow : Window
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
-        await CheckConnectionAsync();
-        if (_online && ErpWebView.CoreWebView2 is not null)
+        var button = sender as Button;
+        if (button is not null)
         {
-            ErpWebView.CoreWebView2.Reload();
-            await TryRefreshIdentityAsync();
+            button.IsEnabled = false;
+            button.Content = "Eşitleniyor...";
         }
-        await RefreshOfflineAsync();
+        try
+        {
+            await CheckConnectionAsync();
+            if (_online && ErpWebView.CoreWebView2 is not null)
+            {
+                await TryRefreshIdentityAsync();
+                await PreloadAuthorizedModulesAsync(true);
+                ErpWebView.CoreWebView2.Reload();
+            }
+            await RefreshOfflineAsync();
+        }
+        finally
+        {
+            if (button is not null)
+            {
+                button.Content = "Tam Eşitle";
+                button.IsEnabled = true;
+            }
+        }
     }
 
     private void OfflineCenterButton_Click(object sender, RoutedEventArgs e) => ShowOfflineCenter(!_offlineCenterVisible);
@@ -370,7 +506,8 @@ public partial class KyErpShellWindow : Window
             PendingText.Text = $"{pending.Count} bekleyen";
             OfflinePendingCountText.Text = pending.Count.ToString();
             PendingBadge.Visibility = pending.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            var lastSync = await _offlineStore.GetStateAsync("last_api_sync", _lifetime.Token);
+            var lastSync = await _offlineStore.GetStateAsync("last_full_sync", _lifetime.Token)
+                ?? await _offlineStore.GetStateAsync("last_api_sync", _lifetime.Token);
             LastSyncText.Text = DateTimeOffset.TryParse(lastSync, out var parsed) ? parsed.LocalDateTime.ToString("dd.MM HH:mm") : "Henüz yok";
             OfflineAgentText.Text = Process.GetProcessesByName("KYERP.PDKS.Agent").Length > 0 ? "Çalışıyor" : "Servis kontrolü";
         }
