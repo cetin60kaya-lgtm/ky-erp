@@ -1,25 +1,27 @@
-name: KY ERP Frontend Dependency Security
+name: KY ERP Frontend Dependency Remediation
 
 on:
-  pull_request:
+  push:
     branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/app/ky-erp-frontend/package.json"
-      - "APP/app/ky-erp-frontend/package-lock.json"
-      - ".github/workflows/frontend-dependency-audit.yml"
-  workflow_dispatch:
+      - codex/frontend-security-audit-20260902
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: frontend-dependency-remediation
+  cancel-in-progress: false
 
 jobs:
-  audit:
-    name: Frontend npm audit high/critical
+  remediate:
+    name: Apply npm audit lockfile fix
     runs-on: ubuntu-latest
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
+        with:
+          ref: codex/frontend-security-audit-20260902
+          fetch-depth: 0
 
       - name: Node.js 22 LTS
         uses: actions/setup-node@v4
@@ -28,30 +30,34 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
-      - name: Frontend paketleri
-        working-directory: APP/app/ky-erp-frontend
-        run: npm ci
-
-      - name: Advisory kaydini yazdir
-        working-directory: APP/app/ky-erp-frontend
-        shell: bash
-        run: npm audit --audit-level=high --json || true
-
-      - name: NPM guvenli lockfile duzeltmesini uret
+      - name: NPM guvenli lockfile duzeltmesini uygula
         working-directory: APP/app/ky-erp-frontend
         shell: bash
         run: |
           set -euo pipefail
+          npm ci
           npm audit fix --package-lock-only
-          echo '=== LOCKFILE FIX DIFF ==='
-          git diff -- package.json package-lock.json
-          echo '=== POST FIX AUDIT ==='
           npm audit --audit-level=high
 
-      - name: Frontend regresyon testi
+      - name: Lockfile degisikligini dala kaydet
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- APP/app/ky-erp-frontend/package-lock.json; then
+            echo "Lockfile zaten guvenli; yeni commit gerekmiyor."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add APP/app/ky-erp-frontend/package-lock.json
+          git commit -m "security: refresh browserslist lockfile to patched versions"
+          git push origin HEAD:codex/frontend-security-audit-20260902
+
+      - name: Frontend regresyon ve audit
         working-directory: APP/app/ky-erp-frontend
         run: |
           npm ci
+          npm audit --audit-level=high
           npm run lint
           npm test
           npm run build
