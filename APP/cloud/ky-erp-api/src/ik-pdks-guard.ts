@@ -8,7 +8,7 @@ import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
 import { registerIkPersonnelMediaRoutes } from "./ik-personnel-media";
 
 type Bindings = Cloudflare.Env;
-type Variables = { requestId: string; pdksCompany: string };
+type Variables = { requestId: string };
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 type Row = Record<string, any>;
 
@@ -94,13 +94,14 @@ async function enforcePdksTenantAndPermission(c: Context<AppEnv>, next: () => Pr
     return;
   }
 
-  c.set("pdksCompany", company);
+  (c as any).set?.("pdksCompany", company);
   await next();
 }
 
 async function userAndCompany(c: Context<AppEnv>) {
   const user = await getAuthenticatedUser(c);
-  const company = lowerSlug(c.get("pdksCompany") || c.req.header("X-KYERP-Tenant-Slug") || user?.mainCompanySlug || user?.security?.main_company_slug || DEFAULT_COMPANY);
+  const storedCompany = text((c as any).get?.("pdksCompany"));
+  const company = lowerSlug(storedCompany || c.req.header("X-KYERP-Tenant-Slug") || user?.mainCompanySlug || user?.security?.main_company_slug || DEFAULT_COMPANY);
   return { user, company };
 }
 
