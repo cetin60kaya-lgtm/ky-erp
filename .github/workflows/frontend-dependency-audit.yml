@@ -1,27 +1,25 @@
-name: KY ERP Frontend Dependency Remediation
+name: KY ERP Frontend Dependency Security
 
 on:
-  push:
+  pull_request:
     branches:
-      - codex/frontend-security-audit-20260902
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/app/ky-erp-frontend/package.json"
+      - "APP/app/ky-erp-frontend/package-lock.json"
+      - ".github/workflows/frontend-dependency-audit.yml"
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: frontend-dependency-remediation
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  remediate:
-    name: Apply npm audit lockfile fix
+  audit:
+    name: Frontend npm audit high/critical
     runs-on: ubuntu-latest
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
-        with:
-          ref: codex/frontend-security-audit-20260902
-          fetch-depth: 0
 
       - name: Node.js 22 LTS
         uses: actions/setup-node@v4
@@ -30,34 +28,24 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
-      - name: NPM guvenli lockfile duzeltmesini uygula
+      - name: Frontend paketleri
         working-directory: APP/app/ky-erp-frontend
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm ci
-          npm audit fix --package-lock-only
-          npm audit --audit-level=high
+        run: npm ci
 
-      - name: Lockfile degisikligini dala kaydet
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- APP/app/ky-erp-frontend/package-lock.json; then
-            echo "Lockfile zaten guvenli; yeni commit gerekmiyor."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add APP/app/ky-erp-frontend/package-lock.json
-          git commit -m "security: refresh browserslist lockfile to patched versions"
-          git push origin HEAD:codex/frontend-security-audit-20260902
-
-      - name: Frontend regresyon ve audit
+      - name: High ve critical dependency audit
         working-directory: APP/app/ky-erp-frontend
-        run: |
-          npm ci
-          npm audit --audit-level=high
-          npm run lint
-          npm test
-          npm run build
+        run: npm audit --audit-level=high
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Frontend testleri
+        working-directory: APP/app/ky-erp-frontend
+        run: npm test
+
+      - name: Frontend production build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: npm run build
