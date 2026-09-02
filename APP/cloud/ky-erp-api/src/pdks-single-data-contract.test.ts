@@ -119,15 +119,18 @@ test("Web PDKS uses personnel-control operations, not legacy advanced endpoints 
   assert.doesNotMatch(service, /\/ik\/advanced\//);
 });
 
-test("Web PDKS keeps one global module entry and grouped internal navigation", () => {
+test("Web PDKS keeps one global module entry and compact horizontal grouped navigation", () => {
   const registry = frontend("app/pdksModuleRegistryPatch.js");
   const shell = frontend("pages/modules/PdksPage.jsx");
   const css = frontend("pages/modules/pdks-shell.css");
   assert.match(registry, /key: "pdks"/);
   assert.match(registry, /label: "PDKS"/);
-  for (const group of ["Günlük İşlemler", "Personel", "Vardiya ve Tanımlar", "İK Bağlantısı", "Sistem ve Denetim"])
+  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
     assert.match(shell, new RegExp(group));
+  for (const item of ["Puantaj Kuralları", "Bölümler", "Görevler", "Servisler", "Durumlar", "Firmalar", "Kullanıcılar"])
+    assert.match(shell, new RegExp(item));
   assert.match(shell, /PDKS Hızlı Asistan/);
   assert.match(css, /shell-v3-submenu/);
-  assert.match(css, /pdks-local-nav/);
+  assert.match(css, /pdks-command-nav/);
+  assert.doesNotMatch(css, /grid-template-columns:\s*210px/);
 });
