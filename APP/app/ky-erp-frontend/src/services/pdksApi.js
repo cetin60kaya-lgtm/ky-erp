@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "../utils/api";
+import { apiFetch, apiGet, apiPost, apiUpload } from "../utils/api";
 
 function unwrap(payload) {
   return payload && typeof payload === "object" && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -18,6 +18,20 @@ export async function getPdksPeople() {
 
 export async function getPdksAttendance(employeeId, year, month) {
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance`, { year, month }));
+}
+
+export async function getPdksPersonPhotoBlob(employeeId) {
+  return apiFetch(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/photo`, { responseType: "blob" });
+}
+
+export async function getPdksPersonPhotoMeta(employeeId) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/photo-meta`));
+}
+
+export async function uploadPdksPersonPhoto(employeeId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  return unwrap(await apiUpload(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/photo`, form));
 }
 
 export async function addPdksTimeEvent(employeeId, payload = {}) {
