@@ -12,7 +12,8 @@ namespace KyPdks.Desktop;
 public partial class KyErpDesktopWindow : Window
 {
     private static readonly Uri AppUri = new("https://app.kyerp.net/");
-    private static readonly Uri BundledAppUri = new("https://app.kyerp.net/index.html");
+    private static readonly Uri BundledAppUri = new("http://localhost/index.html");
+    private const string BundledHost = "localhost";
     private const string FileHubTaskName = "KY ERP File Hub Agent";
 
     private readonly PdksPaths _pdksPaths = new();
@@ -70,7 +71,7 @@ public partial class KyErpDesktopWindow : Window
         var bundledIndex = Path.Combine(bundledRoot, "index.html");
         if (File.Exists(bundledIndex))
         {
-            core.SetVirtualHostNameToFolderMapping(AppUri.Host, bundledRoot, CoreWebView2HostResourceAccessKind.Allow);
+            core.SetVirtualHostNameToFolderMapping(BundledHost, bundledRoot, CoreWebView2HostResourceAccessKind.DenyCors);
             _bundledFrontend = true;
             StartupText.Text = "KY ERP Desktop açılıyor...";
         }
@@ -105,10 +106,10 @@ public partial class KyErpDesktopWindow : Window
         const string script = """
         (() => {
           document.documentElement.dataset.kyerpDesktopHost = '1';
-          document.documentElement.dataset.kyerpDesktopVersion = '1.7.1';
+          document.documentElement.dataset.kyerpDesktopVersion = '1.7.2';
           const post = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
           window.KYERP_DESKTOP = Object.freeze({
-            version: '1.7.1',
+            version: '1.7.2',
             isDesktop: true,
             openPdksDevice: () => post({ type: 'pdks.open-device' }),
             configureFileAgent: (secret, mainCompanySlug) => post({
@@ -177,8 +178,11 @@ public partial class KyErpDesktopWindow : Window
     private static bool IsTrustedAppSource(string? source)
     {
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return false;
-        return uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+        var liveApp = uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
             && uri.Host.Equals(AppUri.Host, StringComparison.OrdinalIgnoreCase);
+        var bundledApp = uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+            && uri.Host.Equals(BundledHost, StringComparison.OrdinalIgnoreCase);
+        return liveApp || bundledApp;
     }
 
     private async void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
