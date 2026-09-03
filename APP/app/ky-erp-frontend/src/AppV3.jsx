@@ -88,8 +88,10 @@ function updateBrowserPath(route, replace = false) {
   window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
 }
 
+const COMPACT_SHELL_QUERY = "(max-width: 1024px)";
+
 function keepSidebarExpanded() {
-  return !window.matchMedia("(max-width: 980px)").matches;
+  return !window.matchMedia(COMPACT_SHELL_QUERY).matches;
 }
 
 function LoadingCard({ title = "Ekran yükleniyor" }) {
@@ -200,7 +202,7 @@ export default function AppV3() {
   }, [replaceActiveRoute, visibleModules]);
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 980px)");
+    const media = window.matchMedia(COMPACT_SHELL_QUERY);
     const onViewportChange = (event) => setModuleMenuOpen(!event.matches);
     media.addEventListener("change", onViewportChange);
     return () => media.removeEventListener("change", onViewportChange);
