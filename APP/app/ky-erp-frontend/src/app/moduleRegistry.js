@@ -112,14 +112,17 @@ const baseModules = BASE_MODULES
   .map(withoutStorageDuplicates)
   .map(withCompanyBilling)
   .map(withEBelgeNavigation);
-const adminIndex = baseModules.findIndex((module) => module.key === "admin");
+const eBelgeModule = baseModules.find((module) => module.key === "isnet");
+const modulesWithoutEBelge = baseModules.filter((module) => module.key !== "isnet");
+const adminIndex = modulesWithoutEBelge.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
-      ...baseModules.slice(0, adminIndex),
+      ...modulesWithoutEBelge.slice(0, adminIndex),
+      ...(eBelgeModule ? [eBelgeModule] : []),
       DEPOLAMA_MODULE,
-      ...baseModules.slice(adminIndex),
+      ...modulesWithoutEBelge.slice(adminIndex),
     ]
-  : [...baseModules, DEPOLAMA_MODULE];
+  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), DEPOLAMA_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
