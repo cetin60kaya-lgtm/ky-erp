@@ -38,6 +38,15 @@ export const resolveEBelgeIssue = (id, issueId) =>
 export const getEBelgeCompanySuggestions = (q = "") =>
   apiGet("/e-belge/company-suggestions", { q }, { timeoutMs: 30_000 }).then(unwrap);
 
+export const getEBelgeProductSuggestions = (q = "") =>
+  apiGet("/e-belge/products", { q }, { timeoutMs: 30_000 }).then(unwrap);
+
+export const updateEBelgeLine = (documentId, lineId, payload) =>
+  apiPatch(`/e-belge/documents/${encodeURIComponent(documentId)}/lines/${encodeURIComponent(lineId)}`, payload).then(unwrap);
+
+export const saveEBelgeProductAlias = (productId, alias) =>
+  apiPost(`/e-belge/products/${encodeURIComponent(productId)}/aliases`, { alias }).then(unwrap);
+
 export const getEBelgeIntegrations = () =>
   apiGet("/e-belge/integrations", undefined, { timeoutMs: 30_000 }).then(unwrap);
 
