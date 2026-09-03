@@ -12,8 +12,7 @@ namespace KyPdks.Desktop;
 public partial class KyErpDesktopWindow : Window
 {
     private static readonly Uri AppUri = new("https://app.kyerp.net/");
-    private static readonly Uri BundledAppUri = new("http://localhost/index.html");
-    private const string BundledHost = "localhost";
+    private static readonly Uri BundledAppUri = new("https://app.kyerp.net/index.html");
     private const string FileHubTaskName = "KY ERP File Hub Agent";
 
     private readonly PdksPaths _pdksPaths = new();
@@ -71,7 +70,7 @@ public partial class KyErpDesktopWindow : Window
         var bundledIndex = Path.Combine(bundledRoot, "index.html");
         if (File.Exists(bundledIndex))
         {
-            core.SetVirtualHostNameToFolderMapping(BundledHost, bundledRoot, CoreWebView2HostResourceAccessKind.DenyCors);
+            core.SetVirtualHostNameToFolderMapping(AppUri.Host, bundledRoot, CoreWebView2HostResourceAccessKind.Allow);
             _bundledFrontend = true;
             StartupText.Text = "KY ERP Desktop açılıyor...";
         }
@@ -178,11 +177,8 @@ public partial class KyErpDesktopWindow : Window
     private static bool IsTrustedAppSource(string? source)
     {
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return false;
-        var liveApp = uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+        return uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
             && uri.Host.Equals(AppUri.Host, StringComparison.OrdinalIgnoreCase);
-        var bundledApp = uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
-            && uri.Host.Equals(BundledHost, StringComparison.OrdinalIgnoreCase);
-        return liveApp || bundledApp;
     }
 
     private async void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
