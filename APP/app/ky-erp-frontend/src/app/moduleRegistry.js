@@ -13,7 +13,7 @@ const DEPOLAMA_MODULE = {
       label: "Depolama Merkezi",
       tabs: [
         ["depolama-genel", "Genel Bakış", "dashboard"],
-        ["depolama-kaynaklar", "Bağlantılar", "dosya"],
+        ["depolama-kaynaklar", "Servisler", "dosya"],
         ["depolama-atamalar", "Bölüm / Dosya Atamaları", "file-check"],
       ],
     },
@@ -21,7 +21,7 @@ const DEPOLAMA_MODULE = {
       label: "Dosya ve Senkronizasyon",
       tabs: [
         ["depolama-dosyalar", "Dosya İndeksi", "dosya"],
-        ["depolama-senkronizasyon", "Senkronizasyon / Agent", "ayarlar"],
+        ["depolama-senkronizasyon", "Senkronizasyon", "ayarlar"],
         ["depolama-yedekleme", "Yedekleme / Loglar", "raporlar"],
       ],
     },
@@ -62,18 +62,46 @@ function withCompanyBilling(module) {
 
 function withEBelgeNavigation(module) {
   if (module.key !== "isnet") return module;
+  const newKeys = new Set([
+    "e-belge-genel","e-belge-gelen-faturalar","e-belge-giden-faturalar",
+    "e-belge-gelen-irsaliyeler","e-belge-giden-irsaliyeler","e-belge-yukleme",
+    "e-belge-eslestirmeler","e-belge-onay-sorunlar","e-belge-entegrasyonlar","e-belge-gecmis",
+  ]);
   const legacyTabs = [
     ...(module.groups || []).flatMap((group) => group.tabs || []),
     ...(module.hiddenTabs || []),
-  ].filter(([key], index, rows) => rows.findIndex(([otherKey]) => otherKey === key) === index);
+  ]
+    .filter(([key]) => !newKeys.has(key))
+    .filter(([key], index, rows) => rows.findIndex(([otherKey]) => otherKey === key) === index);
   return {
     ...module,
     label: "e-Belge Merkezi",
     icon: "dosya",
     groups: [
       {
-        label: "e-Belge Merkezi",
-        tabs: [["e-belge-merkezi", "e-Belge Merkezi", "dosya"]],
+        label: "Belge Yönetimi",
+        tabs: [
+          ["e-belge-genel", "Genel Bakış", "dashboard"],
+          ["e-belge-gelen-faturalar", "Gelen Faturalar", "dosya"],
+          ["e-belge-giden-faturalar", "Giden Faturalar", "dosya"],
+          ["e-belge-gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"],
+          ["e-belge-giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
+          ["e-belge-yukleme", "Belge Havuzu / Yükleme", "file-check"],
+        ],
+      },
+      {
+        label: "Kontrol",
+        tabs: [
+          ["e-belge-eslestirmeler", "Eşleştirmeler", "baglanti"],
+          ["e-belge-onay-sorunlar", "Onay / Sorunlar", "uyari"],
+        ],
+      },
+      {
+        label: "Sistem",
+        tabs: [
+          ["e-belge-entegrasyonlar", "Entegrasyonlar", "ayarlar"],
+          ["e-belge-gecmis", "Geçmiş / Arşiv", "raporlar"],
+        ],
       },
     ],
     hiddenTabs: legacyTabs,
@@ -100,14 +128,16 @@ export const MODULE_ROUTE_ALIASES = {
   },
   isnet: {
     ...(BASE_ROUTE_ALIASES.isnet || {}),
-    "e-belge": "e-belge-merkezi",
-    "belge-merkezi": "e-belge-merkezi",
-    "e-fatura": "e-belge-merkezi",
-    "e-irsaliye": "e-belge-merkezi",
+    "e-belge": "e-belge-genel",
+    "e-belge-merkezi": "e-belge-genel",
+    "belge-merkezi": "e-belge-genel",
+    "e-fatura": "e-belge-gelen-faturalar",
+    "e-irsaliye": "e-belge-gelen-irsaliyeler",
   },
   depolama: {
     genel: "depolama-genel",
     baglantilar: "depolama-kaynaklar",
+    servisler: "depolama-kaynaklar",
     kaynaklar: "depolama-kaynaklar",
     atamalar: "depolama-atamalar",
     yonlendirmeler: "depolama-atamalar",
@@ -131,9 +161,7 @@ export function normalizeModuleTabKey(module, tabKey) {
 export function getModuleGroups(module) {
   if (!module) return [];
   if (Array.isArray(module.groups) && module.groups.length) return module.groups;
-  if (Array.isArray(module.tabs) && module.tabs.length) {
-    return [{ label: "", tabs: module.tabs }];
-  }
+  if (Array.isArray(module.tabs) && module.tabs.length) return [{ label: "", tabs: module.tabs }];
   return [];
 }
 
