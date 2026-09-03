@@ -1,16 +1,15 @@
 -- KY ERP hizli muhasebe CI smoke verisi. Canliya uygulanmaz.
 
-UPDATE companies
-   SET customer_receivable_tracking=1,
-       supplier_debt_tracking=0,
-       payment_mode='CASH',
-       current_balance=12000,
-       fibe_enabled=1,
-       fibe_rate=10,
-       fibe_start_date='2026-08-01',
-       fibe_opening_accrual=0,
-       fibe_opening_paid=0
- WHERE id='company-isnet-customer';
+INSERT OR REPLACE INTO companies(
+  id,main_company_slug,name,normalized_name,company_type,type,tax_no,phone,email,is_active,
+  current_balance,supplier_debt_tracking,customer_receivable_tracking,payment_mode,
+  vat_tracking_enabled,default_record_type,fibe_enabled,fibe_rate,fibe_start_date,
+  fibe_opening_accrual,fibe_opening_paid,created_at,updated_at,deleted_at
+) VALUES(
+  'company-isnet-customer','mecit-hakan','SMOKE MÜŞTERİ','SMOKE MUSTERI','CUSTOMER','CUSTOMER','4444444444','','',1,
+  12000,0,1,'CASH',1,'RESMI',1,10,'2026-08-01',0,0,
+  '2026-09-01T08:00:00.000Z','2026-09-01T08:00:00.000Z',NULL
+);
 
 INSERT OR REPLACE INTO current_account_movements(
   id,main_company_slug,company_id,movement_date,movement_type,source_type,document_no,
