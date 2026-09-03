@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
 using KyPdks.Shared;
@@ -10,6 +12,7 @@ namespace KyPdks.Desktop;
 public partial class KyErpDesktopWindow : Window
 {
     private static readonly Uri AppUri = new("https://app.kyerp.net/");
+    private const string FileHubTaskName = "KY ERP File Hub Agent";
 
     private readonly PdksPaths _pdksPaths = new();
     private readonly ErpApiClient _erp = new();
@@ -105,11 +108,43 @@ public partial class KyErpDesktopWindow : Window
         (() => {
           document.documentElement.dataset.kyerpDesktopHost = '1';
           document.documentElement.dataset.kyerpDesktopVersion = '1.7.0';
+          const post = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
+
           window.KYERP_DESKTOP = Object.freeze({
             version: '1.7.0',
             isDesktop: true,
-            openPdksDevice: () => window.chrome?.webview?.postMessage(JSON.stringify({ type: 'pdks.open-device' }))
+            openPdksDevice: () => post({ type: 'pdks.open-device' }),
+            configureFileAgent: (secret, mainCompanySlug) => post({
+              type: 'file-hub.configure-agent',
+              secret: String(secret || ''),
+              mainCompanySlug: String(mainCompanySlug || '')
+            })
           });
+
+          if (!window.__kyerpDesktopFetchBridgeInstalled) {
+            window.__kyerpDesktopFetchBridgeInstalled = true;
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async (...args) => {
+              const response = await originalFetch(...args);
+              try {
+                const input = args[0];
+                const url = typeof input === 'string' ? input : String(input?.url || '');
+                if (response.ok && url.includes('/file-hub/agent-credential/rotate')) {
+                  response.clone().json().then(payload => {
+                    const data = payload?.data || payload || {};
+                    if (data.secret) {
+                      post({
+                        type: 'file-hub.configure-agent',
+                        secret: String(data.secret),
+                        mainCompanySlug: String(data.mainCompanySlug || '')
+                      });
+                    }
+                  }).catch(() => {});
+                }
+              } catch {}
+              return response;
+            };
+          }
           return true;
         })()
         """;
@@ -120,26 +155,47 @@ public partial class KyErpDesktopWindow : Window
         }
         catch
         {
-            // The ERP remains usable even if the optional native bridge cannot be injected.
+            // ERP remains usable even if an optional Windows bridge cannot be injected.
         }
     }
 
     private async void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        if (!IsTrustedAppSource(e.Source)) return;
+
         try
         {
             var raw = e.TryGetWebMessageAsString();
             if (string.IsNullOrWhiteSpace(raw)) return;
 
             using var doc = JsonDocument.Parse(raw);
-            var type = doc.RootElement.TryGetProperty("type", out var node) ? node.GetString() : null;
+            var root = doc.RootElement;
+            var type = root.TryGetProperty("type", out var node) ? node.GetString() : null;
+
             if (string.Equals(type, "pdks.open-device", StringComparison.OrdinalIgnoreCase))
+            {
                 await OpenNativePdksAsync();
+                return;
+            }
+
+            if (string.Equals(type, "file-hub.configure-agent", StringComparison.OrdinalIgnoreCase))
+            {
+                var secret = root.TryGetProperty("secret", out var secretNode) ? secretNode.GetString() ?? "" : "";
+                var slug = root.TryGetProperty("mainCompanySlug", out var slugNode) ? slugNode.GetString() ?? "" : "";
+                await ConfigureFileHubAgentAsync(secret, slug);
+            }
         }
         catch
         {
-            // Ignore malformed/unknown web messages. No native action is taken.
+            // Ignore malformed or unknown messages. No native action is taken.
         }
+    }
+
+    private static bool IsTrustedAppSource(string? source)
+    {
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+            && uri.Host.Equals(AppUri.Host, StringComparison.OrdinalIgnoreCase);
     }
 
     private async void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
@@ -149,6 +205,58 @@ public partial class KyErpDesktopWindow : Window
         e.Cancel = true;
         if (e.Uri.StartsWith("kyerp://pdks-device", StringComparison.OrdinalIgnoreCase))
             await OpenNativePdksAsync();
+    }
+
+    private async Task ConfigureFileHubAgentAsync(string secret, string mainCompanySlug)
+    {
+        secret = secret.Trim();
+        mainCompanySlug = mainCompanySlug.Trim().ToLocaleLowerInvariant();
+        if (secret.Length < 24) return;
+        if (!Regex.IsMatch(mainCompanySlug, "^[a-z0-9][a-z0-9._-]{1,100}$", RegexOptions.IgnoreCase)) return;
+
+        Environment.SetEnvironmentVariable("KYERP_AGENT_KEY", secret);
+        Environment.SetEnvironmentVariable("KYERP_API_URL", "https://api.kyerp.net");
+        Environment.SetEnvironmentVariable("KYERP_MAIN_COMPANY_SLUG", mainCompanySlug);
+        Environment.SetEnvironmentVariable("KYERP_AGENT_KEY", secret, EnvironmentVariableTarget.User);
+        Environment.SetEnvironmentVariable("KYERP_API_URL", "https://api.kyerp.net", EnvironmentVariableTarget.User);
+        Environment.SetEnvironmentVariable("KYERP_MAIN_COMPANY_SLUG", mainCompanySlug, EnvironmentVariableTarget.User);
+
+        await Task.Run(() =>
+        {
+            var taskReady = RunHidden("schtasks.exe", $"/Query /TN \"{FileHubTaskName}\"") == 0;
+            if (!taskReady)
+            {
+                var installScript = Path.Combine(AppContext.BaseDirectory, "FileAgent", "install-file-hub-agent.ps1");
+                if (File.Exists(installScript))
+                {
+                    RunHidden(
+                        "powershell.exe",
+                        $"-NoProfile -ExecutionPolicy Bypass -File \"{installScript}\" -TaskName \"{FileHubTaskName}\"");
+                }
+            }
+            RunHidden("schtasks.exe", $"/End /TN \"{FileHubTaskName}\"");
+            RunHidden("schtasks.exe", $"/Run /TN \"{FileHubTaskName}\"");
+        });
+    }
+
+    private static int RunHidden(string fileName, string arguments)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(fileName, arguments)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+            if (process is null) return -1;
+            process.WaitForExit(15_000);
+            return process.HasExited ? process.ExitCode : -1;
+        }
+        catch
+        {
+            return -1;
+        }
     }
 
     private async Task OpenNativePdksAsync()
@@ -171,8 +279,8 @@ public partial class KyErpDesktopWindow : Window
         {
             var profile = await _erp.GetPdksProfileAsync(token, _lifetime.Token);
             var audit = profile.Audit
-                || profile.Scope.Equals("AUDIT", StringComparison.OrdinalIgnoreCase)
-                || profile.Role.Equals("DENETIM", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
 
             if (_pdksPeople.Count == 0)
                 _pdksPeople = await _erp.GetPdksPeopleAsync(token, _lifetime.Token);
