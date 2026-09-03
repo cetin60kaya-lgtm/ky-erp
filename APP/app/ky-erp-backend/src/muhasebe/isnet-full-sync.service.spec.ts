@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as path from "node:path";
 import test from "node:test";
 import { IsnetFullSyncService } from "./isnet-full-sync.service";
 
@@ -75,6 +76,58 @@ test("tam senkronizasyon kalan belge sıfır olana kadar bütün partileri işle
   assert.equal(result.fullSync, true);
   assert.equal(result.supplierRouting.ok, true);
   assert.equal(saved.length, 1);
+});
+
+test("İşNet tedarikçi faturası e-Belge havuzuna alınır ama otomatik muhasebeleştirilmez", async () => {
+  const uploadCalls: any[] = [];
+  const operations = {
+    sync: async () => ({
+      automation: {
+        downloaded: 1,
+        processed: 1,
+        markedRead: 1,
+        newDocuments: 1,
+        remaining: 0,
+        errors: [],
+      },
+    }),
+  };
+  const prisma = {
+    isnetDocumentState: {
+      findMany: async () => [
+        {
+          documentNo: "FAT-TEST-1",
+          partnerName: "TEST TEDARIKCI",
+          xmlPath: path.join(process.cwd(), "package.json"),
+          pdfPath: "",
+        },
+      ],
+    },
+    document: { findFirst: async () => null },
+    currentAccountMovement: { findFirst: async () => null },
+    vatRecord: { findFirst: async () => null },
+    setting: { upsert: async () => ({}) },
+  };
+  const service = new IsnetFullSyncService(
+    prisma as any,
+    operations as any,
+    {
+      upload: async (_files: any[], body: any) => {
+        uploadCalls.push(body);
+        return { items: [{ id: "intake-1" }], skipped: [], errors: [] };
+      },
+    } as any,
+    smartMatchMock() as any,
+  );
+
+  const result = await service.run({ mainCompanySlug: "mecit-hakan" });
+
+  assert.equal(uploadCalls.length, 1);
+  assert.equal(uploadCalls[0].autoApprove, false);
+  assert.equal(uploadCalls[0].sourceProvider, "ISNET");
+  assert.equal(result.supplierAccounting.stagedForReview, 1);
+  assert.equal(result.supplierAccounting.imported, 0);
+  assert.equal(result.supplierAccounting.approvalMode, "MANUAL_REVIEW_REQUIRED");
 });
 
 test("senkronizasyon ilerlemiyorsa sonsuz döngü yerine güvenli hata verir", async () => {
