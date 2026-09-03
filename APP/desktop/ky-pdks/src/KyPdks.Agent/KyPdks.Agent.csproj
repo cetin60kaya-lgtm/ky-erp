@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>KyPdks.Agent</RootNamespace>
     <AssemblyName>KYERP.PDKS.Agent</AssemblyName>
-    <Version>1.7.1</Version>
-    <FileVersion>1.7.1.0</FileVersion>
-    <AssemblyVersion>1.7.1.0</AssemblyVersion>
+    <Version>1.7.2</Version>
+    <FileVersion>1.7.2.0</FileVersion>
+    <AssemblyVersion>1.7.2.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
