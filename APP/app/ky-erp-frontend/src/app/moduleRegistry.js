@@ -60,6 +60,20 @@ function withCompanyBilling(module) {
   return { ...module, groups };
 }
 
+function withLoginApprovals(module) {
+  if (module.key !== "admin") return module;
+  const approvalTab = ["giris-onaylari", "Giriş Onayları", "file-check"];
+  if ((module.groups || []).some((group) => (group.tabs || []).some(([key]) => key === approvalTab[0]))) return module;
+  const groups = (module.groups || []).map((group, groupIndex) => {
+    if (groupIndex !== 0) return group;
+    const tabs = [...(group.tabs || [])];
+    const usersIndex = tabs.findIndex(([key]) => key === "kullanicilar");
+    tabs.splice(usersIndex >= 0 ? usersIndex : tabs.length, 0, approvalTab);
+    return { ...group, tabs };
+  });
+  return { ...module, groups };
+}
+
 function withEBelgeNavigation(module) {
   if (module.key !== "isnet") return module;
   const legacyTabs = [
@@ -83,6 +97,7 @@ function withEBelgeNavigation(module) {
 const baseModules = BASE_MODULES
   .map(withoutStorageDuplicates)
   .map(withCompanyBilling)
+  .map(withLoginApprovals)
   .map(withEBelgeNavigation);
 const adminIndex = baseModules.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
@@ -97,6 +112,12 @@ export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
   muhasebe: {
     ...(BASE_ROUTE_ALIASES.muhasebe || {}),
+  },
+  admin: {
+    ...(BASE_ROUTE_ALIASES.admin || {}),
+    "giris-onay": "giris-onaylari",
+    onaylar: "giris-onaylari",
+    "bekleyen-girisler": "giris-onaylari",
   },
   isnet: {
     ...(BASE_ROUTE_ALIASES.isnet || {}),

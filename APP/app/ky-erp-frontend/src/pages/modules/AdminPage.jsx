@@ -1,6 +1,7 @@
 import { useAuth } from "../../context/AuthContext";
 import AdminSystemOverview from "../admin/AdminSystemOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
+import AdminLoginApprovals from "../admin/AdminLoginApprovals";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
 import AdminCompanyBilling from "../admin/AdminCompanyBilling";
@@ -25,6 +26,9 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   }
   if (activeTab === "uygulama-sahibi") {
     return owner ? <AdminOwnerSecurity /> : <AdminSystemOverview activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "giris-onaylari") {
+    return <AdminLoginApprovals />;
   }
   if (activeTab === "kullanicilar") {
     return <AdminUsersPanel activeMainCompany={activeMainCompany} />;
