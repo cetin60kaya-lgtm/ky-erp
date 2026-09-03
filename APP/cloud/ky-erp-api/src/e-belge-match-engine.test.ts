@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compareEBelgeProducts, reconcileEBelgeInvoice } from "./e-belge-match-engine";
+import { compareEBelgeProducts, reconcileEBelgeInvoice } from "./e-belge-match-engine.ts";
 
 const line = (id: string, description: string, quantity: number, productId = "", unitCode = "ADET") => ({
   id,
