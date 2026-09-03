@@ -69,10 +69,7 @@ public partial class KyErpDesktopWindow : Window
         var bundledIndex = Path.Combine(bundledRoot, "index.html");
         if (File.Exists(bundledIndex))
         {
-            core.SetVirtualHostNameToFolderMapping(
-                AppUri.Host,
-                bundledRoot,
-                CoreWebView2HostResourceAccessKind.Allow);
+            core.SetVirtualHostNameToFolderMapping(AppUri.Host, bundledRoot, CoreWebView2HostResourceAccessKind.Allow);
             _bundledFrontend = true;
             StartupText.Text = "KY ERP Desktop açılıyor...";
         }
@@ -109,7 +106,6 @@ public partial class KyErpDesktopWindow : Window
           document.documentElement.dataset.kyerpDesktopHost = '1';
           document.documentElement.dataset.kyerpDesktopVersion = '1.7.0';
           const post = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
-
           window.KYERP_DESKTOP = Object.freeze({
             version: '1.7.0',
             isDesktop: true,
@@ -120,7 +116,6 @@ public partial class KyErpDesktopWindow : Window
               mainCompanySlug: String(mainCompanySlug || '')
             })
           });
-
           if (!window.__kyerpDesktopFetchBridgeInstalled) {
             window.__kyerpDesktopFetchBridgeInstalled = true;
             const originalFetch = window.fetch.bind(window);
@@ -149,35 +144,25 @@ public partial class KyErpDesktopWindow : Window
         })()
         """;
 
-        try
-        {
-            await ErpWebView.CoreWebView2.ExecuteScriptAsync(script);
-        }
-        catch
-        {
-            // ERP remains usable even if an optional Windows bridge cannot be injected.
-        }
+        try { await ErpWebView.CoreWebView2.ExecuteScriptAsync(script); }
+        catch { }
     }
 
     private async void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         if (!IsTrustedAppSource(e.Source)) return;
-
         try
         {
             var raw = e.TryGetWebMessageAsString();
             if (string.IsNullOrWhiteSpace(raw)) return;
-
             using var doc = JsonDocument.Parse(raw);
             var root = doc.RootElement;
             var type = root.TryGetProperty("type", out var node) ? node.GetString() : null;
-
             if (string.Equals(type, "pdks.open-device", StringComparison.OrdinalIgnoreCase))
             {
                 await OpenNativePdksAsync();
                 return;
             }
-
             if (string.Equals(type, "file-hub.configure-agent", StringComparison.OrdinalIgnoreCase))
             {
                 var secret = root.TryGetProperty("secret", out var secretNode) ? secretNode.GetString() ?? "" : "";
@@ -185,10 +170,7 @@ public partial class KyErpDesktopWindow : Window
                 await ConfigureFileHubAgentAsync(secret, slug);
             }
         }
-        catch
-        {
-            // Ignore malformed or unknown messages. No native action is taken.
-        }
+        catch { }
     }
 
     private static bool IsTrustedAppSource(string? source)
@@ -201,7 +183,6 @@ public partial class KyErpDesktopWindow : Window
     private async void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (!e.Uri.StartsWith("kyerp://", StringComparison.OrdinalIgnoreCase)) return;
-
         e.Cancel = true;
         if (e.Uri.StartsWith("kyerp://pdks-device", StringComparison.OrdinalIgnoreCase))
             await OpenNativePdksAsync();
@@ -210,7 +191,7 @@ public partial class KyErpDesktopWindow : Window
     private async Task ConfigureFileHubAgentAsync(string secret, string mainCompanySlug)
     {
         secret = secret.Trim();
-        mainCompanySlug = mainCompanySlug.Trim().ToLocaleLowerInvariant();
+        mainCompanySlug = mainCompanySlug.Trim().ToLowerInvariant();
         if (secret.Length < 24) return;
         if (!Regex.IsMatch(mainCompanySlug, "^[a-z0-9][a-z0-9._-]{1,100}$", RegexOptions.IgnoreCase)) return;
 
@@ -228,11 +209,7 @@ public partial class KyErpDesktopWindow : Window
             {
                 var installScript = Path.Combine(AppContext.BaseDirectory, "FileAgent", "install-file-hub-agent.ps1");
                 if (File.Exists(installScript))
-                {
-                    RunHidden(
-                        "powershell.exe",
-                        $"-NoProfile -ExecutionPolicy Bypass -File \"{installScript}\" -TaskName \"{FileHubTaskName}\"");
-                }
+                    RunHidden("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{installScript}\" -TaskName \"{FileHubTaskName}\"");
             }
             RunHidden("schtasks.exe", $"/End /TN \"{FileHubTaskName}\"");
             RunHidden("schtasks.exe", $"/Run /TN \"{FileHubTaskName}\"");
@@ -253,42 +230,27 @@ public partial class KyErpDesktopWindow : Window
             process.WaitForExit(15_000);
             return process.HasExited ? process.ExitCode : -1;
         }
-        catch
-        {
-            return -1;
-        }
+        catch { return -1; }
     }
 
     private async Task OpenNativePdksAsync()
     {
         if (ErpWebView.CoreWebView2 is null) return;
-
         var token = await ReadTokenAsync();
         if (string.IsNullOrWhiteSpace(token))
         {
-            MessageBox.Show(
-                this,
-                "Önce KY ERP oturumunu açın. Kart cihazı aynı ERP oturumunu kullanır.",
-                "KY ERP Desktop",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            MessageBox.Show(this, "Önce KY ERP oturumunu açın. Kart cihazı aynı ERP oturumunu kullanır.", "KY ERP Desktop", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-
         try
         {
             var profile = await _erp.GetPdksProfileAsync(token, _lifetime.Token);
             var audit = profile.Audit
                 || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
-
             if (_pdksPeople.Count == 0)
                 _pdksPeople = await _erp.GetPdksPeopleAsync(token, _lifetime.Token);
-
-            new PdksUnifiedWindow(token, _pdksPeople, _pdksPaths, !audit)
-            {
-                Owner = this
-            }.ShowDialog();
+            new PdksUnifiedWindow(token, _pdksPeople, _pdksPaths, !audit) { Owner = this }.ShowDialog();
         }
         catch (Exception error)
         {
@@ -300,14 +262,10 @@ public partial class KyErpDesktopWindow : Window
     {
         try
         {
-            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync(
-                "localStorage.getItem('kyerp_auth_token') || ''");
+            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync("localStorage.getItem('kyerp_auth_token') || ''");
             return JsonSerializer.Deserialize<string>(result) ?? "";
         }
-        catch
-        {
-            return "";
-        }
+        catch { return ""; }
     }
 
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -318,18 +276,13 @@ public partial class KyErpDesktopWindow : Window
             e.Handled = true;
             return;
         }
-
         if (e.Key == Key.Left && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
-            if (ErpWebView.CoreWebView2?.CanGoBack == true)
-                ErpWebView.CoreWebView2.GoBack();
+            if (ErpWebView.CoreWebView2?.CanGoBack == true) ErpWebView.CoreWebView2.GoBack();
             e.Handled = true;
             return;
         }
-
-        if (e.Key == Key.P
-            && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)
-            && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        if (e.Key == Key.P && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
             await OpenNativePdksAsync();
             e.Handled = true;
