@@ -3,7 +3,7 @@ import { Bell, ChevronDown, Command, Menu, Plus, Search, X } from "lucide-react"
 import { ErpIcon } from "../components/erp/IconMap";
 import "../styles/shell-v3.css";
 
-const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme"]);
+const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler"]);
 
 function isOwnerUser(user) {
   return ["SUPER_ADMIN", "ADMIN"].includes(String(user?.role || "").toUpperCase().replace(/İ/g, "I"));

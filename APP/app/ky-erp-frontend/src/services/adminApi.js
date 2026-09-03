@@ -32,7 +32,17 @@ export async function generateBackupSql(id, payload = {}) { return unwrap(await 
 export async function downloadBackupSql(id, fileName = "KYERP-firma-yedek.sql") { return downloadFile(`/admin/backups/${encodeURIComponent(id)}/sql/download`, undefined, fileName); }
 
 // Normal Kullanıcılar ekranı uygulama sahibini bilinçli olarak içermez.
-export async function listUsers() { return withoutApplicationOwner(unwrap(await apiGet("/admin/managed-users", { _ts: Date.now() }))); }
+// Uygulama sahibi zengin /managed-users kaynağını kullanır; COMPANY_ADMIN bu
+// owner-only kaynağa erişemezse tenant-sınırlı /admin/users kaynağına düşer.
+export async function listUsers() {
+  try {
+    return withoutApplicationOwner(unwrap(await apiGet("/admin/managed-users", { _ts: Date.now() })));
+  } catch (error) {
+    const status = Number(error?.status || error?.response?.status || 0);
+    if (![401, 403, 404, 405].includes(status)) throw error;
+    return withoutApplicationOwner(unwrap(await apiGet("/admin/users", { _ts: Date.now() })));
+  }
+}
 export async function getApplicationOwner() { return unwrap(await apiGet("/admin/security/application-owner", { _ts: Date.now() })); }
 
 export async function createUser(payload = {}) {
