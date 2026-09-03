@@ -655,7 +655,7 @@ export function registerOperationsBridgeRoutes(app: Hono<AppEnv>) {
         503,
       );
     }
-    const operationId = `operations:hr:${idempotencyKey}`;
+    const operationId = `operations:hr:${auth.companySlug}:${idempotencyKey}`;
     const prior = await operationAlreadyProcessed(c, operationId, auth.companySlug);
     if (prior) {
       return c.json({
@@ -939,7 +939,7 @@ export function registerOperationsBridgeRoutes(app: Hono<AppEnv>) {
         503,
       );
     }
-    const operationId = `operations:accounting:${idempotencyKey}`;
+    const operationId = `operations:accounting:${auth.companySlug}:${idempotencyKey}`;
     const prior = await operationAlreadyProcessed(c, operationId, auth.companySlug);
     if (prior) {
       return c.json({
