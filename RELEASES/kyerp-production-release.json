@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-03T05:54:19+03:00",
-  "attempt": 84,
+  "requestedAt": "2026-09-03T06:45:34+03:00",
+  "attempt": 85,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -43,13 +43,22 @@
     "company-billing-owner-only",
     "company-billing-append-only-ledger",
     "company-billing-provider-usage-metering",
-    "company-billing-monthly-hard-limit",
+    "billing-duration-monthly-6m-12m",
+    "billing-calendar-month-end-clamp",
+    "billing-no-token-hard-limit",
+    "billing-term-extension",
     "company-billing-custom-pricing",
     "file-hub-provider-neutral",
     "file-hub-tenant-isolation",
     "file-hub-agent-tenant-credentials-0039",
     "file-hub-agent-secret-hash-at-rest",
     "file-hub-agent-canonical-legacy-transition",
+    "storage-center-ui-final",
+    "storage-provider-map-health",
+    "storage-binding-coverage",
+    "storage-file-index-final",
+    "storage-agent-credential-console",
+    "storage-backup-logs-preserved",
     "accounting-document-canonical-core",
     "accounting-document-pool",
     "accounting-document-intelligence",
@@ -69,9 +78,9 @@
     "frontend-real-browser-smoke",
     "cloudflare-worker-production",
     "cloudflare-pages-production",
-    "combined-pr50-pr52-final"
+    "pr57-duration-billing-storage-ui-final"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "bf3a1664d9c6a473dfbdbb337e1461f1b0de5c26",
-  "note": "03.09.2026 attempt 84. PR #50 ve PR #52 production source'a kontrollu olarak alindi. Birlesik production HEAD uzerinde D1 Schema Readiness ve Production Source Validation tamamen yesil: Worker typecheck/test/build, frontend dependency audit/lint/test/build ve production security contract basarili. Firma AI paket/token/ucretlendirme 0038, PDKS tenant/terminal merkezi ve File Hub tenant-agent guvenligi 0039 final kapsamdadir. Windows preflight/migration yolu ile GitHub production workflow hedefli 0030-0039 zincirinde esitlendi. Canli yayin tam D1 yedegi, hedefli idempotent migration ve sema dogrulama sonrasinda Worker + Pages sirasi ile yapilir; D1 reset yoktur."
+  "sourceCommit": "3b744b15f8c69fa09b9a42197c7a4093a37cf000",
+  "note": "03.09.2026 attempt 85. PR #57 production source'a alindi. Firma paket yonetimi Aylik / 6 Aylik / 12 Aylik takvim suresi modeline gecirildi; ay sonu hesaplari guvenli bicimde son gune sabitlenir. AI input/output/toplam token yalniz teknik maliyet ve kullanim telemetrisi olarak tutulur, token miktari firma uygulama/AI erisimini kapatmaz. +7/+30/+90 ve ozel gun sure uzatma append-only hareket olarak kaydedilir. Depolama Merkezi eski kopuk admin-* gorunumunden mevcut admpro tasarim sistemine tasindi; Genel Bakis, Baglantilar, Bolum/Dosya Atamalari, Dosya Indeksi, Senkronizasyon/Agent ekranlari yeniden duzenlendi ve mevcut Yedekleme/Loglar korundu. Yeni D1 migration yoktur; mevcut 0038/0039 semasi ve veriler korunur. PR ve merge sonrasi API Contract, D1 Schema Readiness, Production Source Validation ve gercek Chrome runtime smoke tamamen yesildir. Canli yayin tam D1 yedegi, hedefli idempotent 0030-0039 sema dogrulama, Worker ve Pages sirasi ile yapilir; D1 reset yoktur."
 }
