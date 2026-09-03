@@ -1,5 +1,5 @@
 #define MyAppName "KY ERP Desktop"
-#define MyAppVersion "1.7.1"
+#define MyAppVersion "1.7.2"
 #define MyPublisher "KY ERP"
 #define Dist GetEnv("KY_PDKS_DIST")
 #define SetupOut GetEnv("KY_PDKS_SETUP_OUT")
@@ -9,7 +9,7 @@ AppId={{7B558935-8DD5-4D1F-9A62-A1D79EE27C10}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
-VersionInfoVersion=1.7.1.0
+VersionInfoVersion=1.7.2.0
 VersionInfoCompany={#MyPublisher}
 VersionInfoDescription=KY ERP Desktop • tam KY ERP + File Hub + AI + İK/PDKS Windows çalışma merkezi
 AppPublisher={#MyPublisher}
