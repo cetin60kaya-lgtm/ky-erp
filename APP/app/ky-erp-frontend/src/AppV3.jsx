@@ -17,6 +17,7 @@ const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "ur
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
 const IsnetPage = lazyWithRetry(() => import("./pages/modules/IsnetPage"), "isnet-v3");
+const EBelgeCenterPage = lazyWithRetry(() => import("./pages/modules/muhasebe/EBelgeCenterPage"), "e-belge-center-v1");
 const MuhasebeSmartMatchPage = lazyWithRetry(() => import("./pages/modules/muhasebe/MuhasebeSmartMatchPage"), "muhasebe-smart-match-v1");
 const IsnetManagementCenterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetManagementCenterPage"), "isnet-management-center-v1");
 const IsnetDocumentCenterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetDocumentCenterPage"), "isnet-document-center-v1");
@@ -39,6 +40,7 @@ const MODULE_LOADERS = {
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
   isnet: () => Promise.all([
+    import("./pages/modules/muhasebe/EBelgeCenterPage"),
     import("./pages/modules/IsnetPage"),
     import("./pages/modules/isnet/IsnetManagementCenterPage"),
     import("./pages/modules/isnet/IsnetDocumentCenterPage"),
@@ -262,6 +264,7 @@ export default function AppV3() {
     if (activeModule?.key === "muhasebe" && activeTab === "envanter-urunleri") return <MuhasebeSmartMatchPage {...sharedProps} />;
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
 
+    if (activeModule?.key === "isnet" && activeTab === "e-belge-merkezi") return <EBelgeCenterPage {...sharedProps} />;
     if (activeModule?.key === "isnet" && activeTab === "yonetim-merkezi") return <IsnetManagementCenterPage {...sharedProps} />;
     if (activeModule?.key === "isnet" && activeTab === "belge-akisi") return <IsnetDocumentCenterPage {...sharedProps} />;
     if (activeModule?.key === "isnet" && activeTab === "irsaliyeden-faturaya" && moduleActionContext?.targetModule === "isnet" && moduleActionContext?.targetTab === "irsaliyeden-faturaya" && moduleActionContext?.invoiceDraft && moduleActionContext?.sourceId) {

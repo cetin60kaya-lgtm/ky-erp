@@ -61,17 +61,23 @@ function withCompanyBilling(module) {
 }
 
 function withEBelgeNavigation(module) {
-  if (module.key === "isnet") {
-    return { ...module, label: "e-Belge Entegrasyonları" };
-  }
-  if (module.key !== "muhasebe") return module;
-  const tab = ["e-belge-merkezi", "e-Belge Merkezi", "dosya"];
-  const groups = (module.groups || []).map((group) => {
-    if (group.label !== "Fatura ve Belge") return group;
-    if ((group.tabs || []).some(([key]) => key === tab[0])) return group;
-    return { ...group, tabs: [tab, ...(group.tabs || [])] };
-  });
-  return { ...module, groups };
+  if (module.key !== "isnet") return module;
+  const legacyTabs = [
+    ...(module.groups || []).flatMap((group) => group.tabs || []),
+    ...(module.hiddenTabs || []),
+  ].filter(([key], index, rows) => rows.findIndex(([otherKey]) => otherKey === key) === index);
+  return {
+    ...module,
+    label: "e-Belge Merkezi",
+    icon: "dosya",
+    groups: [
+      {
+        label: "e-Belge Merkezi",
+        tabs: [["e-belge-merkezi", "e-Belge Merkezi", "dosya"]],
+      },
+    ],
+    hiddenTabs: legacyTabs,
+  };
 }
 
 const baseModules = BASE_MODULES
@@ -91,6 +97,9 @@ export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
   muhasebe: {
     ...(BASE_ROUTE_ALIASES.muhasebe || {}),
+  },
+  isnet: {
+    ...(BASE_ROUTE_ALIASES.isnet || {}),
     "e-belge": "e-belge-merkezi",
     "belge-merkezi": "e-belge-merkezi",
     "e-fatura": "e-belge-merkezi",
