@@ -16,8 +16,50 @@ export async function getPdksPeople() {
   return unwrap(await apiGet("/ik/personnel-control/people"));
 }
 
+// Modern attendance motoru: vardiya, Cumartesi/Pazar, yarım gün tatil, izin günü,
+// duplicate punch, tolerans ve mesai hesabını tek server cevabında döndürür.
 export async function getPdksAttendance(employeeId, year, month) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance-v2`, { year, month }));
+}
+
+export async function getPdksLegacyAttendance(employeeId, year, month) {
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance`, { year, month }));
+}
+
+export async function getPdksLiveDashboard(params = {}) {
+  return unwrap(await apiGet("/ik/personnel-control/dashboard-live", params));
+}
+
+export async function getPdksModernConfig(params = {}) {
+  return unwrap(await apiGet("/ik/personnel-control/modern/config", params));
+}
+
+export async function savePdksModernConfig(payload = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/modern/config", payload));
+}
+
+export async function savePdksWorkGroupRules(groupId, payload = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/work-groups/${encodeURIComponent(groupId)}/rules`, payload));
+}
+
+export async function previewPdksLeaveV2(payload = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/leaves/preview-v2", payload));
+}
+
+export async function savePdksLeaveV2(payload = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/leaves/save-v2", payload));
+}
+
+export async function getPdksLeaveEntitlement(employeeId, params = {}) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/leave-entitlement`, params));
+}
+
+export async function savePdksCorrection(employeeId, payload = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/correction`, payload));
+}
+
+export async function getPdksCorrections(employeeId, params = {}) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/corrections`, params));
 }
 
 export async function getPdksPersonPhotoBlob(employeeId) {

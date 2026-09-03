@@ -7,46 +7,57 @@ const PDKS_MODULE = {
   icon: "takvim",
   groups: [
     {
-      label: "PDKS İşlemleri",
+      label: "Günlük Operasyon",
       tabs: [
-        ["ana-ekran", "Ana Ekran", "dashboard"],
-        ["bilgi-aktar", "Bilgi Aktar", "dosya"],
+        ["ana-ekran", "Canlı Geçişler", "dashboard"],
+        ["bilgi-aktar", "Kart / Terminal Aktarımı", "dosya"],
         ["giris-cikislar", "Giriş / Çıkışlar", "takvim"],
-        ["personel-bilgileri", "Personel Bilgileri", "users"],
         ["puantaj", "Puantaj", "takvim"],
         ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
-        ["izinler", "İzinler", "takvim"],
-        ["bordro", "Bordro", "odemeler"],
-        ["avanslar", "Avanslar", "odemeler"],
-        ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
       ],
     },
     {
-      label: "Tanımlar",
+      label: "Personel & İK Bağlantısı",
+      tabs: [
+        ["personel-bilgileri", "Personel İşlemleri", "users"],
+        ["izinler", "İzinler", "takvim"],
+        ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+        ["avanslar", "Avans", "odemeler"],
+        ["bordro", "Bordro", "odemeler"],
+      ],
+    },
+    {
+      label: "Vardiya & Kurallar",
       tabs: [
         ["gruplar-vardiyalar", "Gruplar / Vardiyalar", "ayarlar"],
         ["puantaj-kurallari", "Puantaj Kuralları", "ayarlar"],
-        ["donemler", "Dönemler", "takvim"],
-        ["bolumler", "Bölümler", "users"],
-        ["gorevler", "Görevler", "users"],
+        ["donemler", "Dönemler / Kapanış", "takvim"],
         ["servisler", "Servisler", "users"],
-        ["durumlar", "Durumlar", "file-check"],
-        ["firmalar", "Firmalar", "firma-kartlari"],
-        ["tatiller", "Tatiller", "takvim"],
+        ["tatiller", "Resmî Tatil Takvimi", "takvim"],
       ],
     },
     {
-      label: "Terminal ve Sistem",
+      label: "Terminal & Sistem",
       tabs: [
         ["saat-terminal", "Saat / Terminal", "ayarlar"],
-        ["kullanicilar", "Kullanıcılar", "users"],
-        ["raporlar", "Raporlar", "raporlar"],
+        ["cihaz-baglantilari", "Cihaz Bağlantıları", "ayarlar"],
+        ["senkron", "Senkronizasyon", "sync"],
       ],
     },
     {
-      label: "Denetim",
-      tabs: [["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"]],
+      label: "Rapor & Denetim",
+      tabs: [
+        ["raporlar", "Raporlar", "raporlar"],
+        ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
+      ],
     },
+  ],
+  hiddenTabs: [
+    ["kullanicilar", "Kullanıcı Yetkileri (Yönetim)", "users"],
+    ["bolumler", "Bölümler (İK ana kaynak)", "users"],
+    ["gorevler", "Görevler (İK ana kaynak)", "users"],
+    ["durumlar", "Durumlar (İK ana kaynak)", "file-check"],
+    ["firmalar", "Firmalar (Yönetim ana kaynak)", "firma-kartlari"],
   ],
 };
 
@@ -57,6 +68,7 @@ if (!MODULES.some((item) => item.key === "pdks")) {
 
 MODULE_ROUTE_ALIASES.pdks = {
   "genel-bakis": "ana-ekran",
+  "canli-gecisler": "ana-ekran",
   "bilgi-aktarimi": "bilgi-aktar",
   "giris-cikis": "giris-cikislar",
   "personel": "personel-bilgileri",
@@ -71,6 +83,8 @@ MODULE_ROUTE_ALIASES.pdks = {
   "calisma-gruplari": "gruplar-vardiyalar",
   "terminal": "saat-terminal",
   "saat": "saat-terminal",
+  "cihazlar": "cihaz-baglantilari",
+  "sync": "senkron",
   "denetim": "denetim-yillik-temp",
   "temp": "denetim-yillik-temp",
 };

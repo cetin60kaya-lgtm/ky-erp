@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
+import PdksLiveHome from "../pdks/PdksLiveHome";
+import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
+import PdksReportCenter from "../pdks/PdksReportCenter";
+import PdksRulesCenter from "../pdks/PdksRulesCenter";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
@@ -72,6 +76,14 @@ const AUDIT_ALLOWED_TABS = new Set([
   "calisma-tarihi",
   "raporlar",
   "denetim-yillik-temp",
+]);
+
+const PERSONNEL_DESK_TABS = new Set([
+  "personel-bilgileri",
+  "giris-cikislar",
+  "puantaj",
+  "izinler",
+  "calisma-tarihi",
 ]);
 
 function groupForTab(tabKey, groups) {
@@ -161,6 +173,9 @@ export default function PdksPage(props) {
   };
   const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const deviceCenterTab = !isAuditAccount && ["cihaz-baglantilari", "senkron"].includes(activeTab);
+  const personnelDeskTab = !isAuditAccount && PERSONNEL_DESK_TABS.has(activeTab);
+  const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
+  const reportCenterTab = !isAuditAccount && ["puantaj-sonuclari", "raporlar"].includes(activeTab);
 
   return (
     <div className="pdks-module-shell">
@@ -206,8 +221,16 @@ export default function PdksPage(props) {
       </nav>
 
       <main className="pdks-module-content">
-        {deviceCenterTab ? (
+        {activeTab === "ana-ekran" && !isAuditAccount ? (
+          <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
+        ) : deviceCenterTab ? (
           <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+        ) : personnelDeskTab ? (
+          <PdksPersonnelDesk {...props} />
+        ) : rulesCenterTab ? (
+          <PdksRulesCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+        ) : reportCenterTab ? (
+          <PdksReportCenter activeMainCompany={activeMainCompany} />
         ) : (
           <>
             <QuickAssistant disabled={isAuditAccount} mainCompanyId={mainCompanyId} />
