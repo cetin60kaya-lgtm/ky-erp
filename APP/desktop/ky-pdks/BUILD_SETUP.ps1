@@ -42,7 +42,7 @@ if ($DeclaredVersion -ne $Version) { throw "VERSION uyuşmuyor. Beklenen=$Versio
 
 $DesktopWindowSource = Join-Path $Root 'src\KyPdks.Desktop\KyErpDesktopWindow.xaml.cs'
 $DesktopWindowText = Get-Content $DesktopWindowSource -Raw
-if ($DesktopWindowText -notmatch 'http://localhost/index\.html') { throw 'Desktop bundled origin localhost/index.html değil.' }
+if ($DesktopWindowText -notmatch 'https://app\.kyerp\.net/index\.html') { throw 'Desktop bundled origin canonical app.kyerp.net/index.html değil.' }
 if ($DesktopWindowText -notmatch "kyerpDesktopVersion = '1\.7\.2'") { throw 'Desktop bridge sürümü 1.7.2 değil.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
@@ -116,8 +116,8 @@ $Hash = (Get-FileHash $Setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 $BuildInfo = [ordered]@{
     product = 'KY ERP Desktop'
     productScope = 'FULL_ERP_DESKTOP'
-    frontendMode = 'CANONICAL_WEB_UI_BUNDLED_LOCALHOST_LIVE_API'
-    frontendOrigin = 'http://localhost'
+    frontendMode = 'CANONICAL_WEB_UI_BUNDLED_CANONICAL_ORIGIN_LIVE_API'
+    frontendOrigin = 'https://app.kyerp.net'
     liveApi = 'https://api.kyerp.net'
     version = $Version
     setup = $Setup.Name
