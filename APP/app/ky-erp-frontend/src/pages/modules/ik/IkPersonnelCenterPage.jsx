@@ -14,6 +14,7 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   UserRound,
   Users,
   X,
@@ -27,6 +28,7 @@ import {
   getIkControlPerson,
   getIkControlProfile,
   saveIkControlChanges,
+  removeIkControlPerson,
   saveIkDayOverride,
 } from "../../../services/ikPersonnelControlApi";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
@@ -47,6 +49,19 @@ function formatDate(value) {
   const raw = String(value || "").slice(0, 10);
   const [y, m, d] = raw.split("-");
   return y && m && d ? `${d}.${m}.${y}` : "-";
+}
+
+function isPassivePerson(person = {}) {
+  const status = String(person.status || person.activePassive || "").trim().toLocaleUpperCase("tr-TR");
+  return status === "PASIF" || status === "PASİF" || status === "PASSIVE";
+}
+
+function nextPersonnelCode(rows = []) {
+  const max = rows.reduce((current, person) => {
+    const match = String(person.personnelCode || person.code || "").toLocaleUpperCase("tr-TR").match(/^HKN-?(\d+)$/);
+    return match ? Math.max(current, Number(match[1])) : current;
+  }, 0);
+  return `HKN-${String(max + 1).padStart(2, "0")}`;
 }
 
 function statusLabel(value) {
@@ -92,10 +107,15 @@ function Stat({ label, value, sub, icon: Icon }) {
   return <article className="ikpc-stat">{Icon ? <Icon size={20} /> : null}<span><small>{label}</small><strong>{value}</strong><em>{sub}</em></span></article>;
 }
 
-function PersonList({ rows, selectedId, onSelect, query, setQuery }) {
+function PersonList({ rows, selectedId, onSelect, query, setQuery, statusView, setStatusView }) {
   return (
     <aside className="ikpc-list">
-      <label className="ikpc-search"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Personel, kart no, görev ara" /></label>
+      <label className="ikpc-search"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Personel, HKN kodu, kart no, görev ara" /></label>
+      <select className="ikpc-status-filter" value={statusView} onChange={(e) => setStatusView(e.target.value)}>
+        <option value="ACTIVE">Aktif personel</option>
+        <option value="PASSIVE">Pasif personel</option>
+        <option value="ALL">Tüm personel</option>
+      </select>
       <div className="ikpc-list-count">{rows.length} personel</div>
       <div className="ikpc-list-scroll">
         {rows.map((person) => (
@@ -118,6 +138,7 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
   const [detail, setDetail] = useState(null);
   const [attendance, setAttendance] = useState(null);
   const [query, setQuery] = useState("");
+  const [statusView, setStatusView] = useState("ACTIVE");
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [editing, setEditing] = useState(false);
@@ -150,7 +171,11 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
     if (result.states.people.status !== "error") {
       const list = Array.isArray(result.data.people) ? result.data.people : [];
       setPeople(list);
-      setSelectedId((current) => list.some((row) => row.id === current) ? current : list[0]?.id || "");
+      setSelectedId((current) => {
+        const currentRow = list.find((row) => row.id === current);
+        if (currentRow && !isPassivePerson(currentRow)) return current;
+        return list.find((row) => !isPassivePerson(row))?.id || list[0]?.id || "";
+      });
     }
     setError(moduleLoadMessage(result, "Personel ana listesi alınamadı; son başarılı liste korunuyor.", "Yetki profili yenilenemedi; personel listesi kullanılabilir."));
   }, [companyKey]);
@@ -190,9 +215,15 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
 
   const visiblePeople = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("tr-TR");
-    if (!needle) return people;
-    return people.filter((person) => `${person.fullName} ${person.cardNo} ${person.personnelCode} ${person.department} ${person.title}`.toLocaleLowerCase("tr-TR").includes(needle));
-  }, [people, query]);
+    return people.filter((person) => {
+      const passive = isPassivePerson(person);
+      if (statusView === "ACTIVE" && passive) return false;
+      if (statusView === "PASSIVE" && !passive) return false;
+      if (!needle) return true;
+      return `${person.fullName} ${person.cardNo} ${person.personnelCode} ${person.department} ${person.title}`
+        .toLocaleLowerCase("tr-TR").includes(needle);
+    });
+  }, [people, query, statusView]);
 
   const selected = detail?.person || null;
   const summary = attendance?.summary || {};
@@ -223,6 +254,53 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
         : "Personel değişikliği tarihli geçmiş kaydıyla kaydedildi.");
     } catch (cause) { setError(cause?.message || "Değişiklik kaydedilemedi."); }
     finally { setBusy(false); }
+  };
+
+  const openNewPerson = () => {
+    setNewPerson({
+      fullName: "",
+      personnelCode: nextPersonnelCode(people),
+      cardNo: "",
+      department: "",
+      title: "",
+      sgkStatus: "VAR",
+      startDate: TODAY,
+      salary: 0,
+      roadAllowance: 0,
+      annualLeaveEntitlement: 14,
+    });
+    setNewOpen(true);
+    setError("");
+    setNotice("");
+  };
+
+  const removePerson = async (mode) => {
+    if (!selected || auditMode) return;
+    const hard = mode === "HARD";
+    const approved = typeof window !== "undefined" && window.confirm(
+      hard
+        ? `${selected.fullName} personel kaydı KALICI olarak silinecek. Bu seçenek yalnız yanlış veya mükerrer açılan kayıtlar içindir. Silinsin mi?`
+        : `${selected.fullName} pasife alınacak. Geçmiş kayıtları korunacak ve aktif listede görünmeyecek. Pasife alınsın mı?`,
+    );
+    if (!approved) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await removeIkControlPerson(selected.id, {
+        mode,
+        confirmName: selected.fullName,
+        reason: hard ? "Yanlış veya mükerrer açılan personel kaydı" : "Personel kullanıcı onayıyla pasife alındı",
+        mainCompanyId: companyKey,
+      });
+      setEditing(false);
+      setDetail(null);
+      setAttendance(null);
+      setStatusView("ACTIVE");
+      setSelectedId("");
+      await loadPeople();
+      setNotice(hard ? "Personel kaydı kalıcı olarak silindi." : "Personel pasife alındı ve aktif listeden çıkarıldı.");
+    } catch (cause) {
+      setError(cause?.message || (hard ? "Personel kalıcı silinemedi." : "Personel pasife alınamadı."));
+    } finally { setBusy(false); }
   };
 
   const createPerson = async () => {
@@ -281,7 +359,7 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
     <div className="ikpc-page">
       <header className="ikpc-header">
         <div><span>{auditMode ? "DENETİM GÖRÜNÜMÜ" : "İK PERSONEL MERKEZİ"}</span><h1>{auditMode ? "Personel Denetim ve Puantaj" : "Personel Kartı ve Çalışma Geçmişi"}</h1><p>{auditMode ? "Yalnız SGK'lı ve kart numarası bulunan personel gösterilir. Günlük/haftalık personel bu görünümde yoktur." : "Personel bilgileri, maaş geçmişi, kart numarası, giriş-çıkış saatleri ve puantaj tek kişide birleşir."}</p></div>
-        {!auditMode ? <button type="button" className="ikpc-primary" onClick={() => setNewOpen((v) => !v)}><Plus size={17} /> Yeni Personel</button> : <span className="ikpc-audit-badge"><ShieldCheck size={17} /> Salt okunur</span>}
+        {!auditMode ? <button type="button" className="ikpc-primary" onClick={() => newOpen ? setNewOpen(false) : openNewPerson()}><Plus size={17} /> {newOpen ? "Yeni Kaydı Kapat" : "Yeni Personel"}</button> : <span className="ikpc-audit-badge"><ShieldCheck size={17} /> Salt okunur</span>}
       </header>
 
       {notice ? <div className="ikpc-notice"><BadgeCheck size={17} />{notice}</div> : null}
@@ -292,7 +370,7 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
           <div className="ikpc-section-head"><h2><Plus size={18} /> Yeni Personel</h2><button type="button" onClick={() => setNewOpen(false)}><X size={16} /> Kapat</button></div>
           <div className="ikpc-form-grid four">
             <Field label="Ad soyad"><input value={newPerson.fullName} onChange={(e) => setNewPerson({ ...newPerson, fullName: e.target.value })} /></Field>
-            <Field label="Personel kodu"><input value={newPerson.personnelCode} onChange={(e) => setNewPerson({ ...newPerson, personnelCode: e.target.value })} /></Field>
+            <Field label="Personel kodu"><input value={newPerson.personnelCode} readOnly placeholder="HKN-01" /></Field>
             <Field label="Kart no"><input value={newPerson.cardNo} onChange={(e) => setNewPerson({ ...newPerson, cardNo: e.target.value })} placeholder="00057" /></Field>
             <Field label="İşe giriş"><input type="date" value={newPerson.startDate} onChange={(e) => setNewPerson({ ...newPerson, startDate: e.target.value })} /></Field>
             <Field label="Departman"><input value={newPerson.department} onChange={(e) => setNewPerson({ ...newPerson, department: e.target.value })} /></Field>
@@ -307,13 +385,13 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
       ) : null}
 
       <div className="ikpc-layout">
-        <PersonList rows={visiblePeople} selectedId={selectedId} onSelect={setSelectedId} query={query} setQuery={setQuery} />
+        <PersonList rows={visiblePeople} selectedId={selectedId} onSelect={setSelectedId} query={query} setQuery={setQuery} statusView={statusView} setStatusView={setStatusView} />
         <main className="ikpc-main">
           {!selected ? <div className="ikpc-empty"><Users size={42} /><h2>Personel seçin</h2></div> : (
             <>
               <section className="ikpc-profile-head">
                 <div className="ikpc-profile"><b>{initials(selected.fullName)}</b><span><small>{selected.personnelCode || "Personel"}</small><h2>{selected.fullName}</h2><p>{selected.department || "Departman yok"} · {selected.title || "Görev yok"}</p></span></div>
-                {!auditMode ? <div className="ikpc-actions">{editing ? <><button type="button" onClick={() => { setEditing(false); setDraft({ ...selected }); }}><X size={16} /> Vazgeç</button><button type="button" className="ikpc-primary" disabled={busy} onClick={saveEdit}><Save size={16} /> Kaydet</button></> : <button type="button" onClick={startEdit}><Pencil size={16} /> Düzenle</button>}</div> : null}
+                {!auditMode ? <div className="ikpc-actions">{editing ? <><button type="button" onClick={() => { setEditing(false); setDraft({ ...selected }); }}><X size={16} /> Vazgeç</button><button type="button" className="ikpc-primary" disabled={busy} onClick={saveEdit}><Save size={16} /> Kaydet</button></> : <><button type="button" onClick={startEdit}><Pencil size={16} /> Düzenle</button><button type="button" className="ikpc-passive-btn" disabled={busy || isPassivePerson(selected)} onClick={() => removePerson("PASSIVE")}>Pasife Al</button><button type="button" className="ikpc-danger-btn" disabled={busy} onClick={() => removePerson("HARD")}><Trash2 size={16} /> Kalıcı Sil</button></>}</div> : null}
               </section>
 
               <div className="ikpc-stats">
