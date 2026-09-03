@@ -43,6 +43,10 @@ const IsnetPage = lazyWithRetry(
   () => import("./pages/modules/IsnetPage"),
   "isnet",
 );
+const EBelgeCenterPage = lazyWithRetry(
+  () => import("./pages/modules/muhasebe/EBelgeCenterPage"),
+  "e-belge-center",
+);
 const AiAssistantPage = lazyWithRetry(
   () => import("./pages/modules/AiAssistantPage"),
   "asistan",
@@ -55,7 +59,7 @@ const MODULE_LOADERS = {
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
-  isnet: () => import("./pages/modules/IsnetPage"),
+  isnet: () => Promise.all([import("./pages/modules/IsnetPage"), import("./pages/modules/muhasebe/EBelgeCenterPage")]),
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
 
@@ -374,6 +378,7 @@ export default function App() {
       return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule === "isnet") {
+      if (activeTab === "e-belge-merkezi") return <EBelgeCenterPage {...sharedProps} />;
       return <IsnetPage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule === "asistan") {

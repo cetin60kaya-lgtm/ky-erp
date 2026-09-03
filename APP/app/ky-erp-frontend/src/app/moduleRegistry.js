@@ -5,9 +5,6 @@ import {
 
 const DEPOLAMA_MODULE = {
   key: "depolama",
-  // AuthContext gives SUPER_ADMIN/ADMIN every module key automatically, while
-  // COMPANY_ADMIN is special-cased only for the literal ADMIN key. Using a
-  // dedicated owner-only key keeps Depolama aligned with File Hub backend guards.
   permissionKey: "STORAGE_ADMIN",
   label: "Depolama",
   icon: "dosya",
@@ -63,7 +60,30 @@ function withCompanyBilling(module) {
   return { ...module, groups };
 }
 
-const baseModules = BASE_MODULES.map(withoutStorageDuplicates).map(withCompanyBilling);
+function withEBelgeNavigation(module) {
+  if (module.key !== "isnet") return module;
+  const legacyTabs = [
+    ...(module.groups || []).flatMap((group) => group.tabs || []),
+    ...(module.hiddenTabs || []),
+  ].filter(([key], index, rows) => rows.findIndex(([otherKey]) => otherKey === key) === index);
+  return {
+    ...module,
+    label: "e-Belge Merkezi",
+    icon: "dosya",
+    groups: [
+      {
+        label: "e-Belge Merkezi",
+        tabs: [["e-belge-merkezi", "e-Belge Merkezi", "dosya"]],
+      },
+    ],
+    hiddenTabs: legacyTabs,
+  };
+}
+
+const baseModules = BASE_MODULES
+  .map(withoutStorageDuplicates)
+  .map(withCompanyBilling)
+  .map(withEBelgeNavigation);
 const adminIndex = baseModules.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
@@ -75,6 +95,16 @@ export const MODULES = adminIndex >= 0
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
+  muhasebe: {
+    ...(BASE_ROUTE_ALIASES.muhasebe || {}),
+  },
+  isnet: {
+    ...(BASE_ROUTE_ALIASES.isnet || {}),
+    "e-belge": "e-belge-merkezi",
+    "belge-merkezi": "e-belge-merkezi",
+    "e-fatura": "e-belge-merkezi",
+    "e-irsaliye": "e-belge-merkezi",
+  },
   depolama: {
     genel: "depolama-genel",
     baglantilar: "depolama-kaynaklar",
@@ -130,17 +160,10 @@ export function findTab(module, tabKey) {
 }
 
 export function getInitialRoute(pathname) {
-  const resolvedPathname =
-    pathname ??
-    (typeof window !== "undefined" ? window.location.pathname : "/");
-  const [requestedModuleKey, requestedTabKey] = resolvedPathname
-    .split("/")
-    .filter(Boolean);
+  const resolvedPathname = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "/");
+  const [requestedModuleKey, requestedTabKey] = resolvedPathname.split("/").filter(Boolean);
   const module = findModule(requestedModuleKey) || MODULES[0];
   const normalizedTabKey = normalizeModuleTabKey(module, requestedTabKey);
   const tab = findTab(module, normalizedTabKey);
-  return {
-    moduleKey: module.key,
-    tabKey: tab?.[0] || getDefaultTabKey(module),
-  };
+  return { moduleKey: module.key, tabKey: tab?.[0] || getDefaultTabKey(module) };
 }
