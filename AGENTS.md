@@ -2,6 +2,14 @@
 
 Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntılı eski iş kuralları referans için `DOCS/AGENTS_RULES_BASE_PRE_STORAGE_20260902.md` dosyasında korunur. Çelişki halinde **bu dosya** geçerlidir; özellikle eski OneDrive/SQLite/path notları canonical değildir.
 
+## Zorunlu proje devam kaydı
+
+- Her yeni sohbet, yeni ajan, yeni feature branch veya kaldığı yerden devam eden KY ERP işinde **kod yazmadan önce** `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` okunmalıdır.
+- Bu dosya (`AGENTS.md`) teknik/güvenlik kurallarında üstündür; `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` ise kullanıcının güncel kararları, aktif branch/PR, kontrol sonucu, önemli gelişmeler ve sonraki adım için tek devam merkezidir.
+- Aktif feature branch üzerinde bu kontrol dosyasının production branch'ten daha yeni sürümü varsa aktif iş için o sürüm kullanılır; kullanıcı onayından sonra ilgili değişiklikler production kaynağına taşınır.
+- Kullanıcının kalıcı çalışma kuralı, önemli mimari karar, kullanıcı tarafından doğrulanan Desktop sürümü, modül onayı, blocker veya production'a geçiş kararı oluştuğunda kontrol merkezi güncellenmelidir.
+- Şifre, MFA secret, API key, token veya kişisel gizli bilgiler kontrol merkezine yazılmaz.
+
 ## Canonical kaynak
 
 - Repo: `cetin60kaya-lgtm/ky-erp`
