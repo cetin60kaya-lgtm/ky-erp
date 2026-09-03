@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
+import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
@@ -159,6 +160,7 @@ export default function PdksPage(props) {
     openModule?.("pdks", { tabKey });
   };
   const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
+  const deviceCenterTab = !isAuditAccount && ["cihaz-baglantilari", "senkron"].includes(activeTab);
 
   return (
     <div className="pdks-module-shell">
@@ -204,8 +206,14 @@ export default function PdksPage(props) {
       </nav>
 
       <main className="pdks-module-content">
-        <QuickAssistant disabled={isAuditAccount} mainCompanyId={mainCompanyId} />
-        <PdksPageV2 {...props} />
+        {deviceCenterTab ? (
+          <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+        ) : (
+          <>
+            <QuickAssistant disabled={isAuditAccount} mainCompanyId={mainCompanyId} />
+            <PdksPageV2 {...props} />
+          </>
+        )}
       </main>
     </div>
   );
