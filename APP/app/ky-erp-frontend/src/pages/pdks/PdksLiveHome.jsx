@@ -48,7 +48,7 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const metrics = data?.metrics || {};
+  const metrics = useMemo(() => data?.metrics || {}, [data]);
   const cards = useMemo(() => [
     ["Bugün Devamsız", metrics.absent || 0, "bad", "⊘", "raporlar"],
     ["Geç Kalan", metrics.late || 0, "warn", "◷", "raporlar"],
