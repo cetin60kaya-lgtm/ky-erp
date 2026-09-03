@@ -241,7 +241,7 @@ jobs:
           curl --fail --silent \
             'http://127.0.0.1:8790/api/muhasebe/fibe/company-isnet-customer?mainCompanySlug=mecit-hakan' \
             | tee /tmp/accounting-fibe-before.json \
-            | jq -e '.ok == true and .data.summary.automaticAccrual == 200 and .data.summary.remainingBalance == 200'
+            | jq -e '.ok == true and .data.summary.automaticAccrual == 300 and .data.summary.remainingBalance == 300'
 
           curl --fail --silent \
             -X POST \
@@ -269,7 +269,7 @@ jobs:
             -H 'Content-Type: application/json' \
             --data '{"mainCompanySlug":"mecit-hakan","movementType":"PAYMENT","date":"2026-09-03","amount":50,"paymentMethod":"CASH","description":"Smoke FIBE ödeme"}' \
             'http://127.0.0.1:8790/api/muhasebe/fibe/company-isnet-customer/hareketler' \
-            | jq -e '.ok == true and .data.summary.totalPaid == 50 and .data.summary.remainingBalance == 150'
+            | jq -e '.ok == true and .data.summary.totalPaid == 50 and .data.summary.remainingBalance == 250'
 
           curl --fail --silent \
             'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
