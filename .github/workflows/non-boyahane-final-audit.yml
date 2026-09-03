@@ -7,6 +7,8 @@ on:
       - "APP/cloud/ky-erp-api/src/accounting-*.ts"
       - "APP/cloud/ky-erp-api/migrations/0008_hr_relational_bootstrap.sql"
       - "APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql"
+      - "APP/cloud/ky-erp-api/local-accounting-quick-smoke.sql"
+      - "APP/cloud/ky-erp-api/local-accounting-quick-smoke-seed.sql"
       - "APP/app/ky-erp-frontend/src/main.jsx"
       - "APP/app/ky-erp-frontend/src/AppV3.jsx"
       - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
@@ -155,7 +157,14 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: |
           rm -rf .local-shared-audit
-          for sql in local-production-center.sql local-boyahane-inventory.sql local-isnet-cloud.sql migrations/0008_hr_relational_bootstrap.sql migrations/0040_accounting_fibe_company_tracking.sql; do
+          for sql in \
+            local-production-center.sql \
+            local-boyahane-inventory.sql \
+            local-isnet-cloud.sql \
+            migrations/0008_hr_relational_bootstrap.sql \
+            local-accounting-quick-smoke.sql \
+            migrations/0040_accounting_fibe_company_tracking.sql \
+            local-accounting-quick-smoke-seed.sql; do
             npx wrangler d1 execute ky-erp-production-local \
               --local \
               --config wrangler.production-local.jsonc \
@@ -193,9 +202,49 @@ jobs:
           curl --fail --silent \
             'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan' \
             | jq -e '.ok == true'
+
           curl --fail --silent \
-            'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan' \
-            | jq -e '.ok == true and .data.summary != null'
+            'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
+            | tee /tmp/accounting-week-before.json \
+            | jq -e '.ok == true and .data.summary.normalReceivable == 12000'
+
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/muhasebe/fibe/company-isnet-customer?mainCompanySlug=mecit-hakan' \
+            | tee /tmp/accounting-fibe-before.json \
+            | jq -e '.ok == true and .data.summary.automaticAccrual == 200 and .data.summary.remainingBalance == 200'
+
+          curl --fail --silent \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","transactionType":"COLLECTION","amount":2000,"date":"2026-09-03","paymentMethod":"CASH","recordType":"GAYRI_RESMI","description":"Smoke elden tahsilat"}' \
+            'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hareket' \
+            | jq -e '.ok == true and .data.balanceAfter == 10000'
+
+          curl --fail --silent \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' \
+            'http://127.0.0.1:8790/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' \
+            | jq -e '.ok == true and .data.balanceAfter == 8500 and .data.idempotent == false'
+
+          curl --fail --silent \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' \
+            'http://127.0.0.1:8790/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' \
+            | jq -e '.ok == true and .data.idempotent == true'
+
+          curl --fail --silent \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"mainCompanySlug":"mecit-hakan","movementType":"PAYMENT","date":"2026-09-03","amount":50,"paymentMethod":"CASH","description":"Smoke FIBE ödeme"}' \
+            'http://127.0.0.1:8790/api/muhasebe/fibe/company-isnet-customer/hareketler' \
+            | jq -e '.ok == true and .data.summary.totalPaid == 50 and .data.summary.remainingBalance == 150'
+
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
+            | tee /tmp/accounting-week-after.json \
+            | jq -e '.ok == true and .data.summary.normalReceivable == 8500 and .data.summary.cashOutgoing == 50'
 
           curl --silent --show-error -D /tmp/cors-local.headers -o /dev/null \
             -X OPTIONS \
