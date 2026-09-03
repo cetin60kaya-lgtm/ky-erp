@@ -30,7 +30,15 @@ function monthWindow(date = new Date()) {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 function safeIso(value: unknown, fallback: string) { const raw = text(value); if (!raw) return fallback; const parsed = new Date(raw); return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString(); }
-function addCalendarMonths(value: string, months: number) { const d = new Date(value); d.setUTCMonth(d.getUTCMonth() + months); return d.toISOString(); }
+function addCalendarMonths(value: string, months: number) {
+  const d = new Date(value);
+  const originalDay = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(originalDay, lastDay));
+  return d.toISOString();
+}
 function addCalendarDays(value: string, days: number) { const d = new Date(value); d.setUTCDate(d.getUTCDate() + days); return d.toISOString(); }
 function daysRemaining(end: string) { const diff = Date.parse(end) - Date.now(); return Math.max(0, Math.ceil(diff / 86_400_000)); }
 function packageCodeOf(value: unknown) { const code = upper(value); return PACKAGE_TERMS[code] ? code : "MONTHLY"; }
