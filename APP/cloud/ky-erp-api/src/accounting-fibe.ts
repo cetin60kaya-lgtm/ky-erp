@@ -189,6 +189,26 @@ async function movementsOf(c: Context<AppEnv>, slug: string, companyId: string, 
   return result.results || [];
 }
 
+function fibeLedgerType(movementType: string) {
+  switch (movementType) {
+    case "PAYMENT": return "FIBE_ODEME";
+    case "PAYMENT_REVERSAL": return "FIBE_ODEME_IPTAL";
+    case "ACCRUAL": return "FIBE_HAKEDIS";
+    case "ACCRUAL_REVERSAL": return "FIBE_HAKEDIS_IPTAL";
+    default: return "FIBE_HAREKET";
+  }
+}
+
+function fibeDescription(movementType: string) {
+  switch (movementType) {
+    case "PAYMENT": return "FİBE ödemesi";
+    case "PAYMENT_REVERSAL": return "FİBE ödeme düzeltmesi";
+    case "ACCRUAL": return "FİBE ek hakediş";
+    case "ACCRUAL_REVERSAL": return "FİBE hakediş düzeltmesi";
+    default: return "FİBE hareketi";
+  }
+}
+
 async function insertInternalLedger(c: Context<AppEnv>, input: {
   slug: string;
   company: Row;
@@ -202,12 +222,7 @@ async function insertInternalLedger(c: Context<AppEnv>, input: {
   createdBy: string;
 }) {
   if (!(await tableExists(c, "accounting_ledger_entries"))) return "";
-  const ledgerType = {
-    PAYMENT: "FIBE_ODEME",
-    PAYMENT_REVERSAL: "FIBE_ODEME_IPTAL",
-    ACCRUAL: "FIBE_HAKEDIS",
-    ACCRUAL_REVERSAL: "FIBE_HAKEDIS_IPTAL",
-  }[input.movementType] || "FIBE_HAREKET";
+  const ledgerType = fibeLedgerType(input.movementType);
   const ledgerId = crypto.randomUUID();
   const ts = nowIso();
   const isPayment = input.movementType === "PAYMENT";
@@ -296,12 +311,7 @@ export function registerAccountingFibeRoutes(app: Hono<AppEnv>) {
 
     const movementId = crypto.randomUUID();
     const ts = nowIso();
-    const description = text(body.description) || {
-      PAYMENT: "FİBE ödemesi",
-      PAYMENT_REVERSAL: "FİBE ödeme düzeltmesi",
-      ACCRUAL: "FİBE ek hakediş",
-      ACCRUAL_REVERSAL: "FİBE hakediş düzeltmesi",
-    }[movementType] || "FİBE hareketi";
+    const description = text(body.description) || fibeDescription(movementType);
     const note = text(body.note);
     const createdBy = text(body.createdBy || body.actor);
 
