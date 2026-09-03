@@ -1,52 +1,76 @@
 import { useAuth } from "../../context/AuthContext";
 import AdminSystemOverview from "../admin/AdminSystemOverview";
+import AdminCompanyOverview from "../admin/AdminCompanyOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
 import AdminLoginApprovals from "../admin/AdminLoginApprovals";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
+import AdminCompanyUsersPanel from "../admin/AdminCompanyUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
+import AdminCompanyAuthority from "../admin/AdminCompanyAuthority";
 import AdminCompanyBilling from "../admin/AdminCompanyBilling";
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminMappings from "../admin/AdminMappings";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
 import DepolamaPage from "./DepolamaPage";
 
+function canonicalRole(role) {
+  return String(role || "").toUpperCase().replace(/İ/g, "I");
+}
+
 function isOwnerRole(role) {
-  return ["SUPER_ADMIN", "ADMIN"].includes(String(role || "").toUpperCase().replace(/İ/g, "I"));
+  return ["SUPER_ADMIN", "ADMIN"].includes(canonicalRole(role));
 }
 
 export default function AdminPage({ activeTab, activeMainCompany }) {
   const { user } = useAuth();
   const owner = isOwnerRole(user?.role);
+  const companyAdmin = canonicalRole(user?.role) === "COMPANY_ADMIN";
 
   if (String(activeTab || "").startsWith("depolama-")) {
-    return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+    return owner
+      ? <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />
+      : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "admin-yonetim-ozeti") {
-    return <AdminSystemOverview activeMainCompany={activeMainCompany} />;
+    return owner
+      ? <AdminSystemOverview activeMainCompany={activeMainCompany} />
+      : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "uygulama-sahibi") {
-    return owner ? <AdminOwnerSecurity /> : <AdminSystemOverview activeMainCompany={activeMainCompany} />;
+    return owner ? <AdminOwnerSecurity /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "giris-onaylari") {
     return <AdminLoginApprovals />;
   }
   if (activeTab === "kullanicilar") {
-    return <AdminUsersPanel activeMainCompany={activeMainCompany} />;
+    return owner
+      ? <AdminUsersPanel activeMainCompany={activeMainCompany} />
+      : <AdminCompanyUsersPanel activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "ana-firma-ayarlar") {
-    return <AdminCompanySettings activeMainCompany={activeMainCompany} />;
+    if (owner) {
+      return <>
+        <AdminCompanySettings activeMainCompany={activeMainCompany} />
+        <div style={{ height: 16 }} />
+        <AdminCompanyAuthority activeMainCompany={activeMainCompany} />
+      </>;
+    }
+    if (companyAdmin) return <AdminCompanyAuthority activeMainCompany={activeMainCompany} />;
+    return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "firma-ucretlendirme") {
-    return owner ? <AdminCompanyBilling activeMainCompany={activeMainCompany} /> : <AdminSystemOverview activeMainCompany={activeMainCompany} />;
+    return owner ? <AdminCompanyBilling activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "dosya-klasor-yonetimi") {
-    return <AdminStorageCenter activeMainCompany={activeMainCompany} />;
+    return owner ? <AdminStorageCenter activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "eslestirmeler") {
-    return <AdminMappings activeMainCompany={activeMainCompany} />;
+    return owner ? <AdminMappings activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "yedekleme-loglar") {
-    return <AdminBackupLogs activeMainCompany={activeMainCompany} />;
+    return owner ? <AdminBackupLogs activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
-  return <AdminSystemOverview activeMainCompany={activeMainCompany} />;
+  return owner
+    ? <AdminSystemOverview activeMainCompany={activeMainCompany} />
+    : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
 }
