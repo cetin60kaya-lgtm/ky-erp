@@ -1,412 +1,57 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiGet, apiPatch, apiPost } from "../../utils/api";
 import "./AdminManagement.css";
+import "./AdminStorageCenter.css";
 
-const PROVIDERS = ["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT", "LOCAL_FOLDER", "NAS"];
-const MODULES = ["DESEN", "IMALAT", "BOYAHANE", "MUHASEBE", "ISNET", "IK", "DTF", "STOK"];
-const PURPOSES = [
-  "MODEL_IMAGE",
-  "MODEL_SOURCE",
-  "PLACEMENT",
-  "OUTGOING_DESIGN",
-  "RIP_PDF",
-  "INVOICE",
-  "DELIVERY_NOTE",
-  "E_DOCUMENT",
-  "PAYMENT_DOCUMENT",
-  "PERSONNEL_DOCUMENT",
-  "CONTRACT",
-  "RECIPE",
-  "TECHNICAL_SHEET",
-  "QUALITY",
-  "PRODUCTION_PHOTO",
-  "QUALITY_PHOTO",
-  "CUSTOMER_REFERENCE",
-  "GENERIC",
-];
+const PROVIDERS=["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT","LOCAL_FOLDER","NAS"];
+const MODULES=["DESEN","IMALAT","BOYAHANE","MUHASEBE","ISNET","IK","DTF","STOK"];
+const PURPOSES=["MODEL_IMAGE","MODEL_SOURCE","PLACEMENT","OUTGOING_DESIGN","RIP_PDF","INVOICE","DELIVERY_NOTE","E_DOCUMENT","PAYMENT_DOCUMENT","PERSONNEL_DOCUMENT","CONTRACT","RECIPE","TECHNICAL_SHEET","QUALITY","PRODUCTION_PHOTO","QUALITY_PHOTO","CUSTOMER_REFERENCE","GENERIC"];
+const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-atamalar":"bindings","depolama-dosyalar":"files","depolama-senkronizasyon":"events"};
+const emptyConnection={providerType:"GOOGLE_DRIVE",name:"",localRootPath:"",remoteRootId:"",remoteRootName:"",syncMode:"AGENT",isActive:true,isPrimary:false};
+const emptyBinding={moduleCode:"DESEN",purposeCode:"MODEL_IMAGE",storageConnectionId:"",rootPath:"",readEnabled:true,writeEnabled:true,syncEnabled:true};
+const providerLabel=value=>({GOOGLE_DRIVE:"Google Drive",ONEDRIVE:"Microsoft OneDrive",SHAREPOINT:"Microsoft SharePoint",LOCAL_FOLDER:"Yerel Klasör",NAS:"NAS / Ağ Klasörü"})[value]||value||"-";
+const providerHint=value=>({GOOGLE_DRIVE:"Google Drive Desktop senkron kökü",ONEDRIVE:"OneDrive Windows senkron kökü",SHAREPOINT:"SharePoint / OneDrive senkron klasörü",LOCAL_FOLDER:"Bu bilgisayardaki yerel klasör",NAS:"Sunucu veya ağ paylaşımı"})[value]||"Depolama kaynağı";
+const purposeLabel=value=>({MODEL_IMAGE:"Desen / Model Görseli",MODEL_SOURCE:"Kaynak Dosya (PSD / AI / TIFF)",PLACEMENT:"Yerleşim / Kalıp Dosyası",OUTGOING_DESIGN:"Giden Desen / Takım",RIP_PDF:"DTF / RIP PDF",INVOICE:"Fatura",DELIVERY_NOTE:"İrsaliye",E_DOCUMENT:"E-Belge / İşNet",PAYMENT_DOCUMENT:"Ödeme / Dekont / Çek",PERSONNEL_DOCUMENT:"Personel Evrakı",CONTRACT:"Sözleşme",RECIPE:"Reçete",TECHNICAL_SHEET:"Teknik Föy",QUALITY:"Kalite Belgesi",PRODUCTION_PHOTO:"Üretim Fotoğrafı",QUALITY_PHOTO:"Kalite Fotoğrafı",CUSTOMER_REFERENCE:"Müşteri Referansı",GENERIC:"Genel Ek / Diğer"})[value]||value||"-";
+const moduleLabel=value=>({DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",MUHASEBE:"Muhasebe",ISNET:"İşNet",IK:"İK",DTF:"DTF",STOK:"Stok"})[value]||value||"-";
+const statusLabel=value=>({AVAILABLE:"Mevcut",MISSING:"Kaynakta Yok",CONNECTED:"Bağlı",SCANNING:"Taranıyor",ERROR:"Hata",UNKNOWN:"Bekliyor",ONLINE:"Çevrimiçi",OFFLINE:"Çevrimdışı"})[value]||value||"-";
+const formatDate=value=>value?new Date(value).toLocaleString("tr-TR"):"-";
+const formatBytes=value=>{const n=Number(value||0);if(n<1024)return`${n} B`;if(n<1048576)return`${(n/1024).toFixed(1)} KB`;if(n<1073741824)return`${(n/1048576).toFixed(1)} MB`;return`${(n/1073741824).toFixed(2)} GB`};
+const online=value=>Boolean(value)&&Date.now()-new Date(value).getTime()<5*60*1000;
+const eventLabel=value=>({DISCOVERED:"Yeni dosya bulundu",UPDATED:"Dosya güncellendi",SEEN:"Dosya doğrulandı",MISSING:"Dosya kaynakta yok",PREVIEW_READY:"Önizleme hazır",CONNECTION_CREATED:"Bağlantı oluşturuldu",CONNECTION_UPDATED:"Bağlantı güncellendi",BINDING_SAVED:"Dosya ataması kaydedildi",AGENT_CREDENTIAL_ROTATED:"Agent anahtarı yenilendi"})[value]||value||"Sistem olayı";
 
-const ROUTE_TO_TAB = {
-  "depolama-genel": "overview",
-  "depolama-kaynaklar": "connections",
-  "depolama-atamalar": "bindings",
-  "depolama-dosyalar": "files",
-  "depolama-senkronizasyon": "events",
-};
+export default function AdminStorageCenter({activeMainCompany,activeTab,showToolbar=true}){
+ const[tab,setTab]=useState(ROUTE_TO_TAB[activeTab]||"overview"),[overview,setOverview]=useState({}),[connections,setConnections]=useState([]),[bindings,setBindings]=useState([]),[files,setFiles]=useState([]),[credential,setCredential]=useState(null),[newSecret,setNewSecret]=useState(null),[connectionForm,setConnectionForm]=useState(emptyConnection),[bindingForm,setBindingForm]=useState(emptyBinding),[editingConnectionId,setEditingConnectionId]=useState(""),[search,setSearch]=useState(""),[statusFilter,setStatusFilter]=useState(""),[loading,setLoading]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
+ const slug=activeMainCompany?.slug||"mecit-hakan";
+ const tenantParams=useMemo(()=>({mainCompanySlug:slug}),[slug]);
+ useEffect(()=>{const mapped=ROUTE_TO_TAB[activeTab];if(mapped)setTab(mapped)},[activeTab]);
+ const refresh=useCallback(async()=>{setLoading(true);setError("");try{const[o,c,b,f,cred]=await Promise.all([apiGet("/file-hub/overview",tenantParams),apiGet("/file-hub/connections",tenantParams),apiGet("/file-hub/bindings",tenantParams),apiGet("/file-hub/files",{...tenantParams,q:search||undefined,status:statusFilter||undefined,take:300}),apiGet("/file-hub/agent-credential",tenantParams).catch(()=>null)]);setOverview(o?.data||{});setConnections(c?.data||[]);setBindings(b?.data||[]);setFiles(f?.data||[]);setCredential(cred?.data||null)}catch(e){setError(e?.message||"Depolama Merkezi yüklenemedi.")}finally{setLoading(false)}},[search,statusFilter,tenantParams]);
+ useEffect(()=>{refresh()},[refresh]);
+ useEffect(()=>{setBindingForm(current=>({...current,storageConnectionId:current.storageConnectionId||connections.find(x=>x.isActive)?.id||""}))},[connections]);
+ const activeConnections=useMemo(()=>connections.filter(x=>x.isActive),[connections]);
+ const onlineAgents=useMemo(()=>(overview.agents||[]).filter(row=>online(row.last_seen_at)),[overview.agents]);
+ const moduleCoverage=useMemo(()=>MODULES.map(code=>({code,count:bindings.filter(row=>row.module_code===code).length})),[bindings]);
+ const providerCounts=useMemo(()=>Object.fromEntries(PROVIDERS.map(provider=>[provider,connections.filter(row=>row.provider_type===provider).length])),[connections]);
+ const setupSteps=[{ok:activeConnections.length>0,title:"1. Kaynak",detail:activeConnections.length?`${activeConnections.length} aktif depolama kaynağı`:"Google / Microsoft / Yerel / NAS ekleyin"},{ok:bindings.length>0,title:"2. Atama",detail:bindings.length?`${bindings.length} bölüm-dosya ataması`:"Bölümlerin dosya hedefini seçin"},{ok:onlineAgents.length>0,title:"3. Agent",detail:onlineAgents.length?`${onlineAgents.length} agent çevrimiçi`:"Windows Agent heartbeat bekleniyor"},{ok:Number(overview.fileCount||0)>0,title:"4. İndeks",detail:Number(overview.fileCount||0)>0?`${overview.fileCount} dosya izleniyor`:"İlk tarama sonrası otomatik dolar"}];
 
-const emptyConnection = {
-  providerType: "GOOGLE_DRIVE",
-  name: "",
-  localRootPath: "",
-  remoteRootId: "",
-  remoteRootName: "",
-  syncMode: "AGENT",
-  isActive: true,
-  isPrimary: false,
-};
-const emptyBinding = {
-  moduleCode: "DESEN",
-  purposeCode: "MODEL_IMAGE",
-  storageConnectionId: "",
-  rootPath: "",
-  readEnabled: true,
-  writeEnabled: true,
-  syncEnabled: true,
-};
+ async function saveConnection(event){event.preventDefault();setError("");setMessage("");try{if(!connectionForm.name.trim())throw new Error("Bağlantı adı zorunludur.");if(!connectionForm.localRootPath.trim()&&connectionForm.syncMode==="AGENT")throw new Error("Agent bağlantısında Windows / senkron kökü zorunludur.");const payload={...connectionForm,mainCompanySlug:slug};if(editingConnectionId)await apiPatch(`/file-hub/connections/${editingConnectionId}`,payload);else await apiPost("/file-hub/connections",payload);setMessage(editingConnectionId?"Depolama bağlantısı güncellendi.":"Depolama bağlantısı eklendi.");setEditingConnectionId("");setConnectionForm(emptyConnection);await refresh()}catch(e){setError(e?.message||"Bağlantı kaydedilemedi.")}}
+ function editConnection(row){setEditingConnectionId(row.id);setConnectionForm({providerType:row.provider_type,name:row.name||"",localRootPath:row.local_root_path||"",remoteRootId:row.remote_root_id||"",remoteRootName:row.remote_root_name||"",syncMode:row.sync_mode||"AGENT",isActive:row.isActive!==false,isPrimary:Boolean(row.isPrimary)});setTab("connections")}
+ async function saveBinding(event){event.preventDefault();setError("");setMessage("");try{if(!bindingForm.storageConnectionId)throw new Error("Depolama kaynağı seçin.");await apiFetch("/file-hub/bindings",{method:"PUT",body:{...bindingForm,mainCompanySlug:slug}});setMessage(`${moduleLabel(bindingForm.moduleCode)} / ${purposeLabel(bindingForm.purposeCode)} ataması kaydedildi.`);await refresh()}catch(e){setError(e?.message||"Atama kaydedilemedi.")}}
+ async function rotateCredential(){setLoading(true);setNewSecret(null);try{const result=await apiPost("/file-hub/agent-credential/rotate",{mainCompanySlug:slug,label:"KY File Agent"});setNewSecret(result?.data||result);setMessage("Firma bazlı File Agent anahtarı yenilendi. Bu anahtar yalnız şimdi gösterilir; Agent ayarına kaydedin.");await refresh()}catch(e){setError(e?.message||"Agent anahtarı yenilenemedi.")}finally{setLoading(false)}}
+ async function copy(value){try{await navigator.clipboard.writeText(String(value||""));setMessage("Agent anahtarı panoya kopyalandı.")}catch{setError("Anahtar kopyalanamadı; ekrandaki değeri elle alın.")}}
 
-const providerLabel = (value) => ({
-  GOOGLE_DRIVE: "Google Drive",
-  ONEDRIVE: "Microsoft OneDrive",
-  SHAREPOINT: "Microsoft SharePoint",
-  LOCAL_FOLDER: "Yerel Klasör",
-  NAS: "NAS / Ağ Klasörü",
-})[value] || value || "-";
+ return <div className="admpro-page storage-page">
+  <section className="storage-hero"><div><span className="admpro-kicker">KY ERP / DEPOLAMA / FILE HUB</span><h2>Depolama Merkezi</h2><p>Google Drive, OneDrive, SharePoint, yerel klasör ve NAS tek dosya sistemi gibi çalışır. Dosyanın aslı seçilen sağlayıcıda kalır; KY ERP dosya kimliğini, revizyonu, iş ilişkisini ve senkron durumunu yönetir. R2 yalnız web önizleme/cache katmanıdır.</p></div><div className="storage-chips"><span className="storage-chip">Firma: {activeMainCompany?.name||slug}</span><span className="storage-chip">Sağlayıcı Bağımsız</span><span className="storage-chip">Tenant İzole</span><span className="storage-chip">Agent Güvenli</span></div></section>
+  {showToolbar?<nav className="admpro-section-tabs">{[["overview","Genel Bakış"],["connections","Bağlantılar"],["bindings","Bölüm / Dosya Atamaları"],["files","Dosya İndeksi"],["events","Senkronizasyon / Agent"]].map(([key,label])=><button key={key} type="button" className={tab===key?"active":""} onClick={()=>setTab(key)}>{label}</button>)}<button type="button" onClick={refresh} disabled={loading}>{loading?"Yükleniyor...":"Yenile"}</button></nav>:<div className="admpro-actions"><button type="button" onClick={refresh} disabled={loading}>{loading?"Yükleniyor...":"Yenile"}</button></div>}
+  {message?<div className="admpro-notice success">{message}</div>:null}{error?<div className="admpro-notice error">{error}</div>:null}
 
-const purposeLabel = (value) => ({
-  MODEL_IMAGE: "Desen / Model Görseli",
-  MODEL_SOURCE: "Kaynak Dosya (PSD / AI / TIFF vb.)",
-  PLACEMENT: "Yerleşim / Kalıp Dosyası",
-  OUTGOING_DESIGN: "Giden Desen / Takım",
-  RIP_PDF: "DTF / RIP PDF",
-  INVOICE: "Fatura (PDF / XML / Ekler)",
-  DELIVERY_NOTE: "İrsaliye (PDF / XML / Ekler)",
-  E_DOCUMENT: "E-Belge / İşNet Belgesi",
-  PAYMENT_DOCUMENT: "Ödeme / Dekont / Çek Belgesi",
-  PERSONNEL_DOCUMENT: "Personel Evrakı",
-  CONTRACT: "Sözleşme",
-  RECIPE: "Reçete",
-  TECHNICAL_SHEET: "Teknik Föy",
-  QUALITY: "Kalite Belgesi",
-  PRODUCTION_PHOTO: "Üretim Fotoğrafı",
-  QUALITY_PHOTO: "Kalite Fotoğrafı",
-  CUSTOMER_REFERENCE: "Müşteri Referansı",
-  GENERIC: "Genel Ek / Diğer Dosya",
-})[value] || value || "-";
+  {tab==="overview"?<><section className="admpro-stats"><div className="admpro-stat"><span>Aktif Kaynak</span><strong>{overview.connectionCount||0}</strong><small>{connections.length} toplam tanım</small></div><div className="admpro-stat"><span>Dosya İndeksi</span><strong>{overview.fileCount||0}</strong><small>File Hub içindeki kayıt</small></div><div className="admpro-stat"><span>Bölüm Ataması</span><strong>{bindings.length}</strong><small>{MODULES.filter(code=>bindings.some(row=>row.module_code===code)).length}/{MODULES.length} bölüm kapsanıyor</small></div><div className="admpro-stat"><span>Çevrimiçi Agent</span><strong>{onlineAgents.length}</strong><small>{(overview.agents||[]).length} tanımlı cihaz</small></div></section><section className="storage-steps">{setupSteps.map(step=><div className={`storage-step ${step.ok?"ok":""}`} key={step.title}><i>{step.ok?"✓":"·"}</i><div><strong>{step.title}</strong><small>{step.detail}</small></div></div>)}</section><section className="admpro-grid-2"><div className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Depolama Haritası</h3><p>Bir firma aynı anda birden fazla sağlayıcı kullanabilir.</p></div><span className="admpro-badge">{connections.length} kaynak</span></div>{connections.length?<div className="storage-map">{connections.map(row=><div className={`storage-map-card ${row.isPrimary?"primary":""}`} key={row.id}><div className="storage-map-card-head"><div><strong>{row.name}</strong><small>{providerLabel(row.provider_type)}</small></div><span className={`admpro-badge ${row.connection_status==="CONNECTED"?"ok":row.connection_status==="ERROR"?"bad":"warn"}`}>{statusLabel(row.connection_status)}</span></div><small>{row.local_root_path||row.remote_root_name||"Kök belirtilmedi"}</small><div className="storage-map-meta"><span>{row.isPrimary?"Firma varsayılanı":"Ek kaynak"}</span><span>{row.isActive?"Aktif":"Pasif"}</span></div></div>)}</div>:<div className="storage-empty"><div><strong>Henüz depolama kaynağı yok</strong><p>İlk olarak Google Drive, OneDrive, yerel klasör veya NAS bağlantısını tanımlayın.</p><button className="primary" type="button" onClick={()=>setTab("connections")}>İlk Kaynağı Ekle</button></div></div>}</div><div className="admpro-card"><div className="admpro-card-head"><div><h3>Sağlık ve Uyarılar</h3><p>Eksik dosya, eşleşmeyen dosya ve agent durumu.</p></div></div><div className="storage-health"><div className={`storage-health-row ${Number(overview.missingCount||0)?"bad":"online"}`}><span className="lamp"/><div><strong>Kaynakta olmayan dosya</strong><small>{overview.missingCount||0} kayıt yeniden erişim bekliyor</small></div><span className={`admpro-badge ${Number(overview.missingCount||0)?"bad":"ok"}`}>{overview.missingCount||0}</span></div><div className={`storage-health-row ${Number(overview.unmatchedCount||0)?"warn":"online"}`}><span className="lamp"/><div><strong>İş kaydıyla eşleşmeyen dosya</strong><small>Model / fatura / üretim ilişkisi kurulmamış indeks kayıtları</small></div><span className={`admpro-badge ${Number(overview.unmatchedCount||0)?"warn":"ok"}`}>{overview.unmatchedCount||0}</span></div><div className={`storage-health-row ${onlineAgents.length?"online":"warn"}`}><span className="lamp"/><div><strong>KY File Agent</strong><small>{onlineAgents.length?"Heartbeat alınıyor":"Çevrimiçi agent görünmüyor"}</small></div><span className={`admpro-badge ${onlineAgents.length?"ok":"warn"}`}>{onlineAgents.length}</span></div></div></div></section></>:null}
 
-const moduleLabel = (value) => ({
-  DESEN: "Desen",
-  IMALAT: "İmalat",
-  BOYAHANE: "Boyahane",
-  MUHASEBE: "Muhasebe",
-  ISNET: "İşNet",
-  IK: "İK",
-  DTF: "DTF",
-  STOK: "Stok",
-})[value] || value || "-";
+  {tab==="connections"?<><section className="storage-provider-grid">{PROVIDERS.map(provider=><div key={provider} className={`storage-provider ${connectionForm.providerType===provider?"active":""}`} onClick={()=>setConnectionForm(old=>({...old,providerType:provider}))}><strong>{providerLabel(provider)}</strong><span>{providerHint(provider)} · {providerCounts[provider]||0} tanım</span></div>)}</section><section className="admpro-grid-2"><form className="admpro-card" onSubmit={saveConnection}><div className="admpro-card-head"><div><h3>{editingConnectionId?"Depolama Kaynağını Düzenle":"Yeni Depolama Kaynağı"}</h3><p>Google Drive Desktop / OneDrive istemcisi / SharePoint senkron klasörü / yerel klasör / NAS kökünü Agent izler.</p></div></div><div className="admpro-form-grid"><label>Sağlayıcı<select value={connectionForm.providerType} onChange={e=>setConnectionForm({...connectionForm,providerType:e.target.value})}>{PROVIDERS.map(x=><option key={x} value={x}>{providerLabel(x)}</option>)}</select></label><label>Bağlantı Adı<input value={connectionForm.name} onChange={e=>setConnectionForm({...connectionForm,name:e.target.value})} placeholder="Örn: Hakan Emprime Google Drive"/></label><label className="wide">Windows / Senkron Kökü<input value={connectionForm.localRootPath} onChange={e=>setConnectionForm({...connectionForm,localRootPath:e.target.value})} placeholder={connectionForm.providerType==="NAS"?"\\\\SUNUCU\\KYERP":"G:\\Drive'ım\\KYERP"}/></label><label>Remote Root ID<input value={connectionForm.remoteRootId} onChange={e=>setConnectionForm({...connectionForm,remoteRootId:e.target.value})} placeholder="Opsiyonel"/></label><label>Remote Root Adı<input value={connectionForm.remoteRootName} onChange={e=>setConnectionForm({...connectionForm,remoteRootName:e.target.value})} placeholder="Opsiyonel"/></label><label className="admpro-check"><input type="checkbox" checked={connectionForm.isPrimary} onChange={e=>setConnectionForm({...connectionForm,isPrimary:e.target.checked})}/> Firma varsayılanı</label><label className="admpro-check"><input type="checkbox" checked={connectionForm.isActive} onChange={e=>setConnectionForm({...connectionForm,isActive:e.target.checked})}/> Aktif</label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit">{editingConnectionId?"Bağlantıyı Güncelle":"Bağlantıyı Kaydet"}</button>{editingConnectionId?<button type="button" onClick={()=>{setEditingConnectionId("");setConnectionForm(emptyConnection)}}>Vazgeç</button>:null}</div></form><div className="admpro-card"><div className="admpro-card-head"><div><h3>Tanımlı Kaynaklar</h3><p>Birincil kaynak firma varsayılanıdır; bölüm atamaları bunu geçersiz kılabilir.</p></div><span className="admpro-badge">{connections.length}</span></div>{connections.length?<div className="admpro-list">{connections.map(row=><div className="admpro-list-item" key={row.id}><div><strong>{row.name}</strong><small>{providerLabel(row.provider_type)} · {row.local_root_path||row.remote_root_name||"Kök yok"}</small><small>{row.isPrimary?"Firma varsayılanı · ":""}{statusLabel(row.connection_status)} · {row.isActive?"Aktif":"Pasif"}</small></div><button type="button" onClick={()=>editConnection(row)}>Düzenle</button></div>)}</div>:<div className="admpro-empty">Henüz bağlantı tanımlı değil.</div>}</div></section></>:null}
 
-const statusLabel = (value) => ({
-  AVAILABLE: "Mevcut",
-  MISSING: "Kaynakta Yok",
-  CONNECTED: "Bağlı",
-  SCANNING: "Taranıyor",
-  ERROR: "Hata",
-  UNKNOWN: "Bekliyor",
-})[value] || value || "-";
+  {tab==="bindings"?<section className="admpro-grid-2"><form className="admpro-card" onSubmit={saveBinding}><div className="admpro-card-head"><div><h3>Bölüm → Dosya Türü → Depolama</h3><p>Her dosya amacını istediğiniz Google / Microsoft / yerel / NAS kaynağına yönlendirin.</p></div></div>{!activeConnections.length?<div className="admpro-notice warn" style={{marginBottom:10}}>Önce Bağlantılar bölümünde en az bir aktif depolama kaynağı tanımlayın.</div>:null}<div className="admpro-form-grid"><label>Bölüm<select value={bindingForm.moduleCode} onChange={e=>setBindingForm({...bindingForm,moduleCode:e.target.value})}>{MODULES.map(x=><option key={x} value={x}>{moduleLabel(x)}</option>)}</select></label><label>Dosya Türü / Amaç<select value={bindingForm.purposeCode} onChange={e=>setBindingForm({...bindingForm,purposeCode:e.target.value})}>{PURPOSES.map(x=><option key={x} value={x}>{purposeLabel(x)}</option>)}</select></label><label className="wide">Depolama<select value={bindingForm.storageConnectionId} onChange={e=>setBindingForm({...bindingForm,storageConnectionId:e.target.value})}><option value="">Seçin</option>{activeConnections.map(x=><option key={x.id} value={x.id}>{x.name} · {providerLabel(x.provider_type)}</option>)}</select></label><label className="wide">Kök / Alt Klasör<input value={bindingForm.rootPath} onChange={e=>setBindingForm({...bindingForm,rootPath:e.target.value})} placeholder="Örn: DESEN/Modeller veya MUHASEBE/Faturalar"/></label><label className="admpro-check"><input type="checkbox" checked={bindingForm.readEnabled} onChange={e=>setBindingForm({...bindingForm,readEnabled:e.target.checked})}/> Okuma</label><label className="admpro-check"><input type="checkbox" checked={bindingForm.writeEnabled} onChange={e=>setBindingForm({...bindingForm,writeEnabled:e.target.checked})}/> Yazma</label><label className="admpro-check"><input type="checkbox" checked={bindingForm.syncEnabled} onChange={e=>setBindingForm({...bindingForm,syncEnabled:e.target.checked})}/> Agent / Senkron</label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit" disabled={!activeConnections.length}>Atamayı Kaydet</button></div></form><div className="admpro-card"><div className="admpro-card-head"><div><h3>Aktif Atamalar</h3><p>Bölümlerin kapsama durumu ve mevcut dosya hedefleri.</p></div><span className="admpro-badge">{bindings.length} atama</span></div><div className="storage-binding-coverage">{moduleCoverage.map(row=><div key={row.code}><strong>{moduleLabel(row.code)}</strong><span>{row.count?`${row.count} dosya amacı`:"Atama yok"}</span></div>)}</div><div className="admpro-table"><table><thead><tr><th>Bölüm</th><th>Dosya Türü</th><th>Kaynak</th><th>Kök</th><th>Yetki</th></tr></thead><tbody>{bindings.map(row=><tr key={row.id}><td><strong>{moduleLabel(row.module_code)}</strong></td><td>{purposeLabel(row.purpose_code)}</td><td>{row.connection_name}<small>{providerLabel(row.provider_type)}</small></td><td>{row.root_path||"/"}</td><td>{row.readEnabled?"R":"-"}/{row.writeEnabled?"W":"-"}/{row.syncEnabled?"S":"-"}</td></tr>)}{!bindings.length?<tr><td colSpan="5">Henüz bölüm / dosya ataması yok.</td></tr>:null}</tbody></table></div></div></section>:null}
 
-const formatDate = (value) => value ? new Date(value).toLocaleString("tr-TR") : "-";
-const formatBytes = (value) => {
-  const n = Number(value || 0);
-  if (n < 1024) return `${n} B`;
-  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
-  return `${(n / 1073741824).toFixed(2)} GB`;
-};
+  {tab==="files"?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Ortak Dosya İndeksi</h3><p>Orijinal dosya sağlayıcıda kalır; KY ERP hash, revizyon, ana konum ve iş ilişkisini indeksler.</p></div><span className="admpro-badge">{files.length} gösteriliyor</span></div><div className="admpro-toolbar"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Dosya, model veya yol ara"/><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">Tüm Durumlar</option><option value="AVAILABLE">Mevcut</option><option value="MISSING">Kaynakta Yok</option></select><button type="button" onClick={refresh}>Ara / Yenile</button></div><div className="admpro-table"><table><thead><tr><th>Dosya</th><th>Sağlayıcı</th><th>Ana Konum</th><th>Boyut</th><th>İş İlişkisi</th><th>Durum</th></tr></thead><tbody>{files.map(row=><tr key={row.id}><td className="storage-file-name"><strong>{row.file_name}</strong><small>{row.logical_key||row.extension||""}</small></td><td>{providerLabel(row.provider_type)}<small>{row.connection_name||""}</small></td><td className="admpro-code">{row.relative_path||"-"}</td><td>{formatBytes(row.size_bytes)}</td><td><span className={`admpro-badge ${Number(row.relation_count||0)?"ok":"warn"}`}>{row.relation_count||0} ilişki</span></td><td><span className={`admpro-badge ${row.status==="AVAILABLE"?"ok":"bad"}`}>{statusLabel(row.status)}</span></td></tr>)}{!files.length?<tr><td colSpan="6">Dosya indeksi boş veya filtreye uyan kayıt yok.</td></tr>:null}</tbody></table></div></section>:null}
 
-export default function AdminStorageCenter({ activeMainCompany, activeTab, showToolbar = true }) {
-  const [tab, setTab] = useState(ROUTE_TO_TAB[activeTab] || "overview");
-  const [overview, setOverview] = useState({});
-  const [connections, setConnections] = useState([]);
-  const [bindings, setBindings] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [connectionForm, setConnectionForm] = useState(emptyConnection);
-  const [bindingForm, setBindingForm] = useState(emptyBinding);
-  const [editingConnectionId, setEditingConnectionId] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const mapped = ROUTE_TO_TAB[activeTab];
-    if (mapped) setTab(mapped);
-  }, [activeTab]);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [o, c, b, f] = await Promise.all([
-        apiGet("/file-hub/overview"),
-        apiGet("/file-hub/connections"),
-        apiGet("/file-hub/bindings"),
-        apiGet("/file-hub/files", {
-          q: search || undefined,
-          status: statusFilter || undefined,
-          take: 200,
-        }),
-      ]);
-      setOverview(o?.data || {});
-      setConnections(c?.data || []);
-      setBindings(b?.data || []);
-      setFiles(f?.data || []);
-    } catch (e) {
-      setError(e?.message || "Depolama Merkezi yüklenemedi.");
-    } finally {
-      setLoading(false);
-    }
-  }, [search, statusFilter]);
-
-  useEffect(() => { refresh(); }, [refresh]);
-  useEffect(() => {
-    setBindingForm((current) => ({
-      ...current,
-      storageConnectionId:
-        current.storageConnectionId || connections.find((x) => x.isActive)?.id || "",
-    }));
-  }, [connections]);
-
-  const activeConnections = useMemo(
-    () => connections.filter((x) => x.isActive),
-    [connections],
-  );
-
-  const saveConnection = async (event) => {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-    try {
-      if (!connectionForm.name.trim()) throw new Error("Bağlantı adı zorunludur.");
-      if (!connectionForm.localRootPath.trim() && connectionForm.syncMode === "AGENT") {
-        throw new Error("Agent bağlantısında Windows / senkron kökü zorunludur.");
-      }
-      if (editingConnectionId) {
-        await apiPatch(`/file-hub/connections/${editingConnectionId}`, connectionForm);
-      } else {
-        await apiPost("/file-hub/connections", connectionForm);
-      }
-      setMessage(editingConnectionId ? "Depolama bağlantısı güncellendi." : "Depolama bağlantısı eklendi.");
-      setEditingConnectionId("");
-      setConnectionForm(emptyConnection);
-      await refresh();
-    } catch (e) {
-      setError(e?.message || "Bağlantı kaydedilemedi.");
-    }
-  };
-
-  const editConnection = (row) => {
-    setEditingConnectionId(row.id);
-    setConnectionForm({
-      providerType: row.provider_type,
-      name: row.name || "",
-      localRootPath: row.local_root_path || "",
-      remoteRootId: row.remote_root_id || "",
-      remoteRootName: row.remote_root_name || "",
-      syncMode: row.sync_mode || "AGENT",
-      isActive: row.isActive !== false,
-      isPrimary: Boolean(row.isPrimary),
-    });
-    setTab("connections");
-  };
-
-  const saveBinding = async (event) => {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-    try {
-      if (!bindingForm.storageConnectionId) throw new Error("Depolama kaynağı seçin.");
-      await apiFetch("/file-hub/bindings", { method: "PUT", body: bindingForm });
-      setMessage(`${moduleLabel(bindingForm.moduleCode)} / ${purposeLabel(bindingForm.purposeCode)} yönlendirmesi kaydedildi.`);
-      await refresh();
-    } catch (e) {
-      setError(e?.message || "Yönlendirme kaydedilemedi.");
-    }
-  };
-
-  return (
-    <div className="admin-management-page">
-      <section className="admin-management-hero">
-        <div>
-          <span className="admin-kicker">KY ERP / DEPOLAMA</span>
-          <h2>Depolama Merkezi</h2>
-          <p>
-            Google Drive, Microsoft OneDrive, SharePoint, yerel klasör ve NAS aynı File Hub üzerinden yönetilir.
-            Bağlantıyı bir kez tanımlayın; sonra Desen, İmalat, Boyahane, Muhasebe, İşNet, İK, DTF ve Stok için dosya amacına göre hedefi seçin.
-            Modüller sağlayıcıya sabit bağlanmaz. R2 yalnız web önizleme/cache katmanıdır.
-          </p>
-        </div>
-        <div className="admin-chip-stack">
-          <span className="admin-chip">Firma: {activeMainCompany?.name || "Aktif Firma"}</span>
-          <span className="admin-chip">Sağlayıcı Bağımsız</span>
-          <span className="admin-chip">Çoklu Depolama</span>
-        </div>
-      </section>
-
-      {showToolbar ? (
-        <div className="admin-toolbar">
-          {[
-            ["overview", "Genel Bakış"],
-            ["connections", "Bağlantılar"],
-            ["bindings", "Bölüm / Dosya Atamaları"],
-            ["files", "Dosya İndeksi"],
-            ["events", "Senkronizasyon / Agent"],
-          ].map(([key, label]) => (
-            <button key={key} type="button" className={tab === key ? "primary-btn" : "secondary-btn"} onClick={() => setTab(key)}>{label}</button>
-          ))}
-          <button type="button" className="secondary-btn" onClick={refresh} disabled={loading}>{loading ? "Yükleniyor..." : "Yenile"}</button>
-        </div>
-      ) : (
-        <div className="admin-toolbar">
-          <button type="button" className="secondary-btn" onClick={refresh} disabled={loading}>{loading ? "Yükleniyor..." : "Yenile"}</button>
-        </div>
-      )}
-
-      {message ? <div className="admin-alert success">{message}</div> : null}
-      {error ? <div className="admin-alert error">{error}</div> : null}
-
-      {tab === "overview" ? (
-        <>
-          <div className="admin-stat-grid">
-            <article className="admin-stat-card"><span>Aktif Kaynak</span><strong>{overview.connectionCount || 0}</strong></article>
-            <article className="admin-stat-card"><span>İndekslenen Dosya</span><strong>{overview.fileCount || 0}</strong></article>
-            <article className="admin-stat-card"><span>Eşleşmeyen</span><strong>{overview.unmatchedCount || 0}</strong></article>
-            <article className="admin-stat-card"><span>Kaynakta Yok</span><strong>{overview.missingCount || 0}</strong></article>
-          </div>
-          <section className="admin-section-card">
-            <div className="admin-section-heading"><div><h3>Firma Depolama Haritası</h3><p>Google ve Microsoft kaynakları birlikte kullanılabilir. Bir bölüm Google Drive, başka bir bölüm OneDrive/NAS kullanabilir.</p></div></div>
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead><tr><th>Kaynak</th><th>Sağlayıcı</th><th>Yerel / Senkron Kök</th><th>Durum</th><th>Ana</th></tr></thead>
-                <tbody>
-                  {connections.length ? connections.map((row) => (
-                    <tr key={row.id}>
-                      <td><strong>{row.name}</strong></td>
-                      <td>{providerLabel(row.provider_type)}</td>
-                      <td>{row.local_root_path || row.remote_root_name || "-"}</td>
-                      <td>{statusLabel(row.connection_status)}</td>
-                      <td>{row.isPrimary ? "Evet" : "-"}</td>
-                    </tr>
-                  )) : <tr><td colSpan="5">Bu firma için depolama kaynağı henüz tanımlı değil.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {tab === "connections" ? (
-        <div className="admin-split-grid">
-          <section className="admin-section-card">
-            <h3>{editingConnectionId ? "Depolama Kaynağını Düzenle" : "Yeni Depolama Kaynağı"}</h3>
-            <p>V1 bağlantısı Google Drive Desktop / OneDrive istemcisi / yerel klasör / NAS kökünü KY File Agent ile izler. Direct Google/Microsoft API adapterleri daha sonra aynı bağlantı modeline eklenebilir.</p>
-            <form className="admin-form-grid" onSubmit={saveConnection}>
-              <label>Sağlayıcı<select value={connectionForm.providerType} onChange={(e) => setConnectionForm({ ...connectionForm, providerType: e.target.value })}>{PROVIDERS.map((x) => <option key={x} value={x}>{providerLabel(x)}</option>)}</select></label>
-              <label>Bağlantı Adı<input value={connectionForm.name} onChange={(e) => setConnectionForm({ ...connectionForm, name: e.target.value })} placeholder="Google Drive - DESINATOR" /></label>
-              <label className="span-2">Windows / Senkron Kökü<input value={connectionForm.localRootPath} onChange={(e) => setConnectionForm({ ...connectionForm, localRootPath: e.target.value })} placeholder={connectionForm.providerType === "NAS" ? "\\\\SUNUCU\\KYERP" : "G:\\Drive'ım\\DESINATOR"} /></label>
-              <label>Remote Root ID<input value={connectionForm.remoteRootId} onChange={(e) => setConnectionForm({ ...connectionForm, remoteRootId: e.target.value })} placeholder="Opsiyonel" /></label>
-              <label>Remote Root Adı<input value={connectionForm.remoteRootName} onChange={(e) => setConnectionForm({ ...connectionForm, remoteRootName: e.target.value })} placeholder="Opsiyonel" /></label>
-              <label className="admin-check"><input type="checkbox" checked={connectionForm.isPrimary} onChange={(e) => setConnectionForm({ ...connectionForm, isPrimary: e.target.checked })} /> Firma varsayılanı</label>
-              <label className="admin-check"><input type="checkbox" checked={connectionForm.isActive} onChange={(e) => setConnectionForm({ ...connectionForm, isActive: e.target.checked })} /> Aktif</label>
-              <div className="span-2 admin-inline-actions">
-                <button className="primary-btn" type="submit">Kaydet</button>
-                {editingConnectionId ? <button className="secondary-btn" type="button" onClick={() => { setEditingConnectionId(""); setConnectionForm(emptyConnection); }}>Vazgeç</button> : null}
-              </div>
-            </form>
-          </section>
-          <section className="admin-section-card">
-            <h3>Tanımlı Kaynaklar</h3>
-            {connections.length ? connections.map((row) => (
-              <div className="admin-list-row" key={row.id}>
-                <div><strong>{row.name}</strong><span>{providerLabel(row.provider_type)} · {row.local_root_path || row.remote_root_name || "Kök belirtilmedi"} · {statusLabel(row.connection_status)}</span></div>
-                <button className="secondary-btn" type="button" onClick={() => editConnection(row)}>Düzenle</button>
-              </div>
-            )) : <p>Henüz bağlantı yok.</p>}
-          </section>
-        </div>
-      ) : null}
-
-      {tab === "bindings" ? (
-        <div className="admin-split-grid">
-          <section className="admin-section-card">
-            <h3>Bölüm → Dosya Türü → Depolama</h3>
-            <p>Bağlantıyı bir kez tanımlayın. Sonra her bölüm ve dosya amacı için Google Drive, Microsoft, yerel klasör veya NAS hedefini seçin.</p>
-            <form className="admin-form-grid" onSubmit={saveBinding}>
-              <label>Bölüm<select value={bindingForm.moduleCode} onChange={(e) => setBindingForm({ ...bindingForm, moduleCode: e.target.value })}>{MODULES.map((x) => <option key={x} value={x}>{moduleLabel(x)}</option>)}</select></label>
-              <label>Dosya Türü / Amaç<select value={bindingForm.purposeCode} onChange={(e) => setBindingForm({ ...bindingForm, purposeCode: e.target.value })}>{PURPOSES.map((x) => <option key={x} value={x}>{purposeLabel(x)}</option>)}</select></label>
-              <label className="span-2">Depolama<select value={bindingForm.storageConnectionId} onChange={(e) => setBindingForm({ ...bindingForm, storageConnectionId: e.target.value })}><option value="">Seçin</option>{activeConnections.map((x) => <option key={x.id} value={x.id}>{x.name} · {providerLabel(x.provider_type)}</option>)}</select></label>
-              <label className="span-2">Kök / Alt Klasör<input value={bindingForm.rootPath} onChange={(e) => setBindingForm({ ...bindingForm, rootPath: e.target.value })} placeholder="DESINATOR/Modeller veya Muhasebe/Faturalar" /></label>
-              <label className="admin-check"><input type="checkbox" checked={bindingForm.readEnabled} onChange={(e) => setBindingForm({ ...bindingForm, readEnabled: e.target.checked })} /> Okuma</label>
-              <label className="admin-check"><input type="checkbox" checked={bindingForm.writeEnabled} onChange={(e) => setBindingForm({ ...bindingForm, writeEnabled: e.target.checked })} /> Yazma</label>
-              <label className="admin-check"><input type="checkbox" checked={bindingForm.syncEnabled} onChange={(e) => setBindingForm({ ...bindingForm, syncEnabled: e.target.checked })} /> Senkron / Agent</label>
-              <button className="primary-btn" type="submit">Atamayı Kaydet</button>
-            </form>
-          </section>
-          <section className="admin-section-card">
-            <h3>Aktif Atamalar</h3>
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead><tr><th>Bölüm</th><th>Dosya Türü</th><th>Kaynak</th><th>Kök</th></tr></thead>
-                <tbody>
-                  {bindings.length ? bindings.map((row) => (
-                    <tr key={row.id}>
-                      <td>{moduleLabel(row.module_code)}</td>
-                      <td>{purposeLabel(row.purpose_code)}</td>
-                      <td>{row.connection_name} / {providerLabel(row.provider_type)}</td>
-                      <td>{row.root_path || "/"}</td>
-                    </tr>
-                  )) : <tr><td colSpan="4">Henüz bölüm/dosya ataması yok.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {tab === "files" ? (
-        <section className="admin-section-card">
-          <div className="admin-section-heading">
-            <div><h3>Ortak Dosya İndeksi</h3><p>Orijinal dosya seçilen provider üzerinde kalır. KY ERP burada kimlik, hash, konum, revizyon ve iş ilişkisini tutar.</p></div>
-            <div className="admin-inline-actions">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Dosya / model / yol ara" />
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">Tüm Durumlar</option><option value="AVAILABLE">Mevcut</option><option value="MISSING">Kaynakta Yok</option></select>
-            </div>
-          </div>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead><tr><th>Dosya</th><th>Kaynak</th><th>Konum</th><th>Boyut</th><th>İlişki</th><th>Durum</th></tr></thead>
-              <tbody>
-                {files.length ? files.map((row) => (
-                  <tr key={row.id}>
-                    <td><strong>{row.file_name}</strong><br /><small>{row.extension || ""}</small></td>
-                    <td>{providerLabel(row.provider_type)}</td>
-                    <td>{row.relative_path || "-"}</td>
-                    <td>{formatBytes(row.size_bytes)}</td>
-                    <td>{row.relation_count || 0}</td>
-                    <td>{statusLabel(row.status)}</td>
-                  </tr>
-                )) : <tr><td colSpan="6">Dosya indeksi boş.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "events" ? (
-        <div className="admin-split-grid">
-          <section className="admin-section-card">
-            <h3>KY File Agent</h3>
-            <p>Google Drive Desktop, OneDrive, SharePoint senkron klasörü, yerel klasör ve NAS aynı agent tarafından izlenebilir.</p>
-            {(overview.agents || []).length ? (overview.agents || []).map((row) => (
-              <div className="admin-list-row" key={row.id}><div><strong>{row.device_name}</strong><span>{row.status} · Son bağlantı {formatDate(row.last_seen_at)}{row.last_error ? ` · ${row.last_error}` : ""}</span></div></div>
-            )) : <p>Henüz agent heartbeat alınmadı.</p>}
-          </section>
-          <section className="admin-section-card">
-            <h3>Son Dosya Hareketleri</h3>
-            {(overview.recentEvents || []).length ? (overview.recentEvents || []).map((row) => (
-              <div className="admin-list-row" key={row.id}><div><strong>{row.event_type}</strong><span>{row.device_name || row.actor_type} · {formatDate(row.created_at)}</span></div></div>
-            )) : <p>Henüz senkronizasyon olayı yok.</p>}
-          </section>
-        </div>
-      ) : null}
-    </div>
-  );
+  {tab==="events"?<><section className="admpro-grid-2"><div className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Agent Kimliği</h3><p>Her firmanın Agent anahtarı ayrıdır. Veritabanında yalnız hash tutulur.</p></div><span className={`admpro-badge ${credential?.configured&&credential?.active?"ok":"warn"}`}>{credential?.configured?credential?.active?"Hazır":"Pasif":"Kurulmadı"}</span></div><div className="admpro-integration"><div><span>Firma</span><strong>{credential?.companyName||activeMainCompany?.name||slug}</strong></div><div><span>Son Kullanım</span><strong>{formatDate(credential?.lastUsedAt)}</strong></div><div><span>Anahtar Durumu</span><strong>{credential?.configured?"Firma bazlı credential":"Legacy geçiş modu"}</strong></div><div><span>Agent</span><strong>{onlineAgents.length} çevrimiçi</strong></div></div><div className="admpro-notice warn" style={{marginTop:10}}>Anahtarı yenilerseniz mevcut Agent, yeni anahtar Windows ayarına girilene kadar bağlanamaz. Ham anahtar yalnız yenileme yanıtında bir kez gösterilir.</div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:10}}><button type="button" className="primary" onClick={rotateCredential} disabled={loading}>{credential?.configured?"Agent Anahtarını Yenile":"Firma Agent Anahtarı Oluştur"}</button></div>{newSecret?.secret?<div className="storage-secret"><strong>Bu anahtar yalnız şimdi gösterilir.</strong><code>{newSecret.secret}</code><button type="button" onClick={()=>copy(newSecret.secret)}>Anahtarı Kopyala</button></div>:null}</div><div className="admpro-card"><div className="admpro-card-head"><div><h3>Agent Sağlığı</h3><p>Heartbeat beş dakikadan yeniyse çevrimiçi kabul edilir.</p></div><span className="admpro-badge">{(overview.agents||[]).length} cihaz</span></div>{(overview.agents||[]).length?<div className="storage-health">{(overview.agents||[]).map(row=><div className={`storage-health-row ${online(row.last_seen_at)?"online":row.last_error?"bad":"warn"}`} key={row.id}><span className="lamp"/><div><strong>{row.device_name}</strong><small>Son bağlantı {formatDate(row.last_seen_at)}{row.last_error?` · ${row.last_error}`:""}</small></div><span className={`admpro-badge ${online(row.last_seen_at)?"ok":"warn"}`}>{online(row.last_seen_at)?"Çevrimiçi":"Bekliyor"}</span></div>)}</div>:<div className="admpro-empty">Henüz Agent heartbeat alınmadı.</div>}</div></section><section className="admpro-card"><div className="admpro-card-head"><div><h3>Son Dosya ve Senkron Hareketleri</h3><p>Dosya keşfi, revizyon, eksik dosya, bağlantı ve atama olayları.</p></div><span className="admpro-badge">{(overview.recentEvents||[]).length} olay</span></div>{(overview.recentEvents||[]).length?<div className="storage-event-list">{(overview.recentEvents||[]).map(row=><div className="storage-event" key={row.id}><div><strong>{eventLabel(row.event_type)}</strong><small>{row.device_name||row.actor_type||"Sistem"} · {row.details||""}</small></div><small>{formatDate(row.created_at)}</small></div>)}</div>:<div className="admpro-empty">Henüz senkronizasyon olayı yok.</div>}</section></>:null}
+ </div>
 }
