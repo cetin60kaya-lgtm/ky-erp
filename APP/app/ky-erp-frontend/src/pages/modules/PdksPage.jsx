@@ -13,7 +13,7 @@ const NAV_GROUPS = [
     label: "Günlük",
     hint: "Kart, giriş/çıkış ve puantaj",
     items: [
-      ["ana-ekran", "Canlı Geçişler"],
+      ["ana-ekran", "Ana Ekran"],
       ["bilgi-aktar", "Bilgi Aktar"],
       ["giris-cikislar", "Giriş / Çıkış"],
       ["puantaj", "Puantaj"],
@@ -25,7 +25,7 @@ const NAV_GROUPS = [
     label: "Personel & İK",
     hint: "Personel, izin ve bordro bağlantısı",
     items: [
-      ["personel-bilgileri", "Personel İşlemleri"],
+      ["personel-bilgileri", "Personel Bilgileri"],
       ["izinler", "İzinler"],
       ["calisma-tarihi", "Çalışma Tarihi"],
       ["avanslar", "Avans"],
@@ -171,7 +171,7 @@ export default function PdksPage(props) {
   };
   const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const deviceCenterTab = !isAuditAccount && ["cihaz-baglantilari", "senkron"].includes(activeTab);
-  const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
+  const personnelDeskTab = !isAuditAccount && PERSONNEL_DESK_TABS.has(activeTab);
 
   return (
     <div className="pdks-module-shell">
@@ -217,7 +217,7 @@ export default function PdksPage(props) {
       </nav>
 
       <main className="pdks-module-content">
-        {activeTab === "ana-ekran" ? (
+        {activeTab === "ana-ekran" && !isAuditAccount ? (
           <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
         ) : deviceCenterTab ? (
           <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
