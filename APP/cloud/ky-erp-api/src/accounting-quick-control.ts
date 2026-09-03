@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { registerAccountingCheckCariRoutes } from "./accounting-check-cari";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -179,6 +180,8 @@ async function companyBalance(c: Context<AppEnv>, slug: string, companyId: strin
 }
 
 export function registerAccountingQuickControlRoutes(app: Hono<AppEnv>) {
+  registerAccountingCheckCariRoutes(app);
+
   app.post("/api/muhasebe/hizli-cari/hareket", async (c) => {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
