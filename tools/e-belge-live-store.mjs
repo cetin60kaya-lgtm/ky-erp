@@ -13,6 +13,10 @@ rewrite("APP/cloud/ky-erp-api/src/e-belge-center-cloud.ts", (source) => {
     'import { reconcileEBelgeInvoice } from "./e-belge-match-engine";\nimport { eBelgeProductRouting, getEBelgeProduct, matchEBelgeProduct, recordEBelgeChemicalReceipt } from "./e-belge-product-store";',
   );
   source = source.replace(
+    'return{text(doc.id),duplicate:true,attached:asset.ext}',
+    'return{documentId:text(doc.id),duplicate:true,attached:asset.ext}',
+  );
+  source = source.replace(
     /async function productMatch\([^\n]+\nfunction productRouting\([^\n]+\n/,
     'async function productMatch(c:Context<AppEnv>,slug:string,line:Row,companyId=""){return matchEBelgeProduct(c,slug,line,companyId)}\nfunction productRouting(product:Row|null,line:Row){return eBelgeProductRouting(product,line)}\n',
   );
