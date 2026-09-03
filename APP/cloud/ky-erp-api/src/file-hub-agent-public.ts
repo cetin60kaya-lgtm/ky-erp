@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 import { verifyFileHubAgentCredential } from "./file-hub-agent-auth";
 
+// Public transport contract stays X-KYERP-Agent-Key. Validation is now tenant-scoped.
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
 type AppEnv = { Bindings: Bindings; Variables: Variables };
