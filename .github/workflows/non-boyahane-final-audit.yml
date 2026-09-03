@@ -192,16 +192,35 @@ jobs:
 
       - name: Ortak modül ve CORS bağlantılarını doğrula
         run: |
-          jq -e '.ok == true' /tmp/shared-health.json
-          curl --fail --silent \
-            'http://127.0.0.1:8790/api/production-center?mainCompanySlug=mecit-hakan&pageSize=5' \
-            | jq -e '.ok == true'
-          curl --fail --silent \
-            'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan' \
-            | jq -e '.ok == true'
-          curl --fail --silent \
-            'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan' \
-            | jq -e '.ok == true'
+          set -euo pipefail
+          jq -e '.ok == true' /tmp/shared-health.json >/dev/null
+
+          check_ok() {
+            local name="$1"
+            local url="$2"
+            local tmp="/tmp/shared-${name}.json"
+            local status=""
+            for attempt in 1 2 3; do
+              status="$(curl --silent --show-error --output "$tmp" --write-out '%{http_code}' "$url" || true)"
+              if [ "$status" = "200" ] && jq -e '.ok == true' "$tmp" >/dev/null 2>&1; then
+                echo "$name: OK"
+                return 0
+              fi
+              echo "$name smoke denemesi $attempt basarisiz: HTTP ${status:-transport-error}" >&2
+              cat "$tmp" >&2 2>/dev/null || true
+              sleep 1
+            done
+            echo "$name smoke kalici olarak basarisiz." >&2
+            cat /tmp/kyerp-shared-worker.log >&2 || true
+            return 1
+          }
+
+          check_ok production-center \
+            'http://127.0.0.1:8790/api/production-center?mainCompanySlug=mecit-hakan&pageSize=5'
+          check_ok isnet \
+            'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan'
+          check_ok ik \
+            'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan'
 
           curl --fail --silent \
             'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
