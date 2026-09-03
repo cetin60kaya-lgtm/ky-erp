@@ -50,6 +50,32 @@ Kurallar:
 - İleride Desktop'a `Güncelle ve yeniden başlat` tipi otomatik güncelleme kanalı eklenecek; **03.09.2026 itibarıyla bu özellik henüz tamamlanmış sayılmaz.**
 - Production merge/deploy yalnız kullanıcı açıkça onayladıktan sonra yapılır.
 
+## 3A. 04.09.2026 — Hakan Operasyon / sohbet veri köprüsü
+
+Kullanıcının yeni kalıcı hedefi: Hakan Emprime operasyon sohbeti ile **aynı canlı KY ERP D1 verisini** güvenli biçimde okuyup, yetki ve onay kurallarıyla yazabilmek. Ayrı personel/muhasebe veritabanı oluşturulmayacak.
+
+Aktif feature branch:
+
+`codex/hakan-operasyon-bridge-20260904`
+
+İlk kapsam sırası:
+
+1. **İK / Personel** — personel bulma, dönem maaş/bordro/avans/mesai/kesinti okuma; güvenli avans/mesai/kesinti yazma.
+2. **Muhasebe** — firma/cari bulma, bakiye ve hareket okuma; güvenli tahsilat/ödeme yazma.
+
+Köprü kuralları:
+
+- API namespace: `/api/operations/*`.
+- Aynı production D1 tabloları kullanılır; ikinci kopya veri tutulmaz.
+- Her istek mevcut `canonical-v3` KY ERP session kimliğiyle çalışır.
+- Tenant kullanıcı oturumundan türetilir; owner dışı kullanıcı tenant değiştiremez.
+- İK ve Muhasebe modül yetkileri ayrı ayrı uygulanır.
+- Yazma uçlarında `idempotencyKey` zorunludur; mükerrer kayıt korunur.
+- İK dönem kilidi (`ik_monthly_close`) yazmadan önce kontrol edilir.
+- Yazma işlemleri `operation_logs` ve uygun İK audit tablolarına kaydedilir.
+- Production deploy / merge yapılmadı. Önce test + Desktop/uygulama kontrolü, sonra açık kullanıcı onayı gerekir.
+- ChatGPT tarafındaki harici bağlayıcı/MCP katmanı bu API'nin üstüne kurulacaktır; API anahtarları veya oturum tokenları GitHub'a yazılmaz.
+
 ## 4. Aktif Desktop çalışması
 
 Aktif feature branch:
