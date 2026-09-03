@@ -103,7 +103,8 @@ function rawObject(row: Row) {
 function recordScopeOf(row: Row) {
   const raw = rawObject(row);
   const value = upper(row.record_type || raw.recordType || raw.recordScope);
-  return value === "RESMI" || value === "OFFICIAL" ? "OFFICIAL" : "INTERNAL";
+  if (value.includes("GAYRI") || value === "INTERNAL" || value === "UNOFFICIAL") return "INTERNAL";
+  return "OFFICIAL";
 }
 
 function paymentMethodOf(row: Row) {
@@ -199,6 +200,13 @@ export function registerAccountingQuickControlRoutes(app: Hono<AppEnv>) {
     if (!["DEBIT", "CREDIT", "PAYMENT", "COLLECTION"].includes(transactionType)) {
       return c.json(errorBody("INVALID_TRANSACTION_TYPE", "Cari işlem türü geçersiz."), 400);
     }
+    if (transactionType === "PAYMENT" && Number(company.supplier_debt_tracking || 0) !== 1) {
+      return c.json(errorBody("PAYABLE_TRACKING_DISABLED", "Firmaya ödeme için tedarikçi borç takibi açık olmalıdır."), 409);
+    }
+    if (transactionType === "COLLECTION" && Number(company.customer_receivable_tracking || 0) !== 1) {
+      return c.json(errorBody("RECEIVABLE_TRACKING_DISABLED", "Firmadan tahsilat için müşteri alacak takibi açık olmalıdır."), 409);
+    }
+
     const amount = roundMoney(body.amount);
     if (!(amount > 0)) return c.json(errorBody("AMOUNT_REQUIRED", "İşlem tutarı sıfırdan büyük olmalıdır."), 400);
     const date = text(body.date || body.movementDate) || nowIso().slice(0, 10);
