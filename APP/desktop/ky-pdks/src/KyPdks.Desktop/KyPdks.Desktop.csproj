@@ -10,9 +10,9 @@
     <Product>KY ERP Desktop</Product>
     <Description>KY ERP Windows çalışma merkezi • ERP + File Hub + AI + İK/PDKS cihaz köprüsü</Description>
     <Company>KY ERP</Company>
-    <Version>1.6.0</Version>
-    <FileVersion>1.6.0.0</FileVersion>
-    <AssemblyVersion>1.6.0.0</AssemblyVersion>
+    <Version>1.7.0</Version>
+    <FileVersion>1.7.0.0</FileVersion>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
