@@ -113,20 +113,22 @@ async function ensurePersonnelCodes(c: Context<AppEnv>, company: string) {
   if (!missing.length) return;
   const existing = await all(c, "SELECT code FROM hr_monthly_employees WHERE main_company_id=? AND TRIM(COALESCE(code,''))<>''", [company]);
   let max = existing.reduce((current, row) => Math.max(current, personnelCodeNumber(row.code)), 0);
-  const timestamp = nowIso();
-  const statements: any[] = [];
   for (const row of missing) {
     max += 1;
     const code = `HKN-${String(max).padStart(2, "0")}`;
-    statements.push(c.env.DB.prepare("UPDATE hr_monthly_employees SET code=?,updated_at=? WHERE id=? AND main_company_id=? AND TRIM(COALESCE(code,''))=''").bind(code, timestamp, text(row.id), company));
-    statements.push(c.env.DB.prepare(`INSERT INTO ik_employee_change_history
-      (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
-        crypto.randomUUID(), company, text(row.id), "AUTO_PERSONNEL_CODE", "personnelCode", "", code,
-        dateOnly(timestamp), "Eksik personel kodu HKN standardına otomatik tamamlandı.", null, timestamp,
-      ));
+    const timestamp = nowIso();
+    const result = await c.env.DB.prepare("UPDATE hr_monthly_employees SET code=?,updated_at=? WHERE id=? AND main_company_id=? AND TRIM(COALESCE(code,''))=''")
+      .bind(code, timestamp, text(row.id), company).run();
+    if (!result.meta?.changes) continue;
+    try {
+      await c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
+          crypto.randomUUID(), company, text(row.id), "AUTO_PERSONNEL_CODE", "personnelCode", "", code,
+          dateOnly(timestamp), "Eksik personel kodu HKN standardına otomatik tamamlandı.", null, timestamp,
+        ).run();
+    } catch {}
   }
-  await c.env.DB.batch(statements);
 }
 
 async function writePersonRemovalAudit(c: Context<AppEnv>, auth: Row, person: Row, mode: string, reason: string) {
