@@ -157,6 +157,7 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
   const [error, setError] = useState("");
 
   const auditMode = Boolean(profile.audit);
+  const canHardDelete = ["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(String(profile.role || "").trim().toUpperCase());
   const companyKey = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
 
   const loadPeople = useCallback(async () => {
@@ -391,7 +392,7 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
             <>
               <section className="ikpc-profile-head">
                 <div className="ikpc-profile"><b>{initials(selected.fullName)}</b><span><small>{selected.personnelCode || "Personel"}</small><h2>{selected.fullName}</h2><p>{selected.department || "Departman yok"} · {selected.title || "Görev yok"}</p></span></div>
-                {!auditMode ? <div className="ikpc-actions">{editing ? <><button type="button" onClick={() => { setEditing(false); setDraft({ ...selected }); }}><X size={16} /> Vazgeç</button><button type="button" className="ikpc-primary" disabled={busy} onClick={saveEdit}><Save size={16} /> Kaydet</button></> : <><button type="button" onClick={startEdit}><Pencil size={16} /> Düzenle</button><button type="button" className="ikpc-passive-btn" disabled={busy || isPassivePerson(selected)} onClick={() => removePerson("PASSIVE")}>Pasife Al</button><button type="button" className="ikpc-danger-btn" disabled={busy} onClick={() => removePerson("HARD")}><Trash2 size={16} /> Kalıcı Sil</button></>}</div> : null}
+                {!auditMode ? <div className="ikpc-actions">{editing ? <><button type="button" onClick={() => { setEditing(false); setDraft({ ...selected }); }}><X size={16} /> Vazgeç</button><button type="button" className="ikpc-primary" disabled={busy} onClick={saveEdit}><Save size={16} /> Kaydet</button></> : <><button type="button" onClick={startEdit}><Pencil size={16} /> Düzenle</button><button type="button" className="ikpc-passive-btn" disabled={busy || isPassivePerson(selected)} onClick={() => removePerson("PASSIVE")}>Pasife Al</button>{canHardDelete ? <button type="button" className="ikpc-danger-btn" disabled={busy} onClick={() => removePerson("HARD")}><Trash2 size={16} /> Kalıcı Sil</button> : null}</>}</div> : null}
               </section>
 
               <div className="ikpc-stats">
