@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerFileHubCloudOauthRoutes } from "./file-hub-cloud-oauth";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -35,6 +36,8 @@ function moduleForEntity(entityType: unknown) {
 }
 
 export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
+  registerFileHubCloudOauthRoutes(app as any);
+
   app.get("/api/file-hub/files/:id/preview", async (c) => {
     const user = await getAuthenticatedUser(c) as Row | null;
     if (!user) return c.json({ ok:false, error:{ code:"UNAUTHORIZED", message:"Oturum gerekli." } }, 401);
