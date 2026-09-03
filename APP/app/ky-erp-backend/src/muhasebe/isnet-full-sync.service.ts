@@ -105,7 +105,12 @@ export class IsnetFullSyncService {
       );
     }
 
-    const supplierAccounting = await this.reconcileSupplierInvoices(slug);
+    // İşNet artık yalnızca e-Belge Merkezi'nin kaynaklarından biridir.
+    // Portal belgelerini havuza alırız; nihai muhasebe postası kullanıcı onayında kalır.
+    const supplierAccounting = await this.stageSupplierInvoices(slug);
+    // Önceden onaylanmış / muhasebeleşmiş belgelerin mevcut ürün-stock-LOT yönlendirmesi
+    // idempotent biçimde çalışmaya devam eder. Yeni staged intakeler Document olmadığı için
+    // bu aşamada stok veya LOT oluşturmaz.
     const supplierRouting = await this.smartMatch.synchronizeSupplierRouting({
       mainCompanySlug: slug,
     });
@@ -192,7 +197,7 @@ export class IsnetFullSyncService {
     } as Express.Multer.File;
   }
 
-  private async reconcileSupplierInvoices(slug: string) {
+  private async stageSupplierInvoices(slug: string) {
     const states = await this.prisma.isnetDocumentState.findMany({
       where: {
         mainCompanySlug: slug,
@@ -204,18 +209,19 @@ export class IsnetFullSyncService {
     });
 
     let alreadyComplete = 0;
-    let imported = 0;
+    let stagedForReview = 0;
+    let alreadyInPool = 0;
     const failures: Query[] = [];
 
     for (const state of states) {
       const documentNo = clean(state.documentNo);
       if (!documentNo) continue;
 
-      let document = await this.prisma.document.findFirst({
+      const document = await this.prisma.document.findFirst({
         where: { mainCompanySlug: slug, documentNo, deletedAt: null },
         select: { id: true, companyId: true },
       });
-      let movement = document
+      const movement = document
         ? await this.prisma.currentAccountMovement.findFirst({
             where: {
               mainCompanySlug: slug,
@@ -225,7 +231,7 @@ export class IsnetFullSyncService {
             select: { id: true },
           })
         : null;
-      let vat = document
+      const vat = document
         ? await this.prisma.vatRecord.findFirst({
             where: { mainCompanySlug: slug, documentId: document.id },
             select: { id: true },
@@ -249,55 +255,34 @@ export class IsnetFullSyncService {
         if (pdfPath && fs.existsSync(pdfPath)) {
           files.push(this.multerFile(pdfPath, "application/pdf"));
         }
+
         const result = await this.documentIntake.upload(files, {
           mainCompanySlug: slug,
-          autoApprove: true,
+          autoApprove: false,
+          sourceProvider: "ISNET",
         });
-        if (
-          result?.errors?.length ||
-          result?.autoApproved?.some((row: any) => row?.ok === false)
-        ) {
+        if (result?.errors?.length) {
           throw new Error(
-            result?.errors
-              ?.map((row: any) => clean(row?.message))
+            result.errors
+              .map((row: any) => clean(row?.message))
               .filter(Boolean)
-              .join(" ") || "Fatura muhasebeye aktarılamadı.",
+              .join(" ") || "Fatura e-Belge Havuzuna alınamadı.",
           );
         }
 
-        document = await this.prisma.document.findFirst({
-          where: { mainCompanySlug: slug, documentNo, deletedAt: null },
-          select: { id: true, companyId: true },
-        });
-        movement = document
-          ? await this.prisma.currentAccountMovement.findFirst({
-              where: {
-                mainCompanySlug: slug,
-                documentNo,
-                documentId: document.id,
-              },
-              select: { id: true },
-            })
-          : null;
-        vat = document
-          ? await this.prisma.vatRecord.findFirst({
-              where: { mainCompanySlug: slug, documentId: document.id },
-              select: { id: true },
-            })
-          : null;
-
-        if (!document || !movement || !vat) {
-          throw new Error(
-            "Belge, firma carisi veya KDV kaydı doğrulanamadı.",
-          );
+        const created = Number(result?.items?.length || 0);
+        const skipped = Number(result?.skipped?.length || 0);
+        if (!created && !skipped) {
+          throw new Error("Belge e-Belge Havuzunda doğrulanamadı.");
         }
-        imported += 1;
+        stagedForReview += created;
+        alreadyInPool += skipped;
       } catch (error: any) {
         failures.push({
           documentNo,
           partnerName: state.partnerName,
           message:
-            clean(error?.message) || "Tedarikçi faturası kapatılamadı.",
+            clean(error?.message) || "Tedarikçi faturası havuza alınamadı.",
         });
       }
     }
@@ -305,9 +290,12 @@ export class IsnetFullSyncService {
     return {
       total: states.length,
       alreadyComplete,
-      imported,
+      imported: 0,
+      stagedForReview,
+      alreadyInPool,
       failed: failures.length,
       failures,
+      approvalMode: "MANUAL_REVIEW_REQUIRED",
     };
   }
 }
