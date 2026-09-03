@@ -217,8 +217,19 @@ jobs:
 
           check_ok production-center \
             'http://127.0.0.1:8790/api/production-center?mainCompanySlug=mecit-hakan&pageSize=5'
-          check_ok isnet \
-            'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan'
+
+          isnet_status="$(curl --silent --show-error \
+            --output /tmp/shared-isnet.json \
+            --write-out '%{http_code}' \
+            'http://127.0.0.1:8790/api/isnet/configuration?mainCompanySlug=mecit-hakan' || true)"
+          if [ "$isnet_status" != "401" ] || ! jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/shared-isnet.json >/dev/null 2>&1; then
+            echo "IsNet oturum korumasi beklenen 401/UNAUTHORIZED cevabini vermedi: HTTP ${isnet_status:-transport-error}" >&2
+            cat /tmp/shared-isnet.json >&2 2>/dev/null || true
+            cat /tmp/kyerp-shared-worker.log >&2 || true
+            exit 1
+          fi
+          echo "isnet-auth-guard: OK"
+
           check_ok ik \
             'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan'
 
