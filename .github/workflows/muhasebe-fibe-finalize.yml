@@ -20,7 +20,7 @@ jobs:
           ref: codex/muhasebe-fibe-cari-final
           fetch-depth: 0
 
-      - name: FIBE firma karti ve Worker tip duzeltmeleri
+      - name: FIBE firma karti ve final tip/lint duzeltmeleri
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -46,7 +46,13 @@ jobs:
           button = '''        <button type="button" className={mode === "FIBE" ? "active" : ""} onClick={() => setMode("FIBE")}><CircleDollarSign size={16} /> Firma FİBE</button>\n'''
           if button in t:
               t = t.replace(button, '', 1)
+          t = t.replace('[activeMainCompany?.id, activeMainCompany?.slug]', '[activeMainCompany]')
           q.write_text(t, encoding='utf-8')
+
+          f = Path('APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompanyFibeSection.jsx')
+          z = f.read_text(encoding='utf-8-sig')
+          z = z.replace('[activeMainCompany?.id, activeMainCompany?.slug]', '[activeMainCompany]')
+          f.write_text(z, encoding='utf-8')
 
           c = Path('APP/cloud/ky-erp-api/src/accounting-check-cari.ts')
           u = c.read_text(encoding='utf-8-sig')
@@ -69,13 +75,14 @@ jobs:
           r.write_text(v, encoding='utf-8')
           PY
 
-      - name: Baglanti ve tip patch kontrolu
+      - name: Baglanti ve final patch kontrolu
         run: |
           grep -q 'CompanyFibeSection' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx
           ! grep -q '> Firma FİBE</button>' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx
+          ! grep -q '\[activeMainCompany?.id, activeMainCompany?.slug\]' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx
+          ! grep -q '\[activeMainCompany?.id, activeMainCompany?.slug\]' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompanyFibeSection.jsx
           grep -q 'existingMovementId' APP/cloud/ky-erp-api/src/accounting-check-cari.ts
           grep -q 'let fibeResults: Row\[\]' APP/cloud/ky-erp-api/src/accounting-quick-control.ts
-          grep -q 'fibeOpeningAccrual' APP/cloud/ky-erp-api/src/accounting-company-profile.ts
 
       - name: Node setup
         uses: actions/setup-node@v4
@@ -142,7 +149,8 @@ jobs:
           git add APP/cloud/ky-erp-api/src/accounting-check-cari.ts \
                   APP/cloud/ky-erp-api/src/accounting-quick-control.ts \
                   APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx \
-                  APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx
+                  APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx \
+                  APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompanyFibeSection.jsx
           git rm -f .github/workflows/muhasebe-fibe-finalize.yml docs/muhasebe-fibe-finalize-trigger.txt
           git commit -m "feat(accounting): finalize company FIBE and quick accounting UX"
           git push origin HEAD:codex/muhasebe-fibe-cari-final
