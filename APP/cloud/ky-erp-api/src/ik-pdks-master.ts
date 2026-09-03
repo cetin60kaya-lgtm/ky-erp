@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
 import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";
+import { registerIkPdksAdjustmentRoutes } from "./ik-pdks-adjustments";
 import { registerIkPdksModernRoutes } from "./ik-pdks-modern";
 
 type Bindings = Cloudflare.Env;
@@ -113,10 +114,11 @@ function normalizeTime(value: unknown, fallback: string) {
 }
 
 export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
-  // PDKS tek registration noktası. Main.ts yalnız bu modülü çağırır; cihaz,
-  // kart bridge ve modern motor burada aynı /personnel-control sözleşmesine eklenir.
+  // Main.ts yalnız bu modülü çağırır. PDKS'nin cihaz, kart bridge, finans/mesai
+  // düzeltmeleri ve modern puantaj motoru tek registration noktasında kalır.
   registerIkPdksDeviceRoutes(app);
   registerIkPdksCardBridgeRoutes(app);
+  registerIkPdksAdjustmentRoutes(app);
   registerIkPdksModernRoutes(app);
 
   app.get("/api/ik/personnel-control/pdks-masters", async (c) => {
