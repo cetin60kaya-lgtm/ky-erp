@@ -86,7 +86,7 @@ function providerConfig(c: Context<AppEnv>, providerType: unknown) {
       family: "GOOGLE",
       clientId: text(c.env.GOOGLE_DRIVE_CLIENT_ID),
       clientSecret: text(c.env.GOOGLE_DRIVE_CLIENT_SECRET),
-      redirectUri: `${apiBaseUrl}/api/file-hub/oauth/google/callback`,
+      redirectUri: `${apiBaseUrl}/api/auth/file-hub/oauth/google/callback`,
       scope: "openid email profile https://www.googleapis.com/auth/drive",
     };
   }
@@ -96,7 +96,7 @@ function providerConfig(c: Context<AppEnv>, providerType: unknown) {
       family: "MICROSOFT",
       clientId: text(c.env.MICROSOFT_GRAPH_CLIENT_ID),
       clientSecret: text(c.env.MICROSOFT_GRAPH_CLIENT_SECRET),
-      redirectUri: `${apiBaseUrl}/api/file-hub/oauth/microsoft/callback`,
+      redirectUri: `${apiBaseUrl}/api/auth/file-hub/oauth/microsoft/callback`,
       scope: "openid profile email offline_access User.Read Files.ReadWrite.All Sites.ReadWrite.All",
     };
   }
@@ -321,8 +321,8 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
       return c.redirect(`${appBaseUrl}${returnPath}${separator}storageError=${encodeURIComponent(text(error?.code || error?.message || "oauth_failed"))}`);
     }
   }
-  app.get("/api/file-hub/oauth/google/callback", (c) => oauthCallback(c, "GOOGLE"));
-  app.get("/api/file-hub/oauth/microsoft/callback", (c) => oauthCallback(c, "MICROSOFT"));
+  app.get("/api/auth/file-hub/oauth/google/callback", (c) => oauthCallback(c, "GOOGLE"));
+  app.get("/api/auth/file-hub/oauth/microsoft/callback", (c) => oauthCallback(c, "MICROSOFT"));
 
   app.get("/api/file-hub/cloud/folders", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
