@@ -1,0 +1,63 @@
+name: e-Belge Üst Modül Final Doğrulama
+
+on:
+  push:
+    branches:
+      - codex/e-belge-merkezi-final-v2
+    paths:
+      - "tools/e-belge-top-level-final.mjs"
+      - ".github/workflows/e-belge-top-level-final.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/e-belge-merkezi-final-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Üst modül yapısını uygula
+        run: node tools/e-belge-top-level-final.mjs
+      - name: Frontend test build lint
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npm run lint
+      - name: Worker unit typecheck auth build
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run test:unit
+          npm run typecheck
+          npm run test:auth:integration
+          npm run build
+      - name: Yapı ve diff güvenliği
+        run: |
+          set -euo pipefail
+          grep -q 'label: "e-Belge Merkezi"' APP/app/ky-erp-frontend/src/app/moduleRegistry.js
+          ! grep -q 'label: "e-Belge Entegrasyonları"' APP/app/ky-erp-frontend/src/app/moduleRegistry.js
+          ! grep -q 'key: "e-belge-merkezi"' APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx
+          grep -q 'activeModule?.key === "isnet" && activeTab === "e-belge-merkezi"' APP/app/ky-erp-frontend/src/AppV3.jsx
+          git diff --check
+          if git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then
+            echo "Yasaklı veri dosyası değişikliği bulundu."
+            exit 1
+          fi
+      - name: Kalıcı final commit
+        run: |
+          set -euo pipefail
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm tools/e-belge-top-level-final.mjs .github/workflows/e-belge-top-level-final.yml
+          git add APP/app/ky-erp-frontend/src/app/moduleRegistry.js APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelgeCenterPage.jsx APP/app/ky-erp-frontend/src/App.jsx APP/app/ky-erp-frontend/src/AppV3.jsx
+          git diff --cached --check
+          git commit -m "fix(e-belge): make e-Belge Merkezi the single top-level module"
+          git push origin HEAD:codex/e-belge-merkezi-final-v2
