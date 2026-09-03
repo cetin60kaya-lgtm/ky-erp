@@ -1,0 +1,103 @@
+name: Muhasebe Release Gate Final
+
+on:
+  push:
+    branches:
+      - codex/muhasebe-fibe-cari-final
+    paths:
+      - docs/muhasebe-release-gate-final-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: codex/muhasebe-fibe-cari-final
+          fetch-depth: 0
+
+      - name: Production release'e guvenli 0040 kapisi ekle
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('.github/workflows/production-release.yml')
+          s = p.read_text(encoding='utf-8-sig')
+          s = s.replace(
+              '- name: File Hub + Muhasebe + PDKS + AI ucretlendirme hedefli migrationlarini uygula',
+              '- name: File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme hedefli migrationlarini uygula',
+              1,
+          )
+          anchor = '''          for migration in 0035_accounting_intelligence_profiles.sql 0036_accounting_document_archive_queue.sql 0037_pdks_device_sync.sql 0038_company_ai_billing.sql 0039_file_hub_agent_tenant_credentials.sql; do\n            test -f "migrations/$migration"\n            echo "Uygulaniyor/idempotent: $migration"\n            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "migrations/$migration"\n          done\n'''
+          block = anchor + '''\n          echo "0040 FIBE + hizli muhasebe semasi kontrol ediliyor..."\n          test -f migrations/0040_accounting_fibe_company_tracking.sql\n          fibe_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('companies') WHERE name IN ('fibe_enabled','fibe_rate','fibe_start_date','fibe_opening_accrual','fibe_opening_paid','fibe_note')) AS company_cols, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_fibe_movements','accounting_check_settlements')) AS fibe_tables;" --json)"\n          fibe_cols="$(jq -r '.[0].results[0].company_cols // -1' <<<"$fibe_state")"\n          fibe_tables="$(jq -r '.[0].results[0].fibe_tables // -1' <<<"$fibe_state")"\n          if [ "$fibe_cols" = "0" ] && [ "$fibe_tables" = "0" ]; then\n            echo "0040 semasi yok; yedek sonrasi migration uygulanacak."\n            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0040_accounting_fibe_company_tracking.sql\n          elif [ "$fibe_cols" = "6" ] && [ "$fibe_tables" = "2" ]; then\n            echo "0040 semasi zaten tam; tekrar uygulanmiyor."\n          else\n            echo "GUVENLIK DURDURMASI: 0040 kismi sema bulundu (company_cols=$fibe_cols, tables=$fibe_tables). Otomatik migration yapilmadi." >&2\n            exit 1\n          fi\n'''
+          if '0040 FIBE + hizli muhasebe semasi kontrol ediliyor' not in s:
+              if anchor not in s:
+                  raise SystemExit('0035-0039 migration anchor bulunamadi')
+              s = s.replace(anchor, block, 1)
+
+          s = s.replace(
+              '- name: Migration sonrasi File Hub + Muhasebe + PDKS + AI ucretlendirme semasini dogrula',
+              '- name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula',
+              1,
+          )
+          verify_anchor = '''          agent="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('file_hub_agent_credentials') WHERE name IN ('main_company_slug','secret_hash','is_active','last_used_at');" --json)"\n          jq -e '.[0].results[0].n == 4' <<<"$agent" >/dev/null || { echo "File Hub tenant agent credential semasi eksik" >&2; exit 1; }\n'''
+          verify_block = verify_anchor + '''          fibe="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('companies') WHERE name IN ('fibe_enabled','fibe_rate','fibe_start_date','fibe_opening_accrual','fibe_opening_paid','fibe_note')) AS company_cols, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_fibe_movements','accounting_check_settlements')) AS fibe_tables;" --json)"\n          jq -e '.[0].results[0].company_cols == 6 and .[0].results[0].fibe_tables == 2' <<<"$fibe" >/dev/null || { echo "FIBE/hizli muhasebe 0040 semasi eksik" >&2; exit 1; }\n'''
+          if 'FIBE/hizli muhasebe 0040 semasi eksik' not in s:
+              if verify_anchor not in s:
+                  raise SystemExit('schema verify anchor bulunamadi')
+              s = s.replace(verify_anchor, verify_block, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Release sirasi ve korumalari dogrula
+        run: |
+          set -euo pipefail
+          grep -q 'Canli D1 tam yedegini al' .github/workflows/production-release.yml
+          grep -q '0040 FIBE + hizli muhasebe semasi kontrol ediliyor' .github/workflows/production-release.yml
+          grep -q 'company_cols=$fibe_cols, tables=$fibe_tables' .github/workflows/production-release.yml
+          grep -q 'FIBE/hizli muhasebe 0040 semasi eksik' .github/workflows/production-release.yml
+          BACKUP_LINE=$(grep -n 'Canli D1 tam yedegini al' .github/workflows/production-release.yml | head -1 | cut -d: -f1)
+          MIG_LINE=$(grep -n '0040 FIBE + hizli muhasebe semasi kontrol ediliyor' .github/workflows/production-release.yml | head -1 | cut -d: -f1)
+          test "$BACKUP_LINE" -lt "$MIG_LINE"
+
+      - name: Node setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Worker ve frontend final build
+        run: |
+          set -euo pipefail
+          cd APP/cloud/ky-erp-api
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+          cd ../../app/ky-erp-frontend
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Production ancestry ve diff
+        run: |
+          git fetch origin codex/model-uretim-kontrol-merkezi-final
+          git merge-base --is-ancestor origin/codex/model-uretim-kontrol-merkezi-final HEAD
+          git diff --check
+
+      - name: Release gate'i kaydet ve gecici dosyalari temizle
+        run: |
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/production-release.yml
+          git rm -f .github/workflows/muhasebe-release-gate-final.yml docs/muhasebe-release-gate-final-trigger.txt
+          git commit -m "release(accounting): add safe 0040 FIBE production migration gate"
+          git push origin HEAD:codex/muhasebe-fibe-cari-final
