@@ -2,226 +2,57 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPut } from "../../utils/api";
 import "./AdminManagement.css";
 
-const STATUS_OPTIONS = [
-  ["TRIAL", "Deneme"],
-  ["ACTIVE", "Aktif"],
-  ["PAUSED", "Duraklatıldı"],
-  ["CANCELLED", "İptal"],
-];
+const STATUS_OPTIONS = [["TRIAL","Deneme"],["ACTIVE","Aktif"],["PAUSED","Duraklatıldı"],["CANCELLED","İptal"]];
+const PACKAGE_OPTIONS = [["MONTHLY","Aylık",1],["SIX_MONTHS","6 Aylık",6],["TWELVE_MONTHS","12 Aylık",12]];
 
-function unwrap(value) {
-  return value && typeof value === "object" && value.ok === true && Object.prototype.hasOwnProperty.call(value, "data") ? value.data : value;
-}
-function rowsOf(value) {
-  const data = unwrap(value);
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  return [];
-}
-function num(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-function tokenText(value) { return Math.max(0, Math.round(num(value))).toLocaleString("tr-TR"); }
-function moneyText(minor, currency = "TRY") {
-  try { return new Intl.NumberFormat("tr-TR", { style: "currency", currency: currency || "TRY" }).format(num(minor) / 100); }
-  catch { return `${(num(minor) / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency || "TRY"}`; }
-}
-function amountToMinor(value) {
-  const raw = String(value ?? "").trim().replace(/\s/g, "");
-  if (!raw) return 0;
-  let normalized = raw;
-  if (raw.includes(",") && raw.includes(".")) {
-    normalized = raw.lastIndexOf(",") > raw.lastIndexOf(".")
-      ? raw.replace(/\./g, "").replace(",", ".")
-      : raw.replace(/,/g, "");
-  } else if (raw.includes(",")) {
-    normalized = raw.replace(",", ".");
-  }
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
-}
-function minorToInput(value) {
-  if (value === null || value === undefined || value === "") return "";
-  return (num(value) / 100).toFixed(2).replace(".", ",");
-}
-function dateInput(value) { return value ? String(value).slice(0, 10) : ""; }
-function dateText(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("tr-TR");
-}
-function statusLabel(value) { return STATUS_OPTIONS.find(([key]) => key === value)?.[1] || value || "-"; }
-function badgeClass(value) { return value === "ACTIVE" ? "ok" : value === "TRIAL" ? "warn" : "bad"; }
-function formOf(row = {}) {
-  return {
-    packageCode: row.packageCode || "CUSTOM",
-    status: row.status || "ACTIVE",
-    includedTokens: row.includedTokens ?? 0,
-    monthlyTokenLimit: row.monthlyTokenLimit ?? 0,
-    baseMonthlyPrice: minorToInput(row.baseMonthlyPriceMinor ?? 0),
-    customMonthlyPrice: row.customMonthlyPriceMinor === null || row.customMonthlyPriceMinor === undefined ? "" : minorToInput(row.customMonthlyPriceMinor),
-    overagePricePerMillion: minorToInput(row.overagePricePerMillionMinor ?? 0),
-    currency: row.currency || "TRY",
-    periodStart: dateInput(row.periodStart),
-    periodEnd: dateInput(row.periodEnd),
-    nextRenewalAt: dateInput(row.nextRenewalAt),
-    note: row.note || "",
-  };
-}
+function unwrap(value){return value&&typeof value==="object"&&value.ok===true&&Object.prototype.hasOwnProperty.call(value,"data")?value.data:value}
+function rowsOf(value){const data=unwrap(value);if(Array.isArray(data))return data;if(Array.isArray(data?.items))return data.items;return[]}
+function num(value){const parsed=Number(value);return Number.isFinite(parsed)?parsed:0}
+function tokenText(value){return Math.max(0,Math.round(num(value))).toLocaleString("tr-TR")}
+function moneyText(minor,currency="TRY"){try{return new Intl.NumberFormat("tr-TR",{style:"currency",currency:currency||"TRY"}).format(num(minor)/100)}catch{return`${(num(minor)/100).toLocaleString("tr-TR",{minimumFractionDigits:2})} ${currency||"TRY"}`}}
+function amountToMinor(value){const raw=String(value??"").trim().replace(/\s/g,"");if(!raw)return 0;let normalized=raw;if(raw.includes(",")&&raw.includes(".")){normalized=raw.lastIndexOf(",")>raw.lastIndexOf(".")?raw.replace(/\./g,"").replace(",","."):raw.replace(/,/g,"")}else if(raw.includes(",")){normalized=raw.replace(",",".")}const parsed=Number(normalized);return Number.isFinite(parsed)?Math.round(parsed*100):0}
+function minorToInput(value){if(value===null||value===undefined||value==="")return"";return(num(value)/100).toFixed(2).replace(".",",")}
+function dateInput(value){return value?String(value).slice(0,10):""}
+function dateText(value){if(!value)return"-";const date=new Date(value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString("tr-TR")}
+function statusLabel(value){return STATUS_OPTIONS.find(([key])=>key===value)?.[1]||value||"-"}
+function badgeClass(value){return value==="ACTIVE"?"ok":value==="TRIAL"?"warn":"bad"}
+function packageLabel(value){return PACKAGE_OPTIONS.find(([key])=>key===value)?.[1]||"Aylık"}
+function packageMonths(value){return PACKAGE_OPTIONS.find(([key])=>key===value)?.[2]||1}
+function inferPackage(row={}){if(PACKAGE_OPTIONS.some(([key])=>key===row.packageCode))return row.packageCode;const start=Date.parse(row.periodStart||"");const end=Date.parse(row.periodEnd||"");const days=Number.isFinite(start)&&Number.isFinite(end)?Math.round((end-start)/86400000):30;return days>230?"TWELVE_MONTHS":days>45?"SIX_MONTHS":"MONTHLY"}
+function addMonths(dateValue,months){if(!dateValue)return"";const date=new Date(`${dateValue}T00:00:00Z`);if(Number.isNaN(date.getTime()))return"";date.setUTCMonth(date.getUTCMonth()+months);return date.toISOString().slice(0,10)}
+function remainingDays(value){if(!value)return 0;const end=new Date(`${dateInput(value)}T23:59:59Z`).getTime();return Math.max(0,Math.ceil((end-Date.now())/86400000))}
+function movementLabel(value){return({PLAN_UPDATE:"Paket Güncelleme",TERM_EXTENSION:"Süre Uzatma",FEE_ADJUSTMENT:"Ücret Düzeltmesi",AI_USAGE:"AI Kullanımı",TOKEN_CREDIT:"Teknik Token Düzeltme",TOKEN_DEBIT:"Teknik Token Düzeltme"})[value]||value||"-"}
+function formOf(row={}){const code=inferPackage(row);const start=dateInput(row.periodStart)||new Date().toISOString().slice(0,10);return{packageCode:code,status:row.status||"ACTIVE",packagePrice:minorToInput(row.packagePriceMinor??row.baseMonthlyPriceMinor??0),customPackagePrice:row.customPackagePriceMinor===null||row.customPackagePriceMinor===undefined?(row.customMonthlyPriceMinor===null||row.customMonthlyPriceMinor===undefined?"":minorToInput(row.customMonthlyPriceMinor)):minorToInput(row.customPackagePriceMinor),currency:row.currency||"TRY",periodStart:start,note:row.note||""}}
 
-export default function AdminCompanyBilling({ activeMainCompany }) {
-  const [companies, setCompanies] = useState([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [detail, setDetail] = useState(null);
-  const [form, setForm] = useState(formOf());
-  const [credit, setCredit] = useState({ tokens: "", note: "" });
-  const [fee, setFee] = useState({ amount: "", note: "" });
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Firma paket ve AI kullanım bilgileri yükleniyor...");
+export default function AdminCompanyBilling({activeMainCompany}){
+ const[companies,setCompanies]=useState([]),[selectedId,setSelectedId]=useState(""),[detail,setDetail]=useState(null),[form,setForm]=useState(formOf()),[extension,setExtension]=useState({days:"30",note:""}),[fee,setFee]=useState({amount:"",note:""}),[busy,setBusy]=useState(false),[message,setMessage]=useState("Firma paket ve süre bilgileri yükleniyor...");
+ const loadList=useCallback(async()=>{setBusy(true);try{const list=rowsOf(await apiGet("/admin/company-billing",{_ts:Date.now()}));setCompanies(list);setSelectedId(current=>list.some(row=>row.mainCompanyId===current)?current:(activeMainCompany?.id&&list.some(row=>row.mainCompanyId===activeMainCompany.id)?activeMainCompany.id:list[0]?.mainCompanyId||""));setMessage("Firma paket, süre ve ücret bilgileri güncel.")}catch(error){setCompanies([]);setMessage(`Hata: ${error?.message||"Firma ücretlendirme bilgileri alınamadı."}`)}finally{setBusy(false)}},[activeMainCompany?.id]);
+ const loadDetail=useCallback(async(id)=>{if(!id){setDetail(null);return}try{const value=unwrap(await apiGet(`/admin/company-billing/${encodeURIComponent(id)}`,{_ts:Date.now()}));setDetail(value||null);setForm(formOf(value||{}))}catch(error){setDetail(null);setMessage(`Hata: ${error?.message||"Firma paket detayı alınamadı."}`)}},[]);
+ useEffect(()=>{loadList()},[loadList]);useEffect(()=>{loadDetail(selectedId)},[selectedId,loadDetail]);
+ const selected=useMemo(()=>companies.find(row=>row.mainCompanyId===selectedId)||detail,[companies,selectedId,detail]);
+ const usage=detail?.usage||selected?.usage||{};
+ const previewEnd=useMemo(()=>addMonths(form.periodStart,packageMonths(form.packageCode)),[form.periodStart,form.packageCode]);
+ const dayCount=detail?.daysRemaining??remainingDays(detail?.periodEnd);
+ const effectivePackagePrice=detail?.customPackagePriceMinor??detail?.customMonthlyPriceMinor??detail?.packagePriceMinor??detail?.baseMonthlyPriceMinor??0;
 
-  const loadList = useCallback(async () => {
-    setBusy(true);
-    try {
-      const list = rowsOf(await apiGet("/admin/company-billing", { _ts: Date.now() }));
-      setCompanies(list);
-      setSelectedId((current) => list.some((row) => row.mainCompanyId === current)
-        ? current
-        : (activeMainCompany?.id && list.some((row) => row.mainCompanyId === activeMainCompany.id) ? activeMainCompany.id : list[0]?.mainCompanyId || ""));
-      setMessage("Firma paket, token kullanımı ve ücret bilgileri güncel.");
-    } catch (error) {
-      setCompanies([]);
-      setMessage(`Hata: ${error?.message || "Firma ücretlendirme bilgileri alınamadı."}`);
-    } finally { setBusy(false); }
-  }, [activeMainCompany?.id]);
+ async function savePlan(event){event?.preventDefault();if(!selectedId||busy)return;setBusy(true);try{await apiPut(`/admin/company-billing/${encodeURIComponent(selectedId)}`,{packageCode:form.packageCode,status:form.status,packagePriceMinor:amountToMinor(form.packagePrice),customPackagePriceMinor:String(form.customPackagePrice).trim()===""?null:amountToMinor(form.customPackagePrice),currency:String(form.currency||"TRY").toUpperCase().slice(0,3),periodStart:form.periodStart,note:form.note});await Promise.all([loadList(),loadDetail(selectedId)]);setMessage("Firma paketi süre bazlı olarak kaydedildi. AI kullanımı token nedeniyle kısıtlanmaz.")}catch(error){setMessage(`Hata: ${error?.message||"Paket ayarları kaydedilemedi."}`)}finally{setBusy(false)}}
+ async function extendPackage(event){event?.preventDefault();if(!selectedId||busy)return;const days=Math.round(num(extension.days));if(days<1||!extension.note.trim())return setMessage("Süre uzatmada gün ve açıklama zorunludur.");setBusy(true);try{await apiPost(`/admin/company-billing/${encodeURIComponent(selectedId)}/extend`,{days,note:extension.note.trim()});setExtension({days:"30",note:""});await Promise.all([loadList(),loadDetail(selectedId)]);setMessage(`Paket süresi ${days} gün uzatıldı ve hareket geçmişine işlendi.`)}catch(error){setMessage(`Hata: ${error?.message||"Paket süresi uzatılamadı."}`)}finally{setBusy(false)}}
+ async function addFee(event){event?.preventDefault();if(!selectedId||busy)return;const amountMinor=amountToMinor(fee.amount);if(!amountMinor||!fee.note.trim())return setMessage("Ücret düzeltmesinde tutar ve açıklama zorunludur.");setBusy(true);try{await apiPost(`/admin/company-billing/${encodeURIComponent(selectedId)}/fee-adjustment`,{amountMinor,note:fee.note.trim()});setFee({amount:"",note:""});await Promise.all([loadList(),loadDetail(selectedId)]);setMessage("Ücret düzeltmesi silinmez hareket olarak geçmişe işlendi.")}catch(error){setMessage(`Hata: ${error?.message||"Ücret düzeltmesi eklenemedi."}`)}finally{setBusy(false)}}
 
-  const loadDetail = useCallback(async (id) => {
-    if (!id) { setDetail(null); return; }
-    try {
-      const value = unwrap(await apiGet(`/admin/company-billing/${encodeURIComponent(id)}`, { _ts: Date.now() }));
-      setDetail(value || null);
-      setForm(formOf(value || {}));
-    } catch (error) {
-      setDetail(null);
-      setMessage(`Hata: ${error?.message || "Firma paket detayı alınamadı."}`);
-    }
-  }, []);
+ return <div className="admpro-page">
+  <header className="admpro-head"><div><span className="admpro-kicker">YÖNETİM / FİRMA PAKET & SÜRE</span><h2>Firma Paket ve Ücretlendirme</h2><p>Aylık, 6 aylık ve 12 aylık paketler; kalan gün, yenileme ve firma özel fiyatı tek merkezde. AI tokenı yalnız teknik maliyet takibidir.</p></div><div className="admpro-actions"><button type="button" className="primary" onClick={loadList} disabled={busy}>Yenile</button></div></header>
+  <div className={`admpro-notice ${message.startsWith("Hata")?"error":"success"}`}>{message}</div>
+  <section className="admpro-grid-2">
+   <div className="admpro-card"><div className="admpro-card-head"><div><h3>Ana Firmalar</h3><p>Paket ve fiyat yönetimi yalnız Uygulama Sahibine açıktır.</p></div><span className="admpro-badge">{companies.length} firma</span></div><div className="admpro-company-list">{companies.map(row=>{const days=row.daysRemaining??remainingDays(row.periodEnd);return <div key={row.mainCompanyId} className={`admpro-company-row ${row.mainCompanyId===selectedId?"active":""}`}><div role="button" tabIndex={0} onClick={()=>setSelectedId(row.mainCompanyId)} onKeyDown={event=>{if(event.key==="Enter")setSelectedId(row.mainCompanyId)}}><strong>{row.companyName}</strong><small>{row.mainCompanySlug} · {packageLabel(inferPackage(row))} · {statusLabel(row.status)}</small></div><span className={`admpro-badge ${days>30?"ok":days>0?"warn":"bad"}`}>{days} gün</span></div>})}{!companies.length?<div className="admpro-empty">Firma ücretlendirme kaydı bulunamadı.</div>:null}</div></div>
+   <div className="admpro-card"><div className="admpro-card-head"><div><h3>{selected?.companyName||"Firma"} · Paket Özeti</h3><p>{detail?`${dateInput(detail.periodStart)} → ${dateInput(detail.periodEnd)}`:"Firma seçin"}</p></div>{detail?<span className={`admpro-badge ${badgeClass(detail.status)}`}>{statusLabel(detail.status)}</span>:null}</div><div className="admpro-stats"><div className="admpro-stat"><span>Paket</span><strong style={{fontSize:18}}>{packageLabel(detail?.packageCode)}</strong><small>{detail?.packageTermMonths||packageMonths(detail?.packageCode)} aylık dönem</small></div><div className="admpro-stat"><span>Kalan Süre</span><strong>{dayCount}</strong><small>gün</small></div><div className="admpro-stat"><span>Yenileme</span><strong style={{fontSize:15}}>{dateInput(detail?.nextRenewalAt)||"-"}</strong><small>{detail?.expired?"Süre dolmuş":"Takvim bazlı"}</small></div><div className="admpro-stat"><span>Paket Tutarı</span><strong style={{fontSize:18}}>{moneyText(effectivePackagePrice,detail?.currency)}</strong><small>Ücret düzeltmeleri hariç</small></div></div><div className="admpro-notice" style={{marginTop:10}}>Uygulama ve AI kullanımı token kotasıyla kapanmaz. Input / output / toplam token yalnız Uygulama Sahibinin teknik kullanım ve maliyet analizinde tutulur.</div></div>
+  </section>
 
-  useEffect(() => { loadList(); }, [loadList]);
-  useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
+  {detail?<form className="admpro-card" onSubmit={savePlan}><div className="admpro-card-head"><div><h3>Paket, Süre ve Fiyat</h3><p>Paket süresi takvim ayı olarak hesaplanır; 30/31 gün ve Şubat farkları otomatik yönetilir.</p></div><span className="admpro-badge">{detail.mainCompanySlug}</span></div><div className="admpro-form-grid three"><label>Paket<select value={form.packageCode} onChange={e=>setForm(old=>({...old,packageCode:e.target.value}))}>{PACKAGE_OPTIONS.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>Durum<select value={form.status} onChange={e=>setForm(old=>({...old,status:e.target.value}))}>{STATUS_OPTIONS.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>Para Birimi<input maxLength={3} value={form.currency} onChange={e=>setForm(old=>({...old,currency:e.target.value.toUpperCase()}))}/></label><label>Paket Liste Fiyatı<input inputMode="decimal" value={form.packagePrice} onChange={e=>setForm(old=>({...old,packagePrice:e.target.value}))}/></label><label>Firma Özel Paket Fiyatı<input inputMode="decimal" placeholder="Boş = liste fiyatı" value={form.customPackagePrice} onChange={e=>setForm(old=>({...old,customPackagePrice:e.target.value}))}/></label><label>Başlangıç<input type="date" value={form.periodStart} onChange={e=>setForm(old=>({...old,periodStart:e.target.value}))}/></label><label>Bitiş<input type="date" value={previewEnd} readOnly/></label><label>Sonraki Yenileme<input type="date" value={previewEnd} readOnly/></label><label className="wide">Not<textarea value={form.note} onChange={e=>setForm(old=>({...old,note:e.target.value}))}/></label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit" disabled={busy}>Paket Ayarlarını Kaydet</button></div></form>:null}
 
-  const selected = useMemo(() => companies.find((row) => row.mainCompanyId === selectedId) || detail, [companies, selectedId, detail]);
-  const usage = detail?.usage || selected?.usage || {};
+  {detail?<section className="admpro-grid-2"><form className="admpro-card" onSubmit={extendPackage}><div className="admpro-card-head"><div><h3>Süre Uzatma</h3><p>Mevcut bitiş tarihine ek gün eklenir. Süresi dolmuş pakette uzatma bugünden başlar.</p></div></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginBottom:10}}>{[7,30,90].map(days=><button type="button" key={days} className={String(extension.days)===String(days)?"primary":""} onClick={()=>setExtension(old=>({...old,days:String(days)}))}>+{days} Gün</button>)}</div><div className="admpro-form-grid"><label>Ek Gün<input type="number" min="1" max="3650" value={extension.days} onChange={e=>setExtension(old=>({...old,days:e.target.value}))}/></label><label>Açıklama<input value={extension.note} onChange={e=>setExtension(old=>({...old,note:e.target.value}))} placeholder="Örn: kampanya / ek süre"/></label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:10}}><button type="submit" className="primary" disabled={busy}>Süreyi Uzat</button></div></form><form className="admpro-card" onSubmit={addFee}><div className="admpro-card-head"><div><h3>Ücret Düzeltmesi</h3><p>Pozitif ek ücret, negatif indirim/düzeltme olarak paket dönemine yansır.</p></div></div><div className="admpro-form-grid"><label>Tutar ({detail.currency})<input inputMode="decimal" value={fee.amount} onChange={e=>setFee(old=>({...old,amount:e.target.value}))}/></label><label>Açıklama<input value={fee.note} onChange={e=>setFee(old=>({...old,note:e.target.value}))}/></label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:10}}><button type="submit" className="primary" disabled={busy}>Harekete Ekle</button></div></form></section>:null}
 
-  async function savePlan(event) {
-    event?.preventDefault();
-    if (!selectedId || busy) return;
-    setBusy(true);
-    try {
-      const payload = {
-        packageCode: String(form.packageCode || "CUSTOM").trim(),
-        status: form.status,
-        includedTokens: Math.max(0, Math.round(num(form.includedTokens))),
-        monthlyTokenLimit: Math.max(0, Math.round(num(form.monthlyTokenLimit))),
-        baseMonthlyPriceMinor: amountToMinor(form.baseMonthlyPrice),
-        customMonthlyPriceMinor: String(form.customMonthlyPrice).trim() === "" ? null : amountToMinor(form.customMonthlyPrice),
-        overagePricePerMillionMinor: amountToMinor(form.overagePricePerMillion),
-        currency: String(form.currency || "TRY").toUpperCase().slice(0, 3),
-        periodStart: form.periodStart,
-        periodEnd: form.periodEnd,
-        nextRenewalAt: form.nextRenewalAt,
-        note: form.note,
-      };
-      await apiPut(`/admin/company-billing/${encodeURIComponent(selectedId)}`, payload);
-      await Promise.all([loadList(), loadDetail(selectedId)]);
-      setMessage("Firma paket, limit ve ücret ayarları kaydedildi. Kullanım geçmişi değiştirilmedi.");
-    } catch (error) { setMessage(`Hata: ${error?.message || "Paket ayarları kaydedilemedi."}`); }
-    finally { setBusy(false); }
-  }
+  {detail?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Paket / Ücret Hareketleri</h3><p>Paket değişiklikleri, süre uzatmaları ve ücret düzeltmeleri audit mantığında eklemeli geçmiş olarak tutulur.</p></div><span className="admpro-badge">{(detail.movements||[]).filter(row=>row.movementType!=="AI_USAGE").length} hareket</span></div><div className="admpro-table"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Kaynak</th><th>Tutar</th><th>Açıklama</th></tr></thead><tbody>{(detail.movements||[]).filter(row=>row.movementType!=="AI_USAGE").map(row=><tr key={row.id}><td>{dateText(row.createdAt)}</td><td><strong>{movementLabel(row.movementType)}</strong></td><td>{row.source||"-"}</td><td>{moneyText(row.amountMinor,detail.currency)}</td><td className="admpro-code">{row.note||"-"}</td></tr>)}{!(detail.movements||[]).some(row=>row.movementType!=="AI_USAGE")?<tr><td colSpan="5">Henüz paket veya ücret hareketi yok.</td></tr>:null}</tbody></table></div></section>:null}
 
-  async function addCredit(event) {
-    event?.preventDefault();
-    if (!selectedId || busy) return;
-    const tokens = Math.round(num(credit.tokens));
-    if (!tokens || !credit.note.trim()) return setMessage("Ek token/kredi hareketinde miktar ve açıklama zorunludur.");
-    setBusy(true);
-    try {
-      await apiPost(`/admin/company-billing/${encodeURIComponent(selectedId)}/credit`, { tokens, note: credit.note.trim() });
-      setCredit({ tokens: "", note: "" });
-      await Promise.all([loadList(), loadDetail(selectedId)]);
-      setMessage(`${tokens > 0 ? "Ek token/kredi" : "Token düzeltmesi"} hareketi geçmişe işlendi.`);
-    } catch (error) { setMessage(`Hata: ${error?.message || "Token/kredi hareketi eklenemedi."}`); }
-    finally { setBusy(false); }
-  }
-
-  async function addFee(event) {
-    event?.preventDefault();
-    if (!selectedId || busy) return;
-    const amountMinor = amountToMinor(fee.amount);
-    if (!amountMinor || !fee.note.trim()) return setMessage("Ücret düzeltmesinde tutar ve açıklama zorunludur.");
-    setBusy(true);
-    try {
-      await apiPost(`/admin/company-billing/${encodeURIComponent(selectedId)}/fee-adjustment`, { amountMinor, note: fee.note.trim() });
-      setFee({ amount: "", note: "" });
-      await Promise.all([loadList(), loadDetail(selectedId)]);
-      setMessage("Ücret düzeltmesi silinmez hareket olarak geçmişe işlendi.");
-    } catch (error) { setMessage(`Hata: ${error?.message || "Ücret düzeltmesi eklenemedi."}`); }
-    finally { setBusy(false); }
-  }
-
-  return <div className="admpro-page">
-    <header className="admpro-head">
-      <div><span className="admpro-kicker">YÖNETİM / FİRMA PAKET & KULLANIM</span><h2>Firma Ücretlendirme ve AI Token Kullanımı</h2><p>Firma paketi, aylık token limiti, gerçek Workers AI kullanımı, ek kredi ve dönem ücretleri tek merkezde.</p></div>
-      <div className="admpro-actions"><button type="button" className="primary" onClick={loadList} disabled={busy}>Yenile</button></div>
-    </header>
-    <div className={`admpro-notice ${message.startsWith("Hata") ? "error" : "success"}`}>{message}</div>
-
-    <section className="admpro-grid-2">
-      <div className="admpro-card">
-        <div className="admpro-card-head"><div><h3>Ana Firmalar</h3><p>Yalnız Uygulama Sahibi paket/fiyat yönetebilir.</p></div><span className="admpro-badge">{companies.length} firma</span></div>
-        <div className="admpro-company-list">{companies.map((row) => <div key={row.mainCompanyId} className={`admpro-company-row ${row.mainCompanyId === selectedId ? "active" : ""}`}>
-          <div role="button" tabIndex={0} onClick={() => setSelectedId(row.mainCompanyId)} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(row.mainCompanyId); }}>
-            <strong>{row.companyName}</strong><small>{row.mainCompanySlug} · {row.packageCode} · {statusLabel(row.status)}</small>
-          </div>
-          <span className={`admpro-badge ${badgeClass(row.status)}`}>{tokenText(row.usage?.totalTokens)} token</span>
-        </div>)}{!companies.length ? <div className="admpro-empty">Firma ücretlendirme kaydı bulunamadı.</div> : null}</div>
-      </div>
-
-      <div className="admpro-card">
-        <div className="admpro-card-head"><div><h3>{selected?.companyName || "Firma"} · Dönem Özeti</h3><p>{detail ? `${dateInput(detail.periodStart)} → ${dateInput(detail.periodEnd)}` : "Firma seçin"}</p></div>{detail ? <span className={`admpro-badge ${badgeClass(detail.status)}`}>{statusLabel(detail.status)}</span> : null}</div>
-        <div className="admpro-stats">
-          <div className="admpro-stat"><span>Toplam Token</span><strong>{tokenText(usage.totalTokens)}</strong><small>Input {tokenText(usage.inputTokens)} · Output {tokenText(usage.outputTokens)}</small></div>
-          <div className="admpro-stat"><span>Kalan Dahil Token</span><strong>{tokenText(usage.remainingTokens)}</strong><small>Ek kredi dahil: {tokenText(usage.availableTokens)}</small></div>
-          <div className="admpro-stat"><span>Aşım Tokenı</span><strong>{tokenText(usage.overageTokens)}</strong><small>Aşım: {moneyText(usage.overageAmountMinor, detail?.currency)}</small></div>
-          <div className="admpro-stat"><span>Dönem Tutarı</span><strong>{moneyText(usage.invoiceAmountMinor, detail?.currency)}</strong><small>{tokenText(usage.aiRequests)} AI isteği</small></div>
-        </div>
-        <div className="admpro-notice warn" style={{ marginTop: 10 }}>Aylık limit <b>0</b> ise sınırsızdır. AI kullanım satırları yalnız sunucunun gerçek provider <b>usage</b> bilgisinden oluşur; kullanıcı ekranından değiştirilemez veya silinemez.</div>
-      </div>
-    </section>
-
-    {detail ? <form className="admpro-card" onSubmit={savePlan}>
-      <div className="admpro-card-head"><div><h3>Paket, Limit ve Fiyat</h3><p>Firma özel fiyatı boşsa temel aylık fiyat uygulanır.</p></div><span className="admpro-badge">{detail.mainCompanySlug}</span></div>
-      <div className="admpro-form-grid three">
-        <label>Paket Kodu<input value={form.packageCode} onChange={(e) => setForm((old) => ({ ...old, packageCode: e.target.value }))} /></label>
-        <label>Durum<select value={form.status} onChange={(e) => setForm((old) => ({ ...old, status: e.target.value }))}>{STATUS_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label>Para Birimi<input maxLength={3} value={form.currency} onChange={(e) => setForm((old) => ({ ...old, currency: e.target.value.toUpperCase() }))} /></label>
-        <label>Pakete Dahil Token<input type="number" min="0" step="1" value={form.includedTokens} onChange={(e) => setForm((old) => ({ ...old, includedTokens: e.target.value }))} /></label>
-        <label>Aylık Sert Limit<input type="number" min="0" step="1" value={form.monthlyTokenLimit} onChange={(e) => setForm((old) => ({ ...old, monthlyTokenLimit: e.target.value }))} /></label>
-        <label>1 Milyon Aşım Token Fiyatı<input inputMode="decimal" value={form.overagePricePerMillion} onChange={(e) => setForm((old) => ({ ...old, overagePricePerMillion: e.target.value }))} /></label>
-        <label>Temel Aylık Fiyat<input inputMode="decimal" value={form.baseMonthlyPrice} onChange={(e) => setForm((old) => ({ ...old, baseMonthlyPrice: e.target.value }))} /></label>
-        <label>Firma Özel Aylık Fiyat<input inputMode="decimal" placeholder="Boş = temel fiyat" value={form.customMonthlyPrice} onChange={(e) => setForm((old) => ({ ...old, customMonthlyPrice: e.target.value }))} /></label>
-        <label>Sonraki Yenileme<input type="date" value={form.nextRenewalAt} onChange={(e) => setForm((old) => ({ ...old, nextRenewalAt: e.target.value }))} /></label>
-        <label>Dönem Başlangıç<input type="date" value={form.periodStart} onChange={(e) => setForm((old) => ({ ...old, periodStart: e.target.value }))} /></label>
-        <label>Dönem Bitiş<input type="date" value={form.periodEnd} onChange={(e) => setForm((old) => ({ ...old, periodEnd: e.target.value }))} /></label>
-        <label className="wide">Not<textarea value={form.note} onChange={(e) => setForm((old) => ({ ...old, note: e.target.value }))} /></label>
-      </div>
-      <div className="admpro-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}><button className="primary" type="submit" disabled={busy}>Paket Ayarlarını Kaydet</button></div>
-    </form> : null}
-
-    {detail ? <section className="admpro-grid-2">
-      <form className="admpro-card" onSubmit={addCredit}><div className="admpro-card-head"><div><h3>Ek Token / Kredi</h3><p>Pozitif ek kredi, negatif kontrollü token düzeltmesidir.</p></div></div><div className="admpro-form-grid"><label>Token Miktarı<input type="number" step="1" value={credit.tokens} onChange={(e) => setCredit((old) => ({ ...old, tokens: e.target.value }))} /></label><label>Açıklama<input value={credit.note} onChange={(e) => setCredit((old) => ({ ...old, note: e.target.value }))} /></label></div><div className="admpro-actions" style={{ justifyContent: "flex-start", marginTop: 10 }}><button type="submit" className="primary" disabled={busy}>Harekete Ekle</button></div></form>
-      <form className="admpro-card" onSubmit={addFee}><div className="admpro-card-head"><div><h3>Ücret Düzeltmesi</h3><p>Pozitif ek ücret, negatif indirim/düzeltme olarak dönem toplamına yansır.</p></div></div><div className="admpro-form-grid"><label>Tutar ({detail.currency})<input inputMode="decimal" value={fee.amount} onChange={(e) => setFee((old) => ({ ...old, amount: e.target.value }))} /></label><label>Açıklama<input value={fee.note} onChange={(e) => setFee((old) => ({ ...old, note: e.target.value }))} /></label></div><div className="admpro-actions" style={{ justifyContent: "flex-start", marginTop: 10 }}><button type="submit" className="primary" disabled={busy}>Harekete Ekle</button></div></form>
-    </section> : null}
-
-    {detail ? <section className="admpro-card"><div className="admpro-card-head"><div><h3>Kullanım / Kredi / Ücret Hareketleri</h3><p>Audit mantığında eklemeli geçmiş. Düzenleme ve silme endpointi yoktur.</p></div><span className="admpro-badge">{detail.movements?.length || 0} hareket</span></div><div className="admpro-table"><table><thead><tr><th>Tarih</th><th>Tip</th><th>Kaynak</th><th>Input</th><th>Output</th><th>Toplam</th><th>Kredi</th><th>Tutar</th><th>Açıklama</th></tr></thead><tbody>{(detail.movements || []).map((row) => <tr key={row.id}><td>{dateText(row.createdAt)}</td><td>{row.movementType}</td><td>{row.source}<small>{row.model || row.sourceRef || ""}</small></td><td>{tokenText(row.inputTokens)}</td><td>{tokenText(row.outputTokens)}</td><td>{tokenText(row.totalTokens)}</td><td>{num(row.creditTokensDelta).toLocaleString("tr-TR")}</td><td>{moneyText(row.amountMinor, detail.currency)}</td><td>{row.note || "-"}</td></tr>)}{!detail.movements?.length ? <tr><td colSpan="9">Henüz kullanım veya düzeltme hareketi yok.</td></tr> : null}</tbody></table></div></section> : null}
-
-    {detail ? <section className="admpro-card"><div className="admpro-card-head"><div><h3>Aylık Kullanım Özeti</h3><p>Son 12 ayın gerçek AI token hareketleri.</p></div></div><div className="admpro-table"><table><thead><tr><th>Dönem</th><th>İstek</th><th>Input</th><th>Output</th><th>Toplam</th><th>Ek Kredi</th><th>Ücret Düzeltmesi</th></tr></thead><tbody>{(detail.monthlyUsage || []).map((row) => <tr key={row.periodKey}><td>{row.periodKey}</td><td>{tokenText(row.aiRequests)}</td><td>{tokenText(row.inputTokens)}</td><td>{tokenText(row.outputTokens)}</td><td>{tokenText(row.totalTokens)}</td><td>{num(row.creditTokensDelta).toLocaleString("tr-TR")}</td><td>{moneyText(row.feeAdjustmentMinor, detail.currency)}</td></tr>)}{!detail.monthlyUsage?.length ? <tr><td colSpan="7">Aylık kullanım hareketi henüz oluşmadı.</td></tr> : null}</tbody></table></div></section> : null}
-  </div>;
+  {detail?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Teknik AI Kullanım / Maliyet Takibi</h3><p>Bu bölüm yalnız yönetim içindir. Token sayıları firmaya kullanım kotası oluşturmaz ve uygulamayı durdurmaz.</p></div><span className="admpro-badge">{tokenText(usage.totalTokens)} token</span></div><div className="admpro-stats"><div className="admpro-stat"><span>AI İsteği</span><strong>{tokenText(usage.aiRequests)}</strong><small>Seçili paket dönemi</small></div><div className="admpro-stat"><span>Input Token</span><strong>{tokenText(usage.inputTokens)}</strong><small>Provider ölçümü</small></div><div className="admpro-stat"><span>Output Token</span><strong>{tokenText(usage.outputTokens)}</strong><small>Provider ölçümü</small></div><div className="admpro-stat"><span>Toplam Token</span><strong>{tokenText(usage.totalTokens)}</strong><small>Yalnız maliyet analizi</small></div></div><div className="admpro-table" style={{marginTop:12}}><table><thead><tr><th>Dönem</th><th>İstek</th><th>Input</th><th>Output</th><th>Toplam</th></tr></thead><tbody>{(detail.monthlyUsage||[]).map(row=><tr key={row.periodKey}><td>{row.periodKey}</td><td>{tokenText(row.aiRequests)}</td><td>{tokenText(row.inputTokens)}</td><td>{tokenText(row.outputTokens)}</td><td>{tokenText(row.totalTokens)}</td></tr>)}{!detail.monthlyUsage?.length?<tr><td colSpan="5">AI kullanım hareketi henüz oluşmadı.</td></tr>:null}</tbody></table></div></section>:null}
+ </div>
 }
