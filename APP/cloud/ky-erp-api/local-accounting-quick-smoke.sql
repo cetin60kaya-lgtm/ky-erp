@@ -1,6 +1,22 @@
 -- KY ERP hizli muhasebe / cari izole smoke semasi.
 -- Sadece CI yerel D1 icindir; canli veriye uygulanmaz.
 
+CREATE TABLE IF NOT EXISTS companies (
+  id TEXT PRIMARY KEY,
+  main_company_slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  normalized_name TEXT,
+  company_type TEXT,
+  type TEXT,
+  tax_no TEXT,
+  phone TEXT,
+  email TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT,
+  updated_at TEXT,
+  deleted_at TEXT
+);
+
 ALTER TABLE companies ADD COLUMN current_balance REAL NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN supplier_debt_tracking INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN customer_receivable_tracking INTEGER NOT NULL DEFAULT 0;
