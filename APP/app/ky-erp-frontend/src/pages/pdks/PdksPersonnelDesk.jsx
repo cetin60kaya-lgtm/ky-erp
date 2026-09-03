@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   addPdksTimeEvent,
   getPdksAttendance,
-  getPdksLeaveEntitlement,
   getPdksLeaveCenter,
+  getPdksLeaveEntitlement,
   getPdksModernConfig,
   getPdksPayroll,
   getPdksPeople,
@@ -13,206 +13,102 @@ import {
 } from "../../services/pdksApi";
 import "./PdksPersonnelDesk.css";
 
-const MONTHS = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
-const now = new Date();
-const upper = (v) => String(v || "").trim().toLocaleUpperCase("tr-TR");
-const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
-const iso = () => new Date().toISOString().slice(0, 10);
-const statusLabel = (value) => ({
-  CALISTI:"Çalıştı",EKSIK_BASIM:"Eksik Basım",KART_YOK:"Kart Yok",YILLIK_IZIN:"Yıllık İzin",YARIM_GUN_IZIN:"Yarım Gün İzin",IZIN:"İzin",
-  EVLILIK:"Evlilik İzni",EVLAT_EDINME:"Evlat Edinme",OLUM:"Ölüm İzni",BABALIK:"Babalık İzni",DOGUM:"Doğum İzni",RAPOR:"Rapor / İstirahat",UCRETSIZ:"Ücretsiz İzin",SUT:"Süt İzni",
-  DOGUM_SONRASI_YARIM:"Doğum Sonrası Yarım",ENGELLI_COCUK_TEDAVI:"Çocuk Tedavi İzni",YOL_IZNI:"Yol İzni",MAZERET:"Mazeret İzni",IDARI:"İdari İzin",
-  RESMI_TATIL:"Resmî Tatil",RESMI_TATIL_CALISMA:"Resmî Tatil Çalışması",YARIM_GUN_TATIL:"Yarım Gün Tatil",YARIM_GUN_TATIL_CALISMA:"Yarım Gün Tatil Çalışması",
-  HAFTA_TATILI:"Hafta Tatili",HAFTA_TATILI_CALISMA:"Hafta Tatili Çalışması",HAFTA_SONU:"Hafta Sonu",DONEM_DISI:"Dönem Dışı",
-})[upper(value)] || String(value || "-");
-const statusTone = (value) => {
-  const key = upper(value);
-  if (["CALISTI","YILLIK_IZIN","IZIN","EVLILIK","EVLAT_EDINME","OLUM","BABALIK","DOGUM","RAPOR","UCRETSIZ","SUT","DOGUM_SONRASI_YARIM","ENGELLI_COCUK_TEDAVI","YOL_IZNI","MAZERET","IDARI","RESMI_TATIL","HAFTA_TATILI","YARIM_GUN_TATIL"].includes(key)) return "ok";
-  if (["EKSIK_BASIM","YARIM_GUN_IZIN","YARIM_GUN_TATIL_CALISMA"].includes(key)) return "warn";
-  if (["KART_YOK"].includes(key)) return "bad";
-  if (["RESMI_TATIL_CALISMA","HAFTA_TATILI_CALISMA"].includes(key)) return "accent";
-  return "muted";
-};
-const dayName = (date) => {
-  const d = new Date(`${date}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("tr-TR", { weekday:"short" });
-};
-const dateTr = (date) => {
-  const d = new Date(`${date}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString("tr-TR");
-};
-const money = (value) => num(value).toLocaleString("tr-TR", { minimumFractionDigits:2, maximumFractionDigits:2 });
+const MONTHS=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+const NOW=new Date();
+const upper=(v)=>String(v||"").trim().toLocaleUpperCase("tr-TR");
+const num=(v)=>Number.isFinite(Number(v))?Number(v):0;
+const iso=()=>new Date().toISOString().slice(0,10);
+const money=(v)=>num(v).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const dateTr=(date)=>{const d=new Date(`${date}T12:00:00`);return Number.isNaN(d.getTime())?date:d.toLocaleDateString("tr-TR")};
+const dayName=(date)=>{const d=new Date(`${date}T12:00:00`);return Number.isNaN(d.getTime())?"":d.toLocaleDateString("tr-TR",{weekday:"short"})};
+const statusLabel=(value)=>({
+  AUTO:"Otomatik",CALISTI:"Çalıştı",EKSIK_BASIM:"Eksik Basım",KART_YOK:"Kart Yok",YILLIK_IZIN:"Yıllık İzin",YARIM_GUN_IZIN:"Yarım Gün İzin",IZIN:"İzin",
+  EVLILIK:"Evlilik İzni",EVLAT_EDINME:"Evlat Edinme",OLUM:"Ölüm İzni",BABALIK:"Babalık İzni",DOGUM:"Doğum İzni",RAPOR:"Rapor / İstirahat",UCRETSIZ:"Ücretsiz İzin",SUT:"Süt İzni",DOGUM_SONRASI_YARIM:"Doğum Sonrası Yarım",ENGELLI_COCUK_TEDAVI:"Çocuk Tedavi İzni",YOL_IZNI:"Yol İzni",MAZERET:"Mazeret İzni",IDARI:"İdari İzin",
+  RESMI_TATIL:"Resmî Tatil",RESMI_TATIL_CALISMA:"Resmî Tatil Çalışması",YARIM_GUN_TATIL:"Yarım Gün Tatil",YARIM_GUN_TATIL_CALISMA:"Yarım Gün Tatil Çalışması",HAFTA_TATILI:"Hafta Tatili",HAFTA_TATILI_CALISMA:"Hafta Tatili Çalışması",DONEM_DISI:"Dönem Dışı",
+})[upper(value)]||String(value||"-");
+const statusTone=(value)=>{const key=upper(value);if(["CALISTI","YILLIK_IZIN","IZIN","EVLILIK","EVLAT_EDINME","OLUM","BABALIK","DOGUM","RAPOR","UCRETSIZ","SUT","DOGUM_SONRASI_YARIM","ENGELLI_COCUK_TEDAVI","YOL_IZNI","MAZERET","IDARI","RESMI_TATIL","HAFTA_TATILI","YARIM_GUN_TATIL"].includes(key))return"ok";if(["EKSIK_BASIM","YARIM_GUN_IZIN","YARIM_GUN_TATIL_CALISMA"].includes(key))return"warn";if(key==="KART_YOK")return"bad";if(["RESMI_TATIL_CALISMA","HAFTA_TATILI_CALISMA"].includes(key))return"accent";return"muted"};
 
-function Modal({ title, subtitle, children, onClose, wide = false }) {
-  return <div className="ppd-modal-layer" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
-    <section className={`ppd-modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true">
-      <header><div><h3>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div><button type="button" className="ppd-close" onClick={onClose}>×</button></header>
-      <div className="ppd-modal-body">{children}</div>
-    </section>
-  </div>;
+function Modal({title,subtitle,children,onClose,wide=false}){return <div className="ppd-modal-layer" onMouseDown={(e)=>{if(e.target===e.currentTarget)onClose?.()}}><section className={`ppd-modal ${wide?"wide":""}`}><header><div><h3>{title}</h3>{subtitle?<p>{subtitle}</p>:null}</div><button type="button" className="ppd-close" onClick={onClose}>×</button></header><div className="ppd-modal-body">{children}</div></section></div>}
+
+function PersonInfo({person,schedule,onOpenIk}){
+  const rows=[["Personel Kodu",person?.personnelCode||person?.code||"-"],["Kart No",person?.cardNo||"Atanmadı"],["Bölüm",person?.department||"-"],["Görev",person?.title||"-"],["İşe Giriş",person?.startDate||"-"],["İşten Çıkış",person?.exitDate||"-"],["SGK",person?.sgkStatus||"VAR"],["Durum",person?.status||"Aktif"],["Vardiya",schedule?.groupName||"Normal Mesai"],["Mesai",`${schedule?.entryTime||"08:30"} – ${schedule?.exitTime||"19:00"}`],["Mola",`${schedule?.breakMinutes??60} dk`],["Kaynak","İK Personel Kartı"]];
+  return <div><div className="ppd-person-hero"><div className="ppd-big-avatar">{String(person?.fullName||"?").split(/\s+/).slice(0,2).map(v=>v[0]).join("")}</div><div><h2>{person?.fullName||"Personel"}</h2><span>{person?.department||"Bölüm yok"} · {person?.title||"Görev yok"}</span><div className="ppd-person-badges"><b className="ok">İK Ana Kaynak</b><b>{person?.cardNo?`Kart ${person.cardNo}`:"Kart Bekliyor"}</b></div></div></div><div className="ppd-info-grid">{rows.map(([k,v])=><div key={k}><span>{k}</span><strong>{v}</strong></div>)}</div><div className="ppd-hint">PDKS personeli ikinci kez oluşturmaz. Tüm personel işlemleri bu ekrandan erişilebilir; ana kayıt İK personel kartında tek olarak tutulur.</div><button type="button" className="ppd-primary" onClick={onOpenIk}>Tam Personel Kartını Aç</button></div>;
 }
 
-function PersonInfo({ person, schedule, onOpenIk }) {
-  const rows = [
-    ["Personel Kodu", person?.personnelCode || person?.code || "-"],["Kart No", person?.cardNo || "Atanmadı"],["Bölüm", person?.department || "-"],["Görev", person?.title || "-"],
-    ["İşe Giriş", person?.startDate || "-"],["İşten Çıkış", person?.exitDate || "-"],["SGK", person?.sgkStatus || "VAR"],["Durum", person?.status || "Aktif"],
-    ["Vardiya", schedule?.groupName || "Normal Mesai"],["Mesai", `${schedule?.entryTime || "08:30"} – ${schedule?.exitTime || "19:00"}`],["Mola", `${schedule?.breakMinutes ?? 60} dk`],["Kart Kaynağı", "İK Personel Kartı"],
+export default function PdksPersonnelDesk({activeTab="personel-bilgileri",activeMainCompany,isAuditAccount=false,openModule}){
+  const company=activeMainCompany?.slug||activeMainCompany?.id||"mecit-hakan";
+  const [year,setYear]=useState(NOW.getFullYear()),[month,setMonth]=useState(NOW.getMonth()+1);
+  const [people,setPeople]=useState([]),[selectedId,setSelectedId]=useState(""),[attendance,setAttendance]=useState(null),[modern,setModern]=useState({leaveTypes:[]}),[leaveCenter,setLeaveCenter]=useState({plans:[]}),[entitlement,setEntitlement]=useState(null),[payroll,setPayroll]=useState({lines:[]});
+  const [search,setSearch]=useState(""),[filter,setFilter]=useState("AKTIF"),[centerTab,setCenterTab]=useState(activeTab==="giris-cikislar"||activeTab==="puantaj"?"giris":activeTab==="izinler"?"izin":"bilgi");
+  const [busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[error,setError]=useState(""),[modal,setModal]=useState("");
+  const [punch,setPunch]=useState({date:iso(),time:"08:30",direction:"AUTO",note:"Manuel PDKS hareketi"});
+  const [correction,setCorrection]=useState({date:iso(),status:"CALISTI",entry:"08:30",exit:"19:00",reason:"",note:""});
+  const [leave,setLeave]=useState({leaveTypeCode:"YILLIK_IZIN",startDate:iso(),endDate:iso(),dayPart:"FULL",documentNo:"",note:""}),[leavePreview,setLeavePreview]=useState(null);
+
+  const selected=useMemo(()=>people.find(p=>p.id===selectedId)||people[0]||null,[people,selectedId]);
+  const payrollLine=useMemo(()=>(payroll?.lines||[]).find(row=>(row.employeeId||row.employee?.id)===selected?.id)||null,[payroll,selected?.id]);
+  const personLeaves=useMemo(()=>(leaveCenter?.plans||[]).filter(row=>(row.employeeId||row.employee_id)===selected?.id),[leaveCenter?.plans,selected?.id]);
+
+  useEffect(()=>{if(activeTab==="giris-cikislar"||activeTab==="puantaj")setCenterTab("giris");else if(activeTab==="izinler")setCenterTab("izin");else if(activeTab==="personel-bilgileri")setCenterTab("bilgi")},[activeTab]);
+
+  const loadCore=useCallback(async()=>{setBusy(true);setError("");try{const [personRows,config,leaves,pay]=await Promise.all([getPdksPeople(),getPdksModernConfig({mainCompanyId:company}),getPdksLeaveCenter({mainCompanyId:company,from:`${year}-01-01`,to:`${year}-12-31`}),getPdksPayroll({mainCompanyId:company,year,month})]);const list=Array.isArray(personRows)?personRows:[];setPeople(list);setModern(config||{leaveTypes:[]});setLeaveCenter(leaves||{plans:[]});setPayroll(pay||{lines:[]});setSelectedId(current=>list.some(p=>p.id===current)?current:(list[0]?.id||""))}catch(cause){setError(cause?.message||"PDKS personel merkezi yüklenemedi.")}finally{setBusy(false)}},[company,month,year]);
+  const loadPerson=useCallback(async()=>{if(!selected?.id){setAttendance(null);setEntitlement(null);return}setBusy(true);setError("");try{const [att,ent]=await Promise.all([getPdksAttendance(selected.id,year,month),getPdksLeaveEntitlement(selected.id,{mainCompanyId:company})]);setAttendance(att||null);setEntitlement(ent||null)}catch(cause){setError(cause?.message||"Personel puantajı yüklenemedi.")}finally{setBusy(false)}},[company,month,selected?.id,year]);
+  useEffect(()=>{loadCore()},[loadCore]);useEffect(()=>{loadPerson()},[loadPerson]);
+
+  const filtered=useMemo(()=>{const q=upper(search);return people.filter(p=>{const hit=!q||upper(`${p.personnelCode||p.code||""} ${p.fullName||""} ${p.cardNo||""} ${p.department||""} ${p.title||""}`).includes(q);const active=!upper(p.status).includes("PAS")&&!upper(p.activePassive).includes("PAS");return hit&&(filter==="TUM"||(filter==="AKTIF"?active:!active))})},[filter,people,search]);
+  const attendanceRows=attendance?.days||[],summary=attendance?.summary||{},schedule=attendance?.schedule||{};
+  const selectedLeaveType=(modern?.leaveTypes||[]).find(row=>row.code===leave.leaveTypeCode);
+
+  const openIk=(mode="view",tabKey="personel-kartlari",extra={})=>openModule?.("ik",{tabKey,actionContext:{source:"pdks",mode,employeeId:selected?.id,...extra}});
+  const personnelActions=[
+    ["Yeni","primary",()=>openModule?.("ik",{tabKey:"personel-kartlari",actionContext:{source:"pdks",mode:"new"}})],
+    ["Düzenle","",()=>openIk("edit")],
+    ["Kart / Kimlik","",()=>openIk("card")],
+    ["Vardiya","",()=>openModule?.("pdks",{tabKey:"gruplar-vardiyalar",actionContext:{employeeId:selected?.id}})],
+    ["Servis","",()=>openModule?.("pdks",{tabKey:"servisler",actionContext:{employeeId:selected?.id}})],
+    ["İzin","",()=>{setCenterTab("izin");setLeavePreview(null);setModal("leave")}],
+    ["Geçmiş","",()=>openIk("history")],
+    ["Aktif / Pasif","warn",()=>openIk("status")],
+    ["İşten Çıkış","danger",()=>openIk("termination")],
   ];
-  return <div className="ppd-person-info"><div className="ppd-person-hero"><div className="ppd-big-avatar">{String(person?.fullName || "?").split(/\s+/).slice(0,2).map(v=>v[0]).join("")}</div><div><h2>{person?.fullName || "Personel"}</h2><span>{person?.department || "Bölüm yok"} · {person?.title || "Görev yok"}</span><div className="ppd-person-badges"><b className="ok">İK Ana Kaynak</b><b>{person?.cardNo ? `Kart ${person.cardNo}` : "Kart Bekliyor"}</b></div></div></div><div className="ppd-info-grid">{rows.map(([k,v])=><div key={k}><span>{k}</span><strong>{v}</strong></div>)}</div><div className="ppd-hint">Personel ana bilgisi PDKS içinde ikinci kez tutulmaz. Ad, bölüm, işe giriş, SGK ve kart/personel kimliği İK’dan okunur.</div><button type="button" className="ppd-primary" onClick={onOpenIk}>İK Personel Kartında Aç</button></div>;
-}
 
-export default function PdksPersonnelDesk({ activeTab="personel-bilgileri", activeMainCompany, isAuditAccount=false, openModule }) {
-  const company = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
-  const [year,setYear] = useState(now.getFullYear());
-  const [month,setMonth] = useState(now.getMonth()+1);
-  const [people,setPeople] = useState([]);
-  const [selectedId,setSelectedId] = useState("");
-  const [attendance,setAttendance] = useState(null);
-  const [modern,setModern] = useState({ leaveTypes:[] });
-  const [leaveCenter,setLeaveCenter] = useState({ plans:[] });
-  const [entitlement,setEntitlement] = useState(null);
-  const [payroll,setPayroll] = useState({ lines:[] });
-  const [search,setSearch] = useState("");
-  const [filter,setFilter] = useState("AKTIF");
-  const [centerTab,setCenterTab] = useState(activeTab === "giris-cikislar" ? "giris" : activeTab === "izinler" ? "izin" : activeTab === "puantaj" ? "giris" : "bilgi");
-  const [busy,setBusy] = useState(false);
-  const [notice,setNotice] = useState("");
-  const [error,setError] = useState("");
-  const [modal,setModal] = useState("");
-  const [punch,setPunch] = useState({ date:iso(), time:"08:30", direction:"AUTO", note:"Manuel PDKS hareketi" });
-  const [correction,setCorrection] = useState({ date:iso(), status:"CALISTI", entry:"08:30", exit:"19:00", reason:"", note:"" });
-  const [leave,setLeave] = useState({ leaveTypeCode:"YILLIK_IZIN", startDate:iso(), endDate:iso(), dayPart:"FULL", documentNo:"", note:"" });
-  const [leavePreview,setLeavePreview] = useState(null);
-
-  const selected = useMemo(() => people.find(p=>p.id===selectedId) || people[0] || null,[people,selectedId]);
-  const payrollLine = useMemo(() => (payroll?.lines || []).find(row => (row.employeeId || row.employee?.id) === selected?.id) || null,[payroll,selected?.id]);
-  const personLeaves = useMemo(() => (leaveCenter?.plans || []).filter(row => (row.employeeId || row.employee_id) === selected?.id),[leaveCenter?.plans,selected?.id]);
-
-  useEffect(()=>{
-    if (activeTab === "giris-cikislar" || activeTab === "puantaj") setCenterTab("giris");
-    else if (activeTab === "izinler") setCenterTab("izin");
-    else if (activeTab === "personel-bilgileri") setCenterTab("bilgi");
-  },[activeTab]);
-
-  const loadCore = useCallback(async()=>{
-    setBusy(true);setError("");
-    try{
-      const [personRows,config,leaves,pay] = await Promise.all([
-        getPdksPeople(),getPdksModernConfig({mainCompanyId:company}),getPdksLeaveCenter({mainCompanyId:company,from:`${year}-01-01`,to:`${year}-12-31`}),getPdksPayroll({mainCompanyId:company,year,month}),
-      ]);
-      const list = Array.isArray(personRows)?personRows:[];
-      setPeople(list);setModern(config||{leaveTypes:[]});setLeaveCenter(leaves||{plans:[]});setPayroll(pay||{lines:[]});
-      setSelectedId(current=>list.some(p=>p.id===current)?current:(list[0]?.id||""));
-    }catch(cause){setError(cause?.message||"PDKS personel merkezi yüklenemedi.");}finally{setBusy(false);}
-  },[company,month,year]);
-
-  const loadPerson = useCallback(async()=>{
-    if(!selected?.id){setAttendance(null);setEntitlement(null);return;}
-    setBusy(true);setError("");
-    try{
-      const [att,ent] = await Promise.all([getPdksAttendance(selected.id,year,month),getPdksLeaveEntitlement(selected.id,{mainCompanyId:company})]);
-      setAttendance(att||null);setEntitlement(ent||null);
-    }catch(cause){setError(cause?.message||"Personel puantajı yüklenemedi.");}finally{setBusy(false);}
-  },[company,month,selected?.id,year]);
-
-  useEffect(()=>{loadCore();},[loadCore]);
-  useEffect(()=>{loadPerson();},[loadPerson]);
-
-  const filtered = useMemo(()=>{
-    const q = upper(search);
-    return people.filter(p=>{
-      const hit = !q || upper(`${p.personnelCode||p.code||""} ${p.fullName||""} ${p.cardNo||""} ${p.department||""} ${p.title||""}`).includes(q);
-      const active = !upper(p.status).includes("PAS") && !upper(p.activePassive).includes("PAS");
-      return hit && (filter==="TUM" || (filter==="AKTIF" ? active : !active));
-    });
-  },[filter,people,search]);
-
-  const attendanceRows = attendance?.days || [];
-  const summary = attendance?.summary || {};
-  const schedule = attendance?.schedule || {};
-  const selectedLeaveType = (modern?.leaveTypes||[]).find(row=>row.code===leave.leaveTypeCode);
-
-  const savePunch = async()=>{
-    if(isAuditAccount||!selected)return;
-    setBusy(true);setError("");
-    try{await addPdksTimeEvent(selected.id,{cardNo:selected.cardNo,workDate:punch.date,eventTime:punch.time,direction:punch.direction,source:"KYERP_WEB_PDKS",note:punch.note});setNotice("Kart hareketi D1'e kaydedildi; Agent ve web aynı kaydı görecek.");setModal("");await loadPerson();}
-    catch(cause){setError(cause?.message||"Kart hareketi kaydedilemedi.");}finally{setBusy(false);}
-  };
-  const saveCorrection = async()=>{
-    if(isAuditAccount||!selected)return;
-    if(!correction.reason.trim()){setError("Puantaj düzeltme nedeni zorunludur.");return;}
-    setBusy(true);setError("");
-    try{await savePdksCorrection(selected.id,{workDate:correction.date,status:correction.status,entry:correction.entry||null,exit:correction.exit||null,note:correction.note||correction.reason,reason:correction.reason,missingPunch:correction.status==="EKSIK_BASIM"});setNotice("Puantaj düzeltildi ve eski/yeni değer denetim loguna işlendi.");setModal("");await loadPerson();}
-    catch(cause){setError(cause?.message||"Puantaj düzeltilemedi.");}finally{setBusy(false);}
-  };
-  const previewLeave = async()=>{
-    if(!selected)return;
-    setBusy(true);setError("");
-    try{const result=await previewPdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave});setLeavePreview(result);}
-    catch(cause){setLeavePreview(null);setError(cause?.message||"İzin önizlenemedi.");}finally{setBusy(false);}
-  };
-  const saveLeave = async()=>{
-    if(isAuditAccount||!selected||!leavePreview)return;
-    setBusy(true);setError("");
-    try{await savePdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave,status:"APPROVED"});setNotice(`${selected.fullName} için ${selectedLeaveType?.name||"izin"} İK ana kaynağına işlendi; puantaj otomatik yenilendi.`);setLeavePreview(null);setModal("");await Promise.all([loadCore(),loadPerson()]);}
-    catch(cause){setError(cause?.message||"İzin kaydedilemedi.");}finally{setBusy(false);}
-  };
-  const openCorrection=(row)=>{setCorrection({date:row.date,status:row.status||"CALISTI",entry:row.entry||"",exit:row.exit||"",reason:"",note:row.note||""});setModal("correction");};
+  const savePunch=async()=>{if(isAuditAccount||!selected)return;setBusy(true);setError("");try{await addPdksTimeEvent(selected.id,{cardNo:selected.cardNo,workDate:punch.date,eventTime:punch.time,direction:punch.direction,source:"KYERP_WEB_PDKS",note:punch.note});setNotice("Kart hareketi D1'e kaydedildi; Agent ve web aynı kaydı görecek.");setModal("");await loadPerson()}catch(cause){setError(cause?.message||"Kart hareketi kaydedilemedi.")}finally{setBusy(false)}};
+  const saveCorrection=async()=>{if(isAuditAccount||!selected)return;if(!correction.reason.trim()){setError("Puantaj düzeltme nedeni zorunludur.");return}setBusy(true);setError("");try{await savePdksCorrection(selected.id,{workDate:correction.date,status:correction.status,entry:correction.entry||null,exit:correction.exit||null,note:correction.note||correction.reason,reason:correction.reason,missingPunch:correction.status==="EKSIK_BASIM"});setNotice("Puantaj düzeltildi; eski/yeni değer ve kullanıcı denetim loguna işlendi.");setModal("");await loadPerson()}catch(cause){setError(cause?.message||"Puantaj düzeltilemedi.")}finally{setBusy(false)}};
+  const previewLeave=async()=>{if(!selected)return;setBusy(true);setError("");try{setLeavePreview(await previewPdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave}))}catch(cause){setLeavePreview(null);setError(cause?.message||"İzin önizlenemedi.")}finally{setBusy(false)}};
+  const saveLeave=async()=>{if(isAuditAccount||!selected||!leavePreview)return;setBusy(true);setError("");try{await savePdksLeaveV2({mainCompanyId:company,employeeId:selected.id,...leave,status:"APPROVED"});setNotice(`${selected.fullName} için ${selectedLeaveType?.name||"izin"} İK ana kaynağına işlendi; puantaj otomatik yenilendi.`);setLeavePreview(null);setModal("");await Promise.all([loadCore(),loadPerson()])}catch(cause){setError(cause?.message||"İzin kaydedilemedi.")}finally{setBusy(false)}};
+  const openCorrection=(row)=>{setCorrection({date:row.date,status:row.status||"CALISTI",entry:row.entry||"",exit:row.exit||"",reason:"",note:row.note||""});setModal("correction")};
 
   return <div className="ppd-page">
-    <header className="ppd-topline">
-      <div><span>PERSONEL İŞLEMLERİ</span><strong>{MONTHS[month-1]} {year}</strong><small>{selected ? `${selected.fullName} · ${schedule.groupName||"Normal Mesai"}` : "Personel seçin"}</small></div>
-      <div className="ppd-period"><select value={month} onChange={e=>setMonth(Number(e.target.value))}>{MONTHS.map((label,i)=><option value={i+1} key={label}>{label}</option>)}</select><input type="number" value={year} min="2020" max="2100" onChange={e=>setYear(Number(e.target.value)||now.getFullYear())}/><button type="button" onClick={()=>Promise.all([loadCore(),loadPerson()])} disabled={busy}>↻ Yenile</button></div>
-    </header>
+    <header className="ppd-topline"><div><span>PERSONEL İŞLEMLERİ</span><strong>{MONTHS[month-1]} {year}</strong><small>{selected?`${selected.fullName} · ${schedule.groupName||"Normal Mesai"}`:"Personel seçin"}</small></div><div className="ppd-period"><select value={month} onChange={e=>setMonth(Number(e.target.value))}>{MONTHS.map((label,i)=><option value={i+1} key={label}>{label}</option>)}</select><input type="number" value={year} min="2020" max="2100" onChange={e=>setYear(Number(e.target.value)||NOW.getFullYear())}/><button type="button" onClick={()=>Promise.all([loadCore(),loadPerson()])} disabled={busy}>↻ Yenile</button></div></header>
     {notice?<div className="ppd-notice">{notice}</div>:null}{error?<div className="ppd-error">{error}</div>:null}
 
     <div className="ppd-workspace">
       <aside className="ppd-people-panel">
         <div className="ppd-panel-title"><strong>Personel</strong><span>{filtered.length}</span></div>
         <div className="ppd-person-headrow"><span>Kart</span><span>Ad Soyad</span><span>Bölüm</span></div>
-        <div className="ppd-person-list">
-          {filtered.map(person=><button type="button" key={person.id} className={selected?.id===person.id?"active":""} onClick={()=>setSelectedId(person.id)}><code>{person.cardNo||person.personnelCode||"—"}</code><span><strong>{person.fullName}</strong><small>{person.personnelCode||person.code||"Kod yok"} · {person.title||"Görev yok"}</small></span><em>{person.department||"—"}</em></button>)}
-          {!filtered.length?<div className="ppd-empty">Personel bulunamadı.</div>:null}
-        </div>
+        <div className="ppd-person-list">{filtered.map(person=><button type="button" key={person.id} className={selected?.id===person.id?"active":""} onClick={()=>setSelectedId(person.id)}><code>{person.cardNo||person.personnelCode||"—"}</code><span><strong>{person.fullName}</strong><small>{person.personnelCode||person.code||"Kod yok"} · {person.title||"Görev yok"}</small></span><em>{person.department||"—"}</em></button>)}{!filtered.length?<div className="ppd-empty">Personel bulunamadı.</div>:null}</div>
         <div className="ppd-person-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ad, kart, kod, bölüm ara..."/></div>
         <div className="ppd-filter"><button className={filter==="TUM"?"active":""} onClick={()=>setFilter("TUM")}>Tüm</button><button className={filter==="AKTIF"?"active":""} onClick={()=>setFilter("AKTIF")}>Aktif</button><button className={filter==="PASIF"?"active":""} onClick={()=>setFilter("PASIF")}>Pasif</button></div>
+        {!isAuditAccount?<div className="ppd-person-actions">{personnelActions.map(([label,tone,action])=><button type="button" key={label} className={tone} onClick={action} disabled={!selected&&label!=="Yeni"}>{label}</button>)}</div>:null}
         {selected?<div className="ppd-mini-detail"><div><span>Grup</span><b>{schedule.groupName||"Normal Mesai"}</b></div><div><span>Mesai</span><b>{schedule.entryTime||"08:30"}–{schedule.exitTime||"19:00"}</b></div><div><span>Kart</span><b>{selected.cardNo||"Atanmadı"}</b></div><div><span>İşe Baş.</span><b>{selected.startDate||"-"}</b></div></div>:null}
       </aside>
 
       <section className="ppd-center-panel">
         <nav className="ppd-tabs"><button className={centerTab==="bilgi"?"active":""} onClick={()=>setCenterTab("bilgi")}>Personel Bilgileri</button><button className={centerTab==="giris"?"active":""} onClick={()=>setCenterTab("giris")}>Giriş / Çıkış</button><button className={centerTab==="izin"?"active":""} onClick={()=>setCenterTab("izin")}>İzinler</button><button className={centerTab==="kazanc"?"active":""} onClick={()=>setCenterTab("kazanc")}>Kazanç / Kesinti</button></nav>
         <div className="ppd-center-body">
-          {centerTab==="bilgi"?<PersonInfo person={selected} schedule={schedule} onOpenIk={()=>openModule?.("ik",{tabKey:"personel-kartlari",actionContext:{employeeId:selected?.id}})}/>:null}
-          {centerTab==="giris"?<>
-            <div className="ppd-sectionbar"><div><strong>Giriş / Çıkış Hareketleri</strong><small>Ham kart kaydı değişmez; düzeltme puantaj katmanında audit ile yapılır.</small></div>{!isAuditAccount?<button className="ppd-primary" onClick={()=>setModal("punch")}>+ Geçiş Ekle</button>:null}</div>
-            <div className="ppd-movement-table"><div className="head"><span>Tarih</span><span>Giriş</span><span>Çıkış</span><span>Basım</span><span>Kaynak</span><span>Durum</span></div>{attendanceRows.slice().reverse().map(row=><button type="button" key={row.date} onClick={()=>openCorrection(row)}><span>{dateTr(row.date)} <small>{dayName(row.date)}</small></span><b>{row.entry||"—"}</b><b>{row.exit||"—"}</b><span>{row.eventCount||0}{row.duplicatePunches?` · ${row.duplicatePunches} tekrar`:""}</span><span>{row.source==="MANUAL_OVERRIDE"?"Düzeltme":"Kart/Agent"}</span><em className={statusTone(row.status)}>{statusLabel(row.status)}</em></button>)}</div>
-          </>:null}
-          {centerTab==="izin"?<>
-            <div className="ppd-sectionbar"><div><strong>İzinler</strong><small>İzin kaydı İK ana kaynağına yazılır, PDKS sadece puantaja uygular.</small></div>{!isAuditAccount?<button className="ppd-primary" onClick={()=>{setLeavePreview(null);setModal("leave")}}>+ İzin Ekle</button>:null}</div>
-            <div className="ppd-entitlement"><div><span>Kart Hakediş</span><strong>{num(entitlement?.currentCardEntitlement)} gün</strong></div><div><span>Devreden</span><strong>{num(entitlement?.carryover)} gün</strong></div><div><span>Kullanılan</span><strong>{num(entitlement?.used)} gün</strong></div><div className="net"><span>Kalan</span><strong>{num(entitlement?.remaining)} gün</strong></div></div>
-            <div className="ppd-movement-table leave"><div className="head"><span>Başlangıç</span><span>Bitiş</span><span>Tür</span><span>Gün</span><span>Durum</span><span>Not</span></div>{personLeaves.map(row=><div key={row.id}><span>{row.startDate||row.start_date}</span><span>{row.endDate||row.end_date}</span><b>{row.recordType||row.record_type}</b><span>{num(row.countedDays??row.counted_days??row.dayCount)}</span><em className="ok">{row.status||"-"}</em><span>{row.note||"-"}</span></div>)}{!personLeaves.length?<div className="ppd-empty">Bu personel için izin kaydı yok.</div>:null}</div>
-          </>:null}
-          {centerTab==="kazanc"?<>
-            <div className="ppd-sectionbar"><div><strong>Kazanç / Kesinti</strong><small>PDKS çalışma sonucunu gösterir; ücret ve bordro kaydı İK/Muhasebe ana kaynağında tutulur.</small></div><button onClick={()=>openModule?.("ik",{tabKey:"bordro"})}>İK Bordroya Git</button></div>
-            <div className="ppd-pay-grid"><div><span>Normal Çalışma</span><strong>{Math.round(num(summary.workedMinutes)/60*100)/100} saat</strong></div><div><span>Fazla Mesai</span><strong>{Math.round(num(summary.overtimeMinutes)/60*100)/100} saat</strong></div><div><span>Geç Kalma</span><strong>{num(summary.lateMinutes)} dk</strong></div><div><span>Erken Çıkma</span><strong>{num(summary.earlyMinutes)} dk</strong></div><div><span>Yıllık İzin</span><strong>{num(summary.annualLeaveDays)} gün</strong></div><div><span>Eksik Basım</span><strong>{num(summary.missingPunchDays)} gün</strong></div></div>
-            {payrollLine?<div className="ppd-payroll-readonly"><div><span>Maaş</span><b>{money(payrollLine.salary||payrollLine.system?.salary)} ₺</b></div><div><span>Mesai Tutarı</span><b>{money(payrollLine.overtimeAmount||payrollLine.system?.overtimeAmount)} ₺</b></div><div><span>Avans</span><b>{money(payrollLine.advanceAmount||payrollLine.system?.advanceAmount)} ₺</b></div><div className="net"><span>Net</span><b>{money(payrollLine.totalAmount||payrollLine.final?.total||payrollLine.net)} ₺</b></div></div>:<div className="ppd-empty">Bu dönem için bordro sonucu yok.</div>}
-          </>:null}
+          {centerTab==="bilgi"?<PersonInfo person={selected} schedule={schedule} onOpenIk={()=>openIk("view")}/>:null}
+          {centerTab==="giris"?<><div className="ppd-sectionbar"><div><strong>Giriş / Çıkış Hareketleri</strong><small>Ham kart silinmez; düzeltme puantaj katmanında audit ile yapılır.</small></div>{!isAuditAccount?<button className="ppd-primary" onClick={()=>setModal("punch")}>+ Geçiş Ekle</button>:null}</div><div className="ppd-movement-table"><div className="head"><span>Tarih</span><span>Giriş</span><span>Çıkış</span><span>Basım</span><span>Kaynak</span><span>Durum</span></div>{attendanceRows.slice().reverse().map(row=><button type="button" key={row.date} onClick={()=>openCorrection(row)}><span>{dateTr(row.date)} <small>{dayName(row.date)}</small></span><b>{row.entry||"—"}</b><b>{row.exit||"—"}</b><span>{row.eventCount||0}{row.duplicatePunches?` · ${row.duplicatePunches} tekrar`:""}</span><span>{row.source==="MANUAL_OVERRIDE"?"Düzeltme":"Kart/Agent"}</span><em className={statusTone(row.status)}>{statusLabel(row.status)}</em></button>)}</div></>:null}
+          {centerTab==="izin"?<><div className="ppd-sectionbar"><div><strong>İzinler</strong><small>İzin tek kayıt olarak İK’ya yazılır ve PDKS puantajına otomatik yansır.</small></div>{!isAuditAccount?<button className="ppd-primary" onClick={()=>{setLeavePreview(null);setModal("leave")}}>+ İzin Ekle</button>:null}</div><div className="ppd-entitlement"><div><span>Kart Hakediş</span><strong>{num(entitlement?.currentCardEntitlement)} gün</strong></div><div><span>Devreden</span><strong>{num(entitlement?.carryover)} gün</strong></div><div><span>Kullanılan</span><strong>{num(entitlement?.used)} gün</strong></div><div className="net"><span>Kalan</span><strong>{num(entitlement?.remaining)} gün</strong></div></div><div className="ppd-movement-table leave"><div className="head"><span>Başlangıç</span><span>Bitiş</span><span>Tür</span><span>Gün</span><span>Durum</span><span>Not</span></div>{personLeaves.map(row=><div key={row.id}><span>{row.startDate||row.start_date}</span><span>{row.endDate||row.end_date}</span><b>{row.recordType||row.record_type}</b><span>{num(row.countedDays??row.counted_days??row.dayCount)}</span><em className="ok">{row.status||"-"}</em><span>{row.note||"-"}</span></div>)}{!personLeaves.length?<div className="ppd-empty">Bu personel için izin kaydı yok.</div>:null}</div></>:null}
+          {centerTab==="kazanc"?<><div className="ppd-sectionbar"><div><strong>Kazanç / Kesinti</strong><small>PDKS süreleri burada; ücret ve bordro ana kaydı İK/Muhasebe tarafında.</small></div><button onClick={()=>openModule?.("ik",{tabKey:"bordro"})}>İK Bordroya Git</button></div><div className="ppd-pay-grid"><div><span>Normal Çalışma</span><strong>{Math.round(num(summary.workedMinutes)/60*100)/100} saat</strong></div><div><span>Fazla Mesai</span><strong>{Math.round(num(summary.overtimeMinutes)/60*100)/100} saat</strong></div><div><span>Geç Kalma</span><strong>{num(summary.lateMinutes)} dk</strong></div><div><span>Erken Çıkma</span><strong>{num(summary.earlyMinutes)} dk</strong></div><div><span>Yıllık İzin</span><strong>{num(summary.annualLeaveDays)} gün</strong></div><div><span>Eksik Basım</span><strong>{num(summary.missingPunchDays)} gün</strong></div></div>{payrollLine?<div className="ppd-payroll-readonly"><div><span>Maaş</span><b>{money(payrollLine.salary||payrollLine.system?.salary)} ₺</b></div><div><span>Mesai Tutarı</span><b>{money(payrollLine.overtimeAmount||payrollLine.system?.overtimeAmount)} ₺</b></div><div><span>Avans</span><b>{money(payrollLine.advanceAmount||payrollLine.system?.advanceAmount)} ₺</b></div><div className="net"><span>Net</span><b>{money(payrollLine.totalAmount||payrollLine.final?.total||payrollLine.net)} ₺</b></div></div>:<div className="ppd-empty">Bu dönem için bordro sonucu yok.</div>}</>:null}
         </div>
         <footer className="ppd-center-footer">{!isAuditAccount?<><button onClick={()=>setModal("punch")}>+ Geçiş</button><button onClick={()=>setModal("leave")}>+ İzin</button><button onClick={()=>{const row=attendanceRows.find(r=>r.date===iso())||attendanceRows[attendanceRows.length-1];if(row)openCorrection(row)}}>Puantaj Düzelt</button></>:<span>Denetim hesabı · salt okunur</span>}</footer>
       </section>
 
-      <aside className="ppd-att-panel">
-        <div className="ppd-panel-title"><strong>Puantaj</strong><button onClick={()=>openModule?.("pdks",{tabKey:"puantaj-sonuclari"})}>Özet</button></div>
-        <div className="ppd-att-head"><span>Tarih</span><span>Giriş</span><span>Çıkış</span><span>NÇ</span><span>FM</span><span>Geç</span><span>Erk</span><span>Durum</span></div>
-        <div className="ppd-att-list">{attendanceRows.map(row=><button type="button" key={row.date} onClick={()=>openCorrection(row)} className={statusTone(row.status)}><span>{String(row.date).slice(8,10)}/{String(row.date).slice(5,7)} <small>{dayName(row.date)}</small></span><b>{row.entry||"—"}</b><b>{row.exit||"—"}</b><span>{Math.round(num(row.workedMinutes)/60*10)/10}</span><span>{Math.round(num(row.overtimeMinutes)/60*10)/10}</span><span>{num(row.lateMinutes)||""}</span><span>{num(row.earlyMinutes)||""}</span><em>{statusLabel(row.status)}</em></button>)}</div>
-        <div className="ppd-att-totals"><div><span>Normal Çalışma</span><b>{Math.round(num(summary.workedMinutes)/60*10)/10} sa</b></div><div><span>Fazla Mesai</span><b>{Math.round(num(summary.overtimeMinutes)/60*10)/10} sa</b></div><div><span>Yıllık İzin</span><b>{num(summary.annualLeaveDays)} gün</b></div><div><span>Geç Kalma</span><b>{num(summary.lateMinutes)} dk</b></div><div><span>Erken Çıkma</span><b>{num(summary.earlyMinutes)} dk</b></div><div><span>Eksik / Kart Yok</span><b>{num(summary.missingPunchDays)+num(summary.noPunchDays)} gün</b></div></div>
-      </aside>
+      <aside className="ppd-att-panel"><div className="ppd-panel-title"><strong>Puantaj</strong><button onClick={()=>openModule?.("pdks",{tabKey:"puantaj-sonuclari"})}>Özet</button></div><div className="ppd-att-head"><span>Tarih</span><span>Giriş</span><span>Çıkış</span><span>NÇ</span><span>FM</span><span>Geç</span><span>Erk</span><span>Durum</span></div><div className="ppd-att-list">{attendanceRows.map(row=><button type="button" key={row.date} onClick={()=>openCorrection(row)} className={statusTone(row.status)}><span>{String(row.date).slice(8,10)}/{String(row.date).slice(5,7)} <small>{dayName(row.date)}</small></span><b>{row.entry||"—"}</b><b>{row.exit||"—"}</b><span>{Math.round(num(row.workedMinutes)/60*10)/10}</span><span>{Math.round(num(row.overtimeMinutes)/60*10)/10}</span><span>{num(row.lateMinutes)||""}</span><span>{num(row.earlyMinutes)||""}</span><em>{statusLabel(row.status)}</em></button>)}</div><div className="ppd-att-totals"><div><span>Normal Çalışma</span><b>{Math.round(num(summary.workedMinutes)/60*10)/10} sa</b></div><div><span>Fazla Mesai</span><b>{Math.round(num(summary.overtimeMinutes)/60*10)/10} sa</b></div><div><span>Yıllık İzin</span><b>{num(summary.annualLeaveDays)} gün</b></div><div><span>Geç Kalma</span><b>{num(summary.lateMinutes)} dk</b></div><div><span>Erken Çıkma</span><b>{num(summary.earlyMinutes)} dk</b></div><div><span>Eksik / Kart Yok</span><b>{num(summary.missingPunchDays)+num(summary.noPunchDays)} gün</b></div></div></aside>
     </div>
 
     {modal==="punch"?<Modal title="Giriş / Çıkış Ekle" subtitle={`${selected?.fullName||"Personel"} · ham kart hareketi`} onClose={()=>setModal("")}><div className="ppd-form"><label>Tarih<input type="date" value={punch.date} onChange={e=>setPunch({...punch,date:e.target.value})}/></label><label>Saat<input type="time" value={punch.time} onChange={e=>setPunch({...punch,time:e.target.value})}/></label><label>Yön<select value={punch.direction} onChange={e=>setPunch({...punch,direction:e.target.value})}><option value="AUTO">Otomatik</option><option value="IN">Giriş</option><option value="OUT">Çıkış</option></select></label><label className="wide">Açıklama<input value={punch.note} onChange={e=>setPunch({...punch,note:e.target.value})}/></label></div><div className="ppd-modal-actions"><button onClick={()=>setModal("")}>Vazgeç</button><button className="ppd-primary" onClick={savePunch} disabled={busy}>Kaydet</button></div></Modal>:null}
-
-    {modal==="correction"?<Modal title="Puantaj Düzeltme" subtitle="Ham kart kaydı silinmez; düzeltme ve önceki değer denetim logunda saklanır." onClose={()=>setModal("")}><div className="ppd-form"><label>Tarih<input type="date" value={correction.date} onChange={e=>setCorrection({...correction,date:e.target.value})}/></label><label>Durum<select value={correction.status} onChange={e=>setCorrection({...correction,status:e.target.value})}>{["AUTO","CALISTI","EKSIK_BASIM","KART_YOK","YILLIK_IZIN","IZIN","RAPOR","UCRETSIZ","HAFTA_TATILI","RESMI_TATIL"].map(v=><option key={v} value={v}>{statusLabel(v)}</option>)}</select></label><label>Giriş<input type="time" value={correction.entry} onChange={e=>setCorrection({...correction,entry:e.target.value})}/></label><label>Çıkış<input type="time" value={correction.exit} onChange={e=>setCorrection({...correction,exit:e.target.value})}/></label><label className="wide">Düzeltme Nedeni *<input value={correction.reason} onChange={e=>setCorrection({...correction,reason:e.target.value})} placeholder="Örn: personel kart okutmayı unuttu, amir onayı..."/></label><label className="wide">Not<input value={correction.note} onChange={e=>setCorrection({...correction,note:e.target.value})}/></label></div><div className="ppd-audit-note">Kayıt kullanıcı, tarih-saat, eski değer ve yeni değer ile birlikte audit loguna yazılır. Kilitli dönem değiştirilemez.</div><div className="ppd-modal-actions"><button onClick={()=>setModal("")}>Vazgeç</button><button className="ppd-primary" onClick={saveCorrection} disabled={busy||!correction.reason.trim()}>Düzeltmeyi Kaydet</button></div></Modal>:null}
-
+    {modal==="correction"?<Modal title="Puantaj Düzeltme" subtitle="Ham kart kaydı silinmez; düzeltme ve önceki değer denetim logunda saklanır." onClose={()=>setModal("")}><div className="ppd-form"><label>Tarih<input type="date" value={correction.date} onChange={e=>setCorrection({...correction,date:e.target.value})}/></label><label>Durum<select value={correction.status} onChange={e=>setCorrection({...correction,status:e.target.value})}>{["AUTO","CALISTI","EKSIK_BASIM","KART_YOK","YILLIK_IZIN","IZIN","RAPOR","UCRETSIZ","HAFTA_TATILI","RESMI_TATIL"].map(v=><option key={v} value={v}>{statusLabel(v)}</option>)}</select></label><label>Giriş<input type="time" value={correction.entry} onChange={e=>setCorrection({...correction,entry:e.target.value})}/></label><label>Çıkış<input type="time" value={correction.exit} onChange={e=>setCorrection({...correction,exit:e.target.value})}/></label><label className="wide">Düzeltme Nedeni *<input value={correction.reason} onChange={e=>setCorrection({...correction,reason:e.target.value})} placeholder="Kart unutuldu, amir onayı, geç basım düzeltmesi..."/></label><label className="wide">Not<input value={correction.note} onChange={e=>setCorrection({...correction,note:e.target.value})}/></label></div><div className="ppd-audit-note">Kullanıcı, tarih-saat, eski değer ve yeni değer audit kaydına yazılır. Kilitli dönem değiştirilemez.</div><div className="ppd-modal-actions"><button onClick={()=>setModal("")}>Vazgeç</button><button className="ppd-primary" onClick={saveCorrection} disabled={busy||!correction.reason.trim()}>Düzeltmeyi Kaydet</button></div></Modal>:null}
     {modal==="leave"?<Modal wide title="İzin Ekle / Önizle" subtitle="Tek kayıt İK ana kaynağına gider; PDKS günleri otomatik puantaja uygular." onClose={()=>setModal("")}><div className="ppd-form leave-form"><label>İzin Türü<select value={leave.leaveTypeCode} onChange={e=>{setLeave({...leave,leaveTypeCode:e.target.value});setLeavePreview(null)}}>{(modern?.leaveTypes||[]).filter(t=>Number(t.active)!==0).map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></label><label>Başlangıç<input type="date" value={leave.startDate} onChange={e=>{setLeave({...leave,startDate:e.target.value});setLeavePreview(null)}}/></label><label>Bitiş<input type="date" value={leave.endDate} onChange={e=>{setLeave({...leave,endDate:e.target.value});setLeavePreview(null)}}/></label><label>Gün Bölümü<select value={leave.dayPart} onChange={e=>{setLeave({...leave,dayPart:e.target.value});setLeavePreview(null)}}><option value="FULL">Tam Gün</option><option value="MORNING">Sabah / İlk Yarım</option><option value="AFTERNOON">Öğleden Sonra / İkinci Yarım</option></select></label>{selectedLeaveType?.requiresDocument?<label>Belge / Rapor No *<input value={leave.documentNo} onChange={e=>setLeave({...leave,documentNo:e.target.value})}/></label>:null}<label className="wide">Açıklama<input value={leave.note} onChange={e=>setLeave({...leave,note:e.target.value})}/></label></div>{selectedLeaveType?.legalNote?<div className="ppd-legal-note">{selectedLeaveType.legalNote}</div>:null}<div className="ppd-modal-actions left"><button className="ppd-primary" onClick={previewLeave} disabled={busy}>Gün Gün Hesapla</button>{leavePreview?<><span>İzin: <b>{leavePreview.leaveDays}</b> gün</span><span>Bakiyeden: <b>{leavePreview.countedDays}</b> gün</span>{leavePreview.leaveType?.annualBalanceEffect?<span>Kalan: <b>{leavePreview.annualAvailableAfter}</b> gün</span>:null}</>:null}</div>{leavePreview?<div className="ppd-preview-days"><div className="head"><span>Tarih</span><span>Gün</span><span>İzin</span><span>Bakiyeden</span><span>Bölüm</span><span>Açıklama</span></div>{(leavePreview.days||[]).map(row=><div key={row.date}><span>{dateTr(row.date)}</span><span>{dayName(row.date)}</span><b>{row.leaveFraction}</b><b>{row.countedFraction}</b><span>{row.dayPart}</span><span>{row.reason}</span></div>)}</div>:null}<div className="ppd-modal-actions"><button onClick={()=>setModal("")}>Vazgeç</button><button className="ppd-primary" onClick={saveLeave} disabled={busy||!leavePreview||(selectedLeaveType?.requiresDocument&&!leave.documentNo.trim())}>İzni Kaydet</button></div></Modal>:null}
   </div>;
 }
