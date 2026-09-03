@@ -33,10 +33,20 @@ function paramsOf(activeMainCompany) {
   };
 }
 
-function emptyPayment(companyId = "") {
+function defaultTransactionType(firm = {}) {
+  if (firm.customerReceivableTracking && !firm.supplierDebtTracking) return "COLLECTION";
+  return "PAYMENT";
+}
+
+function defaultCheckDirection(firm = {}) {
+  if (firm.customerReceivableTracking && !firm.supplierDebtTracking) return "RECEIVED";
+  return "GIVEN";
+}
+
+function emptyPayment(companyId = "", firm = {}) {
   return {
     companyId,
-    transactionType: "PAYMENT",
+    transactionType: defaultTransactionType(firm),
     date: today(),
     amount: "",
     paymentMethod: "TRANSFER",
@@ -45,7 +55,7 @@ function emptyPayment(companyId = "") {
   };
 }
 
-function emptyCheck(companyId = "") {
+function emptyCheck(companyId = "", firm = {}) {
   return {
     firmId: companyId,
     issueDate: today(),
@@ -55,7 +65,7 @@ function emptyCheck(companyId = "") {
     checkNo: "",
     amount: "",
     checkOwnership: "CUSTOMER_CHECK",
-    checkDirection: "GIVEN",
+    checkDirection: defaultCheckDirection(firm),
     workType: "OFFICIAL",
     note: "",
     applyCariNow: true,
@@ -141,8 +151,8 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
   useEffect(() => { refresh(); }, [refresh, refreshKey]);
 
   useEffect(() => {
-    setPayment(emptyPayment(selectedId));
-    setCheckForm(emptyCheck(selectedId));
+    setPayment(emptyPayment(selectedId, selected || {}));
+    setCheckForm(emptyCheck(selectedId, selected || {}));
     if (selected) setFibeDraft(emptyFibe(selected));
     loadFibe(selectedId).catch(() => {});
   }, [loadFibe, selected, selectedId]);
@@ -153,7 +163,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
     setNotice("");
     try {
       await apiPost("/muhasebe/hizli-cari/hareket", { ...params, ...payment, companyId: selectedId, amount: numberValue(payment.amount) });
-      setPayment(emptyPayment(selectedId));
+      setPayment(emptyPayment(selectedId, selected || {}));
       setNotice(payment.transactionType === "COLLECTION" ? "Tahsilat cariye işlendi." : "Ödeme cariye işlendi.");
       await refresh();
       reloadAll?.();
@@ -181,10 +191,11 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
           amount: numberValue(checkForm.amount),
           workType: checkForm.workType,
           stage: "ENTRY",
+          issueDate: checkForm.issueDate,
           note: checkForm.note,
         });
       }
-      setCheckForm(emptyCheck(selectedId));
+      setCheckForm(emptyCheck(selectedId, selected || {}));
       setNotice(checkForm.applyCariNow ? "Çek kaydedildi ve cari tek sefer mahsup edildi." : "Çek açık olarak kaydedildi; cari henüz değişmedi.");
       await refresh();
       reloadAll?.();
@@ -205,6 +216,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
         checkDirection: row.checkDirection,
         amount: row.amount,
         workType: row.workType,
+        date: today(),
       });
       setNotice("Çek kapatıldı. Daha önce cari mahsup varsa ikinci kez düşülmedi.");
       await refresh();
@@ -285,10 +297,10 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
       ) : null}
 
       <nav className="qab-tabs">
-        <button className={mode === "WEEK" ? "active" : ""} onClick={() => setMode("WEEK")}><CalendarRange size={16} /> Bu Hafta</button>
-        <button className={mode === "PAYMENT" ? "active" : ""} onClick={() => setMode("PAYMENT")}><Banknote size={16} /> Ödeme / Tahsilat</button>
-        <button className={mode === "CHECK" ? "active" : ""} onClick={() => setMode("CHECK")}><CheckSquare2 size={16} /> Hızlı Çek</button>
-        <button className={mode === "FIBE" ? "active" : ""} onClick={() => setMode("FIBE")}><CircleDollarSign size={16} /> Firma FİBE</button>
+        <button type="button" className={mode === "WEEK" ? "active" : ""} onClick={() => setMode("WEEK")}><CalendarRange size={16} /> Bu Hafta</button>
+        <button type="button" className={mode === "PAYMENT" ? "active" : ""} onClick={() => setMode("PAYMENT")}><Banknote size={16} /> Ödeme / Tahsilat</button>
+        <button type="button" className={mode === "CHECK" ? "active" : ""} onClick={() => setMode("CHECK")}><CheckSquare2 size={16} /> Hızlı Çek</button>
+        <button type="button" className={mode === "FIBE" ? "active" : ""} onClick={() => setMode("FIBE")}><CircleDollarSign size={16} /> Firma FİBE</button>
       </nav>
 
       {notice ? <div className="qab-notice">{notice}</div> : null}
@@ -311,7 +323,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
 
       {mode === "PAYMENT" ? (
         <div className="qab-panel qab-form-grid">
-          <label>İşlem<select value={payment.transactionType} onChange={(e) => setPayment((v) => ({ ...v, transactionType: e.target.value }))}><option value="PAYMENT">Firmaya ödeme</option><option value="COLLECTION">Firmadan tahsilat</option></select></label>
+          <label>İşlem<select value={payment.transactionType} onChange={(e) => setPayment((v) => ({ ...v, transactionType: e.target.value }))}>{!selected || selected.supplierDebtTracking ? <option value="PAYMENT">Firmaya ödeme</option> : null}{!selected || selected.customerReceivableTracking ? <option value="COLLECTION">Firmadan tahsilat</option> : null}</select></label>
           <label>Tarih<input type="date" value={payment.date} onChange={(e) => setPayment((v) => ({ ...v, date: e.target.value }))} /></label>
           <label>Tutar<input value={payment.amount} onChange={(e) => setPayment((v) => ({ ...v, amount: e.target.value }))} placeholder="0,00" /></label>
           <label>Ödeme şekli<select value={payment.paymentMethod} onChange={(e) => setPayment((v) => ({ ...v, paymentMethod: e.target.value }))}><option value="TRANSFER">Banka / Havale</option><option value="CASH">Elden</option><option value="CARD">Kart</option><option value="CHECK">Çek</option><option value="OTHER">Diğer</option></select></label>
@@ -324,7 +336,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
       {mode === "CHECK" ? (
         <div className="qab-panel">
           <div className="qab-form-grid">
-            <label>Çek yönü<select value={checkForm.checkDirection} onChange={(e) => setCheckForm((v) => ({ ...v, checkDirection: e.target.value }))}><option value="GIVEN">Verilen çek</option><option value="RECEIVED">Alınan çek</option></select></label>
+            <label>Çek yönü<select value={checkForm.checkDirection} onChange={(e) => setCheckForm((v) => ({ ...v, checkDirection: e.target.value }))}>{!selected || selected.supplierDebtTracking ? <option value="GIVEN">Verilen çek</option> : null}{!selected || selected.customerReceivableTracking ? <option value="RECEIVED">Alınan çek</option> : null}</select></label>
             <label>Çek no<input value={checkForm.checkNo} onChange={(e) => setCheckForm((v) => ({ ...v, checkNo: e.target.value }))} /></label>
             <label>Banka<input value={checkForm.bankName} onChange={(e) => setCheckForm((v) => ({ ...v, bankName: e.target.value }))} /></label>
             <label>Hesap no<input value={checkForm.accountNo} onChange={(e) => setCheckForm((v) => ({ ...v, accountNo: e.target.value }))} /></label>
