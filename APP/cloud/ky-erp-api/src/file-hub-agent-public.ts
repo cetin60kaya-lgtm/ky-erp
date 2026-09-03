@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
+import { verifyFileHubAgentCredential } from "./file-hub-agent-auth";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -18,9 +19,8 @@ const json = (v: unknown): Row => {
   catch { return {}; }
 };
 async function bodyOf(c: Context<AppEnv>): Promise<Row> { try { const b=await c.req.json(); return b&&typeof b==="object"&&!Array.isArray(b)?b as Row:{}; } catch { return {}; } }
-function slugOf(c: Context<AppEnv>, b: Row = {}) { return text(b.mainCompanySlug||b.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"mecit-hakan"); }
+function slugOf(c: Context<AppEnv>, b: Row = {}) { return text(b.mainCompanySlug||b.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"mecit-hakan").toLocaleLowerCase("tr-TR"); }
 function err(code:string,message:string,details?:unknown){return{ok:false,success:false,error:{code,message,...(details===undefined?{}:{details})}};}
-function allowed(c:Context<AppEnv>){const expected=text(c.env.FILE_HUB_AGENT_KEY),actual=text(c.req.header("X-KYERP-Agent-Key"));return Boolean(expected&&actual&&expected===actual);}
 async function findAsset(c:Context<AppEnv>,slug:string,connectionId:string,relativePath:string){return c.env.DB.prepare(`SELECT a.*,l.id location_id,l.provider_file_id,l.relative_path,l.location_role,l.is_available,l.provider_modified_at FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug,connectionId,relativePath).first<Row>();}
 async function logEvent(c:Context<AppEnv>,slug:string,type:string,data:Row){await c.env.DB.prepare(`INSERT INTO file_hub_events(id,main_company_slug,storage_connection_id,file_asset_id,event_type,actor_type,device_name,details,created_at) VALUES(?,?,?,?,?,'AGENT',?,?,?)`).bind(crypto.randomUUID(),slug,text(data.storageConnectionId)||null,text(data.fileAssetId)||null,type,text(data.deviceName)||null,JSON.stringify(data.details||{}),now()).run();}
 
@@ -56,16 +56,18 @@ async function autoLink(c:Context<AppEnv>,slug:string,connectionId:string,fileAs
 }
 
 async function heartbeat(c:Context<AppEnv>){
-  if(!allowed(c))return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
-  const b=await bodyOf(c),slug=slugOf(c,b),device=text(b.deviceName)||"windows",ts=now();const old=await c.env.DB.prepare(`SELECT id FROM file_hub_agent_status WHERE main_company_slug=? AND device_name=?`).bind(slug,device).first<Row>();
+  const b=await bodyOf(c),slug=slugOf(c,b);
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Bu firma için File Agent anahtarı geçersiz."),401);
+  const device=text(b.deviceName)||"windows",ts=now();const old=await c.env.DB.prepare(`SELECT id FROM file_hub_agent_status WHERE main_company_slug=? AND device_name=?`).bind(slug,device).first<Row>();
   if(old)await c.env.DB.prepare(`UPDATE file_hub_agent_status SET version=?,status='ONLINE',watched_connections=?,last_seen_at=?,last_error=?,metadata=?,updated_at=? WHERE id=?`).bind(text(b.version),JSON.stringify(b.watchedConnections||[]),ts,text(b.lastError)||null,JSON.stringify(b.metadata||{}),ts,old.id).run();
   else await c.env.DB.prepare(`INSERT INTO file_hub_agent_status(id,main_company_slug,device_name,version,status,watched_connections,last_seen_at,last_error,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),slug,device,text(b.version),"ONLINE",JSON.stringify(b.watchedConnections||[]),ts,text(b.lastError)||null,JSON.stringify(b.metadata||{}),ts,ts).run();
   return c.json({ok:true,data:{lastSeenAt:ts}});
 }
 
 async function ingest(c:Context<AppEnv>){
-  if(!allowed(c))return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
-  const b=await bodyOf(c),slug=slugOf(c,b),connectionId=text(b.storageConnectionId),relativePath=text(b.relativePath).replace(/\\/g,"/"),fileName=text(b.fileName)||relativePath.split("/").pop()||"",ts=now();
+  const b=await bodyOf(c),slug=slugOf(c,b);
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Bu firma için File Agent anahtarı geçersiz."),401);
+  const connectionId=text(b.storageConnectionId),relativePath=text(b.relativePath).replace(/\\/g,"/"),fileName=text(b.fileName)||relativePath.split("/").pop()||"",ts=now();
   if(!connectionId||!relativePath||!fileName)return c.json(err("REQUIRED","storageConnectionId, relativePath ve fileName zorunludur."),422);
   const conn=await c.env.DB.prepare(`SELECT * FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1`).bind(connectionId,slug).first<Row>();if(!conn)return c.json(err("INVALID_CONNECTION","Depolama bağlantısı bulunamadı."),422);
   const existing=await findAsset(c,slug,connectionId,relativePath);let assetId=text(existing?.id),revisionChanged=false;
@@ -92,9 +94,9 @@ async function ingest(c:Context<AppEnv>){
 }
 
 async function previewUpload(c:Context<AppEnv>){
-  if(!allowed(c))return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
   const form=(await c.req.parseBody({all:true})) as Record<string,any>;
-  const slug=text(form.mainCompanySlug||form.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"mecit-hakan"),fileAssetId=text(form.fileAssetId),candidate=form.file;
+  const slug=text(form.mainCompanySlug||form.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"mecit-hakan").toLocaleLowerCase("tr-TR"),fileAssetId=text(form.fileAssetId),candidate=form.file;
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Bu firma için File Agent anahtarı geçersiz."),401);
   const file=candidate instanceof File?candidate:Array.isArray(candidate)?candidate.find((x:any)=>x instanceof File):null;
   if(!fileAssetId||!file)return c.json(err("REQUIRED","fileAssetId ve file zorunludur."),422);
   const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1`).bind(fileAssetId,slug).first<Row>();
@@ -110,12 +112,13 @@ async function previewUpload(c:Context<AppEnv>){
   const ts=now();
   await c.env.DB.prepare(`UPDATE file_hub_assets SET preview_status='READY',preview_storage_key=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(key,ts,fileAssetId,slug).run();
   await logEvent(c,slug,"PREVIEW_READY",{deviceName:form.deviceName,fileAssetId,details:{contentType:type,size:file.size}});
-  return c.json({ok:true,data:{fileAssetId,previewUrl:`/api/file-hub/files/${encodeURIComponent(fileAssetId)}/preview`,contentType:type,size:file.size}});
+  return c.json({ok:true,data:{fileAssetId,previewUrl:`/api/file-hub/files/${encodeURIComponent(fileAssetId)}/preview?mainCompanySlug=${encodeURIComponent(slug)}`,contentType:type,size:file.size}});
 }
 
 async function missing(c:Context<AppEnv>){
-  if(!allowed(c))return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
-  const b=await bodyOf(c),slug=slugOf(c,b),connectionId=text(b.storageConnectionId),relativePath=text(b.relativePath).replace(/\\/g,"/"),ts=now(),x=await findAsset(c,slug,connectionId,relativePath);if(!x)return c.json({ok:true,data:{ignored:true}});
+  const b=await bodyOf(c),slug=slugOf(c,b);
+  if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Bu firma için File Agent anahtarı geçersiz."),401);
+  const connectionId=text(b.storageConnectionId),relativePath=text(b.relativePath).replace(/\\/g,"/"),ts=now(),x=await findAsset(c,slug,connectionId,relativePath);if(!x)return c.json({ok:true,data:{ignored:true}});
   await c.env.DB.prepare(`UPDATE file_hub_locations SET is_available=0,updated_at=? WHERE id=?`).bind(ts,x.location_id).run();const any=await c.env.DB.prepare(`SELECT COUNT(*) n FROM file_hub_locations WHERE main_company_slug=? AND file_asset_id=? AND is_available=1`).bind(slug,x.id).first<Row>();if(Number(any?.n||0)===0)await c.env.DB.prepare(`UPDATE file_hub_assets SET status='MISSING',updated_at=? WHERE id=?`).bind(ts,x.id).run();await logEvent(c,slug,"MISSING",{deviceName:b.deviceName,storageConnectionId:connectionId,fileAssetId:x.id,details:{relativePath}});return c.json({ok:true});
 }
 
