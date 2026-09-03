@@ -3,7 +3,7 @@ param([switch]$SkipTests)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.7.0'
+$Version = '1.7.1'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 $Dist = Join-Path $Root 'dist'
