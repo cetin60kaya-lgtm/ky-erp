@@ -171,6 +171,44 @@ async function insertLedger(c: Context<AppEnv>, input: {
   return id;
 }
 
+async function totalFibeRemaining(c: Context<AppEnv>, slug: string) {
+  if (!(await tableExists(c, "accounting_fibe_movements"))) return 0;
+  const row = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END),0) AS total
+       FROM (
+         SELECT
+           COALESCE(c.fibe_opening_accrual,0)
+           + COALESCE((
+               SELECT SUM(COALESCE(v.incoming_vat,0))
+                 FROM vat_records v
+                WHERE v.main_company_slug=c.main_company_slug
+                  AND COALESCE(NULLIF(v.company_id,''),v.firm_id)=c.id
+                  AND substr(CAST(v.date AS TEXT),1,10) >= COALESCE(NULLIF(c.fibe_start_date,''),'9999-12-31')
+             ),0) * COALESCE(c.fibe_rate,0) / 100.0
+           + COALESCE((
+               SELECT SUM(CASE UPPER(COALESCE(f.movement_type,''))
+                 WHEN 'ACCRUAL' THEN COALESCE(f.amount,0)
+                 WHEN 'ACCRUAL_REVERSAL' THEN -COALESCE(f.amount,0)
+                 ELSE 0 END)
+                 FROM accounting_fibe_movements f
+                WHERE f.main_company_slug=c.main_company_slug AND f.company_id=c.id AND f.deleted_at IS NULL
+             ),0)
+           - COALESCE(c.fibe_opening_paid,0)
+           - COALESCE((
+               SELECT SUM(CASE UPPER(COALESCE(f.movement_type,''))
+                 WHEN 'PAYMENT' THEN COALESCE(f.amount,0)
+                 WHEN 'PAYMENT_REVERSAL' THEN -COALESCE(f.amount,0)
+                 ELSE 0 END)
+                 FROM accounting_fibe_movements f
+                WHERE f.main_company_slug=c.main_company_slug AND f.company_id=c.id AND f.deleted_at IS NULL
+             ),0) AS balance
+         FROM companies c
+        WHERE c.main_company_slug=? AND c.deleted_at IS NULL AND COALESCE(c.fibe_enabled,0)=1
+       )`,
+  ).bind(slug).first<Row>();
+  return roundMoney(row?.total);
+}
+
 async function companyBalance(c: Context<AppEnv>, slug: string, companyId: string) {
   const row = await c.env.DB.prepare(
     `SELECT COALESCE(SUM(COALESCE(effect,0)),0) AS balance
@@ -391,6 +429,7 @@ export function registerAccountingQuickControlRoutes(app: Hono<AppEnv>) {
     const internalFlow = allMovements
       .filter((row) => row.recordScope === "INTERNAL")
       .reduce((sum, row) => sum + row.amount, 0);
+    const fibeRemaining = await totalFibeRemaining(c, slug);
 
     return c.json({
       ok: true,
@@ -405,6 +444,7 @@ export function registerAccountingQuickControlRoutes(app: Hono<AppEnv>) {
           cashOutgoing: roundMoney(cashOutgoing),
           officialFlow: roundMoney(officialFlow),
           internalFlow: roundMoney(internalFlow),
+          fibeRemaining: roundMoney(fibeRemaining),
         },
         debts: (companyRows.results || []).filter((row) => num(row.current_balance) < 0).map((row) => ({ id: row.id, name: row.name, balance: roundMoney(row.current_balance) })),
         receivables: (companyRows.results || []).filter((row) => num(row.current_balance) > 0).map((row) => ({ id: row.id, name: row.name, balance: roundMoney(row.current_balance) })),

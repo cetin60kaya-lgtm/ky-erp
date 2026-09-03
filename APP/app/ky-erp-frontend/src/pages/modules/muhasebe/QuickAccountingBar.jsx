@@ -312,6 +312,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
             <div><span>Bu hafta gelen</span><strong>{money(week.summary?.incoming)}</strong></div>
             <div><span>Bu hafta giden</span><strong>{money(week.summary?.outgoing)}</strong></div>
             <div><span>Elden çıkan</span><strong>{money(week.summary?.cashOutgoing)}</strong></div>
+            <div><span>FİBE kalan</span><strong>{money(week.summary?.fibeRemaining)}</strong></div>
           </div>
           <div className="qab-week-grid">
             <div className="qab-list"><h4>Ödenecek cariler</h4>{(week.debts || []).slice(0, 8).map((row) => <div key={row.id}><span>{row.name}</span><b>{money(Math.abs(row.balance))}</b></div>)}</div>
