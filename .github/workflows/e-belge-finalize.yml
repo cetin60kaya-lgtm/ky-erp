@@ -1,0 +1,91 @@
+name: e-Belge Merkezi Final Doğrulama
+
+on:
+  push:
+    branches:
+      - codex/e-belge-merkezi-final-v2
+    paths:
+      - "APP/cloud/ky-erp-api/src/e-belge-*"
+      - "APP/cloud/ky-erp-api/src/accounting-tenant-guard.ts"
+      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelge*"
+      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/eBelge*"
+      - "APP/app/ky-erp-frontend/src/services/eBelgeApi.js"
+      - "APP/app/ky-erp-frontend/src/app/moduleRegistry.js"
+      - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
+      - "tools/e-belge-finalize.mjs"
+      - ".github/workflows/e-belge-finalize.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/e-belge-merkezi-final-v2
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Production wiring
+        run: node tools/e-belge-finalize.mjs
+
+      - name: Frontend install
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: APP/app/ky-erp-frontend
+        run: npm test
+
+      - name: Frontend build
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run build
+
+      - name: Frontend lint
+        working-directory: APP/app/ky-erp-frontend
+        run: npm run lint
+
+      - name: Worker install
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci
+
+      - name: Worker unit tests
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run test:unit
+
+      - name: Worker typecheck
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run typecheck
+
+      - name: Worker auth integration smoke
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run test:auth:integration
+
+      - name: Worker wrangler dry-run
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run build
+
+      - name: Diff safety
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then
+            echo "Yasaklı veri dosyası değişikliği bulundu."
+            exit 1
+          fi
+
+      - name: Final wiring commit
+        run: |
+          set -euo pipefail
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm tools/e-belge-finalize.mjs .github/workflows/e-belge-finalize.yml
+          git add APP/cloud/ky-erp-api/src/main.ts APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelgeCenterPage.jsx
+          git diff --cached --check
+          git commit -m "feat(e-belge): complete production e-Belge Merkezi wiring"
+          git push origin HEAD:codex/e-belge-merkezi-final-v2
