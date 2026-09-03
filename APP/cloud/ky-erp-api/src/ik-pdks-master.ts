@@ -1,5 +1,8 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerIkPdksDeviceRoutes } from "./ik-pdks-device";
+import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";
+import { registerIkPdksModernRoutes } from "./ik-pdks-modern";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -110,6 +113,12 @@ function normalizeTime(value: unknown, fallback: string) {
 }
 
 export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
+  // PDKS tek registration noktası. Main.ts yalnız bu modülü çağırır; cihaz,
+  // kart bridge ve modern motor burada aynı /personnel-control sözleşmesine eklenir.
+  registerIkPdksDeviceRoutes(app);
+  registerIkPdksCardBridgeRoutes(app);
+  registerIkPdksModernRoutes(app);
+
   app.get("/api/ik/personnel-control/pdks-masters", async (c) => {
     const auth = await authContext(c);
     if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
