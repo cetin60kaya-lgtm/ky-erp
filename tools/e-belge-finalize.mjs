@@ -24,6 +24,13 @@ patch("APP/cloud/ky-erp-api/src/main.ts", [
   ],
 ]);
 
+patch("APP/cloud/ky-erp-api/src/e-belge-center-cloud.ts", [
+  [
+    'return{text(doc.id),duplicate:true,attached:asset.ext}',
+    'return{documentId:text(doc.id),duplicate:true,attached:asset.ext}',
+  ],
+]);
+
 patch("APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelgeCenterPage.jsx", [
   [
     'import "./eBelgeCenter.css";',
