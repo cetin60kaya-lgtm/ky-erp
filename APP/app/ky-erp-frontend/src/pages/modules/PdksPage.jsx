@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
+import PdksLiveHome from "../pdks/PdksLiveHome";
+import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
@@ -11,7 +13,7 @@ const NAV_GROUPS = [
     label: "Günlük",
     hint: "Kart, giriş/çıkış ve puantaj",
     items: [
-      ["ana-ekran", "Ana Ekran"],
+      ["ana-ekran", "Canlı Geçişler"],
       ["bilgi-aktar", "Bilgi Aktar"],
       ["giris-cikislar", "Giriş / Çıkış"],
       ["puantaj", "Puantaj"],
@@ -23,7 +25,7 @@ const NAV_GROUPS = [
     label: "Personel & İK",
     hint: "Personel, izin ve bordro bağlantısı",
     items: [
-      ["personel-bilgileri", "Personel Bilgileri"],
+      ["personel-bilgileri", "Personel İşlemleri"],
       ["izinler", "İzinler"],
       ["calisma-tarihi", "Çalışma Tarihi"],
       ["avanslar", "Avans"],
@@ -72,6 +74,14 @@ const AUDIT_ALLOWED_TABS = new Set([
   "calisma-tarihi",
   "raporlar",
   "denetim-yillik-temp",
+]);
+
+const PERSONNEL_DESK_TABS = new Set([
+  "personel-bilgileri",
+  "giris-cikislar",
+  "puantaj",
+  "izinler",
+  "calisma-tarihi",
 ]);
 
 function groupForTab(tabKey, groups) {
@@ -161,6 +171,7 @@ export default function PdksPage(props) {
   };
   const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const deviceCenterTab = !isAuditAccount && ["cihaz-baglantilari", "senkron"].includes(activeTab);
+  const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
 
   return (
     <div className="pdks-module-shell">
@@ -206,8 +217,12 @@ export default function PdksPage(props) {
       </nav>
 
       <main className="pdks-module-content">
-        {deviceCenterTab ? (
+        {activeTab === "ana-ekran" ? (
+          <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
+        ) : deviceCenterTab ? (
           <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+        ) : personnelDeskTab ? (
+          <PdksPersonnelDesk {...props} />
         ) : (
           <>
             <QuickAssistant disabled={isAuditAccount} mainCompanyId={mainCompanyId} />
