@@ -108,7 +108,7 @@ export type ParsedDocument = {
   fileHash: string;
   mimeType: string;
   rawText: string;
-  sourceType: "PDF" | "XML" | "IMAGE_OCR" | "UNKNOWN";
+  sourceType: "PDF" | "XML" | "IMAGE_AI" | "IMAGE_OCR" | "UNKNOWN";
   documentNo: string;
   invoiceNo: string;
   dispatchNo: string;
