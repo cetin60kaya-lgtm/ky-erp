@@ -20,7 +20,7 @@ jobs:
           ref: codex/muhasebe-fibe-cari-final
           fetch-depth: 0
 
-      - name: FIBE'yi firma kartina gom ve ayri FIBE sekmesini kaldir
+      - name: FIBE firma karti ve Worker tip duzeltmeleri
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -33,7 +33,6 @@ jobs:
               if anchor not in s:
                   raise SystemExit('CompaniesCurrentWorkspace import anchor bulunamadi')
               s = s.replace(anchor, anchor + imp, 1)
-
           marker = '''              <section className="ccw-section">\n                <header><h3>Firma Alias / Eşleşme</h3><span>{aliases.length} kayıt</span></header>'''
           inserted = '''              <CompanyFibeSection\n                activeMainCompany={activeMainCompany}\n                company={selected}\n                onChanged={async () => {\n                  await loadFirms();\n                  await loadMovements(selected);\n                }}\n              />\n\n''' + marker
           if '<CompanyFibeSection' not in s:
@@ -48,16 +47,35 @@ jobs:
           if button in t:
               t = t.replace(button, '', 1)
           q.write_text(t, encoding='utf-8')
+
+          c = Path('APP/cloud/ky-erp-api/src/accounting-check-cari.ts')
+          u = c.read_text(encoding='utf-8-sig')
+          old = '''    const existing = await settlementOf(c, slug, checkId);\n    const timestamp = nowIso();\n    if (text(existing?.cari_movement_id)) {'''
+          new = '''    const existing = await settlementOf(c, slug, checkId);\n    const existingMovementId = text(existing?.cari_movement_id);\n    const timestamp = nowIso();\n    if (existingMovementId) {'''
+          if old not in u and 'const existingMovementId = text(existing?.cari_movement_id);' not in u:
+              raise SystemExit('check nullable marker bulunamadi')
+          u = u.replace(old, new, 1)
+          u = u.replace('cariMovementId: text(existing.cari_movement_id)', 'cariMovementId: existingMovementId', 1)
+          c.write_text(u, encoding='utf-8')
+
+          r = Path('APP/cloud/ky-erp-api/src/accounting-quick-control.ts')
+          v = r.read_text(encoding='utf-8-sig')
+          old = '''    const fibeRows = await (await tableExists(c, "accounting_fibe_movements"))\n      ? c.env.DB.prepare(\n          `SELECT f.*,c.name AS company_name\n             FROM accounting_fibe_movements f\n             LEFT JOIN companies c ON c.id=f.company_id AND c.main_company_slug=f.main_company_slug\n            WHERE f.main_company_slug=? AND f.deleted_at IS NULL\n              AND substr(CAST(f.movement_date AS TEXT),1,10) BETWEEN ? AND ?\n            ORDER BY f.movement_date DESC,f.created_at DESC\n            LIMIT 1000`,\n        ).bind(slug, range.from, range.to).all<Row>()\n      : { results: [] as Row[] };'''
+          new = '''    let fibeResults: Row[] = [];\n    if (await tableExists(c, "accounting_fibe_movements")) {\n      const fibeRows = await c.env.DB.prepare(\n        `SELECT f.*,c.name AS company_name\n           FROM accounting_fibe_movements f\n           LEFT JOIN companies c ON c.id=f.company_id AND c.main_company_slug=f.main_company_slug\n          WHERE f.main_company_slug=? AND f.deleted_at IS NULL\n            AND substr(CAST(f.movement_date AS TEXT),1,10) BETWEEN ? AND ?\n          ORDER BY f.movement_date DESC,f.created_at DESC\n          LIMIT 1000`,\n      ).bind(slug, range.from, range.to).all<Row>();\n      fibeResults = fibeRows.results || [];\n    }'''
+          if old not in v and 'let fibeResults: Row[] = [];' not in v:
+              raise SystemExit('fibe Promise marker bulunamadi')
+          v = v.replace(old, new, 1)
+          v = v.replace('const fibeMovements = (fibeRows.results || []).map((row) => ({', 'const fibeMovements = fibeResults.map((row: Row) => ({', 1)
+          r.write_text(v, encoding='utf-8')
           PY
 
-      - name: Firma karti baglanti kontrolu
+      - name: Baglanti ve tip patch kontrolu
         run: |
           grep -q 'CompanyFibeSection' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx
           ! grep -q '> Firma FİBE</button>' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx
+          grep -q 'existingMovementId' APP/cloud/ky-erp-api/src/accounting-check-cari.ts
+          grep -q 'let fibeResults: Row\[\]' APP/cloud/ky-erp-api/src/accounting-quick-control.ts
           grep -q 'fibeOpeningAccrual' APP/cloud/ky-erp-api/src/accounting-company-profile.ts
-          grep -q 'registerAccountingFibeRoutes' APP/cloud/ky-erp-api/src/accounting-company-profile.ts
-          grep -q 'registerAccountingQuickControlRoutes' APP/cloud/ky-erp-api/src/accounting-fibe.ts
-          grep -q 'registerAccountingCheckCariRoutes' APP/cloud/ky-erp-api/src/accounting-quick-control.ts
 
       - name: Node setup
         uses: actions/setup-node@v4
@@ -80,25 +98,15 @@ jobs:
         run: |
           rm -rf .local-accounting-final
           for sql in local-accounting-quick-smoke.sql migrations/0040_accounting_fibe_company_tracking.sql local-accounting-quick-smoke-seed.sql; do
-            npx wrangler d1 execute ky-erp-production-local \
-              --local \
-              --config wrangler.production-local.jsonc \
-              --persist-to .local-accounting-final \
-              --file "$sql"
+            npx wrangler d1 execute ky-erp-production-local --local --config wrangler.production-local.jsonc --persist-to .local-accounting-final --file "$sql"
           done
 
       - name: Izole Worker baslat
         working-directory: APP/cloud/ky-erp-api
         run: |
-          nohup npx wrangler dev \
-            --local \
-            --config wrangler.production-local.jsonc \
-            --persist-to .local-accounting-final \
-            --port 8792 > /tmp/kyerp-accounting-final.log 2>&1 &
+          nohup npx wrangler dev --local --config wrangler.production-local.jsonc --persist-to .local-accounting-final --port 8792 > /tmp/kyerp-accounting-final.log 2>&1 &
           for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:8792/api/health > /tmp/accounting-health.json; then
-              exit 0
-            fi
+            if curl --fail --silent http://127.0.0.1:8792/api/health > /tmp/accounting-health.json; then exit 0; fi
             sleep 1
           done
           cat /tmp/kyerp-accounting-final.log
@@ -107,37 +115,13 @@ jobs:
       - name: Cari cek FIBE smoke
         run: |
           set -euo pipefail
-          curl --fail --silent \
-            'http://127.0.0.1:8792/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
-            | jq -e '.ok == true and .data.summary.normalReceivable == 12000'
-
-          curl --fail --silent \
-            'http://127.0.0.1:8792/api/muhasebe/fibe/company-isnet-customer?mainCompanySlug=mecit-hakan' \
-            | jq -e '.ok == true and .data.summary.automaticAccrual == 200 and .data.summary.remainingBalance == 200'
-
-          curl --fail --silent -X POST -H 'Content-Type: application/json' \
-            --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","transactionType":"COLLECTION","amount":2000,"date":"2026-09-03","paymentMethod":"CASH","recordType":"GAYRI_RESMI","description":"Smoke elden tahsilat"}' \
-            'http://127.0.0.1:8792/api/muhasebe/hizli-cari/hareket' \
-            | jq -e '.ok == true and .data.balanceAfter == 10000'
-
-          curl --fail --silent -X POST -H 'Content-Type: application/json' \
-            --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' \
-            'http://127.0.0.1:8792/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' \
-            | jq -e '.ok == true and .data.balanceAfter == 8500 and .data.idempotent == false'
-
-          curl --fail --silent -X POST -H 'Content-Type: application/json' \
-            --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' \
-            'http://127.0.0.1:8792/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' \
-            | jq -e '.ok == true and .data.idempotent == true'
-
-          curl --fail --silent -X POST -H 'Content-Type: application/json' \
-            --data '{"mainCompanySlug":"mecit-hakan","movementType":"PAYMENT","date":"2026-09-03","amount":50,"paymentMethod":"CASH","description":"Smoke FIBE odeme"}' \
-            'http://127.0.0.1:8792/api/muhasebe/fibe/company-isnet-customer/hareketler' \
-            | jq -e '.ok == true and .data.summary.totalPaid == 50 and .data.summary.remainingBalance == 150'
-
-          curl --fail --silent \
-            'http://127.0.0.1:8792/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
-            | jq -e '.ok == true and .data.summary.normalReceivable == 8500 and .data.summary.cashOutgoing == 50'
+          curl --fail --silent 'http://127.0.0.1:8792/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' | jq -e '.ok == true and .data.summary.normalReceivable == 12000'
+          curl --fail --silent 'http://127.0.0.1:8792/api/muhasebe/fibe/company-isnet-customer?mainCompanySlug=mecit-hakan' | jq -e '.ok == true and .data.summary.automaticAccrual == 200 and .data.summary.remainingBalance == 200'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","transactionType":"COLLECTION","amount":2000,"date":"2026-09-03","paymentMethod":"CASH","recordType":"GAYRI_RESMI","description":"Smoke elden tahsilat"}' 'http://127.0.0.1:8792/api/muhasebe/hizli-cari/hareket' | jq -e '.ok == true and .data.balanceAfter == 10000'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' 'http://127.0.0.1:8792/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' | jq -e '.ok == true and .data.balanceAfter == 8500 and .data.idempotent == false'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' 'http://127.0.0.1:8792/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' | jq -e '.ok == true and .data.idempotent == true'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","movementType":"PAYMENT","date":"2026-09-03","amount":50,"paymentMethod":"CASH","description":"Smoke FIBE odeme"}' 'http://127.0.0.1:8792/api/muhasebe/fibe/company-isnet-customer/hareketler' | jq -e '.ok == true and .data.summary.totalPaid == 50 and .data.summary.remainingBalance == 150'
+          curl --fail --silent 'http://127.0.0.1:8792/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' | jq -e '.ok == true and .data.summary.normalReceivable == 8500 and .data.summary.cashOutgoing == 50'
 
       - name: Frontend lint ve build
         working-directory: APP/app/ky-erp-frontend
@@ -149,16 +133,15 @@ jobs:
       - name: Diff guard
         run: |
           git diff --check
-          if git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then
-            echo 'Yasakli veri dosyasi degisikligi bulundu.' >&2
-            exit 1
-          fi
+          if git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then echo 'Yasakli veri dosyasi degisikligi bulundu.' >&2; exit 1; fi
 
       - name: Final patchi kaydet ve tek seferlik akisi temizle
         run: |
           git config user.name "KY ERP Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx \
+          git add APP/cloud/ky-erp-api/src/accounting-check-cari.ts \
+                  APP/cloud/ky-erp-api/src/accounting-quick-control.ts \
+                  APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx \
                   APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx
           git rm -f .github/workflows/muhasebe-fibe-finalize.yml docs/muhasebe-fibe-finalize-trigger.txt
           git commit -m "feat(accounting): finalize company FIBE and quick accounting UX"
