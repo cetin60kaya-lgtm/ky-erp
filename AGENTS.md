@@ -1,118 +1,41 @@
-# KY ERP geliştirme kuralları
+# KY ERP — ANA YÖNLENDİRME
 
-## Sabit çalışma kaynağı
+> **Önemli:** GitHub default branch'i `main` tarihsel/yardımcı branch'tir. Güncel KY ERP production kaynak kodu ve çalışma kuralları için `main` canonical kabul edilmez.
 
-- GitHub deposu: `cetin60kaya-lgtm/ky-erp`.
-- Windows ana yerel çalışma klasörü: `D:\KYERP-GITHUB\KY-ERP-AKTIF`.
-- Kullanıcı yeni bir karar vermedikçe geliştirme, GitHub eşitleme, derleme ve yerel uygulama kontrolü yalnız bu klasörden yapılır.
-- Kararlı çalışma dalı: `tasarim-final-v1`. Onaylı özellik çalışmaları ayrı dal ve taslak PR üzerinde yürütülür; kullanıcı onayı olmadan `main` dalına birleştirilmez.
-- Her Git işleminden önce aşağıdakiler doğrulanır:
-  - `git rev-parse --show-toplevel`
-  - `git remote get-url origin`
-  - `git branch --show-current`
-  - `git status -sb`
-- Beklenen remote: `https://github.com/cetin60kaya-lgtm/ky-erp.git`.
-- Yerel çalışma ağacı temiz değilse veya dal GitHub'dan ilerideyse `pull`, `merge`, `reset`, `clean`, `checkout` ya da `switch` uygulanmaz; önce değişiklikler raporlanır ve korunur.
+## Yeni sohbet / yeni ajan zorunlu başlangıç
 
-## Tek model merkezi ve modüller arası iş akışı
+1. Önce `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` dosyasını oku.
+2. Gerçek production kaynak branch'e geç veya onu GitHub'dan oku: `codex/model-uretim-kontrol-merkezi-final`.
+3. O branch'teki `AGENTS.md` dosyasını teknik ve güvenlik açısından üstün çalışma sözleşmesi kabul et.
+4. Aktif feature branch varsa (ör. Desktop çalışması) aynı `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` dosyasının o branch'teki daha yeni kopyasını kontrol et.
+5. Kullanıcı açıkça `onay / canlıya al / deploy / merge` demeden production deploy veya merge yapma.
 
-- Model ana kaydının tek merkezi Desen modülüdür.
-- İşNet, Desen, Boyahane, İmalat ve Muhasebe aynı değişmeyen `canonicalModelId` kimliğini kullanır; modüller içinde ikinci bağımsız model kartı oluşturulmaz.
-- Model adına göre kalıcı bağlantı kurulmaz. Model adı yalnız arama ve gösterim içindir; işlemler model kimliğiyle bağlanır.
-- Model tekilliğinde ana firma, kayıtlı müşteri firma ve normalize model adı birlikte dikkate alınır. Farklı müşterilerde aynı model adı yanlışlıkla birleştirilmez.
-- Hızlı model açma işleminde kayıtlı müşteri firma kartı zorunludur; serbest firma adıyla model oluşturulmaz.
-- İşNet gelen irsaliyesi modele bağlandığında aynı işlem içinde üretim planı oluşturulur veya güncellenir.
-- İrsaliye müşterisi ile model kartındaki müşteri farklıysa bağlantı engellenir ve kullanıcıya açık hata gösterilir.
-- Desen baskı bölgeleri, Boyahane işleri, üretim operasyonları, sakat kayıtları ve fatura satırları aynı model kimliğini taşır.
-- Model zaman çizelgesi model açılışı, Desen, İşNet, Boyahane, üretim ve Muhasebe olaylarını aynı kimlik altında gösterir.
-- Çok operasyonlu modelde tamamlanan model adedi operasyonların toplamı değil, zorunlu operasyonlar içindeki en düşük ortak adettir.
-- Üretim denklemi: `Net sağlam = Brüt üretim - Baskı sakatı - Kumaş sakatı`.
-- Gelen irsaliye adedi, tamamlanan brüt, net sağlam, eksik, fazla, Boyahane durumu, faturalanan ve fatura bekleyen adet birlikte izlenir.
+## Güncel proje kimliği
 
-## En az kullanıcı girdisi ve hızlı işlem kuralı
+- Repo: `cetin60kaya-lgtm/ky-erp`
+- Production kaynak branch: `codex/model-uretim-kontrol-merkezi-final`
+- Public site: `https://kyerp.net`
+- ERP uygulaması: `https://app.kyerp.net`
+- API: `https://api.kyerp.net`
 
-- Sistem bildiği veya güvenli biçimde çıkarabildiği alanı kullanıcıya yeniden sordurmaz.
-- Ana firma, müşteri, irsaliye no, sipariş no, model kimliği, açık üretim planı ve baskı bölgeleri mümkün olduğunda kaynak kayıttan otomatik taşınır.
-- Makineye bağlı makinacı ve vardiya varsayılanları otomatik önerilir; belirsizlik varsa kullanıcı seçimi istenir.
-- Çok alanlı veya sık kullanılan her modülde hızlı işlem girişi bulunur. Ortak `Ctrl+K / Hızlı İşlem` merkezi normal ekranlarla aynı servisleri kullanır.
-- Hızlı girişler veri doğrulamasını atlamaz. Belirsiz model/firma, adet farkı veya resmî işlemde kullanıcı onayı zorunludur.
-- Gerçek İşNet giden irsaliye ve resmî fatura gönderimi son kullanıcı onayı olmadan çalıştırılmaz.
+## Güncel çalışma yönü — 03.09.2026
 
-## İşNet bağlantısı ve Desen klasör ayarı
+- KY ERP Desktop geliştirme sonrası ilk gerçek kontrol ortamıdır.
+- GitHub ana kaynak kodu ve geçmiş/yedek merkezidir.
+- kyerp.net yalnız Desktop üzerinde kullanıcı kontrolünden geçen ve açıkça onaylanan değişiklikleri alır.
+- Kullanıcı GitHub/VS Code ile manuel uğraştırılmaz; mümkün olduğunca otomatik build/güncelleme akışı kullanılır.
+- Aktif Desktop branch'i: `codex/ky-erp-desktop-final-20260903`.
+- Draft PR: `#56 — KY ERP Desktop 1.7.2 — tam Windows ERP uygulaması`.
+- Kullanıcı Desktop 1.7.2'nin açıldığını ve oturumun çalıştığını gerçek Windows cihazda doğrulamıştır.
+- İlk ayrıntılı modül kontrolü: `İK > Günlük Giriş`.
 
-- İşNet bağlantı testi önce resmî API girişini dener; API 404/500, ağ, zaman aşımı, geçersiz yanıt, eksik token veya firma listesi hatasında NetFatura portalına otomatik geçer.
-- API başarısızlığı portal denemesini engellemez; kullanıcıya API ve portal aşamalarının ayrı ve anlaşılır sonucu gösterilir.
-- İşNet kullanıcı adı ve şifresi GitHub'a, loglara veya frontend kaynak koduna yazılmaz. Şifre yalnız yerel anahtarla AES-256-GCM formatında saklanır.
-- İşNet firma seçimi bağlantı testinden dönen gerçek yetkili firma listesinden yapılır; serbest firma kimliği kaydedilmez.
-- Canlı portal oturumu doğrulanmadan sistem “uçtan uca tamamlandı” sayılmaz. Resmî irsaliye/fatura gönderimi kullanıcı onayı olmadan yapılmaz.
-- Desen görsel klasörleri Desen > Gelen Desenler ekranındaki klasör ayar merkezinden yönetilir.
-- Gelen Görsel, Model Arşivi, İşlenen, İşlenemeyen ve Arşiv klasörleri ayrı, tam ve birbirinden farklı Windows yolları olmalıdır.
-- Mevcut Desen tarama ve model oluşturma motoru standart `STORAGE\desen` yollarını kullanmaya devam eder; seçilen harici klasörler Windows junction ile bu standart yollara güvenli bağlanır.
-- Klasör değişikliğinde mevcut dosyalar silinmez. Hedefe güvenli taşınır; aynı isim varsa üzerine yazılmaz ve `-aktarilan-N` adıyla korunur.
-- Klasör ayarı kaydedilmeden önce erişim ve yazma testi yapılabilir; bağlantı başarısızsa model taraması başlatılmaz.
+## Eski main kuralları
 
-## Canlı veri ve dosya kaynağı
+Bu dosyada daha önce bulunan OneDrive/SQLite/yerel DATA ve `tasarim-final-v1` merkezli kurallar güncel canonical mimari değildir. Gerekirse Git geçmişinden tarihsel referans olarak incelenebilir; yeni geliştirme kararlarında kullanılmamalıdır.
 
-- Gerçek canlı veritabanı Git reposunda tutulmaz.
-- Canlı DATA kökü: `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\DATA`.
-- Canlı SQLite veritabanı: `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\DATA\KYERP.db`.
-- Aktif repo içindeki `DATA` yolu, `SCRIPTS\KYERP_DATA_BAGLA.ps1` ile canlı DATA köküne Windows junction olarak bağlanır.
-- Veritabanı aktif repo içine kopyalanmaz, taşınmaz, yeniden oluşturulmaz veya GitHub'a eklenmez.
-- DATA bağlantısı kurulmadan uygulama başlatılmaz.
-- Canlı STORAGE kökü OneDrive merkezinde kalır; gerçek PDF, XML, görsel, rapor ve kullanıcı dosyaları GitHub'a girmez.
+## Güvenlik
 
-## Eski ve referans klasörler
-
-Aşağıdaki klasörler ana çalışma kaynağı değildir; otomatik eşitlenmez, silinmez veya sıfırlanmaz:
-
-- `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ` — eski `arayuz-kabuk-v3` çalışma kopyası ve canlı DATA/STORAGE merkezi.
-- `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\TEMP\ky-erp-git-sync` — eski `main` çalışma kopyası.
-- `D:\Onedrive-Hkn\OneDrive\KY-ERP-MERKEZ\TEMP\ky-erp-git-sync-yeni` — `work/ik-muhasebe-final` dalında GitHub'a gönderilmemiş yerel commitler içerebilir; özellikle korunur.
-- `D:\KY-ERP` — Git deposu değildir.
-
-## Yerel uygulama kontrolü
-
-- Backend klasörü: `APP\app\ky-erp-backend`.
-- Frontend klasörü: `APP\app\ky-erp-frontend`.
-- Backend geliştirme portu: `3101`.
-- Frontend geliştirme portu: `5173`.
-- İlk kurulum veya DATA bağlantısı eksikse:
-  - `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_DATA_BAGLA.ps1`
-- Repo içindeki güvenli yaşam döngüsü komutu kullanılır:
-  - Başlat: `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_LIFECYCLE.ps1 start`
-  - Durum: `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_LIFECYCLE.ps1 status`
-  - Durdur: `powershell -ExecutionPolicy Bypass -File .\SCRIPTS\KYERP_LIFECYCLE.ps1 stop`
-- Başlatma öncesinde bağlı `DATA\KYERP.db`, gerekli `.env` ayarları, Node/npm bağımlılıkları ve `sqlite3` komutu kontrol edilir.
-- Yaşam döngüsü betiği backend için `DATABASE_URL` değerini bağlı veritabanından otomatik oluşturur.
-
-## Genel mühendislik kuralları
-
-- Bu proje KY ERP üretim sistemidir.
-- Öncelik sırası: sıfır veri kaybı, sıfır hata, hızlı işlem, sade arayüz.
-- Mevcut özellikleri kaldırma ve demo veri üretme.
-- API anahtarlarını açığa çıkarma; frontend'e gizli anahtar koyma.
-- Migration öncesi yedek ve geri dönüş planı hazırla.
-- Her değişiklikten sonra ilgili testleri çalıştır.
-- TypeScript ve lint hatası bırakma.
-- Kullanılmayan veya gereksiz paket ekleme.
-- Büyük değişiklikleri küçük ve denetlenebilir parçalara ayır.
-- Kullanıcı istemedikçe tasarımı baştan değiştirme.
-- Kod içinde Türkçe karakter kaynaklı bozulma oluşturma.
-- Cloudflare D1, R2, Workers ve Pages uyumluluğunu koru.
-- Production API adresi `https://api.kyerp.net` olarak kalmalıdır.
-- İş tamamlandığında değiştirilen dosyaları ve test sonuçlarını raporla.
-
-
-## Muhasebe, İşNet, cari, alias ve çek merkezi
-
-- İşNet belge operasyonunun tek merkezidir: portal senkronu, gelen/giden belge, irsaliyeden faturaya, PDF/XML ve yerel arşiv İşNet altında yürür. Muhasebe aynı belge operasyonunu ikinci kez yaptırmaz.
-- Muhasebe günlük menüsü sade tutulur: Yönetim Özeti, Firmalar ve Cari, Tedarikçi Faturaları, Gelir/Gider/Kâr Zarar, KDV, Çek/Kart/Ödeme, Ekstre/Mail ve Raporlar.
-- Muhasebe yalnız finansal sonucu ve istisnayı gösterir: cari işlendi mi, KDV işlendi mi, gider kategorisi var mı, ödeme/çek durumu nedir.
-- Firma kartı müşteri/tedarikçi, resmi/gayri, gider kategorisi, yetkili/e-posta, boya-kimya tedarikçisi ve cari bilgisinin ortak kaynağıdır.
-- Firma aliası aynı firmaya yazılan farklı adları tek firma kimliğine bağlar. Örnek: Taha Giyim ve Taha Tekstil aynı firma kartına alias olabilir.
-- Ürün aliası yalnız boya/kimya tedarik akışında kullanılır. Örnek: S 20 White ve S 20 Beyaz aynı S 20 ürün kartına bağlanabilir.
-- Boya/kimya tedarikçisi olmayan faturalar ürün/lot beklemeden gider kategorisi, cari ve KDV akışına gider.
-- Çek merkezi büyük aylık denetim ekranıdır; bu ay, gelecek ay, geciken, açık ve yıllık toplamlar atlanmaz.
-- Çek kaydında firma, verilen tarih, vade, banka, hesap no, çek no, tutar, müşteri/kendi çeki, alınan/verilen, resmi/gayri ve not tutulur.
-- Çek ön/arka görseli ve tahsilat makbuzu JPG, PNG, WEBP veya PDF olarak STORAGE altında saklanır; GitHub'a girmez.
-- Hızlı Cari, Hızlı Çek ve Hızlı Ödeme/Tahsilat normal ekranlarla aynı doğrulama ve servisleri kullanır.
+- Production verisini test için silme/sıfırlama.
+- Şifre, MFA secret, API key veya tokenı GitHub'a yazma.
+- Kullanıcı onayı olmadan resmî İşNet belge gönderimi, production migration veya deploy yapma.
+- Değişiklikten önce ilgili feature branch ve güncel Proje Kontrol Merkezi okunmalıdır.
