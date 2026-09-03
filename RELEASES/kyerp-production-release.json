@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-03T09:18:00+03:00",
-  "attempt": 86,
+  "requestedAt": "2026-09-03T11:20:00+03:00",
+  "attempt": 87,
   "scope": [
     "public-kyerp-net-corporate-site",
     "app-kyerp-net-erp-login",
@@ -40,6 +40,16 @@
     "muhasebe-fibe-rate-history-freeze",
     "muhasebe-fibe-internal-ledger-separation",
     "muhasebe-fibe-schema-0040",
+    "e-belge-center-production-final",
+    "e-belge-provider-neutral",
+    "e-belge-isnet-integration",
+    "e-belge-document-pool",
+    "e-belge-ubl-pdf-image-ingest",
+    "e-belge-invoice-dispatch-line-match",
+    "e-belge-multi-dispatch-allocation",
+    "e-belge-product-alias-match",
+    "e-belge-lot-store-routing",
+    "e-belge-controlled-accounting-posting",
     "ik-personnel-control-center",
     "ik-denetim-pdks-sgk-var-card-only",
     "pdks-tenant-guard",
@@ -86,9 +96,10 @@
     "cloudflare-worker-production",
     "cloudflare-pages-production",
     "pr57-duration-billing-storage-ui-final",
-    "pr55-muhasebe-fibe-cari-final"
+    "pr55-muhasebe-fibe-cari-final",
+    "pr58-e-belge-production-final"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "57ffe21a64ae5f41a53381dca486ede662dd3b4a",
-  "note": "03.09.2026 attempt 86. PR #55 production source'a alindi. Muhasebe hizli cari ve haftalik kontrol, resmi/ic kayit ayrimli tahsilat-odeme, cek cari mahsup idempotency ve firma karti icinde FIBE takibi tamamlandi. FIBE normal cariden ve resmi KDV defterinden ayri ic takip olarak tutulur; KDV yalniz hesap referansidir. Firma FIBE orani degistiginde gecmis donem hak edisi eski oranla dondurulur, yeni oran yeni donemden devam eder. Ortak altyapi testi guncel IsNet oturum korumasina gore 401/UNAUTHORIZED sozlesmesini dogrular. PR head uzerinde Production Source Validation, API Contract, D1 Schema Readiness, Yerel Uctan Uca, Shared Safety ve Cloudflare Pages preview tamamen yesildir. Canli yayin tam D1 yedegi alindiktan sonra 0040 semasini yoksa uygular, tam ise atlar, kismi semada guvenli durur; ardindan Worker ve Pages production dagitimi ile canli saglik kontrolleri yapilir. D1 reset yoktur."
+  "sourceCommit": "c89021ab7c7495fe208777a9a356c808a4f9248e",
+  "note": "03.09.2026 attempt 87. Kullanici onayi ile current production source canli yayina cikiyor. PR #55 Muhasebe hizli cari/FIBE duzeni ve PR #58 e-Belge Merkezi production final paketi source'ta mevcut. e-Belge Merkezi provider-neutral ust modul olarak kalir; IsNet yalniz entegrasyon/provider katmanidir. Belge Havuzu, manuel XML/PDF/gorsel alimi, UBL belge okuma, fatura-irsaliye urun/kalem/miktar/birim eslestirmesi, coklu irsaliye dagitimi, urun alias ve LOT/store yonlendirmesi ile kontrollu muhasebelestirme canliya alinacaktir. Resmi e-belge gonderimi otomatik acilmaz. Bu release PR #60 Depolama OAuth degisikliklerini icermez. D1 reset yoktur; mevcut release zinciri tam D1 yedegi aldiktan sonra hedefli migration/Worker/Pages dagitimi yapar. Kullanici smoke teyidinin daha sonra yapilabilecegini belirtti; mevcut release zincirindeki guvenlik ve yedek adimlari korunur."
 }
