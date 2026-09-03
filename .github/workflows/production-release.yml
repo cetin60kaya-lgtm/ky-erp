@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: File Hub + Muhasebe + PDKS hedefli migrationlarini uygula
+      - name: File Hub + Muhasebe + PDKS + AI ucretlendirme hedefli migrationlarini uygula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -136,13 +136,13 @@ jobs:
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0034_accounting_document_core.sql
           fi
 
-          for migration in 0035_accounting_intelligence_profiles.sql 0036_accounting_document_archive_queue.sql 0037_pdks_device_sync.sql; do
+          for migration in 0035_accounting_intelligence_profiles.sql 0036_accounting_document_archive_queue.sql 0037_pdks_device_sync.sql 0038_company_ai_billing.sql 0039_file_hub_agent_tenant_credentials.sql; do
             test -f "migrations/$migration"
             echo "Uygulaniyor/idempotent: $migration"
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "migrations/$migration"
           done
 
-      - name: Migration sonrasi File Hub + Muhasebe + PDKS semasini dogrula
+      - name: Migration sonrasi File Hub + Muhasebe + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -150,11 +150,13 @@ jobs:
           tables=(
             file_hub_connections file_hub_bindings file_hub_assets file_hub_locations
             file_hub_relations file_hub_revisions file_hub_events file_hub_agent_status
+            file_hub_agent_credentials
             accounting_documents accounting_document_lines accounting_document_taxes
             accounting_document_relations accounting_document_issues accounting_payment_plans
             accounting_ledger_entries accounting_extraction_profiles accounting_bank_import_batches
             accounting_bank_import_rows accounting_document_archive_jobs
             ik_pdks_devices ik_pdks_device_sync_logs
+            company_billing_profiles company_billing_ledger
           )
           triggers=(trg_file_hub_outgoing_package_teammates trg_file_hub_primary_location_failover trg_accounting_documents_enqueue_archive)
           for table in "${tables[@]}"; do
@@ -169,6 +171,10 @@ jobs:
           jq -e '.[0].results[0].n == 5' <<<"$canonical" >/dev/null || { echo "accounting_documents canonical kolonlari eksik" >&2; exit 1; }
           pdks="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('ik_pdks_devices') WHERE name IN ('main_company_id','secret_hash','last_sync_at')) AS device_cols, (SELECT COUNT(*) FROM pragma_table_info('ik_pdks_device_sync_logs') WHERE name IN ('device_id','accepted_count','rejected_count','status')) AS log_cols;" --json)"
           jq -e '.[0].results[0].device_cols == 3 and .[0].results[0].log_cols == 4' <<<"$pdks" >/dev/null || { echo "PDKS cihaz senkron semasi eksik" >&2; exit 1; }
+          billing="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('company_billing_profiles') WHERE name IN ('main_company_slug','package_code','status','included_tokens','monthly_token_limit','custom_monthly_price_minor','period_start','period_end','next_renewal_at')) AS profile_cols, (SELECT COUNT(*) FROM pragma_table_info('company_billing_ledger') WHERE name IN ('main_company_slug','movement_type','source','source_ref','input_tokens','output_tokens','total_tokens','amount_minor')) AS ledger_cols;" --json)"
+          jq -e '.[0].results[0].profile_cols == 9 and .[0].results[0].ledger_cols == 8' <<<"$billing" >/dev/null || { echo "Firma AI ucretlendirme semasi eksik" >&2; exit 1; }
+          agent="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('file_hub_agent_credentials') WHERE name IN ('main_company_slug','secret_hash','is_active','last_used_at');" --json)"
+          jq -e '.[0].results[0].n == 4' <<<"$agent" >/dev/null || { echo "File Hub tenant agent credential semasi eksik" >&2; exit 1; }
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
@@ -298,6 +304,8 @@ jobs:
           echo "MFA: zorunlu"
           echo "Oturum cutover: uygulandi"
           echo "IsNet tenant guard: aktif"
+          echo "AI ucretlendirme: 0038 dogrulandi"
+          echo "File Hub tenant agent guvenligi: 0039 dogrulandi"
           echo "RESEND_API_KEY: aktif Worker bindingi dogrulandi"
           echo "API: https://api.kyerp.net"
           echo "Site: https://kyerp.net"

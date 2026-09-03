@@ -13,12 +13,16 @@ $MIGRATIONS = @(
   "0033_file_hub_primary_location_failover.sql",
   "0034_accounting_document_core.sql",
   "0035_accounting_intelligence_profiles.sql",
-  "0036_accounting_document_archive_queue.sql"
+  "0036_accounting_document_archive_queue.sql",
+  "0037_pdks_device_sync.sql",
+  "0038_company_ai_billing.sql",
+  "0039_file_hub_agent_tenant_credentials.sql"
 )
 $REQUIRED_SCHEMA_OBJECTS = @(
-  "file_hub_connections","file_hub_bindings","file_hub_assets","file_hub_locations","file_hub_relations","file_hub_revisions","file_hub_events","file_hub_agent_status",
+  "file_hub_connections","file_hub_bindings","file_hub_assets","file_hub_locations","file_hub_relations","file_hub_revisions","file_hub_events","file_hub_agent_status","file_hub_agent_credentials",
   "accounting_documents","accounting_document_lines","accounting_document_taxes","accounting_document_relations","accounting_document_issues","accounting_payment_plans","accounting_ledger_entries",
   "accounting_extraction_profiles","accounting_bank_import_batches","accounting_bank_import_rows","accounting_document_archive_jobs",
+  "ik_pdks_devices","ik_pdks_device_sync_logs","company_billing_profiles","company_billing_ledger",
   "trg_file_hub_outgoing_package_teammates","trg_file_hub_primary_location_failover","trg_accounting_documents_enqueue_archive"
 )
 
@@ -27,7 +31,7 @@ function Check([string]$Message) { if ($LASTEXITCODE -ne 0) { Fail $Message } }
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host " KY ERP - FILE HUB + MUHASEBE CANLI ONCESI KONTROL" -ForegroundColor Cyan
+Write-Host " KY ERP - FINAL CANLI ONCESI KONTROL 0030-0039" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "Bu script production'a yazmaz, deploy yapmaz ve remote D1'e dokunmaz." -ForegroundColor Yellow
 Write-Host ""
@@ -84,25 +88,30 @@ $schemaCount = [int]$schemaJson[0].results[0].n
 if ($schemaCount -ne $REQUIRED_SCHEMA_OBJECTS.Count) { Fail "Yerel schema audit eksik. Beklenen=$($REQUIRED_SCHEMA_OBJECTS.Count) bulunan=$schemaCount" }
 Write-Host "Yerel schema audit: $schemaCount/$($REQUIRED_SCHEMA_OBJECTS.Count)" -ForegroundColor Green
 
-Write-Host ""; Write-Host "[5/6] Production config binding sozlesmesi" -ForegroundColor Cyan
+Write-Host ""; Write-Host "[5/6] Production config + tenant/billing sozlesmesi" -ForegroundColor Cyan
 $configText = Get-Content (Join-Path $WORKER "wrangler.jsonc") -Raw
 foreach ($needle in @('"binding": "DB"','"binding": "FILES"','"binding": "AI"','"api.kyerp.net"')) { if (-not $configText.Contains($needle)) { Fail "wrangler.jsonc eksik binding/route: $needle" } }
 $intelligence = Get-Content (Join-Path $WORKER "src\accounting-document-intelligence.ts") -Raw
 if (-not $intelligence.Contains("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")) { Fail "Azure Document Intelligence endpoint sozlesmesi kaynakta yok." }
 if (-not $intelligence.Contains("AZURE_DOCUMENT_INTELLIGENCE_KEY")) { Fail "Azure Document Intelligence key sozlesmesi kaynakta yok." }
-$agent = Get-Content (Join-Path $WORKER "src\file-hub-agent-public.ts") -Raw
-if (-not $agent.Contains("FILE_HUB_AGENT_KEY")) { Fail "File Hub Agent key sozlesmesi kaynakta yok." }
+$agentPublic = Get-Content (Join-Path $WORKER "src\file-hub-agent-public.ts") -Raw
+$agentAuth = Get-Content (Join-Path $WORKER "src\file-hub-agent-auth.ts") -Raw
+$billing = Get-Content (Join-Path $WORKER "src\company-billing-cloud.ts") -Raw
+if (-not $agentPublic.Contains("X-KYERP-Agent-Key")) { Fail "File Hub Agent transport key sozlesmesi kaynakta yok." }
+if (-not $agentAuth.Contains("file_hub_agent_credentials")) { Fail "File Hub tenant agent credential sozlesmesi kaynakta yok." }
+if (-not $agentAuth.Contains("mecit-hakan")) { Fail "Canonical tenant legacy gecis sozlesmesi kaynakta yok." }
+if (-not $billing.Contains("company_billing_profiles")) { Fail "Firma AI ucretlendirme sozlesmesi kaynakta yok." }
 
 Write-Host ""; Write-Host "[6/6] Sonuc" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host " KOD + BUILD + TEST + IZOLASYON MIGRATION PREFLIGHT HAZIR " -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "Canliya cikmadan once production ortaminda ayrica zorunlu:" -ForegroundColor Yellow
-Write-Host "- FILE_HUB_AGENT_KEY secret"
+Write-Host "- FILE_HUB_AGENT_KEY: canonical Hakan Emprime legacy gecisi icin tenant credential rotate edilene kadar"
 Write-Host "- AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT secret/var"
 Write-Host "- AZURE_DOCUMENT_INTELLIGENCE_KEY secret"
 Write-Host "- RESEND_API_KEY mevcut mail standardi"
 Write-Host "- Firma bazli File Hub storage connection + MUHASEBE INVOICE/DELIVERY_NOTE binding"
-Write-Host "- Hedefli 0030-0036 remote D1 migration + tam D1 backup"
+Write-Host "- Hedefli 0030-0039 remote D1 migration + tam D1 backup"
 Write-Host "- Worker/Pages deploy sonrasi canli smoke"
 Write-Host ""; exit 0

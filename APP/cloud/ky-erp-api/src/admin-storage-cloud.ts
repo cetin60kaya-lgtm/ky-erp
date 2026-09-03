@@ -4,11 +4,13 @@ import { registerFileHubRoutes } from "./file-hub";
 import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
 import { registerPublicFileHubScanRoutes } from "./file-hub-agent-scan";
+import { registerFileHubAgentAdminRoutes } from "./file-hub-agent-admin";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
 
 type Row = Record<string, any>;
 const text = (v: unknown) => v == null ? "" : String(v).trim();
 const upper = (v: unknown) => text(v).toUpperCase().replace(/İ/g, "I");
+const lowerSlug = (v: unknown) => text(v).toLocaleLowerCase("tr-TR");
 const slugOf = (c: any, b: Row = {}) => text(b.mainCompanySlug || b.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
 const isOwner = (role: unknown) => ["ADMIN","SUPER_ADMIN"].includes(upper(role));
 const errorBody = (code: string, message: string) => ({ ok:false, error:{ code,message } });
@@ -16,6 +18,8 @@ async function ownerCurrent(c:any){ const u=await getAuthenticatedUser(c); retur
 function permissionFor(user:Row,moduleKey:string){return Array.isArray(user?.permissions)?user.permissions.find((p:Row)=>upper(p.moduleKey||p.module_key)===upper(moduleKey)):null;}
 function entityModule(entityType:string){return ({MODEL:"DESEN",MODEL_TEAMMATE:"DESEN",OUTGOING_PACKAGE:"DESEN",PRODUCTION_ORDER:"IMALAT",PRODUCTION:"IMALAT",DYE_RECIPE:"BOYAHANE",DYE_BATCH:"BOYAHANE",LOT:"BOYAHANE",STOCK_ITEM:"BOYAHANE",DOCUMENT:"MUHASEBE",INVOICE:"MUHASEBE",PERSONNEL:"IK",EMPLOYEE:"IK"})[upper(entityType)]||"";}
 function normalizeModule(moduleCode:string){const key=upper(moduleCode);return key==="URETIM"?"IMALAT":key;}
+function requestedTenant(c:any){return lowerSlug(c.req.header("X-KYERP-Tenant-Slug")||c.req.query("mainCompanySlug")||c.req.query("mainCompanyId"));}
+function userTenant(user:Row){return lowerSlug(user?.mainCompanySlug||user?.main_company_slug||user?.security?.main_company_slug);}
 
 async function legacyStatus(c:any){
   const slug=slugOf(c);
@@ -34,6 +38,17 @@ export function registerAdminStorageRoutes(app:any){
     const path=new URL(c.req.url).pathname, user=await getAuthenticatedUser(c);
     if(!user)return c.json(errorBody("UNAUTHORIZED","Oturum gerekli."),401);
     if(isOwner(user.role))return next();
+
+    // File Hub provider/index rows are tenant data. A non-owner may never pick
+    // another company by crafting a header/query parameter. For the canonical
+    // historical tenant an omitted slug remains compatible with old preview
+    // links; every other tenant must carry its own explicit slug so the legacy
+    // fallback in older File Hub readers can never resolve to another company.
+    const own=userTenant(user), requested=requestedTenant(c);
+    if(!own)return c.json(errorBody("FILE_HUB_TENANT_REQUIRED","Kullanıcının ana firma bağlamı bulunamadı."),403);
+    if(!requested&&own!=="mecit-hakan")return c.json(errorBody("FILE_HUB_TENANT_REQUIRED","File Hub isteğinde aktif firma bağlamı zorunludur."),403);
+    if(requested&&requested!==own)return c.json(errorBody("FILE_HUB_TENANT_FORBIDDEN","Başka firmanın File Hub alanına erişemezsiniz."),403);
+
     const ownerOnly = path==="/api/file-hub/overview" || path==="/api/file-hub/connections" || path==="/api/file-hub/bindings" || path==="/api/file-hub/files" || path==="/api/file-hub/search" || /\/files\/[^/]+\/relations$/.test(path);
     if(ownerOnly)return c.json(errorBody("OWNER_ONLY","Dosya Merkezi yönetim görünümü yalnız uygulama sahibine açıktır."),403);
     if(path==="/api/file-hub/entity-files"){
@@ -51,6 +66,7 @@ export function registerAdminStorageRoutes(app:any){
   registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
   registerPublicFileHubScanRoutes(app);
+  registerFileHubAgentAdminRoutes(app);
   registerAccountingDocumentArchiveRoutes(app);
 
   app.get("/api/admin/file-storage/status",async(c:any)=>{const owner=await ownerCurrent(c);if(!owner)return c.json(errorBody("OWNER_ONLY","Dosya ve depolama yönetimi yalnız uygulama sahibine açıktır."),403);return c.json({ok:true,data:await legacyStatus(c)});});
