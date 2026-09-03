@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiUpload } from "../utils/api";
+import { apiFetch, apiGet, apiPost, apiUpload } from "../utils/api";
 
 function company(activeMainCompany) {
   const mainCompanySlug =
@@ -57,4 +57,20 @@ export async function reconcileAllEBelge(activeMainCompany) {
       ...company(activeMainCompany),
     }),
   );
+}
+
+export async function getEBelgeFile(activeMainCompany, id, format = "original") {
+  const ctx = company(activeMainCompany);
+  const search = new URLSearchParams({ mainCompanySlug: ctx.mainCompanySlug });
+  if (ctx.mainCompanyId) search.set("mainCompanyId", ctx.mainCompanyId);
+  return apiFetch(
+    `/e-belge/files/${encodeURIComponent(id)}/${encodeURIComponent(format)}?${search.toString()}`,
+    { responseType: "blob", timeoutMs: 60_000 },
+  );
+}
+
+export function openEBelgeBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
