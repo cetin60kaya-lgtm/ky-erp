@@ -63,7 +63,42 @@ function withCompanyBilling(module) {
   return { ...module, groups };
 }
 
-const baseModules = BASE_MODULES.map(withoutStorageDuplicates).map(withCompanyBilling);
+function withEBelgeCenter(module) {
+  if (module.key !== "isnet") return module;
+  return {
+    ...module,
+    label: "e-Belge Merkezi",
+    icon: "dosya",
+    groups: [
+      {
+        label: "e-Belge Merkezi",
+        tabs: [
+          ["belge-akisi", "Belge Havuzu", "dosya"],
+          ["irsaliyeden-faturaya", "Eşleştirmeler", "file-check"],
+        ],
+      },
+      {
+        label: "Arşiv ve İşlem",
+        tabs: [
+          ["kesilen-belgeler", "Belge Arşivi", "dosya"],
+          ["cikti-kuyrugu", "Çıktı / Mail", "eposta"],
+        ],
+      },
+      {
+        label: "Entegrasyonlar",
+        tabs: [
+          ["yonetim-merkezi", "İşNet", "dashboard"],
+          ["ayarlar", "Bağlantılar / Ayarlar", "ayarlar"],
+        ],
+      },
+    ],
+  };
+}
+
+const baseModules = BASE_MODULES
+  .map(withoutStorageDuplicates)
+  .map(withCompanyBilling)
+  .map(withEBelgeCenter);
 const adminIndex = baseModules.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
@@ -75,6 +110,14 @@ export const MODULES = adminIndex >= 0
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
+  isnet: {
+    ...(BASE_ROUTE_ALIASES.isnet || {}),
+    "e-belge": "belge-akisi",
+    "e-belge-merkezi": "belge-akisi",
+    "belge-havuzu": "belge-akisi",
+    eslestirmeler: "irsaliyeden-faturaya",
+    entegrasyonlar: "ayarlar",
+  },
   depolama: {
     genel: "depolama-genel",
     baglantilar: "depolama-kaynaklar",
