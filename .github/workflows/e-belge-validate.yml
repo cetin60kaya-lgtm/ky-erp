@@ -16,6 +16,8 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:./ci-validation.db"
     defaults:
       run:
         working-directory: APP/app/ky-erp-backend
