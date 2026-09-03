@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronDown, Command, Menu, Plus, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import "../styles/shell-v3.css";
+import "../styles/responsive-core.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler"]);
 
