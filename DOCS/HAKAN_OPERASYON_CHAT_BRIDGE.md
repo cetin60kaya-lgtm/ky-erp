@@ -14,9 +14,9 @@ Bu köprü bir LLM'ye serbest SQL yetkisi vermez. Yalnız tanımlı ve doğrulan
 - Auth: mevcut KY ERP `canonical-v3` Bearer session.
 - Tenant: owner dışı kullanıcı için oturumdaki `mainCompanySlug` zorunlu kaynak.
 - İK okuma: `IK.canView`.
-- İK yazma: `IK.canCreate || IK.canUpdate`.
+- İK yazma (V1 create işlemleri): `IK.canCreate`.
 - Muhasebe okuma: `MUHASEBE.canView`.
-- Muhasebe yazma: `MUHASEBE.canCreate || MUHASEBE.canUpdate`.
+- Muhasebe yazma (V1 create işlemleri): `MUHASEBE.canCreate`.
 - DENETIM rolü üst shell tarafından read-only kapsamda tutulur.
 - Yazma isteklerinde `idempotencyKey` zorunludur.
 - `operation_logs` hazır değilse yazma fail-closed davranır.
