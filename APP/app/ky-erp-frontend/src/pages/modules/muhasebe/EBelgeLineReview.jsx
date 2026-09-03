@@ -40,7 +40,7 @@ export default function EBelgeLineReview({ documentId, line, onChanged }) {
         lotNo,
       });
       if (saveAlias && selected?.id && line?.description?.trim()) {
-        await saveEBelgeProductAlias(selected.id, line.description.trim());
+        await saveEBelgeProductAlias(selected.id, line.description.trim(), documentId);
       }
       setMessage("Kaydedildi");
       setOpen(false);

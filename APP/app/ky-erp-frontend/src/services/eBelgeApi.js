@@ -44,8 +44,8 @@ export const getEBelgeProductSuggestions = (q = "") =>
 export const updateEBelgeLine = (documentId, lineId, payload) =>
   apiPatch(`/e-belge/documents/${encodeURIComponent(documentId)}/lines/${encodeURIComponent(lineId)}`, payload).then(unwrap);
 
-export const saveEBelgeProductAlias = (productId, alias) =>
-  apiPost(`/e-belge/products/${encodeURIComponent(productId)}/aliases`, { alias }).then(unwrap);
+export const saveEBelgeProductAlias = (productId, alias, documentId = "") =>
+  apiPost(`/e-belge/products/${encodeURIComponent(productId)}/aliases`, { alias, documentId }).then(unwrap);
 
 export const getEBelgeIntegrations = () =>
   apiGet("/e-belge/integrations", undefined, { timeoutMs: 30_000 }).then(unwrap);
