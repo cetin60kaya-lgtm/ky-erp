@@ -1,9 +1,11 @@
 -- KY ERP FIBE (Firma Bazli Ek Odeme) takip altyapisi.
 -- FIBE normal cari bakiyesinden tamamen ayridir.
 -- Varsayilan kapali; yalniz firma kartinda acilan firmalarda kullanilir.
+-- Eski donem FIBE degeri acilis hak edisi / acilis odeneni ile devralinir.
 
 ALTER TABLE companies ADD COLUMN fibe_enabled INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN fibe_rate REAL NOT NULL DEFAULT 0;
+ALTER TABLE companies ADD COLUMN fibe_start_date TEXT;
 ALTER TABLE companies ADD COLUMN fibe_opening_accrual REAL NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN fibe_opening_paid REAL NOT NULL DEFAULT 0;
 ALTER TABLE companies ADD COLUMN fibe_note TEXT;
