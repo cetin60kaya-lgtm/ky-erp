@@ -1,17 +1,20 @@
-name: KY ERP Masaüstü Windows Setup
+name: KY ERP Desktop Windows Setup
 
 on:
   push:
     branches:
-      - codex/ky-pdks-windows-v1
+      - codex/ky-erp-desktop-final-20260903
+      - main
     paths:
       - "APP/desktop/ky-pdks/**"
+      - "APP/app/ky-erp-frontend/**"
       - ".github/workflows/ky-pdks-windows-build.yml"
   pull_request:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "APP/desktop/ky-pdks/**"
+      - "APP/app/ky-erp-frontend/**"
       - ".github/workflows/ky-pdks-windows-build.yml"
   workflow_dispatch:
 
@@ -24,11 +27,18 @@ concurrency:
 
 jobs:
   build:
-    name: Test, publish ve Setup.exe
+    name: Test, frontend, publish ve Setup.exe
     runs-on: windows-latest
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
       - name: .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -39,24 +49,25 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: KY ERP Masaüstü test ve paket
+      - name: KY ERP Desktop test ve paket
         shell: pwsh
         run: ./APP/desktop/ky-pdks/BUILD_SETUP.ps1
 
       - name: Setup çıktısını doğrula
         shell: pwsh
         run: |
-          $setup = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-ERP-Masaustu-Setup-*.exe' | Select-Object -First 1
-          if (-not $setup) { throw 'KY ERP Masaüstü Setup.exe bulunamadı.' }
+          $setup = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-ERP-Desktop-Setup-*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'KY ERP Desktop Setup.exe bulunamadı.' }
           Get-FileHash $setup.FullName -Algorithm SHA256
           Get-Content "$($setup.FullName).sha256.txt"
+          Get-Content ./APP/desktop/ky-pdks/dist/setup/build-info.json
 
       - name: Windows kurulum paketini sakla
         uses: actions/upload-artifact@v4
         with:
-          name: KY-ERP-Masaustu-Windows-Setup-${{ github.run_number }}
+          name: KY-ERP-Desktop-Windows-Setup-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-ERP-Masaustu-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-*.exe
             APP/desktop/ky-pdks/dist/setup/*.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
