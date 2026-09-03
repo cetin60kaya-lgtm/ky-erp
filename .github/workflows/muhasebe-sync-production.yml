@@ -1,0 +1,122 @@
+name: Muhasebe Production Sync
+
+on:
+  push:
+    branches:
+      - codex/muhasebe-fibe-cari-final
+    paths:
+      - docs/muhasebe-sync-production-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Feature branch checkout
+        uses: actions/checkout@v4
+        with:
+          ref: codex/muhasebe-fibe-cari-final
+          fetch-depth: 0
+
+      - name: En guncel production'i birlestir
+        run: |
+          set -euo pipefail
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin codex/model-uretim-kontrol-merkezi-final
+          set +e
+          git merge --no-ff --no-edit origin/codex/model-uretim-kontrol-merkezi-final
+          MERGE_CODE=$?
+          set -e
+          if [ "$MERGE_CODE" -ne 0 ]; then
+            UNMERGED=$(git diff --name-only --diff-filter=U || true)
+            echo "$UNMERGED"
+            UNKNOWN=$(printf '%s\n' "$UNMERGED" | grep -v '^APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql$' | grep -v '^DO_NOT_CREATE_PLACEHOLDER.tmp$' || true)
+            if [ -n "$UNKNOWN" ]; then
+              echo "Beklenmeyen merge cakismasi var:" >&2
+              echo "$UNKNOWN" >&2
+              exit 1
+            fi
+            if printf '%s\n' "$UNMERGED" | grep -q '^APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql$'; then
+              git checkout --ours APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql
+              git add APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql
+            fi
+            if printf '%s\n' "$UNMERGED" | grep -q '^DO_NOT_CREATE_PLACEHOLDER.tmp$'; then
+              git rm -f DO_NOT_CREATE_PLACEHOLDER.tmp || true
+            fi
+            REMAIN=$(git diff --name-only --diff-filter=U || true)
+            if [ -n "$REMAIN" ]; then
+              echo "Cozulmemis merge cakismasi var:" >&2
+              echo "$REMAIN" >&2
+              exit 1
+            fi
+            git commit --no-edit
+          fi
+
+      - name: Node setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            APP/cloud/ky-erp-api/package-lock.json
+            APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Worker typecheck ve dry-run
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+      - name: Muhasebe izole smoke
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          rm -rf .local-accounting-sync
+          for sql in local-accounting-quick-smoke.sql migrations/0040_accounting_fibe_company_tracking.sql local-accounting-quick-smoke-seed.sql; do
+            npx wrangler d1 execute ky-erp-production-local --local --config wrangler.production-local.jsonc --persist-to .local-accounting-sync --file "$sql"
+          done
+          nohup npx wrangler dev --local --config wrangler.production-local.jsonc --persist-to .local-accounting-sync --port 8793 > /tmp/kyerp-accounting-sync.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8793/api/health > /tmp/accounting-sync-health.json; then break; fi
+            sleep 1
+          done
+          curl --fail --silent 'http://127.0.0.1:8793/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' | jq -e '.ok == true and .data.summary.normalReceivable == 12000'
+          curl --fail --silent 'http://127.0.0.1:8793/api/muhasebe/fibe/company-isnet-customer?mainCompanySlug=mecit-hakan' | jq -e '.ok == true and .data.summary.automaticAccrual == 200'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","transactionType":"COLLECTION","amount":2000,"date":"2026-09-03","paymentMethod":"CASH","recordType":"GAYRI_RESMI"}' 'http://127.0.0.1:8793/api/muhasebe/hizli-cari/hareket' | jq -e '.ok == true and .data.balanceAfter == 10000'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' 'http://127.0.0.1:8793/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' | jq -e '.ok == true and .data.balanceAfter == 8500 and .data.idempotent == false'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","companyId":"company-isnet-customer","checkDirection":"RECEIVED","amount":1500,"workType":"OFFICIAL","date":"2026-09-03"}' 'http://127.0.0.1:8793/api/muhasebe/hizli-cari/cek/smoke-check-received/kapat' | jq -e '.ok == true and .data.idempotent == true'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' --data '{"mainCompanySlug":"mecit-hakan","movementType":"PAYMENT","date":"2026-09-03","amount":50,"paymentMethod":"CASH"}' 'http://127.0.0.1:8793/api/muhasebe/fibe/company-isnet-customer/hareketler' | jq -e '.ok == true and .data.summary.remainingBalance == 150'
+
+      - name: Frontend lint ve build
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Production senkron ve muhasebe kontratini dogrula
+        run: |
+          set -euo pipefail
+          git diff --check origin/codex/model-uretim-kontrol-merkezi-final...HEAD
+          git merge-base --is-ancestor origin/codex/model-uretim-kontrol-merkezi-final HEAD
+          grep -q 'CompanyFibeSection' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/CompaniesCurrentWorkspace.jsx
+          grep -q 'accounting_check_settlements' APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql
+          ! grep -q '> Firma FİBE</button>' APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx
+
+      - name: Sync sonucunu feature'a kaydet ve gecici akisi kaldir
+        run: |
+          set -euo pipefail
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm -f .github/workflows/muhasebe-sync-production.yml docs/muhasebe-sync-production-trigger.txt
+          git commit -m "ci(accounting): validate against latest production"
+          git push origin HEAD:codex/muhasebe-fibe-cari-final
+
+      - name: Hata logu
+        if: failure()
+        run: |
+          cat /tmp/kyerp-accounting-sync.log 2>/dev/null || true
+          git status --short || true
