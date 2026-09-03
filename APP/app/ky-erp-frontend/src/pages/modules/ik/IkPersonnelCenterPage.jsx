@@ -226,6 +226,11 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
     });
   }, [people, query, statusView]);
 
+  useEffect(() => {
+    if (visiblePeople.some((person) => person.id === selectedId)) return;
+    setSelectedId(visiblePeople[0]?.id || "");
+  }, [selectedId, visiblePeople]);
+
   const selected = detail?.person || null;
   const summary = attendance?.summary || {};
 
