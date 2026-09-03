@@ -1,19 +1,72 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import {
+  eBelgeProductRouting,
+  getEBelgeProduct,
+  listEBelgeProducts,
+  saveEBelgeProductAlias,
+} from "./e-belge-product-store";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
 const text=(v:unknown)=>v==null?"":String(v).trim();
-const upper=(v:unknown)=>text(v).toLocaleUpperCase("tr-TR");
 const now=()=>new Date().toISOString();
 const slugOf=(c:Context<AppEnv>,b:Row={})=>text(b.mainCompanySlug||b.main_company_slug||b.mainCompanyId||c.req.query("mainCompanySlug")||c.req.query("mainCompanyId")||c.req.header("X-KYERP-Tenant-Slug"));
-const normalize=(v:unknown)=>upper(v).replace(/İ/g,"I").replace(/ı/g,"I").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9]+/g," ").replace(/\s+/g," ").trim();
 const json=(v:unknown)=>{if(v&&typeof v==="object"&&!Array.isArray(v))return v as Row;try{const p=JSON.parse(text(v)||"{}");return p&&typeof p==="object"&&!Array.isArray(p)?p:{}}catch{return{}}};
-function route(product:Row,line:Row){const raw=json(product.raw),routing=upper(raw.routingType||raw.routing_type),group=upper(raw.productGroup||raw.product_group),name=normalize(`${product.name||""} ${line.description||""}`);const chemical=routing==="BOYAHANE"||group==="BOYAHANE"||/BOYA|PIGMENT|KIMYA|WHITE|RETARDER|FIXATOR|FIXAT|SILIKON|SILICONE|EMULSIYON|TINER|GAZ|SPREY|SIM/.test(name);if(chemical)return{routingType:"BOYAHANE",chemical:true};return{routingType:routing||"EXPENSE",chemical:false}}
-async function resolveIfClean(c:Context<AppEnv>,slug:string,documentId:string){const unmatched=await c.env.DB.prepare(`SELECT COUNT(*) n FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? AND product_id IS NULL`).bind(slug,documentId).first<Row>();if(Number(unmatched?.n||0)===0)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='PRODUCT_UNMATCHED' AND is_resolved=0`).bind(now(),slug,documentId).run();const lines=(await c.env.DB.prepare(`SELECT raw_metadata FROM accounting_document_lines WHERE main_company_slug=? AND document_id=?`).bind(slug,documentId).all<Row>()).results||[];const lotMissing=lines.some((line)=>{const raw=json(line.raw_metadata);return raw.chemical&&!text(raw.lotNo)});if(!lotMissing)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='LOT_REQUIRED' AND is_resolved=0`).bind(now(),slug,documentId).run()}
+
+async function resolveIfClean(c:Context<AppEnv>,slug:string,documentId:string){
+  const unmatched=await c.env.DB.prepare(`SELECT COUNT(*) n FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? AND product_id IS NULL`).bind(slug,documentId).first<Row>();
+  if(Number(unmatched?.n||0)===0)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='PRODUCT_UNMATCHED' AND is_resolved=0`).bind(now(),slug,documentId).run();
+  const lines=(await c.env.DB.prepare(`SELECT raw_metadata FROM accounting_document_lines WHERE main_company_slug=? AND document_id=?`).bind(slug,documentId).all<Row>()).results||[];
+  const lotMissing=lines.some((line)=>{const raw=json(line.raw_metadata);return raw.chemical&&!text(raw.lotNo)});
+  if(!lotMissing)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='LOT_REQUIRED' AND is_resolved=0`).bind(now(),slug,documentId).run();
+}
 
 export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
-  app.get("/api/e-belge/products",async c=>{const slug=slugOf(c),q=text(c.req.query("q"));if(q.length<1)return c.json({ok:true,data:[]});const term=`%${q}%`,normalized=normalize(q);const rows=await c.env.DB.prepare(`SELECT id,name,normalized_name,legacy_id,unit,raw FROM products WHERE main_company_slug=? AND (UPPER(name) LIKE UPPER(?) OR normalized_name=? OR UPPER(COALESCE(legacy_id,'')) LIKE UPPER(?)) ORDER BY name COLLATE NOCASE LIMIT 30`).bind(slug,term,normalized,term).all<Row>();return c.json({ok:true,data:(rows.results||[]).map(row=>({...row,raw:json(row.raw)}))})});
-  app.patch("/api/e-belge/documents/:id/lines/:lineId",async c=>{const slug=slugOf(c),documentId=c.req.param("id"),lineId=c.req.param("lineId"),body=await c.req.json<Row>().catch(()=>({}));const line=await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE id=? AND document_id=? AND main_company_slug=? LIMIT 1`).bind(lineId,documentId,slug).first<Row>();if(!line)return c.json({ok:false,error:{code:"LINE_NOT_FOUND",message:"Belge kalemi bulunamadı."}},404);let product:Row|null=null;if(text(body.productId)){product=await c.env.DB.prepare(`SELECT * FROM products WHERE id=? AND main_company_slug=? LIMIT 1`).bind(text(body.productId),slug).first<Row>();if(!product)return c.json({ok:false,error:{code:"PRODUCT_NOT_FOUND",message:"Ürün kartı bulunamadı."}},404)}const raw={...json(line.raw_metadata)};if(product){const routing=route(product,line);raw.routingType=routing.routingType;raw.chemical=routing.chemical;raw.productMatchSource="MANUAL"}if(body.lotNo!==undefined)raw.lotNo=text(body.lotNo);await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();await resolveIfClean(c,slug,documentId);return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||""}})});
-  app.post("/api/e-belge/products/:productId/aliases",async c=>{const slug=slugOf(c),productId=c.req.param("productId"),body=await c.req.json<Row>().catch(()=>({})),alias=text(body.alias),normalized=normalize(alias);if(!alias||!normalized)return c.json({ok:false,error:{code:"ALIAS_REQUIRED",message:"Alias adı zorunludur."}},400);const product=await c.env.DB.prepare(`SELECT id FROM products WHERE id=? AND main_company_slug=? LIMIT 1`).bind(productId,slug).first<Row>();if(!product)return c.json({ok:false,error:{code:"PRODUCT_NOT_FOUND",message:"Ürün kartı bulunamadı."}},404);await c.env.DB.prepare(`INSERT INTO product_aliases(id,main_company_slug,product_id,raw_name,normalized_name,is_active,source,created_at,updated_at) VALUES(?,?,?,?,?,1,'E_BELGE',?,?) ON CONFLICT(main_company_slug,normalized_name) DO UPDATE SET product_id=excluded.product_id,raw_name=excluded.raw_name,is_active=1,source='E_BELGE',updated_at=excluded.updated_at`).bind(crypto.randomUUID(),slug,productId,alias,normalized,now(),now()).run();return c.json({ok:true,data:{productId,alias}})});
+  app.get("/api/e-belge/products",async c=>{
+    const slug=slugOf(c),q=text(c.req.query("q"));
+    if(q.length<1)return c.json({ok:true,data:[]});
+    return c.json({ok:true,data:await listEBelgeProducts(c,slug,q)});
+  });
+
+  app.patch("/api/e-belge/documents/:id/lines/:lineId",async c=>{
+    const slug=slugOf(c),documentId=c.req.param("id"),lineId=c.req.param("lineId"),body=await c.req.json<Row>().catch(()=>({}));
+    const line=await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE id=? AND document_id=? AND main_company_slug=? LIMIT 1`).bind(lineId,documentId,slug).first<Row>();
+    if(!line)return c.json({ok:false,error:{code:"LINE_NOT_FOUND",message:"Belge kalemi bulunamadı."}},404);
+    let product:Row|null=null;
+    if(text(body.productId)){
+      product=await getEBelgeProduct(c,slug,text(body.productId));
+      if(!product)return c.json({ok:false,error:{code:"PRODUCT_NOT_FOUND",message:"Ürün kartı bulunamadı."}},404);
+    }
+    const raw={...json(line.raw_metadata)};
+    if(product){
+      const routing=eBelgeProductRouting(product,line);
+      raw.routingType=routing.routing;
+      raw.chemical=routing.chemical;
+      raw.productMatchSource="MANUAL";
+      raw.productName=text(product.name||product.productName);
+    }
+    if(body.lotNo!==undefined)raw.lotNo=text(body.lotNo);
+    await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();
+    await resolveIfClean(c,slug,documentId);
+    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||""}});
+  });
+
+  app.post("/api/e-belge/products/:productId/aliases",async c=>{
+    const slug=slugOf(c),productId=c.req.param("productId"),body=await c.req.json<Row>().catch(()=>({})),alias=text(body.alias);
+    const product=await getEBelgeProduct(c,slug,productId);
+    if(!product)return c.json({ok:false,error:{code:"PRODUCT_NOT_FOUND",message:"Ürün kartı bulunamadı."}},404);
+    const documentId=text(body.documentId);
+    let companyId=text(body.companyId);
+    if(!companyId&&documentId){
+      const doc=await c.env.DB.prepare(`SELECT party_company_id FROM accounting_documents WHERE id=? AND main_company_slug=? LIMIT 1`).bind(documentId,slug).first<Row>();
+      companyId=text(doc?.party_company_id);
+    }
+    try{
+      const saved=await saveEBelgeProductAlias(c,slug,{companyId,productId,productName:text(product.name||product.productName),rawName:alias});
+      return c.json({ok:true,data:{productId,alias,companyId,saved}});
+    }catch(error:any){
+      return c.json({ok:false,error:{code:text(error?.code)||"ALIAS_SAVE_FAILED",message:text(error?.message)||"Alias kaydedilemedi."}},400);
+    }
+  });
 }
