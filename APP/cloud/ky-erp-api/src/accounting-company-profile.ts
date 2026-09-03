@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { registerAccountingFibeRoutes } from "./accounting-fibe";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -8,6 +9,11 @@ type Row = Record<string, any>;
 const text = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
 const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
+const numberValue = (value: unknown, fallback = 0) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 const bool = (value: unknown, fallback = false) => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
@@ -22,6 +28,7 @@ const normalize = (value: unknown) =>
     .trim();
 const nowIso = () => new Date().toISOString();
 const validEmail = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const validDate = (value: string) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
   return text(
@@ -71,6 +78,8 @@ function roleOf(row: Row) {
 
 function profileView(row: Row, aliasCount = 0) {
   const role = roleOf(row);
+  const fibeOpeningAccrual = Number(row.fibe_opening_accrual || 0);
+  const fibeOpeningPaid = Number(row.fibe_opening_paid || 0);
   return {
     id: text(row.id),
     companyName: text(row.name),
@@ -89,6 +98,13 @@ function profileView(row: Row, aliasCount = 0) {
     email: text(row.email),
     address: text(row.address),
     note: text(row.note),
+    fibeEnabled: Number(row.fibe_enabled || 0) === 1,
+    fibeRate: Number(row.fibe_rate || 0),
+    fibeStartDate: text(row.fibe_start_date),
+    fibeOpeningAccrual,
+    fibeOpeningPaid,
+    fibeOpeningBalance: fibeOpeningAccrual - fibeOpeningPaid,
+    fibeNote: text(row.fibe_note),
     aliasCount,
     accountingMode:
       role === "SUPPLIER" && Number(row.supplier_debt_tracking || 0) === 1
@@ -192,6 +208,8 @@ async function rematchPendingDocuments(
 }
 
 export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
+  registerAccountingFibeRoutes(app);
+
   app.get("/api/muhasebe/firma-profilleri", async (c) => {
     const slug = slugOf(c);
     const result = await c.env.DB.prepare(
@@ -259,6 +277,25 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
     const phone = body.phone === undefined ? text(row.phone) : text(body.phone);
     const address = body.address === undefined ? text(row.address) : text(body.address);
     const note = body.note === undefined ? text(row.note) : text(body.note);
+
+    const fibeEnabled = bool(body.fibeEnabled, Number(row.fibe_enabled || 0) === 1);
+    const fibeRate = numberValue(body.fibeRate, Number(row.fibe_rate || 0));
+    if (fibeRate < 0 || fibeRate > 100) {
+      return c.json(errorBody("INVALID_FIBE_RATE", "FİBE oranı 0 ile 100 arasında olmalıdır."), 400);
+    }
+    const requestedFibeStartDate = body.fibeStartDate === undefined
+      ? text(row.fibe_start_date)
+      : text(body.fibeStartDate);
+    const fibeStartDate = requestedFibeStartDate || (fibeEnabled ? nowIso().slice(0, 10) : "");
+    if (!validDate(fibeStartDate)) {
+      return c.json(errorBody("INVALID_FIBE_START_DATE", "FİBE başlangıç tarihi YYYY-AA-GG formatında olmalıdır."), 400);
+    }
+    const fibeOpeningAccrual = numberValue(body.fibeOpeningAccrual, Number(row.fibe_opening_accrual || 0));
+    const fibeOpeningPaid = numberValue(body.fibeOpeningPaid, Number(row.fibe_opening_paid || 0));
+    if (fibeOpeningAccrual < 0 || fibeOpeningPaid < 0) {
+      return c.json(errorBody("INVALID_FIBE_OPENING", "FİBE başlangıç hakedişi ve ödeneni negatif olamaz."), 400);
+    }
+    const fibeNote = body.fibeNote === undefined ? text(row.fibe_note) : text(body.fibeNote);
     const timestamp = nowIso();
 
     await c.env.DB.prepare(
@@ -275,6 +312,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
               email = ?,
               address = ?,
               note = ?,
+              fibe_enabled = ?,
+              fibe_rate = ?,
+              fibe_start_date = ?,
+              fibe_opening_accrual = ?,
+              fibe_opening_paid = ?,
+              fibe_note = ?,
               updated_at = ?
         WHERE id = ? AND main_company_slug = ?`,
     )
@@ -291,6 +334,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
         email || null,
         address || null,
         note || null,
+        fibeEnabled ? 1 : 0,
+        fibeRate,
+        fibeStartDate || null,
+        fibeOpeningAccrual,
+        fibeOpeningPaid,
+        fibeNote || null,
         timestamp,
         row.id,
         slug,
