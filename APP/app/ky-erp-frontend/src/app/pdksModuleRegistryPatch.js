@@ -7,24 +7,27 @@ const PDKS_MODULE = {
   icon: "takvim",
   groups: [
     {
-      label: "PDKS Operasyon",
+      label: "Günlük Operasyon",
       tabs: [
-        ["ana-ekran", "Ana Ekran", "dashboard"],
+        ["ana-ekran", "Canlı Geçişler", "dashboard"],
         ["bilgi-aktar", "Kart / Terminal Aktarımı", "dosya"],
         ["giris-cikislar", "Giriş / Çıkışlar", "takvim"],
         ["puantaj", "Puantaj", "takvim"],
         ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
-        ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
       ],
     },
     {
-      label: "İK'dan Okunan",
+      label: "Personel & İK Bağlantısı",
       tabs: [
-        ["personel-bilgileri", "Personel (İK'dan)", "users"],
+        ["personel-bilgileri", "Personel İşlemleri", "users"],
+        ["izinler", "İzinler", "takvim"],
+        ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+        ["avanslar", "Avans", "odemeler"],
+        ["bordro", "Bordro", "odemeler"],
       ],
     },
     {
-      label: "PDKS Tanımları",
+      label: "Vardiya & Kurallar",
       tabs: [
         ["gruplar-vardiyalar", "Gruplar / Vardiyalar", "ayarlar"],
         ["puantaj-kurallari", "Puantaj Kuralları", "ayarlar"],
@@ -34,26 +37,27 @@ const PDKS_MODULE = {
       ],
     },
     {
-      label: "Terminal ve Rapor",
+      label: "Terminal & Sistem",
       tabs: [
         ["saat-terminal", "Saat / Terminal", "ayarlar"],
-        ["raporlar", "Raporlar", "raporlar"],
+        ["cihaz-baglantilari", "Cihaz Bağlantıları", "ayarlar"],
+        ["senkron", "Senkronizasyon", "sync"],
       ],
     },
     {
-      label: "Denetim",
-      tabs: [["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"]],
+      label: "Rapor & Denetim",
+      tabs: [
+        ["raporlar", "Raporlar", "raporlar"],
+        ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
+      ],
     },
   ],
   hiddenTabs: [
-    ["izinler", "İzinler (İK'ya taşındı)", "takvim"],
-    ["bordro", "Bordro (İK'ya taşındı)", "odemeler"],
-    ["avanslar", "Avanslar (İK'ya taşındı)", "odemeler"],
+    ["kullanicilar", "Kullanıcı Yetkileri (Yönetim)", "users"],
     ["bolumler", "Bölümler (İK ana kaynak)", "users"],
     ["gorevler", "Görevler (İK ana kaynak)", "users"],
     ["durumlar", "Durumlar (İK ana kaynak)", "file-check"],
     ["firmalar", "Firmalar (Yönetim ana kaynak)", "firma-kartlari"],
-    ["kullanicilar", "Kullanıcılar (Yönetim ana kaynak)", "users"],
   ],
 };
 
@@ -64,16 +68,14 @@ if (!MODULES.some((item) => item.key === "pdks")) {
 
 MODULE_ROUTE_ALIASES.pdks = {
   "genel-bakis": "ana-ekran",
+  "canli-gecisler": "ana-ekran",
   "bilgi-aktarimi": "bilgi-aktar",
   "giris-cikis": "giris-cikislar",
   "personel": "personel-bilgileri",
   "personel-kartlari": "personel-bilgileri",
   "puantaj-sonuc": "puantaj-sonuclari",
-  "izin": "puantaj-sonuclari",
-  "izinler": "puantaj-sonuclari",
-  "ozel-izin": "puantaj-sonuclari",
-  "bordro": "puantaj-sonuclari",
-  "avanslar": "puantaj-sonuclari",
+  "izin": "izinler",
+  "ozel-izin": "izinler",
   "puantaj-bilgi": "puantaj-kurallari",
   "puanbilgi": "puantaj-kurallari",
   "gruplar": "gruplar-vardiyalar",
@@ -81,6 +83,8 @@ MODULE_ROUTE_ALIASES.pdks = {
   "calisma-gruplari": "gruplar-vardiyalar",
   "terminal": "saat-terminal",
   "saat": "saat-terminal",
+  "cihazlar": "cihaz-baglantilari",
+  "sync": "senkron",
   "denetim": "denetim-yillik-temp",
   "temp": "denetim-yillik-temp",
 };
