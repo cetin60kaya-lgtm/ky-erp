@@ -43,7 +43,7 @@ function movementLabel(type) {
 }
 
 export default function CompanyFibeSection({ activeMainCompany, company, onChanged }) {
-  const params = useMemo(() => paramsOf(activeMainCompany), [activeMainCompany?.id, activeMainCompany?.slug]);
+  const params = useMemo(() => paramsOf(activeMainCompany), [activeMainCompany]);
   const [draft, setDraft] = useState(() => draftOf(company));
   const [data, setData] = useState({ summary: {}, movements: [] });
   const [payment, setPayment] = useState({ date: today(), amount: "", paymentMethod: "CASH", description: "" });

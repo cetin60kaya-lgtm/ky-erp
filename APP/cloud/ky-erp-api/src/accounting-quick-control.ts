@@ -315,17 +315,19 @@ export function registerAccountingQuickControlRoutes(app: Hono<AppEnv>) {
         LIMIT 1000`,
     ).bind(slug, range.from, range.to).all<Row>();
 
-    const fibeRows = await (await tableExists(c, "accounting_fibe_movements"))
-      ? c.env.DB.prepare(
-          `SELECT f.*,c.name AS company_name
-             FROM accounting_fibe_movements f
-             LEFT JOIN companies c ON c.id=f.company_id AND c.main_company_slug=f.main_company_slug
-            WHERE f.main_company_slug=? AND f.deleted_at IS NULL
-              AND substr(CAST(f.movement_date AS TEXT),1,10) BETWEEN ? AND ?
-            ORDER BY f.movement_date DESC,f.created_at DESC
-            LIMIT 1000`,
-        ).bind(slug, range.from, range.to).all<Row>()
-      : { results: [] as Row[] };
+    let fibeResults: Row[] = [];
+    if (await tableExists(c, "accounting_fibe_movements")) {
+      const fibeRows = await c.env.DB.prepare(
+        `SELECT f.*,c.name AS company_name
+           FROM accounting_fibe_movements f
+           LEFT JOIN companies c ON c.id=f.company_id AND c.main_company_slug=f.main_company_slug
+          WHERE f.main_company_slug=? AND f.deleted_at IS NULL
+            AND substr(CAST(f.movement_date AS TEXT),1,10) BETWEEN ? AND ?
+          ORDER BY f.movement_date DESC,f.created_at DESC
+          LIMIT 1000`,
+      ).bind(slug, range.from, range.to).all<Row>();
+      fibeResults = fibeRows.results || [];
+    }
 
     const normalMovements = (movementRows.results || []).map((row) => {
       const transactionType = transactionTypeOf(row);
@@ -349,7 +351,7 @@ export function registerAccountingQuickControlRoutes(app: Hono<AppEnv>) {
       };
     });
 
-    const fibeMovements = (fibeRows.results || []).map((row) => ({
+    const fibeMovements = fibeResults.map((row: Row) => ({
       id: text(row.id),
       source: "FIBE",
       companyId: text(row.company_id),

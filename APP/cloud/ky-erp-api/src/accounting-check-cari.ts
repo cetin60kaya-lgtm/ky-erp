@@ -372,15 +372,16 @@ export function registerAccountingCheckCariRoutes(app: Hono<AppEnv>) {
     await ensureSettlement(c, { slug, checkId, companyId, direction, amount, workType, note: text(body.note), actor });
 
     const existing = await settlementOf(c, slug, checkId);
+    const existingMovementId = text(existing?.cari_movement_id);
     const timestamp = nowIso();
-    if (text(existing?.cari_movement_id)) {
+    if (existingMovementId) {
       await c.env.DB.prepare(
         `UPDATE accounting_check_settlements
             SET status='SETTLED',settlement_date=?,updated_at=?
           WHERE main_company_slug=? AND check_id=?`,
       ).bind(timestamp.slice(0, 10), timestamp, slug, checkId).run();
       await updateDynamic(c, check.table, checkId, slug, { status: "PAID", updated_at: timestamp });
-      return c.json({ ok: true, success: true, data: { checkId, companyId, idempotent: true, cariMovementId: text(existing.cari_movement_id) } });
+      return c.json({ ok: true, success: true, data: { checkId, companyId, idempotent: true, cariMovementId: existingMovementId } });
     }
 
     try {

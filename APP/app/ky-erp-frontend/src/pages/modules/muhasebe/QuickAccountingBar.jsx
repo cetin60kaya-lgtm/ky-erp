@@ -93,7 +93,7 @@ function labelOfMovement(row) {
 }
 
 export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, reloadAll }) {
-  const params = useMemo(() => paramsOf(activeMainCompany), [activeMainCompany?.id, activeMainCompany?.slug]);
+  const params = useMemo(() => paramsOf(activeMainCompany), [activeMainCompany]);
   const [mode, setMode] = useState("WEEK");
   const [firms, setFirms] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -300,7 +300,6 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
         <button type="button" className={mode === "WEEK" ? "active" : ""} onClick={() => setMode("WEEK")}><CalendarRange size={16} /> Bu Hafta</button>
         <button type="button" className={mode === "PAYMENT" ? "active" : ""} onClick={() => setMode("PAYMENT")}><Banknote size={16} /> Ödeme / Tahsilat</button>
         <button type="button" className={mode === "CHECK" ? "active" : ""} onClick={() => setMode("CHECK")}><CheckSquare2 size={16} /> Hızlı Çek</button>
-        <button type="button" className={mode === "FIBE" ? "active" : ""} onClick={() => setMode("FIBE")}><CircleDollarSign size={16} /> Firma FİBE</button>
       </nav>
 
       {notice ? <div className="qab-notice">{notice}</div> : null}
