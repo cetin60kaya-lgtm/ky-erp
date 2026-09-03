@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { registerAccountingFibeRoutes } from "./accounting-fibe";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -8,6 +9,11 @@ type Row = Record<string, any>;
 const text = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
 const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
+const numberValue = (value: unknown, fallback = 0) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 const bool = (value: unknown, fallback = false) => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
@@ -22,6 +28,7 @@ const normalize = (value: unknown) =>
     .trim();
 const nowIso = () => new Date().toISOString();
 const validEmail = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const validDate = (value: string) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 function slugOf(c: Context<AppEnv>, body: Row = {}) {
   return text(
@@ -62,6 +69,40 @@ async function companyOf(c: Context<AppEnv>, id: string, slug: string) {
     .first<Row>();
 }
 
+async function fibeIncomingVatTotal(
+  c: Context<AppEnv>,
+  slug: string,
+  companyId: string,
+  startDate: string,
+  beforeDate = "",
+) {
+  if (!startDate) return 0;
+  const beforeClause = beforeDate ? " AND substr(CAST(date AS TEXT),1,10) < ?" : "";
+  const statement = c.env.DB.prepare(
+    `SELECT COALESCE(SUM(COALESCE(incoming_vat,0)),0) AS total
+       FROM vat_records
+      WHERE main_company_slug=?
+        AND COALESCE(NULLIF(company_id,''),firm_id)=?
+        AND substr(CAST(date AS TEXT),1,10) >= ?${beforeClause}`,
+  );
+  const row = beforeDate
+    ? await statement.bind(slug, companyId, startDate, beforeDate).first<Row>()
+    : await statement.bind(slug, companyId, startDate).first<Row>();
+  return numberValue(row?.total, 0);
+}
+
+async function fibeMovementCount(c: Context<AppEnv>, slug: string, companyId: string) {
+  const exists = await c.env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='accounting_fibe_movements' LIMIT 1",
+  ).first<Row>();
+  if (!exists?.name) return 0;
+  const row = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS total FROM accounting_fibe_movements
+      WHERE main_company_slug=? AND company_id=? AND deleted_at IS NULL`,
+  ).bind(slug, companyId).first<Row>();
+  return Number(row?.total || 0);
+}
+
 function roleOf(row: Row) {
   const value = upper(row.company_type || row.type);
   if (value === "BOTH") return "BOTH";
@@ -71,6 +112,8 @@ function roleOf(row: Row) {
 
 function profileView(row: Row, aliasCount = 0) {
   const role = roleOf(row);
+  const fibeOpeningAccrual = Number(row.fibe_opening_accrual || 0);
+  const fibeOpeningPaid = Number(row.fibe_opening_paid || 0);
   return {
     id: text(row.id),
     companyName: text(row.name),
@@ -89,6 +132,13 @@ function profileView(row: Row, aliasCount = 0) {
     email: text(row.email),
     address: text(row.address),
     note: text(row.note),
+    fibeEnabled: Number(row.fibe_enabled || 0) === 1,
+    fibeRate: Number(row.fibe_rate || 0),
+    fibeStartDate: text(row.fibe_start_date),
+    fibeOpeningAccrual,
+    fibeOpeningPaid,
+    fibeOpeningBalance: fibeOpeningAccrual - fibeOpeningPaid,
+    fibeNote: text(row.fibe_note),
     aliasCount,
     accountingMode:
       role === "SUPPLIER" && Number(row.supplier_debt_tracking || 0) === 1
@@ -192,6 +242,8 @@ async function rematchPendingDocuments(
 }
 
 export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
+  registerAccountingFibeRoutes(app);
+
   app.get("/api/muhasebe/firma-profilleri", async (c) => {
     const slug = slugOf(c);
     const result = await c.env.DB.prepare(
@@ -259,6 +311,45 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
     const phone = body.phone === undefined ? text(row.phone) : text(body.phone);
     const address = body.address === undefined ? text(row.address) : text(body.address);
     const note = body.note === undefined ? text(row.note) : text(body.note);
+
+    const oldFibeEnabled = Number(row.fibe_enabled || 0) === 1;
+    const oldFibeRate = numberValue(row.fibe_rate, 0);
+    const oldFibeStartDate = text(row.fibe_start_date);
+    const fibeEnabled = bool(body.fibeEnabled, oldFibeEnabled);
+    const fibeRate = numberValue(body.fibeRate, oldFibeRate);
+    if (fibeRate < 0 || fibeRate > 100) {
+      return c.json(errorBody("INVALID_FIBE_RATE", "FİBE oranı 0 ile 100 arasında olmalıdır."), 400);
+    }
+    const requestedFibeStartDate = body.fibeStartDate === undefined ? oldFibeStartDate : text(body.fibeStartDate);
+    let fibeStartDate = requestedFibeStartDate || (fibeEnabled ? nowIso().slice(0, 10) : "");
+    if (!validDate(fibeStartDate)) {
+      return c.json(errorBody("INVALID_FIBE_START_DATE", "FİBE başlangıç tarihi YYYY-AA-GG formatında olmalıdır."), 400);
+    }
+    let fibeOpeningAccrual = numberValue(body.fibeOpeningAccrual, Number(row.fibe_opening_accrual || 0));
+    const fibeOpeningPaid = numberValue(body.fibeOpeningPaid, Number(row.fibe_opening_paid || 0));
+    if (fibeOpeningAccrual < 0 || fibeOpeningPaid < 0) {
+      return c.json(errorBody("INVALID_FIBE_OPENING", "FİBE başlangıç hakedişi ve ödeneni negatif olamaz."), 400);
+    }
+    const rateChanged = oldFibeEnabled && fibeEnabled && Math.abs(fibeRate - oldFibeRate) > 0.000001;
+    if (rateChanged) {
+      const effectiveDate = nowIso().slice(0, 10);
+      if (oldFibeStartDate && oldFibeStartDate < effectiveDate) {
+        const previousVat = await fibeIncomingVatTotal(c, slug, text(row.id), oldFibeStartDate, effectiveDate);
+        const frozenAccrual = Math.round((previousVat * oldFibeRate / 100 + Number.EPSILON) * 100) / 100;
+        fibeOpeningAccrual = Math.round((fibeOpeningAccrual + frozenAccrual + Number.EPSILON) * 100) / 100;
+      }
+      fibeStartDate = effectiveDate;
+    } else if (oldFibeEnabled && fibeEnabled && oldFibeStartDate && fibeStartDate !== oldFibeStartDate) {
+      const [referenceVat, movementCount] = await Promise.all([
+        fibeIncomingVatTotal(c, slug, text(row.id), oldFibeStartDate),
+        fibeMovementCount(c, slug, text(row.id)),
+      ]);
+      const hasHistory = referenceVat > 0 || movementCount > 0 || Number(row.fibe_opening_accrual || 0) > 0 || Number(row.fibe_opening_paid || 0) > 0;
+      if (hasHistory) {
+        return c.json(errorBody("FIBE_START_DATE_LOCKED", "FİBE hareketi başladıktan sonra başlangıç tarihi geriye dönük değiştirilemez. Oran değişikliği yeni dönem olarak otomatik başlatılır."), 409);
+      }
+    }
+    const fibeNote = body.fibeNote === undefined ? text(row.fibe_note) : text(body.fibeNote);
     const timestamp = nowIso();
 
     await c.env.DB.prepare(
@@ -275,6 +366,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
               email = ?,
               address = ?,
               note = ?,
+              fibe_enabled = ?,
+              fibe_rate = ?,
+              fibe_start_date = ?,
+              fibe_opening_accrual = ?,
+              fibe_opening_paid = ?,
+              fibe_note = ?,
               updated_at = ?
         WHERE id = ? AND main_company_slug = ?`,
     )
@@ -291,6 +388,12 @@ export function registerAccountingCompanyProfileRoutes(app: Hono<AppEnv>) {
         email || null,
         address || null,
         note || null,
+        fibeEnabled ? 1 : 0,
+        fibeRate,
+        fibeStartDate || null,
+        fibeOpeningAccrual,
+        fibeOpeningPaid,
+        fibeNote || null,
         timestamp,
         row.id,
         slug,

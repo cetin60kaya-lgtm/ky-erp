@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
+import CompanyFibeSection from "./CompanyFibeSection";
 import "./companiesCurrentWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -674,6 +675,15 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                         : "Müşteri: gelen irsaliye borç oluşturmaz; müşteri alacağı yalnız kesilen fatura/tahsilat akışından izlenir."}
                 </div>
               </section>
+
+              <CompanyFibeSection
+                activeMainCompany={activeMainCompany}
+                company={selected}
+                onChanged={async () => {
+                  await loadFirms();
+                  await loadMovements(selected);
+                }}
+              />
 
               <section className="ccw-section">
                 <header><h3>Firma Alias / Eşleşme</h3><span>{aliases.length} kayıt</span></header>

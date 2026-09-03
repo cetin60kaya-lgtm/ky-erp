@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: File Hub + Muhasebe + PDKS + AI ucretlendirme hedefli migrationlarini uygula
+      - name: File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme hedefli migrationlarini uygula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -142,7 +142,22 @@ jobs:
             npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "migrations/$migration"
           done
 
-      - name: Migration sonrasi File Hub + Muhasebe + PDKS + AI ucretlendirme semasini dogrula
+          echo "0040 FIBE + hizli muhasebe semasi kontrol ediliyor..."
+          test -f migrations/0040_accounting_fibe_company_tracking.sql
+          fibe_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('companies') WHERE name IN ('fibe_enabled','fibe_rate','fibe_start_date','fibe_opening_accrual','fibe_opening_paid','fibe_note')) AS company_cols, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_fibe_movements','accounting_check_settlements')) AS fibe_tables;" --json)"
+          fibe_cols="$(jq -r '.[0].results[0].company_cols // -1' <<<"$fibe_state")"
+          fibe_tables="$(jq -r '.[0].results[0].fibe_tables // -1' <<<"$fibe_state")"
+          if [ "$fibe_cols" = "0" ] && [ "$fibe_tables" = "0" ]; then
+            echo "0040 semasi yok; yedek sonrasi migration uygulanacak."
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0040_accounting_fibe_company_tracking.sql
+          elif [ "$fibe_cols" = "6" ] && [ "$fibe_tables" = "2" ]; then
+            echo "0040 semasi zaten tam; tekrar uygulanmiyor."
+          else
+            echo "GUVENLIK DURDURMASI: 0040 kismi sema bulundu (company_cols=$fibe_cols, tables=$fibe_tables). Otomatik migration yapilmadi." >&2
+            exit 1
+          fi
+
+      - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -175,6 +190,8 @@ jobs:
           jq -e '.[0].results[0].profile_cols == 9 and .[0].results[0].ledger_cols == 8' <<<"$billing" >/dev/null || { echo "Firma AI ucretlendirme semasi eksik" >&2; exit 1; }
           agent="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM pragma_table_info('file_hub_agent_credentials') WHERE name IN ('main_company_slug','secret_hash','is_active','last_used_at');" --json)"
           jq -e '.[0].results[0].n == 4' <<<"$agent" >/dev/null || { echo "File Hub tenant agent credential semasi eksik" >&2; exit 1; }
+          fibe="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('companies') WHERE name IN ('fibe_enabled','fibe_rate','fibe_start_date','fibe_opening_accrual','fibe_opening_paid','fibe_note')) AS company_cols, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_fibe_movements','accounting_check_settlements')) AS fibe_tables;" --json)"
+          jq -e '.[0].results[0].company_cols == 6 and .[0].results[0].fibe_tables == 2' <<<"$fibe" >/dev/null || { echo "FIBE/hizli muhasebe 0040 semasi eksik" >&2; exit 1; }
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
@@ -306,6 +323,7 @@ jobs:
           echo "IsNet tenant guard: aktif"
           echo "AI ucretlendirme: 0038 dogrulandi"
           echo "File Hub tenant agent guvenligi: 0039 dogrulandi"
+          echo "FIBE + hizli muhasebe: 0040 dogrulandi"
           echo "RESEND_API_KEY: aktif Worker bindingi dogrulandi"
           echo "API: https://api.kyerp.net"
           echo "Site: https://kyerp.net"

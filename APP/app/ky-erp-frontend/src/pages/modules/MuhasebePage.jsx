@@ -10,6 +10,7 @@ import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
 import PaymentPlannerPanel from "./muhasebe/PaymentPlannerPanel";
 import ProfitLossWorkspace from "./muhasebe/ProfitLossWorkspace";
+import QuickAccountingBar from "./muhasebe/QuickAccountingBar";
 import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
 import VatComparisonWorkspace from "./muhasebe/VatComparisonWorkspace";
 import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
@@ -18,11 +19,11 @@ import "./muhasebe/supplierInventoryWorkspace.css";
 
 export const MUHASEBE_TABS = [
   { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve çek görünümünü tek ekranda izleyin." },
-  { key: "firma-kartlari", title: "Firmalar ve Cari", description: "Hızlı defter, firma bakiyeleri, cari hareketler ve günlük işlemleri tek listede yönetin." },
+  { key: "firma-kartlari", title: "Firmalar ve Cari", description: "Firma bakiyeleri, normal cari, FİBE ve günlük hareketleri aynı çalışma alanında yönetin." },
   { key: "tedarikci-faturalar", title: "Tedarikçi İrsaliye / Faturaları", description: "İşNet veya manuel XML/PDF/tarama kaynağından gelen irsaliye ve faturaları ortak belge havuzunda inceleyin; gider, KDV, stok-lot ve cari kurallarına göre işleyin." },
   { key: "kesilen-faturalar", title: "Bizim Kesilen Faturalarımız", description: "Bizim giden irsaliyelerimize bağlı kestiğimiz faturaların İşNet, model, adet ve belge durumlarını izleyin." },
   { key: "irsaliye-fatura-kontrol", title: "Müşteri İrsaliye / Bizim Belge Kontrolü", description: "Müşteriden gelen irsaliye → model/üretim → bizim giden irsaliyemiz → bizim kesilen faturamız zincirini takip edin." },
-  { key: "cek-odeme", title: "Çek / Ödeme", description: "Haftalık ödeme planını, hafta sonu ödenecekleri, vadeleri, banka ve firma riskini birlikte takip edin." },
+  { key: "cek-odeme", title: "Çek / Ödeme", description: "Haftalık ödeme planını, hızlı çek girişini, vadeleri, banka ve cari mahsupları birlikte takip edin." },
   { key: "mail-ekstre", title: "Ekstre ve Mail Takibi", description: "Ekstre, alıcı, hatırlatma ve gönderim işlerini satırdan yönetin." },
   { key: "kar-zarar", title: "Gelir / Gider ve Kâr Zarar", description: "Resmî ve iç operasyon hareketlerini aynı dönem görünümünde analiz edin." },
   { key: "kdv-kontrol", title: "Gelen / Giden KDV Kontrolü", description: "Firma bazlı KDV hareketlerini ve dönem farkını karşılaştırın." },
@@ -67,5 +68,5 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   else if (current.key === "muhasebe-raporlari") content = <AccountingReportsListWorkspace {...pageProps} />;
   else if (current.key === "mail-sablonlari") content = <MailTemplatesWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
 
-  return <main className="muhasebe-module-page">{current ? <header className="accounting-page-header"><div><span className="accounting-eyebrow">Muhasebe</span><h1>{current.title}</h1><p>{current.description}</p></div><button type="button" className="accounting-refresh" onClick={reloadAll}>Güncelle</button></header> : null}<div className="muhasebe-workbench">{content}</div></main>;
+  return <main className="muhasebe-module-page">{current ? <header className="accounting-page-header"><div><span className="accounting-eyebrow">Muhasebe</span><h1>{current.title}</h1><p>{current.description}</p></div><button type="button" className="accounting-refresh" onClick={reloadAll}>Güncelle</button></header> : null}<div className="muhasebe-workbench">{current ? <QuickAccountingBar activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} /> : null}{content}</div></main>;
 }
