@@ -73,14 +73,21 @@ function checkMeta(note: unknown) {
 async function findCheck(c: Context<AppEnv>, slug: string, checkId: string) {
   if (await tableExists(c, "payment_control_records")) {
     const cols = await tableColumns(c, "payment_control_records");
-    const slugClause = cols.has("main_company_slug")
-      ? "AND main_company_slug=?"
-      : cols.has("main_company_id")
-        ? "AND main_company_id=?"
-        : "";
+    let tenantClause = "";
+    const tenantBindings: string[] = [];
+    if (cols.has("main_company_slug") && cols.has("main_company_id")) {
+      tenantClause = "AND (main_company_slug=? OR main_company_id=?)";
+      tenantBindings.push(slug, slug);
+    } else if (cols.has("main_company_slug")) {
+      tenantClause = "AND main_company_slug=?";
+      tenantBindings.push(slug);
+    } else if (cols.has("main_company_id")) {
+      tenantClause = "AND main_company_id=?";
+      tenantBindings.push(slug);
+    }
     const row = await c.env.DB.prepare(
-      `SELECT * FROM payment_control_records WHERE id=? ${slugClause} LIMIT 1`,
-    ).bind(checkId, ...(slugClause ? [slug] : [])).first<Row>();
+      `SELECT * FROM payment_control_records WHERE id=? ${tenantClause} LIMIT 1`,
+    ).bind(checkId, ...tenantBindings).first<Row>();
     if (row) {
       const meta = { ...checkMeta(row.note), ...jsonObject(row.raw) };
       return {
@@ -98,10 +105,10 @@ async function findCheck(c: Context<AppEnv>, slug: string, checkId: string) {
 
   if (await tableExists(c, "checks")) {
     const cols = await tableColumns(c, "checks");
-    const slugClause = cols.has("main_company_slug") ? "AND main_company_slug=?" : "";
+    const tenantClause = cols.has("main_company_slug") ? "AND main_company_slug=?" : "";
     const row = await c.env.DB.prepare(
-      `SELECT * FROM checks WHERE id=? ${slugClause} LIMIT 1`,
-    ).bind(checkId, ...(slugClause ? [slug] : [])).first<Row>();
+      `SELECT * FROM checks WHERE id=? ${tenantClause} LIMIT 1`,
+    ).bind(checkId, ...(tenantClause ? [slug] : [])).first<Row>();
     if (row) {
       const meta = { ...checkMeta(row.note), ...jsonObject(row.raw) };
       return {
@@ -134,16 +141,23 @@ async function updateDynamic(c: Context<AppEnv>, table: string, id: string, slug
   const columns = await tableColumns(c, table);
   const entries = Object.entries(data).filter(([key, value]) => columns.has(key) && value !== undefined);
   if (!entries.length) return;
-  const slugColumn = columns.has("main_company_slug")
-    ? "main_company_slug"
-    : columns.has("main_company_id")
-      ? "main_company_id"
-      : "";
-  const sql = `UPDATE ${table} SET ${entries.map(([key]) => `\"${key}\"=?`).join(",")} WHERE id=?${slugColumn ? ` AND ${slugColumn}=?` : ""}`;
+  let tenantClause = "";
+  const tenantBindings: string[] = [];
+  if (columns.has("main_company_slug") && columns.has("main_company_id")) {
+    tenantClause = " AND (main_company_slug=? OR main_company_id=?)";
+    tenantBindings.push(slug, slug);
+  } else if (columns.has("main_company_slug")) {
+    tenantClause = " AND main_company_slug=?";
+    tenantBindings.push(slug);
+  } else if (columns.has("main_company_id")) {
+    tenantClause = " AND main_company_id=?";
+    tenantBindings.push(slug);
+  }
+  const sql = `UPDATE ${table} SET ${entries.map(([key]) => `\"${key}\"=?`).join(",")} WHERE id=?${tenantClause}`;
   await c.env.DB.prepare(sql).bind(
     ...entries.map(([, value]) => value === null || value === undefined ? null : typeof value === "object" ? JSON.stringify(value) : value),
     id,
-    ...(slugColumn ? [slug] : []),
+    ...tenantBindings,
   ).run();
 }
 
@@ -211,6 +225,7 @@ async function applyCari(c: Context<AppEnv>, input: {
   bankName: string;
   actor: string;
   note: string;
+  movementDate: string;
 }) {
   const company = await c.env.DB.prepare(
     `SELECT * FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`,
@@ -237,14 +252,15 @@ async function applyCari(c: Context<AppEnv>, input: {
   const movementId = crypto.randomUUID();
   const timestamp = nowIso();
   const balanceAfter = money(previousBalance + effect);
-  const recordType = upper(input.workType).includes("OFFICIAL") ? "RESMI" : "GAYRI_RESMI";
+  const recordType = upper(input.workType) === "OFFICIAL" ? "RESMI" : "GAYRI_RESMI";
   const description = `Çek ${input.stage === "ENTRY" ? "girişi" : "mahsup"}: ${input.checkNo || input.checkId}${input.bankName ? ` / ${input.bankName}` : ""}`;
+  const movementDate = /^\d{4}-\d{2}-\d{2}$/.test(input.movementDate) ? input.movementDate : timestamp.slice(0, 10);
 
   await insertDynamic(c, "current_account_movements", {
     id: movementId,
     main_company_slug: input.slug,
     company_id: input.companyId,
-    movement_date: nowIso().slice(0, 10),
+    movement_date: movementDate,
     movement_type: movementType,
     source_type: "CHECK",
     document_no: input.checkNo || input.checkId,
@@ -302,6 +318,7 @@ export function registerAccountingCheckCariRoutes(app: Hono<AppEnv>) {
     const workType = upper(body.workType || check.workType) || "OFFICIAL";
     const actor = text(body.actor || body.createdBy || "USER");
     const note = text(body.note);
+    const movementDate = text(body.date || body.movementDate || body.issueDate) || nowIso().slice(0, 10);
 
     await ensureSettlement(c, { slug, checkId, companyId, direction, amount, workType, note, actor });
     try {
@@ -317,6 +334,7 @@ export function registerAccountingCheckCariRoutes(app: Hono<AppEnv>) {
         bankName: check.bankName,
         actor,
         note,
+        movementDate,
       });
       if (stage === "SETTLEMENT") {
         const timestamp = nowIso();
@@ -335,7 +353,6 @@ export function registerAccountingCheckCariRoutes(app: Hono<AppEnv>) {
 
   app.post("/api/muhasebe/hizli-cari/cek/:checkId/kapat", async (c) => {
     const body = await bodyOf(c);
-    body.stage = "SETTLEMENT";
     const slug = slugOf(c, body);
     const checkId = text(c.req.param("checkId"));
     const check = await findCheck(c, slug, checkId);
@@ -346,9 +363,12 @@ export function registerAccountingCheckCariRoutes(app: Hono<AppEnv>) {
       return c.json(errorBody("CHECK_DIRECTION_REQUIRED", "Çekin alınan mı verilen mi olduğu belirtilmelidir."), 400);
     }
     const companyId = text(body.companyId || check.companyId);
+    if (!companyId) return c.json(errorBody("COMPANY_REQUIRED", "Çek için firma bağlantısı bulunamadı."), 400);
     const amount = money(body.amount || check.amount);
+    if (!(amount > 0)) return c.json(errorBody("AMOUNT_REQUIRED", "Çek tutarı sıfırdan büyük olmalıdır."), 400);
     const workType = upper(body.workType || check.workType) || "OFFICIAL";
     const actor = text(body.actor || body.createdBy || "USER");
+    const movementDate = text(body.date || body.movementDate) || nowIso().slice(0, 10);
     await ensureSettlement(c, { slug, checkId, companyId, direction, amount, workType, note: text(body.note), actor });
 
     const existing = await settlementOf(c, slug, checkId);
@@ -376,6 +396,7 @@ export function registerAccountingCheckCariRoutes(app: Hono<AppEnv>) {
         bankName: check.bankName,
         actor,
         note: text(body.note),
+        movementDate,
       });
       await c.env.DB.prepare(
         `UPDATE accounting_check_settlements
