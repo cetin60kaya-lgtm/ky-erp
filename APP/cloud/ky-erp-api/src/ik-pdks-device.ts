@@ -95,6 +95,17 @@ function normalizeDate(value: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
 }
 
+function managedCompany(c: Context<AppEnv>, user: Row, body: Row = {}) {
+  return text(
+    (c as any).get?.("pdksCompany") ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+    c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") ||
+    body.mainCompanySlug || body.mainCompanyId ||
+    user?.mainCompanySlug || user?.security?.main_company_slug ||
+    DEFAULT_COMPANY,
+  ).toLocaleLowerCase("tr-TR");
+}
+
 async function isLocked(c: Context<AppEnv>, company: string, date: string) {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
   if (!match) return false;
@@ -126,15 +137,88 @@ async function writeSyncLog(c: Context<AppEnv>, device: Row, received: number, a
 }
 
 export function registerIkPdksDeviceRoutes(app: Hono<AppEnv>) {
+  app.get("/api/ik/personnel-control/devices", async (c) => {
+    await ensureSchema(c);
+    const user = await getAuthenticatedUser(c) as Row | null;
+    if (!user) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+    const company = managedCompany(c, user);
+    const result = await c.env.DB.prepare(`SELECT
+      id,
+      main_company_id AS mainCompanyId,
+      device_label AS deviceLabel,
+      machine_name AS machineName,
+      active,
+      created_by_user_id AS createdByUserId,
+      created_at AS createdAt,
+      updated_at AS updatedAt,
+      last_seen_at AS lastSeenAt,
+      last_sync_at AS lastSyncAt,
+      last_sync_count AS lastSyncCount
+      FROM ik_pdks_devices
+      WHERE main_company_id=?
+      ORDER BY active DESC, device_label COLLATE NOCASE`)
+      .bind(company).all<Row>();
+    return ok(c, result.results || []);
+  });
+
+  app.get("/api/ik/personnel-control/device-sync-logs", async (c) => {
+    await ensureSchema(c);
+    const user = await getAuthenticatedUser(c) as Row | null;
+    if (!user) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+    const company = managedCompany(c, user);
+    const deviceId = text(c.req.query("deviceId"));
+    const limit = Math.min(500, Math.max(1, Number(c.req.query("limit") || 150)));
+    const sql = `SELECT
+      l.id,
+      l.device_id AS deviceId,
+      l.main_company_id AS mainCompanyId,
+      l.received_count AS receivedCount,
+      l.accepted_count AS acceptedCount,
+      l.rejected_count AS rejectedCount,
+      l.status,
+      l.message,
+      l.created_at AS createdAt,
+      d.device_label AS deviceLabel
+      FROM ik_pdks_device_sync_logs l
+      LEFT JOIN ik_pdks_devices d ON d.id=l.device_id AND d.main_company_id=l.main_company_id
+      WHERE l.main_company_id=? ${deviceId ? "AND l.device_id=?" : ""}
+      ORDER BY l.created_at DESC LIMIT ?`;
+    const stmt = c.env.DB.prepare(sql);
+    const result = deviceId
+      ? await stmt.bind(company, deviceId, limit).all<Row>()
+      : await stmt.bind(company, limit).all<Row>();
+    return ok(c, result.results || []);
+  });
+
+  app.patch("/api/ik/personnel-control/devices/:id", async (c) => {
+    await ensureSchema(c);
+    const user = await getAuthenticatedUser(c) as Row | null;
+    if (!user) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+    if (upper(user.role) === "DENETIM" || text(user.username).toLocaleLowerCase("tr-TR") === "denetim") {
+      return error(c, 403, "PDKS_AUDIT_READ_ONLY", "Denetim hesabı cihaz durumunu değiştiremez.");
+    }
+    const body = await bodyOf(c);
+    const company = managedCompany(c, user, body);
+    const id = text(c.req.param("id"));
+    const active = body.active === true || body.active === 1 || String(body.active).toLowerCase() === "true" ? 1 : 0;
+    const stamp = nowIso();
+    const existing = await c.env.DB.prepare("SELECT id FROM ik_pdks_devices WHERE id=? AND main_company_id=? LIMIT 1")
+      .bind(id, company).first<Row>();
+    if (!existing) return error(c, 404, "PDKS_DEVICE_NOT_FOUND", "PDKS cihazı bulunamadı.");
+    await c.env.DB.prepare("UPDATE ik_pdks_devices SET active=?,updated_at=? WHERE id=? AND main_company_id=?")
+      .bind(active, stamp, id, company).run();
+    return ok(c, { id, mainCompanyId: company, active, updatedAt: stamp });
+  });
+
   app.post("/api/ik/personnel-control/device/enroll", async (c) => {
     await ensureSchema(c);
-    const user = await getAuthenticatedUser(c);
+    const user = await getAuthenticatedUser(c) as Row | null;
     if (!user) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
     if (upper(user.role) === "DENETIM" || text(user.username).toLocaleLowerCase("tr-TR") === "denetim") {
       return error(c, 403, "PDKS_AUDIT_READ_ONLY", "Denetim hesabı cihaz yetkilendiremez.");
     }
     const body = await bodyOf(c);
-    const company = text(c.req.header("X-KYERP-Tenant-Slug") || body.mainCompanyId || body.mainCompanySlug || user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY).toLocaleLowerCase("tr-TR");
+    const company = managedCompany(c, user, body);
     const label = text(body.deviceLabel);
     const machineName = text(body.machineName);
     if (!label) return error(c, 400, "DEVICE_LABEL_REQUIRED", "Cihaz etiketi zorunludur.");
