@@ -64,6 +64,7 @@ import { CheckCenterService } from "./check-center/check-center.service";
 import { EBelgeCenterController } from "./e-belge-center.controller";
 import { EBelgeCenterService } from "./e-belge-center.service";
 import { EBelgeAiExtractorService } from "./e-belge-ai-extractor.service";
+import { EBelgeFileController } from "./e-belge-file.controller";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -83,6 +84,7 @@ import { EBelgeAiExtractorService } from "./e-belge-ai-extractor.service";
     CheckCenterController,
     DispatchReconciliationController,
     EBelgeCenterController,
+    EBelgeFileController,
     IsnetOperationsController,
     IsnetConnectionController,
     IsnetSourceIntakeController,
