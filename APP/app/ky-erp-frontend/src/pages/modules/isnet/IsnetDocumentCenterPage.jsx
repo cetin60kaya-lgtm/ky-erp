@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ExternalLink,
   FileText,
   Link2,
   LoaderCircle,
@@ -12,6 +13,8 @@ import {
 } from "lucide-react";
 import {
   fetchEBelgePool,
+  getEBelgeFile,
+  openEBelgeBlob,
   reconcileAllEBelge,
   reconcileEBelge,
   uploadEBelge,
@@ -53,19 +56,19 @@ const MATCH_LABELS = {
   NOT_REQUIRED: ["İrsaliye", "neutral"],
 };
 
-function money(value, currency = "TRY") {
+function currency(value, code = "TRY") {
   try {
     return new Intl.NumberFormat("tr-TR", {
       style: "currency",
-      currency: currency || "TRY",
+      currency: code || "TRY",
       maximumFractionDigits: 2,
     }).format(Number(value || 0));
   } catch {
-    return `${Number(value || 0).toLocaleString("tr-TR")} ${currency || "TRY"}`;
+    return `${Number(value || 0).toLocaleString("tr-TR")} ${code || "TRY"}`;
   }
 }
 
-function number(value) {
+function quantity(value) {
   return Number(value || 0).toLocaleString("tr-TR", { maximumFractionDigits: 3 });
 }
 
@@ -88,13 +91,11 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
 
-  const params = useMemo(
-    () => ({ ...range, category, search, limit: 1000 }),
-    [category, range, search],
-  );
+  const params = useMemo(() => ({ ...range, category, search, limit: 1000 }), [category, range, search]);
+  const companySlug = activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || "";
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug && !activeMainCompany?.mainCompanySlug) return;
+    if (!companySlug) return;
     setLoading(true);
     try {
       const data = await fetchEBelgePool(activeMainCompany, params);
@@ -108,7 +109,7 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
     } finally {
       setLoading(false);
     }
-  }, [activeMainCompany, params]);
+  }, [activeMainCompany, companySlug, params]);
 
   useEffect(() => {
     void load();
@@ -123,10 +124,7 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
     const incoming = Array.from(files || []).slice(0, 200);
     setSelectedFiles(incoming);
     if (incoming.length) {
-      setNotice({
-        tone: "info",
-        text: `${incoming.length} dosya hazır. XML, PDF ve ZIP aynı yüklemede birlikte işlenebilir.`,
-      });
+      setNotice({ tone: "info", text: `${incoming.length} dosya hazır. XML, PDF ve ZIP aynı yüklemede birlikte işlenebilir.` });
     }
   }
 
@@ -145,13 +143,25 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
       const aiUsed = (data?.aiResults || []).filter((row) => row?.status === "AI_ENRICHED").length;
       setNotice({
         tone: errors ? "warning" : "success",
-        text: `${added} yeni belge havuza alındı${attached ? `, ${attached} PDF/XML mevcut belgeye ek dosya olarak bağlandı` : ""}${aiUsed ? `, ${aiUsed} taranmış belge AI ile okundu` : ""}${errors ? `, ${errors} dosya kontrol bekliyor` : ""}.`,
+        text: `${added} yeni belge havuza alındı${attached ? `, ${attached} PDF/XML mevcut belgeye bağlandı` : ""}${aiUsed ? `, ${aiUsed} taranmış belge AI ile okundu` : ""}${errors ? `, ${errors} dosya kontrol bekliyor` : ""}.`,
       });
       setSelectedFiles([]);
       if (inputRef.current) inputRef.current.value = "";
       await load();
     } catch (error) {
       setNotice({ tone: "error", text: error?.message || "Toplu belge yükleme tamamlanamadı." });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openFile(row, format) {
+    setBusy(`file-${row.id}-${format}`);
+    try {
+      const blob = await getEBelgeFile(activeMainCompany, row.id, format);
+      openEBelgeBlob(blob);
+    } catch (error) {
+      setNotice({ tone: "error", text: error?.message || `${format.toUpperCase()} dosyası açılamadı.` });
     } finally {
       setBusy("");
     }
@@ -178,7 +188,7 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
       const data = await reconcileAllEBelge(activeMainCompany);
       setNotice({
         tone: Number(data?.mismatch || 0) ? "warning" : "success",
-        text: `${Number(data?.total || 0)} fatura kontrol edildi: ${Number(data?.matched || 0)} tam, ${Number(data?.partial || 0)} kısmi, ${Number(data?.mismatch || 0)} uyuşmazlık, ${Number(data?.unmatched || 0)} eşleşme bekliyor.`,
+        text: `${Number(data?.total || 0)} fatura kontrol edildi: ${Number(data?.matched || 0)} tam, ${Number(data?.partial || 0)} kısmi, ${Number(data?.mismatch || 0)} uyuşmazlık, ${Number(data?.unmatched || 0)} bekliyor.`,
       });
       await load();
     } catch (error) {
@@ -191,11 +201,11 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
   async function syncIsnet() {
     setBusy("isnet-sync");
     try {
-      const data = await startDailySync(range);
+      const data = await startDailySync({ ...range, mainCompanySlug: companySlug });
       await reconcileAllEBelge(activeMainCompany);
       setNotice({
-        tone: Number(data?.failed || 0) ? "warning" : "success",
-        text: `İşNet bağlantısı tarandı. ${Number(data?.downloaded || 0)} belge indirildi${Number(data?.failed || 0) ? `, ${Number(data.failed)} belge kontrol bekliyor` : ""}. Manuel yükleme sistemi bundan bağımsız çalışmaya devam eder.`,
+        tone: Number(data?.failed || data?.supplierAccounting?.failed || 0) ? "warning" : "success",
+        text: `İşNet tarandı. Belgeler e-Belge Havuzuna kontrol bekler halde alındı; manuel XML/PDF/ZIP yükleme bundan bağımsız çalışır.`,
       });
       await load();
     } catch (error) {
@@ -213,15 +223,11 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
         <div>
           <span className="ebelge-kicker"><FileText size={15} /> KY ERP · SAĞLAYICIDAN BAĞIMSIZ</span>
           <h1>e-Belge Merkezi</h1>
-          <p>XML, PDF, ZIP ve entegrasyon belgeleri tek havuzda. Fatura–irsaliye bağı firma + belge referansı + ürün kalemi + miktar ile doğrulanır.</p>
+          <p>XML, PDF, ZIP ve entegrasyon belgeleri tek havuzda. Fatura–irsaliye bağı firma + referans + ürün + miktar + birim ile doğrulanır.</p>
         </div>
         <div className="ebelge-hero-actions">
-          <button type="button" className="ebelge-btn secondary" onClick={syncIsnet} disabled={Boolean(busy)}>
-            {busy === "isnet-sync" ? <LoaderCircle size={16} className="spin" /> : <Wifi size={16} />} İşNet Senkronize Et
-          </button>
-          <button type="button" className="ebelge-btn secondary" onClick={reconcileAll} disabled={Boolean(busy)}>
-            {busy === "match-all" ? <LoaderCircle size={16} className="spin" /> : <Link2 size={16} />} Tüm Eşleşmeleri Yenile
-          </button>
+          <button type="button" className="ebelge-btn secondary" onClick={syncIsnet} disabled={Boolean(busy)}>{busy === "isnet-sync" ? <LoaderCircle size={16} className="spin" /> : <Wifi size={16} />} İşNet Senkronize Et</button>
+          <button type="button" className="ebelge-btn secondary" onClick={reconcileAll} disabled={Boolean(busy)}>{busy === "match-all" ? <LoaderCircle size={16} className="spin" /> : <Link2 size={16} />} Tüm Eşleşmeleri Yenile</button>
         </div>
       </header>
 
@@ -237,32 +243,17 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
         <div className="ebelge-upload-icon"><Upload size={26} /></div>
         <div className="ebelge-upload-copy">
           <strong>Toplu Dosya Yükle</strong>
-          <span>XML · PDF · ZIP · JPG · PNG · WEBP · en fazla 200 dosya</span>
-          <small>XML ana veri kaynağıdır. Metinli PDF doğrudan okunur; taranmış PDF/görsel OCR kullanılmadan AI belge analiziyle işlenir.</small>
+          <span>XML · PDF · ZIP · JPG · PNG · en fazla 200 dosya</span>
+          <small>XML ana veri kaynağıdır. Metinli PDF doğrudan okunur; taranmış PDF/görsel klasik OCR yerine AI belge analiziyle işlenir.</small>
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept=".xml,.pdf,.zip,.jpg,.jpeg,.png,.webp"
-          hidden
-          onChange={(event) => acceptFiles(event.target.files)}
-        />
+        <input ref={inputRef} type="file" multiple accept=".xml,.pdf,.zip,.jpg,.jpeg,.png" hidden onChange={(event) => acceptFiles(event.target.files)} />
         <div className="ebelge-upload-actions">
           <button type="button" className="ebelge-btn secondary" onClick={() => inputRef.current?.click()} disabled={Boolean(busy)}>Dosya Seç</button>
-          <button type="button" className="ebelge-btn primary" onClick={upload} disabled={Boolean(busy)}>
-            {busy === "upload" ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />}
-            {selectedFiles.length ? `${selectedFiles.length} Dosyayı İşle` : "Yüklemeyi Başlat"}
-          </button>
+          <button type="button" className="ebelge-btn primary" onClick={upload} disabled={Boolean(busy)}>{busy === "upload" ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />}{selectedFiles.length ? `${selectedFiles.length} Dosyayı İşle` : "Yüklemeyi Başlat"}</button>
         </div>
       </section>
 
-      {selectedFiles.length ? (
-        <div className="ebelge-file-strip">
-          {selectedFiles.slice(0, 8).map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}
-          {selectedFiles.length > 8 ? <b>+{selectedFiles.length - 8} dosya</b> : null}
-        </div>
-      ) : null}
+      {selectedFiles.length ? <div className="ebelge-file-strip">{selectedFiles.slice(0, 8).map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}{selectedFiles.length > 8 ? <b>+{selectedFiles.length - 8} dosya</b> : null}</div> : null}
 
       <section className="ebelge-summary">
         <article><span>Toplam Belge</span><strong>{summary.total || 0}</strong></article>
@@ -276,113 +267,46 @@ export default function IsnetDocumentCenterPage({ activeMainCompany }) {
 
       <section className="ebelge-card">
         <div className="ebelge-toolbar">
-          <div className="ebelge-tabs">
-            {FILTERS.map(([key, label]) => (
-              <button key={key} type="button" className={category === key ? "active" : ""} onClick={() => setCategory(key)}>{label}</button>
-            ))}
-          </div>
+          <div className="ebelge-tabs">{FILTERS.map(([key, label]) => <button key={key} type="button" className={category === key ? "active" : ""} onClick={() => setCategory(key)}>{label}</button>)}</div>
           <div className="ebelge-filters">
-            <form onSubmit={(event) => { event.preventDefault(); setSearch(searchDraft.trim()); }}>
-              <Search size={16} />
-              <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Belge no, firma veya VKN ara" />
-              <button type="submit">Ara</button>
-            </form>
+            <form onSubmit={(event) => { event.preventDefault(); setSearch(searchDraft.trim()); }}><Search size={16} /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Belge no, firma veya VKN ara" /><button type="submit">Ara</button></form>
             <label><span>Başlangıç</span><input type="date" value={range.startDate} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} /></label>
             <label><span>Bitiş</span><input type="date" value={range.endDate} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} /></label>
             <button type="button" className="ebelge-icon-btn" title="Yenile" onClick={load} disabled={loading}><RefreshCw size={17} className={loading ? "spin" : ""} /></button>
           </div>
         </div>
 
-        {loading ? (
-          <div className="ebelge-empty"><LoaderCircle size={24} className="spin" /><strong>Belge havuzu yükleniyor</strong></div>
-        ) : !result.rows?.length ? (
-          <div className="ebelge-empty"><CheckCircle2 size={24} /><strong>Bu filtrede belge yok</strong><span>Dosya yükleyebilir veya entegrasyondan senkronize edebilirsiniz.</span></div>
-        ) : (
+        {loading ? <div className="ebelge-empty"><LoaderCircle size={24} className="spin" /><strong>Belge havuzu yükleniyor</strong></div> : !result.rows?.length ? <div className="ebelge-empty"><CheckCircle2 size={24} /><strong>Bu filtrede belge yok</strong><span>Dosya yükleyebilir veya entegrasyondan senkronize edebilirsiniz.</span></div> : (
           <div className="ebelge-table-wrap">
             <table className="ebelge-table">
               <thead><tr><th>Tarih / Tür</th><th>Belge</th><th>Firma</th><th>Dosyalar</th><th>Kalem / LOT</th><th>Fatura ↔ İrsaliye</th><th>Tutar</th><th>İşlem</th></tr></thead>
-              <tbody>
-                {result.rows.map((row) => {
-                  const info = matchInfo(row);
-                  const linked = row.match?.linkedDispatches || [];
-                  return (
-                    <tr key={row.id} className={`${selectedId === row.id ? "selected" : ""} ${row.actionNeeded ? "needs-action" : ""}`} onClick={() => setSelectedId(row.id)}>
-                      <td><strong>{row.issueDate || "-"}</strong><small>{CATEGORY_LABELS[row.category] || row.category}</small></td>
-                      <td><strong>{row.documentNo || "Belge no bekliyor"}</strong><small>{row.status || "CONTROL_WAITING"}</small></td>
-                      <td><strong>{row.partnerName}</strong><small>{row.partnerTaxNo || row.companyType || "Firma eşleşmesi bekliyor"}</small></td>
-                      <td><div className="ebelge-badges"><span className={row.hasXml ? "ok" : "muted"}>XML {row.hasXml ? "✓" : "—"}</span><span className={row.hasPdf ? "ok" : "muted"}>PDF {row.hasPdf ? "✓" : "—"}</span>{row.aiStatus === "COMPLETED" ? <span className="ai">AI</span> : null}</div></td>
-                      <td><strong>{row.lineCount || 0} kalem</strong><small>{row.lotCount || 0} LOT · {row.unmatchedProductCount || 0} ürün eşleşmemiş</small></td>
-                      <td>
-                        <span className={`ebelge-status ${info.tone}`}>{info.label}</span>
-                        {linked.length ? <small>{linked.map((item) => item.documentNo).filter(Boolean).join(" · ")}</small> : row.category.includes("INVOICE") ? <small>İrsaliye bağı aranıyor</small> : <small>Eşleştirme kaynağı</small>}
-                      </td>
-                      <td><strong>{money(row.grandTotal, row.currency)}</strong><small>KDV {money(row.vatTotal, row.currency)}</small></td>
-                      <td onClick={(event) => event.stopPropagation()}>
-                        {row.category.includes("INVOICE") ? (
-                          <button type="button" className="ebelge-mini-btn" onClick={() => reconcileOne(row.id)} disabled={Boolean(busy)}>
-                            {busy === `match-${row.id}` ? <LoaderCircle size={14} className="spin" /> : <Link2 size={14} />} Kontrol Et
-                          </button>
-                        ) : <span className="ebelge-status neutral">Havuzda</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+              <tbody>{result.rows.map((row) => {
+                const info = matchInfo(row);
+                const linked = row.match?.linkedDispatches || [];
+                return <tr key={row.id} className={`${selectedId === row.id ? "selected" : ""} ${row.actionNeeded ? "needs-action" : ""}`} onClick={() => setSelectedId(row.id)}>
+                  <td><strong>{row.issueDate || "-"}</strong><small>{CATEGORY_LABELS[row.category] || row.category}</small></td>
+                  <td><strong>{row.documentNo || "Belge no bekliyor"}</strong><small>{row.status || "CONTROL_WAITING"}</small></td>
+                  <td><strong>{row.partnerName}</strong><small>{row.partnerTaxNo || row.companyType || "Firma eşleşmesi bekliyor"}</small></td>
+                  <td onClick={(event) => event.stopPropagation()}><div className="ebelge-badges">{row.hasXml ? <button type="button" className="ok" onClick={() => openFile(row, "xml")}>XML <ExternalLink size={10} /></button> : <span className="muted">XML —</span>}{row.hasPdf ? <button type="button" className="ok" onClick={() => openFile(row, "pdf")}>PDF <ExternalLink size={10} /></button> : <span className="muted">PDF —</span>}{row.aiStatus === "COMPLETED" ? <span className="ai">AI</span> : null}</div></td>
+                  <td><strong>{row.lineCount || 0} kalem</strong><small>{row.lotCount || 0} LOT · {row.unmatchedProductCount || 0} ürün eşleşmemiş</small></td>
+                  <td><span className={`ebelge-status ${info.tone}`}>{info.label}</span><small>{linked.length ? linked.map((item) => item.documentNo).filter(Boolean).join(" · ") : row.category.includes("INVOICE") ? "İrsaliye bağı aranıyor" : "Eşleştirme kaynağı"}</small></td>
+                  <td><strong>{currency(row.grandTotal, row.currency)}</strong><small>KDV {currency(row.vatTotal, row.currency)}</small></td>
+                  <td onClick={(event) => event.stopPropagation()}>{row.category.includes("INVOICE") ? <button type="button" className="ebelge-mini-btn" onClick={() => reconcileOne(row.id)} disabled={Boolean(busy)}>{busy === `match-${row.id}` ? <LoaderCircle size={14} className="spin" /> : <Link2 size={14} />} Kontrol Et</button> : <span className="ebelge-status neutral">Havuzda</span>}</td>
+                </tr>;
+              })}</tbody>
             </table>
           </div>
         )}
       </section>
 
-      {selected ? (
-        <section className="ebelge-detail-card">
-          <div className="ebelge-detail-head">
-            <div>
-              <span>{CATEGORY_LABELS[selected.category] || "Belge"}</span>
-              <h2>{selected.documentNo || "Belge detayı"}</h2>
-              <p>{selected.partnerName} · {selected.lineCount} kalem · {selected.files?.length || 0} dosya</p>
-            </div>
-            <span className={`ebelge-status ${matchInfo(selected).tone}`}>{matchInfo(selected).label}</span>
-          </div>
-
-          {selected.category.includes("INVOICE") ? (
-            <>
-              <div className="ebelge-relation-summary">
-                <article><span>Bağlı İrsaliye</span><strong>{selected.match?.linkedDispatches?.map((row) => row.documentNo).filter(Boolean).join(" + ") || "Bulunamadı"}</strong></article>
-                <article><span>Kalem Kontrolü</span><strong>{selected.match ? `${selected.match.matchedLineCount}/${selected.match.totalLineCount}` : "0/0"}</strong></article>
-                <article><span>Tam Miktar</span><strong>{selected.match?.exactQuantityLineCount || 0}</strong></article>
-                <article><span>Güven</span><strong>%{selected.matchConfidence || 0}</strong></article>
-              </div>
-
-              {selected.match?.notes?.length ? (
-                <div className={`ebelge-match-note ${selected.matchStatus === "MATCHED" ? "success" : "warning"}`}>
-                  {selected.matchStatus === "MATCHED" ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
-                  <div>{selected.match.notes.map((note) => <span key={note}>{note}</span>)}</div>
-                </div>
-              ) : null}
-
-              {selected.match?.lines?.length ? (
-                <div className="ebelge-line-table-wrap">
-                  <table className="ebelge-line-table">
-                    <thead><tr><th>Fatura Kalemi</th><th>Fatura</th><th>İrsaliye</th><th>Fark</th><th>Bağlantı</th><th>Durum</th></tr></thead>
-                    <tbody>{selected.match.lines.map((line) => (
-                      <tr key={line.invoiceLineId}>
-                        <td><strong>{line.invoiceProduct}</strong><small>{line.unit}</small></td>
-                        <td>{number(line.invoicedQuantity)}</td>
-                        <td>{number(line.dispatchedQuantity)}</td>
-                        <td className={Math.abs(Number(line.difference || 0)) > 0.0005 ? "diff" : ""}>{number(line.difference)}</td>
-                        <td>{line.allocations?.map((item) => `${item.dispatchNo}: ${number(item.quantity)}`).join(" · ") || "—"}</td>
-                        <td><span className={`ebelge-status ${line.status === "MATCHED" ? "success" : line.status === "UNMATCHED" ? "error" : "warning"}`}>{line.status}</span></td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              ) : <div className="ebelge-empty compact"><Link2 size={20} /><strong>Kalem eşleşmesi henüz oluşmadı</strong></div>}
-            </>
-          ) : (
-            <div className="ebelge-match-note info"><FileText size={18} /><div><span>Bu irsaliye havuzda fatura eşleştirmesi için hazır.</span><span>Fatura geldiğinde firma, referans, ürün ve miktar üzerinden otomatik bağlanır.</span></div></div>
-          )}
-        </section>
-      ) : null}
+      {selected ? <section className="ebelge-detail-card">
+        <div className="ebelge-detail-head"><div><span>{CATEGORY_LABELS[selected.category] || "Belge"}</span><h2>{selected.documentNo || "Belge detayı"}</h2><p>{selected.partnerName} · {selected.lineCount} kalem · {selected.files?.length || 0} dosya</p></div><span className={`ebelge-status ${matchInfo(selected).tone}`}>{matchInfo(selected).label}</span></div>
+        {selected.category.includes("INVOICE") ? <>
+          <div className="ebelge-relation-summary"><article><span>Bağlı İrsaliye</span><strong>{selected.match?.linkedDispatches?.map((row) => row.documentNo).filter(Boolean).join(" + ") || "Bulunamadı"}</strong></article><article><span>Kalem Kontrolü</span><strong>{selected.match ? `${selected.match.matchedLineCount}/${selected.match.totalLineCount}` : "0/0"}</strong></article><article><span>Tam Miktar</span><strong>{selected.match?.exactQuantityLineCount || 0}</strong></article><article><span>Güven</span><strong>%{selected.matchConfidence || 0}</strong></article></div>
+          {selected.match?.notes?.length ? <div className={`ebelge-match-note ${selected.matchStatus === "MATCHED" ? "success" : "warning"}`}>{selected.matchStatus === "MATCHED" ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}<div>{selected.match.notes.map((note) => <span key={note}>{note}</span>)}</div></div> : null}
+          {selected.match?.lines?.length ? <div className="ebelge-line-table-wrap"><table className="ebelge-line-table"><thead><tr><th>Fatura Kalemi</th><th>Fatura</th><th>İrsaliye</th><th>Fark</th><th>Bağlantı</th><th>Durum</th></tr></thead><tbody>{selected.match.lines.map((line) => <tr key={line.invoiceLineId}><td><strong>{line.invoiceProduct}</strong><small>{line.unit}</small></td><td>{quantity(line.invoicedQuantity)}</td><td>{quantity(line.dispatchedQuantity)}</td><td className={Math.abs(Number(line.difference || 0)) > 0.0005 ? "diff" : ""}>{quantity(line.difference)}</td><td>{line.allocations?.map((item) => `${item.dispatchNo}: ${quantity(item.quantity)}`).join(" · ") || "—"}</td><td><span className={`ebelge-status ${line.status === "MATCHED" ? "success" : line.status === "UNMATCHED" ? "error" : "warning"}`}>{line.status}</span></td></tr>)}</tbody></table></div> : <div className="ebelge-empty compact"><Link2 size={20} /><strong>Kalem eşleşmesi henüz oluşmadı</strong></div>}
+        </> : <div className="ebelge-match-note info"><FileText size={18} /><div><span>Bu irsaliye havuzda fatura eşleştirmesi için hazır.</span><span>Fatura geldiğinde firma, referans, ürün ve miktar üzerinden otomatik bağlanır.</span></div></div>}
+      </section> : null}
     </main>
   );
 }
