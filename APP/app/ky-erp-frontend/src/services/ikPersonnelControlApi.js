@@ -26,6 +26,10 @@ export async function saveIkControlChanges(employeeId, payload = {}) {
   return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/change`, payload));
 }
 
+export async function removeIkControlPerson(employeeId, payload = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/remove`, payload));
+}
+
 export async function getIkAttendanceMonth(employeeId, params = {}) {
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance`, params));
 }
