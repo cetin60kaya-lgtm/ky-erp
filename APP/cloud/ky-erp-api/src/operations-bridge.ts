@@ -145,14 +145,14 @@ async function tableExists(c: Context<AppEnv>, table: string) {
 }
 
 function requestedCompany(c: Context<AppEnv>, body: Row = {}) {
-  return canonicalOperationsCompany(
+  const value =
     body.mainCompanySlug ||
-      body.main_company_slug ||
-      body.mainCompanyId ||
-      c.req.header("X-KYERP-Tenant-Slug") ||
-      c.req.query("mainCompanySlug") ||
-      c.req.query("mainCompanyId"),
-  );
+    body.main_company_slug ||
+    body.mainCompanyId ||
+    c.req.header("X-KYERP-Tenant-Slug") ||
+    c.req.query("mainCompanySlug") ||
+    c.req.query("mainCompanyId");
+  return text(value) ? canonicalOperationsCompany(value) : "";
 }
 
 async function authorize(
@@ -185,7 +185,7 @@ async function authorize(
   const ownCompany = canonicalOperationsCompany(
     user.mainCompanySlug || user.main_company_slug || DEFAULT_COMPANY,
   );
-  const requested = requestedCompany(c, body);
+  const requested = requestedCompany(c, body) || ownCompany;
   if (!ownerRole(user.role) && requested !== ownCompany) {
     return {
       response: c.json(
@@ -649,6 +649,12 @@ export function registerOperationsBridgeRoutes(app: Hono<AppEnv>) {
         400,
       );
     }
+    if (!(await tableExists(c, "operation_logs"))) {
+      return c.json(
+        errorBody("AUDIT_NOT_READY", "İşlem günlüğü hazır değil; güvenli yazma kapalı."),
+        503,
+      );
+    }
     const operationId = `operations:hr:${idempotencyKey}`;
     const prior = await operationAlreadyProcessed(c, operationId, auth.companySlug);
     if (prior) {
@@ -927,6 +933,12 @@ export function registerOperationsBridgeRoutes(app: Hono<AppEnv>) {
         400,
       );
     }
+    if (!(await tableExists(c, "operation_logs"))) {
+      return c.json(
+        errorBody("AUDIT_NOT_READY", "İşlem günlüğü hazır değil; güvenli yazma kapalı."),
+        503,
+      );
+    }
     const operationId = `operations:accounting:${idempotencyKey}`;
     const prior = await operationAlreadyProcessed(c, operationId, auth.companySlug);
     if (prior) {
@@ -1009,7 +1021,7 @@ export function registerOperationsBridgeRoutes(app: Hono<AppEnv>) {
         `INSERT INTO current_account_movements
           (id,main_company_slug,company_id,movement_date,movement_type,source_type,
            document_no,description,debit,credit,amount,effect,balance_after,raw,created_at,updated_at)
-         SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+         SELECT ?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(current_balance,0),?,?,?
            FROM companies
           WHERE id=? AND main_company_slug=? AND deleted_at IS NULL`,
       ).bind(
@@ -1025,7 +1037,6 @@ export function registerOperationsBridgeRoutes(app: Hono<AppEnv>) {
         incoming ? 0 : amount,
         amount,
         effect,
-        number(resolved.company.currentBalance) + effect,
         JSON.stringify(payment),
         timestamp,
         timestamp,
