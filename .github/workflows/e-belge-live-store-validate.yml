@@ -1,0 +1,62 @@
+name: e-Belge Canlı Veri Uyumluluğu
+
+on:
+  push:
+    branches:
+      - codex/e-belge-merkezi-final-v2
+    paths:
+      - "APP/cloud/ky-erp-api/src/e-belge-*"
+      - "APP/app/ky-erp-frontend/src/services/eBelgeApi.js"
+      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelgeLineReview.jsx"
+      - "tools/e-belge-live-store.mjs"
+      - ".github/workflows/e-belge-live-store-validate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/e-belge-merkezi-final-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Canlı store uyumluluk patch
+        run: node tools/e-belge-live-store.mjs
+      - name: Frontend doğrulama
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npm run lint
+      - name: Worker doğrulama
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run test:unit
+          npm run typecheck
+          npm run test:auth:integration
+          npm run build
+      - name: Diff güvenliği
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --name-only | grep -E '(^|/)(DATA|STORAGE)(/|$)|(^|/)\.env($|\.)|\.(db|sqlite|sqlite3)$'; then
+            echo "Yasaklı veri dosyası değişikliği bulundu."
+            exit 1
+          fi
+      - name: Son uyumluluk commit
+        run: |
+          set -euo pipefail
+          git config user.name "KY ERP Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm tools/e-belge-live-store.mjs .github/workflows/e-belge-live-store-validate.yml
+          git add APP/cloud/ky-erp-api/src/e-belge-center-cloud.ts APP/app/ky-erp-frontend/src/services/eBelgeApi.js APP/app/ky-erp-frontend/src/pages/modules/muhasebe/EBelgeLineReview.jsx
+          git diff --cached --check
+          git commit -m "fix(e-belge): align product aliases and lots with live stores"
+          git push origin HEAD:codex/e-belge-merkezi-final-v2
