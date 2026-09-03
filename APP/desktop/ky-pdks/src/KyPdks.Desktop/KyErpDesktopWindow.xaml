@@ -2,227 +2,30 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="KY ERP Desktop" Width="1600" Height="960" MinWidth="1180" MinHeight="720"
-        WindowStartupLocation="CenterScreen" Background="#F4F7FB"
-        Loaded="Window_Loaded" Closing="Window_Closing">
-    <Window.Resources>
-        <SolidColorBrush x:Key="Navy" Color="#0D2238"/>
-        <SolidColorBrush x:Key="Navy2" Color="#15324F"/>
-        <SolidColorBrush x:Key="Blue" Color="#2477C9"/>
-        <SolidColorBrush x:Key="Green" Color="#18936B"/>
-        <SolidColorBrush x:Key="Text" Color="#1B2A3B"/>
-        <SolidColorBrush x:Key="Muted" Color="#708197"/>
-        <SolidColorBrush x:Key="Border" Color="#DCE5EE"/>
-
-        <Style x:Key="NavButton" TargetType="Button">
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#EAF2FA"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="15,9"/>
-            <Setter Property="Margin" Value="6,1"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#244968"/></Trigger>
-                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bd" Property="Background" Value="#2E5D83"/></Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="TopButton" TargetType="Button">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#29435F"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,7"/>
-            <Setter Property="Margin" Value="4,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-        </Style>
-
-        <Style TargetType="Expander">
-            <Setter Property="Foreground" Value="#BFD1E3"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Margin" Value="4,4,4,0"/>
-        </Style>
-    </Window.Resources>
-
+        Title="KY ERP Desktop"
+        Width="1600" Height="960"
+        MinWidth="1024" MinHeight="680"
+        WindowStartupLocation="CenterScreen"
+        Background="White"
+        Loaded="Window_Loaded"
+        Closing="Window_Closing"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="292"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="34"/>
-        </Grid.RowDefinitions>
+        <wv2:WebView2 x:Name="ErpWebView" DefaultBackgroundColor="White"/>
 
-        <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource Navy}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="98"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="118"/>
-                </Grid.RowDefinitions>
-
-                <Border Grid.Row="0" Background="#102A45" Padding="18,16">
-                    <StackPanel>
-                        <DockPanel LastChildFill="True">
-                            <Border Width="42" Height="42" CornerRadius="11" Background="#2A7EC7" Margin="0,0,12,0">
-                                <TextBlock Text="KY" Foreground="White" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="KY ERP Desktop" Foreground="White" FontWeight="Bold" FontSize="18"/>
-                                <TextBlock Text="Windows çalışma merkezi" Foreground="#AFC4D8" FontSize="11" Margin="0,2,0,0"/>
-                            </StackPanel>
-                        </DockPanel>
-                        <StackPanel Orientation="Horizontal" Margin="2,10,0,0">
-                            <Ellipse x:Name="ConnectionDot" Width="8" Height="8" Fill="#E3A54A" Margin="0,0,7,0"/>
-                            <TextBlock x:Name="ConnectionText" Text="Bağlantı kontrol ediliyor" Foreground="#CFE0EE" FontSize="11"/>
-                        </StackPanel>
-                    </StackPanel>
+        <Border x:Name="StartupOverlay" Background="#F7FAFD" Visibility="Visible">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="520">
+                <Border Width="76" Height="76" CornerRadius="18" Background="#2477C9" HorizontalAlignment="Center">
+                    <TextBlock Text="KY" Foreground="White" FontWeight="Bold" FontSize="25"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
-
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="6,7,6,12">
-                        <Button Style="{StaticResource NavButton}" Content="⌂   Ana Çalışma Merkezi" Tag="/" Click="ModuleButton_Click"/>
-
-                        <Expander x:Name="FinanceGroup" Header="MUHASEBE / İŞNET" IsExpanded="True">
-                            <StackPanel>
-                                <Button Style="{StaticResource NavButton}" Content="▦   Muhasebe Özeti" Tag="/muhasebe/yonetim-ozeti" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="●   Cari Hesaplar" Tag="/muhasebe/cari-hesaplar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▤   Faturalar" Tag="/muhasebe/faturalar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="₺   Ödeme / Tahsilat" Tag="/muhasebe/odeme-tahsilat" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▣   Kasa / Banka" Tag="/muhasebe/kasa-banka" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↔   İşNet Merkezi" Tag="/isnet/yonetim-merkezi" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↳   İşNet e-Belgeler" Tag="/isnet/e-belgeler" Click="ModuleButton_Click"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander x:Name="ProductionGroup" Header="DESEN / BOYAHANE / İMALAT" IsExpanded="True">
-                            <StackPanel>
-                                <Button Style="{StaticResource NavButton}" Content="◆   Desen Genel Bakış" Tag="/desen/desen-genel-bakis" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="✦   Desen Yap" Tag="/desen/desen-yap" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▧   Kalıp Takip" Tag="/desen/kalip-takip" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▥   Desen Arşivi" Tag="/desen/desen-arsivi" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="●   Boyahane Merkezi" Tag="/boyahane/yonetim-merkezi" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↳   Boyahane İş Emirleri" Tag="/boyahane/is-emirleri" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↳   Renk Kartları / Reçete" Tag="/boyahane/renk-kartlari" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="⚙   Üretim Planı" Tag="/uretim/uretim-plani" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↳   Üretim İş Emirleri" Tag="/uretim/is-emirleri" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="⇢   Sevk" Tag="/uretim/sevk" Click="ModuleButton_Click"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander x:Name="PeopleGroup" Header="İK / PDKS" IsExpanded="True">
-                            <StackPanel>
-                                <Button Style="{StaticResource NavButton}" Content="♙   İK Özeti" Tag="/ik/ik-ozet" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▦   Personel Kartları" Tag="/ik/personel-kartlari" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↕   Günlük Giriş / Çıkış" Tag="/ik/gunluk-personel-hareketleri" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▣   Aylık Puantaj / İzin" Tag="/ik/puantaj-izin" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="◷   Vardiya / Mesai" Tag="/ik/vardiya-mesai" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▤   PDKS Web Merkezi" Tag="/pdks/ana-ekran" Click="ModuleButton_Click"/>
-                                <Button x:Name="NativePdksButton" Style="{StaticResource NavButton}" Content="⌁   Kart Cihazı / Yerel PDKS" Click="NativePdksButton_Click"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander x:Name="FileHubGroup" Header="DEPOLAMA / FILE HUB" IsExpanded="True">
-                            <StackPanel>
-                                <Button Style="{StaticResource NavButton}" Content="▤   Genel Bakış" Tag="/depolama/depolama-genel#genel" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="⌘   Depolama Kaynakları" Tag="/depolama/depolama-genel#kaynaklar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↔   Modül Bağlantıları" Tag="/depolama/depolama-genel#baglantilar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▧   Dosyalar" Tag="/depolama/depolama-genel#dosyalar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="⟳   Senkronizasyon" Tag="/depolama/depolama-genel#senkronizasyon" Click="ModuleButton_Click"/>
-                                <TextBlock Text="Google Drive • OneDrive • Yerel • NAS • SharePoint" Foreground="#8FAAC1" FontSize="10" Margin="16,5,8,8" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander x:Name="AssistantGroup" Header="AI / ASİSTAN" IsExpanded="True">
-                            <StackPanel>
-                                <Button Style="{StaticResource NavButton}" Content="✦   KY ERP Asistan" Tag="/asistan/asistan-genel" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↳   Süreçler" Tag="/asistan/surecler" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="↳   Veriler / Bağlam" Tag="/asistan/veriler" Click="ModuleButton_Click"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander x:Name="AdminGroup" Header="YÖNETİM" IsExpanded="False">
-                            <StackPanel>
-                                <Button Style="{StaticResource NavButton}" Content="⚙   Yönetim Genel" Tag="/admin/admin-genel" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="♙   Kullanıcılar" Tag="/admin/kullanicilar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▦   Firmalar" Tag="/admin/sirketler" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="◉   Oturumlar" Tag="/admin/oturumlar" Click="ModuleButton_Click"/>
-                                <Button Style="{StaticResource NavButton}" Content="▥   Audit Log" Tag="/admin/audit-log" Click="ModuleButton_Click"/>
-                            </StackPanel>
-                        </Expander>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <Border Grid.Row="2" Background="#0A1C2F" Padding="16,12">
-                    <StackPanel>
-                        <TextBlock x:Name="CurrentUserText" Text="KY ERP oturumu" Foreground="White" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="CurrentRoleText" Text="Yetkiler oturumdan okunuyor" Foreground="#9EB6CB" FontSize="11" Margin="0,3,0,8" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="FrontendModeText" Text="Arayüz: hazırlanıyor" Foreground="#81B5DD" FontSize="10"/>
-                        <TextBlock Text="Canlı veri: api.kyerp.net" Foreground="#718DA6" FontSize="10" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </Border>
-
-        <Grid Grid.Row="0" Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="78"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="22,12">
-                <DockPanel LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Style="{StaticResource TopButton}" Content="←" Width="42" ToolTip="Geri" Click="BackButton_Click"/>
-                        <Button Style="{StaticResource TopButton}" Content="⟳ Yenile" Click="RefreshButton_Click"/>
-                        <Button Style="{StaticResource TopButton}" Content="☁ Canlı Web" Click="OpenLiveButton_Click"/>
-                        <Button Style="{StaticResource TopButton}" Content="▤ Dosya Merkezi" Tag="/depolama/depolama-genel" Click="ModuleButton_Click"/>
-                        <Button Style="{StaticResource TopButton}" Content="✦ Asistan" Tag="/asistan/asistan-genel" Click="ModuleButton_Click"/>
-                    </StackPanel>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock x:Name="PageTitleText" Text="KY ERP Çalışma Merkezi" Foreground="{StaticResource Text}" FontWeight="Bold" FontSize="21"/>
-                        <TextBlock x:Name="PageSubTitleText" Text="Desktop-first arayüz • canlı API • Windows PDKS cihaz köprüsü • File Hub" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0"/>
-                    </StackPanel>
-                </DockPanel>
-            </Border>
-
-            <Grid Grid.Row="1">
-                <wv2:WebView2 x:Name="ErpWebView" DefaultBackgroundColor="White"/>
-                <Border x:Name="StartupOverlay" Background="#F7FAFD" Visibility="Visible">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="520">
-                        <Border Width="74" Height="74" CornerRadius="18" Background="#2477C9" HorizontalAlignment="Center">
-                            <TextBlock Text="KY" Foreground="White" FontWeight="Bold" FontSize="25" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="KY ERP Desktop hazırlanıyor" FontWeight="Bold" FontSize="23" Foreground="#16314D" HorizontalAlignment="Center" Margin="0,20,0,8"/>
-                        <TextBlock x:Name="StartupText" Text="Windows kabuğu, canlı ERP oturumu ve yerel servisler kontrol ediliyor..." Foreground="#6F8296" TextAlignment="Center" TextWrapping="Wrap"/>
-                        <ProgressBar Height="5" IsIndeterminate="True" Margin="0,22,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </Grid>
-
-        <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#0A1C2F" Padding="14,0">
-            <DockPanel LastChildFill="True">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Desktop v1.6" Foreground="#88A3BB" FontSize="10" Margin="0,0,16,0"/>
-                    <TextBlock x:Name="ClockText" Foreground="#BFD1E0" FontSize="10"/>
-                </StackPanel>
-                <TextBlock x:Name="FooterStatusText" Text="KY ERP Desktop başlatılıyor..." Foreground="#BCD0E1" FontSize="10" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-            </DockPanel>
+                <TextBlock Text="KY ERP Desktop" FontSize="26" FontWeight="Bold" Foreground="#172D49"
+                           HorizontalAlignment="Center" Margin="0,18,0,7"/>
+                <TextBlock x:Name="StartupText" Text="KY ERP hazırlanıyor..." FontSize="13" Foreground="#708197"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock Text="Aynı KY ERP arayüzü • aynı canlı veri • Windows entegrasyonu"
+                           FontSize="11" Foreground="#91A0B1" HorizontalAlignment="Center" Margin="0,9,0,0"/>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>
