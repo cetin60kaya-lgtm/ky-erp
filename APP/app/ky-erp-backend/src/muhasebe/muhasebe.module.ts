@@ -61,6 +61,9 @@ import { IsnetInvoicePreparationController } from "./isnet-invoice-preparation.c
 import { IsnetInvoicePreparationService } from "./isnet-invoice-preparation.service";
 import { CheckCenterController } from "./check-center/check-center.controller";
 import { CheckCenterService } from "./check-center/check-center.service";
+import { EBelgeCenterController } from "./e-belge-center.controller";
+import { EBelgeCenterService } from "./e-belge-center.service";
+import { EBelgeAiExtractorService } from "./e-belge-ai-extractor.service";
 
 @Module({
   imports: [AdminModule, ModelModule],
@@ -79,6 +82,7 @@ import { CheckCenterService } from "./check-center/check-center.service";
     AccountingPublicApiController,
     CheckCenterController,
     DispatchReconciliationController,
+    EBelgeCenterController,
     IsnetOperationsController,
     IsnetConnectionController,
     IsnetSourceIntakeController,
@@ -94,6 +98,8 @@ import { CheckCenterService } from "./check-center/check-center.service";
   providers: [
     AccountingApiService,
     CheckCenterService,
+    EBelgeCenterService,
+    EBelgeAiExtractorService,
     MuhasebeBelgeService,
     MuhasebeService,
     MuhasebeDocumentWorkflowService,
