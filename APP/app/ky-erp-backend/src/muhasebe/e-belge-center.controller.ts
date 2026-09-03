@@ -9,10 +9,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
+import { ModuleKey } from "@prisma/client";
 import { memoryStorage } from "multer";
+import { RequireModule } from "../auth/roles.decorator";
 import { EBelgeCenterService } from "./e-belge-center.service";
 
 @Controller(["e-belge", "api/e-belge"])
+@RequireModule(ModuleKey.ISNET)
 export class EBelgeCenterController {
   constructor(private readonly service: EBelgeCenterService) {}
 
@@ -28,13 +31,12 @@ export class EBelgeCenterController {
           name.endsWith(".zip") ||
           name.endsWith(".jpg") ||
           name.endsWith(".jpeg") ||
-          name.endsWith(".png") ||
-          name.endsWith(".webp")
+          name.endsWith(".png")
         ) {
           cb(null, true);
           return;
         }
-        cb(new Error("e-Belge Merkezi yalnız XML, PDF, ZIP, JPG, PNG ve WEBP kabul eder."), false);
+        cb(new Error("e-Belge Merkezi yalnız XML, PDF, ZIP, JPG ve PNG kabul eder."), false);
       },
       limits: {
         files: 200,
