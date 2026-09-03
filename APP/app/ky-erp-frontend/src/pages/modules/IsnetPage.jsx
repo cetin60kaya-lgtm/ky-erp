@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import EBelgeCenterPage from "./muhasebe/EBelgeCenterPage";
+import LegacyIsnetPage from "./LegacyIsnetPage";
 import { getEBelgeDetail, getEBelgePool } from "../../services/eBelgeApi";
 import "./eBelgeRoute.css";
 
@@ -59,8 +60,8 @@ function OutgoingList({activeTab,activeMainCompany}){
  return <section className="eb-page"><div className="eb-route-title"><div><span className="eb-kicker">e-Belge Merkezi</span><h2>{title}</h2><p>Sağlayıcıdan veya manuel yüklemeden gelen giden belgeler aynı kayıt yapısında izlenir.</p></div><button className="eb-route-secondary" type="button" onClick={load} disabled={busy}>{busy?"Yükleniyor...":"Yenile"}</button></div>{error?<div className="eb-error">{error}</div>:null}<div className="eb-route-filters"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Belge no, firma veya VKN ara"/><input type="date" value={from} onChange={e=>setFrom(e.target.value)}/><input type="date" value={to} onChange={e=>setTo(e.target.value)}/><button className="eb-route-primary" type="button" onClick={load}>Filtrele</button></div><div className="eb-route-table-wrap"><table className="eb-route-table"><thead><tr><th>Belge No</th><th>Firma</th><th>Tarih</th><th>Toplam</th><th>Durum</th><th>Sorun</th></tr></thead><tbody>{rows.map(row=><tr key={row.id} onClick={()=>setSelectedId(row.id)}><td><strong>{row.document_no||"-"}</strong></td><td>{row.party_name||"-"}</td><td>{dateText(row.issue_date)}</td><td>{money(row.payable_total,row.currency)}</td><td><span className={`eb-route-status ${row.status==="POSTED"?"ok":Number(row.issue_count||0)?"warn":""}`}>{statusLabel(row.status)}</span></td><td>{row.issue_count||0}</td></tr>)}</tbody></table>{!rows.length&&!busy?<div className="eb-route-empty">Bu filtrede belge bulunamadı.</div>:null}</div><OutgoingDetail id={selectedId} onClose={()=>setSelectedId("")}/></section>;
 }
 
-export default function IsnetPage({activeTab,activeMainCompany,openModule,moduleActionContext}){
+export default function IsnetPage({activeTab,activeMainCompany,openModule,moduleActionContext,...rest}){
  if(["e-belge-giden-faturalar","e-belge-giden-irsaliyeler"].includes(activeTab))return <OutgoingList activeTab={activeTab} activeMainCompany={activeMainCompany}/>;
  if(String(activeTab||"").startsWith("e-belge-"))return <RoutedCenter activeTab={activeTab} activeMainCompany={activeMainCompany} openModule={openModule} moduleActionContext={moduleActionContext}/>;
- return <RoutedCenter activeTab="e-belge-genel" activeMainCompany={activeMainCompany} openModule={openModule} moduleActionContext={moduleActionContext}/>;
+ return <LegacyIsnetPage activeTab={activeTab} activeMainCompany={activeMainCompany} openModule={openModule} moduleActionContext={moduleActionContext} {...rest}/>;
 }
