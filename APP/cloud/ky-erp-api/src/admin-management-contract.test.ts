@@ -101,7 +101,8 @@ test("storage management is provider-neutral File Hub and R2 remains preview/cac
   assert.match(ui, /Depolama Merkezi/);
   assert.match(ui, /Google Drive/);
   assert.match(ui, /OneDrive/);
-  assert.match(ui, /Modüller sağlayıcıya sabit bağlanmaz/);
+  assert.match(ui, /Bir firma aynı anda birden fazla sağlayıcı kullanabilir/);
+  assert.match(ui, /tek dosya sistemi gibi çalışır/);
   assert.doesNotMatch(ui, /test-watch-path/);
   assert.doesNotMatch(ui, /import-watch-folder/);
 });
