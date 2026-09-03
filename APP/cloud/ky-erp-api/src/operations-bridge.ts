@@ -62,12 +62,7 @@ export function operationsPermission(
   );
   if (!row) return false;
   if (mode === "read") return Boolean(row.canView ?? row.can_view);
-  return Boolean(
-    row.canCreate ??
-      row.can_create ??
-      row.canUpdate ??
-      row.can_update,
-  ) || Boolean(row.canCreate || row.can_create || row.canUpdate || row.can_update);
+  return Boolean(row.canCreate ?? row.can_create);
 }
 
 export function validateOperationsPeriod(yearValue: unknown, monthValue: unknown) {
