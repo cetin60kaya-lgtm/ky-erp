@@ -16,6 +16,11 @@ import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
+import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
+import { registerFileHubPreviewRoutes } from "./file-hub-preview";
+import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
+import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
+import { enforceAccountingTenant } from "./accounting-tenant-guard";
 import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerBoyahaneColorAssistantRoutes } from "./boyahane-color-assistant";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
@@ -160,6 +165,10 @@ async function targetRole(c: any, userId: string): Promise<AnyRow | null> {
 
 registerAccountingCompanyDirectoryRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
+registerAccountingDocumentArchiveRoutes(app);
+registerFileHubPreviewRoutes(app);
+registerEBelgeCenterRoutes(app);
+registerEBelgeLineToolRoutes(app);
 registerAiCloudRoutes(app);
 registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
@@ -256,6 +265,9 @@ shell.use("/api/*", async (c, next) => {
 // İşNet tek bir sağlayıcı modülü olabilir ancak tenant verisi global değildir.
 // Her İşNet isteği açık ana firma bağlamı taşır; non-owner kullanıcı başka tenant'a geçemez.
 shell.use("/api/isnet/*", enforceIsnetTenant);
+
+// e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
+shell.use("/api/e-belge/*", enforceAccountingTenant);
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
 // izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
