@@ -1,5 +1,5 @@
 -- KY ERP / KY File Hub
--- Tenant-scoped File Agent credentials. Additive only; no reset/drop.
+-- Tenant-scoped File Agent credentials. Additive schema extension only.
 
 CREATE TABLE IF NOT EXISTS file_hub_agent_credentials (
   id TEXT PRIMARY KEY,
