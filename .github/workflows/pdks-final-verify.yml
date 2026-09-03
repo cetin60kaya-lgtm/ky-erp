@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/model-uretim-kontrol-merkezi-final
+      - codex/ik-aylik-hkn-final-2026-09-03
     paths: &pdks_paths
       - "APP/cloud/ky-erp-api/src/ik-pdks-*.ts"
       - "APP/cloud/ky-erp-api/src/ik-personnel-media.ts"
@@ -15,10 +16,14 @@ on:
       - "APP/cloud/ky-erp-api/migrations/0025_pdks_single_data_masters.sql"
       - "APP/cloud/ky-erp-api/migrations/0026_pdks_operation_core.sql"
       - "APP/cloud/ky-erp-api/migrations/0037_pdks_device_sync.sql"
+      - "APP/cloud/ky-erp-api/migrations/0042_pdks_modern_rules_leave_days.sql"
+      - "APP/cloud/ky-erp-api/migrations/0043_pdks_group_rules_and_live_ops.sql"
       - "APP/app/ky-erp-frontend/src/app/pdksModuleRegistryPatch.js"
       - "APP/app/ky-erp-frontend/src/pages/modules/PdksPage*.jsx"
       - "APP/app/ky-erp-frontend/src/pages/modules/pdks*.css"
+      - "APP/app/ky-erp-frontend/src/pages/pdks/**"
       - "APP/app/ky-erp-frontend/src/services/pdksApi.js"
+      - "APP/app/ky-erp-frontend/src/services/pdksDeviceApi.js"
       - "APP/app/ky-erp-frontend/src/AppV3.jsx"
       - ".github/workflows/pdks-final-verify.yml"
   pull_request:
