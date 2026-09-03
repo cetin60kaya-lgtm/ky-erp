@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { registerAccountingQuickControlRoutes } from "./accounting-quick-control";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -244,6 +245,8 @@ async function insertInternalLedger(c: Context<AppEnv>, input: {
 }
 
 export function registerAccountingFibeRoutes(app: Hono<AppEnv>) {
+  registerAccountingQuickControlRoutes(app);
+
   app.get("/api/muhasebe/fibe/:companyId", async (c) => {
     const slug = slugOf(c);
     const companyId = text(c.req.param("companyId"));
