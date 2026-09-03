@@ -12,6 +12,7 @@ namespace KyPdks.Desktop;
 public partial class KyErpDesktopWindow : Window
 {
     private static readonly Uri AppUri = new("https://app.kyerp.net/");
+    private static readonly Uri BundledAppUri = new("https://app.kyerp.net/index.html");
     private const string FileHubTaskName = "KY ERP File Hub Agent";
 
     private readonly PdksPaths _pdksPaths = new();
@@ -79,7 +80,7 @@ public partial class KyErpDesktopWindow : Window
             StartupText.Text = "Canlı KY ERP açılıyor...";
         }
 
-        ErpWebView.Source = AppUri;
+        ErpWebView.Source = _bundledFrontend ? BundledAppUri : AppUri;
     }
 
     private async void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -104,10 +105,10 @@ public partial class KyErpDesktopWindow : Window
         const string script = """
         (() => {
           document.documentElement.dataset.kyerpDesktopHost = '1';
-          document.documentElement.dataset.kyerpDesktopVersion = '1.7.0';
+          document.documentElement.dataset.kyerpDesktopVersion = '1.7.1';
           const post = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
           window.KYERP_DESKTOP = Object.freeze({
-            version: '1.7.0',
+            version: '1.7.1',
             isDesktop: true,
             openPdksDevice: () => post({ type: 'pdks.open-device' }),
             configureFileAgent: (secret, mainCompanySlug) => post({
@@ -272,7 +273,10 @@ public partial class KyErpDesktopWindow : Window
     {
         if (e.Key == Key.F5 || (e.Key == Key.R && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)))
         {
-            ErpWebView.CoreWebView2?.Reload();
+            if (_bundledFrontend)
+                ErpWebView.Source = BundledAppUri;
+            else
+                ErpWebView.CoreWebView2?.Reload();
             e.Handled = true;
             return;
         }
