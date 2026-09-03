@@ -3,7 +3,7 @@ param([switch]$SkipTests)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.7.1'
+$Version = '1.7.2'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 $Dist = Join-Path $Root 'dist'
@@ -39,6 +39,11 @@ if (-not (Test-Path $FileAgentSource)) { throw "KY File Agent kaynağı bulunama
 $VersionFile = Join-Path $Root 'VERSION'
 $DeclaredVersion = (Get-Content $VersionFile -Raw).Trim()
 if ($DeclaredVersion -ne $Version) { throw "VERSION uyuşmuyor. Beklenen=$Version Bulunan=$DeclaredVersion" }
+
+$DesktopWindowSource = Join-Path $Root 'src\KyPdks.Desktop\KyErpDesktopWindow.xaml.cs'
+$DesktopWindowText = Get-Content $DesktopWindowSource -Raw
+if ($DesktopWindowText -notmatch 'http://localhost/index\.html') { throw 'Desktop bundled origin localhost/index.html değil.' }
+if ($DesktopWindowText -notmatch "kyerpDesktopVersion = '1\.7\.2'") { throw 'Desktop bridge sürümü 1.7.2 değil.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 foreach ($dir in @($DesktopOut,$AgentOut,$FileAgentOut,$InstallerOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
@@ -111,7 +116,8 @@ $Hash = (Get-FileHash $Setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 $BuildInfo = [ordered]@{
     product = 'KY ERP Desktop'
     productScope = 'FULL_ERP_DESKTOP'
-    frontendMode = 'CANONICAL_WEB_UI_BUNDLED_LIVE_API'
+    frontendMode = 'CANONICAL_WEB_UI_BUNDLED_LOCALHOST_LIVE_API'
+    frontendOrigin = 'http://localhost'
     liveApi = 'https://api.kyerp.net'
     version = $Version
     setup = $Setup.Name
