@@ -6,6 +6,7 @@ import KesilenFaturalarTab from "./muhasebe/KesilenFaturalarTab";
 import AccountingLedgerPanel from "./muhasebe/AccountingLedgerPanel";
 import AccountingReportsListWorkspace from "./muhasebe/AccountingReportsListWorkspace";
 import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
+import EBelgeCenterPage from "./muhasebe/EBelgeCenterPage";
 import MailTrackingWorkspace from "./muhasebe/MailTrackingWorkspace";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
 import PaymentPlannerPanel from "./muhasebe/PaymentPlannerPanel";
@@ -19,6 +20,7 @@ import "./muhasebe/supplierInventoryWorkspace.css";
 export const MUHASEBE_TABS = [
   { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve çek görünümünü tek ekranda izleyin." },
   { key: "firma-kartlari", title: "Firmalar ve Cari", description: "Hızlı defter, firma bakiyeleri, cari hareketler ve günlük işlemleri tek listede yönetin." },
+  { key: "e-belge-merkezi", title: "e-Belge Merkezi", description: "Fatura, irsaliye, manuel belge yükleme, eşleştirme, kontrol, File Hub arşivi ve e-belge entegrasyonlarını tek merkezden yönetin." },
   { key: "tedarikci-faturalar", title: "Tedarikçi İrsaliye / Faturaları", description: "İşNet veya manuel XML/PDF/tarama kaynağından gelen irsaliye ve faturaları ortak belge havuzunda inceleyin; gider, KDV, stok-lot ve cari kurallarına göre işleyin." },
   { key: "kesilen-faturalar", title: "Bizim Kesilen Faturalarımız", description: "Bizim giden irsaliyelerimize bağlı kestiğimiz faturaların İşNet, model, adet ve belge durumlarını izleyin." },
   { key: "irsaliye-fatura-kontrol", title: "Müşteri İrsaliye / Bizim Belge Kontrolü", description: "Müşteriden gelen irsaliye → model/üretim → bizim giden irsaliyemiz → bizim kesilen faturamız zincirini takip edin." },
@@ -57,6 +59,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
   else if (current.key === "firma-kartlari") content = <><AccountingLedgerPanel activeMainCompany={activeMainCompany} /><CompaniesCurrentWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} /></>;
+  else if (current.key === "e-belge-merkezi") content = <EBelgeCenterPage activeMainCompany={activeMainCompany} openModule={openModule} />;
   else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "kesilen-faturalar") content = <KesilenFaturalarTab activeMainCompany={activeMainCompany} />;
   else if (current.key === "irsaliye-fatura-kontrol") content = <IrsaliyeFaturaKontrolTab activeMainCompany={activeMainCompany} />;
