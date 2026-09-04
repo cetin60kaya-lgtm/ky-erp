@@ -1,13 +1,8 @@
 name: KY ERP Canli Yayin - Hedefli D1 + Worker + Pages
 
 on:
-  # One-shot salary hotfix production gate. This push trigger is reverted after the run.
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - ".github/workflows/production-release.yml"
-      - "RELEASES/kyerp-production-release.json"
+  # GitHub Actions is disabled for automatic production/PR execution.
+  # Cloudflare Git Integration is the automatic deploy path; keep this workflow manual-only as fallback.
   workflow_dispatch:
 
 permissions:
