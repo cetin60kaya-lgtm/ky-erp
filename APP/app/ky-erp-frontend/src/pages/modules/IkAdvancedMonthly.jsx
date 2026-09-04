@@ -1315,6 +1315,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       {bulk && <div className="wide warnline warn">Toplu avans kaydında seçili personellerin her biri için aynı tarih ve kişi başı tutar kaydedilir.</div>}
     </div>
   );
+  }
 
 
 
