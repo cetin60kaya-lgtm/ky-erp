@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerFileHubRoutes } from "./file-hub";
+import { registerFileHubCloudOauthRoutes } from "./file-hub-cloud-oauth";
 import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
 import { registerPublicFileHubScanRoutes } from "./file-hub-agent-scan";
@@ -49,7 +50,7 @@ export function registerAdminStorageRoutes(app:any){
     if(!requested&&own!=="mecit-hakan")return c.json(errorBody("FILE_HUB_TENANT_REQUIRED","File Hub isteğinde aktif firma bağlamı zorunludur."),403);
     if(requested&&requested!==own)return c.json(errorBody("FILE_HUB_TENANT_FORBIDDEN","Başka firmanın File Hub alanına erişemezsiniz."),403);
 
-    const ownerOnly = path==="/api/file-hub/overview" || path==="/api/file-hub/connections" || path==="/api/file-hub/bindings" || path==="/api/file-hub/files" || path==="/api/file-hub/search" || /\/files\/[^/]+\/relations$/.test(path);
+    const ownerOnly = path.startsWith("/api/file-hub/cloud/") || path==="/api/file-hub/overview" || path==="/api/file-hub/connections" || path==="/api/file-hub/bindings" || path==="/api/file-hub/files" || path==="/api/file-hub/search" || /\/files\/[^/]+\/relations$/.test(path);
     if(ownerOnly)return c.json(errorBody("OWNER_ONLY","Dosya Merkezi yönetim görünümü yalnız uygulama sahibine açıktır."),403);
     if(path==="/api/file-hub/entity-files"){
       const moduleKey=entityModule(c.req.query("entityType"));
@@ -62,6 +63,7 @@ export function registerAdminStorageRoutes(app:any){
     return next();
   });
 
+  registerFileHubCloudOauthRoutes(app);
   registerFileHubRoutes(app);
   registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
