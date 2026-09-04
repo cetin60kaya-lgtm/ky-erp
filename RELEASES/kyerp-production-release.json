@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-04T16:24:00+03:00",
-  "attempt": 94,
+  "requestedAt": "2026-09-04T16:40:00+03:00",
+  "attempt": 95,
   "scope": [
     "storage-file-hub-direct-cloud-services",
     "google-drive-oauth",
@@ -32,9 +32,13 @@
     "cloudflare-worker-production",
     "cloudflare-pages-production",
     "live-api-health-auth-contract",
-    "live-pages-domain-check"
+    "live-pages-domain-check",
+    "file-hub-oauth-key-auto-provision",
+    "optional-google-provider-disabled-until-real-app-registration",
+    "optional-microsoft-provider-disabled-until-real-app-registration",
+    "oauth-partial-pair-fail-closed"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "f3cfa1994240ccdb2d59ec940e9d286b62b0a1c1",
-  "note": "04.09.2026 attempt 94. Depolama/File Hub doğrudan Google Drive, OneDrive ve SharePoint OAuth bağlantısı; gerçek klasör ağacı ve bölüm-klasör ataması; yerel/NAS Agent uyumluluğu; e-Belge Merkezi üst modül alt menü finali; İşNet provider/legacy uyumluluğu. OAuth tokenları AES-GCM ile şifreli tutulur. 0044 migration additive ve yalnız tam D1 yedeğinden sonra hedefli uygulanır. Responsive Pages-only workflow, Worker/D1 içeren tam paketlerde deploy etmez. Resmî e-belge gönderimi otomatik açılmaz. D1 reset/drop yok."
+  "sourceCommit": "f8c793e602a1d4846091d4e51ce170c4a63eeb34",
+  "note": "04.09.2026 attempt 95. Attempt 94 gerçek Google/Microsoft OAuth app credentialları production'da tanımlı olmadığı için D1'e dokunmadan güvenli durdu. Bu revizyonda FILE_HUB_OAUTH_KEY yoksa Worker secret olarak tek seferlik güçlü anahtar oluşturulur. Google/Microsoft credential çiftleri tamamen yoksa ilgili provider CONFIGURED=false kalır ve ana KY ERP yayını devam eder; yarım credential çifti fail-closed durur. Depolama/e-Belge final paketi, 0044 additive migration, D1 tam yedek, Worker ve Pages canlı yayını hedeflenir. Resmî e-belge gönderimi otomatik değildir; D1 reset/drop yok."
 }
