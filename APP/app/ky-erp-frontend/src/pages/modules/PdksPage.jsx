@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
@@ -9,64 +8,13 @@ import PdksRulesCenter from "../pdks/PdksRulesCenter";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
-const NAV_GROUPS = [
-  {
-    key: "gunluk",
-    label: "Günlük",
-    hint: "Kart, giriş/çıkış ve puantaj",
-    items: [
-      ["ana-ekran", "Ana Ekran"],
-      ["bilgi-aktar", "Bilgi Aktar"],
-      ["giris-cikislar", "Giriş / Çıkış"],
-      ["puantaj", "Puantaj"],
-      ["puantaj-sonuclari", "Puantaj Sonuçları"],
-    ],
-  },
-  {
-    key: "personel",
-    label: "Personel & İK",
-    hint: "Personel, izin ve bordro bağlantısı",
-    items: [
-      ["personel-bilgileri", "Personel Bilgileri"],
-      ["izinler", "İzinler"],
-      ["calisma-tarihi", "Çalışma Tarihi"],
-      ["avanslar", "Avans"],
-      ["bordro", "Bordro"],
-    ],
-  },
-  {
-    key: "tanimlar",
-    label: "Tanımlar",
-    hint: "Vardiya ve çalışma kuralları",
-    items: [
-      ["gruplar-vardiyalar", "Gruplar / Vardiyalar"],
-      ["puantaj-kurallari", "Puantaj Kuralları"],
-      ["donemler", "Dönemler"],
-      ["servisler", "Servisler"],
-      ["tatiller", "Tatiller"],
-    ],
-  },
-  {
-    key: "terminal",
-    label: "Terminal & Sistem",
-    hint: "Cihaz, saat ve senkron yönetimi",
-    items: [
-      ["saat-terminal", "Saat / Terminal"],
-      ["kullanicilar", "Kullanıcı"],
-      ["cihaz-baglantilari", "Cihaz Bağlantıları"],
-      ["senkron", "Senkron"],
-    ],
-  },
-  {
-    key: "rapor",
-    label: "Rapor & Denetim",
-    hint: "Raporlar ve yıllık denetim paketi",
-    items: [
-      ["raporlar", "Raporlar"],
-      ["denetim-yillik-temp", "Yıllık TEMP / Denetim"],
-    ],
-  },
-];
+const PERSONNEL_DESK_TABS = new Set([
+  "personel-bilgileri",
+  "giris-cikislar",
+  "puantaj",
+  "izinler",
+  "calisma-tarihi",
+]);
 
 const AUDIT_ALLOWED_TABS = new Set([
   "ana-ekran",
@@ -78,17 +26,25 @@ const AUDIT_ALLOWED_TABS = new Set([
   "denetim-yillik-temp",
 ]);
 
-const PERSONNEL_DESK_TABS = new Set([
-  "personel-bilgileri",
-  "giris-cikislar",
-  "puantaj",
-  "izinler",
-  "calisma-tarihi",
-]);
-
-function groupForTab(tabKey, groups) {
-  return groups.find((group) => group.items.some(([key]) => key === tabKey))?.key || "gunluk";
-}
+const TITLES = {
+  "ana-ekran": ["Ana Ekran", "Canlı kart hareketleri, içeride olanlar ve günlük kontrol."],
+  "personel-bilgileri": ["Personel", "İK personel kaynağına bağlı PDKS kart, vardiya ve operasyon görünümü."],
+  "giris-cikislar": ["Giriş / Çıkış", "Ham kart hareketleri ve günlük geçiş kontrolü."],
+  "puantaj": ["Puantaj", "Günlük durum, eksik basım, geç/erken ve fazla mesai kontrolü."],
+  "izinler": ["İzinler", "İK izin kaydının PDKS puantajına yansıyan operasyon görünümü."],
+  "puantaj-kurallari": ["Vardiya & Kurallar", "Çalışma günleri, vardiya, mola ve puantaj kuralları."],
+  "cihaz-baglantilari": ["Cihaz / Senkron", "Terminal, Agent ve senkronizasyon sağlığı."],
+  "raporlar": ["Raporlar", "Puantaj analizi ve kontrol gerektiren kayıtlar."],
+  "puantaj-sonuclari": ["Puantaj Sonuçları", "Aylık puantaj sonuçları ve istisnalar."],
+  "bilgi-aktar": ["Kart / Terminal Aktarımı", "Dosya ve terminal veri aktarımı."],
+  "gruplar-vardiyalar": ["Gruplar / Vardiyalar", "PDKS çalışma grubu tanımları."],
+  "donemler": ["Dönemler", "PDKS dönem kontrolü ve kapanışı."],
+  "servisler": ["Servisler", "Personel servis atamaları."],
+  "tatiller": ["Resmî Tatiller", "PDKS çalışma takviminde kullanılan tatil kayıtları."],
+  "saat-terminal": ["Saat / Terminal", "Terminal saat ve bağlantı görünümü."],
+  "senkron": ["Senkronizasyon", "Agent ve cihaz senkron durumu."],
+  "denetim-yillik-temp": ["Yıllık TEMP / Denetim", "Kart ve puantaj denetim paketi."],
+};
 
 function QuickAssistant({ disabled, mainCompanyId }) {
   const [command, setCommand] = useState("");
@@ -115,7 +71,7 @@ function QuickAssistant({ disabled, mainCompanyId }) {
   return (
     <section className="pdks-quick-assistant">
       <div className="pdks-quick-assistant-title">
-        <div><strong>PDKS Hızlı Asistan</strong><span>Personel adı + işlem yaz; kayıt aynı İK/PDKS D1 verisine gider.</span></div>
+        <div><strong>PDKS Hızlı Asistan</strong><span>Kart ve puantaj işlemleri için kısa komut kullanın.</span></div>
         {disabled ? <em>Denetim: salt okunur</em> : null}
       </div>
       <div className="pdks-assistant-row">
@@ -139,89 +95,65 @@ function QuickAssistant({ disabled, mainCompanyId }) {
   );
 }
 
+function MovedToIk({ kind, openModule }) {
+  const payroll = kind === "bordro";
+  return (
+    <section className="pdks-moved-card">
+      <small>PDKS / İK AYRIMI</small>
+      <h2>{payroll ? "Bordro" : "Avans / Kesinti"} artık İK bölümünde</h2>
+      <p>PDKS yalnız kart, vardiya, giriş/çıkış ve puantaj üretir. Finansal kayıtlar İK ana kaynağında yönetilir.</p>
+      <button type="button" onClick={() => openModule?.("ik", { tabKey: payroll ? "bordro-odeme" : "mesai-avans" })}>
+        İK ekranını aç
+      </button>
+    </section>
+  );
+}
+
 export default function PdksPage(props) {
   const { activeTab = "ana-ekran", isAuditAccount = false, openModule, activeMainCompany } = props;
-  const groups = useMemo(() => NAV_GROUPS
-    .map((group) => ({
-      ...group,
-      items: isAuditAccount ? group.items.filter(([key]) => AUDIT_ALLOWED_TABS.has(key)) : group.items,
-    }))
-    .filter((group) => group.items.length), [isAuditAccount]);
-  const currentGroup = groupForTab(activeTab, groups);
-  const [openGroup, setOpenGroup] = useState("");
+  const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
+  const title = TITLES[activeTab] || ["PDKS", "Kart, vardiya ve puantaj işlemleri."];
+  const blockedForAudit = isAuditAccount && !AUDIT_ALLOWED_TABS.has(activeTab);
+  const deviceCenterTab = !isAuditAccount && ["cihaz-baglantilari", "senkron"].includes(activeTab);
+  const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
+  const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
+  const reportCenterTab = ["puantaj-sonuclari", "raporlar"].includes(activeTab);
+  const movedFinance = ["avanslar", "bordro"].includes(activeTab);
 
   useEffect(() => {
     document.body.classList.add("pdks-compact-active");
     return () => document.body.classList.remove("pdks-compact-active");
   }, []);
 
-  useEffect(() => {
-    setOpenGroup("");
-  }, [activeTab]);
-
-  useEffect(() => {
-    const close = (event) => {
-      if (!event.target?.closest?.(".pdks-command-nav")) setOpenGroup("");
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, []);
-
-  const go = (tabKey) => {
-    setOpenGroup("");
-    openModule?.("pdks", { tabKey });
-  };
-  const mainCompanyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
-  const deviceCenterTab = !isAuditAccount && ["cihaz-baglantilari", "senkron"].includes(activeTab);
-  const personnelDeskTab = !isAuditAccount && PERSONNEL_DESK_TABS.has(activeTab);
-  const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
-  const reportCenterTab = !isAuditAccount && ["puantaj-sonuclari", "raporlar"].includes(activeTab);
+  const legacyTab = useMemo(() => ![
+    "ana-ekran",
+    ...PERSONNEL_DESK_TABS,
+    "puantaj-kurallari",
+    "cihaz-baglantilari",
+    "senkron",
+    "puantaj-sonuclari",
+    "raporlar",
+    "avanslar",
+    "bordro",
+  ].includes(activeTab), [activeTab]);
 
   return (
     <div className="pdks-module-shell">
-      <nav className="pdks-command-nav" aria-label="PDKS işlemleri">
-        <div className="pdks-command-brand">
-          <strong>PDKS</strong>
-          <span>İşlem Merkezi</span>
+      <header className="pdks-section-head">
+        <div>
+          <small>PDKS</small>
+          <h1>{title[0]}</h1>
+          <p>{title[1]}</p>
         </div>
-        <div className="pdks-command-groups">
-          {groups.map((group) => {
-            const expanded = openGroup === group.key;
-            const current = currentGroup === group.key;
-            return (
-              <div className={`pdks-command-group ${current ? "current" : ""}`} key={group.key}>
-                <button
-                  type="button"
-                  className={`pdks-command-toggle ${expanded ? "open" : ""}`}
-                  onClick={() => setOpenGroup((value) => (value === group.key ? "" : group.key))}
-                  aria-expanded={expanded}
-                >
-                  <span><strong>{group.label}</strong><small>{group.hint}</small></span>
-                  <i>⌄</i>
-                </button>
-                {expanded ? (
-                  <div className="pdks-command-menu">
-                    {group.items.map(([key, label]) => (
-                      <button
-                        type="button"
-                        key={key}
-                        className={activeTab === key ? "active" : ""}
-                        onClick={() => go(key)}
-                      >
-                        <span>{label}</span>
-                        {activeTab === key ? <b>Aktif</b> : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </nav>
+        <span>Finans / maaş / bordro işlemleri İK bölümündedir.</span>
+      </header>
 
       <main className="pdks-module-content">
-        {activeTab === "ana-ekran" && !isAuditAccount ? (
+        {blockedForAudit ? (
+          <section className="pdks-moved-card"><h2>Bu ekran denetim hesabına kapalıdır.</h2><p>Denetim hesabı yalnız izin verilen PDKS rapor ve puantaj ekranlarını görüntüler.</p></section>
+        ) : movedFinance ? (
+          <MovedToIk kind={activeTab} openModule={openModule} />
+        ) : activeTab === "ana-ekran" && !isAuditAccount ? (
           <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
         ) : deviceCenterTab ? (
           <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
@@ -231,12 +163,12 @@ export default function PdksPage(props) {
           <PdksRulesCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : reportCenterTab ? (
           <PdksReportCenter activeMainCompany={activeMainCompany} />
-        ) : (
+        ) : legacyTab ? (
           <>
             <QuickAssistant disabled={isAuditAccount} mainCompanyId={mainCompanyId} />
             <PdksPageV2 {...props} />
           </>
-        )}
+        ) : null}
       </main>
     </div>
   );
