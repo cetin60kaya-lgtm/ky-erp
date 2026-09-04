@@ -1207,25 +1207,27 @@ function Table({
   rows,
   empty = "Henüz kayıt yok. Yukarıdaki formdan veya hızlı kayıt butonundan yeni kayıt ekleyebilirsiniz.",
 }) {
+  const safeColumns = Array.isArray(columns) ? columns.filter(Boolean) : [];
+  const safeRows = Array.isArray(rows) ? rows.filter(Boolean) : [];
   return (
     <div className="kyik-table-wrap">
       <table className="kyik-table">
         <thead>
           <tr>
-            {columns.map((column) => (
+            {safeColumns.map((column) => (
               <th key={column.key}>{column.label}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.length ? (
-            rows.map((row) => (
+          {safeRows.length ? (
+            safeRows.map((row) => (
               <tr
                 key={row?.id || row?.key}
                 className={row?.onClick ? "clickable" : ""}
                 onClick={row?.onClick || undefined}
               >
-                {columns.map((column) => (
+                {safeColumns.map((column) => (
                   <td key={column.key}>
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
@@ -1234,7 +1236,7 @@ function Table({
             ))
           ) : (
             <tr>
-              <td className="kyik-empty-cell" colSpan={columns.length}>
+              <td className="kyik-empty-cell" colSpan={Math.max(1, safeColumns.length)}>
                 {empty}
               </td>
             </tr>
@@ -4777,7 +4779,7 @@ function DailyCards({
             <Input label="Başlangıç">
               <TextInput
                 type="date"
-                value={range.start}
+                value={safeRange.start}
                 onChange={(event) =>
                   setRange((current) => ({ ...current, start: event?.target.value }))
                 }
@@ -4786,7 +4788,7 @@ function DailyCards({
             <Input label="Bitiş">
               <TextInput
                 type="date"
-                value={range.end}
+                value={safeRange.end}
                 onChange={(event) =>
                   setRange((current) => ({ ...current, end: event?.target.value }))
                 }
@@ -7689,30 +7691,43 @@ function DailyEntry({
 function getDailySummary(
   daily,
   entries,
-  start = "2026-05-13",
-  end = "2026-05-19",
+  start = DEFAULT_DAILY_RANGE.start,
+  end = DEFAULT_DAILY_RANGE.end,
   skills = [],
 ) {
-  const days = daysBetween(start, end);
-  return daily.map((person) => {
+  const safeDaily = Array.isArray(daily) ? daily.filter(Boolean) : [];
+  const safeEntries = entries && typeof entries === "object" && !Array.isArray(entries) ? entries : {};
+  const safeSkills = Array.isArray(skills) ? skills.filter(Boolean) : [];
+  const safeStart = ISO_DATE_ONLY_PATTERN.test(String(start || "")) ? String(start) : DEFAULT_DAILY_RANGE.start;
+  const safeEnd = ISO_DATE_ONLY_PATTERN.test(String(end || "")) ? String(end) : DEFAULT_DAILY_RANGE.end;
+  const days = daysBetween(safeStart, safeEnd);
+
+  return safeDaily.map((person, index) => {
+    const personId = String(person?.id || "").trim();
     const totals = days.reduce(
       (acc, date) => {
-        const entry = entries[`${person.id}-${date}`] || {
+        const entry = safeEntries[`${personId}-${date}`] || {
           day: false,
           night: false,
         };
         return {
-          dayCount: acc.dayCount + (entry.day ? 1 : 0),
-          nightCount: acc.nightCount + (entry.night ? 1 : 0),
+          dayCount: acc.dayCount + (entry?.day ? 1 : 0),
+          nightCount: acc.nightCount + (entry?.night ? 1 : 0),
         };
       },
       { dayCount: 0, nightCount: 0 },
     );
-    const dayTotal = totals.dayCount * person.dayRate;
-    const nightTotal = totals.nightCount * person.nightRate;
+    const dayRate = toNumber(person?.dayRate);
+    const nightRate = toNumber(person?.nightRate);
+    const dayTotal = totals.dayCount * dayRate;
+    const nightTotal = totals.nightCount * nightRate;
     return {
       ...person,
-      role: personSkillName(person, skills),
+      id: personId || `daily-row-${index + 1}`,
+      name: String(person?.name || person?.fullName || "İsimsiz Personel"),
+      dayRate,
+      nightRate,
+      role: personSkillName(person || {}, safeSkills),
       ...totals,
       dayTotal,
       nightTotal,
@@ -7722,16 +7737,27 @@ function getDailySummary(
 }
 
 function WeeklySummary({ daily, dailyEntries, range, setRange, skills = [], weekOptions = [] }) {
-  const rows = getDailySummary(daily, dailyEntries, range.start, range.end, skills).filter(
-    (row) => row?.total > 0,
+  const safeRange = {
+    start: ISO_DATE_ONLY_PATTERN.test(String(range?.start || "")) ? String(range.start) : DEFAULT_DAILY_RANGE.start,
+    end: ISO_DATE_ONLY_PATTERN.test(String(range?.end || "")) ? String(range.end) : DEFAULT_DAILY_RANGE.end,
+  };
+  const safeWeekOptions = Array.isArray(weekOptions) ? weekOptions.filter(Boolean) : [];
+  const rows = getDailySummary(daily, dailyEntries, safeRange.start, safeRange.end, skills).filter(
+    (row) => toNumber(row?.total) > 0,
   );
-  const dayTotal = rows.reduce((sum, row) => sum + row?.dayTotal, 0);
-  const nightTotal = rows.reduce((sum, row) => sum + row?.nightTotal, 0);
+  const dayTotal = rows.reduce((sum, row) => sum + toNumber(row?.dayTotal), 0);
+  const nightTotal = rows.reduce((sum, row) => sum + toNumber(row?.nightTotal), 0);
   const handlePrint = () => window.print();
   const shiftWeek = (amount) => {
     setRange((current) => ({
-      start: addDaysDateOnly(current.start, amount * 7),
-      end: addDaysDateOnly(current.end, amount * 7),
+      start: addDaysDateOnly(
+        ISO_DATE_ONLY_PATTERN.test(String(current?.start || "")) ? current.start : safeRange.start,
+        amount * 7,
+      ),
+      end: addDaysDateOnly(
+        ISO_DATE_ONLY_PATTERN.test(String(current?.end || "")) ? current.end : safeRange.end,
+        amount * 7,
+      ),
     }));
   };
 
@@ -7786,20 +7812,23 @@ function WeeklySummary({ daily, dailyEntries, range, setRange, skills = [], week
             Sonraki Hafta
           </Button>
         </div>
-        {weekOptions.length ? (
+        {safeWeekOptions.length ? (
           <div className="kyik-week-picker">
-            {weekOptions.map((week) => {
-              const active = range.start === week.start && range.end === week.end;
+            {safeWeekOptions.map((week, index) => {
+              const weekStart = ISO_DATE_ONLY_PATTERN.test(String(week?.start || "")) ? String(week.start) : "";
+              const weekEnd = ISO_DATE_ONLY_PATTERN.test(String(week?.end || "")) ? String(week.end) : "";
+              if (!weekStart || !weekEnd) return null;
+              const active = safeRange.start === weekStart && safeRange.end === weekEnd;
               return (
                 <button
                   type="button"
-                  key={week.id}
+                  key={week?.id || `${weekStart}-${weekEnd}-${index}`}
                   className={active ? "active" : ""}
-                  onClick={() => setRange({ start: week.start, end: week.end })}
+                  onClick={() => setRange({ start: weekStart, end: weekEnd })}
                 >
-                  <strong>{formatDate(week.start)} - {formatDate(week.end)}</strong>
+                  <strong>{formatDate(weekStart)} - {formatDate(weekEnd)}</strong>
                   <span>
-                    {week.peopleCount} kişi · G {week.dayCount} / N {week.nightCount} · {formatTRY(week.total)}
+                    {toNumber(week?.peopleCount)} kişi · G {toNumber(week?.dayCount)} / N {toNumber(week?.nightCount)} · {formatTRY(week?.total)}
                   </span>
                 </button>
               );
@@ -7848,7 +7877,7 @@ function WeeklySummary({ daily, dailyEntries, range, setRange, skills = [], week
           <section className="weekly-print-page">
             <div className="daily-print-title">HAFTALIK GUNLUK PERSONEL OZETI</div>
             <div className="daily-print-subtitle">
-              {formatDate(range.start)} / {formatDate(range.end)}
+              {formatDate(safeRange.start)} / {formatDate(safeRange.end)}
             </div>
             <table className="weekly-print-table">
               <thead>
