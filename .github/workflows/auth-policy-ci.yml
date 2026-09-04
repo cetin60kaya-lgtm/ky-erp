@@ -1,21 +1,7 @@
 name: KY ERP Production Source Validation
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/cloud/ky-erp-api/**"
-      - "APP/app/ky-erp-frontend/**"
-      - "DEPLOY/**"
-      - "RELEASES/kyerp-production-release.json"
-      - ".github/workflows/auth-policy-ci.yml"
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/**"
-      - "APP/app/ky-erp-frontend/**"
-      - "DEPLOY/**"
-      - ".github/workflows/auth-policy-ci.yml"
+  # Manual-only fallback. Automatic production validation/deployment is handled by Cloudflare Git Integration.
   workflow_dispatch:
 
 permissions:
