@@ -119,25 +119,32 @@ test("Web PDKS uses personnel-control operations, not legacy advanced endpoints 
   assert.doesNotMatch(service, /\/ik\/advanced\//);
 });
 
-test("Web PDKS keeps one global module entry and the approved compact horizontal grouped navigation", () => {
-  const registry = frontend("app/pdksModuleRegistryPatch.js");
+test("Web PDKS uses canonical left navigation and keeps finance inside IK", () => {
+  const registry = frontend("app/moduleRegistry.js");
+  const ikRegistry = frontend("app/moduleRegistryBase.js");
   const shell = frontend("pages/modules/PdksPage.jsx");
-  const css = frontend("pages/modules/pdks-shell.css");
+  const desk = frontend("pages/pdks/PdksPersonnelDesk.jsx");
+  const app = frontend("AppV3.jsx");
+
+  assert.match(registry, /const PDKS_MODULE/);
   assert.match(registry, /key: "pdks"/);
   assert.match(registry, /label: "PDKS"/);
-  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
-    assert.match(shell, new RegExp(group));
   for (const item of [
-    "Ana Ekran", "Bilgi Aktar", "Giriş / Çıkış", "Puantaj Sonuçları",
-    "Personel Bilgileri", "İzinler", "Çalışma Tarihi", "Avans", "Bordro",
-    "Gruplar / Vardiyalar", "Puantaj Kuralları", "Dönemler", "Servisler", "Tatiller",
-    "Saat / Terminal", "Kullanıcı", "Cihaz Bağlantıları", "Senkron",
-    "Raporlar", "Yıllık TEMP / Denetim",
-  ]) assert.match(shell, new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const masterData of ["Bölümler", "Görevler", "Durumlar", "Firmalar"])
-    assert.doesNotMatch(shell, new RegExp(masterData));
-  assert.match(shell, /PDKS Hızlı Asistan/);
-  assert.match(css, /shell-v3-submenu/);
-  assert.match(css, /pdks-command-nav/);
-  assert.doesNotMatch(css, /grid-template-columns:\s*210px/);
+    "Ana Ekran", "Personel", "Giriş / Çıkış", "Puantaj",
+    "İzinler", "Vardiya & Kurallar", "Cihaz / Senkron", "Raporlar",
+  ]) assert.ok(registry.includes(item), `PDKS left menu missing: ${item}`);
+
+  assert.doesNotMatch(shell, /pdks-command-nav/);
+  assert.match(shell, /Finans \/ maaş \/ bordro işlemleri İK bölümündedir/);
+  assert.match(shell, /MovedToIk/);
+  assert.doesNotMatch(desk, /getPdksPayroll/);
+  assert.doesNotMatch(desk, /Kazanç \/ Kesinti/);
+
+  for (const ikItem of [
+    "Personel Kartları", "Maaş / Yol / Banka / Elden",
+    "Mesai / Avans / Kesinti", "Bordro & Ödeme", "SGK / Evrak / Ay Sonu",
+  ]) assert.ok(ikRegistry.includes(ikItem), `IK menu missing: ${ikItem}`);
+  assert.doesNotMatch(ikRegistry, /\["puantaj-izin", "Yıllık İzin \/ Günlük Durum"/);
+  assert.match(app, /IkPersonnelFinancePage/);
+  assert.doesNotMatch(app, /IkPdksSyncPage/);
 });
