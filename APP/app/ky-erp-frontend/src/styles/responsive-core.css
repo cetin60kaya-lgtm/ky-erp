@@ -475,6 +475,346 @@ body,
   }
 }
 
+
+/* ============================================================
+   Manuel / otomatik gorunum profilleri
+   Media query cihaz sinirlarini korur; data-layout-mode secilen
+   Windows-benzeri uygulama gorunumunu ustten belirler.
+   ============================================================ */
+
+.shell-v3[data-layout-mode="pc"] {
+  grid-template-columns: 238px minmax(0, 1fr) !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-sidebar {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 80 !important;
+  width: auto !important;
+  padding-top: 0 !important;
+  transform: none !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-overlay,
+.shell-v3[data-layout-mode="pc"] .shell-v3-sidebar-close,
+.shell-v3[data-layout-mode="pc"] .shell-v3-icon.mobile {
+  display: none !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-main {
+  grid-column: 2 !important;
+  grid-template-rows: 58px 38px 26px minmax(0, 1fr) 28px !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-search {
+  display: flex !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-crumb,
+.shell-v3[data-layout-mode="pc"] .shell-v3-status {
+  display: flex !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-user div,
+.shell-v3[data-layout-mode="pc"] .shell-v3-user > button {
+  display: block !important;
+}
+
+.shell-v3[data-layout-mode="pc"] .shell-v3-workspace {
+  padding: 10px !important;
+}
+
+.shell-v3[data-layout-mode="tablet"],
+.shell-v3[data-layout-mode="phone"] {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-sidebar,
+.shell-v3[data-layout-mode="phone"] .shell-v3-sidebar {
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  z-index: 1200 !important;
+  width: min(86vw, 300px) !important;
+  padding-top: var(--ky-safe-top) !important;
+  transform: translateX(-105%) !important;
+  transition: transform .2s ease !important;
+  box-shadow: 18px 0 44px rgba(15, 23, 42, .24) !important;
+}
+
+.shell-v3[data-layout-mode="tablet"].mobile-open .shell-v3-sidebar,
+.shell-v3[data-layout-mode="phone"].mobile-open .shell-v3-sidebar {
+  transform: translateX(0) !important;
+}
+
+.shell-v3[data-layout-mode="tablet"].mobile-open .shell-v3-overlay,
+.shell-v3[data-layout-mode="phone"].mobile-open .shell-v3-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1150 !important;
+  display: block !important;
+  border: 0 !important;
+  background: rgba(15, 23, 42, .48) !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-sidebar-close,
+.shell-v3[data-layout-mode="phone"] .shell-v3-sidebar-close,
+.shell-v3[data-layout-mode="tablet"] .shell-v3-icon.mobile,
+.shell-v3[data-layout-mode="phone"] .shell-v3-icon.mobile {
+  display: grid !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-main,
+.shell-v3[data-layout-mode="phone"] .shell-v3-main {
+  grid-column: 1 !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-user div,
+.shell-v3[data-layout-mode="tablet"] .shell-v3-user > button,
+.shell-v3[data-layout-mode="phone"] .shell-v3-user div,
+.shell-v3[data-layout-mode="phone"] .shell-v3-user > button {
+  display: none !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-workspace :is(
+  .split-layout,
+  .kyerp-dashboard-grid,
+  .bh-grid-3,
+  .bh-grid-2,
+  .bh-work-grid,
+  .production-work-layout,
+  .admpro-grid-2,
+  .admpro-grid-3,
+  .dsg-tab-grid.model-info,
+  .dsg-channel-layout
+) {
+  grid-template-columns: 1fr !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-workspace :is(
+  .bh-form-grid.four,
+  .bh-form-grid.five,
+  .dsg-form-grid.four,
+  .admpro-form-grid.three,
+  .production-metric-grid,
+  .production-selected-metrics,
+  .admpro-stats
+) {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-workspace :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  min-height: 42px;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-main {
+  grid-template-rows: 56px 42px minmax(0, 1fr) !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-topbar {
+  min-height: 56px !important;
+  gap: 7px !important;
+  padding-left: max(6px, var(--ky-safe-left)) !important;
+  padding-right: max(6px, var(--ky-safe-right)) !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-search,
+.shell-v3[data-layout-mode="phone"] .shell-v3-crumb,
+.shell-v3[data-layout-mode="phone"] .shell-v3-status {
+  display: none !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace {
+  padding: 6px 6px max(10px, var(--ky-safe-bottom)) !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-close-all {
+  min-width: 42px !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-close-all span,
+.shell-v3[data-layout-mode="phone"] .shell-v3-quick-button span,
+.shell-v3[data-layout-mode="phone"] .shell-v3-quick-button kbd,
+.shell-v3[data-layout-mode="phone"] .shell-v3-display-button span,
+.shell-v3[data-layout-mode="phone"] .shell-v3-display-button small {
+  display: none !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-quick-button,
+.shell-v3[data-layout-mode="phone"] .shell-v3-display-button,
+.shell-v3[data-layout-mode="phone"] .shell-v3-icon {
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-topbar > select {
+  flex: 1 1 110px !important;
+  min-width: 0 !important;
+  max-width: 150px !important;
+  height: 40px !important;
+  font-size: 12px !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-tabs {
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-tabs > button {
+  min-height: 40px !important;
+  max-width: 72vw;
+  scroll-snap-align: start;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  min-height: 44px !important;
+  font-size: 16px !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .split-layout,
+  .kyerp-dashboard-grid,
+  .bh-grid-3,
+  .bh-grid-2,
+  .bh-work-grid,
+  .bh-form-grid.two,
+  .bh-form-grid.four,
+  .bh-form-grid.five,
+  .dsg-form-grid.two,
+  .dsg-form-grid.four,
+  .dsg-review-layout,
+  .dsg-quick-entry,
+  .dsg-detail-general,
+  .production-filter-row,
+  .production-create-grid,
+  .production-machine-row,
+  .production-work-toolbar,
+  .production-work-layout,
+  .production-entry-grid,
+  .admpro-grid-2,
+  .admpro-grid-3,
+  .admpro-form-grid,
+  .admpro-form-grid.three,
+  .admpro-integration,
+  .management-lists-grid,
+  .vat-sides
+) {
+  grid-template-columns: 1fr !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .bh-field.wide,
+  .production-entry-grid .span-2,
+  .dsg-form-grid .span-2,
+  .dsg-form-grid .span-3,
+  .admpro-form-grid .wide
+) {
+  grid-column: auto !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .operation-summary,
+  .management-secondary-metrics,
+  .vat-summary,
+  .bh-kpi-row,
+  .bh-kpi-row.compact,
+  .production-metric-grid,
+  .production-selected-metrics,
+  .admpro-stats,
+  .dsg-summary-grid,
+  .dsg-summary-grid.reports
+) {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .content-card,
+  .panel-block,
+  .kyerp-card,
+  .mh-card,
+  .bh-card,
+  .admpro-card
+) {
+  max-width: 100% !important;
+  border-radius: 10px !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .section-header,
+  .accounting-page-header,
+  .production-center-head,
+  .production-settings-head,
+  .production-page-intro,
+  .bh-card-head,
+  .admpro-head,
+  .admpro-card-head
+) {
+  align-items: stretch !important;
+  flex-direction: column !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .bh-grid-3,
+  .bh-grid-2,
+  .bh-work-grid
+) {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .bh-grid-3 > .bh-card,
+  .bh-scroll,
+  .bh-list,
+  .bh-work-color-list
+) {
+  max-height: none !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+  .primary-btn,
+  .soft-btn,
+  .mh-btn,
+  .bh-btn,
+  .dsg-btn,
+  .iw-btn,
+  .accounting-primary,
+  .accounting-refresh,
+  .admpro-page button
+) {
+  min-height: 44px !important;
+}
+
+/* Telefon profilinde bile okunurluk korunur; 480 altinda metrikler tek kolona iner. */
+@media (max-width: 480px) {
+  .shell-v3[data-layout-mode="phone"] .shell-v3-workspace :is(
+    .operation-summary,
+    .management-secondary-metrics,
+    .vat-summary,
+    .bh-kpi-row,
+    .bh-kpi-row.compact,
+    .production-metric-grid,
+    .production-selected-metrics,
+    .admpro-stats,
+    .dsg-summary-grid,
+    .dsg-summary-grid.reports
+  ) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .shell-v3 *,
   .shell-v3 *::before,
