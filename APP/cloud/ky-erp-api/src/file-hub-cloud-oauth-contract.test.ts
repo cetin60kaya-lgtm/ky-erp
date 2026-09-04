@@ -36,27 +36,32 @@ test("cloud management is registered behind File Hub tenant-owner guard", () => 
   assert.doesNotMatch(main, /registerFileHubPreviewRoutes/);
 });
 
-test("production release backs up D1 before targeted 0044 and keeps OAuth provider setup fail-closed", () => {
+test("production release backs up D1 before targeted 0044 and writes File Hub secrets only after Worker deploy", () => {
+  const preflight = release.indexOf("File Hub OAuth production guvenligini ve provider durumunu hazirla");
   const backup = release.indexOf("Canli D1 tam yedegini al");
   const oauth = release.indexOf("0044 File Hub cloud OAuth semasi");
-  assert.ok(backup >= 0 && oauth > backup);
+  const workerDeploy = release.indexOf("Worker'i api.kyerp.net production'a dagit");
+  const secretApply = release.indexOf("File Hub OAuth secretlerini Worker deployundan sonra uygula ve dogrula");
+  assert.ok(preflight >= 0 && backup > preflight && oauth > backup && workerDeploy > oauth && secretApply > workerDeploy);
 
-  // The encryption key is mandatory even when no external provider app has
-  // been registered yet. A missing key is generated once and stored only as
-  // a Worker secret; future deploys reuse the existing binding.
-  assert.match(release, /FILE_HUB_OAUTH_KEY/);
+  // A missing encryption key is generated in-memory, masked, carried through
+  // GITHUB_ENV, then written only after the source version has been deployed.
   assert.match(release, /openssl rand -hex 48/);
-  assert.match(release, /FILE_HUB_OAUTH_KEY production Worker icin guvenli ve tek seferlik olusturuldu/);
+  assert.match(release, /::add-mask::\$key_value/);
+  assert.match(release, /KY_FILE_HUB_KEY_ACTION=PUT/);
+  const preflightBlock = release.slice(preflight, backup);
+  assert.doesNotMatch(preflightBlock, /wrangler secret put FILE_HUB_OAUTH_KEY/);
+  const applyBlock = release.slice(secretApply, release.indexOf("RESEND_API_KEY aktif Worker bindingini dogrula", secretApply));
+  assert.match(applyBlock, /wrangler secret put FILE_HUB_OAUTH_KEY/);
 
-  // Google/Microsoft app registrations are optional capabilities: both values
-  // absent means CONFIGURED=false, both present means enabled, and any partial
-  // pair blocks the release instead of inventing credentials.
+  // Google/Microsoft app registrations are optional capabilities. Both values
+  // absent means CONFIGURED=false; partial pairs still fail closed.
   for (const key of ["GOOGLE_DRIVE_CLIENT_ID","GOOGLE_DRIVE_CLIENT_SECRET","MICROSOFT_GRAPH_CLIENT_ID","MICROSOFT_GRAPH_CLIENT_SECRET"]) {
     assert.match(release, new RegExp(key));
   }
-  assert.match(release, /provider CONFIGURED=false kalacak, ana yayin devam edecek/);
+  assert.match(release, /provider CONFIGURED=false kalacak/);
   assert.match(release, /Worker OAuth bindingi yarim tanimli/);
   assert.match(release, /GitHub OAuth bilgisi yarim tanimli/);
-  assert.match(release, /production OAuth binding cifti tutarsiz/);
+  assert.match(release, /disabled beklenen providerda beklenmeyen OAuth bindingi var/);
   assert.match(release, /file_hub_cloud_connection_accounts/);
 });
