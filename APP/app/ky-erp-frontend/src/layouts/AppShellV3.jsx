@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, ChevronDown, Command, Menu, Plus, Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Bell, ChevronDown, Command, Menu, Monitor, Plus, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
+import { displayModeLabel } from "../utils/displayPreferences";
+import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 
@@ -56,6 +59,7 @@ export default function AppShellV3({
   companies,
   activeCompanySlug,
   user,
+  displayPreferences,
   mobileMenuOpen,
   onToggleModuleMenu,
   onOpenTab,
@@ -70,6 +74,7 @@ export default function AppShellV3({
 }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
+  const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
 
   const quickActions = useMemo(() => {
@@ -91,7 +96,10 @@ export default function AppShellV3({
         event.preventDefault();
         setQuickOpen((current) => !current);
       }
-      if (event.key === "Escape") setQuickOpen(false);
+      if (event.key === "Escape") {
+        setQuickOpen(false);
+        setDisplaySettingsOpen(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -104,8 +112,28 @@ export default function AppShellV3({
     setQuickOpen(false);
   }
 
+  const effectiveMode = displayPreferences?.effectiveMode || "pc";
+  const effectiveScale = Number(displayPreferences?.effectiveScale || 100);
+  const scaleFactor = effectiveScale / 100;
+  const displayLabel = displayModeLabel(effectiveMode);
+  const shellStyle = useMemo(() => {
+    if (effectiveScale === 100) return undefined;
+    return {
+      zoom: scaleFactor,
+      width: `${100 / scaleFactor}vw`,
+      height: `${100 / scaleFactor}dvh`,
+      maxWidth: "none",
+    };
+  }, [effectiveScale, scaleFactor]);
+
   return (
-    <div className={`shell-v3 ${mobileMenuOpen ? "mobile-open" : ""}`}>
+    <div
+      className={`shell-v3 ${mobileMenuOpen ? "mobile-open" : ""}`}
+      data-layout-mode={effectiveMode}
+      data-layout-preference={displayPreferences?.preferences?.mode || "auto"}
+      data-ui-scale={effectiveScale}
+      style={shellStyle}
+    >
       <button type="button" className="shell-v3-overlay" aria-label="Menüyü kapat" onClick={onCloseMobileMenu} />
 
       <aside className="shell-v3-sidebar">
@@ -160,6 +188,17 @@ export default function AppShellV3({
           <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
           </select>
+          <button
+            type="button"
+            className="shell-v3-display-button"
+            onClick={() => setDisplaySettingsOpen(true)}
+            aria-label="Ekran ve görünüm ayarları"
+            title="Ayarlar > Sistem > Ekran"
+          >
+            <Monitor size={17} />
+            <span>Ekran</span>
+            <small>{displayLabel} · {effectiveScale}%</small>
+          </button>
           <button type="button" className="shell-v3-icon notification" aria-label="Bildirimler"><Bell size={18} /><span>3</span></button>
           <div className="shell-v3-user">
             <b>{String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</b>
@@ -190,6 +229,16 @@ export default function AppShellV3({
         <section className="shell-v3-workspace">{children}</section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>Firma: {companies.find((item) => item.slug === activeCompanySlug)?.name || "-"}</span><span className="ok">Sistem hazır</span></footer>
       </main>
+
+      {displaySettingsOpen && displayPreferences
+        ? createPortal(
+            <DisplaySettingsPanel
+              display={displayPreferences}
+              onClose={() => setDisplaySettingsOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
 
       {quickOpen ? (
         <div className="shell-v3-quick-backdrop" role="presentation" onMouseDown={() => setQuickOpen(false)}>
