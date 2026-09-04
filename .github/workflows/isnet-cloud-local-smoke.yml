@@ -1,16 +1,8 @@
 name: İşNet Cloud Yerel Uçtan Uca Test
 
 on:
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/src/main.ts"
-      - "APP/cloud/ky-erp-api/src/isnet-cloud.ts"
-      - "APP/cloud/ky-erp-api/local-isnet-cloud.sql"
-      - "APP/cloud/ky-erp-api/local-production-center.sql"
-      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
-      - "APP/app/ky-erp-frontend/src/services/isnetApi.js"
-      - "APP/app/ky-erp-frontend/src/pages/modules/IsnetPage.jsx"
-      - ".github/workflows/isnet-cloud-local-smoke.yml"
+  # GitHub Actions is disabled for automatic production/PR execution.
+  # Cloudflare Git Integration is the automatic deploy path; keep this workflow manual-only as fallback.
   workflow_dispatch:
 
 permissions:
