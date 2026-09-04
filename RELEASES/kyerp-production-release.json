@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-04T11:09:30+03:00",
-  "attempt": 92,
+  "requestedAt": "2026-09-04T11:28:00+03:00",
+  "attempt": 93,
   "scope": [
     "ik-monthly-payroll-readiness",
     "pdks-modern-attendance-v2",
@@ -33,9 +33,13 @@
     "ik-hard-delete-d1-pragma-fix",
     "ik-hard-delete-master-row-verification",
     "ik-hard-delete-exact-id-ui-refresh",
-    "ik-duplicate-name-hkn-display"
+    "ik-duplicate-name-hkn-display",
+    "ik-accounting-user-core-screen-eager-load",
+    "ik-weekly-summary-safe-render",
+    "ik-stale-chunk-auto-recovery",
+    "ik-shared-table-null-safety"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "1d6fba6d029dd79232592d0cc8f553a6d880b39b",
-  "note": "04.09.2026 attempt 92. Canlıda Kalıcı Sil işleminin kaydı kaldırmaması için kesin düzeltme. D1 metadata taraması pragma_table_info literal güvenli çağrıya çevrildi; yardımcı tablo temizliği master silmeyi bloke etmiyor; hr_monthly_employees kaydı tenant+id ile siliniyor ve silme sonrası tekrar SELECT ile doğrulanıyor. Frontend sadece deleted=true dönerse başarı gösteriyor, exact id listeden kaldırılıyor ve sunucudan liste tekrar okunuyor. Aynı isimli mükerrer personeller listede HKN koduyla ayırt ediliyor. D1 reset yok; yayın öncesi tam yedek ve tüm production kontrolleri zorunlu."
+  "sourceCommit": "a5d82e1545daaab834a8ba35a5360a6c2f173ff3",
+  "note": "04.09.2026 attempt 93. Muhasebe kullanıcısında Personel Kartı çalışırken diğer İK ekranlarının 'Ekran şu anda açılamıyor' hatasına düşmesi için canlı hotfix. Personel Kartı ayrı chunk olarak çalıştığı için ortak IkPage dinamik chunk bağımlılığı kaldırılıp çekirdek İK ekranı ana bundle'a eager import edildi. Haftalık özet ve ortak tablo bozuk/eksik veri durumlarında güvenli normalize edildi. Deploy sonrası eski JS chunk hatalarında otomatik retry kapsamı genişletildi. D1 reset yok; mevcut personel hard-delete/HKN düzeltmeleri korunur. Tam frontend/Worker test-build, D1 yedek, security ve canlı domain kontrolleri zorunlu."
 }
