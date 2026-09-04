@@ -113,7 +113,6 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [companyQuery, setCompanyQuery] = useState("");
   const [companies, setCompanies] = useState([]);
-  useEffect(() => { if (initialView) setView(initialView); }, [initialView]);
   const load = useCallback(async () => {
     if (!id) return;
     setError("");
@@ -165,6 +164,7 @@ export default function EBelgeCenterPage({ activeMainCompany, openModule, initia
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const filter = useMemo(() => ({ invoices: "INCOMING_INVOICE", "outgoing-invoices": "OUTGOING_INVOICE", dispatches: "INCOMING_DISPATCH", "outgoing-dispatches": "OUTGOING_DISPATCH", matching: "MATCHING_WAIT", issues: "ISSUE", history: "HISTORY" }[view] || "ALL"), [view]);
+  useEffect(() => { if (initialView) setView(initialView); }, [initialView]);
   const load = useCallback(async () => {
     setBusy(true); setError("");
     try {
