@@ -39,8 +39,7 @@ export function detectRecommendedScale(snapshot = {}, mode = "pc") {
   const dpr = Math.max(1, Number(snapshot.devicePixelRatio || 1));
 
   if (mode !== "pc") return 100;
-  if (dpr <= 1.1 && width >= 3200) return 125;
-  if (dpr <= 1.1 && width >= 2300) return 110;
+  if (dpr <= 1.1 && width >= 3600) return 125;
   return 100;
 }
 
