@@ -123,10 +123,17 @@ Kurallar:
 ## Deploy standardı
 
 - Kaynak hazır olmak, canlıya çıkmak değildir.
-- Kullanıcı açıkça canlıya al/deploy/release demeden deploy yapma.
+- Kullanıcı açıkça canlıya al/deploy/release demeden production branch'e taşıma yapma.
+- **Canonical otomatik production yayın yolu Cloudflare Git Integration'dır.**
+- Frontend: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Pages `ky-erp-frontend`.
+- Worker: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Workers Builds `ky-erp-api`.
+- GitHub Actions otomatik production yolu değildir; manual/emergency fallback olarak tutulur.
+- Feature/preview branch otomatik Cloudflare production deploy etmez.
 - Production D1 reset yasaktır.
-- Migration gerekiyorsa önce remote D1 yedeği ve hedefli/idempotent uyumluluk yaklaşımı kullanılır.
+- Migration gerekiyorsa normal Git auto-deploy'dan ayrı güvenlik kapısı uygulanır: remote D1 full backup -> readiness -> hedefli/additive migration -> schema doğrulaması -> deploy.
+- Secret/token değeri repoya, loga veya dokümana yazılmaz.
 - Deploy sonrası API health, auth contract, CORS ve frontend asset doğrulaması yapılmadan başarılı denmez.
+- Ayrıntılı Cloudflare/AI/yayın kaynağı: `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
 
 ## İş bitiş raporu
 
