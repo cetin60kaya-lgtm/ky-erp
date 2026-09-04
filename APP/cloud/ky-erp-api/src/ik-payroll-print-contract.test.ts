@@ -29,8 +29,35 @@ test("IK payroll report and payment slips use the canonical print service contra
 test("IK bulk slip output keeps A4 pagination and selected-person filtering", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
   assert.match(page, /selectedPayrollIds\.includes\(row\.employee\.id\)/);
-  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 10\)/);
+  assert.match(page, /for \\(let index = 0; index < rows\\.length; index \\+= 4\\)/);
   assert.match(page, /@page\{size:A4 portrait/);
   assert.match(page, /grid-template-columns:1fr 1fr/);
-  assert.match(page, /grid-template-rows:repeat\(5,1fr\)/);
+  assert.match(page, /grid-template-rows:1fr 1fr/);
+});
+
+
+test("IK finance movement keeps the selected employee and supports legal overtime multipliers", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.ok(page.includes("Hafta içi %50 (x1,5)"));
+  assert.ok(page.includes("Hafta sonu %100 (x2)"));
+  assert.ok(page.includes("overtimeMultiplier"));
+  assert.match(page, /payload\.adjustmentType !== "Toplu avans"/);
+  assert.match(page, /delete payload\.employeeIds/);
+
+  assert.match(cloud, /const isBulkAdvance =/);
+  assert.match(cloud, /\[singleEmployeeId\]\.filter\(Boolean\)/);
+  assert.match(cloud, /overtimeAmountForEmployee/);
+  assert.match(cloud, /employee_id=\?,date=\?,adjustment_type=/);
+  assert.match(cloud, /advancedEmployeeVisible/);
+});
+
+test("IK bulk slips are readable four-up A4 cards", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  assert.ok(page.includes("NET / TOPLAM ÖDENECEK"));
+  assert.ok(page.includes("Personel İmza"));
+  assert.ok(page.includes("Ödeme Yapan"));
+  assert.match(page, /index \+= 4/);
+  assert.match(page, /grid-template-rows:1fr 1fr/);
 });
