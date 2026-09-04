@@ -387,6 +387,37 @@ async function auditLogs(c: Context<AppEnv>) {
   })));
 }
 
+function parseWorkDays(value: unknown, fallback: number[]) {
+  try {
+    const parsed = JSON.parse(text(value));
+    if (!Array.isArray(parsed)) return fallback;
+    const normalized = [...new Set(parsed.map((item) => Math.trunc(number(item))).filter((item) => item >= 0 && item <= 6))];
+    return normalized.length ? normalized : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function workCalendarForPerson(c: Context<AppEnv>, company: string, employeeId: string) {
+  const fallbackWork = [1, 2, 3, 4, 5, 6];
+  const fallbackRest = [0];
+  try {
+    const companyRule = await first(c, "SELECT work_days_json,weekly_rest_days_json FROM ik_pdks_rule_profiles WHERE main_company_id=? LIMIT 1", [company]) || {};
+    const groupRule = await first(c, `SELECT r.work_days_json,r.weekly_rest_days_json
+      FROM ik_pdks_employee_groups a
+      JOIN ik_pdks_work_groups g ON g.id=a.group_id AND g.main_company_id=a.main_company_id
+      LEFT JOIN ik_pdks_group_rules r ON r.main_company_id=a.main_company_id AND r.group_id=a.group_id
+      WHERE a.main_company_id=? AND a.employee_id=? AND COALESCE(g.active,1)=1
+      LIMIT 1`, [company, employeeId]) || {};
+    return {
+      workDays: parseWorkDays(groupRule.work_days_json || companyRule.work_days_json, fallbackWork),
+      restDays: parseWorkDays(groupRule.weekly_rest_days_json || companyRule.weekly_rest_days_json, fallbackRest),
+    };
+  } catch {
+    return { workDays: fallbackWork, restDays: fallbackRest };
+  }
+}
+
 async function closeBlocking(c: Context<AppEnv>, company: string, year: number, month: number) {
   const { start, end } = periodDates(year, month);
   const people = await all(c, `SELECT e.id,e.code,e.full_name,e.hire_date,s.exit_date,s.card_no
@@ -413,9 +444,10 @@ async function closeBlocking(c: Context<AppEnv>, company: string, year: number, 
   const missing: Row[] = [];
   let checks = 0;
   for (const person of people) {
+    const calendar = await workCalendarForPerson(c, company, text(person.id));
     for (const date of eachDate(start, end)) {
       const day = new Date(`${date}T12:00:00Z`).getUTCDay();
-      if (day === 0 || day === 6 || holidays.has(date)) continue; // Kart kuralı: Cumartesi/Pazar kart dışı.
+      if (!calendar.workDays.includes(day) || calendar.restDays.includes(day) || holidays.has(date)) continue;
       if (dateOnly(person.hire_date) && date < dateOnly(person.hire_date)) continue;
       if (dateOnly(person.exit_date) && date > dateOnly(person.exit_date)) continue;
       const key = `${text(person.id)}|${date}`;
