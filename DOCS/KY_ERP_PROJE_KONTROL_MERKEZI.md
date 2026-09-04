@@ -213,10 +213,23 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## Son güncelleme
 
+**04.09.2026 — Cloudflare Pro + Actions'sız production yayın düzeni kesinleştirildi.**
+
+- `kyerp.net` için Cloudflare Pro aktif.
+- Frontend `ky-erp-frontend` Cloudflare Pages Git Integration production deploy'u başarıyla doğrulandı.
+- Worker `ky-erp-api` Cloudflare Workers Builds production deploy'u başarıyla doğrulandı.
+- Production branch her iki Cloudflare projesinde de `codex/model-uretim-kontrol-merkezi-final`.
+- Frontend root `APP/app/ky-erp-frontend`; build `npm run build`; output `dist`; `VITE_API_URL=https://api.kyerp.net`.
+- Worker root `APP/cloud/ky-erp-api`; build `npm run typecheck && npm test && npm run build`; deploy `npm run deploy`.
+- Preview/non-production automatic deployments kapatıldı.
+- GitHub Actions production/push otomasyonu manual fallback'e çevrildi; canonical yayın Cloudflare Git Integration.
+- D1 migration normal Git auto-deploy'a bırakılmaz; full backup + readiness + hedefli migration ayrı güvenlik kapısıdır.
+- Cloudflare Pro / AI / yetki / rollout ana kaynağı:
+  `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
+- Sonraki net adım: Cloudflare management token için least-privilege yetkileri tanımlamak; ardından WAF/rate-limit/AI Gateway/Queues/Workflows/Vectorize rollout'u.
+
 **03.09.2026 — Desktop-first çalışma düzeni kesinleştirildi.**
 
 - Desktop 1.7.2 gerçek Windows cihazda açıldı ve ERP oturumu doğrulandı.
 - GitHub ana kaynak olarak kalacak.
 - Kullanıcı GitHub/VS Code ile manuel uğraşmayacak.
-- Desktop üzerinde kontrol edilen değişiklikler kullanıcı onayından sonra kyerp.net'e taşınacak.
-- Yeni sohbetlerin ilk okuyacağı devam kaydı bu dosyadır.
