@@ -36,12 +36,27 @@ test("cloud management is registered behind File Hub tenant-owner guard", () => 
   assert.doesNotMatch(main, /registerFileHubPreviewRoutes/);
 });
 
-test("production release backs up D1 before targeted 0044 and checks OAuth secrets", () => {
+test("production release backs up D1 before targeted 0044 and keeps OAuth provider setup fail-closed", () => {
   const backup = release.indexOf("Canli D1 tam yedegini al");
   const oauth = release.indexOf("0044 File Hub cloud OAuth semasi");
   assert.ok(backup >= 0 && oauth > backup);
-  for (const key of ["FILE_HUB_OAUTH_KEY","GOOGLE_DRIVE_CLIENT_ID","GOOGLE_DRIVE_CLIENT_SECRET","MICROSOFT_GRAPH_CLIENT_ID","MICROSOFT_GRAPH_CLIENT_SECRET"]) {
+
+  // The encryption key is mandatory even when no external provider app has
+  // been registered yet. A missing key is generated once and stored only as
+  // a Worker secret; future deploys reuse the existing binding.
+  assert.match(release, /FILE_HUB_OAUTH_KEY/);
+  assert.match(release, /openssl rand -hex 48/);
+  assert.match(release, /FILE_HUB_OAUTH_KEY production Worker icin guvenli ve tek seferlik olusturuldu/);
+
+  // Google/Microsoft app registrations are optional capabilities: both values
+  // absent means CONFIGURED=false, both present means enabled, and any partial
+  // pair blocks the release instead of inventing credentials.
+  for (const key of ["GOOGLE_DRIVE_CLIENT_ID","GOOGLE_DRIVE_CLIENT_SECRET","MICROSOFT_GRAPH_CLIENT_ID","MICROSOFT_GRAPH_CLIENT_SECRET"]) {
     assert.match(release, new RegExp(key));
   }
+  assert.match(release, /provider CONFIGURED=false kalacak, ana yayin devam edecek/);
+  assert.match(release, /Worker OAuth bindingi yarim tanimli/);
+  assert.match(release, /GitHub OAuth bilgisi yarim tanimli/);
+  assert.match(release, /production OAuth binding cifti tutarsiz/);
   assert.match(release, /file_hub_cloud_connection_accounts/);
 });
