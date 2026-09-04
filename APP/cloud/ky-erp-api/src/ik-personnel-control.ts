@@ -162,37 +162,68 @@ async function writePersonRemovalAudit(c: Context<AppEnv>, auth: Row, person: Ro
   } catch {}
 }
 
-async function hardDeletePersonData(c: Context<AppEnv>, employeeId: string) {
+async function hardDeletePersonData(c: Context<AppEnv>, employeeId: string, company: string) {
+  const cleanupErrors: Array<{ table: string; message: string }> = [];
+
+  // Ana karta referans veren yardımcı bağları önce kopar.
   try {
     await c.env.DB.prepare("UPDATE ik_person_card_settings SET base_employee_id=NULL WHERE base_employee_id=?").bind(employeeId).run();
   } catch {}
 
   const tables = await all(c, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
   const preservedAudit = new Set(["hr_monthly_audit_logs", "ik_audit_logs", "auth_security_audit"]);
+
   for (const row of tables) {
     const table = text(row.name);
     if (!/^[A-Za-z0-9_]+$/.test(table) || table === "hr_monthly_employees") continue;
-    const columns = await all(c, "SELECT name FROM pragma_table_info(?)", [table]);
+
+    let columns: Row[] = [];
+    try {
+      // pragma_table_info(?) bazı D1/SQLite sürümlerinde parametreyle sorun çıkarabildiği için
+      // tablo adı whitelist edildikten sonra literal kullanıyoruz.
+      columns = await all(c, `SELECT name FROM pragma_table_info('${table}')`);
+    } catch (cause: any) {
+      cleanupErrors.push({ table, message: text(cause?.message || cause) });
+      continue;
+    }
+
     const names = new Set(columns.map((column) => text(column.name)));
     const employeeColumns = ["employee_id", "person_id"].filter((column) => names.has(column));
     if (!employeeColumns.length) continue;
 
     const quoted = `"${table}"`;
-    const where = employeeColumns.map((column) => `"${column}"=?`).join(" OR ");
-    if (preservedAudit.has(table)) {
-      for (const column of employeeColumns) {
-        try {
-          await c.env.DB.prepare(`UPDATE ${quoted} SET "${column}"=NULL WHERE "${column}"=?`).bind(employeeId).run();
-        } catch {
-          await c.env.DB.prepare(`DELETE FROM ${quoted} WHERE "${column}"=?`).bind(employeeId).run();
+    try {
+      if (preservedAudit.has(table)) {
+        for (const column of employeeColumns) {
+          try {
+            await c.env.DB.prepare(`UPDATE ${quoted} SET "${column}"=NULL WHERE "${column}"=?`).bind(employeeId).run();
+          } catch {
+            // NOT NULL audit tablolarında sadece ilgili satırı temizle; silme işlemini bloklama.
+            await c.env.DB.prepare(`DELETE FROM ${quoted} WHERE "${column}"=?`).bind(employeeId).run();
+          }
         }
+        continue;
       }
-      continue;
+
+      const where = employeeColumns.map((column) => `"${column}"=?`).join(" OR ");
+      await c.env.DB.prepare(`DELETE FROM ${quoted} WHERE ${where}`).bind(...employeeColumns.map(() => employeeId)).run();
+    } catch (cause: any) {
+      // Yardımcı bir tablo hatası ana personel silmeyi sonsuza kadar engellemesin.
+      // Master delete aşağıda ayrıca doğrulanıyor.
+      cleanupErrors.push({ table, message: text(cause?.message || cause) });
     }
-    await c.env.DB.prepare(`DELETE FROM ${quoted} WHERE ${where}`).bind(...employeeColumns.map(() => employeeId)).run();
   }
 
-  await c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=?").bind(employeeId).run();
+  const deleted = await c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=? AND main_company_id=?")
+    .bind(employeeId, company).run();
+
+  const remaining = await first(c, "SELECT id FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, company]);
+  if (remaining || !Number(deleted.meta?.changes || 0)) {
+    const detail = cleanupErrors.slice(0, 5).map((item) => `${item.table}: ${item.message}`).join(" | ");
+    throw new Error(detail ? `Personel ana kaydı silinemedi. ${detail}` : "Personel ana kaydı silinemedi.");
+  }
+
+  return { cleanupErrors };
 }
 
 function personSelect(audit = false) {
@@ -459,9 +490,18 @@ async function removePerson(c: Context<AppEnv>) {
     if (text(body.confirmName).toLocaleLowerCase("tr-TR") !== text(person.fullName).toLocaleLowerCase("tr-TR")) {
       return error(c, 400, "HARD_DELETE_CONFIRMATION_REQUIRED", "Kalıcı silme için personel adı doğrulanmalıdır.");
     }
-    await hardDeletePersonData(c, employeeId);
+    const cleanup = await hardDeletePersonData(c, employeeId, auth.company);
     await writePersonRemovalAudit(c, auth, person, "HARD", reason);
-    return ok(c, { id: employeeId, fullName: person.fullName, personnelCode: person.personnelCode, mode: "HARD", deleted: true });
+    const verify = await first(c, "SELECT id FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, auth.company]);
+    if (verify) return error(c, 500, "HARD_DELETE_VERIFY_FAILED", "Personel kaydı silme sonrası hâlâ mevcut görünüyor.");
+    return ok(c, {
+      id: employeeId,
+      fullName: person.fullName,
+      personnelCode: person.personnelCode,
+      mode: "HARD",
+      deleted: true,
+      cleanupWarnings: cleanup.cleanupErrors,
+    });
   }
 
   if (mode !== "PASSIVE") return error(c, 400, "REMOVE_MODE_INVALID", "Silme modu PASSIVE veya HARD olmalıdır.");

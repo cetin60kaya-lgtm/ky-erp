@@ -121,7 +121,7 @@ function PersonList({ rows, selectedId, onSelect, query, setQuery, statusView, s
         {rows.map((person) => (
           <button key={person.id} type="button" className={person.id === selectedId ? "active" : ""} onClick={() => onSelect(person.id)}>
             <b>{initials(person.fullName)}</b>
-            <span><strong>{person.fullName}</strong><small>{person.cardNo || "Kart yok"} · {person.department || "Departman yok"}</small></span>
+            <span><strong>{person.fullName}</strong><small>{person.personnelCode || "Kod yok"} · {person.cardNo || "Kart yok"} · {person.department || "Departman yok"}</small></span>
             <em>{person.sgkStatus}</em>
           </button>
         ))}
@@ -283,27 +283,40 @@ export default function IkPersonnelCenterPage({ activeTab = "personel-kartlari",
   const removePerson = async (mode) => {
     if (!selected || auditMode) return;
     const hard = mode === "HARD";
+    const targetId = selected.id;
+    const targetName = selected.fullName;
+    const targetCode = selected.personnelCode || "Kod yok";
     const approved = typeof window !== "undefined" && window.confirm(
       hard
-        ? `${selected.fullName} personel kaydı KALICI olarak silinecek. Bu seçenek yalnız yanlış veya mükerrer açılan kayıtlar içindir. Silinsin mi?`
-        : `${selected.fullName} pasife alınacak. Geçmiş kayıtları korunacak ve aktif listede görünmeyecek. Pasife alınsın mı?`,
+        ? `${targetName} (${targetCode}) personel kaydı KALICI olarak silinecek. Yanlış/mükerrer kayıt ise onaylayın. Silinsin mi?`
+        : `${targetName} (${targetCode}) pasife alınacak. Geçmiş kayıtları korunacak ve aktif listede görünmeyecek. Pasife alınsın mı?`,
     );
     if (!approved) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await removeIkControlPerson(selected.id, {
+      const result = await removeIkControlPerson(targetId, {
         mode,
-        confirmName: selected.fullName,
+        confirmName: targetName,
         reason: hard ? "Yanlış veya mükerrer açılan personel kaydı" : "Personel kullanıcı onayıyla pasife alındı",
         mainCompanyId: companyKey,
       });
+      if (hard && result?.deleted !== true) {
+        throw new Error("Sunucu kalıcı silme işlemini doğrulamadı.");
+      }
+
       setEditing(false);
       setDetail(null);
       setAttendance(null);
       setStatusView("ACTIVE");
       setSelectedId("");
+      setPeople((current) => hard
+        ? current.filter((person) => person.id !== targetId)
+        : current.map((person) => person.id === targetId ? { ...person, status: "Pasif", activePassive: "Pasif" } : person));
+
       await loadPeople();
-      setNotice(hard ? "Personel kaydı kalıcı olarak silindi." : "Personel pasife alındı ve aktif listeden çıkarıldı.");
+      setNotice(hard
+        ? `${targetName} (${targetCode}) kalıcı olarak silindi. Aynı isimde başka kayıt varsa listede ayrıca görünür.`
+        : `${targetName} (${targetCode}) pasife alındı ve aktif listeden çıkarıldı.`);
     } catch (cause) {
       setError(cause?.message || (hard ? "Personel kalıcı silinemedi." : "Personel pasife alınamadı."));
     } finally { setBusy(false); }
