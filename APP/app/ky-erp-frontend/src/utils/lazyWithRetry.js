@@ -4,6 +4,10 @@ const DYNAMIC_IMPORT_ERROR_MARKERS = [
   "Failed to fetch dynamically imported module",
   "Importing a module script failed",
   "error loading dynamically imported module",
+  "Failed to load module script",
+  "ChunkLoadError",
+  "Loading chunk",
+  "Load failed",
 ];
 
 function isDynamicImportError(error) {
