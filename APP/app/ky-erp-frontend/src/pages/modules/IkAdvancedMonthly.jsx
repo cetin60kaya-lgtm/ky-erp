@@ -822,11 +822,16 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   };
 
 
-  const printPayrollReport = () => {
+  const printPayrollReport = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Cikti icin personel bulunamadi.");
     const html = `<html><head><meta charset="utf-8"><style>body{font:12px Arial;color:#14263a;padding:20px}h1{font-size:20px;margin:0}p{color:#52657b}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #cad6e4;padding:7px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef4fb}.tot{font-weight:700;background:#f8fbff}@media print{body{padding:0}}</style></head><body><h1>IK Aylik Bordro ve Odeme Kontrol Listesi</h1><p>${MONTHS[month - 1]} ${year} - Cikti oncesi son kontrol</p><table><thead><tr><th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Avans</th><th>Özel Kesinti</th><th>İcra / Haciz</th><th>Banka</th><th>Elden</th><th>Net</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.employee.fullName}</td><td>${num(row.employee.sgkDays)}</td><td>${money(row.employee.sgkNet)}</td><td>${money(row.hakedis)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td></tr>`).join("")}<tr class="tot"><td>TOPLAM</td><td></td><td>${money(rows.reduce((sum,row)=>sum+num(row.employee.sgkNet),0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.garnishment,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td></tr></tbody></table></body></html>`;
-    printHtmlDocument(html, `ik-aylik-bordro-${period}`);
+    try {
+      await printHtmlDocument({ title: `İK Aylık Bordro - ${period}`, html });
+      setNotice("Toplu bordro raporu yazdırma / PDF ekranına gönderildi.");
+    } catch (error) {
+      setNotice(error?.message || "Toplu bordro raporu açılamadı.");
+    }
   };
 
   const legalLabel = (row) => row.legalType === "KARMA" ? "İcra/Haciz" : row.legalType === "HACIZ" ? "Haciz" : row.legalType === "ICRA" ? "İcra" : "";
@@ -844,19 +849,29 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     return `<article class="pay-slip"><header><b>${row.employee.fullName}</b><span>${MONTHS[month - 1]} ${year} ÖDEME FİŞİ</span></header><div class="slip-lines">${lines.map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join("")}</div><div class="pay-channels"><div><span>BANKADAN</span><b>${money(row.bank)}</b></div><div><span>ELDEN</span><b>${money(row.cash)}</b></div></div><div class="net"><span>TOPLAM ÖDENECEK</span><b>${money(row.net)}</b></div>${row.extra>0?`<div class="ek-cut"><span>EK</span><b>${money(row.extra)}</b></div>`:""}</article>`;
   };
 
-  const printSlip = (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
+  const printSlip = async (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
     if (!row) return setNotice("Fis icin personel secilmelidir.");
     const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{font-family:Arial;color:#101828;margin:0}.single{width:96mm;margin:auto}.pay-slip{border:1px solid #8fa3b8;padding:3mm;background:#fff}.pay-slip header{text-align:center;border-bottom:1px solid #cbd5e1;padding-bottom:2mm}.pay-slip header b{display:block;font-size:15px}.pay-slip header span{font-size:9px}.slip-lines>div{display:flex;justify-content:space-between;padding:1.1mm 0;border-bottom:1px solid #e7edf3;font-size:10px}.pay-channels{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin-top:2mm}.pay-channels div{text-align:center;border:1px solid #b9c8d8;padding:2mm}.pay-channels span,.net span{display:block;font-size:8px;font-weight:700}.pay-channels b{font-size:14px}.net{margin-top:2mm;text-align:center;border:1.5px solid #111;padding:2mm}.net b{font-size:18px}.ek-cut{margin:3mm -3mm -3mm;border-top:1px dashed #111;padding:2mm 3mm;display:flex;justify-content:center;gap:5mm;font-size:13px}.ek-cut b{font-size:15px}</style></head><body><div class="single">${slipCardHtml(row)}</div></body></html>`;
-    printHtmlDocument(html, `ik-fis-${row.employee.fullName}`);
+    try {
+      await printHtmlDocument({ title: `Ödeme Fişi - ${row.employee.fullName}`, html });
+      setNotice(`${row.employee.fullName} ödeme fişi yazdırma / PDF ekranına gönderildi.`);
+    } catch (error) {
+      setNotice(error?.message || "Tek kişi ödeme fişi açılamadı.");
+    }
   };
 
-  const printPaymentSlips = () => {
+  const printPaymentSlips = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Fis icin personel bulunamadi.");
     const pages = [];
     for (let index = 0; index < rows.length; index += 10) pages.push(rows.slice(index, index + 10));
     const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}body{font-family:Arial;color:#101828;margin:0}.page{width:200mm;height:287mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,1fr);gap:2mm;page-break-after:always}.page:last-child{page-break-after:auto}.pay-slip{border:1px dashed #6f8194;padding:2mm;overflow:hidden;display:flex;flex-direction:column;background:#fff}.pay-slip header{text-align:center;border-bottom:1px solid #cbd5e1;padding-bottom:1mm}.pay-slip header b{display:block;font-size:11px}.pay-slip header span{font-size:7px}.slip-lines{flex:1}.slip-lines>div{display:flex;justify-content:space-between;padding:.55mm 0;border-bottom:1px solid #edf1f5;font-size:7.5px}.pay-channels{display:grid;grid-template-columns:1fr 1fr;gap:1mm;margin-top:1mm}.pay-channels div{text-align:center;border:1px solid #b9c8d8;padding:1mm}.pay-channels span,.net span{display:block;font-size:6.5px;font-weight:700}.pay-channels b{font-size:10.5px}.net{margin-top:1mm;text-align:center;border:1.3px solid #111;padding:1mm}.net b{font-size:13px}.ek-cut{margin:1mm -2mm -2mm;border-top:1px dashed #111;padding:1mm 2mm;display:flex;justify-content:center;gap:4mm;font-size:8px}.ek-cut b{font-size:10px}@media print{.pay-slip{break-inside:avoid}}</style></head><body>${pages.map((pageRows)=>`<section class="page">${pageRows.map(slipCardHtml).join("")}</section>`).join("")}</body></html>`;
-    printHtmlDocument(html, `ik-personel-fisleri-${period}`);
+    try {
+      await printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri - ${period}`, html });
+      setNotice(`${rows.length} personelin toplu ödeme fişi yazdırma / PDF ekranına gönderildi.`);
+    } catch (error) {
+      setNotice(error?.message || "Toplu ödeme fişleri açılamadı.");
+    }
   };
 
 const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
@@ -900,7 +915,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     setModal("izinFis");
   };
 
-  const printLeaveForm = (employee = selected, selectedPlan = null, formOverride = null) => {
+  const printLeaveForm = async (employee = selected, selectedPlan = null, formOverride = null) => {
     if (!employee) return setNotice("Izin formu icin personel secilmelidir.");
     if (!formOverride) return openLeaveForm(employee, selectedPlan);
     const plan = selectedPlan || safeList(leaveCenter.plans).filter((item) => item.employeeId === employee.id && item.status !== "CANCELLED").sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))[0] || {};
@@ -908,7 +923,12 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     const type = form.leaveType, start = form.startDate || ".... / .... / ........", end = form.endDate || ".... / .... / ........", returnDate = form.returnDate || ".... / .... / ........", counted = form.countedDays || "....";
     const checked = (label) => upper(type).includes(upper(label)) ? "&#9745;" : "&#9744;";
     const html = `<html><head><meta charset="utf-8"><style>@page{size:A5 portrait;margin:7mm}*{box-sizing:border-box}body{margin:0;font:10.5px Arial;color:#111}.sheet{width:134mm;min-height:196mm;margin:auto;border:1.2px solid #111;padding:5mm}.head{display:grid;grid-template-columns:25mm 1fr 30mm;align-items:center;border-bottom:1.5px solid #111;padding-bottom:3mm}.logo{font-weight:800;font-size:15px}.head h1{text-align:center;font-size:17px;margin:0}.doc{text-align:right;font-size:9px}.row{display:grid;grid-template-columns:49mm 1fr;border-bottom:1px solid #777;min-height:8mm;align-items:center}.row b{padding:2mm;border-right:1px solid #777}.row span{padding:2mm}.reasons{display:flex;gap:8mm;font-size:11px}.note{font-size:8.5px;line-height:1.35;border:1px solid #777;padding:2.5mm;margin-top:4mm}.sign{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;margin-top:12mm;text-align:center}.sign div{padding-top:13mm;border-bottom:1px solid #111;padding-bottom:2mm}.sign b{display:block;margin-top:2mm}.foot{text-align:center;font-size:8px;margin-top:4mm;color:#444}@media print{.sheet{break-inside:avoid}}</style></head><body><div class="sheet"><div class="head"><div class="logo">KY ERP</div><h1>${form.documentTitle}</h1><div class="doc">Form No: ${form.documentNo || "........"}<br>Duzenleme: ${form.documentDate || "........"}</div></div><div class="row"><b>ADI SOYADI</b><span>${form.fullName || "-"}</span></div><div class="row"><b>SGK SICIL / PERSONEL NO</b><span>${form.registryNo || "-"}</span></div><div class="row"><b>DEPARTMANI</b><span>${form.department || "-"}</span></div><div class="row"><b>UNVANI</b><span>${form.jobTitle || "-"}</span></div><div class="row"><b>IZIN SEBEBI</b><span class="reasons"><i>${checked("Yillik")} YILLIK</i><i>${checked("Ucretsiz")} UCRETSIZ</i><i>${checked("Mazeret")} MAZERET</i></span></div><div class="row"><b>IZIN SURESI</b><span>${counted} is gunu</span></div><div class="row"><b>IZNE CIKACAGI TARIH</b><span>${start}</span></div><div class="row"><b>IZIN BITIS TARIHI</b><span>${end}</span></div><div class="row"><b>ISE BASLAYACAGI TARIH</b><span>${returnDate}</span></div><div class="row"><b>DEVREDEN IZIN GUN SAYISI</b><span>${form.carryover} gun</span></div><div class="row"><b>YILLIK IZIN HAKEDIS GUN SAYISI</b><span>${form.entitlement} gun</span></div><div class="row"><b>KULLANIM SONRASI KALAN IZIN</b><span>${form.remaining} gun</span></div><div class="note">NOT: ${form.note}</div><div class="sign"><div>IMZA<b>${form.employeeSignature}</b></div><div>ONAY<b>${form.managerSignature}</b></div><div>ONAY<b>${form.hrSignature}</b></div></div><div class="foot">Bu belge A5 boyutunda, A4 kagidin yarisi olacak sekilde yazdirilmaya uygundur.</div></div></body></html>`;
-    printHtmlDocument(html, `yillik-izin-formu-${employee.fullName}`);
+    try {
+      await printHtmlDocument({ title: `Yıllık İzin Formu - ${employee.fullName}`, html });
+      setNotice(`${employee.fullName} izin formu yazdırma / PDF ekranına gönderildi.`);
+    } catch (error) {
+      setNotice(error?.message || "İzin formu açılamadı.");
+    }
   };
 
   return (
