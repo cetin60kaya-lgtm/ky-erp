@@ -1,12 +1,8 @@
 name: KY ERP Responsive Frontend Canli Yayin
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/app/ky-erp-frontend/**"
-      - ".github/workflows/responsive-pages-release.yml"
+  # Cloudflare Git Integration is the automatic production deployment path.
+  # GitHub Actions is kept manual-only as an emergency fallback.
   workflow_dispatch:
 
 permissions:
