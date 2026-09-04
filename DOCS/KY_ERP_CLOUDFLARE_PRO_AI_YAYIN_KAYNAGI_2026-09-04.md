@@ -352,3 +352,25 @@ Sonraki allowlist:
 Yeni sohbette:
 
 > **“Cloudflare Pro + AI ana kaynağını oku. Actions'sız Git deploy düzenini koru. WAF/rate-limit/AI Gateway/Queues/Workflows/Vectorize rollout'una kaldığı yerden devam et; secret değerlerini asla repo veya sohbete yazma.”**
+
+
+---
+
+## 13. Yarın devam noktası — 04.09.2026
+
+Kullanıcı Cloudflare Pro aktivasyonunu tamamladı ve API Token oluşturma ekranına geldi.
+
+Yarın buradan devam edilecek:
+
+- Token adı: `KY ERP Pro Otomasyon`
+- API token henüz oluşturulmadı.
+- İzinler henüz final olarak kaydedilmedi.
+- Resource scope yalnız mevcut KY ERP Cloudflare hesabı + `kyerp.net` zone olacak.
+- D1 için yalnız Read; D1 Edit verilmeyecek.
+- Billing/API Tokens/Account Members/DNS Edit verilmeyecek.
+- Token değeri chat/repo/log içine yazılmayacak.
+- Token oluşturulduktan sonra `ky-erp-api` build/runtime secrets tarafına güvenli secret olarak eklenecek.
+- Ardından sırasıyla WAF -> rate limit -> cache -> bot koruması -> Turnstile -> AI Gateway -> Workers AI -> Queues -> Workflows -> Vectorize -> AI Search pilotu uygulanacak.
+- GitHub Actions otomatik production yolu olarak kullanılmayacak; Cloudflare Git Integration canonical deploy yoludur.
+
+Kullanıcı talebi: **Yarın minimum soru ile buradan devam et.**
