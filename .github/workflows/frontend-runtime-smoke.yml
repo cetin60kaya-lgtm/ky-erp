@@ -1,12 +1,8 @@
 name: KY ERP Frontend Gerçek Tarayıcı Testi
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/app/ky-erp-frontend/**"
-      - ".github/workflows/frontend-runtime-smoke.yml"
+  # Manual-only. Automatic frontend builds/deploys are handled by Cloudflare Git Integration.
+  workflow_dispatch:
 
 permissions:
   contents: read
