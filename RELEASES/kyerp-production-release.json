@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-04T16:40:00+03:00",
-  "attempt": 95,
+  "requestedAt": "2026-09-04T18:23:00+03:00",
+  "attempt": 96,
   "scope": [
     "storage-file-hub-direct-cloud-services",
     "google-drive-oauth",
@@ -36,9 +36,14 @@
     "file-hub-oauth-key-auto-provision",
     "optional-google-provider-disabled-until-real-app-registration",
     "optional-microsoft-provider-disabled-until-real-app-registration",
-    "oauth-partial-pair-fail-closed"
+    "oauth-partial-pair-fail-closed",
+    "ik-payroll-bulk-report-pdf-fix",
+    "ik-payroll-bulk-slip-pdf-fix",
+    "ik-payroll-single-slip-print-contract",
+    "ik-print-service-full-document-support",
+    "ik-print-service-legacy-call-compatibility"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "f8c793e602a1d4846091d4e51ce170c4a63eeb34",
-  "note": "04.09.2026 attempt 95. Attempt 94 gerçek Google/Microsoft OAuth app credentialları production'da tanımlı olmadığı için D1'e dokunmadan güvenli durdu. Bu revizyonda FILE_HUB_OAUTH_KEY yoksa Worker secret olarak tek seferlik güçlü anahtar oluşturulur. Google/Microsoft credential çiftleri tamamen yoksa ilgili provider CONFIGURED=false kalır ve ana KY ERP yayını devam eder; yarım credential çifti fail-closed durur. Depolama/e-Belge final paketi, 0044 additive migration, D1 tam yedek, Worker ve Pages canlı yayını hedeflenir. Resmî e-belge gönderimi otomatik değildir; D1 reset/drop yok."
+  "sourceCommit": "4b1f7de3b2fc1f99e7bc5a02a43f837b324f82d2",
+  "note": "04.09.2026 attempt 96. Maaş ödemesi öncesi İK Bordro & Ödeme çıktı hotfix'i. printService object sözleşmesi ile legacy çağrı uyumsuzluğu giderildi; Toplu Rapor / PDF, Toplu Fiş / PDF, Tek Kişi Fişi ve İzin Formu canonical yazdırma akışına geçirildi. Tam HTML dokümanı nested HTML oluşturmadan yazdırılır; A4 toplu fiş düzeni ve seçili personel filtresi korunur. Veri/D1 değişikliği yoktur. Worker/frontend test-build ve canlı domain kontrolleri zorunludur."
 }
