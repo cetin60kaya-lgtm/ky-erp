@@ -29,6 +29,8 @@ test("AppShellV3 ortak responsive katmani ve Windows benzeri ekran ayarini yukle
   assert.match(shellV3, /shell-v3-display-button/);
   assert.match(shellV3, /DisplaySettingsPanel/);
   assert.match(shellV3, /data-ui-scale=\{effectiveScale\}/);
+  assert.match(shellV3, /zoom: scaleFactor/);
+  assert.match(shellV3, /100 \/ scaleFactor/);
 });
 
 test("manuel PC tablet ve telefon profilleri CSS seviyesinde tanimlidir", () => {
