@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-04T10:25:00+03:00",
-  "attempt": 91,
+  "requestedAt": "2026-09-04T11:09:30+03:00",
+  "attempt": 92,
   "scope": [
     "ik-monthly-payroll-readiness",
     "pdks-modern-attendance-v2",
@@ -29,9 +29,13 @@
     "ik-legacy-empty-code-backfill",
     "ik-active-passive-filter",
     "ik-admin-hard-delete-duplicate-personnel",
-    "ik-duplicate-code-card-protection"
+    "ik-duplicate-code-card-protection",
+    "ik-hard-delete-d1-pragma-fix",
+    "ik-hard-delete-master-row-verification",
+    "ik-hard-delete-exact-id-ui-refresh",
+    "ik-duplicate-name-hkn-display"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "d3a8e5084ac3f440d552988f420910d4af94ad91",
-  "note": "04.09.2026 attempt 91. Maaş işlemi öncesi İK Personel Kartı son düzeltmeleri canlıya alınır. HKN-xx personel kodu sunucu tarafında otomatik üretilir; mevcut boş kodlar güvenli/idempotent tamamlanır. Aktif/Pasif/Tüm personel filtresi vardır. Yanlış veya mükerrer açılan personel için yalnız yönetici rolünde onaylı kalıcı silme, pasife alma ve audit kaydı eklenmiştir. Mükerrer HKN kodu ve kart numarası engellenir. Önceki İK Aylık + PDKS kapsamı korunur. D1 reset yoktur; yayın öncesi tam D1 yedeği, Worker/frontend test-build, güvenlik ve canlı domain kontrollerinden biri başarısız olursa yayın durur."
+  "sourceCommit": "1d6fba6d029dd79232592d0cc8f553a6d880b39b",
+  "note": "04.09.2026 attempt 92. Canlıda Kalıcı Sil işleminin kaydı kaldırmaması için kesin düzeltme. D1 metadata taraması pragma_table_info literal güvenli çağrıya çevrildi; yardımcı tablo temizliği master silmeyi bloke etmiyor; hr_monthly_employees kaydı tenant+id ile siliniyor ve silme sonrası tekrar SELECT ile doğrulanıyor. Frontend sadece deleted=true dönerse başarı gösteriyor, exact id listeden kaldırılıyor ve sunucudan liste tekrar okunuyor. Aynı isimli mükerrer personeller listede HKN koduyla ayırt ediliyor. D1 reset yok; yayın öncesi tam yedek ve tüm production kontrolleri zorunlu."
 }
