@@ -85,6 +85,116 @@ async function ensureFull(c: Context<AppEnv>) {
   return { auth };
 }
 
+function normalizePersonnelCode(value: unknown) {
+  const raw = upper(value).replace(/\s+/g, "");
+  if (!raw) return "";
+  const legacy = raw.match(/^AY-?(\d+)$/);
+  if (legacy) return `HKN-${String(Number(legacy[1])).padStart(2, "0")}`;
+  const hkn = raw.match(/^HKN-?(\d+)$/);
+  if (hkn) return `HKN-${String(Number(hkn[1])).padStart(2, "0")}`;
+  const numeric = raw.match(/^(\d+)$/);
+  if (numeric) return `HKN-${String(Number(numeric[1])).padStart(2, "0")}`;
+  return raw;
+}
+
+function personnelCodeNumber(value: unknown) {
+  const match = normalizePersonnelCode(value).match(/^HKN-(\d+)$/);
+  return match ? Number(match[1]) : 0;
+}
+
+async function nextPersonnelCode(c: Context<AppEnv>, company: string) {
+  const rows = await all(c, "SELECT code FROM hr_monthly_employees WHERE main_company_id=? AND TRIM(COALESCE(code,''))<>''", [company]);
+  const max = rows.reduce((current, row) => Math.max(current, personnelCodeNumber(row.code)), 0);
+  return `HKN-${String(max + 1).padStart(2, "0")}`;
+}
+
+async function ensurePersonnelCodes(c: Context<AppEnv>, company: string) {
+  const missing = await all(c, "SELECT id,full_name,created_at FROM hr_monthly_employees WHERE main_company_id=? AND TRIM(COALESCE(code,''))='' ORDER BY COALESCE(created_at,''),id", [company]);
+  if (!missing.length) return;
+  const existing = await all(c, "SELECT code FROM hr_monthly_employees WHERE main_company_id=? AND TRIM(COALESCE(code,''))<>''", [company]);
+  let max = existing.reduce((current, row) => Math.max(current, personnelCodeNumber(row.code)), 0);
+  for (const row of missing) {
+    max += 1;
+    const code = `HKN-${String(max).padStart(2, "0")}`;
+    const timestamp = nowIso();
+    const result = await c.env.DB.prepare("UPDATE hr_monthly_employees SET code=?,updated_at=? WHERE id=? AND main_company_id=? AND TRIM(COALESCE(code,''))=''")
+      .bind(code, timestamp, text(row.id), company).run();
+    if (!result.meta?.changes) continue;
+    try {
+      await c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+        (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
+          crypto.randomUUID(), company, text(row.id), "AUTO_PERSONNEL_CODE", "personnelCode", "", code,
+          dateOnly(timestamp), "Eksik personel kodu HKN standardına otomatik tamamlandı.", null, timestamp,
+        ).run();
+    } catch {}
+  }
+}
+
+async function writePersonRemovalAudit(c: Context<AppEnv>, auth: Row, person: Row, mode: string, reason: string) {
+  const details = {
+    deletedEmployeeId: text(person.id),
+    personnelCode: text(person.personnelCode),
+    fullName: text(person.fullName),
+    mode,
+    reason,
+    actorUserId: text(auth.user?.id),
+    actorUsername: text(auth.user?.username),
+  };
+  try {
+    await c.env.DB.prepare(`INSERT INTO hr_monthly_audit_logs
+      (id,main_company_id,period,employee_id,entity_type,action,summary,details_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(
+        crypto.randomUUID(), auth.company, "", null, "PERSONEL", mode === "HARD" ? "HARD_DELETE" : "PASSIVE",
+        mode === "HARD" ? `${text(person.fullName)} personel kaydı kalıcı silindi.` : `${text(person.fullName)} personel kaydı pasife alındı.`,
+        JSON.stringify(details), nowIso(),
+      ).run();
+  } catch {}
+  try {
+    await c.env.DB.prepare(`INSERT INTO auth_security_audit
+      (id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(
+        crypto.randomUUID(), text(auth.user?.id) || null, null, auth.company,
+        mode === "HARD" ? "IK_PERSONNEL_HARD_DELETE" : "IK_PERSONNEL_PASSIVE",
+        null, text(c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For")?.split(",")[0]) || null,
+        JSON.stringify(details), nowIso(),
+      ).run();
+  } catch {}
+}
+
+async function hardDeletePersonData(c: Context<AppEnv>, employeeId: string) {
+  try {
+    await c.env.DB.prepare("UPDATE ik_person_card_settings SET base_employee_id=NULL WHERE base_employee_id=?").bind(employeeId).run();
+  } catch {}
+
+  const tables = await all(c, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+  const preservedAudit = new Set(["hr_monthly_audit_logs", "ik_audit_logs", "auth_security_audit"]);
+  for (const row of tables) {
+    const table = text(row.name);
+    if (!/^[A-Za-z0-9_]+$/.test(table) || table === "hr_monthly_employees") continue;
+    const columns = await all(c, "SELECT name FROM pragma_table_info(?)", [table]);
+    const names = new Set(columns.map((column) => text(column.name)));
+    const employeeColumns = ["employee_id", "person_id"].filter((column) => names.has(column));
+    if (!employeeColumns.length) continue;
+
+    const quoted = `"${table}"`;
+    const where = employeeColumns.map((column) => `"${column}"=?`).join(" OR ");
+    if (preservedAudit.has(table)) {
+      for (const column of employeeColumns) {
+        try {
+          await c.env.DB.prepare(`UPDATE ${quoted} SET "${column}"=NULL WHERE "${column}"=?`).bind(employeeId).run();
+        } catch {
+          await c.env.DB.prepare(`DELETE FROM ${quoted} WHERE "${column}"=?`).bind(employeeId).run();
+        }
+      }
+      continue;
+    }
+    await c.env.DB.prepare(`DELETE FROM ${quoted} WHERE ${where}`).bind(...employeeColumns.map(() => employeeId)).run();
+  }
+
+  await c.env.DB.prepare("DELETE FROM hr_monthly_employees WHERE id=?").bind(employeeId).run();
+}
+
 function personSelect(audit = false) {
   return `SELECT e.id,e.main_company_id,e.code,e.full_name,e.department,e.title,e.work_type,e.sgk_status,e.status,
                  e.hire_date,e.salary,e.road_allowance,e.bank_payment_type,e.bank_amount,e.cash_amount,
@@ -132,6 +242,7 @@ function mapPerson(row: Row, audit = false) {
 }
 
 async function personRows(c: Context<AppEnv>, auth: Row) {
+  if (!auth.audit) await ensurePersonnelCodes(c, auth.company);
   const rows = await all(c, `${personSelect(auth.audit)} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
   return rows.map((row) => mapPerson(row, auth.audit));
 }
@@ -293,23 +404,83 @@ async function createPerson(c: Context<AppEnv>) {
   const fullName = text(body.fullName);
   if (!fullName) return error(c, 400, "FULL_NAME_REQUIRED", "Ad soyad zorunludur.");
   const id = text(body.id) || crypto.randomUUID();
-  const code = text(body.personnelCode || body.code);
+  const requestedCode = normalizePersonnelCode(body.personnelCode || body.code);
+  if (requestedCode && !/^HKN-\d+$/.test(requestedCode)) {
+    return error(c, 400, "PERSONNEL_CODE_INVALID", "Personel kodu HKN-01 biçiminde olmalıdır.");
+  }
+  const code = requestedCode || await nextPersonnelCode(c, auth.company);
+  const codeDuplicate = await first(c, "SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND UPPER(TRIM(COALESCE(code,'')))=UPPER(?) LIMIT 1", [auth.company, code]);
+  if (codeDuplicate) return error(c, 409, "PERSONNEL_CODE_DUPLICATE", `Bu personel kodu zaten kullanılıyor: ${code}.`);
+  const cardNo = text(body.cardNo);
+  if (cardNo) {
+    const cardDuplicate = await first(c, "SELECT employee_id FROM ik_person_card_settings WHERE main_company_id=? AND TRIM(COALESCE(card_no,''))=? LIMIT 1", [auth.company, cardNo]);
+    if (cardDuplicate) return error(c, 409, "PERSONNEL_CARD_DUPLICATE", `Bu kart numarası başka personelde kayıtlı: ${cardNo}.`);
+  }
+  const startDate = dateOnly(body.startDate || body.hireDate);
+  const duplicate = await first(c, `SELECT id FROM hr_monthly_employees
+    WHERE main_company_id=? AND LOWER(TRIM(full_name))=LOWER(TRIM(?))
+      AND COALESCE(hire_date,'')=? AND COALESCE(department,'')=? AND COALESCE(title,'')=? LIMIT 1`,
+    [auth.company, fullName, startDate, text(body.department), text(body.title)]);
+  if (duplicate) return error(c, 409, "DUPLICATE_EMPLOYEE", "Aynı personel kartı zaten mevcut. Yeni kayıt açmak yerine mevcut kartı düzenleyin.");
   const timestamp = nowIso();
   await c.env.DB.prepare(`INSERT INTO hr_monthly_employees
     (id,main_company_id,code,full_name,department,title,work_type,sgk_status,status,hire_date,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,overtime_hourly_base,annual_leave_entitlement,annual_leave_carryover,note,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(id, auth.company, code || null, fullName, text(body.department) || null, text(body.title) || null,
       text(body.workType) || "Aylık", upper(body.sgkStatus) === "YOK" ? "YOK" : "VAR", text(body.status) || "Aktif",
-      dateOnly(body.startDate || body.hireDate) || null, number(body.salary), number(body.roadAllowance), text(body.paymentChannel) || "Banka + Elden",
+      startDate || null, number(body.salary), number(body.roadAllowance), text(body.paymentChannel) || "Banka + Elden",
       number(body.bankAmount), number(body.cashAmount), number(body.overtimeBaseHours) || 225, number(body.annualLeaveEntitlement) || 14,
       number(body.annualLeaveCarryover), text(body.note) || null, timestamp, timestamp).run();
   await c.env.DB.prepare(`INSERT INTO ik_person_card_settings
     (employee_id,main_company_id,card_no,identity_no,exit_date,active_passive,phone,payment_type,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?)
     ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no,identity_no=excluded.identity_no,exit_date=excluded.exit_date,active_passive=excluded.active_passive,phone=excluded.phone,payment_type=excluded.payment_type,updated_at=excluded.updated_at`)
-    .bind(id, auth.company, text(body.cardNo) || null, text(body.identityNo) || null, dateOnly(body.exitDate) || null, text(body.activePassive) || "Aktif", text(body.phone) || null, text(body.paymentChannel) || null, timestamp).run();
+    .bind(id, auth.company, cardNo || null, text(body.identityNo) || null, dateOnly(body.exitDate) || null, text(body.activePassive) || "Aktif", text(body.phone) || null, text(body.paymentChannel) || null, timestamp).run();
   const person = await accessiblePerson(c, auth, id);
   return ok(c, person, 201);
+}
+
+async function removePerson(c: Context<AppEnv>) {
+  const full = await ensureFull(c);
+  if (full.response) return full.response;
+  const { auth } = full;
+  const employeeId = text(c.req.param("employeeId"));
+  const currentRaw = await first(c, `${personSelect(false)} AND e.id=? LIMIT 1`, [auth.company, employeeId]);
+  if (!currentRaw) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+  const person = mapPerson(currentRaw, false);
+  const body = await bodyOf(c);
+  const mode = upper(body.mode || "PASSIVE");
+  const reason = text(body.reason) || (mode === "HARD" ? "Yanlış veya mükerrer personel kaydı" : "Personel pasife alındı");
+
+  if (mode === "HARD") {
+    if (!adminRole(auth.user?.role)) {
+      return error(c, 403, "ADMIN_REQUIRED", "Kalıcı personel silme yalnız yönetici yetkisiyle yapılabilir.");
+    }
+    if (text(body.confirmName).toLocaleLowerCase("tr-TR") !== text(person.fullName).toLocaleLowerCase("tr-TR")) {
+      return error(c, 400, "HARD_DELETE_CONFIRMATION_REQUIRED", "Kalıcı silme için personel adı doğrulanmalıdır.");
+    }
+    await hardDeletePersonData(c, employeeId);
+    await writePersonRemovalAudit(c, auth, person, "HARD", reason);
+    return ok(c, { id: employeeId, fullName: person.fullName, personnelCode: person.personnelCode, mode: "HARD", deleted: true });
+  }
+
+  if (mode !== "PASSIVE") return error(c, 400, "REMOVE_MODE_INVALID", "Silme modu PASSIVE veya HARD olmalıdır.");
+  const timestamp = nowIso();
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE hr_monthly_employees SET status='Pasif',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp, employeeId, auth.company),
+    c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,updated_at)
+      VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET active_passive=excluded.active_passive,updated_at=excluded.updated_at`)
+      .bind(employeeId, auth.company, "Pasif", timestamp),
+    c.env.DB.prepare(`INSERT INTO ik_employee_change_history
+      (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        crypto.randomUUID(), auth.company, employeeId, "PERSONNEL_STATUS", "status", text(person.status), "Pasif",
+        dateOnly(timestamp), reason, text(auth.user?.id), timestamp,
+      ),
+  ]);
+  await writePersonRemovalAudit(c, auth, { ...person, status: "Pasif" }, "PASSIVE", reason);
+  const saved = await accessiblePerson(c, auth, employeeId);
+  return ok(c, { ...(saved || person), mode: "PASSIVE", deleted: false });
 }
 
 async function saveChanges(c: Context<AppEnv>) {
@@ -560,6 +731,7 @@ export function registerIkPersonnelControlRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/personnel-control/people", createPerson);
   app.get("/api/ik/personnel-control/people/:employeeId", personDetail);
   app.post("/api/ik/personnel-control/people/:employeeId/change", saveChanges);
+  app.post("/api/ik/personnel-control/people/:employeeId/remove", removePerson);
   app.get("/api/ik/personnel-control/people/:employeeId/attendance", async (c) => {
     const auth = await authContext(c);
     if (!auth) return error(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
