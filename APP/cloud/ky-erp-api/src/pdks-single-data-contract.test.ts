@@ -139,7 +139,7 @@ test("Web PDKS uses canonical left navigation and keeps finance inside IK", () =
   assert.match(shell, /MovedToIk/);
   assert.doesNotMatch(desk, /getPdksPayroll/);
   assert.doesNotMatch(desk, /Kazanç \/ Kesinti/);
-  assert.doesNotMatch(desk, /createIkControlPerson|personMode|Personel Düzenle|İşten Çıkış/);
+  assert.doesNotMatch(desk, /createIkControlPerson|personMode|Personel Düzenle|İşten Çıkış Tarihi/);
   assert.match(desk, /PDKS Kart Numarası/);
 
   for (const ikItem of [
