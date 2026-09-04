@@ -3,6 +3,7 @@ import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import MuhasebePage from "./pages/modules/MuhasebePage";
+import IkPage from "./pages/modules/IkPage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
@@ -10,7 +11,6 @@ import { useDisplayPreferences } from "./hooks/useDisplayPreferences";
 import AppShellV3 from "./layouts/AppShellV3";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
-const IkPage = lazyWithRetry(() => import("./pages/modules/IkPage"), "ik-v3");
 const IkPersonnelCenterPage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelCenterPage"), "ik-personnel-center-v2");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
 const IkPdksSyncPage = lazyWithRetry(() => import("./pages/modules/ik/IkPdksSyncPage"), "ik-pdks-sync-v1");
