@@ -1,0 +1,3 @@
+KY ERP Cloudflare Workers Git auto-deploy probe
+Purpose: verify production-branch Worker deployment without GitHub Actions.
+Safe to keep; no runtime effect.
