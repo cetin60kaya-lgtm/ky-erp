@@ -32,7 +32,7 @@ jobs:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2
 
       - name: Node.js 22 LTS
         uses: actions/setup-node@v4
@@ -48,11 +48,38 @@ jobs:
           test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
           test -n "${CLOUDFLARE_API_TOKEN:-}"
 
+      - name: Yalnız frontend degisikligi oldugunu dogrula
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Frontend-only yayin otomatik atlandi: onceki commit belirlenemedi."
+            exit 0
+          fi
+          git cat-file -e "$before^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$before"
+          changed="$(git diff --name-only "$before" "$GITHUB_SHA")"
+          printf '%s\n' "$changed"
+          if grep -Eq '^(APP/cloud/ky-erp-api/|RELEASES/kyerp-production-release\.json$|\.github/workflows/production-release\.yml$)' <<<"$changed"; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Worker/D1/full-release degisikligi bulundu; Pages-only yayin atlandi."
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Paketleri kur
+        if: steps.scope.outputs.deploy == 'true'
         working-directory: APP/app/ky-erp-frontend
         run: npm ci
 
       - name: Test lint ve production build
+        if: steps.scope.outputs.deploy == 'true'
         working-directory: APP/app/ky-erp-frontend
         env:
           VITE_API_URL: https://api.kyerp.net
@@ -64,10 +91,12 @@ jobs:
           npm run build
 
       - name: Cloudflare erisimini dogrula
+        if: steps.scope.outputs.deploy == 'true'
         working-directory: APP/app/ky-erp-frontend
         run: npx --yes wrangler@4.118.0 whoami
 
       - name: Frontendi Cloudflare Pages productiona dagit
+        if: steps.scope.outputs.deploy == 'true'
         working-directory: APP/app/ky-erp-frontend
         run: >-
           npx --yes wrangler@4.118.0 pages deploy dist
@@ -77,6 +106,7 @@ jobs:
           --commit-message "KY ERP responsive production $GITHUB_SHA"
 
       - name: Canli uygulamayi ve responsive bundlei dogrula
+        if: steps.scope.outputs.deploy == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -107,8 +137,15 @@ jobs:
           test -s /tmp/kyerp-route.html
 
       - name: Yayin sonucu
+        if: steps.scope.outputs.deploy == 'true'
         run: |
           echo "KY ERP responsive frontend production yayini tamamlandi."
           echo "D1: degismedi"
           echo "Worker API: degismedi"
           echo "App: https://app.kyerp.net"
+
+      - name: Full release paketinde Pages-only yayini atla
+        if: steps.scope.outputs.deploy != 'true'
+        run: |
+          echo "Frontend-only yayin guvenli sekilde atlandi."
+          echo "Worker/D1 iceren paket canonical production release ile yayinlanacak."
