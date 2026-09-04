@@ -18,9 +18,10 @@ test("otomatik mod telefon tablet ve PC ayrimini yapar", () => {
   assert.equal(detectRecommendedMode({ width: 1920, height: 1080, coarsePointer: false, maxTouchPoints: 0 }), "pc");
 });
 
-test("2K 1x Windows ekranda onerilen olcek 110 olur", () => {
-  assert.equal(detectRecommendedScale({ width: 2560, devicePixelRatio: 1 }, "pc"), 110);
+test("Windows 2560x1440 ekranda onerilen olcek 100 kalir", () => {
+  assert.equal(detectRecommendedScale({ width: 2560, devicePixelRatio: 1 }, "pc"), 100);
   assert.equal(detectRecommendedScale({ width: 2048, devicePixelRatio: 1.25 }, "pc"), 100);
+  assert.equal(detectRecommendedScale({ width: 3840, devicePixelRatio: 1 }, "pc"), 125);
   assert.equal(detectRecommendedScale({ width: 1280, devicePixelRatio: 1 }, "tablet"), 100);
 });
 
