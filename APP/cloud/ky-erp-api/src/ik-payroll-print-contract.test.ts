@@ -29,7 +29,7 @@ test("IK payroll report and payment slips use the canonical print service contra
 test("IK bulk slip output keeps A4 pagination and selected-person filtering", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
   assert.match(page, /selectedPayrollIds\.includes\(row\.employee\.id\)/);
-  assert.match(page, /for \\(let index = 0; index < rows\\.length; index \\+= 4\\)/);
+  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 4\)/);
   assert.match(page, /@page\{size:A4 portrait/);
   assert.match(page, /grid-template-columns:1fr 1fr/);
   assert.match(page, /grid-template-rows:1fr 1fr/);
