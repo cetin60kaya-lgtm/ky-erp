@@ -1,0 +1,50 @@
+name: KY ERP Responsive Tablet Telefon Kontrolu
+
+on:
+  push:
+    branches:
+      - codex/responsive-tablet-mobile-v1
+    paths:
+      - "APP/app/ky-erp-frontend/**"
+      - ".github/workflows/responsive-frontend-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-responsive-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Test Lint Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Paketleri kur
+        run: npm ci
+
+      - name: Responsive ve uygulama testleri
+        run: npm test
+
+      - name: Frontend lint
+        run: npm run lint
+
+      - name: Production build
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        run: npm run build
