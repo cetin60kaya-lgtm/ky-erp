@@ -4779,7 +4779,7 @@ function DailyCards({
             <Input label="Başlangıç">
               <TextInput
                 type="date"
-                value={safeRange.start}
+                value={range?.start || DEFAULT_DAILY_RANGE.start}
                 onChange={(event) =>
                   setRange((current) => ({ ...current, start: event?.target.value }))
                 }
@@ -4788,7 +4788,7 @@ function DailyCards({
             <Input label="Bitiş">
               <TextInput
                 type="date"
-                value={safeRange.end}
+                value={range?.end || DEFAULT_DAILY_RANGE.end}
                 onChange={(event) =>
                   setRange((current) => ({ ...current, end: event?.target.value }))
                 }
@@ -7788,7 +7788,7 @@ function WeeklySummary({ daily, dailyEntries, range, setRange, skills = [], week
           <Input label="Başlangıç">
             <TextInput
               type="date"
-              value={range.start}
+              value={safeRange.start}
               onChange={(event) =>
                 setRange((current) => ({ ...current, start: event?.target.value }))
               }
@@ -7797,7 +7797,7 @@ function WeeklySummary({ daily, dailyEntries, range, setRange, skills = [], week
           <Input label="Bitiş">
             <TextInput
               type="date"
-              value={range.end}
+              value={safeRange.end}
               onChange={(event) =>
                 setRange((current) => ({ ...current, end: event?.target.value }))
               }
