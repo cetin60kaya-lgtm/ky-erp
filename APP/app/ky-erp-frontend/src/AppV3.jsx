@@ -3,7 +3,6 @@ import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import MuhasebePage from "./pages/modules/MuhasebePage";
-import IkPage from "./pages/modules/IkPage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
@@ -11,9 +10,9 @@ import { useDisplayPreferences } from "./hooks/useDisplayPreferences";
 import AppShellV3 from "./layouts/AppShellV3";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
-const IkPersonnelCenterPage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelCenterPage"), "ik-personnel-center-v2");
+const IkPersonnelFinancePage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelFinancePage"), "ik-personnel-finance-v1");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
-const IkPdksSyncPage = lazyWithRetry(() => import("./pages/modules/ik/IkPdksSyncPage"), "ik-pdks-sync-v1");
+const IkFinancePage = lazyWithRetry(() => import("./pages/modules/ik/IkFinancePage"), "ik-finance-v1");
 const PdksPage = lazyWithRetry(() => import("./pages/modules/PdksPage"), "pdks-v1");
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
@@ -33,10 +32,9 @@ const MODULE_LOADERS = {
   muhasebe: () => Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
   admin: () => import("./pages/modules/AdminPage"),
   ik: () => Promise.all([
-    import("./pages/modules/IkPage"),
-    import("./pages/modules/ik/IkPersonnelCenterPage"),
+    import("./pages/modules/ik/IkPersonnelFinancePage"),
+    import("./pages/modules/ik/IkFinancePage"),
     import("./pages/modules/ik/IkAuditPersonnelPage"),
-    import("./pages/modules/ik/IkPdksSyncPage"),
   ]),
   pdks: () => import("./pages/modules/PdksPage"),
   desen: () => import("./pages/modules/DesenPage"),
@@ -280,9 +278,10 @@ export default function AppV3() {
     if (activeModule?.key === "boyahane") return <BoyahanePage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "ik") {
       if (isAuditAccount) return <IkAuditPersonnelPage />;
-      if (activeTab === "personel-kartlari") return <IkPersonnelCenterPage activeTab={activeTab} {...sharedProps} />;
-      if (activeTab === "puantaj-izin") return <IkPdksSyncPage {...sharedProps} />;
-      return <IkPage activeTab={activeTab} {...sharedProps} />;
+      if (["personel-kartlari", "ucret-odeme-plani"].includes(activeTab)) {
+        return <IkPersonnelFinancePage focus={activeTab === "ucret-odeme-plani" ? "ucret" : "personel"} {...sharedProps} />;
+      }
+      return <IkFinancePage activeTab={activeTab} {...sharedProps} />;
     }
     if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} isAuditAccount={isAuditAccount} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
