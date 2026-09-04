@@ -3,6 +3,42 @@ import {
   MODULE_ROUTE_ALIASES as BASE_ROUTE_ALIASES,
 } from "./moduleRegistryBase";
 
+const PDKS_MODULE = {
+  key: "pdks",
+  permissionKey: "IK",
+  label: "PDKS",
+  icon: "takvim",
+  groups: [
+    {
+      label: "PDKS Ana Menü",
+      tabs: [
+        ["ana-ekran", "Ana Ekran", "dashboard"],
+        ["personel-bilgileri", "Personel", "users"],
+        ["giris-cikislar", "Giriş / Çıkış", "takvim"],
+        ["puantaj", "Puantaj", "takvim"],
+        ["izinler", "İzinler", "takvim"],
+        ["puantaj-kurallari", "Vardiya & Kurallar", "ayarlar"],
+        ["cihaz-baglantilari", "Cihaz / Senkron", "ayarlar"],
+        ["raporlar", "Raporlar", "raporlar"],
+      ],
+    },
+  ],
+  hiddenTabs: [
+    ["bilgi-aktar", "Kart / Terminal Aktarımı", "dosya"],
+    ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
+    ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+    ["gruplar-vardiyalar", "Gruplar / Vardiyalar", "ayarlar"],
+    ["donemler", "Dönemler / Kapanış", "takvim"],
+    ["servisler", "Servisler", "users"],
+    ["tatiller", "Resmî Tatil Takvimi", "takvim"],
+    ["saat-terminal", "Saat / Terminal", "ayarlar"],
+    ["senkron", "Senkronizasyon", "sync"],
+    ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
+    ["avanslar", "Avans (İK'ya taşındı)", "odemeler"],
+    ["bordro", "Bordro (İK'ya taşındı)", "odemeler"],
+  ],
+};
+
 const DEPOLAMA_MODULE = {
   key: "depolama",
   permissionKey: "STORAGE_ADMIN",
@@ -99,14 +135,24 @@ const baseModules = BASE_MODULES
   .map(withLoginApprovals)
   .map(withCompanyBilling)
   .map(withEBelgeNavigation);
-const adminIndex = baseModules.findIndex((module) => module.key === "admin");
+
+const ikIndex = baseModules.findIndex((module) => module.key === "ik");
+const modulesWithPdks = baseModules.some((module) => module.key === "pdks")
+  ? baseModules
+  : [
+      ...baseModules.slice(0, ikIndex >= 0 ? ikIndex + 1 : baseModules.length),
+      PDKS_MODULE,
+      ...baseModules.slice(ikIndex >= 0 ? ikIndex + 1 : baseModules.length),
+    ];
+
+const adminIndex = modulesWithPdks.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
-      ...baseModules.slice(0, adminIndex),
+      ...modulesWithPdks.slice(0, adminIndex),
       DEPOLAMA_MODULE,
-      ...baseModules.slice(adminIndex),
+      ...modulesWithPdks.slice(adminIndex),
     ]
-  : [...baseModules, DEPOLAMA_MODULE];
+  : [...modulesWithPdks, DEPOLAMA_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
@@ -125,6 +171,28 @@ export const MODULE_ROUTE_ALIASES = {
     "belge-merkezi": "e-belge-merkezi",
     "e-fatura": "e-belge-merkezi",
     "e-irsaliye": "e-belge-merkezi",
+  },
+  pdks: {
+    "genel-bakis": "ana-ekran",
+    "canli-gecisler": "ana-ekran",
+    "bilgi-aktarimi": "bilgi-aktar",
+    "giris-cikis": "giris-cikislar",
+    personel: "personel-bilgileri",
+    "personel-kartlari": "personel-bilgileri",
+    "puantaj-sonuc": "puantaj-sonuclari",
+    izin: "izinler",
+    "ozel-izin": "izinler",
+    "puantaj-bilgi": "puantaj-kurallari",
+    puanbilgi: "puantaj-kurallari",
+    gruplar: "gruplar-vardiyalar",
+    vardiyalar: "gruplar-vardiyalar",
+    "calisma-gruplari": "gruplar-vardiyalar",
+    terminal: "saat-terminal",
+    saat: "saat-terminal",
+    cihazlar: "cihaz-baglantilari",
+    sync: "senkron",
+    denetim: "denetim-yillik-temp",
+    temp: "denetim-yillik-temp",
   },
   depolama: {
     genel: "depolama-genel",
