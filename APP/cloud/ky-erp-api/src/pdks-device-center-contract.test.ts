@@ -39,12 +39,14 @@ test("PDKS public agent heartbeat and import remain available", () => {
   assert.match(device, /SGK=VAR \+ kart\/tarih\/saat/);
 });
 
-test("PDKS five-group navigation keeps dedicated device and sync center", () => {
-  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
-    assert.match(page, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
-  assert.match(page, /"cihaz-baglantilari", "senkron"/);
+test("PDKS canonical left navigation keeps dedicated device and sync center", () => {
+  const registry = frontend("app/moduleRegistry.js");
+  assert.match(registry, /const PDKS_MODULE/);
+  assert.ok(registry.includes('["cihaz-baglantilari", "Cihaz / Senkron"'));
+  assert.ok(registry.includes('["senkron", "Senkronizasyon"'));
+  assert.ok(page.includes('["cihaz-baglantilari", "senkron"].includes(activeTab)'));
   assert.match(page, /<PdksDeviceCenter/);
+  assert.doesNotMatch(page, /pdks-command-nav/);
   assert.match(center, /Son Heartbeat/);
   assert.match(center, /Senkronizasyon Geçmişi/);
   assert.match(center, /Bu bilgi yalnız şimdi gösterilir/);
