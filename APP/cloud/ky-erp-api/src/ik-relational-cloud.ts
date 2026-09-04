@@ -196,20 +196,48 @@ function mapAttendance(row: Row): Row {
   };
 }
 
+function overtimeMultiplierValue(value: unknown) {
+  return number(value) >= 1.75 ? 2 : 1.5;
+}
+
+function overtimeMetaFromNote(value: unknown) {
+  const raw = text(value);
+  const match = raw.match(/^\[OT:(1\.5|2):(WEEKDAY_50|WEEKEND_100)\]\s*/i);
+  const multiplier = match ? overtimeMultiplierValue(match[1]) : (upper(raw).includes("X2") ? 2 : 1.5);
+  return {
+    multiplier,
+    kind: multiplier === 2 ? "WEEKEND_100" : "WEEKDAY_50",
+    note: raw.replace(/^\[OT:(1\.5|2):(WEEKDAY_50|WEEKEND_100)\]\s*/i, "").trim(),
+  };
+}
+
+function overtimeStoredNote(note: unknown, multiplierValue: unknown) {
+  const multiplier = overtimeMultiplierValue(multiplierValue);
+  const kind = multiplier === 2 ? "WEEKEND_100" : "WEEKDAY_50";
+  const clean = text(note).replace(/^\[OT:(1\.5|2):(WEEKDAY_50|WEEKEND_100)\]\s*/i, "").trim();
+  return `[OT:${multiplier}:${kind}]${clean ? ` ${clean}` : ""}`;
+}
+
 function mapAdjustment(row: Row): Row {
+  const adjustmentType = text(row.adjustment_type);
+  const overtimeMeta = upper(adjustmentType).includes("MESAI")
+    ? overtimeMetaFromNote(row.note)
+    : { multiplier: 1, kind: "", note: text(row.note) };
   return {
     id: text(row.id),
     employeeId: text(row.employee_id),
     personId: text(row.employee_id),
     date: hrDateOnly(row.date),
-    adjustmentType: text(row.adjustment_type),
-    type: text(row.adjustment_type),
+    adjustmentType,
+    type: adjustmentType,
     hourOrDay: number(row.hour_or_day),
     hours: number(row.hour_or_day),
     amount: number(row.amount),
+    overtimeMultiplier: overtimeMeta.multiplier,
+    overtimeKind: overtimeMeta.kind,
     paymentMethod: text(row.payment_method) || "Elden",
     payrollEffect: text(row.payroll_effect),
-    note: text(row.note),
+    note: overtimeMeta.note,
     status: text(row.status) || "DRAFT",
     createdAt: row.created_at,
   };
@@ -835,27 +863,60 @@ async function saveAdjustment(c: Context<AppEnv>) {
   return okData(c, mapAdjustment(saved || { id, employee_id: employeeId, date, adjustment_type: adjustmentType, hour_or_day: hourOrDay, amount, payment_method: paymentMethod, payroll_effect: payrollEffect, note, status }), current ? 200 : 201);
 }
 
+async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, hours: number, multiplierValue: unknown) {
+  const employee = await first(c, `SELECT e.salary,e.overtime_hourly_base,s.base_employee_id
+    FROM hr_monthly_employees e
+    LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+    WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  if (!employee) return 0;
+  let baseSalary = number(employee.salary);
+  const baseEmployeeId = text(employee.base_employee_id);
+  if (baseEmployeeId) {
+    const baseEmployee = await first(c, "SELECT salary FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [baseEmployeeId, companyId]);
+    if (baseEmployee) baseSalary = number(baseEmployee.salary);
+  }
+  const divisor = number(employee.overtime_hourly_base) || 225;
+  const multiplier = overtimeMultiplierValue(multiplierValue);
+  return Math.round(((baseSalary / divisor) * hours * multiplier) * 100) / 100;
+}
+
 async function saveAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
-  const employeeIds = Array.isArray(body.employeeIds)
+  const adjustmentType = text(body.adjustmentType || body.type) || "Avans";
+  const isBulkAdvance = upper(adjustmentType).includes("TOPLU") && upper(adjustmentType).includes("AVANS");
+  const singleEmployeeId = text(body.employeeId || body.personId);
+  const employeeIds = isBulkAdvance && Array.isArray(body.employeeIds)
     ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
-    : [text(body.employeeId || body.personId)].filter(Boolean);
+    : [singleEmployeeId].filter(Boolean);
   if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", "Personel zorunludur.");
   const valid = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
   if (valid.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
+
   const date = hrDateOnly(body.date) || hrDateOnly(nowIso());
-  const adjustmentType = text(body.adjustmentType || body.type) || "Avans";
   const hourOrDay = number(body.hourOrDay || body.hours);
-  const amount = number(body.amount);
-  if (amount <= 0 && hourOrDay <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Tutar veya süre sıfırdan büyük olmalıdır.");
-  const paymentMethod = text(body.paymentMethod) || (adjustmentType === "Mesai" ? "Bordro" : "Elden");
-  const payrollEffect = text(body.payrollEffect) || (adjustmentType === "Mesai" ? "Bordroya ekle" : "Bordrodan düş");
-  const note = text(body.note || body.reason) || null;
+  const isOvertime = upper(adjustmentType).includes("MESAI");
+  if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
+  let amount = number(body.amount);
+  if (!isOvertime && amount <= 0 && hourOrDay <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Tutar veya süre sıfırdan büyük olmalıdır.");
+
+  const paymentMethod = text(body.paymentMethod) || (isOvertime ? "Bordro" : "Elden");
+  const payrollEffect = text(body.payrollEffect) || (isOvertime ? "Bordroya yansir" : "Bordrodan düş");
   const status = text(body.status) || "APPROVED";
-  const statements = employeeIds.map((employeeId) => c.env.DB.prepare("INSERT INTO hr_monthly_adjustments_v2 (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(), employeeId, date, adjustmentType, hourOrDay, amount, paymentMethod, payrollEffect, note, status, nowIso()));
+  const multiplier = overtimeMultiplierValue(body.overtimeMultiplier);
+  const statements: D1PreparedStatement[] = [];
+
+  for (const employeeId of employeeIds) {
+    const rowAmount = isOvertime
+      ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
+      : amount;
+    if (rowAmount <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Hesaplanan tutar sıfırdan büyük olmalıdır.");
+    const rowNote = isOvertime ? overtimeStoredNote(body.note || body.reason, multiplier) : (text(body.note || body.reason) || null);
+    statements.push(c.env.DB.prepare("INSERT INTO hr_monthly_adjustments_v2 (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(), employeeId, date, adjustmentType, hourOrDay, rowAmount, isOvertime ? "Bordro" : paymentMethod, isOvertime ? "Bordroya yansir" : payrollEffect, rowNote, status, nowIso()));
+  }
   await c.env.DB.batch(statements);
-  return okData(c, { savedCount: statements.length });
+  return okData(c, { savedCount: statements.length, employeeIds, adjustmentType, overtimeMultiplier: isOvertime ? multiplier : undefined });
 }
 
 async function updateAdvancedFinance(c: Context<AppEnv>) {
@@ -864,7 +925,29 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const current = await first(c, "SELECT a.* FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
-  await c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET date=?,adjustment_type=?,hour_or_day=?,amount=?,payment_method=?,payroll_effect=?,note=?,status=? WHERE id=?").bind(hrDateOnly(body.date || current.date), text(body.adjustmentType || body.type || current.adjustment_type), number(body.hourOrDay ?? body.hours ?? current.hour_or_day), number(body.amount ?? current.amount), text(body.paymentMethod || current.payment_method) || "Elden", text(body.payrollEffect || current.payroll_effect), text(body.note ?? current.note) || null, text(body.status || current.status), id).run();
+
+  const employeeId = text(body.employeeId || body.personId || current.employee_id);
+  const valid = await first(c, "SELECT id FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  if (!valid) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
+
+  const adjustmentType = text(body.adjustmentType || body.type || current.adjustment_type);
+  const isOvertime = upper(adjustmentType).includes("MESAI");
+  const hourOrDay = number(body.hourOrDay ?? body.hours ?? current.hour_or_day);
+  const multiplier = overtimeMultiplierValue(body.overtimeMultiplier || overtimeMetaFromNote(current.note).multiplier);
+  const amount = isOvertime
+    ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
+    : number(body.amount ?? current.amount);
+  if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
+  if (amount <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Tutar sıfırdan büyük olmalıdır.");
+
+  const note = isOvertime
+    ? overtimeStoredNote(body.note ?? overtimeMetaFromNote(current.note).note, multiplier)
+    : (text(body.note ?? current.note) || null);
+  await c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET employee_id=?,date=?,adjustment_type=?,hour_or_day=?,amount=?,payment_method=?,payroll_effect=?,note=?,status=? WHERE id=?")
+    .bind(employeeId, hrDateOnly(body.date || current.date), adjustmentType, hourOrDay, amount,
+      isOvertime ? "Bordro" : (text(body.paymentMethod || current.payment_method) || "Elden"),
+      isOvertime ? "Bordroya yansir" : text(body.payrollEffect || current.payroll_effect),
+      note, text(body.status || current.status), id).run();
   const saved = await first(c, "SELECT * FROM hr_monthly_adjustments_v2 WHERE id=?", [id]);
   return okData(c, mapAdjustment(saved || current));
 }
@@ -936,6 +1019,14 @@ async function createSalaryContract(c: Context<AppEnv>) {
   return okData(c, row || { id, employeeId }, 201);
 }
 
+function advancedEmployeeVisible(employee: Row, card: Row, period: string) {
+  if (card.payroll_included !== undefined && card.payroll_included !== null && !flag(card.payroll_included)) return false;
+  const status = upper(`${text(card.active_passive)} ${text(employee.status)}`);
+  if (!status.includes("PAS")) return true;
+  const exitPeriod = hrDateOnly(card.exit_date).slice(0, 7);
+  return Boolean(exitPeriod && exitPeriod === period);
+}
+
 async function advancedMonth(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const year = number(c.req.query("year")) || new Date().getFullYear();
@@ -949,12 +1040,15 @@ async function advancedMonth(c: Context<AppEnv>) {
     all(c, "SELECT d.* FROM hr_employee_documents d JOIN hr_monthly_employees e ON e.id=d.employee_id WHERE e.main_company_id=? ORDER BY d.date DESC", [companyId]),
     all(c, "SELECT s.* FROM hr_salary_contracts s JOIN hr_monthly_employees e ON e.id=s.employee_id WHERE e.main_company_id=? ORDER BY s.effective_date DESC", [companyId]),
   ]);
+  const period = `${year}-${String(month).padStart(2, "0")}`;
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
-  const mergedEmployees = employees.map((employee) => {
-    const card = cardsByEmployee.get(text(employee.id)) || {};
-    const sgkValue = number(card.sgk_follow);
-    return { ...employee, cardNo: text(card.card_no), identityNo: text(card.identity_no), payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included), cardSource: text(card.card_source) || "TNF", personelKodu: text(card.personel_kodu) || text(employee.code), activePassive: text(card.active_passive) || text(employee.status), paymentType: text(card.payment_type) || text(employee.bankPaymentType), sgkFollow: card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1 ? true : sgkValue === 0 ? false : null, phone: text(card.phone) };
-  });
+  const mergedEmployees = employees
+    .filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period))
+    .map((employee) => {
+      const card = cardsByEmployee.get(text(employee.id)) || {};
+      const sgkValue = number(card.sgk_follow);
+      return { ...employee, cardNo: text(card.card_no), identityNo: text(card.identity_no), exitDate: hrDateOnly(card.exit_date), payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included), cardSource: text(card.card_source) || "TNF", personelKodu: text(card.personel_kodu) || text(employee.code), activePassive: text(card.active_passive) || text(employee.status), paymentType: text(card.payment_type) || text(employee.bankPaymentType), sgkFollow: card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1 ? true : sgkValue === 0 ? false : null, phone: text(card.phone) };
+    });
   return okData(c, {
     year, month, employees: mergedEmployees, adjustments, leaves, payroll,
     documents: documents.map((row) => ({ id: text(row.id), employeeId: text(row.employee_id), documentType: text(row.document_type), fileName: text(row.file_name), filePath: text(row.file_path), date: hrDateOnly(row.date), status: text(row.status) })),
@@ -968,7 +1062,14 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const year = number(c.req.query("year")) || new Date().getFullYear();
   const month = number(c.req.query("month")) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
-  const [employees, saved, adjustments] = await Promise.all([monthlyRows(c, companyId), payrollRows(c, companyId), adjustmentRows(c, companyId)]);
+  const [rawEmployees, saved, adjustments, cards] = await Promise.all([
+    monthlyRows(c, companyId),
+    payrollRows(c, companyId),
+    adjustmentRows(c, companyId),
+    all(c, "SELECT employee_id,payroll_included,active_passive,exit_date FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
+  ]);
+  const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
+  const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
   const employeesById = new Map(employees.map((employee) => [text(employee.id), employee]));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
   const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
