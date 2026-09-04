@@ -98,8 +98,8 @@ export default function DisplaySettingsPanel({ display, onClose }) {
                 {SCALE_OPTIONS.map((scale) => (
                   <option key={scale} value={scale}>
                     {scale === "auto"
-                      ? \`\${display.recommendedScale}% (Önerilen / Otomatik)\`
-                      : \`\${scale}%\`}
+                      ? `${display.recommendedScale}% (Önerilen / Otomatik)`
+                      : `${scale}%`}
                   </option>
                 ))}
               </select>
