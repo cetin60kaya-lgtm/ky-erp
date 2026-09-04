@@ -179,7 +179,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
     "/api/ik/personnel-control/people",
     "/api/ik/personnel-control/pdks-masters",
   ]);
-  const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance|photo|photo-meta)$/i);
+  const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance|attendance-v2|photo|photo-meta)$/i);
   if (!safeStatic.has(path) && !personReadMatch) {
     c.res = c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
     return;
