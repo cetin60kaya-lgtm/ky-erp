@@ -95,7 +95,7 @@ async function waitForPrintableDocument(frame, doc) {
   });
 
   if (doc.fonts?.ready) {
-    try { await doc.fonts.ready; } catch {}
+    try { await doc.fonts.ready; } catch { /* Font bekleme hatası yazdırmayı bloklamaz. */ }
   }
 
   await Promise.all(Array.from(doc.images || []).map((img) => (
