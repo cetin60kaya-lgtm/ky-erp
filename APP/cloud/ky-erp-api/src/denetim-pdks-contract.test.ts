@@ -29,7 +29,7 @@ test("DENETIM API is route-locked to strict SGK-card PDKS reads including person
   assert.match(guard, /"\/api\/ik\/personnel-control\/profile"/);
   assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
   assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
-  assert.match(guard, /attendance\|photo\|photo-meta/);
+  assert.match(guard, /attendance\|attendance-v2\|photo\|photo-meta/);
   assert.match(guard, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
   assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
   assert.match(guard, /if \(!safeStatic\.has\(path\) && !personReadMatch\)/);
