@@ -7,6 +7,7 @@ import IkPage from "./pages/modules/IkPage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
+import { useDisplayPreferences } from "./hooks/useDisplayPreferences";
 import AppShellV3 from "./layouts/AppShellV3";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
@@ -88,10 +89,6 @@ function updateBrowserPath(route, replace = false) {
   window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
 }
 
-function keepSidebarExpanded() {
-  return !window.matchMedia("(max-width: 980px)").matches;
-}
-
 function LoadingCard({ title = "Ekran yükleniyor" }) {
   return <div className="content-card module-loading-card"><h3>{title}</h3><p>Lütfen bekleyin...</p></div>;
 }
@@ -120,7 +117,9 @@ class ModuleErrorBoundary extends React.Component {
 export default function AppV3() {
   const { user, loading: authLoading, isAuthenticated, hasModule, logout } = useAuth();
   const { companies, activeCompany, activeCompanySlug, setActiveCompanySlug } = useActiveCompany();
-  const [moduleMenuOpen, setModuleMenuOpen] = useState(keepSidebarExpanded);
+  const displayPreferences = useDisplayPreferences();
+  const keepModuleMenuExpanded = displayPreferences.effectiveMode === "pc";
+  const [moduleMenuOpen, setModuleMenuOpen] = useState(() => keepModuleMenuExpanded);
   const [moduleActionContext, setModuleActionContext] = useState({});
 
   const isAuditAccount = useMemo(() => {
@@ -193,18 +192,15 @@ export default function AppV3() {
       const requested = getInitialRoute(window.location.pathname);
       const normalized = normalizeRoute(requested, visibleModules);
       if (normalized) replaceActiveRoute(normalized.moduleKey, normalized.tabKey);
-      setModuleMenuOpen(keepSidebarExpanded());
+      setModuleMenuOpen(keepModuleMenuExpanded);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [replaceActiveRoute, visibleModules]);
+  }, [keepModuleMenuExpanded, replaceActiveRoute, visibleModules]);
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 980px)");
-    const onViewportChange = (event) => setModuleMenuOpen(!event.matches);
-    media.addEventListener("change", onViewportChange);
-    return () => media.removeEventListener("change", onViewportChange);
-  }, []);
+    setModuleMenuOpen(keepModuleMenuExpanded);
+  }, [keepModuleMenuExpanded]);
 
   useEffect(() => {
     const onKeyDown = (event) => { if (event.key === "Escape") setModuleMenuOpen(false); };
@@ -232,8 +228,8 @@ export default function AppV3() {
     } else setModuleActionContext({});
     const next = openWorkspaceTab(moduleKey, nextTab);
     updateBrowserPath(next);
-    setModuleMenuOpen(keepSidebarExpanded());
-  }, [openWorkspaceTab, visibleModules]);
+    setModuleMenuOpen(keepModuleMenuExpanded);
+  }, [keepModuleMenuExpanded, openWorkspaceTab, visibleModules]);
 
   const toggleModuleMenu = useCallback((moduleKey) => {
     const module = visibleModules.find((item) => item.key === moduleKey);
@@ -253,8 +249,8 @@ export default function AppV3() {
   const activateWorkspaceTab = useCallback((item) => {
     activateWorkspaceRoute(item);
     updateBrowserPath(item);
-    setModuleMenuOpen(keepSidebarExpanded());
-  }, [activateWorkspaceRoute]);
+    setModuleMenuOpen(keepModuleMenuExpanded);
+  }, [activateWorkspaceRoute, keepModuleMenuExpanded]);
 
   function renderPage() {
     const sharedProps = {
@@ -311,6 +307,7 @@ export default function AppV3() {
       companies={selectableCompanies}
       activeCompanySlug={normalizedCompany?.slug || activeCompanySlug}
       user={user}
+      displayPreferences={displayPreferences}
       mobileMenuOpen={moduleMenuOpen}
       onToggleModuleMenu={toggleModuleMenu}
       onOpenTab={(moduleKey, tabKey) => openTab(moduleKey, tabKey)}
