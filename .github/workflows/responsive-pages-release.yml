@@ -90,19 +90,18 @@ jobs:
           done
           test "$ready" -eq 1
 
-          script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
-          test -n "$script"
-          case "$script" in
-            http://*|https://*) script_url="$script" ;;
-            /*) script_url="https://app.kyerp.net${script}" ;;
-            *) script_url="https://app.kyerp.net/${script#./}" ;;
-          esac
+          entry_script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
+          test -n "$entry_script"
 
-          curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js
-          grep -q "kyerp.display.preferences.v1" /tmp/kyerp-live.js
-          grep -q "Telefon Modu" /tmp/kyerp-live.js
-          grep -q "Tablet Modu" /tmp/kyerp-live.js
-          grep -q "PC Modu" /tmp/kyerp-live.js
+          local_responsive_asset="$(grep -l "kyerp.display.preferences.v1" "$FRONTEND_DIR"/dist/assets/*.js | head -1)"
+          test -n "$local_responsive_asset"
+          responsive_asset_name="$(basename "$local_responsive_asset")"
+
+          curl --location --fail --silent --show-error             "https://app.kyerp.net/assets/$responsive_asset_name" > /tmp/kyerp-responsive-live.js
+          grep -q "kyerp.display.preferences.v1" /tmp/kyerp-responsive-live.js
+          grep -q "Telefon Modu" /tmp/kyerp-responsive-live.js
+          grep -q "Tablet Modu" /tmp/kyerp-responsive-live.js
+          grep -q "PC Modu" /tmp/kyerp-responsive-live.js
 
           curl --location --fail --silent --show-error "https://app.kyerp.net/boyahane/is-akisi" >/tmp/kyerp-route.html
           test -s /tmp/kyerp-route.html
