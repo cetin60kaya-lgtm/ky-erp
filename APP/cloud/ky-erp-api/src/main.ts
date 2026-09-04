@@ -17,7 +17,6 @@ import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
-import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
@@ -166,7 +165,6 @@ async function targetRole(c: any, userId: string): Promise<AnyRow | null> {
 registerAccountingCompanyDirectoryRoutes(app);
 registerAccountingCompanyProfileRoutes(app);
 registerAccountingDocumentArchiveRoutes(app);
-registerFileHubPreviewRoutes(app);
 registerEBelgeCenterRoutes(app);
 registerEBelgeLineToolRoutes(app);
 registerAiCloudRoutes(app);

@@ -113,6 +113,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [companyQuery, setCompanyQuery] = useState("");
   const [companies, setCompanies] = useState([]);
+  useEffect(() => { if (initialView) setView(initialView); }, [initialView]);
   const load = useCallback(async () => {
     if (!id) return;
     setError("");
@@ -153,8 +154,8 @@ function DetailDrawer({ id, onClose, onChanged }) {
   </aside></div>;
 }
 
-export default function EBelgeCenterPage({ activeMainCompany, openModule }) {
-  const [view, setView] = useState("overview");
+export default function EBelgeCenterPage({ activeMainCompany, openModule, initialView = "" }) {
+  const [view, setView] = useState(initialView || "overview");
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
   const [integrations, setIntegrations] = useState(null);
   const [query, setQuery] = useState("");
@@ -163,7 +164,7 @@ export default function EBelgeCenterPage({ activeMainCompany, openModule }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState("");
-  const filter = useMemo(() => ({ invoices: "INCOMING_INVOICE", dispatches: "INCOMING_DISPATCH", matching: "MATCHING_WAIT", issues: "ISSUE", history: "HISTORY" }[view] || "ALL"), [view]);
+  const filter = useMemo(() => ({ invoices: "INCOMING_INVOICE", "outgoing-invoices": "OUTGOING_INVOICE", dispatches: "INCOMING_DISPATCH", "outgoing-dispatches": "OUTGOING_DISPATCH", matching: "MATCHING_WAIT", issues: "ISSUE", history: "HISTORY" }[view] || "ALL"), [view]);
   const load = useCallback(async () => {
     setBusy(true); setError("");
     try {
@@ -175,7 +176,8 @@ export default function EBelgeCenterPage({ activeMainCompany, openModule }) {
   }, [filter, query, from, to, view]);
   useEffect(() => { load(); }, [load, activeMainCompany?.slug, activeMainCompany?.id]);
   const rows = pool.items || [];
-  return <section className="eb-page">
+  const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Aktif Firma";
+  return <section className="eb-page"><div className="eb-company-context"><span>Aktif Firma</span><strong>{companyName}</strong></div>
     <div className="eb-hero"><div><span className="eb-kicker">e-Belge Merkezi</span><h2>Fatura, irsaliye ve belge kontrolü tek merkezde</h2><p>İşNet, manuel XML/PDF ve diğer sağlayıcılar aynı belge havuzuna gelir. Muhasebeleştirme son kullanıcı onayından sonra yapılır.</p></div><div className="eb-hero-actions"><button type="button" onClick={load} disabled={busy}>{busy ? <LoaderCircle className="eb-spin" size={17} /> : <RefreshCw size={17} />} Güncelle</button><button type="button" className="eb-primary" onClick={() => setView("upload")}><Upload size={17} /> Belge Yükle</button></div></div>
     <nav className="eb-tabs">{VIEWS.map(([key, label]) => <button type="button" key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{label}</button>)}</nav>
     {error && <div className="eb-error"><AlertTriangle size={18} />{error}</div>}
