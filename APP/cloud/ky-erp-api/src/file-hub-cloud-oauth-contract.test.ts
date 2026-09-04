@@ -10,7 +10,7 @@ const migration = readFileSync(resolve(here, "../migrations/0044_file_hub_cloud_
 const cloud = read("file-hub-cloud-oauth.ts");
 const adminStorage = read("admin-storage-cloud.ts");
 const main = read("main.ts");
-const release = readFileSync(resolve(here, "../../../.github/workflows/production-release.yml"), "utf8");
+const release = readFileSync(resolve(here, "../../../../.github/workflows/production-release.yml"), "utf8");
 
 test("File Hub OAuth schema is additive and encrypted-token based", () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS file_hub_oauth_accounts/);
