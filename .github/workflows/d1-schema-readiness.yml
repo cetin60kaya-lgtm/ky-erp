@@ -1,20 +1,8 @@
 name: KY ERP D1 Schema Readiness - Check Only
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/cloud/ky-erp-api/migrations/**"
-      - "APP/cloud/ky-erp-api/src/**"
-      - "DEPLOY/**"
-      - ".github/workflows/d1-schema-readiness.yml"
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/migrations/**"
-      - "APP/cloud/ky-erp-api/src/**"
-      - "DEPLOY/**"
-      - ".github/workflows/d1-schema-readiness.yml"
+  # GitHub Actions is disabled for automatic production/PR execution.
+  # Cloudflare Git Integration is the automatic deploy path; keep this workflow manual-only as fallback.
   workflow_dispatch:
 
 permissions:
