@@ -60,7 +60,27 @@ jobs:
             --persist-to .local-isnet-ci \
             --file local-isnet-cloud.sql
 
-      - name: Yerel Worker'ı başlat
+          for migration in \
+            migrations/0018_auth_mfa_sessions.sql \
+            migrations/0019_auth_dual_mfa_recovery.sql \
+            migrations/0021_auth_security_policy_owner_recovery.sql \
+            migrations/0022_auth_same_browser_session_guard.sql
+          do
+            npx wrangler d1 execute ky-erp-production-local \
+              --local \
+              --config wrangler.production-local.jsonc \
+              --persist-to .local-isnet-ci \
+              --file "$migration"
+          done
+
+          PASSWORD_HASH="$(node --input-type=module -e 'import { hash } from "bcryptjs"; console.log(await hash("Isnet-Smoke-2026!", 10));')"
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-isnet-ci \
+            --command "INSERT OR REPLACE INTO auth_users(id,username,password_hash,full_name,role,is_active,must_change_password,created_at,updated_at) VALUES('isnet-smoke-user','isnet-smoke-user','$PASSWORD_HASH','İşNet Smoke User','VIEWER',1,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP); INSERT OR REPLACE INTO auth_user_security(user_id,email,main_company_slug,role_override,mfa_enabled,email_verified,approval_required,login_policy,session_seconds,created_at,updated_at) VALUES('isnet-smoke-user','isnet-smoke@example.test','mecit-hakan',NULL,0,0,0,'PASSWORD_ONLY',28800,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);"
+
+      - name: Yerel Worker'ı başlat ve güvenli İşNet oturumu aç
         working-directory: APP/cloud/ky-erp-api
         run: |
           nohup npx wrangler dev \
@@ -68,16 +88,32 @@ jobs:
             --config wrangler.production-local.jsonc \
             --persist-to .local-isnet-ci \
             --port 8789 > /tmp/kyerp-isnet-worker.log 2>&1 &
+          ready=0
           for attempt in $(seq 1 60); do
-            if curl --fail --silent \
-              "http://127.0.0.1:8789/api/isnet/configuration?mainCompanySlug=mecit-hakan" \
-              > /tmp/isnet-configuration.json; then
-              exit 0
+            if curl --fail --silent "http://127.0.0.1:8789/api/health" > /tmp/isnet-health.json; then
+              ready=1
+              break
             fi
             sleep 1
           done
-          cat /tmp/kyerp-isnet-worker.log
-          exit 1
+          if [ "$ready" != "1" ]; then
+            cat /tmp/kyerp-isnet-worker.log
+            exit 1
+          fi
+
+          curl --fail --silent \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"username":"isnet-smoke-user","password":"Isnet-Smoke-2026!","deviceLabel":"IsNet Local Smoke"}' \
+            "http://127.0.0.1:8789/api/auth/login" \
+            > /tmp/isnet-login.json
+          jq -e '.stage == "AUTHENTICATED" and (.token | length > 20)' /tmp/isnet-login.json
+          TOKEN="$(jq -r '.token' /tmp/isnet-login.json)"
+          printf 'header = "Authorization: Bearer %s"\nheader = "X-KYERP-Tenant-Slug: mecit-hakan"\n' "$TOKEN" > /tmp/isnet-curl.conf
+
+          curl --config /tmp/isnet-curl.conf --fail --silent \
+            "http://127.0.0.1:8789/api/isnet/configuration?mainCompanySlug=mecit-hakan" \
+            > /tmp/isnet-configuration.json
 
       - name: İşNet yerel yapılandırmasını doğrula
         run: |
@@ -89,7 +125,7 @@ jobs:
 
       - name: Yerel belge ve yönetim özetini doğrula
         run: |
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             "http://127.0.0.1:8789/api/isnet/dashboard?mainCompanySlug=mecit-hakan" \
             > /tmp/isnet-dashboard.json
           jq -e '.ok == true' /tmp/isnet-dashboard.json
@@ -97,7 +133,7 @@ jobs:
           jq -e '.data.summary.incomingDispatches == 1' /tmp/isnet-dashboard.json
           jq -e '.data.summary.issuedDocuments == 1' /tmp/isnet-dashboard.json
 
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             "http://127.0.0.1:8789/api/isnet/portal/documents?mainCompanySlug=mecit-hakan" \
             > /tmp/isnet-documents.json
           jq -e '.ok == true' /tmp/isnet-documents.json
@@ -106,7 +142,7 @@ jobs:
 
       - name: Gelen irsaliyeyi işleme al
         run: |
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan"}' \
@@ -130,7 +166,7 @@ jobs:
             "status": "CHANNEL_REVIEW_PENDING"
           }
           JSON
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data-binary @/tmp/isnet-model.json \
@@ -139,13 +175,13 @@ jobs:
           jq -e '.ok == true' /tmp/isnet-model-result.json
 
           INTAKE_ID="$(cat /tmp/isnet-intake-id.txt)"
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             "http://127.0.0.1:8789/api/isnet/intake/${INTAKE_ID}/models?mainCompanySlug=mecit-hakan&q=CI%20ISNET%20MODEL" \
             > /tmp/isnet-model-suggestions.json
           jq -e '.ok == true' /tmp/isnet-model-suggestions.json
           jq -e '.data.suggestions | map(select(.id == "isnet-ci-design-model")) | length == 1' /tmp/isnet-model-suggestions.json
 
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan","candidateId":"isnet-ci-design-model"}' \
@@ -176,7 +212,7 @@ jobs:
             ]
           }
           JSON
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data-binary @/tmp/isnet-draft.json \
@@ -187,7 +223,7 @@ jobs:
           jq -r '.data.draftId' /tmp/isnet-draft-result.json > /tmp/isnet-draft-id.txt
 
           DRAFT_ID="$(cat /tmp/isnet-draft-id.txt)"
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan"}' \
@@ -196,7 +232,7 @@ jobs:
           jq -e '.ok == true' /tmp/isnet-draft-validation.json
           jq -e '.data.verified == true' /tmp/isnet-draft-validation.json
 
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan","approved":true,"confirmationText":"FATURAYI GÖNDER"}' \
@@ -208,7 +244,7 @@ jobs:
       - name: Adaptör yokken resmî gönderimi engelle
         run: |
           DRAFT_ID="$(cat /tmp/isnet-draft-id.txt)"
-          HTTP_CODE=$(curl --silent --output /tmp/isnet-submit.json --write-out '%{http_code}' \
+          HTTP_CODE=$(curl --config /tmp/isnet-curl.conf --silent --output /tmp/isnet-submit.json --write-out '%{http_code}' \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan"}' \
@@ -216,7 +252,7 @@ jobs:
           test "$HTTP_CODE" = "409"
           jq -e '.error.code == "OFFICIAL_SUBMIT_ADAPTER_NOT_CONFIGURED"' /tmp/isnet-submit.json
 
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             "http://127.0.0.1:8789/api/isnet/drafts/${DRAFT_ID}/status?mainCompanySlug=mecit-hakan" \
             > /tmp/isnet-draft-status.json
           jq -e '.ok == true' /tmp/isnet-draft-status.json
@@ -227,7 +263,7 @@ jobs:
         run: |
           AUTOMATION_KEY=$(jq -r '.data.documents[] | select(.documentNo == "DDM2026000009001") | .automationKey' /tmp/isnet-documents.json)
           ENCODED_KEY=$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$AUTOMATION_KEY")
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan","isRead":true}' \
@@ -236,7 +272,7 @@ jobs:
           jq -e '.ok == true' /tmp/isnet-read.json
           jq -e '.data.readAt != null' /tmp/isnet-read.json
 
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             -X POST \
             -H "Content-Type: application/json" \
             --data '{"mainCompanySlug":"mecit-hakan"}' \
@@ -245,7 +281,7 @@ jobs:
           jq -e '.ok == true' /tmp/isnet-printed.json
           jq -e '.data.printedAt != null' /tmp/isnet-printed.json
 
-          curl --fail --silent \
+          curl --config /tmp/isnet-curl.conf --fail --silent \
             "http://127.0.0.1:8789/api/isnet/print-queue?mainCompanySlug=mecit-hakan" \
             > /tmp/isnet-print-queue.json
           jq -e '.ok == true' /tmp/isnet-print-queue.json
