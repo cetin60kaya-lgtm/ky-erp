@@ -1,0 +1,115 @@
+name: KY ERP Responsive Frontend Canli Yayin
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - "APP/app/ky-erp-frontend/**"
+      - ".github/workflows/responsive-pages-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-responsive-pages-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Frontend test build ve Cloudflare Pages
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+      FRONTEND_DIR: APP/app/ky-erp-frontend
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Production branchini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+
+      - name: Paketleri kur
+        working-directory: APP/app/ky-erp-frontend
+        run: npm ci
+
+      - name: Test lint ve production build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Cloudflare erisimini dogrula
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.118.0 whoami
+
+      - name: Frontendi Cloudflare Pages productiona dagit
+        working-directory: APP/app/ky-erp-frontend
+        run: >-
+          npx --yes wrangler@4.118.0 pages deploy dist
+          --project-name "$PAGES_PROJECT"
+          --branch "$PROD_BRANCH"
+          --commit-hash "$GITHUB_SHA"
+          --commit-message "KY ERP responsive production $GITHUB_SHA"
+
+      - name: Canli uygulamayi ve responsive bundlei dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --location --fail --silent --show-error "https://app.kyerp.net/" > /tmp/kyerp-home.html && test -s /tmp/kyerp-home.html; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+
+          script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/kyerp-home.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
+          test -n "$script"
+          case "$script" in
+            http://*|https://*) script_url="$script" ;;
+            /*) script_url="https://app.kyerp.net${script}" ;;
+            *) script_url="https://app.kyerp.net/${script#./}" ;;
+          esac
+
+          curl --location --fail --silent --show-error "$script_url" > /tmp/kyerp-live.js
+          grep -q "kyerp.display.preferences.v1" /tmp/kyerp-live.js
+          grep -q "Telefon Modu" /tmp/kyerp-live.js
+          grep -q "Tablet Modu" /tmp/kyerp-live.js
+          grep -q "PC Modu" /tmp/kyerp-live.js
+
+          curl --location --fail --silent --show-error "https://app.kyerp.net/boyahane/is-akisi" >/tmp/kyerp-route.html
+          test -s /tmp/kyerp-route.html
+
+      - name: Yayin sonucu
+        run: |
+          echo "KY ERP responsive frontend production yayini tamamlandi."
+          echo "D1: degismedi"
+          echo "Worker API: degismedi"
+          echo "App: https://app.kyerp.net"
