@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-04T19:08:00+03:00",
-  "attempt": 97,
+  "requestedAt": "2026-09-04T19:14:00+03:00",
+  "attempt": 98,
   "scope": [
     "storage-file-hub-direct-cloud-services",
     "google-drive-oauth",
@@ -48,9 +48,10 @@
     "ik-overtime-server-side-calculation",
     "ik-passive-stale-payroll-filter",
     "ik-payroll-live-refresh-after-person-delete",
-    "ik-payroll-readable-four-up-slips"
+    "ik-payroll-readable-four-up-slips",
+    "ik-finance-form-syntax-hotfix"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "a9365bc107df49c24685d4fb967077f145a7096e",
-  "note": "04.09.2026 attempt 97. Maaş ödemesi öncesi İK final hotfix. Avans/mesai/kesinti kaydında seçilen personel yerine önceki personelin kaydedilmesine neden olan employeeIds öncelik hatası frontend ve Worker tarafında giderildi. Non-bulk hareketlerde employeeId tek otoritedir; düzenlemede employee_id de güncellenir. Mesai için Hafta içi %50 (x1,5) ve Hafta sonu %100 (x2) seçenekleri eklendi; tutar baz maaş / 225 x saat x çarpan olarak Worker tarafından yeniden hesaplanır. Pasif/silinmiş personelin İK finans/bordro ekranında takılı kalması engellendi; aktif ekran/focus yeniden yükleme eklendi. Toplu ödeme fişleri A4 üzerinde 4 okunaklı fiş, net ödeme ve imza alanlarıyla düzenlendi. D1 reset/drop yok; mevcut maaş verileri korunur. Tam Worker/frontend test-build, D1 yedek, security ve canlı domain kontrolleri zorunludur."
+  "sourceCommit": "4758a54d17c804f3b8e47689980c0b19342917d5",
+  "note": "04.09.2026 attempt 98. Attempt 97 production preflight canlıya geçmeden frontend lint parsing hatasında güvenli durdu; D1 ve canlı deploy yapılmadı. Eksik Mesai formu fonksiyon kapanışı düzeltildi. Ana paket: doğru personel avans/mesai/kesinti kaydı, hafta içi %50 x1,5 ve hafta sonu %100 x2 mesai, Worker tarafında mesai tutarı yeniden hesaplama, pasif/silinmiş personel stale liste temizliği ve A4 4'lü okunaklı net ödeme fişi. D1 reset/drop yok. Tam Worker/frontend test-build, D1 yedek, security ve canlı domain kontrolleri zorunludur."
 }
