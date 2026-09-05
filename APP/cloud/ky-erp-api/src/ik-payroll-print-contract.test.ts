@@ -90,3 +90,39 @@ test("IK base salary reference uses raw employees and overtime metadata is strip
   assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
   assert.match(cloud, /exit_date=COALESCE\(ik_person_card_settings\.exit_date, excluded\.exit_date\)/);
 });
+
+
+test("payroll print HTML escapes employee-entered text and shows every payment component", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /function escapeHtml\(value\)/);
+  assert.match(page, /replaceAll\("&", "&amp;"\)/);
+  assert.match(page, /escapeHtml\(row\.employee\.fullName\)/);
+  assert.match(page, /escapeHtml\(row\.employee\.code \|\| "-"\)/);
+  assert.match(page, /escapeHtml\(row\.employee\.department \|\| "Bölüm yok"\)/);
+
+  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKADAN", "ELDEN", "NET / TOPLAM ÖDENECEK"]) {
+    assert.ok(page.includes(label), `Eksik fiş/rapor alanı: ${label}`);
+  }
+});
+
+test("payroll payment balance cannot be bypassed and backend enforces the same contract", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.ok(page.includes("Banka + elden toplamı net ödenecek tutara eşit olmalıdır."));
+  assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+  assert.match(cloud, /calculatePayrollAmounts/);
+});
+
+test("payroll report and Excel use the same canonical payrollRows data", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const exportPayroll = \(\) =>/);
+  assert.match(page, /payrollRows\.map\(\(row\) =>/);
+  assert.match(page, /const printPayrollReport = async \(\) =>/);
+  assert.match(page, /const rows = payrollRows\.filter/);
+  assert.match(page, /<th>Maaş<\/th><th>Yol<\/th><th>EK<\/th><th>Mesai<\/th>/);
+  assert.match(page, /<th>Avans<\/th><th>Kesinti<\/th><th>İcra\/Haciz<\/th><th>Banka<\/th><th>Elden<\/th><th>Net<\/th>/);
+});
