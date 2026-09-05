@@ -126,3 +126,33 @@ test("payroll report and Excel use the same canonical payrollRows data", () => {
   assert.match(page, /<th>Maaş<\/th><th>Yol<\/th><th>EK<\/th><th>Mesai<\/th>/);
   assert.match(page, /<th>Avans<\/th><th>Kesinti<\/th><th>İcra\/Haciz<\/th><th>Banka<\/th><th>Elden<\/th><th>Net<\/th>/);
 });
+
+
+test("single slip targets the selected payroll row and bulk page five starts a new page", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const printSlip = async \(row = payrollRows\.find\(\(item\) => item\.employee\.id === selected\?\.id\)\)/);
+  assert.match(page, /onClick=\{\(\) => printSlip\(row\)\}/);
+  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 4\) pages\.push\(rows\.slice\(index, index \+ 4\)\)/);
+  assert.match(page, /page-break-after:always/);
+  assert.match(page, /\.page:last-child\{page-break-after:auto\}/);
+});
+
+test("bordro Excel exports the same core amounts shown on screen", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  for (const field of [
+    "maas: row.salary",
+    "yol: row.road",
+    "ek: row.extra",
+    "mesai: row.overtime",
+    "avans: row.advance",
+    "kesinti: row.deduction",
+    "hukukiKesinti: row.garnishment",
+    "netOdenecek: row.net",
+    "banka: row.bank",
+    "elden: row.cash",
+  ]) {
+    assert.ok(page.includes(field), `Eksik Excel bordro alanı: ${field}`);
+  }
+});
