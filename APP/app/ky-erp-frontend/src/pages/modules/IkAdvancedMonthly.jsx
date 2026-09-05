@@ -220,9 +220,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const load = useCallback(async ({ force = false } = {}) => {
     const requestKey = `${companyId}|${year}|${month}`;
     let activeRequest = loadRequestRef.current;
-    if (activeRequest.promise && activeRequest.key === requestKey) {
-      if (!force) return activeRequest.promise;
-      try { await activeRequest.promise; } catch { /* next forced refresh still runs */ }
+    if (activeRequest.promise) {
+      if (!force && activeRequest.key === requestKey) return activeRequest.promise;
+      try { await activeRequest.promise; } catch { /* next serialized refresh still runs */ }
       activeRequest = loadRequestRef.current;
     }
 
