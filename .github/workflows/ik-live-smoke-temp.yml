@@ -1,0 +1,80 @@
+name: TEMP KY ERP Live IK Smoke
+
+on:
+  push:
+    branches:
+      - codex/ik-payroll-fix-3-9-20260906
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temp-kyerp-live-ik-smoke
+  cancel-in-progress: true
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://api.kyerp.net/api/health > /tmp/health.json; then
+              if jq -e '.ok == true' /tmp/health.json >/dev/null; then
+                ready=1
+                break
+              fi
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          echo "HEALTH=$(jq -c . /tmp/health.json)"
+
+      - name: Auth and IK guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_status="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' https://api.kyerp.net/api/auth/me)"
+          test "$auth_status" = "401"
+          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/auth.json >/dev/null
+
+          ik_status="$(curl --silent --show-error --output /tmp/ik.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/month?mainCompanyId=mecit-hakan&year=2026&month=8')"
+          test "$ik_status" = "401"
+          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/ik.json >/dev/null
+
+          payroll_status="$(curl --silent --show-error --output /tmp/payroll.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/payroll?mainCompanyId=mecit-hakan&year=2026&month=8')"
+          test "$payroll_status" = "401"
+          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/payroll.json >/dev/null
+
+          echo "AUTH_HTTP=$auth_status IK_HTTP=$ik_status PAYROLL_HTTP=$payroll_status"
+
+      - name: Frontend production asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --location --fail --silent --show-error https://app.kyerp.net/ > /tmp/app.html; then
+              script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/app.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
+              if [ -n "$script" ]; then
+                case "$script" in
+                  http://*|https://*) script_url="$script" ;;
+                  /*) script_url="https://app.kyerp.net$script" ;;
+                  *) clean_script="$(printf '%s' "$script" | sed 's#^\./##')"; script_url="https://app.kyerp.net/$clean_script" ;;
+                esac
+                if curl --location --fail --silent --show-error "$script_url" > /tmp/live.js; then
+                  if grep -Fq "Banka + elden toplamı net ödenecek tutara eşit olmalıdır." /tmp/live.js                     && grep -Fq "NET / TOPLAM ÖDENECEK" /tmp/live.js                     && grep -Fq "İK Aylık Bordro ve Ödeme Kontrol Listesi" /tmp/live.js; then
+                    ready=1
+                    break
+                  fi
+                fi
+              fi
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          echo "LIVE_SCRIPT=$script_url"
+          echo "LIVE_BYTES=$(wc -c < /tmp/live.js)"
