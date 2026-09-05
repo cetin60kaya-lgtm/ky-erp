@@ -43,12 +43,14 @@ test("IK finance movement keeps the selected employee and supports legal overtim
   assert.ok(page.includes("Hafta içi %50 (x1,5)"));
   assert.ok(page.includes("Hafta sonu %100 (x2)"));
   assert.ok(page.includes("overtimeMultiplier"));
-  assert.match(page, /payload\.adjustmentType !== "Toplu avans"/);
-  assert.match(page, /delete payload\.employeeIds/);
+  assert.match(page, /draft\.adjustmentType === "Toplu avans"\) payload\.employeeIds/);
+  assert.match(page, /else payload\.employeeId = draft\.employeeId/);
 
   assert.match(cloud, /const isBulkAdvance =/);
-  assert.match(cloud, /\[singleEmployeeId\]\.filter\(Boolean\)/);
+  assert.match(cloud, /const singleEmployeeId = text\(body\.employeeId\)/);
+  assert.match(cloud, /SINGLE_EMPLOYEE_ONLY/);
   assert.match(cloud, /overtimeAmountForEmployee/);
+  assert.match(cloud, /calculateOvertimeAmount/);
   assert.match(cloud, /employee_id=\?,date=\?,adjustment_type=/);
   assert.match(cloud, /advancedEmployeeVisible/);
 });
@@ -60,4 +62,31 @@ test("IK bulk slips are readable four-up A4 cards", () => {
   assert.ok(page.includes("Ödeme Yapan"));
   assert.match(page, /index \+= 4/);
   assert.match(page, /grid-template-rows:1fr 1fr/);
+});
+
+
+test("IK refresh uses canonical personnel and latest-wins request guard", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /loadRequestRef = useRef/);
+  assert.match(page, /activeRequest\.promise && activeRequest\.key === requestKey/);
+  assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
+  assert.match(page, /canonicalEmployeeIds/);
+  assert.match(page, /currentIds\.has\(item\.employeeId\)/);
+
+  assert.match(cloud, /rawEmployees: employees/);
+  assert.match(cloud, /visibleEmployeeIds/);
+  assert.match(cloud, /payroll: payroll\.filter/);
+});
+
+test("IK base salary reference uses raw employees and overtime metadata is stripped on type change", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /baseEmployeeId \? rawEmployees\.find/);
+  assert.match(page, /const employee = rawEmployees\.find/);
+  assert.match(cloud, /new Map\(rawEmployees\.map/);
+  assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
+  assert.match(cloud, /exit_date=COALESCE\(ik_person_card_settings\.exit_date, excluded\.exit_date\)/);
 });
