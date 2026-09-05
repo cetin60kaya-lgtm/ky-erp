@@ -209,6 +209,30 @@ export function calculateOvertimeAmount(baseSalaryValue: unknown, hoursValue: un
   return Math.round(((baseSalary / divisor) * hours * multiplier) * 100) / 100;
 }
 
+export function calculatePayrollAmounts(input: {
+  salary?: unknown;
+  road?: unknown;
+  extra?: unknown;
+  overtime?: unknown;
+  advance?: unknown;
+  deduction?: unknown;
+  garnishment?: unknown;
+}) {
+  const earnings = Math.round((
+    number(input.salary) +
+    number(input.road) +
+    number(input.extra) +
+    number(input.overtime)
+  ) * 100) / 100;
+  const net = Math.max(Math.round((
+    earnings -
+    number(input.advance) -
+    number(input.deduction) -
+    number(input.garnishment)
+  ) * 100) / 100, 0);
+  return { earnings, net };
+}
+
 function overtimeMetaFromNote(value: unknown) {
   const raw = text(value);
   const match = raw.match(/^\[OT:(1\.5|2):(WEEKDAY_50|WEEKEND_100)\]\s*/i);
@@ -1130,7 +1154,15 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const deduction = deductionRows.reduce((sum, item) => sum + number(item.amount), 0);
     const garnishment = legalRows.reduce((sum, item) => sum + number(item.amount), 0);
     const bankDeductions = [...advanceRows, ...deductionRows, ...legalRows].filter((item) => upper(item.paymentMethod).includes("BANKA")).reduce((sum, item) => sum + number(item.amount), 0);
-    const baseNet = Math.max(baseSalary + number(employee.roadAllowance) + extra + overtime - advance - deduction - garnishment, 0);
+    const { net: baseNet } = calculatePayrollAmounts({
+      salary: baseSalary,
+      road: employee.roadAllowance,
+      extra,
+      overtime,
+      advance,
+      deduction,
+      garnishment,
+    });
     const systemBank = Math.min(baseNet, Math.max(number(employee.bankAmount) - bankDeductions, 0));
     const systemCash = Math.max(baseNet - systemBank, 0);
     const systemFinal = { salaryPay: baseSalary, roadPay: number(employee.roadAllowance), overtimeAmount: overtime, premiumAmount: extra, garnishmentAmount: garnishment, deductionAmount: deduction, advanceAmount: advance, bank: systemBank, cash: systemCash, total: baseNet };
@@ -1251,11 +1283,27 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const deduction = deductionDefault;
   const advance = advanceDefault;
   const garnishment = garnishmentDefault;
-  const calculatedTotal = Math.max(salary + road + overtimeFinal + premium - deduction - advance - garnishment, 0);
+  const { net: calculatedTotal } = calculatePayrollAmounts({
+    salary,
+    road,
+    extra: premium,
+    overtime: overtimeFinal,
+    advance,
+    deduction,
+    garnishment,
+  });
   const plannedBank = Math.max(number(employee.bank_amount) - bankDeductions, 0);
-  const bank = override.bank !== undefined ? number(override.bank) : Math.min(calculatedTotal, plannedBank);
-  const cash = override.cash !== undefined ? number(override.cash) : Math.max(calculatedTotal - bank, 0);
-  const total = override.total !== undefined ? number(override.total) : calculatedTotal;
+  const bankProvided = override.bank !== undefined;
+  const cashProvided = override.cash !== undefined;
+  let bank = bankProvided ? Math.max(0, number(override.bank)) : Math.min(calculatedTotal, plannedBank);
+  let cash = cashProvided ? Math.max(0, number(override.cash)) : Math.max(calculatedTotal - bank, 0);
+  if (bankProvided && !cashProvided) cash = Math.max(calculatedTotal - bank, 0);
+  if (!bankProvided && cashProvided) bank = Math.max(calculatedTotal - cash, 0);
+  const paymentDiff = Math.round((bank + cash - calculatedTotal) * 100) / 100;
+  if (Math.abs(paymentDiff) > 0.01) {
+    return error(c, 409, "PAYMENT_TOTAL_MISMATCH", "Banka + elden toplamı net ödenecek tutara eşit olmalıdır.");
+  }
+  const total = calculatedTotal;
   const timestamp = nowIso();
   const id = text(existing?.id) || crypto.randomUUID();
   await c.env.DB.prepare(`INSERT INTO hr_payrolls_v2 (id,main_company_id,year,month,employee_id,salary,road_allowance,overtime_amount,premium_amount,garnishment_amount,deduction_amount,advance_amount,bank_amount,cash_amount,total_amount,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,year,month,employee_id) DO UPDATE SET salary=excluded.salary,road_allowance=excluded.road_allowance,overtime_amount=excluded.overtime_amount,premium_amount=excluded.premium_amount,garnishment_amount=excluded.garnishment_amount,deduction_amount=excluded.deduction_amount,advance_amount=excluded.advance_amount,bank_amount=excluded.bank_amount,cash_amount=excluded.cash_amount,total_amount=excluded.total_amount,status=excluded.status,updated_at=excluded.updated_at`).bind(id, companyId, year, month, employeeId, salary, road, overtimeFinal, premium, garnishment, deduction, advance, bank, cash, total, "OVERRIDE", text(existing?.created_at) || timestamp, timestamp).run();
