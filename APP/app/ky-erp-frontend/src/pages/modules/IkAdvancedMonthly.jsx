@@ -71,6 +71,15 @@ function upper(value) {
   return String(value || "").toLocaleUpperCase("tr-TR");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function normalizeFinanceType(value) {
   const text = upper(value);
   if (text.includes("TOPLU") && text.includes("AVANS")) return "Toplu avans";
@@ -778,7 +787,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       bank: modalDraft.bank,
       cash: modalDraft.cash,
     });
-    if (totals.diff !== 0 && !window.confirm("Banka + elden net odeme ile eslesmiyor. Devam edilsin mi?")) return;
+    if (Math.abs(totals.diff) > 0.01) {
+      setNotice("Banka + elden toplamı net ödenecek tutara eşit olmalıdır.");
+      return;
+    }
     setBusy(true);
     try {
       await saveIkAdvancedPayrollOverride({
@@ -941,7 +953,46 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const printPayrollReport = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Cikti icin personel bulunamadi.");
-    const html = `<html><head><meta charset="utf-8"><style>body{font:12px Arial;color:#14263a;padding:20px}h1{font-size:20px;margin:0}p{color:#52657b}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #cad6e4;padding:7px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef4fb}.tot{font-weight:700;background:#f8fbff}@media print{body{padding:0}}</style></head><body><h1>IK Aylik Bordro ve Odeme Kontrol Listesi</h1><p>${MONTHS[month - 1]} ${year} - Cikti oncesi son kontrol</p><table><thead><tr><th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Avans</th><th>Özel Kesinti</th><th>İcra / Haciz</th><th>Banka</th><th>Elden</th><th>Net</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.employee.fullName}</td><td>${num(row.employee.sgkDays)}</td><td>${money(row.employee.sgkNet)}</td><td>${money(row.hakedis)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td></tr>`).join("")}<tr class="tot"><td>TOPLAM</td><td></td><td>${money(rows.reduce((sum,row)=>sum+num(row.employee.sgkNet),0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.garnishment,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td></tr></tbody></table></body></html>`;
+    const totals = rows.reduce((sum, row) => ({
+      salary: sum.salary + row.salary,
+      road: sum.road + row.road,
+      extra: sum.extra + row.extra,
+      overtime: sum.overtime + row.overtime,
+      advance: sum.advance + row.advance,
+      deduction: sum.deduction + row.deduction,
+      garnishment: sum.garnishment + row.garnishment,
+      bank: sum.bank + row.bank,
+      cash: sum.cash + row.cash,
+      net: sum.net + row.net,
+    }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
+    const html = `<html><head><meta charset="utf-8"><style>
+      @page{size:A4 landscape;margin:8mm}
+      body{font:9px Arial;color:#14263a;padding:0}
+      h1{font-size:17px;margin:0}
+      p{color:#52657b;margin:4px 0 10px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      th,td{border:1px solid #cad6e4;padding:4px 3px;text-align:right;white-space:nowrap}
+      th:first-child,td:first-child{text-align:left;width:20%}
+      th{background:#eef4fb;font-size:8px}
+      .tot{font-weight:700;background:#f8fbff}
+    </style></head><body>
+      <h1>İK Aylık Bordro ve Ödeme Kontrol Listesi</h1>
+      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · Ekrandaki bordro ile aynı kaynak</p>
+      <table><thead><tr>
+        <th>Personel</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th>
+        <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Banka</th><th>Elden</th><th>Net</th>
+      </tr></thead><tbody>
+      ${rows.map((row) => `<tr>
+        <td>${escapeHtml(row.employee.fullName)}</td>
+        <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td>
+        <td>${money(row.overtime)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td>
+        <td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>
+      </tr>`).join("")}
+      <tr class="tot"><td>TOPLAM</td>
+        <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td>
+        <td>${money(totals.overtime)}</td><td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td>
+        <td>${money(totals.garnishment)}</td><td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
+      </tr></tbody></table></body></html>`;
     try {
       await printHtmlDocument({ title: `İK Aylık Bordro - ${period}`, html });
       setNotice("Toplu bordro raporu yazdırma / PDF ekranına gönderildi.");
@@ -954,19 +1005,22 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const legalSourceLabel = (row) => row.garnishmentSource === "KARMA" ? "Banka + Elden" : row.garnishmentSource === "ELDEN" ? "Elden" : "Bankadan";
 
   const slipCardHtml = (row) => {
+    const legalTitle = row.garnishment
+      ? `${legalLabel(row) || "İcra/Haciz"} (${legalSourceLabel(row)})`
+      : "İcra/Haciz";
     const lines = [
       ["Maaş", money(row.salary)],
       ["Yol", money(row.road)],
-      ...(row.extra ? [["EK", money(row.extra)]] : []),
-      ...(row.overtime ? [["Mesai", money(row.overtime)]] : []),
-      ...(row.advance ? [["Avans", `-${money(row.advance)}`]] : []),
-      ...(row.deduction ? [["Özel Kesinti", `-${money(row.deduction)}`]] : []),
-      ...(row.garnishment ? [[`${legalLabel(row)} (${legalSourceLabel(row)})`, `-${money(row.garnishment)}`]] : []),
+      ["EK", money(row.extra)],
+      ["Mesai", money(row.overtime)],
+      ["Avans", row.advance ? `-${money(row.advance)}` : money(0)],
+      ["Kesinti", row.deduction ? `-${money(row.deduction)}` : money(0)],
+      [legalTitle, row.garnishment ? `-${money(row.garnishment)}` : money(0)],
     ];
     return `<article class="pay-slip">
-      <header><div class="brand">KY ERP</div><div class="period">${MONTHS[month - 1]} ${year}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
-      <div class="person-block"><strong>${row.employee.fullName}</strong><span>${row.employee.code || "-"} · ${row.employee.department || "Bölüm yok"}</span></div>
-      <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join("")}</div>
+      <header><div class="brand">KY ERP</div><div class="period">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
+      <div class="person-block"><strong>${escapeHtml(row.employee.fullName)}</strong><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
+      <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
       <div class="pay-channels"><div><span>BANKADAN</span><b>${money(row.bank)}</b></div><div><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
       <div class="net"><span>NET / TOPLAM ÖDENECEK</span><b>${money(row.net)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
