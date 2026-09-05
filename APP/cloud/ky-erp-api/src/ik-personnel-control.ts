@@ -231,10 +231,12 @@ function personSelect(audit = false) {
                  e.hire_date,e.salary,e.road_allowance,e.bank_payment_type,e.bank_amount,e.cash_amount,
                  e.overtime_hourly_base,e.annual_leave_entitlement,e.annual_leave_carryover,e.note,
                  e.created_at,e.updated_at,
-                 s.card_no,s.identity_no,s.exit_date,s.active_passive,s.phone,s.payment_type,s.sgk_follow,s.personel_kodu
+                 s.card_no,s.identity_no,s.exit_date,s.active_passive,s.phone,s.payment_type,s.sgk_follow,s.personel_kodu,
+                 hp.personnel_status
             FROM hr_monthly_employees e
             LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-           WHERE e.main_company_id=?${audit ? " AND UPPER(COALESCE(e.sgk_status,'VAR')) <> 'YOK' AND TRIM(COALESCE(s.card_no,'')) <> ''" : ""}`;
+            LEFT JOIN ik_person_hr_profiles hp ON hp.employee_id=e.id AND hp.main_company_id=e.main_company_id
+           WHERE e.main_company_id=?${audit ? " AND TRIM(COALESCE(s.card_no,'')) <> ''" : ""}`;
 }
 
 function mapPerson(row: Row, audit = false) {
@@ -267,20 +269,53 @@ function mapPerson(row: Row, audit = false) {
       cashAmount: number(row.cash_amount),
       overtimeBaseHours: number(row.overtime_hourly_base) || 225,
       note: text(row.note),
+      personnelStatus: text(row.personnel_status) || "NORMAL",
     });
   }
   return base;
 }
 
+function requestedPeriod(c: Context<AppEnv>, fallbackYear?: number, fallbackMonth?: number) {
+  const year = number(c.req.query("year")) || fallbackYear || new Date().getFullYear();
+  const month = number(c.req.query("month")) || fallbackMonth || new Date().getMonth() + 1;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+async function monthlyComplianceFor(c: Context<AppEnv>, company: string, employeeId: string, period: string) {
+  try {
+    return await first(c, "SELECT sgk_covered,sgk_days FROM ik_person_monthly_compliance WHERE main_company_id=? AND employee_id=? AND period=? LIMIT 1", [company, employeeId, period]);
+  } catch {
+    return null;
+  }
+}
+
+async function auditVisibleForPeriod(c: Context<AppEnv>, company: string, row: Row, period: string) {
+  if (!text(row.card_no)) return false;
+  const compliance = await monthlyComplianceFor(c, company, text(row.id), period);
+  if (compliance) return number(compliance.sgk_covered) === 1;
+  return upper(row.sgk_status || (number(row.sgk_follow) === 0 ? "YOK" : "VAR")) !== "YOK";
+}
+
 async function personRows(c: Context<AppEnv>, auth: Row) {
   if (!auth.audit) await ensurePersonnelCodes(c, auth.company);
   const rows = await all(c, `${personSelect(auth.audit)} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
-  return rows.map((row) => mapPerson(row, auth.audit));
+  if (!auth.audit) return rows.map((row) => mapPerson(row, false));
+  const period = requestedPeriod(c);
+  const visible: Row[] = [];
+  for (const row of rows) {
+    if (await auditVisibleForPeriod(c, auth.company, row, period)) {
+      const compliance = await monthlyComplianceFor(c, auth.company, text(row.id), period);
+      visible.push({ ...row, sgk_status: compliance ? "VAR" : row.sgk_status });
+    }
+  }
+  return visible.map((row) => mapPerson(row, true));
 }
 
-async function accessiblePerson(c: Context<AppEnv>, auth: Row, employeeId: string) {
+async function accessiblePerson(c: Context<AppEnv>, auth: Row, employeeId: string, period = "") {
   const row = await first(c, `${personSelect(auth.audit)} AND e.id=? LIMIT 1`, [auth.company, employeeId]);
-  return row ? mapPerson(row, auth.audit) : null;
+  if (!row) return null;
+  if (auth.audit && !(await auditVisibleForPeriod(c, auth.company, row, period || requestedPeriod(c)))) return null;
+  return mapPerson(row, auth.audit);
 }
 
 function minutesOf(hhmm: string) {
@@ -346,7 +381,7 @@ async function annualLeaveMap(c: Context<AppEnv>, employeeId: string, start: str
 }
 
 async function attendanceMonth(c: Context<AppEnv>, auth: Row, employeeId: string, year: number, month: number) {
-  const person = await accessiblePerson(c, auth, employeeId);
+  const person = await accessiblePerson(c, auth, employeeId, `${year}-${String(month).padStart(2, "0")}`);
   if (!person) return null;
   const dates = monthDays(year, month);
   const start = dates[0];
@@ -467,6 +502,8 @@ async function createPerson(c: Context<AppEnv>) {
     VALUES (?,?,?,?,?,?,?,?,?)
     ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no,identity_no=excluded.identity_no,exit_date=excluded.exit_date,active_passive=excluded.active_passive,phone=excluded.phone,payment_type=excluded.payment_type,updated_at=excluded.updated_at`)
     .bind(id, auth.company, cardNo || null, text(body.identityNo) || null, dateOnly(body.exitDate) || null, text(body.activePassive) || "Aktif", text(body.phone) || null, text(body.paymentChannel) || null, timestamp).run();
+  await c.env.DB.prepare(`INSERT OR IGNORE INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
+    VALUES (?,?,?,?,?)`).bind(id, auth.company, upper(body.personnelStatus) === "RETIRED" ? "RETIRED" : "NORMAL", text(auth.user?.username), timestamp).run();
   const person = await accessiblePerson(c, auth, id);
   return ok(c, person, 201);
 }
@@ -508,9 +545,10 @@ async function removePerson(c: Context<AppEnv>) {
   const timestamp = nowIso();
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE hr_monthly_employees SET status='Pasif',updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp, employeeId, auth.company),
-    c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,updated_at)
-      VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET active_passive=excluded.active_passive,updated_at=excluded.updated_at`)
-      .bind(employeeId, auth.company, "Pasif", timestamp),
+    c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,exit_date,updated_at)
+      VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET active_passive=excluded.active_passive,
+      exit_date=COALESCE(ik_person_card_settings.exit_date,excluded.exit_date),updated_at=excluded.updated_at`)
+      .bind(employeeId, auth.company, "Pasif", dateOnly(body.effectiveDate) || dateOnly(timestamp), timestamp),
     c.env.DB.prepare(`INSERT INTO ik_employee_change_history
       (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
