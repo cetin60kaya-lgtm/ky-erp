@@ -123,6 +123,7 @@ function mapMonthly(row: Row): Row {
     title: text(row.title),
     workType: text(row.work_type) || "Aylık",
     sgkStatus: text(row.sgk_status) || "VAR",
+    personnelStatus: text(row.personnel_status) || "NORMAL",
     status: text(row.status) || "Aktif",
     hireDate,
     startDate: hireDate,
@@ -303,10 +304,13 @@ async function monthlyRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
               s.garnishment_source,
               s.legal_start_period,
               s.legal_end_period,
-              s.garnishment_note
+              s.garnishment_note,
+              hp.personnel_status
          FROM hr_monthly_employees e
          LEFT JOIN ik_person_card_settings s
            ON s.employee_id = e.id AND s.main_company_id = e.main_company_id
+         LEFT JOIN ik_person_hr_profiles hp
+           ON hp.employee_id = e.id AND hp.main_company_id = e.main_company_id
         WHERE e.main_company_id = ?
         ORDER BY e.code COLLATE NOCASE ASC, e.full_name COLLATE NOCASE ASC`,
       [companyId],
@@ -625,14 +629,17 @@ function monthlyValues(body: Row, current: Row = {}) {
   const sgk = text(body.sgkStatus ?? body.sgk_status ?? current.sgk_status) || "VAR";
   const requestedPayment =
     text(body.bankPaymentType ?? body.paymentChannel ?? current.bank_payment_type) ||
-    (sgk === "YOK" ? "Elden" : "Banka + Elden");
-  const enteredBank = number(body.bankAmount ?? current.bank_amount);
-  const enteredCash = number(body.cashAmount ?? current.cash_amount);
-  const total = enteredBank + enteredCash > 0 ? enteredBank + enteredCash : salary + road;
-  const cashOnly = requestedPayment.toLocaleLowerCase("tr-TR").includes("elden") &&
-    !requestedPayment.toLocaleLowerCase("tr-TR").includes("banka");
-  const bank = sgk === "YOK" || cashOnly ? 0 : Math.min(total, enteredBank || 28075.5);
-  const cash = Math.max(0, total - bank);
+    "Banka + Elden";
+  const enteredBank = Math.max(0, number(body.bankAmount ?? current.bank_amount));
+  const enteredCash = Math.max(0, number(body.cashAmount ?? current.cash_amount));
+  const total = Math.max(0, salary + road);
+  const paymentUpper = requestedPayment.toLocaleUpperCase("tr-TR");
+  const cashOnly = paymentUpper.includes("ELDEN") && !paymentUpper.includes("BANKA");
+  const bankOnly = paymentUpper.includes("BANKA") && !paymentUpper.includes("ELDEN");
+  const bank = cashOnly ? 0 : bankOnly ? total : Math.min(total, enteredBank);
+  const cash = bankOnly ? 0 : Math.max(0, total - bank);
+  // SGK kapsami odeme kanalini belirlemez. Banka plani yoksa sistem kendiliginden banka tutari uretmez.
+  void enteredCash;
   return {
     code: text(body.code ?? body.personnelCode ?? current.code),
     fullName: text(body.fullName ?? body.adSoyad ?? current.full_name).replace(/\s+/g, " "),
@@ -942,7 +949,7 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
 
   const note = isOvertime
     ? overtimeStoredNote(body.note ?? overtimeMetaFromNote(current.note).note, multiplier)
-    : (text(body.note ?? current.note) || null);
+    : (text(body.note ?? overtimeMetaFromNote(current.note).note) || null);
   await c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET employee_id=?,date=?,adjustment_type=?,hour_or_day=?,amount=?,payment_method=?,payroll_effect=?,note=?,status=? WHERE id=?")
     .bind(employeeId, hrDateOnly(body.date || current.date), adjustmentType, hourOrDay, amount,
       isOvertime ? "Bordro" : (text(body.paymentMethod || current.payment_method) || "Elden"),
@@ -1070,7 +1077,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
   ]);
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
-  const employeesById = new Map(employees.map((employee) => [text(employee.id), employee]));
+  const employeesById = new Map(rawEmployees.map((employee) => [text(employee.id), employee]));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
   const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const lines = employees.map((employee) => {
