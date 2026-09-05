@@ -217,10 +217,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const totalDays = daysInMonth(year, month);
   const selected = employees.find((item) => item.id === selectedId) || employees[0] || null;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ force = false } = {}) => {
     const requestKey = `${companyId}|${year}|${month}`;
-    const activeRequest = loadRequestRef.current;
-    if (activeRequest.promise && activeRequest.key === requestKey) return activeRequest.promise;
+    let activeRequest = loadRequestRef.current;
+    if (activeRequest.promise && activeRequest.key === requestKey) {
+      if (!force) return activeRequest.promise;
+      try { await activeRequest.promise; } catch { /* next forced refresh still runs */ }
+      activeRequest = loadRequestRef.current;
+    }
 
     const requestId = activeRequest.seq + 1;
     const task = (async () => {
@@ -397,6 +401,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const go = (target) => {
     setPage(target);
     setNotice("");
+    load({ force: true });
   };
 
   const openPerson = (employee = selected) => {
@@ -513,7 +518,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setBusy(true);
     try {
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: groupRows.map((row) => row.employee.id), status: "PAID", reason: modalDraft.note || `Odeme tamamlandi: ${modalDraft.paymentDate}` });
-      setModal(null); setNotice(`${groupRows.length} personelin odeme durumu tamamlandi olarak kaydedildi.`); await load();
+      setModal(null); setNotice(`${groupRows.length} personelin odeme durumu tamamlandi olarak kaydedildi.`); await load({ force: true });
     } catch (error) { setNotice(error?.message || "Toplu odeme islemi kaydedilemedi."); } finally { setBusy(false); }
   };
 
@@ -575,7 +580,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       });
       setModal(null);
       setNotice("Personel karti kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Personel karti kaydedilemedi.");
     } finally {
@@ -645,7 +650,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setNotice(payload.adjustmentType === "Mesai"
         ? `${overtimeTypeLabel(payload.overtimeMultiplier)} mesai kaydı doğru personele kaydedildi.`
         : "Hareket doğru personele kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Hareket kaydedilemedi.");
     } finally {
@@ -661,7 +666,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     try {
       await deleteIkAdvancedFinanceMovement({ mainCompanyId: companyId, id: row.id });
       setNotice("Hareket silindi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Hareket silinemedi.");
     } finally {
@@ -714,7 +719,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setModal(null);
       setLeavePreview(null);
       setNotice(modal === "yillik" ? "Izin kaydi ve gun hesaplamasi tamamlandi." : "Gunluk kayit tamamlandi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Kayit yapilamadi.");
     } finally {
@@ -763,7 +768,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       const result = await saveIkAdvancedLeavePolicy({ mainCompanyId: companyId, ...policyDraft });
       setPolicyDraft(result?.policy || { countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
       setNotice("Sirket izin gun sayim ayarlari kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) { setNotice(error?.message || "Izin ayarlari kaydedilemedi."); } finally { setBusy(false); }
   };
 
@@ -771,7 +776,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const reason = window.prompt(`${plan.fullName} izin kaydi iptal edilecek. Iptal aciklamasi:`, "Plan degisikligi");
     if (reason === null) return;
     setBusy(true);
-    try { await cancelIkAdvancedLeave({ mainCompanyId: companyId, id: plan.id, reason }); setNotice("Izin iptal edildi; resmi kayit ve puantaj etkisi geri alindi."); await load(); }
+    try { await cancelIkAdvancedLeave({ mainCompanyId: companyId, id: plan.id, reason }); setNotice("Izin iptal edildi; resmi kayit ve puantaj etkisi geri alindi."); await load({ force: true }); }
     catch (error) { setNotice(error?.message || "Izin iptal edilemedi."); } finally { setBusy(false); }
   };
 
@@ -807,7 +812,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       });
       setModal(null);
       setNotice("Bordro duzeltmesi kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro duzeltmesi kaydedilemedi.");
     } finally {
@@ -833,7 +838,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     try {
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: selectedPayrollIds.length ? selectedPayrollIds : undefined, status: "CALCULATED", reason: "Bordro kaydi" });
       setNotice("Bordro satirlari kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro kaydedilemedi.");
     } finally {
@@ -873,7 +878,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setModal(null);
       setSgkPreview(null);
       setNotice(`${result?.matched || rows.length} personelin resmi bordro verisi kaydedildi. Banka listesi Net Istihkak alanindan hazirlanacak.`);
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro onayi kaydedilemedi.");
     } finally {
@@ -890,7 +895,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       await uploadIkAdvancedDocument(file, { mainCompanyId: companyId, year, month, employeeId, documentType: modalDraft.documentType || "Personel evragi", note: modalDraft.note || "" });
       setModal(null);
       setNotice("Evrak yuklendi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Evrak yuklenemedi.");
     } finally {
@@ -918,7 +923,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     try {
       await saveIkAdvancedSettlementDraft({ mainCompanyId: companyId, year, month, employeeId: selected.id, reason: "Kidem / ayrilis taslagi" });
       setNotice("Kidem / ayrilis taslagi kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Taslak kaydedilemedi.");
     } finally {
