@@ -71,6 +71,15 @@ function upper(value) {
   return String(value || "").toLocaleUpperCase("tr-TR");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function normalizeFinanceType(value) {
   const text = upper(value);
   if (text.includes("TOPLU") && text.includes("AVANS")) return "Toplu avans";
@@ -185,6 +194,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [leaveCalendarMonth, setLeaveCalendarMonth] = useState(`${initial.year}-${String(initial.month).padStart(2, "0")}`);
   const [leaveRangeStep, setLeaveRangeStep] = useState(0);
   const leaveAutoPreviewSeq = useRef(0);
+  const loadRequestRef = useRef({ key: "", seq: 0, promise: null });
   const [sgkPreview, setSgkPreview] = useState(null);
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
   const documentInput = useRef(null);
@@ -196,35 +206,77 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setPage(initialPage);
   }, [initialPage]);
 
+  const rawEmployees = safeList(data.rawEmployees).length ? safeList(data.rawEmployees) : safeList(data.employees);
   const employees = safeList(data.employees).filter((item) => payrollVisibleEmployee(item, period));
-  const rawAdjustments = safeList(data.adjustments);
-  const leaves = safeList(data.leaves);
-  const documents = safeList(data.documents);
+  const canonicalEmployeeIds = useMemo(() => new Set(employees.map((item) => item.id)), [employees]);
+  const rawAdjustments = safeList(data.adjustments).filter((item) => canonicalEmployeeIds.has(item.employeeId));
+  const leaves = safeList(data.leaves).filter((item) => canonicalEmployeeIds.has(item.employeeId));
+  const documents = safeList(data.documents).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const checks = safeList(data.checks);
-  const payrollLines = safeList(payrollData?.lines);
+  const payrollLines = safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id));
   const totalDays = daysInMonth(year, month);
   const selected = employees.find((item) => item.id === selectedId) || employees[0] || null;
 
-  const load = useCallback(async () => {
-    setBusy(true);
+  const load = useCallback(async ({ force = false } = {}) => {
+    const requestKey = `${companyId}|${year}|${month}`;
+    let activeRequest = loadRequestRef.current;
+    if (activeRequest.promise) {
+      if (!force && activeRequest.key === requestKey) return activeRequest.promise;
+      try { await activeRequest.promise; } catch { /* next serialized refresh still runs */ }
+      activeRequest = loadRequestRef.current;
+    }
+
+    const requestId = activeRequest.seq + 1;
+    const task = (async () => {
+      setBusy(true);
+      try {
+        const [result, audit, payroll, center] = await Promise.all([
+          getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
+          getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 })),
+          getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month })),
+          getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: `${year - 1}-01-01`, to: `${year + 1}-12-31` })),
+        ]);
+        if (loadRequestRef.current.seq !== requestId) return;
+
+        const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
+        const currentIds = new Set(nextEmployees.map((item) => item.id));
+        const cleanResult = result ? {
+          ...result,
+          adjustments: safeList(result.adjustments).filter((item) => currentIds.has(item.employeeId)),
+          leaves: safeList(result.leaves).filter((item) => currentIds.has(item.employeeId)),
+          payroll: safeList(result.payroll).filter((item) => currentIds.has(item.employeeId)),
+          documents: safeList(result.documents).filter((item) => currentIds.has(item.employeeId)),
+          contracts: safeList(result.contracts).filter((item) => currentIds.has(item.employeeId)),
+        } : {};
+        const cleanPayroll = payroll ? {
+          ...payroll,
+          lines: safeList(payroll.lines).filter((line) => currentIds.has(line.employeeId || line.employee?.id)),
+        } : null;
+
+        setData(cleanResult);
+        setLogs(safeList(audit));
+        setPayrollData(cleanPayroll);
+        setLeaveCenter(center || { plans: [], conflicts: [] });
+        if (center?.policy) setPolicyDraft(center.policy);
+        setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
+        setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
+        setNotice("");
+      } catch (error) {
+        if (loadRequestRef.current.seq === requestId) {
+          setNotice(error?.message || "IK aylik verisi alinamadi.");
+        }
+      } finally {
+        if (loadRequestRef.current.seq === requestId) setBusy(false);
+      }
+    })();
+
+    loadRequestRef.current = { key: requestKey, seq: requestId, promise: task };
     try {
-      const result = await getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month }));
-      setData(result || {});
-      const audit = await getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 }));
-      setLogs(safeList(audit));
-      const payroll = await getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month }));
-      setPayrollData(payroll || null);
-      const center = await getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: `${year - 1}-01-01`, to: `${year + 1}-12-31` }));
-      setLeaveCenter(center || { plans: [], conflicts: [] });
-      if (center?.policy) setPolicyDraft(center.policy);
-      const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
-      setSelectedId((old) => nextEmployees.some((item) => item.id === old) ? old : nextEmployees[0]?.id || "");
-      setSelectedPayrollIds((old) => old.filter((id) => nextEmployees.some((item) => item.id === id)));
-      setNotice("");
-    } catch (error) {
-      setNotice(error?.message || "IK aylik verisi alinamadi.");
+      return await task;
     } finally {
-      setBusy(false);
+      if (loadRequestRef.current.seq === requestId) {
+        loadRequestRef.current = { ...loadRequestRef.current, promise: null };
+      }
     }
   }, [companyId, month, period, year]);
 
@@ -285,7 +337,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const legalType = legalKinds.size > 1 ? "KARMA" : legalKinds.has("Haciz") ? "HACIZ" : legalKinds.has("Icra") ? "ICRA" : "YOK";
   const garnishmentSource = legalBank > 0 && legalCash > 0 ? "KARMA" : legalCash > 0 ? "ELDEN" : "BANKA";
   const actualSalary = num(employee.salary);
-  const baseEmployee = employee.baseEmployeeId ? employees.find((item) => item.id === employee.baseEmployeeId) : null;
+  const baseEmployee = employee.baseEmployeeId ? rawEmployees.find((item) => item.id === employee.baseEmployeeId) : null;
   const salary = baseEmployee ? num(baseEmployee.salary) : actualSalary;
   const road = num(employee.roadAllowance);
   const extraLabel = "EK";
@@ -296,7 +348,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const bank = saved?.final ? num(saved.final.bank) : Math.min(pre.net, bankPlanAfterDeductions);
   const cash = saved?.final ? num(saved.final.cash) : Math.max(pre.net - bank, 0);
   return { employee, actualSalary, baseEmployee, salary, road, extraLabel, extra, overtime, advance, deduction, legalType, garnishmentSource, garnishment, legalBank, legalCash, bankDeductions, cashDeductions, bank, cash, saved, ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }) };
-}, [employees, movements, payrollLines]);
+}, [movements, payrollLines, rawEmployees]);
 
   const payrollRows = useMemo(() => employees.map((employee) => {
   const system = planFor(employee);
@@ -349,6 +401,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const go = (target) => {
     setPage(target);
     setNotice("");
+    load({ force: true });
   };
 
   const openPerson = (employee = selected) => {
@@ -465,7 +518,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setBusy(true);
     try {
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: groupRows.map((row) => row.employee.id), status: "PAID", reason: modalDraft.note || `Odeme tamamlandi: ${modalDraft.paymentDate}` });
-      setModal(null); setNotice(`${groupRows.length} personelin odeme durumu tamamlandi olarak kaydedildi.`); await load();
+      setModal(null); setNotice(`${groupRows.length} personelin odeme durumu tamamlandi olarak kaydedildi.`); await load({ force: true });
     } catch (error) { setNotice(error?.message || "Toplu odeme islemi kaydedilemedi."); } finally { setBusy(false); }
   };
 
@@ -492,7 +545,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (!modalDraft.sgkFollow) return setNotice("SGK durumu bos olamaz.");
     if (!modalDraft.paymentType) return setNotice("Odeme tipi bos olamaz.");
     if (num(modalDraft.salary) < 0) return setNotice("Maas negatif olamaz.");
-    const baseEmployee = modalDraft.baseEmployeeId ? employees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
+    const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
     if (modalDraft.baseEmployeeId === modalDraft.id) return setNotice("Personel kendisini baz personel olarak secemez.");
     if (modalDraft.baseEmployeeId && !baseEmployee) return setNotice("Baz personel bulunamadi.");
     if (baseEmployee && num(baseEmployee.salary) > num(modalDraft.salary)) return setNotice("Baz personel maasi gercek maastan yuksek olamaz.");
@@ -527,7 +580,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       });
       setModal(null);
       setNotice("Personel karti kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Personel karti kaydedilemedi.");
     } finally {
@@ -536,9 +589,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   };
 
   const overtimeAmountFor = (employeeId, hours, multiplier) => {
-    const employee = employees.find((item) => item.id === employeeId);
+    const employee = rawEmployees.find((item) => item.id === employeeId);
     if (!employee) return 0;
-    const baseEmployee = employee.baseEmployeeId ? employees.find((item) => item.id === employee.baseEmployeeId) : null;
+    const baseEmployee = employee.baseEmployeeId ? rawEmployees.find((item) => item.id === employee.baseEmployeeId) : null;
     const baseSalary = num(baseEmployee?.salary ?? employee.salary);
     const divisor = num(employee.overtimeHourlyBase || employee.overtimeBaseHours) || 225;
     if (baseSalary <= 0 || divisor <= 0 || num(hours) <= 0) return 0;
@@ -575,15 +628,29 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (validationError) return setNotice(validationError);
     setBusy(true);
     try {
-      const payload = { mainCompanyId: companyId, ...draft };
-      if (payload.adjustmentType !== "Toplu avans") delete payload.employeeIds;
+      const payload = {
+        mainCompanyId: companyId,
+        id: draft.id || undefined,
+        adjustmentType: draft.adjustmentType,
+        date: draft.date,
+        hourOrDay: draft.hourOrDay,
+        amount: draft.amount,
+        overtimeMultiplier: draft.overtimeMultiplier,
+        overtimeKind: draft.overtimeKind,
+        paymentMethod: draft.paymentMethod,
+        payrollEffect: draft.payrollEffect,
+        note: draft.note,
+        status: draft.status,
+      };
+      if (draft.adjustmentType === "Toplu avans") payload.employeeIds = safeList(draft.employeeIds);
+      else payload.employeeId = draft.employeeId;
       if (payload.id) await updateIkAdvancedFinanceMovement(payload);
       else await saveIkAdvancedFinanceMovement(payload);
       setModal(null);
       setNotice(payload.adjustmentType === "Mesai"
         ? `${overtimeTypeLabel(payload.overtimeMultiplier)} mesai kaydı doğru personele kaydedildi.`
         : "Hareket doğru personele kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Hareket kaydedilemedi.");
     } finally {
@@ -599,7 +666,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     try {
       await deleteIkAdvancedFinanceMovement({ mainCompanyId: companyId, id: row.id });
       setNotice("Hareket silindi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Hareket silinemedi.");
     } finally {
@@ -652,7 +719,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setModal(null);
       setLeavePreview(null);
       setNotice(modal === "yillik" ? "Izin kaydi ve gun hesaplamasi tamamlandi." : "Gunluk kayit tamamlandi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Kayit yapilamadi.");
     } finally {
@@ -701,7 +768,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       const result = await saveIkAdvancedLeavePolicy({ mainCompanyId: companyId, ...policyDraft });
       setPolicyDraft(result?.policy || { countedWeekdays: [1, 2, 3, 4, 5, 6], excludeOfficialHolidays: true, maxConcurrentDepartment: 1 });
       setNotice("Sirket izin gun sayim ayarlari kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) { setNotice(error?.message || "Izin ayarlari kaydedilemedi."); } finally { setBusy(false); }
   };
 
@@ -709,7 +776,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const reason = window.prompt(`${plan.fullName} izin kaydi iptal edilecek. Iptal aciklamasi:`, "Plan degisikligi");
     if (reason === null) return;
     setBusy(true);
-    try { await cancelIkAdvancedLeave({ mainCompanyId: companyId, id: plan.id, reason }); setNotice("Izin iptal edildi; resmi kayit ve puantaj etkisi geri alindi."); await load(); }
+    try { await cancelIkAdvancedLeave({ mainCompanyId: companyId, id: plan.id, reason }); setNotice("Izin iptal edildi; resmi kayit ve puantaj etkisi geri alindi."); await load({ force: true }); }
     catch (error) { setNotice(error?.message || "Izin iptal edilemedi."); } finally { setBusy(false); }
   };
 
@@ -725,7 +792,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       bank: modalDraft.bank,
       cash: modalDraft.cash,
     });
-    if (totals.diff !== 0 && !window.confirm("Banka + elden net odeme ile eslesmiyor. Devam edilsin mi?")) return;
+    if (Math.abs(totals.diff) > 0.01) {
+      setNotice("Banka + elden toplamı net ödenecek tutara eşit olmalıdır.");
+      return;
+    }
     setBusy(true);
     try {
       await saveIkAdvancedPayrollOverride({
@@ -742,7 +812,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       });
       setModal(null);
       setNotice("Bordro duzeltmesi kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro duzeltmesi kaydedilemedi.");
     } finally {
@@ -768,7 +838,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     try {
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: selectedPayrollIds.length ? selectedPayrollIds : undefined, status: "CALCULATED", reason: "Bordro kaydi" });
       setNotice("Bordro satirlari kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro kaydedilemedi.");
     } finally {
@@ -808,7 +878,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setModal(null);
       setSgkPreview(null);
       setNotice(`${result?.matched || rows.length} personelin resmi bordro verisi kaydedildi. Banka listesi Net Istihkak alanindan hazirlanacak.`);
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro onayi kaydedilemedi.");
     } finally {
@@ -825,7 +895,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       await uploadIkAdvancedDocument(file, { mainCompanyId: companyId, year, month, employeeId, documentType: modalDraft.documentType || "Personel evragi", note: modalDraft.note || "" });
       setModal(null);
       setNotice("Evrak yuklendi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Evrak yuklenemedi.");
     } finally {
@@ -853,7 +923,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     try {
       await saveIkAdvancedSettlementDraft({ mainCompanyId: companyId, year, month, employeeId: selected.id, reason: "Kidem / ayrilis taslagi" });
       setNotice("Kidem / ayrilis taslagi kaydedildi.");
-      await load();
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Taslak kaydedilemedi.");
     } finally {
@@ -888,7 +958,46 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const printPayrollReport = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Cikti icin personel bulunamadi.");
-    const html = `<html><head><meta charset="utf-8"><style>body{font:12px Arial;color:#14263a;padding:20px}h1{font-size:20px;margin:0}p{color:#52657b}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #cad6e4;padding:7px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef4fb}.tot{font-weight:700;background:#f8fbff}@media print{body{padding:0}}</style></head><body><h1>IK Aylik Bordro ve Odeme Kontrol Listesi</h1><p>${MONTHS[month - 1]} ${year} - Cikti oncesi son kontrol</p><table><thead><tr><th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Hak Edis</th><th>Avans</th><th>Özel Kesinti</th><th>İcra / Haciz</th><th>Banka</th><th>Elden</th><th>Net</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.employee.fullName}</td><td>${num(row.employee.sgkDays)}</td><td>${money(row.employee.sgkNet)}</td><td>${money(row.hakedis)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td><td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td></tr>`).join("")}<tr class="tot"><td>TOPLAM</td><td></td><td>${money(rows.reduce((sum,row)=>sum+num(row.employee.sgkNet),0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.hakedis,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.advance,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.deduction,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.garnishment,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.bank,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.cash,0))}</td><td>${money(rows.reduce((sum,row)=>sum+row.net,0))}</td></tr></tbody></table></body></html>`;
+    const totals = rows.reduce((sum, row) => ({
+      salary: sum.salary + row.salary,
+      road: sum.road + row.road,
+      extra: sum.extra + row.extra,
+      overtime: sum.overtime + row.overtime,
+      advance: sum.advance + row.advance,
+      deduction: sum.deduction + row.deduction,
+      garnishment: sum.garnishment + row.garnishment,
+      bank: sum.bank + row.bank,
+      cash: sum.cash + row.cash,
+      net: sum.net + row.net,
+    }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
+    const html = `<html><head><meta charset="utf-8"><style>
+      @page{size:A4 landscape;margin:8mm}
+      body{font:9px Arial;color:#14263a;padding:0}
+      h1{font-size:17px;margin:0}
+      p{color:#52657b;margin:4px 0 10px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}
+      th,td{border:1px solid #cad6e4;padding:4px 3px;text-align:right;white-space:nowrap}
+      th:first-child,td:first-child{text-align:left;width:20%}
+      th{background:#eef4fb;font-size:8px}
+      .tot{font-weight:700;background:#f8fbff}
+    </style></head><body>
+      <h1>İK Aylık Bordro ve Ödeme Kontrol Listesi</h1>
+      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · Ekrandaki bordro ile aynı kaynak</p>
+      <table><thead><tr>
+        <th>Personel</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th>
+        <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Banka</th><th>Elden</th><th>Net</th>
+      </tr></thead><tbody>
+      ${rows.map((row) => `<tr>
+        <td>${escapeHtml(row.employee.fullName)}</td>
+        <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td>
+        <td>${money(row.overtime)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td>
+        <td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>
+      </tr>`).join("")}
+      <tr class="tot"><td>TOPLAM</td>
+        <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td>
+        <td>${money(totals.overtime)}</td><td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td>
+        <td>${money(totals.garnishment)}</td><td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
+      </tr></tbody></table></body></html>`;
     try {
       await printHtmlDocument({ title: `İK Aylık Bordro - ${period}`, html });
       setNotice("Toplu bordro raporu yazdırma / PDF ekranına gönderildi.");
@@ -901,19 +1010,22 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const legalSourceLabel = (row) => row.garnishmentSource === "KARMA" ? "Banka + Elden" : row.garnishmentSource === "ELDEN" ? "Elden" : "Bankadan";
 
   const slipCardHtml = (row) => {
+    const legalTitle = row.garnishment
+      ? `${legalLabel(row) || "İcra/Haciz"} (${legalSourceLabel(row)})`
+      : "İcra/Haciz";
     const lines = [
       ["Maaş", money(row.salary)],
       ["Yol", money(row.road)],
-      ...(row.extra ? [["EK", money(row.extra)]] : []),
-      ...(row.overtime ? [["Mesai", money(row.overtime)]] : []),
-      ...(row.advance ? [["Avans", `-${money(row.advance)}`]] : []),
-      ...(row.deduction ? [["Özel Kesinti", `-${money(row.deduction)}`]] : []),
-      ...(row.garnishment ? [[`${legalLabel(row)} (${legalSourceLabel(row)})`, `-${money(row.garnishment)}`]] : []),
+      ["EK", money(row.extra)],
+      ["Mesai", money(row.overtime)],
+      ["Avans", row.advance ? `-${money(row.advance)}` : money(0)],
+      ["Kesinti", row.deduction ? `-${money(row.deduction)}` : money(0)],
+      [legalTitle, row.garnishment ? `-${money(row.garnishment)}` : money(0)],
     ];
     return `<article class="pay-slip">
-      <header><div class="brand">KY ERP</div><div class="period">${MONTHS[month - 1]} ${year}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
-      <div class="person-block"><strong>${row.employee.fullName}</strong><span>${row.employee.code || "-"} · ${row.employee.department || "Bölüm yok"}</span></div>
-      <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join("")}</div>
+      <header><div class="brand">KY ERP</div><div class="period">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
+      <div class="person-block"><strong>${escapeHtml(row.employee.fullName)}</strong><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
+      <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
       <div class="pay-channels"><div><span>BANKADAN</span><b>${money(row.bank)}</b></div><div><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
       <div class="net"><span>NET / TOPLAM ÖDENECEK</span><b>${money(row.net)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
@@ -1170,7 +1282,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="modal-section-grid">
           <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} onChange={(event)=>setModalDraft((old)=>({...old,code:event.target.value}))}/></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Durum"><select value={modalDraft.status||"AKTIF"} onChange={(event)=>setModalDraft((old)=>({...old,status:event.target.value}))}><option value="AKTIF">Aktif</option><option value="PASIF">Pasif</option></select></Field></div></div>
           <div className="modal-section"><h3>SGK ve Bordro Kapsamı</h3><div className="form"><Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Belirtilmemiş</option></select></Field><Field label="Bordro Kapsamı" half><select value={modalDraft.payrollIncluded===false?"HARIC":"DAHIL"} onChange={(event)=>setModalDraft((old)=>({...old,payrollIncluded:event.target.value==="DAHIL"}))}><option value="DAHIL">Şirket bordrosuna dahil</option><option value="HARIC">Harici - ödeme ve puantaja alma</option></select></Field><Field label="Yıllık İzin Hakkı"><input type="number" value={modalDraft.annualLeaveEntitlement||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveEntitlement:event.target.value}))}/></Field><Field label="Devreden İzin"><input type="number" value={modalDraft.annualLeaveCarryover||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveCarryover:event.target.value}))}/></Field></div></div>
-          <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Baz Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Yok - gerçek maaşı kullan</option>{employees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}</option>)}</select></Field><Field label="Bordro Baz Maaşı"><input value={money(modalDraft.baseEmployeeId?employees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary:modalDraft.salary)} readOnly/></Field><Field label="EK"><input value={money(modalDraft.baseEmployeeId?Math.max(num(modalDraft.salary)-num(employees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary),0):0)} readOnly/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
+          <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Baz Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Yok - gerçek maaşı kullan</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Bordro Baz Maaşı"><input value={money(modalDraft.baseEmployeeId?rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary:modalDraft.salary)} readOnly/></Field><Field label="EK"><input value={money(modalDraft.baseEmployeeId?Math.max(num(modalDraft.salary)-num(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary),0):0)} readOnly/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
         </div>
         <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={savePerson}>{busy?"Kaydediliyor":"Tüm Değişiklikleri Kaydet"}</button>} />
       </Modal>
