@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { ingestProviderEBelgeXml } from "./e-belge-center-cloud";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -1184,6 +1185,10 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       let downloaded = 0;
       let failed = 0;
       let accountingCreated = 0;
+      let canonicalCreated = 0;
+      let canonicalDuplicates = 0;
+      let canonicalFailed = 0;
+      const canonicalErrors: Row[] = [];
 
       for (const baseDoc of docs) {
         const automationKey = `${baseDoc.direction}:${baseDoc.kind}:${baseDoc.sourceId}`;
@@ -1242,12 +1247,51 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         if (xmlText) {
           const id = await ensureAccountingDocument(c, slug, portal, xmlText);
           if (id) accountingCreated += 1;
+          try {
+            const canonical = await ingestProviderEBelgeXml(c, slug, {
+              providerType: "ISNET",
+              providerDocumentId: automationKey,
+              sourceId: baseDoc.sourceId,
+              automationKey,
+              documentNo: baseDoc.documentNo,
+              direction: baseDoc.direction,
+              kind: baseDoc.kind,
+              statusText: baseDoc.statusText,
+              xmlText,
+              xmlKey,
+              pdfKey,
+              sourceType: "ISNET_DIRECT",
+              rawMetadata: {
+                portalSourceId: baseDoc.sourceId,
+                portalDirection: baseDoc.direction,
+                portalKind: baseDoc.kind,
+                portalDateText: baseDoc.dateText,
+                partnerName: baseDoc.partnerName,
+                partnerTaxNo: baseDoc.partnerTaxNo,
+              },
+            });
+            if (canonical?.duplicate) canonicalDuplicates += 1;
+            else if (canonical?.documentId) canonicalCreated += 1;
+          } catch (error: any) {
+            canonicalFailed += 1;
+            canonicalErrors.push({
+              automationKey,
+              documentNo: baseDoc.documentNo,
+              code: text(error?.code) || "CANONICAL_EBELGE_INGEST_FAILED",
+              message: text(error?.message) || "İşNet belgesi canonical e-Belge havuzuna alınamadı.",
+            });
+          }
         }
       }
 
+      const requiresReview = failed > 0 || canonicalFailed > 0;
       const result = {
         id: runId,
-        status: "COMPLETED",
+        status: requiresReview ? "PARTIAL_REVIEW_REQUIRED" : "COMPLETED",
+        requiresReview,
+        warning: requiresReview
+          ? "İşNet taşıma tamamlandı ancak bazı belge dosyaları veya canonical e-Belge kayıtları kontrol gerektiriyor."
+          : null,
         source: "portal",
         startedAt: (await storeGet(c, SYNC_SCOPE, "latest", slug))?.startedAt,
         completedAt: nowIso(),
@@ -1257,11 +1301,20 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         downloaded,
         failed,
         accountingCreated,
+        canonical: {
+          created: canonicalCreated,
+          duplicates: canonicalDuplicates,
+          failed: canonicalFailed,
+          errors: canonicalErrors,
+        },
         counts: {
           incomingInvoices: docs.filter((d) => d.direction === "incoming" && d.kind === "invoice").length,
           incomingDispatches: docs.filter((d) => d.direction === "incoming" && d.kind === "dispatch").length,
           outgoingDispatches: docs.filter((d) => d.direction === "outgoing" && d.kind === "dispatch").length,
           outgoingInvoices: docs.filter((d) => d.direction === "outgoing" && d.kind === "invoice").length,
+          canonicalCreated,
+          canonicalDuplicates,
+          canonicalFailed,
         },
       };
       await storePut(c, SYNC_SCOPE, "latest", result, slug);
