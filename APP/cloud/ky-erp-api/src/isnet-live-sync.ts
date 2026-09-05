@@ -1185,6 +1185,8 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       let downloaded = 0;
       let failed = 0;
       let accountingCreated = 0;
+      let legacyAccountingFailed = 0;
+      const legacyAccountingErrors: Row[] = [];
       let canonicalCreated = 0;
       let canonicalDuplicates = 0;
       let canonicalFailed = 0;
@@ -1245,8 +1247,17 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
           slug,
         );
         if (xmlText) {
-          const id = await ensureAccountingDocument(c, slug, portal, xmlText);
-          if (id) accountingCreated += 1;
+          try {
+            const id = await ensureAccountingDocument(c, slug, portal, xmlText);
+            if (id) accountingCreated += 1;
+          } catch (error: any) {
+            legacyAccountingFailed += 1;
+            legacyAccountingErrors.push({
+              automationKey,
+              documentNo: baseDoc.documentNo,
+              message: text(error?.message) || "Legacy İşNet belge uyumluluk kaydı yazılamadı.",
+            });
+          }
           try {
             const canonical = await ingestProviderEBelgeXml(c, slug, {
               providerType: "ISNET",
@@ -1284,7 +1295,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         }
       }
 
-      const requiresReview = failed > 0 || canonicalFailed > 0;
+      const requiresReview = failed > 0 || canonicalFailed > 0 || legacyAccountingFailed > 0;
       const result = {
         id: runId,
         status: requiresReview ? "PARTIAL_REVIEW_REQUIRED" : "COMPLETED",
@@ -1301,6 +1312,11 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         downloaded,
         failed,
         accountingCreated,
+        legacyAccounting: {
+          created: accountingCreated,
+          failed: legacyAccountingFailed,
+          errors: legacyAccountingErrors,
+        },
         canonical: {
           created: canonicalCreated,
           duplicates: canonicalDuplicates,
@@ -1315,6 +1331,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
           canonicalCreated,
           canonicalDuplicates,
           canonicalFailed,
+          legacyAccountingFailed,
         },
       };
       await storePut(c, SYNC_SCOPE, "latest", result, slug);
