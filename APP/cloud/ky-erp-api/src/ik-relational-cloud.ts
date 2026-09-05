@@ -1079,7 +1079,7 @@ async function advancedMonth(c: Context<AppEnv>) {
     .map((employee) => {
       const card = cardsByEmployee.get(text(employee.id)) || {};
       const sgkValue = number(card.sgk_follow);
-      return { ...employee, cardNo: text(card.card_no), identityNo: text(card.identity_no), exitDate: hrDateOnly(card.exit_date), payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included), cardSource: text(card.card_source) || "TNF", personelKodu: text(card.personel_kodu) || text(employee.code), activePassive: text(card.active_passive) || text(employee.status), paymentType: text(card.payment_type) || text(employee.bankPaymentType), sgkFollow: card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1 ? true : sgkValue === 0 ? false : null, phone: text(card.phone) };
+      return { ...employee, id: text(employee.id), cardNo: text(card.card_no), identityNo: text(card.identity_no), exitDate: hrDateOnly(card.exit_date), payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included), cardSource: text(card.card_source) || "TNF", personelKodu: text(card.personel_kodu) || text(employee.code), activePassive: text(card.active_passive) || text(employee.status), paymentType: text(card.payment_type) || text(employee.bankPaymentType), sgkFollow: card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1 ? true : sgkValue === 0 ? false : null, phone: text(card.phone) };
     });
   const visibleEmployeeIds = new Set(mergedEmployees.map((employee) => text(employee.id)));
   return okData(c, {
