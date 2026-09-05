@@ -70,7 +70,8 @@ test("IK refresh uses canonical personnel and latest-wins request guard", () => 
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
   assert.match(page, /loadRequestRef = useRef/);
-  assert.match(page, /activeRequest\.promise && activeRequest\.key === requestKey/);
+  assert.match(page, /if \(activeRequest\.promise\) \{/);
+  assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
   assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
   assert.match(page, /canonicalEmployeeIds/);
   assert.match(page, /currentIds\.has\(item\.employeeId\)/);
