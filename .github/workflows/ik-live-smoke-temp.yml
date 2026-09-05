@@ -20,17 +20,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ready=0
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error https://api.kyerp.net/api/health > /tmp/health.json; then
-              if jq -e '.ok == true' /tmp/health.json >/dev/null; then
-                ready=1
-                break
-              fi
-            fi
-            sleep 2
-          done
-          test "$ready" -eq 1
+          curl --fail --silent --show-error https://api.kyerp.net/api/health > /tmp/health.json
+          jq -e '.ok == true and .database == "d1"' /tmp/health.json >/dev/null
           echo "HEALTH=$(jq -c . /tmp/health.json)"
 
       - name: Auth and IK guards
@@ -38,43 +29,60 @@ jobs:
         run: |
           set -euo pipefail
           auth_status="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' https://api.kyerp.net/api/auth/me)"
-          test "$auth_status" = "401"
-          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/auth.json >/dev/null
-
           ik_status="$(curl --silent --show-error --output /tmp/ik.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/month?mainCompanyId=mecit-hakan&year=2026&month=8')"
-          test "$ik_status" = "401"
-          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/ik.json >/dev/null
-
           payroll_status="$(curl --silent --show-error --output /tmp/payroll.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/payroll?mainCompanyId=mecit-hakan&year=2026&month=8')"
+          test "$auth_status" = "401"
+          test "$ik_status" = "401"
           test "$payroll_status" = "401"
-          jq -e '.ok == false and .error.code == "UNAUTHORIZED"' /tmp/payroll.json >/dev/null
-
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/auth.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/ik.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/payroll.json >/dev/null
           echo "AUTH_HTTP=$auth_status IK_HTTP=$ik_status PAYROLL_HTTP=$payroll_status"
 
-      - name: Frontend production asset
+      - name: Compare custom domain with deployed Pages preview
         shell: bash
         run: |
           set -euo pipefail
-          ready=0
-          for attempt in $(seq 1 30); do
-            if curl --location --fail --silent --show-error https://app.kyerp.net/ > /tmp/app.html; then
-              script="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/app.html | head -1 | sed -n 's/.*src="\([^"]*\)"/\1/p')"
-              if [ -n "$script" ]; then
-                case "$script" in
-                  http://*|https://*) script_url="$script" ;;
-                  /*) script_url="https://app.kyerp.net$script" ;;
-                  *) clean_script="$(printf '%s' "$script" | sed 's#^\./##')"; script_url="https://app.kyerp.net/$clean_script" ;;
-                esac
-                if curl --location --fail --silent --show-error "$script_url" > /tmp/live.js; then
-                  if grep -Fq "Banka + elden toplamı net ödenecek tutara eşit olmalıdır." /tmp/live.js                     && grep -Fq "NET / TOPLAM ÖDENECEK" /tmp/live.js                     && grep -Fq "İK Aylık Bordro ve Ödeme Kontrol Listesi" /tmp/live.js; then
-                    ready=1
-                    break
-                  fi
-                fi
-              fi
-            fi
-            sleep 2
+
+          fetch_site() {
+            base="$1"
+            key="$2"
+            curl --location --fail --silent --show-error "$base/" > "/tmp/$key.html"
+            grep -oE '<script[^>]+src="[^"]+"' "/tmp/$key.html" | sed -n 's/.*src="\([^"]*\)"/\1/p' > "/tmp/$key.scripts"
+            test -s "/tmp/$key.scripts"
+            : > "/tmp/$key.all.js"
+            while IFS= read -r script; do
+              case "$script" in
+                http://*|https://*) url="$script" ;;
+                /*) url="$base$script" ;;
+                *) clean="$(printf '%s' "$script" | sed 's#^\./##')"; url="$base/$clean" ;;
+              esac
+              echo "$url"
+              curl --location --fail --silent --show-error "$url" >> "/tmp/$key.all.js"
+            done < "/tmp/$key.scripts"
+          }
+
+          fetch_site "https://app.kyerp.net" "app"
+          fetch_site "https://291aa26e.ky-erp-frontend.pages.dev" "preview"
+
+          echo "--- APP SCRIPTS ---"
+          cat /tmp/app.scripts
+          echo "--- PREVIEW SCRIPTS ---"
+          cat /tmp/preview.scripts
+          echo "--- HASHES ---"
+          sha256sum /tmp/app.html /tmp/preview.html /tmp/app.all.js /tmp/preview.all.js
+
+          for marker in             "Banka + elden toplamı net ödenecek tutara eşit olmalıdır."             "NET / TOPLAM ÖDENECEK"             "İK Aylık Bordro ve Ödeme Kontrol Listesi"             "Pasif referans"; do
+            app_count="$(grep -Fao "$marker" /tmp/app.all.js | wc -l || true)"
+            preview_count="$(grep -Fao "$marker" /tmp/preview.all.js | wc -l || true)"
+            echo "MARKER=$marker APP=$app_count PREVIEW=$preview_count"
           done
-          test "$ready" -eq 1
-          echo "LIVE_SCRIPT=$script_url"
-          echo "LIVE_BYTES=$(wc -c < /tmp/live.js)"
+
+          app_hash="$(sha256sum /tmp/app.all.js | awk '{print $1}')"
+          preview_hash="$(sha256sum /tmp/preview.all.js | awk '{print $1}')"
+          test "$app_hash" = "$preview_hash"
+          grep -Fq "Banka + elden toplamı net ödenecek tutara eşit olmalıdır." /tmp/app.all.js
+          grep -Fq "NET / TOPLAM ÖDENECEK" /tmp/app.all.js
+          grep -Fq "İK Aylık Bordro ve Ödeme Kontrol Listesi" /tmp/app.all.js
+
+          echo "APP_AND_PREVIEW_MATCH=$app_hash"
