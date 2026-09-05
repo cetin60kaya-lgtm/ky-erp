@@ -162,8 +162,16 @@ test("forced refresh waits for an active read before starting the canonical rere
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const load = useCallback\(async \(\{ force = false \} = \{\}\) =>/);
-  assert.match(page, /if \(!force\) return activeRequest\.promise/);
+  assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
   assert.match(page, /await activeRequest\.promise/);
   assert.match(page, /await load\(\{ force: true \}\)/);
   assert.match(page, /const go = \(target\) => \{[\s\S]*load\(\{ force: true \}\)/);
+});
+
+
+test("serialized refresh stays single-active across period changes", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  assert.match(page, /if \(activeRequest\.promise\) \{/);
+  assert.match(page, /try \{ await activeRequest\.promise; \}/);
+  assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
 });
