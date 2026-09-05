@@ -8,6 +8,7 @@ import {
   calculateAnnualLeaveRange,
   advancedEmployeeVisible,
   calculateOvertimeAmount,
+  calculatePayrollAmounts,
 } from "./ik-relational-cloud.ts";
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
@@ -95,4 +96,18 @@ test("overtime is recalculated with salary / 225 x hours x multiplier", () => {
   assert.equal(calculateOvertimeAmount(45000, 2, 1.5), 600);
   assert.equal(calculateOvertimeAmount(45000, 2, 2), 800);
   assert.equal(calculateOvertimeAmount(45000, 0, 2), 0);
+});
+
+
+test("canonical payroll equation includes earnings and all deductions", () => {
+  const result = calculatePayrollAmounts({
+    salary: 40000,
+    road: 2000,
+    extra: 3000,
+    overtime: 600,
+    advance: 1000,
+    deduction: 500,
+    garnishment: 100,
+  });
+  assert.deepEqual(result, { earnings: 45600, net: 44000 });
 });
