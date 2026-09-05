@@ -156,3 +156,14 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
     assert.ok(page.includes(field), `Eksik Excel bordro alanı: ${field}`);
   }
 });
+
+
+test("forced refresh waits for an active read before starting the canonical reread", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const load = useCallback\(async \(\{ force = false \} = \{\}\) =>/);
+  assert.match(page, /if \(!force\) return activeRequest\.promise/);
+  assert.match(page, /await activeRequest\.promise/);
+  assert.match(page, /await load\(\{ force: true \}\)/);
+  assert.match(page, /const go = \(target\) => \{[\s\S]*load\(\{ force: true \}\)/);
+});
