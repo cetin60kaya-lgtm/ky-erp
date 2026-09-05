@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCanonicalEBelgeUbl } from "./e-belge-center-cloud.ts";
+import { parseCanonicalEBelgeUbl } from "./e-belge-ubl.ts";
 
 const invoiceXml = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
