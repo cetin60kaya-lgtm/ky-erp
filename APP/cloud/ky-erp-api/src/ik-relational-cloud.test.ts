@@ -6,6 +6,8 @@ import {
   hrListResponse,
   mergeDailyRosterIds,
   calculateAnnualLeaveRange,
+  advancedEmployeeVisible,
+  calculateOvertimeAmount,
 } from "./ik-relational-cloud.ts";
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
@@ -67,4 +69,30 @@ test("10 Aug 2026 leave start and 31 Aug return counts exactly 18 days", () => {
   assert.equal(result.calendarDays, 21);
   assert.equal(result.countedDays, 18);
   assert.deepEqual(result.excludedDates.map((row) => row.date), ["2026-08-16", "2026-08-23", "2026-08-30"]);
+});
+
+
+test("passive employee remains in final payroll month when exit date is in that period", () => {
+  assert.equal(
+    advancedEmployeeVisible(
+      { status: "Pasif" },
+      { payroll_included: 1, active_passive: "Pasif", exit_date: "2026-09-06" },
+      "2026-09",
+    ),
+    true,
+  );
+  assert.equal(
+    advancedEmployeeVisible(
+      { status: "Pasif" },
+      { payroll_included: 1, active_passive: "Pasif", exit_date: "2026-09-06" },
+      "2026-10",
+    ),
+    false,
+  );
+});
+
+test("overtime is recalculated with salary / 225 x hours x multiplier", () => {
+  assert.equal(calculateOvertimeAmount(45000, 2, 1.5), 600);
+  assert.equal(calculateOvertimeAmount(45000, 2, 2), 800);
+  assert.equal(calculateOvertimeAmount(45000, 0, 2), 0);
 });
