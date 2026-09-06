@@ -21,10 +21,11 @@ import "./supplierInvoicesWorkspace.css";
 const PAGE_SIZES = [25, 50, 100];
 const INVOICE_STATUS_OPTIONS = [
   ["ALL", "Tümü"],
-  ["CONTROL_WAITING", "Kontrol bekliyor"],
-  ["READY", "İşleme hazır"],
-  ["PROCESSED", "İşlendi"],
-  ["REJECTED", "Reddedildi"],
+  ["INGESTED", "Yeni / Kontrol bekliyor"],
+  ["REVIEW_REQUIRED", "Kontrol gerekli"],
+  ["READY_FOR_APPROVAL", "İşleme hazır"],
+  ["APPROVED", "Onaylandı"],
+  ["POSTED", "İşlendi"],
 ];
 const LOT_STATUS_OPTIONS = [
   ["ALL", "Tüm lotlar"],
@@ -70,13 +71,56 @@ const listOf = (payload) => {
   return [];
 };
 
+const canonicalInvoiceRow = (row = {}) => ({
+  ...row,
+  id: row.id,
+  documentNo: row.document_no || row.documentNo || "",
+  issueDate: row.issue_date || row.issueDate || row.created_at || row.createdAt,
+  companyId: row.party_company_id || row.companyId || null,
+  firmId: row.party_company_id || row.firmId || null,
+  companyName: row.party_name || row.companyName || "",
+  supplierName: row.party_name || row.supplierName || "",
+  subtotal: Number(row.subtotal || 0),
+  vatTotal: Number(row.tax_total ?? row.vatTotal ?? 0),
+  grandTotal: Number(row.payable_total ?? row.grandTotal ?? 0),
+  sourceType: row.source_type || row.sourceType || row.provider_type || "MANUAL",
+  status: row.status || "REVIEW_REQUIRED",
+  canonical: true,
+});
+
+const canonicalInvoiceDetail = (detail = {}) => ({
+  ...canonicalInvoiceRow(detail),
+  lines: (detail.lines || []).map((line) => {
+    const raw = line.raw_metadata || line.rawMetadata || {};
+    return {
+      ...line,
+      id: line.id,
+      lineNo: line.line_no || line.lineNo,
+      rawName: line.description || line.product_code || line.supplier_product_code || "Kalem",
+      description: line.description || "",
+      quantity: Number(line.quantity || 0),
+      unit: line.unit_code || line.unit || "",
+      unitPrice: Number(line.unit_price ?? line.unitPrice ?? 0),
+      lineTotal: Number(line.line_total ?? line.lineTotal ?? 0),
+      subtotal: Number(line.line_total ?? line.subtotal ?? 0),
+      productId: line.product_id || line.productId || "",
+      productName: raw.productName || "",
+      lotNo: raw.lotNo || "",
+      routingType: raw.routingType || "",
+      raw,
+    };
+  }),
+  canonical: true,
+});
+
 function statusLabel(value) {
   const key = normalize(value);
   if (/DEPLETED|BITTI/.test(key)) return "Bitti";
   if (/QUARANTINE|KARANTINA/.test(key)) return "Karantina";
   if (/INACTIVE|PASIF/.test(key)) return "Pasif";
   if (/AVAILABLE|KULLANILABILIR/.test(key)) return "Kullanılabilir";
-  if (/PROCESSED|APPROVED|ISLENDI/.test(key)) return "İşlendi";
+  if (/POSTED|PROCESSED|ISLENDI/.test(key)) return "İşlendi";
+  if (/APPROVED/.test(key)) return "Onaylandı";
   if (/READY|HAZIR/.test(key)) return "İşleme hazır";
   if (/REJECT|RED/.test(key)) return "Reddedildi";
   if (/MISSING|EKSIK/.test(key)) return "Eksik bilgi";
@@ -85,7 +129,7 @@ function statusLabel(value) {
 
 function statusTone(value) {
   const key = normalize(value);
-  if (/AVAILABLE|PROCESSED|APPROVED|ISLENDI/.test(key)) return "success";
+  if (/AVAILABLE|POSTED|PROCESSED|APPROVED|ISLENDI/.test(key)) return "success";
   if (/DEPLETED|INACTIVE/.test(key)) return "muted";
   if (/REJECT|RED|ERROR|HATA|QUARANTINE/.test(key)) return "danger";
   if (/READY|HAZIR/.test(key)) return "ready";
@@ -139,10 +183,10 @@ function buildLineDrafts(detail, aliases, profile) {
     return {
       lineId: line.id,
       rawName,
-      productId: alias.productId || "",
-      productName: alias.productName || "",
+      productId: line.productId || alias.productId || "",
+      productName: line.productName || alias.productName || "",
       aliasName: alias.aliasName || alias.productName || rawName,
-      lotNo: line.lotNo || "",
+      lotNo: line.lotNo || line.raw?.lotNo || "",
       quantity: Number(line.quantity || 0),
       unit: line.unit || alias.unit || profile?.defaultUnit || "KG",
       unitPrice: Number(line.unitPrice || 0),
