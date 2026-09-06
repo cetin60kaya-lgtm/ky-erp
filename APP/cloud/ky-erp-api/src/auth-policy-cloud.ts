@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
 
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
 const CHALLENGE_SECONDS = 10 * 60;
@@ -631,11 +632,33 @@ async function updateOwnerRecoveryEnabled(c: any, userId: string) {
 }
 
 export function registerAuthPolicyRoutes(app: any) {
+  app.get("/api/auth/turnstile-config", (c: any) => {
+    return c.json({ ok: true, ...turnstilePublicConfig(c) });
+  });
+
   app.post("/api/auth/login", async (c: any) => {
     const body = await bodyOf(c);
     const identity = text(body.username || body.email);
     const password = text(body.password);
     if (!identity || !password) return c.json(jsonError("CREDENTIALS_REQUIRED", "E-posta/kullanıcı adı ve şifre zorunludur."), 400);
+
+    const turnstile = await verifyTurnstileForLogin(c, body.turnstileToken);
+    if (!turnstile.ok) {
+      await audit(c, "TURNSTILE_LOGIN_REJECTED", "", "", "", "", {
+        identity: identity.slice(0, 80),
+        code: turnstile.code,
+      });
+      const unavailable = Number(turnstile.status || 0) >= 500;
+      return c.json(
+        jsonError(
+          turnstile.code,
+          unavailable
+            ? "Güvenlik doğrulama servisi geçici olarak kullanılamıyor. Kısa süre sonra tekrar deneyin."
+            : "Güvenlik doğrulaması tamamlanamadı. Turnstile kontrolünü yenileyip tekrar deneyin.",
+        ),
+        unavailable ? 503 : 403,
+      );
+    }
     const user = await userByIdentity(c, identity);
     if (!user || !Boolean(user.is_active) || !(await compare(password, text(user.password_hash)))) {
       await audit(c, "LOGIN_FAILED_POLICY", "", text(user?.id), text(user?.main_company_slug), "", { identity: identity.slice(0, 80) });

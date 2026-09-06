@@ -543,8 +543,15 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("storage", syncFromStorage);
   }, [clearAuth]);
 
-  const login = useCallback((identity, password, deviceLabel = "") => runAuthOnce("LOGIN", async () => {
-    const body = { username: identity, password, deviceLabel: String(deviceLabel || "").trim() || stableBrowserDeviceLabel() };
+  const getTurnstileConfig = useCallback(() => directAuthRequest("/auth/turnstile-config", { method: "GET" }), []);
+
+  const login = useCallback((identity, password, deviceLabel = "", turnstileToken = "") => runAuthOnce("LOGIN", async () => {
+    const body = {
+      username: identity,
+      password,
+      deviceLabel: String(deviceLabel || "").trim() || stableBrowserDeviceLabel(),
+      turnstileToken: String(turnstileToken || "").trim(),
+    };
     return finalizeResponse(await directAuthRequest("/auth/login", { body }));
   }), [finalizeResponse, runAuthOnce]);
 
@@ -597,10 +604,10 @@ export function AuthProvider({ children }) {
   }, [permissions, user?.role]);
 
   const value = useMemo(() => ({
-    token, user, permissions, login, verifyMfa, recoverMfa,
+    token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa,
     startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can,
     isAuthenticated: Boolean(token && user), loading,
-  }), [token, user, permissions, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can, loading]);
+  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

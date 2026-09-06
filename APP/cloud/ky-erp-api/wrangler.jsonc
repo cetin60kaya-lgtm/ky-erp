@@ -19,7 +19,9 @@
   },
   "secrets": {
     "required": [
-      "RESEND_API_KEY"
+      "RESEND_API_KEY",
+      "TURNSTILE_SECRET_KEY",
+      "TURNSTILE_SITE_KEY"
     ]
   },
   "vars": {

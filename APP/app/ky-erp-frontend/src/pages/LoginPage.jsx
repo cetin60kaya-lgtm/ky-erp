@@ -91,8 +91,34 @@ function ErrorBox({ message }) {
   return <div className="auth-error" role="alert" aria-live="polite">{message}</div>;
 }
 
+let turnstileScriptPromise = null;
+
+function loadTurnstileScript() {
+  if (typeof window === "undefined") return Promise.reject(new Error("Browser gerekli."));
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-kyerp-turnstile="1"]');
+    const script = existing || document.createElement("script");
+    const onReady = () => window.turnstile ? resolve(window.turnstile) : reject(new Error("Turnstile yüklenemedi."));
+    const onError = () => reject(new Error("Turnstile güvenlik bileşeni yüklenemedi."));
+    script.addEventListener("load", onReady, { once: true });
+    script.addEventListener("error", onError, { once: true });
+    if (!existing) {
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.dataset.kyerpTurnstile = "1";
+      document.head.appendChild(script);
+    }
+  });
+  return turnstileScriptPromise;
+}
+
 export default function LoginPage() {
   const {
+    getTurnstileConfig,
     login,
     verifyMfa,
     recoverMfa,
@@ -114,7 +140,12 @@ export default function LoginPage() {
   const [recoveryCode, setRecoveryCode] = useState("");
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [recoveryAnswers, setRecoveryAnswers] = useState(["", ""]);
+  const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false });
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileError, setTurnstileError] = useState("");
   const qrRef = useRef(null);
+  const turnstileRef = useRef(null);
+  const turnstileWidgetRef = useRef(null);
   const otpUri = useMemo(() => compatibleOtpUri(flow.otpauthUri), [flow.otpauthUri]);
 
   useEffect(() => {
@@ -123,6 +154,61 @@ export default function LoginPage() {
       window.history.replaceState({}, "", `/${window.location.search}${window.location.hash}`);
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getTurnstileConfig()
+      .then((response) => {
+        if (cancelled) return;
+        setTurnstileConfig({
+          enabled: Boolean(response?.enabled),
+          siteKey: String(response?.siteKey || ""),
+          loaded: true,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTurnstileConfig({ enabled: false, siteKey: "", loaded: true });
+        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Sayfayı yenileyip tekrar deneyin.");
+      });
+    return () => { cancelled = true; };
+  }, [getTurnstileConfig]);
+
+  useEffect(() => {
+    if (flow.stage !== "CREDENTIALS" || !turnstileConfig.loaded || !turnstileConfig.enabled || !turnstileConfig.siteKey) return undefined;
+    let cancelled = false;
+
+    loadTurnstileScript()
+      .then((turnstile) => {
+        if (cancelled || !turnstileRef.current || turnstileWidgetRef.current !== null) return;
+        setTurnstileError("");
+        turnstileWidgetRef.current = turnstile.render(turnstileRef.current, {
+          sitekey: turnstileConfig.siteKey,
+          theme: "light",
+          size: "flexible",
+          callback: (token) => {
+            setTurnstileToken(String(token || ""));
+            setTurnstileError("");
+          },
+          "expired-callback": () => setTurnstileToken(""),
+          "timeout-callback": () => setTurnstileToken(""),
+          "error-callback": () => {
+            setTurnstileToken("");
+            setTurnstileError("Güvenlik doğrulaması yüklenemedi. Yeniden deneyin.");
+          },
+        });
+      })
+      .catch(() => setTurnstileError("Güvenlik doğrulaması yüklenemedi. Sayfayı yenileyin."));
+
+    return () => {
+      cancelled = true;
+      if (turnstileWidgetRef.current !== null && window.turnstile) {
+        try { window.turnstile.remove(turnstileWidgetRef.current); } catch { /* noop */ }
+      }
+      turnstileWidgetRef.current = null;
+      setTurnstileToken("");
+    };
+  }, [flow.stage, turnstileConfig]);
 
   function chooseNextProvider(response) {
     const available = Array.isArray(response?.availableProviders)
@@ -176,15 +262,27 @@ export default function LoginPage() {
       setError("Kullanıcı adı/e-posta ve şifre zorunludur.");
       return;
     }
+    if (!turnstileConfig.loaded) {
+      setError("Güvenlik doğrulaması hazırlanıyor. Birkaç saniye sonra tekrar deneyin.");
+      return;
+    }
+    if (turnstileConfig.enabled && !turnstileToken) {
+      setError("Güvenlik doğrulamasını tamamlayın.");
+      return;
+    }
     try {
       setLoading(true);
       setError("");
       // Cihaz bilgisi auth isteğinin JSON gövdesine özel header ekletmemek için
       // burada boş bırakılır. Session güvenliği sunucu JWT/policy motoruyla yürür.
-      applyResponse(await login(identity, rawPassword, ""));
+      applyResponse(await login(identity, rawPassword, "", turnstileToken));
     } catch (requestError) {
       setError(requestError?.message || "Giriş yapılamadı.");
     } finally {
+      if (turnstileConfig.enabled && turnstileWidgetRef.current !== null && window.turnstile) {
+        try { window.turnstile.reset(turnstileWidgetRef.current); } catch { /* noop */ }
+        setTurnstileToken("");
+      }
       setLoading(false);
     }
   }
@@ -398,8 +496,14 @@ export default function LoginPage() {
                     placeholder="Şifrenizi girin"
                   />
                 </label>
+                {turnstileConfig.enabled ? (
+                  <div className="auth-turnstile-shell">
+                    <div className="auth-turnstile" ref={turnstileRef} />
+                    <ErrorBox message={turnstileError} />
+                  </div>
+                ) : null}
                 <ErrorBox message={error} />
-                <button className="auth-primary" type="submit" disabled={loading}>
+                <button className="auth-primary" type="submit" disabled={loading || !turnstileConfig.loaded}>
                   {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
                 </button>
                 <div className="auth-inline-note">

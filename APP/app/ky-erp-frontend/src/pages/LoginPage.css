@@ -779,3 +779,21 @@
     width: 100%;
   }
 }
+
+.auth-turnstile-shell {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.auth-turnstile {
+  width: 100%;
+  min-height: 65px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.auth-turnstile iframe {
+  max-width: 100%;
+}
