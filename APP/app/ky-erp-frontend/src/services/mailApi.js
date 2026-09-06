@@ -32,3 +32,11 @@ export const listMailDrafts = () =>
 
 export const createMailDraft = (payload = {}) =>
   apiPost("/mail/drafts", payload).then(unwrap);
+
+export const listCommunicationFiles = (params = {}) =>
+  apiGet("/file-hub/files", { take: 150, ...params }).then(unwrap);
+
+export const searchCommunicationFiles = (q = "") =>
+  q.trim()
+    ? apiGet("/file-hub/search", { q: q.trim() }).then(unwrap)
+    : listCommunicationFiles();
