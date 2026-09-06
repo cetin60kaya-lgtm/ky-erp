@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { hash } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { approvalPendingPayload, consumeCriticalApproval, requestCriticalApproval } from "./approval-center-cloud";
 
 type AnyRow = Record<string, any>;
 
@@ -182,6 +183,62 @@ export function registerAdminManagementRoutes(app: any) {
     }
     await audit(c,"USER_CREATED_COMPLETE",current.id,id,{username,email,role,companySlug,loginPolicy,approvalRequired,permissionCount:permissions.filter((row)=>row.canView||row.canCreate||row.canUpdate||row.canDelete||row.canApprove).length});
     return c.json({ok:true,data:{id,username,fullName,email,role,mainCompanySlug:companySlug,isActive,loginPolicy,approvalRequired,mustChangePassword,permissions}},201);
+  });
+
+  app.post("/api/admin/company-owner-role/:id", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isOwner(current.role)) return c.json(jsonError("OWNER_ONLY", "Firma Sahibi yetkisi değişikliği yalnız Uygulama Sahibi tarafından başlatılabilir."), current ? 403 : 401);
+    const body = await bodyOf(c);
+    const targetId = text(c.req.param("id"));
+    const action = upper(body.action);
+    const companySlug = text(body.mainCompanySlug);
+    if (!["ASSIGN","REMOVE"].includes(action)) return c.json(jsonError("ACTION_INVALID", "İşlem ASSIGN veya REMOVE olmalıdır."), 422);
+    if (!companySlug) return c.json(jsonError("COMPANY_REQUIRED", "Firma seçilmelidir."), 422);
+
+    const company = await c.env.DB.prepare("SELECT slug,name FROM main_companies WHERE slug=? AND COALESCE(is_active,1)<>0 LIMIT 1").bind(companySlug).first<AnyRow>();
+    if (!company) return c.json(jsonError("COMPANY_NOT_FOUND", "Seçilen firma bulunamadı veya pasif."), 404);
+    const target = await targetUser(c,targetId);
+    if (!target) return c.json(jsonError("USER_NOT_FOUND", "Kullanıcı bulunamadı."), 404);
+    if (isOwner(target.effective_role)) return c.json(jsonError("APPLICATION_OWNER_IMMUTABLE", "Uygulama Sahibi firma sahibi rolüne dönüştürülemez."), 409);
+
+    const owners = await c.env.DB.prepare(
+      "SELECT u.id,u.full_name FROM auth_users u JOIN auth_user_security s ON s.user_id=u.id WHERE s.main_company_slug=? AND UPPER(COALESCE(s.role_override,''))='COMPANY_ADMIN' AND u.is_active=1",
+    ).bind(companySlug).all<AnyRow>();
+    const ownerRows = owners.results || [];
+    const otherOwners = ownerRows.filter((row:AnyRow)=>text(row.id)!==targetId);
+
+    if (action==="REMOVE") {
+      if (upper(target.effective_role)!=="COMPANY_ADMIN" || text(target.main_company_slug)!==companySlug) return c.json(jsonError("NOT_COMPANY_OWNER", "Seçilen kullanıcı bu firmanın Firma Sahibi değil."), 409);
+      if (!otherOwners.length) return c.json(jsonError("LAST_COMPANY_OWNER", "Son Firma Sahibi kaldırılamaz. Önce firmaya başka bir Firma Sahibi atayın."), 409);
+    }
+
+    const policy = action==="ASSIGN" && ownerRows.length===0 ? "APP_OWNER" : "COMPANY_OWNER_AND_APP_OWNER";
+    const approval = await requestCriticalApproval(c,current,{
+      mainCompanySlug:companySlug,sourceModule:"ADMIN",actionType:action==="ASSIGN"?"COMPANY_OWNER_ASSIGN":"COMPANY_OWNER_REMOVE",
+      targetType:"AUTH_USER",targetId,
+      title:action==="ASSIGN"?"Firma Sahibi Yetkisi Ver":"Firma Sahibi Yetkisini Kaldır",
+      description:(text(target.full_name||target.username)||targetId)+" · "+text(company.name||companySlug),
+      riskLevel:"CRITICAL",approvalPolicy:policy,
+      payload:{userId:targetId,companySlug,action},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(jsonError("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan Firma Sahibi yetkisi değiştirilemez."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
+
+    const timestamp=nowIso();
+    if(action==="ASSIGN"){
+      await c.env.DB.batch([
+        c.env.DB.prepare("UPDATE auth_users SET role='VIEWER',updated_at=? WHERE id=?").bind(timestamp,targetId),
+        c.env.DB.prepare("UPDATE auth_user_security SET main_company_slug=?,role_override='COMPANY_ADMIN',approval_required=1,updated_at=? WHERE user_id=?").bind(companySlug,timestamp,targetId),
+      ]);
+    }else{
+      await c.env.DB.batch([
+        c.env.DB.prepare("UPDATE auth_users SET role='VIEWER',updated_at=? WHERE id=?").bind(timestamp,targetId),
+        c.env.DB.prepare("UPDATE auth_user_security SET role_override=NULL,approval_required=1,updated_at=? WHERE user_id=? AND main_company_slug=?").bind(timestamp,targetId,companySlug),
+      ]);
+    }
+    await consumeCriticalApproval(c,current,text(approval.request?.id),{userId:targetId,companySlug,action});
+    await audit(c,action==="ASSIGN"?"COMPANY_OWNER_ASSIGNED":"COMPANY_OWNER_REMOVED",current.id,targetId,{companySlug,approvalRequestId:text(approval.request?.id)});
+    return c.json({ok:true,data:{userId:targetId,mainCompanySlug:companySlug,role:action==="ASSIGN"?"COMPANY_ADMIN":"VIEWER",updatedAt:timestamp}});
   });
 
   app.get("/api/admin/security/delivery-capabilities", async (c: any) => {
