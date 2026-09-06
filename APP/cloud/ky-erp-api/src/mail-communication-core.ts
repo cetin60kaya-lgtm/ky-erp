@@ -331,6 +331,16 @@ export function registerMailCommunicationRoutes(app:any){
     return c.json({ok:true,data:{messageId,pinned,pinnedAt:pinned?ts:null}});
   });
 
+  app.get("/api/mail/messages/:id/attachments",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail eklerini görüntüleme yetkiniz yok."),403);
+    const message=await c.env.DB.prepare("SELECT id,account_id FROM mail_messages WHERE id=? AND main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
+    if(!message?.id)return c.json(jsonError("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
+    if(!(await canAccessAccount(c,current,tenant,text(message.account_id),"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    const r=await c.env.DB.prepare("SELECT id,file_name,mime_type,size_bytes,is_inline,content_id FROM mail_attachments WHERE main_company_slug=? AND message_id=? ORDER BY is_inline ASC,file_name").bind(tenant,messageId).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
+  });
+
   app.get("/api/mail/drafts",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail taslaklarını görüntüleme yetkiniz yok."),403);
