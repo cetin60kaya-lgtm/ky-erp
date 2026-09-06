@@ -9,6 +9,9 @@ import {
   listMailMessages,
   requestMailAccount,
   searchCommunicationFiles,
+  sendMailDraft,
+  startMicrosoftMailOAuth,
+  syncMailAccount,
 } from "../../services/mailApi";
 import "./CommunicationHubPage.css";
 
@@ -93,6 +96,15 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   useEffect(() => { loadBase(); }, [loadBase]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mailConnected") === "1") setNotice("Microsoft posta kutusu bağlantısı doğrulandı.");
+    if (params.get("mailError")) setNotice(`Hata: ${params.get("mailError")}`);
+    if (params.has("mailConnected") || params.has("mailError")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadMailbox() {
       if (!isMail || !selectedAccountId) {
@@ -103,7 +115,11 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       try {
         if (activeTab === "mail-taslaklar") {
           const rows = await listMailDrafts();
-          if (!cancelled) setDrafts(safeArray(rows).filter((row) => String(row.account_id || row.accountId) === String(selectedAccountId)));
+          if (!cancelled) {
+            const list = safeArray(rows).filter((row) => String(row.account_id || row.accountId) === String(selectedAccountId));
+            setDrafts(list);
+            setSelectedMessage((current) => list.find((row) => row.id === current?.id) || list[0] || null);
+          }
           return;
         }
         const direction = activeTab === "mail-gonderilen" ? "OUTGOING" : "INCOMING";
@@ -158,6 +174,52 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     } catch (error) {
       setNotice(`Hata: ${error?.message || "Taslak kaydedilemedi."}`);
     } finally {
+      setLoading(false);
+    }
+  }
+
+  async function connectMicrosoft() {
+    if (!selectedAccountId) return;
+    setLoading(true);
+    try {
+      const result = await startMicrosoftMailOAuth(selectedAccountId);
+      if (!result?.authorizeUrl) throw new Error("Microsoft OAuth adresi alınamadı.");
+      window.location.assign(result.authorizeUrl);
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Microsoft hesabı bağlanamadı."}`);
+      setLoading(false);
+    }
+  }
+
+  async function syncSelectedMailbox() {
+    if (!selectedAccountId) return;
+    setLoading(true);
+    try {
+      const result = await syncMailAccount(selectedAccountId);
+      const total = safeArray(result?.folders).reduce((sum, row) => sum + Number(row.count || 0), 0);
+      setNotice(result?.partial ? `Mail senkronizasyonu kısmi tamamlandı. ${total} kayıt işlendi.` : `Mail senkronizasyonu tamamlandı. ${total} kayıt işlendi.`);
+      await loadBase();
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Mail senkronizasyonu tamamlanamadı."}`);
+      setLoading(false);
+    }
+  }
+
+  async function sendSelectedDraft() {
+    if (!selectedMessage?.id) return;
+    setLoading(true);
+    try {
+      const result = await sendMailDraft(selectedMessage.id);
+      setNotice(result?.status === "PROVIDER_ACCEPTED"
+        ? "Microsoft gönderim isteğini kabul etti. Bu durum teslim edildi anlamına gelmez."
+        : "Gönderim işlemi tamamlandı.");
+      const rows = await listMailDrafts();
+      const list = safeArray(rows).filter((row) => String(row.account_id || row.accountId) === String(selectedAccountId));
+      setDrafts(list);
+      setSelectedMessage(list[0] || null);
+      await loadBase();
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Mail gönderilemedi."}`);
       setLoading(false);
     }
   }
@@ -239,6 +301,15 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <em>{providerLabel(row.provider_type || row.providerType)} · {statusLabel(row.status)}</em>
               </button>
             )) : <div className="comm-empty">Henüz atanmış posta kutusu yok.<br/>“+ Mail Hesabı” ile talep oluşturabilirsiniz.</div>}
+            {selectedAccount ? <div className="comm-account-tools">
+              <span><b>{statusLabel(selectedAccount.status)}</b> · {providerLabel(selectedAccount.provider_type || selectedAccount.providerType)}</span>
+              {String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "MICROSOFT_365" && String(selectedAccount.status || "").toUpperCase() !== "ACTIVE"
+                ? <button type="button" onClick={connectMicrosoft} disabled={loading}>Microsoft Hesabını Bağla</button>
+                : null}
+              {String(selectedAccount.status || "").toUpperCase() === "ACTIVE"
+                ? <button type="button" className="secondary" onClick={syncSelectedMailbox} disabled={loading}>Postayı Senkronize Et</button>
+                : null}
+            </div> : null}
           </aside>
 
           <main className="comm-message-list">
@@ -256,7 +327,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
           <aside className="comm-preview">
             <div className="comm-pane-title"><b>Mail Detayı</b><small>ERP Bağlamı</small></div>
-            {selectedMessage && activeTab !== "mail-taslaklar" ? <>
+            {selectedMessage && activeTab === "mail-taslaklar" ? <>
+              <h2>{selectedMessage.subject || "(Konu yok)"}</h2>
+              <p><b>Durum:</b> {selectedMessage.status || "DRAFT"}</p>
+              <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Taslak içeriği yok."}</div>
+              <div className="comm-context-box"><b>Gönderim Güvenliği</b><span>Gönderim yalnız kullanıcı düğmeye bastığında yapılır. Provider kabulü teslimat sayılmaz.</span><button type="button" onClick={sendSelectedDraft} disabled={loading || String(selectedAccount?.status || "").toUpperCase() !== "ACTIVE"}>Gönder</button></div>
+            </> : selectedMessage ? <>
               <h2>{selectedMessage.subject || "(Konu yok)"}</h2>
               <p><b>Gönderen:</b> {selectedMessage.sender_name || selectedMessage.sender_email || "—"}</p>
               <p><b>Tarih:</b> {dateText(selectedMessage.received_at || selectedMessage.sent_at)}</p>
