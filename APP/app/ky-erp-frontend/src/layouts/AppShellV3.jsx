@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, ChevronDown, Command, Menu, Monitor, Plus, Search, X } from "lucide-react";
+import { Bell, CheckCheck, ChevronDown, Command, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
+import { getNotifications, markNotificationsRead } from "../services/notificationApi";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 
@@ -50,6 +51,25 @@ function normalize(value) {
   return String(value || "").toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function notificationCategoryLabel(category) {
+  if (category === "SECURITY") return "Güvenlik";
+  if (category === "E_BELGE") return "e-Belge";
+  if (category === "PAYMENT") return "Ödeme";
+  return "Sistem";
+}
+
+function notificationTime(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
 export default function AppShellV3({
   modules,
   activeModule,
@@ -75,7 +95,63 @@ export default function AppShellV3({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
+  const [notificationData, setNotificationData] = useState({
+    items: [],
+    unreadCount: 0,
+    totalCount: 0,
+    partial: false,
+    sourceErrors: [],
+    generatedAt: "",
+  });
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
+
+  const refreshNotifications = useCallback(async (silent = false) => {
+    if (!user?.id) {
+      setNotificationData((current) => ({ ...current, items: [], unreadCount: 0, totalCount: 0 }));
+      return;
+    }
+    if (!silent) setNotificationLoading(true);
+    setNotificationError("");
+    try {
+      const data = await getNotifications();
+      setNotificationData({
+        items: Array.isArray(data?.items) ? data.items : [],
+        unreadCount: Number(data?.unreadCount || 0),
+        totalCount: Number(data?.totalCount || 0),
+        partial: Boolean(data?.partial),
+        sourceErrors: Array.isArray(data?.sourceErrors) ? data.sourceErrors : [],
+        generatedAt: data?.generatedAt || "",
+      });
+    } catch (error) {
+      setNotificationError(error?.message || "Bildirimler alınamadı.");
+    } finally {
+      if (!silent) setNotificationLoading(false);
+    }
+  }, [activeCompanySlug, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    refreshNotifications(true);
+    const timer = window.setInterval(() => refreshNotifications(true), 60_000);
+    const onFocus = () => refreshNotifications(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refreshNotifications, user?.id]);
+
+  useEffect(() => {
+    if (!notificationOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setNotificationOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [notificationOpen]);
 
   const quickActions = useMemo(() => {
     const moduleMap = new Map(modules.map((item) => [item.key, item]));
@@ -110,6 +186,38 @@ export default function AppShellV3({
   function runQuickAction(action) {
     onOpenTab(action.moduleKey, action.tabKey);
     setQuickOpen(false);
+  }
+
+  function applyNotificationRead(ids) {
+    const readIds = new Set(ids);
+    setNotificationData((current) => {
+      const items = current.items.map((item) => readIds.has(item.id) ? { ...item, unread: false } : item);
+      return { ...current, items, unreadCount: items.filter((item) => item.unread).length };
+    });
+  }
+
+  async function markNotificationIdsRead(ids) {
+    const clean = [...new Set((ids || []).filter(Boolean))];
+    if (!clean.length) return;
+    applyNotificationRead(clean);
+    try {
+      await markNotificationsRead(clean);
+    } catch {
+      refreshNotifications(true);
+    }
+  }
+
+  function openNotification(item) {
+    if (item?.unread) markNotificationIdsRead([item.id]);
+    if (item?.route?.moduleKey && item?.route?.tabKey) {
+      onOpenTab(item.route.moduleKey, item.route.tabKey);
+    }
+    setNotificationOpen(false);
+  }
+
+  function markAllNotificationsRead() {
+    const unreadIds = notificationData.items.filter((item) => item.unread).map((item) => item.id);
+    markNotificationIdsRead(unreadIds);
   }
 
   const effectiveMode = displayPreferences?.effectiveMode || "pc";
@@ -215,7 +323,68 @@ export default function AppShellV3({
             <span>Ekran</span>
             <small>{displayLabel} · {effectiveScale}%</small>
           </button>
-          <button type="button" className="shell-v3-icon notification" aria-label="Bildirimler"><Bell size={18} /><span>3</span></button>
+          <div className="shell-v3-notification-wrap">
+            <button
+              type="button"
+              className="shell-v3-icon notification"
+              aria-label="Bildirim Merkezi"
+              aria-expanded={notificationOpen}
+              onClick={() => {
+                const next = !notificationOpen;
+                setNotificationOpen(next);
+                if (next) refreshNotifications(false);
+              }}
+            >
+              <Bell size={18} />
+              {notificationData.unreadCount > 0 ? <span>{notificationData.unreadCount > 99 ? "99+" : notificationData.unreadCount}</span> : null}
+            </button>
+            {notificationOpen ? (
+              <section className="shell-v3-notification-panel" role="dialog" aria-label="Bildirim Merkezi">
+                <header>
+                  <div>
+                    <strong>Bildirim Merkezi</strong>
+                    <small>{notificationData.unreadCount > 0 ? `${notificationData.unreadCount} okunmamış bildirim` : "Yeni bildirim yok"}</small>
+                  </div>
+                  <div className="shell-v3-notification-actions">
+                    <button type="button" onClick={() => refreshNotifications(false)} disabled={notificationLoading} title="Yenile"><RefreshCw size={15} className={notificationLoading ? "spin" : ""} /></button>
+                    <button type="button" onClick={markAllNotificationsRead} disabled={!notificationData.unreadCount} title="Tümünü okundu işaretle"><CheckCheck size={16} /></button>
+                  </div>
+                </header>
+                {notificationError ? <div className="shell-v3-notification-error">{notificationError}</div> : null}
+                {notificationData.partial ? <div className="shell-v3-notification-warning">Bazı bildirim kaynakları geçici olarak alınamadı. Görünen kayıtlar günceldir.</div> : null}
+                <div className="shell-v3-notification-list" aria-live="polite">
+                  {notificationLoading && !notificationData.items.length ? <div className="shell-v3-notification-empty">Bildirimler kontrol ediliyor...</div> : null}
+                  {!notificationLoading && !notificationData.items.length ? (
+                    <div className="shell-v3-notification-empty">
+                      <Bell size={22} />
+                      <strong>Bildirim yok</strong>
+                      <span>Bekleyen onay, e-Belge sorunu veya vadesi gelen ödeme olduğunda burada görünecek.</span>
+                    </div>
+                  ) : null}
+                  {notificationData.items.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={`shell-v3-notification-item ${item.unread ? "unread" : ""} severity-${item.severity || "info"}`}
+                      onClick={() => openNotification(item)}
+                    >
+                      <i aria-hidden="true" />
+                      <span>
+                        <em>{notificationCategoryLabel(item.category)}</em>
+                        <strong>{item.title}</strong>
+                        <small>{item.detail}</small>
+                      </span>
+                      <time>{notificationTime(item.createdAt)}</time>
+                    </button>
+                  ))}
+                </div>
+                <footer>
+                  <span>Gerçek kayıtlar · Firma ve kullanıcı yetkisine göre</span>
+                  {notificationData.generatedAt ? <small>Son kontrol {notificationTime(notificationData.generatedAt)}</small> : null}
+                </footer>
+              </section>
+            ) : null}
+          </div>
           <div className="shell-v3-user">
             <b>{String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</b>
             <div><strong>{user?.fullName || user?.username || "Kullanıcı"}</strong><small>{user?.role || "-"}</small></div>
