@@ -40,3 +40,16 @@ export const searchCommunicationFiles = (q = "") =>
   q.trim()
     ? apiGet("/file-hub/search", { q: q.trim() }).then(unwrap)
     : listCommunicationFiles();
+
+
+export const startMicrosoftMailOAuth = (accountId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/microsoft/start`, {}).then(unwrap);
+
+export const getMailConnection = (accountId) =>
+  apiGet(`/mail/accounts/${encodeURIComponent(accountId)}/connection`, { _ts: Date.now() }).then(unwrap);
+
+export const syncMailAccount = (accountId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
+
+export const sendMailDraft = (draftId, logicalEventId = "") =>
+  apiPost(`/mail/drafts/${encodeURIComponent(draftId)}/send`, { logicalEventId }, { timeoutMs: 60_000 }).then(unwrap);
