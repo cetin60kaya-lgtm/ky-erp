@@ -36,3 +36,23 @@ test("stored recovery answers stay non-reversible in the UI contract", () => {
   assert.match(source, /salt \+ PBKDF2 hash/);
   assert.match(source, /“Göster \/ Gizle” yalnız bu ekranda şu anda yazdığınız yeni cevabı gösterir/);
 });
+
+
+test("saved recovery questions are masked until explicitly revealed", () => {
+  const source = read("../../../app/ky-erp-frontend/src/pages/admin/AdminOwnerSecurity.jsx");
+  assert.match(source, /maskSecurityQuestion/);
+  assert.match(source, /showRecoveryQuestions/);
+  assert.match(source, /Soruyu Göster/);
+  assert.match(source, /Soruyu Gizle/);
+  assert.match(source, /Cevabı girmeden önce sorunun tamamını görmek için açın/);
+  assert.match(source, /disabled=\{saved && !questionVisible\}/);
+});
+
+
+test("accounting archive source remains parseable after Worker hotfix", () => {
+  const source = read("./accounting-document-archive.ts");
+  assert.doesNotMatch(source, /\\`/);
+  assert.doesNotMatch(source, /\\\$\{/);
+  assert.match(source, /archiveFileToCloudConnection/);
+  assert.match(source, /processCloudArchiveJobs/);
+});

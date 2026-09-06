@@ -25,6 +25,15 @@ function rowsOf(value) { if (Array.isArray(value)) return value; if (Array.isArr
 function dateText(value) { if (!value) return "-"; const d = new Date(value); return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString("tr-TR"); }
 function sessionIdFromToken(token) { try { const parts = String(token || "").split("."); if (parts.length !== 3) return ""; const raw = parts[1].replace(/-/g, "+").replace(/_/g, "/"); const padded = raw + "=".repeat((4 - raw.length % 4) % 4); return String(JSON.parse(window.atob(padded))?.sid || ""); } catch { return ""; } }
 function friendlyDevice(row) { const label = String(row?.deviceLabel || ""); if (label && !label.startsWith("BROWSER:")) return label; const ua = String(row?.userAgent || ""); const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "Tarayıcı"; const os = /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "macOS" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : ""; return [browser, os].filter(Boolean).join(" / ") || "Tarayıcı"; }
+function maskSecurityQuestion(value) {
+  return String(value || "").split(/(\s+)/).map((part) => {
+    if (/^\s+$/.test(part) || !part) return part;
+    const chars = Array.from(part);
+    if (chars.length <= 2) return chars[0] + "*";
+    if (chars.length <= 4) return chars[0] + "*".repeat(Math.max(1, chars.length - 2)) + chars[chars.length - 1];
+    return chars.slice(0, 2).join("") + "*".repeat(Math.max(2, chars.length - 3)) + chars[chars.length - 1];
+  }).join("");
+}
 function compatibleOtpUri(value) { const raw = String(value || "").trim(); const prefix = "otpauth://totp/"; if (!raw.toLowerCase().startsWith(prefix)) return raw; try { const remainder = raw.slice(prefix.length); const questionIndex = remainder.indexOf("?"); const encodedLabel = questionIndex >= 0 ? remainder.slice(0, questionIndex) : remainder; const query = questionIndex >= 0 ? remainder.slice(questionIndex + 1) : ""; const decodedLabel = decodeURIComponent(encodedLabel); const separatorIndex = decodedLabel.indexOf(":"); if (separatorIndex < 0) return raw; const issuer = decodedLabel.slice(0, separatorIndex).trim(); const account = decodedLabel.slice(separatorIndex + 1).trim(); if (!issuer || !account) return raw; return `${prefix}${encodeURIComponent(issuer)}:${encodeURIComponent(account)}${query ? `?${query}` : ""}`; } catch { return raw; } }
 
 export default function AdminOwnerSecurity() {
@@ -45,6 +54,7 @@ export default function AdminOwnerSecurity() {
   const [recoveryProvider, setRecoveryProvider] = useState("GOOGLE");
   const [recoveryStepUpCode, setRecoveryStepUpCode] = useState("");
   const [showRecoveryAnswers, setShowRecoveryAnswers] = useState([false, false, false]);
+  const [showRecoveryQuestions, setShowRecoveryQuestions] = useState([false, false, false]);
 
   const [emailChallenge, setEmailChallenge] = useState(null);
   const [emailOtp, setEmailOtp] = useState("");
@@ -98,6 +108,7 @@ export default function AdminOwnerSecurity() {
           answer: "",
         })));
         setShowRecoveryAnswers([false, false, false]);
+        setShowRecoveryQuestions([false, false, false]);
       } else {
         setRecoveryConfig(null);
         setRecoveryQuestions([
@@ -106,6 +117,7 @@ export default function AdminOwnerSecurity() {
           { question: "", answer: "" },
         ]);
         setShowRecoveryAnswers([false, false, false]);
+        setShowRecoveryQuestions([false, false, false]);
         unavailable.push("hesap kurtarma güvenliği");
       }
       setMessage(unavailable.length
@@ -411,37 +423,66 @@ export default function AdminOwnerSecurity() {
         <div className="aos-question-grid">
           {recoveryQuestions.map((row, index) => {
             const saved = Boolean(recoveryConfig?.questions?.[index]?.configured);
-            const visible = Boolean(showRecoveryAnswers[index]);
+            const answerVisible = Boolean(showRecoveryAnswers[index]);
+            const questionVisible = !saved || Boolean(showRecoveryQuestions[index]);
             return (
               <div className="aos-question-card" key={index}>
                 <div className="aos-question-title">
-                  <div><span>{index + 1}</span><div><b>Güvenlik Sorusu</b><small>{saved ? "Kayıtlı · değiştirmek isterseniz yeni cevap yazın" : "Henüz kaydedilmedi"}</small></div></div>
+                  <div><span>{index + 1}</span><div><b>Güvenlik Sorusu</b><small>{saved ? "Kayıtlı · cevaplamak veya düzenlemek için soruyu açın" : "Henüz kaydedilmedi"}</small></div></div>
                   <span className={saved ? "saved" : "new"}>{saved ? "Kayıtlı" : "Yeni"}</span>
                 </div>
-                <label>Soru
-                  <input
-                    value={row.question}
-                    onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))}
-                    placeholder="Yalnız sizin bildiğiniz, tahmin edilmesi zor bir soru yazın"
-                    maxLength={220}
-                  />
-                </label>
+
+                {questionVisible ? (
+                  <label>Soru
+                    <div className="aos-question-field">
+                      <input
+                        value={row.question}
+                        onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))}
+                        placeholder="Yalnız sizin bildiğiniz, tahmin edilmesi zor bir soru yazın"
+                        maxLength={220}
+                      />
+                      {saved ? <button
+                        type="button"
+                        className="aos-question-toggle"
+                        onClick={() => {
+                          setShowRecoveryQuestions((current) => current.map((value, itemIndex) => itemIndex === index ? false : value));
+                          setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? false : value));
+                        }}
+                      >Soruyu Gizle</button> : null}
+                    </div>
+                  </label>
+                ) : (
+                  <div className="aos-question-preview">
+                    <span>Soru</span>
+                    <div>
+                      <strong>{maskSecurityQuestion(row.question)}</strong>
+                      <button
+                        type="button"
+                        className="aos-question-toggle"
+                        onClick={() => setShowRecoveryQuestions((current) => current.map((value, itemIndex) => itemIndex === index ? true : value))}
+                      >Soruyu Göster</button>
+                    </div>
+                    <small>Cevabı girmeden önce sorunun tamamını görmek için açın.</small>
+                  </div>
+                )}
+
                 <label>Cevap
                   <div className="aos-answer-field">
                     <input
-                      type={visible ? "text" : "password"}
+                      type={answerVisible ? "text" : "password"}
                       autoComplete="new-password"
                       value={row.answer}
+                      disabled={saved && !questionVisible}
                       onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, answer: event.target.value } : item))}
-                      placeholder={saved ? "Kayıtlı — değiştirmek için yeni cevap yazın" : "Özel cevabınızı yazın"}
+                      placeholder={saved ? (questionVisible ? "Kayıtlı — değiştirmek için yeni cevap yazın" : "Önce soruyu gösterin") : "Özel cevabınızı yazın"}
                     />
                     <button
                       type="button"
                       className="aos-answer-toggle"
-                      disabled={!row.answer}
+                      disabled={!row.answer || (saved && !questionVisible)}
                       onClick={() => setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? !value : value))}
-                      aria-label={visible ? "Cevabı gizle" : "Cevabı göster"}
-                    >{visible ? "Gizle" : "Göster"}</button>
+                      aria-label={answerVisible ? "Cevabı gizle" : "Cevabı göster"}
+                    >{answerVisible ? "Gizle" : "Göster"}</button>
                   </div>
                 </label>
               </div>
@@ -476,7 +517,7 @@ export default function AdminOwnerSecurity() {
       </form>
 
       <div className="aos-security-note">
-        <b>Gizlilik:</b> Kayıtlı cevapların düz metni sunucudan geri getirilemez. Cevaplar salt + PBKDF2 hash olarak tutulur. “Göster / Gizle” yalnız bu ekranda şu anda yazdığınız yeni cevabı gösterir.
+        <b>Gizlilik:</b> Kayıtlı sorular sayfa açılışında kısmen maskelenir; “Soruyu Göster” ile yalnız işlem sırasında tam görünür. Kayıtlı cevapların düz metni sunucudan geri getirilemez. Cevaplar salt + PBKDF2 hash olarak tutulur; “Göster / Gizle” yalnız şu anda yazdığınız yeni cevabı gösterir.
       </div>
     </section>
 
