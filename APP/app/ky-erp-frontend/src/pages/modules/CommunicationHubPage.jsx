@@ -737,13 +737,26 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     setLoading(true);
     try {
       const result = await syncMailAccount(selectedAccountId);
-      const total = safeArray(result?.folders).reduce((sum, row) => sum + Number(row.count || 0), 0);
-      setNotice(result?.partial ? `Mail senkronizasyonu kısmi tamamlandı. ${total} kayıt işlendi.` : `Mail senkronizasyonu tamamlandı. ${total} kayıt işlendi.`);
+      const rows = safeArray(result?.folders);
+      const total = Number(result?.total || rows.reduce((sum, row) => sum + Number(row.count || 0), 0));
+      const failed = rows.reduce((sum, row) => sum + Number(row.failed || (row.ok === false ? 1 : 0)), 0);
+      setNotice(result?.partial
+        ? `Mail senkronizasyonu tamamlandı; ${total} kayıt güncellendi, ${failed} kayıt/klasör atlandı.`
+        : `Mail senkronizasyonu tamamlandı. ${total} kayıt işlendi.`);
       setMailboxRefresh((value) => value + 1);
       await loadBase();
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail senkronizasyonu tamamlanamadı."}`);
-      setLoading(false);
+      const partial = error?.code === "MAIL_SYNC_PARTIAL" ? error?.payload?.data : null;
+      if (partial) {
+        const rows = safeArray(partial?.folders);
+        const total = Number(partial?.total || rows.reduce((sum, row) => sum + Number(row.count || 0), 0));
+        setNotice(`Mail senkronizasyonu kısmi tamamlandı. ${total} kayıt güncellendi; kalanlar sonraki senkronizasyonda tekrar denenecek.`);
+        setMailboxRefresh((value) => value + 1);
+        await loadBase();
+      } else {
+        setNotice(`Hata: ${error?.message || "Mail senkronizasyonu tamamlanamadı."}`);
+        setLoading(false);
+      }
     }
   }
 
@@ -753,10 +766,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     setSelectedMessage(null);
     try {
       if (String(selectedAccount?.status || "").toUpperCase() === "ACTIVE") {
-        await syncMailFolder(selectedAccountId, folder.id);
+        const result = await syncMailFolder(selectedAccountId, folder.id);
+        if (result?.partial) setNotice(`Klasör açıldı. ${Number(result.failed || 0)} mesaj atlandı; diğer kayıtlar güncellendi.`);
       }
     } catch (error) {
-      setNotice(`Klasör açıldı; sağlayıcı senkronu tamamlanamadı: ${error?.message || "Bilinmeyen hata"}`);
+      const partial = error?.code === "MAIL_SYNC_PARTIAL" ? error?.payload?.data : null;
+      setNotice(partial
+        ? `Klasör açıldı. ${Number(partial.failed || 0)} mesaj atlandı; diğer kayıtlar güncellendi.`
+        : `Klasör açıldı; sağlayıcı senkronu tamamlanamadı: ${error?.message || "Bilinmeyen hata"}`);
     } finally {
       setMailboxRefresh((value) => value + 1);
     }
