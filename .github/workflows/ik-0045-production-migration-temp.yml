@@ -1,0 +1,102 @@
+name: TEMP IK 0045 Targeted Production Migration
+
+on:
+  push:
+    branches:
+      - codex/ik-retired-sgk-pdks-final-20260906
+    paths:
+      - ".github/workflows/ik-0045-production-migration-temp.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      DB_NAME: ky-erp-db
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+
+      - name: Wrangler ve migration preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          npm ci
+          npx wrangler whoami
+          test -f migrations/0045_hr_retired_monthly_sgk_compliance.sql
+
+          state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('ik_person_hr_profiles','ik_person_monthly_compliance');" --json)"
+          tables="$(jq -r '.[0].results[0].n // -1' <<<"$state")"
+          if [ "$tables" != "0" ] && [ "$tables" != "2" ]; then
+            echo "GUVENLIK DURDURMASI: 0045 kismi sema bulundu (tables=$tables)." >&2
+            exit 1
+          fi
+          echo "PRE_TABLES=$tables" >> "$GITHUB_ENV"
+
+      - name: Canli D1 tam yedegini al
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p database-backup
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          output="database-backup/ky-erp-db-before-ik-0045-${stamp}.sql"
+          npx wrangler d1 export "$DB_NAME" --remote --config wrangler.jsonc --skip-confirmation --output "$output"
+          test -s "$output"
+          echo "D1_BACKUP=$output" >> "$GITHUB_ENV"
+
+      - name: D1 yedegini artifact olarak sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: ky-erp-before-ik-0045-${{ github.run_id }}
+          path: APP/cloud/ky-erp-api/database-backup/*.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Kritik mevcut satir sayilarini kaydet
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM hr_monthly_employees) AS employees,(SELECT COUNT(*) FROM hr_payrolls_v2) AS payrolls,(SELECT COUNT(*) FROM ik_time_clock_events) AS clock_events;" --json)"
+          echo "BEFORE_EMPLOYEES=$(jq -r '.[0].results[0].employees' <<<"$before")" >> "$GITHUB_ENV"
+          echo "BEFORE_PAYROLLS=$(jq -r '.[0].results[0].payrolls' <<<"$before")" >> "$GITHUB_ENV"
+          echo "BEFORE_CLOCK_EVENTS=$(jq -r '.[0].results[0].clock_events' <<<"$before")" >> "$GITHUB_ENV"
+
+      - name: Yalniz 0045 migrationini uygula
+        if: env.PRE_TABLES == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0045_hr_retired_monthly_sgk_compliance.sql
+
+      - name: 0045 semasini ve veri korumasini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('ik_person_hr_profiles','ik_person_monthly_compliance')) AS tables,(SELECT COUNT(*) FROM pragma_table_info('ik_person_hr_profiles') WHERE name IN ('employee_id','main_company_id','personnel_status')) AS profile_cols,(SELECT COUNT(*) FROM pragma_table_info('ik_person_monthly_compliance') WHERE name IN ('main_company_id','employee_id','period','sgk_covered','sgk_days')) AS compliance_cols,(SELECT COUNT(*) FROM ik_person_hr_profiles WHERE personnel_status NOT IN ('NORMAL','RETIRED')) AS bad_status,(SELECT COUNT(*) FROM hr_monthly_employees) AS employees,(SELECT COUNT(*) FROM hr_payrolls_v2) AS payrolls,(SELECT COUNT(*) FROM ik_time_clock_events) AS clock_events;" --json)"
+          jq -e '.[0].results[0].tables == 2 and .[0].results[0].profile_cols == 3 and .[0].results[0].compliance_cols == 5 and .[0].results[0].bad_status == 0' <<<"$verify" >/dev/null
+
+          after_employees="$(jq -r '.[0].results[0].employees' <<<"$verify")"
+          after_payrolls="$(jq -r '.[0].results[0].payrolls' <<<"$verify")"
+          after_clock_events="$(jq -r '.[0].results[0].clock_events' <<<"$verify")"
+          test "$after_employees" = "$BEFORE_EMPLOYEES"
+          test "$after_payrolls" = "$BEFORE_PAYROLLS"
+          test "$after_clock_events" = "$BEFORE_CLOCK_EVENTS"
+
+          profiles="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM ik_person_hr_profiles) AS profiles,(SELECT COUNT(*) FROM hr_monthly_employees) AS employees;" --json)"
+          jq -e '.[0].results[0].profiles == .[0].results[0].employees' <<<"$profiles" >/dev/null
+
+          echo "0045 tamam: mevcut personel/bordro/PDKS hareket sayilari korunarak yeni emekli + aylik SGK semasi hazir."
