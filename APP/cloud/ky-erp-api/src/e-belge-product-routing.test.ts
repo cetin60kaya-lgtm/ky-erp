@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { eBelgeProductRouting } from "./e-belge-product-store.ts";
+import { eBelgeProductRouting, selectEBelgeExpenseRule } from "./e-belge-product-store.ts";
 
 test("normal eşleşmeyen tedarikçi kalemi gider olarak kalır ve LOT istemez", () => {
   const result = eBelgeProductRouting(null, { description: "Nakliye hizmet bedeli" }, {
@@ -42,4 +42,31 @@ test("kimya tedarikçisiyle eşleşmiş ürün Boyahane ve LOT akışına alın�
   assert.equal(result.routing, "BOYAHANE");
   assert.equal(result.lotRequired, true);
   assert.equal(result.defaultUnit, "KG");
+});
+
+
+test("firma + ürün gider hafızası global açıklama kuralından önceliklidir", () => {
+  const result = selectEBelgeExpenseRule([
+    { id: "global-desc", normalized_description: "NAKLIYE HIZMETI", category_name: "Dış Hizmet", priority: 100, is_active: 1 },
+    { id: "firm-product", company_id: "firm-1", product_id: "product-1", category_name: "Nakliye", priority: 100, is_active: 1 },
+  ], {
+    companyId: "firm-1",
+    productId: "product-1",
+    description: "Nakliye hizmeti",
+  });
+  assert.equal(result?.id, "firm-product");
+  assert.equal(result?.categoryName, "Nakliye");
+});
+
+test("başka firmanın özel gider kuralı uygulanmaz", () => {
+  const result = selectEBelgeExpenseRule([
+    { id: "wrong-firm", company_id: "firm-2", product_id: "product-1", category_name: "Yemek", priority: 1, is_active: 1 },
+    { id: "global-product", product_id: "product-1", category_name: "Ambalaj", priority: 100, is_active: 1 },
+  ], {
+    companyId: "firm-1",
+    productId: "product-1",
+    description: "Ürün",
+  });
+  assert.equal(result?.id, "global-product");
+  assert.equal(result?.categoryName, "Ambalaj");
 });
