@@ -85,9 +85,9 @@ export default function AdminLoginApprovals({ compact = false }) {
     <section className={`ala-page ${compact ? "is-compact" : ""}`}>
       <header className="ala-head">
         <div>
-          <span className="ala-kicker">YÖNETİM / GİRİŞ GÜVENLİĞİ</span>
+          <span className="ala-kicker">KARAR MERKEZİ / GİRİŞ GÜVENLİĞİ</span>
           <h2>Bekleyen Giriş Onayları</h2>
-          <p>{owner ? "Uygulama Sahibi tüm yetkili giriş isteklerini yönetir." : "Firma Yöneticisi yalnız kendi firmasındaki kullanıcı girişlerini yönetebilir."}</p>
+          <p>{owner ? "Süper Yönetici tüm firmalardaki giriş isteklerini gözetir ve yönetir." : "Firma Sahibi / İşveren yalnız kendi firmasındaki kullanıcı girişlerini yönetebilir."}</p>
         </div>
         <div className="ala-head-actions">
           <span className={`ala-count ${sortedItems.length ? "has-items" : ""}`}>{sortedItems.length} bekleyen</span>
