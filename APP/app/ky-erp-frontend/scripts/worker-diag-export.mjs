@@ -1,13 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const worker = path.resolve(here, "../../../cloud/ky-erp-api");
-const src = path.join(worker, "src");
-const files = readdirSync(src).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts")).map((name) => path.join(src, name));
-const originals = new Map(files.map((file) => [file, readFileSync(file, "utf8")]));
+const probe = path.join(worker, "ts-probe.ts");
+const config = path.join(worker, "tsconfig.probe.json");
 
 function run(command, args) {
   const r = spawnSync(command, args, { cwd: worker, encoding: "utf8", env: process.env, shell: process.platform === "win32", stdio: "inherit" });
@@ -16,10 +15,24 @@ function run(command, args) {
 }
 
 run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+writeFileSync(probe, "const probeValue: number = 1; export {};\n");
+writeFileSync(config, JSON.stringify({
+  compilerOptions: {
+    target: "ES2022",
+    module: "ESNext",
+    moduleResolution: "Bundler",
+    lib: ["ES2022", "WebWorker"],
+    types: ["node"],
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true
+  },
+  files: ["worker-configuration.d.ts", "ts-probe.ts"]
+}, null, 2));
 try {
-  for (const file of files) writeFileSync(file, "// @ts-nocheck\n" + originals.get(file));
-  run("npx", ["tsc", "--noEmit", "--pretty", "false"]);
-  console.log("WORKER_ALL_SOURCE_DIRECT_TSC_PASS");
+  run("npx", ["tsc", "-p", "tsconfig.probe.json", "--pretty", "false"]);
+  console.log("WORKER_DECLARATION_MINIMAL_PROBE_PASS");
 } finally {
-  for (const file of files) writeFileSync(file, originals.get(file));
+  rmSync(probe, { force: true });
+  rmSync(config, { force: true });
 }
