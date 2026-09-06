@@ -17,7 +17,7 @@ const LOGIN_POLICIES = ["PASSWORD_ONLY", "GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH
 const SESSION_PRESETS = [1800, 3600, 7200, 14400, 28800, 36000, 43200, 86400];
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 const ISSUER = "KY ERP";
 const ADMIN_EMAIL_FROM = "KY ERP <admin@kyerp.net>";
@@ -295,7 +295,10 @@ function roleOf(user: AnyRow) {
 }
 async function permissionRows(c: any, userId: string, role: string) {
   if (isSuper(role)) return MODULE_KEYS.map((moduleKey) => ({ moduleKey, canView: true, canCreate: true, canUpdate: true, canDelete: true, canApprove: true }));
-  if (!(await tableExists(c, "auth_user_module_permissions"))) return isCompanyAdmin(role) ? [{ moduleKey: "ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true }] : [];
+  if (!(await tableExists(c, "auth_user_module_permissions"))) return isCompanyAdmin(role) ? [
+    { moduleKey: "ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true },
+    { moduleKey: "STORAGE_ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true },
+  ] : [];
   const rows = (await c.env.DB.prepare(
     `SELECT module_key,can_view,can_create,can_update,can_delete,can_approve FROM auth_user_module_permissions WHERE user_id=? ORDER BY module_key`,
   ).bind(userId).all()).results || [];
@@ -303,7 +306,10 @@ async function permissionRows(c: any, userId: string, role: string) {
     moduleKey: upper(row.module_key), canView: Boolean(row.can_view), canCreate: Boolean(row.can_create),
     canUpdate: Boolean(row.can_update), canDelete: Boolean(row.can_delete), canApprove: Boolean(row.can_approve),
   }));
-  if (isCompanyAdmin(role) && !mapped.some((row: AnyRow) => row.moduleKey === "ADMIN")) mapped.push({ moduleKey: "ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
+  if (isCompanyAdmin(role)) {
+    if (!mapped.some((row: AnyRow) => row.moduleKey === "ADMIN")) mapped.push({ moduleKey: "ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
+    if (!mapped.some((row: AnyRow) => row.moduleKey === "STORAGE_ADMIN")) mapped.push({ moduleKey: "STORAGE_ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
+  }
   return mapped;
 }
 async function publicUser(c: any, user: AnyRow) {
