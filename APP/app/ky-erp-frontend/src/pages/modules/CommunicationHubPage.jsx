@@ -78,6 +78,88 @@ function initialMailPaneWidths() {
   }
 }
 
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Dosya okunamadı."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function regexEscape(value) {
+  return String(value || "").replace(/[|\\{}()[\]^$+*?.-]/g, "\\function initialMailPaneWidths() {
+  const fallback = { mailbox: 250, list: 560 };
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("kyerp.mailPaneWidths") || "{}");
+    return {
+      mailbox: Math.min(420, Math.max(190, Number(saved.mailbox) || fallback.mailbox)),
+      list: Math.min(820, Math.max(300, Number(saved.list) || fallback.list)),
+    };
+  } catch {
+    return fallback;
+  }
+}
+");
+}
+
+function MailMessageMedia({ message }) {
+  const rootRef = useRef(null);
+  const [media, setMedia] = useState([]);
+  const hasAttachments = Number(message?.has_attachments ?? message?.hasAttachments ?? 0) === 1;
+
+  useEffect(() => {
+    if (!message?.id || !hasAttachments) { setMedia([]); return undefined; }
+    let cancelled = false;
+    let objectUrls = [];
+    let observer = null;
+
+    const load = async () => {
+      try {
+        const rows = safeArray(await listMailAttachments(message.id));
+        const images = rows.filter((row) => attachmentPreviewKind(row) === "image");
+        const loaded = [];
+        for (const attachment of images) {
+          if (cancelled) break;
+          try {
+            const blob = await getMailAttachmentBlob(message.id, attachment.id);
+            const url = URL.createObjectURL(blob);
+            objectUrls.push(url);
+            loaded.push({ id: attachment.id, name: attachmentName(attachment), url });
+          } catch {}
+        }
+        if (!cancelled) setMedia(loaded);
+      } catch {
+        if (!cancelled) setMedia([]);
+      }
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      load();
+    } else if (rootRef.current) {
+      observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer?.disconnect();
+          observer = null;
+          load();
+        }
+      }, { rootMargin: "320px 0px" });
+      observer.observe(rootRef.current);
+    }
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      objectUrls = [];
+    };
+  }, [message?.id, hasAttachments]);
+
+  return <div ref={rootRef} className="comm-message-media" aria-label="Mail görselleri">
+    {media.map((item) => <img key={item.id} src={item.url} alt={item.name} loading="lazy"/>)}
+  </div>;
+}
+
 function flattenFolders(rows) {
   const list = safeArray(rows);
   const byProvider = new Map(list.map((row) => [String(row.provider_folder_id || row.providerFolderId || ""), row]));
@@ -165,6 +247,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
+  const [renderedHtml, setRenderedHtml] = useState("");
   const mailLayoutRef = useRef(null);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
@@ -182,6 +265,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const selectedFolder = useMemo(
     () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
     [folders, selectedFolderId],
+  );
+  const defaultInboxFolderId = useMemo(
+    () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "INBOX")?.id || ""),
+    [folders],
   );
 
   const loadBase = useCallback(async () => {
