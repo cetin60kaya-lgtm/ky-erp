@@ -289,7 +289,7 @@ export function registerGoogleMailRoutes(app:any){
 
   app.post("/api/mail/messages/:id/action/google",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
-    if(!perm(current,"canUpdate"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail düzenleme yetkiniz yok."),403);
+    if(!perm(current,"canView"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail işlemi yetkiniz yok."),403);
     const row=await c.env.DB.prepare("SELECT m.*,a.provider_type,a.provider_connected,a.email_address FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
     if(!row)return c.json(err("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
     const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
