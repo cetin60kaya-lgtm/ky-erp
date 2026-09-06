@@ -22,3 +22,21 @@
 .aos-security-note{margin-top:10px;padding:9px 11px;border-left:3px solid #60a5fa;background:#eff6ff;color:#4b607d;font-size:11px;line-height:1.5}
 @media(max-width:1000px){.aos-recovery-stepup{grid-template-columns:1fr 1fr}.aos-question-row{grid-template-columns:1fr}}
 @media(max-width:640px){.aos-recovery-stepup{grid-template-columns:1fr}.aos-question-row{grid-template-columns:1fr}}
+
+
+/* Corporate Super Admin console v3 */
+.aos-page{gap:14px;padding:6px 10px 24px;background:linear-gradient(180deg,#f7faff 0,#f8fafc 180px,#f8fafc 100%);border-radius:14px}
+.aos-title{padding:17px 19px;border:1px solid #d8e3f0;border-radius:14px;background:linear-gradient(135deg,#fff 0%,#f3f7ff 100%);box-shadow:0 8px 28px rgba(15,23,42,.05)}
+.aos-title h1{font-size:24px;letter-spacing:-.02em}
+.aos-title p{font-size:12px;max-width:760px}
+.aos-owner-card{padding:16px 18px;border-radius:14px;background:linear-gradient(135deg,#0f2f5e 0%,#173f77 18%,#fff 18%,#fff 100%);box-shadow:0 8px 24px rgba(15,23,42,.06)}
+.aos-owner-badge{width:76px;height:76px;border-radius:16px;background:#fff;color:#173f77;border:1px solid rgba(255,255,255,.65);box-shadow:0 6px 20px rgba(15,23,42,.16);font-size:10px;text-align:center;padding:6px}
+.aos-owner-copy h2{font-size:22px;color:#0f172a}
+.aos-owner-copy p{font-size:12px}
+.aos-tags span{background:#fff}
+.aos-grid{gap:12px}
+.aos-card{border-radius:13px;padding:15px 16px;box-shadow:0 4px 18px rgba(15,23,42,.035)}
+.aos-card h3{font-size:15px}
+.aos-provider{border-radius:11px;padding:11px 12px;background:#fbfdff}
+.aos-session-table{border-radius:11px}
+@media(max-width:760px){.aos-owner-card{background:#fff}.aos-owner-badge{background:#173f77;color:#fff;width:58px;height:58px}}
