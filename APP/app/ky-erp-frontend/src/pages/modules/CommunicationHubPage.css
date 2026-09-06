@@ -188,3 +188,32 @@
   .comm-attachment-preview>header>div:last-child{width:100%}
   .comm-attachment-preview>header>div:last-child button{flex:1}
 }
+
+
+/* Mail listesi içi görsel/inline logo önizlemeleri */
+.comm-message-media{
+  min-height:0;
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  margin-top:6px;
+  overflow:hidden;
+}
+.comm-message-media:empty{display:none}
+.comm-message-media img{
+  width:54px;
+  height:42px;
+  object-fit:contain;
+  background:#fff;
+  border:1px solid #dbe4ee;
+  border-radius:5px;
+  padding:2px;
+}
+.comm-message-list>button.unread .comm-message-media img{border-color:#b9cbe0}
+.comm-message-list>button:hover .comm-message-media img{border-color:#9fb8d3}
+
+.comm-message-list>button>.comm-message-media{
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+}

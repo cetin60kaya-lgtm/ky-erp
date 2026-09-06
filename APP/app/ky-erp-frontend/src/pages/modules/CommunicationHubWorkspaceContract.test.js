@@ -40,3 +40,40 @@ test("mail rows expose Outlook-style context actions", () => {
   assert.match(page, /Sil/);
   assert.match(css, /comm-context-menu/);
 });
+
+
+test("opening a mail marks it read and destructive actions remove it from current view", () => {
+  assert.match(page, /async function selectMessage/);
+  assert.match(page, /runMailMessageAction\(messageId, "MARK_READ"/);
+  assert.match(page, /applyMessageActionLocally/);
+  assert.match(page, /current\.filter\(\(item\) => item\.id !== messageId\)/);
+  assert.match(page, /defaultInboxFolderId/);
+  assert.match(page, /folderId: defaultInboxFolderId/);
+});
+
+test("visible message rows render all image attachments lazily and cid images hydrate in HTML", () => {
+  assert.match(page, /function MailMessageMedia/);
+  assert.match(page, /IntersectionObserver/);
+  assert.match(page, /listMailAttachments\(message\.id\)/);
+  assert.match(page, /getMailAttachmentBlob\(message\.id, attachment\.id\)/);
+  assert.match(page, /hydrateInlineImages/);
+  assert.match(page, /content_id/);
+  assert.match(page, /srcDoc=\{renderedHtml/);
+  assert.match(css, /comm-message-media/);
+});
+
+
+test("the detail pane also marks the initially opened unread mail as read", () => {
+  assert.match(page, /selectedMessage\?\.id/);
+  assert.match(page, /runMailMessageAction\(messageId, "MARK_READ", \{\}\)\.catch/);
+  assert.match(page, /unreadCount: Math\.max\(0/);
+});
+
+
+test("partial Gmail sync is shown as a usable warning and refreshes successful records", () => {
+  assert.match(page, /result\?\.partial/);
+  assert.match(page, /Mail senkronizasyonu tamamlandı/);
+  assert.match(page, /MAIL_SYNC_PARTIAL/);
+  assert.match(page, /kalanlar sonraki senkronizasyonda tekrar denenecek/);
+  assert.match(page, /syncMailFolder/);
+});
