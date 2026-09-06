@@ -302,3 +302,13 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Resmî e-Fatura/e-İrsaliye gönderimi otomatikleştirilmez; kullanıcı onayı zorunluluğu devam eder.
 - `0046_accounting_canonical_report_controls.sql` bu canlı yayında production D1'e uygulanmaz. İlgili kod tablo yoksa mevcut `json_store` fallback'ini kullanır; veri kaybı riski alınmaz.
 - 0046 ileride ayrı bakım penceresinde remote D1 full backup + readiness + hedefli additive migration ile ele alınacaktır.
+
+
+## 06.09.2026 — PDKS Agent gerçek kart importunda eski SGK filtresi
+
+- Current production incelemesinde `/api/auth/pdks-device/time-events/import` cihaz importunun hâlâ `e.sgk_status='VAR'` filtresi kullandığı görüldü.
+- Bu filtre emekli ama çalışan veya aylık SGK kapsamı ayrı yönetilen aktif kartlı personelin gerçek terminal hareketini reddedebilir.
+- Canonical davranış Web kart köprüsüyle eşitlendi: **aktif + kartlı personel**, SGK durumundan bağımsız gerçek kart hareketi.
+- DENETİM aylık SGK + kart read-only scope olarak ayrı kalır; normal Agent importuna taşınmaz.
+- Çalışma branch'i: `codex/pdks-agent-sgk-independent-current-20260906`.
+- Production merge/deploy yapılmadı. Worker test/typecheck/build kapısı ve kullanıcı onayı gerekir.

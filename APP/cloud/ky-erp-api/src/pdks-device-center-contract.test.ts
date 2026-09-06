@@ -32,11 +32,13 @@ test("PDKS device secret is hashed at rest and only returned by enrollment", () 
   assert.doesNotMatch(listRoute, /secret_hash AS/);
 });
 
-test("PDKS public agent heartbeat and import remain available", () => {
+test("PDKS public agent heartbeat and import remain available without SGK gating", () => {
   assert.match(device, /\/api\/auth\/pdks-device\/heartbeat/);
   assert.match(device, /\/api\/auth\/pdks-device\/time-events\/import/);
   assert.match(device, /PDKS_DEVICE_UNAUTHORIZED/);
-  assert.match(device, /SGK=VAR \+ kart\/tarih\/saat/);
+  assert.match(device, /active_passive,e\.status,'AKTIF'/);
+  assert.doesNotMatch(device, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(device, /Aktif kartlı personel \+ tarih\/saat eşleşmedi/);
 });
 
 test("PDKS five-group navigation keeps dedicated device and sync center", () => {
