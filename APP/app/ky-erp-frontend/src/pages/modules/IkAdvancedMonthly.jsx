@@ -634,10 +634,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (text.includes("KESINT")) return openFinance("Ozel kesinti");
     if (text.includes("MESAI")) return openFinance("Mesai");
     if (text.includes("BORDRO") || text.includes("ODEME")) return openPayroll();
-    if (text.includes("YILLIK")) return openLeave("yillik");
-    if (text.includes("IZIN") || text.includes("RAPOR") || text.includes("GUNLUK")) return openLeave("gunluk", text.includes("RAPOR") ? "Rapor" : "");
+    if (text.includes("YILLIK") || text.includes("IZIN") || text.includes("RAPOR") || text.includes("GUNLUK")) {
+      return setNotice("İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir. İK Personel Kartında hakediş / kullanılan / kalan bakiye görüntülenir.");
+    }
     if (DOCUMENT_LOG_WORDS.some((word) => text.includes(word))) return openDocument(employee);
-    return openPerson(employee);
+    setModalDraft({ ...log, forceDetail: true });
+    return setModal("logDetay");
   };
 
   const savePerson = async () => {
