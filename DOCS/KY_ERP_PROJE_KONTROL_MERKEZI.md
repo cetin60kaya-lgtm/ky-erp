@@ -8,9 +8,10 @@ Yeni bir çalışma başlarken sırasıyla:
 
 1. `AGENTS.md` dosyasını oku.
 2. Bu dosyayı (`DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md`) oku.
-3. Çalışılacak modül için ilgili kodu ve varsa özel DOCS kaydını kontrol et.
-4. Aktif branch / production branch / PR durumunu GitHub'dan doğrula.
-5. Kullanıcı açıkça istemedikçe production deploy veya merge yapma.
+3. `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md` dosyasını oku; son yapılan işler ve varsayılan modül sırası burada tutulur.
+4. Çalışılacak modül için ilgili kodu ve varsa özel DOCS kaydını kontrol et.
+5. Aktif branch / production branch / PR durumunu GitHub'dan doğrula.
+6. Kullanıcı açıkça istemedikçe production deploy veya merge yapma.
 
 Eski sohbet notları veya tarihli kaynak kayıtları bu dosyaya göre tarihsel referanstır. Güncel kod gerçeği ve bu dosyadaki son kararlar önceliklidir.
 
@@ -209,6 +210,7 @@ Yeni sohbet KY ERP işiyle açılırsa şu gerçekler varsayılmalıdır:
 ## 12. Tarihsel yardımcı kaynaklar
 
 - `AGENTS.md` — üstün teknik/güvenlik çalışma sözleşmesi.
+- `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md` — son yapılan işler + yeni sohbetlerin varsayılan çalışma sırası için güncel ana kaynak.
 - `DOCS/AGENTS_RULES_BASE_PRE_STORAGE_20260902.md` — eski ayrıntılı kuralların tarihsel tabanı.
 - `DOCS/KY_ERP_SOHBET_KAYNAK_KAYDI_2026-09-01.md` — 01.09 İşNet/tenant/deploy kararlarının tarihsel kaydı.
 - `CHANGELOG.md` — sürüm/değişiklik geçmişi.
@@ -219,6 +221,14 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## Son güncelleme
 
+
+## 06.09.2026 — Yeni sohbet devam kaynağı ve iş sırası kilitlendi
+
+- Yeni ana devam özeti oluşturuldu: `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md`.
+- Yeni sohbet/ajan artık `AGENTS.md -> Proje Kontrol Merkezi -> Güncel Devam Kaynağı` sırasını kullanır.
+- Cloudflare/auth/deploy/AI Gateway son durumu bu kaynakta tek özet halinde tutulur.
+- Varsayılan modül sırası: e-Belge/İşNet -> Muhasebe/Cari/FİBE -> PDKS/İK -> File Hub/Mail -> AI/Asistan.
+- Production HEAD paralel sohbetlerde değişebileceği için her yeni işlemde güncel HEAD doğrulanır.
 
 ## 06.09.2026 — Cloudflare çekirdek rollout tamamlandı
 
