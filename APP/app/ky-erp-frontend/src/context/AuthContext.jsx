@@ -16,7 +16,7 @@ const REFRESH_LOCK_MS = 30 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
 const AuthContext = createContext(null);

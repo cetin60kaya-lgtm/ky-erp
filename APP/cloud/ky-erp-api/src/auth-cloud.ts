@@ -4,7 +4,7 @@ import { hash } from "bcryptjs";
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV",
-  "CEK_ODEME", "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET",
+  "CEK_ODEME", "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL",
   "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 

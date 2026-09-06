@@ -28,6 +28,7 @@ const IsnetPreparedInvoicePage = lazyWithRetry(() => import("./pages/modules/isn
 const IsnetArchiveDeliveryPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetArchiveDeliveryPage"), "isnet-archive-delivery-v1");
 const IsnetSettingsMasterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetSettingsMasterPage"), "isnet-settings-master-v1");
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
+const CommunicationHubPage = lazyWithRetry(() => import("./pages/modules/CommunicationHubPage"), "communication-hub-v1");
 
 const MODULE_LOADERS = {
   muhasebe: () => Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
@@ -52,6 +53,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
     import("./pages/modules/isnet/IsnetSettingsMasterPage"),
   ]),
+  iletisim: () => import("./pages/modules/CommunicationHubPage"),
   asistan: () => import("./pages/modules/AiAssistantPage"),
 };
 
@@ -286,6 +288,7 @@ export default function AppV3() {
     }
     if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} isAuditAccount={isAuditAccount} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule?.key === "iletisim") return <CommunicationHubPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "asistan") return <AiAssistantPage {...sharedProps} />;
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
   }

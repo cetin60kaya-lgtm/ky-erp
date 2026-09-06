@@ -21,7 +21,8 @@
     "required": [
       "RESEND_API_KEY",
       "TURNSTILE_SECRET_KEY",
-      "TURNSTILE_SITE_KEY"
+      "TURNSTILE_SITE_KEY",
+      "MAIL_CREDENTIAL_KEY"
     ]
   },
   "vars": {
