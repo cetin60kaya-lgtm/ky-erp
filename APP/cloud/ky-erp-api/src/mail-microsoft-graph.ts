@@ -226,7 +226,7 @@ async function attachMicrosoftAsset(base:string,providerDraftId:string,token:str
   }
   existing.add(key);
 }
-async function syncMicrosoftAttachments(base:string,providerDraftId:string,token:string,assets:any[]){
+async function syncMicrosoftDraftAttachments(base:string,providerDraftId:string,token:string,assets:any[]){
   if(!assets.length)return;
   const listed=(await graphJson(base+"/messages/"+encodeURIComponent(providerDraftId)+"/attachments?$select=id,name,size",token)).payload;
   const existing=new Set((Array.isArray(listed.value)?listed.value:[]).map((row:any)=>text(row.name).toLowerCase()+"\u0000"+Number(row.size||0)));
@@ -478,7 +478,7 @@ export function registerMicrosoftMailRoutes(app:any){
       if(!providerDraftId)return c.json(err("PROVIDER_DRAFT_MISSING","Microsoft taslak kimliği dönmedi."),502);
       await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=?").bind(providerDraftId,nowIso(),draftId,tenant).run();
     }
-    try{await syncMicrosoftAttachments(base,providerDraftId,token,resolvedAttachments);}
+    try{await syncMicrosoftDraftAttachments(base,providerDraftId,token,resolvedAttachments);}
     catch(error:any){return c.json(err(text(error?.code)||"MICROSOFT_ATTACHMENT_SYNC_FAILED",text(error?.message)||"File Hub ekleri Microsoft taslağına aktarılamadı."),Number(error?.status)||502);}
     const jobId=text(existingJob?.id)||crypto.randomUUID(),ts=nowIso();
     if(existingJob)await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,jobId,tenant).run();
