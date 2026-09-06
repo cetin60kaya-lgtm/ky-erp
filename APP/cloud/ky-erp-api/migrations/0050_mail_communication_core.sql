@@ -55,6 +55,22 @@ CREATE TABLE IF NOT EXISTS mail_account_credentials (
 CREATE INDEX IF NOT EXISTS idx_mail_account_credentials_tenant
   ON mail_account_credentials(main_company_slug, account_id);
 
+CREATE TABLE IF NOT EXISTS mail_oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  main_company_slug TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  provider_type TEXT NOT NULL,
+  code_verifier_ciphertext TEXT NOT NULL,
+  code_verifier_nonce TEXT NOT NULL,
+  return_path TEXT,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(account_id) REFERENCES mail_accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_mail_oauth_states_expiry
+  ON mail_oauth_states(expires_at);
+
 CREATE TABLE IF NOT EXISTS mail_account_members (
   id TEXT PRIMARY KEY,
   main_company_slug TEXT NOT NULL,
