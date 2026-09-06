@@ -49,8 +49,8 @@ async function sha256Bytes(value:string){return new Uint8Array(await crypto.subt
 function b64url(bytes:Uint8Array){let raw="";for(const b of bytes)raw+=String.fromCharCode(b);return btoa(raw).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");}
 async function sha256Hex(value:string){const bytes=await sha256Bytes(value);return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
 function clientConfig(c:any){
-  const clientId=text(c.env.MICROSOFT_MAIL_CLIENT_ID),clientSecret=text(c.env.MICROSOFT_MAIL_CLIENT_SECRET);
-  if(!clientId||!clientSecret)throw Object.assign(new Error("Microsoft Mail OAuth uygulaması production secret olarak tanımlı değil."),{code:"MICROSOFT_MAIL_CONFIG_MISSING"});
+  const clientId=text(c.env.MICROSOFT_MAIL_CLIENT_ID || c.env.MICROSOFT_GRAPH_CLIENT_ID),clientSecret=text(c.env.MICROSOFT_MAIL_CLIENT_SECRET || c.env.MICROSOFT_GRAPH_CLIENT_SECRET);
+  if(!clientId||!clientSecret)throw Object.assign(new Error("Microsoft Graph OAuth uygulama bilgileri production secret olarak tanımlı değil."),{code:"MICROSOFT_MAIL_CONFIG_MISSING"});
   return{clientId,clientSecret};
 }
 async function tokenPost(c:any,values:Record<string,string>){
