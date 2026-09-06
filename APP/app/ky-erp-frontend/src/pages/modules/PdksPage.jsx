@@ -25,13 +25,11 @@ const NAV_GROUPS = [
   {
     key: "personel",
     label: "Personel & İK",
-    hint: "Personel, izin ve bordro bağlantısı",
+    hint: "Personel, izin ve çalışma bağlantısı",
     items: [
-      ["personel-bilgileri", "Personel Bilgileri"],
+      ["personel-bilgileri", "Personel (İK Kaynağı)"],
       ["izinler", "İzinler"],
       ["calisma-tarihi", "Çalışma Tarihi"],
-      ["avanslar", "Avans"],
-      ["bordro", "Bordro"],
     ],
   },
   {
@@ -52,7 +50,6 @@ const NAV_GROUPS = [
     hint: "Cihaz, saat ve senkron yönetimi",
     items: [
       ["saat-terminal", "Saat / Terminal"],
-      ["kullanicilar", "Kullanıcı"],
       ["cihaz-baglantilari", "Cihaz Bağlantıları"],
       ["senkron", "Senkron"],
     ],
