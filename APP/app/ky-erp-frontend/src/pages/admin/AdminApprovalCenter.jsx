@@ -3,6 +3,7 @@ import { listSecurityAuditLog } from "../../services/adminApi";
 import { listMailApprovals } from "../../services/mailApi";
 import AdminLoginApprovals from "./AdminLoginApprovals";
 import AdminMailApprovals from "./AdminMailApprovals";
+import "./AdminManagement.css";
 
 const upper = (value) => String(value || "").toUpperCase().replace(/İ/g, "I");
 const dateText = (value) => {
