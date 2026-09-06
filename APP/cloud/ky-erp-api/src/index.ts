@@ -1454,6 +1454,32 @@ app.post("/api/muhasebe/belge-import/upload", async (c) => {
   );
 });
 
+app.get("/api/muhasebe/accounting/documents-read", async (c) => {
+  const kind = databaseText(c.req.query("kind"));
+  const search = c.req.query("search") || "";
+  const status = c.req.query("status") || "";
+  const firmId = databaseText(c.req.query("firmId") || c.req.query("companyId"));
+  const startDate = databaseText(c.req.query("startDate") || c.req.query("dateFrom"));
+  const endDate = databaseText(c.req.query("endDate") || c.req.query("dateTo"));
+  const all = (await accountingReadDocuments(c, { kind: kind || undefined, search, status }))
+    .filter((row) => !firmId || databaseText(row.companyId || row.firmId) === firmId)
+    .filter((row) => {
+      const date = databaseText(row.issueDate || row.createdAt).slice(0, 10);
+      if (startDate && date < startDate) return false;
+      if (endDate && date > endDate) return false;
+      return true;
+    });
+  const limit = Math.min(500, positiveInt(c.req.query("limit"), 100) || 100);
+  const offset = nonNegativeInt(c.req.query("offset"), 0) || 0;
+  return c.json({
+    ok: true,
+    success: true,
+    data: all.slice(offset, offset + limit),
+    pagination: { limit, offset, total: all.length },
+    readModel: "CANONICAL_FIRST_LEGACY_DEDUPE",
+  });
+});
+
 app.get("/api/muhasebe/belge-import", async (c) => {
   const all = await accountingDocuments(c, {
     kind: "SUPPLIER_INVOICE",
