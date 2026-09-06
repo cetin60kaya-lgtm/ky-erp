@@ -19,6 +19,23 @@ const slugOf = (c: Context<AppEnv>) => text(
 );
 const normalize = (v: unknown) => upper(v).replace(/İ/g,"I").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g," ").replace(/\s+/g," ").trim();
 
+export function accountingDocumentIntelligenceStatus(env:any){
+  const endpoint=text(env?.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || env?.KYERP_DOCINTEL_ENDPOINT).replace(/\/$/,"");
+  const keyPresent=Boolean(text(env?.AZURE_DOCUMENT_INTELLIGENCE_KEY || env?.KYERP_DOCINTEL_KEY));
+  const invoiceModel=text(env?.KYERP_DOCINTEL_INVOICE_MODEL) || "prebuilt-invoice";
+  const dispatchModel=text(env?.KYERP_DOCINTEL_DISPATCH_MODEL) || "prebuilt-layout";
+  const apiVersion=text(env?.KYERP_DOCINTEL_API_VERSION) || "2024-11-30";
+  return{
+    provider:"AZURE_DOCUMENT_INTELLIGENCE",
+    configured:Boolean(endpoint && keyPresent),
+    endpointConfigured:Boolean(endpoint),
+    keyConfigured:keyPresent,
+    invoiceModel,
+    dispatchModel,
+    apiVersion,
+  };
+}
+
 export function inferAccountingDocumentKind(rawText: unknown, requestedKind = "AUTO") {
   const requested = upper(requestedKind);
   if (/IRSALIYE|DISPATCH|DESPATCH/.test(requested)) return "IRSALIYE";
@@ -216,13 +233,12 @@ function canonicalFromAzure(result: Row, documentKind: string, requestedModel: s
 
 async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string, modelOverride = "") {
   const env = c.env as any;
+  const status=accountingDocumentIntelligenceStatus(env);
+  if (!status.configured) throw Object.assign(new Error("Belge yapay zeka servisi yapılandırılmamış."), { code: "DOCINTEL_NOT_CONFIGURED", detail:{endpointConfigured:status.endpointConfigured,keyConfigured:status.keyConfigured} });
   const endpoint = text(env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || env.KYERP_DOCINTEL_ENDPOINT).replace(/\/$/, "");
   const key = text(env.AZURE_DOCUMENT_INTELLIGENCE_KEY || env.KYERP_DOCINTEL_KEY);
-  if (!endpoint || !key) throw Object.assign(new Error("Belge yapay zeka servisi yapılandırılmamış."), { code: "DOCINTEL_NOT_CONFIGURED" });
-  const invoiceModel = text(env.KYERP_DOCINTEL_INVOICE_MODEL) || "prebuilt-invoice";
-  const dispatchModel = text(env.KYERP_DOCINTEL_DISPATCH_MODEL) || "prebuilt-layout";
-  const model = modelOverride || (/IRSALIYE|DISPATCH|DESPATCH/i.test(documentKind) ? dispatchModel : invoiceModel);
-  const apiVersion = text(env.KYERP_DOCINTEL_API_VERSION) || "2024-11-30";
+  const model = modelOverride || (/IRSALIYE|DISPATCH|DESPATCH/i.test(documentKind) ? status.dispatchModel : status.invoiceModel);
+  const apiVersion = status.apiVersion;
   const url = `${endpoint}/documentintelligence/documentModels/${encodeURIComponent(model)}:analyze?api-version=${encodeURIComponent(apiVersion)}`;
   const bytes = await file.arrayBuffer();
   const initial = await fetch(url, { method:"POST", headers:{"Ocp-Apim-Subscription-Key":key,"Content-Type":file.type||"application/octet-stream"}, body:bytes });
