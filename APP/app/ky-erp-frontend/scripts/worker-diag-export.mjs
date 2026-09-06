@@ -18,7 +18,6 @@ writeFileSync(probe, `
 import ts from "typescript";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-
 const cwd = process.cwd();
 const files = [
   ...readdirSync(path.join(cwd, "src")).filter((n) => n.endsWith(".ts")).map((n) => path.join(cwd, "src", n)),
@@ -26,19 +25,11 @@ const files = [
 ];
 let errors = 0;
 for (const file of files) {
-  const source = readFileSync(file, "utf8");
-  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  if (sf.parseDiagnostics?.length) {
-    errors += sf.parseDiagnostics.length;
-    console.error("PARSE_ERROR_FILE=" + file);
-    for (const d of sf.parseDiagnostics) console.error(ts.flattenDiagnosticMessageText(d.messageText, "\\n"));
-  }
+  const sf = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  errors += sf.parseDiagnostics?.length || 0;
 }
 if (errors) process.exit(2);
 console.log("WORKER_PARSE_ALL_PASS");
 `);
-try {
-  run("node", ["scripts/temp-parse-all.mjs"]);
-} finally {
-  rmSync(probe, { force: true });
-}
+try { run("node", ["scripts/temp-parse-all.mjs"]); }
+finally { rmSync(probe, { force: true }); }
