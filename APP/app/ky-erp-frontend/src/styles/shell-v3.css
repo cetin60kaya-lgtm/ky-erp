@@ -504,3 +504,239 @@
     padding: 6px;
   }
 }
+
+
+.shell-v3-notification-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.shell-v3-notification-panel {
+  position: absolute;
+  top: 43px;
+  right: 0;
+  z-index: 140;
+  width: min(420px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid #d9e2ec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.2);
+}
+
+.shell-v3-notification-panel > header,
+.shell-v3-notification-panel > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shell-v3-notification-panel > header {
+  padding: 12px 13px;
+  border-bottom: 1px solid #e5eaf0;
+  background: #f8fafc;
+}
+
+.shell-v3-notification-panel > header strong,
+.shell-v3-notification-panel > header small {
+  display: block;
+}
+
+.shell-v3-notification-panel > header strong {
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.shell-v3-notification-panel > header small {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 9px;
+}
+
+.shell-v3-notification-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.shell-v3-notification-actions button {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.shell-v3-notification-actions button:hover:not(:disabled) {
+  border-color: #9fb5ca;
+  color: #0d4a82;
+}
+
+.shell-v3-notification-actions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.shell-v3-notification-error,
+.shell-v3-notification-warning {
+  padding: 8px 12px;
+  border-bottom: 1px solid #fee2e2;
+  font-size: 9px;
+}
+
+.shell-v3-notification-error {
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.shell-v3-notification-warning {
+  border-bottom-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.shell-v3-notification-list {
+  max-height: min(520px, 64vh);
+  overflow-y: auto;
+}
+
+.shell-v3-notification-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  width: 100%;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid #eef2f6;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell-v3-notification-item:hover {
+  background: #f8fafc;
+}
+
+.shell-v3-notification-item.unread {
+  background: #f7fbff;
+}
+
+.shell-v3-notification-item > i {
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.shell-v3-notification-item.unread > i {
+  background: #2563eb;
+}
+
+.shell-v3-notification-item.severity-critical > i {
+  background: #dc2626;
+}
+
+.shell-v3-notification-item.severity-warning > i {
+  background: #d97706;
+}
+
+.shell-v3-notification-item > span {
+  min-width: 0;
+}
+
+.shell-v3-notification-item em,
+.shell-v3-notification-item strong,
+.shell-v3-notification-item small {
+  display: block;
+  font-style: normal;
+}
+
+.shell-v3-notification-item em {
+  margin-bottom: 2px;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shell-v3-notification-item strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-v3-notification-item small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-v3-notification-item time {
+  align-self: start;
+  color: #94a3b8;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.shell-v3-notification-empty {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 22px;
+  color: #64748b;
+  text-align: center;
+}
+
+.shell-v3-notification-empty strong {
+  color: #334155;
+  font-size: 11px;
+}
+
+.shell-v3-notification-empty span {
+  max-width: 300px;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.shell-v3-notification-panel > footer {
+  padding: 9px 12px;
+  border-top: 1px solid #e5eaf0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 8px;
+}
+
+.shell-v3-notification-panel > footer small {
+  color: #94a3b8;
+  font-size: 8px;
+}
+
+@media (max-width: 640px) {
+  .shell-v3-notification-panel {
+    position: fixed;
+    top: 54px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-height: calc(100dvh - 64px);
+  }
+
+  .shell-v3-notification-list {
+    max-height: calc(100dvh - 170px);
+  }
+}
