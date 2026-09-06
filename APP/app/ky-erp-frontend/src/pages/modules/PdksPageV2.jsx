@@ -130,7 +130,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     const nextProfile = await getPdksProfile();
     const [nextPeople, nextMasters] = await Promise.all([
       getPdksPeople({ mainCompanyId: companyId, year, month }),
-      getPdksMasters({ mainCompanyId: companyId }),
+      getPdksMasters({ mainCompanyId: companyId, year, month }),
     ]);
     const list = safe(nextPeople);
     setProfile(nextProfile || null);
