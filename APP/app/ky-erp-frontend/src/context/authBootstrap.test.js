@@ -20,3 +20,11 @@ test("F5 bootstrap reads the canonical persisted auth token before ERP render", 
     "persisted token bootstrap React render'dan once kurulmalidir",
   );
 });
+
+
+test("owner bootstrap never restores a localStorage token after browser restart", () => {
+  assert.match(bootstrap, /ownerToken/);
+  assert.match(bootstrap, /clearPersistentOwnerAuth/);
+  assert.match(bootstrap, /Owner browser restart sonrası kalıcı token kullanamaz/);
+  assert.match(bootstrap, /sessionStorage\?\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
+});
