@@ -328,7 +328,8 @@ $approvalScopeColumn = Remote-Column-Exists "mail_accounts" "account_scope"
 $approvalOwnerColumn = Remote-Column-Exists "mail_accounts" "owner_user_id"
 $approvalRequestTable = Remote-Table-Exists "critical_approval_requests"
 $approvalEventTable = Remote-Table-Exists "critical_approval_events"
-$approvalReadyCount = @($approvalScopeColumn,$approvalOwnerColumn,$approvalRequestTable,$approvalEventTable | Where-Object { $_ }).Count
+$approvalStates = @($approvalScopeColumn,$approvalOwnerColumn,$approvalRequestTable,$approvalEventTable)
+$approvalReadyCount = @($approvalStates | Where-Object { $_ }).Count
 if ($approvalReadyCount -eq 0) {
     wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $APPROVAL_CENTER_FILE
     Check-Exit "0051 Firma Mail Ayrimi / Onay Merkezi semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
