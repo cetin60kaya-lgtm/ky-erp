@@ -54,7 +54,7 @@ export function registerMailProviderOverlayRoutes(app:any){
     const a:any=await access(c);if(a.error)return a.error;
     if(!hasMailPermission(a.current))return c.json(err("MAIL_FORBIDDEN","Mail Merkezi görüntüleme yetkiniz yok."),403);
     const ready=await schemaReady(c);
-    return c.json({ok:true,data:{providers:mailProviderRegistry().map((row:any)=>({...row,...runtime(c,row.provider)})),schemaReady:ready,setupRequired:!ready,credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY||c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
+    return c.json({ok:true,data:{releaseRevision:"MAIL_WORKSPACE_2026_09_06_FINAL_2",providers:mailProviderRegistry().map((row:any)=>({...row,...runtime(c,row.provider)})),schemaReady:ready,setupRequired:!ready,credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY||c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
   });
 
   // Gmail request is intercepted here because the legacy core only knew Microsoft readiness.
