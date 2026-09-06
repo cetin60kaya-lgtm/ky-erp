@@ -341,4 +341,6 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Kullanılan/kalan yıllık izin hesabı modern `ik_leave_plans` ile tarihsel `hr_leave_records_v2` kayıtlarını exact tekrarları çift saymadan birlikte okur.
 - Personel izin geçmişi de modern PDKS izin kayıtları + tarihsel kayıtları tek listede gösterir.
 - D1 reset/drop veya yeni migration yoktur; mevcut personel/izin/bordro verisi korunur.
+- İK ödeme çıktıları da aynı pakette finalleştirildi: A4 yatay ödeme listesinde HKN personel adının altına alınarak sıkışma azaltıldı; EK sütunu ayrı ve pozitif tutar vurgulu; 10'lu A4 toplu fiş kuralı korunur.
+- EK ödeme tutarı olan personelde tekli ve 10'lu fişte altta kesilebilir/ayrılabilir `EK ÖDEME` kuponu oluşur; EK=0 ise kupon görünmez.
 - Bu kayıt feature branch durumudur; production merge/deploy yapılmamıştır. Önce doğrulama, ardından kullanıcı açık canlı onayı gerekir.
