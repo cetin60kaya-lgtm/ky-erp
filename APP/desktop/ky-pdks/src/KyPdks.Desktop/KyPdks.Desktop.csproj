@@ -6,8 +6,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>KyPdks.Desktop</RootNamespace>
-    <AssemblyName>KY ERP Masaüstü</AssemblyName>
-    <Version>1.5.0</Version>
+    <AssemblyName>KY ERP Desktop</AssemblyName>
+    <Product>KY ERP Desktop</Product>
+    <Description>KY ERP Windows çalışma merkezi • ERP + File Hub + AI + İK/PDKS cihaz köprüsü</Description>
+    <Company>KY ERP</Company>
+    <Version>1.7.2</Version>
+    <FileVersion>1.7.2.0</FileVersion>
+    <AssemblyVersion>1.7.2.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
