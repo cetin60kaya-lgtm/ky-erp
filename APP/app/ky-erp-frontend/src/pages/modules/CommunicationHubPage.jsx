@@ -381,6 +381,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   }, [selectedMessage?.id, selectedMessage?.body_html, selectedMessage?.bodyHtml, attachments]);
 
   useEffect(() => {
+    if (!selectedMessage?.id || Number(selectedMessage.is_read ?? selectedMessage.isRead ?? 1) !== 0 || activeTab === "mail-gonderilen" || activeTab === "mail-taslaklar") return;
+    const messageId = selectedMessage.id;
+    setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
+    setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
+    setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    runMailMessageAction(messageId, "MARK_READ", {}).catch((error) => {
+      setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
+      setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
+      setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
+    });
+  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mailConnected") === "1") {
       const provider = String(params.get("mailProvider") || "").toUpperCase();
