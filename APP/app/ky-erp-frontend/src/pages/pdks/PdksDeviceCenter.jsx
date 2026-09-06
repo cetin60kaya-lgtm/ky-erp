@@ -40,7 +40,7 @@ export default function PdksDeviceCenter({ activeTab="cihaz-baglantilari", activ
   async function copy(value){try{await navigator.clipboard.writeText(String(value||""));setMessage("Cihaz anahtarı panoya kopyalandı.");}catch{setMessage("Anahtar kopyalanamadı; ekrandaki değeri elle alın.");}}
 
   return <div className="pdc-page">
-    <header className="pdc-head"><div><small>PDKS / TERMİNAL & SİSTEM</small><h1>{activeTab==="senkron"?"Senkronizasyon Merkezi":"Cihaz Bağlantıları"}</h1><p>Windows Agent, terminal kimliği, heartbeat ve D1 senkron geçmişi tek merkezden izlenir.</p></div><button type="button" onClick={load} disabled={busy}>Yenile</button></header>
+    <header className="pdc-head"><div><small>PDKS / TERMİNAL & SİSTEM</small><h1>{activeTab==="senkron"?"Senkronizasyon":activeTab==="saat-terminal"?"Terminal & Sistem":"Cihaz Bağlantıları"}</h1><p>Windows Agent, terminal kimliği, bağlantı sağlığı ve D1 senkron geçmişi tek merkezden izlenir.</p></div><button type="button" onClick={load} disabled={busy}>Yenile</button></header>
     <div className={`pdc-notice ${message.startsWith("Hata:")?"bad":""}`}>{message}</div>
     <section className="pdc-metrics"><div><span>Tanımlı Cihaz</span><b>{devices.length}</b></div><div><span>Çevrimiçi</span><b>{onlineCount}</b></div><div><span>Son Senkron Kayıtları</span><b>{logs.length}</b></div><div><span>Hata / Red</span><b>{failedCount}</b></div></section>
 
