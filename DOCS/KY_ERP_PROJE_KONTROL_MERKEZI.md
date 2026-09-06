@@ -213,6 +213,20 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## Son güncelleme
 
+
+## 06.09.2026 — Canlı yayın ve Bildirim Merkezi final kararı
+
+- Production deploy **GitHub Actions ile yapılmayacak**.
+- Canonical yol: `production branch push -> Cloudflare Git Integration -> Cloudflare Pages / Workers Builds`.
+- GitHub Actions yalnız açık kullanıcı isteğiyle manual tanılama/test için çalıştırılabilir; production deploy yolu değildir.
+- D1 migration ayrı güvenlik kapısıdır: backup -> readiness -> hedefli/additive migration -> schema audit.
+- Sağ üst bildirim zilindeki sabit `3` kaldırıldı.
+- Bildirim Merkezi gerçek veriye bağlandı: bekleyen giriş onayları, e-Belge açık sorunları, vadesi gelen/geciken ödemeler.
+- Rozet gerçek unreadCount gösterir; 0 ise görünmez.
+- Bildirimler tenant + kullanıcı modül yetkisine göre filtrelenir.
+- Okundu durumu mevcut `json_store` içinde kullanıcı + firma bazında tutulur; yeni migration gerekmez.
+- Ana devam kaynağı: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
+
 **04.09.2026 — Cloudflare Pro + Actions'sız production yayın düzeni kesinleştirildi.**
 
 - `kyerp.net` için Cloudflare Pro aktif.
