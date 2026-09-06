@@ -128,14 +128,17 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
   const loadCore = useCallback(async () => {
     const nextProfile = await getPdksProfile();
-    const [nextPeople, nextMasters] = await Promise.all([getPdksPeople(), getPdksMasters({ mainCompanyId: companyId })]);
+    const [nextPeople, nextMasters] = await Promise.all([
+      getPdksPeople({ mainCompanyId: companyId, year, month }),
+      getPdksMasters({ mainCompanyId: companyId }),
+    ]);
     const list = safe(nextPeople);
     setProfile(nextProfile || null);
     setPeople(list);
     setMasters(nextMasters || { groups: [], services: [], groupAssignments: [], serviceAssignments: [] });
     setSelectedId((old) => list.some((person) => person.id === old) ? old : list[0]?.id || "");
     return Boolean(nextProfile?.audit || nextMasters?.audit || isAuditAccount);
-  }, [companyId, isAuditAccount]);
+  }, [companyId, isAuditAccount, month, year]);
 
   const loadFullMonth = useCallback(async () => {
     const [advanced, nextPayroll, nextHolidays, nextLeaves, nextLogs] = await Promise.all([
@@ -319,8 +322,9 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   const exportAuditYear = () => run(`${year} denetim TEMP D1'den hazırlanıyor...`, async () => {
     const rows = [["Personel Kodu", "Ad Soyad", "Kart No", "Bölüm", "Tarih", "Durum", "Giriş", "Çıkış", "Geç", "Erken", "Fazla", "Basım", "Not"]];
     for (let m = 1; m <= 12; m += 1) {
-      for (let index = 0; index < people.length; index += 4) {
-        const batch = people.slice(index, index + 4);
+      const monthPeople = safe(await getPdksPeople({ mainCompanyId: companyId, year, month: m }));
+      for (let index = 0; index < monthPeople.length; index += 4) {
+        const batch = monthPeople.slice(index, index + 4);
         const results = await Promise.all(batch.map(async (person) => ({ person, data: await getPdksAttendance(person.id, year, m) })));
         results.forEach(({ person, data }) => safe(data?.days).forEach((day) => rows.push([
           person.personnelCode || person.code || "", person.fullName, person.cardNo || "", person.department || "", day.date, day.status,
@@ -329,7 +333,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
       }
     }
     downloadCsv(`PDKS_DENETIM_TEMP_${year}.csv`, rows);
-    setNotice(`${year} TEMP yalnız SGK=VAR + kartlı personel D1 puantajından üretildi; finans alanı yok.`);
+    setNotice(`${year} TEMP her ayın SGK kapsamındaki kartlı personelinin gerçek D1 puantajından üretildi; finans alanı yok.`);
   });
 
   const adjustments = safe(monthData?.adjustments);
@@ -342,8 +346,17 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
   const personColumns = [
     { key: "personnelCode", label: "Kod", render: (row) => row.personnelCode || row.code || "" },
-    { key: "fullName", label: "Ad Soyad" }, { key: "cardNo", label: "Kart No" }, { key: "department", label: "Bölüm" },
-    { key: "title", label: "Görev" }, { key: "startDate", label: "İşe Giriş" }, { key: "exitDate", label: "İşten Çıkış" }, { key: "status", label: "Durum" },
+    { key: "fullName", label: "Ad Soyad" },
+    { key: "cardNo", label: "Kart No" },
+    { key: "department", label: "Bölüm" },
+    { key: "title", label: "Görev" },
+    ...(!audit ? [
+      { key: "personnelStatus", label: "Personel Statüsü", render: (row) => row.personnelStatus === "RETIRED" ? "Emekli" : "Normal" },
+      { key: "sgkDays", label: "SGK Gün", render: (row) => row.sgkDays ?? "-" },
+    ] : []),
+    { key: "startDate", label: "İşe Giriş" },
+    { key: "exitDate", label: "İşten Çıkış" },
+    { key: "status", label: "Durum" },
   ];
   const attendanceColumns = [
     { key: "date", label: "Tarih" }, { key: "status", label: "Durum" }, { key: "entry", label: "Giriş" }, { key: "exit", label: "Çıkış" },
@@ -354,8 +367,8 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
   function renderCore() {
     if (activeTab === "ana-ekran") return <>
-      <div className="pdks-stats"><Card label="SGK + Kart Personel" value={people.length}/><Card label="Kartlı Gün" value={attendance.filter((day) => ["CALISTI", "EKSIK_BASIM"].includes(day.status)).length} tone="ok"/><Card label="Eksik / Kart Yok" value={attendance.filter((day) => ["EKSIK_BASIM", "KART_YOK"].includes(day.status)).length} tone="warn"/><Card label="Vardiya" value={groups.length}/><Card label="Servis" value={services.length}/></div>
-      <div className="pdks-grid two"><section className="pdks-panel"><h3>Hedef PDKS İş Akışı</h3><div className="pdks-flow"><button onClick={() => openModule?.("pdks", { tabKey: "bilgi-aktar" })}>1 Bilgi Aktar</button><button onClick={() => openModule?.("pdks", { tabKey: "giris-cikislar" })}>2 Giriş / Çıkış</button><button onClick={() => openModule?.("pdks", { tabKey: "puantaj" })}>3 Puantaj</button><button onClick={loadAllSummaries}>4 Sonuç</button><button onClick={closePeriod} disabled={!canWrite}>5 Dönem Kapat</button></div></section><section className="pdks-panel"><h3>Tek DATA</h3><p><b>Ana kaynak:</b> KY ERP D1</p><p><b>Windows SQLite:</b> yalnız ham kart, offline kuyruk, cache, log ve yedek</p><p><b>Denetim:</b> SGK=VAR + kartlı personel, salt okunur</p></section></div>
+      <div className="pdks-stats"><Card label={audit ? "SGK + Kart Personel" : "Personel"} value={people.length}/><Card label="Kartlı Gün" value={attendance.filter((day) => ["CALISTI", "EKSIK_BASIM"].includes(day.status)).length} tone="ok"/><Card label="Eksik / Kart Yok" value={attendance.filter((day) => ["EKSIK_BASIM", "KART_YOK"].includes(day.status)).length} tone="warn"/><Card label="Vardiya" value={groups.length}/><Card label="Servis" value={services.length}/></div>
+      <div className="pdks-grid two"><section className="pdks-panel"><h3>Hedef PDKS İş Akışı</h3><div className="pdks-flow"><button onClick={() => openModule?.("pdks", { tabKey: "bilgi-aktar" })}>1 Bilgi Aktar</button><button onClick={() => openModule?.("pdks", { tabKey: "giris-cikislar" })}>2 Giriş / Çıkış</button><button onClick={() => openModule?.("pdks", { tabKey: "puantaj" })}>3 Puantaj</button><button onClick={loadAllSummaries}>4 Sonuç</button><button onClick={closePeriod} disabled={!canWrite}>5 Dönem Kapat</button></div></section><section className="pdks-panel"><h3>Tek DATA</h3><p><b>Ana kaynak:</b> KY ERP D1</p><p><b>Windows SQLite:</b> yalnız ham kart, offline kuyruk, cache, log ve yedek</p><p><b>Denetim:</b> seçili ayın SGK kapsamındaki kartlı personeli, salt okunur</p></section></div>
       <section className="pdks-panel"><h3>Seçili Personel · {selected?.fullName || "-"}</h3><PersonPicker/><DataTable columns={attendanceColumns} rows={attendance.slice(-14).reverse()} rowKey="date" /></section>
     </>;
 
@@ -395,7 +408,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
     if (activeTab === "raporlar") return <section className="pdks-panel"><h3>Raporlar</h3><div className="pdks-flow"><button onClick={loadAllSummaries}>Aylık Puantajı Hazırla</button><button onClick={() => summaryRows.length && downloadCsv(`PDKS_PUANTAJ_${year}_${String(month).padStart(2,"0")}.csv`, [["Kod","Personel","Bölüm","Çalıştı","Yıllık İzin","Eksik","Kart Yok","Geç Dk","Erken Dk","Fazla Dk"], ...summaryRows.map((r)=>[r.personnelCode,r.fullName,r.department,r.workedDays,r.annualLeaveDays,r.missingPunchDays,r.noPunchDays,r.lateMinutes,r.earlyMinutes,r.overtimeMinutes])])} disabled={!summaryRows.length}>Puantaj CSV</button><button onClick={exportAuditYear}>Yıllık Denetim TEMP</button></div>{!audit ? <DataTable rows={logs.slice(0,100)} columns={[{key:"createdAt",label:"Tarih",render:(r)=>r.createdAt||r.created_at},{key:"actionType",label:"İşlem",render:(r)=>r.actionType||r.action_type},{key:"sourceScreen",label:"Kaynak",render:(r)=>r.sourceScreen||r.source_screen},{key:"userName",label:"Kullanıcı",render:(r)=>r.userName||r.user_name},{key:"reason",label:"Açıklama"}]}/> : null}</section>;
 
-    if (activeTab === "denetim-yillik-temp") return <section className="pdks-panel"><h3>Yıllık TEMP / Denetim</h3><p>Yıl snapshotı D1'den yeniden üretilir; ana veri değildir. Yalnız SGK=VAR + kartlı personel, giriş/çıkış ve puantaj bulunur. Finans kesinlikle çıkmaz.</p><div className="form-row"><select value={year} onChange={(e)=>setYear(Number(e.target.value))}>{YEARS.map((item)=><option key={item}>{item}</option>)}</select><button className="primary-btn" onClick={exportAuditYear}>TEMP {year} Oluştur</button></div></section>;
+    if (activeTab === "denetim-yillik-temp") return <section className="pdks-panel"><h3>Yıllık TEMP / Denetim</h3><p>Yıl snapshotı D1'den yeniden üretilir; ana veri değildir. Her ay yalnız o ayın SGK kapsamındaki kartlı personeli, giriş/çıkış ve puantaj bulunur. Finans kesinlikle çıkmaz.</p><div className="form-row"><select value={year} onChange={(e)=>setYear(Number(e.target.value))}>{YEARS.map((item)=><option key={item}>{item}</option>)}</select><button className="primary-btn" onClick={exportAuditYear}>TEMP {year} Oluştur</button></div></section>;
     return <Empty>Bu PDKS ekranı henüz tanımlı değil.</Empty>;
   }
 
