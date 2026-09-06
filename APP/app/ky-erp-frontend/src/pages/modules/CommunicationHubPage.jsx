@@ -10,6 +10,7 @@ import {
   requestMailAccount,
   searchCommunicationFiles,
   sendMailDraft,
+  setMailAccountDefaults,
   startGoogleMailOAuth,
   startMicrosoftMailOAuth,
   syncMailAccount,
@@ -43,6 +44,31 @@ function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+const HAKAN_DIRECT_ACCOUNTS = [
+  {
+    key: "HAKAN_MAIN",
+    title: "Hakan Emprime Ana Mail",
+    providerType: "MICROSOFT_365",
+    accountType: "PERSONAL",
+    emailAddress: "hkngursu@hotmail.com",
+    displayName: "Hakan Emprime",
+    departmentCode: "YONETIM",
+    isDefaultSend: true,
+    isDefaultReceive: true,
+  },
+  {
+    key: "DESEN",
+    title: "Desen Maili",
+    providerType: "GMAIL",
+    accountType: "DEPARTMENT",
+    emailAddress: "hkndesen@gmail.com",
+    displayName: "Hakan Emprime Desen",
+    departmentCode: "DESEN",
+    isDefaultSend: false,
+    isDefaultReceive: false,
+  },
+];
+
 export default function CommunicationHubPage({ activeTab, activeMainCompany, openModule }) {
   const isMail = MAIL_TABS.has(activeTab);
   const [overview, setOverview] = useState(null);
@@ -69,6 +95,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [messageSearch, setMessageSearch] = useState("");
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
+  const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
+  const showHakanDirectAccounts = /hakan|mecit/.test(activeCompanyKey);
   const selectedAccount = useMemo(
     () => accounts.find((row) => String(row.id) === String(selectedAccountId)) || null,
     [accounts, selectedAccountId],
@@ -200,6 +228,38 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
   }
 
+  async function addAndConnectPreset(preset) {
+    setLoading(true);
+    try {
+      const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
+      if (!runtime) throw new Error("Mail sağlayıcı durumu alınamadı. Worker /mail/providers bağlantısı hazır değil.");
+      if (runtime.adapterReady === false) throw new Error(runtime.reason || `${providerLabel(preset.providerType)} adapterı hazır değil.`);
+      if (runtime.configured === false) throw new Error(runtime.reason || `${providerLabel(preset.providerType)} OAuth production ayarı eksik.`);
+
+      let account = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase()) || null;
+      let accountId = account?.id || "";
+      if (!accountId) {
+        const created = await requestMailAccount(preset);
+        accountId = created?.accountId || "";
+        if (!accountId) throw new Error("Mail hesabı kaydı oluşturulamadı.");
+        if (preset.isDefaultSend || preset.isDefaultReceive) {
+          await setMailAccountDefaults(accountId, {
+            isDefaultSend: Boolean(preset.isDefaultSend),
+            isDefaultReceive: Boolean(preset.isDefaultReceive),
+          });
+        }
+      }
+
+      const startOAuth = preset.providerType === "GMAIL" ? startGoogleMailOAuth : startMicrosoftMailOAuth;
+      const result = await startOAuth(accountId);
+      if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
+      window.location.assign(result.authorizeUrl);
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Mail hesabı doğrudan eklenemedi."}`);
+      setLoading(false);
+    }
+  }
+
   async function connectSelectedAccount() {
     if (!selectedAccountId || !selectedAccount) return;
     const provider = String(selectedAccount.provider_type || selectedAccount.providerType || "").toUpperCase();
@@ -322,7 +382,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       {requestOpen ? (
         <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRequestOpen(false); }}>
         <section className="comm-request-card comm-modal" role="dialog" aria-modal="true" aria-label="Mail hesabı ekleme talebi">
-          <div className="comm-section-title"><div><h2>Mail Hesabı Ekleme Talebi</h2><p>Bağlantı onaydan önce aktif olmaz. Tüm hesap talepleri ilgili firmanın sahibi / işvereni tarafından onaylanır.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
+          <div className="comm-section-title"><div><h2>Mail Hesabı Ekle</h2><p>Outlook/Hotmail veya Gmail hesabını seçin; KY ERP sizi doğrudan sağlayıcının güvenli giriş ekranına gönderir.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
+          {showHakanDirectAccounts ? <div className="comm-direct-mail-grid">
+            {HAKAN_DIRECT_ACCOUNTS.map((preset) => {
+              const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
+              const existing = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
+              const ready = Boolean(runtime?.adapterReady && runtime?.configured);
+              return <article key={preset.key} className="comm-direct-mail-card">
+                <div><b>{preset.title}</b><span>{preset.emailAddress}</span><small>{providerLabel(preset.providerType)} · {preset.departmentCode === "DESEN" ? "Desen bölümü" : "Şirket ana maili"}</small></div>
+                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || !ready}>{existing ? "Hesabı Bağla" : "Direkt Ekle & Bağla"}</button>
+                {!ready ? <em>{runtime?.reason || "Sağlayıcı production OAuth ayarı henüz doğrulanmadı."}</em> : null}
+              </article>;
+            })}
+          </div> : null}
+          <div className="comm-advanced-mail-title"><b>Diğer Mail Hesabı</b><span>Farklı bir hesap eklemek için aşağıdaki gelişmiş formu kullanın.</span></div>
           <form onSubmit={submitAccountRequest}>
             <label>Sağlayıcı<select value={requestForm.providerType} onChange={(e) => setRequestForm((v) => ({ ...v, providerType: e.target.value }))}>
               {(providers.length ? providers : [

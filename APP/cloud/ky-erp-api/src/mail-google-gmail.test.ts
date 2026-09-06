@@ -73,3 +73,13 @@ test("reply-waiting view is server-derived instead of misusing incoming flags",(
   assert.match(ui,/awaitingReply: 1/);
   assert.doesNotMatch(ui,/mail-yanit-bekleyen\" \? list\.filter/);
 });
+
+
+test("Hakan mail center exposes direct Hotmail and Gmail OAuth onboarding",()=>{
+  const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(source,/hkngursu@hotmail\.com/);
+  assert.match(source,/hkndesen@gmail\.com/);
+  assert.match(source,/Direkt Ekle & Bağla/);
+  assert.match(source,/addAndConnectPreset/);
+  assert.match(source,/setMailAccountDefaults/);
+});
