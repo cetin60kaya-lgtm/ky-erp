@@ -22,6 +22,8 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <DefineConstants Condition="'$(ProductMode)' == 'PDKS'">$(DefineConstants);PDKS_ONLY</DefineConstants>
+    <BaseIntermediateOutputPath>obj\$(ProductMode)\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\$(ProductMode)\</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(ProductMode)' == 'PDKS'">
