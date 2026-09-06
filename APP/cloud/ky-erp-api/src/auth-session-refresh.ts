@@ -194,7 +194,7 @@ export function registerAuthSessionRefreshRoutes(app: any) {
       expiresIn: ttl,
       expiresAt,
       prepareExpiresAt,
-      rolling: false,
+      rolling: true,
       user,
       session: { id: session.id, expiresAt: session.expires_at, lastSeenAt: session.last_seen_at },
     });
