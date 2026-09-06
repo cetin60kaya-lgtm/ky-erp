@@ -109,9 +109,20 @@ test("daily Mail and Files uses a module-scoped file endpoint", () => {
 test("privileged owner actions bypass their own mail approval queue", () => {
   const source = read("./mail-communication-core.ts");
   assert.match(source, /privilegedInternalApproval/);
-  assert.match(source, /autoApproveOwnPrivilegedMailRequests/);
-  assert.match(source, /PRIVILEGED_OWNER_AUTO_APPROVAL/);
-  assert.match(source, /MAIL_ACCOUNT_AUTO_APPROVED_PRIVILEGED/);
+  assert.match(source, /autoApprovePrivilegedRequesterMailRequests/);
+  assert.match(source, /PRIVILEGED_REQUESTER_AUTO_APPROVAL/);
+  assert.match(source, /MAIL_ACCOUNT_AUTO_APPROVED_PRIVILEGED_REQUESTER/);
   assert.match(source, /requestStatus=privileged\?"APPROVED":"PENDING"/);
   assert.match(source, /approvalBypass:privileged/);
+});
+
+
+test("legacy pending mail request is auto-approved from requester role, not viewer identity", () => {
+  const source = read("./mail-communication-core.ts");
+  assert.match(source, /requester_role_override/);
+  assert.match(source, /requester_role/);
+  assert.match(source, /requesterId=text\(row\.requested_by\)/);
+  assert.match(source, /companyAdminRole\(requesterRole\)/);
+  assert.match(source, /ownerRole\(requesterRole\)/);
+  assert.doesNotMatch(source, /requested_by=\? ORDER BY r\.created_at/);
 });
