@@ -19,6 +19,18 @@ const slugOf = (c: Context<AppEnv>) => text(
 );
 const normalize = (v: unknown) => upper(v).replace(/İ/g,"I").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9ÇĞÖŞÜ]+/g," ").replace(/\s+/g," ").trim();
 
+export function inferAccountingDocumentKind(rawText: unknown, requestedKind = "AUTO") {
+  const requested = upper(requestedKind);
+  if (/IRSALIYE|DISPATCH|DESPATCH/.test(requested)) return "IRSALIYE";
+  if (/FATURA|INVOICE|ARSIV/.test(requested) && requested !== "AUTO") return "FATURA";
+  const content = normalize(rawText);
+  const dispatchTokens = ["SEVK IRSALIYESI","E IRSALIYE","IRSALIYE NO","IRSALIYE NUMARASI","IRSALIYE TARIHI","DESPATCH","DESPATCH ADVICE"];
+  const invoiceTokens = ["E FATURA","E ARSIV","FATURA NO","FATURA NUMARASI","FATURA TARIHI","INVOICE","ODENECEK TUTAR"];
+  const dispatchScore = dispatchTokens.reduce((score, token) => score + (content.includes(token) ? 1 : 0), 0);
+  const invoiceScore = invoiceTokens.reduce((score, token) => score + (content.includes(token) ? 1 : 0), 0);
+  return dispatchScore > invoiceScore ? "IRSALIYE" : "FATURA";
+}
+
 function fieldValue(field: any): any {
   if (!field || typeof field !== "object") return undefined;
   if (field.valueString !== undefined) return field.valueString;
@@ -187,16 +199,44 @@ async function extractionProfile(c: Context<AppEnv>, partyTaxNo: string, partyNa
 export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, documentKind = "INVOICE") {
   if(!file.size)throw Object.assign(new Error("Belge dosyası boş."),{code:"EMPTY_DOCUMENT"});
   if(file.size>40_000_000)throw Object.assign(new Error("Belge dosyası 40 MB sınırını aşıyor."),{code:"DOCUMENT_TOO_LARGE"});
-  const first = await azureAnalyze(c, file, documentKind);
-  const profile = await extractionProfile(c,text(first.partyTaxNo),text(first.partyName),documentKind);
+
+  const requested = upper(documentKind) || "AUTO";
+  let resolvedKind = inferAccountingDocumentKind("", requested);
+  let first: Row;
+
+  if (requested === "AUTO") {
+    const layout = await azureAnalyze(c, file, "IRSALIYE");
+    resolvedKind = inferAccountingDocumentKind(layout.rawText, "AUTO");
+    if (resolvedKind === "FATURA") {
+      try {
+        first = await azureAnalyze(c, file, "FATURA");
+      } catch {
+        first = { ...layout, autoInvoiceRefineFailed: true };
+      }
+    } else {
+      first = layout;
+    }
+    first = {
+      ...first,
+      inferredDocumentKind: resolvedKind,
+      autoDetected: true,
+      autoDetectionSource: "OCR_TEXT",
+    };
+  } else {
+    first = await azureAnalyze(c, file, resolvedKind);
+  }
+
+  const profile = await extractionProfile(c,text(first.partyTaxNo),text(first.partyName),resolvedKind);
   const customModel = text(profile?.provider_model_id);
-  if (!customModel || upper(profile?.provider_type) !== "AZURE_DOCUMENT_INTELLIGENCE") return first;
+  if (!customModel || upper(profile?.provider_type) !== "AZURE_DOCUMENT_INTELLIGENCE") {
+    return { ...first, inferredDocumentKind: resolvedKind };
+  }
   const threshold = num(profile?.min_confidence) || 0.75;
   try {
-    const refined = await azureAnalyze(c, file, documentKind, customModel);
+    const refined = await azureAnalyze(c, file, resolvedKind, customModel);
     await c.env.DB.prepare(`UPDATE accounting_extraction_profiles SET successful_samples=successful_samples+1,last_used_at=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(new Date().toISOString(),new Date().toISOString(),profile.id,slugOf(c)).run();
-    return {...refined,fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};
+    return {...refined,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};
   } catch {
-    return {...first,profileId:profile.id,profileThreshold:threshold,customModelFallbackUsed:true};
+    return {...first,inferredDocumentKind:resolvedKind,profileId:profile.id,profileThreshold:threshold,customModelFallbackUsed:true};
   }
 }
