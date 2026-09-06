@@ -164,3 +164,15 @@ test("PDKS primary sidebar exposes exactly five operation groups without dumping
   assert.match(shell, /owningGroup\?\.tabs\?\.some/);
   assert.match(shell, /shell-v3-submenu-primary/);
 });
+
+
+test("PDKS live dashboard counts all active workers for HR but keeps audit monthly-SGK scoped", () => {
+  const source = api("ik-pdks-modern.ts");
+
+  assert.match(source, /\/api\/ik\/personnel-control\/dashboard-live/);
+  assert.match(source, /const people=auth\.audit/);
+  assert.match(source, /ik_person_monthly_compliance mc/);
+  assert.match(source, /mc\.sgk_covered=1/);
+  assert.match(source, /UPPER\(COALESCE\(s\.active_passive,e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.doesNotMatch(source, /WHERE e\.main_company_id=\? AND UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PASIF%' AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\)<>'YOK'/);
+});
