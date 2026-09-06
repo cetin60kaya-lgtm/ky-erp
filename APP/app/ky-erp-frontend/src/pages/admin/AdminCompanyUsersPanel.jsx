@@ -10,6 +10,7 @@ import {
   revokeAllUserSessions,
   updateUser,
 } from "../../services/adminApi";
+import AdminApprovalCenter from "./AdminApprovalCenter";
 import "./AdminManagement.css";
 
 const ROLES = [
@@ -175,6 +176,8 @@ export default function AdminCompanyUsersPanel({ activeMainCompany }) {
       </header>
       <div className={`admpro-notice ${message.startsWith("Hata:") ? "warn" : "success"}`}>{message}</div>
 
+      <AdminApprovalCenter compact />
+
       <section className="admpro-grid-2">
         <div className="admpro-card">
           <div className="admpro-card-head"><div><h3>{editingId ? "Kullanıcı Düzenle" : "Yeni Kullanıcı"}</h3><p>Firma: {activeMainCompany?.name || companySlug || "-"}</p></div>{editingId ? <button type="button" onClick={clearForm}>İptal</button> : null}</div>
@@ -185,7 +188,7 @@ export default function AdminCompanyUsersPanel({ activeMainCompany }) {
               <label>E-posta<input type="email" value={form.email} onChange={(event) => setForm((old) => ({ ...old, email: event.target.value }))} /></label>
               <label>Rol<select value={form.role} onChange={(event) => setForm((old) => ({ ...old, role: event.target.value }))}>{ROLES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
               {!editingId ? <label>İlk Parola<input type="password" value={form.password} onChange={(event) => setForm((old) => ({ ...old, password: event.target.value }))} /></label> : null}
-              <label className="admpro-check"><input type="checkbox" checked={form.approvalRequired} onChange={(event) => setForm((old) => ({ ...old, approvalRequired: event.target.checked }))} /> Yeni cihaz girişinde firma admin onayı</label>
+              <label className="admpro-check"><input type="checkbox" checked={form.approvalRequired} onChange={(event) => setForm((old) => ({ ...old, approvalRequired: event.target.checked }))} /> Yeni cihaz girişinde Firma Sahibi / Süper Yönetici onayı</label>
               <label className="admpro-check"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm((old) => ({ ...old, isActive: event.target.checked }))} /> Kullanıcı aktif</label>
             </div>
             <div className="admpro-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}><button type="submit" className="primary" disabled={busy}>{editingId ? "Değişiklikleri Kaydet" : "Kullanıcı Oluştur"}</button></div>
