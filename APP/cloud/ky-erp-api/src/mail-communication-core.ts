@@ -290,8 +290,14 @@ export function registerMailCommunicationRoutes(app:any){
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail görüntüleme yetkiniz yok."),403);
     const accountId=text(c.req.query("accountId"));if(!accountId)return c.json(jsonError("ACCOUNT_REQUIRED","Mail hesabı seçilmelidir."),422);
     if(!(await canAccessAccount(c,current,tenant,accountId,"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunu görüntüleme yetkiniz yok."),403);
-    const take=Math.min(200,Math.max(1,Number(c.req.query("take")||100))),folderId=text(c.req.query("folderId")),direction=upper(c.req.query("direction")),where=["m.main_company_slug=?","m.account_id=?"],args:any[]=[tenant,accountId];
-    if(folderId){where.push("m.folder_id=?");args.push(folderId)}if(["INCOMING","OUTGOING"].includes(direction)){where.push("m.direction=?");args.push(direction)}args.push(take);
+    const take=Math.min(200,Math.max(1,Number(c.req.query("take")||100))),folderId=text(c.req.query("folderId")),direction=upper(c.req.query("direction")),awaitingReply=["1","TRUE","YES"].includes(upper(c.req.query("awaitingReply"))),where=["m.main_company_slug=?","m.account_id=?"],args:any[]=[tenant,accountId];
+    if(folderId){where.push("m.folder_id=?");args.push(folderId)}
+    if(awaitingReply){
+      where.push("m.direction='OUTGOING'");
+      where.push("m.thread_id IS NOT NULL");
+      where.push("NOT EXISTS (SELECT 1 FROM mail_messages newer WHERE newer.main_company_slug=m.main_company_slug AND newer.account_id=m.account_id AND newer.thread_id=m.thread_id AND (COALESCE(newer.received_at,newer.sent_at,newer.created_at)>COALESCE(m.received_at,m.sent_at,m.created_at) OR (COALESCE(newer.received_at,newer.sent_at,newer.created_at)=COALESCE(m.received_at,m.sent_at,m.created_at) AND newer.id<>m.id)))");
+    }else if(["INCOMING","OUTGOING"].includes(direction)){where.push("m.direction=?");args.push(direction)}
+    args.push(take);
     const r=await c.env.DB.prepare("SELECT m.* FROM mail_messages m WHERE "+where.join(" AND ")+" ORDER BY COALESCE(m.received_at,m.sent_at,m.created_at) DESC LIMIT ?").bind(...args).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
   });
