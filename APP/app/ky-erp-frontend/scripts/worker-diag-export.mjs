@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const worker = path.resolve(here, "../../../cloud/ky-erp-api");
 const probe = path.join(worker, "scripts", "temp-parse-group.mjs");
-const files = ["accounting-canonical-read.ts","accounting-dispatch-control-canonical.ts","accounting-document-archive.ts","accounting-document-intelligence.ts","accounting-document-posting.ts","accounting-report-canonical.ts","admin-management-cloud.ts","admin-storage-cloud.ts","ai-cloud.ts","auth-cloud.ts","auth-policy-cloud.ts","e-belge-center-cloud.ts","e-belge-line-tools.ts","e-belge-product-store.ts","e-belge-ubl.ts","file-hub-cloud-oauth.ts"];
+const files = ["accounting-canonical-read.ts","accounting-dispatch-control-canonical.ts","accounting-document-archive.ts","accounting-document-intelligence.ts","accounting-document-posting.ts","accounting-report-canonical.ts","admin-management-cloud.ts","admin-storage-cloud.ts"];
 
 function run(command, args) {
   const r = spawnSync(command, args, { cwd: worker, encoding: "utf8", env: process.env, shell: process.platform === "win32", stdio: "inherit" });
@@ -28,7 +28,7 @@ for (const name of files) {
   errors += sf.parseDiagnostics?.length || 0;
 }
 if (errors) process.exit(2);
-console.log("WORKER_PARSE_GROUP_A_PASS");
+console.log("WORKER_PARSE_GROUP_A1_PASS");
 `);
 try { run("node", ["scripts/temp-parse-group.mjs"]); }
 finally { rmSync(probe, { force: true }); }
