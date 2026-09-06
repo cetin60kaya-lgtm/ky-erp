@@ -79,19 +79,25 @@ function Empty({ title, text }) {
   return <div className="eb-empty"><FileText size={30} /><strong>{title}</strong><span>{text}</span></div>;
 }
 
-function UploadPanel({ onUploaded }) {
+function UploadPanel({ onUploaded, ocrProvider }) {
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [direction, setDirection] = useState("INCOMING");
   const [kind, setKind] = useState("AUTO");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const ocrConfigured = Boolean(ocrProvider?.ocrConfigured);
+  const hasScanFile = files.some((file) => !/\.xml$/i.test(file.name));
   const addFiles = (list) => {
     const next = Array.from(list || []).filter((file) => /\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name));
     setFiles((current) => [...current, ...next].slice(0, 20));
   };
   const send = async () => {
     if (!files.length || busy) return;
+    if (hasScanFile && !ocrConfigured) {
+      setMessage("PDF/görsel OCR production ortamında yapılandırılmamış. XML belge yüklemeye devam edebilirsiniz.");
+      return;
+    }
     setBusy(true); setMessage("");
     try {
       const result = await uploadEBelge(files, { direction, documentKind: kind });
@@ -103,7 +109,8 @@ function UploadPanel({ onUploaded }) {
     finally { setBusy(false); }
   };
   return <section className="eb-upload-card">
-    <div className="eb-section-title"><div><strong>Belge Yükleme</strong><span>XML doğrudan UBL-TR olarak okunur. PDF ve görseller belge yapay zekâsı ile analiz edilir.</span></div></div>
+    <div className="eb-section-title"><div><strong>Belge Yükleme</strong><span>XML doğrudan UBL-TR olarak okunur. PDF ve görseller yalnız canlı OCR servisi hazırsa analiz edilir.</span></div></div>
+    <div className={`eb-ocr-status ${ocrConfigured ? "ok" : "warn"}`}><strong>{ocrConfigured ? "PDF / Görsel OCR Hazır" : "PDF / Görsel OCR Hazır Değil"}</strong><span>{ocrConfigured ? `${ocrProvider?.ocrProvider || "Document Intelligence"} · endpoint + secret doğrulandı` : "XML ve manuel giriş çalışır; PDF/JPEG/PNG otomatik okuma için Azure Document Intelligence endpoint + secret gerekir."}</span></div>
     <div className="eb-upload-options">
       <label>Yön<select value={direction} onChange={(e) => setDirection(e.target.value)}><option value="INCOMING">Gelen</option><option value="OUTGOING">Giden</option></select></label>
       <label>Belge türü<select value={kind} onChange={(e) => setKind(e.target.value)}><option value="AUTO">Otomatik</option><option value="FATURA">Fatura</option><option value="IRSALIYE">İrsaliye</option></select></label>
@@ -113,7 +120,7 @@ function UploadPanel({ onUploaded }) {
     </button>
     <input ref={inputRef} type="file" multiple accept=".xml,.pdf,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff" hidden onChange={(e) => addFiles(e.target.files)} />
     {files.length > 0 && <div className="eb-file-queue">{files.map((file, index) => <div key={`${file.name}-${index}`}><FileText size={16} /><span>{file.name}</span><small>{(file.size / 1024 / 1024).toFixed(2)} MB</small><button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><X size={15} /></button></div>)}</div>}
-    <div className="eb-upload-footer"><span>{message}</span><button type="button" className="eb-primary" disabled={!files.length || busy} onClick={send}>{busy ? <LoaderCircle className="eb-spin" size={17} /> : <Upload size={17} />} Havuzuna Al</button></div>
+    <div className="eb-upload-footer"><span>{message || (hasScanFile && !ocrConfigured ? "Seçimde PDF/görsel var; OCR hazır olmadan bu dosyalar işlenmez." : "")}</span><button type="button" className="eb-primary" disabled={!files.length || busy || (hasScanFile && !ocrConfigured)} onClick={send}>{busy ? <LoaderCircle className="eb-spin" size={17} /> : <Upload size={17} />} Havuzuna Al</button></div>
   </section>;
 }
 
@@ -181,7 +188,7 @@ export default function EBelgeCenterPage({ activeMainCompany, openModule, initia
     try {
       const data = await getEBelgePool({ filter, q: query, from, to, page: 1, pageSize: 100 });
       setPool(data || { items: [], stats: {}, total: 0 });
-      if (view === "integrations") setIntegrations(await getEBelgeIntegrations());
+      if (view === "integrations" || view === "upload") setIntegrations(await getEBelgeIntegrations());
     } catch (e) { setError(e.message || "e-Belge Merkezi yüklenemedi."); }
     finally { setBusy(false); }
   }, [filter, query, from, to, view]);
@@ -209,7 +216,7 @@ export default function EBelgeCenterPage({ activeMainCompany, openModule, initia
     {error && <div className="eb-error"><AlertTriangle size={18} />{error}</div>}
     {syncNotice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>İşNet Senkronizasyonu</strong><span>{syncNotice}</span></div></div>}
     {view === "overview" && <><div className="eb-stats"><StatCard label="Toplam Belge" value={pool.stats?.total} hint="Havuzdaki aktif belge" /><StatCard label="Gelen Fatura" value={pool.stats?.incomingInvoices} hint="Tedarikçi / gider" /><StatCard label="Giden Fatura" value={pool.stats?.outgoingInvoices} hint="Müşteri satış" /><StatCard label="İrsaliye" value={pool.stats?.dispatches} hint="Gelen + giden" /><StatCard label="Muhasebeleşti" value={pool.stats?.posted} hint="Son onay tamamlandı" /></div><div className="eb-overview-note"><CheckCircle2 size={20} /><div><strong>Kontrollü akış</strong><span>Belge otomatik okunabilir ve eşleşebilir; cari, KDV, stok ve LOT etkisi son onaydan önce oluşmaz.</span></div></div></>}
-    {view === "upload" && <UploadPanel onUploaded={() => { setView("issues"); load(); }} />}
+    {view === "upload" && <UploadPanel ocrProvider={(integrations?.providers || []).find((row) => row.key === "MANUAL")} onUploaded={() => { setView("issues"); load(); }} />}
     {view === "integrations" && <section className="eb-integration-grid">{(integrations?.providers || []).map((provider) => <div className="eb-integration-provider" key={provider.key}><button type="button" onClick={() => provider.key === "ISNET" && openModule?.("isnet", { tabKey: "yonetim-merkezi" })}><Wifi size={22} /><span><strong>{provider.label}</strong><small>{provider.key === "ISNET" ? `${provider.status} · ${Number(provider.canonicalDocumentCount || 0)} canonical belge` : provider.key === "MANUAL" ? (provider.ocrConfigured ? "XML + PDF/Görsel OCR hazır" : "XML hazır · PDF/Görsel OCR yapılandırılmadı") : provider.status}</small>{provider.key === "ISNET" && provider.lastSyncAt && <small>Son senkron: {new Date(provider.lastSyncAt).toLocaleString("tr-TR")}</small>}</span>{provider.key === "ISNET" && <Link2 size={16} />}</button>{provider.key === "ISNET" && <button type="button" className="eb-primary" disabled={busy || !provider.configured} onClick={synchronizeIsnet}>{busy ? <LoaderCircle className="eb-spin" size={16} /> : <RefreshCw size={16} />} Şimdi Senkronize Et</button>}</div>)}<div className="eb-archive-summary"><Archive size={22} /><div><strong>File Hub Arşiv Kuyruğu</strong>{(integrations?.archive || []).map((row) => <span key={row.status}>{row.status}: {row.n}</span>)}</div></div></section>}
     {view === "matching" && <div className="eb-toolbar-callout"><div><Link2 size={20} /><span><strong>Toplu fatura–irsaliye kontrolü</strong><small>Firma, yön, ürün kodu/açıklaması, birim ve miktar üzerinden tüm açık faturaları tekrar kontrol eder.</small></span></div><button type="button" className="eb-primary" disabled={busy} onClick={async () => { setBusy(true); try { await reconcileAllEBelge(); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); } }}>Tümünü Eşleştir</button></div>}
     {view !== "upload" && view !== "integrations" && <section className="eb-pool"><div className="eb-pool-toolbar"><div className="eb-search"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Belge no, firma veya VKN ara" /></div><label>Başlangıç<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label><label>Bitiş<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label><span>{pool.total || 0} kayıt</span></div>{busy && !rows.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belgeler yükleniyor</div> : rows.length ? <div className="eb-table"><div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Kontrol</span></div>{rows.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Eşleşmedi"}</strong><small>{row.party_tax_no || ""}</small></span><span>{dateText(row.issue_date)}</span><span><small>{sourceLabel(row.source_type)}</small><em>{row.archive_status || "-"}</em></span><span><strong>{money(row.payable_total, row.currency)}</strong><small>KDV {money(row.tax_total, row.currency)}</small></span><span><i className={`eb-status ${tone(row)}`}>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : statusLabel(row.status)}</i><small>{row.line_count || 0} kalem</small></span></button>)}</div> : <Empty title="Bu görünümde belge yok" text="Filtreyi değiştirin veya yeni belge yükleyin." />}</section>}
