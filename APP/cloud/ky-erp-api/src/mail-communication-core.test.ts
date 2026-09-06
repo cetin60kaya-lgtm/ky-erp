@@ -39,7 +39,7 @@ test("mail core is fail-closed for tenant, membership and approvals", () => {
   assert.match(source, /AES-GCM/);
   assert.match(source, /mail_account_members/);
   assert.match(source, /MAIL_REQUESTER_INITIAL_MEMBER/);
-  assert.match(source, /COMPANY_OWNER_STEP_PENDING/);
+  assert.match(source, /\.bind\(crypto\.randomUUID\(\),tenant,requestId,"COMPANY_OWNER",1,1,"PENDING"/);
   assert.match(source, /m\.user_id=\?/);
   assert.doesNotMatch(source, /COMPANY_OWNER_AND_APP_OWNER/);
   assert.match(source, /normalizeCompanyOwnerOnlyApprovals/);
