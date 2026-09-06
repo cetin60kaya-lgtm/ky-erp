@@ -45,3 +45,31 @@ test("worker source no longer contains the literal escaped import regression",()
   assert.doesNotMatch(main,/;\\nimport \{ ensureMailCommunicationCore0050/);
   assert.match(wrangler,/"main": "src\/main-entry-mail\.ts"/);
 });
+
+
+test("daily Mail Center can connect Gmail and keeps account setup out of the inbox flow",()=>{
+  const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(source,/startGoogleMailOAuth/);
+  assert.match(source,/Google Hesabını Bağla/);
+  assert.match(source,/comm-modal-backdrop/);
+  assert.match(source,/messageSearch/);
+  assert.match(source,/replyToMessageId/);
+});
+
+test("Gmail account approval follows current company-owner governance",()=>{
+  const source=read("./mail-provider-overlay.ts");
+  assert.match(source,/policy="COMPANY_OWNER"/);
+  assert.doesNotMatch(source,/COMPANY_OWNER_AND_APP_OWNER/);
+  assert.doesNotMatch(source,/"APP_OWNER",2,1,"PENDING"/);
+});
+
+
+test("reply-waiting view is server-derived instead of misusing incoming flags",()=>{
+  const core=read("./mail-communication-core.ts");
+  const ui=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(core,/awaitingReply/);
+  assert.match(core,/m\.direction='OUTGOING'/);
+  assert.match(core,/NOT EXISTS \(SELECT 1 FROM mail_messages newer/);
+  assert.match(ui,/awaitingReply: 1/);
+  assert.doesNotMatch(ui,/mail-yanit-bekleyen\" \? list\.filter/);
+});
