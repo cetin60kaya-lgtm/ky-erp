@@ -11,6 +11,7 @@ on:
       - "APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql"
       - "APP/cloud/ky-erp-api/local-accounting-quick-smoke.sql"
       - "APP/cloud/ky-erp-api/local-accounting-quick-smoke-seed.sql"
+      - "APP/cloud/ky-erp-api/local-accounting-canonical-report-smoke.sql"
       - "APP/app/ky-erp-frontend/src/main.jsx"
       - "APP/app/ky-erp-frontend/src/AppV3.jsx"
       - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
@@ -172,7 +173,8 @@ jobs:
             migrations/0040_accounting_fibe_company_tracking.sql \
             migrations/0034_accounting_document_core.sql \
             migrations/0046_accounting_canonical_report_controls.sql \
-            local-accounting-quick-smoke-seed.sql; do
+            local-accounting-quick-smoke-seed.sql \
+            local-accounting-canonical-report-smoke.sql; do
             npx wrangler d1 execute ky-erp-production-local \
               --local \
               --config wrangler.production-local.jsonc \
@@ -240,6 +242,11 @@ jobs:
 
           check_ok ik \
             'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan'
+
+          curl --fail --silent \
+            'http://127.0.0.1:8790/api/muhasebe/accounting/reports/records?mainCompanySlug=mecit-hakan&startDate=2026-09-06&endDate=2026-09-06&firmId=company-canonical-report-smoke' \
+            | tee /tmp/accounting-canonical-report.json \
+            | jq -e '.ok == true and .data.summary.totalIncome == 1180 and .data.summary.totalExpense == 590 and .data.summary.netResult == 590 and (.data.records | length) == 2 and (.data.generalExpenses | length) == 1 and .data.generalExpenses[0].category == "Nakliye"'
 
           curl --fail --silent \
             'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \
