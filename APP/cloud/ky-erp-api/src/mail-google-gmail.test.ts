@@ -45,3 +45,20 @@ test("worker source no longer contains the literal escaped import regression",()
   assert.doesNotMatch(main,/;\\nimport \{ ensureMailCommunicationCore0050/);
   assert.match(wrangler,/"main": "src\/main-entry-mail\.ts"/);
 });
+
+
+test("daily Mail Center can connect Gmail and keeps account setup out of the inbox flow",()=>{
+  const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(source,/startGoogleMailOAuth/);
+  assert.match(source,/Google Hesabını Bağla/);
+  assert.match(source,/comm-modal-backdrop/);
+  assert.match(source,/messageSearch/);
+  assert.match(source,/replyToMessageId/);
+});
+
+test("Gmail account approval follows current company-owner governance",()=>{
+  const source=read("./mail-provider-overlay.ts");
+  assert.match(source,/policy="COMPANY_OWNER"/);
+  assert.doesNotMatch(source,/COMPANY_OWNER_AND_APP_OWNER/);
+  assert.doesNotMatch(source,/"APP_OWNER",2,1,"PENDING"/);
+});
