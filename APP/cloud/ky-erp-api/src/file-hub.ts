@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { approvalPendingPayload, consumeCriticalApproval, requestCriticalApproval } from "./approval-center-cloud";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -50,9 +51,17 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     const owner=await requireOwner(c); if(!owner) return c.json(err("OWNER_ONLY","Depolama bağlantısı yalnız uygulama sahibi tarafından eklenebilir."),403);
     const b=await bodyOf(c), slug=slugOf(c,b), provider=upper(b.providerType);
     if(!["GOOGLE_DRIVE","ONEDRIVE","LOCAL_FOLDER","NAS","SHAREPOINT"].includes(provider)) return c.json(err("INVALID_PROVIDER","Geçersiz depolama sağlayıcısı."),422);
+    const approval=await requestCriticalApproval(c,owner,{
+      mainCompanySlug:slug,sourceModule:"STORAGE",actionType:"STORAGE_CONNECTION_CREATE",targetType:"STORAGE_PROVIDER",targetId:provider,
+      title:"Depolama Servisi Ekle",description:(text(b.name)||provider)+" depolama servisi firmaya eklenecek.",riskLevel:"HIGH",
+      approvalPolicy:"COMPANY_OWNER_OR_APP_OWNER",payload:{providerType:provider,name:text(b.name),isPrimary:bool(b.isPrimary,false),localRootPath:text(b.localRootPath)},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(err("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan depolama servisi eklenemez."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     const id=crypto.randomUUID(), ts=now();
     if(bool(b.isPrimary,false)) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts,slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,slug,provider,text(b.name)||provider,bool(b.isActive,true)?1:0,bool(b.isPrimary,false)?1:0,text(b.localRootPath)||null,text(b.remoteRootId)||null,text(b.remoteRootName)||null,upper(b.syncMode)||"AGENT",upper(b.connectionStatus)||"UNKNOWN",JSON.stringify(b.metadata||{}),ts,ts).run();
+    await consumeCriticalApproval(c,owner,text(approval.request?.id),{storageConnectionId:id,provider});
     await event(c,slug,"CONNECTION_CREATED",{actorType:"USER",actorId:owner.id,storageConnectionId:id,details:{provider}});
     return c.json({ok:true,data:{id}},201);
   });
@@ -61,8 +70,16 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     const owner=await requireOwner(c); if(!owner) return c.json(err("OWNER_ONLY","Depolama bağlantısı yalnız uygulama sahibi tarafından değiştirilebilir."),403);
     const b=await bodyOf(c), slug=slugOf(c,b), id=c.req.param("id"), ts=now();
     const old=await c.env.DB.prepare(`SELECT * FROM file_hub_connections WHERE id=? AND main_company_slug=?`).bind(id,slug).first<Row>(); if(!old) return c.json(err("NOT_FOUND","Bağlantı bulunamadı."),404);
+    const approval=await requestCriticalApproval(c,owner,{
+      mainCompanySlug:slug,sourceModule:"STORAGE",actionType:"STORAGE_CONNECTION_UPDATE",targetType:"FILE_HUB_CONNECTION",targetId:id,
+      title:"Depolama Servisi Ayarını Değiştir",description:text(old.name||old.provider_type)+" bağlantısının yapılandırması değiştirilecek.",riskLevel:"HIGH",
+      approvalPolicy:"COMPANY_OWNER_OR_APP_OWNER",payload:{connectionId:id,name:b.name,isActive:b.isActive,isPrimary:b.isPrimary,localRootPath:b.localRootPath,remoteRootId:b.remoteRootId,remoteRootName:b.remoteRootName,syncMode:b.syncMode},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(err("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan depolama servisi değiştirilemez."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     const isPrimary=b.isPrimary===undefined?Number(old.is_primary):bool(b.isPrimary)?1:0; if(isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=? AND id<>?`).bind(ts,slug,id).run();
     await c.env.DB.prepare(`UPDATE file_hub_connections SET name=?,is_active=?,is_primary=?,local_root_path=?,remote_root_id=?,remote_root_name=?,sync_mode=?,metadata=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(text(b.name)||old.name,b.isActive===undefined?old.is_active:bool(b.isActive)?1:0,isPrimary,b.localRootPath===undefined?old.local_root_path:text(b.localRootPath)||null,b.remoteRootId===undefined?old.remote_root_id:text(b.remoteRootId)||null,b.remoteRootName===undefined?old.remote_root_name:text(b.remoteRootName)||null,upper(b.syncMode)||old.sync_mode,JSON.stringify(b.metadata===undefined?json(old.metadata):b.metadata||{}),ts,id,slug).run();
+    await consumeCriticalApproval(c,owner,text(approval.request?.id),{storageConnectionId:id});
     await event(c,slug,"CONNECTION_UPDATED",{actorType:"USER",actorId:owner.id,storageConnectionId:id}); return c.json({ok:true});
   });
 
