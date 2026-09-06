@@ -65,7 +65,7 @@ export default function AdminMailApprovals({ compact = false, onChanged }) {
       <div className="admpro-card-head">
         <div>
           <h3>Mail Hesabı Onayları</h3>
-          <p>Yeni Outlook / Gmail hesapları giriş onayları gibi burada karar kuyruğuna düşer.</p>
+          <p>Normal kullanıcıların Outlook / Gmail talepleri burada karar kuyruğuna düşer. Firma Sahibi / İşveren ve Süper Yönetici kendi taleplerinde onay beklemez.</p>
         </div>
         <span className={`admpro-badge ${pending.length ? "warn" : "ok"}`}>{pending.length} bekleyen</span>
       </div>
