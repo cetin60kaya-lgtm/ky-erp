@@ -538,10 +538,24 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
               const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
               const existing = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
               const ready = Boolean(runtime?.adapterReady && runtime?.configured);
-              return <article key={preset.key} className="comm-direct-mail-card">
+              const accountActive = String(existing?.status || "").toUpperCase() === "ACTIVE";
+              const buttonLabel = accountActive ? "Posta Kutusunu Aç" : existing ? "Hesabı Bağla" : "Ekle & Bağla";
+              const statusText = accountActive
+                ? "Bağlı ve kullanıma hazır"
+                : ready
+                  ? "Güvenli sağlayıcı girişi ile bağlanır"
+                  : "Bağlantı servisi canlı yayın bekliyor";
+              return <article key={preset.key} className={`comm-direct-mail-card ${accountActive ? "connected" : ready ? "ready" : "waiting"}`}>
                 <div><b>{preset.title}</b><span>{preset.emailAddress}</span><small>{providerLabel(preset.providerType)} · {preset.departmentCode === "DESEN" ? "Desen bölümü" : "Şirket ana maili"}</small></div>
-                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || !ready}>{existing ? "Hesabı Bağla" : "Direkt Ekle & Bağla"}</button>
-                {!ready ? <em>{runtime?.reason || "Sağlayıcı production OAuth ayarı henüz doğrulanmadı."}</em> : null}
+                <button type="button" onClick={() => {
+                  if (accountActive) {
+                    setSelectedAccountId(String(existing.id));
+                    setRequestOpen(false);
+                    return;
+                  }
+                  addAndConnectPreset(preset);
+                }} disabled={loading || (!ready && !accountActive)}>{buttonLabel}</button>
+                <small className="comm-direct-mail-status">{statusText}</small>
               </article>;
             })}
           </div> : null}
