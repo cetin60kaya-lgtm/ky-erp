@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, RefreshCcw, Truck } from "lucide-react";
-import { getIsnetDocumentCenter } from "../../../services/isnetDocumentCenterApi";
+import { getEBelgePool } from "../../../services/eBelgeApi";
 import SupplierInventoryWorkspace from "./SupplierInventoryWorkspace";
 import DocumentPoolPanel from "./DocumentPoolPanel";
 import "./supplierDocumentsWorkspace.css";
@@ -13,6 +13,14 @@ const dateText = (value) => {
     : parsed.toLocaleDateString("tr-TR");
 };
 
+const sourceText = (row = {}) => {
+  const source = String(row.source_type || row.provider_type || "MANUAL").toUpperCase();
+  if (source.includes("ISNET")) return "İşNet";
+  if (source.includes("XML")) return "XML";
+  if (source.includes("AI") || source.includes("SCAN")) return "PDF / Görsel";
+  return row.provider_type || row.source_type || "Manuel";
+};
+
 export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshKey = 0 }) {
   const [dispatches, setDispatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +29,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
   const params = useMemo(() => ({
     mainCompanySlug: activeMainCompany?.slug,
     mainCompanyId: activeMainCompany?.id,
-    category: "SUPPLIER_INCOMING_DISPATCH",
+    filter: "INCOMING_DISPATCH",
     page: 1,
     pageSize: 100,
   }), [activeMainCompany?.id, activeMainCompany?.slug]);
@@ -30,8 +38,8 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
     setLoading(true);
     setError("");
     try {
-      const result = await getIsnetDocumentCenter(params);
-      setDispatches(Array.isArray(result?.rows) ? result.rows : []);
+      const result = await getEBelgePool({ ...params, _ts: Date.now() });
+      setDispatches(Array.isArray(result?.items) ? result.items : []);
     } catch (requestError) {
       setDispatches([]);
       setError(requestError?.message || "Tedarikçi irsaliyeleri alınamadı.");
@@ -49,29 +57,29 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
       <section className="sdw-flow">
         <div><Truck size={20} /><strong>Tedarikçi Alış Zinciri</strong></div>
         <p><b>Tedarikçiden Gelen İrsaliye</b><span>→</span><b>Tedarikçiden Gelen Fatura</b><span>→</span>Gider / KDV / Stok-Lot / Cari</p>
-        <small>İşNet bu akışın sağlayıcılarından biridir. Manuel XML/PDF/tarama belgeleri Akıllı Belge Havuzu üzerinden aynı canonical muhasebe çekirdeğine girer.</small>
+        <small>İşNet yalnız sağlayıcılardan biridir. İşNet, manuel XML/PDF ve tarama belgeleri aynı canonical e-Belge havuzunda birlikte görünür.</small>
       </section>
 
       <section className="sdw-card">
         <header>
-          <div><Truck size={18} /><span><strong>Tedarikçiden Gelen İrsaliyeler</strong><small>İşNet satınalma belgeleri</small></span></div>
+          <div><Truck size={18} /><span><strong>Tedarikçiden Gelen İrsaliyeler</strong><small>Canonical e-Belge havuzu · tüm sağlayıcılar</small></span></div>
           <button type="button" onClick={load}><RefreshCcw size={15} /> Yenile</button>
         </header>
         {error ? <div className="sdw-message error">{error}</div> : null}
         {loading ? <div className="sdw-empty">Tedarikçi irsaliyeleri yükleniyor…</div> : dispatches.length ? (
           <div className="sdw-table-wrap">
-            <table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>PDF</th><th>XML</th><th>Durum</th></tr></thead><tbody>
+            <table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>Kaynak</th><th>Kalem</th><th>Kontrol</th></tr></thead><tbody>
               {dispatches.map((row) => <tr key={row.id}>
-                <td>{dateText(row.dateText)}</td>
-                <td><strong>{row.partnerName || "Firma eşleşmesi bekliyor"}</strong></td>
-                <td>{row.documentNo || "-"}</td>
-                <td>{row.pdfSaved ? "Hazır" : "Eksik"}</td>
-                <td>{row.xmlSaved ? "Hazır" : "Eksik"}</td>
-                <td>Tedarikçi faturası beklenir</td>
+                <td>{dateText(row.issue_date || row.created_at)}</td>
+                <td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td>
+                <td>{row.document_no || "-"}</td>
+                <td>{sourceText(row)}</td>
+                <td>{Number(row.line_count || 0)}</td>
+                <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td>
               </tr>)}
             </tbody></table>
           </div>
-        ) : <div className="sdw-empty"><FileText size={24} /><strong>Tedarikçi irsaliyesi yok</strong><span>İşNet senkronizasyonunda gelen tedarikçi irsaliyeleri burada görünür.</span></div>}
+        ) : <div className="sdw-empty"><FileText size={24} /><strong>Tedarikçi irsaliyesi yok</strong><span>İşNet, XML/PDF veya taramadan gelen tedarikçi irsaliyeleri burada birlikte görünür.</span></div>}
       </section>
 
       <section className="sdw-invoice-head">
