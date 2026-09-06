@@ -27,9 +27,11 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   const companyAdmin = canonicalRole(user?.role) === "COMPANY_ADMIN";
 
   if (String(activeTab || "").startsWith("depolama-")) {
-    return owner
-      ? <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />
-      : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    if (owner) return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+    if (companyAdmin && activeTab !== "depolama-yedekleme") {
+      return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+    }
+    return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "admin-yonetim-ozeti") {
     return owner
@@ -62,7 +64,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     return owner ? <AdminCompanyBilling activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "dosya-klasor-yonetimi") {
-    return owner ? <AdminStorageCenter activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    return (owner || companyAdmin) ? <AdminStorageCenter activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "eslestirmeler") {
     return owner ? <AdminMappings activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
