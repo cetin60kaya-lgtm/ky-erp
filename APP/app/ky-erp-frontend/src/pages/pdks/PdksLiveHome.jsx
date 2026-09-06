@@ -10,16 +10,13 @@ const fmtDate = (value) => {
 const isOnline = (value) => Boolean(value) && Date.now() - new Date(value).getTime() < 300000;
 
 const QUICK = [
-  ["giris-cikislar", "Giriş-Çıkış Listesi", "Son kart hareketleri ve personel bazlı geçişler", "↔"],
-  ["puantaj-sonuclari", "Puantaj Özet Raporu", "Ayın çalışma, eksik basım ve mesai özeti", "▦"],
-  ["personel-bilgileri", "Personel Listesi", "İK ana kaynağındaki PDKS personelleri", "♟"],
-  ["raporlar", "Devamsızlık / Geç Kalma", "Kontrol gerektiren günleri tek listede aç", "!"],
-  ["izinler", "İzinli Personeller", "İK izin kaydının puantaj yansıması", "◷"],
-  ["gruplar-vardiyalar", "Vardiya Planları", "Mesai grupları, tolerans ve çalışma günleri", "⌚"],
-  ["cihaz-baglantilari", "Cihaz Sağlığı", "Windows Agent ve terminal heartbeat durumu", "▣"],
+  ["giris-cikislar", "Giriş / Çıkış", "Son kart hareketleri ve personel geçişleri", "↔"],
+  ["puantaj-sonuclari", "Puantaj Özeti", "Çalışma, eksik basım, geç/erken ve mesai", "▦"],
+  ["personel-bilgileri", "Personel", "İK ana kaynağındaki kartlı çalışanlar", "♟"],
+  ["izinler", "İzinler", "İK izin kaydının puantaj yansıması", "◷"],
+  ["cihaz-baglantilari", "Cihaz Sağlığı", "Windows Agent ve terminal bağlantıları", "▣"],
   ["denetim-yillik-temp", "Yıllık Denetim", "Kart ve puantaj denetim paketini hazırla", "✓"],
-  ["raporlar", "Fazla Mesai Analizi", "Normal / hafta tatili / resmî tatil çalışması", "+"],
-];
+]
 
 export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const company = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
@@ -103,7 +100,7 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
 
       <div className="plh-two">
         <section className="plh-section">
-          <div className="plh-title"><div><span>TEK TIK</span><h2>Hızlı Raporlar</h2></div></div>
+          <div className="plh-title"><div><span>TEK TIK</span><h2>Hızlı İşlemler</h2></div></div>
           <div className="plh-quick">
             {QUICK.map(([tab, label, hint, icon], index) => (
               <button type="button" key={`${tab}-${index}`} onClick={() => go(tab)}>

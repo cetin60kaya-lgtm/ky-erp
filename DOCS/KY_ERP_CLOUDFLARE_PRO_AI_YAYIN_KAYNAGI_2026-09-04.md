@@ -5,7 +5,7 @@
 **Repo:** `cetin60kaya-lgtm/ky-erp`  
 **Production branch:** `codex/model-uretim-kontrol-merkezi-final`
 
-Bu dosya KY ERP'nin Cloudflare Pro, AI/otomasyon, Git auto-deploy ve GitHub Actions'sız production yayın düzeni için canonical devam kaydıdır. Secret/token değerleri bu dosyaya yazılmaz.
+Bu dosya KY ERP'nin Cloudflare Pro ve AI/otomasyon mimarisi için canonical devam kaydıdır. **Production canlıya alma prosedürünün tek üstün kaynağı `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` dosyasıdır.** Deploy konusunda çelişki olursa 06.09 canonical deploy sözleşmesi geçerlidir. Secret/token değerleri bu dosyaya yazılmaz.
 
 ---
 
@@ -13,7 +13,7 @@ Bu dosya KY ERP'nin Cloudflare Pro, AI/otomasyon, Git auto-deploy ve GitHub Acti
 
 - GitHub = kaynak kodu ve geçmiş.
 - Cloudflare = production runtime, güvenlik, deploy ve AI/otomasyon merkezi.
-- GitHub Actions = otomatik production yolu DEĞİL; yalnız manual/emergency fallback.
+- GitHub Actions = production deploy yolu DEĞİL. Normal release/hotfix için kullanılmaz; yalnız kullanıcı açıkça isterse manual tanılama/test çalıştırılabilir.
 - Frontend = Cloudflare Pages.
 - API = Cloudflare Worker `ky-erp-api`.
 - Database = Cloudflare D1 `ky-erp-db`.
@@ -53,6 +53,8 @@ Pro tarafında KY ERP için kullanılacak başlıklar:
 ---
 
 ## 3. Actions'sız otomatik yayın — doğrulanmış
+
+> Güncel operasyon kuralı: normal canlıya almada kullanıcıdan PowerShell/token istenmez; production merge sonrası Cloudflare Git Integration otomatik çalışır. Worker build/test fail olursa manuel deploy ile bypass edilmez. Ayrıntı: `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
 
 ### Frontend / Pages
 
@@ -107,7 +109,7 @@ Yeni normal yayın akışı:
 
 `production branch push -> Cloudflare Git build -> test/build -> Worker veya Pages deploy`
 
-GitHub Actions dakikası normal production deploy için harcanmaz.
+GitHub Actions normal production deploy için hiç kullanılmaz; production sonucu Cloudflare Git Integration üzerinden doğrulanır.
 
 ---
 
@@ -374,3 +376,10 @@ Yarın buradan devam edilecek:
 - GitHub Actions otomatik production yolu olarak kullanılmayacak; Cloudflare Git Integration canonical deploy yoludur.
 
 Kullanıcı talebi: **Yarın minimum soru ile buradan devam et.**
+
+
+---
+
+## 14. 06.09.2026 güncellemesi
+
+Production deploy için GitHub Actions kullanılmaması kesinleştirildi. Sağ üst Bildirim Merkezi gerçek notification API'ye bağlandı. Ayrıntılı son kaynak: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.

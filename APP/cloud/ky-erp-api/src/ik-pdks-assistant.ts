@@ -74,17 +74,6 @@ async function writeAudit(c: Context<AppEnv>, company: string, employeeId: strin
   } catch {}
 }
 
-function parseAmount(command: string) {
-  const normalized = text(command).replace(/\./g, "").replace(/,/g, ".");
-  const match = normalized.match(/\b(\d+(?:\.\d+)?)\s*(?:tl|₺)\b/i);
-  return match ? Number(match[1]) : 0;
-}
-
-function parseHours(command: string) {
-  const match = trFold(command).match(/\b(\d+(?:[.,]\d+)?)\s*saat\b/);
-  return match ? Number(match[1].replace(",", ".")) : 0;
-}
-
 export function registerIkPdksAssistantRoutes(app: Hono<AppEnv>) {
   app.post("/api/ik/personnel-control/assistant/command", async (c) => {
     const user = await getAuthenticatedUser(c);
@@ -95,23 +84,27 @@ export function registerIkPdksAssistantRoutes(app: Hono<AppEnv>) {
     const body = await bodyOf(c);
     const command = text(body.command);
     if (!command) return error(c, 400, "COMMAND_REQUIRED", "Asistan komutu boş olamaz.");
+    const folded = trFold(command);
+    const financeTerms = ["avans","bordro","maas","banka","elden","kesinti","icra","haciz","fibe"];
+    if (financeTerms.some((term) => folded.includes(term))) {
+      return error(c, 422, "PDKS_FINANCE_NOT_ALLOWED", "Finans ve bordro işlemleri PDKS'den yapılamaz. İK İşlem Merkezi'ni kullanın.");
+    }
     const company = text(c.req.header("X-KYERP-Tenant-Slug") || body.mainCompanyId || body.mainCompanySlug || user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY).toLocaleLowerCase("tr-TR");
 
-    const result = await c.env.DB.prepare(`SELECT e.id,e.code,e.full_name,e.department,e.sgk_status,s.card_no
+    const result = await c.env.DB.prepare(`SELECT e.id,e.code,e.full_name,e.department,s.card_no
       FROM hr_monthly_employees e
       JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-      WHERE e.main_company_id=? AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR' AND TRIM(COALESCE(s.card_no,''))<>''
+      WHERE e.main_company_id=?
+        AND UPPER(COALESCE(s.active_passive,e.status,'AKTIF')) NOT LIKE '%PAS%'
+        AND TRIM(COALESCE(s.card_no,''))<>''
       ORDER BY LENGTH(e.full_name) DESC`).bind(company).all<Row>();
-    const folded = trFold(command);
     const people = result.results || [];
     const person = people.find((row) => folded.includes(trFold(row.full_name)))
       || people.find((row) => text(row.code) && folded.includes(trFold(row.code)));
-    if (!person) return error(c, 404, "PDKS_PERSON_NOT_FOUND", "Komuttaki SGK=VAR + kartlı personel bulunamadı. Ad soyadı tam yazın.");
+    if (!person) return error(c, 404, "PDKS_PERSON_NOT_FOUND", "Komuttaki aktif kartlı personel bulunamadı. Ad soyadı tam yazın.");
 
     const date = dateFromCommand(command);
     const time = timeFromCommand(command);
-    const amount = parseAmount(command);
-    const hours = parseHours(command);
     const commit = body.commit === true;
 
     let locked = false;
@@ -151,30 +144,23 @@ export function registerIkPdksAssistantRoutes(app: Hono<AppEnv>) {
             .bind(crypto.randomUUID(), company, text(person.id), cardNo, date, time, "IN", "KYERP_PDKS_ASSISTANT", "Asistan giriş kaydı", text(user.id), nowIso(), nowIso()).run();
         }
       }
-    } else if (folded.includes("avans") && amount > 0) {
-      action = "ADVANCE";
-      payload.amount = amount;
-      summary = `${text(person.full_name)} · ${date} · ${amount.toLocaleString("tr-TR")} TL avans`;
+    } else if ((folded.includes("cikis") || folded.includes("cikti")) && time) {
+      action = "DEPARTURE";
+      payload.time = time;
+      summary = `${text(person.full_name)} · ${date} ${time} çıkış`;
       if (commit) {
-        await c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
-          (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
-          .bind(crypto.randomUUID(), text(person.id), date, "Avans", 0, amount, "Elden", "Bordrodan düş", "PDKS Asistan avans", "APPROVED", nowIso()).run();
-      }
-    } else if (folded.includes("mesai") && hours > 0) {
-      action = "OVERTIME";
-      const type = folded.includes("hafta sonu") ? "Hafta Sonu Mesai" : folded.includes("resmi tatil") ? "Resmi Tatil Mesai" : "Hafta İçi Mesai";
-      payload.hours = hours;
-      payload.adjustmentType = type;
-      summary = `${text(person.full_name)} · ${date} · ${hours} saat ${type}`;
-      if (commit) {
-        await c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
-          (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
-          .bind(crypto.randomUUID(), text(person.id), date, type, hours, 0, "Bordro", "Bordroya ekle", "PDKS Asistan mesai", "APPROVED", nowIso()).run();
+        const cardNo = text(person.card_no);
+        const existing = await c.env.DB.prepare("SELECT id FROM ik_time_clock_events WHERE main_company_id=? AND card_no=? AND work_date=? AND event_time=? LIMIT 1")
+          .bind(company, cardNo, date, time).first<Row>();
+        if (!existing?.id) {
+          await c.env.DB.prepare(`INSERT INTO ik_time_clock_events
+            (id,main_company_id,employee_id,card_no,work_date,event_time,direction,source,note,actor_user_id,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .bind(crypto.randomUUID(), company, text(person.id), cardNo, date, time, "OUT", "KYERP_PDKS_ASSISTANT", "Asistan çıkış kaydı", text(user.id), nowIso(), nowIso()).run();
+        }
       }
     } else {
-      return error(c, 422, "PDKS_ASSISTANT_COMMAND_UNCLEAR", "Komut anlaşılamadı. Örnek: 'Ali bugün 08:42 geldi', 'Ali bugün gelmedi yok yaz', 'Ali için 5000 TL avans gir', 'Ali 10 saat hafta içi mesai ekle'.");
+      return error(c, 422, "PDKS_ASSISTANT_COMMAND_UNCLEAR", "Komut anlaşılamadı. Örnek: 'Ali bugün 08:42 geldi', 'Ali bugün gelmedi yok yaz', 'Ali bugün 18:55 çıkış yaptı'.");
     }
 
     if (commit) {

@@ -55,6 +55,7 @@ import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
 import { enforceIsnetTenant } from "./isnet-tenant-guard";
 import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
+import { registerNotificationRoutes } from "./notifications-cloud";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
@@ -66,7 +67,7 @@ type AnyRow = Record<string, any>;
 const AUTH_VERSION = "canonical-v3";
 const PASSWORD_SESSION_SECONDS = 0;
 const MFA_SESSION_SECONDS = 36_000;
-const OWNER_ROLLING_SESSION_SECONDS = 86_400;
+const OWNER_ROLLING_SESSION_SECONDS = 0;
 
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
@@ -171,6 +172,7 @@ registerEBelgeLineToolRoutes(app);
 registerAiCloudRoutes(app);
 registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
+registerNotificationRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobV2Routes(app);
@@ -371,6 +373,8 @@ shell.get("/api/auth/status", (c) => c.json({
     passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
     mfaSeconds: MFA_SESSION_SECONDS,
     ownerRollingSeconds: OWNER_ROLLING_SESSION_SECONDS,
+    ownerPersistentBrowserSession: false,
+    ownerAutomaticRefresh: false,
   },
 }));
 

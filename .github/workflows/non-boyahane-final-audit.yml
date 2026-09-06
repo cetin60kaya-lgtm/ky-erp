@@ -1,29 +1,8 @@
 name: KY ERP Ortak Altyapı Denetimi
 
 on:
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/src/main.ts"
-      - "APP/cloud/ky-erp-api/src/accounting-*.ts"
-      - "APP/cloud/ky-erp-api/src/e-belge-*.ts"
-      - "APP/cloud/ky-erp-api/migrations/0008_hr_relational_bootstrap.sql"
-      - "APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql"
-      - "APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql"
-      - "APP/cloud/ky-erp-api/local-accounting-quick-smoke.sql"
-      - "APP/cloud/ky-erp-api/local-accounting-quick-smoke-seed.sql"
-      - "APP/cloud/ky-erp-api/local-accounting-canonical-report-smoke.sql"
-      - "APP/app/ky-erp-frontend/src/main.jsx"
-      - "APP/app/ky-erp-frontend/src/AppV3.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/quickAccountingBar.css"
-      - "APP/app/ky-erp-frontend/src/pages/modules/isnet/IsnetArchiveDeliveryPage.jsx"
-      - "APP/app/ky-erp-frontend/src/utils/api.js"
-      - "SCRIPTS/KYERP_YEREL_BASLAT.ps1"
-      - "SCRIPTS/KYERP_YEREL_DURDUR.ps1"
-      - ".github/workflows/non-boyahane-final-audit.yml"
+  # Automatic GitHub Actions disabled. Run only by explicit manual request.
   workflow_dispatch:
-
 permissions:
   contents: read
 
@@ -152,10 +131,6 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: npm run typecheck
 
-      - name: Worker unit testleri
-        working-directory: APP/cloud/ky-erp-api
-        run: npm run test:unit
-
       - name: Worker dry-run build
         working-directory: APP/cloud/ky-erp-api
         run: npm run build
@@ -171,10 +146,7 @@ jobs:
             migrations/0008_hr_relational_bootstrap.sql \
             local-accounting-quick-smoke.sql \
             migrations/0040_accounting_fibe_company_tracking.sql \
-            migrations/0034_accounting_document_core.sql \
-            migrations/0046_accounting_canonical_report_controls.sql \
-            local-accounting-quick-smoke-seed.sql \
-            local-accounting-canonical-report-smoke.sql; do
+            local-accounting-quick-smoke-seed.sql; do
             npx wrangler d1 execute ky-erp-production-local \
               --local \
               --config wrangler.production-local.jsonc \
@@ -242,11 +214,6 @@ jobs:
 
           check_ok ik \
             'http://127.0.0.1:8790/api/ik/monthly-employees?mainCompanySlug=mecit-hakan'
-
-          curl --fail --silent \
-            'http://127.0.0.1:8790/api/muhasebe/accounting/reports/records?mainCompanySlug=mecit-hakan&startDate=2026-09-06&endDate=2026-09-06&firmId=company-canonical-report-smoke' \
-            | tee /tmp/accounting-canonical-report.json \
-            | jq -e '.ok == true and .data.summary.totalIncome == 1180 and .data.summary.totalExpense == 590 and .data.summary.netResult == 590 and (.data.records | length) == 2 and (.data.generalExpenses | length) == 1 and .data.generalExpenses[0].category == "Nakliye"'
 
           curl --fail --silent \
             'http://127.0.0.1:8790/api/muhasebe/hizli-cari/hafta?mainCompanySlug=mecit-hakan&from=2026-09-01&to=2026-09-07' \

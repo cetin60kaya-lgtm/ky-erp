@@ -1,15 +1,8 @@
 name: KY ERP Frontend Dependency Security
 
 on:
-  pull_request:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/app/ky-erp-frontend/package.json"
-      - "APP/app/ky-erp-frontend/package-lock.json"
-      - ".github/workflows/frontend-dependency-audit.yml"
+  # Automatic GitHub Actions disabled. Run only when explicitly requested.
   workflow_dispatch:
-
 permissions:
   contents: read
 

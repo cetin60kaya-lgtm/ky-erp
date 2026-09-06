@@ -188,6 +188,8 @@ Bir modül için doğru sıra:
 
 **Desktop'ta çalıştı = otomatik olarak production'a al demek değildir.**
 
+Production yayınında tek canonical prosedür `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` dosyasıdır. Normal canlıya almada kullanıcıdan PowerShell/Cloudflare tokenı istenmez; production merge sonrası Cloudflare Git Integration Pages ve Workers Builds'i otomatik yürütür. Worker build/test fail olursa manuel deploy ile bypass edilmez; log okunur, kaynak düzeltilir ve yeni production commitinin otomatik buildi beklenir.
+
 ## 11. Yeni sohbet için hazır devam özeti
 
 Yeni sohbet KY ERP işiyle açılırsa şu gerçekler varsayılmalıdır:
@@ -213,6 +215,33 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## Son güncelleme
 
+
+## 06.09.2026 — Canonical Cloudflare canlıya alma prosedürü kilitlendi
+
+- Kullanıcı kararı: normal production release sırasında **PowerShell veya manuel Cloudflare deploy adımı olmayacak**.
+- Tek yayın kaynağı: `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
+- Normal yol: feature branch -> test/build -> kullanıcı onayı -> production merge -> Cloudflare Git Integration -> Pages + Workers Builds -> canlı smoke.
+- GitHub Actions production deploy yolu değildir.
+- Worker build kapısı `npm run typecheck && npm test && npm run build`; fail olursa deploy durur.
+- Cloudflare otomatik Worker build failinde doğru davranış: log -> kök neden -> feature branch düzeltme -> regression testi -> production merge -> yeni otomatik build. Manuel deploy ile test kapısı bypass edilmez.
+- Pages success + Worker fail = release tamam değildir.
+- Paralel sohbetler production HEAD'i ilerletirse eski SHA körlemesine deploy edilmez; en güncel production HEAD doğrulanır.
+- D1 migration backup/readiness/hedefli migration ile ayrı güvenlik kapısıdır.
+- 06.09.2026 doğrulanmış incident: bildirim Worker testindeki extensionless Node ESM importu `ERR_MODULE_NOT_FOUND` oluşturdu; kaynak düzeltmesi explicit `.ts` import + kontrat testi ile yapıldı. Bu olay otomatik Worker buildin çalıştığını, test kapısının deployu doğru şekilde durdurduğunu doğruladı.
+
+## 06.09.2026 — Canlı yayın ve Bildirim Merkezi final kararı
+
+- Production deploy **GitHub Actions ile yapılmayacak**.
+- Canonical yol: `production branch push -> Cloudflare Git Integration -> Cloudflare Pages / Workers Builds`.
+- GitHub Actions yalnız açık kullanıcı isteğiyle manual tanılama/test için çalıştırılabilir; production deploy yolu değildir.
+- D1 migration ayrı güvenlik kapısıdır: backup -> readiness -> hedefli/additive migration -> schema audit.
+- Sağ üst bildirim zilindeki sabit `3` kaldırıldı.
+- Bildirim Merkezi gerçek veriye bağlandı: bekleyen giriş onayları, e-Belge açık sorunları, vadesi gelen/geciken ödemeler.
+- Rozet gerçek unreadCount gösterir; 0 ise görünmez.
+- Bildirimler tenant + kullanıcı modül yetkisine göre filtrelenir.
+- Okundu durumu mevcut `json_store` içinde kullanıcı + firma bazında tutulur; yeni migration gerekmez.
+- Ana devam kaynağı: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
+
 **04.09.2026 — Cloudflare Pro + Actions'sız production yayın düzeni kesinleştirildi.**
 
 - `kyerp.net` için Cloudflare Pro aktif.
@@ -237,79 +266,12 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ---
 
-## 06.09.2026 — e-Belge / İşNet canonical finalizasyon paketi
+## 06.09.2026 — e-Belge / Muhasebe canonical canlı yayın onayı
 
-Aktif feature branch:
-
-`codex/e-belge-isnet-canonical-final-20260906`
-
-Production tabanı:
-
-`eb5b406ff6c2577fdfe14a5da1b55c58dbb53b6e`
-
-### Bulunan kök neden
-
-Yeni `e-Belge Merkezi` ekranı `accounting_documents` canonical havuzunu okurken, İşNet `full-sync` akışı belgeleri esas olarak eski `documents` uyumluluk tablosuna yazıyordu. Bu nedenle İşNet bağlantısı mevcut olsa bile senkronlanan belgelerin yeni e-Belge havuzuna eksiksiz düşmesi garanti değildi.
-
-### Bu branch'te yapılan final düzeni
-
-- İşNet `full-sync` XML/PDF indirme motoru korunur.
-- İşNet'ten alınan dört belge yönü/türü canonical e-Belge havuzuna beslenir:
-  - gelen fatura,
-  - giden fatura,
-  - gelen irsaliye,
-  - giden irsaliye.
-- UBL-TR XML, provider bağımsız ortak parser ile canonical belge/kalem modeline çevrilir.
-- İşNet provider kimliği `provider_type=ISNET`, `provider_document_id` ve `source_type=ISNET_DIRECT` olarak izlenir.
-- PDF/XML dosyaları mevcut R2 kaynağından File Hub asset/relation + canonical arşiv kuyruğuna bağlanır.
-- Eski `documents` yazımı uyumluluk için korunur ancak hata vermesi canonical e-Belge ingest yolunu kesmez.
-- İşNet canonical yazım hatası sessiz başarıya çevrilmez; `PARTIAL_REVIEW_REQUIRED` olarak görünür.
-- e-Belge Entegrasyonlar ekranı tenant bazlı gerçek İşNet yapılandırma/bağlantı, son senkron ve canonical belge sayısını gösterir.
-- e-Belge iç navigasyonu gelen/giden fatura ve irsaliyeleri ayrı sekmeler olarak gösterir.
-- Normal operasyon için e-Belge Entegrasyonlar içinden “Şimdi Senkronize Et” kullanılabilir.
-- Legacy İşNet çalışma alanı yalnız provider ayarı/özel uyumluluk işlemleri için içeride korunur; ayrı ana modül olarak geri getirilmez.
-- Resmî e-Fatura/e-İrsaliye gönderimi bu paketle otomatikleştirilmez; açık kullanıcı onayı kuralı aynen korunur.
-- Yeni D1 migration gerekmez; mevcut `0034_accounting_document_core.sql` şeması kullanılır.
-
-### Test / yayın kapısı
-
-- Yeni saf UBL parser için incoming/outgoing yön testleri eklendi.
-- Worker için `npm test`, `npm run typecheck`, `npm run build`; frontend için `npm test`, `npm run lint`, `npm run build` çalıştırılmadan production'a taşınmış sayılmaz.
-- Bu feature branch production değildir. Kullanıcı açıkça “canlıya al” demeden production branch'e merge/deploy yapılmaz.
-
-
-### 06.09.2026 — Manuel e-Belge / ürün / LOT audit revizyonu
-
-Kullanıcının ayrıca istediği manuel belge havuzu ve ürün/LOT kontrolü PR #77 üzerinde tekrar denetlendi.
-
-Tamamlanan ilgili düzen:
-
-- Manuel havuz XML, PDF, JPG/JPEG, PNG, WEBP, BMP, TIF/TIFF kabul eder.
-- XML UBL-TR doğrudan parser ile; PDF/görsel Azure Document Intelligence OCR + belge analizi ile okunur.
-- AUTO taramada OCR metninden fatura/irsaliye türü belirlenir; fatura tespitinde structured invoice modeli ile refine edilir.
-- Entegrasyonlar ekranı OCR servisinin gerçekten hazır olup olmadığını secret göstermeden bildirir.
-- Firma eşleşmesi VKN + alias ile yapılır; kullanıcı elle cari seçerse OCR'dan gelen eski firma adı tenant-scoped company alias olarak öğrenilebilir.
-- Ürün alias eşleşmesi firma kapsamını aşamaz; başka tedarikçinin özel aliası yanlış firmaya uygulanmaz.
-- Kalem yönlendirmesi merkezileştirildi: EXPENSE / STOCK / BOYAHANE.
-- Normal gider kalemi ürün kartı veya LOT zorunlu olmadan “Mal ve Hizmet Alımı” gider akışında kalabilir.
-- Ürün kartındaki expenseCategoryId/expenseCategoryName taşınır.
-- STOCK ürünü stok girişine gider; ürün kartında LOT zorunluysa final onaydan önce LOT aranır.
-- Boyahane/kimya tedarikçisi ve Boyahane ürünü için ürün + LOT zorunluluğu uygulanır.
-- Firma sonradan elle seçilirse tüm belge kalemleri o firmanın ürün aliası ve kimya profiliyle yeniden eşleştirilir.
-- Boyahane LOT girişi ve stock movement aynı belge kalemi için idempotent hale getirildi; retry LOT miktarını ikinci kez artırmaz.
-- Boyahane LOT ürün çatışması muhasebe postundan önce preflight edilir.
-- Finalizasyon sırası: validation -> stok/LOT -> canonical muhasebe postu.
-- Cari hareket, ledger ve KDV postları canonical belge üzerinden çalışır; ledger aynı source_document_id için idempotent hale getirildi.
-- Kalem detayında yönlendirme kullanıcıya Gider / Stok / Boyahane·LOT olarak görünür.
-- UBL irsaliye + LOT, AUTO fatura/irsaliye ayrımı ve ürün routing kuralları için unit testler eklendi.
-- PR yerel smoke workflow'una Worker unit-test adımı eklendi.
-
-Açık bırakılan ikinci paketler:
-
-1. Muhasebe rapor read-model birleşmesi: bazı eski kar-zarar/rapor ekranları hâlâ legacy `documents` okuyor. Canonical `accounting_documents` + `accounting_ledger_entries` kaynak yapılacak, legacy fallback/dedupe sonra kaldırılacak.
-2. Gider sınıflandırma ürünleştirmesi: normal gider kalemlerinde opsiyonel ürün/kategori seçimi, firma varsayılan gider kategorisi ve satır bazlı hızlı kategori düzeltme e-Belge ekranına taşınacak.
-3. OCR dayanıklılığı: Azure primary adapter korunacak; secondary OCR/vision fallback ve düşük-confidence karşılaştırmalı doğrulama ayrı paket olacak.
-4. File Hub arşiv tamamlama: e-Belge archive queue mevcut; gerçek Google Drive/OneDrive/SharePoint/Yerel/NAS hedefe yazma File Hub bağlantı/OAuth paketinin tamamlanmasıyla uçtan uca doğrulanacak.
-5. Eski `documents` / İşNet legacy uyumluluk katmanı: rapor ve entegrasyon tüketicileri canonical'a taşındıkça read/write compatibility kodu kontrollü azaltılacak.
-
-Bu audit production deploy değildir; PR #77 üzerinde test kapısı tamamlandıktan ve kullanıcı açıkça canlıya al dedikten sonra production merge değerlendirilir.
+- Kullanıcı PR #77 kapsamı için açıkça **canlıya al** onayı verdi.
+- Canlı birleşimde güncel production auth, PDKS, Bildirim Merkezi ve Cloudflare-only yayın sözleşmesi korunur.
+- İşNet + manuel e-Belge havuzu canonical `accounting_documents` akışına alınır; rapor read-modeli canonical kaynakları kullanır.
+- XML/PDF/görsel OCR, firma/ürün alias, EXPENSE/STOCK/BOYAHANE yönlendirme ve LOT kuralları aynı paket içindedir.
+- Resmî e-Fatura/e-İrsaliye gönderimi otomatikleştirilmez; kullanıcı onayı zorunluluğu devam eder.
+- `0046_accounting_canonical_report_controls.sql` bu canlı yayında production D1'e uygulanmaz. İlgili kod tablo yoksa mevcut `json_store` fallback'ini kullanır; veri kaybı riski alınmaz.
+- 0046 ileride ayrı bakım penceresinde remote D1 full backup + readiness + hedefli additive migration ile ele alınacaktır.

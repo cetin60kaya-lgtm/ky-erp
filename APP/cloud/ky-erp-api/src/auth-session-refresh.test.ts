@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   MFA_SESSION_SECONDS,
-  OWNER_ROLLING_SECONDS,
+  OWNER_REFRESH_SECONDS,
   PASSWORD_SESSION_SECONDS,
   sessionRefreshSeconds,
 } from "./auth-session-refresh.ts";
@@ -20,8 +20,8 @@ test("normal MFA session refresh stays at 10 hours for every non-owner role", ()
   }
 });
 
-test("system owner refresh uses rolling 24 hour active-device session", () => {
-  assert.equal(OWNER_ROLLING_SECONDS, 86_400);
-  assert.equal(sessionRefreshSeconds("SUPER_ADMIN", "ANY_MFA"), 86_400);
-  assert.equal(sessionRefreshSeconds("ADMIN", "PASSWORD_ONLY"), 86_400);
+test("system owner automatic refresh is disabled", () => {
+  assert.equal(OWNER_REFRESH_SECONDS, 0);
+  assert.equal(sessionRefreshSeconds("SUPER_ADMIN", "ANY_MFA"), 0);
+  assert.equal(sessionRefreshSeconds("ADMIN", "PASSWORD_ONLY"), 0);
 });

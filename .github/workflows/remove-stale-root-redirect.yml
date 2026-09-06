@@ -1,13 +1,8 @@
 name: KY ERP Eski Kok Yonlendirmesini Kaldir
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "RELEASES/remove-stale-root-redirect.json"
+  # Manual maintenance only. Automatic Actions trigger is disabled.
   workflow_dispatch:
-
 permissions:
   contents: read
 

@@ -1,16 +1,8 @@
 name: KY ERP Boyahane Renk UI Kontrol
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/app/ky-erp-frontend/src/pages/boyahane/workflow/KayitliRenklerWorkspace.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/boyahane/boyahaneColorIdentity.css"
-      - "APP/app/ky-erp-frontend/src/services/boyahaneColorIdentityApi.js"
-      - ".github/workflows/boyahane-color-ui-check.yml"
+  # Automatic GitHub Actions kapali; production ve PR dogrulamasi Cloudflare/yerel kontrol ile yurur.
   workflow_dispatch:
-
 permissions:
   contents: read
 

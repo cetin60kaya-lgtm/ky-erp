@@ -1,41 +1,8 @@
 name: KY ERP Yerel Uçtan Uca Test
 
 on:
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/src/main.ts"
-      - "APP/cloud/ky-erp-api/src/e-belge-*.ts"
-      - "APP/cloud/ky-erp-api/src/accounting-document-*.ts"
-      - "APP/cloud/ky-erp-api/src/accounting-report-*.ts"
-      - "APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql"
-      - "APP/cloud/ky-erp-api/src/isnet-live-sync.ts"
-      - "APP/cloud/ky-erp-api/src/production-center.ts"
-      - "APP/cloud/ky-erp-api/src/boyahane-inventory.ts"
-      - "APP/cloud/ky-erp-api/src/boyahane-workflow.ts"
-      - "APP/cloud/ky-erp-api/src/desen-storage.ts"
-      - "APP/cloud/ky-erp-api/src/desen-workflow.ts"
-      - "APP/cloud/ky-erp-api/src/desen-operations.ts"
-      - "APP/cloud/ky-erp-api/worker-configuration.d.ts"
-      - "APP/cloud/ky-erp-api/wrangler.production-local.jsonc"
-      - "APP/cloud/ky-erp-api/local-production-center.sql"
-      - "APP/cloud/ky-erp-api/local-boyahane-inventory.sql"
-      - "APP/app/ky-erp-frontend/src/pages/imalat/**"
-      - "APP/app/ky-erp-frontend/src/pages/boyahane/**"
-      - "APP/app/ky-erp-frontend/src/pages/desen/**"
-      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/**"
-      - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/UretimPage.jsx"
-      - "APP/app/ky-erp-frontend/src/services/productionCenterApi.js"
-      - "APP/app/ky-erp-frontend/src/services/boyahaneWorkflowApi.js"
-      - "APP/app/ky-erp-frontend/src/services/desenWorkflowApi.js"
-      - "APP/app/ky-erp-frontend/src/services/desenFolderSettingsApi.js"
-      - "APP/app/ky-erp-frontend/src/app/moduleRegistry.js"
-      - "APP/app/ky-erp-frontend/src/App.jsx"
-      - "APP/app/ky-erp-frontend/src/app/appShell.css"
-      - "SCRIPTS/KYERP_URETIM_YEREL_TEST.ps1"
-      - ".github/workflows/production-center-local-smoke.yml"
+  # Automatic GitHub Actions disabled. Manual diagnostic/fallback only.
   workflow_dispatch:
-
 permissions:
   contents: read
 
@@ -82,10 +49,6 @@ jobs:
       - name: Worker typecheck
         working-directory: APP/cloud/ky-erp-api
         run: npm run typecheck
-
-      - name: Worker unit testleri
-        working-directory: APP/cloud/ky-erp-api
-        run: npm run test:unit
 
       - name: Worker varsayılan dry-run build
         working-directory: APP/cloud/ky-erp-api

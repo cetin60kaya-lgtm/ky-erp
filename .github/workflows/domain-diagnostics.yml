@@ -1,13 +1,8 @@
 name: KY ERP Alan Adi Teshis
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "RELEASES/domain-diagnostics-trigger.json"
+  # Automatic GitHub Actions kapali; production ve PR dogrulamasi Cloudflare/yerel kontrol ile yurur.
   workflow_dispatch:
-
 permissions:
   contents: read
 

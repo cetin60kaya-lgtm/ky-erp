@@ -4,10 +4,12 @@ import {
   confirmSecureMfaRenewal,
   getApplicationOwner,
   getDeliveryCapabilities,
+  getOwnerRecoveryConfig,
   getUserEmailDeliveryStatus,
   listActiveSessions,
   reauthOwnerWithPassword,
   revokeSession,
+  saveOwnerRecoveryQuestions,
   startOwnerEmailReauth,
   startSecureMfaRenewal,
   startUserEmailVerification,
@@ -34,6 +36,14 @@ export default function AdminOwnerSecurity() {
   const [message, setMessage] = useState("Uygulama sahibi güvenlik bilgileri yükleniyor...");
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState({ fullName: "", username: "", email: "" });
+  const [recoveryConfig, setRecoveryConfig] = useState(null);
+  const [recoveryQuestions, setRecoveryQuestions] = useState([
+    { question: "", answer: "" },
+    { question: "", answer: "" },
+    { question: "", answer: "" },
+  ]);
+  const [recoveryProvider, setRecoveryProvider] = useState("GOOGLE");
+  const [recoveryStepUpCode, setRecoveryStepUpCode] = useState("");
 
   const [emailChallenge, setEmailChallenge] = useState(null);
   const [emailOtp, setEmailOtp] = useState("");
@@ -56,10 +66,11 @@ export default function AdminOwnerSecurity() {
   async function loadAll() {
     setBusy(true);
     try {
-      const [ownerResult, sessionResult, deliveryResult] = await Promise.allSettled([
+      const [ownerResult, sessionResult, deliveryResult, recoveryResult] = await Promise.allSettled([
         getApplicationOwner(),
         listActiveSessions(),
         getDeliveryCapabilities(),
+        getOwnerRecoveryConfig(),
       ]);
       if (ownerResult.status === "rejected") {
         setOwner(null);
@@ -74,6 +85,23 @@ export default function AdminOwnerSecurity() {
       else { setSessions([]); unavailable.push("aktif oturumlar"); }
       if (deliveryResult.status === "fulfilled") setDelivery(deliveryResult.value);
       else { setDelivery(null); unavailable.push("e-posta servisi"); }
+      if (recoveryResult.status === "fulfilled") {
+        const recovery = recoveryResult.value || null;
+        const configured = Array.isArray(recovery?.questions) ? recovery.questions : [];
+        setRecoveryConfig(recovery);
+        setRecoveryQuestions([0, 1, 2].map((index) => ({
+          question: String(configured[index]?.question || ""),
+          answer: "",
+        })));
+      } else {
+        setRecoveryConfig(null);
+        setRecoveryQuestions([
+          { question: "", answer: "" },
+          { question: "", answer: "" },
+          { question: "", answer: "" },
+        ]);
+        unavailable.push("özel güvenlik soruları");
+      }
       setMessage(unavailable.length
         ? `Uygulama sahibi hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.`
         : "Uygulama sahibi hesabı ve güvenlik durumu güncel.");
@@ -131,6 +159,50 @@ export default function AdminOwnerSecurity() {
     }, 5000);
     return () => window.clearTimeout(timer);
   }, [emailChallenge?.providerMessageId, emailDelivery?.delivered, emailDelivery?.failed, mailPollCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveRecoverySecurity(event) {
+    event.preventDefault();
+    const cleanCode = String(recoveryStepUpCode || "").replace(/\D/g, "");
+    const questions = recoveryQuestions.map((row) => ({
+      question: String(row?.question || "").trim(),
+      answer: String(row?.answer || "").trim(),
+    }));
+    if (questions.some((row) => row.question.length < 6)) {
+      setMessage("Hata: Üç özel güvenlik sorusunun her biri en az 6 karakter olmalıdır.");
+      return;
+    }
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setMessage("Hata: Kaydetmek için mevcut Google veya Microsoft Authenticator uygulamanızdaki 6 haneli kodu girin.");
+      return;
+    }
+    const existing = Array.isArray(recoveryConfig?.questions) ? recoveryConfig.questions : [];
+    const missingNewAnswer = questions.some((row, index) => {
+      const oldQuestion = String(existing[index]?.question || "").trim();
+      return row.question !== oldQuestion && !row.answer;
+    });
+    if (missingNewAnswer) {
+      setMessage("Hata: Yeni veya değiştirilen her güvenlik sorusu için cevap girin.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const result = await saveOwnerRecoveryQuestions({
+        provider: recoveryProvider,
+        code: cleanCode,
+        questions,
+      });
+      setRecoveryStepUpCode("");
+      setMessage(result?.recoveryEnabled
+        ? "Uygulama sahibi özel soru-cevap güvenliği kaydedildi ve kurtarma koruması aktif."
+        : "Özel güvenlik soruları kaydedildi. Kurtarmanın aktif olması için doğrulanmış e-posta/SMS kanalı da hazır olmalıdır.");
+      await loadAll();
+    } catch (error) {
+      setMessage(`Hata: ${error?.message || "Özel güvenlik soruları kaydedilemedi."}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function startEmailVerification() {
     if (!owner) return;
@@ -293,6 +365,72 @@ export default function AdminOwnerSecurity() {
         <div className="aos-provider"><div><b>Microsoft Authenticator</b><small>{owner.microsoftMfaEnabled ? "Aktif" : "Kurulu değil"}</small></div><button onClick={() => beginRenew("MICROSOFT")}>Microsoft QR Yenile</button></div>
       </section>
     </div>
+
+    <section className="aos-card aos-recovery-security">
+      <div className="aos-card-head">
+        <div>
+          <h3>Uygulama Sahibi Özel Soru-Cevap</h3>
+          <p>Tek kullanımlık acil kurtarma kodu yerine, yalnız uygulama sahibi için özel soru-cevap katmanı kullanılır. Üç soru kaydedilir; kurtarmada iki tanesi rastgele sorulur.</p>
+        </div>
+        <span className={recoveryConfig?.recoveryEnabled ? "state good" : "state warn"}>
+          {recoveryConfig?.recoveryEnabled ? "Aktif" : "Hazırlanıyor"}
+        </span>
+      </div>
+
+      <div className="aos-recovery-status">
+        <span className={recoveryConfig?.questions?.length === 3 ? "good" : "warn"}>{recoveryConfig?.questions?.length || 0}/3 soru</span>
+        <span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmalı"}</span>
+        <span className={recoveryConfig?.recoveryEnabled ? "good" : "warn"}>{recoveryConfig?.recoveryEnabled ? "Owner kurtarma hazır" : "Owner kurtarma henüz kapalı"}</span>
+      </div>
+
+      <form className="aos-recovery-form" onSubmit={saveRecoverySecurity}>
+        <div className="aos-question-grid">
+          {recoveryQuestions.map((row, index) => (
+            <div className="aos-question-row" key={index}>
+              <label>{index + 1}. özel soru
+                <input
+                  value={row.question}
+                  onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))}
+                  placeholder="Yalnız sizin bildiğiniz özel bir soru yazın"
+                  maxLength={220}
+                />
+              </label>
+              <label>Cevap
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={row.answer}
+                  onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, answer: event.target.value } : item))}
+                  placeholder={recoveryConfig?.questions?.[index]?.configured ? "Değiştirmiyorsanız boş bırakın" : "Özel cevabınızı yazın"}
+                />
+              </label>
+            </div>
+          ))}
+        </div>
+
+        <div className="aos-recovery-stepup">
+          <div>
+            <b>Kaydetme güvenliği</b>
+            <small>Soru-cevap değişikliği, açık oturumda bile mevcut Authenticator kodunuzla yeniden doğrulanır.</small>
+          </div>
+          <select value={recoveryProvider} onChange={(event) => setRecoveryProvider(event.target.value)}>
+            <option value="GOOGLE">Google Authenticator</option>
+            <option value="MICROSOFT">Microsoft Authenticator</option>
+          </select>
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={recoveryStepUpCode}
+            onChange={(event) => setRecoveryStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
+            aria-label="Mevcut Authenticator kodu"
+          />
+          <button className="primary" type="submit" disabled={busy}>Özel Güvenliği Kaydet</button>
+        </div>
+      </form>
+      <div className="aos-security-note">Cevaplar ekranda geri gösterilmez. Sunucu tarafında hash + salt ile saklanır; kurtarma soruları tek başına doğrudan oturum açmaz, MFA yeniden kurulumunu yetkilendirir.</div>
+    </section>
 
     {renewProvider && <section className="aos-card aos-renew">
       <div className="aos-card-head"><div><h3>{PROVIDER_LABELS[renewProvider]} — Güvenli QR Yenileme</h3><p>Mevcut Authenticator kaydı yeni kod doğrulanana kadar değiştirilmez.</p></div><button onClick={cancelRenew}>İptal</button></div>

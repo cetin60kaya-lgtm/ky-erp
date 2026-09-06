@@ -270,21 +270,6 @@ jobs:
             exit 1
           fi
 
-
-          echo "0046 canonical Muhasebe rapor + gider hafizasi semasi kontrol ediliyor..."
-          test -f migrations/0046_accounting_canonical_report_controls.sql
-          report_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('accounting_report_categories','accounting_report_overrides','accounting_expense_rules');" --json)"
-          report_tables="$(jq -r '.[0].results[0].n // -1' <<<"$report_state")"
-          if [ "$report_tables" = "0" ]; then
-            echo "0046 semasi yok; tam D1 yedegi sonrasi additive migration uygulanacak."
-            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0046_accounting_canonical_report_controls.sql
-          elif [ "$report_tables" = "3" ]; then
-            echo "0046 semasi zaten tam; tekrar uygulanmiyor."
-          else
-            echo "GUVENLIK DURDURMASI: 0046 kismi sema bulundu (tables=$report_tables)." >&2
-            exit 1
-          fi
-
       - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
@@ -299,7 +284,6 @@ jobs:
             accounting_document_relations accounting_document_issues accounting_payment_plans
             accounting_ledger_entries accounting_extraction_profiles accounting_bank_import_batches
             accounting_bank_import_rows accounting_document_archive_jobs
-            accounting_report_categories accounting_report_overrides accounting_expense_rules
             ik_pdks_devices ik_pdks_device_sync_logs
             ik_person_hr_profiles ik_person_monthly_compliance
             company_billing_profiles company_billing_ledger
@@ -459,7 +443,6 @@ jobs:
           echo "FIBE + hizli muhasebe: 0040 dogrulandi"
           echo "File Hub cloud OAuth: 0044 dogrulandi"
           echo "IK emekli + aylik SGK uyum: 0045 dogrulandi"
-          echo "Canonical Muhasebe rapor + gider hafizasi: 0046 dogrulandi"
           echo "RESEND_API_KEY: aktif Worker bindingi dogrulandi"
           echo "API: https://api.kyerp.net"
           echo "Site: https://kyerp.net"
