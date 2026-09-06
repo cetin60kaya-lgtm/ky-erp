@@ -1034,6 +1034,17 @@
   box-shadow: 0 0 0 3px rgba(47, 109, 242, .11);
 }
 
+.auth-field-group {
+  display: grid;
+  gap: 7px;
+}
+
+.auth-field-group > label {
+  color: #24344d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .auth-password-field {
   position: relative;
   display: block;
