@@ -19,7 +19,7 @@
     "db:migrations:local": "wrangler d1 migrations apply ky-erp-production-local --local --config wrangler.production-local.jsonc",
     "db:migrations:remote": "wrangler d1 migrations apply ky-erp-db --remote --config wrangler.jsonc",
     "db:audit:local": "node scripts/d1-schema-audit.mjs --local --database ky-erp-production-local --config wrangler.production-local.jsonc --require-migrations",
-    "db:audit:remote": "node scripts/d1-schema-audit.mjs --remote --database ky-erp-db --remote --config wrangler.jsonc --require-migrations",
+    "db:audit:remote": "node scripts/d1-schema-audit.mjs --remote --database ky-erp-db --config wrangler.jsonc --require-migrations",
     "db:hr:check": "node scripts/hr-relational-sync.mjs --remote",
     "db:hr:apply": "node scripts/hr-relational-sync.mjs --apply --remote",
     "db:tenant:audit": "node scripts/tenant-scope-audit.mjs"
