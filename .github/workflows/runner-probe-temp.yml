@@ -1,0 +1,17 @@
+name: TEMP Runner Probe
+
+on:
+  push:
+    branches:
+      - codex/desktop-dual-product-final-20260906
+    paths:
+      - ".github/workflows/runner-probe-temp.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "runner-ok"
