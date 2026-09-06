@@ -276,3 +276,40 @@ Yeni `e-Belge Merkezi` ekranı `accounting_documents` canonical havuzunu okurken
 - Yeni saf UBL parser için incoming/outgoing yön testleri eklendi.
 - Worker için `npm test`, `npm run typecheck`, `npm run build`; frontend için `npm test`, `npm run lint`, `npm run build` çalıştırılmadan production'a taşınmış sayılmaz.
 - Bu feature branch production değildir. Kullanıcı açıkça “canlıya al” demeden production branch'e merge/deploy yapılmaz.
+
+
+### 06.09.2026 — Manuel e-Belge / ürün / LOT audit revizyonu
+
+Kullanıcının ayrıca istediği manuel belge havuzu ve ürün/LOT kontrolü PR #77 üzerinde tekrar denetlendi.
+
+Tamamlanan ilgili düzen:
+
+- Manuel havuz XML, PDF, JPG/JPEG, PNG, WEBP, BMP, TIF/TIFF kabul eder.
+- XML UBL-TR doğrudan parser ile; PDF/görsel Azure Document Intelligence OCR + belge analizi ile okunur.
+- AUTO taramada OCR metninden fatura/irsaliye türü belirlenir; fatura tespitinde structured invoice modeli ile refine edilir.
+- Entegrasyonlar ekranı OCR servisinin gerçekten hazır olup olmadığını secret göstermeden bildirir.
+- Firma eşleşmesi VKN + alias ile yapılır; kullanıcı elle cari seçerse OCR'dan gelen eski firma adı tenant-scoped company alias olarak öğrenilebilir.
+- Ürün alias eşleşmesi firma kapsamını aşamaz; başka tedarikçinin özel aliası yanlış firmaya uygulanmaz.
+- Kalem yönlendirmesi merkezileştirildi: EXPENSE / STOCK / BOYAHANE.
+- Normal gider kalemi ürün kartı veya LOT zorunlu olmadan “Mal ve Hizmet Alımı” gider akışında kalabilir.
+- Ürün kartındaki expenseCategoryId/expenseCategoryName taşınır.
+- STOCK ürünü stok girişine gider; ürün kartında LOT zorunluysa final onaydan önce LOT aranır.
+- Boyahane/kimya tedarikçisi ve Boyahane ürünü için ürün + LOT zorunluluğu uygulanır.
+- Firma sonradan elle seçilirse tüm belge kalemleri o firmanın ürün aliası ve kimya profiliyle yeniden eşleştirilir.
+- Boyahane LOT girişi ve stock movement aynı belge kalemi için idempotent hale getirildi; retry LOT miktarını ikinci kez artırmaz.
+- Boyahane LOT ürün çatışması muhasebe postundan önce preflight edilir.
+- Finalizasyon sırası: validation -> stok/LOT -> canonical muhasebe postu.
+- Cari hareket, ledger ve KDV postları canonical belge üzerinden çalışır; ledger aynı source_document_id için idempotent hale getirildi.
+- Kalem detayında yönlendirme kullanıcıya Gider / Stok / Boyahane·LOT olarak görünür.
+- UBL irsaliye + LOT, AUTO fatura/irsaliye ayrımı ve ürün routing kuralları için unit testler eklendi.
+- PR yerel smoke workflow'una Worker unit-test adımı eklendi.
+
+Açık bırakılan ikinci paketler:
+
+1. Muhasebe rapor read-model birleşmesi: bazı eski kar-zarar/rapor ekranları hâlâ legacy `documents` okuyor. Canonical `accounting_documents` + `accounting_ledger_entries` kaynak yapılacak, legacy fallback/dedupe sonra kaldırılacak.
+2. Gider sınıflandırma ürünleştirmesi: normal gider kalemlerinde opsiyonel ürün/kategori seçimi, firma varsayılan gider kategorisi ve satır bazlı hızlı kategori düzeltme e-Belge ekranına taşınacak.
+3. OCR dayanıklılığı: Azure primary adapter korunacak; secondary OCR/vision fallback ve düşük-confidence karşılaştırmalı doğrulama ayrı paket olacak.
+4. File Hub arşiv tamamlama: e-Belge archive queue mevcut; gerçek Google Drive/OneDrive/SharePoint/Yerel/NAS hedefe yazma File Hub bağlantı/OAuth paketinin tamamlanmasıyla uçtan uca doğrulanacak.
+5. Eski `documents` / İşNet legacy uyumluluk katmanı: rapor ve entegrasyon tüketicileri canonical'a taşındıkça read/write compatibility kodu kontrollü azaltılacak.
+
+Bu audit production deploy değildir; PR #77 üzerinde test kapısı tamamlandıktan ve kullanıcı açıkça canlıya al dedikten sonra production merge değerlendirilir.
