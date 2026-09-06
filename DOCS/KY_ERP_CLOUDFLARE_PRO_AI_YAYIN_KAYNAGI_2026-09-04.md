@@ -5,7 +5,7 @@
 **Repo:** `cetin60kaya-lgtm/ky-erp`  
 **Production branch:** `codex/model-uretim-kontrol-merkezi-final`
 
-Bu dosya KY ERP'nin Cloudflare Pro, AI/otomasyon, Git auto-deploy ve GitHub Actions'sız production yayın düzeni için canonical devam kaydıdır. Secret/token değerleri bu dosyaya yazılmaz.
+Bu dosya KY ERP'nin Cloudflare Pro ve AI/otomasyon mimarisi için canonical devam kaydıdır. **Production canlıya alma prosedürünün tek üstün kaynağı `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` dosyasıdır.** Deploy konusunda çelişki olursa 06.09 canonical deploy sözleşmesi geçerlidir. Secret/token değerleri bu dosyaya yazılmaz.
 
 ---
 
@@ -53,6 +53,8 @@ Pro tarafında KY ERP için kullanılacak başlıklar:
 ---
 
 ## 3. Actions'sız otomatik yayın — doğrulanmış
+
+> Güncel operasyon kuralı: normal canlıya almada kullanıcıdan PowerShell/token istenmez; production merge sonrası Cloudflare Git Integration otomatik çalışır. Worker build/test fail olursa manuel deploy ile bypass edilmez. Ayrıntı: `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
 
 ### Frontend / Pages
 
