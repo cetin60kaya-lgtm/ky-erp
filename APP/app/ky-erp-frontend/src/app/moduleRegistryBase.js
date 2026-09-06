@@ -6,7 +6,7 @@ export const MODULES = [
     icon: "cari-kasa",
     groups: [
       {
-        label: "Platform Yönetimi",
+        label: "Yönetim",
         tabs: [
           ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
           ["firma-kartlari", "Firmalar ve Cari", "firma-kartlari"],
@@ -161,7 +161,7 @@ export const MODULES = [
   {
     key: "admin",
     permissionKey: "ADMIN",
-    label: "Yönetim",
+    label: "Platform Yönetimi",
     icon: "ayarlar",
     groups: [
       {
