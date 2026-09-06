@@ -131,9 +131,10 @@ test("payment list PDF and Excel use the same canonical payrollRows data with a 
   assert.match(page, /personel: "TOPLAM"/);
   assert.match(page, /const printPayrollReport = async \(\) =>/);
   assert.match(page, /<h1>İK Ödeme Listesi<\/h1>/);
-  assert.match(page, /<th>Personel<\/th><th>HKN<\/th><th>Maaş<\/th><th>Yol<\/th><th>EK<\/th><th>Mesai<\/th>/);
-  assert.match(page, /<th>Avans<\/th><th>Kesinti<\/th><th>İcra\/Haciz<\/th><th>Banka<\/th><th>Elden<\/th><th>Toplam Ödeme<\/th>/);
-  assert.match(page, /<tr class="tot"><td>TOPLAM<\/td>/);
+  assert.match(page, /Personel \/ HKN/);
+  assert.match(page, /<th class="medium">Maaş<\/th><th class="narrow">Yol<\/th><th class="narrow">EK<\/th><th class="narrow">Mesai<\/th>/);
+  assert.match(page, /<th class="narrow">Avans<\/th><th class="narrow">Kesinti<\/th><th class="medium">İcra\/Haciz<\/th><th class="medium">Banka<\/th><th class="medium">Elden<\/th><th class="total">Toplam Ödeme<\/th>/);
+  assert.match(page, /<tr class="tot"><td class="person"><strong>TOPLAM<\/strong>/);
   assert.ok(page.includes("Ödeme Listesi / PDF"));
   assert.ok(page.includes("Ödeme Listesi / Excel"));
 });
@@ -232,16 +233,17 @@ test("IK payroll period persists and new periods require explicit preparation", 
   assert.match(page, /periodPrepared \? employees\.map/);
 });
 
-test("IK overview is functional and reads today's PDKS live dashboard", () => {
+test("IK overview is finance-focused and leaves live attendance operations to PDKS", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /getPdksLiveDashboard/);
-  assert.match(page, /Bugün kart basan/);
-  assert.match(page, /Bugün gelmeyen/);
-  assert.match(page, /Eksik basım/);
-  assert.match(page, /Bugün yıllık izinde/);
-  assert.match(page, /Akıllı Kontrol Merkezi/);
-  assert.match(page, /Hızlı İşlemler/);
+  assert.doesNotMatch(page, /getPdksLiveDashboard/);
+  assert.doesNotMatch(page, /Bugün kart basan/);
+  assert.doesNotMatch(page, /Bugün gelmeyen/);
+  assert.doesNotMatch(page, /Eksik basım/);
+  assert.doesNotMatch(page, /Bugün yıllık izinde/);
+  assert.match(page, /Akıllı İK Kontrol Merkezi/);
+  assert.match(page, /Hızlı Finans İşlemleri/);
+  assert.match(page, /Giriş\/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir/);
   assert.match(page, /Mesai Ekle/);
   assert.match(page, /Avans Ekle/);
   assert.match(page, /Kesinti Ekle/);
