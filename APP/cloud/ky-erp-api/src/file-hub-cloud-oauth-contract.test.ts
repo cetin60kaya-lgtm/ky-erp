@@ -88,7 +88,8 @@ test("0046 canonical report controls are runtime-ready and keep fallback-safe re
   const runtime = read("runtime-migration-0046.ts");
   assert.match(runtime, /MIGRATION_0046_PARTIAL_SCHEMA/);
   assert.match(runtime, /MIGRATION_0046_PARTIAL_INDEX/);
-  assert.match(runtime, /await db\.batch\(statements\)/);
+  assert.doesNotMatch(runtime, /await db\.batch\(/);
+  assert.match(runtime, /MIGRATION_0046_REQUIRED_TABLES/);
   assert.match(read("accounting-report-canonical.ts"), /tableExists\(c,"accounting_report_categories"\)/);
   assert.match(read("accounting-report-canonical.ts"), /ACCOUNTING_REPORT_OVERRIDE/);
   assert.match(read("e-belge-product-store.ts"), /tableExists\(c,"accounting_expense_rules"\)/);

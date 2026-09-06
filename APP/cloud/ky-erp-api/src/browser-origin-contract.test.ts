@@ -11,7 +11,8 @@ const wrangler = readFileSync(resolve(here, "../wrangler.jsonc"), "utf8");
 const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
 
 test("worker accepts canonical V6 browser origins through the explicit CORS allowlist", () => {
-  assert.match(wrangler, /"main"\s*:\s*"src\/main-entry\.ts"/);
+  assert.match(wrangler, /"main"\s*:\s*"src\/main-entry-mail\.ts"/);
+  assert.match(readFileSync(resolve(here, "main-entry-mail.ts"), "utf8"), /import base from "\.\/main-entry"/);
   assert.match(main, /const LIVE_ORIGINS = new Set\(\[/);
   assert.match(main, /"https:\/\/kyerp\.net"/);
   assert.match(main, /"https:\/\/www\.kyerp\.net"/);
@@ -32,7 +33,7 @@ test("normal user writes cannot create ADMIN permission or unsupported forced-pa
   assert.match(entry, /users\\\/\[\^\/\]\+\\\/permissions\$/);
   assert.match(entry, /body\.mustChangePassword = false/);
   assert.match(entry, /!== "ADMIN"/);
-  assert.match(delegate, /AdminUsersPanelHardening\.css/);
+  assert.match(delegate, /return <AdminUsersPanelV2 \{\.\.\.props\} \/>/);
   assert.match(hardening, /auc2-check-stack > label:nth-child\(2\)/);
   assert.match(hardening, /auc2-perm-row:nth-last-child\(2\)/);
 });

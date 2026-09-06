@@ -3,13 +3,11 @@ type D1Like = D1Database;
 type TableSpec = {
   name: string;
   columns: string[];
-  createSql: string;
 };
 
 type IndexSpec = {
   name: string;
   columns: string[];
-  createSql: string;
 };
 
 const TABLES: TableSpec[] = [
@@ -26,20 +24,6 @@ const TABLES: TableSpec[] = [
       "created_at",
       "updated_at",
     ],
-    createSql: `
-      CREATE TABLE IF NOT EXISTS accounting_report_categories (
-        id TEXT PRIMARY KEY,
-        main_company_slug TEXT NOT NULL,
-        code TEXT NOT NULL,
-        name TEXT NOT NULL,
-        category_type TEXT NOT NULL DEFAULT 'EXPENSE',
-        is_active INTEGER NOT NULL DEFAULT 1,
-        sort_order INTEGER NOT NULL DEFAULT 100,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        UNIQUE(main_company_slug, code)
-      )
-    `,
   },
   {
     name: "accounting_report_overrides",
@@ -61,27 +45,6 @@ const TABLES: TableSpec[] = [
       "created_at",
       "updated_at",
     ],
-    createSql: `
-      CREATE TABLE IF NOT EXISTS accounting_report_overrides (
-        id TEXT PRIMARY KEY,
-        main_company_slug TEXT NOT NULL,
-        source_type TEXT NOT NULL,
-        source_id TEXT NOT NULL,
-        report_included INTEGER,
-        report_category_id TEXT,
-        report_amount REAL,
-        report_description TEXT,
-        report_official_type TEXT,
-        report_vat_amount REAL,
-        report_vat_included INTEGER,
-        report_expense_status TEXT,
-        report_note TEXT,
-        override_mask TEXT NOT NULL DEFAULT '[]',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        UNIQUE(main_company_slug, source_type, source_id)
-      )
-    `,
   },
   {
     name: "accounting_expense_rules",
@@ -100,23 +63,6 @@ const TABLES: TableSpec[] = [
       "created_at",
       "updated_at",
     ],
-    createSql: `
-      CREATE TABLE IF NOT EXISTS accounting_expense_rules (
-        id TEXT PRIMARY KEY,
-        main_company_slug TEXT NOT NULL,
-        company_id TEXT,
-        product_id TEXT,
-        normalized_description TEXT,
-        category_id TEXT,
-        category_name TEXT NOT NULL,
-        routing_type TEXT NOT NULL DEFAULT 'EXPENSE',
-        priority INTEGER NOT NULL DEFAULT 100,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        source TEXT NOT NULL DEFAULT 'USER',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `,
   },
 ];
 
@@ -124,14 +70,10 @@ const INDEXES: IndexSpec[] = [
   {
     name: "ix_accounting_report_categories_active",
     columns: ["main_company_slug", "is_active", "sort_order", "name"],
-    createSql:
-      "CREATE INDEX IF NOT EXISTS ix_accounting_report_categories_active ON accounting_report_categories(main_company_slug, is_active, sort_order, name)",
   },
   {
     name: "ix_accounting_report_overrides_source",
     columns: ["main_company_slug", "source_type", "source_id"],
-    createSql:
-      "CREATE INDEX IF NOT EXISTS ix_accounting_report_overrides_source ON accounting_report_overrides(main_company_slug, source_type, source_id)",
   },
   {
     name: "ix_accounting_expense_rules_match",
@@ -143,12 +85,10 @@ const INDEXES: IndexSpec[] = [
       "is_active",
       "priority",
     ],
-    createSql:
-      "CREATE INDEX IF NOT EXISTS ix_accounting_expense_rules_match ON accounting_expense_rules(main_company_slug, company_id, product_id, normalized_description, is_active, priority)",
   },
 ];
 
-let readyInThisIsolate = false;
+const readyDatabases = new WeakSet<D1Like>();
 
 function quotedIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
@@ -259,7 +199,7 @@ export async function ensureAccountingCanonicalReportControls0046(
   createdTables: string[];
   createdIndexes: string[];
 }> {
-  if (readyInThisIsolate) return { state: "READY", createdTables: [], createdIndexes: [] };
+  if (readyDatabases.has(db)) return { state: "READY", createdTables: [], createdIndexes: [] };
 
   const { missingTables, missingIndexes } = await preflight(db);
   if (missingTables.length) {
@@ -270,7 +210,7 @@ export async function ensureAccountingCanonicalReportControls0046(
   }
 
   await verify(db);
-  readyInThisIsolate = true;
+  readyDatabases.add(db);
   return { state: "READY", createdTables: [], createdIndexes: [] };
 }
 

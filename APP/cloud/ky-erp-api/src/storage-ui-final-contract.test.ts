@@ -11,7 +11,7 @@ test("File Hub screen uses current admpro design system instead of orphaned admi
 
 test("all six storage workspaces remain reachable",()=>{for(const token of ["depolama-genel","depolama-kaynaklar","depolama-atamalar","depolama-dosyalar","depolama-senkronizasyon"])assert.match(storage,new RegExp(token));assert.match(page,/depolama-yedekleme/)});
 
-test("storage overview exposes setup progress and health",()=>{for(const label of ["Aktif Kaynak","Dosya İndeksi","Bölüm Ataması","Çevrimiçi Agent","Firma Depolama Haritası","Sağlık ve Uyarılar"])assert.match(storage,new RegExp(label));assert.match(storage,/setupSteps/);assert.match(storage,/missingCount/);assert.match(storage,/unmatchedCount/)});
+test("storage overview exposes setup progress and health",()=>{for(const label of ["Aktif Dosya Servisi","Dosya İndeksi","Bölüm Ataması","Firma Bağlantı Haritası","Sağlık ve Uyarılar"])assert.match(storage,new RegExp(label));assert.match(storage,/setupSteps/);assert.match(storage,/missingCount/);assert.match(storage,/unmatchedCount/)});
 
 test("connection and binding centers cover every provider and business module",()=>{for(const provider of ["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT","LOCAL_FOLDER","NAS"])assert.match(storage,new RegExp(provider));for(const module of ["DESEN","IMALAT","BOYAHANE","MUHASEBE","ISNET","IK","DTF","STOK"])assert.match(storage,new RegExp(module));assert.match(storage,/Bölüm → Dosya Türü → Depolama/)});
 

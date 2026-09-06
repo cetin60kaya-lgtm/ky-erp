@@ -25,7 +25,8 @@ test("new user starts with blank password and exposes company role permissions a
   assert.match(ui, /Ana Firma/);
   assert.match(ui, /Başlangıç Yetkileri/);
   assert.match(ui, /Giriş Politikası/);
-  assert.match(ui, /Yeni cihaz girişinde yönetici onayı/);
+  assert.match(ui, /checked=\{createForm\.approvalRequired\}/);
+  assert.match(ui, /Yeni cihaz girişinde Firma Sahibi \/ Süper Yönetici onayı/);
   assert.match(ui, /createUserComplete\(\{\.\.\.createForm,loginPolicy:createForm\.loginPolicy==="PASSWORD_ONLY"\?"ANY_MFA":createForm\.loginPolicy,permissions:createPermissions\}\)/);
   assert.match(ui, /İkili doğrulama tüm kullanıcılar için zorunludur/);
 });

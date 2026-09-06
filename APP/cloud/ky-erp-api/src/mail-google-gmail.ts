@@ -2,6 +2,7 @@
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { openMailCredential, sealMailCredential } from "./mail-communication-core.ts";
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
+import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -227,13 +228,13 @@ async function resolveDraftAttachments(c:any,tenant:string,refs:any[]){
   }
   return resolved;
 }
-function mimeMessage(account:AnyRow,draft:AnyRow,attachments:any[]=[]){
+function mimeMessage(account:AnyRow,draft:AnyRow,attachments:any[]=[],replyHeaders:string[]=[]){
   const recipients=parseRecipients(draft.recipients_json),to=recipientEmails(recipients.to),cc=recipientEmails(recipients.cc),bcc=recipientEmails(recipients.bcc);
   if(!to.length&&!cc.length&&!bcc.length)throw Object.assign(new Error("En az bir alıcı gereklidir."),{code:"RECIPIENT_REQUIRED"});
   const subject=headerSafe(draft.subject),content=text(draft.body_html||draft.body_text),isHtml=Boolean(text(draft.body_html));
   const lines=[`From: ${headerSafe(account.email_address)}`,`To: ${to.join(", ")}`];
   if(cc.length)lines.push(`Cc: ${cc.join(", ")}`);if(bcc.length)lines.push(`Bcc: ${bcc.join(", ")}`);
-  lines.push(`Subject: ${subject}`,"MIME-Version: 1.0");
+  lines.push(`Subject: ${subject}`,"MIME-Version: 1.0",...replyHeaders);
   if(!attachments.length){
     lines.push(`Content-Type: ${isHtml?"text/html":"text/plain"}; charset=UTF-8`,"Content-Transfer-Encoding: 8bit","",content);
     return b64url(new TextEncoder().encode(lines.join("\r\n")));
@@ -396,6 +397,10 @@ export function registerGoogleMailRoutes(app:any){
     if(!draft)return c.json(err("DRAFT_NOT_FOUND","Mail taslağı bulunamadı."),404);
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_SEND_FORBIDDEN","Bu posta kutusundan gönderim yetkiniz yok."),403);
     if(upper(draft.provider_type)!=="GMAIL"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Gmail posta kutusu aktif ve onaylı değil."),409);
+    let original=null,replyHeaders:string[]=[];
+    try { original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id)); replyHeaders=gmailReplyHeaders(original); }
+    catch(error:any){return c.json(err(error.code,error.message),error.status||422);}
+    if(upper(draft.status)==="SENT")return c.json({ok:true,data:{idempotent:true,status:"PROVIDER_ACCEPTED",delivered:false}});
     const attachments=parseAttachments(draft.attachment_refs_json);
     let resolvedAttachments:any[]=[];
     try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
@@ -403,14 +408,15 @@ export function registerGoogleMailRoutes(app:any){
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId,existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
     if(existingJob){
       if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id}});
-      if(upper(existingJob.status)==="UNKNOWN_REVIEW_REQUIRED")return c.json(err("UNKNOWN_REVIEW_REQUIRED","Önceki gönderimin sonucu belirsiz. Çift mail riskine karşı otomatik tekrar gönderim kapalıdır.",{sendJobId:existingJob.id}),409);
+      if(["SENDING","UNKNOWN_REVIEW_REQUIRED"].includes(upper(existingJob.status)))return c.json(err("UNKNOWN_REVIEW_REQUIRED","Önceki gönderimin sonucu belirsiz. Çift mail riskine karşı otomatik tekrar gönderim kapalıdır.",{sendJobId:existingJob.id}),409);
     }
     const account=await c.env.DB.prepare("SELECT * FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(draft.account_id,tenant).first<AnyRow>(),token=(await usableToken(c,tenant,account)).text,jobId=text(existingJob?.id)||crypto.randomUUID(),ts=nowIso();
-    if(existingJob)await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,jobId,tenant).run();
+    if(existingJob){const claim=await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=? AND status='FAILED'").bind(ts,jobId,tenant).run();if(!claim.meta?.changes)return c.json(err("SEND_IN_PROGRESS","Gönderim zaten işleniyor; tekrar gönderilmedi."),409);}
     else await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",null,null,1,null,text(current.id),null,ts,ts).run();
     try{
-      const raw=mimeMessage(account,draft,resolvedAttachments),sent=(await googleJson(GMAIL+"/messages/send",token,{method:"POST",body:JSON.stringify({raw})})).payload,done=nowIso(),providerMessageId=text(sent.id),acceptance=text(sent.threadId||sent.historyId);
+      const raw=mimeMessage(account,draft,resolvedAttachments,replyHeaders),sent=(await googleJson(GMAIL+"/messages/send",token,{method:"POST",body:JSON.stringify({raw,...(original?{threadId:original.provider_thread_id}:{})})})).payload,done=nowIso(),providerMessageId=text(sent.id),acceptance=text(sent.threadId||sent.historyId);
+      if(!providerMessageId)throw new Error("Gmail gönderim kimliği doğrulanamadı.");
       await c.env.DB.batch([
         c.env.DB.prepare("UPDATE mail_send_jobs SET status='ACCEPTED',provider_message_id=?,provider_acceptance_id=?,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(providerMessageId||null,acceptance||null,done,jobId,tenant),
         c.env.DB.prepare("UPDATE mail_drafts SET status='SENT',updated_at=? WHERE id=? AND main_company_slug=?").bind(done,draftId,tenant)

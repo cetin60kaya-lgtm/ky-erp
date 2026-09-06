@@ -2,6 +2,7 @@
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { openMailCredential, sealMailCredential } from "./mail-communication-core.ts";
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
+import { mailReplyContext } from "./mail-reply-context.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -12,8 +13,10 @@ const CALLBACK = "https://api.kyerp.net/api/auth/mail/oauth/microsoft/callback";
 const APP_RETURN = "https://app.kyerp.net/iletisim/mail-gelen";
 const SCOPES = [
   "openid","profile","email","offline_access","User.Read",
-  "Mail.ReadWrite","Mail.Send","Mail.ReadWrite.Shared","Mail.Send.Shared"
+  "Mail.ReadWrite","Mail.Send"
 ].join(" ");
+const scopesForAccount=(account:AnyRow)=>String(account?.account_type||"").toUpperCase()==="SHARED"
+  ? SCOPES+" Mail.ReadWrite.Shared Mail.Send.Shared" : SCOPES;
 
 const text=(v:unknown)=>v==null?"":String(v).trim();
 const upper=(v:unknown)=>text(v).toUpperCase().replace(/İ/g,"I");
@@ -99,7 +102,7 @@ async function usableToken(c:any,tenant:string,account:AnyRow){
   const expires=Date.parse(text(cred.expiresAt));
   if(Number.isFinite(expires)&&expires>Date.now()+120000)return{text:cred.accessToken,credential:cred};
   if(!text(cred.refreshToken))throw Object.assign(new Error("Microsoft yenileme anahtarı bulunamadı; hesabı yeniden bağlayın."),{code:"MAIL_REAUTH_REQUIRED"});
-  const payload=await tokenPost(c,{grant_type:"refresh_token",refresh_token:text(cred.refreshToken),scope:SCOPES});
+  const payload=await tokenPost(c,{grant_type:"refresh_token",refresh_token:text(cred.refreshToken),scope:scopesForAccount(account)});
   cred={...cred,accessToken:text(payload.access_token),refreshToken:text(payload.refresh_token)||text(cred.refreshToken),expiresAt:new Date(Date.now()+Math.max(60,Number(payload.expires_in||3600))*1000).toISOString(),scope:text(payload.scope)||text(cred.scope),tokenType:text(payload.token_type)||"Bearer"};
   await saveCredential(c,tenant,text(account.id),cred,{provider:"MICROSOFT_365",refreshedAt:nowIso()});
   return{text:cred.accessToken,credential:cred};
@@ -329,7 +332,7 @@ export function registerMicrosoftMailRoutes(app:any){
     await c.env.DB.prepare("DELETE FROM mail_oauth_states WHERE expires_at<?").bind(ts).run();
     await c.env.DB.prepare("INSERT INTO mail_oauth_states(state_hash,main_company_slug,account_id,user_id,provider_type,code_verifier_ciphertext,code_verifier_nonce,return_path,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
       .bind(await sha256Hex(state),tenant,account.id,text(current.id),"MICROSOFT_365",sealed.ciphertext,sealed.nonce,APP_RETURN,new Date(Date.now()+10*60*1000).toISOString(),ts).run();
-    const qs=new URLSearchParams({client_id:cfg.clientId,response_type:"code",redirect_uri:CALLBACK,response_mode:"query",scope:SCOPES,state,code_challenge:challenge,code_challenge_method:"S256",prompt:"select_account"});
+    const qs=new URLSearchParams({client_id:cfg.clientId,response_type:"code",redirect_uri:CALLBACK,response_mode:"query",scope:scopesForAccount(account),state,code_challenge:challenge,code_challenge_method:"S256",prompt:"select_account"});
     await audit(c,tenant,text(current.id),text(account.id),"MAIL_MICROSOFT_OAUTH_STARTED",{accountType:account.account_type});
     return c.json({ok:true,data:{authorizeUrl:AUTHORIZE+"?"+qs.toString(),expiresAt:new Date(Date.now()+10*60*1000).toISOString()}});
   });
@@ -344,7 +347,7 @@ export function registerMicrosoftMailRoutes(app:any){
     await c.env.DB.prepare("DELETE FROM mail_oauth_states WHERE state_hash=?").bind(stateHash).run();
     try{
       const verifier=await openMailCredential(c,{ciphertext:text(row.code_verifier_ciphertext),nonce:text(row.code_verifier_nonce)});
-      const payload=await tokenPost(c,{grant_type:"authorization_code",code,redirect_uri:CALLBACK,code_verifier:verifier,scope:SCOPES});
+      const payload=await tokenPost(c,{grant_type:"authorization_code",code,redirect_uri:CALLBACK,code_verifier:verifier,scope:scopesForAccount(row)});
       const accessToken=text(payload.access_token);
       const profile=(await graphJson(GRAPH+"/me?$select=id,displayName,mail,userPrincipalName",accessToken)).payload;
       const connectedEmail=text(profile.mail||profile.userPrincipalName).toLowerCase(),mailbox=text(row.email_address).toLowerCase();
@@ -460,6 +463,10 @@ export function registerMicrosoftMailRoutes(app:any){
     if(!draft)return c.json(err("DRAFT_NOT_FOUND","Mail taslağı bulunamadı."),404);
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_SEND_FORBIDDEN","Bu posta kutusundan gönderim yetkiniz yok."),403);
     if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Microsoft posta kutusu aktif ve onaylı değil."),409);
+    let original=null;
+    try { original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id)); }
+    catch(error:any){return c.json(err(error.code,error.message),error.status||422);}
+    if(upper(draft.status)==="SENT")return c.json({ok:true,data:{idempotent:true,status:"PROVIDER_ACCEPTED",delivered:false}});
     const attachments=parseAttachments(draft.attachment_refs_json);
     let resolvedAttachments:any[]=[];
     try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
@@ -468,24 +475,26 @@ export function registerMicrosoftMailRoutes(app:any){
     const existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
     if(existingJob){
       if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id}});
-      if(upper(existingJob.status)==="UNKNOWN_REVIEW_REQUIRED")return c.json(err("UNKNOWN_REVIEW_REQUIRED","Önceki gönderimin sonucu belirsiz. Çift mail riskine karşı otomatik tekrar gönderim kapalıdır.",{sendJobId:existingJob.id}),409);
+      if(["SENDING","UNKNOWN_REVIEW_REQUIRED"].includes(upper(existingJob.status)))return c.json(err("UNKNOWN_REVIEW_REQUIRED","Önceki gönderimin sonucu belirsiz. Çift mail riskine karşı otomatik tekrar gönderim kapalıdır.",{sendJobId:existingJob.id}),409);
     }
     const account=await c.env.DB.prepare("SELECT * FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(draft.account_id,tenant).first<AnyRow>(),token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),recipients=parseRecipients(draft.recipients_json);
     const message={subject:text(draft.subject),body:{contentType:text(draft.body_html)?"HTML":"Text",content:text(draft.body_html||draft.body_text)},toRecipients:localRecipients(recipients.to),ccRecipients:localRecipients(recipients.cc),bccRecipients:localRecipients(recipients.bcc)};
     let providerDraftId=text(draft.provider_draft_id);
     if(!providerDraftId){
-      const created=(await graphJson(base+"/messages",token,{method:"POST",body:JSON.stringify(message)})).payload;providerDraftId=text(created.id);
+      const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
+      const created=(await graphJson(endpoint,token,{method:"POST",body:JSON.stringify(original?{message}:message)})).payload;providerDraftId=text(created.id);
       if(!providerDraftId)return c.json(err("PROVIDER_DRAFT_MISSING","Microsoft taslak kimliği dönmedi."),502);
       await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=?").bind(providerDraftId,nowIso(),draftId,tenant).run();
     }
     try{await syncMicrosoftDraftAttachments(base,providerDraftId,token,resolvedAttachments);}
     catch(error:any){return c.json(err(text(error?.code)||"MICROSOFT_ATTACHMENT_SYNC_FAILED",text(error?.message)||"File Hub ekleri Microsoft taslağına aktarılamadı."),Number(error?.status)||502);}
     const jobId=text(existingJob?.id)||crypto.randomUUID(),ts=nowIso();
-    if(existingJob)await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,jobId,tenant).run();
+    if(existingJob){const claim=await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=? AND status='FAILED'").bind(ts,jobId,tenant).run();if(!claim.meta?.changes)return c.json(err("SEND_IN_PROGRESS","Gönderim zaten işleniyor; tekrar gönderilmedi."),409);}
     else await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",providerDraftId,null,1,null,text(current.id),null,ts,ts).run();
     try{
       const response=await fetch(base+"/messages/"+encodeURIComponent(providerDraftId)+"/send",{method:"POST",headers:{Authorization:"Bearer "+token}});
+      if(response.status>=500)throw new Error("Microsoft gönderim sonucu doğrulanamadı.");
       if(!response.ok){
         const payload=await response.json().catch(()=>({})) as AnyRow,detail=text(payload?.error?.message)||"Microsoft gönderimi reddetti.";
         await c.env.DB.prepare("UPDATE mail_send_jobs SET status='FAILED',last_error=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(detail,nowIso(),jobId,tenant).run();

@@ -391,6 +391,10 @@ export function registerMailCommunicationRoutes(app:any){
     if(!hasMailPermission(current,"canCreate"))return c.json(jsonError("MAIL_COMPOSE_FORBIDDEN","Mail taslağı oluşturma yetkiniz yok."),403);
     const accountId=text(body.accountId);
     if(!accountId||!(await canAccessAccount(c,current,tenant,accountId,"can_compose")))return c.json(jsonError("MAIL_ACCOUNT_COMPOSE_FORBIDDEN","Bu posta kutusundan taslak oluşturma yetkiniz yok."),403);
+    if(text(body.replyToMessageId)) {
+      const original=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE id=? AND main_company_slug=? AND account_id=? LIMIT 1").bind(text(body.replyToMessageId),tenant,accountId).first<AnyRow>();
+      if(!original || !(await canAccessAccount(c,current,tenant,accountId,"can_reply")))return c.json(jsonError("MAIL_REPLY_FORBIDDEN","Bu posta kutusundaki maile yanıt verme yetkiniz yok."),403);
+    }
     let attachmentRefs:any[]=[];
     try{attachmentRefs=await validateDraftAttachments(c,current,tenant,accountId,body.attachmentRefs);}
     catch(error:any){return c.json(jsonError(text(error?.code)||"MAIL_ATTACHMENT_INVALID",text(error?.message)||"Mail eki doğrulanamadı."),Number(error?.status)||422);}

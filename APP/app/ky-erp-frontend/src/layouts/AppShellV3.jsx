@@ -137,7 +137,7 @@ export default function AppShellV3({
     } finally {
       if (!silent) setNotificationLoading(false);
     }
-  }, [activeCompanySlug, user?.id]);
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     if (!user?.id) return undefined;
@@ -149,7 +149,7 @@ export default function AppShellV3({
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [refreshNotifications, user?.id]);
+  }, [refreshNotifications, user?.id, activeCompanySlug]);
 
   useEffect(() => {
     if (!notificationOpen) return undefined;
