@@ -53,9 +53,10 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
       raw.productName=text(product.name||product.productName);
     }
     if(body.lotNo!==undefined)raw.lotNo=text(body.lotNo);
+    if(body.expenseCategoryName!==undefined&&text(raw.routingType||"EXPENSE").toUpperCase()==="EXPENSE")raw.expenseCategoryName=text(body.expenseCategoryName)||"Mal ve Hizmet Alımı";
     await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();
     await resolveIfClean(c,slug,documentId);
-    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||""}});
+    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||"",expenseCategoryName:raw.expenseCategoryName||null}});
   });
 
   app.post("/api/e-belge/products/:productId/aliases",async c=>{
