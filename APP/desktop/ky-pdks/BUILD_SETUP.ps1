@@ -49,6 +49,8 @@ if ($ProjectText -notmatch 'ProductMode') { throw 'Desktop project dual ProductM
 if ($ProjectText -notmatch 'PDKS_ONLY') { throw 'PDKS-only compile constant eksik.' }
 if ($ProjectText -notmatch 'Compile Remove="KyErpDesktopWindow.xaml.cs"') { throw 'PDKS-only build tam ERP window code-behind dosyasını dışlamıyor.' }
 if ($ProjectText -notmatch 'Page Remove="KyErpDesktopWindow.xaml"') { throw 'PDKS-only build tam ERP XAML dosyasını dışlamıyor.' }
+if ($ProjectText -notmatch 'Compile Remove="KyErpShellWindow.xaml.cs"') { throw 'PDKS-only build eski ERP shell code-behind dosyasını dışlamıyor.' }
+if ($ProjectText -notmatch 'Page Remove="KyErpShellWindow.xaml"') { throw 'PDKS-only build eski ERP shell XAML dosyasını dışlamıyor.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
