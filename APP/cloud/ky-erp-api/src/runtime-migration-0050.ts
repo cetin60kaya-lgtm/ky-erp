@@ -610,7 +610,9 @@ async function verify(db: D1Like): Promise<void> {
   }
 }
 
-export async function ensureMailCommunicationCore0050(db: D1Like): Promise<{
+export async function ensureMailCommunicationCore0050(
+  db: D1Like,
+): Promise<{
   state: "READY";
   createdTables: string[];
   createdIndexes: string[];
@@ -618,14 +620,16 @@ export async function ensureMailCommunicationCore0050(db: D1Like): Promise<{
   if (readyInThisIsolate) return { state: "READY", createdTables: [], createdIndexes: [] };
 
   const { missingTables, missingIndexes } = await preflight(db);
-  const statements = [
-    ...TABLES.filter((spec) => missingTables.includes(spec.name)).map((spec) => db.prepare(spec.createSql)),
-    ...INDEXES.filter((spec) => missingIndexes.includes(spec.name)).map((spec) => db.prepare(spec.createSql)),
-  ];
-  if (statements.length) await db.batch(statements);
+  if (missingTables.length) {
+    throw new Error(`MIGRATION_0050_REQUIRED_TABLES:${missingTables.join(",")}`);
+  }
+  if (missingIndexes.length) {
+    throw new Error(`MIGRATION_0050_REQUIRED_INDEXES:${missingIndexes.join(",")}`);
+  }
+
   await verify(db);
   readyInThisIsolate = true;
-  return { state: "READY", createdTables: missingTables, createdIndexes: missingIndexes };
+  return { state: "READY", createdTables: [], createdIndexes: [] };
 }
 
 export const mailCommunication0050Contract = {
