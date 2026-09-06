@@ -73,7 +73,7 @@ export default function AdminApprovalCenter({ compact = false }) {
       <div className="admpro-card-head">
         <div>
           <h3>Bekleyen Onaylar</h3>
-          <p>Giriş ve mail hesabı talepleri tek karar merkezinde. Firma Sahibi / İşveren ve Süper Yönetici yetkili talepleri doğrudan sonuçlandırabilir.</p>
+          <p>Giriş ve mail hesabı talepleri tek karar merkezinde. Firma Sahibi / İşveren ve Süper Yönetici kendi işlemlerinde onay kuyruğuna düşmez; diğer kullanıcı taleplerini doğrudan sonuçlandırabilir.</p>
         </div>
       </div>
 

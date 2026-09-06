@@ -40,3 +40,10 @@ test("users area exposes one clean approval center with decision log", () => {
   assert.match(approvalCenterSource, /LOGIN_APPROVED/);
   assert.match(approvalCenterSource, /decision_actor_name/);
 });
+
+
+test("owner accounts are described as approval-exempt for their own actions", () => {
+  assert.match(approvalCenterSource, /kendi işlemlerinde onay kuyruğuna düşmez/);
+  assert.match(usersSource, /Firma Sahibi \/ İşveren ve Süper Yönetici giriş onayından muaftır/);
+  assert.match(usersSource, /selectedApprovalExempt/);
+});

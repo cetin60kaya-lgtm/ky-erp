@@ -70,22 +70,22 @@ export function registerMailProviderOverlayRoutes(app:any){
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return c.json(err("EMAIL_INVALID","Geçerli bir e-posta adresi girin."),422);
     const existing=await c.env.DB.prepare("SELECT id,status,approval_status FROM mail_accounts WHERE main_company_slug=? AND provider_type='GMAIL' AND LOWER(email_address)=LOWER(?) LIMIT 1").bind(tenant,email).first<AnyRow>();
     if(existing?.id)return c.json(err("MAIL_ACCOUNT_EXISTS","Bu Gmail hesabı için mevcut kayıt veya talep bulunuyor.",existing),409);
-    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OR_APP_OWNER",elevated=ownerRole(current?.role)||companyAdminRole(current?.role),defaultSend=elevated&&bool(body.isDefaultSend),defaultReceive=elevated&&bool(body.isDefaultReceive);
+    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OR_APP_OWNER",elevated=ownerRole(current?.role)||companyAdminRole(current?.role),companyOwner=companyAdminRole(current?.role),appOwner=ownerRole(current?.role),requestStatus=elevated?"APPROVED":"PENDING",accountStatus=elevated?"DISCONNECTED":"PENDING",defaultSend=elevated&&bool(body.isDefaultSend),defaultReceive=elevated&&bool(body.isDefaultReceive);
     const statements:any[]=[];
     if(defaultSend)statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_send=0,updated_at=? WHERE main_company_slug=?").bind(ts,tenant));
     if(defaultReceive)statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_receive=0,updated_at=? WHERE main_company_slug=?").bind(ts,tenant));
     statements.push(
       c.env.DB.prepare("INSERT INTO mail_accounts(id,main_company_slug,provider_type,account_type,email_address,display_name,department_code,provider_account_id,status,approval_status,provider_connected,is_default_send,is_default_receive,created_by,approved_by_company,approved_by_owner,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(accountId,tenant,"GMAIL",type,email,text(body.displayName)||email,text(body.departmentCode)||null,null,"PENDING","PENDING",0,defaultSend?1:0,defaultReceive?1:0,text(current?.id),null,null,ts,ts),
+        .bind(accountId,tenant,"GMAIL",type,email,text(body.displayName)||email,text(body.departmentCode)||null,null,accountStatus,requestStatus,0,defaultSend?1:0,defaultReceive?1:0,text(current?.id),elevated&&companyOwner?text(current?.id):null,elevated&&appOwner?text(current?.id):null,ts,ts),
       c.env.DB.prepare("INSERT INTO mail_account_members(id,main_company_slug,account_id,user_id,can_view,can_compose,can_send,can_reply,can_forward,can_attach,can_link_entity,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
         .bind(crypto.randomUUID(),tenant,accountId,text(current?.id),1,1,type==="PERSONAL"?1:0,type==="PERSONAL"?1:0,type==="PERSONAL"?1:0,1,1,ts,ts),
       c.env.DB.prepare("INSERT INTO mail_approval_requests(id,main_company_slug,request_type,target_type,target_id,status,approval_policy,requested_by,request_payload,decided_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(requestId,tenant,"MAIL_ACCOUNT_CONNECT","MAIL_ACCOUNT",accountId,"PENDING",policy,text(current?.id),JSON.stringify({provider:"GMAIL",accountType:type,emailAddress:email,departmentCode:text(body.departmentCode),isDefaultSend:defaultSend,isDefaultReceive:defaultReceive}),null,ts,ts),
+        .bind(requestId,tenant,"MAIL_ACCOUNT_CONNECT","MAIL_ACCOUNT",accountId,requestStatus,policy,text(current?.id),JSON.stringify({provider:"GMAIL",accountType:type,emailAddress:email,departmentCode:text(body.departmentCode),isDefaultSend:defaultSend,isDefaultReceive:defaultReceive,privilegedOwnerBypass:elevated}),elevated?ts:null,ts,ts),
       c.env.DB.prepare("INSERT INTO mail_approval_steps(id,main_company_slug,request_id,step_type,step_order,required,status,decided_by,decided_at,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(crypto.randomUUID(),tenant,requestId,"COMPANY_OWNER",1,1,"PENDING",null,null,null,ts,ts)
+        .bind(crypto.randomUUID(),tenant,requestId,"COMPANY_OWNER",1,1,requestStatus,elevated?text(current?.id):null,elevated?ts:null,elevated?"PRIVILEGED_OWNER_AUTO_APPROVAL":null,ts,ts)
     );
     await c.env.DB.batch(statements);
-    return c.json({ok:true,data:{accountId,requestId,status:"PENDING",approvalPolicy:policy,provider:"GMAIL",accountType:type,emailAddress:email,isDefaultSend:defaultSend,isDefaultReceive:defaultReceive}},201);
+    return c.json({ok:true,data:{accountId,requestId,status:requestStatus,approvalPolicy:policy,approvalBypass:elevated,provider:"GMAIL",accountType:type,emailAddress:email,isDefaultSend:defaultSend,isDefaultReceive:defaultReceive}},201);
   });
 
   app.put("/api/mail/accounts/:id/defaults",async(c:any)=>{

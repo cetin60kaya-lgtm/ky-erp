@@ -100,7 +100,8 @@ async function securityFor(c: any, user: AnyRow) {
   let security = await c.env.DB.prepare("SELECT * FROM auth_user_security WHERE user_id=? LIMIT 1").bind(user.id).first<AnyRow>();
   if (!security) {
     const timestamp = nowIso();
-    const approvalRequired = effectiveRole(user) === "SUPER_ADMIN" ? 0 : 1;
+    const approvalRole = effectiveRole(user);
+    const approvalRequired = isSuper(approvalRole) || isCompanyAdmin(approvalRole) ? 0 : 1;
     await c.env.DB.prepare(
       `INSERT OR IGNORE INTO auth_user_security
        (user_id,email,main_company_slug,role_override,mfa_enabled,email_verified,approval_required,google_mfa_enabled,microsoft_mfa_enabled,created_at,updated_at)
@@ -156,7 +157,7 @@ async function userPayload(c: any, user: AnyRow) {
     microsoftMfaEnabled,
     legacyMfaEnabled: Boolean(security.mfa_enabled && security.mfa_secret),
     emailVerified: Boolean(security.email_verified),
-    approvalRequired: Boolean(security.approval_required),
+    approvalRequired: isSuper(role) || isCompanyAdmin(role) ? false : Boolean(security.approval_required),
     permissions: await permissionRows(c, text(user.id), role),
   };
 }
@@ -325,7 +326,7 @@ export function registerAuthManagementRoutes(app: any) {
         mfaEnabled: googleMfaEnabled && microsoftMfaEnabled,
         googleMfaEnabled, microsoftMfaEnabled,
         legacyMfaEnabled: Boolean(row.mfa_enabled && row.mfa_secret),
-        emailVerified: Boolean(row.email_verified), approvalRequired: Boolean(row.approval_required),
+        emailVerified: Boolean(row.email_verified), approvalRequired: isSuper(effective) || isCompanyAdmin(effective) ? false : Boolean(row.approval_required),
         lastLoginAt: row.last_login_at, createdAt: row.created_at, updatedAt: row.updated_at,
       };
       if (isSuper(current.role) || adminCanManage(current, { ...item, effectiveRole: effective })) data.push(item);
