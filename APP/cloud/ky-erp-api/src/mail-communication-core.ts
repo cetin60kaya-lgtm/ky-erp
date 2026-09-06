@@ -320,7 +320,7 @@ export function registerMailCommunicationRoutes(app:any){
 
   app.put("/api/mail/messages/:id/pin",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
-    if(!hasMailPermission(current,"canUpdate"))return c.json(jsonError("MAIL_UPDATE_FORBIDDEN","Mail sabitleme yetkiniz yok."),403);
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_UPDATE_FORBIDDEN","Mail sabitleme yetkiniz yok."),403);
     const row=await c.env.DB.prepare("SELECT id,account_id FROM mail_messages WHERE id=? AND main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
     if(!row?.id)return c.json(jsonError("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
     if(!(await canAccessAccount(c,current,tenant,text(row.account_id),"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
