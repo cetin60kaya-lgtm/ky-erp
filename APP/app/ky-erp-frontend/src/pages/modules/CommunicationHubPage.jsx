@@ -133,6 +133,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [draftForm, setDraftForm] = useState({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
   const [composeOpen, setComposeOpen] = useState(false);
   const [messageSearch, setMessageSearch] = useState("");
+  const [composeAttachments, setComposeAttachments] = useState([]);
+  const [attachmentSearch, setAttachmentSearch] = useState("");
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
@@ -145,6 +147,19 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     () => providers.find((row) => row.provider === requestForm.providerType) || null,
     [providers, requestForm.providerType],
   );
+  const selectedAccountReadiness = selectedAccount?.readiness || {};
+  const attachmentTotalBytes = useMemo(
+    () => composeAttachments.reduce((sum, row) => sum + Number(row.size_bytes || row.sizeBytes || 0), 0),
+    [composeAttachments],
+  );
+  const attachmentCandidates = useMemo(() => {
+    const q = attachmentSearch.trim().toLocaleLowerCase("tr-TR");
+    const selected = new Set(composeAttachments.map((row) => String(row.id)));
+    return files
+      .filter((row) => row?.id && !selected.has(String(row.id)))
+      .filter((row) => !q || String(row.file_name || row.fileName || "").toLocaleLowerCase("tr-TR").includes(q))
+      .slice(0, 10);
+  }, [files, composeAttachments, attachmentSearch]);
   const folderRows = useMemo(() => flattenFolders(folders), [folders]);
   const selectedFolder = useMemo(
     () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
@@ -268,6 +283,31 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     loadMailbox();
     return () => { cancelled = true; };
   }, [activeTab, isMail, selectedAccountId, selectedFolderId, mailboxRefresh]);
+
+  function addComposeAttachment(file) {
+    if (!file?.id || composeAttachments.some((row) => String(row.id) === String(file.id))) return;
+    if (composeAttachments.length >= 10) {
+      setNotice("Hata: Bir mailde en fazla 10 dosya eki kullanılabilir.");
+      return;
+    }
+    const nextTotal = attachmentTotalBytes + Number(file.size_bytes || file.sizeBytes || 0);
+    if (nextTotal > 25 * 1024 * 1024) {
+      setNotice("Hata: Mail eklerinin toplamı 25 MB sınırını aşamaz.");
+      return;
+    }
+    setComposeAttachments((current) => [...current, file]);
+  }
+
+  function removeComposeAttachment(fileId) {
+    setComposeAttachments((current) => current.filter((row) => String(row.id) !== String(fileId)));
+  }
+
+  function openNewCompose() {
+    setDraftForm({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
+    setComposeAttachments([]);
+    setAttachmentSearch("");
+    setComposeOpen(true);
+  }
 
   async function submitAccountRequest(event) {
     event.preventDefault();
