@@ -30,7 +30,6 @@ public partial class PdksWorkbenchWindow : Window
     private IReadOnlyList<CachedPerson> _people = Array.Empty<CachedPerson>();
     private IReadOnlyList<AttendanceDayRow> _attendanceRows = Array.Empty<AttendanceDayRow>();
     private IReadOnlyList<TimesheetRow> _timesheet = Array.Empty<TimesheetRow>();
-    private IReadOnlyList<AdvanceRow> _advances = Array.Empty<AdvanceRow>();
 
     private bool CanWrite => !string.IsNullOrWhiteSpace(_token)
         && !string.Equals(_role, "DENETIM", StringComparison.OrdinalIgnoreCase);
@@ -85,7 +84,6 @@ public partial class PdksWorkbenchWindow : Window
         CorrectionDatePicker.SelectedDate = today;
         LeaveStartPicker.SelectedDate = today;
         LeaveEndPicker.SelectedDate = today;
-        AdvanceDatePicker.SelectedDate = today;
         CorrectionStatusCombo.SelectedIndex = 0;
         LeaveTypeCombo.SelectedIndex = 0;
         MfaProviderCombo.SelectedIndex = 0;
@@ -272,11 +270,27 @@ public partial class PdksWorkbenchWindow : Window
     private void SetWriteControls()
     {
         var enabled = CanWrite;
+        ImportButton.IsEnabled = enabled;
         ProcessButton.IsEnabled = enabled;
         ClosePeriodButton.IsEnabled = enabled;
         CorrectionSaveButton.IsEnabled = enabled;
         LeaveSaveButton.IsEnabled = enabled;
-        AdvanceSaveButton.IsEnabled = enabled;
+        DetailAdminButton.IsEnabled = enabled;
+        BackupButton.IsEnabled = !string.IsNullOrWhiteSpace(_token);
+        ApplyRoleVisibility();
+    }
+
+    private void ApplyRoleVisibility()
+    {
+        var audit = string.Equals(_role, "DENETIM", StringComparison.OrdinalIgnoreCase);
+        var writeVisibility = audit ? Visibility.Collapsed : Visibility.Visible;
+        ImportButton.Visibility = writeVisibility;
+        ProcessButton.Visibility = writeVisibility;
+        ClosePeriodButton.Visibility = writeVisibility;
+        BackupButton.Visibility = writeVisibility;
+        DetailAdminButton.Visibility = writeVisibility;
+        CorrectionPanel.Visibility = writeVisibility;
+        LeavePanel.Visibility = writeVisibility;
     }
 
     private async Task RefreshPeopleFromErpAsync(bool refreshAttendance)
@@ -296,7 +310,6 @@ public partial class PdksWorkbenchWindow : Window
     {
         CorrectionPersonCombo.ItemsSource = _people;
         LeavePersonCombo.ItemsSource = _people;
-        AdvancePersonCombo.ItemsSource = _people;
         PersonCountText.Text = _people.Count.ToString(CultureInfo.InvariantCulture);
     }
 
@@ -324,7 +337,6 @@ public partial class PdksWorkbenchWindow : Window
         var (year, month) = SelectedPeriod();
         _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
         _timesheet = AttendanceStore.BuildTimesheet(_attendanceRows);
-        _advances = await _operations.GetAdvancesAsync(_lifetime.Token);
         AttendanceGrid.ItemsSource = _attendanceRows.OrderByDescending(x => x.Date).ThenBy(x => x.FullName).ToArray();
         TimesheetGrid.ItemsSource = _timesheet;
         var snapshot = await _store.SnapshotAsync(_lifetime.Token);
@@ -378,7 +390,7 @@ public partial class PdksWorkbenchWindow : Window
         {
             await RefreshPeopleFromErpAsync(false);
             await RefreshAllAsync();
-            StatusText.Text = $"ERP personeli yenilendi · {_people.Count} SGK'lı kartlı personel.";
+            StatusText.Text = $"ERP personeli yenilendi · {_people.Count} aktif kartlı personel.";
         });
     }
 
@@ -495,35 +507,6 @@ public partial class PdksWorkbenchWindow : Window
         });
     }
 
-    private async void ExportPayrollWorkflowButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_busy) return;
-        await BusyAsync("Bordro aktarımı hazırlanıyor...", async () =>
-        {
-            var (year, month) = SelectedPeriod();
-            _attendanceRows = await _attendance.BuildMonthAsync(year, month, _lifetime.Token);
-            _timesheet = AttendanceStore.BuildTimesheet(_attendanceRows);
-            _advances = await _operations.GetAdvancesAsync(_lifetime.Token);
-            var prefix = $"{year:D4}-{month:D2}-";
-            var advances = _advances.Where(x => x.Date.StartsWith(prefix, StringComparison.Ordinal))
-                .GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
-            var reportDir = Path.Combine(_paths.Root, "Reports");
-            Directory.CreateDirectory(reportDir);
-            var path = Path.Combine(reportDir, $"KY-PDKS-BORDRO-{year:D4}-{month:D2}-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
-            var lines = new List<string> { "Kod;Personel;Bolum;Kart;Calisilan;YillikIzin;Izin;EksikBasim;KartYok;GecDk;ErkenDk;FazlaDk;Avans" };
-            foreach (var row in _timesheet)
-            {
-                lines.Add(CsvLine(row.PersonnelCode, row.FullName, row.Department, row.CardNo, row.WorkedDays, row.AnnualLeaveDays,
-                    row.LeaveDays, row.MissingPunchDays, row.NoPunchDays, row.LateMinutes, row.EarlyMinutes, row.OvertimeMinutes,
-                    advances.TryGetValue(row.EmployeeId, out var amount) ? amount.ToString("0.00", CultureInfo.InvariantCulture) : "0.00"));
-            }
-            await File.WriteAllLinesAsync(path, lines, new UTF8Encoding(true), _lifetime.Token);
-            await _operations.AuditAsync("PAYROLL_EXPORT", $"{year:D4}-{month:D2}", path, _userName, _lifetime.Token);
-            StatusText.Text = $"Bordro aktarımı hazır: {path}";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
-        });
-    }
-
     private async void BackupWorkflowButton_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -587,25 +570,6 @@ public partial class PdksWorkbenchWindow : Window
             if (start.Year != end.Year || start.Month != end.Month) await RefreshOnePersonMonthAsync(person, end.Year, end.Month);
             await RefreshAllAsync();
             StatusText.Text = $"{person.FullName} izin kaydı ERP + PDKS'ye işlendi.";
-        });
-    }
-
-    private async void SaveAdvanceButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_busy) return;
-        if (AdvancePersonCombo.SelectedItem is not CachedPerson person || AdvanceDatePicker.SelectedDate is not DateTime date)
-        { StatusText.Text = "Avans için personel ve tarih seçin."; return; }
-        if (!decimal.TryParse(AdvanceAmountBox.Text.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
-        { StatusText.Text = "Geçerli bir avans tutarı girin."; return; }
-        await BusyAsync("Avans kaydediliyor...", async () =>
-        {
-            if (!CanWrite) throw new InvalidOperationException("Avans kaydı için yazma yetkisi gerekir.");
-            await EnsurePeriodOpenAsync(date);
-            await _erp.SaveAdvanceAsync(_token, person, date.ToString("yyyy-MM-dd"), amount, AdvanceNoteBox.Text, _lifetime.Token);
-            await _operations.SaveAdvanceAsync(person.Id, date.ToString("yyyy-MM-dd"), amount, AdvanceNoteBox.Text, _userName, _lifetime.Token);
-            AdvanceAmountBox.Clear();
-            await RefreshAllAsync();
-            StatusText.Text = $"{person.FullName} · {amount:N2} TL avans ERP + PDKS'ye işlendi.";
         });
     }
 
