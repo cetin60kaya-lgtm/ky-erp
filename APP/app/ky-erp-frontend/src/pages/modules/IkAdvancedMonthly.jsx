@@ -1067,32 +1067,57 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   };
 
   const exportPayroll = () => {
-    exportRowsToExcelFile(`ik-bordro-${period}.xlsx`, payrollRows.map((row) => ({
+    const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
+    if (!rows.length) return setNotice("Ödeme listesi için personel bulunamadı.");
+    const totals = rows.reduce((sum, row) => ({
+      salary: sum.salary + row.salary,
+      road: sum.road + row.road,
+      extra: sum.extra + row.extra,
+      overtime: sum.overtime + row.overtime,
+      advance: sum.advance + row.advance,
+      deduction: sum.deduction + row.deduction,
+      garnishment: sum.garnishment + row.garnishment,
+      bank: sum.bank + row.bank,
+      cash: sum.cash + row.cash,
+      net: sum.net + row.net,
+    }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
+    const excelRows = rows.map((row) => ({
       personel: row.employee.fullName,
-      sgk: sgkLabel(row.employee),
-      odeme: paymentLabel(row.employee),
+      hkn: row.employee.code || "",
       maas: row.salary,
       yol: row.road,
       ek: row.extra,
       mesai: row.overtime,
       avans: row.advance,
       kesinti: row.deduction,
-      hukukiKesintiTuru: row.legalType === "KARMA" ? "İcra / Haciz" : row.legalType === "HACIZ" ? "Haciz" : row.legalType === "ICRA" ? "İcra" : "",
-      hukukiKesintiYeri: row.garnishmentSource === "KARMA" ? "Banka + Elden" : row.garnishmentSource === "ELDEN" ? "Elden" : row.garnishment ? "Banka" : "",
-      hukukiKesinti: row.garnishment,
-      hakedis: row.hakedis,
-      netOdenecek: row.net,
+      icraHaciz: row.garnishment,
       banka: row.bank,
       elden: row.cash,
-      toplam: row.total,
+      toplamOdeme: row.net,
       durum: row.diff === 0 ? "Dengeli" : "Kontrol",
-    })));
+    }));
+    excelRows.push({
+      personel: "TOPLAM",
+      hkn: "",
+      maas: totals.salary,
+      yol: totals.road,
+      ek: totals.extra,
+      mesai: totals.overtime,
+      avans: totals.advance,
+      kesinti: totals.deduction,
+      icraHaciz: totals.garnishment,
+      banka: totals.bank,
+      elden: totals.cash,
+      toplamOdeme: totals.net,
+      durum: "",
+    });
+    exportRowsToExcelFile(`ik-odeme-listesi-${period}.xlsx`, excelRows);
+    setNotice(`${rows.length} personelin ödeme listesi Excel'e hazırlandı; en altta sütun toplamları var.`);
   };
-
 
   const printPayrollReport = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
-    if (!rows.length) return setNotice("Cikti icin personel bulunamadi.");
+    if (!rows.length) return setNotice("Ödeme listesi için personel bulunamadı.");
     const totals = rows.reduce((sum, row) => ({
       salary: sum.salary + row.salary,
       road: sum.road + row.road,
@@ -1106,38 +1131,42 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       net: sum.net + row.net,
     }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
     const html = `<html><head><meta charset="utf-8"><style>
-      @page{size:A4 landscape;margin:8mm}
-      body{font:9px Arial;color:#14263a;padding:0}
-      h1{font-size:17px;margin:0}
-      p{color:#52657b;margin:4px 0 10px}
+      @page{size:A4 landscape;margin:7mm}
+      *{box-sizing:border-box}
+      body{font:8.5px Arial;color:#14263a;padding:0;margin:0}
+      h1{font-size:16px;margin:0}
+      p{color:#52657b;margin:3px 0 8px}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #cad6e4;padding:4px 3px;text-align:right;white-space:nowrap}
-      th:first-child,td:first-child{text-align:left;width:20%}
-      th{background:#eef4fb;font-size:8px}
-      .tot{font-weight:700;background:#f8fbff}
+      th,td{border:1px solid #bac8d8;padding:3.2px 2.5px;text-align:right;white-space:nowrap}
+      th:first-child,td:first-child{text-align:left;width:18%}
+      th:nth-child(2),td:nth-child(2){text-align:left;width:7%}
+      th{background:#eaf1f8;font-size:7.5px}
+      .tot{font-weight:900;background:#eef5ff;border-top:2px solid #111}
+      .tot td{font-size:8.5px}
+      .money-strong{font-weight:800}
     </style></head><body>
-      <h1>İK Aylık Bordro ve Ödeme Kontrol Listesi</h1>
-      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · Ekrandaki bordro ile aynı kaynak</p>
+      <h1>İK Ödeme Listesi</h1>
+      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · Toplu fişlerden ayrı kontrol/bilgilendirme listesi · Ekrandaki bordro ile aynı kaynak</p>
       <table><thead><tr>
-        <th>Personel</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th>
-        <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Banka</th><th>Elden</th><th>Net</th>
+        <th>Personel</th><th>HKN</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th>
+        <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Banka</th><th>Elden</th><th>Toplam Ödeme</th>
       </tr></thead><tbody>
       ${rows.map((row) => `<tr>
-        <td>${escapeHtml(row.employee.fullName)}</td>
+        <td>${escapeHtml(row.employee.fullName)}</td><td>${escapeHtml(row.employee.code || "-")}</td>
         <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td>
         <td>${money(row.overtime)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td>
-        <td>${money(row.garnishment)}</td><td>${money(row.bank)}</td><td>${money(row.cash)}</td><td>${money(row.net)}</td>
+        <td>${money(row.garnishment)}</td><td class="money-strong">${money(row.bank)}</td><td class="money-strong">${money(row.cash)}</td><td class="money-strong">${money(row.net)}</td>
       </tr>`).join("")}
-      <tr class="tot"><td>TOPLAM</td>
+      <tr class="tot"><td>TOPLAM</td><td>-</td>
         <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td>
         <td>${money(totals.overtime)}</td><td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td>
         <td>${money(totals.garnishment)}</td><td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
       </tr></tbody></table></body></html>`;
     try {
-      await printHtmlDocument({ title: `İK Aylık Bordro - ${period}`, html });
-      setNotice("Toplu bordro raporu yazdırma / PDF ekranına gönderildi.");
+      await printHtmlDocument({ title: `İK Ödeme Listesi - ${period}`, html });
+      setNotice("Ödeme listesi yazdırma / PDF ekranına gönderildi; en altta tüm sütun toplamları var.");
     } catch (error) {
-      setNotice(error?.message || "Toplu bordro raporu açılamadı.");
+      setNotice(error?.message || "Ödeme listesi açılamadı.");
     }
   };
 
@@ -1161,20 +1190,38 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       <header><div class="brand">KY ERP</div><div class="period">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
       <div class="person-block"><strong>${escapeHtml(row.employee.fullName)}</strong><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
       <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
-      <div class="pay-channels"><div><span>BANKADAN</span><b>${money(row.bank)}</b></div><div><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
-      <div class="net"><span>NET / TOPLAM ÖDENECEK</span><b>${money(row.net)}</b></div>
+      <div class="pay-channels"><div><span>BANKA</span><b>${money(row.bank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
+      <div class="net"><span>TOPLAM ÖDEME</span><b>${money(row.net)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
     </article>`;
   };
 
-  const slipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.pay-slip{border:1.4px solid #415a77;border-radius:2mm;padding:3.2mm;background:#fff;display:flex;flex-direction:column;min-height:132mm;break-inside:avoid}.pay-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1.4px solid #415a77;padding-bottom:2mm}.brand{font-size:15px;font-weight:900;color:#173b72}.period{text-align:right;font-size:8px;line-height:1.25}.period b{font-size:9px}.person-block{padding:2.4mm 0;border-bottom:1px solid #d6dee8}.person-block strong{display:block;font-size:14px}.person-block span{font-size:8px;color:#52657b}.slip-lines{flex:1;padding-top:1mm}.slip-lines>div{display:flex;justify-content:space-between;align-items:center;padding:1.05mm .4mm;border-bottom:1px solid #e6ebf1;font-size:9px}.slip-lines>div b{font-size:10px}.pay-channels{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin-top:2mm}.pay-channels div{text-align:center;border:1px solid #9fb0c3;border-radius:1mm;padding:2mm}.pay-channels span,.net span{display:block;font-size:7px;font-weight:800;letter-spacing:.04em}.pay-channels b{display:block;font-size:14px;margin-top:.6mm}.net{margin-top:2mm;text-align:center;border:2px solid #111;border-radius:1mm;padding:2.2mm}.net b{display:block;font-size:19px;margin-top:.5mm}.pay-slip footer{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:4mm;font-size:7px;color:#52657b}.pay-slip footer div{display:flex;flex-direction:column;gap:5mm}.pay-slip footer i{border-bottom:1px solid #667085}`;
+  const compactSlipCardHtml = (row) => {
+    const totalDeductions = round(num(row.advance) + num(row.deduction) + num(row.garnishment));
+    return `<div class="cut-slot"><article class="compact-slip">
+      <header><b>KY ERP</b><span>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}</span></header>
+      <div class="compact-person"><strong>${escapeHtml(row.employee.fullName)}</strong><small>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</small></div>
+      <div class="compact-grid">
+        <div><span>MESAI</span><b>${money(row.overtime)}</b></div>
+        <div><span>AVANS/KESİNTİ</span><b>${money(totalDeductions)}</b></div>
+        <div><span>BANKA</span><b>${money(row.bank)}</b></div>
+        <div class="cash"><span>ELDEN</span><b>${money(row.cash)}</b></div>
+        <div class="total"><span>TOPLAM ÖDEME</span><b>${money(row.net)}</b></div>
+      </div>
+      <footer><span>Personel İmza</span><i></i><span>Ödeme Yapan</span><i></i></footer>
+    </article></div>`;
+  };
+
+  const slipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.pay-slip{border:1.4px solid #415a77;border-radius:2mm;padding:3.2mm;background:#fff;display:flex;flex-direction:column;min-height:132mm;break-inside:avoid}.pay-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1.4px solid #415a77;padding-bottom:2mm}.brand{font-size:15px;font-weight:900;color:#173b72}.period{text-align:right;font-size:8px;line-height:1.25}.period b{font-size:9px}.person-block{padding:2.4mm 0;border-bottom:1px solid #d6dee8}.person-block strong{display:block;font-size:14px}.person-block span{font-size:8px;color:#52657b}.slip-lines{flex:1;padding-top:1mm}.slip-lines>div{display:flex;justify-content:space-between;align-items:center;padding:1.05mm .4mm;border-bottom:1px solid #e6ebf1;font-size:9px}.slip-lines>div b{font-size:10px}.pay-channels{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin-top:2mm}.pay-channels div{text-align:center;border:1px solid #9fb0c3;border-radius:1mm;padding:2mm}.pay-channels span,.net span{display:block;font-size:7px;font-weight:800;letter-spacing:.04em}.pay-channels b{display:block;font-size:14px;margin-top:.6mm}.pay-channels .cash-pay{border:2px solid #111}.pay-channels .cash-pay span{font-size:9px}.pay-channels .cash-pay b{font-size:19px}.net{margin-top:2mm;text-align:center;border:2px solid #111;border-radius:1mm;padding:2.2mm}.net span{font-size:9px}.net b{display:block;font-size:22px;margin-top:.5mm}.pay-slip footer{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:4mm;font-size:7px;color:#52657b}.pay-slip footer div{display:flex;flex-direction:column;gap:5mm}.pay-slip footer i{border-bottom:1px solid #667085}`;
+
+  const compactSlipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.cut-slot{height:100%;padding:1mm;border:1px dashed #7d8b99;break-inside:avoid;overflow:hidden}.compact-slip{height:100%;border:1px solid #34475b;border-radius:.7mm;padding:1.5mm 1.8mm;background:#fff;display:flex;flex-direction:column}.compact-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #8fa0b2;padding-bottom:.7mm;font-size:6.5px}.compact-slip header b{font-size:9.5px;color:#173b72}.compact-person{padding:.8mm 0 .7mm;border-bottom:1px solid #d7dee7;white-space:nowrap;overflow:hidden}.compact-person strong{display:block;font-size:10px;line-height:1.05;overflow:hidden;text-overflow:ellipsis}.compact-person small{display:block;font-size:6px;color:#52657b;overflow:hidden;text-overflow:ellipsis}.compact-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55mm .8mm;padding-top:.7mm;flex:1}.compact-grid>div{border:1px solid #c4ced9;border-radius:.5mm;padding:.45mm .8mm;display:flex;align-items:center;justify-content:space-between;min-height:5.2mm}.compact-grid span{font-size:5.7px;font-weight:800}.compact-grid b{font-size:8.5px}.compact-grid .cash{border:1.8px solid #111}.compact-grid .cash span{font-size:7px}.compact-grid .cash b{font-size:13px}.compact-grid .total{grid-column:1/-1;border:2px solid #111;padding:.55mm 1mm}.compact-grid .total span{font-size:7.2px}.compact-grid .total b{font-size:15px}.compact-slip footer{display:grid;grid-template-columns:auto 1fr auto 1fr;align-items:end;gap:1mm;margin-top:.45mm;font-size:5.4px;color:#52657b}.compact-slip footer i{display:block;border-bottom:1px solid #667085;height:2mm}`;
 
   const printSlip = async (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
-    if (!row) return setNotice("Fis icin personel secilmelidir.");
+    if (!row) return setNotice("Fiş için personel seçilmelidir.");
     const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 portrait;margin:10mm}${slipCss}.single{width:120mm;margin:0 auto}.single .pay-slip{min-height:155mm}</style></head><body><div class="single">${slipCardHtml(row)}</div></body></html>`;
     try {
       await printHtmlDocument({ title: `Ödeme Fişi - ${row.employee.fullName}`, html });
-      setNotice(`${row.employee.fullName} ödeme fişi yazdırma / PDF ekranına gönderildi.`);
+      setNotice(`${row.employee.fullName} için yalnız tek ödeme fişi yazdırma / PDF ekranına gönderildi.`);
     } catch (error) {
       setNotice(error?.message || "Tek kişi ödeme fişi açılamadı.");
     }
@@ -1182,13 +1229,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
 
   const printPaymentSlips = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
-    if (!rows.length) return setNotice("Fis icin personel bulunamadi.");
+    if (!rows.length) return setNotice("Fiş için personel bulunamadı.");
     const pages = [];
-    for (let index = 0; index < rows.length; index += 4) pages.push(rows.slice(index, index + 4));
-    const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 portrait;margin:6mm}${slipCss}.page{width:198mm;min-height:285mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4mm;page-break-after:always}.page:last-child{page-break-after:auto}.page .pay-slip{min-height:139mm;max-height:139mm}</style></head><body>${pages.map((pageRows)=>`<section class="page">${pageRows.map(slipCardHtml).join("")}</section>`).join("")}</body></html>`;
+    for (let index = 0; index < rows.length; index += 10) pages.push(rows.slice(index, index + 10));
+    const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 portrait;margin:6mm}${compactSlipCss}.page{width:198mm;height:285mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,1fr);gap:1.5mm 2mm;page-break-after:always}.page:last-child{page-break-after:auto}</style></head><body>${pages.map((pageRows)=>`<section class="page">${pageRows.map(compactSlipCardHtml).join("")}</section>`).join("")}</body></html>`;
     try {
       await printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri - ${period}`, html });
-      setNotice(`${rows.length} personelin okunaklı toplu ödeme fişi yazdırma / PDF ekranına gönderildi.`);
+      setNotice(`${rows.length} personelin A4 başına 10 adet kesimli toplu ödeme fişi yazdırma / PDF ekranına gönderildi.`);
     } catch (error) {
       setNotice(error?.message || "Toplu ödeme fişleri açılamadı.");
     }
@@ -1430,7 +1477,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="page-head"><div><h1>Son Bordro ve Odeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka odemesi cikti oncesi burada son kez duzenlenir.</p></div><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Odeme dengeli" : "Odeme kontrol gerekli"}</span></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
         <div className="sumgrid short">{summaryBox("Odeme listesi", payrollRows.length, "", `${selectedPayrollIds.length || payrollRows.length} secili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" onClick={savePayroll}>Secilileri Kaydet</button><button className="btn green" onClick={openBulkPayment}>Odeme Merkezi</button><button className="btn" onClick={() => openPayroll()}>Seciliyi Duzenle</button><button className="btn" onClick={printPayrollReport}>Toplu Rapor / PDF</button><button className="btn" onClick={printPaymentSlips}>Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kisi Fisi</button></div><button className="btn green" onClick={exportPayroll}>Tum Bordro Excel</button></div>
+        <div className="workbar"><div className="group"><button className="btn primary" onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" onClick={savePayroll}>Secilileri Kaydet</button><button className="btn green" onClick={openBulkPayment}>Odeme Merkezi</button><button className="btn" onClick={() => openPayroll()}>Seciliyi Duzenle</button><button className="btn" onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
         <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Toplam odeme dengeli: Banka + Elden = Net Toplam." : "Toplam odeme banka + elden ile eslesmiyor."}</div>
         <div className="card">
           <div className="ch"><div><b>Cikti Oncesi Son Bordro</b><span>Resmi Net bordro dosyasindan gelir; Banka + Elden = sirket net odemesi olmalidir.</span></div></div>
@@ -1624,9 +1671,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     if (modal === "fis" || modal === "kidemCikti") {
       const row = payrollRows.find((item) => item.employee.id === selected?.id) || payrollRows[0];
       return (
-        <Modal title={modal === "fis" ? "Tek Kisi Fisi" : "Kidem Ciktisi"} sub="Yazdirmadan once onizleme" size="small" onClose={() => setModal(null)}>
-          <div className="print-sheet"><h2>{modal === "fis" ? "ÖDEME FİŞİ" : "KIDEM CIKTISI"}</h2><div className="print-row"><span>Personel</span><b>{row?.employee?.fullName || "-"}</b></div><div className="print-row"><span>Dönem</span><b>{MONTHS[month - 1]} {year}</b></div><div className="print-row"><span>Maaş</span><b>{money(row?.salary)}</b></div>{row?.road>0&&<div className="print-row"><span>Yol</span><b>{money(row?.road)}</b></div>}{row?.overtime>0&&<div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div>}{row?.advance>0&&<div className="print-row"><span>Avans</span><b>-{money(row?.advance)}</b></div>}{row?.deduction>0&&<div className="print-row"><span>Özel Kesinti</span><b>-{money(row?.deduction)}</b></div>}{row?.garnishment>0&&<div className="print-row"><span>{row?.legalType==="HACIZ"?"Haciz":"İcra"} ({row?.garnishmentSource==="ELDEN"?"Elden":"Bankadan"})</span><b>-{money(row?.garnishment)}</b></div>}<div className="print-row"><span>Bankadan</span><b>{money(row?.bank)}</b></div><div className="print-row"><span>Elden</span><b>{money(row?.cash)}</b></div><div className="print-row"><span>Toplam Ödenecek</span><b>{money(row?.net)}</b></div>{row?.extra>0&&<div className="print-row" style={{marginTop:10,borderTop:"1px dashed #111",justifyContent:"center",gap:18}}><span>EK</span><b>{money(row?.extra)}</b></div>}</div>
-          <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" onClick={() => printSlip(row)}>Yazdir / PDF</button>} />
+        <Modal title={modal === "fis" ? "Tek Kişi Ödeme Fişi" : "Kıdem Çıktısı"} sub={modal === "fis" ? "Personeli seçin; yanlış tutar varsa son bordrodan düzeltip yalnız bu fişi tekrar alın." : "Yazdırmadan önce önizleme"} size="small" onClose={() => setModal(null)}>
+          {modal === "fis" && <div className="form"><Field label="Fişi alınacak personel" wide><select value={row?.employee?.id || ""} onChange={(event)=>setSelectedId(event.target.value)}>{payrollRows.map((item)=><option key={item.employee.id} value={item.employee.id}>{item.employee.fullName} · {item.employee.code || "HKN yok"}</option>)}</select></Field></div>}
+          <div className="print-sheet"><h2>{modal === "fis" ? "ÖDEME FİŞİ" : "KIDEM ÇIKTISI"}</h2><div className="print-row"><span>Personel</span><b>{row?.employee?.fullName || "-"}</b></div><div className="print-row"><span>Dönem</span><b>{MONTHS[month - 1]} {year}</b></div>{modal === "fis" ? <><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans / Kesinti / İcra-Haciz</span><b>{money(num(row?.advance)+num(row?.deduction)+num(row?.garnishment))}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row" style={{fontSize:18,fontWeight:900,border:"2px solid #111",padding:8}}><span>ELDEN</span><b>{money(row?.cash)}</b></div><div className="print-row" style={{fontSize:20,fontWeight:900,border:"2px solid #111",padding:8,marginTop:6}}><span>TOPLAM ÖDEME</span><b>{money(row?.net)}</b></div></> : <><div className="print-row"><span>Maaş</span><b>{money(row?.salary)}</b></div><div className="print-row"><span>Toplam</span><b>{money(row?.net)}</b></div></>}</div>
+          <ModalFooter onClose={() => setModal(null)} actions={modal === "fis" ? <><button className="btn" disabled={!row} onClick={()=>openPayroll(row)}>Yanlışsa Düzenle</button><button className="btn primary" disabled={!row} onClick={() => printSlip(row)}>Sadece Bu Fişi Yazdır / PDF</button></> : <button className="btn primary" onClick={() => printSlip(row)}>Yazdır / PDF</button>} />
         </Modal>
       );
     }
