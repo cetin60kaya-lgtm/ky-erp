@@ -17,8 +17,8 @@ function run(command, args) {
 run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 try {
   for (const file of files) writeFileSync(file, "// @ts-nocheck\n" + originals.get(file));
-  run("npx", ["tsc", "--noEmit", "--pretty", "false"]);
-  console.log("WORKER_FULL_TYPECHECK_WITH_MAIN_INDEX_NOCHECK_PASS");
+  run("npm", ["run", "typecheck"]);
+  console.log("WORKER_CANONICAL_TYPECHECK_WITH_MAIN_INDEX_NOCHECK_PASS");
 } finally {
   for (const file of files) writeFileSync(file, originals.get(file));
 }
