@@ -3,6 +3,8 @@ import AdminSystemOverview from "../admin/AdminSystemOverview";
 import AdminCompanyOverview from "../admin/AdminCompanyOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
 import AdminLoginApprovals from "../admin/AdminLoginApprovals";
+import AdminApprovalCenter from "../admin/AdminApprovalCenter";
+import AdminCompanyMailCard from "../admin/AdminCompanyMailCard";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanyUsersPanel from "../admin/AdminCompanyUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
@@ -21,7 +23,7 @@ function isOwnerRole(role) {
   return ["SUPER_ADMIN", "ADMIN"].includes(canonicalRole(role));
 }
 
-export default function AdminPage({ activeTab, activeMainCompany }) {
+export default function AdminPage({ activeTab, activeMainCompany, openModule }) {
   const { user } = useAuth();
   const owner = isOwnerRole(user?.role);
   const companyAdmin = canonicalRole(user?.role) === "COMPANY_ADMIN";
@@ -39,6 +41,9 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   if (activeTab === "uygulama-sahibi") {
     return owner ? <AdminOwnerSecurity /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
+  if (activeTab === "onay-merkezi") {
+    return <AdminApprovalCenter />;
+  }
   if (activeTab === "giris-onaylari") {
     return <AdminLoginApprovals />;
   }
@@ -53,9 +58,15 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
         <AdminCompanySettings activeMainCompany={activeMainCompany} />
         <div style={{ height: 16 }} />
         <AdminCompanyAuthority activeMainCompany={activeMainCompany} />
+        <div style={{ height: 16 }} />
+        <AdminCompanyMailCard activeMainCompany={activeMainCompany} openModule={openModule} />
       </>;
     }
-    if (companyAdmin) return <AdminCompanyAuthority activeMainCompany={activeMainCompany} />;
+    if (companyAdmin) return <>
+      <AdminCompanyAuthority activeMainCompany={activeMainCompany} />
+      <div style={{ height: 16 }} />
+      <AdminCompanyMailCard activeMainCompany={activeMainCompany} openModule={openModule} />
+    </>;
     return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "firma-ucretlendirme") {
