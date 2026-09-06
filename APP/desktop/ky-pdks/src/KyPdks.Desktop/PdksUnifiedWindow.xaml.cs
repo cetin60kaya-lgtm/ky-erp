@@ -186,7 +186,7 @@ public partial class PdksUnifiedWindow : Window
 
     private static bool IsFinanceAssistantCommand(string command)
     {
-        var value = (command ?? "").ToLocaleUpper(CultureInfo.GetCultureInfo("tr-TR"));
+        var value = (command ?? "").ToUpper(CultureInfo.GetCultureInfo("tr-TR"));
         var blocked = new[] { "AVANS", "BORDRO", "MAAŞ", "MAAS", "BANKA", "ELDEN", "KESİNTİ", "KESINTI", "İCRA", "ICRA", "HACİZ", "HACIZ", "FİBE", "FIBE" };
         return blocked.Any(value.Contains);
     }
