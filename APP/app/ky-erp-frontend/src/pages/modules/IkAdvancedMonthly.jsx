@@ -57,7 +57,9 @@ function readStoredIkPeriod(companyId) {
     const parsed = raw ? JSON.parse(raw) : null;
     const year = Number(parsed?.year), month = Number(parsed?.month);
     if (year >= 2020 && year <= 2100 && month >= 1 && month <= 12) return { year, month };
-  } catch {}
+  } catch {
+    return fallback;
+  }
   return fallback;
 }
 
