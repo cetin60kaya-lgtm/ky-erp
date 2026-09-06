@@ -5,6 +5,8 @@ import {
   getEBelgeProduct,
   getEBelgeSupplierProfile,
   listEBelgeProducts,
+  resolveEBelgeExpenseCategory,
+  saveEBelgeExpenseRule,
   saveEBelgeProductAlias,
 } from "./e-belge-product-store";
 
@@ -46,17 +48,29 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
       raw.routingType=routing.routing;
       raw.chemical=routing.chemical;
       raw.lotRequired=routing.lotRequired===true;
-      raw.expenseCategoryId=routing.expenseCategoryId||null;
-      raw.expenseCategoryName=routing.expenseCategoryName||null;
+      const expense=routing.routing==="EXPENSE"?await resolveEBelgeExpenseCategory(c,slug,{companyId:text(doc?.party_company_id),productId:text(product.id),description:text(line.description),fallbackId:routing.expenseCategoryId,fallbackName:routing.expenseCategoryName}):null;
+      raw.expenseCategoryId=expense?.categoryId||routing.expenseCategoryId||null;
+      raw.expenseCategoryName=expense?.categoryName||routing.expenseCategoryName||null;
+      raw.expenseCategorySource=expense?.source||null;
+      raw.expenseRuleId=expense?.ruleId||null;
       raw.warehouse=routing.warehouse||null;
       raw.productMatchSource="MANUAL";
       raw.productName=text(product.name||product.productName);
     }
     if(body.lotNo!==undefined)raw.lotNo=text(body.lotNo);
-    if(body.expenseCategoryName!==undefined&&text(raw.routingType||"EXPENSE").toUpperCase()==="EXPENSE")raw.expenseCategoryName=text(body.expenseCategoryName)||"Mal ve Hizmet Alımı";
+    if(body.expenseCategoryName!==undefined&&text(raw.routingType||"EXPENSE").toUpperCase()==="EXPENSE"){
+      raw.expenseCategoryName=text(body.expenseCategoryName)||"Mal ve Hizmet Alımı";
+      raw.expenseCategoryId=text(body.expenseCategoryId)||raw.expenseCategoryId||null;
+      raw.expenseCategorySource="USER";
+      if(body.rememberExpenseRule===true){
+        const savedRule=await saveEBelgeExpenseRule(c,slug,{companyId:text(doc?.party_company_id),productId:text(product?.id||line.product_id),description:text(line.description),categoryId:text(raw.expenseCategoryId),categoryName:text(raw.expenseCategoryName),source:"E_BELGE_REVIEW"});
+        raw.expenseRuleId=savedRule.id||raw.expenseRuleId||null;
+        raw.expenseCategorySource="EXPENSE_RULE";
+      }
+    }
     await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();
     await resolveIfClean(c,slug,documentId);
-    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||"",expenseCategoryName:raw.expenseCategoryName||null}});
+    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||"",expenseCategoryId:raw.expenseCategoryId||null,expenseCategoryName:raw.expenseCategoryName||null,expenseCategorySource:raw.expenseCategorySource||null,expenseRuleId:raw.expenseRuleId||null}});
   });
 
   app.post("/api/e-belge/products/:productId/aliases",async c=>{
