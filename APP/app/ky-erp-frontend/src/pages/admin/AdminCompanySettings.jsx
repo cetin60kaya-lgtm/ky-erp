@@ -5,6 +5,7 @@ import {
   downloadBackupSql,
   generateBackupSql,
   listBackups,
+  listUsers,
   restoreBackup,
 } from "../../services/adminApi";
 import "./AdminManagement.css";
@@ -24,9 +25,14 @@ function mapCompany(row = {}) {
 function emptyForm(){ return { id:"", name:"", slug:"", note:"", isActive:true }; }
 function dateText(value){if(!value)return"-";const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleString("tr-TR")}
 function sqlName(row,slug){const safe=String(row?.mainCompanySlug||slug||"firma").replace(/[^a-zA-Z0-9._-]+/g,"-");const date=String(row?.createdAt||row?.completedAt||new Date().toISOString()).slice(0,10);return `KYERP-${safe}-${date}.sql`}
+const ROLE_LABELS={COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",DENETIM:"Denetim",VIEWER:"Özel Yetkili",SUPER_ADMIN:"Uygulama Sahibi",ADMIN:"Uygulama Sahibi"};
+const ROLE_ORDER={COMPANY_ADMIN:0,MUHASEBE:1,IK:2,DESEN:3,BOYAHANE:4,IMALAT:5,DENETIM:6,VIEWER:7,SUPER_ADMIN:8,ADMIN:8};
+function roleOf(value){return String(value||"VIEWER").toUpperCase().replace(/İ/g,"I")}
+function userCompanySlug(row){return String(row?.mainCompanySlug||row?.main_company_slug||"").trim()}
 
 export default function AdminCompanySettings({ activeMainCompany }) {
   const [companies,setCompanies]=useState([]);
+  const [users,setUsers]=useState([]);
   const [form,setForm]=useState(emptyForm());
   const [selectedId,setSelectedId]=useState("");
   const [delivery,setDelivery]=useState(null);
@@ -40,10 +46,11 @@ export default function AdminCompanySettings({ activeMainCompany }) {
 
   const load=useCallback(async()=>{
     setBusy(true);
-    const [companyJob,deliveryJob,recoveryJob]=await Promise.allSettled([
+    const [companyJob,deliveryJob,recoveryJob,usersJob]=await Promise.allSettled([
       apiGet("/admin/main-companies",{_ts:Date.now()}),
       apiGet("/admin/security/delivery-capabilities",{_ts:Date.now()}),
       apiGet("/admin/security/owner-recovery",{_ts:Date.now()}),
+      listUsers(),
     ]);
     if(companyJob.status==="fulfilled"){
       const list=rowsOf(companyJob.value).map(mapCompany);
@@ -52,13 +59,21 @@ export default function AdminCompanySettings({ activeMainCompany }) {
     }
     if(deliveryJob.status==="fulfilled") setDelivery(deliveryJob.value?.data || deliveryJob.value);
     if(recoveryJob.status==="fulfilled") setRecovery(recoveryJob.value?.data || recoveryJob.value);
-    const failed=[companyJob,deliveryJob,recoveryJob].filter((job)=>job.status==="rejected").length;
+    if(usersJob.status==="fulfilled") setUsers(rowsOf(usersJob.value));
+    const failed=[companyJob,deliveryJob,recoveryJob,usersJob].filter((job)=>job.status==="rejected").length;
     setMessage(failed?`${failed} sistem bilgisi alınamadı; erişilebilen ayarlar gösteriliyor.`:"Firma ve entegrasyon ayarları güncel.");
     setBusy(false);
   },[activeMainCompany?.id]);
   useEffect(()=>{load();},[load]);
 
   const selected=useMemo(()=>companies.find((row)=>row.id===selectedId)||null,[companies,selectedId]);
+  const selectedPeople=useMemo(()=>users
+    .filter((row)=>selected?.slug && userCompanySlug(row)===selected.slug)
+    .sort((a,b)=>(ROLE_ORDER[roleOf(a.role)]??99)-(ROLE_ORDER[roleOf(b.role)]??99)||String(a.fullName||a.username||"").localeCompare(String(b.fullName||b.username||""),"tr")),[selected?.slug,users]);
+  const companyPeopleCount=useMemo(()=>{const map=new Map();users.forEach((row)=>{const slug=userCompanySlug(row);if(slug)map.set(slug,(map.get(slug)||0)+1)});return map},[users]);
+  const owners=selectedPeople.filter((row)=>roleOf(row.role)==="COMPANY_ADMIN");
+  const accountingPeople=selectedPeople.filter((row)=>roleOf(row.role)==="MUHASEBE");
+  const activePeople=selectedPeople.filter((row)=>row.isActive!==false);
   const deliveryData=delivery||{};
   const recoveryData=recovery||{};
 
@@ -158,13 +173,35 @@ export default function AdminCompanySettings({ activeMainCompany }) {
 
     <section className="admpro-grid-2">
       <div className="admpro-card"><div className="admpro-card-head"><div><h3>Ana Firmalar</h3><p>Tenant/firma sınırlarının temel yönetimi.</p></div><span className="admpro-badge">{companies.length} kayıt</span></div>
-        <div className="admpro-company-list">{companies.map((row)=><div key={row.id} className={`admpro-company-row ${row.id===selectedId?"active":""}`}><div onClick={()=>setSelectedId(row.id)} role="button" tabIndex={0}><strong>{row.name}</strong><small>{row.slug} · {row.isActive?"Aktif":"Pasif"}{row.id===activeMainCompany?.id?" · Şu an seçili":""}</small></div><div className="admpro-row-actions"><button type="button" onClick={()=>beginEdit(row)}>Düzenle</button><button type="button" onClick={()=>toggle(row)}>{row.isActive?"Pasife Al":"Aktifleştir"}</button></div></div>)}{!companies.length?<div className="admpro-empty">Ana firma kaydı alınamadı.</div>:null}</div>
+        <div className="admpro-company-list">{companies.map((row)=><div key={row.id} className={`admpro-company-row ${row.id===selectedId?"active":""}`}><div onClick={()=>setSelectedId(row.id)} role="button" tabIndex={0}><strong>{row.name}</strong><small>{row.slug} · {row.isActive?"Aktif":"Pasif"} · {companyPeopleCount.get(row.slug)||0} kişi{row.id===activeMainCompany?.id?" · Şu an seçili":""}</small></div><div className="admpro-row-actions"><button type="button" onClick={()=>beginEdit(row)}>Düzenle</button><button type="button" onClick={()=>toggle(row)}>{row.isActive?"Pasife Al":"Aktifleştir"}</button></div></div>)}{!companies.length?<div className="admpro-empty">Ana firma kaydı alınamadı.</div>:null}</div>
       </div>
 
       <div className="admpro-card"><div className="admpro-card-head"><div><h3>{form.id?"Ana Firma Düzenle":"Yeni Ana Firma"}</h3><p>İsim, kısa kod ve aktiflik ayarları.</p></div>{form.id?<button type="button" onClick={()=>setForm(emptyForm())}>Formu Temizle</button>:null}</div>
         <form onSubmit={save}><div className="admpro-form-grid"><label>Firma Adı<input value={form.name} onChange={(e)=>setForm((old)=>({...old,name:e.target.value,slug:old.slug||slugify(e.target.value)}))}/></label><label>Kısa Kod / Slug<input value={form.slug} onChange={(e)=>setForm((old)=>({...old,slug:e.target.value}))}/></label><label className="wide">Açıklama<textarea value={form.note} onChange={(e)=>setForm((old)=>({...old,note:e.target.value}))}/></label><label className="admpro-check wide"><input type="checkbox" checked={form.isActive} onChange={(e)=>setForm((old)=>({...old,isActive:e.target.checked}))}/> Aktif ana firma</label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit" disabled={busy}>{form.id?"Değişiklikleri Kaydet":"Ana Firma Oluştur"}</button></div></form>
       </div>
     </section>
+
+    {selected?<section className="admpro-card admpro-company-profile">
+      <div className="admpro-card-head">
+        <div><h3>Firma Kartı · {selected.name}</h3><p>İşveren, muhasebe ve diğer bölüm kullanıcıları bu firmaya bağlı tek listede görünür. Mail ve Drive/File Hub karar yetkisi Firma Sahibi / İşveren rolündedir.</p></div>
+        <span className="admpro-badge ok">{activePeople.length} aktif / {selectedPeople.length} toplam</span>
+      </div>
+      <div className="admpro-company-profile-stats">
+        <div><span>Firma Sahibi / İşveren</span><strong>{owners.length}</strong><small>{owners.map((row)=>row.fullName||row.username).join(", ")||"Atanmadı"}</small></div>
+        <div><span>Muhasebe</span><strong>{accountingPeople.length}</strong><small>{accountingPeople.map((row)=>row.fullName||row.username).join(", ")||"Atanmadı"}</small></div>
+        <div><span>Aktif Kullanıcı</span><strong>{activePeople.length}</strong><small>Bu firmada oturum açabilen</small></div>
+        <div><span>Toplam Kişi</span><strong>{selectedPeople.length}</strong><small>Firma kullanıcı kartları</small></div>
+      </div>
+      {!owners.length?<div className="admpro-notice warn" style={{marginTop:10}}>Bu firmaya Firma Sahibi / İşveren (COMPANY_ADMIN) atanmadı. Mail hesabı ve Drive/File Hub bağlantı onayları için önce firma sahibi atanmalıdır.</div>:null}
+      <div className="admpro-company-people">
+        {selectedPeople.map((row)=><div className={`admpro-person-card ${roleOf(row.role)==="COMPANY_ADMIN"?"is-owner":roleOf(row.role)==="MUHASEBE"?"is-accounting":""}`} key={row.id}>
+          <div className="admpro-person-avatar">{String(row.fullName||row.username||"K").split(" ").filter(Boolean).slice(0,2).map((part)=>part[0]).join("").toUpperCase()}</div>
+          <div><strong>{row.fullName||row.username}</strong><span>{ROLE_LABELS[roleOf(row.role)]||roleOf(row.role)}</span><small>@{row.username}{row.email?` · ${row.email}`:""}</small></div>
+          <span className={`admpro-badge ${row.isActive===false?"bad":"ok"}`}>{row.isActive===false?"Pasif":"Aktif"}</span>
+        </div>)}
+        {!selectedPeople.length?<div className="admpro-empty">Bu firmaya bağlı kullanıcı bulunamadı.</div>:null}
+      </div>
+    </section>:null}
 
     {selected?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Yedek & Geri Dönüş · {selected.name}</h3><p>Bu firmanın tenant verileri, R2 dosyaları ve SQL arşivi tek işlemde korunur.</p></div><div className="admpro-actions"><button className="primary" type="button" onClick={backupSelected} disabled={backupBusy}>{backupBusy?"İşleniyor...":"Tam Yedek Al"}</button></div></div><div className="admpro-notice success">Yedek firma bazlıdır. Geri dönüş başlamadan önce ayrıca PRE_RESTORE güvenlik yedeği alınır; auth/session/MFA kayıtları firma geri dönüşüyle geriye sarılmaz.</div><div className="admpro-table" style={{marginTop:12}}><table><thead><tr><th>Tarih</th><th>Veri</th><th>Dosya</th><th>SQL</th><th>İşlem</th></tr></thead><tbody>{companyBackups.slice(0,5).map((row)=><tr key={row.id}><td>{dateText(row.createdAt||row.completedAt)}</td><td>{Number(row.totalRows||0).toLocaleString("tr-TR")} satır</td><td>{Number(row.totalFiles||0).toLocaleString("tr-TR")}</td><td><button type="button" onClick={()=>downloadSql(row)} disabled={backupBusy}>{row.sqlKey?"SQL İndir":"SQL Hazırla & İndir"}</button></td><td><button type="button" className="danger" onClick={()=>setRestore({backup:row,password:"",confirmText:""})}>Bu Yedeğe Dön</button></td></tr>)}{!companyBackups.length?<tr><td colSpan="5">Bu firma için henüz yedek yok.</td></tr>:null}</tbody></table></div></section>:null}
 
