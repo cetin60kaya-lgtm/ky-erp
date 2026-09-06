@@ -88,19 +88,7 @@ function blobToDataUrl(blob) {
 }
 
 function regexEscape(value) {
-  return String(value || "").replace(/[|\\{}()[\]^$+*?.-]/g, "\\function initialMailPaneWidths() {
-  const fallback = { mailbox: 250, list: 560 };
-  try {
-    const saved = JSON.parse(window.localStorage.getItem("kyerp.mailPaneWidths") || "{}");
-    return {
-      mailbox: Math.min(420, Math.max(190, Number(saved.mailbox) || fallback.mailbox)),
-      list: Math.min(820, Math.max(300, Number(saved.list) || fallback.list)),
-    };
-  } catch {
-    return fallback;
-  }
-}
-");
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function MailMessageMedia({ message }) {
