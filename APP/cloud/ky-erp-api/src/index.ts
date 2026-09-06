@@ -2,6 +2,7 @@ import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { registerAuthManagementRoutes } from "./auth-cloud";
 import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
+import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -600,6 +601,27 @@ async function accountingDocuments(
     });
 }
 
+
+async function accountingReadDocuments(
+  c: Context<AppEnv>,
+  options: { kind?: string; search?: string; status?: string } = {},
+): Promise<DatabaseRow[]> {
+  const slug = slugOf(c);
+  const [canonical, legacy] = await Promise.all([
+    listCanonicalAccountingDocuments(c, slug, options),
+    accountingDocuments(c, options),
+  ]);
+  return mergeCanonicalLegacyAccounting(canonical, legacy);
+}
+
+async function accountingReadDocumentDetail(
+  c: Context<AppEnv>,
+  id: string,
+): Promise<DatabaseRow | null> {
+  const canonical = await canonicalAccountingDocumentDetail(c, slugOf(c), id);
+  return canonical || accountingDocumentDetail(c, id);
+}
+
 async function accountingDocumentDetail(
   c: Context<AppEnv>,
   id: string,
@@ -669,7 +691,7 @@ async function accountingSummary(c: Context<AppEnv>) {
       orderBy: "name COLLATE NOCASE ASC",
       limit: 10000,
     }),
-    accountingDocuments(c),
+    accountingReadDocuments(c),
     scopedRows(c, "current_account_movements", {
       slug,
       orderBy: "movement_date DESC, id DESC",
@@ -813,7 +835,7 @@ async function buildVatSummary(c: Context<AppEnv>, forcedFirmId = "") {
       limit: 10000,
     }),
     companyMap(c, slug),
-    accountingDocuments(c),
+    accountingReadDocuments(c),
   ]);
   const selected = records.filter((record) => {
     const recordYear = Number(
@@ -1570,7 +1592,7 @@ app.post("/api/muhasebe/belge-import/:id/approve", async (c) => {
 });
 
 app.get("/api/muhasebe/kesilen-faturalar", async (c) => {
-  const all = await accountingDocuments(c, {
+  const all = await accountingReadDocuments(c, {
     kind: "CUSTOMER_INVOICE",
     search: c.req.query("search") || "",
     status: c.req.query("status") || "",
@@ -1597,7 +1619,7 @@ app.get("/api/muhasebe/kesilen-faturalar", async (c) => {
 });
 
 app.get("/api/muhasebe/kesilen-faturalar/:id", async (c) => {
-  const row = await accountingDocumentDetail(c, c.req.param("id"));
+  const row = await accountingReadDocumentDetail(c, c.req.param("id"));
   return row && row.documentKind === "CUSTOMER_INVOICE"
     ? c.json({ ok: true, success: true, data: row })
     : c.json(jsonError("NOT_FOUND", "Kesilen fatura bulunamadı."), 404);
