@@ -58,6 +58,10 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
       raw.productName=text(product.name||product.productName);
     }
     if(body.lotNo!==undefined)raw.lotNo=text(body.lotNo);
+    if(body.warehouse!==undefined)raw.warehouse=text(body.warehouse);
+    if(body.productionDate!==undefined)raw.productionDate=text(body.productionDate);
+    if(body.expiryDate!==undefined)raw.expiryDate=text(body.expiryDate);
+    if(body.unitCode!==undefined)raw.correctedUnitCode=text(body.unitCode);
     if(body.expenseCategoryName!==undefined&&text(raw.routingType||"EXPENSE").toUpperCase()==="EXPENSE"){
       raw.expenseCategoryName=text(body.expenseCategoryName)||"Mal ve Hizmet Alımı";
       raw.expenseCategoryId=text(body.expenseCategoryId)||raw.expenseCategoryId||null;
@@ -68,7 +72,7 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
         raw.expenseCategorySource="EXPENSE_RULE";
       }
     }
-    await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();
+    await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),unit_code=CASE WHEN ?<>'' THEN ? ELSE unit_code END,match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,text(body.unitCode),text(body.unitCode),product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();
     await resolveIfClean(c,slug,documentId);
     return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||"",expenseCategoryId:raw.expenseCategoryId||null,expenseCategoryName:raw.expenseCategoryName||null,expenseCategorySource:raw.expenseCategorySource||null,expenseRuleId:raw.expenseRuleId||null}});
   });
