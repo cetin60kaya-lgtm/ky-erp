@@ -318,6 +318,48 @@ export function registerMicrosoftMailRoutes(app:any){
     return c.json({ok:Boolean(result.ok),data:result,...(!result.ok?{error:{code:"MAIL_FOLDER_SYNC_FAILED",message:result.error||"Klasör senkronize edilemedi."}}:{})},result.ok?200:502);
   });
 
+  app.post("/api/mail/messages/:id/action/microsoft",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!perm(current,"canUpdate"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail düzenleme yetkiniz yok."),403);
+    const row=await c.env.DB.prepare("SELECT m.*,a.provider_type,a.provider_connected,a.account_type,a.email_address FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
+    if(!row)return c.json(err("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    if(upper(row.provider_type)!=="MICROSOFT_365"||!row.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Microsoft hesabı bağlı değil."),409);
+    const action=upper(body.action),token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),providerMessageId=text(row.provider_message_id);
+    if(!providerMessageId)return c.json(err("PROVIDER_MESSAGE_ID_MISSING","Provider mail kimliği bulunamadı."),409);
+    const messageUrl=base+"/messages/"+encodeURIComponent(providerMessageId),ts=nowIso();
+    if(action==="MARK_READ"||action==="MARK_UNREAD"){
+      const isRead=action==="MARK_READ";
+      await graphJson(messageUrl,token,{method:"PATCH",body:JSON.stringify({isRead})});
+      await c.env.DB.prepare("UPDATE mail_messages SET is_read=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(isRead?1:0,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action,isRead}});
+    }
+    if(action==="FLAG"||action==="UNFLAG"){
+      const flagged=action==="FLAG";
+      await graphJson(messageUrl,token,{method:"PATCH",body:JSON.stringify({flag:{flagStatus:flagged?"flagged":"notFlagged"}})});
+      await c.env.DB.prepare("UPDATE mail_messages SET is_flagged=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(flagged?1:0,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action,flagged}});
+    }
+    if(["ARCHIVE","DELETE","MOVE"].includes(action)){
+      let target:any=null;
+      if(action==="MOVE"){
+        const folderId=text(body.folderId);if(!folderId)return c.json(err("MAIL_FOLDER_REQUIRED","Hedef klasör seçilmelidir."),422);
+        target=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(folderId,row.account_id,tenant).first<AnyRow>();
+      }else{
+        const type=action==="ARCHIVE"?"ARCHIVE":"TRASH";
+        target=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE account_id=? AND main_company_slug=? AND UPPER(folder_type)=? ORDER BY updated_at DESC LIMIT 1").bind(row.account_id,tenant,type).first<AnyRow>();
+      }
+      const destinationId=text(target?.provider_folder_id)||(action==="ARCHIVE"?"archive":action==="DELETE"?"deleteditems":"");
+      if(!destinationId)return c.json(err("MAIL_FOLDER_NOT_FOUND","Hedef posta klasörü bulunamadı."),404);
+      const moved=(await graphJson(messageUrl+"/move",token,{method:"POST",body:JSON.stringify({destinationId})})).payload;
+      await c.env.DB.prepare("UPDATE mail_messages SET provider_message_id=COALESCE(NULLIF(?,''),provider_message_id),folder_id=COALESCE(?,folder_id),updated_at=? WHERE id=? AND main_company_slug=?")
+        .bind(text(moved.id)||null,text(target?.id)||null,ts,messageId,tenant).run();
+      await audit(c,tenant,text(current.id),text(row.account_id),"MAIL_MICROSOFT_MESSAGE_"+action,{messageId,targetFolderId:text(target?.id),providerMessageId:text(moved.id)||providerMessageId});
+      return c.json({ok:true,data:{messageId,action,folderId:text(target?.id)||null,providerMessageId:text(moved.id)||providerMessageId}});
+    }
+    return c.json(err("MAIL_ACTION_INVALID","Desteklenmeyen mail işlemi."),422);
+  });
+
   app.post("/api/mail/drafts/:id/send",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,draftId=text(c.req.param("id"));
     const draft=await c.env.DB.prepare("SELECT d.*,a.provider_type,a.status account_status,a.provider_connected,a.email_address,a.account_type FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.id=? AND d.main_company_slug=? LIMIT 1").bind(draftId,tenant).first<AnyRow>();
