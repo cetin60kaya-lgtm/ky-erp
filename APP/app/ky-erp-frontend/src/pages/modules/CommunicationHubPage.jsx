@@ -109,7 +109,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("mailConnected") === "1") setNotice("Microsoft posta kutusu bağlantısı doğrulandı.");
+    if (params.get("mailConnected") === "1") {
+      const provider = String(params.get("mailProvider") || "").toUpperCase();
+      setNotice(provider === "GMAIL" ? "Google / Gmail posta kutusu bağlantısı doğrulandı." : "Microsoft posta kutusu bağlantısı doğrulandı.");
+    }
     if (params.get("mailError")) setNotice(`Hata: ${params.get("mailError")}`);
     if (params.has("mailConnected") || params.has("mailError")) {
       window.history.replaceState({}, "", window.location.pathname);
@@ -154,7 +157,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     setLoading(true);
     try {
       const result = await requestMailAccount(requestForm);
-      setNotice(`Hesap talebi oluşturuldu. Onay politikası: ${result.approvalPolicy === "COMPANY_OWNER_AND_APP_OWNER" ? "Firma Sahibi + Uygulama Sahibi" : "Firma Sahibi"}.`);
+      setNotice("Hesap talebi oluşturuldu. İlgili firma sahibi / işveren onayı bekleniyor.");
       setRequestOpen(false);
       setRequestForm((current) => ({ ...current, emailAddress: "", displayName: "", departmentCode: "" }));
       await loadBase();
@@ -252,8 +255,9 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     setLoading(true);
     try {
       const result = await sendMailDraft(selectedMessage.id);
+      const providerName = providerLabel(selectedAccount?.provider_type || selectedAccount?.providerType);
       setNotice(result?.status === "PROVIDER_ACCEPTED"
-        ? "Microsoft gönderim isteğini kabul etti. Bu durum teslim edildi anlamına gelmez."
+        ? `${providerName} gönderim isteğini kabul etti. Bu durum teslim edildi anlamına gelmez.`
         : "Gönderim işlemi tamamlandı.");
       const rows = await listMailDrafts();
       const list = safeArray(rows).filter((row) => String(row.account_id || row.accountId) === String(selectedAccountId));
@@ -316,7 +320,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       {requestOpen ? (
         <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRequestOpen(false); }}>
         <section className="comm-request-card comm-modal" role="dialog" aria-modal="true" aria-label="Mail hesabı ekleme talebi">
-          <div className="comm-section-title"><div><h2>Mail Hesabı Ekleme Talebi</h2><p>Bağlantı onaydan önce aktif olmaz. Muhasebe, e-Belge, ortak ve bölüm posta kutuları çift onaya düşer.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
+          <div className="comm-section-title"><div><h2>Mail Hesabı Ekleme Talebi</h2><p>Bağlantı onaydan önce aktif olmaz. Tüm hesap talepleri ilgili firmanın sahibi / işvereni tarafından onaylanır.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
           <form onSubmit={submitAccountRequest}>
             <label>Sağlayıcı<select value={requestForm.providerType} onChange={(e) => setRequestForm((v) => ({ ...v, providerType: e.target.value }))}>
               {(providers.length ? providers : [
