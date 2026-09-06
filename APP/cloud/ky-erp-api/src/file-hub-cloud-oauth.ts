@@ -348,6 +348,48 @@ export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string
   throw Object.assign(new Error("Bu File Hub sağlayıcısı doğrudan bulut arşivlemeyi desteklemiyor."),{code:"CLOUD_ARCHIVE_PROVIDER_UNSUPPORTED"});
 }
 
+
+export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,maxBytes=25*1024*1024){
+  const asset=await c.env.DB.prepare(`SELECT id,file_name,mime_type,size_bytes,status,source_type,preview_storage_key,metadata
+    FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1`).bind(assetId,slug).first<Row>();
+  if(!asset)throw Object.assign(new Error("File Hub dosyası bulunamadı."),{code:"MAIL_ATTACHMENT_NOT_FOUND",status:404});
+  if(upper(asset.status)!=="AVAILABLE")throw Object.assign(new Error("File Hub dosyası şu anda kullanılamıyor."),{code:"MAIL_ATTACHMENT_UNAVAILABLE",status:409});
+  const declared=Math.max(0,Number(asset.size_bytes||0));
+  if(declared>maxBytes)throw Object.assign(new Error("Mail eki 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENT_TOO_LARGE",status:413,sizeBytes:declared,maxBytes});
+  const fileName=text(asset.file_name)||"ek";
+  const mimeType=text(asset.mime_type)||"application/octet-stream";
+
+  if(upper(asset.source_type)==="ACCOUNTING_STAGING"&&text(asset.preview_storage_key)){
+    const object=await c.env.FILES.get(text(asset.preview_storage_key));
+    if(!object)throw Object.assign(new Error("Muhasebe belge eki R2 intake alanında bulunamadı."),{code:"MAIL_ATTACHMENT_R2_MISSING",status:404});
+    const buffer=await object.arrayBuffer();
+    if(buffer.byteLength>maxBytes)throw Object.assign(new Error("Mail eki 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENT_TOO_LARGE",status:413,sizeBytes:buffer.byteLength,maxBytes});
+    return{fileAssetId:assetId,fileName,mimeType,sizeBytes:buffer.byteLength,bytes:new Uint8Array(buffer),source:"R2_INTAKE"};
+  }
+
+  const row=await c.env.DB.prepare(`SELECT l.provider_file_id,l.storage_connection_id,x.oauth_account_id,x.provider_drive_id,c.provider_type
+    FROM file_hub_locations l
+    JOIN file_hub_connections c ON c.id=l.storage_connection_id AND c.main_company_slug=l.main_company_slug
+    JOIN file_hub_cloud_connection_accounts x ON x.connection_id=c.id AND x.main_company_slug=c.main_company_slug
+    WHERE l.file_asset_id=? AND l.main_company_slug=? AND l.is_available=1
+    ORDER BY CASE WHEN l.location_role='PRIMARY' THEN 0 ELSE 1 END,l.updated_at DESC LIMIT 1`).bind(assetId,slug).first<Row>();
+  if(!row)throw Object.assign(new Error("Bu File Hub dosyasının Worker tarafından okunabilir bulut kaynağı yok. Yerel/NAS dosyasını önce bağlı bulut arşivine veya belge yükleme alanına alın."),{code:"MAIL_ATTACHMENT_SOURCE_OFFLINE",status:409});
+  const {accessToken}=await usableAccount(c,slug,text(row.oauth_account_id));
+  const provider=upper(row.provider_type),fileId=text(row.provider_file_id),driveId=text(row.provider_drive_id);
+  const url=provider==="GOOGLE_DRIVE"
+    ?`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`
+    :driveId
+      ?`https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(fileId)}/content`
+      :`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(fileId)}/content`;
+  const response=await fetch(url,{headers:{Authorization:`Bearer ${accessToken}`},redirect:"follow"});
+  if(!response.ok)throw Object.assign(new Error(`File Hub eki sağlayıcıdan alınamadı (HTTP ${response.status}).`),{code:"MAIL_ATTACHMENT_DOWNLOAD_FAILED",status:502});
+  const length=Number(response.headers.get("Content-Length")||0);
+  if(length>maxBytes)throw Object.assign(new Error("Mail eki 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENT_TOO_LARGE",status:413,sizeBytes:length,maxBytes});
+  const buffer=await response.arrayBuffer();
+  if(buffer.byteLength>maxBytes)throw Object.assign(new Error("Mail eki 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENT_TOO_LARGE",status:413,sizeBytes:buffer.byteLength,maxBytes});
+  return{fileAssetId:assetId,fileName,mimeType:text(response.headers.get("Content-Type"))||mimeType,sizeBytes:buffer.byteLength,bytes:new Uint8Array(buffer),source:provider};
+}
+
 export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/providers", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
