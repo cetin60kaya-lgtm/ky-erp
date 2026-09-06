@@ -15,6 +15,7 @@ import {
   saveIkAdvancedFinanceMovement,
   saveIkAdvancedPayrollLines,
   saveIkAdvancedPayrollOverride,
+  saveIkAdvancedFinalPayrollControl,
   saveIkAdvancedPersonCard,
   saveIkAdvancedSettlementDraft,
   previewIkAdvancedSgk,
@@ -23,6 +24,7 @@ import {
   uploadIkAdvancedDocument,
 } from "../../services/ikApi";
 import { printHtmlDocument } from "../../services/printService";
+import { getPdksLiveDashboard } from "../../services/pdksApi";
 import { exportRowsToExcelFile } from "../../utils/excelExport";
 import "./ik.advanced.css";
 
@@ -36,6 +38,43 @@ const PAYROLL_LOG_WORDS = ["BORDRO", "ODEME", "FIS"];
 function todayPeriod() {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+function previousPeriod() {
+  const now = new Date();
+  now.setDate(1);
+  now.setMonth(now.getMonth() - 1);
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+function ikPeriodStorageKey(companyId) {
+  return `kyerp.ik.selected-period.v2.${companyId || "default"}`;
+}
+
+function ikPreparedStorageKey(companyId) {
+  return `kyerp.ik.prepared-periods.v2.${companyId || "default"}`;
+}
+
+function readStoredIkPeriod(companyId) {
+  const fallback = previousPeriod();
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(ikPeriodStorageKey(companyId));
+    const parsed = raw ? JSON.parse(raw) : null;
+    const year = Number(parsed?.year), month = Number(parsed?.month);
+    if (year >= 2020 && year <= 2100 && month >= 1 && month <= 12) return { year, month };
+  } catch {}
+  return fallback;
+}
+
+function readPreparedPeriods(companyId) {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ikPreparedStorageKey(companyId)) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((value) => /^\d{4}-\d{2}$/.test(String(value))) : [];
+  } catch {
+    return [];
+  }
 }
 
 function dateKey(year, month, day = 1) {
@@ -171,7 +210,8 @@ function draftPerson(employee = {}) {
 }
 
 export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) {
-  const initial = todayPeriod();
+  const companyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
+  const initial = readStoredIkPeriod(companyId);
   const initialPage = mode === "personel" ? "personel"
     : mode === "mesai" ? "hareket"
       : mode === "izin" ? "izin"
@@ -182,6 +222,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [month, setMonth] = useState(initial.month);
   const [data, setData] = useState({});
   const [payrollData, setPayrollData] = useState(null);
+  const [pdksLive, setPdksLive] = useState({ metrics: {}, liveCards: [], events: [] });
+  const [preparedPeriods, setPreparedPeriods] = useState(() => readPreparedPeriods(companyId));
   const [logs, setLogs] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -203,12 +245,24 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
   const documentInput = useRef(null);
   const payrollInput = useRef(null);
-  const companyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const period = `${year}-${String(month).padStart(2, "0")}`;
+  const periodPrepared = preparedPeriods.includes(period);
 
   useEffect(() => {
     setPage(initialPage);
   }, [initialPage]);
+
+  useEffect(() => {
+    const stored = readStoredIkPeriod(companyId);
+    setYear(stored.year);
+    setMonth(stored.month);
+    setPreparedPeriods(readPreparedPeriods(companyId));
+  }, [companyId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(ikPeriodStorageKey(companyId), JSON.stringify({ year, month }));
+  }, [companyId, year, month]);
 
   const rawEmployees = safeList(data.rawEmployees).length ? safeList(data.rawEmployees) : safeList(data.employees);
   const employees = safeList(data.employees).filter((item) => payrollVisibleEmployee(item, period));
@@ -221,7 +275,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const totalDays = daysInMonth(year, month);
   const selected = employees.find((item) => item.id === selectedId) || employees[0] || null;
 
-  const load = useCallback(async ({ force = false } = {}) => {
+  const load = useCallback(async ({ force = false, prepare = false } = {}) => {
     const requestKey = `${companyId}|${year}|${month}`;
     let activeRequest = loadRequestRef.current;
     if (activeRequest.promise) {
@@ -234,11 +288,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const task = (async () => {
       setBusy(true);
       try {
-        const [result, audit, payroll, center] = await Promise.all([
+        const includePayroll = prepare || periodPrepared;
+        const [result, audit, payroll, center, live] = await Promise.all([
           getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
           getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 })),
-          getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month })),
+          includePayroll ? getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month })) : Promise.resolve(null),
           getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: `${year - 1}-01-01`, to: `${year + 1}-12-31` })),
+          getPdksLiveDashboard(params({ mainCompanyId: companyId })),
         ]);
         if (loadRequestRef.current.seq !== requestId) return;
 
@@ -259,16 +315,19 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
 
         setData(cleanResult);
         setLogs(safeList(audit));
-        setPayrollData(cleanPayroll);
+        setPayrollData(includePayroll ? cleanPayroll : null);
+        setPdksLive(live || { metrics: {}, liveCards: [], events: [] });
         setLeaveCenter(center || { plans: [], conflicts: [] });
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
         setNotice("");
+        return true;
       } catch (error) {
         if (loadRequestRef.current.seq === requestId) {
           setNotice(error?.message || "IK aylik verisi alinamadi.");
         }
+        return false;
       } finally {
         if (loadRequestRef.current.seq === requestId) setBusy(false);
       }
@@ -282,7 +341,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         loadRequestRef.current = { ...loadRequestRef.current, promise: null };
       }
     }
-  }, [companyId, month, period, year]);
+  }, [companyId, month, period, periodPrepared, year]);
 
   useEffect(() => {
     load();
@@ -300,7 +359,26 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     };
   }, [load]);
 
-  const filteredEmployees = useMemo(() => {
+  const preparePeriod = async () => {
+    const ok = await load({ force: true, prepare: true });
+    if (!ok) return;
+    setPreparedPeriods((old) => {
+      const next = [...new Set([...old, period])];
+      if (typeof window !== "undefined") window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
+      return next;
+    });
+    setNotice(`${MONTHS[month - 1]} ${year} bilgileri hazırlandı. Bordro ve ödeme kontrolü artık açılabilir.`);
+  };
+
+  const changePeriod = (nextYear, nextMonth) => {
+    setYear(Number(nextYear));
+    setMonth(Number(nextMonth));
+    setPayrollData(null);
+    setSelectedPayrollIds([]);
+    setNotice("");
+  };
+
+    const filteredEmployees = useMemo(() => {
     const needle = upper(search).trim();
     return employees.filter((employee) => {
       const haystack = upper(`${employee.fullName || ""} ${employee.code || ""} ${employee.cardNo || ""} ${employee.identityNo || ""}`);
@@ -354,7 +432,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   return { employee, actualSalary, baseEmployee, salary, road, extraLabel, extra, overtime, advance, deduction, legalType, garnishmentSource, garnishment, legalBank, legalCash, bankDeductions, cashDeductions, bank, cash, saved, ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }) };
 }, [movements, payrollLines, rawEmployees]);
 
-  const payrollRows = useMemo(() => employees.map((employee) => {
+  const payrollRows = useMemo(() => periodPrepared ? employees.map((employee) => {
   const system = planFor(employee);
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
@@ -369,7 +447,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const bank = num(saved.final.bank);
   const cash = num(saved.final.cash);
   return { ...system, salary, road, extraLabel, extra, overtime, advance, deduction, garnishment, bank, cash, saved, ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }) };
-}), [employees, payrollLines, planFor]);
+}): [], [employees, payrollLines, planFor, periodPrepared]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
     count: acc.count + 1,
@@ -1142,8 +1220,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   function filters({ third = "Personel ara", fourth = "Durum", fifth = "SGK" } = {}) {
     return (
       <div className="filters">
-        <div><label>Yil</label><select value={year} onChange={(event) => setYear(Number(event.target.value))}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
-        <div><label>Ay</label><select value={month} onChange={(event) => setMonth(Number(event.target.value))}>{MONTHS.map((item, index) => <option key={item} value={index + 1}>{item}</option>)}</select></div>
+        <div><label>Yil</label><select value={year} onChange={(event) => changePeriod(Number(event.target.value), month)}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
+        <div><label>Ay</label><select value={month} onChange={(event) => changePeriod(year, Number(event.target.value))}>{MONTHS.map((item, index) => <option key={item} value={index + 1}>{item}</option>)}</select></div>
         <div><label>{third}</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ad, kod, kart no" /></div>
         <div><label>{fourth}</label><select><option>Tumu</option></select></div>
         <div><label>{fifth}</label><select><option>Tumu</option></select></div>
