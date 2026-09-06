@@ -1,6 +1,7 @@
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { registerAuthManagementRoutes } from "./auth-cloud";
+import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -908,132 +909,7 @@ function documentDateInRange(row: DatabaseRow, startDate: string, endDate: strin
 }
 
 async function buildProfitLoss(c: Context<AppEnv>) {
-  const today = new Date();
-  const startDate =
-    c.req.query("startDate") ||
-    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-  const endDate = c.req.query("endDate") || today.toISOString().slice(0, 10);
-  const [documents, manualExpenses, fixedExpenses] = await Promise.all([
-    accountingDocuments(c),
-    jsonStoreList(c, "MUHASEBE_MANUAL_EXPENSE"),
-    jsonStoreList(c, "MUHASEBE_FIXED_EXPENSE"),
-  ]);
-  const documentRecords = documents
-    .filter((row) => documentDateInRange(row, startDate, endDate))
-    .filter((row) =>
-      ["SUPPLIER_INVOICE", "CUSTOMER_INVOICE"].includes(databaseText(row.documentKind)),
-    )
-    .map((row) => {
-      const income = row.documentKind === "CUSTOMER_INVOICE";
-      const raw = jsonObject(row.raw);
-      return {
-        id: row.id,
-        date: row.issueDate,
-        companyId: row.companyId,
-        companyName: row.companyName || row.supplierName,
-        documentNo: row.documentNo,
-        description: raw.description || raw.aciklama || "",
-        category:
-raw.reportCategory ||
-          raw.giderKategori ||
-          (income ? "Baskı Geliri" : "Mal ve Hizmet Alımı"),
-        type: income ? "INCOME" : "EXPENSE",
-        amount: databaseNumber(row.grandTotal),
-        vatAmount: databaseNumber(row.vatTotal),
-        recordType: raw.recordType || "RESMI",
-        source: "DOCUMENT",
-      };
-    });
-  const manualRecords = manualExpenses
-    .filter((row) => {
-      const date = databaseText(row.date || row.createdAt).slice(0, 10);
-      if (startDate && date < startDate) return false;
-      if (endDate && date > endDate) return false;
-      return true;
-    })
-    .map((row) => ({
-      id: row.id || row.fileName,
-      date: row.date || row.createdAt,
-      companyId: row.companyId || null,
-      companyName: row.companyName || row.description || "Genel gider",
-      documentNo: row.documentNo || "MANUEL",
-      description: row.description || "",
-      category: row.category || "Diğer",
-      type: "EXPENSE",
-      amount: databaseNumber(row.amount),
-      vatAmount: databaseNumber(row.vatAmount),
-      recordType: row.recordType || "RESMI",
-      source: "MANUAL",
-    }));
-  const records = [...documentRecords, ...manualRecords].sort((left, right) =>
-    databaseText(right.date).localeCompare(databaseText(left.date)),
-  );
-  const totalIncome = records
-    .filter((row) => row.type === "INCOME")
-    .reduce((sum, row) => sum + databaseNumber(row.amount), 0);
-  const totalExpense = records
-    .filter((row) => row.type === "EXPENSE")
-    .reduce((sum, row) => sum + databaseNumber(row.amount), 0);
-  const categoryMap = new Map<string, DatabaseRow>();
-  for (const row of records) {
-    const key = `${row.type}:${row.category}`;
-    const current = categoryMap.get(key) || {
-      type: row.type,
-      category: row.category,
-      count: 0,
-      total: 0,
-    };
-    current.count = databaseNumber(current.count) + 1;
-    current.total = databaseNumber(current.total) + databaseNumber(row.amount);
-    categoryMap.set(key, current);
-  }
-  const companyRows = new Map<string, DatabaseRow>();
-  for (const row of records) {
-    const key = databaseText(row.companyId || row.companyName || row.id);
-    const current = companyRows.get(key) || {
-      companyId: row.companyId,
-      companyName: row.companyName,
-      income: 0,
-      expense: 0,
-      net: 0,
-    };
-    if (row.type === "INCOME") {
-      current.income = databaseNumber(current.income) + databaseNumber(row.amount);
-    } else {
-      current.expense = databaseNumber(current.expense) + databaseNumber(row.amount);
-    }
-    current.net = databaseNumber(current.income) - databaseNumber(current.expense);
-    companyRows.set(key, current);
-  }
-  return {
-    period: { startDate, endDate },
-    summary: {
-      totalIncome,
-      totalExpense,
-      incomingVat: records
-        .filter((row) => row.type === "EXPENSE")
-        .reduce((sum, row) => sum + databaseNumber(row.vatAmount), 0),
-      outgoingVat: records
-        .filter((row) => row.type === "INCOME")
-        .reduce((sum, row) => sum + databaseNumber(row.vatAmount), 0),
-      grossProfit: totalIncome - totalExpense,
-      netProfit: totalIncome - totalExpense,
-      netResult: totalIncome - totalExpense,
-    },
-    records,
-    categories: [...categoryMap.values()].sort(
-      (a, b) => databaseNumber(b.total) - databaseNumber(a.total),
-    ),
-    companySummary: [...companyRows.values()].sort(
-      (a, b) =>
-        Math.abs(databaseNumber(b.net)) - Math.abs(databaseNumber(a.net)),
-    ),
-    generalExpenses: fixedExpenses,
-    emptyState:
-      records.length === 0
-        ? "Bu dönem için işlenmiş gelir veya gider kaydı bulunamadı."
-        : "",
-  };
+  return buildCanonicalAccountingReport(c);
 }
 
 async function buildChequeDashboard(c: Context<AppEnv>) {
@@ -2488,6 +2364,7 @@ app.get("/api/files/*", async (c) => {
   return new Response(object.body, { headers });
 });
 
+registerCanonicalAccountingReportRoutes(app);
 registerAuthManagementRoutes(app);
 
 export default app;
