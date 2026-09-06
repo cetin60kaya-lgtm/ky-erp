@@ -28,6 +28,33 @@ const DEPOLAMA_MODULE = {
   ],
 };
 
+const ILETISIM_MODULE = {
+  key: "iletisim",
+  permissionKey: "MAIL",
+  label: "İletişim & Dosyalar",
+  icon: "eposta",
+  groups: [
+    {
+      label: "Mail",
+      tabs: [
+        ["mail-gelen", "Gelen Kutusu", "eposta"],
+        ["mail-gonderilen", "Gönderilenler", "eposta"],
+        ["mail-taslaklar", "Taslaklar", "dosya"],
+        ["mail-yanit-bekleyen", "Yanıt Bekleyenler", "file-check"],
+        ["mail-sablonlar", "Şablonlar", "dosya"],
+      ],
+    },
+    {
+      label: "Drive / Dosyalar",
+      tabs: [
+        ["drive-dosyalar", "Dosyalar", "dosya"],
+        ["drive-son-kullanilanlar", "Son Kullanılanlar", "dosya"],
+        ["drive-firma-dosyalari", "Firma Dosyaları", "dosya"],
+      ],
+    },
+  ],
+};
+
 function withoutStorageDuplicates(module) {
   if (module.key !== "admin") return module;
   const storageKeys = new Set(["dosya-klasor-yonetimi", "yedekleme-loglar"]);
@@ -125,10 +152,11 @@ export const MODULES = adminIndex >= 0
   ? [
       ...modulesWithoutEBelge.slice(0, adminIndex),
       ...(eBelgeModule ? [eBelgeModule] : []),
+      ILETISIM_MODULE,
       DEPOLAMA_MODULE,
       ...modulesWithoutEBelge.slice(adminIndex),
     ]
-  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), DEPOLAMA_MODULE];
+  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, DEPOLAMA_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
@@ -148,6 +176,18 @@ export const MODULE_ROUTE_ALIASES = {
     "belge-merkezi": "e-belge-genel",
     "e-fatura": "e-belge-gelen-faturalar",
     "e-irsaliye": "e-belge-gelen-irsaliyeler",
+  },
+  iletisim: {
+    mail: "mail-gelen",
+    gelen: "mail-gelen",
+    gonderilen: "mail-gonderilen",
+    taslaklar: "mail-taslaklar",
+    "yanit-bekleyen": "mail-yanit-bekleyen",
+    sablonlar: "mail-sablonlar",
+    drive: "drive-dosyalar",
+    dosyalar: "drive-dosyalar",
+    "son-kullanilanlar": "drive-son-kullanilanlar",
+    "firma-dosyalari": "drive-firma-dosyalari",
   },
   depolama: {
     genel: "depolama-genel",
