@@ -10,6 +10,7 @@ $DB_CONFIG = "wrangler.jsonc"
 $SESSION_GUARD_FILE = Join-Path $WORKER "migrations\0022_auth_same_browser_session_guard.sql"
 $ALIAS_SCHEMA_FILE = Join-Path $WORKER "migrations\0023_admin_company_alias_schema.sql"
 $AUDIT_USER_FILE = Join-Path $WORKER "migrations\0024_denetime_pdks_system_user.sql"
+$MAIL_CORE_FILE = Join-Path $WORKER "migrations\0050_mail_communication_core.sql"
 $BACKUP_DIR = Join-Path $ROOT "BACKUPS\D1\PRE_DEPLOY"
 
 function Fail($message) {
@@ -98,6 +99,29 @@ WHERE user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' L
     Write-Host "DENETIM: hazir sistem hesabi | yalniz IK/PDKS | salt-okunur" -ForegroundColor Green
 }
 
+function Get-Worker-SecretNames {
+    Set-Location $WORKER
+    $raw = (& wrangler secret list --format json --config $DB_CONFIG 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { Fail "Worker secret listesi okunamadi." }
+    try { $rows = @($raw | ConvertFrom-Json) }
+    catch { Fail "Worker secret listesi JSON olarak okunamadi: $raw" }
+    return @($rows | ForEach-Object { ([string]$_.name).Trim() } | Where-Object { $_ })
+}
+
+function Assert-Mail-Provider-Secrets {
+    $required = @(
+        "FILE_HUB_OAUTH_KEY",
+        "MICROSOFT_GRAPH_CLIENT_ID",
+        "MICROSOFT_GRAPH_CLIENT_SECRET"
+    )
+    $names = @(Get-Worker-SecretNames)
+    $missing = @($required | Where-Object { $names -notcontains $_ })
+    if ($missing.Count -gt 0) {
+        Fail ("Mail / Microsoft Graph production secretleri eksik. File Hub ile ortak mevcut OAuth secretleri kullanilir. Eksik: " + ($missing -join ", "))
+    }
+    Write-Host "Mail / Microsoft Graph secret readiness: HAZIR" -ForegroundColor Green
+}
+
 function Assert-Remote-Schema-Readiness {
     $tableSql = @"
 WITH required(name) AS (
@@ -118,7 +142,16 @@ WITH required(name) AS (
     ('auth_owner_recovery_challenges'),
     ('hr_monthly_employees'),
     ('ik_person_card_settings'),
-    ('ik_user_hr_scope')
+    ('ik_user_hr_scope'),
+    ('mail_audit_log'),
+    ('mail_approval_requests'),
+    ('mail_send_jobs'),
+    ('mail_drafts'),
+    ('mail_messages'),
+    ('mail_oauth_states'),
+    ('mail_account_members'),
+    ('mail_account_credentials'),
+    ('mail_accounts')
 )
 SELECT r.name AS missing
   FROM required r
@@ -168,7 +201,7 @@ Write-Host "KORUMA:" -ForegroundColor Yellow
 Write-Host "- Tum Worker + frontend test/build bitmeden canliya yazma YOK." -ForegroundColor Yellow
 Write-Host "- Production D1 RESET YOK." -ForegroundColor Yellow
 Write-Host "- Genel migration zinciri YOK." -ForegroundColor Yellow
-Write-Host "- Yalniz additive 0023, DENETIM 0024 ve gerekli 0022 session guard uygulanabilir." -ForegroundColor Yellow
+Write-Host "- Yalniz additive 0023, DENETIM 0024, gerekli 0022 session guard ve Mail Core 0050 uygulanabilir." -ForegroundColor Yellow
 Write-Host "- D1 uyumluluk adimlarindan once tam D1 export yedegi alinir." -ForegroundColor Yellow
 Write-Host "- Production test INSERT/UPDATE/DELETE YOK." -ForegroundColor Yellow
 Write-Host "- Kirli tracked Git agaci otomatik resetlenmez." -ForegroundColor Yellow
@@ -180,6 +213,7 @@ if (-not (Get-Command wrangler -ErrorAction SilentlyContinue)) { Fail "Wrangler 
 if (-not (Test-Path $SESSION_GUARD_FILE)) { Fail "0022 session guard dosyasi bulunamadi: $SESSION_GUARD_FILE" }
 if (-not (Test-Path $ALIAS_SCHEMA_FILE)) { Fail "0023 firma eslestirme sema dosyasi bulunamadi: $ALIAS_SCHEMA_FILE" }
 if (-not (Test-Path $AUDIT_USER_FILE)) { Fail "0024 DENETIM sistem kullanicisi dosyasi bulunamadi: $AUDIT_USER_FILE" }
+if (-not (Test-Path $MAIL_CORE_FILE)) { Fail "0050 Mail Core sema dosyasi bulunamadi: $MAIL_CORE_FILE" }
 
 Write-Host "=== 1/11 REPO ===" -ForegroundColor Cyan
 Set-Location $ROOT
@@ -209,6 +243,7 @@ Write-Host ""
 Write-Host "=== 2/11 CLOUDFLARE ===" -ForegroundColor Cyan
 wrangler whoami
 Check-Exit "Cloudflare OAuth oturumu bulunamadi. wrangler login calistirin."
+Assert-Mail-Provider-Secrets
 
 Write-Host ""
 Write-Host "=== 3/11 WORKER PREFLIGHT ===" -ForegroundColor Cyan
@@ -269,9 +304,13 @@ Write-Host "0024 DENETIM / PDKS sistem hesabi kontrol/uygulama..." -ForegroundCo
 wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $AUDIT_USER_FILE
 Check-Exit "0024 DENETIM sistem hesabi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
 
+Write-Host "0050 Mail / Iletisim Core additive semasi kontrol/uygulama..." -ForegroundColor Yellow
+wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
+Check-Exit "0050 Mail Core additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+
 Assert-Remote-Schema-Readiness
 Assert-Denetime-System-User
-Write-Host "D1 hedefli uyumluluk + sema + DENETIM: HAZIR" -ForegroundColor Green
+Write-Host "D1 hedefli uyumluluk + sema + DENETIM + MAIL: HAZIR" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 6/11 WORKER PRODUCTION DEPLOY ===" -ForegroundColor Green
