@@ -36,6 +36,18 @@ test("IK rendering never mounts a second PDKS or puantaj workspace", () => {
   assert.doesNotMatch(app, /import IkPage from/);
 });
 
+test("monthly IK overview does not fetch or render live PDKS operations", () => {
+  const monthly = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.doesNotMatch(monthly, /getPdksLiveDashboard/);
+  assert.doesNotMatch(monthly, /Bugünkü PDKS Hareketi/);
+  assert.doesNotMatch(monthly, /Bugün kart basan/);
+  assert.doesNotMatch(monthly, /Bugün gelmeyen/);
+  assert.doesNotMatch(monthly, /Eksik basım/);
+  assert.match(monthly, /PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları/);
+  assert.match(monthly, /İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir/);
+});
+
 test("IK personnel card exposes authoritative annual leave entitlement, used and remaining balance", () => {
   const page = frontend("pages/modules/ik/IkPersonnelFinancePage.jsx");
   const service = frontend("services/ikPersonnelControlApi.js");
