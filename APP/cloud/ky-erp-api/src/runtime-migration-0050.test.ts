@@ -33,3 +33,12 @@ test("0050 runtime gate is fail-closed on partial schema or index drift", () => 
   assert.match(source, /MIGRATION_0050_VERIFY_INDEX_MISSING/);
   assert.match(source, /await db\.batch\(statements\)/);
 });
+
+
+test("Mail routes activate 0050 readiness without exposing a global migration endpoint", () => {
+  const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  assert.match(main, /import \{ ensureMailCommunicationCore0050 \} from "\.\/runtime-migration-0050";/);
+  assert.match(main, /shell\.use\("\/api\/mail\/\*", async \(c, next\) => \{/);
+  assert.match(main, /await ensureMailCommunicationCore0050\(c\.env\.DB\)/);
+  assert.doesNotMatch(main, /shell\.use\("\/api\/\*", async \(c, next\) => \{\s*await ensureMailCommunicationCore0050/);
+});
