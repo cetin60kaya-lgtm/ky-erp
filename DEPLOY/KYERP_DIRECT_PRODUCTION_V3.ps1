@@ -117,9 +117,11 @@ function Assert-Mail-Provider-Secrets {
     $names = @(Get-Worker-SecretNames)
     $missing = @($required | Where-Object { $names -notcontains $_ })
     if ($missing.Count -gt 0) {
-        Fail ("Mail / Microsoft Graph production secretleri eksik. File Hub ile ortak mevcut OAuth secretleri kullanilir. Eksik: " + ($missing -join ", "))
+        Write-Host ("UYARI: Microsoft Mail/OneDrive OAuth production secretleri eksik; provider bagli gorunmeyecek. Eksik: " + ($missing -join ", ")) -ForegroundColor Yellow
+        return $false
     }
     Write-Host "Mail / Microsoft Graph secret readiness: HAZIR" -ForegroundColor Green
+    return $true
 }
 
 function Assert-Remote-Schema-Readiness {
