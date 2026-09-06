@@ -124,19 +124,26 @@ Kurallar:
 
 - Kaynak hazır olmak, canlıya çıkmak değildir.
 - Kullanıcı açıkça canlıya al/deploy/release demeden production branch'e taşıma yapma.
+- **Tek canonical production yayın sözleşmesi:** `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
 - **Canonical production yayın yolu Cloudflare Git Integration'dır.**
+- Normal release akışı: feature branch -> test/build -> kullanıcı onayı -> production branch merge -> Cloudflare Pages + Workers Builds -> canlı smoke.
 - Frontend: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Pages `ky-erp-frontend`.
 - Worker: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Workers Builds `ky-erp-api`.
-- **Production deploy için GitHub Actions kullanılmaz.** `.github/workflows/production-release.yml` ve diğer workflow'lar normal release/hotfix sırasında tetiklenmez.
-- GitHub Actions workflow'ları varsayılan olarak **manual-only (`workflow_dispatch`)** tutulur. Otomatik `push`, `pull_request`, `workflow_run` veya schedule tetikleri kullanıcı açık kararı olmadan eklenmez. Actions yalnız kullanıcı açıkça isterse tanılama/test amacıyla çalıştırılabilir; production deploy yerine geçmez.
+- Worker build kapısı `npm run typecheck && npm test && npm run build`; deploy `npm run deploy`. Build kapısı fail ise Worker deploy edilmez ve release tamam sayılmaz.
+- **Normal canlıya almada kullanıcıdan PowerShell, Cloudflare tokenı, manuel Pages deployu veya manuel Worker build/deploy isteme.**
+- Manuel PowerShell/Cloudflare API müdahalesi yalnız Git Integration arızası, tetiklenmeme teşhisi veya kontrollü incident/recovery içindir.
+- Otomatik Worker build fail olursa manuel deploy ile bypass etme: Cloudflare build logunu oku, kök nedeni feature branch'te düzelt, regression testi ekle/güncelle, production'a normal merge et ve yeni otomatik buildi bekle.
+- Pages success + Worker fail = **kısmi/başarısız release**; ikisi ve canlı smoke tamamlanmadan "canlı tamam" denmez.
+- Production branch paralel sohbet nedeniyle ilerlerse eski SHA körlemesine deploy edilmez; güncel HEAD doğrulanır ve ilgili değişikliğin yeni HEAD'de bulunduğu teyit edilir.
+- **Production deploy için GitHub Actions kullanılmaz.** Workflow'lar varsayılan olarak manual-only (`workflow_dispatch`) tutulur; otomatik push/PR/workflow_run/schedule tetikleri kullanıcı açık kararı olmadan eklenmez.
 - Eski Windows BAT/direct deploy scriptleri canonical otomatik yayın yolu değildir; bakım/geri dönüş referansı olarak kalabilir.
 - Feature/preview branch otomatik Cloudflare production deploy etmez.
 - Production D1 reset yasaktır.
 - Migration gerekiyorsa normal Git auto-deploy'dan ayrı güvenlik kapısı uygulanır: remote D1 full backup -> readiness -> hedefli/additive migration -> schema doğrulaması -> deploy.
 - Secret/token değeri repoya, loga veya dokümana yazılmaz.
 - Deploy sonrası API health, auth contract, CORS ve frontend asset doğrulaması yapılmadan başarılı denmez.
-- Ayrıntılı Cloudflare/AI/yayın kaynağı: `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
-- 06.09.2026 deploy + Bildirim Merkezi final kaynağı: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
+- Ayrıntılı Cloudflare/AI kaynağı: `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
+- Bildirim Merkezi kaynağı: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
 
 ## İş bitiş raporu
 
