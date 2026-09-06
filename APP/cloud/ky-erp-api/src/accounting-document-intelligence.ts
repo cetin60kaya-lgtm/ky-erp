@@ -90,6 +90,51 @@ export function extractAccountingLot(value: unknown) {
   return text(match?.[1]);
 }
 
+export function scoreAccountingExtraction(row: Row) {
+  const confidenceScore=Math.max(0,Math.min(1,num(row?.extractionConfidence)))*50;
+  const fieldScore=[
+    text(row?.documentNo),
+    text(row?.partyTaxNo),
+    text(row?.issueDate),
+    num(row?.payableTotal)>0?"1":"",
+    Array.isArray(row?.lines)&&row.lines.length?"1":"",
+  ].filter(Boolean).length*9;
+  const partyScore=text(row?.partyName)?5:0;
+  return Math.min(100,confidenceScore+fieldScore+partyScore);
+}
+
+export function compareAccountingExtractions(primary: Row, secondary: Row) {
+  const discrepancies:any[]=[];
+  const add=(code:string,primaryValue:unknown,secondaryValue:unknown,severity="WARNING")=>discrepancies.push({code,severity,primary:primaryValue,secondary:secondaryValue});
+  const pNo=normalize(primary?.documentNo),sNo=normalize(secondary?.documentNo);
+  if(pNo&&sNo&&pNo!==sNo)add("DOCUMENT_NO_MISMATCH",primary.documentNo,secondary.documentNo,"ERROR");
+  const pTax=text(primary?.partyTaxNo).replace(/\D/g,""),sTax=text(secondary?.partyTaxNo).replace(/\D/g,"");
+  if(pTax&&sTax&&pTax!==sTax)add("PARTY_TAX_NO_MISMATCH",primary.partyTaxNo,secondary.partyTaxNo,"ERROR");
+  const pDate=text(primary?.issueDate).slice(0,10),sDate=text(secondary?.issueDate).slice(0,10);
+  if(pDate&&sDate&&pDate!==sDate)add("ISSUE_DATE_MISMATCH",pDate,sDate,"WARNING");
+  const pTotal=num(primary?.payableTotal),sTotal=num(secondary?.payableTotal),totalTolerance=Math.max(.05,Math.max(Math.abs(pTotal),Math.abs(sTotal))*.002);
+  if(pTotal>0&&sTotal>0&&Math.abs(pTotal-sTotal)>totalTolerance)add("PAYABLE_TOTAL_MISMATCH",pTotal,sTotal,"ERROR");
+  const pVat=num(primary?.taxTotal),sVat=num(secondary?.taxTotal),vatTolerance=Math.max(.05,Math.max(Math.abs(pVat),Math.abs(sVat))*.005);
+  if(pVat>0&&sVat>0&&Math.abs(pVat-sVat)>vatTolerance)add("VAT_TOTAL_MISMATCH",pVat,sVat,"WARNING");
+  const pLines=Array.isArray(primary?.lines)?primary.lines.length:0,sLines=Array.isArray(secondary?.lines)?secondary.lines.length:0;
+  if(pLines&&sLines&&pLines!==sLines)add("LINE_COUNT_MISMATCH",pLines,sLines,"WARNING");
+  return discrepancies;
+}
+
+export function selectAccountingExtraction(primary: Row, secondary: Row) {
+  const primaryScore=scoreAccountingExtraction(primary),secondaryScore=scoreAccountingExtraction(secondary),discrepancies=compareAccountingExtractions(primary,secondary);
+  const chosen=secondaryScore>primaryScore+2?secondary:primary;
+  return {
+    ...chosen,
+    primaryExtractionScore:primaryScore,
+    secondaryExtractionScore:secondaryScore,
+    fallbackCompared:true,
+    fallbackSelected:chosen===secondary,
+    extractionDiscrepancies:discrepancies,
+    needsManualReview:discrepancies.some(item=>item.severity==="ERROR"),
+  };
+}
+
 function genericTables(result: Row) {
   const tables=Array.isArray(result?.analyzeResult?.tables)?result.analyzeResult.tables:[];
   const out:any[]=[];
@@ -207,43 +252,69 @@ export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, 
   if(!file.size)throw Object.assign(new Error("Belge dosyası boş."),{code:"EMPTY_DOCUMENT"});
   if(file.size>40_000_000)throw Object.assign(new Error("Belge dosyası 40 MB sınırını aşıyor."),{code:"DOCUMENT_TOO_LARGE"});
 
-  const requested = upper(documentKind) || "AUTO";
-  let resolvedKind = inferAccountingDocumentKind("", requested);
-  let first: Row;
+  const requested=upper(documentKind)||"AUTO",env=c.env as any;
+  let resolvedKind=inferAccountingDocumentKind("",requested),first:Row,autoLayout:Row|null=null;
 
-  if (requested === "AUTO") {
-    const layout = await azureAnalyze(c, file, "IRSALIYE");
-    resolvedKind = inferAccountingDocumentKind(layout.rawText, "AUTO");
-    if (resolvedKind === "FATURA") {
-      try {
-        first = await azureAnalyze(c, file, "FATURA");
-      } catch {
-        first = { ...layout, autoInvoiceRefineFailed: true };
-      }
-    } else {
-      first = layout;
+  if(requested==="AUTO"){
+    autoLayout=await azureAnalyze(c,file,"IRSALIYE");
+    resolvedKind=inferAccountingDocumentKind(autoLayout.rawText,"AUTO");
+    if(resolvedKind==="FATURA"){
+      try{first=await azureAnalyze(c,file,"FATURA")}
+      catch{first={...autoLayout,autoInvoiceRefineFailed:true}}
+    }else first=autoLayout;
+    first={...first,inferredDocumentKind:resolvedKind,autoDetected:true,autoDetectionSource:"OCR_TEXT"};
+  }else first=await azureAnalyze(c,file,resolvedKind);
+
+  const profile=await extractionProfile(c,text(first.partyTaxNo),text(first.partyName),resolvedKind);
+  const customModel=text(profile?.provider_model_id),threshold=num(profile?.min_confidence)||num(env.KYERP_DOCINTEL_REVIEW_THRESHOLD)||0.75;
+  let candidate:Row={...first,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",profileId:profile?.id||null,profileThreshold:threshold};
+
+  if(customModel&&upper(profile?.provider_type)==="AZURE_DOCUMENT_INTELLIGENCE"){
+    try{
+      const refined=await azureAnalyze(c,file,resolvedKind,customModel);
+      await c.env.DB.prepare(`UPDATE accounting_extraction_profiles SET successful_samples=successful_samples+1,last_used_at=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(new Date().toISOString(),new Date().toISOString(),profile.id,slugOf(c)).run();
+      candidate={...refined,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};
+    }catch{
+      candidate={...candidate,customModelFallbackUsed:true};
     }
-    first = {
-      ...first,
-      inferredDocumentKind: resolvedKind,
-      autoDetected: true,
-      autoDetectionSource: "OCR_TEXT",
-    };
-  } else {
-    first = await azureAnalyze(c, file, resolvedKind);
   }
 
-  const profile = await extractionProfile(c,text(first.partyTaxNo),text(first.partyName),resolvedKind);
-  const customModel = text(profile?.provider_model_id);
-  if (!customModel || upper(profile?.provider_type) !== "AZURE_DOCUMENT_INTELLIGENCE") {
-    return { ...first, inferredDocumentKind: resolvedKind };
+  const missingCritical=!text(candidate.documentNo)||!text(candidate.issueDate)||num(candidate.payableTotal)<=0||!Array.isArray(candidate.lines)||candidate.lines.length===0;
+  const lowConfidence=num(candidate.extractionConfidence)<threshold;
+  const shouldFallback=lowConfidence||missingCritical;
+  let secondary:Row|null=null;
+
+  if(shouldFallback&&autoLayout&&candidate.extractorModel!==autoLayout.extractorModel)secondary=autoLayout;
+
+  if(shouldFallback&&!secondary){
+    const configuredSecondary=text(env.KYERP_DOCINTEL_SECONDARY_MODEL);
+    const defaultSecondary=resolvedKind==="FATURA"?(text(env.KYERP_DOCINTEL_DISPATCH_MODEL)||"prebuilt-layout"):"";
+    const secondaryModel=configuredSecondary||defaultSecondary;
+    if(secondaryModel&&secondaryModel!==text(candidate.extractorModel)){
+      try{secondary=await azureAnalyze(c,file,resolvedKind,secondaryModel)}
+      catch(error:any){candidate={...candidate,secondaryFallbackFailed:true,secondaryFallbackError:text(error?.code)||"DOCINTEL_SECONDARY_FAILED"}}
+    }
   }
-  const threshold = num(profile?.min_confidence) || 0.75;
-  try {
-    const refined = await azureAnalyze(c, file, resolvedKind, customModel);
-    await c.env.DB.prepare(`UPDATE accounting_extraction_profiles SET successful_samples=successful_samples+1,last_used_at=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(new Date().toISOString(),new Date().toISOString(),profile.id,slugOf(c)).run();
-    return {...refined,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};
-  } catch {
-    return {...first,inferredDocumentKind:resolvedKind,profileId:profile.id,profileThreshold:threshold,customModelFallbackUsed:true};
+
+  if(secondary){
+    candidate={
+      ...selectAccountingExtraction(candidate,secondary),
+      inferredDocumentKind:resolvedKind,
+      autoDetected:requested==="AUTO",
+      secondaryFallbackModel:text(secondary.extractorModel),
+    };
   }
+
+  const finalScore=scoreAccountingExtraction(candidate);
+  return{
+    ...candidate,
+    extractionQualityScore:finalScore,
+    lowConfidence:lowConfidence||finalScore<70,
+    needsManualReview:Boolean(candidate.needsManualReview||missingCritical||finalScore<60),
+    manualReviewReasons:[
+      ...(missingCritical?["CRITICAL_FIELDS_MISSING"]:[]),
+      ...(finalScore<60?["EXTRACTION_QUALITY_LOW"]:[]),
+      ...((candidate.extractionDiscrepancies||[]).filter((item:any)=>item.severity==="ERROR").map((item:any)=>item.code)),
+    ],
+  };
 }
