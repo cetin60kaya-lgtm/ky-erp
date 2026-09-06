@@ -9,10 +9,9 @@ const AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authoriz
 const TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const CALLBACK = "https://api.kyerp.net/api/auth/mail/oauth/microsoft/callback";
 const APP_RETURN = "https://app.kyerp.net/iletisim/mail-gelen";
-const SCOPES = [
-  "openid","profile","email","offline_access","User.Read",
-  "Mail.ReadWrite","Mail.Send","Mail.ReadWrite.Shared","Mail.Send.Shared"
-].join(" ");
+const PERSONAL_SCOPES = ["openid","profile","email","offline_access","User.Read","Mail.ReadWrite","Mail.Send"].join(" ");
+const SHARED_SCOPES = ["openid","profile","email","offline_access","User.Read","Mail.ReadWrite","Mail.Send","Mail.ReadWrite.Shared","Mail.Send.Shared"].join(" ");
+function scopesForAccount(account:any){ return String(account?.account_type||"").toUpperCase()==="PERSONAL" ? PERSONAL_SCOPES : SHARED_SCOPES; }
 
 const text=(v:unknown)=>v==null?"":String(v).trim();
 const upper=(v:unknown)=>text(v).toUpperCase().replace(/İ/g,"I");
@@ -98,7 +97,7 @@ async function usableToken(c:any,tenant:string,account:AnyRow){
   const expires=Date.parse(text(cred.expiresAt));
   if(Number.isFinite(expires)&&expires>Date.now()+120000)return{text:cred.accessToken,credential:cred};
   if(!text(cred.refreshToken))throw Object.assign(new Error("Microsoft yenileme anahtarı bulunamadı; hesabı yeniden bağlayın."),{code:"MAIL_REAUTH_REQUIRED"});
-  const payload=await tokenPost(c,{grant_type:"refresh_token",refresh_token:text(cred.refreshToken),scope:SCOPES});
+  const payload=await tokenPost(c,{grant_type:"refresh_token",refresh_token:text(cred.refreshToken),scope:text(cred.scope)||scopesForAccount(account)});
   cred={...cred,accessToken:text(payload.access_token),refreshToken:text(payload.refresh_token)||text(cred.refreshToken),expiresAt:new Date(Date.now()+Math.max(60,Number(payload.expires_in||3600))*1000).toISOString(),scope:text(payload.scope)||text(cred.scope),tokenType:text(payload.token_type)||"Bearer"};
   await saveCredential(c,tenant,text(account.id),cred,{provider:"MICROSOFT_365",refreshedAt:nowIso()});
   return{text:cred.accessToken,credential:cred};
@@ -180,7 +179,7 @@ export function registerMicrosoftMailRoutes(app:any){
     await c.env.DB.prepare("DELETE FROM mail_oauth_states WHERE expires_at<?").bind(ts).run();
     await c.env.DB.prepare("INSERT INTO mail_oauth_states(state_hash,main_company_slug,account_id,user_id,provider_type,code_verifier_ciphertext,code_verifier_nonce,return_path,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
       .bind(await sha256Hex(state),tenant,account.id,text(current.id),"MICROSOFT_365",sealed.ciphertext,sealed.nonce,APP_RETURN,new Date(Date.now()+10*60*1000).toISOString(),ts).run();
-    const qs=new URLSearchParams({client_id:cfg.clientId,response_type:"code",redirect_uri:CALLBACK,response_mode:"query",scope:SCOPES,state,code_challenge:challenge,code_challenge_method:"S256",prompt:"select_account"});
+    const requestedScopes=scopesForAccount(account);\n    const qs=new URLSearchParams({client_id:cfg.clientId,response_type:"code",redirect_uri:CALLBACK,response_mode:"query",scope:requestedScopes,state,code_challenge:challenge,code_challenge_method:"S256",prompt:"select_account"});
     await audit(c,tenant,text(current.id),text(account.id),"MAIL_MICROSOFT_OAUTH_STARTED",{accountType:account.account_type});
     return c.json({ok:true,data:{authorizeUrl:AUTHORIZE+"?"+qs.toString(),expiresAt:new Date(Date.now()+10*60*1000).toISOString()}});
   });
@@ -195,7 +194,7 @@ export function registerMicrosoftMailRoutes(app:any){
     await c.env.DB.prepare("DELETE FROM mail_oauth_states WHERE state_hash=?").bind(stateHash).run();
     try{
       const verifier=await openMailCredential(c,{ciphertext:text(row.code_verifier_ciphertext),nonce:text(row.code_verifier_nonce)});
-      const payload=await tokenPost(c,{grant_type:"authorization_code",code,redirect_uri:CALLBACK,code_verifier:verifier,scope:SCOPES});
+      const payload=await tokenPost(c,{grant_type:"authorization_code",code,redirect_uri:CALLBACK,code_verifier:verifier,scope:scopesForAccount(row)});
       const accessToken=text(payload.access_token);
       const profile=(await graphJson(GRAPH+"/me?$select=id,displayName,mail,userPrincipalName",accessToken)).payload;
       const connectedEmail=text(profile.mail||profile.userPrincipalName).toLowerCase(),mailbox=text(row.email_address).toLowerCase();
