@@ -152,18 +152,14 @@ export default function AdminMailConnections({ activeMainCompany, openModule }) 
       </section>
 
       <section className="mail-admin-card">
-        <div className="mail-admin-card-head"><div><h3>Bekleyen Mail Onayları</h3><p>Kritik ortak/bölüm hesaplarında Firma Sahibi → Uygulama Sahibi sıralı onay uygulanır.</p></div></div>
+        <div className="mail-admin-card-head"><div><h3>Bekleyen Mail Onayları</h3><p>Firma mail hesaplarında onay sahibi yalnız Firma Sahibi'dir. Uygulama Sahibi teknik bağlantıyı yönetir, firma adına onay vermez.</p></div></div>
         {approvals.filter((row) => String(row.status || "").toUpperCase() === "PENDING").length ? <div className="mail-admin-approvals">
-          {approvals.filter((row) => String(row.status || "").toUpperCase() === "PENDING").map((row) => {
-            const companyStepPending = row.approval_policy === "COMPANY_OWNER_AND_APP_OWNER" && Number(row.pending_steps || 0) > 1;
-            const appOwnerBlocked = appOwner && companyStepPending;
-            return <div className="approval" key={row.id}>
-              <div><b>{row.display_name || row.email_address || "Mail hesabı"}</b><span>{providerLabel(row.provider_type)} · {accountTypeLabel(row.account_type)} · {row.approval_policy === "COMPANY_OWNER_AND_APP_OWNER" ? "Çift Onay" : "Firma Sahibi Onayı"}</span>{appOwnerBlocked ? <small>Önce Firma Sahibi onayı bekleniyor.</small> : null}</div>
-              <div className="actions">
-                {(appOwner || companyOwner) ? <><button type="button" onClick={() => decide(row, "APPROVE")} disabled={loading || appOwnerBlocked}>{appOwnerBlocked ? "Firma Sahibi Bekleniyor" : "Onayla"}</button><button type="button" className="danger" onClick={() => decide(row, "REJECT")} disabled={loading || appOwnerBlocked}>Reddet</button></> : <span>Yetkili onayı bekleniyor</span>}
-              </div>
-            </div>;
-          })}
+          {approvals.filter((row) => String(row.status || "").toUpperCase() === "PENDING").map((row) => <div className="approval" key={row.id}>
+            <div><b>{row.display_name || row.email_address || "Mail hesabı"}</b><span>{providerLabel(row.provider_type)} · {accountTypeLabel(row.account_type)} · Firma Sahibi Onayı</span>{appOwner ? <small>Bu firma işlemini Uygulama Sahibi onaylayamaz.</small> : null}</div>
+            <div className="actions">
+              {companyOwner ? <><button type="button" onClick={() => decide(row, "APPROVE")} disabled={loading}>Onayla</button><button type="button" className="danger" onClick={() => decide(row, "REJECT")} disabled={loading}>Reddet</button></> : <span>Firma Sahibi onayı bekleniyor</span>}
+            </div>
+          </div>)}
         </div> : <div className="mail-admin-empty compact">Bekleyen mail bağlantı onayı yok.</div>}
       </section>
     </div>
