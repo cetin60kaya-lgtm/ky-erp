@@ -28,7 +28,7 @@ test("AI conversation and action records are exact-tenant scoped",()=>{assert.do
 
 test("PDKS central guard rejects cross-tenant access and requires IK permissions",()=>{assert.match(pdks,/enforcePdksTenantAndPermission/);assert.match(pdks,/PDKS_TENANT_FORBIDDEN/);assert.match(pdks,/requested && requested !== own/);assert.match(pdks,/PDKS_TENANT_NOT_ACTIVE/);assert.match(pdks,/PDKS_PERMISSION_DENIED/);assert.match(pdks,/app\.use\("\/api\/ik\/personnel-control\/\*", enforcePdksTenantAndPermission\)/)});
 
-test("PDKS audit account remains SGK+card filtered and read-only",()=>{assert.match(pdks,/isAuditRole/);assert.match(pdks,/\["GET", "HEAD"\]\.includes\(method\)/);assert.match(pdks,/UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);assert.match(pdks,/TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);assert.match(pdks,/enforceAuditReadScope/)});
+test("PDKS audit account remains monthly-SGK + card filtered and read-only",()=>{assert.match(pdks,/isAuditRole/);assert.match(pdks,/\["GET", "HEAD"\]\.includes\(method\)/);assert.match(pdks,/ik_person_monthly_compliance/);assert.match(pdks,/mc\.sgk_covered=1/);assert.match(pdks,/TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);assert.match(pdks,/enforceAuditReadScope/)});
 
 test("company billing workspace is reachable from Yönetim",()=>{assert.match(registry,/firma-ucretlendirme/);assert.match(registry,/Firma Paket \/ Kullanım/);assert.match(adminPage,/AdminCompanyBilling/);assert.match(adminPage,/activeTab === "firma-ucretlendirme"/);assert.match(adminPage,/owner \? <AdminCompanyBilling/)});
 
