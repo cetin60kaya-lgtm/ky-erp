@@ -257,7 +257,7 @@ export function registerMailCommunicationRoutes(app:any){
       (SELECT s.decided_by FROM mail_approval_steps s WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_actor_id,
       (SELECT COALESCE(u.full_name,u.username,s.decided_by) FROM mail_approval_steps s LEFT JOIN auth_users u ON u.id=s.decided_by WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_actor_name,
       (SELECT s.decided_at FROM mail_approval_steps s WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_at,
-      (SELECT COALESCE(u.full_name,u.username,r.requested_by) FROM auth_users u WHERE u.id=r.requested_by LIMIT 1) requested_by_name
+      COALESCE((SELECT COALESCE(u.full_name,u.username) FROM auth_users u WHERE u.id=r.requested_by LIMIT 1),r.requested_by) requested_by_name
       FROM mail_approval_requests r
       JOIN mail_accounts a ON a.id=r.target_id AND a.main_company_slug=r.main_company_slug
       WHERE r.main_company_slug=?
@@ -295,7 +295,7 @@ export function registerMailCommunicationRoutes(app:any){
     if(Number(pending?.n||0)===0){
       await c.env.DB.batch([
         c.env.DB.prepare("UPDATE mail_approval_requests SET status='APPROVED',decided_at=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,ts,requestId,tenant),
-        c.env.DB.prepare("UPDATE mail_accounts SET approval_status='APPROVED',approved_by_company=COALESCE(approved_by_company,(SELECT decided_by FROM mail_approval_steps WHERE request_id=? AND step_type='COMPANY_OWNER' AND status='APPROVED' LIMIT 1)),approved_by_owner=COALESCE(approved_by_owner,(SELECT decided_by FROM mail_approval_steps WHERE request_id=? AND step_type='APP_OWNER' AND status='APPROVED' LIMIT 1)),status=CASE WHEN provider_connected=1 THEN 'ACTIVE' ELSE 'DISCONNECTED' END,updated_at=? WHERE id=? AND main_company_slug=?").bind(requestId,requestId,ts,request.target_id,tenant)
+        c.env.DB.prepare("UPDATE mail_accounts SET approval_status='APPROVED',approved_by_company=CASE WHEN ?=1 THEN COALESCE(approved_by_company,?) ELSE approved_by_company END,approved_by_owner=CASE WHEN ?=1 THEN COALESCE(approved_by_owner,?) ELSE approved_by_owner END,status=CASE WHEN provider_connected=1 THEN 'ACTIVE' ELSE 'DISCONNECTED' END,updated_at=? WHERE id=? AND main_company_slug=?").bind(companyOwner?1:0,text(current?.id),appOwner?1:0,text(current?.id),ts,request.target_id,tenant)
       ]);
       await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVED",{requestId,stepType,decisionAuthority:appOwner?"SUPER_ADMIN":"COMPANY_ADMIN"},text(request.target_id));
       return c.json({ok:true,data:{requestId,status:"APPROVED",connectionStatus:"DISCONNECTED"}});
