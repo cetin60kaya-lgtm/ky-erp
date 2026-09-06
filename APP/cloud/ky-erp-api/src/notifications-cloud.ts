@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { getAuthenticatedUser } from "./auth-cloud";
-import { hasNotificationPermission, NOTIFICATION_MAX_READ_IDS, sanitizeNotificationReadIds } from "./notifications-core";
+import { getAuthenticatedUser } from "./auth-cloud.ts";
+import { hasNotificationPermission, NOTIFICATION_MAX_READ_IDS, sanitizeNotificationReadIds } from "./notifications-core.ts";
 
 const READ_SCOPE = "SYSTEM_NOTIFICATIONS_READ_V1";
 const MAX_READ_IDS = NOTIFICATION_MAX_READ_IDS;
