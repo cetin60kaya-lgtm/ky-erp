@@ -16,9 +16,9 @@ const slugOf=(c:Context<AppEnv>,b:Row={})=>text(b.mainCompanySlug||b.main_compan
 const json=(v:unknown)=>{if(v&&typeof v==="object"&&!Array.isArray(v))return v as Row;try{const p=JSON.parse(text(v)||"{}");return p&&typeof p==="object"&&!Array.isArray(p)?p:{}}catch{return{}}};
 
 async function resolveIfClean(c:Context<AppEnv>,slug:string,documentId:string){
-  const unmatched=await c.env.DB.prepare(`SELECT COUNT(*) n FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? AND product_id IS NULL`).bind(slug,documentId).first<Row>();
-  if(Number(unmatched?.n||0)===0)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='PRODUCT_UNMATCHED' AND is_resolved=0`).bind(now(),slug,documentId).run();
-  const lines=(await c.env.DB.prepare(`SELECT raw_metadata FROM accounting_document_lines WHERE main_company_slug=? AND document_id=?`).bind(slug,documentId).all<Row>()).results||[];
+  const lines=(await c.env.DB.prepare(`SELECT product_id,raw_metadata FROM accounting_document_lines WHERE main_company_slug=? AND document_id=?`).bind(slug,documentId).all<Row>()).results||[];
+  const productMissing=lines.some((line)=>{const raw=json(line.raw_metadata),routing=text(raw.routingType||"EXPENSE").toUpperCase();return !text(line.product_id)&&(routing!=="EXPENSE"||raw.lotRequired===true||raw.chemical===true)});
+  if(!productMissing)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='PRODUCT_UNMATCHED' AND is_resolved=0`).bind(now(),slug,documentId).run();
   const lotMissing=lines.some((line)=>{const raw=json(line.raw_metadata);return raw.lotRequired===true&&!text(raw.lotNo)});
   if(!lotMissing)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='LOT_REQUIRED' AND is_resolved=0`).bind(now(),slug,documentId).run();
 }
