@@ -34,15 +34,21 @@ test("only the first password login transport gets one automatic network retry",
   assert.match(source, /await wait\(250\)/);
 });
 
-test("active sessions are refreshed silently while temporary refresh failures preserve the valid token", () => {
+test("normal sessions refresh silently while owner automatic refresh is disabled", () => {
   assert.match(source, /sessionRefreshDelay/);
   assert.match(source, /NORMAL_REFRESH_BEFORE_MS/);
-  assert.match(source, /OWNER_ROLLING_REFRESH_BEFORE_MS/);
   assert.match(source, /REFRESH_RETRY_MS/);
+  assert.match(source, /isSuperAdmin\(user\.role\)/);
+  assert.match(source, /clearPendingRefresh\(\)/);
   assert.match(source, /tokenRef\.current === scheduledToken/);
+  assert.doesNotMatch(source, /OWNER_ROLLING_REFRESH_BEFORE_MS/);
 });
 
-test("valid stored JWT survives browser restart until its real exp", () => {
-  assert.match(source, /localStorage\.setItem\(AUTH_TOKEN_KEY/);
+test("normal users persist across browser restart while owner auth stays session-only", () => {
+  assert.match(source, /window\.localStorage\.setItem\(AUTH_TOKEN_KEY/);
+  assert.match(source, /window\.sessionStorage\.setItem\(AUTH_TOKEN_KEY/);
+  assert.match(source, /isOwnerAuthPair/);
+  assert.match(source, /clearPersistentAuth\(\)/);
+  assert.match(source, /Owner kimliği browser restart sonrasında otomatik geri yüklenmez/);
   assert.match(source, /payload\.exp/);
 });

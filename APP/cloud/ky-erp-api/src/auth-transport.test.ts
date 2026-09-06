@@ -19,7 +19,9 @@ test("Worker exposes the canonical-v3 auth handshake and current MFA session con
   assert.match(mainSource, /\/api\/auth\/status/);
   assert.match(mainSource, /PASSWORD_SESSION_SECONDS = 0/);
   assert.match(mainSource, /MFA_SESSION_SECONDS = 36_000/);
-  assert.match(mainSource, /OWNER_ROLLING_SESSION_SECONDS = 86_400/);
+  assert.match(mainSource, /OWNER_ROLLING_SESSION_SECONDS = 0/);
+  assert.match(mainSource, /ownerPersistentBrowserSession:\s*false/);
+  assert.match(mainSource, /ownerAutomaticRefresh:\s*false/);
   assert.match(mainSource, /X-KYERP-Auth-Version/);
 });
 
