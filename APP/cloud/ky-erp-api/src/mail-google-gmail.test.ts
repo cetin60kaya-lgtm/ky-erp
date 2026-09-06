@@ -132,3 +132,21 @@ test("compose final supports explicit send-now and rich HTML preview stays sandb
   assert.match(ui,/sandbox=""/);
   assert.match(ui,/Klasöre taşı/);
 });
+
+
+test("mail attachment metadata and secure provider download are wired end to end",()=>{
+  const core=read("./mail-communication-core.ts");
+  const microsoft=read("./mail-microsoft-graph.ts");
+  const gmail=read("./mail-google-gmail.ts");
+  const wrapper=read("./main-entry-mail.ts");
+  const api=read("../../../app/ky-erp-frontend/src/services/mailApi.js");
+  const ui=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(core,/messages\/:id\/attachments/);
+  assert.match(microsoft,/syncMicrosoftAttachments/);
+  assert.match(microsoft,/attachments\/:attachmentId\/download\/microsoft/);
+  assert.match(gmail,/provider_attachment_id/);
+  assert.match(gmail,/attachments\/:attachmentId\/download\/google/);
+  assert.match(wrapper,/attachmentDownloadMatch/);
+  assert.match(api,/downloadMailAttachment/);
+  assert.match(ui,/comm-attachments/);
+});
