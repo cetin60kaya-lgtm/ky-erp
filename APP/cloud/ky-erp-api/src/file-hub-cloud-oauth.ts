@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { approvalPendingPayload, consumeCriticalApproval, requestCriticalApproval } from "./approval-center-cloud";
 import { getAuthenticatedUser } from "./auth-cloud";
 
 type Bindings = Cloudflare.Env & {
@@ -369,6 +370,13 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     const providerType = upper(body.providerType), cfg = providerConfig(c, providerType);
     if (!cfg.family) return c.json(err("INVALID_PROVIDER", "Bu servis doğrudan bulut bağlantısını desteklemiyor."), 422);
     if (!providerReady(c, providerType)) return c.json(err("OAUTH_NOT_CONFIGURED", `${providerType === "GOOGLE_DRIVE" ? "Google Drive" : "Microsoft"} OAuth uygulama bilgileri henüz production ortamında tanımlı değil.`), 503);
+    const approval = await requestCriticalApproval(c,gate.user,{
+      mainCompanySlug:gate.slug,sourceModule:"STORAGE",actionType:"EXTERNAL_PROVIDER_AUTHORIZE",targetType:"PROVIDER",targetId:providerType,
+      title:"Harici Dosya Servisi Bağla",description:providerType+" hesabına KY ERP dosya erişimi verilecek.",riskLevel:"HIGH",
+      approvalPolicy:"COMPANY_OWNER_OR_APP_OWNER",payload:{providerType},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(err("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan harici servis bağlantısı başlatılamaz."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     const state = stateToken(), createdAt = now(), expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(), returnPath = sanitizeReturnPath(body.returnPath);
     await c.env.DB.prepare(`DELETE FROM file_hub_oauth_states WHERE expires_at<?`).bind(createdAt).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_oauth_states(state,main_company_slug,provider_type,user_id,return_path,expires_at,created_at) VALUES(?,?,?,?,?,?,?)`).bind(state, gate.slug, providerType, gate.user.id, returnPath, expiresAt, createdAt).run();
@@ -380,6 +388,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
       const params = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: "code", response_mode: "query", scope: cfg.scope, state });
       authorizeUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
     }
+    await consumeCriticalApproval(c,gate.user,text(approval.request?.id),{providerType,oauthStarted:true});
     return c.json({ ok: true, data: { authorizeUrl } });
   });
 
@@ -470,9 +479,17 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
 
   app.delete("/api/file-hub/cloud/connections/:id", async (c) => {
     const gate = await assertOwner(c); if (gate.error) return gate.error; const id = c.req.param("id"), ts = now();
-    const row = await c.env.DB.prepare(`SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? LIMIT 1`).bind(id, gate.slug).first<Row>();
+    const row = await c.env.DB.prepare(`SELECT id,name,provider_type FROM file_hub_connections WHERE id=? AND main_company_slug=? LIMIT 1`).bind(id, gate.slug).first<Row>();
     if (!row) return c.json(err("NOT_FOUND", "Depolama servisi bulunamadı."), 404);
+    const approval = await requestCriticalApproval(c,gate.user,{
+      mainCompanySlug:gate.slug,sourceModule:"STORAGE",actionType:"EXTERNAL_PROVIDER_DISCONNECT",targetType:"FILE_HUB_CONNECTION",targetId:id,
+      title:"Dosya Servisi Bağlantısını Kes",description:text(row.name||row.provider_type)+" bağlantısı pasif yapılacak.",riskLevel:"HIGH",
+      approvalPolicy:"COMPANY_OWNER_OR_APP_OWNER",payload:{connectionId:id,providerType:text(row.provider_type)},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(err("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan servis bağlantısı kesilemez."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     await c.env.DB.prepare(`UPDATE file_hub_connections SET is_active=0,connection_status='DISCONNECTED',updated_at=? WHERE id=? AND main_company_slug=?`).bind(ts, id, gate.slug).run();
+    await consumeCriticalApproval(c,gate.user,text(approval.request?.id),{connectionId:id,disconnected:true});
     return c.json({ ok: true });
   });
 
