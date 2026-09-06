@@ -188,6 +188,8 @@ Bir modül için doğru sıra:
 
 **Desktop'ta çalıştı = otomatik olarak production'a al demek değildir.**
 
+Production yayınında tek canonical prosedür `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` dosyasıdır. Normal canlıya almada kullanıcıdan PowerShell/Cloudflare tokenı istenmez; production merge sonrası Cloudflare Git Integration Pages ve Workers Builds'i otomatik yürütür. Worker build/test fail olursa manuel deploy ile bypass edilmez; log okunur, kaynak düzeltilir ve yeni production commitinin otomatik buildi beklenir.
+
 ## 11. Yeni sohbet için hazır devam özeti
 
 Yeni sohbet KY ERP işiyle açılırsa şu gerçekler varsayılmalıdır:
@@ -213,6 +215,19 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## Son güncelleme
 
+
+## 06.09.2026 — Canonical Cloudflare canlıya alma prosedürü kilitlendi
+
+- Kullanıcı kararı: normal production release sırasında **PowerShell veya manuel Cloudflare deploy adımı olmayacak**.
+- Tek yayın kaynağı: `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
+- Normal yol: feature branch -> test/build -> kullanıcı onayı -> production merge -> Cloudflare Git Integration -> Pages + Workers Builds -> canlı smoke.
+- GitHub Actions production deploy yolu değildir.
+- Worker build kapısı `npm run typecheck && npm test && npm run build`; fail olursa deploy durur.
+- Cloudflare otomatik Worker build failinde doğru davranış: log -> kök neden -> feature branch düzeltme -> regression testi -> production merge -> yeni otomatik build. Manuel deploy ile test kapısı bypass edilmez.
+- Pages success + Worker fail = release tamam değildir.
+- Paralel sohbetler production HEAD'i ilerletirse eski SHA körlemesine deploy edilmez; en güncel production HEAD doğrulanır.
+- D1 migration backup/readiness/hedefli migration ile ayrı güvenlik kapısıdır.
+- 06.09.2026 doğrulanmış incident: bildirim Worker testindeki extensionless Node ESM importu `ERR_MODULE_NOT_FOUND` oluşturdu; kaynak düzeltmesi explicit `.ts` import + kontrat testi ile yapıldı. Bu olay otomatik Worker buildin çalıştığını, test kapısının deployu doğru şekilde durdurduğunu doğruladı.
 
 ## 06.09.2026 — Canlı yayın ve Bildirim Merkezi final kararı
 
