@@ -20,7 +20,10 @@ export default function AdminMailApprovals({ compact = false, onChanged }) {
   const [rows, setRows] = useState([]);
   const [busyId, setBusyId] = useState("");
   const [notice, setNotice] = useState("");
-  const companyOwner = upper(user?.role) === "COMPANY_ADMIN";
+  const role = upper(user?.role);
+  const companyOwner = role === "COMPANY_ADMIN";
+  const appOwner = ["SUPER_ADMIN", "ADMIN"].includes(role);
+  const canDecide = companyOwner || appOwner;
 
   const load = useCallback(async () => {
     try {
@@ -77,13 +80,13 @@ export default function AdminMailApprovals({ compact = false, onChanged }) {
                 <small>{row.email_address || "—"} · {providerLabel(row.provider_type)} · {accountTypeLabel(row.account_type)}</small>
               </div>
               <div className="admpro-actions">
-                {companyOwner ? (
+                {canDecide ? (
                   <>
                     <button type="button" className="primary" onClick={() => decide(row, "APPROVE")} disabled={Boolean(busyId)}>Onayla</button>
                     <button type="button" onClick={() => decide(row, "REJECT")} disabled={Boolean(busyId)}>Reddet</button>
                   </>
                 ) : (
-                  <span className="admpro-badge warn">Firma sahibi / işveren onayı</span>
+                  <span className="admpro-badge warn">Firma sahibi / Süper Yönetici onayı</span>
                 )}
               </div>
             </div>
