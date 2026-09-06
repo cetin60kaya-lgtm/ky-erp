@@ -12,11 +12,14 @@ test("0046 runtime contract has exactly three canonical tables and three indexes
       "accounting_expense_rules",
     ],
   );
-  assert.deepEqual(accountingCanonical0046Contract.indexes, [
-    "ix_accounting_report_categories_active",
-    "ix_accounting_report_overrides_source",
-    "ix_accounting_expense_rules_match",
-  ]);
+  assert.deepEqual(
+    accountingCanonical0046Contract.indexes.map((row) => row.name),
+    [
+      "ix_accounting_report_categories_active",
+      "ix_accounting_report_overrides_source",
+      "ix_accounting_expense_rules_match",
+    ],
+  );
 });
 
 test("0046 SQL stays additive-only", () => {
@@ -35,6 +38,8 @@ test("0046 runtime gate is fail-closed on partial schema", () => {
   const source = readFileSync(new URL("./runtime-migration-0046.ts", import.meta.url), "utf8");
   assert.match(source, /MIGRATION_0046_PARTIAL_SCHEMA/);
   assert.match(source, /MIGRATION_0046_VERIFY_TABLE_MISSING/);
+  assert.match(source, /MIGRATION_0046_PARTIAL_INDEX/);
   assert.match(source, /MIGRATION_0046_VERIFY_INDEX_MISSING/);
+  assert.match(source, /MIGRATION_0046_VERIFY_INDEX_COLUMNS/);
   assert.match(source, /await db\.batch\(statements\)/);
 });
