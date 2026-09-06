@@ -259,7 +259,9 @@ export function registerIkPdksDeviceRoutes(app: Hono<AppEnv>) {
     const peopleResult = await c.env.DB.prepare(`SELECT e.id,e.full_name,e.code,s.card_no
       FROM hr_monthly_employees e
       JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-      WHERE e.main_company_id=? AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR' AND TRIM(COALESCE(s.card_no,''))<>''`)
+      WHERE e.main_company_id=?
+        AND UPPER(TRIM(COALESCE(s.active_passive,e.status,'AKTIF'))) NOT LIKE '%PAS%'
+        AND TRIM(COALESCE(s.card_no,''))<>''`)
       .bind(company).all<Row>();
     const people = new Map((peopleResult.results || []).map((row) => [normalizeCard(row.card_no), row]));
     const accepted: Row[] = [];
@@ -274,7 +276,7 @@ export function registerIkPdksDeviceRoutes(app: Hono<AppEnv>) {
       const eventTime = normalizeTime(source.eventTime || source.time);
       const person = people.get(cardNo);
       if (!localId || !cardNo || !workDate || !eventTime || !person) {
-        rejected.push({ localId, reason: "SGK=VAR + kart/tarih/saat eşleşmedi." });
+        rejected.push({ localId, reason: "Aktif kartlı personel + tarih/saat eşleşmedi." });
         continue;
       }
       if (await isLocked(c, company, workDate)) {
