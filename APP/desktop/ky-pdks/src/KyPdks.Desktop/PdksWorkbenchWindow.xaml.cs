@@ -427,7 +427,7 @@ public partial class PdksWorkbenchWindow : Window
         }
 
         if (invalid.Count > 0)
-            await _store.MarkLocalErrorAsync(invalid, "SGK=VAR + kart/personel veya çalışma dönemi eşleşmesi yok.", _lifetime.Token);
+            await _store.MarkLocalErrorAsync(invalid, "Kart/personel veya çalışma dönemi eşleşmesi yok.", _lifetime.Token);
 
         if (valid.Count > 0)
         {
