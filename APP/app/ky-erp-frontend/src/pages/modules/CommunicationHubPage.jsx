@@ -241,8 +241,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     <div className="comm-page">
       <header className="comm-header">
         <div>
-          <small>KY ERP / İLETİŞİM & DOSYALAR</small>
-          <h1>{isMail ? "Mail Merkezi" : "Drive / Dosyalar"}</h1>
+          <small>KY ERP / MAIL & DOSYALAR</small>
+          <h1>{isMail ? "Mail Merkezi" : "Dosya Merkezi"}</h1>
           <p><b>Aktif Firma:</b> {activeCompanyName} · Mail, firma dosyaları ve ERP ilişkileri tek çalışma alanında.</p>
         </div>
         <div className="comm-actions">
@@ -285,7 +285,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             <label>Kime<input value={draftForm.to} onChange={(e) => setDraftForm((v) => ({ ...v, to: e.target.value }))} placeholder="mail@firma.com"/></label>
             <label className="wide">Konu<input value={draftForm.subject} onChange={(e) => setDraftForm((v) => ({ ...v, subject: e.target.value }))}/></label>
             <label className="wide">Mesaj<textarea rows={7} value={draftForm.bodyText} onChange={(e) => setDraftForm((v) => ({ ...v, bodyText: e.target.value }))}/></label>
-            <div className="wide comm-compose-actions"><button type="submit" disabled={loading}>Taslağı Kaydet</button><span>Gönder butonu Microsoft/Gmail adapterı ve idempotent send-job tamamlandığında açılacak.</span></div>
+            <div className="wide comm-compose-actions"><button type="submit" disabled={loading}>Taslağı Kaydet</button><span>Gönderim yalnız açık kullanıcı işlemiyle yapılır; otomatik gönderim kapalıdır.</span></div>
           </form>
         </section>
       ) : null}
@@ -358,8 +358,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             </div>) : <div className="comm-empty large">Bu firmada indekslenmiş dosya bulunamadı.</div>}
           </div>
           <footer className="comm-files-footer">
-            <span>Günlük kullanım burada; servis ekleme, OAuth, ana klasör ve bölüm atamaları Yönetim / Depolama tarafında kalır.</span>
-            <button type="button" className="secondary" onClick={() => openModule?.("depolama", { tabKey: "depolama-kaynaklar" })}>Depolama Yönetimini Aç</button>
+            <span>Günlük kullanım burada; servis ekleme, OAuth, ana klasör ve bölüm atamaları Bağlantılar & Depolama bölümünde kalır.</span>
+            <button type="button" className="secondary" onClick={() => openModule?.("depolama", { tabKey: "depolama-kaynaklar" })}>Bağlantılar & Depolama</button>
           </footer>
         </section>
       )}
