@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { openMailCredential, sealMailCredential } from "./mail-communication-core.ts";
+import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -169,6 +170,68 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
 function parseAttachments(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return Array.isArray(v)?v:[];}catch{return[];}}
+function attachmentAssetId(value:any){return text(typeof value==="string"?value:value?.fileAssetId||value?.file_asset_id||value?.assetId||value?.id);}
+function standardBase64(bytes:Uint8Array){
+  let raw="";
+  for(let offset=0;offset<bytes.length;offset+=0x8000){
+    const part=bytes.subarray(offset,Math.min(bytes.length,offset+0x8000));
+    raw+=String.fromCharCode(...part);
+  }
+  return btoa(raw);
+}
+async function resolveDraftAttachments(c:any,tenant:string,refs:any[]){
+  if(refs.length>10)throw Object.assign(new Error("Bir mailde en fazla 10 File Hub eki kullanılabilir."),{code:"MAIL_ATTACHMENT_COUNT_LIMIT",status:413});
+  const resolved:any[]=[];let total=0;
+  for(const ref of refs){
+    const assetId=attachmentAssetId(ref);
+    if(!assetId)throw Object.assign(new Error("Mail eki File Hub kimliği eksik."),{code:"MAIL_ATTACHMENT_REF_INVALID",status:422});
+    const asset=await readFileHubAssetForMail(c,tenant,assetId,25*1024*1024);
+    total+=Number(asset.sizeBytes||asset.bytes?.byteLength||0);
+    if(total>25*1024*1024)throw Object.assign(new Error("Mail eklerinin toplamı 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENTS_TOO_LARGE",status:413,totalBytes:total});
+    resolved.push(asset);
+  }
+  return resolved;
+}
+async function attachMicrosoftAsset(base:string,providerDraftId:string,token:string,asset:any,existing:Set<string>){
+  const name=text(asset.fileName)||"ek",size=Number(asset.sizeBytes||asset.bytes?.byteLength||0),key=name.toLowerCase()+"\u0000"+size;
+  if(existing.has(key))return;
+  const messageBase=base+"/messages/"+encodeURIComponent(providerDraftId);
+  if(size<3*1024*1024){
+    await graphJson(messageBase+"/attachments",token,{method:"POST",body:JSON.stringify({
+      "@odata.type":"#microsoft.graph.fileAttachment",
+      name,
+      contentType:text(asset.mimeType)||"application/octet-stream",
+      contentBytes:standardBase64(asset.bytes),
+    })});
+    existing.add(key);
+    return;
+  }
+  const session=(await graphJson(messageBase+"/attachments/createUploadSession",token,{method:"POST",body:JSON.stringify({
+    AttachmentItem:{attachmentType:"file",name,size,contentType:text(asset.mimeType)||"application/octet-stream"}
+  })})).payload;
+  const uploadUrl=text(session.uploadUrl);
+  if(!uploadUrl)throw Object.assign(new Error("Microsoft büyük ek yükleme oturumu oluşturmadı."),{code:"MICROSOFT_ATTACHMENT_UPLOAD_SESSION_MISSING",status:502});
+  const chunkSize=10*320*1024;
+  for(let start=0;start<size;start+=chunkSize){
+    const end=Math.min(size,start+chunkSize),chunk=asset.bytes.slice(start,end);
+    const response=await fetch(uploadUrl,{method:"PUT",headers:{
+      "Content-Length":String(chunk.byteLength),
+      "Content-Range":`bytes ${start}-${end-1}/${size}`,
+      "Content-Type":"application/octet-stream",
+    },body:chunk});
+    if(!response.ok){
+      const detail=await response.text().catch(()=>"");
+      throw Object.assign(new Error(detail||`Microsoft büyük ek yüklemesi HTTP ${response.status} ile başarısız oldu.`),{code:"MICROSOFT_ATTACHMENT_UPLOAD_FAILED",status:502});
+    }
+  }
+  existing.add(key);
+}
+async function syncMicrosoftAttachments(base:string,providerDraftId:string,token:string,assets:any[]){
+  if(!assets.length)return;
+  const listed=(await graphJson(base+"/messages/"+encodeURIComponent(providerDraftId)+"/attachments?$select=id,name,size",token)).payload;
+  const existing=new Set((Array.isArray(listed.value)?listed.value:[]).map((row:any)=>text(row.name).toLowerCase()+"\u0000"+Number(row.size||0)));
+  for(const asset of assets)await attachMicrosoftAsset(base,providerDraftId,token,asset,existing);
+}
 
 
 const MS_FOLDER_DEFS=[
@@ -397,7 +460,10 @@ export function registerMicrosoftMailRoutes(app:any){
     if(!draft)return c.json(err("DRAFT_NOT_FOUND","Mail taslağı bulunamadı."),404);
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_SEND_FORBIDDEN","Bu posta kutusundan gönderim yetkiniz yok."),403);
     if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Microsoft posta kutusu aktif ve onaylı değil."),409);
-    const attachments=parseAttachments(draft.attachment_refs_json);if(attachments.length)return c.json(err("ATTACHMENT_PROVIDER_SYNC_PENDING","File Hub ekleri Microsoft taslağına aktarılmadan gönderim yapılamaz."),409);
+    const attachments=parseAttachments(draft.attachment_refs_json);
+    let resolvedAttachments:any[]=[];
+    try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
+    catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Mail eki File Hub'dan alınamadı."),Number(error?.status)||502);}
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId;
     const existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
     if(existingJob){
@@ -412,6 +478,8 @@ export function registerMicrosoftMailRoutes(app:any){
       if(!providerDraftId)return c.json(err("PROVIDER_DRAFT_MISSING","Microsoft taslak kimliği dönmedi."),502);
       await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=?").bind(providerDraftId,nowIso(),draftId,tenant).run();
     }
+    try{await syncMicrosoftAttachments(base,providerDraftId,token,resolvedAttachments);}
+    catch(error:any){return c.json(err(text(error?.code)||"MICROSOFT_ATTACHMENT_SYNC_FAILED",text(error?.message)||"File Hub ekleri Microsoft taslağına aktarılamadı."),Number(error?.status)||502);}
     const jobId=text(existingJob?.id)||crypto.randomUUID(),ts=nowIso();
     if(existingJob)await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,jobId,tenant).run();
     else await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
