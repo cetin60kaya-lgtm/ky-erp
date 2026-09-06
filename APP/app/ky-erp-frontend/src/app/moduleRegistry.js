@@ -74,6 +74,20 @@ function withoutStorageDuplicates(module) {
   };
 }
 
+function withApprovalCenter(module) {
+  if (module.key !== "admin") return module;
+  const approvalTab = ["onay-merkezi", "Onay Merkezi", "file-check"];
+  if ((module.groups || []).some((group) => (group.tabs || []).some(([key]) => key === approvalTab[0]))) return module;
+  const groups = (module.groups || []).map((group, groupIndex) => {
+    if (groupIndex !== 0) return group;
+    const tabs = [...(group.tabs || [])];
+    const summaryIndex = tabs.findIndex(([key]) => key === "admin-yonetim-ozeti");
+    tabs.splice(summaryIndex >= 0 ? summaryIndex + 1 : 0, 0, approvalTab);
+    return { ...group, tabs };
+  });
+  return { ...module, groups };
+}
+
 function withLoginApprovals(module) {
   if (module.key !== "admin") return module;
   const approvalTab = ["giris-onaylari", "Giriş Onayları", "file-check"];
@@ -143,6 +157,7 @@ function withEBelgeNavigation(module) {
 
 const baseModules = BASE_MODULES
   .map(withoutStorageDuplicates)
+  .map(withApprovalCenter)
   .map(withLoginApprovals)
   .map(withCompanyBilling)
   .map(withEBelgeNavigation);
@@ -169,6 +184,9 @@ export const MODULE_ROUTE_ALIASES = {
     "giris-onay": "giris-onaylari",
     onaylar: "giris-onaylari",
     "bekleyen-girisler": "giris-onaylari",
+    "onaylar": "onay-merkezi",
+    "bekleyen-onaylar": "onay-merkezi",
+    "onay-merkezi": "onay-merkezi",
   },
   isnet: {
     ...(BASE_ROUTE_ALIASES.isnet || {}),
