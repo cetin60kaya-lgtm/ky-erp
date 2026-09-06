@@ -95,6 +95,24 @@ async function currentAndTenant(c:any,body:AnyRow={}){
   if(!tenant)return{error:c.json(jsonError("TENANT_FORBIDDEN","Bu firma Mail Merkezi erişimine izin verilmiyor."),403)};
   return{current,tenant};
 }
+function fileEntityTypesForUser(current:AnyRow){
+  if(ownerRole(current?.role)||companyAdminRole(current?.role)) return null;
+  const modules=new Set(
+    (Array.isArray(current?.permissions)?current.permissions:[])
+      .filter((row:AnyRow)=>Boolean(row?.canView ?? row?.can_view))
+      .map((row:AnyRow)=>upper(row?.moduleKey||row?.module_key)),
+  );
+  const map:Record<string,string[]>={
+    DESEN:["MODEL","MODEL_TEAMMATE","OUTGOING_PACKAGE"],
+    IMALAT:["PRODUCTION_ORDER","PRODUCTION"],
+    BOYAHANE:["DYE_RECIPE","DYE_BATCH","LOT","STOCK_ITEM"],
+    MUHASEBE:["DOCUMENT","INVOICE"],
+    ISNET:["DOCUMENT","INVOICE"],
+    IK:["PERSONNEL","EMPLOYEE"],
+  };
+  return [...new Set([...modules].flatMap((module)=>map[module]||[]))];
+}
+
 async function canAccessAccount(c:any,current:AnyRow,tenant:string,accountId:string,flag="can_view"){
   if(ownerRole(current?.role)||companyAdminRole(current?.role)){
     const r=await c.env.DB.prepare("SELECT id FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(accountId,tenant).first<AnyRow>();
@@ -239,6 +257,33 @@ export function registerMailCommunicationRoutes(app:any){
     }
     await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVAL_STEP_APPROVED",{requestId,stepType},text(request.target_id));
     return c.json({ok:true,data:{requestId,status:"PENDING",approvedStep:stepType}});
+  });
+
+  app.get("/api/mail/files",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail & Dosyalar görüntüleme yetkiniz yok."),403);
+    for(const table of ["file_hub_assets","file_hub_locations","file_hub_connections","file_hub_relations"]){
+      if(!(await tableExists(c,table)))return c.json({ok:true,data:[]});
+    }
+    const q=text(c.req.query("q")),take=Math.min(200,Math.max(1,Number(c.req.query("take")||150)));
+    const allowed=fileEntityTypesForUser(current);
+    if(Array.isArray(allowed)&&allowed.length===0)return c.json({ok:true,data:[]});
+    const where=["a.main_company_slug=?"];const args:any[]=[tenant];
+    let join="LEFT JOIN file_hub_relations r ON r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug";
+    if(Array.isArray(allowed)){
+      join="JOIN file_hub_relations r ON r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug";
+      where.push("r.entity_type IN ("+allowed.map(()=>"?").join(",")+")");
+      args.push(...allowed);
+    }
+    if(q){
+      const like="%"+q+"%";
+      where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ? OR r.entity_id LIKE ?)");
+      args.push(like,like,like,like);
+    }
+    args.push(take);
+    const sql="SELECT DISTINCT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.status,a.logical_key,a.updated_at,l.relative_path,l.storage_connection_id,c.provider_type,c.name connection_name FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id "+join+" WHERE "+where.join(" AND ")+" ORDER BY a.updated_at DESC LIMIT ?";
+    const r=await c.env.DB.prepare(sql).bind(...args).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
   });
 
   app.get("/api/mail/messages",async(c:any)=>{
