@@ -158,7 +158,7 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
     await c.env.DB.prepare("UPDATE mail_messages SET thread_id=?,folder_id=?,internet_message_id=?,direction=?,sender_email=?,sender_name=?,subject=?,body_text=?,body_html=?,sent_at=?,received_at=?,is_read=?,is_flagged=?,has_attachments=?,provider_metadata=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(...values).run();
   }else{
     await c.env.DB.prepare("INSERT INTO mail_messages(id,main_company_slug,account_id,thread_id,folder_id,provider_message_id,internet_message_id,direction,sender_email,sender_name,subject,body_text,body_html,sent_at,received_at,is_read,is_flagged,has_attachments,provider_metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(id,tenant,account.id,threadId||null,folder.id||null,providerMessageId,text(item.internetMessageId)||null,direction,text(from.address)||null,text(from.name)||null,removed?"[Provider'da silindi]":text(item.subject)||null,bodyText,bodyHtml,text(item.sentDateTime)||null,text(item.receivedDateTime)||null,item.isRead?1:0,upper(item?.flag?.flagStatus)==="FLAGGED"?1:0,item.hasAttachments?1:0,JSON.stringify({provider:"MICROSOFT_365",removed:removed?item["@removed"]:null}),ts,ts).run();
+      .bind(id,tenant,account.id,threadId||null,folder.id||null,providerMessageId,text(item.internetMessageId)||null,actualDirection,text(from.address)||null,text(from.name)||null,removed?"[Provider'da silindi]":text(item.subject)||null,bodyText,bodyHtml,text(item.sentDateTime)||null,text(item.receivedDateTime)||null,item.isRead?1:0,upper(item?.flag?.flagStatus)==="FLAGGED"?1:0,item.hasAttachments?1:0,JSON.stringify({provider:"MICROSOFT_365",removed:removed?item["@removed"]:null}),ts,ts).run();
   }
   if(!removed){
     await c.env.DB.prepare("DELETE FROM mail_recipients WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
@@ -320,7 +320,7 @@ export function registerMicrosoftMailRoutes(app:any){
 
   app.post("/api/mail/messages/:id/action/microsoft",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
-    if(!perm(current,"canUpdate"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail düzenleme yetkiniz yok."),403);
+    if(!perm(current,"canView"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail işlemi yetkiniz yok."),403);
     const row=await c.env.DB.prepare("SELECT m.*,a.provider_type,a.provider_connected,a.account_type,a.email_address FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
     if(!row)return c.json(err("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
     const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
