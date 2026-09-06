@@ -308,8 +308,7 @@ export function registerGoogleMailRoutes(app:any){
     }
     if(action==="ARCHIVE"){
       await modify([],["INBOX"]);
-      const target=await c.env.DB.prepare("SELECT id FROM mail_folders WHERE account_id=? AND main_company_slug=? AND UPPER(folder_type)='ARCHIVE' LIMIT 1").bind(row.account_id,tenant).first<AnyRow>();
-      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=COALESCE(?,folder_id),updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
+      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,messageId,tenant).run();
       return c.json({ok:true,data:{messageId,action}});
     }
     if(action==="DELETE"){
