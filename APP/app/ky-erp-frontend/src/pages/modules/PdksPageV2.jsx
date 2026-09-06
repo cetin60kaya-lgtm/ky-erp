@@ -26,7 +26,6 @@ const CURRENT_YEAR = now.getFullYear();
 const YEARS = Array.from({ length: 12 }, (_, i) => CURRENT_YEAR - 8 + i);
 const safe = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value ?? "").trim();
-const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const periodKey = (year, month) => `${year}-${String(month).padStart(2, "0")}`;
 
