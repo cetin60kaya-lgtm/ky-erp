@@ -96,7 +96,9 @@ async function locked(c: Context<AppEnv>, company: string, date: string) {
 async function peopleByCard(c: Context<AppEnv>, company: string) {
   const result = await c.env.DB.prepare(`SELECT e.id,e.code,e.full_name,e.sgk_status,s.card_no
     FROM hr_monthly_employees e JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-    WHERE e.main_company_id=? AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR' AND TRIM(COALESCE(s.card_no,''))<>''`)
+    WHERE e.main_company_id=?
+      AND UPPER(TRIM(COALESCE(s.active_passive,e.status,'AKTIF'))) NOT LIKE '%PAS%'
+      AND TRIM(COALESCE(s.card_no,''))<>''`)
     .bind(company).all<Row>();
   return new Map((result.results || []).map((row) => [normalizeCard(row.card_no), row]));
 }
@@ -119,7 +121,7 @@ async function preview(c: Context<AppEnv>) {
   const cards = await peopleByCard(c, context.company);
   const rows = parsed.map((row) => {
     const person = cards.get(normalizeCard(row.cardNo));
-    const warning = text(row.warning) || (!person ? "SGK=VAR + kartlı personel eşleşmedi." : "");
+    const warning = text(row.warning) || (!person ? "Aktif kartlı personel eşleşmedi." : "");
     return {
       ...row,
       employeeId: text(person?.id),
@@ -156,7 +158,7 @@ async function confirm(c: Context<AppEnv>) {
     const person = cards.get(cardNo);
     const localId = text(source.localId || source.id);
     if (!cardNo || !workDate || !eventTime || !person) {
-      rejected.push({ localId, cardNo, workDate, eventTime, reason: "SGK=VAR + kart/tarih/saat eşleşmedi." });
+      rejected.push({ localId, cardNo, workDate, eventTime, reason: "Kartlı personel/tarih/saat eşleşmedi." });
       continue;
     }
     if (await locked(c, context.company, workDate)) {
