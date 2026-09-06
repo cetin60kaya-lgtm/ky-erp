@@ -216,6 +216,17 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 ## Son güncelleme
 
 
+## 06.09.2026 — Cloudflare çekirdek rollout tamamlandı
+
+- Cloudflare Pro, Git Integration, Pages/Workers Builds, Turnstile, login rate limit, API cache bypass, bot policy audit ve owner session security çekirdek production katmanı olarak tamam kabul edilir.
+- WAF Cloudflare Managed Ruleset **Observe/Log** modunda kalır; yeterli event verisi görülmeden kör enforce yapılmaz.
+- OWASP ikinci managed paket ve geniş Bot Fight block/challenge bilerek açılmaz; API/mobile/PDKS/File Agent false-positive riski nedeniyle bunlar "eksik" değil kontrollü deferred karardır.
+- Management token least-privilege kuralı: D1 yalnız **Read**; D1 Edit/Billing/API Tokens/Account Members/DNS Edit verilmez.
+- Workers AI binding `AI` aktif; AI çağrıları `default` AI Gateway üzerinden, cache bypass ve varsayılan persistent prompt logging kapalı şekilde yürütülür.
+- Tenant/permission guard ve KY ERP billing ledger AI çağrısından önce/sonra korunur; serbest SQL/write executor açılmaz.
+- Queues/Workflows/Vectorize/AI Search mevcut ERP'nin production blocker'ı değildir. Somut ürün özelliği gerektiğinde ayrı kontrollü feature paketi olarak ele alınır.
+- Cloudflare tarafında bundan sonra "çekirdek eksik kurulum" yerine modül/ürün geliştirme sırasına dönülür.
+
 ## 06.09.2026 — Canonical Cloudflare canlıya alma prosedürü kilitlendi
 
 - Kullanıcı kararı: normal production release sırasında **PowerShell veya manuel Cloudflare deploy adımı olmayacak**.
@@ -255,7 +266,7 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - D1 migration normal Git auto-deploy'a bırakılmaz; full backup + readiness + hedefli migration ayrı güvenlik kapısıdır.
 - Cloudflare Pro / AI / yetki / rollout ana kaynağı:
   `DOCS/KY_ERP_CLOUDFLARE_PRO_AI_YAYIN_KAYNAGI_2026-09-04.md`.
-- Sonraki net adım: Cloudflare management token için least-privilege yetkileri tanımlamak; ardından WAF/rate-limit/AI Gateway/Queues/Workflows/Vectorize rollout'u.
+- 04.09 tarihli "sonraki adım token/WAF" notu tarihsel kalmıştır; güncel final durum yukarıdaki 06.09 Cloudflare çekirdek rollout kaydındadır.
 
 **03.09.2026 — Desktop-first çalışma düzeni kesinleştirildi.**
 
