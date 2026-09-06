@@ -39,10 +39,10 @@ test("mail core is fail-closed for tenant, membership and approvals", () => {
   assert.match(source, /AES-GCM/);
   assert.match(source, /mail_account_members/);
   assert.match(source, /MAIL_REQUESTER_INITIAL_MEMBER/);
-  assert.match(source, /COMPANY_OWNER_STEP_PENDING/);
+  assert.match(source, /MAIL_COMPANY_OWNER_ONLY/);
+  assert.match(source, /policy="COMPANY_OWNER"/);
+  assert.match(source, /account_scope/);
   assert.match(source, /m\.user_id=\?/);
-  assert.match(source, /COMPANY_OWNER_AND_APP_OWNER/);
-  assert.match(source, /COMPANY_OWNER_APPROVAL_REQUIRED/);
   assert.match(source, /aiMaySendAutomatically:false/);
   assert.doesNotMatch(source, /mainCompanySlug\s*\|\|\s*["']mecit-hakan["']/);
 });
@@ -99,4 +99,34 @@ test("daily Mail and Files uses a module-scoped file endpoint", () => {
   assert.match(source, /r\.entity_type IN/);
   assert.match(api, /apiGet\("\/mail\/files"/);
   assert.doesNotMatch(api, /apiGet\("\/file-hub\/(?:files|search)"/);
+});
+
+
+test("Gmail adapter reuses Google Drive OAuth and protects explicit sends", () => {
+  const source = read("./mail-google-gmail.ts");
+  assert.match(source, /GOOGLE_DRIVE_CLIENT_ID/);
+  assert.match(source, /GOOGLE_DRIVE_CLIENT_SECRET/);
+  assert.match(source, /gmail\.modify/);
+  assert.match(source, /code_challenge_method:"S256"/);
+  assert.match(source, /UNKNOWN_REVIEW_REQUIRED/);
+  assert.match(source, /PROVIDER_ACCEPTED/);
+  assert.doesNotMatch(source, /delivered:true/);
+});
+
+test("0051 separates company mail from user email and adds approval center", () => {
+  const sql = read("../migrations/0051_company_mail_approval_center.sql");
+  assert.match(sql, /ALTER TABLE mail_accounts ADD COLUMN account_scope/);
+  assert.match(sql, /ALTER TABLE mail_accounts ADD COLUMN owner_user_id/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS critical_approval_requests/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS critical_approval_events/);
+  assert.doesNotMatch(sql, /DROP TABLE|TRUNCATE/i);
+});
+
+test("management navigation exposes company card and centralized approvals", () => {
+  const registry = read("../../../app/ky-erp-frontend/src/app/moduleRegistry.js");
+  const adminPage = read("../../../app/ky-erp-frontend/src/pages/modules/AdminPage.jsx");
+  assert.match(registry, /\["onay-merkezi", "Onay Merkezi"/);
+  assert.match(registry, /Firma Kartı \/ Ayarlar/);
+  assert.match(adminPage, /AdminApprovalCenter/);
+  assert.match(adminPage, /AdminCompanyMailCard/);
 });
