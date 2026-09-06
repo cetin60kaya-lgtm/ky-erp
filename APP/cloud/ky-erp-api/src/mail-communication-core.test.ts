@@ -88,3 +88,15 @@ test("mail core fails soft before 0050 instead of breaking the ERP shell", () =>
   assert.match(source, /MAIL_SCHEMA_NOT_READY/);
   assert.match(source, /setupRequired:true/);
 });
+
+
+test("daily Mail and Files uses a module-scoped file endpoint", () => {
+  const source = read("./mail-communication-core.ts");
+  const api = read("../../../app/ky-erp-frontend/src/services/mailApi.js");
+  assert.match(source, /app\.get\("\/api\/mail\/files"/);
+  assert.match(source, /fileEntityTypesForUser/);
+  assert.match(source, /JOIN file_hub_relations/);
+  assert.match(source, /r\.entity_type IN/);
+  assert.match(api, /apiGet\("\/mail\/files"/);
+  assert.doesNotMatch(api, /apiGet\("\/file-hub\/(?:files|search)"/);
+});
