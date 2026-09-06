@@ -84,6 +84,12 @@ function taxNoFromContent(content: string) {
   const m=content.match(/\b\d{10,11}\b/);return text(m?.[0]);
 }
 
+export function extractAccountingLot(value: unknown) {
+  const source = text(value);
+  const match = source.match(/\b(?:LOT|PART[Iİ]|BATCH)\s*(?:NO|NUMARASI|NUMBER)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9._\/-]{1,50})/i);
+  return text(match?.[1]);
+}
+
 function genericTables(result: Row) {
   const tables=Array.isArray(result?.analyzeResult?.tables)?result.analyzeResult.tables:[];
   const out:any[]=[];
@@ -94,12 +100,12 @@ function genericTables(result: Row) {
     if(matrix.length<2)continue;
     const headers=matrix[0].map(normalize);
     const idx=(keys:string[])=>headers.findIndex(h=>keys.some(k=>h.includes(k)));
-    const di=idx(["ACIKLAMA","URUN","MAL HIZMET","DESCRIPTION","ITEM"]), qi=idx(["MIKTAR","ADET","QTY","QUANTITY"]), ui=idx(["BIRIM","UNIT"]), pi=idx(["BIRIM FIYAT","FIYAT","PRICE"]), ti=idx(["TUTAR","TOPLAM","AMOUNT","TOTAL"]), vi=idx(["KDV","VERGI","VAT"]), ci=idx(["KOD","CODE"]);
+    const di=idx(["ACIKLAMA","URUN","MAL HIZMET","DESCRIPTION","ITEM"]), qi=idx(["MIKTAR","ADET","QTY","QUANTITY"]), ui=idx(["BIRIM","UNIT"]), pi=idx(["BIRIM FIYAT","FIYAT","PRICE"]), ti=idx(["TUTAR","TOPLAM","AMOUNT","TOTAL"]), vi=idx(["KDV","VERGI","VAT"]), ci=idx(["KOD","CODE"]), li=idx(["LOT","PARTI","BATCH"]);
     if(di<0&&qi<0&&pi<0&&ti<0)continue;
     for(let r=1;r<matrix.length;r++){
       const row=matrix[r];const description=di>=0?text(row[di]):"", quantity=qi>=0?trAmount(row[qi]):0, unitPrice=pi>=0?trAmount(row[pi]):0, lineTotal=ti>=0?trAmount(row[ti]):0;
       if(!description&&!quantity&&!unitPrice&&!lineTotal)continue;
-      out.push({lineNo:out.length+1,productCode:ci>=0?text(row[ci]):"",supplierProductCode:ci>=0?text(row[ci]):"",description,quantity,unitCode:ui>=0?text(row[ui]):"",unitPrice,taxRate:vi>=0?trAmount(row[vi]):0,taxAmount:0,discountTotal:0,lineTotal:lineTotal||quantity*unitPrice,extractionConfidence:.55});
+      out.push({lineNo:out.length+1,productCode:ci>=0?text(row[ci]):"",supplierProductCode:ci>=0?text(row[ci]):"",description,quantity,unitCode:ui>=0?text(row[ui]):"",unitPrice,taxRate:vi>=0?trAmount(row[vi]):0,taxAmount:0,discountTotal:0,lineTotal:lineTotal||quantity*unitPrice,lotNo:li>=0?text(row[li]):extractAccountingLot(description),extractionConfidence:.55});
     }
   }
   return out;
@@ -143,6 +149,7 @@ function canonicalFromAzure(result: Row, documentKind: string, requestedModel: s
     taxAmount: num(itemValue(item, "Tax")),
     discountTotal: num(itemValue(item, "Discount")),
     lineTotal: num(itemValue(item, "Amount") || itemValue(item, "TotalPrice")),
+    lotNo: text(itemValue(item, "LotNo") || itemValue(item, "LotNumber") || itemValue(item, "BatchNumber")) || extractAccountingLot(itemValue(item, "Description") || itemValue(item, "Name")),
     extractionConfidence: Number(item?.confidence || 0),
   }));
   if(!lines.length) lines=genericTables(result);
