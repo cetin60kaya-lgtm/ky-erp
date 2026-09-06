@@ -128,6 +128,32 @@ async function canAccessAccount(c:any,current:AnyRow,tenant:string,accountId:str
   return Boolean(r?.id);
 }
 
+function draftAttachmentAssetId(value:any){return text(typeof value==="string"?value:value?.fileAssetId||value?.file_asset_id||value?.assetId||value?.id);}
+async function validateDraftAttachments(c:any,current:AnyRow,tenant:string,accountId:string,raw:any){
+  const refs=Array.isArray(raw)?raw:[];
+  if(!refs.length)return[];
+  if(refs.length>10)throw Object.assign(new Error("Bir mailde en fazla 10 File Hub eki kullanılabilir."),{code:"MAIL_ATTACHMENT_COUNT_LIMIT",status:413});
+  if(!(await canAccessAccount(c,current,tenant,accountId,"can_attach")))throw Object.assign(new Error("Bu posta kutusuna ek dosya ekleme yetkiniz yok."),{code:"MAIL_ATTACH_FORBIDDEN",status:403});
+  const ids=[...new Set(refs.map(draftAttachmentAssetId).filter(Boolean))];
+  if(ids.length!==refs.length)throw Object.assign(new Error("Mail eki File Hub kimliği geçersiz veya tekrarlı."),{code:"MAIL_ATTACHMENT_REF_INVALID",status:422});
+  const allowed=fileEntityTypesForUser(current),resolved:any[]=[];let total=0;
+  for(const id of ids){
+    const args:any[]=[id,tenant];let relationSql="";
+    if(Array.isArray(allowed)){
+      if(!allowed.length)throw Object.assign(new Error("Bu kullanıcı için File Hub ek erişimi bulunmuyor."),{code:"MAIL_ATTACHMENT_FORBIDDEN",status:403});
+      relationSql=" AND EXISTS (SELECT 1 FROM file_hub_relations r WHERE r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug AND r.entity_type IN ("+allowed.map(()=>"?").join(",")+"))";
+      args.push(...allowed);
+    }
+    const asset=await c.env.DB.prepare("SELECT a.id,a.file_name,a.mime_type,a.size_bytes,a.status FROM file_hub_assets a WHERE a.id=? AND a.main_company_slug=?"+relationSql+" LIMIT 1").bind(...args).first<AnyRow>();
+    if(!asset?.id)throw Object.assign(new Error("File Hub eki bulunamadı veya bu modül için erişim yetkiniz yok."),{code:"MAIL_ATTACHMENT_FORBIDDEN",status:403,fileAssetId:id});
+    if(upper(asset.status)!=="AVAILABLE")throw Object.assign(new Error("Seçilen File Hub eki şu anda kullanılamıyor."),{code:"MAIL_ATTACHMENT_UNAVAILABLE",status:409,fileAssetId:id});
+    const size=Math.max(0,Number(asset.size_bytes||0));total+=size;
+    if(size>25*1024*1024||total>25*1024*1024)throw Object.assign(new Error("Mail eklerinin toplamı 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENTS_TOO_LARGE",status:413,totalBytes:total});
+    resolved.push({fileAssetId:id,fileName:text(asset.file_name),mimeType:text(asset.mime_type),sizeBytes:size});
+  }
+  return resolved;
+}
+
 export function registerMailCommunicationRoutes(app:any){
   app.get("/api/mail/providers",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;
@@ -154,10 +180,20 @@ export function registerMailCommunicationRoutes(app:any){
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail hesabı görüntüleme yetkiniz yok."),403);
     if(!(await mailSchemaReady(c)))return c.json({ok:true,data:[]});
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role);
+    const readiness=`,(SELECT MAX(s.last_success_at) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id) last_sync_success_at
+      ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.last_success_at IS NOT NULL) sync_success_count
+      ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND TRIM(COALESCE(s.last_error,''))<>'') sync_error_count
+      ,CASE WHEN EXISTS(SELECT 1 FROM mail_account_credentials mc WHERE mc.main_company_slug=a.main_company_slug AND mc.account_id=a.id) THEN 1 ELSE 0 END credential_present`;
     const result=elevated
-      ?await c.env.DB.prepare("SELECT a.* FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
-      :await c.env.DB.prepare("SELECT a.*,m.can_view,m.can_compose,m.can_send,m.can_reply,m.can_forward,m.can_attach,m.can_link_entity FROM mail_account_members m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.main_company_slug=? AND m.user_id=? AND m.can_view=1 ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant,text(current?.id)).all<AnyRow>();
-    return c.json({ok:true,data:result.results||[]});
+      ?await c.env.DB.prepare("SELECT a.*"+readiness+" FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
+      :await c.env.DB.prepare("SELECT a.*,m.can_view,m.can_compose,m.can_send,m.can_reply,m.can_forward,m.can_attach,m.can_link_entity"+readiness+" FROM mail_account_members m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.main_company_slug=? AND m.user_id=? AND m.can_view=1 ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant,text(current?.id)).all<AnyRow>();
+    const rows=(result.results||[]).map((row:AnyRow)=>{
+      const companyApproved=upper(row.approval_status)==="APPROVED";
+      const oauthConnected=Number(row.provider_connected||0)===1&&Number(row.credential_present||0)===1;
+      const syncHealthy=Number(row.sync_success_count||0)>0&&Number(row.sync_error_count||0)===0;
+      return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
+    });
+    return c.json({ok:true,data:rows});
   });
 
   app.post("/api/mail/accounts/request",async(c:any)=>{
@@ -355,10 +391,13 @@ export function registerMailCommunicationRoutes(app:any){
     if(!hasMailPermission(current,"canCreate"))return c.json(jsonError("MAIL_COMPOSE_FORBIDDEN","Mail taslağı oluşturma yetkiniz yok."),403);
     const accountId=text(body.accountId);
     if(!accountId||!(await canAccessAccount(c,current,tenant,accountId,"can_compose")))return c.json(jsonError("MAIL_ACCOUNT_COMPOSE_FORBIDDEN","Bu posta kutusundan taslak oluşturma yetkiniz yok."),403);
+    let attachmentRefs:any[]=[];
+    try{attachmentRefs=await validateDraftAttachments(c,current,tenant,accountId,body.attachmentRefs);}
+    catch(error:any){return c.json(jsonError(text(error?.code)||"MAIL_ATTACHMENT_INVALID",text(error?.message)||"Mail eki doğrulanamadı."),Number(error?.status)||422);}
     const ts=nowIso(),id=crypto.randomUUID();
     await c.env.DB.prepare("INSERT INTO mail_drafts (id,main_company_slug,account_id,provider_draft_id,reply_to_message_id,subject,body_text,body_html,recipients_json,attachment_refs_json,status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(id,tenant,accountId,null,text(body.replyToMessageId)||null,text(body.subject),text(body.bodyText)||null,text(body.bodyHtml)||null,JSON.stringify(body.recipients||{}),JSON.stringify(body.attachmentRefs||[]),"DRAFT",text(current?.id),ts,ts).run();
-    await audit(c,tenant,current,"MAIL_DRAFT_CREATED",{subject:text(body.subject)},accountId);
+      .bind(id,tenant,accountId,null,text(body.replyToMessageId)||null,text(body.subject),text(body.bodyText)||null,text(body.bodyHtml)||null,JSON.stringify(body.recipients||{}),JSON.stringify(attachmentRefs),"DRAFT",text(current?.id),ts,ts).run();
+    await audit(c,tenant,current,"MAIL_DRAFT_CREATED",{subject:text(body.subject),attachmentCount:attachmentRefs.length},accountId);
     return c.json({ok:true,data:{id,status:"DRAFT",accountId}},201);
   });
 }
