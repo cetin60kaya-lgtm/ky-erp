@@ -6,7 +6,7 @@ export const MODULES = [
     icon: "cari-kasa",
     groups: [
       {
-        label: "Yönetim",
+        label: "Platform Yönetimi",
         tabs: [
           ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
           ["firma-kartlari", "Firmalar ve Cari", "firma-kartlari"],
@@ -174,12 +174,12 @@ export const MODULES = [
     icon: "ayarlar",
     groups: [
       {
-        label: "Sistem Yönetimi",
+        label: "Platform Yönetimi",
         tabs: [
-          ["admin-yonetim-ozeti", "Yönetim Özeti", "dashboard"],
-          ["uygulama-sahibi", "Uygulama Sahibi", "ayarlar"],
-          ["kullanicilar", "Kullanıcılar", "users"],
-          ["ana-firma-ayarlar", "Ana Firma / Ayarlar", "ayarlar"],
+          ["admin-yonetim-ozeti", "Yönetim Konsolu", "dashboard"],
+          ["uygulama-sahibi", "Süper Yönetici & Güvenlik", "ayarlar"],
+          ["kullanicilar", "Kullanıcı & Yetkiler", "users"],
+          ["ana-firma-ayarlar", "Firmalar & Organizasyon", "ayarlar"],
         ],
       },
       {
