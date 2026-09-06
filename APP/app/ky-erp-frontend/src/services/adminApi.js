@@ -95,3 +95,12 @@ export async function verifyUserEmail(id, payload = {}) { return unwrap(await ap
 export async function getUserEmailDeliveryStatus(id, messageId) {
   return unwrap(await apiGet(`/admin/security/users/${encodeURIComponent(id)}/email-verification/delivery/${encodeURIComponent(messageId)}`, { _ts: Date.now() }));
 }
+
+
+export async function listCriticalApprovals(params = {}) {
+  return unwrap(await apiGet("/admin/approval-center", { ...params, _ts: Date.now() }));
+}
+
+export async function decideCriticalApproval(id, decision, note = "") {
+  return unwrap(await apiPost(`/admin/approval-center/${encodeURIComponent(id)}/decision`, { decision, note }));
+}
