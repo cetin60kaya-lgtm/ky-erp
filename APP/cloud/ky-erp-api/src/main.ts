@@ -58,6 +58,7 @@ import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 import { registerNotificationRoutes } from "./notifications-cloud";
 import { registerMailCommunicationRoutes } from "./mail-communication-core";
 import { registerMicrosoftMailRoutes } from "./mail-microsoft-graph";
+import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
@@ -264,6 +265,12 @@ shell.use("/api/*", async (c, next) => {
     }
   }
 
+  await next();
+});
+
+// Mail Core şeması yalnız Mail alanında, ilk gerçek kullanımda fail-closed hazırlanır.
+shell.use("/api/mail/*", async (c, next) => {
+  await ensureMailCommunicationCore0050(c.env.DB);
   await next();
 });
 
