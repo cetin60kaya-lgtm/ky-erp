@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import base from "./main-entry";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
+import { ensureMailWorkspaceUx } from "./runtime-migration-mail-ux";
 import { registerMailProviderOverlayRoutes } from "./mail-provider-overlay";
 import { registerGoogleMailRoutes } from "./mail-google-gmail";
 
@@ -43,6 +44,7 @@ export default {
     const mailPath=path.startsWith("/api/mail/");
     const googleCallback=path==="/api/auth/mail/oauth/google/callback";
     if(mailPath||googleCallback) await ensureMailCommunicationCore0050(env.DB);
+    if(mailPath) await ensureMailWorkspaceUx(env.DB);
 
     if(path==="/api/mail/providers"&&method==="GET")return overlay.fetch(request,env,ctx);
     if(path==="/api/mail/accounts/request"&&method==="POST"){
