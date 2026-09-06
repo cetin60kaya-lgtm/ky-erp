@@ -89,6 +89,10 @@ export default function AdminCompanySettings({ activeMainCompany }) {
       if(form.id) result=await apiPatch(`/admin/main-companies/${encodeURIComponent(form.id)}`,{id:form.id,...payload});
       else result=await apiPost("/admin/main-companies",payload);
       const created=result?.data || result;
+      if(created?.approvalRequired){
+        setMessage(`${created.title || "Kritik firma değişikliği"} için Onay Merkezi isteği oluşturuldu. ${created.approvalPolicyLabel || "Yetkili onayı"} tamamlandıktan sonra Kaydet düğmesine tekrar basın.`);
+        return;
+      }
       setMessage(form.id?"Ana firma güncellendi.":"Ana firma oluşturuldu.");
       setForm(emptyForm());
       await load();
@@ -107,8 +111,15 @@ export default function AdminCompanySettings({ activeMainCompany }) {
     if(danger.mode==="TRANSFER" && !danger.targetId) return setMessage("Verilerin aktarılacağı hedef firmayı seçin.");
     setBusy(true);
     try{
-      if(danger.mode==="DELETE") await apiPost(`/admin/main-companies/${encodeURIComponent(danger.item.id)}/delete`,{adminPassword:danger.password});
-      else await apiPost(`/admin/main-companies/${encodeURIComponent(danger.item.id)}/transfer`,{targetId:danger.targetId,adminPassword:danger.password});
+      const result = danger.mode==="DELETE"
+        ? await apiPost(`/admin/main-companies/${encodeURIComponent(danger.item.id)}/delete`,{adminPassword:danger.password})
+        : await apiPost(`/admin/main-companies/${encodeURIComponent(danger.item.id)}/transfer`,{targetId:danger.targetId,adminPassword:danger.password});
+      const data=result?.data||result;
+      if(data?.approvalRequired){
+        setMessage(`${data.title || (danger.mode==="DELETE"?"Firma silme":"Firma veri aktarımı")} için Onay Merkezi isteği oluşturuldu. ${data.approvalPolicyLabel || "Gerekli onaylar"} tamamlandıktan sonra işlemi yeniden başlatın.`);
+        setDanger({mode:"",item:null,password:"",targetId:""});
+        return;
+      }
       setMessage(danger.mode==="DELETE"?"Firma güvenli şekilde silindi.":"Firma verileri hedef firmaya aktarıldı.");
       setDanger({mode:"",item:null,password:"",targetId:""});
       await load();
@@ -120,6 +131,10 @@ export default function AdminCompanySettings({ activeMainCompany }) {
     setBackupBusy(true);
     try{
       const backup=await createBackup({mainCompanySlug:selected.slug,mainCompanyId:selected.id,reason:"MAIN_COMPANY_CARD_BACKUP",requestedAt:new Date().toISOString()});
+      if(backup?.approvalRequired){
+        setMessage(`Firma tam yedeği için Onay Merkezi isteği oluşturuldu. ${backup.approvalPolicyLabel || "Yetkili onayı"} tamamlandıktan sonra “Tam Yedek Al” düğmesine tekrar basın.`);
+        return;
+      }
       let sql=backup;
       try{sql=await generateBackupSql(backup.id,{mainCompanySlug:selected.slug});}
       catch(sqlError){setMessage(`Firma yedeği alındı fakat SQL dosyası hazırlanamadı: ${sqlError?.message||"SQL yedek hatası"}. SQL işlemini yedek listesinden tekrar deneyebilirsiniz.`);await loadSelectedBackups();return;}
@@ -146,6 +161,10 @@ export default function AdminCompanySettings({ activeMainCompany }) {
     setBackupBusy(true);
     try{
       const result=await restoreBackup(restore.backup.id,{mainCompanySlug:selected.slug,mainCompanyId:selected.id,adminPassword:restore.password,confirmText:restore.confirmText});
+      if(result?.approvalRequired){
+        setMessage(`Geri yükleme için Onay Merkezi isteği oluşturuldu. ${result.approvalPolicyLabel || "Firma Sahibi + Uygulama Sahibi"} onayı tamamlandıktan sonra aynı geri yükleme işlemini tekrar başlatın.`);
+        return;
+      }
       setMessage(`${selected.name} geri yüklendi. İşlem öncesi güvenlik yedeği: ${result?.safetyBackupId||"oluşturuldu"}.`);
       setRestore({backup:null,password:"",confirmText:""});
       await loadSelectedBackups();
