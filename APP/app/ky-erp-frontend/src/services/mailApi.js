@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "../utils/api";
+import { apiFetch, apiGet, apiPost, apiPut } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -26,6 +26,41 @@ export const decideMailApproval = (id, decision, note = "") =>
 
 export const listMailMessages = (accountId, params = {}) =>
   apiGet("/mail/messages", { accountId, ...params }).then(unwrap);
+
+export const listMailFolders = (accountId) =>
+  apiGet("/mail/folders", { accountId, _ts: Date.now() }).then(unwrap);
+
+export const syncMailFolder = (accountId, folderId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/folders/${encodeURIComponent(folderId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
+
+export const pinMailMessage = (messageId, pinned) =>
+  apiPut(`/mail/messages/${encodeURIComponent(messageId)}/pin`, { pinned }).then(unwrap);
+
+export const runMailMessageAction = (messageId, action, values = {}) =>
+  apiPost(`/mail/messages/${encodeURIComponent(messageId)}/action`, { action, ...values }, { timeoutMs: 60_000 }).then(unwrap);
+
+export const listMailAttachments = (messageId) =>
+  apiGet(`/mail/messages/${encodeURIComponent(messageId)}/attachments`, { _ts: Date.now() }).then(unwrap);
+
+export const downloadMailAttachment = async (messageId, attachmentId, fileName = "ek") => {
+  const blob = await apiFetch(`/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download`, {
+    method: "GET",
+    responseType: "blob",
+    timeoutMs: 60_000,
+  });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName || "ek";
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+};
 
 export const listMailDrafts = () =>
   apiGet("/mail/drafts", { _ts: Date.now() }).then(unwrap);

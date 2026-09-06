@@ -39,6 +39,7 @@ const ILETISIM_MODULE = {
       label: "Mail",
       tabs: [
         ["mail-gelen", "Gelen Kutusu", "eposta"],
+        ["mail-sabitlenen", "Sabitlenenler", "file-check"],
         ["mail-gonderilen", "Gönderilenler", "eposta"],
         ["mail-taslaklar", "Taslaklar", "dosya"],
         ["mail-yanit-bekleyen", "Yanıt Bekleyenler", "file-check"],
@@ -167,6 +168,8 @@ export const MODULE_ROUTE_ALIASES = {
   iletisim: {
     mail: "mail-gelen",
     gelen: "mail-gelen",
+    sabitlenen: "mail-sabitlenen",
+    sabitler: "mail-sabitlenen",
     gonderilen: "mail-gonderilen",
     taslaklar: "mail-taslaklar",
     "yanit-bekleyen": "mail-yanit-bekleyen",

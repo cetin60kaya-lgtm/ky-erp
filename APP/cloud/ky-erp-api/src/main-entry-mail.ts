@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import base from "./main-entry";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
+import { ensureMailWorkspaceUx } from "./runtime-migration-mail-ux";
 import { registerMailProviderOverlayRoutes } from "./mail-provider-overlay";
 import { registerGoogleMailRoutes } from "./mail-google-gmail";
 
@@ -35,6 +36,10 @@ async function providerForDraft(env:Cloudflare.Env,id:string){
   const row=await env.DB.prepare("SELECT a.provider_type FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.id=? LIMIT 1").bind(id).first<Row>();
   return normalizedProvider(row?.provider_type);
 }
+async function providerForMessage(env:Cloudflare.Env,id:string){
+  const row=await env.DB.prepare("SELECT a.provider_type FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.id=? LIMIT 1").bind(id).first<Row>();
+  return normalizedProvider(row?.provider_type);
+}
 function rewritePath(request:Request,path:string){const url=new URL(request.url);url.pathname=path;return new Request(url.toString(),request);}
 
 export default {
@@ -43,6 +48,7 @@ export default {
     const mailPath=path.startsWith("/api/mail/");
     const googleCallback=path==="/api/auth/mail/oauth/google/callback";
     if(mailPath||googleCallback) await ensureMailCommunicationCore0050(env.DB);
+    if(mailPath) await ensureMailWorkspaceUx(env.DB);
 
     if(path==="/api/mail/providers"&&method==="GET")return overlay.fetch(request,env,ctx);
     if(path==="/api/mail/accounts/request"&&method==="POST"){
@@ -57,6 +63,27 @@ export default {
     if(method==="POST"&&syncMatch&&await providerForAccount(env,decodeURIComponent(syncMatch[1]))==="GMAIL"){
       return overlay.fetch(rewritePath(request,`/api/mail/accounts/${encodeURIComponent(decodeURIComponent(syncMatch[1]))}/sync/google`),env,ctx);
     }
+    const folderSyncMatch=path.match(/^\/api\/mail\/accounts\/([^/]+)\/folders\/([^/]+)\/sync$/);
+    if(method==="POST"&&folderSyncMatch){
+      const accountId=decodeURIComponent(folderSyncMatch[1]),folderId=decodeURIComponent(folderSyncMatch[2]),provider=await providerForAccount(env,accountId);
+      if(provider==="GMAIL")return overlay.fetch(rewritePath(request,`/api/mail/accounts/${encodeURIComponent(accountId)}/folders/${encodeURIComponent(folderId)}/sync/google`),env,ctx);
+      if(provider==="MICROSOFT_365")return base.fetch(rewritePath(request,`/api/mail/accounts/${encodeURIComponent(accountId)}/folders/${encodeURIComponent(folderId)}/sync/microsoft`),env,ctx);
+    }
+
+    const messageActionMatch=path.match(/^\/api\/mail\/messages\/([^/]+)\/action$/);
+    if(method==="POST"&&messageActionMatch){
+      const messageId=decodeURIComponent(messageActionMatch[1]),provider=await providerForMessage(env,messageId);
+      if(provider==="GMAIL")return overlay.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/action/google`),env,ctx);
+      if(provider==="MICROSOFT_365")return base.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/action/microsoft`),env,ctx);
+    }
+
+    const attachmentDownloadMatch=path.match(/^\/api\/mail\/messages\/([^/]+)\/attachments\/([^/]+)\/download$/);
+    if(method==="GET"&&attachmentDownloadMatch){
+      const messageId=decodeURIComponent(attachmentDownloadMatch[1]),attachmentId=decodeURIComponent(attachmentDownloadMatch[2]),provider=await providerForMessage(env,messageId);
+      if(provider==="GMAIL")return overlay.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download/google`),env,ctx);
+      if(provider==="MICROSOFT_365")return base.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download/microsoft`),env,ctx);
+    }
+
     const sendMatch=path.match(/^\/api\/mail\/drafts\/([^/]+)\/send$/);
     if(method==="POST"&&sendMatch&&await providerForDraft(env,decodeURIComponent(sendMatch[1]))==="GMAIL"){
       return overlay.fetch(rewritePath(request,`/api/mail/drafts/${encodeURIComponent(decodeURIComponent(sendMatch[1]))}/send/google`),env,ctx);

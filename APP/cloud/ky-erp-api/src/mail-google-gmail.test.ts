@@ -83,3 +83,70 @@ test("Hakan mail center exposes direct Hotmail and Gmail OAuth onboarding",()=>{
   assert.match(source,/addAndConnectPreset/);
   assert.match(source,/setMailAccountDefaults/);
 });
+
+
+test("mail workspace final includes per-user pinning and provider folders",()=>{
+  const core=read("./mail-communication-core.ts");
+  const migration=read("./runtime-migration-mail-ux.ts");
+  const ui=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  const registry=read("../../../app/ky-erp-frontend/src/app/moduleRegistry.js");
+  assert.match(migration,/mail_message_user_state/);
+  assert.match(core,/\/api\/mail\/folders/);
+  assert.match(core,/\/api\/mail\/messages\/:id\/pin/);
+  assert.match(core,/COALESCE\(us\.is_pinned,0\) DESC/);
+  assert.match(ui,/mail-sabitlenen/);
+  assert.match(ui,/📌 Sabitle/);
+  assert.match(ui,/syncMailFolder/);
+  assert.match(registry,/Sabitlenenler/);
+});
+
+test("Outlook and Gmail expose user mail actions without conflating pin and flag",()=>{
+  const microsoft=read("./mail-microsoft-graph.ts");
+  const gmail=read("./mail-google-gmail.ts");
+  const wrapper=read("./main-entry-mail.ts");
+  assert.match(microsoft,/MAIL_MICROSOFT_MESSAGE_/);
+  assert.match(microsoft,/MARK_READ/);
+  assert.match(microsoft,/ARCHIVE/);
+  assert.match(microsoft,/deleteditems/);
+  assert.match(gmail,/\/modify/);
+  assert.match(gmail,/STARRED/);
+  assert.match(gmail,/\/trash/);
+  assert.match(wrapper,/providerForMessage/);
+  assert.match(wrapper,/messageActionMatch/);
+});
+
+test("Microsoft sync discovers standard and custom folder tree",()=>{
+  const source=read("./mail-microsoft-graph.ts");
+  assert.match(source,/discoverMicrosoftFolders/);
+  assert.match(source,/childFolders/);
+  assert.match(source,/folder_type:type/);
+  assert.match(source,/CUSTOM/);
+  assert.match(source,/syncMicrosoftFolder/);
+});
+
+test("compose final supports explicit send-now and rich HTML preview stays sandboxed",()=>{
+  const ui=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(ui,/saveDraft\(true\)/);
+  assert.match(ui,/Taslağı Kaydet/);
+  assert.match(ui,/comm-html-body/);
+  assert.match(ui,/sandbox=""/);
+  assert.match(ui,/Klasöre taşı/);
+});
+
+
+test("mail attachment metadata and secure provider download are wired end to end",()=>{
+  const core=read("./mail-communication-core.ts");
+  const microsoft=read("./mail-microsoft-graph.ts");
+  const gmail=read("./mail-google-gmail.ts");
+  const wrapper=read("./main-entry-mail.ts");
+  const api=read("../../../app/ky-erp-frontend/src/services/mailApi.js");
+  const ui=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.match(core,/messages\/:id\/attachments/);
+  assert.match(microsoft,/syncMicrosoftAttachments/);
+  assert.match(microsoft,/attachments\/:attachmentId\/download\/microsoft/);
+  assert.match(gmail,/provider_attachment_id/);
+  assert.match(gmail,/attachments\/:attachmentId\/download\/google/);
+  assert.match(wrapper,/attachmentDownloadMatch/);
+  assert.match(api,/downloadMailAttachment/);
+  assert.match(ui,/comm-attachments/);
+});

@@ -285,20 +285,59 @@ export function registerMailCommunicationRoutes(app:any){
     return c.json({ok:true,data:r.results||[]});
   });
 
+  app.get("/api/mail/folders",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail klasörlerini görüntüleme yetkiniz yok."),403);
+    const accountId=text(c.req.query("accountId"));if(!accountId)return c.json(jsonError("ACCOUNT_REQUIRED","Mail hesabı seçilmelidir."),422);
+    if(!(await canAccessAccount(c,current,tenant,accountId,"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunu görüntüleme yetkiniz yok."),403);
+    const r=await c.env.DB.prepare(`SELECT f.*,
+      (SELECT COUNT(*) FROM mail_messages m WHERE m.main_company_slug=f.main_company_slug AND m.account_id=f.account_id AND m.folder_id=f.id) message_count,
+      (SELECT COUNT(*) FROM mail_messages m WHERE m.main_company_slug=f.main_company_slug AND m.account_id=f.account_id AND m.folder_id=f.id AND m.direction='INCOMING' AND m.is_read=0) unread_count
+      FROM mail_folders f
+      WHERE f.main_company_slug=? AND f.account_id=?
+      ORDER BY CASE UPPER(COALESCE(f.folder_type,'')) WHEN 'INBOX' THEN 0 WHEN 'DRAFTS' THEN 1 WHEN 'SENT' THEN 2 WHEN 'ARCHIVE' THEN 3 WHEN 'JUNK' THEN 4 WHEN 'TRASH' THEN 5 ELSE 10 END,
+      LOWER(f.name)`).bind(tenant,accountId).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
+  });
+
   app.get("/api/mail/messages",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail görüntüleme yetkiniz yok."),403);
     const accountId=text(c.req.query("accountId"));if(!accountId)return c.json(jsonError("ACCOUNT_REQUIRED","Mail hesabı seçilmelidir."),422);
     if(!(await canAccessAccount(c,current,tenant,accountId,"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunu görüntüleme yetkiniz yok."),403);
-    const take=Math.min(200,Math.max(1,Number(c.req.query("take")||100))),folderId=text(c.req.query("folderId")),direction=upper(c.req.query("direction")),awaitingReply=["1","TRUE","YES"].includes(upper(c.req.query("awaitingReply"))),where=["m.main_company_slug=?","m.account_id=?"],args:any[]=[tenant,accountId];
+    const take=Math.min(200,Math.max(1,Number(c.req.query("take")||100))),folderId=text(c.req.query("folderId")),direction=upper(c.req.query("direction")),awaitingReply=["1","TRUE","YES"].includes(upper(c.req.query("awaitingReply"))),pinnedOnly=["1","TRUE","YES"].includes(upper(c.req.query("pinned"))),where=["m.main_company_slug=?","m.account_id=?"],args:any[]=[text(current?.id),tenant,accountId];
     if(folderId){where.push("m.folder_id=?");args.push(folderId)}
+    if(pinnedOnly)where.push("COALESCE(us.is_pinned,0)=1");
     if(awaitingReply){
       where.push("m.direction='OUTGOING'");
       where.push("m.thread_id IS NOT NULL");
       where.push("NOT EXISTS (SELECT 1 FROM mail_messages newer WHERE newer.main_company_slug=m.main_company_slug AND newer.account_id=m.account_id AND newer.thread_id=m.thread_id AND (COALESCE(newer.received_at,newer.sent_at,newer.created_at)>COALESCE(m.received_at,m.sent_at,m.created_at) OR (COALESCE(newer.received_at,newer.sent_at,newer.created_at)=COALESCE(m.received_at,m.sent_at,m.created_at) AND newer.id<>m.id)))");
     }else if(["INCOMING","OUTGOING"].includes(direction)){where.push("m.direction=?");args.push(direction)}
     args.push(take);
-    const r=await c.env.DB.prepare("SELECT m.* FROM mail_messages m WHERE "+where.join(" AND ")+" ORDER BY COALESCE(m.received_at,m.sent_at,m.created_at) DESC LIMIT ?").bind(...args).all<AnyRow>();
+    const r=await c.env.DB.prepare("SELECT m.*,COALESCE(us.is_pinned,0) is_pinned,us.pinned_at FROM mail_messages m LEFT JOIN mail_message_user_state us ON us.main_company_slug=m.main_company_slug AND us.message_id=m.id AND us.user_id=? WHERE "+where.join(" AND ")+" ORDER BY COALESCE(us.is_pinned,0) DESC,COALESCE(us.pinned_at,'') DESC,COALESCE(m.received_at,m.sent_at,m.created_at) DESC LIMIT ?").bind(...args).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
+  });
+
+  app.put("/api/mail/messages/:id/pin",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_UPDATE_FORBIDDEN","Mail sabitleme yetkiniz yok."),403);
+    const row=await c.env.DB.prepare("SELECT id,account_id FROM mail_messages WHERE id=? AND main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
+    if(!row?.id)return c.json(jsonError("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
+    if(!(await canAccessAccount(c,current,tenant,text(row.account_id),"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    const pinned=body.pinned===true||body.pinned===1||body.pinned==="1"||upper(body.pinned)==="TRUE",ts=nowIso();
+    await c.env.DB.prepare("INSERT INTO mail_message_user_state(id,main_company_slug,user_id,message_id,is_pinned,pinned_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,user_id,message_id) DO UPDATE SET is_pinned=excluded.is_pinned,pinned_at=excluded.pinned_at,updated_at=excluded.updated_at")
+      .bind(crypto.randomUUID(),tenant,text(current?.id),messageId,pinned?1:0,pinned?ts:null,ts).run();
+    await audit(c,tenant,current,pinned?"MAIL_MESSAGE_PINNED":"MAIL_MESSAGE_UNPINNED",{},text(row.account_id),messageId);
+    return c.json({ok:true,data:{messageId,pinned,pinnedAt:pinned?ts:null}});
+  });
+
+  app.get("/api/mail/messages/:id/attachments",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail eklerini görüntüleme yetkiniz yok."),403);
+    const message=await c.env.DB.prepare("SELECT id,account_id FROM mail_messages WHERE id=? AND main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
+    if(!message?.id)return c.json(jsonError("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
+    if(!(await canAccessAccount(c,current,tenant,text(message.account_id),"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    const r=await c.env.DB.prepare("SELECT id,file_name,mime_type,size_bytes,is_inline,content_id FROM mail_attachments WHERE main_company_slug=? AND message_id=? ORDER BY is_inline ASC,file_name").bind(tenant,messageId).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
   });
 
