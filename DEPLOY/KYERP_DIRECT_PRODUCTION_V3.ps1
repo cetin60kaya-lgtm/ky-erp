@@ -11,6 +11,7 @@ $SESSION_GUARD_FILE = Join-Path $WORKER "migrations\0022_auth_same_browser_sessi
 $ALIAS_SCHEMA_FILE = Join-Path $WORKER "migrations\0023_admin_company_alias_schema.sql"
 $AUDIT_USER_FILE = Join-Path $WORKER "migrations\0024_denetime_pdks_system_user.sql"
 $MAIL_CORE_FILE = Join-Path $WORKER "migrations\0050_mail_communication_core.sql"
+$APPROVAL_CENTER_FILE = Join-Path $WORKER "migrations\0051_company_mail_approval_center.sql"
 $BACKUP_DIR = Join-Path $ROOT "BACKUPS\D1\PRE_DEPLOY"
 
 function Fail($message) {
@@ -153,7 +154,9 @@ WITH required(name) AS (
     ('mail_oauth_states'),
     ('mail_account_members'),
     ('mail_account_credentials'),
-    ('mail_accounts')
+    ('mail_accounts'),
+    ('critical_approval_requests'),
+    ('critical_approval_events')
 )
 SELECT r.name AS missing
   FROM required r
@@ -179,7 +182,9 @@ SELECT r.name AS missing
         @{ Table = "company_aliases"; Column = "deleted_at" },
         @{ Table = "auth_sessions"; Column = "device_label" },
         @{ Table = "auth_sessions"; Column = "token_hash" },
-        @{ Table = "auth_user_security"; Column = "email_verified" }
+        @{ Table = "auth_user_security"; Column = "email_verified" },
+        @{ Table = "mail_accounts"; Column = "account_scope" },
+        @{ Table = "mail_accounts"; Column = "owner_user_id" }
     )
     $missingColumns = @()
     foreach ($required in $requiredColumns) {
@@ -216,6 +221,7 @@ if (-not (Test-Path $SESSION_GUARD_FILE)) { Fail "0022 session guard dosyasi bul
 if (-not (Test-Path $ALIAS_SCHEMA_FILE)) { Fail "0023 firma eslestirme sema dosyasi bulunamadi: $ALIAS_SCHEMA_FILE" }
 if (-not (Test-Path $AUDIT_USER_FILE)) { Fail "0024 DENETIM sistem kullanicisi dosyasi bulunamadi: $AUDIT_USER_FILE" }
 if (-not (Test-Path $MAIL_CORE_FILE)) { Fail "0050 Mail Core sema dosyasi bulunamadi: $MAIL_CORE_FILE" }
+if (-not (Test-Path $APPROVAL_CENTER_FILE)) { Fail "0051 Onay Merkezi sema dosyasi bulunamadi: $APPROVAL_CENTER_FILE" }
 
 Write-Host "=== 1/11 REPO ===" -ForegroundColor Cyan
 Set-Location $ROOT
@@ -310,9 +316,13 @@ Write-Host "0050 Mail / Iletisim Core additive semasi kontrol/uygulama..." -Fore
 wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
 Check-Exit "0050 Mail Core additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
 
+Write-Host "0051 Firma Mail Ayrimi + Onay Merkezi additive semasi kontrol/uygulama..." -ForegroundColor Yellow
+wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $APPROVAL_CENTER_FILE
+Check-Exit "0051 Firma Mail Ayrimi / Onay Merkezi semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+
 Assert-Remote-Schema-Readiness
 Assert-Denetime-System-User
-Write-Host "D1 hedefli uyumluluk + sema + DENETIM + MAIL: HAZIR" -ForegroundColor Green
+Write-Host "D1 hedefli uyumluluk + sema + DENETIM + MAIL + ONAY MERKEZI: HAZIR" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 6/11 WORKER PRODUCTION DEPLOY ===" -ForegroundColor Green
