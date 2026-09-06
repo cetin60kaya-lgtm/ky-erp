@@ -150,3 +150,15 @@ test("mail attachment metadata and secure provider download are wired end to end
   assert.match(api,/downloadMailAttachment/);
   assert.match(ui,/comm-attachments/);
 });
+
+
+test("mail final release is not blocked by temporary Worker diagnostics",()=>{
+  const pkg=JSON.parse(read("../../../app/ky-erp-frontend/package.json"));
+  const overlay=read("./mail-provider-overlay.ts");
+  const ui=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
+  assert.equal(pkg.scripts.build,"vite build");
+  assert.match(overlay,/MAIL_WORKSPACE_2026_09_06_FINAL_2/);
+  assert.match(ui,/Bağlantı servisi canlı yayın bekliyor/);
+  assert.match(ui,/Posta Kutusunu Aç/);
+  assert.match(ui,/advancedAccountOpen/);
+});
