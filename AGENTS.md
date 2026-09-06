@@ -5,7 +5,8 @@ Bu dosya KY ERP için güncel ve üstün çalışma sözleşmesidir. Ayrıntıl�
 ## Zorunlu proje devam kaydı
 
 - Her yeni sohbet, yeni ajan, yeni feature branch veya kaldığı yerden devam eden KY ERP işinde **kod yazmadan önce** `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` okunmalıdır.
-- Bu dosya (`AGENTS.md`) teknik/güvenlik kurallarında üstündür; `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` ise kullanıcının güncel kararları, aktif branch/PR, kontrol sonucu, önemli gelişmeler ve sonraki adım için tek devam merkezidir.
+- Ardından güncel yapılan işler + varsayılan iş sırası için **`DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md`** okunmalıdır.
+- Bu dosya (`AGENTS.md`) teknik/güvenlik kurallarında üstündür; `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md` ana devam indeksidir; `DOCS/KY_ERP_GUNCEL_DEVAM_KAYNAGI_2026-09-06.md` ise son yapılan işler, tamamlanan Cloudflare/auth katmanı ve modül çalışma sırasının güncel özetidir.
 - Aktif feature branch üzerinde bu kontrol dosyasının production branch'ten daha yeni sürümü varsa aktif iş için o sürüm kullanılır; kullanıcı onayından sonra ilgili değişiklikler production kaynağına taşınır.
 - Kullanıcının kalıcı çalışma kuralı, önemli mimari karar, kullanıcı tarafından doğrulanan Desktop sürümü, modül onayı, blocker veya production'a geçiş kararı oluştuğunda kontrol merkezi güncellenmelidir.
 - Şifre, MFA secret, API key, token veya kişisel gizli bilgiler kontrol merkezine yazılmaz.
