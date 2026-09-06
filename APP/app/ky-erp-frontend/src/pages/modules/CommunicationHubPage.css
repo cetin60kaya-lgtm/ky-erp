@@ -74,3 +74,24 @@
 .comm-attachments>button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .comm-attachments>button em{flex:0 0 auto;font-size:10px;font-style:normal;color:#64748b}
 @media(max-width:720px){.comm-attachments{margin:10px}}
+
+.comm-direct-mail-card.complete{border-color:#a7d7b4;background:#fbfffc}
+.comm-readiness-steps{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px!important}
+.comm-readiness-steps span,.comm-account-readiness span{display:inline-flex!important;align-items:center;gap:4px;margin:0!important;padding:4px 7px;border-radius:999px;font-size:10px!important;font-weight:800}
+.comm-readiness-steps .ok,.comm-account-readiness .ok{background:#e9f8ee;color:#176534}
+.comm-readiness-steps .pending,.comm-account-readiness .pending{background:#fff7dd;color:#7a5700}
+.comm-account-readiness{display:flex;flex-wrap:wrap;gap:5px}
+.comm-account-tools>small{color:#64748b;font-size:10px}
+.comm-compose-files{display:grid;gap:8px;border:1px solid #dce5ef;border-radius:10px;padding:10px;background:#fbfdff}
+.comm-compose-files-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.comm-compose-files-head span b,.comm-compose-files-head span small{display:block}
+.comm-compose-files-head span small,.comm-compose-file-note{margin-top:2px;color:#64748b;font-size:11px;font-weight:500}
+.comm-compose-files-head em{font-style:normal;color:#475569;font-size:11px;font-weight:800;white-space:nowrap}
+.comm-compose-selected{display:flex;flex-wrap:wrap;gap:6px}
+.comm-compose-selected button{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#eaf2fb;color:#173b67;border:1px solid #cfddeb}
+.comm-compose-selected button b{font-size:16px;line-height:1}
+.comm-compose-file-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:190px;overflow:auto}
+.comm-compose-file-results button{display:grid;gap:2px;text-align:left;background:#fff;color:#0f172a;border:1px solid #dce5ef;padding:8px 9px}
+.comm-compose-file-results button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.comm-compose-file-results button small{color:#64748b}
+@media(max-width:720px){.comm-compose-file-results{grid-template-columns:1fr}.comm-compose-files-head{flex-direction:column}.comm-compose-files-head em{white-space:normal}}
