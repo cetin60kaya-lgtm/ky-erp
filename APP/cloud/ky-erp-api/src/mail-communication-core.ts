@@ -186,6 +186,7 @@ export function registerMailCommunicationRoutes(app:any){
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail Merkezi görüntüleme yetkiniz yok."),403);
     if(!(await mailSchemaReady(c))) return c.json({ok:true,data:schemaPendingData({accountCount:0,activeAccountCount:0,pendingAccountCount:0,messageCount:0,unreadCount:0,draftCount:0,tenant})});
+    await autoApproveOwnPrivilegedMailRequests(c,tenant,current);
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role),userId=text(current?.id);
     const accountWhere=elevated?"a.main_company_slug=?":"a.main_company_slug=? AND EXISTS (SELECT 1 FROM mail_account_members mm WHERE mm.main_company_slug=a.main_company_slug AND mm.account_id=a.id AND mm.user_id=? AND mm.can_view=1)";
     const args=elevated?[tenant]:[tenant,userId];
