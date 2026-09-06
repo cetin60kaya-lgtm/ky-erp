@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { registerAuthManagementRoutes } from "./auth-cloud";
 import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
 import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
+import { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -1091,8 +1092,14 @@ app.get("/api/health", (c) =>
 );
 
 app.get("/api/health/db", async (c) => {
+  const migration0046 = await ensureAccountingCanonicalReportControls0046(c.env.DB);
   await c.env.DB.prepare("SELECT COUNT(*) AS count FROM main_companies").first();
-  return c.json({ ok: true, database: "ky-erp-db", connected: true });
+  return c.json({
+    ok: true,
+    database: "ky-erp-db",
+    connected: true,
+    canonicalAccountingControls: migration0046.state,
+  });
 });
 
 app.get("/api/system/status", async (c) => {
