@@ -8,9 +8,9 @@
             <StackPanel>
                 <TextBlock Text="Eski Yerel Yönetim Devre Dışı" FontSize="23" FontWeight="Bold" Foreground="#172D49"/>
                 <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#586C82"
-                           Text="Vardiya, servis, izin, avans, puantaj ve dönem işlemleri artık ikinci bir yerel veri tabanında tutulmaz. Yetkili kaynak KY ERP D1'dir."/>
+                           Text="Kart, vardiya, servis, izin, puantaj ve dönem işlemleri tek KY ERP D1 kaynağında tutulur. Personel ana kartı ve finans işlemleri İK'nın yetkisindedir."/>
                 <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#586C82"
-                           Text="Ana İşlem Merkezi üzerindeki Detay Yönetim düğmesi yeni D1 yönetim ekranını açar. Bu pencere yalnız eski çağrılar için güvenli uyumluluk kabuğudur."/>
+                           Text="Ana İşlem Merkezi üzerindeki Detay Yönetim düğmesi PDKS tanım ekranını açar. Bu pencere yalnız eski çağrılar için güvenli uyumluluk kabuğudur."/>
                 <Button Content="Kapat" Width="110" HorizontalAlignment="Right" Margin="0,18,0,0" Click="CloseButton_Click"/>
             </StackPanel>
         </Border>

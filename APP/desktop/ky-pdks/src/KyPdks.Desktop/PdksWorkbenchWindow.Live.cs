@@ -148,16 +148,8 @@ public partial class PdksWorkbenchWindow
         BackupButton.IsEnabled = write;
         CorrectionSaveButton.IsEnabled = write;
         LeaveSaveButton.IsEnabled = write;
-        AdvanceSaveButton.IsEnabled = write;
         PeopleButton.IsEnabled = !string.IsNullOrWhiteSpace(_token);
-        PayrollButton.IsEnabled = write;
-        PayrollButton.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
 
-        foreach (var expander in FindVisualChildren<Expander>(this))
-        {
-            if (string.Equals(expander.Header?.ToString(), "Hızlı Avans", StringComparison.OrdinalIgnoreCase))
-                expander.Visibility = audit ? Visibility.Collapsed : Visibility.Visible;
-        }
         foreach (var button in FindVisualChildren<Button>(this))
         {
             if (string.Equals(button.Content?.ToString(), "Detay Yönetim", StringComparison.OrdinalIgnoreCase))
