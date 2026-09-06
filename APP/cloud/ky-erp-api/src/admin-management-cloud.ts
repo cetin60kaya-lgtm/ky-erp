@@ -136,6 +136,7 @@ export function registerAdminManagementRoutes(app: any) {
 
     if (!username || !fullName || password.length < 6) return c.json(jsonError("USER_FIELDS_REQUIRED", "Kullanıcı adı, ad soyad ve en az 6 karakter parola zorunludur."), 400);
     if (!MANAGED_ROLES.includes(role)) return c.json(jsonError("ROLE_INVALID", "Seçilen kullanıcı rolü oluşturma için geçerli değildir."), 400);
+    if (role === "COMPANY_ADMIN") return c.json(jsonError("COMPANY_OWNER_APPROVAL_REQUIRED", "Firma Sahibi doğrudan kullanıcı oluşturma formundan verilemez. Kullanıcıyı normal rol ile oluşturun, ardından Firma Kartı / Ayarlar içindeki Firma Sahibi yetki akışını kullanın."), 409);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json(jsonError("EMAIL_INVALID", "Geçerli bir e-posta adresi girin."), 400);
     if (!companySlug) return c.json(jsonError("COMPANY_REQUIRED", "Kayıtlı ana firma seçilmelidir."), 400);
 
