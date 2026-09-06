@@ -19,3 +19,14 @@
   .comm-list-toolbar>div{width:100%;justify-content:space-between}
   .comm-message-search{width:100%;max-width:none}
 }
+
+.comm-direct-mail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:14px 16px;border-bottom:1px solid #e2e8f0;background:#f8fafc}
+.comm-direct-mail-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px;border:1px solid #dbe4ee;border-radius:10px;background:#fff}
+.comm-direct-mail-card div{min-width:0}
+.comm-direct-mail-card b,.comm-direct-mail-card span,.comm-direct-mail-card small{display:block}
+.comm-direct-mail-card span{margin-top:3px;font-size:13px;color:#334155}
+.comm-direct-mail-card small{margin-top:3px;color:#64748b}
+.comm-direct-mail-card em{grid-column:1/-1;font-size:11px;font-style:normal;color:#9a6700;background:#fff7dd;border:1px solid #f0d580;border-radius:7px;padding:7px 8px}
+.comm-advanced-mail-title{display:flex;justify-content:space-between;gap:12px;padding:11px 16px;border-bottom:1px solid #e2e8f0}
+.comm-advanced-mail-title span{font-size:12px;color:#64748b}
+@media(max-width:720px){.comm-direct-mail-grid{grid-template-columns:1fr}.comm-direct-mail-card{grid-template-columns:1fr}.comm-direct-mail-card button{width:100%}.comm-advanced-mail-title{flex-direction:column}}
