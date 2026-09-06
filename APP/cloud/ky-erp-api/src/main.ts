@@ -17,6 +17,7 @@ import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
+import { registerCanonicalDispatchControlRoutes } from "./accounting-dispatch-control-canonical";
 import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
@@ -266,6 +267,10 @@ shell.use("/api/isnet/*", enforceIsnetTenant);
 
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
 shell.use("/api/e-belge/*", enforceAccountingTenant);
+
+// Müşteri irsaliye/fatura kontrolü canonical Muhasebe verisini kullanır ve aynı tenant/yetki kilidine tabidir.
+shell.use("/api/muhasebe/customer-dispatches*", enforceAccountingTenant);
+registerCanonicalDispatchControlRoutes(shell);
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
 // izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
