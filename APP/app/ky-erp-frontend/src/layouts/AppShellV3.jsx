@@ -147,7 +147,8 @@ export default function AppShellV3({
         <nav className="shell-v3-sidebar-nav" aria-label="Ana modüller">
           {modules.map((module) => {
             const isActiveModule = activeModule?.key === module.key;
-            const isExpanded = isActiveModule && mobileMenuOpen;
+            const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
+            const isExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
             const groups = visibleGroups(module, user);
             return (
               <section key={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
@@ -156,22 +157,37 @@ export default function AppShellV3({
                 </button>
                 {isExpanded ? (
                   <div className="shell-v3-submenu">
-                    {module.groups
-                      ? groups.map((group) => (
-                          <div key={group.label} className="shell-v3-submenu-group">
-                            <h3>{group.label}</h3>
-                            {group.tabs.map(([key, label, icon]) => (
-                              <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                                <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
-                              </button>
-                            ))}
+                    {hasPrimarySidebarGroups
+                      ? (
+                          <div className="shell-v3-submenu-primary">
+                            {module.sidebarGroups.map(([key, label, icon, description]) => {
+                              const owningGroup = groups.find((group) => (group.tabs || []).some(([tabKey]) => tabKey === key));
+                              const groupActive = owningGroup?.tabs?.some(([tabKey]) => tabKey === activeTab) || activeTab === key;
+                              return (
+                                <button type="button" key={key} className={groupActive ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                                  <ErpIcon name={icon || "dashboard"} size={16} />
+                                  <span><strong>{label}</strong><small>{description}</small></span>
+                                </button>
+                              );
+                            })}
                           </div>
-                        ))
-                      : getTabs(module, user).map(([key, label, icon]) => (
-                          <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                            <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
-                          </button>
-                        ))}
+                        )
+                      : module.groups
+                        ? groups.map((group) => (
+                            <div key={group.label} className="shell-v3-submenu-group">
+                              <h3>{group.label}</h3>
+                              {group.tabs.map(([key, label, icon]) => (
+                                <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                                  <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ))
+                        : getTabs(module, user).map(([key, label, icon]) => (
+                            <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                              <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
+                            </button>
+                          ))}
                   </div>
                 ) : null}
               </section>
