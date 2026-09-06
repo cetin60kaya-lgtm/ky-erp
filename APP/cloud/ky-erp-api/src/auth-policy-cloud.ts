@@ -424,7 +424,7 @@ async function publicUser(c: any, user: AnyRow) {
     mfaEnabled: Boolean(user.google_mfa_enabled || user.microsoft_mfa_enabled),
     googleMfaEnabled: Boolean(user.google_mfa_enabled),
     microsoftMfaEnabled: Boolean(user.microsoft_mfa_enabled),
-    emailVerified: Boolean(user.email_verified), approvalRequired: Boolean(user.approval_required),
+    emailVerified: Boolean(user.email_verified), approvalRequired: isSuper(role) || isCompanyAdmin(role) ? false : Boolean(user.approval_required),
     loginPolicy: policy, loginPolicyLabel: policyLabel(policy),
     sessionSeconds: effectiveSessionSeconds(user, role),
     permissions: await permissionRows(c, text(user.id), role),
@@ -900,7 +900,7 @@ export function registerAuthPolicyRoutes(app: any) {
       const role = roleOf(row); const policy = effectivePolicy(row, role); return {
         userId: text(row.id), role, loginPolicy: policy, loginPolicyLabel: policyLabel(policy),
         configuredSessionSeconds: normalizeSessionSeconds(row.session_seconds, 36000), effectiveSessionSeconds: effectiveSessionSeconds(row, role),
-        approvalRequired: Boolean(row.approval_required), googleMfaEnabled: Boolean(row.google_mfa_enabled), microsoftMfaEnabled: Boolean(row.microsoft_mfa_enabled),
+        approvalRequired: isSuper(role) || isCompanyAdmin(role) ? false : Boolean(row.approval_required), googleMfaEnabled: Boolean(row.google_mfa_enabled), microsoftMfaEnabled: Boolean(row.microsoft_mfa_enabled),
         ownerRecoveryEnabled: Boolean(row.owner_recovery_enabled),
       };
     }) });
