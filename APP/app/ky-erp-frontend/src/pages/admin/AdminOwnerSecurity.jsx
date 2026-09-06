@@ -339,11 +339,11 @@ export default function AdminOwnerSecurity() {
   if (!owner) return <div className="aos-page"><div className={`aos-banner ${String(message).startsWith("Hata:") ? "bad" : ""}`}>{message}</div></div>;
 
   return <div className="aos-page">
-    <div className="aos-title"><div><small>YÖNETİM / UYGULAMA SAHİBİ</small><h1>Süper Yönetici Güvenlik Merkezi</h1><p>Bu hesap normal kullanıcı değildir. Kimlik, e-posta, MFA ve oturum güvenliği ayrı yönetilir.</p></div><button disabled={busy} onClick={loadAll}>Yenile</button></div>
+    <div className="aos-title"><div><small>PLATFORM YÖNETİMİ / SÜPER YÖNETİCİ</small><h1>Süper Yönetici Güvenlik Merkezi</h1><p>Bu hesap normal kullanıcı değildir. Kimlik, e-posta, MFA ve oturum güvenliği ayrı yönetilir.</p></div><button disabled={busy} onClick={loadAll}>Yenile</button></div>
     <div className={`aos-banner ${String(message).startsWith("Hata:") ? "bad" : ""}`}>{message}</div>
 
     <section className="aos-owner-card">
-      <div className="aos-owner-badge">SAHİP</div>
+      <div className="aos-owner-badge">SUPER ADMIN</div>
       {!editing ? <>
         <div className="aos-owner-copy"><h2>{owner.fullName}</h2><p>@{owner.username} · {owner.email || "e-posta yok"}</p><div className="aos-tags"><span>Süper Yönetici</span><span>{owner.mainCompanySlug || "-"}</span><span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmadı"}</span></div></div>
         <button className="primary" onClick={() => setEditing(true)}>Profili Düzenle</button>
@@ -380,7 +380,7 @@ export default function AdminOwnerSecurity() {
       <div className="aos-recovery-status">
         <span className={recoveryConfig?.questions?.length === 3 ? "good" : "warn"}>{recoveryConfig?.questions?.length || 0}/3 soru</span>
         <span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmalı"}</span>
-        <span className={recoveryConfig?.recoveryEnabled ? "good" : "warn"}>{recoveryConfig?.recoveryEnabled ? "Owner kurtarma hazır" : "Owner kurtarma henüz kapalı"}</span>
+        <span className={recoveryConfig?.recoveryEnabled ? "good" : "warn"}>{recoveryConfig?.recoveryEnabled ? "Süper Yönetici kurtarma hazır" : "Süper Yönetici kurtarma henüz kapalı"}</span>
       </div>
 
       <form className="aos-recovery-form" onSubmit={saveRecoverySecurity}>
