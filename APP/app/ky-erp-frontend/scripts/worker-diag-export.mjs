@@ -3,9 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 const here=path.dirname(fileURLToPath(import.meta.url));
 const worker=path.resolve(here,"../../../cloud/ky-erp-api");
-const tests=["mail-communication-core.test.ts","mail-google-gmail.test.ts","main-source-syntax-contract.test.ts"];
 function run(command,args){const r=spawnSync(command,args,{cwd:worker,encoding:"utf8",env:process.env,shell:process.platform==="win32",stdio:"inherit"});if(r.error)throw r.error;if(r.status!==0)process.exit(r.status||1);}
 run("npm",["ci","--ignore-scripts","--no-audit","--no-fund"]);
 run("npm",["run","typecheck"]);
-run("node",["--experimental-strip-types","--test",...tests.map((x)=>"src/"+x)]);
-console.log("WORKER_MAIL_THREE_CURRENT_PASS");
+run("npm",["run","test:unit"]);
+console.log("WORKER_UNIT_CURRENT_AFTER_FIXES_PASS");
