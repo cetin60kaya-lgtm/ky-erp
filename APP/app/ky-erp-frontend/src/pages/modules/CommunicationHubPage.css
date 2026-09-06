@@ -30,3 +30,38 @@
 .comm-advanced-mail-title{display:flex;justify-content:space-between;gap:12px;padding:11px 16px;border-bottom:1px solid #e2e8f0}
 .comm-advanced-mail-title span{font-size:12px;color:#64748b}
 @media(max-width:720px){.comm-direct-mail-grid{grid-template-columns:1fr}.comm-direct-mail-card{grid-template-columns:1fr}.comm-direct-mail-card button{width:100%}.comm-advanced-mail-title{flex-direction:column}}
+
+
+/* Mail workspace final — Outlook benzeri klasör, sabitleme ve hızlı işlem yüzeyi */
+.comm-folder-tree{border-top:1px solid #e2e8f0;padding:8px 6px 10px;display:grid;gap:2px;background:#fbfdff}
+.comm-folder-heading{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;color:#334155;font-size:11px}
+.comm-folder-heading small{color:#94a3b8}
+.comm-folder-tree>button{width:100%;min-height:31px;display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;border-radius:7px;background:transparent;color:#334155;text-align:left;font-size:11px;cursor:pointer}
+.comm-folder-tree>button:hover{background:#eef4fb}
+.comm-folder-tree>button.active{background:#dbeafe;color:#123b72;font-weight:800}
+.comm-folder-tree>button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comm-folder-tree>button em{min-width:18px;text-align:center;font-size:10px;font-style:normal;font-weight:900;color:#1d4ed8}
+.comm-empty.compact{padding:10px;font-size:10px}
+.comm-message-list>button.unread{background:#f7fbff}
+.comm-message-list>button.unread strong,.comm-message-list>button.unread b{font-weight:900;color:#0f3f77}
+.comm-message-list>button.pinned{border-left:3px solid #e5a100}
+.comm-message-list>button.pinned.active{border-left-color:#b77900}
+.comm-preview-actions-wrap{flex-wrap:wrap}
+.comm-preview-actions .pin-active{background:#fff4c7!important;border-color:#e8bd48!important;color:#6f4c00!important}
+.comm-preview-actions .danger-lite{background:#fff7f7;border:1px solid #f0c6c6;color:#9f2323}
+.comm-preview-actions .danger-lite:hover{background:#fff0f0}
+.comm-move-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin:8px 16px 0}
+.comm-move-row select{min-width:0;border:1px solid #cbd5e1;border-radius:8px;padding:7px 9px;background:#fff;color:#334155;font-size:11px}
+.comm-html-body{display:block;width:calc(100% - 32px);height:min(58vh,620px);margin:12px 16px 16px;border:1px solid #e2e8f0;border-radius:8px;background:#fff}
+.comm-advanced-mail-title{width:100%;border:0!important;border-radius:0!important;background:#fff!important;color:#334155!important;text-align:left;cursor:pointer}
+.comm-advanced-mail-title:hover{background:#f8fafc!important}
+.comm-compose-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.comm-compose-actions span{flex:1;min-width:220px}
+@media(max-width:900px){
+  .comm-html-body{height:52vh}
+}
+@media(max-width:720px){
+  .comm-move-row{grid-template-columns:1fr}
+  .comm-move-row button{width:100%}
+  .comm-html-body{width:calc(100% - 20px);margin:10px;height:55vh}
+}
