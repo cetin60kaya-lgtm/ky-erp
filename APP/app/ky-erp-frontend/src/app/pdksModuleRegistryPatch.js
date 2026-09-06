@@ -7,7 +7,7 @@ const PDKS_MODULE = {
   icon: "takvim",
   sidebarGroups: [
     ["ana-ekran", "Günlük", "dashboard", "Kart, giriş/çıkış ve puantaj"],
-    ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve bordro bağlantısı"],
+    ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve çalışma bağlantısı"],
     ["gruplar-vardiyalar", "Tanımlar", "ayarlar", "Vardiya ve çalışma kuralları"],
     ["saat-terminal", "Terminal & Sistem", "ayarlar", "Cihaz, saat ve senkron yönetimi"],
     ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],
@@ -26,11 +26,9 @@ const PDKS_MODULE = {
     {
       label: "Personel & İK",
       tabs: [
-        ["personel-bilgileri", "Personel İşlemleri", "users"],
+        ["personel-bilgileri", "Personel (İK Kaynağı)", "users"],
         ["izinler", "İzinler", "takvim"],
         ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
-        ["avanslar", "Avans", "odemeler"],
-        ["bordro", "Bordro", "odemeler"],
       ],
     },
     {
