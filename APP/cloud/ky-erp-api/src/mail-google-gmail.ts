@@ -170,21 +170,35 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
     const root=decodeGmailPart(item.payload.body.data);if(text(item?.payload?.mimeType).toLowerCase()==="text/html")bodies.html=root;else bodies.plain=root;
   }
   const from=splitAddresses(headers.FROM)[0]||{name:"",email:""};
+  const actualDirection=direction==="AUTO"?(from.email.toLowerCase()===text(account.email_address).toLowerCase()?"OUTGOING":"INCOMING"):direction;
   const stamp=Number(item.internalDate)>0?new Date(Number(item.internalDate)).toISOString():nowIso();
   const threadId=await ensureThread(c,tenant,text(account.id),text(item.threadId),headers.SUBJECT,stamp),ts=nowIso();
   const existing=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
   const id=text(existing?.id)||crypto.randomUUID();
-  const values=[threadId||null,folder.id||null,headers["MESSAGE-ID"]||null,direction,from.email||null,from.name||null,headers.SUBJECT||null,bodies.plain||text(item.snippet)||null,bodies.html||null,direction==="OUTGOING"?stamp:null,direction==="INCOMING"?stamp:null,(Array.isArray(item.labelIds)&&item.labelIds.includes("UNREAD"))?0:1,(Array.isArray(item.labelIds)&&item.labelIds.includes("STARRED"))?1:0,Number(item?.payload?.parts?.length||0)>0&&JSON.stringify(item.payload.parts).includes("filename")?1:0,JSON.stringify({provider:"GMAIL",labelIds:item.labelIds||[],historyId:text(item.historyId)}),ts,id,tenant];
+  const hasAttachments=Number(item?.payload?.parts?.length||0)>0&&JSON.stringify(item.payload.parts).includes("filename");
+  const values=[threadId||null,folder.id||null,headers["MESSAGE-ID"]||null,actualDirection,from.email||null,from.name||null,headers.SUBJECT||null,bodies.plain||text(item.snippet)||null,bodies.html||null,actualDirection==="OUTGOING"?stamp:null,actualDirection==="INCOMING"?stamp:null,(Array.isArray(item.labelIds)&&item.labelIds.includes("UNREAD"))?0:1,(Array.isArray(item.labelIds)&&item.labelIds.includes("STARRED"))?1:0,hasAttachments?1:0,JSON.stringify({provider:"GMAIL",labelIds:item.labelIds||[],historyId:text(item.historyId)}),ts,id,tenant];
   if(existing?.id){
     await c.env.DB.prepare("UPDATE mail_messages SET thread_id=?,folder_id=?,internet_message_id=?,direction=?,sender_email=?,sender_name=?,subject=?,body_text=?,body_html=?,sent_at=?,received_at=?,is_read=?,is_flagged=?,has_attachments=?,provider_metadata=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(...values).run();
   }else{
     await c.env.DB.prepare("INSERT INTO mail_messages(id,main_company_slug,account_id,thread_id,folder_id,provider_message_id,internet_message_id,direction,sender_email,sender_name,subject,body_text,body_html,sent_at,received_at,is_read,is_flagged,has_attachments,provider_metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(id,tenant,account.id,threadId||null,folder.id||null,providerMessageId,headers["MESSAGE-ID"]||null,direction,from.email||null,from.name||null,headers.SUBJECT||null,bodies.plain||text(item.snippet)||null,bodies.html||null,direction==="OUTGOING"?stamp:null,direction==="INCOMING"?stamp:null,(Array.isArray(item.labelIds)&&item.labelIds.includes("UNREAD"))?0:1,(Array.isArray(item.labelIds)&&item.labelIds.includes("STARRED"))?1:0,Number(item?.payload?.parts?.length||0)>0&&JSON.stringify(item.payload.parts).includes("filename")?1:0,JSON.stringify({provider:"GMAIL",labelIds:item.labelIds||[],historyId:text(item.historyId)}),ts,ts).run();
+      .bind(id,tenant,account.id,threadId||null,folder.id||null,providerMessageId,headers["MESSAGE-ID"]||null,actualDirection,from.email||null,from.name||null,headers.SUBJECT||null,bodies.plain||text(item.snippet)||null,bodies.html||null,actualDirection==="OUTGOING"?stamp:null,actualDirection==="INCOMING"?stamp:null,(Array.isArray(item.labelIds)&&item.labelIds.includes("UNREAD"))?0:1,(Array.isArray(item.labelIds)&&item.labelIds.includes("STARRED"))?1:0,hasAttachments?1:0,JSON.stringify({provider:"GMAIL",labelIds:item.labelIds||[],historyId:text(item.historyId)}),ts,ts).run();
   }
   await c.env.DB.prepare("DELETE FROM mail_recipients WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
   for(const [kind,value] of [["TO",headers.TO],["CC",headers.CC],["BCC",headers.BCC]] as any){
     for(const recipient of splitAddresses(value))await c.env.DB.prepare("INSERT INTO mail_recipients(id,main_company_slug,message_id,recipient_type,email_address,display_name,created_at) VALUES(?,?,?,?,?,?,?)")
       .bind(crypto.randomUUID(),tenant,id,kind,recipient.email,recipient.name||null,ts).run();
+  }
+  await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
+  const attachmentParts:any[]=[];
+  const collect=(part:any)=>{
+    if(!part||typeof part!=="object")return;
+    if(text(part.filename)&&text(part?.body?.attachmentId))attachmentParts.push(part);
+    for(const child of Array.isArray(part.parts)?part.parts:[])collect(child);
+  };
+  collect(item.payload||{});
+  for(const part of attachmentParts){
+    await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(),tenant,id,text(part.body.attachmentId),null,text(part.filename),text(part.mimeType)||null,Number(part?.body?.size||0)||null,0,null,JSON.stringify({provider:"GMAIL",partId:text(part.partId)}),ts).run();
   }
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
@@ -325,6 +339,21 @@ export function registerGoogleMailRoutes(app:any){
       return c.json({ok:true,data:{messageId,action,folderId:target.id}});
     }
     return c.json(err("MAIL_ACTION_INVALID","Desteklenmeyen mail işlemi."),422);
+  });
+
+  app.get("/api/mail/messages/:messageId/attachments/:attachmentId/download/google",async(c:any)=>{
+    const a:any=await currentAccess(c);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("messageId")),attachmentId=text(c.req.param("attachmentId"));
+    const row=await c.env.DB.prepare("SELECT ma.*,m.account_id,m.provider_message_id,a.provider_type,a.provider_connected FROM mail_attachments ma JOIN mail_messages m ON m.id=ma.message_id AND m.main_company_slug=ma.main_company_slug JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE ma.id=? AND ma.message_id=? AND ma.main_company_slug=? LIMIT 1").bind(attachmentId,messageId,tenant).first<AnyRow>();
+    if(!row)return c.json(err("MAIL_ATTACHMENT_NOT_FOUND","Mail eki bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    if(upper(row.provider_type)!=="GMAIL"||!row.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
+    const token=(await usableToken(c,tenant,account)).text,payload=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(row.provider_message_id))+"/attachments/"+encodeURIComponent(text(row.provider_attachment_id)),token)).payload,data=text(payload.data);
+    if(!data)return c.json(err("MAIL_ATTACHMENT_CONTENT_UNAVAILABLE","Gmail ek içeriği alınamadı."),409);
+    const bytes=unb64url(data);
+    if(bytes.byteLength>25*1024*1024)return c.json(err("MAIL_ATTACHMENT_TOO_LARGE","25 MB üzerindeki ekler KY ERP içinden indirilemez."),413);
+    const headers=new Headers({"Content-Type":text(row.mime_type)||"application/octet-stream","Cache-Control":"private, no-store"});
+    headers.set("Content-Disposition",`attachment; filename*=UTF-8''${encodeURIComponent(text(row.file_name)||"ek")}`);
+    return new Response(bytes,{status:200,headers});
   });
 
   app.post("/api/mail/drafts/:id/send/google",async(c:any)=>{
