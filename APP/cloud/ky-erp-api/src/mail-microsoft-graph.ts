@@ -215,6 +215,22 @@ async function discoverMicrosoftFolders(c:any,tenant:string,account:AnyRow,token
   }
   return local;
 }
+async function syncMicrosoftAttachments(c:any,tenant:string,account:AnyRow,token:string,item:AnyRow){
+  const providerMessageId=text(item.id);if(!providerMessageId)return;
+  const local=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
+  if(!local?.id)return;
+  await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id).run();
+  if(!item.hasAttachments)return;
+  try{
+    const base=mailboxBase(account),rows=await graphCollection(base+"/messages/"+encodeURIComponent(providerMessageId)+"/attachments?$top=50&$select=id,name,contentType,size,isInline,contentId",token,3),ts=nowIso();
+    for(const attachment of rows){
+      if(!text(attachment.id)||!text(attachment.name))continue;
+      await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(),tenant,local.id,text(attachment.id),null,text(attachment.name),text(attachment.contentType)||null,Number(attachment.size||0)||null,attachment.isInline?1:0,text(attachment.contentId)||null,JSON.stringify({provider:"MICROSOFT_365"}),ts).run();
+    }
+  }catch{}
+}
+
 async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:string,folder:AnyRow,maxPages=4){
   const base=mailboxBase(account),cursor=await c.env.DB.prepare("SELECT * FROM mail_sync_cursors WHERE main_company_slug=? AND account_id=? AND folder_id=? AND cursor_type='MICROSOFT_DELTA' LIMIT 1").bind(tenant,account.id,folder.id).first<AnyRow>();
   let url=text(cursor?.cursor_value)||base+"/mailFolders/"+encodeURIComponent(text(folder.provider_folder_id))+"/messages/delta?$top=50&$select=id,conversationId,internetMessageId,subject,from,toRecipients,ccRecipients,bccRecipients,body,receivedDateTime,sentDateTime,isRead,hasAttachments,flag";
@@ -223,7 +239,7 @@ async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:stri
   try{
     while(url&&pages<maxPages&&count<200){
       const payload=(await graphJson(url,token)).payload;pages++;
-      for(const item of Array.isArray(payload.value)?payload.value:[]){await persistMessage(c,tenant,account,folder,item,direction);count++;}
+      for(const item of Array.isArray(payload.value)?payload.value:[]){await persistMessage(c,tenant,account,folder,item,direction);if(item.hasAttachments)await syncMicrosoftAttachments(c,tenant,account,token,item);count++;}
       const next=text(payload["@odata.nextLink"]);deltaLink=text(payload["@odata.deltaLink"])||deltaLink;url=next;
       if(!next)break;
     }
@@ -358,6 +374,21 @@ export function registerMicrosoftMailRoutes(app:any){
       return c.json({ok:true,data:{messageId,action,folderId:text(target?.id)||null,providerMessageId:text(moved.id)||providerMessageId}});
     }
     return c.json(err("MAIL_ACTION_INVALID","Desteklenmeyen mail işlemi."),422);
+  });
+
+  app.get("/api/mail/messages/:messageId/attachments/:attachmentId/download/microsoft",async(c:any)=>{
+    const a:any=await currentAccess(c);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("messageId")),attachmentId=text(c.req.param("attachmentId"));
+    const row=await c.env.DB.prepare("SELECT ma.*,m.account_id,m.provider_message_id,a.provider_type,a.provider_connected FROM mail_attachments ma JOIN mail_messages m ON m.id=ma.message_id AND m.main_company_slug=ma.main_company_slug JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE ma.id=? AND ma.message_id=? AND ma.main_company_slug=? LIMIT 1").bind(attachmentId,messageId,tenant).first<AnyRow>();
+    if(!row)return c.json(err("MAIL_ATTACHMENT_NOT_FOUND","Mail eki bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    if(upper(row.provider_type)!=="MICROSOFT_365"||!row.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Microsoft hesabı bağlı değil."),409);
+    const token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),payload=(await graphJson(base+"/messages/"+encodeURIComponent(text(row.provider_message_id))+"/attachments/"+encodeURIComponent(text(row.provider_attachment_id)),token)).payload,encoded=text(payload.contentBytes);
+    if(!encoded)return c.json(err("MAIL_ATTACHMENT_CONTENT_UNAVAILABLE","Bu ek türünün içeriği Microsoft tarafından doğrudan indirilebilir biçimde dönmedi."),409);
+    const raw=atob(encoded.replace(/\s+/g,"")),bytes=Uint8Array.from(raw,(ch)=>ch.charCodeAt(0));
+    if(bytes.byteLength>25*1024*1024)return c.json(err("MAIL_ATTACHMENT_TOO_LARGE","25 MB üzerindeki ekler KY ERP içinden indirilemez."),413);
+    const headers=new Headers({"Content-Type":text(row.mime_type)||"application/octet-stream","Cache-Control":"private, no-store"});
+    headers.set("Content-Disposition",`attachment; filename*=UTF-8''${encodeURIComponent(text(row.file_name)||"ek")}`);
+    return new Response(bytes,{status:200,headers});
   });
 
   app.post("/api/mail/drafts/:id/send",async(c:any)=>{
