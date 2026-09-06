@@ -8,6 +8,7 @@ type TableSpec = {
 
 type IndexSpec = {
   name: string;
+  columns: string[];
   createSql: string;
 };
 
@@ -122,22 +123,36 @@ const TABLES: TableSpec[] = [
 const INDEXES: IndexSpec[] = [
   {
     name: "ix_accounting_report_categories_active",
+    columns: ["main_company_slug", "is_active", "sort_order", "name"],
     createSql:
       "CREATE INDEX IF NOT EXISTS ix_accounting_report_categories_active ON accounting_report_categories(main_company_slug, is_active, sort_order, name)",
   },
   {
     name: "ix_accounting_report_overrides_source",
+    columns: ["main_company_slug", "source_type", "source_id"],
     createSql:
       "CREATE INDEX IF NOT EXISTS ix_accounting_report_overrides_source ON accounting_report_overrides(main_company_slug, source_type, source_id)",
   },
   {
     name: "ix_accounting_expense_rules_match",
+    columns: [
+      "main_company_slug",
+      "company_id",
+      "product_id",
+      "normalized_description",
+      "is_active",
+      "priority",
+    ],
     createSql:
       "CREATE INDEX IF NOT EXISTS ix_accounting_expense_rules_match ON accounting_expense_rules(main_company_slug, company_id, product_id, normalized_description, is_active, priority)",
   },
 ];
 
 let readyInThisIsolate = false;
+
+function quotedIdentifier(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
 
 async function existingTableColumns(db: D1Like, table: string): Promise<Set<string> | null> {
   const exists = await db
@@ -148,14 +163,34 @@ async function existingTableColumns(db: D1Like, table: string): Promise<Set<stri
   if (!exists?.name) return null;
 
   const result = await db
-    .prepare(`PRAGMA table_info("${table.replace(/"/g, '""')}")`)
+    .prepare(`PRAGMA table_info(${quotedIdentifier(table)})`)
     .all<{ name: string }>();
 
   return new Set((result.results || []).map((row) => row.name));
 }
 
-async function preflight(db: D1Like): Promise<string[]> {
+async function existingIndexColumns(db: D1Like, index: string): Promise<string[] | null> {
+  const exists = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1")
+    .bind(index)
+    .first<{ name: string }>();
+
+  if (!exists?.name) return null;
+
+  const result = await db
+    .prepare(`PRAGMA index_info(${quotedIdentifier(index)})`)
+    .all<{ seqno: number; name: string }>();
+
+  return [...(result.results || [])]
+    .sort((left, right) => Number(left.seqno) - Number(right.seqno))
+    .map((row) => row.name);
+}
+
+async function preflight(
+  db: D1Like,
+): Promise<{ missingTables: string[]; missingIndexes: string[] }> {
   const missingTables: string[] = [];
+  const missingIndexes: string[] = [];
 
   for (const spec of TABLES) {
     const columns = await existingTableColumns(db, spec.name);
@@ -172,7 +207,21 @@ async function preflight(db: D1Like): Promise<string[]> {
     }
   }
 
-  return missingTables;
+  for (const spec of INDEXES) {
+    const columns = await existingIndexColumns(db, spec.name);
+    if (!columns) {
+      missingIndexes.push(spec.name);
+      continue;
+    }
+
+    if (columns.join("\u0000") !== spec.columns.join("\u0000")) {
+      throw new Error(
+        `MIGRATION_0046_PARTIAL_INDEX:${spec.name}:${columns.join(",")}`,
+      );
+    }
+  }
+
+  return { missingTables, missingIndexes };
 }
 
 async function verify(db: D1Like): Promise<void> {
@@ -190,39 +239,39 @@ async function verify(db: D1Like): Promise<void> {
     }
   }
 
-  const placeholders = INDEXES.map(() => "?").join(",");
-  const rows = await db
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'index' AND name IN (${placeholders})`,
-    )
-    .bind(...INDEXES.map((index) => index.name))
-    .all<{ name: string }>();
-
-  const present = new Set((rows.results || []).map((row) => row.name));
-  const missingIndexes = INDEXES.map((index) => index.name).filter(
-    (name) => !present.has(name),
-  );
-  if (missingIndexes.length) {
-    throw new Error(
-      `MIGRATION_0046_VERIFY_INDEX_MISSING:${missingIndexes.join(",")}`,
-    );
+  for (const spec of INDEXES) {
+    const columns = await existingIndexColumns(db, spec.name);
+    if (!columns) {
+      throw new Error(`MIGRATION_0046_VERIFY_INDEX_MISSING:${spec.name}`);
+    }
+    if (columns.join("\u0000") !== spec.columns.join("\u0000")) {
+      throw new Error(
+        `MIGRATION_0046_VERIFY_INDEX_COLUMNS:${spec.name}:${columns.join(",")}`,
+      );
+    }
   }
 }
 
 export async function ensureAccountingCanonicalReportControls0046(
   db: D1Like,
-): Promise<{ state: "READY"; createdTables: string[] }> {
+): Promise<{
+  state: "READY";
+  createdTables: string[];
+  createdIndexes: string[];
+}> {
   if (readyInThisIsolate) {
-    return { state: "READY", createdTables: [] };
+    return { state: "READY", createdTables: [], createdIndexes: [] };
   }
 
-  const missingTables = await preflight(db);
+  const { missingTables, missingIndexes } = await preflight(db);
 
   const statements = [
     ...TABLES.filter((spec) => missingTables.includes(spec.name)).map((spec) =>
       db.prepare(spec.createSql),
     ),
-    ...INDEXES.map((spec) => db.prepare(spec.createSql)),
+    ...INDEXES.filter((spec) => missingIndexes.includes(spec.name)).map((spec) =>
+      db.prepare(spec.createSql),
+    ),
   ];
 
   if (statements.length) {
@@ -232,10 +281,14 @@ export async function ensureAccountingCanonicalReportControls0046(
   await verify(db);
   readyInThisIsolate = true;
 
-  return { state: "READY", createdTables: missingTables };
+  return {
+    state: "READY",
+    createdTables: missingTables,
+    createdIndexes: missingIndexes,
+  };
 }
 
 export const accountingCanonical0046Contract = {
   tables: TABLES.map((spec) => ({ name: spec.name, columns: [...spec.columns] })),
-  indexes: INDEXES.map((spec) => spec.name),
+  indexes: INDEXES.map((spec) => ({ name: spec.name, columns: [...spec.columns] })),
 };
