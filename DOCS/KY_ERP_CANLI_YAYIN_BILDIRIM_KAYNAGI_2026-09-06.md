@@ -7,11 +7,13 @@
 **ERP:** `https://app.kyerp.net`  
 **API:** `https://api.kyerp.net`
 
-Bu dosya 06.09.2026 itibarıyla KY ERP'nin **production canlıya alma** ve **uygulama bildirim merkezi** için güncel devam kaynağıdır. Yeni sohbet/ajan önce `AGENTS.md`, sonra `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md`, sonra bu dosyayı okumalıdır.
+Bu dosya 06.09.2026 itibarıyla KY ERP'nin **uygulama Bildirim Merkezi** için güncel devam kaynağıdır. Production canlıya alma prosedürü artık ayrı ve üstün canonical kaynak olan `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md` dosyasında tutulur. Yeni sohbet/ajan önce `AGENTS.md`, sonra `DOCS/KY_ERP_PROJE_KONTROL_MERKEZI.md`, sonra canlıya alma işi varsa canonical deploy dosyasını okumalıdır.
 
 ---
 
 # 1. KESİN CANLIYA ALMA KURALI
+
+> **Güncel ve üstün prosedür:** `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`. Aşağıdaki bölüm tarihsel/özet referanstır; çelişki halinde canonical deploy dosyası geçerlidir.
 
 ## Canonical yol
 
