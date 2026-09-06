@@ -262,6 +262,107 @@ async function tableExists(c: any, table: string) {
   const row = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(table).first();
   return Boolean(row?.name);
 }
+
+async function tableColumnNames(c: any, table: string) {
+  if (!(await tableExists(c, table))) return new Set<string>();
+  const rows = (await c.env.DB.prepare(`PRAGMA table_info("${table.replace(/"/g, '""')}")`).all<AnyRow>()).results || [];
+  return new Set(rows.map((row: AnyRow) => text(row.name)));
+}
+async function addColumnIfMissing(c: any, table: string, column: string, definition: string) {
+  const columns = await tableColumnNames(c, table);
+  if (columns.has(column)) return;
+  try {
+    await c.env.DB.prepare(`ALTER TABLE "${table.replace(/"/g, '""')}" ADD COLUMN ${definition}`).run();
+  } catch (error) {
+    const refreshed = await tableColumnNames(c, table);
+    if (!refreshed.has(column)) throw error;
+  }
+}
+async function ensureOwnerRecoverySchema(c: any) {
+  if (!(await tableExists(c, "auth_user_security")) || !(await tableExists(c, "auth_login_challenges"))) {
+    throw new Error("AUTH_SECURITY_BASELINE_TABLES_MISSING");
+  }
+
+  const securityColumns: Array<[string,string]> = [
+    ["google_mfa_secret","google_mfa_secret TEXT"],
+    ["google_mfa_enabled","google_mfa_enabled INTEGER NOT NULL DEFAULT 0"],
+    ["microsoft_mfa_secret","microsoft_mfa_secret TEXT"],
+    ["microsoft_mfa_enabled","microsoft_mfa_enabled INTEGER NOT NULL DEFAULT 0"],
+    ["recovery_codes_acknowledged","recovery_codes_acknowledged INTEGER NOT NULL DEFAULT 0"],
+    ["login_policy","login_policy TEXT NOT NULL DEFAULT 'ANY_MFA'"],
+    ["session_seconds","session_seconds INTEGER NOT NULL DEFAULT 36000"],
+    ["recovery_phone","recovery_phone TEXT"],
+    ["recovery_phone_verified","recovery_phone_verified INTEGER NOT NULL DEFAULT 0"],
+    ["owner_recovery_enabled","owner_recovery_enabled INTEGER NOT NULL DEFAULT 0"],
+  ];
+  for (const [column, definition] of securityColumns) await addColumnIfMissing(c, "auth_user_security", column, definition);
+
+  const challengeColumns: Array<[string,string]> = [
+    ["policy_snapshot","policy_snapshot TEXT"],
+    ["session_seconds_snapshot","session_seconds_snapshot INTEGER"],
+    ["google_verified_at","google_verified_at TEXT"],
+    ["microsoft_verified_at","microsoft_verified_at TEXT"],
+  ];
+  for (const [column, definition] of challengeColumns) await addColumnIfMissing(c, "auth_login_challenges", column, definition);
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_owner_recovery_questions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      question_text TEXT NOT NULL,
+      answer_hash TEXT NOT NULL,
+      answer_salt TEXT NOT NULL,
+      answer_iterations INTEGER NOT NULL DEFAULT 180000,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, position)
+    )`),
+    c.env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_owner_recovery_questions_user ON auth_owner_recovery_questions(user_id, position)"),
+    c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_owner_recovery_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      destination_masked TEXT,
+      challenge_token_hash TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      otp_salt TEXT NOT NULL,
+      question_ids TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      answer_attempt_count INTEGER NOT NULL DEFAULT 0,
+      send_count INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      locked_until TEXT,
+      verified_at TEXT,
+      consumed_at TEXT,
+      ip_address TEXT
+    )`),
+    c.env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_owner_recovery_challenges_user ON auth_owner_recovery_challenges(user_id, created_at DESC)"),
+    c.env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_owner_recovery_challenges_active ON auth_owner_recovery_challenges(user_id, consumed_at, expires_at)"),
+  ]);
+}
+async function ensureOwnerRecoveryOrResponse(c: any) {
+  try {
+    await ensureOwnerRecoverySchema(c);
+    return null;
+  } catch (error) {
+    logAuthError(c, "OWNER_RECOVERY_SCHEMA_READINESS", error);
+    return c.json(
+      jsonError(
+        "OWNER_RECOVERY_SCHEMA_UNAVAILABLE",
+        "Hesap kurtarma veritabanı hazırlanamadı. Güvenlik soruları korunarak işlem durduruldu; lütfen sayfayı yenileyip tekrar deneyin.",
+      ),
+      503,
+    );
+  }
+}
+async function retireLegacyRecoveryCodes(c: any, userId: string) {
+  if (!(await tableExists(c, "auth_recovery_codes"))) return;
+  const timestamp = nowIso();
+  await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=COALESCE(used_at,?) WHERE user_id=? AND used_at IS NULL").bind(timestamp, userId).run();
+}
 async function securityFor(c: any, userId: string) {
   return (await c.env.DB.prepare("SELECT * FROM auth_user_security WHERE user_id=? LIMIT 1").bind(userId).first<AnyRow>()) || {};
 }
@@ -462,11 +563,18 @@ async function beginProviderSetup(c: any, user: AnyRow, providerValue: unknown, 
   };
 }
 async function ownerRecoveryReadiness(c: any, user: AnyRow) {
-  const questions = Number((await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_owner_recovery_questions WHERE user_id=?").bind(user.id).first<AnyRow>())?.total || 0);
-  const caps = deliveryCapabilities(c);
-  const emailReady = Boolean(user.email_verified && text(user.email) && caps.email);
-  const smsReady = Boolean(user.recovery_phone_verified && text(user.recovery_phone) && caps.sms);
-  return { ready: questions >= 3 && (emailReady || smsReady), questionsConfigured: questions >= 3, emailReady, smsReady, capabilities: caps };
+  try {
+    await ensureOwnerRecoverySchema(c);
+    const questions = Number((await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_owner_recovery_questions WHERE user_id=?").bind(user.id).first<AnyRow>())?.total || 0);
+    const caps = deliveryCapabilities(c);
+    const emailReady = Boolean(user.email_verified && text(user.email) && caps.email);
+    const smsReady = Boolean(user.recovery_phone_verified && text(user.recovery_phone) && caps.sms);
+    return { ready: questions >= 3 && (emailReady || smsReady), schemaReady: true, questionsConfigured: questions >= 3, emailReady, smsReady, capabilities: caps };
+  } catch (error) {
+    logAuthError(c, "OWNER_RECOVERY_READINESS", error, { userId: text(user?.id) });
+    const caps = deliveryCapabilities(c);
+    return { ready: false, schemaReady: false, questionsConfigured: false, emailReady: false, smsReady: false, capabilities: caps };
+  }
 }
 async function afterFactors(c: any, user: AnyRow, source: AnyRow) {
   const refreshed = await userById(c, user.id);
@@ -825,8 +933,10 @@ export function registerAuthPolicyRoutes(app: any) {
   });
 
   app.get("/api/admin/security/owner-recovery", async (c: any) => {
+    const schemaError = await ensureOwnerRecoveryOrResponse(c);
+    if (schemaError) return schemaError;
     const current = await getAuthenticatedUser(c);
-    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız uygulama sahibine açıktır."), current ? 403 : 401);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız Süper Yönetici hesabına açıktır."), current ? 403 : 401);
     const user = await userById(c, current.id);
     const questions = (await c.env.DB.prepare("SELECT id,position,question_text,created_at,updated_at FROM auth_owner_recovery_questions WHERE user_id=? ORDER BY position").bind(current.id).all()).results || [];
     const readiness = await ownerRecoveryReadiness(c, user || current);
@@ -840,8 +950,10 @@ export function registerAuthPolicyRoutes(app: any) {
   });
 
   app.put("/api/admin/security/owner-recovery/questions", async (c: any) => {
+    const schemaError = await ensureOwnerRecoveryOrResponse(c);
+    if (schemaError) return schemaError;
     const current = await getAuthenticatedUser(c);
-    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız uygulama sahibine açıktır."), current ? 403 : 401);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız Süper Yönetici hesabına açıktır."), current ? 403 : 401);
     const body = await bodyOf(c);
     if (!(await stepUpOwner(c, current, body.provider, body.code))) return c.json(jsonError("STEP_UP_FAILED", "Mevcut Google veya Microsoft Authenticator kodu doğrulanamadı."), 401);
     const incoming = Array.isArray(body.questions) ? body.questions.slice(0, 3) : [];
@@ -864,15 +976,16 @@ export function registerAuthPolicyRoutes(app: any) {
       }
     }
     const enabled = await updateOwnerRecoveryEnabled(c, current.id);
-    const timestamp = nowIso();
-    await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=COALESCE(used_at,?) WHERE user_id=? AND used_at IS NULL").bind(timestamp, current.id).run();
-    await audit(c, "OWNER_RECOVERY_QUESTIONS_UPDATED", current.id, current.id, text(current.mainCompanySlug), "", { enabled, legacyRecoveryCodesDisabled: true });
-    return c.json({ ok: true, data: { saved: true, recoveryEnabled: enabled, legacyRecoveryCodesDisabled: true } });
+    await retireLegacyRecoveryCodes(c, current.id);
+    await audit(c, "OWNER_RECOVERY_QUESTIONS_UPDATED", current.id, current.id, text(current.mainCompanySlug), "", { enabled, legacyRecoveryCodesRetired: true });
+    return c.json({ ok: true, data: { saved: true, recoveryEnabled: enabled, legacyRecoveryCodesRetired: true } });
   });
 
   app.post("/api/admin/security/owner-recovery/contact/start", async (c: any) => {
+    const schemaError = await ensureOwnerRecoveryOrResponse(c);
+    if (schemaError) return schemaError;
     const current = await getAuthenticatedUser(c);
-    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız uygulama sahibine açıktır."), current ? 403 : 401);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız Süper Yönetici hesabına açıktır."), current ? 403 : 401);
     const body = await bodyOf(c);
     if (!(await stepUpOwner(c, current, body.provider, body.code))) return c.json(jsonError("STEP_UP_FAILED", "Mevcut Google veya Microsoft Authenticator kodu doğrulanamadı."), 401);
     const channel = upper(body.channel);
@@ -893,8 +1006,10 @@ export function registerAuthPolicyRoutes(app: any) {
   });
 
   app.post("/api/admin/security/owner-recovery/contact/verify", async (c: any) => {
+    const schemaError = await ensureOwnerRecoveryOrResponse(c);
+    if (schemaError) return schemaError;
     const current = await getAuthenticatedUser(c);
-    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız uygulama sahibine açıktır."), current ? 403 : 401);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız Süper Yönetici hesabına açıktır."), current ? 403 : 401);
     const body = await bodyOf(c);
     const recovery = await recoveryChallengeFromBody(c, body);
     if (!recovery || recovery.user_id !== current.id || !text(recovery.purpose).startsWith("CONFIG_")) return c.json(jsonError("RECOVERY_CHALLENGE_INVALID", "Doğrulama isteği geçersiz veya süresi dolmuş."), 401);
@@ -912,13 +1027,15 @@ export function registerAuthPolicyRoutes(app: any) {
   });
 
   app.post("/api/auth/owner-recovery/start", async (c: any) => {
+    const schemaError = await ensureOwnerRecoveryOrResponse(c);
+    if (schemaError) return schemaError;
     const body = await bodyOf(c);
     const loginChallenge = await challengeFromRequest(c, body);
     if (!loginChallenge || text(loginChallenge.challenge_type) !== "POLICY_MFA_REQUIRED") return c.json(jsonError("LOGIN_CHALLENGE_INVALID", "Önce kullanıcı adı ve şifrenizi doğrulayın."), 401);
     const user = await userById(c, text(loginChallenge.user_id));
-    if (!user || !isSuper(roleOf(user))) return c.json(jsonError("OWNER_ONLY", "Bu kurtarma akışı yalnız uygulama sahibine açıktır."), 403);
+    if (!user || !isSuper(roleOf(user))) return c.json(jsonError("OWNER_ONLY", "Bu kurtarma akışı yalnız Süper Yönetici hesabına açıktır."), 403);
     const readiness = await ownerRecoveryReadiness(c, user);
-    if (!readiness.ready || !Boolean(user.owner_recovery_enabled)) return c.json(jsonError("OWNER_RECOVERY_NOT_READY", "Uygulama sahibi kurtarma kanalları henüz tam doğrulanmamış."), 503);
+    if (!readiness.ready || !Boolean(user.owner_recovery_enabled)) return c.json(jsonError("OWNER_RECOVERY_NOT_READY", "Süper Yönetici hesap kurtarma kanalları henüz tam doğrulanmamış."), 503);
     const channel = upper(body.channel);
     const destination = channel === "EMAIL" && readiness.emailReady ? text(user.email) : channel === "SMS" && readiness.smsReady ? text(user.recovery_phone) : "";
     if (!destination) return c.json(jsonError("CHANNEL_UNAVAILABLE", "Seçilen kurtarma kanalı kullanılamıyor."), 400);
@@ -936,6 +1053,8 @@ export function registerAuthPolicyRoutes(app: any) {
   });
 
   app.post("/api/auth/owner-recovery/verify", async (c: any) => {
+    const schemaError = await ensureOwnerRecoveryOrResponse(c);
+    if (schemaError) return schemaError;
     const body = await bodyOf(c);
     const recovery = await recoveryChallengeFromBody(c, body);
     if (!recovery || recovery.purpose !== "OWNER_ACCOUNT_RECOVERY") return c.json(jsonError("RECOVERY_CHALLENGE_INVALID", "Kurtarma isteği geçersiz veya süresi dolmuş."), 401);
@@ -956,7 +1075,7 @@ export function registerAuthPolicyRoutes(app: any) {
     await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET verified_at=?,consumed_at=? WHERE id=?").bind(timestamp, timestamp, recovery.id).run();
     await revokeSecurityState(c, recovery.user_id, recovery.user_id, "OWNER_ACCOUNT_RECOVERED");
     await c.env.DB.prepare("UPDATE auth_user_security SET google_mfa_secret=NULL,google_mfa_enabled=0,microsoft_mfa_secret=NULL,microsoft_mfa_enabled=0,login_policy='ANY_MFA',session_seconds=36000,updated_at=? WHERE user_id=?").bind(timestamp, recovery.user_id).run();
-    await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=COALESCE(used_at,?) WHERE user_id=? AND used_at IS NULL").bind(timestamp, recovery.user_id).run();
+    await retireLegacyRecoveryCodes(c, recovery.user_id);
     const user = await userById(c, recovery.user_id);
     await audit(c, "OWNER_RECOVERY_VERIFIED_REENROLL_REQUIRED", recovery.user_id, recovery.user_id, text(user?.main_company_slug), "", { channel: recovery.channel });
     return c.json(await beginProviderSetup(c, user, "GOOGLE", {}, "OWNER_RECOVERY"));

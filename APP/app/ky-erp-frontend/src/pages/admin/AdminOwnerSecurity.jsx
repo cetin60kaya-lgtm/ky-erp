@@ -44,6 +44,7 @@ export default function AdminOwnerSecurity() {
   ]);
   const [recoveryProvider, setRecoveryProvider] = useState("GOOGLE");
   const [recoveryStepUpCode, setRecoveryStepUpCode] = useState("");
+  const [showRecoveryAnswers, setShowRecoveryAnswers] = useState([false, false, false]);
 
   const [emailChallenge, setEmailChallenge] = useState(null);
   const [emailOtp, setEmailOtp] = useState("");
@@ -62,6 +63,9 @@ export default function AdminOwnerSecurity() {
 
   const currentSessionId = useMemo(() => sessionIdFromToken(token), [token]);
   const ownerSessions = useMemo(() => sessions.filter((row) => String(row.userId || row.user_id || "") === String(owner?.id || "")), [sessions, owner?.id]);
+  const configuredRecoveryCount = Array.isArray(recoveryConfig?.questions) ? recoveryConfig.questions.filter((row) => row?.configured !== false).length : 0;
+  const recoveryChannelReady = Boolean(recoveryConfig?.readiness?.emailReady || recoveryConfig?.readiness?.smsReady);
+  const recoveryChannelLabel = recoveryConfig?.readiness?.emailReady ? "Doğrulanmış e-posta" : recoveryConfig?.readiness?.smsReady ? "Doğrulanmış SMS" : "Kanal bekliyor";
 
   async function loadAll() {
     setBusy(true);
@@ -93,6 +97,7 @@ export default function AdminOwnerSecurity() {
           question: String(configured[index]?.question || ""),
           answer: "",
         })));
+        setShowRecoveryAnswers([false, false, false]);
       } else {
         setRecoveryConfig(null);
         setRecoveryQuestions([
@@ -100,7 +105,8 @@ export default function AdminOwnerSecurity() {
           { question: "", answer: "" },
           { question: "", answer: "" },
         ]);
-        unavailable.push("özel güvenlik soruları");
+        setShowRecoveryAnswers([false, false, false]);
+        unavailable.push("hesap kurtarma güvenliği");
       }
       setMessage(unavailable.length
         ? `Süper Yönetici hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.`
@@ -194,8 +200,8 @@ export default function AdminOwnerSecurity() {
       });
       setRecoveryStepUpCode("");
       setMessage(result?.recoveryEnabled
-        ? "Süper Yönetici özel soru-cevap güvenliği kaydedildi ve kurtarma koruması aktif."
-        : "Özel güvenlik soruları kaydedildi. Kurtarmanın aktif olması için doğrulanmış e-posta/SMS kanalı da hazır olmalıdır.");
+        ? "Hesap kurtarma güvenliği kaydedildi. Üç güvenlik sorusu ve doğrulanmış kanal aktif."
+        : "Güvenlik soruları kaydedildi. Hesap kurtarmanın aktif olması için doğrulanmış e-posta veya SMS kanalı da hazır olmalıdır.");
       await loadAll();
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Özel güvenlik soruları kaydedilemedi."}`);
@@ -367,69 +373,111 @@ export default function AdminOwnerSecurity() {
     </div>
 
     <section className="aos-card aos-recovery-security">
-      <div className="aos-card-head">
+      <div className="aos-card-head aos-recovery-head">
         <div>
-          <h3>Süper Yönetici Özel Soru-Cevap</h3>
-          <p>Tek kullanımlık acil kurtarma kodu yerine, yalnız Süper Yönetici için özel soru-cevap katmanı kullanılır. Üç soru kaydedilir; kurtarmada iki tanesi rastgele sorulur.</p>
+          <small className="aos-section-kicker">HESAP KURTARMA / SÜPER YÖNETİCİ</small>
+          <h3>Hesap Kurtarma ve Kimlik Doğrulama</h3>
+          <p>Üç güvenlik sorusu tanımlanır. Hesap kurtarma sırasında doğrulanmış iletişim kanalı ile birlikte rastgele iki soru sorulur; başarılı doğrulamadan sonra Authenticator kayıtları güvenli şekilde yeniden kurulur.</p>
         </div>
         <span className={recoveryConfig?.recoveryEnabled ? "state good" : "state warn"}>
-          {recoveryConfig?.recoveryEnabled ? "Aktif" : "Hazırlanıyor"}
+          {recoveryConfig?.recoveryEnabled ? "Kurtarma Hazır" : "Kurulum Bekliyor"}
         </span>
       </div>
 
-      <div className="aos-recovery-status">
-        <span className={recoveryConfig?.questions?.length === 3 ? "good" : "warn"}>{recoveryConfig?.questions?.length || 0}/3 soru</span>
-        <span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmalı"}</span>
-        <span className={recoveryConfig?.recoveryEnabled ? "good" : "warn"}>{recoveryConfig?.recoveryEnabled ? "Süper Yönetici kurtarma hazır" : "Süper Yönetici kurtarma henüz kapalı"}</span>
+      <div className="aos-recovery-summary">
+        <div className={recoveryConfig?.recoveryEnabled ? "ready" : "pending"}>
+          <span>Kurtarma Durumu</span>
+          <strong>{recoveryConfig?.recoveryEnabled ? "Aktif" : "Hazırlanıyor"}</strong>
+          <small>{recoveryConfig?.recoveryEnabled ? "Güvenli kurtarma kullanılabilir" : "Eksik adımları tamamlayın"}</small>
+        </div>
+        <div className={configuredRecoveryCount === 3 ? "ready" : "pending"}>
+          <span>Güvenlik Soruları</span>
+          <strong>{configuredRecoveryCount}/3</strong>
+          <small>{configuredRecoveryCount === 3 ? "Üç soru kayıtlı" : "Üç soru zorunlu"}</small>
+        </div>
+        <div className={owner.emailVerified ? "ready" : "pending"}>
+          <span>E-posta</span>
+          <strong>{owner.emailVerified ? "Doğrulandı" : "Bekliyor"}</strong>
+          <small>{owner.email || "E-posta kayıtlı değil"}</small>
+        </div>
+        <div className={recoveryChannelReady ? "ready" : "pending"}>
+          <span>Kurtarma Kanalı</span>
+          <strong>{recoveryChannelReady ? "Hazır" : "Bekliyor"}</strong>
+          <small>{recoveryChannelLabel}</small>
+        </div>
       </div>
 
       <form className="aos-recovery-form" onSubmit={saveRecoverySecurity}>
         <div className="aos-question-grid">
-          {recoveryQuestions.map((row, index) => (
-            <div className="aos-question-row" key={index}>
-              <label>{index + 1}. özel soru
-                <input
-                  value={row.question}
-                  onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))}
-                  placeholder="Yalnız sizin bildiğiniz özel bir soru yazın"
-                  maxLength={220}
-                />
-              </label>
-              <label>Cevap
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={row.answer}
-                  onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, answer: event.target.value } : item))}
-                  placeholder={recoveryConfig?.questions?.[index]?.configured ? "Değiştirmiyorsanız boş bırakın" : "Özel cevabınızı yazın"}
-                />
-              </label>
-            </div>
-          ))}
+          {recoveryQuestions.map((row, index) => {
+            const saved = Boolean(recoveryConfig?.questions?.[index]?.configured);
+            const visible = Boolean(showRecoveryAnswers[index]);
+            return (
+              <div className="aos-question-card" key={index}>
+                <div className="aos-question-title">
+                  <div><span>{index + 1}</span><div><b>Güvenlik Sorusu</b><small>{saved ? "Kayıtlı · değiştirmek isterseniz yeni cevap yazın" : "Henüz kaydedilmedi"}</small></div></div>
+                  <span className={saved ? "saved" : "new"}>{saved ? "Kayıtlı" : "Yeni"}</span>
+                </div>
+                <label>Soru
+                  <input
+                    value={row.question}
+                    onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))}
+                    placeholder="Yalnız sizin bildiğiniz, tahmin edilmesi zor bir soru yazın"
+                    maxLength={220}
+                  />
+                </label>
+                <label>Cevap
+                  <div className="aos-answer-field">
+                    <input
+                      type={visible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={row.answer}
+                      onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, answer: event.target.value } : item))}
+                      placeholder={saved ? "Kayıtlı — değiştirmek için yeni cevap yazın" : "Özel cevabınızı yazın"}
+                    />
+                    <button
+                      type="button"
+                      className="aos-answer-toggle"
+                      disabled={!row.answer}
+                      onClick={() => setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? !value : value))}
+                      aria-label={visible ? "Cevabı gizle" : "Cevabı göster"}
+                    >{visible ? "Gizle" : "Göster"}</button>
+                  </div>
+                </label>
+              </div>
+            );
+          })}
         </div>
 
         <div className="aos-recovery-stepup">
           <div>
-            <b>Kaydetme güvenliği</b>
-            <small>Soru-cevap değişikliği, açık oturumda bile mevcut Authenticator kodunuzla yeniden doğrulanır.</small>
+            <b>Değişikliği doğrula</b>
+            <small>Güvenlik soruları yalnız mevcut Authenticator kodunuz doğrulandıktan sonra kaydedilir.</small>
           </div>
-          <select value={recoveryProvider} onChange={(event) => setRecoveryProvider(event.target.value)}>
-            <option value="GOOGLE">Google Authenticator</option>
-            <option value="MICROSOFT">Microsoft Authenticator</option>
-          </select>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            value={recoveryStepUpCode}
-            onChange={(event) => setRecoveryStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="000000"
-            aria-label="Mevcut Authenticator kodu"
-          />
-          <button className="primary" type="submit" disabled={busy}>Özel Güvenliği Kaydet</button>
+          <label>Authenticator
+            <select value={recoveryProvider} onChange={(event) => setRecoveryProvider(event.target.value)}>
+              <option value="GOOGLE">Google Authenticator</option>
+              <option value="MICROSOFT">Microsoft Authenticator</option>
+            </select>
+          </label>
+          <label>6 haneli kod
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={recoveryStepUpCode}
+              onChange={(event) => setRecoveryStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              aria-label="Mevcut Authenticator kodu"
+            />
+          </label>
+          <button className="primary" type="submit" disabled={busy}>Kurtarma Güvenliğini Kaydet</button>
         </div>
       </form>
-      <div className="aos-security-note">Cevaplar ekranda geri gösterilmez. Sunucu tarafında hash + salt ile saklanır; kurtarma soruları tek başına doğrudan oturum açmaz, MFA yeniden kurulumunu yetkilendirir.</div>
+
+      <div className="aos-security-note">
+        <b>Gizlilik:</b> Kayıtlı cevapların düz metni sunucudan geri getirilemez. Cevaplar salt + PBKDF2 hash olarak tutulur. “Göster / Gizle” yalnız bu ekranda şu anda yazdığınız yeni cevabı gösterir.
+      </div>
     </section>
 
     {renewProvider && <section className="aos-card aos-renew">
