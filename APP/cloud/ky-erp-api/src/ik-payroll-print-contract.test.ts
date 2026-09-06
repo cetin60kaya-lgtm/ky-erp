@@ -20,7 +20,7 @@ test("IK payroll report and payment slips use the canonical print service contra
   assert.ok(page.includes("Ödeme Listesi / PDF"));
   assert.ok(page.includes("10’lu Toplu Fiş / PDF"));
   assert.ok(page.includes("Tek Kişi Fişi"));
-  assert.ok(page.includes("printHtmlDocument({ title: `İK Aylık Bordro"));
+  assert.ok(page.includes("printHtmlDocument({ title: `İK Ödeme Listesi"));
   assert.ok(page.includes("printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri"));
   assert.ok(page.includes("printHtmlDocument({ title: `Ödeme Fişi"));
   assert.doesNotMatch(page, /printHtmlDocument\(html,/);
@@ -107,7 +107,7 @@ test("payroll print HTML escapes employee-entered text and shows every payment c
   assert.match(page, /escapeHtml\(row\.employee\.code \|\| "-"\)/);
   assert.match(page, /escapeHtml\(row\.employee\.department \|\| "Bölüm yok"\)/);
 
-  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKADAN", "ELDEN", "NET / TOPLAM ÖDENECEK"]) {
+  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKA", "ELDEN", "TOPLAM ÖDEME"]) {
     assert.ok(page.includes(label), `Eksik fiş/rapor alanı: ${label}`);
   }
 });
