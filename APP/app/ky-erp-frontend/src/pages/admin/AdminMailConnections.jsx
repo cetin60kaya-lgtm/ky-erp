@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  decideMailApproval,
   listMailAccounts,
-  listMailApprovals,
+  startGoogleMailOAuth,
   startMicrosoftMailOAuth,
+  syncGoogleMailAccount,
   syncMailAccount,
 } from "../../services/mailApi";
-import { useAuth } from "../../context/AuthContext";
 import "./AdminMailConnections.css";
 
 const providerLabel = (value) => ({
@@ -32,26 +31,16 @@ const statusLabel = (value) => ({
   REJECTED: "Reddedildi",
 }[String(value || "").toUpperCase()] || value || "—");
 
-const isOwnerRole = (value) => ["SUPER_ADMIN", "ADMIN"].includes(String(value || "").toUpperCase());
-const isCompanyOwnerRole = (value) => String(value || "").toUpperCase() === "COMPANY_ADMIN";
-
 export default function AdminMailConnections({ activeMainCompany, openModule }) {
-  const { user } = useAuth();
   const [accounts, setAccounts] = useState([]);
-  const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const slug = activeMainCompany?.slug || "";
   const companyName = activeMainCompany?.name || activeMainCompany?.title || slug || "Aktif Firma";
-  const role = String(user?.role || "").toUpperCase();
-  const appOwner = isOwnerRole(role);
-  const companyOwner = isCompanyOwnerRole(role);
-
   const load = useCallback(async () => {
     setLoading(true);
-    const rows = await Promise.allSettled([listMailAccounts(), listMailApprovals()]);
+    const rows = await Promise.allSettled([listMailAccounts()]);
     if (rows[0].status === "fulfilled") setAccounts(Array.isArray(rows[0].value) ? rows[0].value : []);
-    if (rows[1].status === "fulfilled") setApprovals(Array.isArray(rows[1].value) ? rows[1].value : []);
     const failed = rows.filter((row) => row.status === "rejected");
     setNotice(failed.length ? "Bazı mail yönetim bilgileri alınamadı. Erişilebilen kayıtlar gösteriliyor." : "");
     setLoading(false);
@@ -70,11 +59,14 @@ export default function AdminMailConnections({ activeMainCompany, openModule }) 
     setLoading(true);
     setNotice("");
     try {
-      const result = await startMicrosoftMailOAuth(account.id);
-      if (!result?.authorizeUrl) throw new Error("Microsoft giriş adresi alınamadı.");
+      const provider = String(account.provider_type || account.providerType || "").toUpperCase();
+      const result = provider === "GMAIL"
+        ? await startGoogleMailOAuth(account.id)
+        : await startMicrosoftMailOAuth(account.id);
+      if (!result?.authorizeUrl) throw new Error("Sağlayıcı giriş adresi alınamadı.");
       window.location.assign(result.authorizeUrl);
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Microsoft hesabı bağlantısı başlatılamadı."}`);
+      setNotice(`Hata: ${error?.message || "Mail hesabı bağlantısı başlatılamadı."}`);
       setLoading(false);
     }
   }
@@ -83,8 +75,11 @@ export default function AdminMailConnections({ activeMainCompany, openModule }) 
     setLoading(true);
     setNotice("");
     try {
-      const result = await syncMailAccount(account.id);
-      const count = (Array.isArray(result?.folders) ? result.folders : []).reduce((sum, row) => sum + Number(row.count || 0), 0);
+      const provider = String(account.provider_type || account.providerType || "").toUpperCase();
+      const result = provider === "GMAIL"
+        ? await syncGoogleMailAccount(account.id)
+        : await syncMailAccount(account.id);
+      const count = Number(result?.count || (Array.isArray(result?.folders) ? result.folders : []).reduce((sum, row) => sum + Number(row.count || 0), 0));
       setNotice(result?.partial ? `Senkronizasyon kısmi tamamlandı. ${count} kayıt işlendi.` : `Senkronizasyon tamamlandı. ${count} kayıt işlendi.`);
       await load();
     } catch (error) {
@@ -93,26 +88,13 @@ export default function AdminMailConnections({ activeMainCompany, openModule }) 
     }
   }
 
-  async function decide(request, decision) {
-    setLoading(true);
-    setNotice("");
-    try {
-      await decideMailApproval(request.id, decision);
-      setNotice(decision === "APPROVE" ? "Mail bağlantı onayı kaydedildi." : "Mail bağlantı talebi reddedildi.");
-      await load();
-    } catch (error) {
-      setNotice(`Hata: ${error?.message || "Onay işlemi tamamlanamadı."}`);
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="mail-admin-page">
       <section className="mail-admin-hero">
         <div>
-          <small>BAĞLANTILAR & DEPOLAMA / E-POSTA HESAPLARI</small>
-          <h2>Kurumsal Mail Bağlantıları</h2>
-          <p><b>{companyName}</b> için Outlook / Microsoft 365, Gmail ve diğer posta kutuları burada bağlanır ve yetkilendirilir. Günlük gelen-giden mail kullanımı bu ekranda değil, <b>Mail & Dosyalar</b> bölümünde yapılır.</p>
+          <small>BAĞLANTILAR & DEPOLAMA / MAIL BAĞLANTILARI</small>
+          <h2>Mail Sağlayıcı Bağlantıları</h2>
+          <p><b>{companyName}</b> için Onaylanmış Outlook/Hotmail ve Gmail posta kutularının OAuth bağlantısı ve senkronizasyonu burada yönetilir. Firma maili onayı <b>Firma Kartı / Ayarlar</b> veya <b>Onay Merkezi</b> içinden verilir.</p>
         </div>
         <button type="button" onClick={() => openModule?.("iletisim", { tabKey: "mail-gelen" })}>Mail Merkezini Aç</button>
       </section>
@@ -122,7 +104,7 @@ export default function AdminMailConnections({ activeMainCompany, openModule }) 
       <section className="mail-admin-stats">
         <div><span>Toplam Hesap</span><strong>{stats.total}</strong><small>Kişisel + ortak + bölüm</small></div>
         <div><span>Aktif</span><strong>{stats.active}</strong><small>Kullanıma hazır posta kutusu</small></div>
-        <div><span>Onay Bekleyen</span><strong>{stats.pending}</strong><small>Firma / uygulama sahibi</small></div>
+        <div><span>Onay Bekleyen</span><strong>{stats.pending}</strong><small>Firma Sahibi kararı bekleniyor</small></div>
         <div><span>Provider Bağlı</span><strong>{stats.connected}</strong><small>OAuth bağlantısı tamamlandı</small></div>
       </section>
 
@@ -143,24 +125,17 @@ export default function AdminMailConnections({ activeMainCompany, openModule }) 
               <span>{providerLabel(provider)}</span>
               <span><b>{statusLabel(status)}</b><small>{connected ? "OAuth bağlı" : "OAuth bekliyor"}</small></span>
               <span className="actions">
-                {provider === "MICROSOFT_365" && !connected ? <button type="button" onClick={() => connect(row)} disabled={loading}>Microsoft Bağla</button> : null}
-                {provider === "MICROSOFT_365" && connected ? <button type="button" className="secondary" onClick={() => sync(row)} disabled={loading}>Senkronize Et</button> : null}
+                {["MICROSOFT_365","GMAIL"].includes(provider) && !connected ? <button type="button" onClick={() => connect(row)} disabled={loading || String(row.approval_status || row.approvalStatus || "").toUpperCase() !== "APPROVED"}>{provider === "GMAIL" ? "Gmail Bağla" : "Microsoft Bağla"}</button> : null}
+                {["MICROSOFT_365","GMAIL"].includes(provider) && connected ? <button type="button" className="secondary" onClick={() => sync(row)} disabled={loading}>Senkronize Et</button> : null}
               </span>
             </div>;
           })}
-        </div> : <div className="mail-admin-empty"><b>Henüz mail hesabı yok.</b><span>Yeni hesap talebi Mail & Dosyalar bölümünden açılır; onay ve bağlantı yönetimi burada yapılır.</span><button type="button" onClick={() => openModule?.("iletisim", { tabKey: "mail-gelen" })}>Mail Hesabı Talebi Aç</button></div>}
+        </div> : <div className="mail-admin-empty"><b>Henüz mail hesabı yok.</b><span>Yeni firma maili talebi Mail & Dosyalar bölümünden açılır. Onay Firma Kartı / Onay Merkezi'nde; teknik OAuth bağlantısı burada yapılır.</span><button type="button" onClick={() => openModule?.("iletisim", { tabKey: "mail-gelen" })}>Firma Maili Talebi Aç</button></div>}
       </section>
 
       <section className="mail-admin-card">
-        <div className="mail-admin-card-head"><div><h3>Bekleyen Mail Onayları</h3><p>Firma mail hesaplarında onay sahibi yalnız Firma Sahibi'dir. Uygulama Sahibi teknik bağlantıyı yönetir, firma adına onay vermez.</p></div></div>
-        {approvals.filter((row) => String(row.status || "").toUpperCase() === "PENDING").length ? <div className="mail-admin-approvals">
-          {approvals.filter((row) => String(row.status || "").toUpperCase() === "PENDING").map((row) => <div className="approval" key={row.id}>
-            <div><b>{row.display_name || row.email_address || "Mail hesabı"}</b><span>{providerLabel(row.provider_type)} · {accountTypeLabel(row.account_type)} · Firma Sahibi Onayı</span>{appOwner ? <small>Bu firma işlemini Uygulama Sahibi onaylayamaz.</small> : null}</div>
-            <div className="actions">
-              {companyOwner ? <><button type="button" onClick={() => decide(row, "APPROVE")} disabled={loading}>Onayla</button><button type="button" className="danger" onClick={() => decide(row, "REJECT")} disabled={loading}>Reddet</button></> : <span>Firma Sahibi onayı bekleniyor</span>}
-            </div>
-          </div>)}
-        </div> : <div className="mail-admin-empty compact">Bekleyen mail bağlantı onayı yok.</div>}
+        <div className="mail-admin-card-head"><div><h3>Onay ve Sahiplik</h3><p>Bu ekran teknik bağlantı içindir; firma maili ekleme/onay kararı burada verilmez.</p></div></div>
+        <div className="mail-admin-empty compact">Firma mail listesi ve onayları için Yönetim → Firma Kartı / Ayarlar veya Yönetim → Onay Merkezi kullanılır.</div>
       </section>
     </div>
   );
