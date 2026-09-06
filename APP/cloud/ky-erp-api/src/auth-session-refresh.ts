@@ -215,6 +215,15 @@ export function registerAuthSessionRefreshRoutes(app: any) {
     if (!prepared || Date.parse(text(prepared.prepareExpiresAt)) <= Date.now()) {
       return c.json({ ok: false, error: { code: "REFRESH_EXPIRED", message: "Oturum yenileme isteğinin süresi doldu." } }, 410);
     }
+    if (isOwner(prepared.role)) {
+      return c.json({
+        ok: false,
+        error: {
+          code: "OWNER_SESSION_REFRESH_DISABLED",
+          message: "Uygulama sahibi için hazırlanmış otomatik oturum yenilemesi kullanılamaz. Yeniden giriş yapın.",
+        },
+      }, 403);
+    }
     if (!safeEqual(text(prepared.refreshSecretHash), await sha256(refreshSecret))) {
       return c.json({ ok: false, error: { code: "REFRESH_SECRET_INVALID", message: "Oturum yenileme onayı geçersiz." } }, 401);
     }
