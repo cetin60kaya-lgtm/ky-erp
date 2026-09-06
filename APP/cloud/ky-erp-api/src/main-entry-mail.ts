@@ -47,8 +47,13 @@ export default {
     const url=new URL(request.url),path=url.pathname,method=request.method.toUpperCase();
     const mailPath=path.startsWith("/api/mail/");
     const googleCallback=path==="/api/auth/mail/oauth/google/callback";
-    if(mailPath||googleCallback) await ensureMailCommunicationCore0050(env.DB);
-    if(mailPath) await ensureMailWorkspaceUx(env.DB);
+    try{
+      if(mailPath||googleCallback) await ensureMailCommunicationCore0050(env.DB);
+      if(mailPath) await ensureMailWorkspaceUx(env.DB);
+    }catch(error){
+      const message=error instanceof Error?error.message:String(error);
+      return new Response(JSON.stringify({ok:false,error:{code:"MAIL_SCHEMA_NOT_READY",message:"Mail veritabanı şeması hazır değil. 0050/0051 migrationları yedekli ve hedefli olarak uygulanmalıdır.",details:message}}),{status:503,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"}});
+    }
 
     if(path==="/api/mail/providers"&&method==="GET")return overlay.fetch(request,env,ctx);
     if(path==="/api/mail/accounts/request"&&method==="POST"){
