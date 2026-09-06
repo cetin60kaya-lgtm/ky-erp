@@ -25,7 +25,7 @@ function mapCompany(row = {}) {
 function emptyForm(){ return { id:"", name:"", slug:"", note:"", isActive:true }; }
 function dateText(value){if(!value)return"-";const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleString("tr-TR")}
 function sqlName(row,slug){const safe=String(row?.mainCompanySlug||slug||"firma").replace(/[^a-zA-Z0-9._-]+/g,"-");const date=String(row?.createdAt||row?.completedAt||new Date().toISOString()).slice(0,10);return `KYERP-${safe}-${date}.sql`}
-const ROLE_LABELS={COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",DENETIM:"Denetim",VIEWER:"Özel Yetkili",SUPER_ADMIN:"Uygulama Sahibi",ADMIN:"Uygulama Sahibi"};
+const ROLE_LABELS={COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",DENETIM:"Denetim",VIEWER:"Özel Yetkili",SUPER_ADMIN:"Süper Yönetici",ADMIN:"Süper Yönetici"};
 const ROLE_ORDER={COMPANY_ADMIN:0,MUHASEBE:1,IK:2,DESEN:3,BOYAHANE:4,IMALAT:5,DENETIM:6,VIEWER:7,SUPER_ADMIN:8,ADMIN:8};
 function roleOf(value){return String(value||"VIEWER").toUpperCase().replace(/İ/g,"I")}
 function userCompanySlug(row){return String(row?.mainCompanySlug||row?.main_company_slug||"").trim()}
