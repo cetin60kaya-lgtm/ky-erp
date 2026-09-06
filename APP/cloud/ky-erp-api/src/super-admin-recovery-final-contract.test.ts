@@ -47,3 +47,12 @@ test("saved recovery questions are masked until explicitly revealed", () => {
   assert.match(source, /Cevabı girmeden önce sorunun tamamını görmek için açın/);
   assert.match(source, /disabled=\{saved && !questionVisible\}/);
 });
+
+
+test("accounting archive source remains parseable after Worker hotfix", () => {
+  const source = read("./accounting-document-archive.ts");
+  assert.doesNotMatch(source, /\\`/);
+  assert.doesNotMatch(source, /\\\$\{/);
+  assert.match(source, /archiveFileToCloudConnection/);
+  assert.match(source, /processCloudArchiveJobs/);
+});
