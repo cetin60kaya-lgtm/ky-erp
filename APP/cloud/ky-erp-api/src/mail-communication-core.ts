@@ -63,6 +63,17 @@ export async function openMailCredential(c:any,payload:{ciphertext:string;nonce:
   return new TextDecoder().decode(plain);
 }
 
+function providerRuntimeReady(c:any, provider:unknown){
+  const normalized=normalizeMailProvider(provider);
+  const vaultReady=Boolean(text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY));
+  if(normalized==="MICROSOFT_365"){
+    const clientId=text(c.env.MICROSOFT_MAIL_CLIENT_ID || c.env.MICROSOFT_GRAPH_CLIENT_ID);
+    const clientSecret=text(c.env.MICROSOFT_MAIL_CLIENT_SECRET || c.env.MICROSOFT_GRAPH_CLIENT_SECRET);
+    return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Microsoft Graph OAuth production ayarı eksik."};
+  }
+  return {configured:false,adapterReady:false,reason:"Bu sağlayıcının KY ERP bağlantı adapterı henüz aktif değil."};
+}
+
 function accountType(v:unknown){const n=upper(v||"PERSONAL");return ["PERSONAL","SHARED","DEPARTMENT"].includes(n)?n:"";}
 function dualApprovalRequired(type:string,department:unknown){
   const d=upper(department).replace(/[\s-]+/g,"_");
@@ -91,7 +102,7 @@ export function registerMailCommunicationRoutes(app:any){
   app.get("/api/mail/providers",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;
     if(!hasMailPermission(a.current))return c.json(jsonError("MAIL_FORBIDDEN","Mail Merkezi görüntüleme yetkiniz yok."),403);
-    return c.json({ok:true,data:{providers:mailProviderRegistry(),credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
+    return c.json({ok:true,data:{providers:mailProviderRegistry().map((row:any)=>({...row,...providerRuntimeReady(c,row.provider)})),credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
   });
 
   app.get("/api/mail/overview",async(c:any)=>{
@@ -121,6 +132,8 @@ export function registerMailCommunicationRoutes(app:any){
     if(!hasMailPermission(current,"canCreate"))return c.json(jsonError("MAIL_CREATE_FORBIDDEN","Mail hesabı ekleme talebi oluşturma yetkiniz yok."),403);
     const provider=normalizeMailProvider(body.providerType||body.provider),type=accountType(body.accountType),email=text(body.emailAddress||body.email).toLowerCase();
     if(!provider)return c.json(jsonError("PROVIDER_INVALID","Desteklenen bir mail sağlayıcısı seçin."),422);
+    const runtime=providerRuntimeReady(c,provider);
+    if(!runtime.adapterReady||!runtime.configured)return c.json(jsonError("MAIL_PROVIDER_NOT_READY",runtime.reason||"Bu mail sağlayıcısı henüz bağlantıya hazır değil.",{provider,configured:runtime.configured,adapterReady:runtime.adapterReady}),503);
     if(!type)return c.json(jsonError("ACCOUNT_TYPE_INVALID","Mail hesap türü geçersiz."),422);
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return c.json(jsonError("EMAIL_INVALID","Geçerli bir iş e-posta adresi girin."),422);
     const existing=await c.env.DB.prepare("SELECT id,status,approval_status FROM mail_accounts WHERE main_company_slug=? AND provider_type=? AND LOWER(email_address)=LOWER(?) LIMIT 1").bind(tenant,provider,email).first<AnyRow>();
