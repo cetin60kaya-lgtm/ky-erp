@@ -367,6 +367,32 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   }, [selectedMessage?.id, activeTab, selectedFolderId]);
 
   useEffect(() => {
+    let cancelled = false;
+    async function hydrateInlineImages() {
+      const html = String(selectedMessage?.body_html || selectedMessage?.bodyHtml || "");
+      if (!html) { setRenderedHtml(""); return; }
+      let hydrated = html;
+      const inlineRows = attachments.filter((row) => attachmentPreviewKind(row) === "image" && String(row.content_id || row.contentId || "").trim());
+      for (const attachment of inlineRows) {
+        if (cancelled) return;
+        try {
+          const cid = String(attachment.content_id || attachment.contentId || "").replace(/^<|>$/g, "").trim();
+          if (!cid) continue;
+          const matcher = new RegExp("cid:\\s*" + regexEscape(cid), "gi");
+          if (!matcher.test(hydrated)) continue;
+          matcher.lastIndex = 0;
+          const blob = await getMailAttachmentBlob(selectedMessage.id, attachment.id);
+          const dataUrl = await blobToDataUrl(blob);
+          hydrated = hydrated.replace(matcher, dataUrl);
+        } catch {}
+      }
+      if (!cancelled) setRenderedHtml(hydrated);
+    }
+    hydrateInlineImages();
+    return () => { cancelled = true; };
+  }, [selectedMessage?.id, selectedMessage?.body_html, selectedMessage?.bodyHtml, attachments]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mailConnected") === "1") {
       const provider = String(params.get("mailProvider") || "").toUpperCase();
@@ -398,11 +424,13 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         }
         const params = selectedFolderId
           ? { folderId: selectedFolderId, take: 200 }
-          : activeTab === "mail-sabitlenen"
-            ? { pinned: 1, take: 200 }
-            : activeTab === "mail-yanit-bekleyen"
-              ? { awaitingReply: 1, take: 120 }
-              : { direction: activeTab === "mail-gonderilen" ? "OUTGOING" : "INCOMING", take: 120 };
+          : activeTab === "mail-gelen" && defaultInboxFolderId
+            ? { folderId: defaultInboxFolderId, take: 200 }
+            : activeTab === "mail-sabitlenen"
+              ? { pinned: 1, take: 200 }
+              : activeTab === "mail-yanit-bekleyen"
+                ? { awaitingReply: 1, take: 120 }
+                : { direction: activeTab === "mail-gonderilen" ? "OUTGOING" : "INCOMING", take: 120 };
         const rows = await listMailMessages(selectedAccountId, params);
         if (!cancelled) {
           const list = safeArray(rows);
@@ -415,7 +443,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
     loadMailbox();
     return () => { cancelled = true; };
-  }, [activeTab, isMail, selectedAccountId, selectedFolderId, mailboxRefresh]);
+  }, [activeTab, isMail, selectedAccountId, selectedFolderId, defaultInboxFolderId, mailboxRefresh]);
 
   function beginPaneResize(pane, event) {
     if (window.innerWidth <= 1100 || !mailLayoutRef.current) return;
