@@ -10,6 +10,7 @@ import {
   requestMailAccount,
   searchCommunicationFiles,
   sendMailDraft,
+  startGoogleMailOAuth,
   startMicrosoftMailOAuth,
   syncMailAccount,
 } from "../../services/mailApi";
@@ -63,8 +64,9 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     displayName: "",
     departmentCode: "",
   });
-  const [draftForm, setDraftForm] = useState({ to: "", subject: "", bodyText: "" });
+  const [draftForm, setDraftForm] = useState({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
   const [composeOpen, setComposeOpen] = useState(false);
+  const [messageSearch, setMessageSearch] = useState("");
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const selectedAccount = useMemo(
@@ -92,11 +94,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       setSelectedAccountId((current) => rows.some((row) => String(row.id) === String(current)) ? current : String(rows[0]?.id || ""));
     }
     if (results[3].status === "fulfilled") setFiles(safeArray(results[3].value));
-    const failed = results.filter((row) => row.status === "rejected");
+    const sourceNames = ["Mail özeti", "Sağlayıcı durumu", "Posta kutuları", "Firma dosyaları"];
+    const failedSources = results
+      .map((row, index) => row.status === "rejected" ? sourceNames[index] : "")
+      .filter(Boolean);
     const schemaPending = results[0].status === "fulfilled" && results[0].value?.schemaReady === false;
     setNotice(schemaPending
       ? "Mail Core veritabanı kurulumu bekliyor. Ekran önizleme modunda; mail bağlantısı ve gönderim 0050 tamamlanınca açılacak."
-      : failed.length ? "Bazı kaynaklar henüz hazır değil; erişilebilen bilgiler gösteriliyor." : "");
+      : failedSources.length ? `Hazır olmayan kaynak: ${failedSources.join(", ")}. Diğer bilgiler gösteriliyor.` : "");
     setLoading(false);
   }, []);
 
@@ -167,11 +172,16 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     try {
       await createMailDraft({
         accountId: selectedAccountId,
+        replyToMessageId: draftForm.replyToMessageId || undefined,
         subject: draftForm.subject,
         bodyText: draftForm.bodyText,
-        recipients: { to: draftForm.to.split(/[;,]/).map((email) => email.trim()).filter(Boolean) },
+        recipients: {
+          to: draftForm.to.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
+          cc: draftForm.cc.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
+          bcc: draftForm.bcc.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
+        },
       });
-      setDraftForm({ to: "", subject: "", bodyText: "" });
+      setDraftForm({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
       setComposeOpen(false);
       setNotice("Taslak kaydedildi. Otomatik gönderim yapılmadı.");
       if (activeTab === "mail-taslaklar") {
@@ -185,17 +195,42 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
   }
 
-  async function connectMicrosoft() {
-    if (!selectedAccountId) return;
+  async function connectSelectedAccount() {
+    if (!selectedAccountId || !selectedAccount) return;
+    const provider = String(selectedAccount.provider_type || selectedAccount.providerType || "").toUpperCase();
+    const startOAuth = provider === "GMAIL"
+      ? startGoogleMailOAuth
+      : provider === "MICROSOFT_365"
+        ? startMicrosoftMailOAuth
+        : null;
+    if (!startOAuth) {
+      setNotice("Hata: Bu posta sağlayıcısı için etkileşimli bağlantı henüz aktif değil.");
+      return;
+    }
     setLoading(true);
     try {
-      const result = await startMicrosoftMailOAuth(selectedAccountId);
-      if (!result?.authorizeUrl) throw new Error("Microsoft OAuth adresi alınamadı.");
+      const result = await startOAuth(selectedAccountId);
+      if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
       window.location.assign(result.authorizeUrl);
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Microsoft hesabı bağlanamadı."}`);
+      setNotice(`Hata: ${error?.message || "Mail hesabı bağlantısı başlatılamadı."}`);
       setLoading(false);
     }
+  }
+
+  function openReply() {
+    if (!selectedMessage) return;
+    const sender = selectedMessage.sender_email || selectedMessage.senderEmail || "";
+    const subject = String(selectedMessage.subject || "").trim();
+    setDraftForm({
+      to: sender,
+      cc: "",
+      bcc: "",
+      subject: /^re:/i.test(subject) ? subject : `Re: ${subject || "(Konu yok)"}`,
+      bodyText: "",
+      replyToMessageId: selectedMessage.id || "",
+    });
+    setComposeOpen(true);
   }
 
   async function syncSelectedMailbox() {
@@ -242,7 +277,17 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   }
 
   const visibleDrafts = activeTab === "mail-taslaklar" ? drafts : [];
-  const messageRows = activeTab === "mail-taslaklar" ? visibleDrafts : messages;
+  const baseMessageRows = activeTab === "mail-taslaklar" ? visibleDrafts : messages;
+  const messageNeedle = messageSearch.trim().toLocaleLowerCase("tr-TR");
+  const messageRows = messageNeedle
+    ? baseMessageRows.filter((row) => [
+        row.sender_name,
+        row.sender_email,
+        row.subject,
+        row.body_text,
+        row.bodyText,
+      ].some((value) => String(value || "").toLocaleLowerCase("tr-TR").includes(messageNeedle)))
+    : baseMessageRows;
 
   return (
     <div className="comm-page">
@@ -261,15 +306,16 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
       {notice ? <div className={`comm-notice ${notice.startsWith("Hata:") ? "error" : ""}`}>{notice}</div> : null}
 
-      <section className="comm-metrics">
-        <div><span>Okunmamış Mail</span><b>{overview?.unreadCount ?? 0}</b></div>
-        <div><span>Aktif Mail Hesabı</span><b>{overview?.activeAccountCount ?? 0}</b></div>
-        <div><span>Hesap Onayı Bekleyen</span><b>{overview?.pendingAccountCount ?? 0}</b></div>
-        <div><span>Firma Dosyası</span><b>{files.length}</b></div>
+      <section className="comm-metrics" aria-label="Mail merkezi durum özeti">
+        <div><span>Okunmamış</span><b>{overview?.unreadCount ?? 0}</b></div>
+        <div><span>Aktif hesap</span><b>{overview?.activeAccountCount ?? 0}</b></div>
+        <div><span>Onay bekleyen</span><b>{overview?.pendingAccountCount ?? 0}</b></div>
+        <div><span>Firma dosyası</span><b>{files.length}</b></div>
       </section>
 
       {requestOpen ? (
-        <section className="comm-request-card">
+        <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRequestOpen(false); }}>
+        <section className="comm-request-card comm-modal" role="dialog" aria-modal="true" aria-label="Mail hesabı ekleme talebi">
           <div className="comm-section-title"><div><h2>Mail Hesabı Ekleme Talebi</h2><p>Bağlantı onaydan önce aktif olmaz. Muhasebe, e-Belge, ortak ve bölüm posta kutuları çift onaya düşer.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
           <form onSubmit={submitAccountRequest}>
             <label>Sağlayıcı<select value={requestForm.providerType} onChange={(e) => setRequestForm((v) => ({ ...v, providerType: e.target.value }))}>
@@ -288,19 +334,24 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">{selectedProviderRuntime.reason || "Bu sağlayıcı henüz bağlantıya hazır değil."}</div> : null}
           </form>
         </section>
+        </div>
       ) : null}
 
       {composeOpen ? (
-        <section className="comm-compose">
+        <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setComposeOpen(false); }}>
+        <section className="comm-compose comm-modal comm-compose-modal" role="dialog" aria-modal="true" aria-label="Yeni mail taslağı">
           <div className="comm-section-title"><div><h2>Yeni Mail Taslağı</h2><p>Bu aşamada yalnız taslak kaydedilir; AI veya ekran otomatik gönderim yapmaz.</p></div><button type="button" className="secondary" onClick={() => setComposeOpen(false)}>Kapat</button></div>
           <form onSubmit={submitDraft}>
             <label>Kimden<select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}>{accounts.map((row) => <option key={row.id} value={row.id}>{row.display_name || row.displayName || row.email_address || row.emailAddress}</option>)}</select></label>
             <label>Kime<input value={draftForm.to} onChange={(e) => setDraftForm((v) => ({ ...v, to: e.target.value }))} placeholder="mail@firma.com"/></label>
+            <label>CC<input value={draftForm.cc} onChange={(e) => setDraftForm((v) => ({ ...v, cc: e.target.value }))} placeholder="opsiyonel"/></label>
+            <label>BCC<input value={draftForm.bcc} onChange={(e) => setDraftForm((v) => ({ ...v, bcc: e.target.value }))} placeholder="opsiyonel"/></label>
             <label className="wide">Konu<input value={draftForm.subject} onChange={(e) => setDraftForm((v) => ({ ...v, subject: e.target.value }))}/></label>
-            <label className="wide">Mesaj<textarea rows={7} value={draftForm.bodyText} onChange={(e) => setDraftForm((v) => ({ ...v, bodyText: e.target.value }))}/></label>
+            <label className="wide">Mesaj<textarea rows={10} value={draftForm.bodyText} onChange={(e) => setDraftForm((v) => ({ ...v, bodyText: e.target.value }))}/></label>
             <div className="wide comm-compose-actions"><button type="submit" disabled={loading}>Taslağı Kaydet</button><span>Gönderim yalnız açık kullanıcı işlemiyle yapılır; otomatik gönderim kapalıdır.</span></div>
           </form>
         </section>
+        </div>
       ) : null}
 
       {isMail ? (
@@ -316,8 +367,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             )) : <div className="comm-empty">Henüz atanmış posta kutusu yok.<br/>“+ Mail Hesabı” ile talep oluşturabilirsiniz.</div>}
             {selectedAccount ? <div className="comm-account-tools">
               <span><b>{statusLabel(selectedAccount.status)}</b> · {providerLabel(selectedAccount.provider_type || selectedAccount.providerType)}</span>
-              {String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "MICROSOFT_365" && String(selectedAccount.status || "").toUpperCase() !== "ACTIVE"
-                ? <button type="button" onClick={connectMicrosoft} disabled={loading}>Microsoft Hesabını Bağla</button>
+              {["MICROSOFT_365", "GMAIL"].includes(String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase()) && String(selectedAccount.status || "").toUpperCase() !== "ACTIVE"
+                ? <button type="button" onClick={connectSelectedAccount} disabled={loading}>{String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "GMAIL" ? "Google Hesabını Bağla" : "Microsoft Hesabını Bağla"}</button>
                 : null}
               {String(selectedAccount.status || "").toUpperCase() === "ACTIVE"
                 ? <button type="button" className="secondary" onClick={syncSelectedMailbox} disabled={loading}>Postayı Senkronize Et</button>
@@ -326,7 +377,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           </aside>
 
           <main className="comm-message-list">
-            <div className="comm-pane-title"><b>{activeTab === "mail-gonderilen" ? "Gönderilenler" : activeTab === "mail-taslaklar" ? "Taslaklar" : activeTab === "mail-yanit-bekleyen" ? "Yanıt Bekleyenler" : activeTab === "mail-sablonlar" ? "Şablonlar" : "Gelen Kutusu"}</b><small>{messageRows.length} kayıt</small></div>
+            <div className="comm-pane-title comm-list-toolbar"><b>{activeTab === "mail-gonderilen" ? "Gönderilenler" : activeTab === "mail-taslaklar" ? "Taslaklar" : activeTab === "mail-yanit-bekleyen" ? "Yanıt Bekleyenler" : activeTab === "mail-sablonlar" ? "Şablonlar" : "Gelen Kutusu"}</b><div><input className="comm-message-search" type="search" value={messageSearch} onChange={(e) => setMessageSearch(e.target.value)} placeholder="Mail ara"/><small>{messageRows.length} kayıt</small></div></div>
             {activeTab === "mail-sablonlar" ? (
               <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
@@ -349,6 +400,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
               <h2>{selectedMessage.subject || "(Konu yok)"}</h2>
               <p><b>Gönderen:</b> {selectedMessage.sender_name || selectedMessage.sender_email || "—"}</p>
               <p><b>Tarih:</b> {dateText(selectedMessage.received_at || selectedMessage.sent_at)}</p>
+              <div className="comm-preview-actions">
+                {activeTab !== "mail-gonderilen" ? <button type="button" onClick={openReply}>Yanıtla</button> : null}
+                <button type="button" className="secondary" onClick={() => setComposeOpen(true)}>Yeni Mail</button>
+              </div>
               <div className="comm-body">{selectedMessage.body_text || "Mail gövdesi henüz senkronize edilmemiş."}</div>
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Firma / cari / model / desen / fatura ilişkileri mail_relations üzerinden burada gösterilecek.</span><span>File Hub ekleri ikinci kez kopyalanmadan ilişkilendirilecek.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
