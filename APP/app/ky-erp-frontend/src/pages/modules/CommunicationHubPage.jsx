@@ -137,11 +137,13 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           }
           return;
         }
-        const direction = activeTab === "mail-gonderilen" ? "OUTGOING" : "INCOMING";
-        const rows = await listMailMessages(selectedAccountId, { direction, take: 120 });
+        const params = activeTab === "mail-yanit-bekleyen"
+          ? { awaitingReply: 1, take: 120 }
+          : { direction: activeTab === "mail-gonderilen" ? "OUTGOING" : "INCOMING", take: 120 };
+        const rows = await listMailMessages(selectedAccountId, params);
         if (!cancelled) {
           const list = safeArray(rows);
-          setMessages(activeTab === "mail-yanit-bekleyen" ? list.filter((row) => row.is_flagged || row.isFlagged) : list);
+          setMessages(list);
           setSelectedMessage((current) => list.find((row) => row.id === current?.id) || list[0] || null);
         }
       } catch (error) {
@@ -409,7 +411,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className="secondary" onClick={() => setComposeOpen(true)}>Yeni Mail</button>
               </div>
               <div className="comm-body">{selectedMessage.body_text || "Mail gövdesi henüz senkronize edilmemiş."}</div>
-              <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Firma / cari / model / desen / fatura ilişkileri mail_relations üzerinden burada gösterilecek.</span><span>File Hub ekleri ikinci kez kopyalanmadan ilişkilendirilecek.</span></div>
+              <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
           </aside>
         </section>
