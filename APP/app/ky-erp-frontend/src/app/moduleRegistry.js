@@ -6,23 +6,24 @@ import {
 const DEPOLAMA_MODULE = {
   key: "depolama",
   permissionKey: "STORAGE_ADMIN",
-  label: "Depolama",
+  label: "Bağlantılar & Depolama",
   icon: "dosya",
   groups: [
     {
-      label: "Depolama Merkezi",
+      label: "Bağlantılar",
       tabs: [
         ["depolama-genel", "Genel Bakış", "dashboard"],
-        ["depolama-kaynaklar", "Servisler", "dosya"],
+        ["depolama-kaynaklar", "Dosya Servisleri", "dosya"],
+        ["depolama-mail", "E-posta Hesapları", "eposta"],
         ["depolama-atamalar", "Bölüm / Dosya Atamaları", "file-check"],
       ],
     },
     {
-      label: "Dosya ve Senkronizasyon",
+      label: "Dosya Sistemi",
       tabs: [
         ["depolama-dosyalar", "Dosya İndeksi", "dosya"],
-        ["depolama-senkronizasyon", "Senkronizasyon", "ayarlar"],
-        ["depolama-yedekleme", "Yedekleme / Loglar", "raporlar"],
+        ["depolama-senkronizasyon", "Senkronizasyon & Agent", "ayarlar"],
+        ["depolama-yedekleme", "Yedekleme & Loglar", "raporlar"],
       ],
     },
   ],
@@ -31,7 +32,7 @@ const DEPOLAMA_MODULE = {
 const ILETISIM_MODULE = {
   key: "iletisim",
   permissionKey: "MAIL",
-  label: "İletişim & Dosyalar",
+  label: "Mail & Dosyalar",
   icon: "eposta",
   groups: [
     {
@@ -45,10 +46,10 @@ const ILETISIM_MODULE = {
       ],
     },
     {
-      label: "Drive / Dosyalar",
+      label: "Dosyalar",
       tabs: [
         ["drive-dosyalar", "Dosyalar", "dosya"],
-        ["drive-son-kullanilanlar", "Son Kullanılanlar", "dosya"],
+        ["drive-son-kullanilanlar", "Son Kullanılanlar", "takvim"],
         ["drive-firma-dosyalari", "Firma Dosyaları", "dosya"],
       ],
     },
@@ -194,6 +195,10 @@ export const MODULE_ROUTE_ALIASES = {
     baglantilar: "depolama-kaynaklar",
     servisler: "depolama-kaynaklar",
     kaynaklar: "depolama-kaynaklar",
+    mail: "depolama-mail",
+    email: "depolama-mail",
+    eposta: "depolama-mail",
+    mailhesaplari: "depolama-mail",
     atamalar: "depolama-atamalar",
     yonlendirmeler: "depolama-atamalar",
     dosyalar: "depolama-dosyalar",
