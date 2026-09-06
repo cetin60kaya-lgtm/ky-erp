@@ -162,7 +162,7 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
 test("forced refresh waits for an active read before starting the canonical reread", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /const load = useCallback\(async \(\{ force = false \} = \{\}\) =>/);
+  assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false \} = \{\}\) =>/);
   assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
   assert.match(page, /await activeRequest\.promise/);
   assert.match(page, /await load\(\{ force: true \}\)/);
@@ -202,4 +202,60 @@ test("SGK status no longer forces bank payment or legacy fixed bank amount", () 
   assert.doesNotMatch(cloud, /enteredBank \|\| 28075\.5/);
   assert.doesNotMatch(cloud, /sgk === "YOK" \|\| cashOnly/);
   assert.match(cloud, /const bank = cashOnly \? 0 : bankOnly \? total : Math\.min\(total, enteredBank\)/);
+});
+
+
+test("IK payroll period persists and new periods require explicit preparation", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /kyerp\.ik\.selected-period\.v2/);
+  assert.match(page, /kyerp\.ik\.prepared-periods\.v2/);
+  assert.match(page, /function previousPeriod\(\)/);
+  assert.match(page, /const initial = readStoredIkPeriod\(companyId\)/);
+  assert.match(page, /const periodPrepared = preparedPeriods\.includes\(period\)/);
+  assert.match(page, /Bilgileri Hazırla/);
+  assert.match(page, /preparePeriod/);
+  assert.match(page, /includePayroll = prepare \|\| periodPrepared/);
+  assert.match(page, /periodPrepared \? employees\.map/);
+});
+
+test("IK overview is functional and reads today's PDKS live dashboard", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /getPdksLiveDashboard/);
+  assert.match(page, /Bugün kart basan/);
+  assert.match(page, /Bugün gelmeyen/);
+  assert.match(page, /Eksik basım/);
+  assert.match(page, /Bugün yıllık izinde/);
+  assert.match(page, /Akıllı Kontrol Merkezi/);
+  assert.match(page, /Hızlı İşlemler/);
+  assert.match(page, /Mesai Ekle/);
+  assert.match(page, /Avans Ekle/);
+  assert.match(page, /Kesinti Ekle/);
+  assert.match(page, /Son Bordro Kontrolü/);
+  assert.match(page, /Tek Kişi Fişi/);
+});
+
+test("final payroll control edits every amount and writes movement deltas back to source", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const api = frontend("services/ikApi.js");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /Modal title="Son Bordro Kontrolü"/);
+  for (const label of ["Maaş", "Yol", "EK / İlave Ödeme", "Mesai Toplamı", "Avans", "Özel Kesinti", "İcra / Haciz", "Bankadan Ödenecek", "Elden Ödenecek"]) {
+    assert.ok(page.includes(label), `Eksik son bordro alanı: ${label}`);
+  }
+  assert.match(page, /saveIkAdvancedFinalPayrollControl/);
+  assert.match(page, /Kaydet \+ Fişi Aç/);
+  assert.match(api, /\/ik\/advanced\/payroll\/final-control/);
+
+  assert.match(cloud, /async function saveAdvancedPayrollFinalControl/);
+  assert.match(cloud, /Mesai - Son Bordro Düzeltme/);
+  assert.match(cloud, /Avans - Son Bordro Düzeltme/);
+  assert.match(cloud, /Ozel kesinti - Son Bordro Düzeltme/);
+  assert.match(cloud, /Son bordro kontrolü düzeltmesi/);
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+  assert.match(cloud, /action: "FINAL_CONTROL"/);
+  assert.match(cloud, /status=excluded\.status/);
+  assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
 });
