@@ -17,9 +17,9 @@ test("mail broker normalizes supported providers and keeps native APIs first-cla
 });
 
 test("0050 mail schema is additive, tenant-scoped and send-idempotent", () => {
-  const sql = read("../migrations/0046_mail_communication_core.sql");
+  const sql = read("../migrations/0050_mail_communication_core.sql");
   for (const table of [
-    "mail_provider_configs", "mail_accounts", "mail_account_credentials", "mail_account_members",
+    "mail_provider_configs", "mail_accounts", "mail_account_credentials", "mail_oauth_states", "mail_account_members",
     "mail_folders", "mail_threads", "mail_messages", "mail_recipients", "mail_attachments",
     "mail_relations", "mail_sync_cursors", "mail_drafts", "mail_send_jobs", "mail_templates",
     "mail_approval_requests", "mail_approval_steps", "mail_ai_drafts", "mail_audit_log",
@@ -53,6 +53,29 @@ test("worker and frontend expose the communication center without replacing stor
   assert.match(main, /registerMailCommunicationRoutes\(app\)/);
   assert.match(registry, /key: "iletisim"/);
   assert.match(registry, /permissionKey: "MAIL"/);
-  assert.match(registry, /label: "İletişim & Dosyalar"/);
+  assert.match(registry, /label: "Mail & Dosyalar"/);
   assert.match(registry, /const DEPOLAMA_MODULE/);
+});
+
+
+test("Microsoft Graph mail adapter reuses File Hub OAuth app and protects send retries", () => {
+  const source = read("./mail-microsoft-graph.ts");
+  assert.match(source, /MICROSOFT_GRAPH_CLIENT_ID/);
+  assert.match(source, /MICROSOFT_GRAPH_CLIENT_SECRET/);
+  assert.match(source, /Mail\.ReadWrite/);
+  assert.match(source, /Mail\.Send/);
+  assert.match(source, /code_challenge_method:"S256"/);
+  assert.match(source, /UNKNOWN_REVIEW_REQUIRED/);
+  assert.match(source, /providerAcceptanceId/);
+  assert.doesNotMatch(source, /delivered:true/);
+});
+
+test("connection navigation keeps daily Mail and admin connection settings separate", () => {
+  const registry = read("../../../app/ky-erp-frontend/src/app/moduleRegistry.js");
+  const storagePage = read("../../../app/ky-erp-frontend/src/pages/modules/DepolamaPage.jsx");
+  assert.match(registry, /label: "Mail & Dosyalar"/);
+  assert.match(registry, /label: "Bağlantılar & Depolama"/);
+  assert.match(registry, /\["depolama-mail", "E-posta Hesapları"/);
+  assert.match(registry, /\["depolama-kaynaklar", "Dosya Servisleri"/);
+  assert.match(storagePage, /AdminMailConnections/);
 });
