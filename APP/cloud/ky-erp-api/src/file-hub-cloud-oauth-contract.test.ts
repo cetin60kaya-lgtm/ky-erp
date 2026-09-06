@@ -10,6 +10,8 @@ const migration = readFileSync(resolve(here, "../migrations/0044_file_hub_cloud_
 const cloud = read("file-hub-cloud-oauth.ts");
 const adminStorage = read("admin-storage-cloud.ts");
 const main = read("main.ts");
+const archive = read("accounting-document-archive.ts");
+const eBelge = read("e-belge-center-cloud.ts");
 const release = readFileSync(resolve(here, "../../../../.github/workflows/production-release.yml"), "utf8");
 
 test("File Hub OAuth schema is additive and encrypted-token based", () => {
@@ -59,4 +61,37 @@ test("production release backs up D1 before targeted 0044 and keeps OAuth provid
   assert.match(release, /GitHub OAuth bilgisi yarim tanimli/);
   assert.match(release, /production OAuth binding cifti tutarsiz/);
   assert.match(release, /file_hub_cloud_connection_accounts/);
+});
+
+
+test("direct cloud archive writer uses idempotent provider paths", () => {
+  assert.match(cloud, /archiveFileToCloudConnection/);
+  assert.match(cloud, /uploadType=resumable/);
+  assert.match(cloud, /googleExistingFile/);
+  assert.match(cloud, /method=updateId\?"PATCH":"POST"/);
+  assert.match(cloud, /microsoftContentUrl/);
+  assert.match(cloud, /method:"PUT"/);
+});
+
+test("e-Belge archive queue supports CLOUD_API and keeps AGENT path intact", () => {
+  assert.match(archive, /upper\(c\.sync_mode\)='CLOUD_API'/);
+  assert.match(archive, /processCloudArchiveJobs/);
+  assert.match(archive, /archiveFileToCloudConnection/);
+  assert.match(archive, /CANONICAL_CLOUD_ARCHIVED/);
+  assert.match(archive, /status='COMPLETED'/);
+  assert.match(archive, /sync_mode\)='AGENT'/);
+});
+
+test("final e-Belge approval schedules cloud archive without weakening accounting approval", () => {
+  assert.match(eBelge, /processCloudArchiveJobs/);
+  assert.match(eBelge, /postAccountingDocument/);
+  assert.match(eBelge, /cloudArchiveQueued:true/);
+  assert.match(eBelge, /executionCtx\.waitUntil/);
+});
+
+test("production release gates canonical report migration after D1 backup", () => {
+  const backup = release.indexOf("Canli D1 tam yedegini al");
+  const migration = release.indexOf("0046 canonical Muhasebe rapor + gider hafizasi semasi");
+  assert.ok(backup >= 0 && migration > backup);
+  assert.match(release, /accounting_report_categories accounting_report_overrides accounting_expense_rules/);
 });
