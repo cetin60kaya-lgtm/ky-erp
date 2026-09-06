@@ -256,6 +256,20 @@ jobs:
             exit 1
           fi
 
+          echo "0045 IK emekli + aylik SGK uyum semasi kontrol ediliyor..."
+          test -f migrations/0045_hr_retired_monthly_sgk_compliance.sql
+          hr_compliance_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('ik_person_hr_profiles','ik_person_monthly_compliance');" --json)"
+          hr_compliance_tables="$(jq -r '.[0].results[0].n // -1' <<<"$hr_compliance_state")"
+          if [ "$hr_compliance_tables" = "0" ]; then
+            echo "0045 semasi yok; tam D1 yedegi sonrasi additive migration uygulanacak."
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0045_hr_retired_monthly_sgk_compliance.sql
+          elif [ "$hr_compliance_tables" = "2" ]; then
+            echo "0045 semasi zaten tam; tekrar uygulanmiyor."
+          else
+            echo "GUVENLIK DURDURMASI: 0045 kismi sema bulundu (tables=$hr_compliance_tables)." >&2
+            exit 1
+          fi
+
       - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
@@ -271,6 +285,7 @@ jobs:
             accounting_ledger_entries accounting_extraction_profiles accounting_bank_import_batches
             accounting_bank_import_rows accounting_document_archive_jobs
             ik_pdks_devices ik_pdks_device_sync_logs
+            ik_person_hr_profiles ik_person_monthly_compliance
             company_billing_profiles company_billing_ledger
           )
           triggers=(trg_file_hub_outgoing_package_teammates trg_file_hub_primary_location_failover trg_accounting_documents_enqueue_archive)
@@ -292,6 +307,8 @@ jobs:
           jq -e '.[0].results[0].n == 4' <<<"$agent" >/dev/null || { echo "File Hub tenant agent credential semasi eksik" >&2; exit 1; }
           fibe="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('companies') WHERE name IN ('fibe_enabled','fibe_rate','fibe_start_date','fibe_opening_accrual','fibe_opening_paid','fibe_note')) AS company_cols, (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('accounting_fibe_movements','accounting_check_settlements')) AS fibe_tables;" --json)"
           jq -e '.[0].results[0].company_cols == 6 and .[0].results[0].fibe_tables == 2' <<<"$fibe" >/dev/null || { echo "FIBE/hizli muhasebe 0040 semasi eksik" >&2; exit 1; }
+          hr_compliance="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('ik_person_hr_profiles') WHERE name IN ('employee_id','main_company_id','personnel_status')) AS profile_cols, (SELECT COUNT(*) FROM pragma_table_info('ik_person_monthly_compliance') WHERE name IN ('main_company_id','employee_id','period','sgk_covered','sgk_days')) AS compliance_cols;" --json)"
+          jq -e '.[0].results[0].profile_cols == 3 and .[0].results[0].compliance_cols == 5' <<<"$hr_compliance" >/dev/null || { echo "IK emekli/aylik SGK 0045 semasi eksik" >&2; exit 1; }
 
       - name: Worker'i api.kyerp.net production'a dagit
         working-directory: APP/cloud/ky-erp-api
@@ -425,6 +442,7 @@ jobs:
           echo "File Hub tenant agent guvenligi: 0039 dogrulandi"
           echo "FIBE + hizli muhasebe: 0040 dogrulandi"
           echo "File Hub cloud OAuth: 0044 dogrulandi"
+          echo "IK emekli + aylik SGK uyum: 0045 dogrulandi"
           echo "RESEND_API_KEY: aktif Worker bindingi dogrulandi"
           echo "API: https://api.kyerp.net"
           echo "Site: https://kyerp.net"
