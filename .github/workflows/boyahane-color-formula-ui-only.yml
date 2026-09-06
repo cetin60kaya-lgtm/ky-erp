@@ -1,13 +1,9 @@
 name: KY ERP Boyahane Renk Bilesen UI Tamamlama
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "RELEASES/boyahane-color-formula-ui.json"
+  # KY ERP production/PR otomasyonu Cloudflare Git Integration uzerindedir.
+  # GitHub Actions yalniz acik manuel tanilama/test isteginde calistirilir.
   workflow_dispatch:
-
 permissions:
   contents: write
 
