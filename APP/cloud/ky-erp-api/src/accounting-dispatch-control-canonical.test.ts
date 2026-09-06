@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, "accounting-dispatch-control-canonical.ts"), "utf8");
 const main = fs.readFileSync(path.join(here, "main.ts"), "utf8");
 const supplierDocuments = fs.readFileSync(
-  path.join(here, "../../app/ky-erp-frontend/src/pages/modules/muhasebe/SupplierDocumentsWorkspace.jsx"),
+  path.join(here, "../../../app/ky-erp-frontend/src/pages/modules/muhasebe/SupplierDocumentsWorkspace.jsx"),
   "utf8",
 );
 
