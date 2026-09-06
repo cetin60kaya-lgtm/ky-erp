@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { listActiveSessions, listLoginApprovals, listUsers } from "../../services/adminApi";
+import { listMailApprovals } from "../../services/mailApi";
+import AdminMailApprovals from "./AdminMailApprovals";
 import "./AdminManagement.css";
 
 function rowsOf(value) {
@@ -14,15 +16,17 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
   const [users, setUsers] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [approvals, setApprovals] = useState([]);
+  const [mailApprovals, setMailApprovals] = useState([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Firma yönetim merkezi hazırlanıyor...");
 
   const load = useCallback(async () => {
     setBusy(true);
-    const jobs = await Promise.allSettled([listUsers(), listActiveSessions(), listLoginApprovals()]);
+    const jobs = await Promise.allSettled([listUsers(), listActiveSessions(), listLoginApprovals(), listMailApprovals()]);
     if (jobs[0].status === "fulfilled") setUsers(rowsOf(jobs[0].value));
     if (jobs[1].status === "fulfilled") setSessions(rowsOf(jobs[1].value));
     if (jobs[2].status === "fulfilled") setApprovals(rowsOf(jobs[2].value));
+    if (jobs[3].status === "fulfilled") setMailApprovals(rowsOf(jobs[3].value).filter((row) => String(row?.status || "").toUpperCase() === "PENDING"));
     const failed = jobs.filter((job) => job.status === "rejected").length;
     setMessage(failed ? `${failed} firma yönetim kontrolü yanıt vermedi.` : "Firma kullanıcı ve giriş kontrolleri güncel.");
     setBusy(false);
@@ -39,7 +43,8 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
     passiveUsers: users.filter((row) => row?.isActive === false).length,
     sessions: sessions.length,
     approvals: approvals.length,
-  }), [approvals.length, sessions.length, users]);
+    mailApprovals: mailApprovals.length,
+  }), [approvals.length, mailApprovals.length, sessions.length, users]);
 
   return (
     <div className="admpro-page">
@@ -58,7 +63,7 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
         <div className="admpro-stat"><span>Aktif Kullanıcı</span><strong>{metrics.activeUsers}</strong><small>{metrics.passiveUsers} pasif kullanıcı</small></div>
         <div className="admpro-stat"><span>Aktif Oturum</span><strong>{metrics.sessions}</strong><small>Yalnız bu firma</small></div>
         <div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{metrics.approvals}</strong><small>Karar bekleyen yeni cihaz girişi</small></div>
-        <div className="admpro-stat"><span>Firma Yetkisi</span><strong>ADMIN</strong><small>COMPANY_ADMIN</small></div>
+        <div className="admpro-stat"><span>Bekleyen Mail Onayı</span><strong>{metrics.mailApprovals}</strong><small>Mail hesabı bağlantı kararı</small></div>
       </section>
 
       <section className="admpro-grid-2">
@@ -70,6 +75,10 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
           <div className="admpro-card-head"><div><h3>Firma Kullanıcıları</h3><p>Kullanıcı ekleme, aktif/pasif, parola ve giriş güvenliği.</p></div><span className="admpro-badge ok">{users.length} kullanıcı</span></div>
           <div className="admpro-actions" style={{ justifyContent: "flex-start" }}><button type="button" onClick={() => window.location.assign("/admin/kullanicilar")}>Kullanıcıları Aç</button><button type="button" onClick={() => window.location.assign("/admin/ana-firma-ayarlar")}>Firma Yetkisini Aç</button></div>
         </div>
+      </section>
+
+      <section className="admpro-card admpro-decision-center">
+        <AdminMailApprovals compact onChanged={load} />
       </section>
     </div>
   );
