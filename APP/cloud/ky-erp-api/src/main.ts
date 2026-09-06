@@ -59,6 +59,7 @@ import { registerNotificationRoutes } from "./notifications-cloud";
 import { registerMailCommunicationRoutes } from "./mail-communication-core";
 import { registerMicrosoftMailRoutes } from "./mail-microsoft-graph";
 import { registerGoogleMailRoutes } from "./mail-google-gmail";
+import { registerApprovalCenterRoutes } from "./approval-center-cloud";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
@@ -179,6 +180,7 @@ registerNotificationRoutes(app);
 registerMailCommunicationRoutes(app);
 registerMicrosoftMailRoutes(app);
 registerGoogleMailRoutes(app);
+registerApprovalCenterRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobV2Routes(app);
