@@ -94,6 +94,17 @@ Kurallar:
 - POST/PATCH/PUT/DELETE isteklerini otomatik retry ederek mükerrer kayıt üretme.
 - Resmî İşNet belge/fatura gönderimi kullanıcı onayı olmadan yapılmaz.
 
+## Cloudflare AI standardı
+
+- Workers AI binding adı `AI` ve canonical model çağrısı Worker içinden yapılır.
+- Workers AI çağrıları AI Gateway üzerinden yürütülür; varsayılan gateway kimliği `default`.
+- ERP/tenant cevabı cache edilmez; AI Gateway request bazında `skipCache: true`.
+- Hassas ERP prompt/response payload'larının kalıcı AI Gateway loguna düşmesi varsayılan olarak kapalıdır (`AI_GATEWAY_COLLECT_LOGS=false`).
+- Tenant/permission guard AI çağrısından önce uygulanır.
+- AI kullanım/maliyet kaydı KY ERP'nin tenant bazlı billing ledger'ında tutulur.
+- AI write executor serbest SQL değildir; typed/allowlisted ve kullanıcı onaylı iş akışı dışında write yapılmaz.
+- Queues/Workflows/Vectorize/AI Search çekirdek production zorunluluğu değildir; somut iş akışı ve tenant/permission contractı olmadan sırf servis açık görünsün diye eklenmez.
+
 ## Auth standardı
 
 - Auth contract: `canonical-v3`.
