@@ -214,3 +214,23 @@ Bildirim sorusu gelirse:
 > **Sağ üst zil gerçek notification API'ye bağlıdır; sabit sayaç kullanılmaz. Bildirimler tenant + kullanıcı yetkisine göre Güvenlik, e-Belge ve Ödeme kaynaklarından üretilir.**
 
 Secret/API key/token bu dosyaya yazılmaz.
+
+
+---
+
+# 9. 06.09.2026 GITHUB ACTIONS TAM OTOMATİK TETİK TEMİZLİĞİ
+
+Canlı bildirim release'i sırasında eski `.github/workflows/pdks-final-verify.yml` dosyasının production branch `push` olayını hâlâ dinlediği görüldü. Bu nedenle GitHub Actions kullanıcı tarafından çağrılmadan otomatik başlamıştı.
+
+Final düzeltme:
+
+- `.github/workflows` altındaki tüm workflow dosyalarının event blokları denetlendi.
+- Otomatik `push`, `pull_request`, `workflow_run` ve benzeri Actions tetikleri kaldırıldı.
+- Workflow dosyaları silinmedi.
+- Tümü yalnız `workflow_dispatch` ile açık manuel istek halinde çalışabilecek şekilde korundu.
+- Production branch push artık GitHub Actions CI/deploy zinciri başlatmamalıdır.
+- Production push sonrası otomatik çalışan sistem yalnız Cloudflare Git Integration olmalıdır:
+  - Cloudflare Pages,
+  - Cloudflare Workers Builds.
+
+Bu kural KY ERP için kalıcıdır. Yeni workflow eklenirse varsayılanı manual-only'dir; kullanıcı açıkça istemeden otomatik GitHub Actions tetikleyicisi eklenmez.
