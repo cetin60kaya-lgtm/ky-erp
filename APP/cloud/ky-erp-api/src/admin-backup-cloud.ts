@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { approvalPendingPayload, consumeCriticalApproval, requestCriticalApproval } from "./approval-center-cloud";
 
 type Row = Record<string, any>;
 
@@ -454,8 +455,16 @@ export function registerAdminBackupRoutes(app: any) {
     if (!current) return c.json(errorBody("OWNER_ONLY", "Yedek alma yalnız uygulama sahibine açıktır."), 403);
     const body = await bodyOf(c);
     const slug = text(body.mainCompanySlug || body.main_company_slug || current.mainCompanySlug || "mecit-hakan");
+    const approval = await requestCriticalApproval(c,current,{
+      mainCompanySlug:slug,sourceModule:"BACKUP",actionType:"TENANT_BACKUP_CREATE",targetType:"MAIN_COMPANY",targetId:slug,
+      title:"Firma Tam Yedeği Al",description:slug+" firması için D1 + R2 tam yedeği oluşturulacak.",riskLevel:"HIGH",
+      approvalPolicy:"COMPANY_OWNER_OR_APP_OWNER",payload:{mainCompanySlug:slug,reason:text(body.reason || "MANUAL_ADMIN_BACKUP")},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(errorBody("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan kritik yedek işlemi çalıştırılamaz."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     try {
       const backup = await createBackupInternal(c, current, slug, text(body.reason || "MANUAL_ADMIN_BACKUP"), true);
+      await consumeCriticalApproval(c,current,text(approval.request?.id),{backupId:backup.id,mainCompanySlug:slug});
       return c.json({ ok: true, data: backup }, 201);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -478,6 +487,14 @@ export function registerAdminBackupRoutes(app: any) {
     const target = await c.env.DB.prepare("SELECT id,slug,name FROM main_companies WHERE slug=? LIMIT 1").bind(targetSlug).first<Row>();
     if (!target) return c.json(errorBody("TARGET_COMPANY_NOT_FOUND", "Geri yüklenecek hedef ana firma bulunamadı."), 404);
 
+    const approval = await requestCriticalApproval(c,current,{
+      mainCompanySlug:targetSlug,sourceModule:"BACKUP",actionType:"TENANT_BACKUP_RESTORE",targetType:"BACKUP",targetId:text(backup.id),
+      title:"Firma Yedeğine Geri Dön",description:targetSlug+" firması "+text(backup.id)+" yedeğine geri döndürülecek.",riskLevel:"CRITICAL",
+      approvalPolicy:"COMPANY_OWNER_AND_APP_OWNER",payload:{backupId:text(backup.id),targetSlug},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(errorBody("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan geri yükleme çalıştırılamaz."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
+
     let safetyBackup: Row | null = null;
     try {
       safetyBackup = await createBackupInternal(c, current, targetSlug, `PRE_RESTORE:${backup.id}`, false);
@@ -485,6 +502,7 @@ export function registerAdminBackupRoutes(app: any) {
       return c.json(errorBody("PRE_RESTORE_BACKUP_FAILED", "Geri yükleme öncesi güvenlik yedeği alınamadığı için işlem başlatılmadı.", { message: error instanceof Error ? error.message : String(error) }), 500);
     }
 
+    await consumeCriticalApproval(c,current,text(approval.request?.id),{backupId:text(backup.id),targetSlug,executionStarted:true});
     try {
       const restored = await restoreManifestData(c, manifest, targetSlug);
       await audit(c, "TENANT_BACKUP_RESTORED", current.id, targetSlug, { backupId: backup.id, safetyBackupId: safetyBackup.id, ...restored });
