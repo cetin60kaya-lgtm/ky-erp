@@ -8,6 +8,7 @@ import {
   listUsers,
 } from "../../services/adminApi";
 import AdminLoginApprovals from "./AdminLoginApprovals";
+import AdminMailApprovals from "./AdminMailApprovals";
 import "./AdminManagement.css";
 
 function rowsOf(value) {
@@ -105,8 +106,10 @@ export default function AdminSystemOverview({ activeMainCompany }) {
         </div></div>
       </section>
       <section className="admpro-card admpro-decision-center">
-        <div className="admpro-card-head"><div><h3>Karar Merkezi</h3><p>Yeni cihaz girişleri ayrı menü oluşturmaz; burada firma sahibi ve Süper Yönetici tarafından yönetilir.</p></div></div>
+        <div className="admpro-card-head"><div><h3>Karar Merkezi</h3><p>Giriş ve mail hesabı talepleri aynı karar merkezinde görünür; mail hesabı kararı ilgili firma sahibi / işveren tarafından verilir.</p></div></div>
         <AdminLoginApprovals compact />
+        <div style={{ height: 16 }} />
+        <AdminMailApprovals compact />
       </section>
       <section className="admpro-card"><div className="admpro-card-head"><div><h3>Son Güvenlik Hareketleri</h3><p>Giriş, oturum ve yönetici güvenliğiyle ilgili son olaylar.</p></div></div><div className="admpro-table"><table><thead><tr><th>Zaman</th><th>İşlem</th><th>Uygulayan</th><th>Hedef</th><th>IP</th></tr></thead><tbody>{state.audit.slice(0,12).map((row)=><tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.action||"-"}</td><td>{row.actorName||"Sistem"}</td><td>{row.targetName||"-"}</td><td>{row.ipAddress||"-"}</td></tr>)}{!state.audit.length?<tr><td colSpan="5">Güvenlik hareketi alınamadı veya kayıt yok.</td></tr>:null}</tbody></table></div></section>
     </div>
