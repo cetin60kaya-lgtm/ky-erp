@@ -300,7 +300,7 @@ export default function MuhasebeReportsWorkspace({ activeMainCompany, goTab }) {
     downloadFile(
       "/muhasebe/accounting/reports/export",
       params,
-      `KY_ERP_Muhasebe_Raporu_${filters.startDate.slice(0, 7).replace("-", "_")}.xlsx`,
+      `KY_ERP_Muhasebe_Raporu_${filters.startDate.slice(0, 7).replace("-", "_")}.csv`,
     );
 
   return (

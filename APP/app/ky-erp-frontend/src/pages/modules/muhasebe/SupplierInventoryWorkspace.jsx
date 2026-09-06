@@ -21,10 +21,11 @@ import "./supplierInvoicesWorkspace.css";
 const PAGE_SIZES = [25, 50, 100];
 const INVOICE_STATUS_OPTIONS = [
   ["ALL", "Tümü"],
-  ["CONTROL_WAITING", "Kontrol bekliyor"],
-  ["READY", "İşleme hazır"],
-  ["PROCESSED", "İşlendi"],
-  ["REJECTED", "Reddedildi"],
+  ["INGESTED", "Yeni / Kontrol bekliyor"],
+  ["REVIEW_REQUIRED", "Kontrol gerekli"],
+  ["READY_FOR_APPROVAL", "İşleme hazır"],
+  ["APPROVED", "Onaylandı"],
+  ["POSTED", "İşlendi"],
 ];
 const LOT_STATUS_OPTIONS = [
   ["ALL", "Tüm lotlar"],
@@ -70,13 +71,56 @@ const listOf = (payload) => {
   return [];
 };
 
+const canonicalInvoiceRow = (row = {}) => ({
+  ...row,
+  id: row.id,
+  documentNo: row.document_no || row.documentNo || "",
+  issueDate: row.issue_date || row.issueDate || row.created_at || row.createdAt,
+  companyId: row.party_company_id || row.companyId || null,
+  firmId: row.party_company_id || row.firmId || null,
+  companyName: row.party_name || row.companyName || "",
+  supplierName: row.party_name || row.supplierName || "",
+  subtotal: Number(row.subtotal || 0),
+  vatTotal: Number(row.tax_total ?? row.vatTotal ?? 0),
+  grandTotal: Number(row.payable_total ?? row.grandTotal ?? 0),
+  sourceType: row.source_type || row.sourceType || row.provider_type || "MANUAL",
+  status: row.status || "REVIEW_REQUIRED",
+  canonical: true,
+});
+
+const canonicalInvoiceDetail = (detail = {}) => ({
+  ...canonicalInvoiceRow(detail),
+  lines: (detail.lines || []).map((line) => {
+    const raw = line.raw_metadata || line.rawMetadata || {};
+    return {
+      ...line,
+      id: line.id,
+      lineNo: line.line_no || line.lineNo,
+      rawName: line.description || line.product_code || line.supplier_product_code || "Kalem",
+      description: line.description || "",
+      quantity: Number(line.quantity || 0),
+      unit: line.unit_code || line.unit || "",
+      unitPrice: Number(line.unit_price ?? line.unitPrice ?? 0),
+      lineTotal: Number(line.line_total ?? line.lineTotal ?? 0),
+      subtotal: Number(line.line_total ?? line.subtotal ?? 0),
+      productId: line.product_id || line.productId || "",
+      productName: raw.productName || "",
+      lotNo: raw.lotNo || "",
+      routingType: raw.routingType || "",
+      raw,
+    };
+  }),
+  canonical: true,
+});
+
 function statusLabel(value) {
   const key = normalize(value);
   if (/DEPLETED|BITTI/.test(key)) return "Bitti";
   if (/QUARANTINE|KARANTINA/.test(key)) return "Karantina";
   if (/INACTIVE|PASIF/.test(key)) return "Pasif";
   if (/AVAILABLE|KULLANILABILIR/.test(key)) return "Kullanılabilir";
-  if (/PROCESSED|APPROVED|ISLENDI/.test(key)) return "İşlendi";
+  if (/POSTED|PROCESSED|ISLENDI/.test(key)) return "İşlendi";
+  if (/APPROVED/.test(key)) return "Onaylandı";
   if (/READY|HAZIR/.test(key)) return "İşleme hazır";
   if (/REJECT|RED/.test(key)) return "Reddedildi";
   if (/MISSING|EKSIK/.test(key)) return "Eksik bilgi";
@@ -85,7 +129,7 @@ function statusLabel(value) {
 
 function statusTone(value) {
   const key = normalize(value);
-  if (/AVAILABLE|PROCESSED|APPROVED|ISLENDI/.test(key)) return "success";
+  if (/AVAILABLE|POSTED|PROCESSED|APPROVED|ISLENDI/.test(key)) return "success";
   if (/DEPLETED|INACTIVE/.test(key)) return "muted";
   if (/REJECT|RED|ERROR|HATA|QUARANTINE/.test(key)) return "danger";
   if (/READY|HAZIR/.test(key)) return "ready";
@@ -139,10 +183,10 @@ function buildLineDrafts(detail, aliases, profile) {
     return {
       lineId: line.id,
       rawName,
-      productId: alias.productId || "",
-      productName: alias.productName || "",
+      productId: line.productId || alias.productId || "",
+      productName: line.productName || alias.productName || "",
       aliasName: alias.aliasName || alias.productName || rawName,
-      lotNo: line.lotNo || "",
+      lotNo: line.lotNo || line.raw?.lotNo || "",
       quantity: Number(line.quantity || 0),
       unit: line.unit || alias.unit || profile?.defaultUnit || "KG",
       unitPrice: Number(line.unitPrice || 0),
@@ -211,17 +255,19 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
     setLoading(true);
     setError("");
     try {
-      const payload = await apiGet("/muhasebe/belge-import", {
+      const payload = await apiGet("/e-belge/pool", {
         ...companyParams,
-        search,
-        status,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
+        filter: "INCOMING_INVOICE",
+        q: search,
+        status: status === "ALL" ? undefined : status,
+        page,
+        pageSize,
         _ts: Date.now(),
       });
-      const data = listOf(payload);
-      setRows(data);
-      setTotal(Number(payload?.pagination?.total ?? payload?.data?.pagination?.total ?? data.length));
+      const data = unwrap(payload);
+      const items = Array.isArray(data?.items) ? data.items.map(canonicalInvoiceRow) : [];
+      setRows(items);
+      setTotal(Number(data?.total ?? items.length));
     } catch (requestError) {
       setRows([]);
       setTotal(0);
@@ -275,10 +321,10 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
     setMessage("");
     try {
       const detailPayload = await apiGet(
-        `/muhasebe/belge-import/${encodeURIComponent(row.id)}`,
+        `/e-belge/documents/${encodeURIComponent(row.id)}`,
         { ...companyParams, _ts: Date.now() },
       );
-      const detail = unwrap(detailPayload);
+      const detail = canonicalInvoiceDetail(unwrap(detailPayload));
       const companyId = detail.companyId || detail.firmId;
       const [profilePayload, aliasesPayload] = companyId
         ? await Promise.all([
@@ -433,34 +479,53 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
     return errors;
   }, [lineDrafts, profile?.isChemicalSupplier]);
 
-  const transferToDyehouse = async () => {
+  const saveCanonicalLineDetails = async () => {
     if (!selected?.id || lineErrors.length) {
-      setMessage(lineErrors.join(" ") || "Aktarım için fatura seçin.");
-      return;
+      throw new Error(lineErrors.join(" ") || "Ürün / LOT kaydı için fatura seçin.");
     }
+    for (const line of lineDrafts) {
+      await apiPatch(
+        `/e-belge/documents/${encodeURIComponent(selected.id)}/lines/${encodeURIComponent(line.lineId)}`,
+        {
+          ...companyParams,
+          productId: line.productId || undefined,
+          lotNo: line.lotNo,
+          warehouse: line.warehouse,
+          productionDate: line.productionDate,
+          expiryDate: line.expiryDate,
+          unitCode: line.unit,
+        },
+      );
+      if (line.productId && String(line.aliasName || "").trim()) {
+        await apiPost(
+          `/e-belge/products/${encodeURIComponent(line.productId)}/aliases`,
+          {
+            ...companyParams,
+            alias: String(line.aliasName || line.rawName || "").trim(),
+            documentId: selected.id,
+          },
+        );
+      }
+    }
+    const detailPayload = await apiGet(
+      `/e-belge/documents/${encodeURIComponent(selected.id)}`,
+      { ...companyParams, _ts: Date.now() },
+    );
+    const detail = canonicalInvoiceDetail(unwrap(detailPayload));
+    setSelected({ ...detail, detailType: "invoice" });
+    setLineDrafts(buildLineDrafts(detail, [], profile));
+    return detail;
+  };
+
+  const transferToDyehouse = async () => {
     setSaving(true);
     setMessage("");
     try {
-      const payload = await apiPost(
-        `/muhasebe/belge-import/${encodeURIComponent(selected.id)}/boyahane-transfer-v2`,
-        {
-          ...companyParams,
-          lines: lineDrafts.map((line) => ({
-            ...line,
-            quantity: Number(line.quantity || 0),
-            unitPrice: Number(line.unitPrice || 0),
-            totalCost: Number(line.totalCost || 0),
-          })),
-        },
-      );
-      setSelected((current) => ({
-        ...current,
-        boyahaneTransferStatus: unwrap(payload)?.status || "COMPLETED",
-      }));
-      setMessage("Onaylı ürün, firma aliası, lot ve stok giriş hareketi birlikte oluşturuldu.");
-      await Promise.all([loadInvoices(), loadLots(), loadProducts()]);
+      await saveCanonicalLineDetails();
+      setMessage("Ürün, firma aliası ve LOT bilgileri canonical faturaya kaydedildi. Stok/LOT girişi son onayda tek işlem olarak oluşacak.");
+      await Promise.all([loadInvoices(), loadProducts()]);
     } catch (requestError) {
-      setMessage(requestError?.message || "Boyahane lot aktarımı tamamlanamadı.");
+      setMessage(requestError?.message || "Ürün / LOT bilgileri kaydedilemedi.");
     } finally {
       setSaving(false);
     }
@@ -468,18 +533,24 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
 
   const processInvoice = async () => {
     if (!selected?.id) return;
+    if (profile?.isChemicalSupplier && lineErrors.length) {
+      setMessage(lineErrors.join(" "));
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
+      if (profile?.isChemicalSupplier) await saveCanonicalLineDetails();
       const payload = await apiPost(
-        `/muhasebe/belge-import/${encodeURIComponent(selected.id)}/approve`,
+        `/e-belge/documents/${encodeURIComponent(selected.id)}/finalize`,
         { ...companyParams, confirm: true },
       );
-      setSelected({ ...unwrap(payload), detailType: "invoice" });
-      setMessage("Fatura cari, KDV ve gider akışına işlendi.");
-      await loadInvoices();
+      const posted = unwrap(payload);
+      setSelected((current) => ({ ...current, status: posted?.status || "POSTED", canonical: true }));
+      setMessage("Fatura canonical olarak işlendi; cari, KDV, gider ve gerekiyorsa Boyahane stok/LOT hareketi tek akışta tamamlandı.");
+      await Promise.all([loadInvoices(), loadLots()]);
     } catch (requestError) {
-      setMessage(requestError?.message || "Fatura işlenemedi.");
+      setMessage(requestError?.message || "Fatura son onayı tamamlanamadı.");
     } finally {
       setSaving(false);
     }
@@ -494,11 +565,15 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
       uploadFiles.forEach((file) => formData.append("files", file));
       if (activeMainCompany?.slug) formData.set("mainCompanySlug", activeMainCompany.slug);
       if (activeMainCompany?.id) formData.set("mainCompanyId", activeMainCompany.id);
-      const payload = await apiUpload("/muhasebe/belge-import/upload", formData);
+      formData.set("direction", "INCOMING");
+      formData.set("documentKind", "AUTO");
+      const payload = await apiUpload("/e-belge/upload", formData);
       const result = unwrap(payload);
       setUploadFiles([]);
       setUploadOpen(false);
-      setMessage(`${Number(result.createdCount || result.created?.length || 0)} belge kontrol listesine alındı.`);
+      const created = Array.isArray(result?.items) ? result.items.length : 0;
+      const rejected = Array.isArray(result?.errors) ? result.errors.length : 0;
+      setMessage(`${created} belge canonical havuza alındı.${rejected ? ` ${rejected} belge kontrol gerektirdi.` : ""}`);
       await loadInvoices();
     } catch (requestError) {
       setMessage(requestError?.message || "Belge yükleme tamamlanamadı.");

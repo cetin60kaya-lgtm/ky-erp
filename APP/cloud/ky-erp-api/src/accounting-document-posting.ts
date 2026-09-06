@@ -144,32 +144,37 @@ export async function postAccountingDocument(
     }
   }
 
-  const ledgerId = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO accounting_ledger_entries(
-       id,main_company_slug,entry_date,entry_type,record_scope,company_id,company_name,
-       description,debit,credit,currency,payment_method,source_document_id,note,
-       created_by,created_at,updated_at
-     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).bind(
-    ledgerId,
-    slug,
-    text(doc.issue_date) || timestamp.slice(0, 10),
-    direction === "INCOMING" ? "BORC" : "ALACAK",
-    recordScope,
-    doc.party_company_id,
-    text(doc.party_name) || text(company.name),
-    `${text(doc.document_no) || "Belge"} ${direction === "INCOMING" ? "alış" : "satış"} kaydı`,
-    direction === "INCOMING" ? total : 0,
-    direction === "OUTGOING" ? total : 0,
-    text(doc.currency) || "TRY",
-    null,
-    documentId,
-    text(doc.note) || null,
-    actor,
-    timestamp,
-    timestamp,
-  ).run();
+  const existingLedger = await c.env.DB.prepare(
+    `SELECT id FROM accounting_ledger_entries WHERE main_company_slug=? AND source_document_id=? LIMIT 1`,
+  ).bind(slug, documentId).first<Row>();
+  const ledgerId = text(existingLedger?.id) || crypto.randomUUID();
+  if (!existingLedger?.id) {
+    await c.env.DB.prepare(
+      `INSERT INTO accounting_ledger_entries(
+         id,main_company_slug,entry_date,entry_type,record_scope,company_id,company_name,
+         description,debit,credit,currency,payment_method,source_document_id,note,
+         created_by,created_at,updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).bind(
+      ledgerId,
+      slug,
+      text(doc.issue_date) || timestamp.slice(0, 10),
+      direction === "INCOMING" ? "BORC" : "ALACAK",
+      recordScope,
+      doc.party_company_id,
+      text(doc.party_name) || text(company.name),
+      `${text(doc.document_no) || "Belge"} ${direction === "INCOMING" ? "alış" : "satış"} kaydı`,
+      direction === "INCOMING" ? total : 0,
+      direction === "OUTGOING" ? total : 0,
+      text(doc.currency) || "TRY",
+      null,
+      documentId,
+      text(doc.note) || null,
+      actor,
+      timestamp,
+      timestamp,
+    ).run();
+  }
 
   let vatId = "";
   if (recordScope === "OFFICIAL" && vat >= 0) {

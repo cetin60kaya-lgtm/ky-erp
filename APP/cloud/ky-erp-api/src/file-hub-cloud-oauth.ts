@@ -251,6 +251,100 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
   return assetId;
 }
 
+
+function archiveParts(relativePath: unknown, fallbackName: unknown) {
+  const parts=text(relativePath).replace(/\\/g,"/").split("/").map(text).filter(Boolean);
+  const fileName=parts.pop()||text(fallbackName)||"belge";
+  return{folders:parts,fileName};
+}
+function googleQueryValue(value: unknown){return text(value).replace(/\\/g,"\\\\").replace(/'/g,"\\'")}
+async function googleChildFolder(token:string,parentId:string,name:string){
+  const q=\`'\${googleQueryValue(parentId||"root")}' in parents and name='\${googleQueryValue(name)}' and mimeType='application/vnd.google-apps.folder' and trashed=false\`;
+  const params=new URLSearchParams({q,fields:"files(id,name)",pageSize:"10",spaces:"drive"});
+  const payload=await providerJson(\`https://www.googleapis.com/drive/v3/files?\${params}\`,token);
+  const existing=(Array.isArray(payload.files)?payload.files:[]).find((row:Row)=>text(row.name)===name);
+  if(existing?.id)return text(existing.id);
+  const created=await providerJson("https://www.googleapis.com/drive/v3/files?fields=id,name",token,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,mimeType:"application/vnd.google-apps.folder",parents:[parentId||"root"]})});
+  return text(created.id);
+}
+async function ensureGooglePath(token:string,rootId:string,folders:string[]){
+  let parent=rootId||"root";
+  for(const folder of folders)parent=await googleChildFolder(token,parent,folder);
+  return parent;
+}
+async function googleExistingFile(token:string,parentId:string,name:string){
+  const q=\`'\${googleQueryValue(parentId||"root")}' in parents and name='\${googleQueryValue(name)}' and trashed=false and mimeType!='application/vnd.google-apps.folder'\`;
+  const params=new URLSearchParams({q,fields:"files(id,name,webViewLink)",pageSize:"10",spaces:"drive"});
+  const payload=await providerJson(\`https://www.googleapis.com/drive/v3/files?\${params}\`,token);
+  return(Array.isArray(payload.files)?payload.files:[]).find((row:Row)=>text(row.name)===name)||null;
+}
+async function googleUpload(token:string,parentId:string,fileName:string,mimeType:string,bytes:ArrayBuffer){
+  const existing=await googleExistingFile(token,parentId,fileName);
+  const updateId=text(existing?.id),method=updateId?"PATCH":"POST";
+  const initUrl=updateId
+    ?\`https://www.googleapis.com/upload/drive/v3/files/\${encodeURIComponent(updateId)}?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime,webViewLink\`
+    :"https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime,webViewLink";
+  const metadata=updateId?{name:fileName}:{name:fileName,parents:[parentId||"root"]};
+  const init=await fetch(initUrl,{method,headers:{Authorization:\`Bearer \${token}\`,"Content-Type":"application/json; charset=UTF-8","X-Upload-Content-Type":mimeType||"application/octet-stream","X-Upload-Content-Length":String(bytes.byteLength)},body:JSON.stringify(metadata)});
+  if(!init.ok)throw Object.assign(new Error(\`Google Drive upload oturumu HTTP \${init.status} döndürdü.\`),{code:"GOOGLE_UPLOAD_SESSION_FAILED",status:init.status});
+  const location=text(init.headers.get("Location"));if(!location)throw Object.assign(new Error("Google Drive upload oturum adresi dönmedi."),{code:"GOOGLE_UPLOAD_LOCATION_MISSING"});
+  const upload=await fetch(location,{method:"PUT",headers:{"Content-Type":mimeType||"application/octet-stream","Content-Length":String(bytes.byteLength)},body:bytes});
+  const payload=await upload.json().catch(()=>({})) as Row;
+  if(!upload.ok)throw Object.assign(new Error(text(payload?.error?.message)||\`Google Drive upload HTTP \${upload.status} döndürdü.\`),{code:"GOOGLE_UPLOAD_FAILED",status:upload.status});
+  return{id:text(payload.id||updateId),name:text(payload.name||fileName),webUrl:text(payload.webViewLink||existing?.webViewLink),provider:"GOOGLE_DRIVE"};
+}
+function microsoftChildrenUrl(driveId:string,parentId:string){
+  if(driveId)return parentId&&parentId!=="root"
+    ?\`https://graph.microsoft.com/v1.0/drives/\${encodeURIComponent(driveId)}/items/\${encodeURIComponent(parentId)}/children\`
+    :\`https://graph.microsoft.com/v1.0/drives/\${encodeURIComponent(driveId)}/root/children\`;
+  return parentId&&parentId!=="root"
+    ?\`https://graph.microsoft.com/v1.0/me/drive/items/\${encodeURIComponent(parentId)}/children\`
+    :"https://graph.microsoft.com/v1.0/me/drive/root/children";
+}
+async function ensureMicrosoftPath(token:string,rootId:string,driveId:string,folders:string[]){
+  let parent=rootId||"root";
+  for(const name of folders){
+    const children=await listMicrosoftChildren(token,parent,driveId,true);
+    const existing=children.find(row=>row.isFolder&&text(row.name)===name);
+    if(existing?.id){parent=text(existing.id);continue}
+    const created=await providerJson(microsoftChildrenUrl(driveId,parent),token,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,folder:{}, "@microsoft.graph.conflictBehavior":"fail"})});
+    parent=text(created.id);
+    if(!parent)throw Object.assign(new Error(\`\${name} bulut klasörü oluşturulamadı.\`),{code:"MICROSOFT_FOLDER_CREATE_FAILED"});
+  }
+  return parent;
+}
+function microsoftContentUrl(driveId:string,parentId:string,fileName:string){
+  const encoded=encodeURIComponent(fileName);
+  if(driveId)return parentId&&parentId!=="root"
+    ?\`https://graph.microsoft.com/v1.0/drives/\${encodeURIComponent(driveId)}/items/\${encodeURIComponent(parentId)}:/\${encoded}:/content\`
+    :\`https://graph.microsoft.com/v1.0/drives/\${encodeURIComponent(driveId)}/root:/\${encoded}:/content\`;
+  return parentId&&parentId!=="root"
+    ?\`https://graph.microsoft.com/v1.0/me/drive/items/\${encodeURIComponent(parentId)}:/\${encoded}:/content\`
+    :\`https://graph.microsoft.com/v1.0/me/drive/root:/\${encoded}:/content\`;
+}
+async function microsoftUpload(token:string,driveId:string,parentId:string,fileName:string,mimeType:string,bytes:ArrayBuffer){
+  const response=await fetch(microsoftContentUrl(driveId,parentId,fileName),{method:"PUT",headers:{Authorization:\`Bearer \${token}\`,"Content-Type":mimeType||"application/octet-stream"},body:bytes});
+  const payload=await response.json().catch(()=>({})) as Row;
+  if(!response.ok)throw Object.assign(new Error(text(payload?.error?.message)||\`Microsoft Graph upload HTTP \${response.status} döndürdü.\`),{code:"MICROSOFT_UPLOAD_FAILED",status:response.status});
+  return{id:text(payload.id),name:text(payload.name||fileName),webUrl:text(payload.webUrl),provider:"MICROSOFT"};
+}
+
+export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string,connectionId:string,input:{relativePath:string;fileName:string;mimeType?:string;bytes:ArrayBuffer}){
+  const {link,accessToken}=await connectionAccount(c,slug,connectionId);
+  if(Number(link.is_active)===0)throw Object.assign(new Error("Bulut depolama servisi pasif."),{code:"CONNECTION_DISABLED"});
+  if(upper(link.sync_mode)!=="CLOUD_API")throw Object.assign(new Error("Seçilen hedef doğrudan bulut API bağlantısı değil."),{code:"NOT_CLOUD_API"});
+  const provider=upper(link.provider_type),driveId=text(link.provider_drive_id),rootId=text(link.remote_root_id)||"root",parts=archiveParts(input.relativePath,input.fileName);
+  if(provider==="GOOGLE_DRIVE"){
+    const parentId=await ensureGooglePath(accessToken,rootId,parts.folders);
+    return{...(await googleUpload(accessToken,parentId,parts.fileName,text(input.mimeType)||"application/octet-stream",input.bytes)),providerType:provider,parentId,relativePath:text(input.relativePath)};
+  }
+  if(["ONEDRIVE","SHAREPOINT"].includes(provider)){
+    const parentId=await ensureMicrosoftPath(accessToken,rootId,driveId,parts.folders);
+    return{...(await microsoftUpload(accessToken,driveId,parentId,parts.fileName,text(input.mimeType)||"application/octet-stream",input.bytes)),providerType:provider,parentId,relativePath:text(input.relativePath)};
+  }
+  throw Object.assign(new Error("Bu File Hub sağlayıcısı doğrudan bulut arşivlemeyi desteklemiyor."),{code:"CLOUD_ARCHIVE_PROVIDER_UNSUPPORTED"});
+}
+
 export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/providers", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);

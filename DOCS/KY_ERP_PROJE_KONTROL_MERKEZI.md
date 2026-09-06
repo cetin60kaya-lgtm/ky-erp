@@ -262,3 +262,16 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Desktop 1.7.2 gerçek Windows cihazda açıldı ve ERP oturumu doğrulandı.
 - GitHub ana kaynak olarak kalacak.
 - Kullanıcı GitHub/VS Code ile manuel uğraşmayacak.
+
+
+---
+
+## 06.09.2026 — e-Belge / Muhasebe canonical canlı yayın onayı
+
+- Kullanıcı PR #77 kapsamı için açıkça **canlıya al** onayı verdi.
+- Canlı birleşimde güncel production auth, PDKS, Bildirim Merkezi ve Cloudflare-only yayın sözleşmesi korunur.
+- İşNet + manuel e-Belge havuzu canonical `accounting_documents` akışına alınır; rapor read-modeli canonical kaynakları kullanır.
+- XML/PDF/görsel OCR, firma/ürün alias, EXPENSE/STOCK/BOYAHANE yönlendirme ve LOT kuralları aynı paket içindedir.
+- Resmî e-Fatura/e-İrsaliye gönderimi otomatikleştirilmez; kullanıcı onayı zorunluluğu devam eder.
+- `0046_accounting_canonical_report_controls.sql` bu canlı yayında production D1'e uygulanmaz. İlgili kod tablo yoksa mevcut `json_store` fallback'ini kullanır; veri kaybı riski alınmaz.
+- 0046 ileride ayrı bakım penceresinde remote D1 full backup + readiness + hedefli additive migration ile ele alınacaktır.
