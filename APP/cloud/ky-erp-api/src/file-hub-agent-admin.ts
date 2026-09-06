@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { approvalPendingPayload, consumeCriticalApproval, requestCriticalApproval } from "./approval-center-cloud";
 import {
   generateFileHubAgentSecret,
   hashFileHubAgentSecret,
@@ -93,6 +94,13 @@ export function registerFileHubAgentAdminRoutes(app: Hono<AppEnv>) {
     if (!company || Number(company.is_active ?? 1) === 0) {
       return c.json({ ok:false, error:{ code:"FILE_HUB_TENANT_NOT_ACTIVE", message:"Seçilen ana firma bulunamadı veya pasif." } }, 404);
     }
+    const approval = await requestCriticalApproval(c,owner,{
+      mainCompanySlug:slug,sourceModule:"STORAGE",actionType:"FILE_AGENT_CREDENTIAL_ROTATE",targetType:"FILE_AGENT",targetId:slug,
+      title:"File Agent Anahtarını Yenile",description:text(company.name||slug)+" için yeni yerel/NAS Agent erişim anahtarı üretilecek.",riskLevel:"CRITICAL",
+      approvalPolicy:"COMPANY_OWNER_AND_APP_OWNER",payload:{mainCompanySlug:slug,label:text(body.label)||"KY File Agent"},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json({ok:false,error:{code:"APPROVAL_SCHEMA_NOT_READY",message:"Onay Merkezi kurulumu tamamlanmadan Agent anahtarı yenilenemez."}},503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     const secret = generateFileHubAgentSecret();
     const secretHash = await hashFileHubAgentSecret(secret);
     const stamp = nowIso();
@@ -112,6 +120,7 @@ export function registerFileHubAgentAdminRoutes(app: Hono<AppEnv>) {
     } catch {
       return c.json({ ok:false, error:{ code:"FILE_HUB_AGENT_SCHEMA_MISSING", message:"File Agent tenant credential migrationı henüz uygulanmamış." } }, 503);
     }
+    await consumeCriticalApproval(c,owner,text(approval.request?.id),{mainCompanySlug:slug,label});
     await logEvent(c, slug, text(owner.id), "AGENT_CREDENTIAL_ROTATED", { label });
     // The raw secret is intentionally returned only on rotation/enrollment.
     return c.json({ ok:true, data:{
