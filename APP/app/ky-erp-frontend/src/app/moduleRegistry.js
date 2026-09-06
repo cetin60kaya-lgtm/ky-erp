@@ -14,7 +14,7 @@ const DEPOLAMA_MODULE = {
       tabs: [
         ["depolama-genel", "Genel Bakış", "dashboard"],
         ["depolama-kaynaklar", "Dosya Servisleri", "dosya"],
-        ["depolama-mail", "E-posta Hesapları", "eposta"],
+        ["depolama-mail", "Mail Bağlantıları", "eposta"],
         ["depolama-atamalar", "Bölüm / Dosya Atamaları", "file-check"],
       ],
     },
