@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { approvalPendingPayload, consumeCriticalApproval, requestCriticalApproval } from "./approval-center-cloud";
 
 type Row = Record<string, any>;
 
@@ -246,6 +247,13 @@ export function registerAdminCoreRoutes(app: any) {
       if (nextSlug !== text(row.slug)) {
         const conflict = await c.env.DB.prepare("SELECT id FROM main_companies WHERE slug=? AND id<>? LIMIT 1").bind(nextSlug, id).first<Row>();
         if (conflict?.id) return c.json(errorBody("COMPANY_SLUG_EXISTS", "Bu firma kısa kodu başka bir ana firmada kullanılıyor."), 409);
+        const approval = await requestCriticalApproval(c,current,{
+          mainCompanySlug:text(row.slug),sourceModule:"ADMIN",actionType:"TENANT_SLUG_MOVE",targetType:"MAIN_COMPANY",targetId:id,
+          title:"Firma Kısa Kodunu / Tenant Kimliğini Değiştir",description:text(row.slug)+" -> "+nextSlug+" tenant taşıması yapılacak.",riskLevel:"CRITICAL",
+          approvalPolicy:"COMPANY_OWNER_AND_APP_OWNER",payload:{companyId:id,previousSlug:text(row.slug),nextSlug,name},
+        });
+        if(approval.state==="SCHEMA_MISSING")return c.json(errorBody("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan tenant taşıması yapılamaz."),503);
+        if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
         const plan = await tenantMovePlan(c, text(row.slug), nextSlug);
         plan.statements.push(
           c.env.DB.prepare(
@@ -253,6 +261,7 @@ export function registerAdminCoreRoutes(app: any) {
           ).bind(nextSlug, name, text(body.note) || null, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
         );
         await atomicBatch(c, plan.statements);
+        await consumeCriticalApproval(c,current,text(approval.request?.id),{companyId:id,previousSlug:text(row.slug),nextSlug});
       } else {
         await c.env.DB.prepare(
           `UPDATE main_companies SET name=?,title=?,is_active=?,updated_at=? WHERE id=?`,
@@ -274,6 +283,13 @@ export function registerAdminCoreRoutes(app: any) {
     const target = await companyById(c, text(body.targetId));
     if (!source || !target) return c.json(errorBody("COMPANY_NOT_FOUND", "Kaynak veya hedef ana firma bulunamadı."), 404);
     if (source.id === target.id) return c.json(errorBody("SAME_COMPANY", "Kaynak ve hedef firma aynı olamaz."), 400);
+    const approval = await requestCriticalApproval(c,current,{
+      mainCompanySlug:text(source.slug),sourceModule:"ADMIN",actionType:"TENANT_DATA_TRANSFER",targetType:"MAIN_COMPANY",targetId:text(source.id),
+      title:"Firma Verilerini Başka Firmaya Aktar",description:text(source.name)+" verileri "+text(target.name)+" firmasına taşınacak.",riskLevel:"CRITICAL",
+      approvalPolicy:"COMPANY_OWNER_AND_APP_OWNER",payload:{sourceId:text(source.id),sourceSlug:text(source.slug),targetId:text(target.id),targetSlug:text(target.slug)},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(errorBody("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan firma aktarımı yapılamaz."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     const timestamp = nowIso();
     let changed: Row[] = [];
     try {
@@ -287,6 +303,7 @@ export function registerAdminCoreRoutes(app: any) {
     } catch (error) {
       return c.json(errorBody("COMPANY_TRANSFER_CONFLICT", "Firma veri aktarımı atomik olarak tamamlanamadı. Bir tablo bile hata verirse tüm aktarım geri alınır.", { message: error instanceof Error ? error.message : String(error) }), 409);
     }
+    await consumeCriticalApproval(c,current,text(approval.request?.id),{sourceId:source.id,targetId:target.id,transferredTables:changed.length});
     await audit(c, "MAIN_COMPANY_TRANSFERRED", current.id, source.id, { mainCompanySlug: text(source.slug), targetId: target.id, targetSlug: text(target.slug), tables: changed });
     return c.json({ ok: true, data: { source: companyView(source), target: companyView(target), transferredTables: changed, sourceDeactivated: true, transferredAt: timestamp } });
   });
@@ -302,7 +319,15 @@ export function registerAdminCoreRoutes(app: any) {
     if (counts.length) return c.json(errorBody("COMPANY_HAS_DATA", "Bu ana firmada veri var. Önce verileri başka ana firmaya aktarın; veri varken doğrudan silme yapılmaz.", { tables: counts }), 409);
     const active = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM main_companies WHERE is_active=1 AND id<>?").bind(row.id).first<Row>();
     if (Number(active?.total || 0) < 1) return c.json(errorBody("LAST_ACTIVE_COMPANY", "Sistemde en az bir aktif ana firma kalmalıdır."), 409);
+    const approval = await requestCriticalApproval(c,current,{
+      mainCompanySlug:text(row.slug),sourceModule:"ADMIN",actionType:"MAIN_COMPANY_DELETE",targetType:"MAIN_COMPANY",targetId:text(row.id),
+      title:"Ana Firmayı Sil",description:text(row.name)+" ana firma kaydı kalıcı olarak silinecek.",riskLevel:"CRITICAL",
+      approvalPolicy:"COMPANY_OWNER_AND_APP_OWNER",payload:{companyId:text(row.id),slug:text(row.slug),name:text(row.name)},
+    });
+    if(approval.state==="SCHEMA_MISSING")return c.json(errorBody("APPROVAL_SCHEMA_NOT_READY","Onay Merkezi kurulumu tamamlanmadan ana firma silinemez."),503);
+    if(!approval.approved)return c.json({ok:true,data:approvalPendingPayload(approval)},202);
     await c.env.DB.prepare("DELETE FROM main_companies WHERE id=?").bind(row.id).run();
+    await consumeCriticalApproval(c,current,text(approval.request?.id),{companyId:row.id,slug:text(row.slug)});
     await audit(c, "MAIN_COMPANY_DELETED", current.id, row.id, { mainCompanySlug: text(row.slug), name: text(row.name) });
     return c.json({ ok: true, data: { id: row.id, deleted: true, deletedAt: nowIso() } });
   });
