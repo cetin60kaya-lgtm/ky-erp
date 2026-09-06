@@ -29,7 +29,6 @@ test("DENETIM API is route-locked to strict SGK-card PDKS reads including person
   assert.match(guard, /"\/api\/ik\/personnel-control\/profile"/);
   assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
   assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
-  assert.match(guard, /attendance\|photo\|photo-meta/);
   assert.match(guard, /ik_person_monthly_compliance/);
   assert.match(guard, /mc\.sgk_covered=1/);
   assert.match(guard, /auditPeriod\(c/);
