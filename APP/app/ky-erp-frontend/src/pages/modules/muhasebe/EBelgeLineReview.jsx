@@ -16,14 +16,16 @@ export default function EBelgeLineReview({ documentId, line, onChanged }) {
   const [saveAlias, setSaveAlias] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const chemical = Boolean(line?.raw_metadata?.chemical);
-  const lotRequired = Boolean(line?.raw_metadata?.lotRequired || line?.raw_metadata?.routingType === "BOYAHANE");
-  const needsReview = !line?.product_id || (lotRequired && !line?.raw_metadata?.lotNo);
+  const routingType = String(line?.raw_metadata?.routingType || "EXPENSE").toUpperCase();
+  const lotRequired = Boolean(line?.raw_metadata?.lotRequired || routingType === "BOYAHANE");
+  const productRequired = routingType !== "EXPENSE" || lotRequired;
+  const needsReview = (productRequired && !line?.product_id) || (lotRequired && !line?.raw_metadata?.lotNo);
   const label = useMemo(() => {
-    if (!line?.product_id) return "Ürünü eşleştir";
+    if (!line?.product_id && productRequired) return "Ürünü eşleştir";
+    if (!line?.product_id) return "Gider kalemi";
     if (lotRequired && !line?.raw_metadata?.lotNo) return "LOT gir";
     return "Düzenle";
-  }, [line, lotRequired]);
+  }, [line, lotRequired, productRequired]);
 
   useEffect(() => {
     if (!open || query.trim().length < 1) { setProducts([]); return; }
