@@ -503,6 +503,43 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     });
   }
 
+  async function selectMessage(row) {
+    setSelectedMessage(row);
+    if (Number(row?.is_read ?? row?.isRead ?? 1) !== 0 || activeTab === "mail-gonderilen" || activeTab === "mail-taslaklar") return;
+    const messageId = row.id;
+    setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
+    setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
+    setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    try {
+      await runMailMessageAction(messageId, "MARK_READ", {});
+    } catch (error) {
+      setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
+      setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
+      setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
+    }
+  }
+
+  function applyMessageActionLocally(messageId, action, values = {}) {
+    if (action === "MARK_READ" || action === "MARK_UNREAD") {
+      const read = action === "MARK_READ";
+      setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: read ? 1 : 0, isRead: read ? 1 : 0 } : item));
+      setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: read ? 1 : 0, isRead: read ? 1 : 0 } : current);
+      return;
+    }
+    if (action === "FLAG" || action === "UNFLAG") {
+      const flagged = action === "FLAG";
+      setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_flagged: flagged ? 1 : 0, isFlagged: flagged ? 1 : 0 } : item));
+      setSelectedMessage((current) => current?.id === messageId ? { ...current, is_flagged: flagged ? 1 : 0, isFlagged: flagged ? 1 : 0 } : current);
+      return;
+    }
+    if (["DELETE", "ARCHIVE", "MOVE"].includes(action)) {
+      setMessages((current) => current.filter((item) => item.id !== messageId));
+      setSelectedMessage((current) => current?.id === messageId ? null : current);
+      if (action === "MOVE" && values.folderId && String(values.folderId) === String(selectedFolderId)) setMailboxRefresh((value) => value + 1);
+    }
+  }
+
   function openMessageContextMenu(event, row) {
     event.preventDefault();
     event.stopPropagation();
@@ -551,12 +588,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     setLoading(true);
     try {
       await runMailMessageAction(row.id, apiAction, {});
+      applyMessageActionLocally(row.id, apiAction, {});
       setNotice(apiAction === "ARCHIVE" ? "Mail arşive taşındı." : apiAction === "DELETE" ? "Mail silinmiş öğelere taşındı." : "Mail durumu güncellendi.");
-      setSelectedMessage(null);
       setMailboxRefresh((value) => value + 1);
       await loadBase();
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail işlemi tamamlanamadı."}`);
+      setNotice("Hata: " + (error?.message || "Mail işlemi tamamlanamadı."));
     } finally { setLoading(false); }
   }
 
@@ -739,16 +776,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
   async function messageAction(action, values = {}) {
     if (!selectedMessage?.id) return;
+    const messageId = selectedMessage.id;
+    const wasUnread = Number(selectedMessage.is_read ?? selectedMessage.isRead ?? 1) === 0;
     setLoading(true);
     try {
-      await runMailMessageAction(selectedMessage.id, action, values);
+      await runMailMessageAction(messageId, action, values);
+      applyMessageActionLocally(messageId, action, values);
+      if (action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+      if (action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice(action === "ARCHIVE" ? "Mail arşive taşındı." : action === "DELETE" ? "Mail silinmiş öğelere taşındı." : action === "MOVE" ? "Mail klasöre taşındı." : "Mail durumu güncellendi.");
-      setSelectedMessage(null);
       setMoveTargetId("");
       setMailboxRefresh((value) => value + 1);
       await loadBase();
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail işlemi tamamlanamadı."}`);
+      setNotice("Hata: " + (error?.message || "Mail işlemi tamamlanamadı."));
     } finally { setLoading(false); }
   }
 
