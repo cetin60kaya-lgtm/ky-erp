@@ -54,6 +54,7 @@ import { registerIsnetIntakeCompatRoutes } from "./isnet-intake-compat";
 import { enforceIsnetTenant } from "./isnet-tenant-guard";
 import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
+import { registerNotificationRoutes } from "./notifications-cloud";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
@@ -170,6 +171,7 @@ registerEBelgeLineToolRoutes(app);
 registerAiCloudRoutes(app);
 registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
+registerNotificationRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobV2Routes(app);
