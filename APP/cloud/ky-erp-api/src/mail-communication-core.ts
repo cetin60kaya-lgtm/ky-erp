@@ -80,6 +80,11 @@ function providerRuntimeReady(c:any, provider:unknown){
     const clientSecret=text(c.env.MICROSOFT_MAIL_CLIENT_SECRET || c.env.MICROSOFT_GRAPH_CLIENT_SECRET);
     return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Microsoft Graph OAuth production ayarı eksik."};
   }
+  if(normalized==="GMAIL"){
+    const clientId=text(c.env.GOOGLE_MAIL_CLIENT_ID || c.env.GOOGLE_DRIVE_CLIENT_ID);
+    const clientSecret=text(c.env.GOOGLE_MAIL_CLIENT_SECRET || c.env.GOOGLE_DRIVE_CLIENT_SECRET);
+    return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Google OAuth production ayarı eksik."};
+  }
   return {configured:false,adapterReady:false,reason:"Bu sağlayıcının KY ERP bağlantı adapterı henüz aktif değil."};
 }
 
