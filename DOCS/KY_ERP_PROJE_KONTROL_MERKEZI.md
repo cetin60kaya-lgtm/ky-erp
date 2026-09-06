@@ -88,7 +88,8 @@ Desktop içinde web ile aynı kaynak üzerinden şu ana bölümler bulunur:
 - İK
 - PDKS
 - İmalat
-- Depolama / KY File Hub
+- Mail & Dosyalar
+- Bağlantılar & Depolama / KY File Hub
 - Yönetim
 - KY ERP Asistan
 
@@ -128,14 +129,17 @@ Desteklenen V1 provider tipleri:
 
 Desktop paketi mevcut KY File Agent + gömülü Node runtime yaklaşımını içerir. Kullanıcının ayrıca Node kurması hedeflenmez.
 
-File Hub ekranları:
+Bağlantılar & Depolama yönetim ekranları:
 
 1. Genel Bakış
-2. Bağlantılar
-3. Bölüm / Dosya Atamaları
-4. Dosya İndeksi
-5. Senkronizasyon / Agent
-6. Yedekleme / Loglar
+2. Dosya Servisleri
+3. E-posta Hesapları
+4. Bölüm / Dosya Atamaları
+5. Dosya İndeksi
+6. Senkronizasyon & Agent
+7. Yedekleme & Loglar
+
+Günlük kullanıcı alanı ayrıca **Mail & Dosyalar** modülüdür. Mail okuma/gönderme ve File Hub dosya kullanımı burada yapılır; provider/OAuth/klasör bağlantı yönetimi günlük ekrana karıştırılmaz.
 
 Provider veya yerel path hiçbir modüle sabit kodlanmamalıdır; `AGENTS.md` File Hub kuralları geçerlidir.
 
@@ -286,3 +290,20 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Resmî e-Fatura/e-İrsaliye gönderimi otomatikleştirilmez; kullanıcı onayı zorunluluğu devam eder.
 - `0046_accounting_canonical_report_controls.sql` bu canlı yayında production D1'e uygulanmaz. İlgili kod tablo yoksa mevcut `json_store` fallback'ini kullanır; veri kaybı riski alınmaz.
 - 0046 ileride ayrı bakım penceresinde remote D1 full backup + readiness + hedefli additive migration ile ele alınacaktır.
+
+
+## 06.09.2026 — Mail & Dosyalar / Bağlantılar & Depolama mimarisi kilitlendi
+
+- Aktif geliştirme branch'i: `codex/mail-iletisim-merkezi-core-v1b-20260906`.
+- PR: **#94 — Mail: İletişim & Dosyalar merkezi + provider-independent Mail Core**.
+- Kullanıcı tarafındaki ana modül adı **Mail & Dosyalar** olarak netleştirildi.
+- Yönetim tarafındaki ana modül adı **Bağlantılar & Depolama** olarak netleştirildi.
+- Bağlantılar & Depolama sekmeleri: Genel Bakış, Dosya Servisleri, E-posta Hesapları, Bölüm / Dosya Atamaları, Dosya İndeksi, Senkronizasyon & Agent, Yedekleme & Loglar.
+- Mail & Dosyalar sekmeleri: Gelen Kutusu, Gönderilenler, Taslaklar, Yanıt Bekleyenler, Şablonlar, Dosyalar, Son Kullanılanlar, Firma Dosyaları.
+- Microsoft 365/Outlook ilk gerçek mail adapterıdır; mevcut File Hub Microsoft Graph OAuth uygulaması ve şifreli secret katmanı yeniden kullanılır.
+- Gmail/JMAP/IMAP-SMTP adapterı hazır olmadan bağlı/kullanılabilir gösterilmez.
+- Mail hesap erişimi tenant + kullanıcı posta kutusu üyeliğiyle sınırlandırılır.
+- Kritik ortak/bölüm/Muhasebe/e-Belge posta kutularında Firma Sahibi -> Uygulama Sahibi sıralı çift onay uygulanır.
+- Gönderim açık kullanıcı işlemi gerektirir; AI otomatik mail göndermez. Belirsiz provider sonucu otomatik retry edilmez.
+- Mail Core additive D1 şeması `0050_mail_communication_core.sql` dosyasıdır; production öncesi D1 full backup + readiness + hedefli migration + schema doğrulaması gerekir.
+- Bu paket henüz production merge/deploy sayılmaz; kullanıcı açıkça **canlıya al** demeden production branch'e taşınmaz.
