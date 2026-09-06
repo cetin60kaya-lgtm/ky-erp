@@ -463,8 +463,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
   }
 
-  const visibleDrafts = activeTab === "mail-taslaklar" ? drafts : [];
-  const baseMessageRows = activeTab === "mail-taslaklar" ? visibleDrafts : messages;
+  const visibleDrafts = !selectedFolderId && activeTab === "mail-taslaklar" ? drafts : [];
+  const baseMessageRows = !selectedFolderId && activeTab === "mail-taslaklar" ? visibleDrafts : messages;
   const messageNeedle = messageSearch.trim().toLocaleLowerCase("tr-TR");
   const messageRows = messageNeedle
     ? baseMessageRows.filter((row) => [
@@ -548,7 +548,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       {composeOpen ? (
         <div className="comm-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setComposeOpen(false); }}>
         <section className="comm-compose comm-modal comm-compose-modal" role="dialog" aria-modal="true" aria-label="Yeni mail taslağı">
-          <div className="comm-section-title"><div><h2>Yeni Mail Taslağı</h2><p>Bu aşamada yalnız taslak kaydedilir; AI veya ekran otomatik gönderim yapmaz.</p></div><button type="button" className="secondary" onClick={() => setComposeOpen(false)}>Kapat</button></div>
+          <div className="comm-section-title"><div><h2>Yeni Mail</h2><p>Maili doğrudan gönderebilir veya taslak olarak kaydedebilirsiniz. Otomatik gönderim yapılmaz.</p></div><button type="button" className="secondary" onClick={() => setComposeOpen(false)}>Kapat</button></div>
           <form onSubmit={submitDraft}>
             <label>Kimden<select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}>{accounts.map((row) => <option key={row.id} value={row.id}>{row.display_name || row.displayName || row.email_address || row.emailAddress}</option>)}</select></label>
             <label>Kime<input value={draftForm.to} onChange={(e) => setDraftForm((v) => ({ ...v, to: e.target.value }))} placeholder="mail@firma.com"/></label>
@@ -595,7 +595,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
           <main className="comm-message-list">
             <div className="comm-pane-title comm-list-toolbar"><b>{mailViewTitle}</b><div><input className="comm-message-search" type="search" value={messageSearch} onChange={(e) => setMessageSearch(e.target.value)} placeholder="Mail ara"/><small>{messageRows.length} kayıt</small></div></div>
-            {activeTab === "mail-sablonlar" ? (
+            {activeTab === "mail-sablonlar" && !selectedFolderId ? (
               <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
               <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => setSelectedMessage(row)}>
@@ -608,7 +608,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
           <aside className="comm-preview">
             <div className="comm-pane-title"><b>Mail Detayı</b><small>ERP Bağlamı</small></div>
-            {selectedMessage && activeTab === "mail-taslaklar" ? <>
+            {selectedMessage && activeTab === "mail-taslaklar" && !selectedFolderId ? <>
               <h2>{selectedMessage.subject || "(Konu yok)"}</h2>
               <p><b>Durum:</b> {selectedMessage.status || "DRAFT"}</p>
               <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Taslak içeriği yok."}</div>
