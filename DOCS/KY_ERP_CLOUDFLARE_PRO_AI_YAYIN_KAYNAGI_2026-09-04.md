@@ -13,7 +13,7 @@ Bu dosya KY ERP'nin Cloudflare Pro, AI/otomasyon, Git auto-deploy ve GitHub Acti
 
 - GitHub = kaynak kodu ve geçmiş.
 - Cloudflare = production runtime, güvenlik, deploy ve AI/otomasyon merkezi.
-- GitHub Actions = otomatik production yolu DEĞİL; yalnız manual/emergency fallback.
+- GitHub Actions = production deploy yolu DEĞİL. Normal release/hotfix için kullanılmaz; yalnız kullanıcı açıkça isterse manual tanılama/test çalıştırılabilir.
 - Frontend = Cloudflare Pages.
 - API = Cloudflare Worker `ky-erp-api`.
 - Database = Cloudflare D1 `ky-erp-db`.
@@ -107,7 +107,7 @@ Yeni normal yayın akışı:
 
 `production branch push -> Cloudflare Git build -> test/build -> Worker veya Pages deploy`
 
-GitHub Actions dakikası normal production deploy için harcanmaz.
+GitHub Actions normal production deploy için hiç kullanılmaz; production sonucu Cloudflare Git Integration üzerinden doğrulanır.
 
 ---
 
@@ -374,3 +374,10 @@ Yarın buradan devam edilecek:
 - GitHub Actions otomatik production yolu olarak kullanılmayacak; Cloudflare Git Integration canonical deploy yoludur.
 
 Kullanıcı talebi: **Yarın minimum soru ile buradan devam et.**
+
+
+---
+
+## 14. 06.09.2026 güncellemesi
+
+Production deploy için GitHub Actions kullanılmaması kesinleştirildi. Sağ üst Bildirim Merkezi gerçek notification API'ye bağlandı. Ayrıntılı son kaynak: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
