@@ -25,7 +25,9 @@
     ]
   },
   "vars": {
-    "RECOVERY_EMAIL_FROM": "KY ERP <admin@kyerp.net>"
+    "RECOVERY_EMAIL_FROM": "KY ERP <admin@kyerp.net>",
+    "AI_GATEWAY_ID": "default",
+    "AI_GATEWAY_COLLECT_LOGS": "false"
   },
   "d1_databases": [
     {
