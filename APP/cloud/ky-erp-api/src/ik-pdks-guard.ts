@@ -144,18 +144,43 @@ async function lockedPeriods(c: Context<AppEnv>, company: string, dates: string[
   return locked;
 }
 
+function auditPeriod(c: Context<AppEnv>) {
+  const now = new Date();
+  const year = Math.max(2020, Math.min(2100, number(c.req.query("year")) || now.getFullYear()));
+  const month = Math.max(1, Math.min(12, number(c.req.query("month")) || now.getMonth() + 1));
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
 async function strictAuditEmployeeIds(c: Context<AppEnv>, company: string) {
+  const period = auditPeriod(c);
   try {
     const result = await c.env.DB.prepare(`SELECT e.id
       FROM hr_monthly_employees e
       JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+      LEFT JOIN ik_person_monthly_compliance mc
+        ON mc.main_company_id=e.main_company_id AND mc.employee_id=e.id AND mc.period=?
       WHERE e.main_company_id=?
-        AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
-        AND TRIM(COALESCE(s.card_no,''))<>''`)
-      .bind(company).all<Row>();
+        AND TRIM(COALESCE(s.card_no,''))<>''
+        AND (
+          (mc.employee_id IS NOT NULL AND mc.sgk_covered=1)
+          OR
+          (mc.employee_id IS NULL AND UPPER(TRIM(COALESCE(e.sgk_status,'VAR'))) <> 'YOK')
+        )`)
+      .bind(period, company).all<Row>();
     return new Set((result.results || []).map((row) => text(row.id)).filter(Boolean));
   } catch {
-    return new Set<string>();
+    try {
+      const legacy = await c.env.DB.prepare(`SELECT e.id
+        FROM hr_monthly_employees e
+        JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+        WHERE e.main_company_id=?
+          AND UPPER(TRIM(COALESCE(e.sgk_status,'VAR'))) <> 'YOK'
+          AND TRIM(COALESCE(s.card_no,''))<>''`)
+        .bind(company).all<Row>();
+      return new Set((legacy.results || []).map((row) => text(row.id)).filter(Boolean));
+    } catch {
+      return new Set<string>();
+    }
   }
 }
 
@@ -179,7 +204,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
     "/api/ik/personnel-control/people",
     "/api/ik/personnel-control/pdks-masters",
   ]);
-  const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance|photo|photo-meta)$/i);
+  const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance(?:-v2)?|photo|photo-meta)$/i);
   if (!safeStatic.has(path) && !personReadMatch) {
     c.res = c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
     return;
@@ -198,7 +223,18 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
   try { payload = await c.res.clone().json(); } catch { return; }
   if (path === "/api/ik/personnel-control/people") {
     const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
-    const filtered = rows.filter((row: Row) => upper(row.sgkStatus || row.sgk_status) === "VAR" && text(row.cardNo || row.card_no));
+    const filtered = rows
+      .filter((row: Row) => allowedIds.has(text(row.id)) && text(row.cardNo || row.card_no))
+      .map((row: Row) => {
+        const {
+          personnelStatus, sgkDays, sgkPeriod, pdksCardDays, sgkPdksMatch,
+          salary, roadAllowance, paymentChannel, bankAmount, cashAmount, identityNo, note,
+          ...safeRow
+        } = row;
+        void personnelStatus; void sgkDays; void sgkPeriod; void pdksCardDays; void sgkPdksMatch;
+        void salary; void roadAllowance; void paymentChannel; void bankAmount; void cashAmount; void identityNo; void note;
+        return safeRow;
+      });
     rewriteJson(c, payload?.data && Array.isArray(payload.data) ? { ...payload, data: filtered } : filtered);
     return;
   }
