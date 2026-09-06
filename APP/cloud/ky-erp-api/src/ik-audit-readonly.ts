@@ -73,11 +73,7 @@ const IK_PERSON_SQL = `
      AND UPPER(TRIM(COALESCE(e.sgk_status,''))) = 'VAR'
 `;
 
-// DENETIM PDKS görünümü: yalnız SGK=VAR + kart numarası bulunan personel.
-const PDKS_PERSON_SQL = `${IK_PERSON_SQL}
-     AND TRIM(COALESCE(s.card_no,'')) <> ''
-`;
-
+// DENETIM PDKS görünümü aylık SGK kapsamıdır. Emekli/finans/iç uyum alanları seçilmez.
 async function auditIkPeople(c: Context<AppEnv>, company: string) {
   return all(
     c,
@@ -86,12 +82,37 @@ async function auditIkPeople(c: Context<AppEnv>, company: string) {
   );
 }
 
-async function auditPdksPeople(c: Context<AppEnv>, company: string) {
-  return all(
-    c,
-    `${PDKS_PERSON_SQL} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`,
-    [company],
-  );
+async function auditPdksPeople(c: Context<AppEnv>, company: string, year: number, month: number) {
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  try {
+    return all(
+      c,
+      `SELECT e.id,e.code,e.full_name,e.department,e.title,
+              CASE WHEN mc.employee_id IS NOT NULL THEN CASE WHEN mc.sgk_covered=1 THEN 'VAR' ELSE 'YOK' END ELSE e.sgk_status END AS sgk_status,
+              e.status,e.hire_date,s.exit_date,s.card_no,s.phone
+         FROM hr_monthly_employees e
+         LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+         LEFT JOIN ik_person_monthly_compliance mc
+           ON mc.main_company_id=e.main_company_id AND mc.employee_id=e.id AND mc.period=?
+        WHERE e.main_company_id=?
+          AND TRIM(COALESCE(s.card_no,''))<>''
+          AND (
+            (mc.employee_id IS NOT NULL AND mc.sgk_covered=1)
+            OR
+            (mc.employee_id IS NULL AND UPPER(TRIM(COALESCE(e.sgk_status,'VAR'))) <> 'YOK')
+          )
+        ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`,
+      [period, company],
+    );
+  } catch {
+    return all(
+      c,
+      `${IK_PERSON_SQL}
+         AND TRIM(COALESCE(s.card_no,'')) <> ''
+         ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`,
+      [company],
+    );
+  }
 }
 
 function dateParts(value: string) {
@@ -173,7 +194,6 @@ async function leaveMap(
          LEFT JOIN ik_person_card_settings s
            ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
         WHERE e.main_company_id=?
-          AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
           AND TRIM(COALESCE(s.card_no,''))<>''
           AND COALESCE(p.status,'')<>'CANCELLED'
           AND p.start_date<=? AND p.end_date>=?`,
@@ -190,7 +210,6 @@ async function leaveMap(
          LEFT JOIN ik_person_card_settings s
            ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
         WHERE e.main_company_id=?
-          AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
           AND TRIM(COALESCE(s.card_no,''))<>''
           AND p.start_date<=? AND p.end_date>=?`,
       [company, end, start],
@@ -225,7 +244,7 @@ async function buildPdksMonth(
   const dates = monthDays(year, month);
   const start = dates[0];
   const end = dates.at(-1)!;
-  const peopleRows = await auditPdksPeople(c, company);
+  const peopleRows = await auditPdksPeople(c, company, year, month);
   const people = peopleRows.map(safePerson);
 
   const [events, overrides, holidays, leaves] = await Promise.all([
@@ -241,7 +260,6 @@ async function buildPdksMonth(
               WHERE t.main_company_id=?
                 AND t.work_date BETWEEN ? AND ?
                 AND e.main_company_id=?
-                AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
                 AND TRIM(COALESCE(s.card_no,''))<>''
               ORDER BY t.work_date,t.event_time`,
             [company, start, end, company],
@@ -260,7 +278,6 @@ async function buildPdksMonth(
               WHERE o.main_company_id=?
                 AND o.work_date BETWEEN ? AND ?
                 AND e.main_company_id=?
-                AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR'
                 AND TRIM(COALESCE(s.card_no,''))<>''`,
             [company, start, end, company],
           )

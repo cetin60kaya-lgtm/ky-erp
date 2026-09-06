@@ -133,6 +133,16 @@ async function personRow(c: Context<AppEnv>, company: string, employeeId: string
     WHERE e.main_company_id=? AND e.id=? LIMIT 1`, [company, employeeId]);
 }
 
+async function auditSgkVisible(c: Context<AppEnv>, company: string, person: Row, year: number, month: number) {
+  if (!text(person.card_no)) return false;
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  try {
+    const row = await first(c, "SELECT sgk_covered FROM ik_person_monthly_compliance WHERE main_company_id=? AND employee_id=? AND period=? LIMIT 1", [company, text(person.id), period]);
+    if (row) return Number(row.sgk_covered || 0) === 1;
+  } catch {}
+  return upper(person.sgk_status || "VAR") !== "YOK";
+}
+
 async function resolveSchedule(c: Context<AppEnv>, company: string, person: Row) {
   await seedCompany(c, company);
   const companyRule = await first(c, `SELECT * FROM ik_pdks_rule_profiles WHERE main_company_id=? LIMIT 1`, [company]) || {};
@@ -194,6 +204,7 @@ function duplicateCount(times: string[], seconds: number) {
 async function attendanceV2(c: Context<AppEnv>, auth: Row, employeeId: string, year: number, month: number) {
   const person = await personRow(c, auth.company, employeeId);
   if (!person) return null;
+  if (auth.audit && !(await auditSgkVisible(c, auth.company, person, year, month))) return null;
   const dates = monthDays(year, month), start = dates[0], end = dates[dates.length - 1];
   const schedule = await resolveSchedule(c, auth.company, person);
   const [events, overrides, holidays, leaves] = await Promise.all([

@@ -123,6 +123,7 @@ function mapMonthly(row: Row): Row {
     title: text(row.title),
     workType: text(row.work_type) || "Aylık",
     sgkStatus: text(row.sgk_status) || "VAR",
+    personnelStatus: text(row.personnel_status) || "NORMAL",
     status: text(row.status) || "Aktif",
     hireDate,
     startDate: hireDate,
@@ -658,14 +659,14 @@ function monthlyValues(body: Row, current: Row = {}) {
   const sgk = text(body.sgkStatus ?? body.sgk_status ?? current.sgk_status) || "VAR";
   const requestedPayment =
     text(body.bankPaymentType ?? body.paymentChannel ?? current.bank_payment_type) ||
-    (sgk === "YOK" ? "Elden" : "Banka + Elden");
-  const enteredBank = number(body.bankAmount ?? current.bank_amount);
-  const enteredCash = number(body.cashAmount ?? current.cash_amount);
-  const total = enteredBank + enteredCash > 0 ? enteredBank + enteredCash : salary + road;
-  const cashOnly = requestedPayment.toLocaleLowerCase("tr-TR").includes("elden") &&
-    !requestedPayment.toLocaleLowerCase("tr-TR").includes("banka");
-  const bank = sgk === "YOK" || cashOnly ? 0 : Math.min(total, enteredBank || 28075.5);
-  const cash = Math.max(0, total - bank);
+    "Banka + Elden";
+  const enteredBank = Math.max(0, number(body.bankAmount ?? current.bank_amount));
+  const total = Math.max(0, salary + road);
+  const paymentUpper = upper(requestedPayment);
+  const cashOnly = paymentUpper.includes("ELDEN") && !paymentUpper.includes("BANKA");
+  const bankOnly = paymentUpper.includes("BANKA") && !paymentUpper.includes("ELDEN");
+  const bank = cashOnly ? 0 : bankOnly ? total : Math.min(total, enteredBank);
+  const cash = bankOnly ? 0 : Math.max(0, total - bank);
   return {
     code: text(body.code ?? body.personnelCode ?? current.code),
     fullName: text(body.fullName ?? body.adSoyad ?? current.full_name).replace(/\s+/g, " "),
@@ -1087,7 +1088,10 @@ async function advancedMonth(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const year = number(c.req.query("year")) || new Date().getFullYear();
   const month = number(c.req.query("month")) || new Date().getMonth() + 1;
-  const [employees, cards, adjustments, leaves, payroll, documents, contracts] = await Promise.all([
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const periodStart = `${period}-01`;
+  const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows] = await Promise.all([
     monthlyRows(c, companyId),
     all(c, "SELECT * FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
     adjustmentRows(c, companyId),
@@ -1095,15 +1099,46 @@ async function advancedMonth(c: Context<AppEnv>) {
     payrollRows(c, companyId),
     all(c, "SELECT d.* FROM hr_employee_documents d JOIN hr_monthly_employees e ON e.id=d.employee_id WHERE e.main_company_id=? ORDER BY d.date DESC", [companyId]),
     all(c, "SELECT s.* FROM hr_salary_contracts s JOIN hr_monthly_employees e ON e.id=s.employee_id WHERE e.main_company_id=? ORDER BY s.effective_date DESC", [companyId]),
+    all(c, "SELECT employee_id,personnel_status FROM ik_person_hr_profiles WHERE main_company_id=?", [companyId]).catch(() => []),
+    all(c, "SELECT employee_id,sgk_covered,sgk_days,note FROM ik_person_monthly_compliance WHERE main_company_id=? AND period=?", [companyId, period]).catch(() => []),
+    all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS card_days FROM ik_time_clock_events WHERE main_company_id=? AND work_date BETWEEN ? AND ? GROUP BY employee_id", [companyId, periodStart, periodEnd]).catch(() => []),
   ]);
-  const period = `${year}-${String(month).padStart(2, "0")}`;
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
+  const profileByEmployee = new Map(profiles.map((row) => [text(row.employee_id), row]));
+  const complianceByEmployee = new Map(compliance.map((row) => [text(row.employee_id), row]));
+  const cardDaysByEmployee = new Map(cardDayRows.map((row) => [text(row.employee_id), number(row.card_days)]));
   const mergedEmployees = employees
     .filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period))
     .map((employee) => {
       const card = cardsByEmployee.get(text(employee.id)) || {};
+      const profile = profileByEmployee.get(text(employee.id)) || {};
+      const monthlyCompliance = complianceByEmployee.get(text(employee.id));
       const sgkValue = number(card.sgk_follow);
-      return { ...employee, id: text(employee.id), cardNo: text(card.card_no), identityNo: text(card.identity_no), exitDate: hrDateOnly(card.exit_date), payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included), cardSource: text(card.card_source) || "TNF", personelKodu: text(card.personel_kodu) || text(employee.code), activePassive: text(card.active_passive) || text(employee.status), paymentType: text(card.payment_type) || text(employee.bankPaymentType), sgkFollow: card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1 ? true : sgkValue === 0 ? false : null, phone: text(card.phone) };
+      const fallbackSgk = card.sgk_follow === undefined ? text(employee.sgkStatus) !== "YOK" : sgkValue === 1;
+      const sgkFollow = monthlyCompliance ? number(monthlyCompliance.sgk_covered) === 1 : fallbackSgk;
+      const sgkDays = monthlyCompliance?.sgk_days === null || monthlyCompliance?.sgk_days === undefined ? null : number(monthlyCompliance.sgk_days);
+      const pdksCardDays = cardDaysByEmployee.get(text(employee.id)) || 0;
+      const sgkPdksMatch = sgkDays === null ? null : sgkDays === pdksCardDays;
+      return {
+        ...employee,
+        id: text(employee.id),
+        personnelStatus: text(profile.personnel_status) || text(employee.personnelStatus) || "NORMAL",
+        cardNo: text(card.card_no),
+        identityNo: text(card.identity_no),
+        exitDate: hrDateOnly(card.exit_date),
+        payrollIncluded: card.payroll_included === undefined ? true : flag(card.payroll_included),
+        cardSource: text(card.card_source) || "TNF",
+        personelKodu: text(card.personel_kodu) || text(employee.code),
+        activePassive: text(card.active_passive) || text(employee.status),
+        paymentType: text(card.payment_type) || text(employee.bankPaymentType),
+        sgkFollow,
+        sgkStatus: sgkFollow ? "VAR" : "YOK",
+        sgkDays,
+        sgkPeriod: period,
+        pdksCardDays,
+        sgkPdksMatch,
+        phone: text(card.phone),
+      };
     });
   const visibleEmployeeIds = new Set(mergedEmployees.map((employee) => text(employee.id)));
   return okData(c, {
@@ -1242,8 +1277,35 @@ async function savePersonCard(c: Context<AppEnv>) {
     legalType !== "YOK" && legalAmount > 0 ? 1 : 0, legalAmount, legalSource,
     text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
+  const personnelStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(body.personnelStatus)) ? "RETIRED" : "NORMAL";
+  const period = /^\d{4}-\d{2}$/.test(text(body.period))
+    ? text(body.period)
+    : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
+  const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
+  const maxSgkDays = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate() || 31;
+  const rawSgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.round(number(body.sgkDays));
+  if (rawSgkDays !== null && (rawSgkDays < 0 || rawSgkDays > maxSgkDays)) {
+    return error(c, 400, "SGK_DAYS_INVALID", `SGK gün sayısı 0-${maxSgkDays} arasında olmalıdır.`);
+  }
+  const sgkDays = sgkCovered ? rawSgkDays : 0;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
+      VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET
+      main_company_id=excluded.main_company_id,personnel_status=excluded.personnel_status,
+      updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+      .bind(employeeId, companyId, personnelStatus, text(body.userName) || "IK", nowIso()),
+    c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
+      VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
+      sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,note=excluded.note,
+      updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+      .bind(companyId, employeeId, period, sgkCovered ? 1 : 0, sgkDays, text(body.sgkNote), text(body.userName) || "IK", nowIso()),
+  ]);
   await updateMonthlyEmployeeFromCard(c, employeeId, companyId, body, current);
-  return okData(c, { employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra, legalDeductionType: legalType, garnishmentSource: legalSource });
+  return okData(c, {
+    employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra,
+    legalDeductionType: legalType, garnishmentSource: legalSource,
+    personnelStatus, period, sgkCovered, sgkDays,
+  });
 }
 async function updateMonthlyEmployeeFromCard(c: Context<AppEnv>, employeeId: string, companyId: string, body: Row, current: Row) {
   const merged: Row = { ...current, ...body, code: body.personelKodu || body.code || current.code, bankPaymentType: body.paymentType || current.bank_payment_type, sgkStatus: body.sgkFollow === false ? "YOK" : "VAR", status: body.activePassive || body.status || current.status };
