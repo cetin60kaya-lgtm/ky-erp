@@ -48,8 +48,8 @@ Desteklenen V1 provider tipleri:
 
 Kurallar:
 
-1. Provider bağlantısı bir kez **Depolama > Bağlantılar** ekranında tanımlanır.
-2. Bölüm + dosya amacı hedefi **Depolama > Bölüm / Dosya Atamaları** ekranında seçilir.
+1. Dosya provider bağlantısı bir kez **Bağlantılar & Depolama > Dosya Servisleri** ekranında tanımlanır.
+2. Bölüm + dosya amacı hedefi **Bağlantılar & Depolama > Bölüm / Dosya Atamaları** ekranında seçilir.
 3. Modüller doğrudan Google/OneDrive/NAS path kodu çağırmaz; ortak File Hub resolver kullanır.
 4. Çözüm sırası: exact `module + purpose` binding -> firma primary storage -> hedef yoksa kontrollü hata.
 5. OneDrive desteklenen opsiyonel provider'dır; varsayılan, repo kökü veya runtime zorunluluğu değildir.
@@ -70,6 +70,26 @@ Kurallar:
 - **İmalat:** teknik dosya, model dosyası, üretim fotoğrafı ve müşteri referansı File Hub üzerinden çözülür.
 - **Stok:** kalite/teknik/genel ekler File Hub üzerinden çözülür.
 
+## Mail & Dosyalar — canonical kural
+
+KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kullanıcı deneyimi ile bağlantı yönetimi ayrıdır.
+
+- Günlük kullanıcı alanı: **Mail & Dosyalar**.
+- Yönetim alanı: **Bağlantılar & Depolama**.
+- Dosya provider yönetimi: **Bağlantılar & Depolama > Dosya Servisleri**.
+- Mail provider / posta kutusu yönetimi: **Bağlantılar & Depolama > E-posta Hesapları**.
+- Mail & Dosyalar içinde Gelen Kutusu, Gönderilenler, Taslaklar, Yanıt Bekleyenler, Şablonlar ve File Hub dosya görünümleri bulunur.
+- Microsoft 365/Outlook ilk aktif mail adapterıdır. Gmail/JMAP/IMAP-SMTP yalnız adapter gerçekten hazır ve production config mevcut olduğunda aktif gösterilir; hazır olmayan provider sahte şekilde “bağlı” görünmez.
+- Mail hesapları tenant + mail_account_members ile izole edilir. Modül yetkisi tek başına başka kullanıcının posta kutusunu açmaz.
+- Kişisel hesap talebi Firma Sahibi onayı; ortak/bölüm, Muhasebe ve e-Belge gibi kritik kutular Firma Sahibi -> Uygulama Sahibi sıralı çift onay kullanır.
+- OAuth token/credential plaintext saklanmaz; AES-GCM kasası kullanılır ve mevcut File Hub OAuth secret katmanı yeniden kullanılabilir.
+- Mail gönderimi yalnız açık kullanıcı işlemiyle yapılır. AI otomatik gönderemez.
+- Provider 202 Accepted veya benzeri kabul cevabı “teslim edildi” anlamına gelmez.
+- Belirsiz timeout/transport sonucunda otomatik retry yapma; UNKNOWN_REVIEW_REQUIRED ile çift mail riski engellenir.
+- Mail ekleri File Hub ile ilişkilendirilir; aynı dosyanın gereksiz ikinci kopyası üretilmez.
+- Normal operasyon rolleri Mail & Dosyalar alanını görüntüleyebilir; mail oluşturma/gönderme/onay yetkisi ayrıca verilir.
+- Canonical additive Mail Core D1 şeması 0050_mail_communication_core.sql dosyasıdır. Production D1'e uygulanmadan önce full backup + readiness + hedefli migration + schema doğrulaması zorunludur.
+
 ## Desen özel kuralı
 
 - Model ana kaydının tek merkezi Desen'dir.
@@ -81,7 +101,7 @@ Kurallar:
 
 - KY ERP çoklu ana firma/tenant destekler.
 - Storage connection, binding, FileAsset, location, relation, event ve agent status kayıtları tenant bağlamından çıkamaz.
-- Yönetimsel Depolama ekranı owner/admin yetkisindedir.
+- Yönetimsel **Bağlantılar & Depolama** ekranı owner/admin yetkisindedir.
 - Normal modül kullanıcısı yalnız yetkili olduğu entity dosyalarını ve kendi modülü için çözümlenen storage hedefini görebilir.
 
 ## Veri ve güvenlik
