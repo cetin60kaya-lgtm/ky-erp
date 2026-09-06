@@ -7,7 +7,7 @@
   "scripts": {
     "test": "node --test src/**/*.test.js",
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/worker-diag-export.mjs && vite build",
     "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --max-warnings=0",
     "preview": "vite preview"
   },
@@ -23,7 +23,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-hooks": "^7.1.0",
     "globals": "^17.4.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.4"
