@@ -177,7 +177,7 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
   const threadId=await ensureThread(c,tenant,text(account.id),text(item.threadId),headers.SUBJECT,stamp),ts=nowIso();
   const existing=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
   const id=text(existing?.id)||crypto.randomUUID();
-  const hasAttachments=Number(item?.payload?.parts?.length||0)>0&&JSON.stringify(item.payload.parts).includes("filename");
+  const hasAttachments=Number(item?.payload?.parts?.length||0)>0&&JSON.stringify(item.payload.parts).includes("attachmentId");
   const values=[threadId||null,folder.id||null,headers["MESSAGE-ID"]||null,actualDirection,from.email||null,from.name||null,headers.SUBJECT||null,bodies.plain||text(item.snippet)||null,bodies.html||null,actualDirection==="OUTGOING"?stamp:null,actualDirection==="INCOMING"?stamp:null,(Array.isArray(item.labelIds)&&item.labelIds.includes("UNREAD"))?0:1,(Array.isArray(item.labelIds)&&item.labelIds.includes("STARRED"))?1:0,hasAttachments?1:0,JSON.stringify({provider:"GMAIL",labelIds:item.labelIds||[],historyId:text(item.historyId)}),ts,id,tenant];
   if(existing?.id){
     await c.env.DB.prepare("UPDATE mail_messages SET thread_id=?,folder_id=?,internet_message_id=?,direction=?,sender_email=?,sender_name=?,subject=?,body_text=?,body_html=?,sent_at=?,received_at=?,is_read=?,is_flagged=?,has_attachments=?,provider_metadata=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(...values).run();
@@ -192,15 +192,22 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
   }
   await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
   const attachmentParts:any[]=[];
+  const partHeader=(part:any,name:string)=>{
+    const wanted=upper(name);
+    const row=(Array.isArray(part?.headers)?part.headers:[]).find((header:any)=>upper(header?.name)===wanted);
+    return text(row?.value);
+  };
   const collect=(part:any)=>{
     if(!part||typeof part!=="object")return;
-    if(text(part.filename)&&text(part?.body?.attachmentId))attachmentParts.push(part);
+    const attachmentId=text(part?.body?.attachmentId),contentId=partHeader(part,"Content-ID").replace(/^<|>$/g,""),disposition=partHeader(part,"Content-Disposition").toLowerCase();
+    if(attachmentId&&(text(part.filename)||contentId))attachmentParts.push({...part,_contentId:contentId,_isInline:disposition.includes("inline")||Boolean(contentId)});
     for(const child of Array.isArray(part.parts)?part.parts:[])collect(child);
   };
   collect(item.payload||{});
   for(const part of attachmentParts){
+    const mime=text(part.mimeType)||"application/octet-stream",fallbackName=part._contentId?`inline-${text(part.partId)||crypto.randomUUID()}`:"ek";
     await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,id,text(part.body.attachmentId),null,text(part.filename),text(part.mimeType)||null,Number(part?.body?.size||0)||null,0,null,JSON.stringify({provider:"GMAIL",partId:text(part.partId)}),ts).run();
+      .bind(crypto.randomUUID(),tenant,id,text(part.body.attachmentId),null,text(part.filename)||fallbackName,mime,Number(part?.body?.size||0)||null,part._isInline?1:0,text(part._contentId)||null,JSON.stringify({provider:"GMAIL",partId:text(part.partId)}),ts).run();
   }
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
@@ -362,9 +369,9 @@ export function registerGoogleMailRoutes(app:any){
     }
     if(action==="DELETE"){
       await googleJson(url+"/trash",token,{method:"POST"});
-      const target=await c.env.DB.prepare("SELECT id FROM mail_folders WHERE account_id=? AND main_company_slug=? AND UPPER(folder_type)='TRASH' LIMIT 1").bind(row.account_id,tenant).first<AnyRow>();
-      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=COALESCE(?,folder_id),updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
-      return c.json({ok:true,data:{messageId,action}});
+      const target=await ensureFolder(c,tenant,text(row.account_id),"TRASH","Çöp Kutusu","TRASH");
+      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action,folderId:text(target?.id)||null}});
     }
     if(action==="MOVE"){
       const folderId=text(body.folderId),target=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(folderId,row.account_id,tenant).first<AnyRow>();
