@@ -339,6 +339,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           cc: draftForm.cc.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
           bcc: draftForm.bcc.split(/[;,]/).map((email) => email.trim()).filter(Boolean),
         },
+        attachmentRefs: composeAttachments.map((row) => ({ fileAssetId: row.id })),
       });
       if (sendNow) {
         const result = await sendMailDraft(created.id);
@@ -350,6 +351,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         setNotice("Taslak kaydedildi.");
       }
       setDraftForm({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
+      setComposeAttachments([]);
+      setAttachmentSearch("");
       setComposeOpen(false);
       setMailboxRefresh((value) => value + 1);
       await loadBase();
@@ -385,14 +388,40 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             isDefaultReceive: Boolean(preset.isDefaultReceive),
           });
         }
+        setNotice(`${preset.emailAddress} kaydı oluşturuldu. Firma sahibi onayından sonra OAuth bağlantısı açılacak.`);
+        await loadBase();
+        return;
       }
 
-      const startOAuth = preset.providerType === "GMAIL" ? startGoogleMailOAuth : startMicrosoftMailOAuth;
-      const result = await startOAuth(accountId);
-      if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
-      window.location.assign(result.authorizeUrl);
+      const readiness = account?.readiness || {};
+      if (!readiness.companyApproved) {
+        setNotice(`${preset.emailAddress} için firma sahibi onayı bekleniyor. Onay tamamlanmadan OAuth bağlantısı hazır sayılmaz.`);
+        return;
+      }
+      if (!readiness.oauthConnected) {
+        const startOAuth = preset.providerType === "GMAIL" ? startGoogleMailOAuth : startMicrosoftMailOAuth;
+        const result = await startOAuth(accountId);
+        if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
+        window.location.assign(result.authorizeUrl);
+        return;
+      }
+      if (!readiness.syncHealthy) {
+        const result = await syncMailAccount(accountId);
+        const total = safeArray(result?.folders).reduce((sum, row) => sum + Number(row.count || 0), 0);
+        setNotice(result?.partial
+          ? `${preset.emailAddress} bağlı; senkronizasyon kısmi kaldı. ${total} kayıt işlendi, kontrol gerekiyor.`
+          : `${preset.emailAddress} bağlantısı doğrulandı ve senkron tamamlandı. ${total} kayıt işlendi.`);
+        setSelectedAccountId(String(accountId));
+        setMailboxRefresh((value) => value + 1);
+        await loadBase();
+        return;
+      }
+      setSelectedAccountId(String(accountId));
+      setNotice(`${preset.emailAddress} · sağlayıcı ayarı, firma onayı, OAuth ve senkronizasyon doğrulandı.`);
+      setRequestOpen(false);
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Mail hesabı doğrudan eklenemedi."}`);
+      setNotice(`Hata: ${error?.message || "Mail hesabı bağlantısı tamamlanamadı."}`);
+    } finally {
       setLoading(false);
     }
   }
@@ -432,6 +461,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       bodyText: "",
       replyToMessageId: selectedMessage.id || "",
     });
+    setComposeAttachments([]);
+    setAttachmentSearch("");
     setComposeOpen(true);
   }
 
