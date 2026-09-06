@@ -245,9 +245,16 @@ export function registerGoogleMailRoutes(app:any){
     const account=await accountForUser(c,current,tenant,text(c.req.param("id")));
     if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Mail hesabı bulunamadı veya erişim yok."),404);
     if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
-    const token=(await usableToken(c,tenant,account)).text,defs=[["INBOX","INBOX","INCOMING"],["SENT","SENT","OUTGOING"]],summary:any[]=[];
-    for(const [labelId,type,direction] of defs){
-      const folder=await ensureFolder(c,tenant,text(account.id),labelId,labelId==="INBOX"?"Gelen Kutusu":"Gönderilenler",type);
+    const token=(await usableToken(c,tenant,account)).text,labelPayload=(await googleJson(GMAIL+"/labels",token)).payload,labels=Array.isArray(labelPayload.labels)?labelPayload.labels:[],folderMap=new Map<string,AnyRow>();
+    const typeOf=(id:string)=>({INBOX:"INBOX",SENT:"SENT",DRAFT:"DRAFTS",SPAM:"JUNK",TRASH:"TRASH",STARRED:"STARRED",IMPORTANT:"IMPORTANT"}[id]||"CUSTOM");
+    for(const label of labels){
+      const id=text(label.id);if(!id)continue;
+      const folder=await ensureFolder(c,tenant,text(account.id),id,text(label.name)||id,typeOf(id));
+      folderMap.set(id,{...folder,folder_type:typeOf(id)});
+    }
+    const defs=[["INBOX","INCOMING"],["SENT","OUTGOING"]],summary:any[]=[];
+    for(const [labelId,direction] of defs){
+      const folder=folderMap.get(labelId)||await ensureFolder(c,tenant,text(account.id),labelId,labelId==="INBOX"?"Gelen Kutusu":"Gönderilenler",typeOf(labelId));
       let count=0;
       try{
         const list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
@@ -258,11 +265,67 @@ export function registerGoogleMailRoutes(app:any){
         const ts=nowIso(),profile=(await googleJson(GMAIL+"/profile",token)).payload;
         await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=NULL,updated_at=excluded.updated_at")
           .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_HISTORY",text(profile.historyId)||null,ts,ts,null,ts).run();
-        summary.push({folder:type,count,ok:true});
-      }catch(error:any){summary.push({folder:type,count,ok:false,error:text(error?.message)});}
+        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,ok:true});
+      }catch(error:any){summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,ok:false,error:text(error?.message)});}
     }
-    const partial=summary.some(r=>!r.ok);await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial});
-    return c.json({ok:!partial,data:{accountId:account.id,partial,folders:summary},...(partial?{error:{code:"MAIL_SYNC_PARTIAL",message:"Bazı Gmail klasörleri senkronize edilemedi."}}:{})},partial?207:200);
+    const partial=summary.some(r=>!r.ok);await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,discoveredLabels:labels.length});
+    return c.json({ok:!partial,data:{accountId:account.id,partial,folders:summary,discoveredFolders:labels.length},...(partial?{error:{code:"MAIL_SYNC_PARTIAL",message:"Bazı Gmail klasörleri senkronize edilemedi."}}:{})},partial?207:200);
+  });
+
+  app.post("/api/mail/accounts/:id/folders/:folderId/sync/google",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    const account=await accountForUser(c,current,tenant,text(c.req.param("id")));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Mail hesabı bulunamadı veya erişim yok."),404);
+    if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
+    const folder=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(text(c.req.param("folderId")),account.id,tenant).first<AnyRow>();
+    if(!folder)return c.json(err("MAIL_FOLDER_NOT_FOUND","Posta klasörü bulunamadı."),404);
+    const token=(await usableToken(c,tenant,account)).text,labelId=text(folder.provider_folder_id),list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
+    let count=0;
+    for(const item of Array.isArray(list.messages)?list.messages:[]){
+      const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
+      await persistMessage(c,tenant,account,folder,full,upper(folder.folder_type)==="SENT"?"OUTGOING":"AUTO");count++;
+    }
+    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count}});
+  });
+
+  app.post("/api/mail/messages/:id/action/google",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!perm(current,"canUpdate"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail düzenleme yetkiniz yok."),403);
+    const row=await c.env.DB.prepare("SELECT m.*,a.provider_type,a.provider_connected,a.email_address FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
+    if(!row)return c.json(err("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
+    if(upper(row.provider_type)!=="GMAIL"||!row.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
+    const token=(await usableToken(c,tenant,account)).text,providerMessageId=text(row.provider_message_id),action=upper(body.action),url=GMAIL+"/messages/"+encodeURIComponent(providerMessageId),ts=nowIso();
+    const modify=async(addLabelIds:string[]=[],removeLabelIds:string[]=[])=>googleJson(url+"/modify",token,{method:"POST",body:JSON.stringify({addLabelIds,removeLabelIds})});
+    if(action==="MARK_READ"||action==="MARK_UNREAD"){
+      const isRead=action==="MARK_READ";await modify(isRead?[]:["UNREAD"],isRead?["UNREAD"]:[]);
+      await c.env.DB.prepare("UPDATE mail_messages SET is_read=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(isRead?1:0,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action,isRead}});
+    }
+    if(action==="FLAG"||action==="UNFLAG"){
+      const flagged=action==="FLAG";await modify(flagged?["STARRED"]:[],flagged?[]:["STARRED"]);
+      await c.env.DB.prepare("UPDATE mail_messages SET is_flagged=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(flagged?1:0,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action,flagged}});
+    }
+    if(action==="ARCHIVE"){
+      await modify([],["INBOX"]);
+      const target=await c.env.DB.prepare("SELECT id FROM mail_folders WHERE account_id=? AND main_company_slug=? AND UPPER(folder_type)='ARCHIVE' LIMIT 1").bind(row.account_id,tenant).first<AnyRow>();
+      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=COALESCE(?,folder_id),updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action}});
+    }
+    if(action==="DELETE"){
+      await googleJson(url+"/trash",token,{method:"POST"});
+      const target=await c.env.DB.prepare("SELECT id FROM mail_folders WHERE account_id=? AND main_company_slug=? AND UPPER(folder_type)='TRASH' LIMIT 1").bind(row.account_id,tenant).first<AnyRow>();
+      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=COALESCE(?,folder_id),updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action}});
+    }
+    if(action==="MOVE"){
+      const folderId=text(body.folderId),target=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(folderId,row.account_id,tenant).first<AnyRow>();
+      if(!target)return c.json(err("MAIL_FOLDER_NOT_FOUND","Hedef posta klasörü bulunamadı."),404);
+      const labelId=text(target.provider_folder_id);await modify([labelId],labelId==="INBOX"?[]:["INBOX"]);
+      await c.env.DB.prepare("UPDATE mail_messages SET folder_id=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(target.id,ts,messageId,tenant).run();
+      return c.json({ok:true,data:{messageId,action,folderId:target.id}});
+    }
+    return c.json(err("MAIL_ACTION_INVALID","Desteklenmeyen mail işlemi."),422);
   });
 
   app.post("/api/mail/drafts/:id/send/google",async(c:any)=>{
