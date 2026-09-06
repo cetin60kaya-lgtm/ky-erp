@@ -8,6 +8,7 @@ on:
       - "APP/cloud/ky-erp-api/src/e-belge-*.ts"
       - "APP/cloud/ky-erp-api/migrations/0008_hr_relational_bootstrap.sql"
       - "APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql"
+      - "APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql"
       - "APP/cloud/ky-erp-api/local-accounting-quick-smoke.sql"
       - "APP/cloud/ky-erp-api/local-accounting-quick-smoke-seed.sql"
       - "APP/app/ky-erp-frontend/src/main.jsx"
@@ -169,6 +170,8 @@ jobs:
             migrations/0008_hr_relational_bootstrap.sql \
             local-accounting-quick-smoke.sql \
             migrations/0040_accounting_fibe_company_tracking.sql \
+            migrations/0034_accounting_document_core.sql \
+            migrations/0046_accounting_canonical_report_controls.sql \
             local-accounting-quick-smoke-seed.sql; do
             npx wrangler d1 execute ky-erp-production-local \
               --local \
