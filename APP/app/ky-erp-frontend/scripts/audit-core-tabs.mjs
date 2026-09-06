@@ -36,9 +36,8 @@ const expected = {
   ],
   isnet: ["yonetim-merkezi", "belge-merkezi", "is-akisi", "arsiv-gonderim", "ayarlar"],
   ik: [
-    "ozet", "personel-kartlari", "mesai-avans", "puantaj-izin",
-    "bordro-odeme", "sgk-evrak-kontrol", "gunluk-personel",
-    "gunluk-personel-kartlari", "ik-raporlari", "gunluk-odeme-fisleri",
+    "ozet", "personel-kartlari", "ucret-odeme-plani",
+    "mesai-avans", "bordro-odeme", "sgk-evrak-kontrol",
   ],
 };
 
@@ -58,10 +57,9 @@ const appV3 = read("src/AppV3.jsx");
 const main = read("src/main.jsx");
 const muhasebePage = read("src/pages/modules/MuhasebePage.jsx");
 const smartMatchPage = read("src/pages/modules/muhasebe/MuhasebeSmartMatchPage.jsx");
-const ikPage = read("src/pages/modules/IkPage.jsx");
-const monthlyPersonnel = read("src/pages/modules/ik/MonthlyPersonnelWorkspace.jsx");
-const monthlyOperations = read("src/pages/modules/ik/MonthlyOperationsWorkspaceV2.jsx");
-const dailyWorkspace = read("src/pages/modules/ik/DailyHrWorkspace.jsx");
+const ikPersonnelFinance = read("src/pages/modules/ik/IkPersonnelFinancePage.jsx");
+const ikFinance = read("src/pages/modules/ik/IkFinancePage.jsx");
+const ikAdvanced = read("src/pages/modules/IkAdvancedMonthly.jsx");
 
 for (const tab of expected.muhasebe) {
   if (tab === "envanter-urunleri") {
@@ -95,27 +93,40 @@ requireCheck(
   "İşNet/fatura önizleme: gizli güvenli rota bağlı",
 );
 
-const ikCombined = [ikPage, monthlyPersonnel, monthlyOperations, dailyWorkspace, main].join("\n");
+const ikCombined = [appV3, ikPersonnelFinance, ikFinance, ikAdvanced, main].join("\n");
 for (const tab of expected.ik) {
-  requireCheck(ikCombined.includes(tab), `İK/${tab}: bir çalışma alanında karşılığı var`);
-}
-for (const route of ["/ik/mesai-avans", "/ik/puantaj-izin", "/ik/bordro-odeme"]) {
-  requireCheck(monthlyOperations.includes(route), `${route}: yeni aylık işlem merkezine bağlı`);
+  requireCheck(ikCombined.includes(tab), `İK/${tab}: canonical çalışma alanında karşılığı var`);
 }
 requireCheck(
-  main.includes("MonthlyOperationsWorkspaceV2") && !main.includes("<MonthlyOperationsWorkspace />"),
-  "İK aylık: eski işlem alanı yerine V2 kullanılıyor",
+  appV3.includes("IkPersonnelFinancePage") &&
+  appV3.includes("IkFinancePage") &&
+  !appV3.includes("IkPdksSyncPage") &&
+  !appV3.includes("IkPersonnelCenterPage"),
+  "İK / PDKS: görünür İK rotaları personel-finans alanına ayrılmış",
 );
 requireCheck(
-  monthlyOperations.includes("hesaplaBordro") && monthlyOperations.includes("olusturBordro"),
-  "İK bordro: hesaplama ve taslak kaydetme API'lerine bağlı",
+  ikPersonnelFinance.includes("Yıllık İzin Hakediş / Bakiye") &&
+  ikPersonnelFinance.includes("Hakediş Geçmişi") &&
+  ikPersonnelFinance.includes("Kullanılan") &&
+  ikPersonnelFinance.includes("Kalan"),
+  "İK yıllık izin: hakediş, kullanılan, kalan ve hakediş geçmişi var",
 );
 requireCheck(
-  monthlyOperations.includes("overtimeHourlyBase") && monthlyOperations.includes("225") && monthlyOperations.includes("300"),
-  "İK mesai: 225/300 saat tabanı destekleniyor",
+  !ikAdvanced.includes("getPdksLiveDashboard") &&
+  !ikAdvanced.includes("Bugünkü PDKS Hareketi") &&
+  ikAdvanced.includes("PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları"),
+  "İK aylık özet: canlı PDKS/puantaj operasyonu içermez",
 );
 requireCheck(
-  monthlyOperations.includes("1.5") && monthlyOperations.includes("? 2 : 1.5"),
+  ikAdvanced.includes("savePayroll") && ikAdvanced.includes("savePayrollOverride"),
+  "İK bordro: hesap/kayıt ve son kontrol akışı bağlı",
+);
+requireCheck(
+  ikAdvanced.includes("overtimeHourlyBase") && ikAdvanced.includes("225"),
+  "İK mesai: merkezi saat tabanı ile hesaplanıyor",
+);
+requireCheck(
+  ikAdvanced.includes("1.5") && ikAdvanced.includes("? 2 : 1.5"),
   "İK mesai: hafta içi ×1,5 ve hafta sonu/resmî tatil ×2 kuralı var",
 );
 

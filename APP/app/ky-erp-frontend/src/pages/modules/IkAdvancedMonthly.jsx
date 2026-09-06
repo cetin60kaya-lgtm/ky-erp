@@ -23,7 +23,6 @@ import {
   uploadIkAdvancedDocument,
 } from "../../services/ikApi";
 import { printHtmlDocument } from "../../services/printService";
-import { getPdksLiveDashboard } from "../../services/pdksApi";
 import { exportRowsToExcelFile } from "../../utils/excelExport";
 import "./ik.advanced.css";
 
@@ -218,7 +217,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [month, setMonth] = useState(initial.month);
   const [data, setData] = useState({});
   const [payrollData, setPayrollData] = useState(null);
-  const [pdksLive, setPdksLive] = useState({ metrics: {}, liveCards: [], events: [] });
   const [preparedPeriods, setPreparedPeriods] = useState(() => readPreparedPeriods(companyId));
   const [logs, setLogs] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -285,12 +283,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setBusy(true);
       try {
         const includePayroll = prepare || periodPrepared;
-        const [result, audit, payroll, center, live] = await Promise.all([
+        const [result, audit, payroll, center] = await Promise.all([
           getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
           getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 })),
           includePayroll ? getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month })) : Promise.resolve(null),
           getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: `${year - 1}-01-01`, to: `${year + 1}-12-31` })),
-          getPdksLiveDashboard(params({ mainCompanyId: companyId })),
         ]);
         if (loadRequestRef.current.seq !== requestId) return;
 
@@ -312,7 +309,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         setData(cleanResult);
         setLogs(safeList(audit));
         setPayrollData(includePayroll ? cleanPayroll : null);
-        setPdksLive(live || { metrics: {}, liveCards: [], events: [] });
         setLeaveCenter(center || { plans: [], conflicts: [] });
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
@@ -474,22 +470,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
 
   const balanced = round(summary.bank + summary.cash - summary.net) === 0;
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const pdksMetrics = pdksLive?.metrics || {};
-  const todayCarded = Math.max(0, num(pdksMetrics.activePersonnel) - num(pdksMetrics.absent) - num(pdksMetrics.permitted));
-  const todayAnnualLeave = safeList(leaveCenter.plans).filter((item) =>
-    upper(item.recordType || item.leaveType).includes("YILLIK") &&
-    upper(item.status) !== "CANCELLED" &&
-    String(item.startDate || "") <= todayIso &&
-    String(item.endDate || item.returnDate || item.startDate || "") >= todayIso
-  );
-  const sgkPdksMismatch = employees.filter((item) => item.sgkPdksMatch === false).length;
   const smartIssues = [
     !periodPrepared ? { tone: "orange", title: "Bordro dönemi hazırlanmadı", detail: `${MONTHS[month - 1]} ${year} için önce Bilgileri Hazırla.`, action: preparePeriod, actionLabel: "Hazırla" } : null,
     periodPrepared && !balanced ? { tone: "red", title: "Banka / elden dengesi", detail: "Banka + elden toplamı net ödeme ile eşleşmiyor.", action: () => go("bordro"), actionLabel: "Bordroya Git" } : null,
-    sgkPdksMismatch ? { tone: "orange", title: "SGK / PDKS gün kontrolü", detail: `${sgkPdksMismatch} personelde SGK günü ile gerçek kart günü farklı.`, action: () => go("personel"), actionLabel: "Kontrol Et" } : null,
-    employees.filter((item) => !item.cardNo).length ? { tone: "orange", title: "Kart numarası eksik", detail: `${employees.filter((item) => !item.cardNo).length} personelde kart numarası yok.`, action: () => go("personel"), actionLabel: "Personel Kartı" } : null,
-    num(pdksMetrics.missingPunch) ? { tone: "orange", title: "Bugün eksik kart basımı", detail: `${num(pdksMetrics.missingPunch)} personelde tek/eksik basım var.`, action: () => setNotice("Eksik basımlar PDKS Günlük ekranından düzeltilmelidir."), actionLabel: "PDKS Bilgisi" } : null,
     summary.docsMissing ? { tone: "orange", title: "Eksik evrak", detail: `${summary.docsMissing} personelde evrak bağlantısı yok.`, action: () => go("evrak"), actionLabel: "Evraka Git" } : null,
   ].filter(Boolean);
 
@@ -651,10 +634,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (text.includes("KESINT")) return openFinance("Ozel kesinti");
     if (text.includes("MESAI")) return openFinance("Mesai");
     if (text.includes("BORDRO") || text.includes("ODEME")) return openPayroll();
-    if (text.includes("YILLIK")) return openLeave("yillik");
-    if (text.includes("IZIN") || text.includes("RAPOR") || text.includes("GUNLUK")) return openLeave("gunluk", text.includes("RAPOR") ? "Rapor" : "");
+    if (text.includes("YILLIK") || text.includes("IZIN") || text.includes("RAPOR") || text.includes("GUNLUK")) {
+      return setNotice("İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir. İK Personel Kartında hakediş / kullanılan / kalan bakiye görüntülenir.");
+    }
     if (DOCUMENT_LOG_WORDS.some((word) => text.includes(word))) return openDocument(employee);
-    return openPerson(employee);
+    setModalDraft({ ...log, forceDetail: true });
+    return setModal("logDetay");
   };
 
   const savePerson = async () => {
@@ -1131,33 +1116,38 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       net: sum.net + row.net,
     }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
     const html = `<html><head><meta charset="utf-8"><style>
-      @page{size:A4 landscape;margin:7mm}
+      @page{size:A4 landscape;margin:6mm}
       *{box-sizing:border-box}
-      body{font:8.5px Arial;color:#14263a;padding:0;margin:0}
-      h1{font-size:16px;margin:0}
-      p{color:#52657b;margin:3px 0 8px}
+      body{font:9px Arial;color:#14263a;padding:0;margin:0}
+      h1{font-size:17px;margin:0}
+      p{color:#52657b;margin:3px 0 7px;font-size:8px}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #bac8d8;padding:3.2px 2.5px;text-align:right;white-space:nowrap}
-      th:first-child,td:first-child{text-align:left;width:18%}
-      th:nth-child(2),td:nth-child(2){text-align:left;width:7%}
-      th{background:#eaf1f8;font-size:7.5px}
+      th,td{border:1px solid #aebfd0;padding:4px 3px;text-align:right;white-space:nowrap;vertical-align:middle}
+      th{background:#eaf1f8;font-size:8px;line-height:1.15}
+      th.person,td.person{text-align:left;width:22%}
+      td.person strong{display:block;font-size:9.5px;overflow:hidden;text-overflow:ellipsis}
+      td.person small{display:block;margin-top:1px;font-size:7px;color:#60758c}
+      th.narrow{width:6.5%}
+      th.medium{width:7.5%}
+      th.total{width:9.5%}
       .tot{font-weight:900;background:#eef5ff;border-top:2px solid #111}
-      .tot td{font-size:8.5px}
-      .money-strong{font-weight:800}
+      .tot td{font-size:9px}
+      .money-strong{font-weight:900}
+      .ek-positive{font-weight:900;background:#f2fbf4}
     </style></head><body>
       <h1>İK Ödeme Listesi</h1>
-      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · Toplu fişlerden ayrı kontrol/bilgilendirme listesi · Ekrandaki bordro ile aynı kaynak</p>
+      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · A4 yatay okunaklı ödeme özeti · HKN personel adının altında · Ekrandaki bordro ile aynı kaynak</p>
       <table><thead><tr>
-        <th>Personel</th><th>HKN</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Mesai</th>
-        <th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Banka</th><th>Elden</th><th>Toplam Ödeme</th>
+        <th class="person">Personel / HKN</th><th class="medium">Maaş</th><th class="narrow">Yol</th><th class="narrow">EK</th><th class="narrow">Mesai</th>
+        <th class="narrow">Avans</th><th class="narrow">Kesinti</th><th class="medium">İcra/Haciz</th><th class="medium">Banka</th><th class="medium">Elden</th><th class="total">Toplam Ödeme</th>
       </tr></thead><tbody>
       ${rows.map((row) => `<tr>
-        <td>${escapeHtml(row.employee.fullName)}</td><td>${escapeHtml(row.employee.code || "-")}</td>
-        <td>${money(row.salary)}</td><td>${money(row.road)}</td><td>${money(row.extra)}</td>
+        <td class="person"><strong>${escapeHtml(row.employee.fullName)}</strong><small>${escapeHtml(row.employee.code || "-")}</small></td>
+        <td>${money(row.salary)}</td><td>${money(row.road)}</td><td class="${row.extra > 0 ? "ek-positive" : ""}">${money(row.extra)}</td>
         <td>${money(row.overtime)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td>
         <td>${money(row.garnishment)}</td><td class="money-strong">${money(row.bank)}</td><td class="money-strong">${money(row.cash)}</td><td class="money-strong">${money(row.net)}</td>
       </tr>`).join("")}
-      <tr class="tot"><td>TOPLAM</td><td>-</td>
+      <tr class="tot"><td class="person"><strong>TOPLAM</strong><small>${rows.length} personel</small></td>
         <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td>
         <td>${money(totals.overtime)}</td><td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td>
         <td>${money(totals.garnishment)}</td><td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
@@ -1193,6 +1183,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       <div class="pay-channels"><div><span>BANKA</span><b>${money(row.bank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(row.cash)}</b></div></div>
       <div class="net"><span>TOPLAM ÖDEME</span><b>${money(row.net)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
+      ${row.extra > 0 ? `<div class="extra-coupon"><span>✂ EK ÖDEME</span><b>${money(row.extra)}</b><small>Personel: ${escapeHtml(row.employee.fullName)} · İmza: __________________</small></div>` : ""}
     </article>`;
   };
 
@@ -1209,12 +1200,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         <div class="total"><span>TOPLAM ÖDEME</span><b>${money(row.net)}</b></div>
       </div>
       <footer><span>Personel İmza</span><i></i><span>Ödeme Yapan</span><i></i></footer>
+      ${row.extra > 0 ? `<div class="compact-extra"><span>✂ EK ÖDEME</span><b>${money(row.extra)}</b><small>İmza __________</small></div>` : ""}
     </article></div>`;
   };
 
-  const slipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.pay-slip{border:1.4px solid #415a77;border-radius:2mm;padding:3.2mm;background:#fff;display:flex;flex-direction:column;min-height:132mm;break-inside:avoid}.pay-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1.4px solid #415a77;padding-bottom:2mm}.brand{font-size:15px;font-weight:900;color:#173b72}.period{text-align:right;font-size:8px;line-height:1.25}.period b{font-size:9px}.person-block{padding:2.4mm 0;border-bottom:1px solid #d6dee8}.person-block strong{display:block;font-size:14px}.person-block span{font-size:8px;color:#52657b}.slip-lines{flex:1;padding-top:1mm}.slip-lines>div{display:flex;justify-content:space-between;align-items:center;padding:1.05mm .4mm;border-bottom:1px solid #e6ebf1;font-size:9px}.slip-lines>div b{font-size:10px}.pay-channels{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin-top:2mm}.pay-channels div{text-align:center;border:1px solid #9fb0c3;border-radius:1mm;padding:2mm}.pay-channels span,.net span{display:block;font-size:7px;font-weight:800;letter-spacing:.04em}.pay-channels b{display:block;font-size:14px;margin-top:.6mm}.pay-channels .cash-pay{border:2px solid #111}.pay-channels .cash-pay span{font-size:9px}.pay-channels .cash-pay b{font-size:19px}.net{margin-top:2mm;text-align:center;border:2px solid #111;border-radius:1mm;padding:2.2mm}.net span{font-size:9px}.net b{display:block;font-size:22px;margin-top:.5mm}.pay-slip footer{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:4mm;font-size:7px;color:#52657b}.pay-slip footer div{display:flex;flex-direction:column;gap:5mm}.pay-slip footer i{border-bottom:1px solid #667085}`;
+  const slipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.pay-slip{border:1.4px solid #415a77;border-radius:2mm;padding:3.2mm;background:#fff;display:flex;flex-direction:column;min-height:132mm;break-inside:avoid}.pay-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1.4px solid #415a77;padding-bottom:2mm}.brand{font-size:15px;font-weight:900;color:#173b72}.period{text-align:right;font-size:8px;line-height:1.25}.period b{font-size:9px}.person-block{padding:2.4mm 0;border-bottom:1px solid #d6dee8}.person-block strong{display:block;font-size:14px}.person-block span{font-size:8px;color:#52657b}.slip-lines{flex:1;padding-top:1mm}.slip-lines>div{display:flex;justify-content:space-between;align-items:center;padding:1.05mm .4mm;border-bottom:1px solid #e6ebf1;font-size:9px}.slip-lines>div b{font-size:10px}.pay-channels{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin-top:2mm}.pay-channels div{text-align:center;border:1px solid #9fb0c3;border-radius:1mm;padding:2mm}.pay-channels span,.net span{display:block;font-size:7px;font-weight:800;letter-spacing:.04em}.pay-channels b{display:block;font-size:14px;margin-top:.6mm}.pay-channels .cash-pay{border:2px solid #111}.pay-channels .cash-pay span{font-size:9px}.pay-channels .cash-pay b{font-size:19px}.net{margin-top:2mm;text-align:center;border:2px solid #111;border-radius:1mm;padding:2.2mm}.net span{font-size:9px}.net b{display:block;font-size:22px;margin-top:.5mm}.pay-slip footer{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:4mm;font-size:7px;color:#52657b}.pay-slip footer div{display:flex;flex-direction:column;gap:5mm}.pay-slip footer i{border-bottom:1px solid #667085}.extra-coupon{margin:4mm -3.2mm -3.2mm;padding:2.2mm 3.2mm;border-top:1.5px dashed #111;display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:4mm}.extra-coupon span{font-size:9px;font-weight:900}.extra-coupon b{font-size:16px}.extra-coupon small{text-align:right;font-size:7px;color:#52657b}`;
 
-  const compactSlipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.cut-slot{height:100%;padding:1mm;border:1px dashed #7d8b99;break-inside:avoid;overflow:hidden}.compact-slip{height:100%;border:1px solid #34475b;border-radius:.7mm;padding:1.5mm 1.8mm;background:#fff;display:flex;flex-direction:column}.compact-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #8fa0b2;padding-bottom:.7mm;font-size:6.5px}.compact-slip header b{font-size:9.5px;color:#173b72}.compact-person{padding:.8mm 0 .7mm;border-bottom:1px solid #d7dee7;white-space:nowrap;overflow:hidden}.compact-person strong{display:block;font-size:10px;line-height:1.05;overflow:hidden;text-overflow:ellipsis}.compact-person small{display:block;font-size:6px;color:#52657b;overflow:hidden;text-overflow:ellipsis}.compact-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55mm .8mm;padding-top:.7mm;flex:1}.compact-grid>div{border:1px solid #c4ced9;border-radius:.5mm;padding:.45mm .8mm;display:flex;align-items:center;justify-content:space-between;min-height:5.2mm}.compact-grid span{font-size:5.7px;font-weight:800}.compact-grid b{font-size:8.5px}.compact-grid .cash{border:1.8px solid #111}.compact-grid .cash span{font-size:7px}.compact-grid .cash b{font-size:13px}.compact-grid .total{grid-column:1/-1;border:2px solid #111;padding:.55mm 1mm}.compact-grid .total span{font-size:7.2px}.compact-grid .total b{font-size:15px}.compact-slip footer{display:grid;grid-template-columns:auto 1fr auto 1fr;align-items:end;gap:1mm;margin-top:.45mm;font-size:5.4px;color:#52657b}.compact-slip footer i{display:block;border-bottom:1px solid #667085;height:2mm}`;
+  const compactSlipCss = `*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#101828;margin:0;background:#fff}.cut-slot{height:100%;padding:1mm;border:1px dashed #7d8b99;break-inside:avoid;overflow:hidden}.compact-slip{height:100%;border:1px solid #34475b;border-radius:.7mm;padding:1.5mm 1.8mm;background:#fff;display:flex;flex-direction:column}.compact-slip header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #8fa0b2;padding-bottom:.7mm;font-size:6.5px}.compact-slip header b{font-size:9.5px;color:#173b72}.compact-person{padding:.8mm 0 .7mm;border-bottom:1px solid #d7dee7;white-space:nowrap;overflow:hidden}.compact-person strong{display:block;font-size:10px;line-height:1.05;overflow:hidden;text-overflow:ellipsis}.compact-person small{display:block;font-size:6px;color:#52657b;overflow:hidden;text-overflow:ellipsis}.compact-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55mm .8mm;padding-top:.7mm;flex:1}.compact-grid>div{border:1px solid #c4ced9;border-radius:.5mm;padding:.45mm .8mm;display:flex;align-items:center;justify-content:space-between;min-height:5.2mm}.compact-grid span{font-size:5.7px;font-weight:800}.compact-grid b{font-size:8.5px}.compact-grid .cash{border:1.8px solid #111}.compact-grid .cash span{font-size:7px}.compact-grid .cash b{font-size:13px}.compact-grid .total{grid-column:1/-1;border:2px solid #111;padding:.55mm 1mm}.compact-grid .total span{font-size:7.2px}.compact-grid .total b{font-size:15px}.compact-slip footer{display:grid;grid-template-columns:auto 1fr auto 1fr;align-items:end;gap:1mm;margin-top:.45mm;font-size:5.4px;color:#52657b}.compact-slip footer i{display:block;border-bottom:1px solid #667085;height:2mm}.compact-extra{margin:.6mm -1.8mm -1.5mm;padding:.55mm 1.8mm;border-top:1px dashed #111;display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:1.2mm;min-height:4mm}.compact-extra span{font-size:5.8px;font-weight:900}.compact-extra b{font-size:9px}.compact-extra small{text-align:right;font-size:5px;color:#52657b}`;
 
   const printSlip = async (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
     if (!row) return setNotice("Fiş için personel seçilmelidir.");
@@ -1333,7 +1325,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return (
       <section>
         <div className="page-head">
-          <div><h1>İK İşlem Merkezi</h1><p>Personel, ödeme dönemi ve bugünkü PDKS durumunu tek ekranda kontrol edin.</p></div>
+          <div><h1>İK İşlem Merkezi</h1><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir.</p></div>
           <div className="group"><span className={`badge ${periodPrepared ? "green" : "orange"}`}>{MONTHS[month - 1]} {year} · {payrollReadyText}</span><span className={`badge ${smartIssues.length ? "orange" : "green"}`}>{smartIssues.length ? `${smartIssues.length} kontrol` : "Kontroller temiz"}</span></div>
         </div>
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
@@ -1344,52 +1336,39 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
         <div className="sumgrid">
           {summaryBox("Aktif personel", employees.length, "", `${employees.filter(isSgk).length} SGK'lı · ${employees.filter((item) => item.personnelStatus === "RETIRED").length} emekli çalışan`)}
-          {summaryBox("Bugün kart basan", todayCarded, "green", `${num(pdksMetrics.inside)} şu an içeride`)}
-          {summaryBox("Bugün gelmeyen", num(pdksMetrics.absent), num(pdksMetrics.absent) ? "red" : "green", `${num(pdksMetrics.permitted)} izinli/mazeretli`)}
-          {summaryBox("Eksik basım", num(pdksMetrics.missingPunch), num(pdksMetrics.missingPunch) ? "orange" : "green", `${num(pdksMetrics.late)} geç gelen`)}
-          {summaryBox("Bugün yıllık izinde", todayAnnualLeave.length, todayAnnualLeave.length ? "orange" : "", todayAnnualLeave.slice(0, 2).map((item) => item.fullName).filter(Boolean).join(", "))}
           {summaryBox("Banka ödeme", periodPrepared ? money(summary.bank) : "Hazırlanmadı")}
           {summaryBox("Elden ödeme", periodPrepared ? money(summary.cash) : "Hazırlanmadı")}
           {summaryBox("Net ödeme", periodPrepared ? money(summary.net) : "Hazırlanmadı", periodPrepared ? (balanced ? "green" : "red") : "orange")}
+          {summaryBox("Ek ödeme", periodPrepared ? money(summary.extra) : "-", summary.extra ? "green" : "")}
           {summaryBox("Mesai", periodPrepared ? money(summary.overtime) : "-", summary.overtime ? "orange" : "")}
           {summaryBox("Avans", periodPrepared ? money(summary.advance) : "-", summary.advance ? "orange" : "")}
           {summaryBox("Kesinti", periodPrepared ? money(summary.deduction) : "-", summary.deduction ? "red" : "")}
           {summaryBox("İcra / Haciz", periodPrepared ? money(summary.garnishment) : "-", summary.garnishment ? "red" : "")}
+          {summaryBox("Eksik evrak", summary.docsMissing, summary.docsMissing ? "orange" : "green")}
         </div>
 
         <div className="card">
-          <div className="ch"><div><b>Hızlı İşlemler</b><span>Sık kullanılan İK işlemleri tek tıkla doğru ekrana ve seçili personele gider.</span></div></div>
+          <div className="ch"><div><b>Hızlı Finans İşlemleri</b><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları.</span></div></div>
           <div className="workbar"><div className="group">
-            <button className="btn primary" onClick={() => openPerson()}>Personel Kartı</button>
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
             <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button>
-            <button className="btn" onClick={() => openLeave("yillik")}>Yıllık İzin</button>
             <button className="btn green" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
             <button className="btn" disabled={!periodPrepared} onClick={() => setModal("fis")}>Tek Kişi Fişi</button>
           </div></div>
         </div>
 
-        <div className="layout2">
-          <div className="card">
-            <div className="ch"><div><b>Akıllı Kontrol Merkezi</b><span>İK + PDKS kaynaklarından dikkat isteyen maddeler.</span></div></div>
-            <table><tbody>
-              {smartIssues.map((item, index) => <tr key={`${item.title}-${index}`}><td><span className={`badge ${item.tone}`}>!</span></td><td><b>{item.title}</b><br/><span>{item.detail}</span></td><td><button className="btn" onClick={item.action}>{item.actionLabel}</button></td></tr>)}
-              {!smartIssues.length && <tr><td><span className="badge green">OK</span></td><td><b>Kontroller temiz</b><br/><span>Ödeme, kart, SGK/PDKS ve evrak kontrollerinde açık görünmüyor.</span></td><td>-</td></tr>}
-            </tbody></table>
-          </div>
-          <div className="card">
-            <div className="ch"><div><b>Bugünkü PDKS Hareketi</b><span>Gerçek kart hareketlerinden son personel durumları.</span></div></div>
-            <div className="tw"><table><thead><tr><th>Personel</th><th>Bölüm</th><th>Son Saat</th><th>Durum</th></tr></thead><tbody>
-              {safeList(pdksLive.liveCards).slice(0, 10).map((row) => <tr key={row.employeeId}><td>{row.fullName}</td><td>{row.department || "-"}</td><td>{row.lastTime || "-"}</td><td><span className={`badge ${row.inside ? "green" : "blue"}`}>{row.inside ? "İçeride" : "Çıkış yaptı"}</span></td></tr>)}
-              <EmptyRow show={!safeList(pdksLive.liveCards).length} colSpan={4} text="Bugün kart hareketi henüz yok."/>
-            </tbody></table></div>
-          </div>
+        <div className="card">
+          <div className="ch"><div><b>Akıllı İK Kontrol Merkezi</b><span>Bordro, ödeme ve evrak tarafında dikkat isteyen maddeler.</span></div></div>
+          <table><tbody>
+            {smartIssues.map((item, index) => <tr key={`${item.title}-${index}`}><td><span className={`badge ${item.tone}`}>!</span></td><td><b>{item.title}</b><br/><span>{item.detail}</span></td><td><button className="btn" onClick={item.action}>{item.actionLabel}</button></td></tr>)}
+            {!smartIssues.length && <tr><td><span className="badge green">OK</span></td><td><b>Kontroller temiz</b><br/><span>Bordro, ödeme ve evrak kontrollerinde açık görünmüyor.</span></td><td>-</td></tr>}
+          </tbody></table>
         </div>
 
-        {periodPrepared && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
-          {payrollRows.map((row) => <tr key={row.employee.id} onClick={() => setSelectedId(row.employee.id)}><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{sgkLabel(row.employee)}</td><td>{money(row.overtime)}</td><td>{money(row.advance)}</td><td>{money(row.deduction + row.garnishment)}</td><td>{money(row.bank)}</td><td>{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff === 0 ? "green" : "red"}`}>{row.diff === 0 ? "Hazır" : "Kontrol"}</span></td></tr>)}
-          <EmptyRow show={!payrollRows.length} colSpan={9} text="Hazırlanmış bordro satırı yok."/>
+        {periodPrepared && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Ek</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
+          {payrollRows.map((row) => <tr key={row.employee.id} onClick={() => setSelectedId(row.employee.id)}><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{sgkLabel(row.employee)}</td><td>{money(row.extra)}</td><td>{money(row.overtime)}</td><td>{money(row.advance)}</td><td>{money(row.deduction + row.garnishment)}</td><td>{money(row.bank)}</td><td>{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff === 0 ? "green" : "red"}`}>{row.diff === 0 ? "Hazır" : "Kontrol"}</span></td></tr>)}
+          <EmptyRow show={!payrollRows.length} colSpan={10} text="Hazırlanmış bordro satırı yok."/>
         </tbody></table></div></div>}
         <LogTable title="Son 10 İşlem" rows={logs.map(withPerson).slice(0, 10)} onEdit={editFromLog} />
       </section>

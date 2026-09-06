@@ -329,3 +329,18 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - `0050_mail_communication_core.sql` bu sohbet oturumunda production D1'e uygulanamadı; Cloudflare D1 write yetkili aracı mevcut değildi.
 - Bu nedenle Mail Core fail-soft çalışır: Mail & Dosyalar arayüzü canlıda önizleme/kurulum bekliyor durumunda açılabilir; mail hesap talebi, bağlantı ve gönderim 0050 uygulanana kadar kapalıdır.
 - 0050 aktivasyonu için canonical sıra değişmez: remote D1 full backup -> readiness -> hedefli 0050 additive migration -> schema doğrulaması. GitHub Actions production deploy için kullanılmaz.
+
+
+## 06.09.2026 — İK / PDKS kesin ayrım + yıllık izin bakiye final paketi
+
+- Aktif feature branch: `codex/ik-pdks-yillik-izin-final-20260906`.
+- İK görünür menüsü yalnız özlük ve finans yönetimidir: İK Özet, Personel Kartları, Maaş / Yol / Banka / Elden, Mesai / Avans / Kesinti, Bordro & Ödeme, SGK / Evrak / Ay Sonu.
+- İK içinde ikinci PDKS/puantaj/giriş-çıkış/günlük personel ekranı açılmaz; eski İK içi PDKS rotaları güvenli biçimde personel/finans ekranlarına yönlenir.
+- PDKS; giriş/çıkış, puantaj, vardiya, terminal/senkron ve izin hareketlerinin operasyonel sahibidir.
+- İK Personel Kartı yıllık izin özlük özetini tek ekranda gösterir: hakediş, devreden, toplam hak, kullanılan, kalan ve hakediş geçmişi.
+- Kullanılan/kalan yıllık izin hesabı modern `ik_leave_plans` ile tarihsel `hr_leave_records_v2` kayıtlarını exact tekrarları çift saymadan birlikte okur.
+- Personel izin geçmişi de modern PDKS izin kayıtları + tarihsel kayıtları tek listede gösterir.
+- D1 reset/drop veya yeni migration yoktur; mevcut personel/izin/bordro verisi korunur.
+- İK ödeme çıktıları da aynı pakette finalleştirildi: A4 yatay ödeme listesinde HKN personel adının altına alınarak sıkışma azaltıldı; EK sütunu ayrı ve pozitif tutar vurgulu; 10'lu A4 toplu fiş kuralı korunur.
+- EK ödeme tutarı olan personelde tekli ve 10'lu fişte altta kesilebilir/ayrılabilir `EK ÖDEME` kuponu oluşur; EK=0 ise kupon görünmez.
+- Bu kayıt feature branch durumudur; production merge/deploy yapılmamıştır. Önce doğrulama, ardından kullanıcı açık canlı onayı gerekir.
