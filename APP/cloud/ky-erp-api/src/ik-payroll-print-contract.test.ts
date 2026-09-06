@@ -17,22 +17,23 @@ test("IK payroll report and payment slips use the canonical print service contra
   assert.match(service, /fullDocument/);
   assert.match(service, /win\.print\(\)/);
 
-  assert.ok(page.includes("Toplu Rapor / PDF"));
-  assert.ok(page.includes("Toplu Fiş / PDF"));
-  assert.ok(page.includes("Tek Kisi Fisi"));
-  assert.ok(page.includes("printHtmlDocument({ title: `İK Aylık Bordro"));
+  assert.ok(page.includes("Ödeme Listesi / PDF"));
+  assert.ok(page.includes("10’lu Toplu Fiş / PDF"));
+  assert.ok(page.includes("Tek Kişi Fişi"));
+  assert.ok(page.includes("printHtmlDocument({ title: `İK Ödeme Listesi"));
   assert.ok(page.includes("printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri"));
   assert.ok(page.includes("printHtmlDocument({ title: `Ödeme Fişi"));
   assert.doesNotMatch(page, /printHtmlDocument\(html,/);
 });
 
-test("IK bulk slip output keeps A4 pagination and selected-person filtering", () => {
+test("IK bulk slip output keeps selected-person filtering and ten-up A4 pagination", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
   assert.match(page, /selectedPayrollIds\.includes\(row\.employee\.id\)/);
-  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 4\)/);
+  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 10\)/);
   assert.match(page, /@page\{size:A4 portrait/);
   assert.match(page, /grid-template-columns:1fr 1fr/);
-  assert.match(page, /grid-template-rows:1fr 1fr/);
+  assert.match(page, /grid-template-rows:repeat\(5,1fr\)/);
+  assert.match(page, /class="cut-slot"/);
 });
 
 
@@ -55,13 +56,17 @@ test("IK finance movement keeps the selected employee and supports legal overtim
   assert.match(cloud, /advancedEmployeeVisible/);
 });
 
-test("IK bulk slips are readable four-up A4 cards", () => {
+test("IK bulk slips are compact ten-up A4 cards with strong cash and total fields", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
-  assert.ok(page.includes("NET / TOPLAM ÖDENECEK"));
+  assert.ok(page.includes("AVANS/KESİNTİ"));
+  assert.ok(page.includes("ELDEN"));
+  assert.ok(page.includes("TOPLAM ÖDEME"));
   assert.ok(page.includes("Personel İmza"));
   assert.ok(page.includes("Ödeme Yapan"));
-  assert.match(page, /index \+= 4/);
-  assert.match(page, /grid-template-rows:1fr 1fr/);
+  assert.match(page, /index \+= 10/);
+  assert.match(page, /grid-template-rows:repeat\(5,1fr\)/);
+  assert.match(page, /\.compact-grid \.cash/);
+  assert.match(page, /\.compact-grid \.total/);
 });
 
 
@@ -102,7 +107,7 @@ test("payroll print HTML escapes employee-entered text and shows every payment c
   assert.match(page, /escapeHtml\(row\.employee\.code \|\| "-"\)/);
   assert.match(page, /escapeHtml\(row\.employee\.department \|\| "Bölüm yok"\)/);
 
-  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKADAN", "ELDEN", "NET / TOPLAM ÖDENECEK"]) {
+  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKA", "ELDEN", "TOPLAM ÖDEME"]) {
     assert.ok(page.includes(label), `Eksik fiş/rapor alanı: ${label}`);
   }
 });
@@ -117,24 +122,32 @@ test("payroll payment balance cannot be bypassed and backend enforces the same c
   assert.match(cloud, /calculatePayrollAmounts/);
 });
 
-test("payroll report and Excel use the same canonical payrollRows data", () => {
+test("payment list PDF and Excel use the same canonical payrollRows data with a totals row", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const exportPayroll = \(\) =>/);
-  assert.match(page, /payrollRows\.map\(\(row\) =>/);
-  assert.match(page, /const printPayrollReport = async \(\) =>/);
   assert.match(page, /const rows = payrollRows\.filter/);
-  assert.match(page, /<th>Maaş<\/th><th>Yol<\/th><th>EK<\/th><th>Mesai<\/th>/);
-  assert.match(page, /<th>Avans<\/th><th>Kesinti<\/th><th>İcra\/Haciz<\/th><th>Banka<\/th><th>Elden<\/th><th>Net<\/th>/);
+  assert.match(page, /excelRows\.push\(\{/);
+  assert.match(page, /personel: "TOPLAM"/);
+  assert.match(page, /const printPayrollReport = async \(\) =>/);
+  assert.match(page, /<h1>İK Ödeme Listesi<\/h1>/);
+  assert.match(page, /<th>Personel<\/th><th>HKN<\/th><th>Maaş<\/th><th>Yol<\/th><th>EK<\/th><th>Mesai<\/th>/);
+  assert.match(page, /<th>Avans<\/th><th>Kesinti<\/th><th>İcra\/Haciz<\/th><th>Banka<\/th><th>Elden<\/th><th>Toplam Ödeme<\/th>/);
+  assert.match(page, /<tr class="tot"><td>TOPLAM<\/td>/);
+  assert.ok(page.includes("Ödeme Listesi / PDF"));
+  assert.ok(page.includes("Ödeme Listesi / Excel"));
 });
 
 
-test("single slip targets the selected payroll row and bulk page five starts a new page", () => {
+test("single slip can select, edit and reprint only one person while bulk page eleven starts a new page", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const printSlip = async \(row = payrollRows\.find\(\(item\) => item\.employee\.id === selected\?\.id\)\)/);
+  assert.match(page, /Fişi alınacak personel/);
+  assert.match(page, /Yanlışsa Düzenle/);
+  assert.match(page, /Sadece Bu Fişi Yazdır \/ PDF/);
   assert.match(page, /onClick=\{\(\) => printSlip\(row\)\}/);
-  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 4\) pages\.push\(rows\.slice\(index, index \+ 4\)\)/);
+  assert.match(page, /for \(let index = 0; index < rows\.length; index \+= 10\) pages\.push\(rows\.slice\(index, index \+ 10\)\)/);
   assert.match(page, /page-break-after:always/);
   assert.match(page, /\.page:last-child\{page-break-after:auto\}/);
 });
@@ -149,8 +162,8 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
     "mesai: row.overtime",
     "avans: row.advance",
     "kesinti: row.deduction",
-    "hukukiKesinti: row.garnishment",
-    "netOdenecek: row.net",
+    "icraHaciz: row.garnishment",
+    "toplamOdeme: row.net",
     "banka: row.bank",
     "elden: row.cash",
   ]) {
