@@ -665,6 +665,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             <label>BCC<input value={draftForm.bcc} onChange={(e) => setDraftForm((v) => ({ ...v, bcc: e.target.value }))} placeholder="opsiyonel"/></label>
             <label className="wide">Konu<input value={draftForm.subject} onChange={(e) => setDraftForm((v) => ({ ...v, subject: e.target.value }))}/></label>
             <label className="wide">Mesaj<textarea rows={10} value={draftForm.bodyText} onChange={(e) => setDraftForm((v) => ({ ...v, bodyText: e.target.value }))}/></label>
+            <div className="wide comm-compose-files">
+              <div className="comm-compose-files-head"><span><b>File Hub Ekleri</b><small>Fatura, irsaliye, desen veya yetkili olduğunuz firma dosyasını seçin.</small></span><em>{composeAttachments.length}/10 · {(attachmentTotalBytes / 1024 / 1024).toFixed(2)} / 25 MB</em></div>
+              {composeAttachments.length ? <div className="comm-compose-selected">{composeAttachments.map((file) => <button type="button" key={file.id} onClick={() => removeComposeAttachment(file.id)} title="Eki kaldır"><span>📎 {file.file_name || file.fileName}</span><b>×</b></button>)}</div> : <small className="comm-compose-file-note">Ek seçilmedi. Dosya, File Hub kimliğiyle taslağa bağlanır; ayrı kopya oluşturulmaz.</small>}
+              <input type="search" value={attachmentSearch} onChange={(e) => setAttachmentSearch(e.target.value)} placeholder="File Hub'da dosya ara"/>
+              {attachmentCandidates.length ? <div className="comm-compose-file-results">{attachmentCandidates.map((file) => <button type="button" key={file.id} onClick={() => addComposeAttachment(file)}><span>{file.file_name || file.fileName}</span><small>{file.provider_type || file.providerType || file.connection_name || "File Hub"} · {Number(file.size_bytes || file.sizeBytes || 0) > 0 ? `${(Number(file.size_bytes || file.sizeBytes) / 1024 / 1024).toFixed(2)} MB` : "boyut bilinmiyor"}</small></button>)}</div> : null}
+            </div>
             <div className="wide comm-compose-actions"><button type="button" onClick={() => saveDraft(true)} disabled={loading || String(selectedAccount?.status || "").toUpperCase() !== "ACTIVE"}>Gönder</button><button type="submit" className="secondary" disabled={loading}>Taslağı Kaydet</button><span>Gönderim yalnız sizin açık işleminizle yapılır.</span></div>
           </form>
         </section>
@@ -684,12 +690,18 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             )) : <div className="comm-empty">Henüz atanmış posta kutusu yok.<br/>“+ Mail Hesabı” ile talep oluşturabilirsiniz.</div>}
             {selectedAccount ? <div className="comm-account-tools">
               <span><b>{statusLabel(selectedAccount.status)}</b> · {providerLabel(selectedAccount.provider_type || selectedAccount.providerType)}</span>
-              {["MICROSOFT_365", "GMAIL"].includes(String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase()) && String(selectedAccount.status || "").toUpperCase() !== "ACTIVE"
+              <div className="comm-account-readiness">
+                <span className={selectedAccountReadiness.companyApproved ? "ok" : "pending"}>{selectedAccountReadiness.companyApproved ? "✓" : "○"} Firma Onayı</span>
+                <span className={selectedAccountReadiness.oauthConnected ? "ok" : "pending"}>{selectedAccountReadiness.oauthConnected ? "✓" : "○"} OAuth</span>
+                <span className={selectedAccountReadiness.syncHealthy ? "ok" : "pending"}>{selectedAccountReadiness.syncHealthy ? "✓" : "○"} Senkron</span>
+              </div>
+              {["MICROSOFT_365", "GMAIL"].includes(String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase()) && selectedAccountReadiness.companyApproved && !selectedAccountReadiness.oauthConnected
                 ? <button type="button" onClick={connectSelectedAccount} disabled={loading}>{String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "GMAIL" ? "Google Hesabını Bağla" : "Microsoft Hesabını Bağla"}</button>
                 : null}
-              {String(selectedAccount.status || "").toUpperCase() === "ACTIVE"
-                ? <button type="button" className="secondary" onClick={syncSelectedMailbox} disabled={loading}>Postayı Senkronize Et</button>
+              {selectedAccountReadiness.oauthConnected
+                ? <button type="button" className="secondary" onClick={syncSelectedMailbox} disabled={loading}>{selectedAccountReadiness.syncHealthy ? "Postayı Yeniden Senkronize Et" : "İlk Senkronu Tamamla"}</button>
                 : null}
+              {selectedAccountReadiness.lastSyncSuccessAt ? <small>Son başarılı senkron: {dateText(selectedAccountReadiness.lastSyncSuccessAt)}</small> : null}
             </div> : null}
             {selectedAccount ? <div className="comm-folder-tree">
               <div className="comm-folder-heading"><b>Klasörler</b><small>{folders.length}</small></div>
