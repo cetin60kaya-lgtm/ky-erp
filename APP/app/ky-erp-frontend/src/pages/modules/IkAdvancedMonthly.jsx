@@ -415,6 +415,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const cashDeductions = [...advanceRows, ...deductionRows, ...legalRows].filter((item) => !isBank(item)).reduce((sum, item) => sum + num(item.amount), 0);
   const legalBank = legalRows.filter(isBank).reduce((sum, item) => sum + num(item.amount), 0);
   const legalCash = legalRows.filter((item) => !isBank(item)).reduce((sum, item) => sum + num(item.amount), 0);
+  const advanceBank = advanceRows.filter(isBank).reduce((sum, item) => sum + num(item.amount), 0);
+  const advanceCash = advanceRows.filter((item) => !isBank(item)).reduce((sum, item) => sum + num(item.amount), 0);
+  const deductionBank = deductionRows.filter(isBank).reduce((sum, item) => sum + num(item.amount), 0);
+  const deductionCash = deductionRows.filter((item) => !isBank(item)).reduce((sum, item) => sum + num(item.amount), 0);
+  const correctionSource = (bankValue, cashValue) => bankValue >= cashValue ? "Banka" : "Elden";
   const legalKinds = new Set(legalRows.map((item) => item.type));
   const legalType = legalKinds.size > 1 ? "KARMA" : legalKinds.has("Haciz") ? "HACIZ" : legalKinds.has("Icra") ? "ICRA" : "YOK";
   const garnishmentSource = legalBank > 0 && legalCash > 0 ? "KARMA" : legalCash > 0 ? "ELDEN" : "BANKA";
@@ -429,7 +434,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const bankPlanAfterDeductions = Math.max(num(employee.bankAmount) - bankDeductions, 0);
   const bank = saved?.final ? num(saved.final.bank) : Math.min(pre.net, bankPlanAfterDeductions);
   const cash = saved?.final ? num(saved.final.cash) : Math.max(pre.net - bank, 0);
-  return { employee, actualSalary, baseEmployee, salary, road, extraLabel, extra, overtime, advance, deduction, legalType, garnishmentSource, garnishment, legalBank, legalCash, bankDeductions, cashDeductions, bank, cash, saved, ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }) };
+  return {
+    employee, actualSalary, baseEmployee, salary, road, extraLabel, extra, overtime, advance, deduction,
+    legalType, garnishmentSource, garnishment, legalBank, legalCash, bankDeductions, cashDeductions,
+    advanceSource: correctionSource(advanceBank, advanceCash),
+    deductionSource: correctionSource(deductionBank, deductionCash),
+    bank, cash, saved,
+    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }),
+  };
 }, [movements, payrollLines, rawEmployees]);
 
   const payrollRows = useMemo(() => periodPrepared ? employees.map((employee) => {
@@ -465,6 +477,25 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   }), { count: 0, bank: 0, cash: 0, net: 0, advance: 0, deduction: 0, extra: 0, garnishment: 0, overtime: 0, annual: 0, docsMissing: 0, manual: 0 }), [payrollRows, employeeLeave, docsFor]);
 
   const balanced = round(summary.bank + summary.cash - summary.net) === 0;
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const pdksMetrics = pdksLive?.metrics || {};
+  const todayCarded = Math.max(0, num(pdksMetrics.activePersonnel) - num(pdksMetrics.absent) - num(pdksMetrics.permitted));
+  const todayAnnualLeave = safeList(leaveCenter.plans).filter((item) =>
+    upper(item.recordType || item.leaveType).includes("YILLIK") &&
+    upper(item.status) !== "CANCELLED" &&
+    String(item.startDate || "") <= todayIso &&
+    String(item.endDate || item.returnDate || item.startDate || "") >= todayIso
+  );
+  const sgkPdksMismatch = employees.filter((item) => item.sgkPdksMatch === false).length;
+  const smartIssues = [
+    !periodPrepared ? { tone: "orange", title: "Bordro dönemi hazırlanmadı", detail: `${MONTHS[month - 1]} ${year} için önce Bilgileri Hazırla.`, action: preparePeriod, actionLabel: "Hazırla" } : null,
+    periodPrepared && !balanced ? { tone: "red", title: "Banka / elden dengesi", detail: "Banka + elden toplamı net ödeme ile eşleşmiyor.", action: () => go("bordro"), actionLabel: "Bordroya Git" } : null,
+    sgkPdksMismatch ? { tone: "orange", title: "SGK / PDKS gün kontrolü", detail: `${sgkPdksMismatch} personelde SGK günü ile gerçek kart günü farklı.`, action: () => go("personel"), actionLabel: "Kontrol Et" } : null,
+    employees.filter((item) => !item.cardNo).length ? { tone: "orange", title: "Kart numarası eksik", detail: `${employees.filter((item) => !item.cardNo).length} personelde kart numarası yok.`, action: () => go("personel"), actionLabel: "Personel Kartı" } : null,
+    num(pdksMetrics.missingPunch) ? { tone: "orange", title: "Bugün eksik kart basımı", detail: `${num(pdksMetrics.missingPunch)} personelde tek/eksik basım var.`, action: () => setNotice("Eksik basımlar PDKS Günlük ekranından düzeltilmelidir."), actionLabel: "PDKS Bilgisi" } : null,
+    summary.docsMissing ? { tone: "orange", title: "Eksik evrak", detail: `${summary.docsMissing} personelde evrak bağlantısı yok.`, action: () => go("evrak"), actionLabel: "Evraka Git" } : null,
+  ].filter(Boolean);
 
   const scopedLogs = useMemo(() => {
     const rows = logs.map((log) => {
@@ -570,6 +601,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       garnishment: row.garnishment,
       bank: row.bank,
       cash: row.cash,
+      legalType: row.legalType === "HACIZ" ? "HACIZ" : "ICRA",
+      advanceSource: row.advanceSource || "Elden",
+      deductionSource: row.deductionSource || "Elden",
+      garnishmentSource: row.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
+      originalOvertime: row.overtime,
+      originalAdvance: row.advance,
+      originalDeduction: row.deduction,
+      originalGarnishment: row.garnishment,
       reason: "",
     });
     setModal("bordroDuzelt");
@@ -868,7 +907,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     catch (error) { setNotice(error?.message || "Izin iptal edilemedi."); } finally { setBusy(false); }
   };
 
-  const savePayrollOverride = async () => {
+  const savePayrollOverride = async (openSlipAfter = false) => {
     const totals = calcRow({
       salary: modalDraft.salary,
       road: modalDraft.road,
@@ -880,29 +919,41 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       bank: modalDraft.bank,
       cash: modalDraft.cash,
     });
+    if ([modalDraft.salary, modalDraft.road, modalDraft.extra, modalDraft.overtime, modalDraft.advance, modalDraft.deduction, modalDraft.garnishment, modalDraft.bank, modalDraft.cash].some((value) => num(value) < 0)) {
+      return setNotice("Son bordro kalemleri negatif olamaz.");
+    }
     if (Math.abs(totals.diff) > 0.01) {
       setNotice("Banka + elden toplamı net ödenecek tutara eşit olmalıdır.");
       return;
     }
     setBusy(true);
     try {
-      await saveIkAdvancedPayrollOverride({
+      await saveIkAdvancedFinalPayrollControl({
         mainCompanyId: companyId,
         year,
         month,
         employeeId: modalDraft.employeeId,
-        reason: modalDraft.reason || "Bordro kontrol duzeltmesi",
-        override: {
-          bank: num(modalDraft.bank),
-          cash: num(modalDraft.cash),
-          total: totals.net,
-        },
+        salary: num(modalDraft.salary),
+        road: num(modalDraft.road),
+        extra: num(modalDraft.extra),
+        overtime: num(modalDraft.overtime),
+        advance: num(modalDraft.advance),
+        deduction: num(modalDraft.deduction),
+        garnishment: num(modalDraft.garnishment),
+        bank: num(modalDraft.bank),
+        cash: num(modalDraft.cash),
+        advanceSource: modalDraft.advanceSource,
+        deductionSource: modalDraft.deductionSource,
+        garnishmentSource: modalDraft.garnishmentSource,
+        legalType: modalDraft.legalType,
+        reason: modalDraft.reason || "Son bordro kontrolü",
       });
       setModal(null);
-      setNotice("Bordro duzeltmesi kaydedildi.");
+      setNotice("Son bordro kontrolü kaydedildi; mesai/avans/kesinti/icra-haciz farkları kendi hareket ekranlarına işlendi.");
       await load({ force: true });
+      if (openSlipAfter) setTimeout(() => setModal("fis"), 0);
     } catch (error) {
-      setNotice(error?.message || "Bordro duzeltmesi kaydedilemedi.");
+      setNotice(error?.message || "Son bordro kontrolü kaydedilemedi.");
     } finally {
       setBusy(false);
     }
@@ -1235,25 +1286,69 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderOzet() {
+    const payrollReadyText = periodPrepared ? "Hazır" : "Hazırlanmadı";
     return (
       <section>
-        <div className="page-head"><div><h1>IK Ozet</h1><p>Sadece durum panosu. Giris islemi yok; uyaridan ilgili ekrana gidilir.</p></div><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Toplam odeme dengeli" : "Toplam odeme kontrol"}</span></div>
-        {filters({ third: "Personel / uyari ara", fourth: "Durum", fifth: "SGK" })}
+        <div className="page-head">
+          <div><h1>İK İşlem Merkezi</h1><p>Personel, ödeme dönemi ve bugünkü PDKS durumunu tek ekranda kontrol edin.</p></div>
+          <div className="group"><span className={`badge ${periodPrepared ? "green" : "orange"}`}>{MONTHS[month - 1]} {year} · {payrollReadyText}</span><span className={`badge ${smartIssues.length ? "orange" : "green"}`}>{smartIssues.length ? `${smartIssues.length} kontrol` : "Kontroller temiz"}</span></div>
+        </div>
+        {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
+        <div className={`warnline ${periodPrepared ? "ok" : "warn"}`}>
+          <b>Ödeme dönemi: {MONTHS[month - 1]} {year}</b> · Seçtiğiniz dönem sayfadan çıkınca korunur.
+          {!periodPrepared ? <><span> Bu dönem bordro hesabı henüz açılmadı.</span> <button className="btn primary" onClick={preparePeriod} disabled={busy}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></> : <span> Bordro verileri hazır.</span>}
+        </div>
+
         <div className="sumgrid">
-          {summaryBox("Aylik personel", summary.count, "", `${employees.filter(isSgk).length} SGK'li / ${employees.filter((item) => item.sgkFollow === false).length} SGK'siz`)}
-          {summaryBox("Banka odeme", money(summary.bank))}
-          {summaryBox("Elden odeme", money(summary.cash))}
-          {summaryBox("Net odeme", money(summary.net), balanced ? "green" : "red")}
-          {summaryBox("Avans", money(summary.advance), "orange")}
-          {summaryBox("Kesinti", money(summary.deduction), "red")}
-          {summaryBox("Yillik izin", summary.annual)}
-          {summaryBox("Eksik evrak", summary.docsMissing, "orange")}
+          {summaryBox("Aktif personel", employees.length, "", `${employees.filter(isSgk).length} SGK'lı · ${employees.filter((item) => item.personnelStatus === "RETIRED").length} emekli çalışan`)}
+          {summaryBox("Bugün kart basan", todayCarded, "green", `${num(pdksMetrics.inside)} şu an içeride`)}
+          {summaryBox("Bugün gelmeyen", num(pdksMetrics.absent), num(pdksMetrics.absent) ? "red" : "green", `${num(pdksMetrics.permitted)} izinli/mazeretli`)}
+          {summaryBox("Eksik basım", num(pdksMetrics.missingPunch), num(pdksMetrics.missingPunch) ? "orange" : "green", `${num(pdksMetrics.late)} geç gelen`)}
+          {summaryBox("Bugün yıllık izinde", todayAnnualLeave.length, todayAnnualLeave.length ? "orange" : "", todayAnnualLeave.slice(0, 2).map((item) => item.fullName).filter(Boolean).join(", "))}
+          {summaryBox("Banka ödeme", periodPrepared ? money(summary.bank) : "Hazırlanmadı")}
+          {summaryBox("Elden ödeme", periodPrepared ? money(summary.cash) : "Hazırlanmadı")}
+          {summaryBox("Net ödeme", periodPrepared ? money(summary.net) : "Hazırlanmadı", periodPrepared ? (balanced ? "green" : "red") : "orange")}
+          {summaryBox("Mesai", periodPrepared ? money(summary.overtime) : "-", summary.overtime ? "orange" : "")}
+          {summaryBox("Avans", periodPrepared ? money(summary.advance) : "-", summary.advance ? "orange" : "")}
+          {summaryBox("Kesinti", periodPrepared ? money(summary.deduction) : "-", summary.deduction ? "red" : "")}
+          {summaryBox("İcra / Haciz", periodPrepared ? money(summary.garnishment) : "-", summary.garnishment ? "red" : "")}
         </div>
+
+        <div className="card">
+          <div className="ch"><div><b>Hızlı İşlemler</b><span>Sık kullanılan İK işlemleri tek tıkla doğru ekrana ve seçili personele gider.</span></div></div>
+          <div className="workbar"><div className="group">
+            <button className="btn primary" onClick={() => openPerson()}>Personel Kartı</button>
+            <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
+            <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
+            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button>
+            <button className="btn" onClick={() => openLeave("yillik")}>Yıllık İzin</button>
+            <button className="btn green" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
+            <button className="btn" disabled={!periodPrepared} onClick={() => setModal("fis")}>Tek Kişi Fişi</button>
+          </div></div>
+        </div>
+
         <div className="layout2">
-          <div className="card"><div className="ch"><div><b>Aylik Personel Durumu</b><span>Islem yapilmaz; sadece kontrol listesi.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Odeme</th><th>Net</th><th>Durum</th></tr></thead><tbody>{payrollRows.map((row) => <tr key={row.employee.id}><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{sgkLabel(row.employee)}</td><td>{paymentLabel(row.employee)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff === 0 ? "green" : "orange"}`}>{row.diff === 0 ? "Dengeli" : "Kontrol"}</span></td></tr>)}<EmptyRow show={!payrollRows.length} colSpan={5} text="Personel yok." /></tbody></table></div></div>
-          <div className="card"><div className="ch"><div><b>Acik Isler / Kontrol Uyarilari</b><span>Butonlar ilgili ekrana yonlendirir.</span></div></div><table><tbody><tr><td><span className="badge orange">!</span></td><td><b>Kart eksikleri</b><br /><span>{employees.filter((item) => !item.cardNo).length} personelde kart no eksik</span></td><td><button className="btn" onClick={() => go("personel")}>Git</button></td></tr><tr><td><span className="badge orange">!</span></td><td><b>Evrak eksikleri</b><br /><span>{summary.docsMissing} personelde evrak yok</span></td><td><button className="btn" onClick={() => go("evrak")}>Git</button></td></tr><tr><td><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "OK" : "!"}</span></td><td><b>Bordro odeme kontrolu</b><br /><span>{balanced ? "Banka + elden nete esit" : "Toplam odeme eslesmiyor"}</span></td><td><button className="btn" onClick={() => go("bordro")}>Git</button></td></tr></tbody></table></div>
+          <div className="card">
+            <div className="ch"><div><b>Akıllı Kontrol Merkezi</b><span>İK + PDKS kaynaklarından dikkat isteyen maddeler.</span></div></div>
+            <table><tbody>
+              {smartIssues.map((item, index) => <tr key={`${item.title}-${index}`}><td><span className={`badge ${item.tone}`}>!</span></td><td><b>{item.title}</b><br/><span>{item.detail}</span></td><td><button className="btn" onClick={item.action}>{item.actionLabel}</button></td></tr>)}
+              {!smartIssues.length && <tr><td><span className="badge green">OK</span></td><td><b>Kontroller temiz</b><br/><span>Ödeme, kart, SGK/PDKS ve evrak kontrollerinde açık görünmüyor.</span></td><td>-</td></tr>}
+            </tbody></table>
+          </div>
+          <div className="card">
+            <div className="ch"><div><b>Bugünkü PDKS Hareketi</b><span>Gerçek kart hareketlerinden son personel durumları.</span></div></div>
+            <div className="tw"><table><thead><tr><th>Personel</th><th>Bölüm</th><th>Son Saat</th><th>Durum</th></tr></thead><tbody>
+              {safeList(pdksLive.liveCards).slice(0, 10).map((row) => <tr key={row.employeeId}><td>{row.fullName}</td><td>{row.department || "-"}</td><td>{row.lastTime || "-"}</td><td><span className={`badge ${row.inside ? "green" : "blue"}`}>{row.inside ? "İçeride" : "Çıkış yaptı"}</span></td></tr>)}
+              <EmptyRow show={!safeList(pdksLive.liveCards).length} colSpan={4} text="Bugün kart hareketi henüz yok."/>
+            </tbody></table></div>
+          </div>
         </div>
-        <LogTable title="Son 10 Islem" rows={logs.map(withPerson).slice(0, 10)} onEdit={editFromLog} />
+
+        {periodPrepared && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
+          {payrollRows.map((row) => <tr key={row.employee.id} onClick={() => setSelectedId(row.employee.id)}><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{sgkLabel(row.employee)}</td><td>{money(row.overtime)}</td><td>{money(row.advance)}</td><td>{money(row.deduction + row.garnishment)}</td><td>{money(row.bank)}</td><td>{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff === 0 ? "green" : "red"}`}>{row.diff === 0 ? "Hazır" : "Kontrol"}</span></td></tr>)}
+          <EmptyRow show={!payrollRows.length} colSpan={9} text="Hazırlanmış bordro satırı yok."/>
+        </tbody></table></div></div>}
+        <LogTable title="Son 10 İşlem" rows={logs.map(withPerson).slice(0, 10)} onEdit={editFromLog} />
       </section>
     );
   }
@@ -1325,6 +1420,15 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderBordro() {
+    if (!periodPrepared) {
+      return (
+        <section>
+          <div className="page-head"><div><h1>Son Bordro ve Ödeme Merkezi</h1><p>{MONTHS[month - 1]} {year} bordrosu henüz hazırlanmadı.</p></div><span className="badge orange">Hazırlanmadı</span></div>
+          {filters({ third: "Personel ara", fourth: "Ödeme", fifth: "Durum" })}
+          <div className="card"><div className="ch"><div><b>Önce Bilgileri Hazırla</b><span>Yeni aya geçildiğinde önceki ayın hesapları otomatik olarak yeni aya taşınmaz.</span></div></div><div className="warnline warn">Personel, maaş, yol, EK, mesai, avans, kesinti, icra/haciz ve ödeme planı seçili dönem için yeniden okunacak.</div><button className="btn primary" disabled={busy} onClick={preparePeriod}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></div>
+        </section>
+      );
+    }
     return (
       <section>
         <div className="page-head"><div><h1>Son Bordro ve Odeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka odemesi cikti oncesi burada son kez duzenlenir.</p></div><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Odeme dengeli" : "Odeme kontrol gerekli"}</span></div>
@@ -1335,7 +1439,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="card">
           <div className="ch"><div><b>Cikti Oncesi Son Bordro</b><span>Resmi Net bordro dosyasindan gelir; Banka + Elden = sirket net odemesi olmalidir.</span></div></div>
           <div className="tw"><table><thead><tr><th><input type="checkbox" checked={payrollRows.length>0&&selectedPayrollIds.length===payrollRows.length} onChange={(event)=>setSelectedPayrollIds(event.target.checked?payrollRows.map((row)=>row.employee.id):[])} /></th><th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Maas</th><th>Yol</th><th>EK</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Hak Edis</th><th>Net Odenecek</th><th>Banka</th><th>Elden</th><th>Kaynak</th><th>Durum</th><th>Islem</th></tr></thead><tbody>
-            {payrollRows.map((row) => <tr key={row.employee.id}><td><input type="checkbox" checked={selectedPayrollIds.includes(row.employee.id)} onChange={(event)=>setSelectedPayrollIds((old)=>event.target.checked?[...new Set([...old,row.employee.id])]:old.filter((id)=>id!==row.employee.id))} /></td><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{num(row.employee.sgkDays)||"-"}</td><td className="money">{num(row.employee.sgkNet)>0?money(row.employee.sgkNet):"-"}</td><td className="money">{money(row.salary)}</td><td className="money">{money(row.road)}</td><td className="money">{money(row.extra)}</td><td className="money">{money(row.overtime)}</td><td className="money">{money(row.advance)}</td><td className="money">{money(row.deduction)}</td><td className="money">{money(row.garnishment)}</td><td className="money">{money(row.hakedis)}</td><td className="money">{money(row.net)}</td><td className="money">{money(row.bank)}</td><td className="money">{money(row.cash)}</td><td><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span></td><td><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazir":"Kontrol"}</span></td><td><button className="btn" onClick={()=>openPayroll(row)}>Ödeme Dağılımı</button> <button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fis</button></td></tr>)}
+            {payrollRows.map((row) => <tr key={row.employee.id}><td><input type="checkbox" checked={selectedPayrollIds.includes(row.employee.id)} onChange={(event)=>setSelectedPayrollIds((old)=>event.target.checked?[...new Set([...old,row.employee.id])]:old.filter((id)=>id!==row.employee.id))} /></td><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{num(row.employee.sgkDays)||"-"}</td><td className="money">{num(row.employee.sgkNet)>0?money(row.employee.sgkNet):"-"}</td><td className="money">{money(row.salary)}</td><td className="money">{money(row.road)}</td><td className="money">{money(row.extra)}</td><td className="money">{money(row.overtime)}</td><td className="money">{money(row.advance)}</td><td className="money">{money(row.deduction)}</td><td className="money">{money(row.garnishment)}</td><td className="money">{money(row.hakedis)}</td><td className="money">{money(row.net)}</td><td className="money">{money(row.bank)}</td><td className="money">{money(row.cash)}</td><td><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span></td><td><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazir":"Kontrol"}</span></td><td><button className="btn" onClick={()=>openPayroll(row)}>Son Kontrol / Düzenle</button> <button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fis</button></td></tr>)}
             <EmptyRow show={!payrollRows.length} colSpan={18} text="Bordro icin personel bulunamadi." />
           </tbody></table></div>
         </div>
