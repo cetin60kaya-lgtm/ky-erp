@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import { approveLogin, decideCriticalApproval, denyLogin, listCriticalApprovals, listLoginApprovals } from "../../services/adminApi";
 import { decideMailApproval, listMailApprovals } from "../../services/mailApi";
 import "./AdminApprovalCenter.css";
@@ -58,6 +59,10 @@ function normalizeLogin(row) {
 }
 
 export default function AdminApprovalCenter() {
+  const { user } = useAuth();
+  const role = upper(user?.role);
+  const appOwner = ["SUPER_ADMIN","ADMIN"].includes(role);
+  const companyOwner = role === "COMPANY_ADMIN";
   const [critical, setCritical] = useState([]);
   const [mail, setMail] = useState([]);
   const [login, setLogin] = useState([]);
@@ -101,6 +106,15 @@ export default function AdminApprovalCenter() {
     mineRejected: allItems.filter((row) => row.myDecision === "REJECTED").length,
     total: allItems.length,
   }), [allItems]);
+
+  function canDecideRow(row) {
+    if (row.source === "MAIL") return companyOwner;
+    if (row.source === "LOGIN") return appOwner || companyOwner;
+    const policy = upper(row.raw?.approval_policy);
+    if (companyOwner) return ["COMPANY_OWNER","COMPANY_OWNER_OR_APP_OWNER","COMPANY_OWNER_AND_APP_OWNER"].includes(policy);
+    if (appOwner) return ["APP_OWNER","COMPANY_OWNER_OR_APP_OWNER","COMPANY_OWNER_AND_APP_OWNER"].includes(policy);
+    return false;
+  }
 
   async function decide(row, decision) {
     if (!row?.id || busyId) return;
@@ -162,10 +176,10 @@ export default function AdminApprovalCenter() {
             </div>
             <div className="approval-actions">
               {row.myDecision ? <span className="my-decision">Benim kararım: <b>{row.myDecision}</b></span> : null}
-              {pending ? <>
+              {pending && canDecideRow(row) ? <>
                 <button type="button" className="reject" disabled={Boolean(busyId)} onClick={() => decide(row, "REJECT")}>{busyId === key ? "İşleniyor..." : "Reddet"}</button>
                 <button type="button" className="approve" disabled={Boolean(busyId)} onClick={() => decide(row, "APPROVE")}>{busyId === key ? "İşleniyor..." : "Onayla"}</button>
-              </> : <span className="closed">İşlem {row.status === "APPROVED" ? "onaylandı" : row.status === "REJECTED" ? "reddedildi" : row.status.toLowerCase()}.</span>}
+              </> : pending ? <span className="closed">Yetkili onayı bekleniyor.</span> : <span className="closed">İşlem {row.status === "APPROVED" ? "onaylandı" : row.status === "REJECTED" ? "reddedildi" : row.status.toLowerCase()}.</span>}
             </div>
           </article>;
         }) : <div className="approval-empty"><b>Bu görünümde kayıt yok.</b><span>Yeni kritik işlem isteği geldiğinde burada görünecek.</span></div>}
