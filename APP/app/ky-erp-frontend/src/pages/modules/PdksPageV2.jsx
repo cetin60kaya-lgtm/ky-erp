@@ -396,7 +396,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
   return (
     <div className="pdks-page">
-      <header className="pdks-header"><div><h1>KY ERP · PDKS</h1><p>Hedef PDKS kapsamı · Windows Agent · tek D1 data</p></div><div className="pdks-period"><select value={month} onChange={(e)=>setMonth(Number(e.target.value))}>{MONTHS.map((name,index)=><option key={name} value={index+1}>{name}</option>)}</select><select value={year} onChange={(e)=>setYear(Number(e.target.value))}>{YEARS.map((item)=><option key={item}>{item}</option>)}</select><button onClick={refresh} disabled={busy}>D1 Yenile</button><span className={audit?"audit":"full"}>{audit?"DENETİM · Salt Okunur":"FULL · D1 Yazma"}</span></div></header>
+      <div className="pdks-period-strip"><div><small>ÇALIŞMA DÖNEMİ</small><strong>{MONTHS[month-1]} {year}</strong></div><div className="pdks-period"><select value={month} onChange={(e)=>setMonth(Number(e.target.value))}>{MONTHS.map((name,index)=><option key={name} value={index+1}>{name}</option>)}</select><select value={year} onChange={(e)=>setYear(Number(e.target.value))}>{YEARS.map((item)=><option key={item}>{item}</option>)}</select><button onClick={refresh} disabled={busy}>Yenile</button><span className={audit?"audit":"full"}>{audit?"Salt Okunur":"D1 Canlı"}</span></div></div>
       {notice ? <div className="pdks-notice">{notice}</div> : null}
       {error ? <div className="pdks-error">{error}</div> : null}
       {busy ? <div className="pdks-busy">İşlem sürüyor...</div> : null}
