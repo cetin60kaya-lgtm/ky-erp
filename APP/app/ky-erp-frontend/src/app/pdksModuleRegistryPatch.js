@@ -5,9 +5,16 @@ const PDKS_MODULE = {
   permissionKey: "IK",
   label: "PDKS",
   icon: "takvim",
+  sidebarGroups: [
+    ["ana-ekran", "Günlük", "dashboard", "Kart, giriş/çıkış ve puantaj"],
+    ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve bordro bağlantısı"],
+    ["gruplar-vardiyalar", "Tanımlar", "ayarlar", "Vardiya ve çalışma kuralları"],
+    ["saat-terminal", "Terminal & Sistem", "ayarlar", "Cihaz, saat ve senkron yönetimi"],
+    ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],
+  ],
   groups: [
     {
-      label: "Günlük Operasyon",
+      label: "Günlük",
       tabs: [
         ["ana-ekran", "Canlı Geçişler", "dashboard"],
         ["bilgi-aktar", "Kart / Terminal Aktarımı", "dosya"],
@@ -17,7 +24,7 @@ const PDKS_MODULE = {
       ],
     },
     {
-      label: "Personel & İK Bağlantısı",
+      label: "Personel & İK",
       tabs: [
         ["personel-bilgileri", "Personel İşlemleri", "users"],
         ["izinler", "İzinler", "takvim"],
@@ -27,7 +34,7 @@ const PDKS_MODULE = {
       ],
     },
     {
-      label: "Vardiya & Kurallar",
+      label: "Tanımlar",
       tabs: [
         ["gruplar-vardiyalar", "Gruplar / Vardiyalar", "ayarlar"],
         ["puantaj-kurallari", "Puantaj Kuralları", "ayarlar"],
