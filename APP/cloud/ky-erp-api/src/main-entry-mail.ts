@@ -77,6 +77,13 @@ export default {
       if(provider==="MICROSOFT_365")return base.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/action/microsoft`),env,ctx);
     }
 
+    const attachmentDownloadMatch=path.match(/^\/api\/mail\/messages\/([^/]+)\/attachments\/([^/]+)\/download$/);
+    if(method==="GET"&&attachmentDownloadMatch){
+      const messageId=decodeURIComponent(attachmentDownloadMatch[1]),attachmentId=decodeURIComponent(attachmentDownloadMatch[2]),provider=await providerForMessage(env,messageId);
+      if(provider==="GMAIL")return overlay.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download/google`),env,ctx);
+      if(provider==="MICROSOFT_365")return base.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download/microsoft`),env,ctx);
+    }
+
     const sendMatch=path.match(/^\/api\/mail\/drafts\/([^/]+)\/send$/);
     if(method==="POST"&&sendMatch&&await providerForDraft(env,decodeURIComponent(sendMatch[1]))==="GMAIL"){
       return overlay.fetch(rewritePath(request,`/api/mail/drafts/${encodeURIComponent(decodeURIComponent(sendMatch[1]))}/send/google`),env,ctx);
