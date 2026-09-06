@@ -139,7 +139,7 @@ export default function LoginPage() {
   const [capsLock, setCapsLock] = useState(false);
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [recoveryAnswers, setRecoveryAnswers] = useState(["", ""]);
-  const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false });
+  const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false, failed: false });
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
   const qrRef = useRef(null);
@@ -163,12 +163,13 @@ export default function LoginPage() {
           enabled: Boolean(response?.enabled),
           siteKey: String(response?.siteKey || ""),
           loaded: true,
+          failed: false,
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setTurnstileConfig({ enabled: false, siteKey: "", loaded: true });
-        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Sayfayı yenileyip tekrar deneyin.");
+        setTurnstileConfig({ enabled: true, siteKey: "", loaded: true, failed: true });
+        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Güvenli giriş için sayfayı yenileyip tekrar deneyin.");
       });
     return () => { cancelled = true; };
   }, [getTurnstileConfig]);
@@ -465,9 +466,11 @@ export default function LoginPage() {
                     placeholder="admin veya ad@firma.com"
                   />
                 </label>
-                <label>Şifre
+                <div className="auth-field-group">
+                  <label htmlFor="kyerp-password">Şifre</label>
                   <span className="auth-password-field">
                     <input
+                      id="kyerp-password"
                       name="password"
                       type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
@@ -487,7 +490,7 @@ export default function LoginPage() {
                       {showPassword ? "Gizle" : "Göster"}
                     </button>
                   </span>
-                </label>
+                </div>
                 {capsLock ? <div className="auth-caps-warning" role="status">Caps Lock açık. Şifrenizi kontrol edin.</div> : null}
                 {turnstileConfig.enabled ? (
                   <div className="auth-turnstile-shell">
@@ -496,8 +499,8 @@ export default function LoginPage() {
                   </div>
                 ) : null}
                 <ErrorBox message={error} />
-                <button className="auth-primary" type="submit" disabled={loading || !turnstileConfig.loaded || (turnstileConfig.enabled && !turnstileToken)}>
-                  {loading ? "Giriş yapılıyor..." : turnstileConfig.enabled && !turnstileToken ? "Güvenlik doğrulaması bekleniyor" : "Giriş Yap"}
+                <button className="auth-primary" type="submit" disabled={loading || !turnstileConfig.loaded || turnstileConfig.failed || (turnstileConfig.enabled && !turnstileToken)}>
+                  {loading ? "Giriş yapılıyor..." : turnstileConfig.failed ? "Güvenlik doğrulaması kullanılamıyor" : turnstileConfig.enabled && !turnstileToken ? "Güvenlik doğrulaması bekleniyor" : "Giriş Yap"}
                 </button>
                 <div className="auth-inline-note">
                   <span className="auth-dot" />
