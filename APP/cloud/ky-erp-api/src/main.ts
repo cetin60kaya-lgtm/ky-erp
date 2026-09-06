@@ -57,6 +57,7 @@ import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 import { registerNotificationRoutes } from "./notifications-cloud";
 import { registerMailCommunicationRoutes } from "./mail-communication-core";
+import { registerMicrosoftMailRoutes } from "./mail-microsoft-graph";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
@@ -175,6 +176,7 @@ registerProductionRuntimeV2Routes(app);
 registerProductionCenterRoutes(app);
 registerNotificationRoutes(app);
 registerMailCommunicationRoutes(app);
+registerMicrosoftMailRoutes(app);
 registerBoyahaneInventoryRoutes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobV2Routes(app);
