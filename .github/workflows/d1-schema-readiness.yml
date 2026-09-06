@@ -43,6 +43,35 @@ jobs:
         working-directory: APP/cloud/ky-erp-api
         run: npm run build
 
+      - name: 0046 canonical Muhasebe migration sözleşmesini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration='APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql'
+          test -f "$migration"
+          grep -Fq 'CREATE TABLE IF NOT EXISTS accounting_report_categories' "$migration"
+          grep -Fq 'CREATE TABLE IF NOT EXISTS accounting_report_overrides' "$migration"
+          grep -Fq 'CREATE TABLE IF NOT EXISTS accounting_expense_rules' "$migration"
+          ! grep -Eiq '(^|[[:space:]])DROP[[:space:]]+(TABLE|INDEX)|(^|[[:space:]])DELETE[[:space:]]+FROM|(^|[[:space:]])TRUNCATE|(^|[[:space:]])ALTER[[:space:]]+TABLE.+DROP' "$migration"
+          echo '0046 canonical Muhasebe migration additive-only contract PASSED.'
+
+      - name: 0046 migrationı izole D1 üzerinde uygula
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .local-d1-readiness-0046
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-d1-readiness-0046 \
+            --file migrations/0046_accounting_canonical_report_controls.sql
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-d1-readiness-0046 \
+            --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('accounting_report_categories','accounting_report_overrides','accounting_expense_rules') ORDER BY name;"
+
       - name: D1 production güvenlik sözleşmesini doğrula
         shell: bash
         run: |
@@ -50,6 +79,7 @@ jobs:
           test -f APP/cloud/ky-erp-api/migrations/0022_auth_same_browser_session_guard.sql
           test -f APP/cloud/ky-erp-api/migrations/0023_admin_company_alias_schema.sql
           test -f APP/cloud/ky-erp-api/migrations/0024_denetime_pdks_system_user.sql
+          test -f APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql
           grep -Fq 'D1 tam yedek' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
           grep -Fq 'Remote-Column-Exists' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
           grep -Fq '0022_auth_same_browser_session_guard.sql' DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1
