@@ -162,7 +162,7 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
 test("forced refresh waits for an active read before starting the canonical reread", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /const load = useCallback\(async \(\{ force = false \} = \{\}\) =>/);
+  assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false \} = \{\}\) =>/);
   assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
   assert.match(page, /await activeRequest\.promise/);
   assert.match(page, /await load\(\{ force: true \}\)/);
