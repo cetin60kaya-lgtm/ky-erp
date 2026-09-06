@@ -130,6 +130,8 @@ export function registerMailCommunicationRoutes(app:any){
     const statements=[
       c.env.DB.prepare("INSERT INTO mail_accounts (id,main_company_slug,provider_type,account_type,email_address,display_name,department_code,provider_account_id,status,approval_status,provider_connected,is_default_send,is_default_receive,created_by,approved_by_company,approved_by_owner,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         .bind(accountId,tenant,provider,type,email,text(body.displayName)||email,text(body.departmentCode)||null,null,"PENDING","PENDING",0,0,0,text(current?.id),null,null,ts,ts),
+      c.env.DB.prepare("INSERT INTO mail_account_members (id,main_company_slug,account_id,user_id,can_view,can_compose,can_send,can_reply,can_forward,can_attach,can_link_entity,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(),tenant,accountId,text(current?.id),1,1,type==="PERSONAL"?1:0,type==="PERSONAL"?1:0,type==="PERSONAL"?1:0,1,1,ts,ts), // MAIL_REQUESTER_INITIAL_MEMBER
       c.env.DB.prepare("INSERT INTO mail_approval_requests (id,main_company_slug,request_type,target_type,target_id,status,approval_policy,requested_by,request_payload,decided_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
         .bind(requestId,tenant,"MAIL_ACCOUNT_CONNECT","MAIL_ACCOUNT",accountId,"PENDING",policy,text(current?.id),JSON.stringify({provider,accountType:type,emailAddress:email,departmentCode:text(body.departmentCode)}),null,ts,ts),
       c.env.DB.prepare("INSERT INTO mail_approval_steps (id,main_company_slug,request_id,step_type,step_order,required,status,decided_by,decided_at,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
@@ -139,6 +141,28 @@ export function registerMailCommunicationRoutes(app:any){
     await c.env.DB.batch(statements);
     await audit(c,tenant,current,"MAIL_ACCOUNT_REQUESTED",{requestId,provider,type,email,policy},accountId);
     return c.json({ok:true,data:{accountId,requestId,status:"PENDING",approvalPolicy:policy,provider,accountType:type,emailAddress:email}},201);
+  });
+
+  app.get("/api/mail/accounts/:id/members",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a,accountId=text(c.req.param("id"));
+    if(!(ownerRole(current?.role)||companyAdminRole(current?.role)))return c.json(jsonError("MAIL_MEMBER_ADMIN_FORBIDDEN","Posta kutusu kullanıcı yetkilerini yalnız firma sahibi veya uygulama sahibi yönetebilir."),403);
+    if(!(await canAccessAccount(c,current,tenant,accountId)))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusu bu firmaya ait değil."),403);
+    const r=await c.env.DB.prepare("SELECT m.*,u.username,u.full_name,s.email FROM mail_account_members m LEFT JOIN auth_users u ON u.id=m.user_id LEFT JOIN auth_user_security s ON s.user_id=m.user_id WHERE m.main_company_slug=? AND m.account_id=? ORDER BY COALESCE(u.full_name,u.username,m.user_id)").bind(tenant,accountId).all<AnyRow>();
+    return c.json({ok:true,data:r.results||[]});
+  });
+
+  app.put("/api/mail/accounts/:id/members",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a,accountId=text(c.req.param("id")),userId=text(body.userId);
+    if(!(ownerRole(current?.role)||companyAdminRole(current?.role)))return c.json(jsonError("MAIL_MEMBER_ADMIN_FORBIDDEN","Posta kutusu kullanıcı yetkilerini yalnız firma sahibi veya uygulama sahibi yönetebilir."),403);
+    if(!userId)return c.json(jsonError("USER_REQUIRED","Kullanıcı seçilmelidir."),422);
+    if(!(await canAccessAccount(c,current,tenant,accountId)))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusu bu firmaya ait değil."),403);
+    const target=await c.env.DB.prepare("SELECT u.id,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1").bind(userId).first<AnyRow>();
+    if(!target?.id||text(target.main_company_slug)!==tenant)return c.json(jsonError("USER_TENANT_FORBIDDEN","Kullanıcı bu firmaya ait değil."),403);
+    const ts=nowIso(),bool=(v:any)=>v===true||v===1||v==="1";
+    await c.env.DB.prepare("INSERT INTO mail_account_members (id,main_company_slug,account_id,user_id,can_view,can_compose,can_send,can_reply,can_forward,can_attach,can_link_entity,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,user_id) DO UPDATE SET can_view=excluded.can_view,can_compose=excluded.can_compose,can_send=excluded.can_send,can_reply=excluded.can_reply,can_forward=excluded.can_forward,can_attach=excluded.can_attach,can_link_entity=excluded.can_link_entity,updated_at=excluded.updated_at")
+      .bind(crypto.randomUUID(),tenant,accountId,userId,bool(body.canView)?1:0,bool(body.canCompose)?1:0,bool(body.canSend)?1:0,bool(body.canReply)?1:0,bool(body.canForward)?1:0,bool(body.canAttach)?1:0,bool(body.canLinkEntity)?1:0,ts,ts).run();
+    await audit(c,tenant,current,"MAIL_ACCOUNT_MEMBER_UPDATED",{userId,permissions:{canView:bool(body.canView),canCompose:bool(body.canCompose),canSend:bool(body.canSend),canReply:bool(body.canReply),canForward:bool(body.canForward),canAttach:bool(body.canAttach),canLinkEntity:bool(body.canLinkEntity)}},accountId);
+    return c.json({ok:true,data:{accountId,userId,updatedAt:ts}});
   });
 
   app.get("/api/mail/approvals",async(c:any)=>{
@@ -161,6 +185,10 @@ export function registerMailCommunicationRoutes(app:any){
     if(!step&&ownerRole(current?.role))return c.json(jsonError("COMPANY_OWNER_APPROVAL_REQUIRED","Önce firma sahibi onayı gereklidir."),409);
     if(!step)return c.json(jsonError("APPROVAL_STEP_NOT_FOUND","Bu rol için bekleyen onay adımı yok."),409);
     if(upper(step.status)!=="PENDING")return c.json(jsonError("APPROVAL_STEP_ALREADY_DECIDED","Bu onay adımı daha önce sonuçlandırılmış."),409);
+    if(stepType==="APP_OWNER"){
+      const companyStep=await c.env.DB.prepare("SELECT status FROM mail_approval_steps WHERE request_id=? AND main_company_slug=? AND step_type='COMPANY_OWNER' AND required=1 LIMIT 1").bind(requestId,tenant).first<AnyRow>();
+      if(upper(companyStep?.status)!=="APPROVED")return c.json(jsonError("COMPANY_OWNER_STEP_PENDING","Önce firma sahibi bu mail bağlantısını onaylamalıdır."),409);
+    }
     const ts=nowIso(),next=decision==="APPROVE"?"APPROVED":"REJECTED";
     await c.env.DB.prepare("UPDATE mail_approval_steps SET status=?,decided_by=?,decided_at=?,note=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(next,text(current?.id),ts,text(body.note)||null,ts,step.id,tenant).run();
 
