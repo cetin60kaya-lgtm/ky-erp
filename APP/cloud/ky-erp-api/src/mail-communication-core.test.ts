@@ -39,7 +39,7 @@ test("mail core is fail-closed for tenant, membership and approvals", () => {
   assert.match(source, /AES-GCM/);
   assert.match(source, /mail_account_members/);
   assert.match(source, /MAIL_REQUESTER_INITIAL_MEMBER/);
-  assert.match(source, /\.bind\(crypto\.randomUUID\(\),tenant,requestId,"COMPANY_OWNER",1,1,"PENDING"/);
+  assert.match(source, /\.bind\(crypto\.randomUUID\(\),tenant,requestId,"COMPANY_OWNER",1,1,requestStatus/);
   assert.match(source, /m\.user_id=\?/);
   assert.doesNotMatch(source, /COMPANY_OWNER_AND_APP_OWNER/);
   assert.match(source, /normalizeSingleDecisionApprovals/);
@@ -103,4 +103,15 @@ test("daily Mail and Files uses a module-scoped file endpoint", () => {
   assert.match(source, /r\.entity_type IN/);
   assert.match(api, /apiGet\("\/mail\/files"/);
   assert.doesNotMatch(api, /apiGet\("\/file-hub\/(?:files|search)"/);
+});
+
+
+test("privileged owner actions bypass their own mail approval queue", () => {
+  const source = read("./mail-communication-core.ts");
+  assert.match(source, /privilegedInternalApproval/);
+  assert.match(source, /autoApproveOwnPrivilegedMailRequests/);
+  assert.match(source, /PRIVILEGED_OWNER_AUTO_APPROVAL/);
+  assert.match(source, /MAIL_ACCOUNT_AUTO_APPROVED_PRIVILEGED/);
+  assert.match(source, /requestStatus=privileged\?"APPROVED":"PENDING"/);
+  assert.match(source, /approvalBypass:privileged/);
 });
