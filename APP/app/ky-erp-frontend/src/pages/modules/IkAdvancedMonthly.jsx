@@ -144,7 +144,11 @@ function draftPerson(employee = {}) {
     code: employee.code || "",
     cardNo: employee.cardNo || "",
     identityNo: employee.identityNo || "",
+    personnelStatus: employee.personnelStatus === "RETIRED" ? "RETIRED" : "NORMAL",
     sgkFollow: employee.sgkFollow === true ? "SGKLI" : employee.sgkFollow === false ? "SGKSIZ" : "BELIRTILMEMIS",
+    sgkDays: employee.sgkDays ?? "",
+    pdksCardDays: employee.pdksCardDays ?? 0,
+    sgkPdksMatch: employee.sgkPdksMatch ?? null,
     paymentType: employee.paymentType || "BANKA_ELDEN",
     salary: employee.salary ?? "",
     roadAllowance: employee.roadAllowance ?? "",
@@ -542,7 +546,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
 
   const savePerson = async () => {
     if (!modalDraft.fullName?.trim()) return setNotice("Personel adi bos olamaz.");
-    if (!modalDraft.sgkFollow) return setNotice("SGK durumu bos olamaz.");
+    if (!["SGKLI", "SGKSIZ"].includes(modalDraft.sgkFollow)) return setNotice("Bu ay için SGK durumu seçilmelidir.");
+    if (modalDraft.sgkFollow === "SGKLI" && (num(modalDraft.sgkDays) < 1 || num(modalDraft.sgkDays) > totalDays)) return setNotice(`SGK gün sayısı 1-${totalDays} arasında olmalıdır.`);
     if (!modalDraft.paymentType) return setNotice("Odeme tipi bos olamaz.");
     if (num(modalDraft.salary) < 0) return setNotice("Maas negatif olamaz.");
     const baseEmployee = modalDraft.baseEmployeeId ? rawEmployees.find((item) => item.id === modalDraft.baseEmployeeId) : null;
@@ -560,7 +565,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         personelKodu: modalDraft.code,
         cardNo: modalDraft.cardNo,
         identityNo: modalDraft.identityNo,
-        sgkFollow: modalDraft.sgkFollow === "SGKLI" ? true : modalDraft.sgkFollow === "SGKSIZ" ? false : null,
+        personnelStatus: modalDraft.personnelStatus || "NORMAL",
+        period,
+        year,
+        month,
+        sgkFollow: modalDraft.sgkFollow === "SGKLI",
+        sgkDays: modalDraft.sgkFollow === "SGKLI" ? num(modalDraft.sgkDays) : 0,
         paymentType: modalDraft.paymentType,
         salary: num(modalDraft.salary),
         roadAllowance: num(modalDraft.roadAllowance),
@@ -1281,7 +1291,17 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
         <div className="modal-section-grid">
           <div className="modal-section"><h3>Kimlik ve Çalışma Bilgileri</h3><div className="form"><Field label="Ad Soyad" half><input value={modalDraft.fullName||""} onChange={(event)=>setModalDraft((old)=>({...old,fullName:event.target.value}))}/></Field><Field label="TC Kimlik No"><input value={modalDraft.identityNo||""} maxLength={11} onChange={(event)=>setModalDraft((old)=>({...old,identityNo:event.target.value.replace(/\D/g,"")}))}/></Field><Field label="Personel Kodu"><input value={modalDraft.code||""} onChange={(event)=>setModalDraft((old)=>({...old,code:event.target.value}))}/></Field><Field label="Kart No"><input value={modalDraft.cardNo||""} onChange={(event)=>setModalDraft((old)=>({...old,cardNo:event.target.value}))}/></Field><Field label="İşe Giriş"><input type="date" value={modalDraft.startDate||""} onChange={(event)=>setModalDraft((old)=>({...old,startDate:event.target.value}))}/></Field><Field label="Görev"><input value={modalDraft.title||""} onChange={(event)=>setModalDraft((old)=>({...old,title:event.target.value}))}/></Field><Field label="Bölüm"><input value={modalDraft.department||""} onChange={(event)=>setModalDraft((old)=>({...old,department:event.target.value}))}/></Field><Field label="Durum"><select value={modalDraft.status||"AKTIF"} onChange={(event)=>setModalDraft((old)=>({...old,status:event.target.value}))}><option value="AKTIF">Aktif</option><option value="PASIF">Pasif</option></select></Field></div></div>
-          <div className="modal-section"><h3>SGK ve Bordro Kapsamı</h3><div className="form"><Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Belirtilmemiş</option></select></Field><Field label="Bordro Kapsamı" half><select value={modalDraft.payrollIncluded===false?"HARIC":"DAHIL"} onChange={(event)=>setModalDraft((old)=>({...old,payrollIncluded:event.target.value==="DAHIL"}))}><option value="DAHIL">Şirket bordrosuna dahil</option><option value="HARIC">Harici - ödeme ve puantaja alma</option></select></Field><Field label="Yıllık İzin Hakkı"><input type="number" value={modalDraft.annualLeaveEntitlement||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveEntitlement:event.target.value}))}/></Field><Field label="Devreden İzin"><input type="number" value={modalDraft.annualLeaveCarryover||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveCarryover:event.target.value}))}/></Field></div></div>
+          <div className="modal-section"><h3>SGK ve Bordro Kapsamı · {MONTHS[month-1]} {year}</h3><div className="form">
+            <Field label="Personel Statüsü" half><select value={modalDraft.personnelStatus||"NORMAL"} onChange={(event)=>setModalDraft((old)=>({...old,personnelStatus:event.target.value}))}><option value="NORMAL">Normal</option><option value="RETIRED">Emekli</option></select></Field>
+            <Field label="SGK Durumu" half><select value={modalDraft.sgkFollow||"BELIRTILMEMIS"} onChange={(event)=>setModalDraft((old)=>({...old,sgkFollow:event.target.value,sgkDays:event.target.value==="SGKSIZ"?0:old.sgkDays}))}><option value="SGKLI">SGK'lı</option><option value="SGKSIZ">SGK'sız</option><option value="BELIRTILMEMIS">Seçiniz</option></select></Field>
+            <Field label="Bu Ay SGK Gün" half><input type="number" min="0" max={totalDays} value={modalDraft.sgkDays??""} disabled={modalDraft.sgkFollow==="SGKSIZ"} onChange={(event)=>setModalDraft((old)=>({...old,sgkDays:event.target.value}))}/></Field>
+            <Field label="Gerçek PDKS Kart Günü" half><input value={modalDraft.pdksCardDays??0} readOnly/></Field>
+            <Field label="Bordro Kapsamı" half><select value={modalDraft.payrollIncluded===false?"HARIC":"DAHIL"} onChange={(event)=>setModalDraft((old)=>({...old,payrollIncluded:event.target.value==="DAHIL"}))}><option value="DAHIL">Şirket bordrosuna dahil</option><option value="HARIC">Harici - ödeme ve puantaja alma</option></select></Field>
+            <Field label="Yıllık İzin Hakkı"><input type="number" value={modalDraft.annualLeaveEntitlement||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveEntitlement:event.target.value}))}/></Field>
+            <Field label="Devreden İzin"><input type="number" value={modalDraft.annualLeaveCarryover||""} onChange={(event)=>setModalDraft((old)=>({...old,annualLeaveCarryover:event.target.value}))}/></Field>
+            {modalDraft.sgkFollow==="SGKLI" && modalDraft.sgkDays!=="" && num(modalDraft.sgkDays)!==num(modalDraft.pdksCardDays) ? <div className="wide warnline warn">İç kontrol: Bu ay SGK günü {num(modalDraft.sgkDays)}, gerçek kart günü {num(modalDraft.pdksCardDays)}. Denetim görünümünde bu iç uyarı gösterilmez; gerçek PDKS kaydı otomatik üretilmez.</div> : null}
+            {modalDraft.personnelStatus==="RETIRED" ? <div className="wide warnline">Emekli personel aktif çalışan olarak devam edebilir. Emekli statüsü SGK durumundan bağımsızdır.</div> : null}
+          </div></div>
           <div className="modal-section"><h3>Ücret ve Ödeme Planı</h3><div className="form"><Field label="Gerçek Maaş"><input type="number" value={modalDraft.salary||""} onChange={(event)=>setModalDraft((old)=>({...old,salary:event.target.value}))}/></Field><Field label="Baz Personel"><select value={modalDraft.baseEmployeeId||""} onChange={(event)=>setModalDraft((old)=>({...old,baseEmployeeId:event.target.value}))}><option value="">Yok - gerçek maaşı kullan</option>{rawEmployees.filter((item)=>item.id!==modalDraft.id).map((item)=><option key={item.id} value={item.id}>{item.fullName} - {money(item.salary)}{upper(item.status).includes("PAS") ? " · Pasif referans" : ""}</option>)}</select></Field><Field label="Bordro Baz Maaşı"><input value={money(modalDraft.baseEmployeeId?rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary:modalDraft.salary)} readOnly/></Field><Field label="EK"><input value={money(modalDraft.baseEmployeeId?Math.max(num(modalDraft.salary)-num(rawEmployees.find((item)=>item.id===modalDraft.baseEmployeeId)?.salary),0):0)} readOnly/></Field><Field label="Yol Yardımı"><input type="number" value={modalDraft.roadAllowance||""} onChange={(event)=>setModalDraft((old)=>({...old,roadAllowance:event.target.value}))}/></Field><Field label="Ödeme Tipi"><select value={modalDraft.paymentType||"BANKA_ELDEN"} onChange={(event)=>setModalDraft((old)=>({...old,paymentType:event.target.value}))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field><Field label="Banka Planı"><input type="number" value={modalDraft.bankAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,bankAmount:event.target.value}))}/></Field><Field label="Elden Planı"><input type="number" value={modalDraft.cashAmount||""} onChange={(event)=>setModalDraft((old)=>({...old,cashAmount:event.target.value}))}/></Field><Field label="Resmi Bordro Net"><input value={money(selected?.sgkNet)} readOnly/></Field><Field label="Not" wide><textarea value={modalDraft.note||""} onChange={(event)=>setModalDraft((old)=>({...old,note:event.target.value}))}/></Field></div></div>
         </div>
         <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={savePerson}>{busy?"Kaydediliyor":"Tüm Değişiklikleri Kaydet"}</button>} />
