@@ -17,5 +17,5 @@ test("application owner cannot use legacy one-time recovery codes", () => {
 
 test("saving owner questions retires any remaining legacy recovery codes", () => {
   assert.match(policy, /UPDATE auth_recovery_codes SET used_at=COALESCE\(used_at,\?\)/);
-  assert.match(policy, /legacyRecoveryCodesDisabled:\s*true/);
+  assert.match(policy, /legacyRecoveryCodesRetired:\s*true/);
 });

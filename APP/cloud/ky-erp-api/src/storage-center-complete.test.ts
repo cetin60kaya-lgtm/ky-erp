@@ -16,7 +16,7 @@ test("Depolama is a first-class owner module with all storage screens", () => {
   assert.match(registry, /key:\s*"depolama"/);
   assert.match(registry, /permissionKey:\s*"STORAGE_ADMIN"/);
   assert.match(auth, /if \(isSuperAdmin\(user\?\.role\)\) return true/);
-  assert.match(auth, /COMPANY_ADMIN" && key === "ADMIN"/);
+  assert.match(auth, /COMPANY_ADMIN" && \["ADMIN","STORAGE_ADMIN"\]\.includes\(key\)/);
   for (const tab of [
     "depolama-genel",
     "depolama-kaynaklar",

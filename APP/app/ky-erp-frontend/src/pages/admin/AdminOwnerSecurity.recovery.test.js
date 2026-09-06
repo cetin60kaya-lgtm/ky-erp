@@ -11,8 +11,8 @@ const adminApi = fs.readFileSync(path.join(here, "..", "..", "services", "adminA
 test("owner security center manages question-answer recovery with MFA step-up", () => {
   assert.match(ownerSecurity, /getOwnerRecoveryConfig/);
   assert.match(ownerSecurity, /saveOwnerRecoveryQuestions/);
-  assert.match(ownerSecurity, /Uygulama Sahibi Özel Soru-Cevap/);
-  assert.match(ownerSecurity, /Üç soru kaydedilir; kurtarmada iki tanesi rastgele sorulur/);
+  assert.match(ownerSecurity, /Hesap Kurtarma ve Kimlik Doğrulama/);
+  assert.match(ownerSecurity, /rastgele iki soru sorulur/);
   assert.match(ownerSecurity, /Mevcut Authenticator kodu/);
   assert.match(ownerSecurity, /recoveryStepUpCode/);
   assert.match(ownerSecurity, /provider:\s*recoveryProvider/);

@@ -82,7 +82,7 @@ KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kul
 - Mail & Dosyalar içinde Gelen Kutusu, Gönderilenler, Taslaklar, Yanıt Bekleyenler, Şablonlar ve File Hub dosya görünümleri bulunur.
 - Microsoft 365/Outlook ilk aktif mail adapterıdır. Gmail/JMAP/IMAP-SMTP yalnız adapter gerçekten hazır ve production config mevcut olduğunda aktif gösterilir; hazır olmayan provider sahte şekilde “bağlı” görünmez.
 - Mail hesapları tenant + mail_account_members ile izole edilir. Modül yetkisi tek başına başka kullanıcının posta kutusunu açmaz.
-- Kişisel hesap talebi Firma Sahibi onayı; ortak/bölüm, Muhasebe ve e-Belge gibi kritik kutular Firma Sahibi -> Uygulama Sahibi sıralı çift onay kullanır.
+- Tüm mail hesabı bağlantı talepleri ilgili Firma Sahibi / İşveren onayını kullanır (`COMPANY_OWNER`). Eski `APP_OWNER` ikinci adımı uygulanmaz; Süper Yönetici gözetim görünürlüğü firma sahibi kararını devralmaz.
 - OAuth token/credential plaintext saklanmaz; AES-GCM kasası kullanılır ve mevcut File Hub OAuth secret katmanı yeniden kullanılabilir.
 - Mail gönderimi yalnız açık kullanıcı işlemiyle yapılır. AI otomatik gönderemez.
 - Provider 202 Accepted veya benzeri kabul cevabı “teslim edildi” anlamına gelmez.

@@ -136,7 +136,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
-  const showHakanDirectAccounts = /hakan|mecit/.test(activeCompanyKey);
+  const showHakanDirectAccounts = ["mecit-hakan", "main-mecit-hakan"].includes(activeCompanyKey);
   const selectedAccount = useMemo(
     () => accounts.find((row) => String(row.id) === String(selectedAccountId)) || null,
     [accounts, selectedAccountId],
@@ -173,7 +173,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       .filter(Boolean);
     const schemaPending = results[0].status === "fulfilled" && results[0].value?.schemaReady === false;
     setNotice(schemaPending
-      ? "Mail Core veritabanı kurulumu bekliyor. Ekran önizleme modunda; mail bağlantısı ve gönderim 0050 tamamlanınca açılacak."
+      ? "Mail bağlantı servisi hazırlanıyor. Hazır olduğunda hesaplarınızı bağlayabilirsiniz."
       : failedSources.length ? `Hazır olmayan kaynak: ${failedSources.join(", ")}. Diğer bilgiler gösteriliyor.` : "");
     setLoading(false);
   }, []);
@@ -224,7 +224,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       const provider = String(params.get("mailProvider") || "").toUpperCase();
       setNotice(provider === "GMAIL" ? "Google / Gmail posta kutusu bağlantısı doğrulandı." : "Microsoft posta kutusu bağlantısı doğrulandı.");
     }
-    if (params.get("mailError")) setNotice(`Hata: ${params.get("mailError")}`);
+    if (params.get("mailError")) setNotice("Hata: Mail hesabı bağlanamadı. Hesabınızı kontrol edip yeniden bağlanmayı deneyin.");
     if (params.has("mailConnected") || params.has("mailError")) {
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -273,7 +273,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     event.preventDefault();
     setLoading(true);
     try {
-      const result = await requestMailAccount(requestForm);
+      await requestMailAccount(requestForm);
       setNotice("Hesap talebi oluşturuldu. İlgili firma sahibi / işveren onayı bekleniyor.");
       setRequestOpen(false);
       setRequestForm((current) => ({ ...current, emailAddress: "", displayName: "", departmentCode: "" }));
@@ -326,12 +326,19 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   }
 
   async function addAndConnectPreset(preset) {
+    const existingAccount = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
+    if (String(existingAccount?.status || "").toUpperCase() === "ACTIVE") {
+      setSelectedAccountId(String(existingAccount.id));
+      setSelectedFolderId("");
+      setSelectedMessage(null);
+      setRequestOpen(false);
+      openModule?.("iletisim", { tabKey: "mail-gelen" });
+      return;
+    }
     setLoading(true);
     try {
       const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
-      if (!runtime) throw new Error("Mail sağlayıcı durumu alınamadı. Worker /mail/providers bağlantısı hazır değil.");
-      if (runtime.adapterReady === false) throw new Error(runtime.reason || `${providerLabel(preset.providerType)} adapterı hazır değil.`);
-      if (runtime.configured === false) throw new Error(runtime.reason || `${providerLabel(preset.providerType)} OAuth production ayarı eksik.`);
+      if (!runtime?.adapterReady || !runtime?.configured) throw new Error("Bağlantı servisi hazırlanıyor. Lütfen daha sonra tekrar deneyin.");
 
       let account = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase()) || null;
       let accountId = account?.id || "";
@@ -427,7 +434,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
   async function togglePin() {
     if (!selectedMessage?.id) return;
-    const next = !Boolean(selectedMessage.is_pinned ?? selectedMessage.isPinned);
+    const next = Number(selectedMessage.is_pinned ?? selectedMessage.isPinned ?? 0) !== 1;
     setLoading(true);
     try {
       await pinMailMessage(selectedMessage.id, next);
@@ -515,7 +522,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         </div>
         <div className="comm-actions">
           {isMail ? <button type="button" onClick={() => setComposeOpen(true)} disabled={!selectedAccountId || loading}>+ Yeni Mail</button> : null}
-          {isMail ? <button type="button" className="secondary" onClick={() => setRequestOpen(true)}>+ Mail Hesabı</button> : null}
+          {isMail ? <button type="button" className="secondary" onClick={() => { setAdvancedAccountOpen(false); setRequestOpen(true); }}>+ Mail Hesabı</button> : null}
           <button type="button" className="secondary" onClick={loadBase} disabled={loading}>Yenile</button>
         </div>
       </header>
@@ -538,10 +545,11 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
               const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
               const existing = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
               const ready = Boolean(runtime?.adapterReady && runtime?.configured);
+              const active = String(existing?.status || "").toUpperCase() === "ACTIVE";
               return <article key={preset.key} className="comm-direct-mail-card">
                 <div><b>{preset.title}</b><span>{preset.emailAddress}</span><small>{providerLabel(preset.providerType)} · {preset.departmentCode === "DESEN" ? "Desen bölümü" : "Şirket ana maili"}</small></div>
-                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || !ready}>{existing ? "Hesabı Bağla" : "Direkt Ekle & Bağla"}</button>
-                {!ready ? <em>{runtime?.reason || "Sağlayıcı production OAuth ayarı henüz doğrulanmadı."}</em> : null}
+                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || (!active && !ready)}>{active ? "Posta Kutusunu Aç" : existing ? "Hesabı Bağla" : "Ekle & Bağla"}</button>
+                <em>{active ? "Bağlı" : ready ? "Bağlantıya hazır" : "Bağlantı servisi hazırlanıyor"}</em>
               </article>;
             })}
           </div> : null}
@@ -553,14 +561,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 {provider:"GMAIL",adapterReady:false,configured:false},
                 {provider:"JMAP",adapterReady:false,configured:false},
                 {provider:"IMAP_SMTP",adapterReady:false,configured:false},
-              ]).map((row) => <option key={row.provider} value={row.provider} disabled={row.adapterReady===false || row.configured===false}>{providerLabel(row.provider)}{row.adapterReady===false ? " · Yakında" : row.configured===false ? " · OAuth Ayarı Gerekli" : ""}</option>)}
+              ]).map((row) => <option key={row.provider} value={row.provider} disabled={row.adapterReady===false || row.configured===false}>{providerLabel(row.provider)}{row.adapterReady===false ? " · Yakında" : row.configured===false ? " · Hazırlanıyor" : ""}</option>)}
             </select></label>
             <label>Hesap Türü<select value={requestForm.accountType} onChange={(e) => setRequestForm((v) => ({ ...v, accountType: e.target.value }))}><option value="PERSONAL">Kişisel</option><option value="SHARED">Ortak / Shared</option><option value="DEPARTMENT">Bölüm</option></select></label>
             <label>E-posta<input type="email" required value={requestForm.emailAddress} onChange={(e) => setRequestForm((v) => ({ ...v, emailAddress: e.target.value }))} placeholder="muhasebe@firma.com"/></label>
             <label>Görünen Ad<input value={requestForm.displayName} onChange={(e) => setRequestForm((v) => ({ ...v, displayName: e.target.value }))} placeholder="Muhasebe"/></label>
             <label>Bölüm<select value={requestForm.departmentCode} onChange={(e) => setRequestForm((v) => ({ ...v, departmentCode: e.target.value }))}><option value="">Genel</option><option value="MUHASEBE">Muhasebe</option><option value="E_BELGE">e-Belge</option><option value="DESEN">Desen</option><option value="IK">İK</option><option value="YONETIM">Yönetim</option></select></label>
             <button type="submit" disabled={loading || overview?.schemaReady===false || selectedProviderRuntime?.adapterReady===false || selectedProviderRuntime?.configured===false}>Onaya Gönder</button>
-            {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">{selectedProviderRuntime.reason || "Bu sağlayıcı henüz bağlantıya hazır değil."}</div> : null}
+            {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">Bağlantı servisi hazırlanıyor.</div> : null}
           </form> : null}
         </section>
         </div>

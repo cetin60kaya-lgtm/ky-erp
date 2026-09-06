@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { getAuthenticatedUser } from "./auth-cloud.ts";
 import base from "./main-entry";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
 import { ensureMailWorkspaceUx } from "./runtime-migration-mail-ux";
@@ -42,8 +43,7 @@ async function providerForMessage(env:Cloudflare.Env,id:string){
 }
 function rewritePath(request:Request,path:string){const url=new URL(request.url);url.pathname=path;return new Request(url.toString(),request);}
 
-export default {
-  async fetch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext){
+async function dispatch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext){
     const url=new URL(request.url),path=url.pathname,method=request.method.toUpperCase();
     const mailPath=path.startsWith("/api/mail/");
     const googleCallback=path==="/api/auth/mail/oauth/google/callback";
@@ -51,8 +51,8 @@ export default {
       if(mailPath||googleCallback) await ensureMailCommunicationCore0050(env.DB);
       if(mailPath) await ensureMailWorkspaceUx(env.DB);
     }catch(error){
-      const message=error instanceof Error?error.message:String(error);
-      return new Response(JSON.stringify({ok:false,error:{code:"MAIL_SCHEMA_NOT_READY",message:"Mail veritabanı şeması hazır değil. 0050/0051 migrationları yedekli ve hedefli olarak uygulanmalıdır.",details:message}}),{status:503,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"}});
+      console.error(JSON.stringify({code:"MAIL_SCHEMA_NOT_READY",message:error instanceof Error?error.message:String(error)}));
+      return new Response(JSON.stringify({ok:false,error:{code:"MAIL_SCHEMA_NOT_READY",message:"Mail bağlantı servisi hazırlanıyor."}}),{status:503,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"}});
     }
 
     if(path==="/api/mail/providers"&&method==="GET")return overlay.fetch(request,env,ctx);
@@ -94,5 +94,22 @@ export default {
       return overlay.fetch(rewritePath(request,`/api/mail/drafts/${encodeURIComponent(decodeURIComponent(sendMatch[1]))}/send/google`),env,ctx);
     }
     return base.fetch(request,env,ctx);
-  },
-};
+}
+
+// The same boundary covers overlay routes, legacy dispatch and schema failures.
+// Preflight must complete without a database query; authenticate before looking
+// up a mailbox provider so anonymous requests cannot inspect schema or accounts.
+const gateway = new Hono<Env>();
+gateway.use("/api/*", cors({origin:allowedOrigin,allowMethods:["GET","POST","PATCH","PUT","DELETE","HEAD","OPTIONS"],allowHeaders:["Accept","Authorization","Content-Type","X-KYERP-Tenant-Slug","X-KYERP-Device"],exposeHeaders:["Content-Length","Content-Type","ETag","X-Request-Id"],maxAge:86400,credentials:true}));
+gateway.use("/api/mail/*", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  if (!(await getAuthenticatedUser(c))) return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gereklidir."}},401);
+  await next();
+});
+gateway.all("*", (c) => dispatch(c.req.raw, c.env, c.executionCtx));
+gateway.onError((error, c) => {
+  const requestId=crypto.randomUUID();
+  console.error(JSON.stringify({code:"MAIL_REQUEST_FAILED",requestId,message:error instanceof Error?error.message:String(error)}));
+  return c.json({ok:false,error:{code:"MAIL_REQUEST_FAILED",message:"Mail işlemi tamamlanamadı.",requestId}},500);
+});
+export default gateway;

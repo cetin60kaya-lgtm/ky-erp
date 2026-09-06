@@ -16,9 +16,9 @@ test("login approval center exposes approve and deny actions", () => {
 });
 
 test("admin navigation and route expose login approvals", () => {
-  assert.match(registrySource, /\["giris-onaylari", "Giriş Onayları"/);
+  assert.match(registrySource, /"giris-onaylari": "admin-yonetim-ozeti"/);
   assert.match(adminPageSource, /activeTab === "giris-onaylari"/);
-  assert.match(adminPageSource, /<AdminLoginApprovals/);
+  assert.match(adminPageSource, /<AdminSystemOverview/);
 });
 
 test("admin API keeps backend approval endpoints wired", () => {

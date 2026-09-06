@@ -79,7 +79,10 @@ test("Hakan mail center exposes direct Hotmail and Gmail OAuth onboarding",()=>{
   const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
   assert.match(source,/hkngursu@hotmail\.com/);
   assert.match(source,/hkndesen@gmail\.com/);
-  assert.match(source,/Direkt Ekle & Bağla/);
+  assert.match(source,/Ekle & Bağla/);
+  assert.match(source,/Posta Kutusunu Aç/);
+  assert.match(source,/Bağlantı servisi hazırlanıyor/);
+  assert.doesNotMatch(source,/Sağlayıcı production OAuth ayarı henüz doğrulanmadı/);
   assert.match(source,/addAndConnectPreset/);
   assert.match(source,/setMailAccountDefaults/);
 });
@@ -122,6 +125,18 @@ test("Microsoft sync discovers standard and custom folder tree",()=>{
   assert.match(source,/folder_type:type/);
   assert.match(source,/CUSTOM/);
   assert.match(source,/syncMicrosoftFolder/);
+});
+
+test("provider replies keep their conversation and in-flight sends cannot be repeated",()=>{
+  const microsoft=read("./mail-microsoft-graph.ts"),gmail=read("./mail-google-gmail.ts");
+  for(const source of [microsoft,gmail]) {
+    assert.match(source,/mailReplyContext\(c\.env\.DB,tenant,text\(draft\.account_id\),text\(draft\.reply_to_message_id\)\)/);
+    assert.match(source,/\["SENDING","UNKNOWN_REVIEW_REQUIRED"\]\.includes/);
+  }
+  assert.match(microsoft,/\/createReply/);
+  assert.match(microsoft,/scope:scopesForAccount\(account\)/);
+  assert.match(gmail,/threadId:original\.provider_thread_id/);
+  assert.match(gmail,/gmailReplyHeaders\(original\)/);
 });
 
 test("compose final supports explicit send-now and rich HTML preview stays sandboxed",()=>{

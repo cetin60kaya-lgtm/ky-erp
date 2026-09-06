@@ -1,5 +1,17 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 06.09.2026 — Mail Merkezi production onarım kaydı
+
+- Kullanıcı yerel production eşitlemesi, yeni feature branch, temiz PR/merge ve Cloudflare Git Integration yayını için açık talimat verdi.
+- Başlangıç local=origin SHA: `c2e541a618ef8b01f01a8363b1c3d1cbb28c71bb`; iki `npm ci` başarılı, source temiz. Yerel önceki değişiklikler `backup/local-before-production-sync-20260906-204004` branch'i ve aynı isimli stash ile korundu.
+- Feature: `fix/mail-center-production-final-20260906`.
+- Kök neden: Pages bu SHA'da başarılıyken canlı Worker v705 (`7485e463-135a-4e3e-b6cf-f9fdb993687e`, 03:13 UTC) paketinde `/api/mail/providers`, hesap, Google OAuth ve sabitleme rotaları bulunmuyor. Worker'ın commit SHA'sı canlı metadata'da yok; eski SHA tahmin edilmedi. Kaynak Worker test kapısında 11 hata tekrar üretildi.
+- Eski ekran/entry sözleşmeleri güncellendi; runtime readiness içindeki kullanılmayan DDL kopyaları ve frontend build'e bağlanmış geçici Worker tanılama betiği kaldırıldı. Frontend build tekrar `vite build`.
+- Mail girişinde ortak CORS/auth/hata sınırı; firma/hesap kapsamlı gerçek Microsoft/Gmail reply ilişkisi; gönderim sürerken tekrar engeli; sade bağlantı durumları ve ACTIVE hesapta posta kutusunu açma eklendi.
+- D1: repo dışında 38.371.801 bayt full SQL backup alındı. SHA256 `5A14E92BE137BCD585DE891970BA8016231795E832EEEF7B7FFF314F35B5A6AD`. Sonra yalnız 0050+0051 uygulandı; 23 tablo ve 18 indeks canlı metadata üzerinden doğrulandı. Genel migration zinciri veya business test write yapılmadı.
+- Eksik production bindings: `MICROSOFT_GRAPH_CLIENT_ID`, `MICROSOFT_GRAPH_CLIENT_SECRET`, `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`. `FILE_HUB_OAUTH_KEY` mevcut; yeni kasa anahtarı gerekmez. Client bilgileri olmadan OAuth/gönderim başarılı sayılmaz.
+- Bu kayıt kaynak onarımını ve D1 durumunu belgeler; Pages+Worker yeni yayın ve kullanıcı OAuth onayı/gerçek hesap smoke sonuçları ayrıca doğrulanmalıdır.
+
 > Bu dosya KY ERP projesinde yeni sohbet, yeni ajan, yeni feature branch veya yeniden başlama durumunda **ilk okunacak güncel durum kaydıdır**. Teknik ve güvenlik kuralları için `AGENTS.md` üstündür; bu dosya ise kullanıcının kararlarını, aktif çalışma yönünü, son önemli gelişmeleri, kontrol bekleyen işleri ve devam noktasını tek yerde toplar.
 
 ## 1. Zorunlu başlangıç sırası
