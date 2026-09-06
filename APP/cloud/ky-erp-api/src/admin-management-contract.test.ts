@@ -103,8 +103,8 @@ test("storage management is provider-neutral File Hub and R2 remains preview/cac
   assert.match(ui, /Depolama Merkezi/);
   assert.match(ui, /Google Drive/);
   assert.match(ui, /OneDrive/);
-  assert.match(ui, /Bir firma aynı anda birden fazla sağlayıcı kullanabilir/);
-  assert.match(ui, /tek dosya sistemi gibi çalışır/);
+  assert.match(ui, /Google Drive, OneDrive, SharePoint, yerel klasör ve NAS tek File Hub içinde çalışır/);
+  assert.match(ui, /Tüm servislerdeki dosyaların ortak KY ERP indeksi/);
   assert.doesNotMatch(ui, /test-watch-path/);
   assert.doesNotMatch(ui, /import-watch-folder/);
 });
