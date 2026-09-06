@@ -57,7 +57,8 @@ import { registerProductionCenterRoutes } from "./production-center";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
 import { registerNotificationRoutes } from "./notifications-cloud";
 import { registerMailCommunicationRoutes } from "./mail-communication-core";
-import { registerMicrosoftMailRoutes } from "./mail-microsoft-graph";\nimport { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
+import { registerMicrosoftMailRoutes } from "./mail-microsoft-graph";
+import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
 
 type ShellEnv = {
   Bindings: Cloudflare.Env;
