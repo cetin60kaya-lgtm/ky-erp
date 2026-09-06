@@ -106,7 +106,7 @@ export default function AdminSystemOverview({ activeMainCompany }) {
         </div></div>
       </section>
       <section className="admpro-card admpro-decision-center">
-        <div className="admpro-card-head"><div><h3>Karar Merkezi</h3><p>Giriş ve mail hesabı talepleri aynı karar merkezinde görünür; mail hesabı kararı ilgili firma sahibi / işveren tarafından verilir.</p></div></div>
+        <div className="admpro-card-head"><div><h3>Karar Merkezi</h3><p>Giriş ve mail hesabı talepleri aynı karar merkezinde görünür; yetkili firma sahibi / işveren veya Süper Yönetici doğrudan karar verebilir.</p></div></div>
         <AdminLoginApprovals compact />
         <div style={{ height: 16 }} />
         <AdminMailApprovals compact />
