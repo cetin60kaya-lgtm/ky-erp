@@ -24,7 +24,7 @@ test("Super Admin recovery UI has show-hide answers and no recovery-code UX", ()
   const source = read("../../../app/ky-erp-frontend/src/pages/admin/AdminOwnerSecurity.jsx");
   assert.match(source, /Hesap Kurtarma ve Kimlik Doğrulama/);
   assert.match(source, /showRecoveryAnswers/);
-  assert.match(source, /visible \? "Gizle" : "Göster"/);
+  assert.match(source, /answerVisible \? "Gizle" : "Göster"/);
   assert.match(source, /Kayıtlı — değiştirmek için yeni cevap yazın/);
   assert.match(source, /Kurtarma Güvenliğini Kaydet/);
   assert.doesNotMatch(source, /tek kullanımlık acil kurtarma kodu/i);
@@ -34,7 +34,7 @@ test("stored recovery answers stay non-reversible in the UI contract", () => {
   const source = read("../../../app/ky-erp-frontend/src/pages/admin/AdminOwnerSecurity.jsx");
   assert.match(source, /Kayıtlı cevapların düz metni sunucudan geri getirilemez/);
   assert.match(source, /salt \+ PBKDF2 hash/);
-  assert.match(source, /“Göster \/ Gizle” yalnız bu ekranda şu anda yazdığınız yeni cevabı gösterir/);
+  assert.match(source, /“Göster \/ Gizle” yalnız şu anda yazdığınız yeni cevabı gösterir/);
 });
 
 
