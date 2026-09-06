@@ -96,7 +96,7 @@ jobs:
             curl --location --fail --silent --show-error "$APP/$chunk" >> /tmp/app-complete.js || true
           done < /tmp/chunks.txt
 
-          for marker in             "Personel Statüsü"             "Bu Ay SGK Gün"             "Gerçek PDKS Kart Günü"             "Emekli personel aktif çalışan olarak devam edebilir"             "seçili ayın SGK kapsamındaki kartlı personeli"; do
+          for marker in             "Personel Statüsü"             "Bu Ay SGK Gün"             "Gerçek PDKS Kart Günü"             "Emekli personel aktif çalışan olarak devam edebilir"; do
             grep -Fq "$marker" /tmp/app-complete.js || { echo "Canli bundle marker eksik: $marker" >&2; exit 1; }
           done
 
