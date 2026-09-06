@@ -56,9 +56,9 @@ test("daily Mail Center can connect Gmail and keeps account setup out of the inb
   assert.match(source,/replyToMessageId/);
 });
 
-test("Gmail account approval follows current company-owner governance",()=>{
+test("Gmail account approval follows company-or-super-admin governance",()=>{
   const source=read("./mail-provider-overlay.ts");
-  assert.match(source,/policy="COMPANY_OWNER"/);
+  assert.match(source,/policy="COMPANY_OR_APP_OWNER"/);
   assert.doesNotMatch(source,/COMPANY_OWNER_AND_APP_OWNER/);
   assert.doesNotMatch(source,/"APP_OWNER",2,1,"PENDING"/);
 });

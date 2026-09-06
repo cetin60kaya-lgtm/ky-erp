@@ -84,10 +84,10 @@ function providerRuntimeReady(c:any, provider:unknown){
 }
 
 function accountType(v:unknown){const n=upper(v||"PERSONAL");return ["PERSONAL","SHARED","DEPARTMENT"].includes(n)?n:"";}
-async function normalizeCompanyOwnerOnlyApprovals(c:any,tenant:string){
+async function normalizeSingleDecisionApprovals(c:any,tenant:string){
   const ts=nowIso();
   await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE mail_approval_requests SET approval_policy='COMPANY_OWNER',updated_at=? WHERE main_company_slug=? AND status='PENDING' AND approval_policy<>'COMPANY_OWNER'").bind(ts,tenant),
+    c.env.DB.prepare("UPDATE mail_approval_requests SET approval_policy='COMPANY_OR_APP_OWNER',updated_at=? WHERE main_company_slug=? AND status='PENDING' AND approval_policy<>'COMPANY_OR_APP_OWNER'").bind(ts,tenant),
     c.env.DB.prepare("UPDATE mail_approval_steps SET required=0,status=CASE WHEN status='PENDING' THEN 'SKIPPED' ELSE status END,updated_at=? WHERE main_company_slug=? AND step_type='APP_OWNER' AND required=1").bind(ts,tenant),
   ]);
 }
@@ -209,7 +209,7 @@ export function registerMailCommunicationRoutes(app:any){
     const existing=await c.env.DB.prepare("SELECT id,status,approval_status FROM mail_accounts WHERE main_company_slug=? AND provider_type=? AND LOWER(email_address)=LOWER(?) LIMIT 1").bind(tenant,provider,email).first<AnyRow>();
     if(existing?.id)return c.json(jsonError("MAIL_ACCOUNT_EXISTS","Bu mail hesabı için mevcut bir kayıt veya talep bulunuyor.",existing),409);
 
-    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OWNER";
+    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OR_APP_OWNER";
     const statements=[
       c.env.DB.prepare("INSERT INTO mail_accounts (id,main_company_slug,provider_type,account_type,email_address,display_name,department_code,provider_account_id,status,approval_status,provider_connected,is_default_send,is_default_receive,created_by,approved_by_company,approved_by_owner,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         .bind(accountId,tenant,provider,type,email,text(body.displayName)||email,text(body.departmentCode)||null,null,"PENDING","PENDING",0,0,0,text(current?.id),null,null,ts,ts),
@@ -251,8 +251,17 @@ export function registerMailCommunicationRoutes(app:any){
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!(ownerRole(current?.role)||companyAdminRole(current?.role)||hasMailPermission(current,"canApprove")))return c.json(jsonError("MAIL_APPROVAL_FORBIDDEN","Mail bağlantı onaylarını görme yetkiniz yok."),403);
     if(!(await mailSchemaReady(c)))return c.json({ok:true,data:[]});
-    await normalizeCompanyOwnerOnlyApprovals(c,tenant);
-    const r=await c.env.DB.prepare("SELECT r.*,a.email_address,a.display_name,a.provider_type,a.account_type,a.department_code,(SELECT COUNT(*) FROM mail_approval_steps s WHERE s.request_id=r.id AND s.required=1 AND s.status='PENDING') pending_steps FROM mail_approval_requests r JOIN mail_accounts a ON a.id=r.target_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? ORDER BY CASE r.status WHEN 'PENDING' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").bind(tenant).all<AnyRow>();
+    await normalizeSingleDecisionApprovals(c,tenant);
+    const r=await c.env.DB.prepare(`SELECT r.*,a.email_address,a.display_name,a.provider_type,a.account_type,a.department_code,
+      (SELECT COUNT(*) FROM mail_approval_steps s WHERE s.request_id=r.id AND s.required=1 AND s.status='PENDING') pending_steps,
+      (SELECT s.decided_by FROM mail_approval_steps s WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_actor_id,
+      (SELECT COALESCE(u.full_name,u.username,s.decided_by) FROM mail_approval_steps s LEFT JOIN auth_users u ON u.id=s.decided_by WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_actor_name,
+      (SELECT s.decided_at FROM mail_approval_steps s WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_at,
+      COALESCE((SELECT COALESCE(u.full_name,u.username) FROM auth_users u WHERE u.id=r.requested_by LIMIT 1),r.requested_by) requested_by_name
+      FROM mail_approval_requests r
+      JOIN mail_accounts a ON a.id=r.target_id AND a.main_company_slug=r.main_company_slug
+      WHERE r.main_company_slug=?
+      ORDER BY CASE r.status WHEN 'PENDING' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200`).bind(tenant).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
   });
 
@@ -260,12 +269,13 @@ export function registerMailCommunicationRoutes(app:any){
     const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
     const requestId=text(c.req.param("id")),decision=upper(body.decision);
     if(!["APPROVE","REJECT"].includes(decision))return c.json(jsonError("DECISION_INVALID","Karar APPROVE veya REJECT olmalıdır."),422);
-    await normalizeCompanyOwnerOnlyApprovals(c,tenant);
+    await normalizeSingleDecisionApprovals(c,tenant);
     const request=await c.env.DB.prepare("SELECT * FROM mail_approval_requests WHERE id=? AND main_company_slug=? LIMIT 1").bind(requestId,tenant).first<AnyRow>();
     if(!request)return c.json(jsonError("NOT_FOUND","Mail onay talebi bulunamadı."),404);
     if(upper(request.status)!=="PENDING")return c.json(jsonError("REQUEST_ALREADY_DECIDED","Bu mail onay talebi daha önce sonuçlandırılmış."),409);
-    if(!companyAdminRole(current?.role))return c.json(jsonError("COMPANY_OWNER_APPROVAL_REQUIRED","Mail hesabı bağlantısını yalnız bu firmanın sahibi / işvereni onaylayabilir."),403);
-    const stepType="COMPANY_OWNER";
+    const companyOwner=companyAdminRole(current?.role),appOwner=ownerRole(current?.role);
+    if(!(companyOwner||appOwner))return c.json(jsonError("MAIL_APPROVAL_OWNER_REQUIRED","Mail hesabı bağlantısını yalnız firma sahibi / işveren veya Süper Yönetici onaylayabilir."),403);
+    const stepType=appOwner?"SUPER_ADMIN":"COMPANY_OWNER";
     const step=await c.env.DB.prepare("SELECT * FROM mail_approval_steps WHERE request_id=? AND main_company_slug=? AND step_type='COMPANY_OWNER' AND required=1 LIMIT 1").bind(requestId,tenant).first<AnyRow>();
     if(!step)return c.json(jsonError("APPROVAL_STEP_NOT_FOUND","Firma sahibi için bekleyen onay adımı yok."),409);
     if(upper(step.status)!=="PENDING")return c.json(jsonError("APPROVAL_STEP_ALREADY_DECIDED","Bu onay adımı daha önce sonuçlandırılmış."),409);
@@ -277,7 +287,7 @@ export function registerMailCommunicationRoutes(app:any){
         c.env.DB.prepare("UPDATE mail_approval_requests SET status='REJECTED',decided_at=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,ts,requestId,tenant),
         c.env.DB.prepare("UPDATE mail_accounts SET approval_status='REJECTED',status='DISCONNECTED',updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,request.target_id,tenant)
       ]);
-      await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVAL_REJECTED",{requestId,stepType,note:text(body.note)},text(request.target_id));
+      await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVAL_REJECTED",{requestId,stepType,decisionAuthority:appOwner?"SUPER_ADMIN":"COMPANY_ADMIN",note:text(body.note)},text(request.target_id));
       return c.json({ok:true,data:{requestId,status:"REJECTED"}});
     }
 
@@ -285,12 +295,12 @@ export function registerMailCommunicationRoutes(app:any){
     if(Number(pending?.n||0)===0){
       await c.env.DB.batch([
         c.env.DB.prepare("UPDATE mail_approval_requests SET status='APPROVED',decided_at=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(ts,ts,requestId,tenant),
-        c.env.DB.prepare("UPDATE mail_accounts SET approval_status='APPROVED',approved_by_company=COALESCE(approved_by_company,(SELECT decided_by FROM mail_approval_steps WHERE request_id=? AND step_type='COMPANY_OWNER' AND status='APPROVED' LIMIT 1)),approved_by_owner=COALESCE(approved_by_owner,(SELECT decided_by FROM mail_approval_steps WHERE request_id=? AND step_type='APP_OWNER' AND status='APPROVED' LIMIT 1)),status=CASE WHEN provider_connected=1 THEN 'ACTIVE' ELSE 'DISCONNECTED' END,updated_at=? WHERE id=? AND main_company_slug=?").bind(requestId,requestId,ts,request.target_id,tenant)
+        c.env.DB.prepare("UPDATE mail_accounts SET approval_status='APPROVED',approved_by_company=CASE WHEN ?=1 THEN COALESCE(approved_by_company,?) ELSE approved_by_company END,approved_by_owner=CASE WHEN ?=1 THEN COALESCE(approved_by_owner,?) ELSE approved_by_owner END,status=CASE WHEN provider_connected=1 THEN 'ACTIVE' ELSE 'DISCONNECTED' END,updated_at=? WHERE id=? AND main_company_slug=?").bind(companyOwner?1:0,text(current?.id),appOwner?1:0,text(current?.id),ts,request.target_id,tenant)
       ]);
-      await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVED",{requestId},text(request.target_id));
+      await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVED",{requestId,stepType,decisionAuthority:appOwner?"SUPER_ADMIN":"COMPANY_ADMIN"},text(request.target_id));
       return c.json({ok:true,data:{requestId,status:"APPROVED",connectionStatus:"DISCONNECTED"}});
     }
-    await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVAL_STEP_APPROVED",{requestId,stepType},text(request.target_id));
+    await audit(c,tenant,current,"MAIL_ACCOUNT_APPROVAL_STEP_APPROVED",{requestId,stepType,decisionAuthority:appOwner?"SUPER_ADMIN":"COMPANY_ADMIN"},text(request.target_id));
     return c.json({ok:true,data:{requestId,status:"PENDING",approvedStep:stepType}});
   });
 

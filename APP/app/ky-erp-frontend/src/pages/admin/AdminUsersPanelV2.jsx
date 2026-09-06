@@ -22,6 +22,7 @@ import {
   verifyUserEmail,
 } from "../../services/adminApi";
 import { saveIkUserScope } from "../../services/ikPersonnelControlApi";
+import AdminApprovalCenter from "./AdminApprovalCenter";
 import "./AdminUsersPanelV2.css";
 
 const MODULE_KEYS=["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","ISNET","MAIL","STORAGE_ADMIN","ASISTAN","ADMIN","RAPORLAR"];
@@ -138,6 +139,8 @@ export default function AdminUsersPanelV2(){
     <div className="auc2-titlebar"><div><small>PLATFORM YÖNETİMİ / KULLANICI & ORGANİZASYON</small><h1>Kullanıcı & Yetki Merkezi</h1><p>Firma, işveren, muhasebe ve bölüm kullanıcıları; yetki, MFA ve oturumlarıyla birlikte tek kurumsal görünümde yönetilir.</p></div><div className="auc2-actions"><button className="auc2-secondary" disabled={busy} onClick={loadAll}>Yenile</button><button className="auc2-primary" disabled={busy||!isOwner} onClick={startCreate}>+ Yeni Kullanıcı</button></div></div>
     <div className={`auc2-banner ${String(message).startsWith("Hata:")?"is-error":warnings.length?"is-warn":"is-ok"}`}>{message}</div>
     <div className="auc2-metrics"><div><span>Aktif Kullanıcı</span><b>{activeCount}</b><small>{users.length} toplam</small></div><div><span>Firma Sahibi / İşveren</span><b>{companyOwnerCount}</b><small>COMPANY_ADMIN</small></div><div><span>Aktif Oturum</span><b>{sessions.length}</b><small>Canlı cihaz oturumu</small></div><div><span>Doğrulanmış E-posta</span><b>{verifiedCount}</b><small>Kimlik güvenliği</small></div></div>
+
+    <AdminApprovalCenter compact />
 
     {createOpen&&<section className="auc2-create-card"><div className="auc2-section-title"><div><h2>Yeni Kullanıcı — Tek Adım</h2><p>Kullanıcı kaydı tamamlanmadan firma, rol, yetki ve zorunlu MFA birlikte seçilir.</p></div><button className="auc2-secondary" onClick={()=>setCreateOpen(false)}>Vazgeç</button></div>
       <form autoComplete="off" onSubmit={submitCreate}>

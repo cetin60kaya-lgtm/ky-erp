@@ -70,7 +70,7 @@ export function registerMailProviderOverlayRoutes(app:any){
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return c.json(err("EMAIL_INVALID","Geçerli bir e-posta adresi girin."),422);
     const existing=await c.env.DB.prepare("SELECT id,status,approval_status FROM mail_accounts WHERE main_company_slug=? AND provider_type='GMAIL' AND LOWER(email_address)=LOWER(?) LIMIT 1").bind(tenant,email).first<AnyRow>();
     if(existing?.id)return c.json(err("MAIL_ACCOUNT_EXISTS","Bu Gmail hesabı için mevcut kayıt veya talep bulunuyor.",existing),409);
-    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OWNER",elevated=ownerRole(current?.role)||companyAdminRole(current?.role),defaultSend=elevated&&bool(body.isDefaultSend),defaultReceive=elevated&&bool(body.isDefaultReceive);
+    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OR_APP_OWNER",elevated=ownerRole(current?.role)||companyAdminRole(current?.role),defaultSend=elevated&&bool(body.isDefaultSend),defaultReceive=elevated&&bool(body.isDefaultReceive);
     const statements:any[]=[];
     if(defaultSend)statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_send=0,updated_at=? WHERE main_company_slug=?").bind(ts,tenant));
     if(defaultReceive)statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_receive=0,updated_at=? WHERE main_company_slug=?").bind(ts,tenant));
