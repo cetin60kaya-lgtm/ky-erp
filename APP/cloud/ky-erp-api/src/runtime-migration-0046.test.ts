@@ -41,5 +41,8 @@ test("0046 runtime gate is fail-closed on partial schema", () => {
   assert.match(source, /MIGRATION_0046_PARTIAL_INDEX/);
   assert.match(source, /MIGRATION_0046_VERIFY_INDEX_MISSING/);
   assert.match(source, /MIGRATION_0046_VERIFY_INDEX_COLUMNS/);
-  assert.match(source, /await db\.batch\(statements\)/);
+  assert.match(source, /MIGRATION_0046_REQUIRED_TABLES/);
+  assert.match(source, /MIGRATION_0046_REQUIRED_INDEXES/);
+  assert.doesNotMatch(source, /await db\.batch\(/);
+  assert.doesNotMatch(source, /CREATE TABLE IF NOT EXISTS/);
 });
