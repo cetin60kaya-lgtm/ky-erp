@@ -309,23 +309,33 @@ export function registerGoogleMailRoutes(app:any){
       folderMap.set(id,{...folder,folder_type:typeOf(id)});
     }
     const defs=[["INBOX","INCOMING"],["SENT","OUTGOING"]],summary:any[]=[];
+    const profile=(await googleJson(GMAIL+"/profile",token)).payload;
     for(const [labelId,direction] of defs){
       const folder=folderMap.get(labelId)||await ensureFolder(c,tenant,text(account.id),labelId,labelId==="INBOX"?"Gelen Kutusu":"Gönderilenler",typeOf(labelId));
-      let count=0;
+      let count=0,failed=0;const failures:any[]=[];
       try{
         const list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
         for(const item of Array.isArray(list.messages)?list.messages:[]){
-          const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-          await persistMessage(c,tenant,account,folder,full,direction);count++;
+          try{
+            const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
+            await persistMessage(c,tenant,account,folder,full,direction);count++;
+          }catch(error:any){
+            failed++;
+            if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
+          }
         }
-        const ts=nowIso(),profile=(await googleJson(GMAIL+"/profile",token)).payload;
-        await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=NULL,updated_at=excluded.updated_at")
-          .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_HISTORY",text(profile.historyId)||null,ts,ts,null,ts).run();
-        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,ok:true});
-      }catch(error:any){summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,ok:false,error:text(error?.message)});}
+        const ts=nowIso(),lastError=failed?String(failed)+" mesaj işlenemedi.":null;
+        await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
+          .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_HISTORY",text(profile.historyId)||null,ts,failed?null:ts,lastError,ts).run();
+        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,failures});
+      }catch(error:any){
+        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:false,error:text(error?.message)||"Klasör senkronize edilemedi.",failures});
+      }
     }
-    const partial=summary.some(r=>!r.ok);await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,discoveredLabels:labels.length});
-    return c.json({ok:!partial,data:{accountId:account.id,partial,folders:summary,discoveredFolders:labels.length},...(partial?{error:{code:"MAIL_SYNC_PARTIAL",message:"Bazı Gmail klasörleri senkronize edilemedi."}}:{})},partial?207:200);
+    const partial=summary.some(r=>!r.ok),successfulFolders=summary.filter(r=>r.count>0||r.ok).length,total=summary.reduce((sum,row)=>sum+Number(row.count||0),0);
+    await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length});
+    if(partial&&successfulFolders===0&&total===0)return c.json(err("MAIL_SYNC_FAILED","Gmail posta kutusu senkronize edilemedi.",{folders:summary}),502);
+    return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,discoveredFolders:labels.length,warning:partial?"Bazı Gmail mesajları veya klasörleri atlandı; başarılı kayıtlar güncellendi.":""}},partial?207:200);
   });
 
   app.post("/api/mail/accounts/:id/folders/:folderId/sync/google",async(c:any)=>{
@@ -335,12 +345,17 @@ export function registerGoogleMailRoutes(app:any){
     const folder=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(text(c.req.param("folderId")),account.id,tenant).first<AnyRow>();
     if(!folder)return c.json(err("MAIL_FOLDER_NOT_FOUND","Posta klasörü bulunamadı."),404);
     const token=(await usableToken(c,tenant,account)).text,labelId=text(folder.provider_folder_id),list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
-    let count=0;
+    let count=0,failed=0;const failures:any[]=[];
     for(const item of Array.isArray(list.messages)?list.messages:[]){
-      const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-      await persistMessage(c,tenant,account,folder,full,upper(folder.folder_type)==="SENT"?"OUTGOING":"AUTO");count++;
+      try{
+        const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
+        await persistMessage(c,tenant,account,folder,full,upper(folder.folder_type)==="SENT"?"OUTGOING":"AUTO");count++;
+      }catch(error:any){
+        failed++;
+        if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
+      }
     }
-    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count}});
+    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count,failed,partial:failed>0,failures,warning:failed?String(failed)+" mesaj atlandı; diğer kayıtlar güncellendi.":""}},failed?207:200);
   });
 
   app.post("/api/mail/messages/:id/action/google",async(c:any)=>{
