@@ -16,7 +16,7 @@ test("mail broker normalizes supported providers and keeps native APIs first-cla
   assert.deepEqual(mailProviderRegistry().map((row) => row.provider), ["MICROSOFT_365", "GMAIL", "JMAP", "IMAP_SMTP"]);
 });
 
-test("0046 mail schema is additive, tenant-scoped and send-idempotent", () => {
+test("0050 mail schema is additive, tenant-scoped and send-idempotent", () => {
   const sql = read("../migrations/0046_mail_communication_core.sql");
   for (const table of [
     "mail_provider_configs", "mail_accounts", "mail_account_credentials", "mail_account_members",
