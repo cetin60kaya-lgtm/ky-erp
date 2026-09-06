@@ -71,6 +71,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     () => accounts.find((row) => String(row.id) === String(selectedAccountId)) || null,
     [accounts, selectedAccountId],
   );
+  const selectedProviderRuntime = useMemo(
+    () => providers.find((row) => row.provider === requestForm.providerType) || null,
+    [providers, requestForm.providerType],
+  );
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -266,13 +270,19 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           <div className="comm-section-title"><div><h2>Mail Hesabı Ekleme Talebi</h2><p>Bağlantı onaydan önce aktif olmaz. Muhasebe, e-Belge, ortak ve bölüm posta kutuları çift onaya düşer.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
           <form onSubmit={submitAccountRequest}>
             <label>Sağlayıcı<select value={requestForm.providerType} onChange={(e) => setRequestForm((v) => ({ ...v, providerType: e.target.value }))}>
-              {(providers.length ? providers : [{provider:"MICROSOFT_365"},{provider:"GMAIL"},{provider:"JMAP"},{provider:"IMAP_SMTP"}]).map((row) => <option key={row.provider} value={row.provider}>{providerLabel(row.provider)}</option>)}
+              {(providers.length ? providers : [
+                {provider:"MICROSOFT_365",adapterReady:true,configured:false},
+                {provider:"GMAIL",adapterReady:false,configured:false},
+                {provider:"JMAP",adapterReady:false,configured:false},
+                {provider:"IMAP_SMTP",adapterReady:false,configured:false},
+              ]).map((row) => <option key={row.provider} value={row.provider} disabled={row.adapterReady===false || row.configured===false}>{providerLabel(row.provider)}{row.adapterReady===false ? " · Yakında" : row.configured===false ? " · OAuth Ayarı Gerekli" : ""}</option>)}
             </select></label>
             <label>Hesap Türü<select value={requestForm.accountType} onChange={(e) => setRequestForm((v) => ({ ...v, accountType: e.target.value }))}><option value="PERSONAL">Kişisel</option><option value="SHARED">Ortak / Shared</option><option value="DEPARTMENT">Bölüm</option></select></label>
             <label>E-posta<input type="email" required value={requestForm.emailAddress} onChange={(e) => setRequestForm((v) => ({ ...v, emailAddress: e.target.value }))} placeholder="muhasebe@firma.com"/></label>
             <label>Görünen Ad<input value={requestForm.displayName} onChange={(e) => setRequestForm((v) => ({ ...v, displayName: e.target.value }))} placeholder="Muhasebe"/></label>
             <label>Bölüm<select value={requestForm.departmentCode} onChange={(e) => setRequestForm((v) => ({ ...v, departmentCode: e.target.value }))}><option value="">Genel</option><option value="MUHASEBE">Muhasebe</option><option value="E_BELGE">e-Belge</option><option value="DESEN">Desen</option><option value="IK">İK</option><option value="YONETIM">Yönetim</option></select></label>
-            <button type="submit" disabled={loading}>Onaya Gönder</button>
+            <button type="submit" disabled={loading || selectedProviderRuntime?.adapterReady===false || selectedProviderRuntime?.configured===false}>Onaya Gönder</button>
+            {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">{selectedProviderRuntime.reason || "Bu sağlayıcı henüz bağlantıya hazır değil."}</div> : null}
           </form>
         </section>
       ) : null}
