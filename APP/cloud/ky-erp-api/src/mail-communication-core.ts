@@ -47,8 +47,8 @@ async function audit(c:any,tenant:string,current:AnyRow,action:string,detail:Any
 function b64url(bytes:Uint8Array){let raw="";for(const b of bytes)raw+=String.fromCharCode(b);return btoa(raw).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");}
 function unb64url(value:string){const n=value.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((value.length+3)%4);const raw=atob(n);return Uint8Array.from(raw,ch=>ch.charCodeAt(0));}
 async function credentialKey(c:any){
-  const secret=text(c.env.MAIL_CREDENTIAL_KEY);
-  if(!secret) throw Object.assign(new Error("MAIL_CREDENTIAL_KEY tanımlı değil."),{code:"MAIL_CREDENTIAL_KEY_MISSING"});
+  const secret=text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY);
+  if(!secret) throw Object.assign(new Error("MAIL_CREDENTIAL_KEY veya FILE_HUB_OAUTH_KEY tanımlı değil."),{code:"MAIL_CREDENTIAL_KEY_MISSING"});
   const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(secret));
   return crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["encrypt","decrypt"]);
 }
@@ -91,7 +91,7 @@ export function registerMailCommunicationRoutes(app:any){
   app.get("/api/mail/providers",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;
     if(!hasMailPermission(a.current))return c.json(jsonError("MAIL_FORBIDDEN","Mail Merkezi görüntüleme yetkiniz yok."),403);
-    return c.json({ok:true,data:{providers:mailProviderRegistry(),credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
+    return c.json({ok:true,data:{providers:mailProviderRegistry(),credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
   });
 
   app.get("/api/mail/overview",async(c:any)=>{
