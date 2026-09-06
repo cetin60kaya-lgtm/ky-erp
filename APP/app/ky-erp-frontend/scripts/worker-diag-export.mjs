@@ -13,4 +13,5 @@ function run(command, args) {
 
 run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 run("npm", ["run", "typecheck"]);
-console.log("WORKER_TYPECHECK_FINAL_PASS");
+run("npm", ["test"]);
+console.log("WORKER_TEST_FINAL_PASS");
