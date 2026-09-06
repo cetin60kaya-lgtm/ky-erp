@@ -89,9 +89,10 @@ test("final e-Belge approval schedules cloud archive without weakening accountin
   assert.match(eBelge, /executionCtx\.waitUntil/);
 });
 
-test("production release gates canonical report migration after D1 backup", () => {
-  const backup = release.indexOf("Canli D1 tam yedegini al");
-  const migration = release.indexOf("0046 canonical Muhasebe rapor + gider hafizasi semasi");
-  assert.ok(backup >= 0 && migration > backup);
-  assert.match(release, /accounting_report_categories accounting_report_overrides accounting_expense_rules/);
+test("0046 canonical report migration is deferred safely in the live release", () => {
+  assert.doesNotMatch(release, /0046 canonical Muhasebe rapor \+ gider hafizasi semasi/);
+  assert.match(read("accounting-report-canonical.ts"), /tableExists\(c,"accounting_report_categories"\)/);
+  assert.match(read("accounting-report-canonical.ts"), /ACCOUNTING_REPORT_OVERRIDE/);
+  assert.match(read("e-belge-product-store.ts"), /tableExists\(c,"accounting_expense_rules"\)/);
+  assert.match(read("e-belge-product-store.ts"), /ACCOUNTING_EXPENSE_RULE/);
 });
