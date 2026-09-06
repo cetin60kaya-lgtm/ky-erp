@@ -61,3 +61,10 @@ test("visible message rows render all image attachments lazily and cid images hy
   assert.match(page, /srcDoc=\{renderedHtml/);
   assert.match(css, /comm-message-media/);
 });
+
+
+test("the detail pane also marks the initially opened unread mail as read", () => {
+  assert.match(page, /selectedMessage\?\.id/);
+  assert.match(page, /runMailMessageAction\(messageId, "MARK_READ", \{\}\)\.catch/);
+  assert.match(page, /unreadCount: Math\.max\(0/);
+});
