@@ -41,14 +41,17 @@ test("company card exposes people and responsibilities", () => {
   assert.match(source, /selectedPeople/);
 });
 
-test("mail decisions remain company-owner controlled and are mirrored to Super Admin", () => {
+test("mail decisions allow company owner or Super Admin and keep owner self-requests out of approval queue", () => {
   const mail = read("./mail-communication-core.ts");
   const notifications = read("./notifications-cloud.ts");
-  assert.match(mail, /policy="COMPANY_OWNER"/);
-  assert.match(mail, /if\(!companyAdminRole\(current\?\.role\)\)return c\.json\(jsonError\("COMPANY_OWNER_APPROVAL_REQUIRED"/);
+  assert.match(mail, /policy="COMPANY_OR_APP_OWNER"/);
+  assert.match(mail, /companyOwner\|\|appOwner/);
+  assert.match(mail, /MAIL_APPROVAL_OWNER_REQUIRED/);
+  assert.match(mail, /autoApprovePrivilegedRequesterMailRequests/);
+  assert.match(mail, /PRIVILEGED_REQUESTER_AUTO_APPROVAL/);
   assert.match(notifications, /collectMailApprovals/);
   assert.match(notifications, /category: "APPROVAL"/);
-  assert.match(notifications, /Mail hesabı firma sahibi onayı bekliyor/);
+  assert.match(notifications, /Mail hesabı firma sahibi \/ Süper Yönetici onayı bekliyor/);
 });
 
 test("File Hub and cloud OAuth writes are owned by the company owner", () => {
