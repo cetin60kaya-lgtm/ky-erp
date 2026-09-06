@@ -80,7 +80,7 @@ function UploadPanel({ onUploaded }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const addFiles = (list) => {
-    const next = Array.from(list || []).filter((file) => /\.(xml|pdf|jpe?g|png|webp)$/i.test(file.name));
+    const next = Array.from(list || []).filter((file) => /\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name));
     setFiles((current) => [...current, ...next].slice(0, 20));
   };
   const send = async () => {
@@ -102,9 +102,9 @@ function UploadPanel({ onUploaded }) {
       <label>Belge türü<select value={kind} onChange={(e) => setKind(e.target.value)}><option value="AUTO">Otomatik</option><option value="FATURA">Fatura</option><option value="IRSALIYE">İrsaliye</option></select></label>
     </div>
     <button type="button" className="eb-drop" onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
-      <Upload size={28} /><strong>Dosyaları sürükle veya seç</strong><span>XML · PDF · JPG · PNG · WEBP — en fazla 20 dosya, dosya başına 20 MB</span>
+      <Upload size={28} /><strong>Dosyaları sürükle veya seç</strong><span>XML · PDF · JPG · PNG · WEBP · BMP · TIFF — en fazla 20 dosya, dosya başına 20 MB</span>
     </button>
-    <input ref={inputRef} type="file" multiple accept=".xml,.pdf,.jpg,.jpeg,.png,.webp" hidden onChange={(e) => addFiles(e.target.files)} />
+    <input ref={inputRef} type="file" multiple accept=".xml,.pdf,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff" hidden onChange={(e) => addFiles(e.target.files)} />
     {files.length > 0 && <div className="eb-file-queue">{files.map((file, index) => <div key={`${file.name}-${index}`}><FileText size={16} /><span>{file.name}</span><small>{(file.size / 1024 / 1024).toFixed(2)} MB</small><button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><X size={15} /></button></div>)}</div>}
     <div className="eb-upload-footer"><span>{message}</span><button type="button" className="eb-primary" disabled={!files.length || busy} onClick={send}>{busy ? <LoaderCircle className="eb-spin" size={17} /> : <Upload size={17} />} Havuzuna Al</button></div>
   </section>;
