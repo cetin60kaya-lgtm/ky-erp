@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "repair:source-syntax": "node scripts/repair-escaped-source-newlines.mjs",
+    "pretypecheck": "npm run repair:source-syntax",
+    "pretest": "npm run repair:source-syntax",
+    "prebuild": "npm run repair:source-syntax",
+    "predeploy": "npm run repair:source-syntax",
     "test": "npm run test:unit && npm run test:auth:integration",
     "test:unit": "node --experimental-strip-types --test src/*.test.ts",
     "test:auth:integration": "node scripts/run-auth-integration.mjs",
@@ -14,7 +19,7 @@
     "db:migrations:local": "wrangler d1 migrations apply ky-erp-production-local --local --config wrangler.production-local.jsonc",
     "db:migrations:remote": "wrangler d1 migrations apply ky-erp-db --remote --config wrangler.jsonc",
     "db:audit:local": "node scripts/d1-schema-audit.mjs --local --database ky-erp-production-local --config wrangler.production-local.jsonc --require-migrations",
-    "db:audit:remote": "node scripts/d1-schema-audit.mjs --remote --database ky-erp-db --config wrangler.jsonc --require-migrations",
+    "db:audit:remote": "node scripts/d1-schema-audit.mjs --remote --database ky-erp-db --remote --config wrangler.jsonc --require-migrations",
     "db:hr:check": "node scripts/hr-relational-sync.mjs --remote",
     "db:hr:apply": "node scripts/hr-relational-sync.mjs --apply --remote",
     "db:tenant:audit": "node scripts/tenant-scope-audit.mjs"
