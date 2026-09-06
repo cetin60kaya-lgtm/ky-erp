@@ -154,7 +154,6 @@ public partial class PdksUnifiedWindow : Window
         var command = AssistantBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(command)) { StatusText.Text = "Asistan komutunu yazın."; return; }
         if (IsFinanceAssistantCommand(command)) { StatusText.Text = "Finans ve bordro işlemleri yalnız İK üzerinden yapılır."; return; }
-        if (IsFinanceAssistantCommand(command)) { StatusText.Text = "Finans ve bordro işlemleri yalnız İK üzerinden yapılır."; return; }
         await RunAsync("Komut D1 üzerinde önizleniyor...", async () =>
         {
             var result = await _machineApi.AssistantAsync(_token, command, false, _lifetime.Token);
@@ -167,6 +166,7 @@ public partial class PdksUnifiedWindow : Window
         if (!_canWrite) return;
         var command = AssistantBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(command)) { StatusText.Text = "Asistan komutunu yazın."; return; }
+        if (IsFinanceAssistantCommand(command)) { StatusText.Text = "Finans ve bordro işlemleri yalnız İK üzerinden yapılır."; return; }
         await RunAsync("Komut kontrol ediliyor...", async () =>
         {
             var preview = await _machineApi.AssistantAsync(_token, command, false, _lifetime.Token);
