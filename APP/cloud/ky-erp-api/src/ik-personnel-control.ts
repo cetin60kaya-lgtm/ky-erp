@@ -231,10 +231,12 @@ function personSelect(audit = false) {
                  e.hire_date,e.salary,e.road_allowance,e.bank_payment_type,e.bank_amount,e.cash_amount,
                  e.overtime_hourly_base,e.annual_leave_entitlement,e.annual_leave_carryover,e.note,
                  e.created_at,e.updated_at,
-                 s.card_no,s.identity_no,s.exit_date,s.active_passive,s.phone,s.payment_type,s.sgk_follow,s.personel_kodu
+                 s.card_no,s.identity_no,s.exit_date,s.active_passive,s.phone,s.payment_type,s.sgk_follow,s.personel_kodu,
+                 hp.personnel_status
             FROM hr_monthly_employees e
             LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-           WHERE e.main_company_id=?${audit ? " AND UPPER(COALESCE(e.sgk_status,'VAR')) <> 'YOK' AND TRIM(COALESCE(s.card_no,'')) <> ''" : ""}`;
+            LEFT JOIN ik_person_hr_profiles hp ON hp.employee_id=e.id AND hp.main_company_id=e.main_company_id
+           WHERE e.main_company_id=?${audit ? " AND TRIM(COALESCE(s.card_no,'')) <> ''" : ""}`;
 }
 
 function mapPerson(row: Row, audit = false) {
@@ -267,20 +269,76 @@ function mapPerson(row: Row, audit = false) {
       cashAmount: number(row.cash_amount),
       overtimeBaseHours: number(row.overtime_hourly_base) || 225,
       note: text(row.note),
+      personnelStatus: text(row.personnel_status) || "NORMAL",
+      sgkDays: row.sgk_days === null || row.sgk_days === undefined ? null : number(row.sgk_days),
+      sgkPeriod: text(row.sgk_period),
+      pdksCardDays: row.pdks_card_days === null || row.pdks_card_days === undefined ? null : number(row.pdks_card_days),
+      sgkPdksMatch: row.sgk_match === null || row.sgk_match === undefined ? null : Boolean(row.sgk_match),
     });
   }
   return base;
 }
 
+function requestedPeriod(c: Context<AppEnv>, fallbackYear?: number, fallbackMonth?: number) {
+  const year = number(c.req.query("year")) || fallbackYear || new Date().getFullYear();
+  const month = number(c.req.query("month")) || fallbackMonth || new Date().getMonth() + 1;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+async function complianceRow(c: Context<AppEnv>, company: string, employeeId: string, period: string) {
+  try {
+    return await first(c, "SELECT sgk_covered,sgk_days FROM ik_person_monthly_compliance WHERE main_company_id=? AND employee_id=? AND period=? LIMIT 1", [company, employeeId, period]);
+  } catch {
+    return null;
+  }
+}
+
+async function pdksCardDays(c: Context<AppEnv>, company: string, employeeId: string, period: string) {
+  const start = `${period}-01`;
+  const y = Number(period.slice(0,4)), m = Number(period.slice(5,7));
+  const end = `${period}-${String(new Date(y,m,0).getDate()).padStart(2,"0")}`;
+  try {
+    const row = await first(c, "SELECT COUNT(DISTINCT work_date) AS days FROM ik_time_clock_events WHERE main_company_id=? AND employee_id=? AND work_date BETWEEN ? AND ?", [company, employeeId, start, end]);
+    return number(row?.days);
+  } catch {
+    return 0;
+  }
+}
+
+async function auditVisibleForPeriod(c: Context<AppEnv>, company: string, row: Row, period: string) {
+  if (!text(row.card_no)) return false;
+  const compliance = await complianceRow(c, company, text(row.id), period);
+  if (compliance) return number(compliance.sgk_covered) === 1;
+  return upper(row.sgk_status || (number(row.sgk_follow) === 0 ? "YOK" : "VAR")) !== "YOK";
+}
+
 async function personRows(c: Context<AppEnv>, auth: Row) {
   if (!auth.audit) await ensurePersonnelCodes(c, auth.company);
   const rows = await all(c, `${personSelect(auth.audit)} ORDER BY e.code COLLATE NOCASE,e.full_name COLLATE NOCASE`, [auth.company]);
-  return rows.map((row) => mapPerson(row, auth.audit));
+  const period = requestedPeriod(c);
+  const result: Row[] = [];
+  for (const row of rows) {
+    const compliance = await complianceRow(c, auth.company, text(row.id), period);
+    if (auth.audit && !(await auditVisibleForPeriod(c, auth.company, row, period))) continue;
+    const cardDays = auth.audit ? null : await pdksCardDays(c, auth.company, text(row.id), period);
+    const sgkDays = compliance?.sgk_days === null || compliance?.sgk_days === undefined ? null : number(compliance.sgk_days);
+    result.push(mapPerson({
+      ...row,
+      sgk_status: compliance ? (number(compliance.sgk_covered) === 1 ? "VAR" : "YOK") : row.sgk_status,
+      sgk_days: sgkDays,
+      sgk_period: period,
+      pdks_card_days: cardDays,
+      sgk_match: auth.audit || sgkDays === null ? null : sgkDays === cardDays,
+    }, auth.audit));
+  }
+  return result;
 }
 
-async function accessiblePerson(c: Context<AppEnv>, auth: Row, employeeId: string) {
+async function accessiblePerson(c: Context<AppEnv>, auth: Row, employeeId: string, period = requestedPeriod(c)) {
   const row = await first(c, `${personSelect(auth.audit)} AND e.id=? LIMIT 1`, [auth.company, employeeId]);
-  return row ? mapPerson(row, auth.audit) : null;
+  if (!row) return null;
+  if (auth.audit && !(await auditVisibleForPeriod(c, auth.company, row, period))) return null;
+  return mapPerson(row, auth.audit);
 }
 
 function minutesOf(hhmm: string) {
@@ -346,7 +404,8 @@ async function annualLeaveMap(c: Context<AppEnv>, employeeId: string, start: str
 }
 
 async function attendanceMonth(c: Context<AppEnv>, auth: Row, employeeId: string, year: number, month: number) {
-  const person = await accessiblePerson(c, auth, employeeId);
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const person = await accessiblePerson(c, auth, employeeId, period);
   if (!person) return null;
   const dates = monthDays(year, month);
   const start = dates[0];
@@ -467,7 +526,15 @@ async function createPerson(c: Context<AppEnv>) {
     VALUES (?,?,?,?,?,?,?,?,?)
     ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no,identity_no=excluded.identity_no,exit_date=excluded.exit_date,active_passive=excluded.active_passive,phone=excluded.phone,payment_type=excluded.payment_type,updated_at=excluded.updated_at`)
     .bind(id, auth.company, cardNo || null, text(body.identityNo) || null, dateOnly(body.exitDate) || null, text(body.activePassive) || "Aktif", text(body.phone) || null, text(body.paymentChannel) || null, timestamp).run();
-  const person = await accessiblePerson(c, auth, id);
+  const personnelStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(body.personnelStatus)) ? "RETIRED" : "NORMAL";
+  const period = /^\d{4}-\d{2}$/.test(text(body.period)) ? text(body.period) : requestedPeriod(c);
+  const sgkCovered = upper(body.sgkStatus) !== "YOK";
+  const sgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.max(0, Math.min(31, Math.round(number(body.sgkDays))));
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT OR IGNORE INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at) VALUES (?,?,?,?,?)`).bind(id, auth.company, personnelStatus, text(auth.user?.username), timestamp),
+    c.env.DB.prepare(`INSERT OR REPLACE INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?)`).bind(auth.company, id, period, sgkCovered ? 1 : 0, sgkCovered ? sgkDays : 0, text(body.sgkNote), text(auth.user?.username), timestamp),
+  ]);
+  const person = await accessiblePerson(c, auth, id, period);
   return ok(c, person, 201);
 }
 
@@ -544,9 +611,33 @@ async function saveChanges(c: Context<AppEnv>) {
   const cardFields: Record<string, string> = {
     cardNo: "card_no", identityNo: "identity_no", exitDate: "exit_date", activePassive: "active_passive", phone: "phone",
   };
+  const period = /^\d{4}-\d{2}$/.test(text(body.period)) ? text(body.period) : requestedPeriod(c);
+  const profile = await first(c, "SELECT personnel_status FROM ik_person_hr_profiles WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, auth.company]).catch(() => null);
+  const monthCompliance = await complianceRow(c, auth.company, employeeId, period);
   const statements: any[] = [];
   let salaryTouched = false;
   for (const [key, value] of Object.entries(changes)) {
+    if (key === "personnelStatus") {
+      const nextStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(value)) ? "RETIRED" : "NORMAL";
+      const oldStatus = text(profile?.personnel_status) || "NORMAL";
+      if (oldStatus !== nextStatus) {
+        statements.push(c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
+          VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_status=excluded.personnel_status,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+          .bind(employeeId, auth.company, nextStatus, text(auth.user?.username), nowIso()));
+      }
+      continue;
+    }
+    if (key === "sgkDays" || key === "sgkStatus") {
+      const currentCovered = monthCompliance ? number(monthCompliance.sgk_covered) === 1 : upper(currentRaw.sgk_status) !== "YOK";
+      const nextCovered = key === "sgkStatus" ? upper(value) !== "YOK" : currentCovered;
+      const rawDays = key === "sgkDays" ? value : monthCompliance?.sgk_days;
+      const nextDays = nextCovered ? (rawDays === null || rawDays === undefined || rawDays === "" ? null : Math.max(0, Math.min(31, Math.round(number(rawDays))))) : 0;
+      statements.push(c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
+        VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
+        sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(auth.company, employeeId, period, nextCovered ? 1 : 0, nextDays, text(body.sgkNote), text(auth.user?.username), nowIso()));
+      continue;
+    }
     const employeeColumn = employeeFields[key];
     const cardColumn = cardFields[key];
     if (!employeeColumn && !cardColumn) continue;
