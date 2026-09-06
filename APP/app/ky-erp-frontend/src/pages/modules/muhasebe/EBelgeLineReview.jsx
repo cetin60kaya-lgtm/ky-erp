@@ -12,17 +12,21 @@ export default function EBelgeLineReview({ documentId, line, onChanged }) {
   const [query, setQuery] = useState(line?.description || line?.product_code || "");
   const [products, setProducts] = useState([]);
   const [lotNo, setLotNo] = useState(line?.raw_metadata?.lotNo || "");
+  const [expenseCategoryName, setExpenseCategoryName] = useState(line?.raw_metadata?.expenseCategoryName || "Mal ve Hizmet Alımı");
   const [selected, setSelected] = useState(null);
   const [saveAlias, setSaveAlias] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const chemical = Boolean(line?.raw_metadata?.chemical);
-  const needsReview = !line?.product_id || (chemical && !line?.raw_metadata?.lotNo);
+  const routingType = String(line?.raw_metadata?.routingType || "EXPENSE").toUpperCase();
+  const lotRequired = Boolean(line?.raw_metadata?.lotRequired || routingType === "BOYAHANE");
+  const productRequired = routingType !== "EXPENSE" || lotRequired;
+  const needsReview = (productRequired && !line?.product_id) || (lotRequired && !line?.raw_metadata?.lotNo);
   const label = useMemo(() => {
-    if (!line?.product_id) return "Ürünü eşleştir";
-    if (chemical && !line?.raw_metadata?.lotNo) return "LOT gir";
+    if (!line?.product_id && productRequired) return "Ürünü eşleştir";
+    if (!line?.product_id) return "Gider kalemi";
+    if (lotRequired && !line?.raw_metadata?.lotNo) return "LOT gir";
     return "Düzenle";
-  }, [line, chemical]);
+  }, [line, lotRequired, productRequired]);
 
   useEffect(() => {
     if (!open || query.trim().length < 1) { setProducts([]); return; }
@@ -38,6 +42,7 @@ export default function EBelgeLineReview({ documentId, line, onChanged }) {
       const result = await updateEBelgeLine(documentId, line.id, {
         ...(selected?.id ? { productId: selected.id } : {}),
         lotNo,
+        ...(routingType === "EXPENSE" ? { expenseCategoryName } : {}),
       });
       if (saveAlias && selected?.id && line?.description?.trim()) {
         await saveEBelgeProductAlias(selected.id, line.description.trim(), documentId);
@@ -58,9 +63,10 @@ export default function EBelgeLineReview({ documentId, line, onChanged }) {
         {products.length > 0 && <div className="eb-line-review-results">{products.map((product) => <button type="button" key={product.id} className={selected?.id === product.id ? "selected" : ""} onClick={() => setSelected(product)}><span>{product.name}</span><small>{product.legacy_id || product.unit || ""}</small></button>)}</div>}
         <label className="eb-line-review-check"><input type="checkbox" checked={saveAlias} onChange={(e) => setSaveAlias(e.target.checked)} /><span>Bu fatura açıklamasını ürün alias’ı olarak kaydet</span></label>
       </>}
-      {(chemical || line?.raw_metadata?.routingType === "BOYAHANE") && <label><span>LOT No</span><input value={lotNo} onChange={(e) => setLotNo(e.target.value)} placeholder="LOT numarasını girin" /></label>}
+      {routingType === "EXPENSE" && <label><span>Gider kategorisi</span><input value={expenseCategoryName} onChange={(e) => setExpenseCategoryName(e.target.value)} placeholder="Örn. Nakliye, Yemek, Ambalaj, Bakım" /></label>}
+      {lotRequired && <label><span>LOT No</span><input value={lotNo} onChange={(e) => setLotNo(e.target.value)} placeholder="LOT numarasını girin" required /></label>}
       {message && <small className="eb-line-review-message">{message}</small>}
-      <button type="button" className="eb-line-review-save" disabled={busy || (!line?.product_id && !selected?.id)} onClick={save}>{busy ? <LoaderCircle className="eb-spin" size={15} /> : <Check size={15} />} Kaydet</button>
+      <button type="button" className="eb-line-review-save" disabled={busy || (productRequired && !line?.product_id && !selected?.id) || (lotRequired && !lotNo.trim())} onClick={save}>{busy ? <LoaderCircle className="eb-spin" size={15} /> : <Check size={15} />} Kaydet</button>
     </div>}
   </div>;
 }

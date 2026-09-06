@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "APP/cloud/ky-erp-api/src/main.ts"
+      - "APP/cloud/ky-erp-api/src/e-belge-*.ts"
+      - "APP/cloud/ky-erp-api/src/accounting-document-*.ts"
+      - "APP/cloud/ky-erp-api/src/isnet-live-sync.ts"
       - "APP/cloud/ky-erp-api/src/production-center.ts"
       - "APP/cloud/ky-erp-api/src/boyahane-inventory.ts"
       - "APP/cloud/ky-erp-api/src/boyahane-workflow.ts"
@@ -77,6 +80,10 @@ jobs:
       - name: Worker typecheck
         working-directory: APP/cloud/ky-erp-api
         run: npm run typecheck
+
+      - name: Worker unit testleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run test:unit
 
       - name: Worker varsayılan dry-run build
         working-directory: APP/cloud/ky-erp-api
