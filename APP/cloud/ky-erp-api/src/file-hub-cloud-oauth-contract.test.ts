@@ -12,7 +12,8 @@ const adminStorage = read("admin-storage-cloud.ts");
 const main = read("main.ts");
 const archive = read("accounting-document-archive.ts");
 const eBelge = read("e-belge-center-cloud.ts");
-const release = readFileSync(resolve(here, "../../../../.github/workflows/production-release.yml"), "utf8");
+const workflow = readFileSync(resolve(here, "../../../../.github/workflows/production-release.yml"), "utf8");
+const deployContract = readFileSync(resolve(here, "../../../../DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md"), "utf8");
 
 test("File Hub OAuth schema is additive and encrypted-token based", () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS file_hub_oauth_accounts/);
@@ -30,6 +31,15 @@ test("cloud OAuth uses AES-GCM and expiring one-time state", () => {
   assert.match(cloud, /\/api\/auth\/file-hub\/oauth\/microsoft\/callback/);
 });
 
+test("cloud OAuth provider readiness fails closed on missing credential pairs", () => {
+  assert.match(cloud, /GOOGLE_DRIVE_CLIENT_ID/);
+  assert.match(cloud, /GOOGLE_DRIVE_CLIENT_SECRET/);
+  assert.match(cloud, /MICROSOFT_GRAPH_CLIENT_ID/);
+  assert.match(cloud, /MICROSOFT_GRAPH_CLIENT_SECRET/);
+  assert.match(cloud, /function providerReady/);
+  assert.match(cloud, /cfg\.family && cfg\.clientId && cfg\.clientSecret && text\(c\.env\.FILE_HUB_OAUTH_KEY\)/);
+});
+
 test("cloud management is registered behind File Hub tenant-owner guard", () => {
   const guard = adminStorage.indexOf('app.use("/api/file-hub/*"');
   const register = adminStorage.indexOf("registerFileHubCloudOauthRoutes(app)");
@@ -38,31 +48,16 @@ test("cloud management is registered behind File Hub tenant-owner guard", () => 
   assert.doesNotMatch(main, /registerFileHubPreviewRoutes/);
 });
 
-test("production release backs up D1 before targeted 0044 and keeps OAuth provider setup fail-closed", () => {
-  const backup = release.indexOf("Canli D1 tam yedegini al");
-  const oauth = release.indexOf("0044 File Hub cloud OAuth semasi");
-  assert.ok(backup >= 0 && oauth > backup);
+test("production deploy contract uses Cloudflare Git Integration and keeps GitHub Actions manual-only", () => {
+  assert.match(deployContract, /Cloudflare Git Integration/);
+  assert.match(deployContract, /GitHub Actions production deploy yolu değildir|Production deploy için GitHub Actions kullanılmaz/);
+  assert.match(deployContract, /npm run typecheck && npm test && npm run build/);
+  assert.match(deployContract, /remote production D1 full backup/);
+  assert.match(deployContract, /yalnız hedefli ve additive migration/);
 
-  // The encryption key is mandatory even when no external provider app has
-  // been registered yet. A missing key is generated once and stored only as
-  // a Worker secret; future deploys reuse the existing binding.
-  assert.match(release, /FILE_HUB_OAUTH_KEY/);
-  assert.match(release, /openssl rand -hex 48/);
-  assert.match(release, /FILE_HUB_OAUTH_KEY production Worker icin guvenli ve tek seferlik olusturuldu/);
-
-  // Google/Microsoft app registrations are optional capabilities: both values
-  // absent means CONFIGURED=false, both present means enabled, and any partial
-  // pair blocks the release instead of inventing credentials.
-  for (const key of ["GOOGLE_DRIVE_CLIENT_ID","GOOGLE_DRIVE_CLIENT_SECRET","MICROSOFT_GRAPH_CLIENT_ID","MICROSOFT_GRAPH_CLIENT_SECRET"]) {
-    assert.match(release, new RegExp(key));
-  }
-  assert.match(release, /provider CONFIGURED=false kalacak, ana yayin devam edecek/);
-  assert.match(release, /Worker OAuth bindingi yarim tanimli/);
-  assert.match(release, /GitHub OAuth bilgisi yarim tanimli/);
-  assert.match(release, /production OAuth binding cifti tutarsiz/);
-  assert.match(release, /file_hub_cloud_connection_accounts/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /^\s{2}(?:push|pull_request|schedule|workflow_run):/m);
 });
-
 
 test("direct cloud archive writer uses idempotent provider paths", () => {
   assert.match(cloud, /archiveFileToCloudConnection/);
@@ -89,8 +84,11 @@ test("final e-Belge approval schedules cloud archive without weakening accountin
   assert.match(eBelge, /executionCtx\.waitUntil/);
 });
 
-test("0046 canonical report migration is deferred safely in the live release", () => {
-  assert.doesNotMatch(release, /0046 canonical Muhasebe rapor \+ gider hafizasi semasi/);
+test("0046 canonical report controls are runtime-ready and keep fallback-safe readers", () => {
+  const runtime = read("runtime-migration-0046.ts");
+  assert.match(runtime, /MIGRATION_0046_PARTIAL_SCHEMA/);
+  assert.match(runtime, /MIGRATION_0046_PARTIAL_INDEX/);
+  assert.match(runtime, /await db\.batch\(statements\)/);
   assert.match(read("accounting-report-canonical.ts"), /tableExists\(c,"accounting_report_categories"\)/);
   assert.match(read("accounting-report-canonical.ts"), /ACCOUNTING_REPORT_OVERRIDE/);
   assert.match(read("e-belge-product-store.ts"), /tableExists\(c,"accounting_expense_rules"\)/);
