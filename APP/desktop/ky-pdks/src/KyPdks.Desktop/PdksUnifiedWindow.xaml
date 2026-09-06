@@ -141,10 +141,10 @@
                                 <TextBlock Grid.Row="1" Text="Bölüm" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="1" Grid.Column="1" x:Name="DepartmentText" Margin="0,10,0,0"/>
                                 <TextBlock Grid.Row="2" Text="Görev" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="2" Grid.Column="1" x:Name="TitleText" Margin="0,10,0,0"/>
                                 <TextBlock Grid.Row="3" Text="İşe Giriş" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="StartText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="3" Text="İşten Çıkış" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="ExitText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="3" Text="Vardiya" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="GroupText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="3" Text="Servis" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" x:Name="ServiceText" Margin="0,10,0,0"/>
-                                <TextBlock Grid.Row="3" Text="Veri Kaynağı" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" Text="KY ERP D1 · Personel ana kaynağı İK" Foreground="#267048" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="4" Text="İşten Çıkış" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="4" Grid.Column="1" x:Name="ExitText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="5" Text="Vardiya" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="5" Grid.Column="1" x:Name="GroupText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="6" Text="Servis" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="6" Grid.Column="1" x:Name="ServiceText" Margin="0,10,0,0"/>
+                                <TextBlock Grid.Row="7" Text="Veri Kaynağı" FontWeight="SemiBold" Margin="0,10,0,0"/><TextBlock Grid.Row="7" Grid.Column="1" Text="KY ERP D1 · Personel ana kaynağı İK" Foreground="#267048" Margin="0,10,0,0"/>
                             </Grid>
                         </Border>
                     </Grid>
