@@ -2,7 +2,8 @@ import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { registerAuthManagementRoutes } from "./auth-cloud";
 import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
-import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";\nimport { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
+import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
+import { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
