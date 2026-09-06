@@ -42,7 +42,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     return owner ? <AdminOwnerSecurity /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "giris-onaylari") {
-    return <AdminLoginApprovals />;
+    return owner ? <AdminSystemOverview activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "kullanicilar") {
     return owner
