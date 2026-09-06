@@ -38,6 +38,15 @@ async function tableExists(c:any,table:string) {
   const r=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(table).first<AnyRow>();
   return Boolean(r?.name);
 }
+async function mailSchemaReady(c:any) {
+  for (const table of ["mail_accounts","mail_account_members","mail_messages","mail_drafts","mail_approval_requests","mail_send_jobs"]) {
+    if (!(await tableExists(c, table))) return false;
+  }
+  return true;
+}
+function schemaPendingData(extra:AnyRow={}) {
+  return { schemaReady:false, setupRequired:true, ...extra };
+}
 async function audit(c:any,tenant:string,current:AnyRow,action:string,detail:AnyRow={},accountId="",messageId="") {
   if(!(await tableExists(c,"mail_audit_log"))) return;
   await c.env.DB.prepare("INSERT INTO mail_audit_log (id,main_company_slug,actor_user_id,account_id,message_id,action,detail,ip_address,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
@@ -102,12 +111,14 @@ export function registerMailCommunicationRoutes(app:any){
   app.get("/api/mail/providers",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;
     if(!hasMailPermission(a.current))return c.json(jsonError("MAIL_FORBIDDEN","Mail Merkezi görüntüleme yetkiniz yok."),403);
-    return c.json({ok:true,data:{providers:mailProviderRegistry().map((row:any)=>({...row,...providerRuntimeReady(c,row.provider)})),credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
+    const schemaReady=await mailSchemaReady(c);
+    return c.json({ok:true,data:{providers:mailProviderRegistry().map((row:any)=>({...row,...providerRuntimeReady(c,row.provider)})),schemaReady,setupRequired:!schemaReady,credentialVaultReady:Boolean(text(c.env.MAIL_CREDENTIAL_KEY || c.env.FILE_HUB_OAUTH_KEY)),rules:{providerIndependent:true,systemMailSeparate:true,aiMaySendAutomatically:false,plaintextCredentialsAllowed:false}}});
   });
 
   app.get("/api/mail/overview",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail Merkezi görüntüleme yetkiniz yok."),403);
+    if(!(await mailSchemaReady(c))) return c.json({ok:true,data:schemaPendingData({accountCount:0,activeAccountCount:0,pendingAccountCount:0,messageCount:0,unreadCount:0,draftCount:0,tenant})});
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role),userId=text(current?.id);
     const accountWhere=elevated?"a.main_company_slug=?":"a.main_company_slug=? AND EXISTS (SELECT 1 FROM mail_account_members mm WHERE mm.main_company_slug=a.main_company_slug AND mm.account_id=a.id AND mm.user_id=? AND mm.can_view=1)";
     const args=elevated?[tenant]:[tenant,userId];
@@ -120,6 +131,7 @@ export function registerMailCommunicationRoutes(app:any){
   app.get("/api/mail/accounts",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail hesabı görüntüleme yetkiniz yok."),403);
+    if(!(await mailSchemaReady(c)))return c.json({ok:true,data:[]});
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role);
     const result=elevated
       ?await c.env.DB.prepare("SELECT a.* FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
@@ -130,6 +142,7 @@ export function registerMailCommunicationRoutes(app:any){
   app.post("/api/mail/accounts/request",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current,"canCreate"))return c.json(jsonError("MAIL_CREATE_FORBIDDEN","Mail hesabı ekleme talebi oluşturma yetkiniz yok."),403);
+    if(!(await mailSchemaReady(c)))return c.json(jsonError("MAIL_SCHEMA_NOT_READY","Mail Core veritabanı kurulumu henüz tamamlanmadı. 0050 migration uygulanmadan mail bağlantısı açılamaz."),503);
     const provider=normalizeMailProvider(body.providerType||body.provider),type=accountType(body.accountType),email=text(body.emailAddress||body.email).toLowerCase();
     if(!provider)return c.json(jsonError("PROVIDER_INVALID","Desteklenen bir mail sağlayıcısı seçin."),422);
     const runtime=providerRuntimeReady(c,provider);
@@ -181,6 +194,7 @@ export function registerMailCommunicationRoutes(app:any){
   app.get("/api/mail/approvals",async(c:any)=>{
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!(ownerRole(current?.role)||companyAdminRole(current?.role)||hasMailPermission(current,"canApprove")))return c.json(jsonError("MAIL_APPROVAL_FORBIDDEN","Mail bağlantı onaylarını görme yetkiniz yok."),403);
+    if(!(await mailSchemaReady(c)))return c.json({ok:true,data:[]});
     const r=await c.env.DB.prepare("SELECT r.*,a.email_address,a.display_name,a.provider_type,a.account_type,a.department_code,(SELECT COUNT(*) FROM mail_approval_steps s WHERE s.request_id=r.id AND s.required=1 AND s.status='PENDING') pending_steps FROM mail_approval_requests r JOIN mail_accounts a ON a.id=r.target_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? ORDER BY CASE r.status WHEN 'PENDING' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").bind(tenant).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
   });
