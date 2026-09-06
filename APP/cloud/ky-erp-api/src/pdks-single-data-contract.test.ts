@@ -143,3 +143,24 @@ test("Web PDKS keeps one global module entry and the approved compact horizontal
   assert.match(css, /pdks-command-nav/);
   assert.doesNotMatch(css, /grid-template-columns:\s*210px/);
 });
+
+test("PDKS primary sidebar exposes exactly five operation groups without dumping every subtab", () => {
+  const registry = frontend("app/pdksModuleRegistryPatch.js");
+  const shell = frontend("layouts/AppShellV3.jsx");
+
+  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
+    assert.ok(registry.includes(label), `Eksik PDKS ana grup: ${label}`);
+  }
+  assert.match(registry, /sidebarGroups:\s*\[/);
+  assert.match(registry, /\["ana-ekran", "Günlük"/);
+  assert.match(registry, /\["personel-bilgileri", "Personel & İK"/);
+  assert.match(registry, /\["gruplar-vardiyalar", "Tanımlar"/);
+  assert.match(registry, /\["saat-terminal", "Terminal & Sistem"/);
+  assert.match(registry, /\["raporlar", "Rapor & Denetim"/);
+
+  assert.match(shell, /hasPrimarySidebarGroups/);
+  assert.match(shell, /isActiveModule && \(hasPrimarySidebarGroups \|\| mobileMenuOpen\)/);
+  assert.match(shell, /module\.sidebarGroups\.map/);
+  assert.match(shell, /owningGroup\?\.tabs\?\.some/);
+  assert.match(shell, /shell-v3-submenu-primary/);
+});

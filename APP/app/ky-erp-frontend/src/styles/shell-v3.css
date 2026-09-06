@@ -209,6 +209,42 @@
   font-weight: 800;
 }
 
+.shell-v3-submenu-primary button {
+  align-items: flex-start;
+  min-height: 50px;
+  padding: 9px 9px 9px 12px;
+}
+
+.shell-v3-submenu-primary button > span {
+  display: block;
+  min-width: 0;
+}
+
+.shell-v3-submenu-primary button strong,
+.shell-v3-submenu-primary button small {
+  display: block;
+}
+
+.shell-v3-submenu-primary button strong {
+  color: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.shell-v3-submenu-primary button small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8fa0b7;
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+.shell-v3-submenu-primary button.active small {
+  color: #d9f1ff;
+}
+
 .shell-v3-main {
   grid-column: 2;
   display: grid;
