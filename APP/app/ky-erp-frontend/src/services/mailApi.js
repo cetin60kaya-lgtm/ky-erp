@@ -53,3 +53,13 @@ export const syncMailAccount = (accountId) =>
 
 export const sendMailDraft = (draftId, logicalEventId = "") =>
   apiPost(`/mail/drafts/${encodeURIComponent(draftId)}/send`, { logicalEventId }, { timeoutMs: 60_000 }).then(unwrap);
+
+
+export const startGoogleMailOAuth = (accountId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/google/start`, {}).then(unwrap);
+
+export const syncGoogleMailAccount = (accountId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/sync/google`, {}, { timeoutMs: 120_000 }).then(unwrap);
+
+export const sendGoogleMailDraft = (draftId, logicalEventId = "") =>
+  apiPost(`/mail/drafts/${encodeURIComponent(draftId)}/send/google`, { logicalEventId }, { timeoutMs: 60_000 }).then(unwrap);
