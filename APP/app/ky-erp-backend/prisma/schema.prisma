@@ -143,6 +143,7 @@ enum ModuleKey {
   IK
   ISNET
   MAIL
+  STORAGE_ADMIN
   ASISTAN
   ADMIN
   RAPORLAR
