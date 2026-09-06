@@ -1,0 +1,62 @@
+name: TEMP IK Retired SGK PDKS Final CI
+
+on:
+  push:
+    branches:
+      - codex/ik-retired-sgk-pdks-final-20260906
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temp-ik-retired-sgk-final
+  cancel-in-progress: true
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/cloud/ky-erp-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: 0045 migration SQLite smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          db=/tmp/ik-retired-0045.db
+          rm -f "$db"
+          sqlite3 "$db" "CREATE TABLE hr_monthly_employees(id TEXT PRIMARY KEY, main_company_id TEXT NOT NULL);"
+          sqlite3 "$db" < migrations/0045_hr_retired_monthly_sgk_compliance.sql
+          test "$(sqlite3 "$db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('ik_person_hr_profiles','ik_person_monthly_compliance');")" = "2"
+          sqlite3 "$db" "INSERT INTO hr_monthly_employees(id,main_company_id) VALUES('e1','mecit-hakan');"
+          sqlite3 "$db" < migrations/0045_hr_retired_monthly_sgk_compliance.sql
+          test "$(sqlite3 "$db" "SELECT personnel_status FROM ik_person_hr_profiles WHERE employee_id='e1';")" = "NORMAL"
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: APP/app/ky-erp-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_API_URL: https://api.kyerp.net
