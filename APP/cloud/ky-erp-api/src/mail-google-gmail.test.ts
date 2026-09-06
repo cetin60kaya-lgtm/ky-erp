@@ -61,6 +61,9 @@ test("Gmail account approval follows company-or-super-admin governance",()=>{
   assert.match(source,/policy="COMPANY_OR_APP_OWNER"/);
   assert.doesNotMatch(source,/COMPANY_OWNER_AND_APP_OWNER/);
   assert.doesNotMatch(source,/"APP_OWNER",2,1,"PENDING"/);
+  assert.match(source,/requestStatus=elevated\?"APPROVED":"PENDING"/);
+  assert.match(source,/PRIVILEGED_OWNER_AUTO_APPROVAL/);
+  assert.match(source,/approvalBypass:elevated/);
 });
 
 
