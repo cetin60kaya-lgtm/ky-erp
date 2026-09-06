@@ -1,0 +1,105 @@
+name: TEMP IK Retired Live Smoke
+
+on:
+  push:
+    branches:
+      - codex/ik-retired-sgk-pdks-final-20260906
+    paths:
+      - ".github/workflows/ik-retired-live-smoke-temp.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: API health + auth + IK guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error https://api.kyerp.net/api/health > /tmp/health.json
+          jq -e '.ok == true and .service == "ky-erp-api" and .database == "d1"' /tmp/health.json >/dev/null
+
+          auth_status="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' https://api.kyerp.net/api/auth/me)"
+          month_status="$(curl --silent --show-error --output /tmp/month.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/month?mainCompanyId=mecit-hakan&year=2026&month=9')"
+          payroll_status="$(curl --silent --show-error --output /tmp/payroll.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/advanced/payroll?mainCompanyId=mecit-hakan&year=2026&month=9')"
+          pdks_status="$(curl --silent --show-error --output /tmp/pdks.json --write-out '%{http_code}' 'https://api.kyerp.net/api/ik/personnel-control/people?mainCompanyId=mecit-hakan&year=2026&month=9')"
+
+          for status in "$auth_status" "$month_status" "$payroll_status" "$pdks_status"; do
+            test "$status" = "401"
+          done
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/auth.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/month.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/payroll.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/pdks.json >/dev/null
+
+          echo "HEALTH=$(jq -c . /tmp/health.json)"
+          echo "AUTH=$auth_status IK_MONTH=$month_status IK_PAYROLL=$payroll_status PDKS=$pdks_status"
+
+      - name: App custom domain equals latest Pages deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="https://app.kyerp.net"
+          PREVIEW="https://99d562cd.ky-erp-frontend.pages.dev"
+
+          fetch_html() {
+            base="$1"
+            out="$2"
+            for attempt in $(seq 1 30); do
+              if curl --location --fail --silent --show-error "$base/" > "$out" && test -s "$out"; then
+                return 0
+              fi
+              sleep 2
+            done
+            return 1
+          }
+
+          fetch_html "$APP" /tmp/app.html
+          fetch_html "$PREVIEW" /tmp/preview.html
+
+          app_scripts="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/app.html | sed -n 's/.*src="\([^"]*\)"/\1/p' | tr '\n' ' ')"
+          preview_scripts="$(grep -oE '<script[^>]+src="[^"]+"' /tmp/preview.html | sed -n 's/.*src="\([^"]*\)"/\1/p' | tr '\n' ' ')"
+          test -n "$app_scripts"
+          test -n "$preview_scripts"
+          test "$app_scripts" = "$preview_scripts"
+
+          : > /tmp/app-all.js
+          : > /tmp/preview-all.js
+
+          fetch_scripts() {
+            base="$1"
+            html="$2"
+            out="$3"
+            grep -oE '<script[^>]+src="[^"]+"' "$html" | sed -n 's/.*src="\([^"]*\)"/\1/p' | while IFS= read -r src; do
+              case "$src" in
+                http://*|https://*) url="$src" ;;
+                /*) url="$base$src" ;;
+                *) clean="$(printf '%s' "$src" | sed 's#^\./##')"; url="$base/$clean" ;;
+              esac
+              curl --location --fail --silent --show-error "$url" >> "$out"
+            done
+          }
+
+          fetch_scripts "$APP" /tmp/app.html /tmp/app-all.js
+          fetch_scripts "$PREVIEW" /tmp/preview.html /tmp/preview-all.js
+
+          app_hash="$(sha256sum /tmp/app-all.js | awk '{print $1}')"
+          preview_hash="$(sha256sum /tmp/preview-all.js | awk '{print $1}')"
+          test "$app_hash" = "$preview_hash"
+
+          grep -oE 'assets/[A-Za-z0-9._-]+\.js' /tmp/app-all.js | sort -u > /tmp/chunks.txt || true
+          cp /tmp/app-all.js /tmp/app-complete.js
+          while IFS= read -r chunk; do
+            [ -n "$chunk" ] || continue
+            curl --location --fail --silent --show-error "$APP/$chunk" >> /tmp/app-complete.js || true
+          done < /tmp/chunks.txt
+
+          for marker in             "Personel Statüsü"             "Bu Ay SGK Gün"             "Gerçek PDKS Kart Günü"             "Emekli personel aktif çalışan olarak devam edebilir"             "seçili ayın SGK kapsamındaki kartlı personeli"; do
+            grep -Fq "$marker" /tmp/app-complete.js || { echo "Canli bundle marker eksik: $marker" >&2; exit 1; }
+          done
+
+          echo "APP_SCRIPTS=$app_scripts"
+          echo "ASSET_SHA256=$app_hash"
+          echo "CUSTOM_DOMAIN_LATEST_PAGES=YES"
