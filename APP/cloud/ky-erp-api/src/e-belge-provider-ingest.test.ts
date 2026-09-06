@@ -43,3 +43,35 @@ test("provider UBL parser maps outgoing invoice to customer", () => {
   assert.equal(parsed.partyName, "Müşteri B");
   assert.equal(parsed.partyTaxNo, "9876543210");
 });
+
+
+const dispatchXml = `<?xml version="1.0" encoding="UTF-8"?>
+<DespatchAdvice xmlns="urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2"
+ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>IRS-2026-0099</cbc:ID>
+  <cbc:UUID>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</cbc:UUID>
+  <cbc:IssueDate>2026-09-06</cbc:IssueDate>
+  <cac:DespatchSupplierParty><cac:Party><cac:PartyIdentification><cbc:ID>1234567890</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name>Kimya Tedarikçisi</cbc:Name></cac:PartyName></cac:Party></cac:DespatchSupplierParty>
+  <cac:DeliveryCustomerParty><cac:Party><cac:PartyIdentification><cbc:ID>9876543210</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name>Alıcı Firma</cbc:Name></cac:PartyName></cac:Party></cac:DeliveryCustomerParty>
+  <cac:DespatchLine>
+    <cbc:ID>1</cbc:ID>
+    <cbc:DeliveredQuantity unitCode="KGM">25</cbc:DeliveredQuantity>
+    <cac:Item>
+      <cbc:Name>White Pigment</cbc:Name>
+      <cac:SellersItemIdentification><cbc:ID>WP-25</cbc:ID></cac:SellersItemIdentification>
+      <cac:AdditionalItemProperty><cbc:Name>LOT NO</cbc:Name><cbc:Value>LOT-260906-A</cbc:Value></cac:AdditionalItemProperty>
+    </cac:Item>
+  </cac:DespatchLine>
+</DespatchAdvice>`;
+
+test("UBL irsaliye kalemi LOT bilgisini ayırır", () => {
+  const parsed = parseCanonicalEBelgeUbl(dispatchXml, "incoming");
+  assert.equal(parsed.documentType, "GELEN_IRSALIYE");
+  assert.equal(parsed.partyName, "Kimya Tedarikçisi");
+  assert.equal(parsed.lines.length, 1);
+  assert.equal(parsed.lines[0].supplierProductCode, "WP-25");
+  assert.equal(parsed.lines[0].quantity, 25);
+  assert.equal(parsed.lines[0].unitCode, "KGM");
+  assert.equal(parsed.lines[0].lotNo, "LOT-260906-A");
+});
