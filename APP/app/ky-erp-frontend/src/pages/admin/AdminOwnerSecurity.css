@@ -40,3 +40,43 @@
 .aos-provider{border-radius:11px;padding:11px 12px;background:#fbfdff}
 .aos-session-table{border-radius:11px}
 @media(max-width:760px){.aos-owner-card{background:#fff}.aos-owner-badge{background:#173f77;color:#fff;width:58px;height:58px}}
+
+
+/* Super Admin recovery console v4 */
+.aos-recovery-security{padding:18px;border-color:#c9d9ef;background:linear-gradient(180deg,#fff 0%,#f8fbff 100%)}
+.aos-recovery-head{align-items:flex-start}
+.aos-recovery-head h3{margin-top:3px;font-size:17px}
+.aos-recovery-head p{max-width:900px;line-height:1.55}
+.aos-section-kicker{display:block;color:#2563eb;font-size:9px;font-weight:900;letter-spacing:.09em}
+.aos-recovery-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:14px 0 16px}
+.aos-recovery-summary>div{min-height:82px;padding:11px 13px;border:1px solid #dce5ef;border-radius:11px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.025)}
+.aos-recovery-summary>div.ready{border-color:#bbdfc7;background:#fbfffc}
+.aos-recovery-summary>div.pending{border-color:#f0cf91;background:#fffdf8}
+.aos-recovery-summary span,.aos-recovery-summary small{display:block;color:#64748b;font-size:10px}
+.aos-recovery-summary strong{display:block;margin:4px 0 3px;color:#0f172a;font-size:18px;line-height:1.1}
+.aos-recovery-summary .ready strong{color:#166534}
+.aos-recovery-summary .pending strong{color:#9a5a00}
+.aos-question-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.aos-question-card{display:grid;gap:10px;padding:12px;border:1px solid #dbe6f3;border-radius:12px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.025)}
+.aos-question-title{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:9px;border-bottom:1px solid #eef2f7}
+.aos-question-title>div{display:flex;align-items:center;gap:9px;min-width:0}
+.aos-question-title>div>span{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#eaf2ff;color:#1d4ed8;font-weight:900}
+.aos-question-title b,.aos-question-title small{display:block}
+.aos-question-title b{font-size:12px;color:#0f172a}.aos-question-title small{margin-top:2px;color:#64748b;font-size:9px;line-height:1.3}
+.aos-question-title>span{flex:0 0 auto;border-radius:999px;padding:4px 7px;font-size:9px;font-weight:900}
+.aos-question-title>span.saved{background:#ecfdf3;color:#15803d;border:1px solid #bbf7d0}
+.aos-question-title>span.new{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.aos-question-card label{display:grid;gap:5px;color:#42526a;font-size:11px;font-weight:800}
+.aos-question-card input{width:100%;min-height:42px;box-sizing:border-box;border:1px solid #cfd9e6;border-radius:8px;padding:8px 10px;background:#fff;outline:none}
+.aos-question-card input:focus{border-color:#3b82f6;box-shadow:0 0 0 2px #dbeafe}
+.aos-answer-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+.aos-answer-toggle{min-width:64px;min-height:42px;padding:7px 9px;border:1px solid #cfd9e6!important;background:#f8fafc!important;color:#334155!important;border-radius:8px;font-size:10px;font-weight:850}
+.aos-answer-toggle:hover:not(:disabled){background:#eef4fb!important;border-color:#9fb7d2!important}
+.aos-answer-toggle:disabled{opacity:.45;cursor:not-allowed}
+.aos-recovery-stepup{grid-template-columns:minmax(250px,1fr) 210px 150px auto;align-items:end;border-radius:12px;padding:13px;background:#f4f8ff}
+.aos-recovery-stepup label{display:grid;gap:5px;color:#42526a;font-size:10px;font-weight:800}
+.aos-recovery-stepup button.primary{min-height:42px;white-space:nowrap}
+.aos-security-note{border-left:0;border:1px solid #d6e4f5;border-radius:9px;background:#f7fbff;padding:10px 12px}
+.aos-security-note b{color:#173f7a}
+@media(max-width:1180px){.aos-question-grid{grid-template-columns:1fr}.aos-recovery-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.aos-recovery-stepup{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.aos-recovery-summary{grid-template-columns:1fr}.aos-recovery-stepup{grid-template-columns:1fr}.aos-answer-field{grid-template-columns:1fr}.aos-answer-toggle{width:100%}}
