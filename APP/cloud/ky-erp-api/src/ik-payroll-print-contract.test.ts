@@ -176,3 +176,30 @@ test("serialized refresh stays single-active across period changes", () => {
   assert.match(page, /try \{ await activeRequest\.promise; \}/);
   assert.match(page, /loadRequestRef\.current\.seq !== requestId/);
 });
+
+
+test("retired personnel and monthly SGK are independent and PDKS mismatch is internal", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /Personel Statüsü/);
+  assert.match(page, /value="RETIRED">Emekli/);
+  assert.match(page, /Bu Ay SGK Gün/);
+  assert.match(page, /Gerçek PDKS Kart Günü/);
+  assert.match(page, /Denetim görünümünde bu iç uyarı gösterilmez/);
+  assert.match(page, /personnelStatus: modalDraft\.personnelStatus/);
+  assert.match(page, /sgkDays: modalDraft\.sgkFollow === "SGKLI"/);
+
+  assert.match(cloud, /ik_person_hr_profiles/);
+  assert.match(cloud, /ik_person_monthly_compliance/);
+  assert.match(cloud, /COUNT\(DISTINCT work_date\) AS card_days/);
+  assert.match(cloud, /sgkPdksMatch/);
+});
+
+test("SGK status no longer forces bank payment or legacy fixed bank amount", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.doesNotMatch(cloud, /enteredBank \|\| 28075\.5/);
+  assert.doesNotMatch(cloud, /sgk === "YOK" \|\| cashOnly/);
+  assert.match(cloud, /const bank = cashOnly \? 0 : bankOnly \? total : Math\.min\(total, enteredBank\)/);
+});
