@@ -8,29 +8,34 @@ const worker = path.resolve(here, "../../../cloud/ky-erp-api");
 const pub = path.resolve(here, "../public");
 mkdirSync(pub, { recursive: true });
 
-const sections = [];
-function run(label, command, args) {
+function run(label, command, args, timeout = 180000) {
   const r = spawnSync(command, args, {
     cwd: worker,
     encoding: "utf8",
     env: process.env,
     shell: process.platform === "win32",
+    timeout,
+    maxBuffer: 12 * 1024 * 1024,
   });
-  sections.push([
+  return [
     "===== " + label + " =====",
     "status=" + String(r.status),
     "signal=" + String(r.signal ?? ""),
+    "error=" + String(r.error?.message || ""),
     "--- stdout ---",
     r.stdout || "",
     "--- stderr ---",
     r.stderr || "",
-  ].join("\n"));
-  return r.status ?? 1;
+  ].join("\n");
 }
 
-run("npm ci", "npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
-run("typecheck", "npm", ["run", "typecheck"]);
-run("test", "npm", ["test"]);
+const sections = [];
+sections.push(run("npm ci", "npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], 180000));
+sections.push(run("typecheck", "npm", ["run", "typecheck"], 180000));
+sections.push(run("unit", "npm", ["run", "test:unit"], 180000));
 
-writeFileSync(path.join(pub, "worker-diag.txt"), sections.join("\n\n"), "utf8");
-console.log("WORKER_DIAG_EXPORTED");
+const text = sections.join("\n\n")
+  .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+  .replace(/(?:api[_-]?key|token|secret|password)\s*[=:]\s*[^\s]+/gi, "$1=[REDACTED]");
+writeFileSync(path.join(pub, "worker-diag.txt"), text, "utf8");
+console.log("WORKER_UNIT_DIAG_EXPORTED");
