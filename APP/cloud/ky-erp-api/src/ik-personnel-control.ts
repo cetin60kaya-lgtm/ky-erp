@@ -616,28 +616,37 @@ async function saveChanges(c: Context<AppEnv>) {
   const monthCompliance = await complianceRow(c, auth.company, employeeId, period);
   const statements: any[] = [];
   let salaryTouched = false;
-  for (const [key, value] of Object.entries(changes)) {
-    if (key === "personnelStatus") {
-      const nextStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(value)) ? "RETIRED" : "NORMAL";
-      const oldStatus = text(profile?.personnel_status) || "NORMAL";
-      if (oldStatus !== nextStatus) {
-        statements.push(c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
-          VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_status=excluded.personnel_status,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-          .bind(employeeId, auth.company, nextStatus, text(auth.user?.username), nowIso()));
-      }
-      continue;
+
+  if (Object.prototype.hasOwnProperty.call(changes, "personnelStatus")) {
+    const nextStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(changes.personnelStatus)) ? "RETIRED" : "NORMAL";
+    const oldStatus = text(profile?.personnel_status) || "NORMAL";
+    if (oldStatus !== nextStatus) {
+      statements.push(c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
+        VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET personnel_status=excluded.personnel_status,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(employeeId, auth.company, nextStatus, text(auth.user?.username), nowIso()));
     }
-    if (key === "sgkDays" || key === "sgkStatus") {
-      const currentCovered = monthCompliance ? number(monthCompliance.sgk_covered) === 1 : upper(currentRaw.sgk_status) !== "YOK";
-      const nextCovered = key === "sgkStatus" ? upper(value) !== "YOK" : currentCovered;
-      const rawDays = key === "sgkDays" ? value : monthCompliance?.sgk_days;
-      const nextDays = nextCovered ? (rawDays === null || rawDays === undefined || rawDays === "" ? null : Math.max(0, Math.min(31, Math.round(number(rawDays))))) : 0;
-      statements.push(c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
+  }
+
+  if (Object.prototype.hasOwnProperty.call(changes, "sgkStatus") || Object.prototype.hasOwnProperty.call(changes, "sgkDays")) {
+    const currentCovered = monthCompliance ? number(monthCompliance.sgk_covered) === 1 : upper(currentRaw.sgk_status) !== "YOK";
+    const nextCovered = Object.prototype.hasOwnProperty.call(changes, "sgkStatus") ? upper(changes.sgkStatus) !== "YOK" : currentCovered;
+    const rawDays = Object.prototype.hasOwnProperty.call(changes, "sgkDays") ? changes.sgkDays : monthCompliance?.sgk_days;
+    const nextDays = nextCovered ? (rawDays === null || rawDays === undefined || rawDays === "" ? null : Math.max(0, Math.min(31, Math.round(number(rawDays))))) : 0;
+    statements.push(
+      c.env.DB.prepare(`INSERT INTO ik_person_monthly_compliance(main_company_id,employee_id,period,sgk_covered,sgk_days,note,updated_by,updated_at)
         VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,employee_id,period) DO UPDATE SET
-        sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-        .bind(auth.company, employeeId, period, nextCovered ? 1 : 0, nextDays, text(body.sgkNote), text(auth.user?.username), nowIso()));
-      continue;
-    }
+        sgk_covered=excluded.sgk_covered,sgk_days=excluded.sgk_days,note=excluded.note,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(auth.company, employeeId, period, nextCovered ? 1 : 0, nextDays, text(body.sgkNote), text(auth.user?.username), nowIso()),
+      c.env.DB.prepare("UPDATE hr_monthly_employees SET sgk_status=?,updated_at=? WHERE id=? AND main_company_id=?")
+        .bind(nextCovered ? "VAR" : "YOK", nowIso(), employeeId, auth.company),
+      c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,sgk_follow,updated_at)
+        VALUES (?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET sgk_follow=excluded.sgk_follow,updated_at=excluded.updated_at`)
+        .bind(employeeId, auth.company, nextCovered ? 1 : 0, nowIso()),
+    );
+  }
+
+  for (const [key, value] of Object.entries(changes)) {
+    if (key === "personnelStatus" || key === "sgkStatus" || key === "sgkDays") continue;
     const employeeColumn = employeeFields[key];
     const cardColumn = cardFields[key];
     if (!employeeColumn && !cardColumn) continue;
