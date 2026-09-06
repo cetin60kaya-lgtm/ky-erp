@@ -41,7 +41,9 @@ test("mail core is fail-closed for tenant, membership and approvals", () => {
   assert.match(source, /MAIL_REQUESTER_INITIAL_MEMBER/);
   assert.match(source, /COMPANY_OWNER_STEP_PENDING/);
   assert.match(source, /m\.user_id=\?/);
-  assert.match(source, /COMPANY_OWNER_AND_APP_OWNER/);
+  assert.doesNotMatch(source, /COMPANY_OWNER_AND_APP_OWNER/);
+  assert.match(source, /normalizeCompanyOwnerOnlyApprovals/);
+  assert.match(source, /approval_policy='COMPANY_OWNER'/);
   assert.match(source, /COMPANY_OWNER_APPROVAL_REQUIRED/);
   assert.match(source, /aiMaySendAutomatically:false/);
   assert.doesNotMatch(source, /mainCompanySlug\s*\|\|\s*["']mecit-hakan["']/);
