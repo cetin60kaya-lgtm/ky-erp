@@ -30,7 +30,10 @@ test("DENETIM API is route-locked to strict SGK-card PDKS reads including person
   assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
   assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
   assert.match(guard, /attendance\|photo\|photo-meta/);
-  assert.match(guard, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)='VAR'/);
+  assert.match(guard, /ik_person_monthly_compliance/);
+  assert.match(guard, /mc\.sgk_covered=1/);
+  assert.match(guard, /auditPeriod\(c/);
+  assert.match(guard, /attendance\(\?:-v2\)\?/);
   assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
   assert.match(guard, /if \(!safeStatic\.has\(path\) && !personReadMatch\)/);
   assert.match(media, /PDKS_AUDIT_READ_ONLY/);
@@ -40,16 +43,17 @@ test("DENETIM API is route-locked to strict SGK-card PDKS reads including person
   assert.match(personnel, /salary:/);
 });
 
-test("DENETIM IK is SGK-only while PDKS remains SGK+card", () => {
+test("DENETIM IK stays finance-free while PDKS uses monthly SGK + card scope", () => {
   const readonlyApi = api("ik-audit-readonly.ts");
   const ikScreen = frontend("pages/modules/ik/IkAuditPersonnelPage.jsx");
   assert.match(readonlyApi, /const IK_PERSON_SQL/);
-  assert.match(readonlyApi, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\)\s*=\s*'VAR'/);
-  assert.match(readonlyApi, /const PDKS_PERSON_SQL = `\$\{IK_PERSON_SQL\}[\s\S]*TRIM\(COALESCE\(s\.card_no,''\)\)\s*<>\s*''/);
-  assert.match(readonlyApi, /await auditIkPeople\(c, auth\.company\)/);
-  assert.match(readonlyApi, /const peopleRows = await auditPdksPeople\(c, company\)/);
+  assert.match(readonlyApi, /async function auditPdksPeople\(c: Context<AppEnv>, company: string, year: number, month: number\)/);
+  assert.match(readonlyApi, /ik_person_monthly_compliance/);
+  assert.match(readonlyApi, /mc\.sgk_covered=1/);
+  assert.match(readonlyApi, /const peopleRows = await auditPdksPeople\(c, company, year, month\)/);
   assert.match(ikScreen, /Kart numarası İK görünümü için şart değildir/);
-  assert.match(ikScreen, /result\.filter\(\(person\) => normalized\(person\?\.sgkStatus\) === "VAR"\)/);
+  assert.doesNotMatch(ikScreen, /personnelStatus|Emekli/);
+  assert.doesNotMatch(ikScreen, /bankAmount|cashAmount|Banka|Elden/);
 });
 
 test("DENETIM system account bootstrap is active, unknown-password, identity-locked and IK-only", () => {
@@ -71,4 +75,26 @@ test("DENETIM system account bootstrap is active, unknown-password, identity-loc
   assert.match(source, /CREATE TRIGGER trg_denetime_security_role_guard/);
   assert.match(source, /AFTER UPDATE OF role_override ON auth_user_security/);
   assert.match(source, /role_override=NULL/);
+});
+
+
+test("retired status is internal and monthly SGK controls PDKS audit scope", () => {
+  const personnel = api("ik-personnel-control.ts");
+  const guard = api("ik-pdks-guard.ts");
+  const pdks = frontend("pages/modules/PdksPageV2.jsx");
+  const migrationSource = migration("0045_hr_retired_monthly_sgk_compliance.sql");
+
+  assert.match(migrationSource, /personnel_status TEXT NOT NULL DEFAULT 'NORMAL'/);
+  assert.match(migrationSource, /CHECK \(personnel_status IN \('NORMAL','RETIRED'\)\)/);
+  assert.match(migrationSource, /PRIMARY KEY\(main_company_id, employee_id, period\)/);
+  assert.match(migrationSource, /sgk_days INTEGER/);
+
+  assert.match(personnel, /personnelStatus: text\(row\.personnel_status\) \|\| "NORMAL"/);
+  assert.match(personnel, /sgkPdksMatch/);
+  assert.match(personnel, /if \(auth\.audit && !\(await auditVisibleForPeriod/);
+  assert.match(guard, /personnelStatus, sgkDays, sgkPeriod, pdksCardDays, sgkPdksMatch/);
+
+  assert.match(pdks, /row\.personnelStatus === "RETIRED" \? "Emekli" : "Normal"/);
+  assert.match(pdks, /\.\.\.\(!audit \? \[/);
+  assert.match(pdks, /getPdksPeople\(\{ mainCompanyId: companyId, year, month \}\)/);
 });
