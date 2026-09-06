@@ -68,3 +68,12 @@ test("the detail pane also marks the initially opened unread mail as read", () =
   assert.match(page, /runMailMessageAction\(messageId, "MARK_READ", \{\}\)\.catch/);
   assert.match(page, /unreadCount: Math\.max\(0/);
 });
+
+
+test("partial Gmail sync is shown as a usable warning and refreshes successful records", () => {
+  assert.match(page, /result\?\.partial/);
+  assert.match(page, /Mail senkronizasyonu tamamlandı/);
+  assert.match(page, /MAIL_SYNC_PARTIAL/);
+  assert.match(page, /kalanlar sonraki senkronizasyonda tekrar denenecek/);
+  assert.match(page, /syncMailFolder/);
+});
