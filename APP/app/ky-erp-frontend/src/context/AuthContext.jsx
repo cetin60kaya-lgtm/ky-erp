@@ -11,7 +11,6 @@ const AUTH_REFRESH_LOCK_KEY = "kyerp_auth_refresh_lock_v1";
 const AUTH_TAB_KEY = "kyerp_auth_tab_v1";
 const AUTH_VERSION = "canonical-v3";
 const NORMAL_REFRESH_BEFORE_MS = 30 * 60 * 1000;
-const OWNER_ROLLING_REFRESH_BEFORE_MS = 12 * 60 * 60 * 1000;
 const REFRESH_RETRY_MS = 60 * 1000;
 const REFRESH_LOCK_MS = 30 * 1000;
 
@@ -115,26 +114,19 @@ function isSuperAdmin(role) {
   return ["SUPER_ADMIN", "ADMIN"].includes(String(role || "").toUpperCase());
 }
 
+function isOwnerAuthPair(token, user) {
+  const tokenRole = parseJwtPayload(token)?.role;
+  return isSuperAdmin(tokenRole) || isSuperAdmin(user?.role);
+}
+
 function sessionRefreshDelay(token, role) {
+  if (isSuperAdmin(role)) return 0;
   const payload = parseJwtPayload(token);
   const expiresAtMs = Number(payload?.exp || 0) * 1000;
-  const issuedAtMs = Number(payload?.iat || 0) * 1000;
   const remaining = expiresAtMs - Date.now();
   if (!(remaining > 5000)) return 0;
 
-  const tokenLifetime = Math.max(0, expiresAtMs - issuedAtMs);
-  const owner = isSuperAdmin(role);
-  let target;
-  if (owner && tokenLifetime < 20 * 60 * 60 * 1000) {
-    // İlk owner oturumu mevcut MFA politikasından 10 saat gelir. Bir dakika içinde
-    // rolling 24 saatlik aktif-cihaz oturumuna yükseltilir.
-    target = 60 * 1000;
-  } else if (owner) {
-    target = remaining - OWNER_ROLLING_REFRESH_BEFORE_MS;
-  } else {
-    target = remaining - NORMAL_REFRESH_BEFORE_MS;
-  }
-
+  const target = remaining - NORMAL_REFRESH_BEFORE_MS;
   const latestSafe = Math.max(5000, remaining - 5000);
   return Math.min(Math.max(5000, target), latestSafe);
 }
@@ -241,14 +233,25 @@ async function directAuthRequest(path, options = {}) {
   throw wrapped;
 }
 
-function removeStoredAuth() {
+function clearPersistentAuth() {
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
     window.localStorage.removeItem(AUTH_USER_KEY);
+    window.localStorage.removeItem(AUTH_REFRESH_LOCK_KEY);
+  } catch { /* noop */ }
+}
+
+function clearSessionAuth() {
+  try {
     window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
     window.sessionStorage.removeItem(AUTH_USER_KEY);
-    window.sessionStorage.removeItem(AUTH_REFRESH_PENDING_KEY);
   } catch { /* noop */ }
+}
+
+function removeStoredAuth() {
+  clearPersistentAuth();
+  clearSessionAuth();
+  try { window.sessionStorage.removeItem(AUTH_REFRESH_PENDING_KEY); } catch { /* noop */ }
 }
 
 function storePendingRefresh(value) {
@@ -264,30 +267,57 @@ function clearPendingRefresh() {
   try { window.sessionStorage.removeItem(AUTH_REFRESH_PENDING_KEY); } catch { /* noop */ }
 }
 
+function parseStoredUser(raw) {
+  try {
+    const value = raw ? JSON.parse(raw) : null;
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function authSnapshot(token, user) {
+  return { token, user, permissions: normalizePermissionRows(user?.permissions) };
+}
+
 function readStoredAuth() {
   try {
     cleanLegacyAuthStorage();
-    const persistentToken = window.localStorage.getItem(AUTH_TOKEN_KEY) || "";
-    const sessionToken = window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
-    const token = persistentToken || sessionToken;
-    const persistentUserRaw = window.localStorage.getItem(AUTH_USER_KEY);
-    const sessionUserRaw = window.sessionStorage.getItem(AUTH_USER_KEY);
-    const userRaw = persistentUserRaw || sessionUserRaw;
-    const user = userRaw ? JSON.parse(userRaw) : null;
-    if (!token || !user || !isTokenUsable(token)) {
-      // Hazırlanmış iki-aşamalı refresh varsa eski token süresi dolmuş olsa bile
-      // restoreSession commit'i tamamlamaya çalışabilsin diye pending kayıt korunur.
-      try {
-        window.localStorage.removeItem(AUTH_TOKEN_KEY);
-        window.localStorage.removeItem(AUTH_USER_KEY);
-        window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
-        window.sessionStorage.removeItem(AUTH_USER_KEY);
-      } catch { /* noop */ }
+
+    const sessionToken = String(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "");
+    const sessionUser = parseStoredUser(window.sessionStorage.getItem(AUTH_USER_KEY));
+    if (sessionToken && sessionUser && isTokenUsable(sessionToken)) {
+      if (isOwnerAuthPair(sessionToken, sessionUser)) {
+        // Uygulama sahibi yalnız aktif tarayıcı oturumunda tutulur.
+        // Eski localStorage kalıntıları bilinçli olarak temizlenir.
+        clearPersistentAuth();
+        clearPendingRefresh();
+        return authSnapshot(sessionToken, sessionUser);
+      }
+      window.localStorage.setItem(AUTH_TOKEN_KEY, sessionToken);
+      window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(sessionUser));
+      return authSnapshot(sessionToken, sessionUser);
+    }
+    clearSessionAuth();
+
+    const persistentToken = String(window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
+    const persistentUser = parseStoredUser(window.localStorage.getItem(AUTH_USER_KEY));
+    if (persistentToken && persistentUser && isOwnerAuthPair(persistentToken, persistentUser)) {
+      // Önceki sürümlerin kalıcı owner tokenı yeni güvenlik politikasında geçerli
+      // bir browser-restore kaynağı değildir. Sunucu sessionı burada silinmez;
+      // yalnız istemci kalıcı oturumu bırakır ve yeniden giriş ister.
+      clearPersistentAuth();
+      clearPendingRefresh();
       return { token: "", user: null, permissions: [] };
     }
-    if (!persistentToken) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-    if (!persistentUserRaw) window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-    return { token, user, permissions: normalizePermissionRows(user?.permissions) };
+    if (persistentToken && persistentUser && isTokenUsable(persistentToken)) {
+      window.sessionStorage.setItem(AUTH_TOKEN_KEY, persistentToken);
+      window.sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(persistentUser));
+      return authSnapshot(persistentToken, persistentUser);
+    }
+
+    clearPersistentAuth();
+    return { token: "", user: null, permissions: [] };
   } catch {
     removeStoredAuth();
     return { token: "", user: null, permissions: [] };
@@ -335,9 +365,17 @@ export function AuthProvider({ children }) {
     tokenRef.current = payload.token;
     setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
     const storedUser = JSON.stringify({ ...payload.user, permissions: payload.permissions });
+    const ownerSession = isOwnerAuthPair(payload.token, payload.user);
     try {
-      window.localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
-      window.localStorage.setItem(AUTH_USER_KEY, storedUser);
+      if (ownerSession) {
+        // Owner kimliği browser restart sonrasında otomatik geri yüklenmez.
+        // F5 / aynı aktif sekme sessionStorage sayesinde çalışmaya devam eder.
+        clearPersistentAuth();
+        clearPendingRefresh();
+      } else {
+        window.localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
+        window.localStorage.setItem(AUTH_USER_KEY, storedUser);
+      }
       window.sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token);
       window.sessionStorage.setItem(AUTH_USER_KEY, storedUser);
     } catch { /* noop */ }
@@ -398,6 +436,10 @@ export function AuthProvider({ children }) {
   }, [clearAuth, finalizeResponse]);
 
   const refreshSession = useCallback(() => runAuthOnce("SESSION_REFRESH", async () => {
+    if (isSuperAdmin(authSnapshotRef.current.user?.role)) {
+      clearPendingRefresh();
+      return null;
+    }
     const pending = readPendingRefresh();
     if (pending?.token && isTokenUsable(pending.token)) {
       const committed = await commitPreparedRefresh(pending);
@@ -452,7 +494,11 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     async function restoreSession() {
       const snapshot = authSnapshotRef.current;
-      const pending = readPendingRefresh();
+      let pending = readPendingRefresh();
+      if (isSuperAdmin(snapshot.user?.role) || isSuperAdmin(pending?.user?.role)) {
+        clearPendingRefresh();
+        pending = null;
+      }
 
       if (!token) {
         if (pending?.token && isTokenUsable(pending.token)) {
@@ -498,6 +544,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!token || !user || !isTokenUsable(token)) return undefined;
+    if (isSuperAdmin(user.role)) {
+      clearPendingRefresh();
+      return undefined;
+    }
     let cancelled = false;
     let timer = null;
     const scheduledToken = token;
@@ -533,6 +583,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const syncFromStorage = (event) => {
       if (![AUTH_TOKEN_KEY, AUTH_USER_KEY].includes(String(event.key || ""))) return;
+      if (isSuperAdmin(authSnapshotRef.current.user?.role)) return;
       const stored = readStoredAuth();
       tokenRef.current = stored.token;
       setAuthState(stored);

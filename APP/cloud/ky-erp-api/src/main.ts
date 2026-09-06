@@ -65,7 +65,7 @@ type AnyRow = Record<string, any>;
 const AUTH_VERSION = "canonical-v3";
 const PASSWORD_SESSION_SECONDS = 0;
 const MFA_SESSION_SECONDS = 36_000;
-const OWNER_ROLLING_SESSION_SECONDS = 86_400;
+const OWNER_ROLLING_SESSION_SECONDS = 0;
 
 const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
@@ -366,6 +366,8 @@ shell.get("/api/auth/status", (c) => c.json({
     passwordOnlySeconds: PASSWORD_SESSION_SECONDS,
     mfaSeconds: MFA_SESSION_SECONDS,
     ownerRollingSeconds: OWNER_ROLLING_SESSION_SECONDS,
+    ownerPersistentBrowserSession: false,
+    ownerAutomaticRefresh: false,
   },
 }));
 

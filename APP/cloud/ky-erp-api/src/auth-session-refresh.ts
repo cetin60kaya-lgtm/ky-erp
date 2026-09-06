@@ -6,7 +6,7 @@ type AnyRow = Record<string, any>;
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
 const REFRESH_SCOPE = "AUTH_SESSION_REFRESH";
 const REFRESH_PREPARE_SECONDS = 120;
-export const OWNER_ROLLING_SECONDS = 86_400;
+export const OWNER_REFRESH_SECONDS = 0;
 export const PASSWORD_SESSION_SECONDS = 28_800;
 export const MFA_SESSION_SECONDS = 36_000;
 
@@ -26,7 +26,7 @@ function isOwner(role: unknown) {
   return ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
 }
 export function sessionRefreshSeconds(role: unknown, policy: unknown) {
-  if (isOwner(role)) return OWNER_ROLLING_SECONDS;
+  if (isOwner(role)) return OWNER_REFRESH_SECONDS;
   return upper(policy) === "PASSWORD_ONLY" ? PASSWORD_SESSION_SECONDS : MFA_SESSION_SECONDS;
 }
 function bearerToken(c: any) {
@@ -133,6 +133,15 @@ export function registerAuthSessionRefreshRoutes(app: any) {
     if (!current?.session?.id) {
       return c.json({ ok: false, error: { code: "SESSION_INVALID", message: "Oturum yenilenemedi. Mevcut oturum doğrulanamadı." } }, 401);
     }
+    if (isOwner(current.role)) {
+      return c.json({
+        ok: false,
+        error: {
+          code: "OWNER_SESSION_REFRESH_DISABLED",
+          message: "Uygulama sahibi oturumu otomatik yenilenmez. Yeni tarayıcı oturumunda şifre ve MFA ile yeniden giriş yapın.",
+        },
+      }, 403);
+    }
 
     const oldToken = bearerToken(c);
     if (!oldToken) {
@@ -205,6 +214,15 @@ export function registerAuthSessionRefreshRoutes(app: any) {
     const prepared = await preparedRefresh(c, refreshId);
     if (!prepared || Date.parse(text(prepared.prepareExpiresAt)) <= Date.now()) {
       return c.json({ ok: false, error: { code: "REFRESH_EXPIRED", message: "Oturum yenileme isteğinin süresi doldu." } }, 410);
+    }
+    if (isOwner(prepared.role)) {
+      return c.json({
+        ok: false,
+        error: {
+          code: "OWNER_SESSION_REFRESH_DISABLED",
+          message: "Uygulama sahibi için hazırlanmış otomatik oturum yenilemesi kullanılamaz. Yeniden giriş yapın.",
+        },
+      }, 403);
     }
     if (!safeEqual(text(prepared.refreshSecretHash), await sha256(refreshSecret))) {
       return c.json({ ok: false, error: { code: "REFRESH_SECRET_INVALID", message: "Oturum yenileme onayı geçersiz." } }, 401);
