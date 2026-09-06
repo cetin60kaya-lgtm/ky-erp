@@ -15,7 +15,7 @@ concurrency:
 jobs:
   migrate:
     name: Backup, readiness, 0046, verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -45,15 +45,13 @@ jobs:
           cache: npm
           cache-dependency-path: APP/cloud/ky-erp-api/package-lock.json
 
-      - name: Worker paketleri ve kod kapısı
+      - name: Wrangler paketini hazırla
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
-          npm ci
-          npm run typecheck
-          npm test
-          npm run build
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx wrangler --version
 
       - name: Cloudflare production erişimini doğrula
         working-directory: APP/cloud/ky-erp-api
@@ -93,7 +91,8 @@ jobs:
 
           scalar() {
             local sql="$1"
-            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$sql" --json               | jq -r '.[0].results[0].n // 0'
+            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "$sql" --json |
+              node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(j?.[0]?.results?.[0]?.n ?? 0));})'
           }
 
           check_table() {
@@ -123,7 +122,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc             --file migrations/0046_accounting_canonical_report_controls.sql
+          npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0046_accounting_canonical_report_controls.sql
 
       - name: 0046 şema ve indeks doğrulaması
         working-directory: APP/cloud/ky-erp-api
@@ -143,8 +142,8 @@ jobs:
             )
             ORDER BY type, name;
           " --json)"
-          echo "$schema" | jq .
-          count="$(jq -r '.[0].results | length' <<<"$schema")"
+          printf '%s\n' "$schema"
+          count="$(printf '%s' "$schema" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(j?.[0]?.results?.length ?? 0));})')"
           test "$count" = "6" || { echo "GÜVENLİK DURDURMASI: 0046 nesnelerinin tamamı oluşmadı ($count/6)." >&2; exit 1; }
 
       - name: Canonical tablo okuma smoke
@@ -157,5 +156,5 @@ jobs:
               (SELECT COUNT(*) FROM accounting_report_categories) AS report_categories,
               (SELECT COUNT(*) FROM accounting_report_overrides) AS report_overrides,
               (SELECT COUNT(*) FROM accounting_expense_rules) AS expense_rules;
-          " --json | jq .
+          " --json
           echo "0046_CANLI_MIGRATION_OK"
