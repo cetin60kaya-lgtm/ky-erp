@@ -167,7 +167,7 @@ async function collectMailApprovals(c: any, current: AnyRow, tenant: string) {
     id: `mail-approval:${text(row.id)}`,
     category: "APPROVAL",
     severity: "warning",
-    title: "Mail hesabı firma sahibi onayı bekliyor",
+    title: "Mail hesabı firma sahibi / Süper Yönetici onayı bekliyor",
     detail: [
       ownerRole(current?.role) ? text(row.main_company_slug) : "",
       text(row.display_name) || text(row.email_address),
