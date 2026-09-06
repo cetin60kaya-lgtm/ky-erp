@@ -302,3 +302,12 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Resmî e-Fatura/e-İrsaliye gönderimi otomatikleştirilmez; kullanıcı onayı zorunluluğu devam eder.
 - `0046_accounting_canonical_report_controls.sql` bu canlı yayında production D1'e uygulanmaz. İlgili kod tablo yoksa mevcut `json_store` fallback'ini kullanır; veri kaybı riski alınmaz.
 - 0046 ileride ayrı bakım penceresinde remote D1 full backup + readiness + hedefli additive migration ile ele alınacaktır.
+
+
+## 06.09.2026 — Hızlı Muhasebe FİBE sekmesi erişim hatası
+
+- Current production kaynak incelemesinde `QuickAccountingBar.jsx` içinde FİBE çalışma panelinin tamamen mevcut olduğu, ancak üst sekme navigasyonunda `mode="FIBE"` açan butonun unutulduğu görüldü.
+- Firma kartındaki `CompanyFibeSection` erişilebilir ve FİBE normal cari bakiyesinden ayrı çalışıyor; veri modeli veya D1 şeması değiştirilmiyor.
+- Düzeltme yalnız Hızlı Muhasebe navigasyonuna FİBE sekmesini açar ve regression kontratı ekler.
+- Çalışma branch'i: `codex/muhasebe-fibe-quick-tab-20260906`.
+- Production merge/deploy yapılmadı. Frontend test/lint/build ve Worker regression testi tamamlanmadan canlıya alınmaz.
