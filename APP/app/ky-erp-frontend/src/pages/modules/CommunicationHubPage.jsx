@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createMailDraft,
   getMailOverview,
   downloadMailAttachment,
+  getMailAttachmentBlob,
   getMailProviders,
   listCommunicationFiles,
   listMailAccounts,
@@ -48,6 +49,33 @@ function dateText(value) {
 
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function attachmentName(row) {
+  return String(row?.file_name || row?.fileName || "Ek");
+}
+
+function attachmentPreviewKind(row) {
+  const name = attachmentName(row).toLowerCase();
+  const mime = String(row?.mime_type || row?.mimeType || "").toLowerCase();
+  const ext = name.includes(".") ? name.split(".").pop() : "";
+  if ((mime.startsWith("image/") && mime !== "image/svg+xml") || ["png","jpg","jpeg","gif","webp","bmp","ico","avif"].includes(ext)) return "image";
+  if (mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (mime.startsWith("text/") || ["txt","csv","log","md","json","xml"].includes(ext)) return "text";
+  return "unsupported";
+}
+
+function initialMailPaneWidths() {
+  const fallback = { mailbox: 250, list: 560 };
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("kyerp.mailPaneWidths") || "{}");
+    return {
+      mailbox: Math.min(420, Math.max(190, Number(saved.mailbox) || fallback.mailbox)),
+      list: Math.min(820, Math.max(300, Number(saved.list) || fallback.list)),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function flattenFolders(rows) {
@@ -133,6 +161,11 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [draftForm, setDraftForm] = useState({ to: "", cc: "", bcc: "", subject: "", bodyText: "", replyToMessageId: "" });
   const [composeOpen, setComposeOpen] = useState(false);
   const [messageSearch, setMessageSearch] = useState("");
+  const [paneWidths, setPaneWidths] = useState(initialMailPaneWidths);
+  const [attachmentPreview, setAttachmentPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const mailLayoutRef = useRef(null);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
@@ -179,6 +212,34 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   }, []);
 
   useEffect(() => { loadBase(); }, [loadBase]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("kyerp.mailPaneWidths", JSON.stringify(paneWidths)); } catch {}
+  }, [paneWidths]);
+
+  useEffect(() => {
+    const close = () => setContextMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("resize", close);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (attachmentPreview?.url) URL.revokeObjectURL(attachmentPreview.url);
+  }, [attachmentPreview?.url]);
+
+  useEffect(() => {
+    setAttachmentPreview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    setContextMenu(null);
+  }, [selectedMessage?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,6 +329,121 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     loadMailbox();
     return () => { cancelled = true; };
   }, [activeTab, isMail, selectedAccountId, selectedFolderId, mailboxRefresh]);
+
+  function beginPaneResize(pane, event) {
+    if (window.innerWidth <= 1100 || !mailLayoutRef.current) return;
+    event.preventDefault();
+    const rect = mailLayoutRef.current.getBoundingClientRect();
+    const startX = event.clientX;
+    const start = { ...paneWidths };
+    document.body.classList.add("comm-resizing");
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      if (pane === "mailbox") {
+        const maxMailbox = Math.max(240, rect.width - start.list - 430);
+        setPaneWidths((current) => ({ ...current, mailbox: Math.min(Math.min(420, maxMailbox), Math.max(190, start.mailbox + dx)) }));
+      } else {
+        const maxList = Math.max(360, rect.width - start.mailbox - 430);
+        setPaneWidths((current) => ({ ...current, list: Math.min(Math.min(820, maxList), Math.max(300, start.list + dx)) }));
+      }
+    };
+    const stop = () => {
+      document.body.classList.remove("comm-resizing");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }
+
+  async function openAttachmentPreview(attachment) {
+    const kind = attachmentPreviewKind(attachment);
+    const name = attachmentName(attachment);
+    if (attachmentPreview?.url) URL.revokeObjectURL(attachmentPreview.url);
+    if (kind === "unsupported") {
+      setAttachmentPreview({ attachment, kind, name, url: "", text: "" });
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const blob = await getMailAttachmentBlob(selectedMessage.id, attachment.id);
+      if (kind === "text") {
+        setAttachmentPreview({ attachment, kind, name, url: "", text: await blob.text() });
+      } else {
+        setAttachmentPreview({ attachment, kind, name, url: URL.createObjectURL(blob), text: "" });
+      }
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Ek önizlemesi açılamadı."}`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closeAttachmentPreview() {
+    setAttachmentPreview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  }
+
+  function openMessageContextMenu(event, row) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedMessage(row);
+    const width = 230;
+    const height = 310;
+    setContextMenu({
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+      row,
+    });
+  }
+
+  async function runContextAction(action) {
+    const row = contextMenu?.row;
+    setContextMenu(null);
+    if (!row) return;
+    setSelectedMessage(row);
+    if (action === "REPLY") {
+      const sender = row.sender_email || row.senderEmail || "";
+      const subject = String(row.subject || "").trim();
+      setDraftForm({ to: sender, cc: "", bcc: "", subject: /^re:/i.test(subject) ? subject : `Re: ${subject || "(Konu yok)"}`, bodyText: "", replyToMessageId: row.id || "" });
+      setComposeOpen(true);
+      return;
+    }
+    if (action === "PIN") {
+      const next = Number(row.is_pinned ?? row.isPinned ?? 0) !== 1;
+      setLoading(true);
+      try {
+        await pinMailMessage(row.id, next);
+        setMailboxRefresh((value) => value + 1);
+        setNotice(next ? "Mail sabitlendi." : "Mail sabitlemeden çıkarıldı.");
+      } catch (error) {
+        setNotice(`Hata: ${error?.message || "Sabitleme değiştirilemedi."}`);
+      } finally { setLoading(false); }
+      return;
+    }
+    const actionMap = {
+      READ_TOGGLE: Number(row.is_read ?? row.isRead ?? 1) === 1 ? "MARK_UNREAD" : "MARK_READ",
+      FLAG_TOGGLE: Number(row.is_flagged ?? row.isFlagged ?? 0) === 1 ? "UNFLAG" : "FLAG",
+      ARCHIVE: "ARCHIVE",
+      DELETE: "DELETE",
+    };
+    const apiAction = actionMap[action];
+    if (!apiAction) return;
+    setLoading(true);
+    try {
+      await runMailMessageAction(row.id, apiAction, {});
+      setNotice(apiAction === "ARCHIVE" ? "Mail arşive taşındı." : apiAction === "DELETE" ? "Mail silinmiş öğelere taşındı." : "Mail durumu güncellendi.");
+      setSelectedMessage(null);
+      setMailboxRefresh((value) => value + 1);
+      await loadBase();
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Mail işlemi tamamlanamadı."}`);
+    } finally { setLoading(false); }
+  }
 
   async function submitAccountRequest(event) {
     event.preventDefault();
@@ -592,7 +768,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       ) : null}
 
       {isMail ? (
-        <section className="comm-mail-layout">
+        <section ref={mailLayoutRef} className="comm-mail-layout comm-mail-layout-resizable" style={{ "--comm-mailbox-width": `${paneWidths.mailbox}px`, "--comm-list-width": `${paneWidths.list}px` }}>
           <aside className="comm-mailboxes">
             <div className="comm-pane-title"><b>Posta Kutuları</b><small>{accounts.length} hesap</small></div>
             {accounts.length ? accounts.map((row) => (
@@ -621,19 +797,21 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
               )) : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
             </div> : null}
           </aside>
+          <div className="comm-pane-resizer" role="separator" aria-orientation="vertical" aria-label="Posta kutuları genişliğini ayarla" onPointerDown={(event) => beginPaneResize("mailbox", event)} />
 
           <main className="comm-message-list">
             <div className="comm-pane-title comm-list-toolbar"><b>{mailViewTitle}</b><div><input className="comm-message-search" type="search" value={messageSearch} onChange={(e) => setMessageSearch(e.target.value)} placeholder="Mail ara"/><small>{messageRows.length} kayıt</small></div></div>
             {activeTab === "mail-sablonlar" && !selectedFolderId ? (
               <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
-              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => setSelectedMessage(row)}>
+              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => setSelectedMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
                 <div><b>{Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "📌 " : ""}{row.sender_name || row.sender_email || row.subject || "Taslak"}</b><span>{dateText(row.received_at || row.sent_at || row.updated_at)}</span></div>
                 <strong>{row.subject || "(Konu yok)"}{Number(row.is_flagged ?? row.isFlagged ?? 0) === 1 ? "  ⚑" : ""}</strong>
                 <p>{row.body_text || row.bodyText || (row.body_html || row.bodyHtml ? "HTML mail içeriği" : "İçerik önizlemesi yok.")}{Number(row.has_attachments ?? row.hasAttachments ?? 0) === 1 ? " · 📎 Ek var" : ""}</p>
               </button>
             )) : <div className="comm-empty large">{selectedAccount ? "Bu görünümde mail kaydı yok." : "Önce bir posta kutusu seçin veya hesap talebi oluşturun."}</div>}
           </main>
+          <div className="comm-pane-resizer" role="separator" aria-orientation="vertical" aria-label="Mail listesi genişliğini ayarla" onPointerDown={(event) => beginPaneResize("list", event)} />
 
           <aside className="comm-preview">
             <div className="comm-pane-title"><b>Mail Detayı</b><small>ERP Bağlamı</small></div>
@@ -655,7 +833,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button>
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
-              {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya</small></div>{attachments.map((attachment) => <button type="button" key={attachment.id} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachment.file_name || attachment.fileName || "ek")}><span>📎 {attachment.file_name || attachment.fileName || "Ek"}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : "İndir"}</em></button>)}</div> : null}
+              {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya · tıklayınca önizleme</small></div>{attachments.map((attachment) => <div className="comm-attachment-row" key={attachment.id}><button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : attachmentPreviewKind(attachment) === "unsupported" ? "Dosya" : "Önizle"}</em></button><button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button></div>)}</div> : null}
               {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
@@ -683,6 +861,28 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           </footer>
         </section>
       )}
+
+      {contextMenu ? <div className="comm-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} role="menu">
+        {activeTab !== "mail-gonderilen" ? <button type="button" onClick={() => runContextAction("REPLY")}>↩ Yanıtla</button> : null}
+        <button type="button" onClick={() => runContextAction("PIN")}>{Number(contextMenu.row?.is_pinned ?? contextMenu.row?.isPinned ?? 0) === 1 ? "📌 Sabitten Çıkar" : "📌 Sabitle"}</button>
+        <button type="button" onClick={() => runContextAction("READ_TOGGLE")}>{Number(contextMenu.row?.is_read ?? contextMenu.row?.isRead ?? 1) === 1 ? "○ Okunmadı Yap" : "● Okundu Yap"}</button>
+        <button type="button" onClick={() => runContextAction("FLAG_TOGGLE")}>{Number(contextMenu.row?.is_flagged ?? contextMenu.row?.isFlagged ?? 0) === 1 ? "⚑ Bayrağı Kaldır" : "⚑ Bayrak Ekle"}</button>
+        <div className="comm-context-separator" />
+        <button type="button" onClick={() => runContextAction("ARCHIVE")}>▣ Arşivle</button>
+        <button type="button" className="danger" onClick={() => runContextAction("DELETE")}>🗑 Sil</button>
+      </div> : null}
+
+      {attachmentPreview ? <div className="comm-attachment-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAttachmentPreview(); }}>
+        <section className="comm-attachment-preview" role="dialog" aria-modal="true" aria-label={`${attachmentPreview.name} önizleme`}>
+          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
+          <div className="comm-attachment-preview-body">
+            {attachmentPreview.kind === "image" && attachmentPreview.url ? <img src={attachmentPreview.url} alt={attachmentPreview.name}/> : null}
+            {attachmentPreview.kind === "pdf" && attachmentPreview.url ? <iframe src={attachmentPreview.url} title={attachmentPreview.name}/> : null}
+            {attachmentPreview.kind === "text" ? <pre>{attachmentPreview.text}</pre> : null}
+            {attachmentPreview.kind === "unsupported" ? <div className="comm-empty large"><b>Bu dosya türü tarayıcı içinde güvenli önizlenemiyor.</b><span>Dosyayı indirmek için sağ üstteki İndir düğmesini kullanın.</span></div> : null}
+          </div>
+        </section>
+      </div> : null}
     </div>
   );
 }
