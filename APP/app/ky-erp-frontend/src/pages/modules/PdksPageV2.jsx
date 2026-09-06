@@ -4,17 +4,14 @@ import {
   assignPdksService,
   assignPdksWorkGroup,
   closePdksPeriod,
-  getPdksAdvancedMonth,
   getPdksAttendance,
   getPdksAuditLogs,
   getPdksHolidays,
   getPdksLeaveCenter,
   getPdksMasters,
-  getPdksPayroll,
   getPdksPeople,
   getPdksProfile,
   savePdksDayOverride,
-  savePdksFinanceMovement,
   savePdksHoliday,
   savePdksLeave,
   savePdksService,
@@ -90,8 +87,6 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   const [masters, setMasters] = useState({ groups: [], services: [], groupAssignments: [], serviceAssignments: [] });
   const [selectedId, setSelectedId] = useState("");
   const [attendance, setAttendance] = useState([]);
-  const [monthData, setMonthData] = useState({});
-  const [payroll, setPayroll] = useState({});
   const [holidays, setHolidays] = useState([]);
   const [leaveCenter, setLeaveCenter] = useState({ plans: [] });
   const [logs, setLogs] = useState([]);
@@ -101,7 +96,6 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   const [error, setError] = useState("");
   const [eventForm, setEventForm] = useState({ date: isoToday(), time: "08:30", direction: "AUTO" });
   const [override, setOverride] = useState({ date: isoToday(), status: "CALISTI", entry: "08:30", exit: "19:00", note: "PDKS düzeltme" });
-  const [advance, setAdvance] = useState({ date: isoToday(), amount: "", note: "PDKS avans" });
   const [leave, setLeave] = useState({ startDate: isoToday(), endDate: isoToday(), type: "YILLIK_IZIN", note: "PDKS izin" });
   const [holiday, setHoliday] = useState({ date: "", name: "", halfDay: false });
   const [groupForm, setGroupForm] = useState({ code: "", name: "", entryTime: "08:30", exitTime: "19:00", lateTolerance: 5, earlyTolerance: 10, active: true });
@@ -141,15 +135,11 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   }, [companyId, isAuditAccount, month, year]);
 
   const loadFullMonth = useCallback(async () => {
-    const [advanced, nextPayroll, nextHolidays, nextLeaves, nextLogs] = await Promise.all([
-      getPdksAdvancedMonth({ mainCompanyId: companyId, year, month }),
-      getPdksPayroll({ mainCompanyId: companyId, year, month }),
+    const [nextHolidays, nextLeaves, nextLogs] = await Promise.all([
       getPdksHolidays({ year, mainCompanyId: companyId }),
       getPdksLeaveCenter({ mainCompanyId: companyId, from: `${year}-01-01`, to: `${year}-12-31` }),
       getPdksAuditLogs({ mainCompanyId: companyId, period: periodKey(year, month), limit: 200 }),
     ]);
-    setMonthData(advanced || {});
-    setPayroll(nextPayroll || {});
     setHolidays(safe(nextHolidays));
     setLeaveCenter(nextLeaves || { plans: [] });
     setLogs(safe(nextLogs));
@@ -164,7 +154,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
   const refresh = useCallback(() => run("KY ERP D1 verisi yenileniyor...", async () => {
     const isAudit = await loadCore();
     if (isAudit) {
-      setMonthData({}); setPayroll({}); setHolidays([]); setLeaveCenter({ plans: [] }); setLogs([]);
+      setHolidays([]); setLeaveCenter({ plans: [] }); setLogs([]);
     } else {
       await loadFullMonth();
     }
@@ -224,15 +214,6 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     });
     await loadSelectedAttendance(selected.id);
     setNotice("Puantaj düzeltmesi D1'e işlendi.");
-  });
-
-  const saveAdvance = () => run("Avans D1'e kaydediliyor...", async () => {
-    if (!canWrite) throw new Error("Denetim hesabı avans kaydedemez.");
-    if (!selected || num(advance.amount) <= 0) throw new Error("Personel ve tutar zorunludur.");
-    await savePdksFinanceMovement({ mainCompanyId: companyId, employeeId: selected.id, date: advance.date, adjustmentType: "Avans", amount: num(advance.amount), paymentMethod: "Elden", payrollEffect: "Bordrodan düş", note: advance.note, status: "APPROVED" });
-    setAdvance((current) => ({ ...current, amount: "" }));
-    await loadFullMonth();
-    setNotice("Avans İK Bordro ile aynı D1 finans hareketine işlendi.");
   });
 
   const saveLeave = () => run("İzin D1'e kaydediliyor...", async () => {
@@ -336,9 +317,6 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
     setNotice(`${year} TEMP her ayın SGK kapsamındaki kartlı personelinin gerçek D1 puantajından üretildi; finans alanı yok.`);
   });
 
-  const adjustments = safe(monthData?.adjustments);
-  const advances = adjustments.filter((row) => text(row.adjustmentType || row.type).toLocaleUpperCase("tr-TR").includes("AVANS"));
-  const payrollLines = safe(payroll?.lines);
   const plans = safe(leaveCenter?.plans);
   const departments = useMemo(() => [...new Set(people.map((person) => text(person.department)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [people]);
   const titles = useMemo(() => [...new Set(people.map((person) => text(person.title)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")), [people]);
@@ -372,7 +350,7 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
       <section className="pdks-panel"><h3>Seçili Personel · {selected?.fullName || "-"}</h3><PersonPicker/><DataTable columns={attendanceColumns} rows={attendance.slice(-14).reverse()} rowKey="date" /></section>
     </>;
 
-    if (activeTab === "personel-bilgileri") return <section className="pdks-panel"><h3>Personel Bilgileri</h3><p>İK Personel Kartı ile aynı D1 kaydı. PDKS ikinci personel kartı oluşturmaz.</p><DataTable columns={personColumns} rows={people}/></section>;
+    if (activeTab === "personel-bilgileri") return <section className="pdks-panel"><h3>Personel · İK Ana Kaynağı</h3><p>Personel ana kartı yalnız İK'da yönetilir. PDKS burada kart/puantaj için gerekli personel referansını salt operasyon görünümü olarak kullanır; ikinci personel kartı oluşturmaz.</p>{!audit && openModule ? <button className="primary-btn" onClick={() => openModule("ik", { tabKey: "personel" })}>İK Personel Kartını Aç</button> : null}<DataTable columns={personColumns} rows={people}/></section>;
 
     if (["giris-cikislar", "puantaj", "calisma-tarihi"].includes(activeTab)) return <>
       <section className="pdks-panel"><h3>{activeTab === "puantaj" ? "Puantaj" : activeTab === "calisma-tarihi" ? "Çalışma Tarihi" : "Giriş / Çıkışlar"}</h3><PersonPicker/></section>
@@ -385,9 +363,14 @@ export default function PdksPageV2({ activeTab = "ana-ekran", activeMainCompany,
 
     if (activeTab === "izinler") return <><section className="pdks-panel"><h3>İzinler</h3><PersonPicker/>{canWrite ? <div className="form-row"><input type="date" value={leave.startDate} onChange={(event)=>setLeave({...leave,startDate:event.target.value})}/><input type="date" value={leave.endDate} onChange={(event)=>setLeave({...leave,endDate:event.target.value})}/><select value={leave.type} onChange={(event)=>setLeave({...leave,type:event.target.value})}><option value="YILLIK_IZIN">Yıllık İzin</option><option value="IZIN">İzin</option></select><input value={leave.note} onChange={(event)=>setLeave({...leave,note:event.target.value})}/><button onClick={saveLeave}>D1'e Kaydet</button></div> : null}</section><section className="pdks-panel"><DataTable rows={plans} columns={[{key:"startDate",label:"Başlangıç",render:(r)=>r.startDate||r.start_date},{key:"endDate",label:"Bitiş",render:(r)=>r.endDate||r.end_date},{key:"fullName",label:"Personel",render:(r)=>r.fullName||r.employeeName||r.employeeId},{key:"recordType",label:"Tür",render:(r)=>r.recordType||r.record_type},{key:"status",label:"Durum"},{key:"note",label:"Not"}]}/></section></>;
 
-    if (activeTab === "avanslar") return <><section className="pdks-panel"><h3>Avanslar</h3>{audit ? <p className="pdks-warning">Denetim hesabında finans ekranı kapalıdır.</p> : <div className="form-row"><PersonPicker/><input type="date" value={advance.date} onChange={(event) => setAdvance({ ...advance, date: event.target.value })}/><input type="number" placeholder="Tutar" value={advance.amount} onChange={(event) => setAdvance({ ...advance, amount: event.target.value })}/><input value={advance.note} onChange={(event) => setAdvance({ ...advance, note: event.target.value })}/><button onClick={saveAdvance}>D1'e Kaydet</button></div>}</section>{!audit ? <section className="pdks-panel"><DataTable rows={advances} columns={[{key:"date",label:"Tarih"},{key:"employeeName",label:"Personel",render:(r)=>r.fullName||r.employeeName||r.employeeId},{key:"amount",label:"Tutar"},{key:"paymentMethod",label:"Ödeme"},{key:"note",label:"Not"}]}/></section> : null}</>;
-
-    if (activeTab === "bordro") return <section className="pdks-panel"><h3>Bordro</h3>{audit ? <p className="pdks-warning">Denetim hesabında maaş, avans, banka ve elden ödeme gösterilmez.</p> : <DataTable rows={payrollLines} columns={[{key:"fullName",label:"Personel",render:(r)=>r.fullName||r.employee?.fullName||r.employeeId},{key:"salary",label:"Maaş",render:(r)=>r.salary||r.system?.salary||0},{key:"overtimeAmount",label:"Mesai",render:(r)=>r.overtimeAmount||r.system?.overtimeAmount||0},{key:"advanceAmount",label:"Avans",render:(r)=>r.advanceAmount||r.system?.advanceAmount||0},{key:"bankAmount",label:"Banka",render:(r)=>r.bankAmount||r.final?.bank||0},{key:"cashAmount",label:"Elden",render:(r)=>r.cashAmount||r.final?.cash||0},{key:"totalAmount",label:"Net",render:(r)=>r.totalAmount||r.final?.total||r.net||0}]}/>}</section>;
+    if (["avanslar", "bordro"].includes(activeTab)) return (
+      <section className="pdks-panel">
+        <h3>İK Finans Bağlantısı</h3>
+        <p>Avans, kesinti, maaş, banka/elden ve bordro işlemleri PDKS'de ikinci kez yönetilmez. Tek doğruluk kaynağı İK'dır.</p>
+        {!audit && openModule ? <button className="primary-btn" onClick={() => openModule("ik", { tabKey: activeTab === "bordro" ? "bordro" : "mesai" })}>İK'da Aç</button> : null}
+        {audit ? <p className="pdks-warning">Denetim görünümünde finans modülü kapalıdır.</p> : null}
+      </section>
+    );
 
     if (activeTab === "bilgi-aktar") return <><section className="pdks-panel"><h3>Bilgi Aktar / Kart Makinesi</h3><p><b>Canlı yol:</b> Kart makinesi → Windows Agent → offline kuyruk → KY ERP D1 → Web + Windows.</p><p><b>Hedef/TR500:</b> Windows Agent mevcut <code>F:\Ekin\bilgi.dat</code> akışını dosyayı silmeden okur. FILE, TCP Server, TCP Client ve SERIAL/COM alternatifleri de devam eder.</p></section>{canWrite ? <section className="pdks-panel"><h3>Web Dosya Önizleme / Onay</h3><input ref={cardFile} type="file" accept=".txt,.csv,.dat,.xlsx,.xls"/><button onClick={previewCardFile}>Önizle</button>{cardPreview ? <><pre className="pdks-preview">{JSON.stringify(cardPreview, null, 2).slice(0,8000)}</pre><button className="primary-btn" onClick={confirmCardFile}>D1'e Onayla</button></> : null}</section> : null}</>;
 

@@ -131,9 +131,9 @@ test("Web PDKS keeps one global module entry and the approved compact horizontal
     assert.match(shell, new RegExp(group));
   for (const item of [
     "Ana Ekran", "Bilgi Aktar", "Giriş / Çıkış", "Puantaj Sonuçları",
-    "Personel Bilgileri", "İzinler", "Çalışma Tarihi", "Avans", "Bordro",
+    "Personel (İK Kaynağı)", "İzinler", "Çalışma Tarihi",
     "Gruplar / Vardiyalar", "Puantaj Kuralları", "Dönemler", "Servisler", "Tatiller",
-    "Saat / Terminal", "Kullanıcı", "Cihaz Bağlantıları", "Senkron",
+    "Saat / Terminal", "Cihaz Bağlantıları", "Senkron",
     "Raporlar", "Yıllık TEMP / Denetim",
   ]) assert.match(shell, new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   for (const masterData of ["Bölümler", "Görevler", "Durumlar", "Firmalar"])
@@ -175,4 +175,24 @@ test("PDKS live dashboard counts all active workers for HR but keeps audit month
   assert.match(source, /mc\.sgk_covered=1/);
   assert.match(source, /UPPER\(COALESCE\(s\.active_passive,e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
   assert.doesNotMatch(source, /WHERE e\.main_company_id=\? AND UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PASIF%' AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\)<>'YOK'/);
+});
+
+
+test("PDKS does not own payroll advance or user administration", () => {
+  const registry = frontend("app/pdksModuleRegistryPatch.js");
+  const shell = frontend("pages/modules/PdksPage.jsx");
+  const page = frontend("pages/modules/PdksPageV2.jsx");
+
+  assert.doesNotMatch(registry, /\["avanslar", "Avans"/);
+  assert.doesNotMatch(registry, /\["bordro", "Bordro"/);
+  assert.doesNotMatch(shell, /\["avanslar", "Avans"/);
+  assert.doesNotMatch(shell, /\["bordro", "Bordro"/);
+  assert.doesNotMatch(shell, /\["kullanicilar", "Kullanıcı"/);
+
+  assert.doesNotMatch(page, /savePdksFinanceMovement/);
+  assert.doesNotMatch(page, /getPdksPayroll/);
+  assert.doesNotMatch(page, /getPdksAdvancedMonth/);
+  assert.doesNotMatch(page, /const \[advance, setAdvance\]/);
+  assert.match(page, /Avans, kesinti, maaş, banka\/elden ve bordro işlemleri PDKS'de ikinci kez yönetilmez/);
+  assert.match(page, /Personel ana kartı yalnız İK'da yönetilir/);
 });
