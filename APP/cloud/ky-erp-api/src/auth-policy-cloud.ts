@@ -858,8 +858,10 @@ export function registerAuthPolicyRoutes(app: any) {
       }
     }
     const enabled = await updateOwnerRecoveryEnabled(c, current.id);
-    await audit(c, "OWNER_RECOVERY_QUESTIONS_UPDATED", current.id, current.id, text(current.mainCompanySlug), "", { enabled });
-    return c.json({ ok: true, data: { saved: true, recoveryEnabled: enabled } });
+    const timestamp = nowIso();
+    await c.env.DB.prepare("UPDATE auth_recovery_codes SET used_at=COALESCE(used_at,?) WHERE user_id=? AND used_at IS NULL").bind(timestamp, current.id).run();
+    await audit(c, "OWNER_RECOVERY_QUESTIONS_UPDATED", current.id, current.id, text(current.mainCompanySlug), "", { enabled, legacyRecoveryCodesDisabled: true });
+    return c.json({ ok: true, data: { saved: true, recoveryEnabled: enabled, legacyRecoveryCodesDisabled: true } });
   });
 
   app.post("/api/admin/security/owner-recovery/contact/start", async (c: any) => {

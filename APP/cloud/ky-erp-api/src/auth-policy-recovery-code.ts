@@ -125,7 +125,8 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
       if (!["MFA_REQUIRED", "MFA_LEGACY_REQUIRED"].includes(stage) || !payload?.challengeId) return;
       const challenge = await challengeById(c, text(payload.challengeId));
       if (!challenge) return;
-      const recoveryCodeAvailable = await hasUnusedCodes(c, text(challenge.user_id));
+      const user = await userById(c, text(challenge.user_id));
+      const recoveryCodeAvailable = Boolean(user && !isOwner(roleOf(user)) && await hasUnusedCodes(c, text(challenge.user_id)));
       c.res = c.json({ ...payload, recoveryCodeAvailable });
     } catch { /* leave original response */ }
   });
@@ -137,6 +138,10 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     if (!["POLICY_MFA_REQUIRED", "POLICY_MFA_LEGACY_REQUIRED"].includes(text(challenge.challenge_type))) return c.json(jsonError("RECOVERY_CHALLENGE_TYPE", "Bu giriş isteğinde kurtarma kodu kullanılamaz."), 400);
     const user = await userById(c, text(challenge.user_id));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
+    if (isOwner(roleOf(user))) {
+      await audit(c, "OWNER_RECOVERY_CODE_BLOCKED", user.id, { ownerQuestionAnswerRequired: true });
+      return c.json(jsonError("OWNER_RECOVERY_QUESTIONS_REQUIRED", "Uygulama sahibi için tek kullanımlık kurtarma kodu devre dışıdır. Özel soru-cevap ve doğrulanmış iletişim kanalı ile güvenli kurtarma kullanın."), 403);
+    }
     const candidateHash = await sha256(normalizeRecoveryCode(body.recoveryCode));
     const row = await c.env.DB.prepare("SELECT id FROM auth_recovery_codes WHERE user_id=? AND code_hash=? AND used_at IS NULL LIMIT 1").bind(user.id, candidateHash).first<AnyRow>();
     if (!row?.id) {
@@ -151,19 +156,16 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     await audit(c, "RECOVERY_CODE_USED", user.id, { recoveryCodeId: row.id, emergencyFallback: true });
 
     const role = roleOf(user);
-    if (isOwner(role)) {
-      await c.env.DB.prepare("UPDATE auth_user_security SET login_policy='ANY_MFA',session_seconds=?,updated_at=? WHERE user_id=?").bind(MFA_SESSION_SECONDS, timestamp, user.id).run();
-      return c.json(await beginSetup(c, { ...user, login_policy: "ANY_MFA", session_seconds: MFA_SESSION_SECONDS }, "GOOGLE", true));
-    }
     const policy = normalizePolicy(user.login_policy, role);
     const provider = policy === "MICROSOFT" ? "MICROSOFT" : "GOOGLE";
     return c.json(await beginSetup(c, user, provider, false));
   });
 
-  // This endpoint is deliberately owner-only and informational; it never exposes codes.
+  // Uygulama sahibi için legacy acil kod bilinçli olarak devre dışıdır.
+  // Endpoint yalnız durum bilgisidir ve hiçbir kodu açığa çıkarmaz.
   app.get("/api/admin/security/recovery-code-fallback/status", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current || !isOwner(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız uygulama sahibine açıktır."), current ? 403 : 401);
-    return c.json({ ok: true, data: { available: await hasUnusedCodes(c, current.id), note: "Telefon/e-posta kurtarma tamamen doğrulanana kadar acil yedek olarak korunur." } });
+    return c.json({ ok: true, data: { available: false, note: "Uygulama sahibi için tek kullanımlık acil kurtarma kodu devre dışıdır; özel soru-cevap + doğrulanmış iletişim kanalı kullanılır." } });
   });
 }

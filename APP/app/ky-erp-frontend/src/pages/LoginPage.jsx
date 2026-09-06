@@ -121,7 +121,6 @@ export default function LoginPage() {
     getTurnstileConfig,
     login,
     verifyMfa,
-    recoverMfa,
     startOwnerRecovery,
     verifyOwnerRecovery,
     checkApproval,
@@ -136,11 +135,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [qrError, setQrError] = useState("");
-  const [showRecoveryCode, setShowRecoveryCode] = useState(false);
-  const [recoveryCode, setRecoveryCode] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [recoveryAnswers, setRecoveryAnswers] = useState(["", ""]);
-  const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false });
+  const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false, failed: false });
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
   const qrRef = useRef(null);
@@ -164,12 +163,13 @@ export default function LoginPage() {
           enabled: Boolean(response?.enabled),
           siteKey: String(response?.siteKey || ""),
           loaded: true,
+          failed: false,
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setTurnstileConfig({ enabled: false, siteKey: "", loaded: true });
-        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Sayfayı yenileyip tekrar deneyin.");
+        setTurnstileConfig({ enabled: true, siteKey: "", loaded: true, failed: true });
+        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Güvenli giriş için sayfayı yenileyip tekrar deneyin.");
       });
     return () => { cancelled = true; };
   }, [getTurnstileConfig]);
@@ -232,8 +232,6 @@ export default function LoginPage() {
     setCode("");
     setResetProvider("");
     setQrError("");
-    setShowRecoveryCode(false);
-    setRecoveryCode("");
     if (["MFA_REQUIRED", "MFA_SETUP"].includes(stage)) setSelectedProvider(chooseNextProvider(response));
     if (stage === "OWNER_RECOVERY_VERIFY") {
       setRecoveryOtp("");
@@ -246,11 +244,11 @@ export default function LoginPage() {
     setFlow({ stage: "CREDENTIALS" });
     setPassword("");
     setCode("");
-    setRecoveryCode("");
     setRecoveryOtp("");
     setRecoveryAnswers(["", ""]);
     setResetProvider("");
-    setShowRecoveryCode(false);
+    setShowPassword(false);
+    setCapsLock(false);
     setError(message);
   }
 
@@ -311,26 +309,8 @@ export default function LoginPage() {
     }
   }
 
-  async function handleRecoveryCode(event) {
-    event?.preventDefault();
-    const clean = String(recoveryCode || "").trim().toUpperCase();
-    if (!/^KYERP-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(clean)) {
-      setError("Geçerli tek kullanımlık KY ERP kurtarma kodunu girin.");
-      return;
-    }
-    try {
-      setLoading(true);
-      setError("");
-      applyResponse(await recoverMfa({
-        challengeId: flow.challengeId,
-        challengeToken: flow.challengeToken,
-        recoveryCode: clean,
-      }));
-    } catch (requestError) {
-      setError(requestError?.message || "Kurtarma kodu doğrulanamadı.");
-    } finally {
-      setLoading(false);
-    }
+  function updateCapsLock(event) {
+    setCapsLock(Boolean(event?.getModifierState?.("CapsLock")));
   }
 
   async function handleOwnerRecovery(channel) {
@@ -447,16 +427,16 @@ export default function LoginPage() {
             <div><strong>KY ERP</strong><small>Kurumsal Yönetim Sistemi</small></div>
           </div>
           <div className="auth-brand-copy">
-            <span className="auth-eyebrow">GÜVENLİ OTURUM</span>
-            <h1>Tek giriş.<br />İki bağımsız doğrulama.</h1>
-            <p>Hesabın güvenlik politikasına göre Google Authenticator, Microsoft Authenticator veya ikisi birlikte doğrulanır.</p>
+            <span className="auth-eyebrow">KURUMSAL VE GÜVENLİ ERİŞİM</span>
+            <h1>Tek giriş.<br /><span>Güvenli erişim.</span></h1>
+            <p>Tüm iş süreçlerinize tek ve güvenli bir kapıdan erişin. KY ERP oturum, bot koruması ve çok faktörlü doğrulamayı birlikte uygular.</p>
           </div>
           <div className="auth-security-points">
-            <div><span>01</span><p><strong>Sunucu kontrollü oturum</strong><small>JWT ve gerçek session süresi sunucu tarafından uygulanır.</small></p></div>
-            <div><span>02</span><p><strong>Çift MFA desteği</strong><small>Google ve Microsoft kayıtları birbirinden bağımsız tutulur.</small></p></div>
-            <div><span>03</span><p><strong>Kurtarma güvenliği</strong><small>Kurtarma işlemi doğrudan uygulamaya giriş vermez; doğrulamayı yeniden kurar.</small></p></div>
+            <div><span className="auth-point-icon">S</span><p><strong>Güvenli oturum</strong><small>Sunucu kontrollü JWT, session süresi ve otomatik zaman aşımı.</small></p></div>
+            <div><span className="auth-point-icon">T</span><p><strong>Turnstile koruması</strong><small>Cloudflare Turnstile ile otomatik bot ve kötüye kullanım kontrolü.</small></p></div>
+            <div><span className="auth-point-icon">M</span><p><strong>MFA desteği</strong><small>Google ve Microsoft Authenticator ile güçlü ikinci doğrulama.</small></p></div>
           </div>
-          <div className="auth-brand-footer">KY ERP · Yetkili kullanıcı erişimi</div>
+          <div className="auth-brand-footer">KY ERP · Verimlilik · Kontrol · Güven</div>
         </aside>
 
         <section className="auth-card-panel">
@@ -465,7 +445,7 @@ export default function LoginPage() {
               <div>
                 <span className="auth-section-label">KY ERP / GİRİŞ</span>
                 <h2>{stage === "CREDENTIALS" ? "Kurumsal Giriş" : "Güvenlik Doğrulaması"}</h2>
-                <p>{stage === "CREDENTIALS" ? "Hesabınızla devam edin." : "Hesabınız için tanımlı güvenlik adımını tamamlayın."}</p>
+                <p>{stage === "CREDENTIALS" ? "Hesabınızla giriş yaparak KY ERP’ye güvenli şekilde erişin." : "Hesabınız için tanımlı güvenlik adımını tamamlayın."}</p>
               </div>
               <span className="auth-secure-badge">Güvenli</span>
             </div>
@@ -486,16 +466,32 @@ export default function LoginPage() {
                     placeholder="admin veya ad@firma.com"
                   />
                 </label>
-                <label>Şifre
-                  <input
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Şifrenizi girin"
-                  />
-                </label>
+                <div className="auth-field-group">
+                  <label htmlFor="kyerp-password">Şifre</label>
+                  <span className="auth-password-field">
+                    <input
+                      id="kyerp-password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      onKeyDown={updateCapsLock}
+                      onKeyUp={updateCapsLock}
+                      placeholder="Şifrenizi girin"
+                    />
+                    <button
+                      type="button"
+                      className="auth-password-toggle"
+                      onClick={() => setShowPassword((value) => !value)}
+                      aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                      title={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                    >
+                      {showPassword ? "Gizle" : "Göster"}
+                    </button>
+                  </span>
+                </div>
+                {capsLock ? <div className="auth-caps-warning" role="status">Caps Lock açık. Şifrenizi kontrol edin.</div> : null}
                 {turnstileConfig.enabled ? (
                   <div className="auth-turnstile-shell">
                     <div className="auth-turnstile" ref={turnstileRef} />
@@ -503,8 +499,8 @@ export default function LoginPage() {
                   </div>
                 ) : null}
                 <ErrorBox message={error} />
-                <button className="auth-primary" type="submit" disabled={loading || !turnstileConfig.loaded}>
-                  {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
+                <button className="auth-primary" type="submit" disabled={loading || !turnstileConfig.loaded || turnstileConfig.failed || (turnstileConfig.enabled && !turnstileToken)}>
+                  {loading ? "Giriş yapılıyor..." : turnstileConfig.failed ? "Güvenlik doğrulaması kullanılamıyor" : turnstileConfig.enabled && !turnstileToken ? "Güvenlik doğrulaması bekleniyor" : "Giriş Yap"}
                 </button>
                 <div className="auth-inline-note">
                   <span className="auth-dot" />
@@ -522,7 +518,6 @@ export default function LoginPage() {
                   </label>
                   <ErrorBox message={error} />
                   <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Kodu Doğrula"}</button>
-                  {flow.recoveryCodeAvailable ? <button type="button" className="auth-secondary" onClick={() => setShowRecoveryCode((value) => !value)}>Tek kullanımlık kurtarma kodu</button> : null}
                   <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
                 </form>
               </div>
@@ -560,7 +555,7 @@ export default function LoginPage() {
               <div className="auth-flow-block">
                 <div className="auth-policy-row">
                   <div><span className="auth-section-label">GÜVENLİK POLİTİKASI</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "Authenticator doğrulaması")}</strong></div>
-                  {flow.requireBoth ? <span className="auth-policy-badge">2/2 gerekli</span> : <span className="auth-policy-badge">1 doğrulama</span>}
+                  {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA gerekli</span> : <span className="auth-policy-badge">1 MFA doğrulaması gerekli</span>}
                 </div>
 
                 <div className="provider-grid">
@@ -596,35 +591,27 @@ export default function LoginPage() {
                 </form>
 
                 {flow.ownerRecoveryAvailable ? (
-                  <div className="auth-recovery-panel">
-                    <div><strong>Authenticator'lara erişemiyor musunuz?</strong><span>Doğrulanmış e-posta/SMS ve güvenlik soruları ile Authenticator kayıtları yeniden kurulabilir.</span></div>
+                  <div className="auth-recovery-panel auth-owner-recovery-panel">
+                    <div>
+                      <span className="auth-section-label">UYGULAMA SAHİBİ EK GÜVENLİK</span>
+                      <strong>Özel soru-cevap ile güvenli kurtarma</strong>
+                      <span>Yalnız uygulama sahibi için çalışır. Doğrulanmış iletişim kanalı ve kayıtlı özel güvenlik soruları birlikte doğrulanır; doğrudan oturum açılmaz, MFA güvenli şekilde yeniden kurulur.</span>
+                    </div>
                     <div className="auth-recovery-actions">
-                      {flow.recoveryChannels?.email ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("EMAIL")} disabled={loading}>E-posta ile kurtar</button> : null}
-                      {flow.recoveryChannels?.sms ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("SMS")} disabled={loading}>SMS ile kurtar</button> : null}
+                      {flow.recoveryChannels?.email ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("EMAIL")} disabled={loading}>E-posta + özel sorular</button> : null}
+                      {flow.recoveryChannels?.sms ? <button type="button" className="auth-secondary" onClick={() => handleOwnerRecovery("SMS")} disabled={loading}>SMS + özel sorular</button> : null}
                     </div>
                   </div>
                 ) : null}
-
-                {flow.recoveryCodeAvailable ? <button type="button" className="auth-link-button" onClick={() => setShowRecoveryCode((value) => !value)}>{showRecoveryCode ? "Kurtarma kodunu kapat" : "Tek kullanımlık acil kurtarma kodu kullan"}</button> : null}
               </div>
-            ) : null}
-
-            {showRecoveryCode && ["MFA_REQUIRED", "MFA_LEGACY_REQUIRED"].includes(stage) ? (
-              <form className="auth-form auth-recovery-code" onSubmit={handleRecoveryCode}>
-                <label>KY ERP kurtarma kodu
-                  <input autoFocus value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value.toUpperCase())} placeholder="KYERP-ABCD-2345" />
-                </label>
-                <ErrorBox message={error} />
-                <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Kontrol ediliyor..." : "Kodu Doğrula"}</button>
-              </form>
             ) : null}
 
             {stage === "OWNER_RECOVERY_VERIFY" ? (
               <div className="auth-flow-block">
-                <div className="auth-notice"><strong>Hesap kurtarma doğrulaması</strong><span>Kod <b>{flow.maskedDestination}</b> kanalına gönderildi. Kod ve iki güvenlik sorusu birlikte doğru olmalıdır.</span></div>
+                <div className="auth-notice auth-owner-notice"><strong>Uygulama sahibi özel güvenlik doğrulaması</strong><span><b>{flow.maskedDestination}</b> kanalındaki iletişim doğrulamasını ve aşağıdaki iki özel güvenlik sorusunu birlikte tamamlayın.</span></div>
                 <form className="auth-form" onSubmit={handleOwnerRecoveryVerify}>
-                  <label>6 haneli kurtarma kodu
-                    <input className="auth-code-input" autoFocus inputMode="numeric" maxLength={6} value={recoveryOtp} onChange={(event) => setRecoveryOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
+                  <label>İletişim doğrulama kodu
+                    <input className="auth-code-input" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={recoveryOtp} onChange={(event) => setRecoveryOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
                   </label>
                   {(flow.questions || []).slice(0, 2).map((question, index) => (
                     <label key={question.id || index}>{question.question}
@@ -632,7 +619,7 @@ export default function LoginPage() {
                     </label>
                   ))}
                   <ErrorBox message={error} />
-                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Kurtarmayı Doğrula"}</button>
+                  <button className="auth-primary" type="submit" disabled={loading}>{loading ? "Doğrulanıyor..." : "Özel Güvenliği Doğrula"}</button>
                   <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>İptal</button>
                 </form>
               </div>
@@ -678,11 +665,15 @@ export default function LoginPage() {
 
             <div className="auth-card-footer">
               <span className="auth-dot" />
-              <span>Şifre, MFA ve oturum politikaları sunucu tarafından doğrulanır.</span>
+              <span>Şifre, Turnstile, MFA ve oturum politikaları sunucu tarafından doğrulanır.</span>
             </div>
           </div>
         </section>
       </section>
+      <footer className="auth-page-footer">
+        <span>© 2026 KY ERP. Tüm hakları saklıdır.</span>
+        <span>Güvenli · Güçlü · Kurumsal</span>
+      </footer>
     </main>
   );
 }
