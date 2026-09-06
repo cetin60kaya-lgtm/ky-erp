@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "repair:source-syntax": "node scripts/repair-escaped-source-newlines.mjs",
+    "pretypecheck": "npm run repair:source-syntax",
+    "pretest": "npm run repair:source-syntax",
+    "prebuild": "npm run repair:source-syntax",
+    "predeploy": "npm run repair:source-syntax",
     "test": "npm run test:unit && npm run test:auth:integration",
     "test:unit": "node --experimental-strip-types --test src/*.test.ts",
     "test:auth:integration": "node scripts/run-auth-integration.mjs",
