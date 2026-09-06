@@ -317,3 +317,15 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Gönderim açık kullanıcı işlemi gerektirir; AI otomatik mail göndermez. Belirsiz provider sonucu otomatik retry edilmez.
 - Mail Core additive D1 şeması `0050_mail_communication_core.sql` dosyasıdır; production öncesi D1 full backup + readiness + hedefli migration + schema doğrulaması gerekir.
 - Bu paket henüz production merge/deploy sayılmaz; kullanıcı açıkça **canlıya al** demeden production branch'e taşınmaz.
+
+
+## 06.09.2026 — Mail & Dosyalar production merge + P1 hotfix
+
+- PR #94 production branch'e merge edildi.
+- Production merge commit: `efc774fc4891d6c4fa72578f4d108b2a21c80f42`.
+- Merge sonrası yakalanan P1: normal kullanıcıların günlük Dosyalar sekmesi owner-only File Hub indeks endpointlerini çağırıyordu.
+- P1, PR #103 ile düzeltildi; günlük dosya görünümü artık `/api/mail/files` üzerinden tenant + MAIL izni + kullanıcının modül `canView` ilişkilerine göre scope edilir.
+- P1 hotfix production commit: `322362bc35a229f100f0ce6f33025b86cb7d1444`.
+- `0050_mail_communication_core.sql` bu sohbet oturumunda production D1'e uygulanamadı; Cloudflare D1 write yetkili aracı mevcut değildi.
+- Bu nedenle Mail Core fail-soft çalışır: Mail & Dosyalar arayüzü canlıda önizleme/kurulum bekliyor durumunda açılabilir; mail hesap talebi, bağlantı ve gönderim 0050 uygulanana kadar kapalıdır.
+- 0050 aktivasyonu için canonical sıra değişmez: remote D1 full backup -> readiness -> hedefli 0050 additive migration -> schema doğrulaması. GitHub Actions production deploy için kullanılmaz.
