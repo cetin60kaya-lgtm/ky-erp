@@ -58,6 +58,13 @@ function Remote-Trigger-Exists($triggerName) {
     return ([int]$json[0].results[0].total -gt 0)
 }
 
+function Remote-Table-Exists($tableName) {
+    $safeTable = ([string]$tableName).Replace("'", "''")
+    $sql = "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='$safeTable';"
+    $json = Invoke-Remote-D1Json $sql "Canli D1 tablo kontrolu $tableName"
+    return ([int]$json[0].results[0].total -gt 0)
+}
+
 function Remote-Column-Exists($tableName, $columnName) {
     $safeTable = ([string]$tableName).Replace("'", "''")
     $safeColumn = ([string]$columnName).Replace("'", "''")
@@ -317,8 +324,19 @@ wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
 Check-Exit "0050 Mail Core additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
 
 Write-Host "0051 Firma Mail Ayrimi + Onay Merkezi additive semasi kontrol/uygulama..." -ForegroundColor Yellow
-wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $APPROVAL_CENTER_FILE
-Check-Exit "0051 Firma Mail Ayrimi / Onay Merkezi semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+$approvalScopeColumn = Remote-Column-Exists "mail_accounts" "account_scope"
+$approvalOwnerColumn = Remote-Column-Exists "mail_accounts" "owner_user_id"
+$approvalRequestTable = Remote-Table-Exists "critical_approval_requests"
+$approvalEventTable = Remote-Table-Exists "critical_approval_events"
+$approvalReadyCount = @($approvalScopeColumn,$approvalOwnerColumn,$approvalRequestTable,$approvalEventTable | Where-Object { $_ }).Count
+if ($approvalReadyCount -eq 0) {
+    wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $APPROVAL_CENTER_FILE
+    Check-Exit "0051 Firma Mail Ayrimi / Onay Merkezi semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+} elseif ($approvalReadyCount -eq 4) {
+    Write-Host "0051 zaten canli D1'de hazir; tekrar uygulanmayacak." -ForegroundColor Green
+} else {
+    Fail "0051 kismi uygulanmis gorunuyor. Duplicate ALTER riskine karsi deploy durduruldu; once sema elle teyit edilmeli."
+}
 
 Assert-Remote-Schema-Readiness
 Assert-Denetime-System-User
