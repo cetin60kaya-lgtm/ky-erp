@@ -822,11 +822,21 @@ async function personDetail(c: Context<AppEnv>) {
   const employeeId = text(c.req.param("employeeId"));
   const person = await accessiblePerson(c, auth, employeeId);
   if (!person) return error(c, 404, "NOT_FOUND", "Personel bulunamadı veya bu kullanıcı için görünür değil.");
-  const [leaves, history, salaryHistory] = await Promise.all([
-    all(c, `SELECT id,record_type,effect_type,start_date,end_date,day_count,note,created_at FROM hr_leave_records_v2 WHERE employee_id=? ORDER BY start_date DESC LIMIT 200`, [employeeId]),
+  const [modernLeaves, legacyLeaves, history, salaryHistory] = await Promise.all([
+    all(c, `SELECT id,record_type,'PDKS' AS effect_type,start_date,end_date,counted_days AS day_count,note,created_at,status FROM ik_leave_plans WHERE main_company_id=? AND employee_id=? AND UPPER(COALESCE(status,''))<>'CANCELLED' ORDER BY start_date DESC LIMIT 200`, [auth.company, employeeId]).catch(() => []),
+    all(c, `SELECT id,record_type,effect_type,start_date,end_date,day_count,note,created_at FROM hr_leave_records_v2 WHERE employee_id=? ORDER BY start_date DESC LIMIT 200`, [employeeId]).catch(() => []),
     auth.audit ? Promise.resolve([]) : all(c, `SELECT * FROM ik_employee_change_history WHERE main_company_id=? AND employee_id=? ORDER BY effective_date DESC,created_at DESC LIMIT 300`, [auth.company, employeeId]),
     auth.audit ? Promise.resolve([]) : all(c, `SELECT id,salary,road_allowance,bank_payment_type,bank_amount,cash_amount,contract_type,contract_start,contract_end,effective_date,note,created_at FROM hr_salary_contracts WHERE employee_id=? ORDER BY effective_date DESC,created_at DESC LIMIT 200`, [employeeId]),
   ]);
+  const leaveKeys = new Set<string>();
+  const leaves = [...modernLeaves, ...legacyLeaves]
+    .filter((row) => {
+      const key = [upper(row.record_type), dateOnly(row.start_date), dateOnly(row.end_date), number(row.day_count)].join("|");
+      if (leaveKeys.has(key)) return false;
+      leaveKeys.add(key);
+      return true;
+    })
+    .sort((a, b) => dateOnly(b.start_date).localeCompare(dateOnly(a.start_date)));
   return ok(c, { scope: auth.scope, person, leaves, changeHistory: history, salaryHistory });
 }
 

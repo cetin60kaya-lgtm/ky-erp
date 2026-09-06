@@ -276,6 +276,22 @@ async function isLocked(c: Context<AppEnv>, company: string, date: string) {
   catch { return false; }
 }
 
+async function annualLeaveUsed(c: Context<AppEnv>, company: string, employeeId: string) {
+  const [modernRows, legacyRows] = await Promise.all([
+    all(c, `SELECT start_date,end_date,record_type,counted_days AS days FROM ik_leave_plans WHERE main_company_id=? AND employee_id=? AND UPPER(record_type) LIKE '%YILLIK%' AND UPPER(COALESCE(status,''))<>'CANCELLED'`, [company, employeeId]).catch(() => []),
+    all(c, `SELECT start_date,end_date,record_type,day_count AS days FROM hr_leave_records_v2 WHERE employee_id=? AND UPPER(record_type) LIKE '%YILLIK%'`, [employeeId]).catch(() => []),
+  ]);
+  const seen = new Set<string>();
+  let used = 0;
+  for (const row of [...modernRows, ...legacyRows]) {
+    const key = [upper(row.record_type), dateOnly(row.start_date), dateOnly(row.end_date), num(row.days)].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    used += num(row.days);
+  }
+  return used;
+}
+
 async function leavePreview(c: Context<AppEnv>, auth: Row, body: Row) {
   const employeeId = text(body.employeeId), code = upper(body.leaveTypeCode || body.type || "YILLIK_IZIN");
   const person = await personRow(c, auth.company, employeeId); if (!person) throw new Error("Personel bulunamadı.");
@@ -295,8 +311,8 @@ async function leavePreview(c: Context<AppEnv>, auth: Row, body: Row) {
     rows.push({ date, weekday: wd, leaveFraction, countedFraction, dayPart, reason, holidayName: holiday?.name || "" });
   }
   const countedDays = rows.reduce((sum, row) => sum + num(row.countedFraction), 0), leaveDays = rows.reduce((sum, row) => sum + num(row.leaveFraction), 0);
-  const usedRow = await first(c, `SELECT COALESCE(SUM(counted_days),0) AS used FROM ik_leave_plans WHERE main_company_id=? AND employee_id=? AND UPPER(record_type) LIKE '%YILLIK%' AND UPPER(COALESCE(status,''))<>'CANCELLED'`, [auth.company, employeeId]);
-  const annualAvailable = num(person.annual_leave_entitlement) + num(person.annual_leave_carryover) - num(usedRow?.used);
+  const used = await annualLeaveUsed(c, auth.company, employeeId);
+  const annualAvailable = num(person.annual_leave_entitlement) + num(person.annual_leave_carryover) - used;
   return { employeeId, leaveType: { code: type.code, name: type.name, unit: type.unit, paid: Boolean(type.paid), annualBalanceEffect: Boolean(type.annual_balance_effect), requiresDocument: Boolean(type.requires_document), legalNote: type.legal_note }, startDate: start, endDate: end, returnDate: addDays(end, 1), dayPart: requestedPart, leaveDays, countedDays, annualAvailableBefore: annualAvailable, annualAvailableAfter: Number(type.annual_balance_effect) !== 0 ? annualAvailable - countedDays : annualAvailable, days: rows };
 }
 
@@ -316,8 +332,8 @@ async function entitlementLedger(c: Context<AppEnv>, company: string, employeeId
     await c.env.DB.prepare(`INSERT OR IGNORE INTO ik_pdks_leave_entitlement_ledger(id,main_company_id,employee_id,service_year,entitlement_date,entitlement_days,source,note,created_at) VALUES(?,?,?,?,?,?,?, ?,?)`).bind(crypto.randomUUID(), company, employeeId, serviceYear, entitlementDate, days, "AUTO_STATUTORY", age === null ? "Yaş istisnası için doğum tarihi alanı bulunursa otomatik uygulanır." : `Hakediş yaş: ${age}`, nowIso()).run();
     rows.push({ serviceYear, entitlementDate, entitlementDays: days, age });
   }
-  const usedRow = await first(c, `SELECT COALESCE(SUM(counted_days),0) AS used FROM ik_leave_plans WHERE main_company_id=? AND employee_id=? AND UPPER(record_type) LIKE '%YILLIK%' AND UPPER(COALESCE(status,''))<>'CANCELLED'`, [company, employeeId]);
-  return { rows, currentCardEntitlement: num(person.annual_leave_entitlement), carryover: num(person.annual_leave_carryover), used: num(usedRow?.used), remaining: Math.max(0, num(person.annual_leave_entitlement) + num(person.annual_leave_carryover) - num(usedRow?.used)) };
+  const used = await annualLeaveUsed(c, company, employeeId);
+  return { rows, currentCardEntitlement: num(person.annual_leave_entitlement), carryover: num(person.annual_leave_carryover), used, remaining: Math.max(0, num(person.annual_leave_entitlement) + num(person.annual_leave_carryover) - used) };
 }
 
 export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {

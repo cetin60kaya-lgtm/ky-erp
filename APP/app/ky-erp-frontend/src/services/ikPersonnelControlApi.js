@@ -18,6 +18,10 @@ export async function getIkControlPerson(employeeId) {
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}`));
 }
 
+export async function getIkControlLeaveEntitlement(employeeId, params = {}) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/leave-entitlement`, params));
+}
+
 export async function createIkControlPerson(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/people", payload));
 }
