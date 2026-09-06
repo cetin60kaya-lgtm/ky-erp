@@ -9,8 +9,11 @@ import {
   listMailMessages,
   requestMailAccount,
   searchCommunicationFiles,
+  sendGoogleMailDraft,
   sendMailDraft,
+  startGoogleMailOAuth,
   startMicrosoftMailOAuth,
+  syncGoogleMailAccount,
   syncMailAccount,
 } from "../../services/mailApi";
 import "./CommunicationHubPage.css";
@@ -75,6 +78,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     () => providers.find((row) => row.provider === requestForm.providerType) || null,
     [providers, requestForm.providerType],
   );
+  const companyMailPresets = useMemo(() => /hakan\s*emprime/i.test(activeCompanyName) ? [
+    { providerType: "MICROSOFT_365", accountType: "PERSONAL", emailAddress: "hkngursu@hotmail.com", displayName: "Hakan Emprime Genel", departmentCode: "GENEL", label: "Genel / Ana Mail" },
+    { providerType: "GMAIL", accountType: "DEPARTMENT", emailAddress: "hkndesen@gmail.com", displayName: "Hakan Emprime Desen", departmentCode: "DESEN", label: "Desen Bölümü" },
+  ] : [], [activeCompanyName]);
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -104,7 +111,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("mailConnected") === "1") setNotice("Microsoft posta kutusu bağlantısı doğrulandı.");
+    if (params.get("mailConnected") === "1") setNotice(`${params.get("mailProvider") === "GMAIL" ? "Gmail" : "Microsoft"} posta kutusu bağlantısı doğrulandı.`);
     if (params.get("mailError")) setNotice(`Hata: ${params.get("mailError")}`);
     if (params.has("mailConnected") || params.has("mailError")) {
       window.history.replaceState({}, "", window.location.pathname);
@@ -148,8 +155,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     event.preventDefault();
     setLoading(true);
     try {
-      const result = await requestMailAccount(requestForm);
-      setNotice(`Hesap talebi oluşturuldu. Onay politikası: ${result.approvalPolicy === "COMPANY_OWNER_AND_APP_OWNER" ? "Firma Sahibi + Uygulama Sahibi" : "Firma Sahibi"}.`);
+      const result = await requestMailAccount({ ...requestForm, accountScope: "COMPANY" });
+      setNotice("Firma mail hesabı talebi oluşturuldu. Aktivasyon için yalnız Firma Sahibi onayı gerekir; talep Yönetim > Onay Merkezi ve Firma Kartı'na düştü.");
       setRequestOpen(false);
       setRequestForm((current) => ({ ...current, emailAddress: "", displayName: "", departmentCode: "" }));
       await loadBase();
@@ -158,6 +165,16 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     } finally {
       setLoading(false);
     }
+  }
+
+  function applyCompanyPreset(preset) {
+    setRequestForm({
+      providerType: preset.providerType,
+      accountType: preset.accountType,
+      emailAddress: preset.emailAddress,
+      displayName: preset.displayName,
+      departmentCode: preset.departmentCode,
+    });
   }
 
   async function submitDraft(event) {
@@ -185,15 +202,18 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
   }
 
-  async function connectMicrosoft() {
-    if (!selectedAccountId) return;
+  async function connectSelectedMailbox() {
+    if (!selectedAccountId || !selectedAccount) return;
     setLoading(true);
     try {
-      const result = await startMicrosoftMailOAuth(selectedAccountId);
-      if (!result?.authorizeUrl) throw new Error("Microsoft OAuth adresi alınamadı.");
+      const provider = String(selectedAccount.provider_type || selectedAccount.providerType || "").toUpperCase();
+      const result = provider === "GMAIL"
+        ? await startGoogleMailOAuth(selectedAccountId)
+        : await startMicrosoftMailOAuth(selectedAccountId);
+      if (!result?.authorizeUrl) throw new Error("OAuth giriş adresi alınamadı.");
       window.location.assign(result.authorizeUrl);
     } catch (error) {
-      setNotice(`Hata: ${error?.message || "Microsoft hesabı bağlanamadı."}`);
+      setNotice(`Hata: ${error?.message || "Mail hesabı bağlantısı başlatılamadı."}`);
       setLoading(false);
     }
   }
@@ -202,8 +222,9 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     if (!selectedAccountId) return;
     setLoading(true);
     try {
-      const result = await syncMailAccount(selectedAccountId);
-      const total = safeArray(result?.folders).reduce((sum, row) => sum + Number(row.count || 0), 0);
+      const provider = String(selectedAccount?.provider_type || selectedAccount?.providerType || "").toUpperCase();
+      const result = provider === "GMAIL" ? await syncGoogleMailAccount(selectedAccountId) : await syncMailAccount(selectedAccountId);
+      const total = Number(result?.count || safeArray(result?.folders).reduce((sum, row) => sum + Number(row.count || 0), 0));
       setNotice(result?.partial ? `Mail senkronizasyonu kısmi tamamlandı. ${total} kayıt işlendi.` : `Mail senkronizasyonu tamamlandı. ${total} kayıt işlendi.`);
       await loadBase();
     } catch (error) {
@@ -216,9 +237,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     if (!selectedMessage?.id) return;
     setLoading(true);
     try {
-      const result = await sendMailDraft(selectedMessage.id);
+      const provider = String(selectedAccount?.provider_type || selectedAccount?.providerType || "").toUpperCase();
+      const result = provider === "GMAIL" ? await sendGoogleMailDraft(selectedMessage.id) : await sendMailDraft(selectedMessage.id);
       setNotice(result?.status === "PROVIDER_ACCEPTED"
-        ? "Microsoft gönderim isteğini kabul etti. Bu durum teslim edildi anlamına gelmez."
+        ? `${provider === "GMAIL" ? "Gmail" : "Microsoft"} gönderim isteğini kabul etti. Bu durum teslim edildi anlamına gelmez.`
         : "Gönderim işlemi tamamlandı.");
       const rows = await listMailDrafts();
       const list = safeArray(rows).filter((row) => String(row.account_id || row.accountId) === String(selectedAccountId));
@@ -270,20 +292,21 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
       {requestOpen ? (
         <section className="comm-request-card">
-          <div className="comm-section-title"><div><h2>Mail Hesabı Ekleme Talebi</h2><p>Bağlantı onaydan önce aktif olmaz. Muhasebe, e-Belge, ortak ve bölüm posta kutuları çift onaya düşer.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
+          <div className="comm-section-title"><div><h2>Firma Maili Ekleme Talebi</h2><p>Bu kayıt kullanıcı giriş e-postasından ayrıdır. Talep burada açılır; yalnız Firma Sahibi Yönetim > Onay Merkezi veya Firma Kartı içinden onaylar.</p></div><button type="button" className="secondary" onClick={() => setRequestOpen(false)}>Kapat</button></div>
+          {companyMailPresets.length ? <div className="comm-mail-presets"><b>Hakan Emprime hazır hesapları</b>{companyMailPresets.map((preset) => <button type="button" key={preset.emailAddress} onClick={() => applyCompanyPreset(preset)}><span>{preset.label}</span><strong>{preset.emailAddress}</strong><small>{providerLabel(preset.providerType)} · {preset.departmentCode}</small></button>)}</div> : null}
           <form onSubmit={submitAccountRequest}>
             <label>Sağlayıcı<select value={requestForm.providerType} onChange={(e) => setRequestForm((v) => ({ ...v, providerType: e.target.value }))}>
               {(providers.length ? providers : [
                 {provider:"MICROSOFT_365",adapterReady:true,configured:false},
-                {provider:"GMAIL",adapterReady:false,configured:false},
+                {provider:"GMAIL",adapterReady:true,configured:false},
                 {provider:"JMAP",adapterReady:false,configured:false},
                 {provider:"IMAP_SMTP",adapterReady:false,configured:false},
               ]).map((row) => <option key={row.provider} value={row.provider} disabled={row.adapterReady===false || row.configured===false}>{providerLabel(row.provider)}{row.adapterReady===false ? " · Yakında" : row.configured===false ? " · OAuth Ayarı Gerekli" : ""}</option>)}
             </select></label>
-            <label>Hesap Türü<select value={requestForm.accountType} onChange={(e) => setRequestForm((v) => ({ ...v, accountType: e.target.value }))}><option value="PERSONAL">Kişisel</option><option value="SHARED">Ortak / Shared</option><option value="DEPARTMENT">Bölüm</option></select></label>
+            <label>Posta Kutusu Türü<select value={requestForm.accountType} onChange={(e) => setRequestForm((v) => ({ ...v, accountType: e.target.value }))}><option value="PERSONAL">Tek Posta Kutusu</option><option value="SHARED">Ortak / Shared</option><option value="DEPARTMENT">Bölüm Posta Kutusu</option></select></label>
             <label>E-posta<input type="email" required value={requestForm.emailAddress} onChange={(e) => setRequestForm((v) => ({ ...v, emailAddress: e.target.value }))} placeholder="muhasebe@firma.com"/></label>
             <label>Görünen Ad<input value={requestForm.displayName} onChange={(e) => setRequestForm((v) => ({ ...v, displayName: e.target.value }))} placeholder="Muhasebe"/></label>
-            <label>Bölüm<select value={requestForm.departmentCode} onChange={(e) => setRequestForm((v) => ({ ...v, departmentCode: e.target.value }))}><option value="">Genel</option><option value="MUHASEBE">Muhasebe</option><option value="E_BELGE">e-Belge</option><option value="DESEN">Desen</option><option value="IK">İK</option><option value="YONETIM">Yönetim</option></select></label>
+            <label>Bölüm<select value={requestForm.departmentCode} onChange={(e) => setRequestForm((v) => ({ ...v, departmentCode: e.target.value }))}><option value="GENEL">Genel</option><option value="MUHASEBE">Muhasebe</option><option value="E_BELGE">e-Belge</option><option value="DESEN">Desen</option><option value="IK">İK</option><option value="YONETIM">Yönetim</option></select></label>
             <button type="submit" disabled={loading || overview?.schemaReady===false || selectedProviderRuntime?.adapterReady===false || selectedProviderRuntime?.configured===false}>Onaya Gönder</button>
             {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">{selectedProviderRuntime.reason || "Bu sağlayıcı henüz bağlantıya hazır değil."}</div> : null}
           </form>
@@ -316,8 +339,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             )) : <div className="comm-empty">Henüz atanmış posta kutusu yok.<br/>“+ Mail Hesabı” ile talep oluşturabilirsiniz.</div>}
             {selectedAccount ? <div className="comm-account-tools">
               <span><b>{statusLabel(selectedAccount.status)}</b> · {providerLabel(selectedAccount.provider_type || selectedAccount.providerType)}</span>
-              {String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "MICROSOFT_365" && String(selectedAccount.status || "").toUpperCase() !== "ACTIVE"
-                ? <button type="button" onClick={connectMicrosoft} disabled={loading}>Microsoft Hesabını Bağla</button>
+              {["MICROSOFT_365","GMAIL"].includes(String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase()) && !Boolean(selectedAccount.provider_connected ?? selectedAccount.providerConnected)
+                ? <button type="button" onClick={connectSelectedMailbox} disabled={loading || String(selectedAccount.approval_status || selectedAccount.approvalStatus || "").toUpperCase() !== "APPROVED"}>{String(selectedAccount.provider_type || selectedAccount.providerType).toUpperCase() === "GMAIL" ? "Gmail Hesabını Bağla" : "Microsoft Hesabını Bağla"}</button>
                 : null}
               {String(selectedAccount.status || "").toUpperCase() === "ACTIVE"
                 ? <button type="button" className="secondary" onClick={syncSelectedMailbox} disabled={loading}>Postayı Senkronize Et</button>
