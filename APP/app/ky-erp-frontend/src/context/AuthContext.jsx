@@ -16,7 +16,7 @@ const REFRESH_LOCK_MS = 30 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
 const AuthContext = createContext(null);
@@ -641,7 +641,7 @@ export function AuthProvider({ children }) {
     const key = String(moduleKey || "").toUpperCase();
     if (!key) return false;
     if (isSuperAdmin(user?.role)) return true;
-    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") return true;
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && ["ADMIN","STORAGE_ADMIN"].includes(key)) return true;
     return Boolean(permissions.find((row) => row.moduleKey === key)?.canView);
   }, [permissions, user?.role]);
 
@@ -650,7 +650,7 @@ export function AuthProvider({ children }) {
     const actionKey = { view: "canView", create: "canCreate", update: "canUpdate", delete: "canDelete", approve: "canApprove" }[String(action || "").toLowerCase()];
     if (!key || !actionKey) return false;
     if (isSuperAdmin(user?.role)) return true;
-    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "ADMIN") return actionKey !== "canDelete";
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && ["ADMIN","STORAGE_ADMIN"].includes(key)) return actionKey !== "canDelete";
     return Boolean(permissions.find((row) => row.moduleKey === key)?.[actionKey]);
   }, [permissions, user?.role]);
 

@@ -60,3 +60,17 @@ test("File Hub and cloud OAuth writes are owned by the company owner", () => {
   assert.match(storage, /isCompanyOwner/);
   assert.match(storage, /Firma sahibi \/ işveren/);
 });
+
+
+test("company owner can actually reach storage module and user center has no approval duplicate", () => {
+  const auth = read("../../../app/ky-erp-frontend/src/context/AuthContext.jsx");
+  const usersWrapper = read("../../../app/ky-erp-frontend/src/pages/admin/AdminUsersPanel.jsx");
+  const authCloud = read("./auth-cloud.ts");
+  const authPolicy = read("./auth-policy-cloud.ts");
+  assert.match(auth, /STORAGE_ADMIN/);
+  assert.match(auth, /COMPANY_ADMIN"[\s\S]*\["ADMIN","STORAGE_ADMIN"\]/);
+  assert.match(authCloud, /moduleKey: "STORAGE_ADMIN"/);
+  assert.match(authPolicy, /moduleKey: "STORAGE_ADMIN"/);
+  assert.doesNotMatch(usersWrapper, /AdminLoginApprovals/);
+  assert.match(usersWrapper, /<AdminUsersPanelV2/);
+});

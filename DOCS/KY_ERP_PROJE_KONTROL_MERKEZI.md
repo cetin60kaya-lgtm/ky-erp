@@ -361,3 +361,12 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Kullanıcı & Yetki Merkezi firma filtresi, rol/firma görünürlüğü ve daha geniş kurumsal kart düzeniyle yenilendi.
 - Üst sağ kullanıcı profilinde ham `SUPER_ADMIN` yerine **Süper Yönetici**, `COMPANY_ADMIN` yerine **Firma Sahibi / İşveren** gösterilir.
 - Regression sözleşmesi: `APP/cloud/ky-erp-api/src/admin-governance-v2-contract.test.ts`.
+
+
+## 06.09.2026 — Yönetim production sonrası erişim hotfix'i
+
+- PR #120 production'a merge edildi ve kurumsal Süper Yönetici / Firma Sahibi modeli canlı kaynakta yerini aldı.
+- Merge sonrası P1 incelemesinde Firma Sahibi / İşveren'in backend'de File Hub yönetim yetkisi olmasına rağmen frontend `STORAGE_ADMIN` modülüne erişemediği doğrulandı.
+- Hotfix ile `STORAGE_ADMIN` auth module contract'a eklendi; COMPANY_ADMIN için ADMIN + STORAGE_ADMIN implicit görünür/yazılabilir yetki verildi.
+- Login/session permission payload, frontend AuthContext, kullanıcı yetki editörü ve legacy Prisma enum aynı contract'a çekildi.
+- Kullanıcı & Yetkiler ekranında gömülü kalan ikinci Giriş Onayları bloğu kaldırıldı. Giriş onayı tek yüzeydir: **Yönetim Konsolu -> Karar Merkezi**.
