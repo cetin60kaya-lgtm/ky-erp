@@ -1,26 +1,8 @@
 name: KY ERP Ortak Altyapı Denetimi
 
 on:
-  pull_request:
-    paths:
-      - "APP/cloud/ky-erp-api/src/main.ts"
-      - "APP/cloud/ky-erp-api/src/accounting-*.ts"
-      - "APP/cloud/ky-erp-api/migrations/0008_hr_relational_bootstrap.sql"
-      - "APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql"
-      - "APP/cloud/ky-erp-api/local-accounting-quick-smoke.sql"
-      - "APP/cloud/ky-erp-api/local-accounting-quick-smoke-seed.sql"
-      - "APP/app/ky-erp-frontend/src/main.jsx"
-      - "APP/app/ky-erp-frontend/src/AppV3.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/MuhasebePage.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/QuickAccountingBar.jsx"
-      - "APP/app/ky-erp-frontend/src/pages/modules/muhasebe/quickAccountingBar.css"
-      - "APP/app/ky-erp-frontend/src/pages/modules/isnet/IsnetArchiveDeliveryPage.jsx"
-      - "APP/app/ky-erp-frontend/src/utils/api.js"
-      - "SCRIPTS/KYERP_YEREL_BASLAT.ps1"
-      - "SCRIPTS/KYERP_YEREL_DURDUR.ps1"
-      - ".github/workflows/non-boyahane-final-audit.yml"
+  # Automatic GitHub Actions disabled. Run only by explicit manual request.
   workflow_dispatch:
-
 permissions:
   contents: read
 

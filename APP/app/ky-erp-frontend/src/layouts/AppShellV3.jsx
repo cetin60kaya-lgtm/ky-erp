@@ -109,8 +109,10 @@ export default function AppShellV3({
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
 
   const refreshNotifications = useCallback(async (silent = false) => {
-    if (!user?.id) {
+    const normalizedRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
+    if (!user?.id || normalizedRole === "DENETIM") {
       setNotificationData((current) => ({ ...current, items: [], unreadCount: 0, totalCount: 0 }));
+      setNotificationError("");
       return;
     }
     if (!silent) setNotificationLoading(true);

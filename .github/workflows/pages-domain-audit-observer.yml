@@ -1,12 +1,8 @@
 name: KY ERP Pages Denetim Gözlemcisi
 
 on:
-  workflow_run:
-    workflows:
-      - KY ERP Pages Alan Adı Denetimi
-    types:
-      - completed
-
+  # Automatic GitHub Actions disabled. Run only by explicit manual request.
+  workflow_dispatch:
 permissions:
   actions: read
   issues: write

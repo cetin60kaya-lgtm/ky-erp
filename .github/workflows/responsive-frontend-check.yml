@@ -1,14 +1,8 @@
 name: KY ERP Responsive Tablet Telefon Kontrolu
 
 on:
-  push:
-    branches:
-      - codex/responsive-tablet-mobile-v1
-    paths:
-      - "APP/app/ky-erp-frontend/**"
-      - ".github/workflows/responsive-frontend-check.yml"
+  # Manual diagnostic only. Automatic CI is disabled.
   workflow_dispatch:
-
 permissions:
   contents: read
 

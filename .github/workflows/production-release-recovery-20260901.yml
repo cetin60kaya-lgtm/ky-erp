@@ -1,13 +1,8 @@
 name: KY ERP Production Recovery 2026-09-01
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - ".github/workflows/production-release-recovery-20260901.yml"
+  # Automatic GitHub Actions disabled. Manual diagnostic/fallback only.
   workflow_dispatch:
-
 permissions:
   contents: read
 

@@ -1,12 +1,8 @@
 name: KY ERP Uygulama Canlı Son Denetim
 
 on:
-  workflow_run:
-    workflows:
-      - "KY ERP Canlı Yayın"
-    types:
-      - completed
-
+  # Automatic GitHub Actions disabled. Manual diagnostic/fallback only.
+  workflow_dispatch:
 permissions:
   contents: read
   issues: write

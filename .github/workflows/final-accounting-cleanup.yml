@@ -1,12 +1,8 @@
 name: Muhasebe Son Temizlik ve Doğrulama
 
 on:
-  pull_request:
-    paths:
-      - "docs/trigger-final-accounting-cleanup.txt"
-      - ".github/workflows/final-accounting-cleanup.yml"
+  # Automatic GitHub Actions kapali; production ve PR dogrulamasi Cloudflare/yerel kontrol ile yurur.
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: read
