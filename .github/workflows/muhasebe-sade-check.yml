@@ -1,13 +1,8 @@
 name: KY ERP Muhasebe Sadeleştirme Kontrolü
 
 on:
-  push:
-    branches:
-      - agent/muhasebe-sade-v1
-  pull_request:
-    branches:
-      - agent/uretim-tek-merkez
-
+  # Automatic GitHub Actions disabled. Run only by explicit manual request.
+  workflow_dispatch:
 permissions:
   contents: read
 
