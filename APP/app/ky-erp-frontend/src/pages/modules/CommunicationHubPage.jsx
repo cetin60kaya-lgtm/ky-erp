@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createMailDraft,
   getMailOverview,
+  downloadMailAttachment,
   getMailProviders,
   listCommunicationFiles,
   listMailAccounts,
+  listMailAttachments,
   listMailDrafts,
   listMailFolders,
   listMailMessages,
@@ -110,6 +112,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [messages, setMessages] = useState([]);
   const [drafts, setDrafts] = useState([]);
   const [folders, setFolders] = useState([]);
+  const [attachments, setAttachments] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState("");
   const [moveTargetId, setMoveTargetId] = useState("");
   const [mailboxRefresh, setMailboxRefresh] = useState(0);
@@ -196,6 +199,24 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     setSelectedFolderId("");
     setMoveTargetId("");
   }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAttachments() {
+      if (!selectedMessage?.id || (!selectedFolderId && activeTab === "mail-taslaklar")) {
+        setAttachments([]);
+        return;
+      }
+      try {
+        const rows = await listMailAttachments(selectedMessage.id);
+        if (!cancelled) setAttachments(safeArray(rows));
+      } catch {
+        if (!cancelled) setAttachments([]);
+      }
+    }
+    loadAttachments();
+    return () => { cancelled = true; };
+  }, [selectedMessage?.id, activeTab, selectedFolderId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -626,6 +647,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button>
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
+              {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya</small></div>{attachments.map((attachment) => <button type="button" key={attachment.id} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachment.file_name || attachment.fileName || "ek")}><span>📎 {attachment.file_name || attachment.fileName || "Ek"}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : "İndir"}</em></button>)}</div> : null}
               {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
