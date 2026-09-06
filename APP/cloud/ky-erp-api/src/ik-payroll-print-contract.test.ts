@@ -17,9 +17,9 @@ test("IK payroll report and payment slips use the canonical print service contra
   assert.match(service, /fullDocument/);
   assert.match(service, /win\.print\(\)/);
 
-  assert.ok(page.includes("Toplu Rapor / PDF"));
-  assert.ok(page.includes("Toplu Fiş / PDF"));
-  assert.ok(page.includes("Tek Kisi Fisi"));
+  assert.ok(page.includes("Ödeme Listesi / PDF"));
+  assert.ok(page.includes("10’lu Toplu Fiş / PDF"));
+  assert.ok(page.includes("Tek Kişi Fişi"));
   assert.ok(page.includes("printHtmlDocument({ title: `İK Aylık Bordro"));
   assert.ok(page.includes("printHtmlDocument({ title: `Toplu Personel Ödeme Fişleri"));
   assert.ok(page.includes("printHtmlDocument({ title: `Ödeme Fişi"));
@@ -162,8 +162,8 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
     "mesai: row.overtime",
     "avans: row.advance",
     "kesinti: row.deduction",
-    "hukukiKesinti: row.garnishment",
-    "netOdenecek: row.net",
+    "icraHaciz: row.garnishment",
+    "toplamOdeme: row.net",
     "banka: row.bank",
     "elden: row.cash",
   ]) {
