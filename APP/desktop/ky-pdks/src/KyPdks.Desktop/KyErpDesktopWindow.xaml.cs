@@ -105,10 +105,10 @@ public partial class KyErpDesktopWindow : Window
         const string script = """
         (() => {
           document.documentElement.dataset.kyerpDesktopHost = '1';
-          document.documentElement.dataset.kyerpDesktopVersion = '1.7.2';
+          document.documentElement.dataset.kyerpDesktopVersion = '1.8.0';
           const post = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
           window.KYERP_DESKTOP = Object.freeze({
-            version: '1.7.2',
+            version: '1.8.0',
             isDesktop: true,
             openPdksDevice: () => post({ type: 'pdks.open-device' }),
             configureFileAgent: (secret, mainCompanySlug) => post({
