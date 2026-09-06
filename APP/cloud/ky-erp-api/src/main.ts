@@ -268,9 +268,14 @@ shell.use("/api/*", async (c, next) => {
   await next();
 });
 
-// Mail Core şeması yalnız Mail alanında, ilk gerçek kullanımda fail-closed hazırlanır.
+// Mail Core şeması request sırasında yazılmaz. 0050/0051 yalnız yedekli ve hedefli
+// production migration kapısından uygulanır; eksik şema burada fail-closed 503 döner.
 shell.use("/api/mail/*", async (c, next) => {
-  await ensureMailCommunicationCore0050(c.env.DB);
+  try {
+    await ensureMailCommunicationCore0050(c.env.DB);
+  } catch (error) {
+    return c.json({ ok:false, error:{ code:"MAIL_SCHEMA_NOT_READY", message:"Mail veritabanı şeması hazır değil. 0050/0051 migrationları yedekli ve hedefli olarak uygulanmalıdır.", details:error instanceof Error ? error.message : String(error) } }, 503);
+  }
   await next();
 });
 
