@@ -255,17 +255,19 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
     setLoading(true);
     setError("");
     try {
-      const payload = await apiGet("/muhasebe/belge-import", {
+      const payload = await apiGet("/e-belge/pool", {
         ...companyParams,
-        search,
-        status,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
+        filter: "INCOMING_INVOICE",
+        q: search,
+        status: status === "ALL" ? undefined : status,
+        page,
+        pageSize,
         _ts: Date.now(),
       });
-      const data = listOf(payload);
-      setRows(data);
-      setTotal(Number(payload?.pagination?.total ?? payload?.data?.pagination?.total ?? data.length));
+      const data = unwrap(payload);
+      const items = Array.isArray(data?.items) ? data.items.map(canonicalInvoiceRow) : [];
+      setRows(items);
+      setTotal(Number(data?.total ?? items.length));
     } catch (requestError) {
       setRows([]);
       setTotal(0);
@@ -319,10 +321,10 @@ export default function SupplierInventoryWorkspace({ activeMainCompany, refreshK
     setMessage("");
     try {
       const detailPayload = await apiGet(
-        `/muhasebe/belge-import/${encodeURIComponent(row.id)}`,
+        `/e-belge/documents/${encodeURIComponent(row.id)}`,
         { ...companyParams, _ts: Date.now() },
       );
-      const detail = unwrap(detailPayload);
+      const detail = canonicalInvoiceDetail(unwrap(detailPayload));
       const companyId = detail.companyId || detail.firmId;
       const [profilePayload, aliasesPayload] = companyId
         ? await Promise.all([
