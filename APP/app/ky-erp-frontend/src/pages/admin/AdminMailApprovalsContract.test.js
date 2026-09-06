@@ -16,13 +16,13 @@ test("mail approvals are visible in management decision centers", () => {
   assert.match(companySource, /Bekleyen Mail Onayı/);
 });
 
-test("company owner can approve or reject mail account directly", () => {
+test("company owner or super admin can approve or reject mail account directly", () => {
   assert.match(approvalsSource, /COMPANY_ADMIN/);
   assert.match(approvalsSource, /SUPER_ADMIN/);
   assert.match(approvalsSource, /decideMailApproval/);
   assert.match(approvalsSource, />Onayla</);
   assert.match(approvalsSource, />Reddet</);
-  assert.match(approvalsSource, /Firma sahibi \/ işveren onayı/);
+  assert.match(approvalsSource, /Firma sahibi \/ Süper Yönetici onayı/);
 });
 
 test("mail approval API remains wired to backend decision endpoint", () => {
