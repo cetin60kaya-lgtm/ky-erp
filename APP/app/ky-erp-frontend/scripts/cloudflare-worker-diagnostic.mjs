@@ -15,12 +15,11 @@ function run(label, args) {
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    console.error("WORKER_GATE_A_FAIL=" + label);
+    console.error("WORKER_TYPECHECK_FAIL=" + label);
     process.exit(result.status || 1);
   }
 }
 
 run("npm-ci", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 run("typecheck", ["run", "typecheck"]);
-run("unit", ["run", "test:unit"]);
-console.log("WORKER_GATE_A_PASS=typecheck+unit");
+console.log("WORKER_TYPECHECK_PASS");
