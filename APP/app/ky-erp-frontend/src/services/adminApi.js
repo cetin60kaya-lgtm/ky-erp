@@ -104,3 +104,8 @@ export async function listCriticalApprovals(params = {}) {
 export async function decideCriticalApproval(id, decision, note = "") {
   return unwrap(await apiPost(`/admin/approval-center/${encodeURIComponent(id)}/decision`, { decision, note }));
 }
+
+
+export async function requestCompanyOwnerRole(id, action, mainCompanySlug) {
+  return unwrap(await apiPost(`/admin/company-owner-role/${encodeURIComponent(id)}`, { action, mainCompanySlug }));
+}
