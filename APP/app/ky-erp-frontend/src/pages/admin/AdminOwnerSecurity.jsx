@@ -33,7 +33,7 @@ export default function AdminOwnerSecurity() {
   const [sessions, setSessions] = useState([]);
   const [delivery, setDelivery] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Uygulama sahibi güvenlik bilgileri yükleniyor...");
+  const [message, setMessage] = useState("Süper Yönetici güvenlik bilgileri yükleniyor...");
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState({ fullName: "", username: "", email: "" });
   const [recoveryConfig, setRecoveryConfig] = useState(null);
@@ -74,7 +74,7 @@ export default function AdminOwnerSecurity() {
       ]);
       if (ownerResult.status === "rejected") {
         setOwner(null);
-        setMessage(`Hata: ${ownerResult.reason?.message || "Uygulama sahibi hesabı alınamadı."}`);
+        setMessage(`Hata: ${ownerResult.reason?.message || "Süper Yönetici hesabı alınamadı."}`);
         return;
       }
       const ownerData = ownerResult.value;
@@ -103,10 +103,10 @@ export default function AdminOwnerSecurity() {
         unavailable.push("özel güvenlik soruları");
       }
       setMessage(unavailable.length
-        ? `Uygulama sahibi hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.`
-        : "Uygulama sahibi hesabı ve güvenlik durumu güncel.");
+        ? `Süper Yönetici hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.`
+        : "Süper Yönetici hesabı ve güvenlik durumu güncel.");
     } catch (error) {
-      setMessage(`Hata: ${error?.message || "Uygulama sahibi güvenlik bilgileri alınamadı."}`);
+      setMessage(`Hata: ${error?.message || "Süper Yönetici güvenlik bilgileri alınamadı."}`);
     } finally {
       setBusy(false);
     }
@@ -130,7 +130,7 @@ export default function AdminOwnerSecurity() {
         emailVerified: sameEmail && owner.emailVerified === true,
       });
       setEditing(false);
-      setMessage(sameEmail ? "Uygulama sahibi profili güncellendi." : "E-posta değişti. Yeni adres güvenlik nedeniyle yeniden doğrulanmalıdır.");
+      setMessage(sameEmail ? "Süper Yönetici profili güncellendi." : "E-posta değişti. Yeni adres güvenlik nedeniyle yeniden doğrulanmalıdır.");
       await loadAll();
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Profil güncellenemedi."}`);
@@ -194,7 +194,7 @@ export default function AdminOwnerSecurity() {
       });
       setRecoveryStepUpCode("");
       setMessage(result?.recoveryEnabled
-        ? "Uygulama sahibi özel soru-cevap güvenliği kaydedildi ve kurtarma koruması aktif."
+        ? "Süper Yönetici özel soru-cevap güvenliği kaydedildi ve kurtarma koruması aktif."
         : "Özel güvenlik soruları kaydedildi. Kurtarmanın aktif olması için doğrulanmış e-posta/SMS kanalı da hazır olmalıdır.");
       await loadAll();
     } catch (error) {
@@ -210,7 +210,7 @@ export default function AdminOwnerSecurity() {
     setBusy(true);
     try {
       const result = await startUserEmailVerification(owner.id);
-      if (result?.alreadyVerified) { setMessage("Uygulama sahibi e-postası zaten doğrulanmış."); await loadAll(); return; }
+      if (result?.alreadyVerified) { setMessage("Süper Yönetici e-postası zaten doğrulanmış."); await loadAll(); return; }
       if (result?.deliveryStatus !== "PROVIDER_ACCEPTED" || !result?.providerMessageId) throw new Error("Resend sağlayıcı kabul kimliği dönmedi.");
       setEmailChallenge(result);
       setEmailOtp("");
@@ -233,7 +233,7 @@ export default function AdminOwnerSecurity() {
     try {
       await verifyUserEmail(owner.id, { verificationId: emailChallenge.verificationId, verificationToken: emailChallenge.verificationToken, otp });
       setEmailChallenge(null); setEmailOtp(""); setEmailDelivery(null); setMailPollCount(0);
-      setMessage("Uygulama sahibi e-postası doğrulandı. Artık MFA yenilemede şifreye alternatif olarak e-posta kodu kullanılabilir.");
+      setMessage("Süper Yönetici e-postası doğrulandı. Artık MFA yenilemede şifreye alternatif olarak e-posta kodu kullanılabilir.");
       await loadAll();
     } catch (error) { setMessage(`Hata: ${error?.message || "E-posta kodu doğrulanamadı."}`); }
     finally { setBusy(false); }
@@ -260,7 +260,7 @@ export default function AdminOwnerSecurity() {
 
   async function passwordReauth(event) {
     event.preventDefault();
-    if (!owner || !renewProvider || !reauthPassword) return setMessage("Hata: Uygulama sahibi şifresini girin.");
+    if (!owner || !renewProvider || !reauthPassword) return setMessage("Hata: Süper Yönetici şifresini girin.");
     setBusy(true);
     try {
       const grant = await reauthOwnerWithPassword({ password: reauthPassword, targetUserId: owner.id, provider: renewProvider });
@@ -272,7 +272,7 @@ export default function AdminOwnerSecurity() {
 
   async function startEmailReauth() {
     if (!owner || !renewProvider) return;
-    if (!owner.emailVerified) return setMessage("Hata: E-posta ile MFA yenileme doğrulaması için önce uygulama sahibi e-postasını doğrulayın.");
+    if (!owner.emailVerified) return setMessage("Hata: E-posta ile MFA yenileme doğrulaması için önce Süper Yönetici e-postasını doğrulayın.");
     setBusy(true);
     try {
       const result = await startOwnerEmailReauth({ targetUserId: owner.id, provider: renewProvider });
@@ -339,13 +339,13 @@ export default function AdminOwnerSecurity() {
   if (!owner) return <div className="aos-page"><div className={`aos-banner ${String(message).startsWith("Hata:") ? "bad" : ""}`}>{message}</div></div>;
 
   return <div className="aos-page">
-    <div className="aos-title"><div><small>YÖNETİM / UYGULAMA SAHİBİ</small><h1>Uygulama Sahibi Güvenlik Merkezi</h1><p>Bu hesap normal kullanıcı değildir. Kimlik, e-posta, MFA ve oturum güvenliği ayrı yönetilir.</p></div><button disabled={busy} onClick={loadAll}>Yenile</button></div>
+    <div className="aos-title"><div><small>PLATFORM YÖNETİMİ / SÜPER YÖNETİCİ</small><h1>Süper Yönetici Güvenlik Merkezi</h1><p>Bu hesap normal kullanıcı değildir. Kimlik, e-posta, MFA ve oturum güvenliği ayrı yönetilir.</p></div><button disabled={busy} onClick={loadAll}>Yenile</button></div>
     <div className={`aos-banner ${String(message).startsWith("Hata:") ? "bad" : ""}`}>{message}</div>
 
     <section className="aos-owner-card">
-      <div className="aos-owner-badge">SAHİP</div>
+      <div className="aos-owner-badge">SUPER ADMIN</div>
       {!editing ? <>
-        <div className="aos-owner-copy"><h2>{owner.fullName}</h2><p>@{owner.username} · {owner.email || "e-posta yok"}</p><div className="aos-tags"><span>Uygulama Sahibi</span><span>{owner.mainCompanySlug || "-"}</span><span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmadı"}</span></div></div>
+        <div className="aos-owner-copy"><h2>{owner.fullName}</h2><p>@{owner.username} · {owner.email || "e-posta yok"}</p><div className="aos-tags"><span>Süper Yönetici</span><span>{owner.mainCompanySlug || "-"}</span><span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmadı"}</span></div></div>
         <button className="primary" onClick={() => setEditing(true)}>Profili Düzenle</button>
       </> : <form className="aos-profile-form" onSubmit={saveProfile}><label>Ad Soyad<input value={profile.fullName} onChange={(e) => setProfile((v) => ({ ...v, fullName: e.target.value }))}/></label><label>Kullanıcı Adı<input value={profile.username} onChange={(e) => setProfile((v) => ({ ...v, username: e.target.value }))}/></label><label>E-posta<input type="email" value={profile.email} onChange={(e) => setProfile((v) => ({ ...v, email: e.target.value }))}/></label><div><button className="primary" type="submit">Kaydet</button><button type="button" onClick={() => setEditing(false)}>Vazgeç</button></div></form>}
     </section>
@@ -369,8 +369,8 @@ export default function AdminOwnerSecurity() {
     <section className="aos-card aos-recovery-security">
       <div className="aos-card-head">
         <div>
-          <h3>Uygulama Sahibi Özel Soru-Cevap</h3>
-          <p>Tek kullanımlık acil kurtarma kodu yerine, yalnız uygulama sahibi için özel soru-cevap katmanı kullanılır. Üç soru kaydedilir; kurtarmada iki tanesi rastgele sorulur.</p>
+          <h3>Süper Yönetici Özel Soru-Cevap</h3>
+          <p>Tek kullanımlık acil kurtarma kodu yerine, yalnız Süper Yönetici için özel soru-cevap katmanı kullanılır. Üç soru kaydedilir; kurtarmada iki tanesi rastgele sorulur.</p>
         </div>
         <span className={recoveryConfig?.recoveryEnabled ? "state good" : "state warn"}>
           {recoveryConfig?.recoveryEnabled ? "Aktif" : "Hazırlanıyor"}
@@ -380,7 +380,7 @@ export default function AdminOwnerSecurity() {
       <div className="aos-recovery-status">
         <span className={recoveryConfig?.questions?.length === 3 ? "good" : "warn"}>{recoveryConfig?.questions?.length || 0}/3 soru</span>
         <span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmalı"}</span>
-        <span className={recoveryConfig?.recoveryEnabled ? "good" : "warn"}>{recoveryConfig?.recoveryEnabled ? "Owner kurtarma hazır" : "Owner kurtarma henüz kapalı"}</span>
+        <span className={recoveryConfig?.recoveryEnabled ? "good" : "warn"}>{recoveryConfig?.recoveryEnabled ? "Süper Yönetici kurtarma hazır" : "Süper Yönetici kurtarma henüz kapalı"}</span>
       </div>
 
       <form className="aos-recovery-form" onSubmit={saveRecoverySecurity}>
@@ -435,13 +435,13 @@ export default function AdminOwnerSecurity() {
     {renewProvider && <section className="aos-card aos-renew">
       <div className="aos-card-head"><div><h3>{PROVIDER_LABELS[renewProvider]} — Güvenli QR Yenileme</h3><p>Mevcut Authenticator kaydı yeni kod doğrulanana kadar değiştirilmez.</p></div><button onClick={cancelRenew}>İptal</button></div>
       {renewStage === "CHOOSE" && <div className="aos-step"><h4>1. Yeniden kimlik doğrulaması</h4><p>Oturumun açık olması yeterli değildir. Şifrenizi doğrulayın veya doğrulanmış e-posta adresinize kod gönderin.</p><div className="aos-row"><button className="primary" onClick={() => setRenewStage("PASSWORD")}>Şifre ile Doğrula</button><button disabled={!owner.emailVerified || !delivery?.email} onClick={startEmailReauth}>E-posta Kodu ile Doğrula</button></div>{!owner.emailVerified && <small>E-posta seçeneği için önce üstteki e-posta doğrulamasını tamamlayın.</small>}</div>}
-      {renewStage === "PASSWORD" && <form className="aos-step" onSubmit={passwordReauth}><h4>1. Şifrenizi doğrulayın</h4><div className="aos-row"><input type="password" autoComplete="current-password" placeholder="Uygulama sahibi şifresi" value={reauthPassword} onChange={(e) => setReauthPassword(e.target.value)}/><button className="primary" type="submit">Doğrula ve QR Aç</button><button type="button" onClick={() => setRenewStage("CHOOSE")}>Geri</button></div></form>}
+      {renewStage === "PASSWORD" && <form className="aos-step" onSubmit={passwordReauth}><h4>1. Şifrenizi doğrulayın</h4><div className="aos-row"><input type="password" autoComplete="current-password" placeholder="Süper Yönetici şifresi" value={reauthPassword} onChange={(e) => setReauthPassword(e.target.value)}/><button className="primary" type="submit">Doğrula ve QR Aç</button><button type="button" onClick={() => setRenewStage("CHOOSE")}>Geri</button></div></form>}
       {renewStage === "EMAIL_OTP" && <form className="aos-step" onSubmit={verifyEmailReauth}><h4>1. E-posta güvenlik kodunu doğrulayın</h4><p>{reauthEmailChallenge?.masked || owner.email}</p><div className="aos-row"><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={reauthEmailOtp} onChange={(e) => setReauthEmailOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}/><button className="primary" type="submit">Doğrula ve QR Aç</button><button type="button" onClick={() => setRenewStage("CHOOSE")}>Geri</button></div></form>}
       {renewStage === "QR" && <form className="aos-step aos-qr-step" onSubmit={confirmRenew}><div><h4>2. Yeni QR kodunu okutun</h4><div className="aos-qr" ref={qrRef}/>{qrError && <div className="aos-error">{qrError}</div>}<small>Manuel anahtar: <code>{renewal?.secret || ""}</code></small></div><div className="aos-qr-confirm"><h4>3. Yeni kaydı doğrulayın</h4><p>Yeni Authenticator uygulamasında görünen 6 haneli kodu girin. Kod doğru değilse eski kayıt korunur.</p><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={renewCode} onChange={(e) => setRenewCode(e.target.value.replace(/\D/g, "").slice(0, 6))}/><button className="primary" type="submit">Yeni Authenticator'ı Onayla</button></div></form>}
     </section>}
 
     <section className="aos-card">
-      <div className="aos-card-head"><div><h3>Uygulama Sahibi Oturumları</h3><p>Bu cihaz güvenli çıkış yapabilir; diğer cihazlar tek tek sonlandırılabilir.</p></div><span className="state">{ownerSessions.length} aktif</span></div>
+      <div className="aos-card-head"><div><h3>Süper Yönetici Oturumları</h3><p>Bu cihaz güvenli çıkış yapabilir; diğer cihazlar tek tek sonlandırılabilir.</p></div><span className="state">{ownerSessions.length} aktif</span></div>
       <div className="aos-session-table"><div className="head"><span>Cihaz</span><span>Oluşturma</span><span>Son Görülme</span><span>İşlem</span></div>{ownerSessions.length ? ownerSessions.map((row) => { const current = String(row.id) === String(currentSessionId); return <div className="line" key={row.id}><span><b>{friendlyDevice(row)}</b>{current && <small>Bu cihaz</small>}</span><span>{dateText(row.createdAt || row.created_at)}</span><span>{dateText(row.lastSeenAt || row.last_seen_at)}</span><span><button className="danger" disabled={busy} onClick={() => closeSession(row)}>{current ? "Güvenli Çıkış" : "Oturumu Sonlandır"}</button></span></div>; }) : <div className="empty">Aktif oturum bulunamadı.</div>}</div>
     </section>
   </div>;

@@ -2,7 +2,6 @@ import { useAuth } from "../../context/AuthContext";
 import AdminSystemOverview from "../admin/AdminSystemOverview";
 import AdminCompanyOverview from "../admin/AdminCompanyOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
-import AdminLoginApprovals from "../admin/AdminLoginApprovals";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanyUsersPanel from "../admin/AdminCompanyUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
@@ -27,9 +26,11 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   const companyAdmin = canonicalRole(user?.role) === "COMPANY_ADMIN";
 
   if (String(activeTab || "").startsWith("depolama-")) {
-    return owner
-      ? <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />
-      : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    if (owner) return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+    if (companyAdmin && activeTab !== "depolama-yedekleme") {
+      return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+    }
+    return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "admin-yonetim-ozeti") {
     return owner
@@ -40,7 +41,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     return owner ? <AdminOwnerSecurity /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "giris-onaylari") {
-    return <AdminLoginApprovals />;
+    return owner ? <AdminSystemOverview activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "kullanicilar") {
     return owner
@@ -62,7 +63,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
     return owner ? <AdminCompanyBilling activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "dosya-klasor-yonetimi") {
-    return owner ? <AdminStorageCenter activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    return (owner || companyAdmin) ? <AdminStorageCenter activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "eslestirmeler") {
     return owner ? <AdminMappings activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;

@@ -31,8 +31,8 @@ export async function restoreBackup(id, payload = {}) { return unwrap(await apiP
 export async function generateBackupSql(id, payload = {}) { return unwrap(await apiPost(`/admin/backups/${encodeURIComponent(id)}/sql`, payload, { timeoutMs: 120000 })); }
 export async function downloadBackupSql(id, fileName = "KYERP-firma-yedek.sql") { return downloadFile(`/admin/backups/${encodeURIComponent(id)}/sql/download`, undefined, fileName); }
 
-// Normal Kullanıcılar ekranı uygulama sahibini bilinçli olarak içermez.
-// Uygulama sahibi zengin /managed-users kaynağını kullanır; COMPANY_ADMIN bu
+// Normal Kullanıcılar ekranı Süper Yöneticini bilinçli olarak içermez.
+// Süper Yönetici zengin /managed-users kaynağını kullanır; COMPANY_ADMIN bu
 // owner-only kaynağa erişemezse tenant-sınırlı /admin/users kaynağına düşer.
 export async function listUsers() {
   try {
@@ -69,7 +69,7 @@ export async function denyLogin(id) { return unwrap(await apiPost(`/admin/securi
 
 // Legacy direct reset is intentionally unavailable. The backend also rejects it.
 export async function resetUserMfa() {
-  throw new Error("Doğrudan Authenticator sıfırlama kapalıdır. Yenileme için Uygulama Sahibi güvenlik ekranındaki şifre/e-posta doğrulama akışını kullanın.");
+  throw new Error("Doğrudan Authenticator sıfırlama kapalıdır. Yenileme için Süper Yönetici güvenlik ekranındaki şifre/e-posta doğrulama akışını kullanın.");
 }
 
 export async function reauthOwnerWithPassword(payload = {}) { return unwrap(await apiPost("/admin/security/reauth/password", payload)); }

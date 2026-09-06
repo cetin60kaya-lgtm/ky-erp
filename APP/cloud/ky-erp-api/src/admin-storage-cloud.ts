@@ -14,6 +14,7 @@ const upper = (v: unknown) => text(v).toUpperCase().replace(/İ/g, "I");
 const lowerSlug = (v: unknown) => text(v).toLocaleLowerCase("tr-TR");
 const slugOf = (c: any, b: Row = {}) => text(b.mainCompanySlug || b.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug") || c.req.query("mainCompanyId") || "mecit-hakan");
 const isOwner = (role: unknown) => ["ADMIN","SUPER_ADMIN"].includes(upper(role));
+const isCompanyOwner = (role: unknown) => upper(role) === "COMPANY_ADMIN";
 const errorBody = (code: string, message: string) => ({ ok:false, error:{ code,message } });
 async function ownerCurrent(c:any){ const u=await getAuthenticatedUser(c); return u&&isOwner(u.role)?u:null; }
 function permissionFor(user:Row,moduleKey:string){return Array.isArray(user?.permissions)?user.permissions.find((p:Row)=>upper(p.moduleKey||p.module_key)===upper(moduleKey)):null;}
@@ -50,8 +51,12 @@ export function registerAdminStorageRoutes(app:any){
     if(!requested&&own!=="mecit-hakan")return c.json(errorBody("FILE_HUB_TENANT_REQUIRED","File Hub isteğinde aktif firma bağlamı zorunludur."),403);
     if(requested&&requested!==own)return c.json(errorBody("FILE_HUB_TENANT_FORBIDDEN","Başka firmanın File Hub alanına erişemezsiniz."),403);
 
+    // Firma sahibi / işveren kendi tenantında Mail + Drive/File Hub yönetimini yapar.
+    // Uygulama sahibi sistem seviyesinde görünürlüğünü korur; normal kullanıcılar yönetim endpointlerine çıkamaz.
+    if(isCompanyOwner(user.role))return next();
+
     const ownerOnly = path.startsWith("/api/file-hub/cloud/") || path==="/api/file-hub/overview" || path==="/api/file-hub/connections" || path==="/api/file-hub/bindings" || path==="/api/file-hub/files" || path==="/api/file-hub/search" || /\/files\/[^/]+\/relations$/.test(path);
-    if(ownerOnly)return c.json(errorBody("OWNER_ONLY","Dosya Merkezi yönetim görünümü yalnız uygulama sahibine açıktır."),403);
+    if(ownerOnly)return c.json(errorBody("COMPANY_OWNER_ONLY","Dosya Merkezi yönetim görünümü firma sahibi / işverene açıktır."),403);
     if(path==="/api/file-hub/entity-files"){
       const moduleKey=entityModule(c.req.query("entityType"));
       if(moduleKey&&!permissionFor(user,moduleKey)?.canView)return c.json(errorBody("FORBIDDEN","Bu kaydın dosyalarını görme yetkiniz bulunmuyor."),403);

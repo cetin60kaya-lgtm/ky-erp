@@ -161,16 +161,16 @@ export const MODULES = [
   {
     key: "admin",
     permissionKey: "ADMIN",
-    label: "Yönetim",
+    label: "Platform Yönetimi",
     icon: "ayarlar",
     groups: [
       {
-        label: "Sistem Yönetimi",
+        label: "Platform Yönetimi",
         tabs: [
-          ["admin-yonetim-ozeti", "Yönetim Özeti", "dashboard"],
-          ["uygulama-sahibi", "Uygulama Sahibi", "ayarlar"],
-          ["kullanicilar", "Kullanıcılar", "users"],
-          ["ana-firma-ayarlar", "Ana Firma / Ayarlar", "ayarlar"],
+          ["admin-yonetim-ozeti", "Yönetim Konsolu", "dashboard"],
+          ["uygulama-sahibi", "Süper Yönetici & Güvenlik", "ayarlar"],
+          ["kullanicilar", "Kullanıcı & Yetkiler", "users"],
+          ["ana-firma-ayarlar", "Firmalar & Organizasyon", "ayarlar"],
         ],
       },
       {

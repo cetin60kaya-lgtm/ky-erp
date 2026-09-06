@@ -13,6 +13,10 @@ const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme",
 function isOwnerUser(user) {
   return ["SUPER_ADMIN", "ADMIN"].includes(String(user?.role || "").toUpperCase().replace(/İ/g, "I"));
 }
+function roleLabel(role) {
+  const value=String(role||"").toUpperCase().replace(/İ/g,"I");
+  return ({SUPER_ADMIN:"Süper Yönetici",ADMIN:"Süper Yönetici",COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",DENETIM:"Denetim",VIEWER:"Özel Yetkili"})[value] || role || "-";
+}
 
 function tabVisible(module, tab, user) {
   if (!module || !tab) return false;
@@ -53,6 +57,7 @@ function normalize(value) {
 
 function notificationCategoryLabel(category) {
   if (category === "SECURITY") return "Güvenlik";
+  if (category === "APPROVAL") return "Onay";
   if (category === "E_BELGE") return "e-Belge";
   if (category === "PAYMENT") return "Ödeme";
   return "Sistem";
@@ -389,7 +394,7 @@ export default function AppShellV3({
           </div>
           <div className="shell-v3-user">
             <b>{String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</b>
-            <div><strong>{user?.fullName || user?.username || "Kullanıcı"}</strong><small>{user?.role || "-"}</small></div>
+            <div><strong>{user?.fullName || user?.username || "Kullanıcı"}</strong><small>{roleLabel(user?.role)}</small></div>
             <button type="button" onClick={onLogout}>Çıkış</button>
           </div>
         </header>

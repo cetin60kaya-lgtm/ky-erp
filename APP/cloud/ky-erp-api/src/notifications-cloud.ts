@@ -100,27 +100,83 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
   if (!canApprove || !(await tableExists(c, "auth_login_approvals"))) return [];
 
   const now = new Date().toISOString();
-  const result = await c.env.DB.prepare(
-    `SELECT a.id,a.user_id,a.device_label,a.ip_address,a.requested_at,a.expires_at,
-            COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name
-       FROM auth_login_approvals a
-       LEFT JOIN auth_users u ON u.id=a.user_id
-      WHERE UPPER(COALESCE(a.status,''))='PENDING'
-        AND a.expires_at>?
-        AND COALESCE(NULLIF(TRIM(a.main_company_slug),''),?)=?
-      ORDER BY a.requested_at DESC
-      LIMIT 12`,
-  ).bind(now, tenant, tenant).all<AnyRow>();
+  const result = ownerRole(current?.role)
+    ? await c.env.DB.prepare(
+        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.ip_address,a.requested_at,a.expires_at,
+                COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name
+           FROM auth_login_approvals a
+           LEFT JOIN auth_users u ON u.id=a.user_id
+          WHERE UPPER(COALESCE(a.status,''))='PENDING'
+            AND a.expires_at>?
+          ORDER BY a.requested_at DESC
+          LIMIT 30`,
+      ).bind(now).all<AnyRow>()
+    : await c.env.DB.prepare(
+        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.ip_address,a.requested_at,a.expires_at,
+                COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name
+           FROM auth_login_approvals a
+           LEFT JOIN auth_users u ON u.id=a.user_id
+          WHERE UPPER(COALESCE(a.status,''))='PENDING'
+            AND a.expires_at>?
+            AND COALESCE(NULLIF(TRIM(a.main_company_slug),''),?)=?
+          ORDER BY a.requested_at DESC
+          LIMIT 12`,
+      ).bind(now, tenant, tenant).all<AnyRow>();
 
   return (result.results || []).map((row: AnyRow) => ({
     id: `login-approval:${text(row.id)}`,
     category: "SECURITY",
     severity: "warning",
     title: "Bekleyen giriş onayı",
-    detail: [text(row.user_name), text(row.device_label) || "Yeni cihaz"].filter(Boolean).join(" · "),
+    detail: [ownerRole(current?.role) ? text(row.main_company_slug) : "", text(row.user_name), text(row.device_label) || "Yeni cihaz"].filter(Boolean).join(" · "),
     createdAt: toIso(row.requested_at),
-    route: { moduleKey: "admin", tabKey: "giris-onaylari" },
-    meta: { userId: text(row.user_id), expiresAt: toIso(row.expires_at) },
+    route: { moduleKey: "admin", tabKey: "admin-yonetim-ozeti" },
+    meta: { userId: text(row.user_id), mainCompanySlug: text(row.main_company_slug), expiresAt: toIso(row.expires_at) },
+  }));
+}
+
+async function collectMailApprovals(c: any, current: AnyRow, tenant: string) {
+  if (
+    !(ownerRole(current?.role) || companyAdminRole(current?.role)) ||
+    !(await tableExists(c, "mail_approval_requests")) ||
+    !(await tableExists(c, "mail_accounts"))
+  ) return [];
+
+  const result = ownerRole(current?.role)
+    ? await c.env.DB.prepare(
+        `SELECT r.id,r.main_company_slug,r.created_at,r.request_type,
+                a.email_address,a.display_name,a.provider_type,a.account_type,a.department_code
+           FROM mail_approval_requests r
+           JOIN mail_accounts a ON a.id=r.target_id AND a.main_company_slug=r.main_company_slug
+          WHERE UPPER(COALESCE(r.status,''))='PENDING'
+          ORDER BY r.created_at DESC
+          LIMIT 30`,
+      ).all<AnyRow>()
+    : await c.env.DB.prepare(
+        `SELECT r.id,r.main_company_slug,r.created_at,r.request_type,
+                a.email_address,a.display_name,a.provider_type,a.account_type,a.department_code
+           FROM mail_approval_requests r
+           JOIN mail_accounts a ON a.id=r.target_id AND a.main_company_slug=r.main_company_slug
+          WHERE UPPER(COALESCE(r.status,''))='PENDING'
+            AND r.main_company_slug=?
+          ORDER BY r.created_at DESC
+          LIMIT 20`,
+      ).bind(tenant).all<AnyRow>();
+
+  return (result.results || []).map((row: AnyRow) => ({
+    id: `mail-approval:${text(row.id)}`,
+    category: "APPROVAL",
+    severity: "warning",
+    title: "Mail hesabı firma sahibi onayı bekliyor",
+    detail: [
+      ownerRole(current?.role) ? text(row.main_company_slug) : "",
+      text(row.display_name) || text(row.email_address),
+      text(row.provider_type),
+      text(row.department_code),
+    ].filter(Boolean).join(" · "),
+    createdAt: toIso(row.created_at),
+    route: { moduleKey: "depolama", tabKey: "depolama-mail" },
+    meta: { requestId: text(row.id), mainCompanySlug: text(row.main_company_slug), emailAddress: text(row.email_address) },
   }));
 }
 
@@ -211,6 +267,7 @@ async function collectNotifications(c: any, current: AnyRow, tenant: string) {
 
   for (const [source, collector] of [
     ["SECURITY", collectLoginApprovals],
+    ["APPROVAL", collectMailApprovals],
     ["E_BELGE", collectEBelgeIssues],
     ["PAYMENT", collectPaymentReminders],
   ] as const) {

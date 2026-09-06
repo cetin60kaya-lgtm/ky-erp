@@ -44,16 +44,19 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
   catch { return {}; }
 }
 async function currentUser(c: Context<AppEnv>) { return await getAuthenticatedUser(c) as Row | null; }
-function isOwner(user: Row | null) { return Boolean(user && ["ADMIN", "SUPER_ADMIN"].includes(upper(user.role))); }
 function companySlug(c: Context<AppEnv>, body: Row = {}) {
   return text(body.mainCompanySlug || body.main_company_slug || c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanySlug"));
 }
-async function assertOwner(c: Context<AppEnv>, body: Row = {}) {
+async function assertCompanyOwner(c: Context<AppEnv>, body: Row = {}) {
   const user = await currentUser(c);
-  if (!isOwner(user)) return { error: c.json(err("OWNER_ONLY", "Bulut depolama servisini yalnız uygulama sahibi yönetebilir."), 403) };
+  if (!user || upper(user.role) !== "COMPANY_ADMIN") {
+    return { error: c.json(err("COMPANY_OWNER_ONLY", "Google Drive / OneDrive / SharePoint bağlantısını yalnız bu firmanın sahibi / işvereni yönetebilir."), 403) };
+  }
   const slug = companySlug(c, body);
   if (!slug) return { error: c.json(err("TENANT_REQUIRED", "Aktif firma seçimi gerekli."), 422) };
-  return { user: user!, slug };
+  const own = text(user.mainCompanySlug || user.main_company_slug || user.security?.main_company_slug);
+  if (!own || own !== slug) return { error: c.json(err("TENANT_FORBIDDEN", "Başka firmanın depolama bağlantısını yönetemezsiniz."), 403) };
+  return { user, slug };
 }
 
 async function cryptoKey(c: Context<AppEnv>) {
@@ -365,7 +368,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   });
 
   app.post("/api/file-hub/cloud/authorize", async (c) => {
-    const body = await bodyOf(c); const gate = await assertOwner(c, body); if (gate.error) return gate.error;
+    const body = await bodyOf(c); const gate = await assertCompanyOwner(c, body); if (gate.error) return gate.error;
     const providerType = upper(body.providerType), cfg = providerConfig(c, providerType);
     if (!cfg.family) return c.json(err("INVALID_PROVIDER", "Bu servis doğrudan bulut bağlantısını desteklemiyor."), 422);
     if (!providerReady(c, providerType)) return c.json(err("OAUTH_NOT_CONFIGURED", `${providerType === "GOOGLE_DRIVE" ? "Google Drive" : "Microsoft"} OAuth uygulama bilgileri henüz production ortamında tanımlı değil.`), 503);
@@ -453,7 +456,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   });
 
   app.post("/api/file-hub/cloud/connections", async (c) => {
-    const body = await bodyOf(c); const gate = await assertOwner(c, body); if (gate.error) return gate.error;
+    const body = await bodyOf(c); const gate = await assertCompanyOwner(c, body); if (gate.error) return gate.error;
     const accountId = text(body.accountId), rootFolderId = text(body.rootFolderId) || "root", rootFolderName = text(body.rootFolderName) || "Ana Klasör", driveId = text(body.driveId), isPrimary = Boolean(body.isPrimary);
     if (!accountId) return c.json(err("ACCOUNT_REQUIRED", "Bağlanacak bulut hesabını seçin."), 422);
     const account = await c.env.DB.prepare(`SELECT * FROM file_hub_oauth_accounts WHERE id=? AND main_company_slug=? LIMIT 1`).bind(accountId, gate.slug).first<Row>();
@@ -469,7 +472,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   });
 
   app.delete("/api/file-hub/cloud/connections/:id", async (c) => {
-    const gate = await assertOwner(c); if (gate.error) return gate.error; const id = c.req.param("id"), ts = now();
+    const gate = await assertCompanyOwner(c); if (gate.error) return gate.error; const id = c.req.param("id"), ts = now();
     const row = await c.env.DB.prepare(`SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? LIMIT 1`).bind(id, gate.slug).first<Row>();
     if (!row) return c.json(err("NOT_FOUND", "Depolama servisi bulunamadı."), 404);
     await c.env.DB.prepare(`UPDATE file_hub_connections SET is_active=0,connection_status='DISCONNECTED',updated_at=? WHERE id=? AND main_company_slug=?`).bind(ts, id, gate.slug).run();
@@ -477,7 +480,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   });
 
   app.post("/api/file-hub/cloud/connections/:id/sync", async (c) => {
-    const body = await bodyOf(c); const gate = await assertOwner(c, body); if (gate.error) return gate.error; const connectionId = c.req.param("id"), limit = Math.min(2500, Math.max(50, Number(body.limit || 1200)));
+    const body = await bodyOf(c); const gate = await assertCompanyOwner(c, body); if (gate.error) return gate.error; const connectionId = c.req.param("id"), limit = Math.min(2500, Math.max(50, Number(body.limit || 1200)));
     try {
       const { link, accessToken } = await connectionAccount(c, gate.slug, connectionId); if (Number(link.is_active) === 0) return c.json(err("CONNECTION_DISABLED", "Bu depolama servisi pasif."), 409);
       const provider = upper(link.provider_type), driveId = text(link.provider_drive_id), rootId = text(link.remote_root_id) || "root", rootName = text(link.remote_root_name) || "Ana Klasör", seenAt = now();
