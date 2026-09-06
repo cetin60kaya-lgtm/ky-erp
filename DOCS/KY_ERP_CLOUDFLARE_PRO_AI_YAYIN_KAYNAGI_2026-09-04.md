@@ -146,7 +146,7 @@ Token bir secret'tır. Repo, chat, log veya MD dosyasına token değeri yazılma
 - Workers Builds Configuration — Edit
 - Workers Scripts — Edit
 - Cloudflare Pages — Edit
-- D1 — Edit
+- D1 — Read only
 - Workers R2 Storage — Edit
 - Workers AI — Edit
 - AI Gateway — Read + Edit + Run
@@ -191,18 +191,25 @@ Resource scope:
 
 `KY ERP -> Worker API -> tenant/permission guard -> AI Gateway -> Workers AI / gerekirse harici provider -> audit/metering`
 
-### Hemen kullanılacak
+### Production'da aktif / hazır
 
-- Workers AI
-- AI Gateway
-- AI request/rate/maliyet görünürlüğü
-- Queues
-- Workflows
-- Vectorize
+- Workers AI binding `AI` — aktif.
+- AI Gateway — `default` gateway üzerinden Workers AI çağrılarına bağlandı.
+- AI Gateway cache — tenant/ERP cevaplarında yanlış çapraz-cache riskini önlemek için request bazında bypass.
+- AI Gateway persistent request/response logu — hassas ERP promptlarının saklanmaması için varsayılan kapalı.
+- AI kullanım/maliyet takibi — KY ERP kendi tenant bazlı billing ledger'ı üzerinden devam eder.
 
-### Pilot
+### İhtiyaç oluşunca aktive edilecek altyapı
 
-- AI Search (beta)
+- Queues — gerçek asenkron iş kuyruğu gerektiren modül için.
+- Workflows — uzun süreli/idempotent çok adımlı iş akışı için.
+- Vectorize — semantik benzerlik araması için gerçek embedding indeks ihtiyacı doğduğunda.
+- AI Search — File Hub/kurumsal belge semantik araması pilotu için.
+
+Bu dört servis **çekirdek production blocker değildir**. Kullanılmayan Cloudflare kaynağı sırf açık görünsün diye production'a eklenmez; somut iş akışı + tenant/permission contract hazır olduğunda ayrı kontrollü paket olarak etkinleştirilir.
+
+### Pilot / değerlendirme
+
 - Secrets Store (beta)
 - Browser Run / portal otomasyonu
 - Email Sending (beta)
@@ -317,22 +324,24 @@ Sonraki allowlist:
 
 ---
 
-## 10. Cloudflare Pro rollout sırası
+## 10. Cloudflare Pro rollout sırası — 06.09.2026 final durum
 
-1. Git auto-deploy — TAMAM.
-2. GitHub Actions auto trigger kapatma — TAMAM.
-3. Pro plan — TAMAM.
-4. Management token — kullanıcı tarafından tek sefer oluşturulacak.
-5. WAF managed rules — observe/log -> kontrollü enforce.
-6. Login/recovery rate limits.
-7. API cache bypass + asset cache doğrulaması.
-8. Bot koruması — API/PDKS/File Agent istisnalarıyla.
-9. Turnstile — login/recovery.
-10. AI Gateway.
-11. Workers AI metering.
-12. Queues/Workflows.
-13. Vectorize.
-14. AI Search pilot.
+1. Git auto-deploy — **TAMAM**.
+2. GitHub Actions production auto-trigger kapatma — **TAMAM**.
+3. Cloudflare Pro — **TAMAM**.
+4. Least-privilege management token — **TAMAM**; D1 yalnız Read, secret değeri kaynakta yok.
+5. Cloudflare Managed WAF — **TAMAM / Observe-Log**. Enforce bilerek açılmadı; event verisi görülmeden kör block yapılmaz.
+6. Login rate limit — **TAMAM**: `/api/auth/login` 10 istek / 60 sn / IP, 60 sn block. İkinci Pro slotu bilerek boş.
+7. API cache bypass — **TAMAM**: `api.kyerp.net/api` ve `/api/*` cache dışı.
+8. Bot policy audit — **TAMAM**: Verified Bots allow; geniş SBFM block/challenge açılmadı. API/mobile/PDKS/File Agent korunur.
+9. Turnstile — **TAMAM**: web login server-side verify + fail-closed.
+10. Owner session security — **TAMAM**: kalıcı browser restore ve rolling refresh kapalı; normal kullanıcı davranışı korunur.
+11. AI Gateway — **TAMAM / source-ready**: Workers AI çağrıları `default` gateway üzerinden, cache bypass, persistent prompt logu varsayılan kapalı.
+12. Workers AI — **TAMAM**: `AI` binding ve tenant/billing guard aktif.
+13. Queues / Workflows — **BLOCKER DEĞİL / ihtiyaç bazlı**.
+14. Vectorize / AI Search — **BLOCKER DEĞİL / semantik arama paketi olarak ihtiyaç bazlı**.
+
+**Çekirdek Cloudflare production katmanı tamam kabul edilir.** Kalan servisler yeni ürün özelliği paketidir; mevcut ERP'nin güvenli yayınını tamamlamak için zorunlu değildir.
 
 ---
 
@@ -358,28 +367,27 @@ Yeni sohbette:
 
 ---
 
-## 13. Yarın devam noktası — 04.09.2026
+## 13. 04.09 tarihli kurulum notunun durumu
 
-Kullanıcı Cloudflare Pro aktivasyonunu tamamladı ve API Token oluşturma ekranına geldi.
+04.09 tarihli "token henüz oluşturulmadı / WAF-Turnstile kurulacak" devam notu artık **tarihsel ve geçersizdir**. 06.09 final durumu bu dosyanın 10. bölümünde tutulur.
 
-Yarın buradan devam edilecek:
-
-- Token adı: `KY ERP Pro Otomasyon`
-- API token henüz oluşturulmadı.
-- İzinler henüz final olarak kaydedilmedi.
-- Resource scope yalnız mevcut KY ERP Cloudflare hesabı + `kyerp.net` zone olacak.
-- D1 için yalnız Read; D1 Edit verilmeyecek.
-- Billing/API Tokens/Account Members/DNS Edit verilmeyecek.
-- Token değeri chat/repo/log içine yazılmayacak.
-- Token oluşturulduktan sonra `ky-erp-api` build/runtime secrets tarafına güvenli secret olarak eklenecek.
-- Ardından sırasıyla WAF -> rate limit -> cache -> bot koruması -> Turnstile -> AI Gateway -> Workers AI -> Queues -> Workflows -> Vectorize -> AI Search pilotu uygulanacak.
-- GitHub Actions otomatik production yolu olarak kullanılmayacak; Cloudflare Git Integration canonical deploy yoludur.
-
-Kullanıcı talebi: **Yarın minimum soru ile buradan devam et.**
+Kalıcı kurallar:
+- Token adı `KY ERP Pro Otomasyon`.
+- Resource scope yalnız KY ERP Cloudflare hesabı + `kyerp.net`.
+- D1 yalnız Read; D1 Edit verilmez.
+- Billing/API Tokens/Account Members/DNS Edit verilmez.
+- Token değeri chat/repo/log içine yazılmaz.
+- Production deploy yolu GitHub Actions değil, Cloudflare Git Integration'dır.
 
 
 ---
 
-## 14. 06.09.2026 güncellemesi
+## 14. 06.09.2026 final güncellemesi
 
-Production deploy için GitHub Actions kullanılmaması kesinleştirildi. Sağ üst Bildirim Merkezi gerçek notification API'ye bağlandı. Ayrıntılı son kaynak: `DOCS/KY_ERP_CANLI_YAYIN_BILDIRIM_KAYNAGI_2026-09-06.md`.
+- Production deploy için GitHub Actions kullanılmaması kesinleştirildi.
+- Normal canlıya almada PowerShell/token/manual deploy yok; canonical kaynak: `DOCS/KY_ERP_CANLIYA_ALMA_CANONICAL_2026-09-06.md`.
+- Sağ üst Bildirim Merkezi gerçek notification API'ye bağlandı.
+- Turnstile + MFA + owner session güvenliği final.
+- AI Gateway + Workers AI production source contractı tamamlandı.
+- Queues/Workflows/Vectorize/AI Search çekirdek blocker olmaktan çıkarıldı; yalnız somut ürün iş akışı gerektirirse ayrı feature paketi olarak açılacak.
+- Bu bölüm eski "yarın devam" notlarının üstündedir.
