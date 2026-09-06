@@ -585,7 +585,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           <p><b>Aktif Firma:</b> {activeCompanyName} · Mail, firma dosyaları ve ERP ilişkileri tek çalışma alanında.</p>
         </div>
         <div className="comm-actions">
-          {isMail ? <button type="button" onClick={() => setComposeOpen(true)} disabled={!selectedAccountId || loading}>+ Yeni Mail</button> : null}
+          {isMail ? <button type="button" onClick={openNewCompose} disabled={!selectedAccountId || loading}>+ Yeni Mail</button> : null}
           {isMail ? <button type="button" className="secondary" onClick={() => setRequestOpen(true)}>+ Mail Hesabı</button> : null}
           <button type="button" className="secondary" onClick={loadBase} disabled={loading}>Yenile</button>
         </div>
@@ -608,11 +608,28 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             {HAKAN_DIRECT_ACCOUNTS.map((preset) => {
               const runtime = providers.find((row) => String(row.provider || "").toUpperCase() === preset.providerType);
               const existing = accounts.find((row) => String(row.email_address || row.emailAddress || "").trim().toLowerCase() === preset.emailAddress.toLowerCase());
-              const ready = Boolean(runtime?.adapterReady && runtime?.configured);
-              return <article key={preset.key} className="comm-direct-mail-card">
+              const providerReady = Boolean(runtime?.adapterReady && runtime?.configured);
+              const readiness = existing?.readiness || {};
+              const steps = [
+                ["Sağlayıcı", providerReady],
+                ["Firma Onayı", Boolean(readiness.companyApproved)],
+                ["OAuth", Boolean(readiness.oauthConnected)],
+                ["Senkron", Boolean(readiness.syncHealthy)],
+              ];
+              const complete = Boolean(existing && providerReady && readiness.complete);
+              const actionLabel = !existing ? "Hesap Kaydı Oluştur"
+                : !readiness.companyApproved ? "Onay Bekleniyor"
+                  : !readiness.oauthConnected ? "Hesabı Bağla"
+                    : !readiness.syncHealthy ? "Senkronize Et"
+                      : "Bağlı ve Hazır";
+              return <article key={preset.key} className={`comm-direct-mail-card ${complete ? "complete" : ""}`}>
                 <div><b>{preset.title}</b><span>{preset.emailAddress}</span><small>{providerLabel(preset.providerType)} · {preset.departmentCode === "DESEN" ? "Desen bölümü" : "Şirket ana maili"}</small></div>
-                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || !ready}>{existing ? "Hesabı Bağla" : "Direkt Ekle & Bağla"}</button>
-                {!ready ? <em>{runtime?.reason || "Sağlayıcı production OAuth ayarı henüz doğrulanmadı."}</em> : null}
+                <button type="button" onClick={() => addAndConnectPreset(preset)} disabled={loading || !providerReady || (Boolean(existing) && !readiness.companyApproved)}>{actionLabel}</button>
+                <div className="comm-readiness-steps">{steps.map(([label, ok]) => <span key={label} className={ok ? "ok" : "pending"}>{ok ? "✓" : "○"} {label}</span>)}</div>
+                {!providerReady ? <em>{runtime?.reason || "Sağlayıcı production OAuth ayarı henüz doğrulanmadı."}</em>
+                  : existing && !readiness.companyApproved ? <em>Firma sahibi onayı tamamlanmadan bu hesap bağlı sayılmaz.</em>
+                    : existing && readiness.oauthConnected && !readiness.syncHealthy ? <em>OAuth bağlı; ilk başarılı posta senkronu henüz doğrulanmadı.</em>
+                      : null}
               </article>;
             })}
           </div> : null}
