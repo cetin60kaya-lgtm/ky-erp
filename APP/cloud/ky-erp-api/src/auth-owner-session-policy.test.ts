@@ -11,7 +11,8 @@ const mainSource = fs.readFileSync(path.join(here, "main.ts"), "utf8");
 test("owner refresh endpoint is fail-closed", () => {
   assert.match(refreshSource, /OWNER_SESSION_REFRESH_DISABLED/);
   assert.match(refreshSource, /if \(isOwner\(current\.role\)\)/);
-  assert.match(refreshSource, /sessionRefreshSeconds\("SUPER_ADMIN"/);
+  assert.match(refreshSource, /export const OWNER_REFRESH_SECONDS = 0/);
+  assert.match(refreshSource, /if \(isOwner\(role\)\) return OWNER_REFRESH_SECONDS/);
 });
 
 test("auth status advertises non-persistent owner policy", () => {
