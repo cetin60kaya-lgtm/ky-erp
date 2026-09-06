@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: temp-ik-retired-sgk-final
-  cancel-in-progress: true
+  group: temp-ik-retired-sgk-final-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   worker:
