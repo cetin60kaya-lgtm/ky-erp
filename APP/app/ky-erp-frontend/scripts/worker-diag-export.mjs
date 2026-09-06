@@ -1,31 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const worker = path.resolve(here, "../../../cloud/ky-erp-api");
-const pub = path.resolve(here, "../public");
-mkdirSync(pub, { recursive: true });
 
-const sections = [];
 function run(label, command, args) {
   const r = spawnSync(command, args, { cwd: worker, encoding: "utf8", shell: process.platform === "win32" });
-  sections.push([
-    `===== ${label} =====`,
-    `status=${r.status}`,
-    `signal=${r.signal ?? ""}`,
-    "--- stdout ---",
-    r.stdout || "",
-    "--- stderr ---",
-    r.stderr || ""
-  ].join("\n"));
+  console.log(`===== ${label} =====`);
+  if (r.stdout) console.log(r.stdout);
+  if (r.stderr) console.error(r.stderr);
+  return r.status ?? 1;
 }
 
-run("npm ci", "npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
-run("typecheck", "npm", ["run", "typecheck"]);
-run("test", "npm", ["test"]);
-run("build", "npm", ["run", "build"]);
-
-writeFileSync(path.join(pub, "worker-diag.txt"), sections.join("\n\n"), "utf8");
-console.log("WORKER_DIAG_EXPORTED");
+const ci = run("npm ci", "npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+if (ci !== 0) process.exit(ci);
+const typecheck = run("typecheck", "npm", ["run", "typecheck"]);
+if (typecheck !== 0) process.exit(typecheck);
+console.log("WORKER_TYPECHECK_GATE_PASS");
