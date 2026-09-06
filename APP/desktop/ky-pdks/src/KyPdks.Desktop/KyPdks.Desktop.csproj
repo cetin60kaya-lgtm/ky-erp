@@ -27,6 +27,8 @@
   <ItemGroup Condition="'$(ProductMode)' == 'PDKS'">
     <Page Remove="KyErpDesktopWindow.xaml" />
     <Compile Remove="KyErpDesktopWindow.xaml.cs" />
+    <Page Remove="KyErpShellWindow.xaml" />
+    <Compile Remove="KyErpShellWindow.xaml.cs" />
   </ItemGroup>
 
   <ItemGroup>
