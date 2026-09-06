@@ -1,9 +1,14 @@
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
+import AdminMailConnections from "../admin/AdminMailConnections";
 
-export default function DepolamaPage({ activeTab, activeMainCompany }) {
+export default function DepolamaPage({ activeTab, activeMainCompany, openModule }) {
   if (activeTab === "depolama-yedekleme") {
     return <AdminBackupLogs activeMainCompany={activeMainCompany} />;
+  }
+
+  if (activeTab === "depolama-mail") {
+    return <AdminMailConnections activeMainCompany={activeMainCompany} openModule={openModule} />;
   }
 
   return (

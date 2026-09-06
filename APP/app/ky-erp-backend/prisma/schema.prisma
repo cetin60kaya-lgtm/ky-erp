@@ -142,6 +142,7 @@ enum ModuleKey {
   BOYAHANE
   IK
   ISNET
+  MAIL
   ASISTAN
   ADMIN
   RAPORLAR

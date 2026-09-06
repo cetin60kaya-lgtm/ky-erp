@@ -6,23 +6,51 @@ import {
 const DEPOLAMA_MODULE = {
   key: "depolama",
   permissionKey: "STORAGE_ADMIN",
-  label: "Depolama",
+  label: "Bağlantılar & Depolama",
   icon: "dosya",
   groups: [
     {
-      label: "Depolama Merkezi",
+      label: "Bağlantılar",
       tabs: [
         ["depolama-genel", "Genel Bakış", "dashboard"],
-        ["depolama-kaynaklar", "Servisler", "dosya"],
+        ["depolama-kaynaklar", "Dosya Servisleri", "dosya"],
+        ["depolama-mail", "E-posta Hesapları", "eposta"],
         ["depolama-atamalar", "Bölüm / Dosya Atamaları", "file-check"],
       ],
     },
     {
-      label: "Dosya ve Senkronizasyon",
+      label: "Dosya Sistemi",
       tabs: [
         ["depolama-dosyalar", "Dosya İndeksi", "dosya"],
-        ["depolama-senkronizasyon", "Senkronizasyon", "ayarlar"],
-        ["depolama-yedekleme", "Yedekleme / Loglar", "raporlar"],
+        ["depolama-senkronizasyon", "Senkronizasyon & Agent", "ayarlar"],
+        ["depolama-yedekleme", "Yedekleme & Loglar", "raporlar"],
+      ],
+    },
+  ],
+};
+
+const ILETISIM_MODULE = {
+  key: "iletisim",
+  permissionKey: "MAIL",
+  label: "Mail & Dosyalar",
+  icon: "eposta",
+  groups: [
+    {
+      label: "Mail",
+      tabs: [
+        ["mail-gelen", "Gelen Kutusu", "eposta"],
+        ["mail-gonderilen", "Gönderilenler", "eposta"],
+        ["mail-taslaklar", "Taslaklar", "dosya"],
+        ["mail-yanit-bekleyen", "Yanıt Bekleyenler", "file-check"],
+        ["mail-sablonlar", "Şablonlar", "dosya"],
+      ],
+    },
+    {
+      label: "Dosyalar",
+      tabs: [
+        ["drive-dosyalar", "Dosyalar", "dosya"],
+        ["drive-son-kullanilanlar", "Son Kullanılanlar", "takvim"],
+        ["drive-firma-dosyalari", "Firma Dosyaları", "dosya"],
       ],
     },
   ],
@@ -125,10 +153,11 @@ export const MODULES = adminIndex >= 0
   ? [
       ...modulesWithoutEBelge.slice(0, adminIndex),
       ...(eBelgeModule ? [eBelgeModule] : []),
+      ILETISIM_MODULE,
       DEPOLAMA_MODULE,
       ...modulesWithoutEBelge.slice(adminIndex),
     ]
-  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), DEPOLAMA_MODULE];
+  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, DEPOLAMA_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
@@ -149,11 +178,27 @@ export const MODULE_ROUTE_ALIASES = {
     "e-fatura": "e-belge-gelen-faturalar",
     "e-irsaliye": "e-belge-gelen-irsaliyeler",
   },
+  iletisim: {
+    mail: "mail-gelen",
+    gelen: "mail-gelen",
+    gonderilen: "mail-gonderilen",
+    taslaklar: "mail-taslaklar",
+    "yanit-bekleyen": "mail-yanit-bekleyen",
+    sablonlar: "mail-sablonlar",
+    drive: "drive-dosyalar",
+    dosyalar: "drive-dosyalar",
+    "son-kullanilanlar": "drive-son-kullanilanlar",
+    "firma-dosyalari": "drive-firma-dosyalari",
+  },
   depolama: {
     genel: "depolama-genel",
     baglantilar: "depolama-kaynaklar",
     servisler: "depolama-kaynaklar",
     kaynaklar: "depolama-kaynaklar",
+    mail: "depolama-mail",
+    email: "depolama-mail",
+    eposta: "depolama-mail",
+    mailhesaplari: "depolama-mail",
     atamalar: "depolama-atamalar",
     yonlendirmeler: "depolama-atamalar",
     dosyalar: "depolama-dosyalar",
