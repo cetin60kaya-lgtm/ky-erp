@@ -119,9 +119,10 @@ export default function AccountingReportsListWorkspace({ activeMainCompany }) {
             ]),
           );
         } else if (definition.key === "gelen-faturalar") {
-          const rows = listOf(await apiGet("/muhasebe/belge-import", common)).filter((row) =>
-            inRange(row.issueDate || row.createdAt, filters.dateFrom, filters.dateTo),
-          );
+          const rows = listOf(await apiGet("/muhasebe/accounting/documents-read", {
+            ...common,
+            kind: "SUPPLIER_INVOICE",
+          })).filter((row) => inRange(row.issueDate || row.createdAt, filters.dateFrom, filters.dateTo));
           table = normalizeTable(
             ["Tarih", "Firma", "Fatura No", "Matrah", "KDV", "Toplam", "Kaynak", "Durum"],
             rows.map((row) => [
@@ -137,7 +138,10 @@ export default function AccountingReportsListWorkspace({ activeMainCompany }) {
             [["Belge sayısı", rows.length], ["Genel toplam", money(rows.reduce((sum, row) => sum + Number(row.grandTotal || 0), 0))]],
           );
         } else if (definition.key === "kesilen-faturalar") {
-          const payload = await apiGet("/muhasebe/kesilen-faturalar", common);
+          const payload = await apiGet("/muhasebe/accounting/documents-read", {
+            ...common,
+            kind: "CUSTOMER_INVOICE",
+          });
           const rows = listOf(payload).filter((row) => inRange(row.issueDate || row.createdAt, filters.dateFrom, filters.dateTo));
           table = normalizeTable(
             ["Tarih", "Müşteri", "Fatura No", "Model", "Adet", "Matrah", "KDV", "Toplam", "Durum"],
