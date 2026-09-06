@@ -121,7 +121,7 @@ export function compareAccountingExtractions(primary: Row, secondary: Row) {
   return discrepancies;
 }
 
-export function selectAccountingExtraction(primary: Row, secondary: Row) {
+export function selectAccountingExtraction(primary: Row, secondary: Row): Row {
   const primaryScore=scoreAccountingExtraction(primary),secondaryScore=scoreAccountingExtraction(secondary),discrepancies=compareAccountingExtractions(primary,secondary);
   const chosen=secondaryScore>primaryScore+2?secondary:primary;
   return {
