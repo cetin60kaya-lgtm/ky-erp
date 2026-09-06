@@ -93,7 +93,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
     if (results[3].status === "fulfilled") setFiles(safeArray(results[3].value));
     const failed = results.filter((row) => row.status === "rejected");
-    setNotice(failed.length ? "Bazı kaynaklar henüz hazır değil; erişilebilen bilgiler gösteriliyor." : "");
+    const schemaPending = results[0].status === "fulfilled" && results[0].value?.schemaReady === false;
+    setNotice(schemaPending
+      ? "Mail Core veritabanı kurulumu bekliyor. Ekran önizleme modunda; mail bağlantısı ve gönderim 0050 tamamlanınca açılacak."
+      : failed.length ? "Bazı kaynaklar henüz hazır değil; erişilebilen bilgiler gösteriliyor." : "");
     setLoading(false);
   }, []);
 
@@ -281,7 +284,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             <label>E-posta<input type="email" required value={requestForm.emailAddress} onChange={(e) => setRequestForm((v) => ({ ...v, emailAddress: e.target.value }))} placeholder="muhasebe@firma.com"/></label>
             <label>Görünen Ad<input value={requestForm.displayName} onChange={(e) => setRequestForm((v) => ({ ...v, displayName: e.target.value }))} placeholder="Muhasebe"/></label>
             <label>Bölüm<select value={requestForm.departmentCode} onChange={(e) => setRequestForm((v) => ({ ...v, departmentCode: e.target.value }))}><option value="">Genel</option><option value="MUHASEBE">Muhasebe</option><option value="E_BELGE">e-Belge</option><option value="DESEN">Desen</option><option value="IK">İK</option><option value="YONETIM">Yönetim</option></select></label>
-            <button type="submit" disabled={loading || selectedProviderRuntime?.adapterReady===false || selectedProviderRuntime?.configured===false}>Onaya Gönder</button>
+            <button type="submit" disabled={loading || overview?.schemaReady===false || selectedProviderRuntime?.adapterReady===false || selectedProviderRuntime?.configured===false}>Onaya Gönder</button>
             {selectedProviderRuntime && (!selectedProviderRuntime.adapterReady || !selectedProviderRuntime.configured) ? <div className="wide comm-provider-warning">{selectedProviderRuntime.reason || "Bu sağlayıcı henüz bağlantıya hazır değil."}</div> : null}
           </form>
         </section>
