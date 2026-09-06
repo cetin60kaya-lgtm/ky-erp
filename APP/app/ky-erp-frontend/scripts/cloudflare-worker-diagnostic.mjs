@@ -5,9 +5,20 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const worker = path.resolve(here, "../../../cloud/ky-erp-api");
-const diagConfig = path.join(worker, "tsconfig.accounting-diag.json");
+const config = path.join(worker, "tsconfig.pr77-candidates-diag.json");
 
-function run(label, command, args) {
+const targets = [
+  "src/accounting-canonical-read.test.ts",
+  "src/accounting-dispatch-control-canonical.test.ts",
+  "src/accounting-document-intelligence-kind.test.ts",
+  "src/accounting-report-canonical.test.ts",
+  "src/e-belge-product-routing.test.ts",
+  "src/e-belge-provider-ingest.test.ts",
+  "src/file-hub-cloud-oauth-contract.test.ts",
+  "src/e-belge-ubl.ts"
+];
+
+function run(command, args) {
   const result = spawnSync(command, args, {
     cwd: worker,
     encoding: "utf8",
@@ -16,26 +27,28 @@ function run(label, command, args) {
     stdio: "inherit",
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) {
-    console.error("WORKER_ACCOUNTING_TYPECHECK_FAIL=" + label);
-    process.exit(result.status || 1);
-  }
+  if (result.status !== 0) process.exit(result.status || 1);
 }
 
-run("npm-ci", "npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
-writeFileSync(diagConfig, JSON.stringify({
-  extends: "./tsconfig.json",
-  include: [
-    "src/accounting-report-canonical.ts",
-    "src/accounting-canonical-read.ts",
-    "worker-configuration.d.ts"
-  ],
-  exclude: ["src/**/*.test.ts"]
+run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+writeFileSync(config, JSON.stringify({
+  compilerOptions: {
+    target: "ES2022",
+    module: "ESNext",
+    moduleResolution: "Bundler",
+    allowImportingTsExtensions: true,
+    lib: ["ES2022", "WebWorker"],
+    types: ["node"],
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true
+  },
+  files: targets
 }, null, 2));
 
 try {
-  run("accounting-typecheck", "npx", ["tsc", "-p", "tsconfig.accounting-diag.json", "--pretty", "false"]);
-  console.log("WORKER_ACCOUNTING_TYPECHECK_PASS");
+  run("npx", ["tsc", "-p", path.basename(config), "--pretty", "false"]);
+  console.log("WORKER_PR77_CANDIDATES_PASS");
 } finally {
-  rmSync(diagConfig, { force: true });
+  rmSync(config, { force: true });
 }
