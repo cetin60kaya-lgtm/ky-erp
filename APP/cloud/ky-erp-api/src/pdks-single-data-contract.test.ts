@@ -121,27 +121,25 @@ test("Web PDKS uses personnel-control operations, not legacy advanced endpoints 
   assert.doesNotMatch(service, /\/ik\/advanced\//);
 });
 
-test("Web PDKS keeps one global module entry and the approved compact horizontal grouped navigation", () => {
+test("Web PDKS uses the left sidebar as primary navigation and only a compact group workbar inside", () => {
   const registry = frontend("app/pdksModuleRegistryPatch.js");
-  const shell = frontend("pages/modules/PdksPage.jsx");
+  const page = frontend("pages/modules/PdksPage.jsx");
   const css = frontend("pages/modules/pdks-shell.css");
+
   assert.match(registry, /key: "pdks"/);
   assert.match(registry, /label: "PDKS"/);
   for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
-    assert.match(shell, new RegExp(group));
-  for (const item of [
-    "Ana Ekran", "Bilgi Aktar", "Giriş / Çıkış", "Puantaj Sonuçları",
-    "Personel (İK Kaynağı)", "İzinler", "Çalışma Tarihi",
-    "Gruplar / Vardiyalar", "Puantaj Kuralları", "Dönemler", "Servisler", "Tatiller",
-    "Saat / Terminal", "Cihaz Bağlantıları", "Senkron",
-    "Raporlar", "Yıllık TEMP / Denetim",
-  ]) assert.match(shell, new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const masterData of ["Bölümler", "Görevler", "Durumlar", "Firmalar"])
-    assert.doesNotMatch(shell, new RegExp(masterData));
-  assert.match(shell, /PDKS Hızlı Asistan/);
-  assert.match(css, /shell-v3-submenu/);
-  assert.match(css, /pdks-command-nav/);
-  assert.doesNotMatch(css, /grid-template-columns:\s*210px/);
+    assert.match(page, new RegExp(group));
+
+  assert.match(page, /pdks-context-bar/);
+  assert.match(page, /pdks-context-tabs/);
+  assert.match(page, /Hızlı İşlem/);
+  assert.doesNotMatch(page, /pdks-command-nav/);
+  assert.doesNotMatch(page, /pdks-command-groups/);
+  assert.doesNotMatch(css, /body\.pdks-compact-active/);
+  assert.doesNotMatch(css, /shell-v3-submenu[^\n]*display:\s*none/);
+  assert.match(css, /\.pdks-context-bar/);
+  assert.match(css, /\.pdks-context-tabs/);
 });
 
 test("PDKS primary sidebar exposes exactly five operation groups without dumping every subtab", () => {
@@ -195,4 +193,28 @@ test("PDKS does not own payroll advance or user administration", () => {
   assert.doesNotMatch(page, /const \[advance, setAdvance\]/);
   assert.match(page, /Avans, kesinti, maaş, banka\/elden ve bordro işlemleri PDKS'de ikinci kez yönetilmez/);
   assert.match(page, /Personel ana kartı yalnız İK'da yönetilir/);
+});
+
+
+test("PDKS person workspace is operational-only and never owns the IK person master or payroll", () => {
+  const desk = frontend("pages/pdks/PdksPersonnelDesk.jsx");
+
+  assert.doesNotMatch(desk, /getPdksPayroll/);
+  assert.doesNotMatch(desk, /createIkControlPerson/);
+  assert.doesNotMatch(desk, /saveIkControlChanges/);
+  assert.doesNotMatch(desk, /Kazanç \/ Kesinti/);
+  assert.doesNotMatch(desk, /payrollLine/);
+  assert.match(desk, /İK Kartını Aç/);
+  assert.match(desk, /PDKS ikinci personel kartı oluşturmaz/);
+  assert.match(desk, /Giriş \/ Çıkış/);
+  assert.match(desk, /Puantaj/);
+  assert.match(desk, /İzinler/);
+});
+
+test("PDKS Terminal & Sistem landing opens the actual device center", () => {
+  const page = frontend("pages/modules/PdksPage.jsx");
+  const device = frontend("pages/pdks/PdksDeviceCenter.jsx");
+
+  assert.match(page, /\["saat-terminal", "cihaz-baglantilari", "senkron"\]/);
+  assert.match(device, /activeTab==="saat-terminal"\?"Terminal & Sistem"/);
 });
