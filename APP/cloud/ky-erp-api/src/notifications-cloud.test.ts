@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasNotificationPermission, sanitizeNotificationReadIds } from "./notifications-cloud.ts";
+import { hasNotificationPermission, sanitizeNotificationReadIds } from "./notifications-core.ts";
 
 test("notification read ids only keep supported live notification ids", () => {
   assert.deepEqual(

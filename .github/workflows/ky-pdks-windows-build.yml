@@ -1,20 +1,8 @@
 name: KY ERP Masaüstü Windows Setup
 
 on:
-  push:
-    branches:
-      - codex/ky-pdks-windows-v1
-    paths:
-      - "APP/desktop/ky-pdks/**"
-      - ".github/workflows/ky-pdks-windows-build.yml"
-  pull_request:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - "APP/desktop/ky-pdks/**"
-      - ".github/workflows/ky-pdks-windows-build.yml"
+  # Automatic GitHub Actions disabled. Run only when explicitly requested.
   workflow_dispatch:
-
 permissions:
   contents: read
 

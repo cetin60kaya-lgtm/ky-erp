@@ -128,7 +128,7 @@ Kurallar:
 - Frontend: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Pages `ky-erp-frontend`.
 - Worker: `codex/model-uretim-kontrol-merkezi-final` -> Cloudflare Workers Builds `ky-erp-api`.
 - **Production deploy için GitHub Actions kullanılmaz.** `.github/workflows/production-release.yml` ve diğer workflow'lar normal release/hotfix sırasında tetiklenmez.
-- GitHub Actions yalnız kullanıcı açıkça isterse tanılama/test amacıyla manual çalıştırılabilir; production deploy yerine geçmez.
+- GitHub Actions workflow'ları varsayılan olarak **manual-only (`workflow_dispatch`)** tutulur. Otomatik `push`, `pull_request`, `workflow_run` veya schedule tetikleri kullanıcı açık kararı olmadan eklenmez. Actions yalnız kullanıcı açıkça isterse tanılama/test amacıyla çalıştırılabilir; production deploy yerine geçmez.
 - Eski Windows BAT/direct deploy scriptleri canonical otomatik yayın yolu değildir; bakım/geri dönüş referansı olarak kalabilir.
 - Feature/preview branch otomatik Cloudflare production deploy etmez.
 - Production D1 reset yasaktır.

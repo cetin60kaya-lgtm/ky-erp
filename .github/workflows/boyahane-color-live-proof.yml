@@ -1,13 +1,9 @@
 name: KY ERP Boyahane Renk Canli Kanit
 
 on:
-  push:
-    branches:
-      - codex/model-uretim-kontrol-merkezi-final
-    paths:
-      - ".github/workflows/boyahane-color-live-proof.yml"
+  # KY ERP production/PR otomasyonu Cloudflare Git Integration uzerindedir.
+  # GitHub Actions yalniz acik manuel tanilama/test isteginde calistirilir.
   workflow_dispatch:
-
 permissions:
   contents: read
 
