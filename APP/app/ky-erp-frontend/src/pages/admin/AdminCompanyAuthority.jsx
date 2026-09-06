@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { getMainCompanies, listUsers, updateUser } from "../../services/adminApi";
+import { getMainCompanies, listUsers, requestCompanyOwnerRole } from "../../services/adminApi";
 import "./AdminManagement.css";
 
 function roleOf(value) {
@@ -65,13 +65,13 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
     if (!target || !companySlug || busy) return;
     setBusy(true);
     try {
-      await updateUser(target.id, {
-        role: "COMPANY_ADMIN",
-        mainCompanySlug: companySlug,
-        isActive: target.isActive !== false,
-      });
+      const result = await requestCompanyOwnerRole(target.id, "ASSIGN", companySlug);
+      if (result?.approvalRequired) {
+        setMessage(`${target.fullName || target.username} için Firma Sahibi atama isteği Onay Merkezi'ne gönderildi. ${result.approvalPolicyLabel || "Gerekli onaylar"} tamamlandıktan sonra aynı atama işlemini tekrar çalıştırın.`);
+        return;
+      }
       setCandidateId("");
-      setMessage(`${target.fullName || target.username} artık ${companySlug} firma sahibi/admin yetkisine sahip.`);
+      setMessage(`${target.fullName || target.username} artık ${companySlug} Firma Sahibi yetkisine sahip.`);
       await load();
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Firma admin yetkisi atanamadı."}`);
@@ -84,13 +84,12 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
     if (!row?.id || busy) return;
     setBusy(true);
     try {
-      await updateUser(row.id, {
-        role: "VIEWER",
-        mainCompanySlug: companySlug,
-        approvalRequired: true,
-        isActive: row.isActive !== false,
-      });
-      setMessage(`${row.fullName || row.username} firma admin yetkisinden çıkarıldı.`);
+      const result = await requestCompanyOwnerRole(row.id, "REMOVE", companySlug);
+      if (result?.approvalRequired) {
+        setMessage(`${row.fullName || row.username} için Firma Sahibi yetkisini kaldırma isteği Onay Merkezi'ne gönderildi. ${result.approvalPolicyLabel || "Firma Sahibi + Uygulama Sahibi"} onayından sonra aynı işlemi tekrar çalıştırın.`);
+        return;
+      }
+      setMessage(`${row.fullName || row.username} Firma Sahibi yetkisinden çıkarıldı.`);
       await load();
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Firma admin yetkisi kaldırılamadı."}`);
@@ -104,7 +103,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
       <section className="admpro-card">
         <div className="admpro-card-head">
           <div>
-            <h3>Firma Sahibi / Admin Yetkisi</h3>
+            <h3>Firma Sahibi Yetkisi</h3>
             <p>Bu yetki yalnız kendi firmanızdaki kullanıcı, oturum ve giriş onaylarını yönetir.</p>
           </div>
           <span className="admpro-badge ok">COMPANY_ADMIN</span>
@@ -127,7 +126,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
       <div className="admpro-card-head">
         <div>
           <h3>Firma Sahibi / Admin Yetkisi</h3>
-          <p>Yeni firma için bir veya birden fazla COMPANY_ADMIN atanabilir. Bu kişiler yalnız kendi firmasının giriş onaylarını ve kullanıcılarını yönetir.</p>
+          <p>Firma Sahibi yetkisi kritik bir yetkidir. İlk sahip Uygulama Sahibi onayıyla, sonraki atamalar mevcut Firma Sahibi + Uygulama Sahibi onayıyla yapılır.</p>
         </div>
         <button type="button" onClick={load} disabled={busy}>{busy ? "İşleniyor..." : "Yenile"}</button>
       </div>
@@ -138,7 +137,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
             {companies.map((row) => <option key={row.id || row.slug} value={row.slug}>{row.name || row.slug}</option>)}
           </select>
         </label>
-        <label>Firma Sahibi / Admin Ata
+        <label>Firma Sahibi Ata
           <select value={candidateId} onChange={(event) => setCandidateId(event.target.value)}>
             <option value="">Kullanıcı seçin</option>
             {candidates.map((row) => <option key={row.id} value={row.id}>{row.fullName || row.username} · {roleOf(row.role) || "VIEWER"}</option>)}
@@ -146,7 +145,7 @@ export default function AdminCompanyAuthority({ activeMainCompany }) {
         </label>
       </div>
       <div className="admpro-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}>
-        <button type="button" className="primary" onClick={assignAdmin} disabled={!candidateId || !companySlug || busy}>COMPANY_ADMIN Yetkisi Ver</button>
+        <button type="button" className="primary" onClick={assignAdmin} disabled={!candidateId || !companySlug || busy}>Firma Sahibi Yetkisi İste</button>
       </div>
       <div className="admpro-table" style={{ marginTop: 16 }}>
         <table>
