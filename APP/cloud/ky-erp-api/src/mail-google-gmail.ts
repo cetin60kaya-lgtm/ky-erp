@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { openMailCredential, sealMailCredential } from "./mail-communication-core.ts";
+import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -204,13 +205,46 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
 function parseAttachments(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return Array.isArray(v)?v:[];}catch{return[];}}
 function recipientEmails(value:any){return (Array.isArray(value)?value:[]).map((item:any)=>typeof item==="string"?item:text(item?.email||item?.address)).map(headerSafe).filter((email:string)=>email.includes("@"));}
-function mimeMessage(account:AnyRow,draft:AnyRow){
+function attachmentAssetId(value:any){return text(typeof value==="string"?value:value?.fileAssetId||value?.file_asset_id||value?.assetId||value?.id);}
+function mimeBase64(bytes:Uint8Array){
+  let raw="";
+  for(let offset=0;offset<bytes.length;offset+=0x8000){
+    const part=bytes.subarray(offset,Math.min(bytes.length,offset+0x8000));
+    raw+=String.fromCharCode(...part);
+  }
+  return btoa(raw).replace(/.{1,76}/g,(chunk)=>chunk+"\r\n").trimEnd();
+}
+async function resolveDraftAttachments(c:any,tenant:string,refs:any[]){
+  if(refs.length>10)throw Object.assign(new Error("Bir mailde en fazla 10 File Hub eki kullanılabilir."),{code:"MAIL_ATTACHMENT_COUNT_LIMIT",status:413});
+  const resolved:any[]=[];let total=0;
+  for(const ref of refs){
+    const assetId=attachmentAssetId(ref);
+    if(!assetId)throw Object.assign(new Error("Mail eki File Hub kimliği eksik."),{code:"MAIL_ATTACHMENT_REF_INVALID",status:422});
+    const asset=await readFileHubAssetForMail(c,tenant,assetId,25*1024*1024);
+    total+=Number(asset.sizeBytes||asset.bytes?.byteLength||0);
+    if(total>25*1024*1024)throw Object.assign(new Error("Mail eklerinin toplamı 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENTS_TOO_LARGE",status:413,totalBytes:total});
+    resolved.push(asset);
+  }
+  return resolved;
+}
+function mimeMessage(account:AnyRow,draft:AnyRow,attachments:any[]=[]){
   const recipients=parseRecipients(draft.recipients_json),to=recipientEmails(recipients.to),cc=recipientEmails(recipients.cc),bcc=recipientEmails(recipients.bcc);
   if(!to.length&&!cc.length&&!bcc.length)throw Object.assign(new Error("En az bir alıcı gereklidir."),{code:"RECIPIENT_REQUIRED"});
   const subject=headerSafe(draft.subject),content=text(draft.body_html||draft.body_text),isHtml=Boolean(text(draft.body_html));
   const lines=[`From: ${headerSafe(account.email_address)}`,`To: ${to.join(", ")}`];
   if(cc.length)lines.push(`Cc: ${cc.join(", ")}`);if(bcc.length)lines.push(`Bcc: ${bcc.join(", ")}`);
-  lines.push(`Subject: ${subject}`,"MIME-Version: 1.0",`Content-Type: ${isHtml?"text/html":"text/plain"}; charset=UTF-8`,"Content-Transfer-Encoding: 8bit","",content);
+  lines.push(`Subject: ${subject}`,"MIME-Version: 1.0");
+  if(!attachments.length){
+    lines.push(`Content-Type: ${isHtml?"text/html":"text/plain"}; charset=UTF-8`,"Content-Transfer-Encoding: 8bit","",content);
+    return b64url(new TextEncoder().encode(lines.join("\r\n")));
+  }
+  const boundary="=_KYERP_"+crypto.randomUUID().replace(/-/g,"");
+  lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`,"",`--${boundary}`,`Content-Type: ${isHtml?"text/html":"text/plain"}; charset=UTF-8`,"Content-Transfer-Encoding: 8bit","",content);
+  for(const asset of attachments){
+    const encoded=encodeURIComponent(text(asset.fileName)||"ek");
+    lines.push("",`--${boundary}`,`Content-Type: ${text(asset.mimeType)||"application/octet-stream"}; name*=UTF-8''${encoded}`,"Content-Transfer-Encoding: base64",`Content-Disposition: attachment; filename*=UTF-8''${encoded}`,"",mimeBase64(asset.bytes));
+  }
+  lines.push("",`--${boundary}--`,"");
   return b64url(new TextEncoder().encode(lines.join("\r\n")));
 }
 
@@ -362,7 +396,10 @@ export function registerGoogleMailRoutes(app:any){
     if(!draft)return c.json(err("DRAFT_NOT_FOUND","Mail taslağı bulunamadı."),404);
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_SEND_FORBIDDEN","Bu posta kutusundan gönderim yetkiniz yok."),403);
     if(upper(draft.provider_type)!=="GMAIL"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Gmail posta kutusu aktif ve onaylı değil."),409);
-    const attachments=parseAttachments(draft.attachment_refs_json);if(attachments.length)return c.json(err("ATTACHMENT_PROVIDER_SYNC_PENDING","File Hub ekleri Gmail taslağına aktarılmadan gönderim yapılamaz."),409);
+    const attachments=parseAttachments(draft.attachment_refs_json);
+    let resolvedAttachments:any[]=[];
+    try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
+    catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Mail eki File Hub'dan alınamadı."),Number(error?.status)||502);}
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId,existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
     if(existingJob){
       if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id}});
@@ -373,7 +410,7 @@ export function registerGoogleMailRoutes(app:any){
     else await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",null,null,1,null,text(current.id),null,ts,ts).run();
     try{
-      const raw=mimeMessage(account,draft),sent=(await googleJson(GMAIL+"/messages/send",token,{method:"POST",body:JSON.stringify({raw})})).payload,done=nowIso(),providerMessageId=text(sent.id),acceptance=text(sent.threadId||sent.historyId);
+      const raw=mimeMessage(account,draft,resolvedAttachments),sent=(await googleJson(GMAIL+"/messages/send",token,{method:"POST",body:JSON.stringify({raw})})).payload,done=nowIso(),providerMessageId=text(sent.id),acceptance=text(sent.threadId||sent.historyId);
       await c.env.DB.batch([
         c.env.DB.prepare("UPDATE mail_send_jobs SET status='ACCEPTED',provider_message_id=?,provider_acceptance_id=?,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?").bind(providerMessageId||null,acceptance||null,done,jobId,tenant),
         c.env.DB.prepare("UPDATE mail_drafts SET status='SENT',updated_at=? WHERE id=? AND main_company_slug=?").bind(done,draftId,tenant)
