@@ -75,7 +75,7 @@ test("connection navigation keeps daily Mail and admin connection settings separ
   const storagePage = read("../../../app/ky-erp-frontend/src/pages/modules/DepolamaPage.jsx");
   assert.match(registry, /label: "Mail & Dosyalar"/);
   assert.match(registry, /label: "Bağlantılar & Depolama"/);
-  assert.match(registry, /\["depolama-mail", "E-posta Hesapları"/);
+  assert.match(registry, /\["depolama-mail", "Mail Bağlantıları"/);
   assert.match(registry, /\["depolama-kaynaklar", "Dosya Servisleri"/);
   assert.match(storagePage, /AdminMailConnections/);
 });
