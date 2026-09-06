@@ -91,6 +91,26 @@ async function normalizeSingleDecisionApprovals(c:any,tenant:string){
     c.env.DB.prepare("UPDATE mail_approval_steps SET required=0,status=CASE WHEN status='PENDING' THEN 'SKIPPED' ELSE status END,updated_at=? WHERE main_company_slug=? AND step_type='APP_OWNER' AND required=1").bind(ts,tenant),
   ]);
 }
+function privilegedInternalApproval(current:AnyRow){return ownerRole(current?.role)||companyAdminRole(current?.role);}
+async function autoApproveOwnPrivilegedMailRequests(c:any,tenant:string,current:AnyRow){
+  if(!privilegedInternalApproval(current))return 0;
+  const userId=text(current?.id);if(!userId)return 0;
+  const rows=await c.env.DB.prepare("SELECT r.id request_id,r.target_id FROM mail_approval_requests r WHERE r.main_company_slug=? AND r.status='PENDING' AND r.request_type='MAIL_ACCOUNT_CONNECT' AND r.target_type='MAIL_ACCOUNT' AND r.requested_by=? ORDER BY r.created_at").bind(tenant,userId).all<AnyRow>();
+  let changed=0;
+  for(const row of rows.results||[]){
+    const step=await c.env.DB.prepare("SELECT id FROM mail_approval_steps WHERE main_company_slug=? AND request_id=? AND step_type='COMPANY_OWNER' AND required=1 AND status='PENDING' LIMIT 1").bind(tenant,row.request_id).first<AnyRow>();
+    if(!step?.id)continue;
+    const ts=nowIso(),companyOwner=companyAdminRole(current?.role),appOwner=ownerRole(current?.role);
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE mail_approval_steps SET status='APPROVED',decided_by=?,decided_at=?,note='PRIVILEGED_OWNER_AUTO_APPROVAL',updated_at=? WHERE id=? AND main_company_slug=? AND status='PENDING'").bind(userId,ts,ts,step.id,tenant),
+      c.env.DB.prepare("UPDATE mail_approval_requests SET status='APPROVED',decided_at=?,updated_at=? WHERE id=? AND main_company_slug=? AND status='PENDING'").bind(ts,ts,row.request_id,tenant),
+      c.env.DB.prepare("UPDATE mail_accounts SET approval_status='APPROVED',approved_by_company=CASE WHEN ?=1 THEN COALESCE(approved_by_company,?) ELSE approved_by_company END,approved_by_owner=CASE WHEN ?=1 THEN COALESCE(approved_by_owner,?) ELSE approved_by_owner END,status=CASE WHEN provider_connected=1 THEN 'ACTIVE' ELSE 'DISCONNECTED' END,updated_at=? WHERE id=? AND main_company_slug=?").bind(companyOwner?1:0,userId,appOwner?1:0,userId,ts,row.target_id,tenant)
+    ]);
+    await audit(c,tenant,current,"MAIL_ACCOUNT_AUTO_APPROVED_PRIVILEGED",{requestId:text(row.request_id),decisionAuthority:appOwner?"SUPER_ADMIN":"COMPANY_ADMIN",reason:"PRIVILEGED_OWNER_BYPASS"},text(row.target_id));
+    changed+=1;
+  }
+  return changed;
+}
 async function currentAndTenant(c:any,body:AnyRow={}){
   const current=await getAuthenticatedUser(c);
   if(!current)return{error:c.json(jsonError("UNAUTHORIZED","Oturum gereklidir."),401)};
@@ -179,6 +199,7 @@ export function registerMailCommunicationRoutes(app:any){
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail hesabı görüntüleme yetkiniz yok."),403);
     if(!(await mailSchemaReady(c)))return c.json({ok:true,data:[]});
+    await autoApproveOwnPrivilegedMailRequests(c,tenant,current);
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role);
     const readiness=`,(SELECT MAX(s.last_success_at) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id) last_sync_success_at
       ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.last_success_at IS NOT NULL) sync_success_count
@@ -209,20 +230,20 @@ export function registerMailCommunicationRoutes(app:any){
     const existing=await c.env.DB.prepare("SELECT id,status,approval_status FROM mail_accounts WHERE main_company_slug=? AND provider_type=? AND LOWER(email_address)=LOWER(?) LIMIT 1").bind(tenant,provider,email).first<AnyRow>();
     if(existing?.id)return c.json(jsonError("MAIL_ACCOUNT_EXISTS","Bu mail hesabı için mevcut bir kayıt veya talep bulunuyor.",existing),409);
 
-    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OR_APP_OWNER";
+    const ts=nowIso(),accountId=crypto.randomUUID(),requestId=crypto.randomUUID(),policy="COMPANY_OR_APP_OWNER",privileged=privilegedInternalApproval(current),companyOwner=companyAdminRole(current?.role),appOwner=ownerRole(current?.role),requestStatus=privileged?"APPROVED":"PENDING",accountStatus=privileged?"DISCONNECTED":"PENDING";
     const statements=[
       c.env.DB.prepare("INSERT INTO mail_accounts (id,main_company_slug,provider_type,account_type,email_address,display_name,department_code,provider_account_id,status,approval_status,provider_connected,is_default_send,is_default_receive,created_by,approved_by_company,approved_by_owner,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(accountId,tenant,provider,type,email,text(body.displayName)||email,text(body.departmentCode)||null,null,"PENDING","PENDING",0,0,0,text(current?.id),null,null,ts,ts),
+        .bind(accountId,tenant,provider,type,email,text(body.displayName)||email,text(body.departmentCode)||null,null,accountStatus,requestStatus,0,0,0,text(current?.id),privileged&&companyOwner?text(current?.id):null,privileged&&appOwner?text(current?.id):null,ts,ts),
       c.env.DB.prepare("INSERT INTO mail_account_members (id,main_company_slug,account_id,user_id,can_view,can_compose,can_send,can_reply,can_forward,can_attach,can_link_entity,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
         .bind(crypto.randomUUID(),tenant,accountId,text(current?.id),1,1,type==="PERSONAL"?1:0,type==="PERSONAL"?1:0,type==="PERSONAL"?1:0,1,1,ts,ts), // MAIL_REQUESTER_INITIAL_MEMBER
       c.env.DB.prepare("INSERT INTO mail_approval_requests (id,main_company_slug,request_type,target_type,target_id,status,approval_policy,requested_by,request_payload,decided_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(requestId,tenant,"MAIL_ACCOUNT_CONNECT","MAIL_ACCOUNT",accountId,"PENDING",policy,text(current?.id),JSON.stringify({provider,accountType:type,emailAddress:email,departmentCode:text(body.departmentCode)}),null,ts,ts),
+        .bind(requestId,tenant,"MAIL_ACCOUNT_CONNECT","MAIL_ACCOUNT",accountId,requestStatus,policy,text(current?.id),JSON.stringify({provider,accountType:type,emailAddress:email,departmentCode:text(body.departmentCode),privilegedOwnerBypass:privileged}),privileged?ts:null,ts,ts),
       c.env.DB.prepare("INSERT INTO mail_approval_steps (id,main_company_slug,request_id,step_type,step_order,required,status,decided_by,decided_at,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(crypto.randomUUID(),tenant,requestId,"COMPANY_OWNER",1,1,"PENDING",null,null,null,ts,ts)
+        .bind(crypto.randomUUID(),tenant,requestId,"COMPANY_OWNER",1,1,requestStatus,privileged?text(current?.id):null,privileged?ts:null,privileged?"PRIVILEGED_OWNER_AUTO_APPROVAL":null,ts,ts)
     ];
     await c.env.DB.batch(statements);
-    await audit(c,tenant,current,"MAIL_ACCOUNT_REQUESTED",{requestId,provider,type,email,policy},accountId);
-    return c.json({ok:true,data:{accountId,requestId,status:"PENDING",approvalPolicy:policy,provider,accountType:type,emailAddress:email}},201);
+    await audit(c,tenant,current,privileged?"MAIL_ACCOUNT_REQUESTED_AUTO_APPROVED":"MAIL_ACCOUNT_REQUESTED",{requestId,provider,type,email,policy,privilegedOwnerBypass:privileged,decisionAuthority:privileged?(appOwner?"SUPER_ADMIN":"COMPANY_ADMIN"):null},accountId);
+    return c.json({ok:true,data:{accountId,requestId,status:requestStatus,approvalPolicy:policy,approvalBypass:privileged,provider,accountType:type,emailAddress:email}},201);
   });
 
   app.get("/api/mail/accounts/:id/members",async(c:any)=>{
@@ -252,6 +273,7 @@ export function registerMailCommunicationRoutes(app:any){
     if(!(ownerRole(current?.role)||companyAdminRole(current?.role)||hasMailPermission(current,"canApprove")))return c.json(jsonError("MAIL_APPROVAL_FORBIDDEN","Mail bağlantı onaylarını görme yetkiniz yok."),403);
     if(!(await mailSchemaReady(c)))return c.json({ok:true,data:[]});
     await normalizeSingleDecisionApprovals(c,tenant);
+    await autoApproveOwnPrivilegedMailRequests(c,tenant,current);
     const r=await c.env.DB.prepare(`SELECT r.*,a.email_address,a.display_name,a.provider_type,a.account_type,a.department_code,
       (SELECT COUNT(*) FROM mail_approval_steps s WHERE s.request_id=r.id AND s.required=1 AND s.status='PENDING') pending_steps,
       (SELECT s.decided_by FROM mail_approval_steps s WHERE s.request_id=r.id AND s.status IN ('APPROVED','REJECTED') ORDER BY s.decided_at DESC LIMIT 1) decision_actor_id,
