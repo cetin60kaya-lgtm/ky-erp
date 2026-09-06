@@ -6,20 +6,21 @@ on:
       - codex/model-uretim-kontrol-merkezi-final
     paths:
       - "APP/desktop/ky-pdks/**"
-      - ".github/workflows/ky-pdks-windows-build.yml"
+      - ".github/workflows/ky-pdks-linux-fallback-build.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ky-desktop-dual-windows-${{ github.ref }}
+  group: ky-desktop-linux-fallback-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Test, dual publish ve iki Setup.exe
-    runs-on: windows-2022
+    name: Cross-target win-x64 + iki Setup.exe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
@@ -36,52 +37,146 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Inno Setup 6
-        shell: pwsh
-        run: choco install innosetup -y --no-progress
-
-      - name: KY ERP + KY PDKS test ve paket
-        shell: pwsh
-        run: ./APP/desktop/ky-pdks/BUILD_SETUP.ps1
-
-      - name: İki Setup çıktısını doğrula
-        shell: pwsh
+      - name: Frontend test ve build
+        working-directory: APP/app/ky-erp-frontend
         run: |
-          $dir = './APP/desktop/ky-pdks/dist/setup'
-          $erp = Get-ChildItem $dir -Filter 'KY-ERP-Desktop-Setup-*.exe' | Select-Object -First 1
-          $pdks = Get-ChildItem $dir -Filter 'KY-PDKS-Desktop-Setup-*.exe' | Select-Object -First 1
-          if (-not $erp) { throw 'KY ERP Desktop Setup.exe bulunamadı.' }
-          if (-not $pdks) { throw 'KY PDKS Desktop Setup.exe bulunamadı.' }
-          if (-not (Test-Path "$($erp.FullName).sha256.txt")) { throw 'KY ERP SHA256 dosyası yok.' }
-          if (-not (Test-Path "$($pdks.FullName).sha256.txt")) { throw 'KY PDKS SHA256 dosyası yok.' }
-          $info = Get-Content "$dir/build-info.json" -Raw | ConvertFrom-Json
-          if ($info.version -ne '1.8.0') { throw "build-info sürümü yanlış: $($info.version)" }
-          if ($info.products.Count -ne 2) { throw 'build-info iki ürün içermiyor.' }
-          if ($info.products[0].scope -ne 'FULL_ERP_DESKTOP') { throw 'Tam ERP scope yanlış.' }
-          if ($info.products[1].scope -ne 'PDKS_ONLY_DESKTOP') { throw 'PDKS-only scope yanlış.' }
-          if ($info.products[1].includesWebView -ne $false) { throw 'PDKS-only build WebView içeriyor görünüyor.' }
-          if ($info.products[1].denetimWriteControls -ne 'HIDDEN') { throw 'DENETİM write-controls politikası yanlış.' }
-          Get-FileHash $erp.FullName -Algorithm SHA256
-          Get-FileHash $pdks.FullName -Algorithm SHA256
+          set -euxo pipefail
+          npm ci
+          npm test
+          npm run build
+          test -f dist/index.html
 
-      - name: KY ERP Desktop paketini sakla
+      - name: Windows hedefli .NET test ve publish
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ROOT="$GITHUB_WORKSPACE/APP/desktop/ky-pdks"
+          DESKTOP="$ROOT/src/KyPdks.Desktop/KyPdks.Desktop.csproj"
+          AGENT="$ROOT/src/KyPdks.Agent/KyPdks.Agent.csproj"
+          TESTS="$ROOT/src/KyPdks.Tests/KyPdks.Tests.csproj"
+          DIST="$ROOT/dist"
+          rm -rf "$DIST"
+          mkdir -p "$DIST/erp-desktop" "$DIST/pdks-desktop" "$DIST/agent" "$DIST/file-agent" "$DIST/setup"
+
+          dotnet restore "$DESKTOP" -p:EnableWindowsTargeting=true
+          dotnet restore "$AGENT" -p:EnableWindowsTargeting=true
+          if [ -f "$TESTS" ]; then
+            dotnet restore "$TESTS" -p:EnableWindowsTargeting=true
+            dotnet test "$TESTS" -c Release --no-restore -p:EnableWindowsTargeting=true
+          fi
+
+          dotnet publish "$DESKTOP" -c Release -r win-x64 --self-contained true             -p:EnableWindowsTargeting=true -p:ProductMode=ERP -p:PublishSingleFile=true             -p:IncludeNativeLibrariesForSelfExtract=true -o "$DIST/erp-desktop"
+
+          dotnet publish "$DESKTOP" -c Release -r win-x64 --self-contained true             -p:EnableWindowsTargeting=true -p:ProductMode=PDKS -p:PublishSingleFile=true             -p:IncludeNativeLibrariesForSelfExtract=true -o "$DIST/pdks-desktop"
+
+          dotnet publish "$AGENT" -c Release -r win-x64 --self-contained true             -p:EnableWindowsTargeting=true -p:PublishSingleFile=true             -p:IncludeNativeLibrariesForSelfExtract=true -o "$DIST/agent"
+
+          cp -R "$GITHUB_WORKSPACE/APP/app/ky-erp-frontend/dist" "$DIST/erp-desktop/web"
+          test -f "$DIST/erp-desktop/web/index.html"
+          test ! -d "$DIST/pdks-desktop/web"
+          if find "$DIST/pdks-desktop" -maxdepth 1 -iname 'Microsoft.Web.WebView2*' | grep -q .; then
+            echo "PDKS-only pakette WebView2 bulundu." >&2
+            exit 1
+          fi
+          test -f "$DIST/erp-desktop/KY ERP Desktop.exe"
+          test -f "$DIST/pdks-desktop/KY PDKS Desktop.exe"
+          test -f "$DIST/agent/KYERP.PDKS.Agent.exe"
+
+      - name: KY File Agent ve Windows Node runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ROOT="$GITHUB_WORKSPACE/APP/desktop/ky-pdks"
+          DIST="$ROOT/dist"
+          cp -R "$GITHUB_WORKSPACE/tools/file-hub-agent/." "$DIST/file-agent/"
+          mkdir -p "$DIST/file-agent/runtime"
+          NODE_VERSION="$(node -p 'process.version')"
+          curl -fL --retry 3 "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-win-x64.zip" -o /tmp/node-win.zip
+          unzip -q /tmp/node-win.zip -d /tmp/node-win
+          cp "/tmp/node-win/node-$NODE_VERSION-win-x64/node.exe" "$DIST/file-agent/runtime/node.exe"
+          for f in file-hub-agent.mjs accounting-archive-worker.mjs start-file-hub-agent.cmd start-file-hub-agent-hidden.vbs install-file-hub-agent.ps1; do
+            test -f "$DIST/file-agent/$f"
+          done
+          test -f "$DIST/file-agent/runtime/node.exe"
+
+      - name: Wine + resmi Inno Setup 6
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wine64 wine32 xvfb cabextract
+          curl -fL --retry 3 "https://files.jrsoftware.org/is/6/innosetup-6.4.3.exe" -o /tmp/innosetup.exe
+          export WINEDEBUG=-all
+          export WINEPREFIX="$RUNNER_TEMP/wine-inno"
+          mkdir -p "$WINEPREFIX"
+          xvfb-run -a wineboot -u
+          xvfb-run -a wine /tmp/innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
+          test -f "$WINEPREFIX/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+
+      - name: İki Inno Setup paketini üret
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ROOT="$GITHUB_WORKSPACE/APP/desktop/ky-pdks"
+          export WINEDEBUG=-all
+          export WINEPREFIX="$RUNNER_TEMP/wine-inno"
+          export KY_PDKS_DIST="$(winepath -w "$ROOT/dist")"
+          export KY_PDKS_SETUP_OUT="$(winepath -w "$ROOT/dist/setup")"
+          ERP_ISS="$(winepath -w "$ROOT/installer/KY-ERP.iss")"
+          PDKS_ISS="$(winepath -w "$ROOT/installer/KY-PDKS.iss")"
+          ISCC="$WINEPREFIX/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          xvfb-run -a wine "$ISCC" "$ERP_ISS"
+          xvfb-run -a wine "$ISCC" "$PDKS_ISS"
+          test -f "$ROOT/dist/setup/KY-ERP-Desktop-Setup-1.8.0.exe"
+          test -f "$ROOT/dist/setup/KY-PDKS-Desktop-Setup-1.8.0.exe"
+
+      - name: SHA256 ve build-info
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DIR="$GITHUB_WORKSPACE/APP/desktop/ky-pdks/dist/setup"
+          ERP="$DIR/KY-ERP-Desktop-Setup-1.8.0.exe"
+          PDKS="$DIR/KY-PDKS-Desktop-Setup-1.8.0.exe"
+          ERP_HASH="$(sha256sum "$ERP" | awk '{print $1}')"
+          PDKS_HASH="$(sha256sum "$PDKS" | awk '{print $1}')"
+          printf '%s  %s\n' "$ERP_HASH" "$(basename "$ERP")" > "$ERP.sha256.txt"
+          printf '%s  %s\n' "$PDKS_HASH" "$(basename "$PDKS")" > "$PDKS.sha256.txt"
+          python3 - "$DIR" "$ERP_HASH" "$PDKS_HASH" <<'PY'
+          import json, pathlib, sys
+          d=pathlib.Path(sys.argv[1])
+          data={
+            "version":"1.8.0",
+            "frontendOrigin":"https://app.kyerp.net",
+            "liveApi":"https://api.kyerp.net",
+            "buildHost":"ubuntu-wine-fallback",
+            "products":[
+              {"product":"KY ERP Desktop","scope":"FULL_ERP_DESKTOP","setup":"KY-ERP-Desktop-Setup-1.8.0.exe","sha256":sys.argv[2],"includesFileHubAgent":True,"includesWebView":True},
+              {"product":"KY PDKS Desktop","scope":"PDKS_ONLY_DESKTOP","setup":"KY-PDKS-Desktop-Setup-1.8.0.exe","sha256":sys.argv[3],"includesFileHubAgent":False,"includesWebView":False,"denetimWriteControls":"HIDDEN"}
+            ]
+          }
+          (d/"build-info.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+          PY
+          cat "$DIR/build-info.json"
+
+      - name: KY ERP Desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KY-ERP-Desktop-Windows-Setup-${{ github.run_number }}
+          name: KY-ERP-Desktop-Linux-Fallback-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-*.exe
-            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-*.sha256.txt
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-1.8.0.exe
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-1.8.0.exe.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
           retention-days: 30
 
-      - name: KY PDKS Desktop paketini sakla
+      - name: KY PDKS Desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-Desktop-Windows-Setup-${{ github.run_number }}
+          name: KY-PDKS-Desktop-Linux-Fallback-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.exe
-            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.sha256.txt
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-1.8.0.exe
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-1.8.0.exe.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
           retention-days: 30
