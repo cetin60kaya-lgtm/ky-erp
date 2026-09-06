@@ -74,3 +74,19 @@
 .comm-attachments>button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .comm-attachments>button em{flex:0 0 auto;font-size:10px;font-style:normal;color:#64748b}
 @media(max-width:720px){.comm-attachments{margin:10px}}
+
+
+/* Mail hesap ekleme final sade görünüm */
+.comm-request-card.comm-modal{width:min(920px,calc(100vw - 48px))}
+.comm-direct-mail-card{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto}
+.comm-direct-mail-card.connected{border-color:#b7dfc4;background:#fbfffc}
+.comm-direct-mail-card.ready{border-color:#cbdcec}
+.comm-direct-mail-card.waiting{background:#fcfcfd}
+.comm-direct-mail-status{grid-column:1/-1;margin:0!important;padding-top:4px;border-top:1px solid #eef2f7;color:#64748b!important;font-size:11px!important}
+.comm-direct-mail-card.connected .comm-direct-mail-status{color:#2f6f46!important}
+.comm-direct-mail-card.waiting .comm-direct-mail-status{color:#8a6b1f!important}
+@media(max-width:720px){
+  .comm-request-card.comm-modal{width:100%}
+  .comm-direct-mail-card{grid-template-columns:1fr}
+  .comm-direct-mail-status{grid-column:auto}
+}
