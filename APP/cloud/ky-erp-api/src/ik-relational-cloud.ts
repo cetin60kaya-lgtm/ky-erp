@@ -1374,6 +1374,116 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   return okData(c, mapPayroll(saved || { id, main_company_id: companyId, year, month, employee_id: employeeId, salary, road_allowance: road, overtime_amount: overtimeFinal, premium_amount: premium, garnishment_amount: garnishment, deduction_amount: deduction, advance_amount: advance, bank_amount: bank, cash_amount: cash, total_amount: total, status: "OVERRIDE" }));
 }
 
+async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const employeeId = text(body.employeeId);
+  const year = number(body.year) || new Date().getFullYear();
+  const month = number(body.month) || new Date().getMonth() + 1;
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const employee = await first(c, "SELECT id,full_name FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
+
+  const desired = {
+    salary: Math.max(0, number(body.salary)),
+    road: Math.max(0, number(body.road)),
+    extra: Math.max(0, number(body.extra)),
+    overtime: Math.max(0, number(body.overtime)),
+    advance: Math.max(0, number(body.advance)),
+    deduction: Math.max(0, number(body.deduction)),
+    garnishment: Math.max(0, number(body.garnishment)),
+    bank: Math.max(0, number(body.bank)),
+    cash: Math.max(0, number(body.cash)),
+  };
+  const { net } = calculatePayrollAmounts(desired);
+  const paymentDiff = Math.round((desired.bank + desired.cash - net) * 100) / 100;
+  if (Math.abs(paymentDiff) > 0.01) {
+    return error(c, 409, "PAYMENT_TOTAL_MISMATCH", "Banka + elden toplamı net ödenecek tutara eşit olmalıdır.");
+  }
+
+  const allAdjustments = await adjustmentRows(c, companyId);
+  const normalizeType = (value: unknown) => {
+    const valueUpper = upper(value);
+    if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS";
+    if (valueUpper.includes("AVANS")) return "AVANS";
+    if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ";
+    if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA";
+    if (valueUpper.includes("KESINT")) return "KESINTI";
+    if (valueUpper.includes("MESAI")) return "MESAI";
+    return valueUpper;
+  };
+  const own = allAdjustments.filter((item) =>
+    text(item.employeeId) === employeeId &&
+    text(item.date).startsWith(period) &&
+    !upper(item.payrollEffect).includes("SADECE")
+  );
+  const current = {
+    overtime: own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0),
+    advance: own.filter((item) => ["AVANS","TOPLU_AVANS"].includes(normalizeType(item.adjustmentType))).reduce((sum, item) => sum + number(item.amount), 0),
+    deduction: own.filter((item) => normalizeType(item.adjustmentType) === "KESINTI").reduce((sum, item) => sum + number(item.amount), 0),
+    garnishment: own.filter((item) => ["ICRA","HACIZ"].includes(normalizeType(item.adjustmentType))).reduce((sum, item) => sum + number(item.amount), 0),
+  };
+
+  const timestamp = nowIso();
+  const correctionDate = hrDateOnly(body.date) || `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  const reason = text(body.reason) || "Son bordro kontrolü";
+  const statements: D1PreparedStatement[] = [];
+  const correctionIds: string[] = [];
+
+  const pushCorrection = (kind: "overtime" | "advance" | "deduction" | "garnishment", adjustmentType: string, source: string) => {
+    const delta = Math.round((desired[kind] - current[kind]) * 100) / 100;
+    if (Math.abs(delta) <= 0.01) return;
+    const id = crypto.randomUUID();
+    correctionIds.push(id);
+    const paymentMethod = kind === "overtime" ? "Bordro" : (upper(source).includes("BANKA") ? "Banka" : "Elden");
+    const note = `Son bordro kontrolü düzeltmesi · önce ${current[kind].toFixed(2)} · sonra ${desired[kind].toFixed(2)} · ${reason}`;
+    statements.push(
+      c.env.DB.prepare(`INSERT INTO hr_monthly_adjustments_v2
+        (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(id, employeeId, correctionDate, adjustmentType, 0, delta, paymentMethod, "Bordroya yansir", note, "APPROVED", timestamp),
+    );
+  };
+
+  pushCorrection("overtime", "Mesai - Son Bordro Düzeltme", "Bordro");
+  pushCorrection("advance", "Avans - Son Bordro Düzeltme", text(body.advanceSource) || "Elden");
+  pushCorrection("deduction", "Ozel kesinti - Son Bordro Düzeltme", text(body.deductionSource) || "Elden");
+  const legalType = upper(body.legalType) === "HACIZ" ? "Haciz" : "Icra";
+  pushCorrection("garnishment", `${legalType} - Son Bordro Düzeltme`, text(body.garnishmentSource) || "Banka");
+
+  const existing = await first(c, "SELECT id,created_at FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=? LIMIT 1", [companyId, year, month, employeeId]);
+  const payrollId = text(existing?.id) || crypto.randomUUID();
+  statements.push(
+    c.env.DB.prepare(`INSERT INTO hr_payrolls_v2
+      (id,main_company_id,year,month,employee_id,salary,road_allowance,overtime_amount,premium_amount,garnishment_amount,deduction_amount,advance_amount,bank_amount,cash_amount,total_amount,status,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(main_company_id,year,month,employee_id) DO UPDATE SET
+        salary=excluded.salary,road_allowance=excluded.road_allowance,overtime_amount=excluded.overtime_amount,
+        premium_amount=excluded.premium_amount,garnishment_amount=excluded.garnishment_amount,
+        deduction_amount=excluded.deduction_amount,advance_amount=excluded.advance_amount,
+        bank_amount=excluded.bank_amount,cash_amount=excluded.cash_amount,total_amount=excluded.total_amount,
+        status=excluded.status,updated_at=excluded.updated_at`)
+      .bind(
+        payrollId, companyId, year, month, employeeId,
+        desired.salary, desired.road, desired.overtime, desired.extra, desired.garnishment,
+        desired.deduction, desired.advance, desired.bank, desired.cash, net, "OVERRIDE",
+        text(existing?.created_at) || timestamp, timestamp,
+      ),
+  );
+
+  await c.env.DB.batch(statements);
+  await audit(c, {
+    mainCompanyId: companyId,
+    period,
+    employeeId,
+    entityType: "BORDRO",
+    action: "FINAL_CONTROL",
+    summary: "Son bordro kontrolü kaynak hareketleriyle birlikte kaydedildi.",
+    details: { reason, current, desired, net, correctionIds },
+  });
+  return okData(c, { employeeId, period, current, final: { ...desired, total: net }, correctionIds });
+}
+
 async function auditLogs(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const limit = Math.min(Math.max(number(c.req.query("limit")) || 200, 1), 500);
@@ -1714,6 +1824,7 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/advanced/month", protect(advancedMonth));
   app.get("/api/ik/advanced/payroll", protect(advancedPayroll));
   app.post("/api/ik/advanced/payroll/override", protect(saveAdvancedPayrollOverride));
+  app.post("/api/ik/advanced/payroll/final-control", protect(saveAdvancedPayrollFinalControl));
   app.get("/api/ik/advanced/audit-logs", protect(auditLogs));
   app.get("/api/ik/advanced/leave-center", protect(leaveCenterV2));
   app.post("/api/ik/advanced/leave/preview", protect(async (c) => (await previewAdvancedLeaveV2(c)) as Response));
