@@ -1,6 +1,6 @@
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
-import AdminMailConnections from "../admin/AdminMailConnections";
+import AdminMailConnections from "../admin/AdminMailConnectionsV2";
 
 export default function DepolamaPage({ activeTab, activeMainCompany, openModule }) {
   if (activeTab === "depolama-yedekleme") {

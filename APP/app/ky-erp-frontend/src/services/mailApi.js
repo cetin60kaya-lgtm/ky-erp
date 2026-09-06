@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "../utils/api";
+import { apiGet, apiPost, apiPut } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -41,12 +41,17 @@ export const searchCommunicationFiles = (q = "") =>
     ? apiGet("/mail/files", { q: q.trim(), take: 150 }).then(unwrap)
     : listCommunicationFiles();
 
-
 export const startMicrosoftMailOAuth = (accountId) =>
   apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/microsoft/start`, {}).then(unwrap);
 
+export const startGoogleMailOAuth = (accountId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/google/start`, {}).then(unwrap);
+
 export const getMailConnection = (accountId) =>
   apiGet(`/mail/accounts/${encodeURIComponent(accountId)}/connection`, { _ts: Date.now() }).then(unwrap);
+
+export const setMailAccountDefaults = (accountId, values = {}) =>
+  apiPut(`/mail/accounts/${encodeURIComponent(accountId)}/defaults`, values).then(unwrap);
 
 export const syncMailAccount = (accountId) =>
   apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
