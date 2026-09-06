@@ -179,3 +179,15 @@ test("Gmail sync preserves inline CID images and delete always moves local row t
   assert.match(gmail,/ensureFolder\(c,tenant,text\(row\.account_id\),"TRASH","Çöp Kutusu","TRASH"\)/);
   assert.match(gmail,/UPDATE mail_messages SET folder_id=\?/);
 });
+
+
+test("Gmail partial sync keeps successful mail data usable instead of surfacing a false hard error",()=>{
+  const gmail=read("./mail-google-gmail.ts");
+  assert.match(gmail,/successfulFolders/);
+  assert.match(gmail,/partial,total,folders:summary/);
+  assert.match(gmail,/ok:true,data:\{accountId:account\.id,partial/);
+  assert.match(gmail,/failed\+\+/);
+  assert.match(gmail,/failures\.length<5/);
+  assert.match(gmail,/MAIL_SYNC_FAILED/);
+  assert.doesNotMatch(gmail,/ok:!partial,data:\{accountId:account\.id/);
+});
