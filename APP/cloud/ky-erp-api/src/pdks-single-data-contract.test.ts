@@ -67,15 +67,32 @@ test("PDKS enrolled Windows device schema and headless HTTPS sync are explicit",
   assert.match(device, /Dönem kilitli/);
 });
 
-test("PDKS quick assistant is preview-first, D1-backed and audit logged", () => {
+test("PDKS quick assistant is preview-first, attendance-only and audit logged", () => {
   const source = api("ik-pdks-assistant.ts");
+  const frontendAssistant = frontend("services/pdksAssistant.js");
+
   assert.match(source, /\/api\/ik\/personnel-control\/assistant\/command/);
   assert.match(source, /body\.commit === true/);
   assert.match(source, /PDKS_ASSISTANT_COMMAND_UNCLEAR/);
+  assert.match(source, /PDKS_FINANCE_NOT_ALLOWED/);
   assert.match(source, /KART_YOK/);
+  assert.match(source, /action = "ARRIVAL"/);
+  assert.match(source, /action = "DEPARTURE"/);
+  assert.match(source, /direction,source,note/);
+  assert.match(source, /"OUT", "KYERP_PDKS_ASSISTANT"/);
   assert.match(source, /KYERP_PDKS_ASSISTANT/);
-  assert.match(source, /hr_monthly_adjustments_v2/);
   assert.match(source, /PDKS_ASSISTANT_/);
+  assert.match(source, /active_passive,e\.status,'AKTIF'/);
+  assert.doesNotMatch(source, /hr_monthly_adjustments_v2/);
+  assert.doesNotMatch(source, /SGK=VAR/);
+  assert.doesNotMatch(source, /parseAmount/);
+  assert.doesNotMatch(source, /parseHours/);
+
+  assert.match(frontendAssistant, /assertOperationalPdksCommand/);
+  assert.match(frontendAssistant, /Finans ve bordro işlemleri PDKS'den yapılamaz/);
+  assert.match(frontendAssistant, /18:55 çıkış yaptı/);
+  assert.doesNotMatch(frontendAssistant, /5000 TL avans/);
+  assert.doesNotMatch(frontendAssistant, /10 saat hafta içi mesai/);
 });
 
 test("Canonical personnel photo is shared by employee id and R2 instead of second PDKS person data", () => {
