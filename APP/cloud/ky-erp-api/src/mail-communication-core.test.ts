@@ -79,3 +79,12 @@ test("connection navigation keeps daily Mail and admin connection settings separ
   assert.match(registry, /\["depolama-kaynaklar", "Dosya Servisleri"/);
   assert.match(storagePage, /AdminMailConnections/);
 });
+
+
+test("mail core fails soft before 0050 instead of breaking the ERP shell", () => {
+  const source = read("./mail-communication-core.ts");
+  assert.match(source, /mailSchemaReady/);
+  assert.match(source, /schemaPendingData/);
+  assert.match(source, /MAIL_SCHEMA_NOT_READY/);
+  assert.match(source, /setupRequired:true/);
+});
