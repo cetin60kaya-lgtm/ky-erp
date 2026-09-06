@@ -51,6 +51,8 @@ if ($ProjectText -notmatch 'Compile Remove="KyErpDesktopWindow.xaml.cs"') { thro
 if ($ProjectText -notmatch 'Page Remove="KyErpDesktopWindow.xaml"') { throw 'PDKS-only build tam ERP XAML dosyasını dışlamıyor.' }
 if ($ProjectText -notmatch 'Compile Remove="KyErpShellWindow.xaml.cs"') { throw 'PDKS-only build eski ERP shell code-behind dosyasını dışlamıyor.' }
 if ($ProjectText -notmatch 'Page Remove="KyErpShellWindow.xaml"') { throw 'PDKS-only build eski ERP shell XAML dosyasını dışlamıyor.' }
+if ($ProjectText -notmatch 'BaseIntermediateOutputPath') { throw 'ERP/PDKS ayrı MSBuild ara klasörleri tanımlı değil.' }
+if ($ProjectText -notmatch 'BaseOutputPath') { throw 'ERP/PDKS ayrı MSBuild çıktı klasörleri tanımlı değil.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
