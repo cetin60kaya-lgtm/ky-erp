@@ -1,33 +1,31 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const worker = path.resolve(here, "../../../cloud/ky-erp-api");
-const srcDir = path.join(worker, "src");
-const originals = new Map();
-for (const name of readdirSync(srcDir)) {
-  if (!name.endsWith(".ts") || name.endsWith(".test.ts")) continue;
-  const file = path.join(srcDir, name);
-  const src = readFileSync(file, "utf8");
-  originals.set(file, src);
-  if (!src.startsWith("// @ts-nocheck")) writeFileSync(file, `// @ts-nocheck\n${src}`, "utf8");
+const rel = [
+  "src/e-belge-ubl.ts",
+  "src/index.ts",
+  "src/mail-connection-broker.ts",
+  "src/main.ts",
+  "src/runtime-migration-0046.ts",
+  "src/runtime-migration-0050.ts",
+];
+const files = rel.map((p) => path.join(worker, p));
+const originals = new Map(files.map((f) => [f, readFileSync(f, "utf8")]));
+
+function run(command, args) {
+  const r = spawnSync(command, args, { cwd: worker, encoding: "utf8", env: process.env, shell: process.platform === "win32", stdio: "inherit" });
+  if (r.error) throw r.error;
+  if (r.status !== 0) process.exit(r.status || 1);
 }
-function restore(){ for (const [file, src] of originals) writeFileSync(file, src, "utf8"); }
-function run(label, command, args) {
-  const r = spawnSync(command, args, { cwd: worker, encoding: "utf8", shell: process.platform === "win32" });
-  console.log(`===== ${label} =====`);
-  if (r.stdout) console.log(r.stdout);
-  if (r.stderr) console.error(r.stderr);
-  return r.status ?? 1;
-}
+run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 try {
-  const ci = run("npm ci", "npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
-  if (ci !== 0) process.exitCode = ci;
-  else {
-    const typecheck = run("typecheck all-source-nocheck", "npm", ["run", "typecheck"]);
-    if (typecheck !== 0) process.exitCode = typecheck;
-    else console.log("WORKER_ALL_SOURCE_NOCHECK_PASS");
-  }
-} finally { restore(); }
+  for (const f of files) writeFileSync(f, "// @ts-nocheck\n" + originals.get(f));
+  run("npm", ["run", "typecheck"]);
+  console.log("WORKER_SIX_RUNTIME_NOCHECK_PASS");
+} finally {
+  for (const f of files) writeFileSync(f, originals.get(f));
+}
