@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { accountingCanonical0046Contract } from "./runtime-migration-0046";
+import { accountingCanonical0046Contract } from "./runtime-migration-0046.ts";
 
 test("0046 runtime contract has exactly three canonical tables and three indexes", () => {
   assert.deepEqual(
