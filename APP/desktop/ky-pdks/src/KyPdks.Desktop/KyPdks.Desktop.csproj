@@ -6,21 +6,32 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>KyPdks.Desktop</RootNamespace>
-    <AssemblyName>KY ERP Desktop</AssemblyName>
-    <Product>KY ERP Desktop</Product>
-    <Description>KY ERP Windows çalışma merkezi • ERP + File Hub + AI + İK/PDKS cihaz köprüsü</Description>
+    <ProductMode Condition="'$(ProductMode)' == ''">ERP</ProductMode>
+    <AssemblyName Condition="'$(ProductMode)' != 'PDKS'">KY ERP Desktop</AssemblyName>
+    <AssemblyName Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Desktop</AssemblyName>
+    <Product Condition="'$(ProductMode)' != 'PDKS'">KY ERP Desktop</Product>
+    <Product Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Desktop</Product>
+    <Description Condition="'$(ProductMode)' != 'PDKS'">KY ERP Windows çalışma merkezi • tam ERP + File Hub + AI + İK/PDKS cihaz köprüsü</Description>
+    <Description Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Windows işlem merkezi • kart + puantaj + vardiya + izin + terminal + rapor</Description>
     <Company>KY ERP</Company>
-    <Version>1.7.2</Version>
-    <FileVersion>1.7.2.0</FileVersion>
-    <AssemblyVersion>1.7.2.0</AssemblyVersion>
+    <Version>1.8.0</Version>
+    <FileVersion>1.8.0.0</FileVersion>
+    <AssemblyVersion>1.8.0.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DefineConstants Condition="'$(ProductMode)' == 'PDKS'">$(DefineConstants);PDKS_ONLY</DefineConstants>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(ProductMode)' == 'PDKS'">
+    <Page Remove="KyErpDesktopWindow.xaml" />
+    <Compile Remove="KyErpDesktopWindow.xaml.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="System.IO" />
     <ProjectReference Include="..\KyPdks.Shared\KyPdks.Shared.csproj" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" Condition="'$(ProductMode)' != 'PDKS'" />
   </ItemGroup>
 </Project>
