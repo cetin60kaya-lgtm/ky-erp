@@ -27,11 +27,11 @@ writeFileSync(config, JSON.stringify({
     noEmit: true,
     skipLibCheck: true
   },
-  files: ["worker-configuration.d.ts", "ts-probe.ts"]
+  files: ["worker-configuration.d.ts", "src/cloudflare-ai-env.d.ts", "ts-probe.ts"]
 }, null, 2));
 try {
   run("npx", ["tsc", "-p", "tsconfig.probe.json", "--pretty", "false"]);
-  console.log("WORKER_DECLARATION_MINIMAL_PROBE_PASS");
+  console.log("WORKER_DECLARATION_AI_PROBE_PASS");
 } finally {
   rmSync(probe, { force: true });
   rmSync(config, { force: true });
