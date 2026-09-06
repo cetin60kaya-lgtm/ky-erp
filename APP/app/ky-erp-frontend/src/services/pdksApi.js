@@ -12,8 +12,8 @@ export async function getPdksProfile() {
   return unwrap(await apiGet("/ik/personnel-control/profile"));
 }
 
-export async function getPdksPeople() {
-  return unwrap(await apiGet("/ik/personnel-control/people"));
+export async function getPdksPeople(params = {}) {
+  return unwrap(await apiGet("/ik/personnel-control/people", params));
 }
 
 // Modern attendance motoru: vardiya, Cumartesi/Pazar, yarım gün tatil, izin günü,
