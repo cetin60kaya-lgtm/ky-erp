@@ -351,6 +351,10 @@ export async function saveIkAdvancedPayrollOverride(payload = {}) {
   return unwrap(await apiPost("/ik/advanced/payroll/override", payload));
 }
 
+export async function saveIkAdvancedFinalPayrollControl(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/payroll/final-control", payload));
+}
+
 export async function saveIkAdvancedPayrollLines(payload = {}) {
   return unwrap(await apiPost("/ik/advanced/payroll/save", payload));
 }
