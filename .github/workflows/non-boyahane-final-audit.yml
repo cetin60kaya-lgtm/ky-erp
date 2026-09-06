@@ -5,6 +5,7 @@ on:
     paths:
       - "APP/cloud/ky-erp-api/src/main.ts"
       - "APP/cloud/ky-erp-api/src/accounting-*.ts"
+      - "APP/cloud/ky-erp-api/src/e-belge-*.ts"
       - "APP/cloud/ky-erp-api/migrations/0008_hr_relational_bootstrap.sql"
       - "APP/cloud/ky-erp-api/migrations/0040_accounting_fibe_company_tracking.sql"
       - "APP/cloud/ky-erp-api/local-accounting-quick-smoke.sql"
@@ -148,6 +149,10 @@ jobs:
       - name: Worker typecheck
         working-directory: APP/cloud/ky-erp-api
         run: npm run typecheck
+
+      - name: Worker unit testleri
+        working-directory: APP/cloud/ky-erp-api
+        run: npm run test:unit
 
       - name: Worker dry-run build
         working-directory: APP/cloud/ky-erp-api
