@@ -27,6 +27,18 @@ export const decideMailApproval = (id, decision, note = "") =>
 export const listMailMessages = (accountId, params = {}) =>
   apiGet("/mail/messages", { accountId, ...params }).then(unwrap);
 
+export const listMailFolders = (accountId) =>
+  apiGet("/mail/folders", { accountId, _ts: Date.now() }).then(unwrap);
+
+export const syncMailFolder = (accountId, folderId) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/folders/${encodeURIComponent(folderId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
+
+export const pinMailMessage = (messageId, pinned) =>
+  apiPut(`/mail/messages/${encodeURIComponent(messageId)}/pin`, { pinned }).then(unwrap);
+
+export const runMailMessageAction = (messageId, action, values = {}) =>
+  apiPost(`/mail/messages/${encodeURIComponent(messageId)}/action`, { action, ...values }, { timeoutMs: 60_000 }).then(unwrap);
+
 export const listMailDrafts = () =>
   apiGet("/mail/drafts", { _ts: Date.now() }).then(unwrap);
 
