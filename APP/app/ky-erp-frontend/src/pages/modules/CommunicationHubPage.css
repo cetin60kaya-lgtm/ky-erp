@@ -74,3 +74,117 @@
 .comm-attachments>button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .comm-attachments>button em{flex:0 0 auto;font-size:10px;font-style:normal;color:#64748b}
 @media(max-width:720px){.comm-attachments{margin:10px}}
+
+
+/* Mail workspace desktop ergonomics — Outlook benzeri ayarlanabilir kolonlar */
+.comm-mail-layout-resizable{
+  grid-template-columns:var(--comm-mailbox-width,250px) 6px var(--comm-list-width,560px) 6px minmax(360px,1fr);
+}
+.comm-mail-layout-resizable>.comm-mailboxes,
+.comm-mail-layout-resizable>.comm-message-list{border-right:0}
+.comm-pane-resizer{
+  position:relative;
+  width:6px;
+  min-width:6px;
+  cursor:col-resize;
+  background:#f8fafc;
+  border-left:1px solid #e2e8f0;
+  border-right:1px solid #e2e8f0;
+  touch-action:none;
+  z-index:3;
+}
+.comm-pane-resizer::after{
+  content:"";
+  position:absolute;
+  inset:0 1px;
+  background:transparent;
+}
+.comm-pane-resizer:hover,.comm-resizing .comm-pane-resizer{background:#dbeafe;border-color:#93c5fd}
+.comm-resizing{cursor:col-resize!important;user-select:none!important}
+.comm-resizing *{cursor:col-resize!important}
+
+/* Ekler: dosya adına tık = önizleme, küçük ok = indir */
+.comm-attachment-row{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:6px;align-items:stretch}
+.comm-attachments>.comm-attachment-row{min-width:0}
+.comm-attachment-open{
+  display:flex!important;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+  min-width:0;
+  border:1px solid #e2e8f0!important;
+  border-radius:7px!important;
+  background:#fff!important;
+  color:#334155!important;
+  padding:8px 9px!important;
+  text-align:left!important;
+}
+.comm-attachment-open:hover{background:#f1f6fb!important;border-color:#c7d7e8!important}
+.comm-attachment-open span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.comm-attachment-open em{flex:0 0 auto;font-size:10px;font-style:normal;color:#64748b}
+.comm-attachment-download{
+  padding:0!important;
+  min-width:34px;
+  border:1px solid #dbe4ee!important;
+  border-radius:7px!important;
+  background:#f8fafc!important;
+  color:#173b67!important;
+  font-size:17px!important;
+}
+.comm-attachment-download:hover{background:#eaf2fb!important}
+
+/* Güvenli dosya önizleme */
+.comm-attachment-preview-backdrop{
+  position:fixed;inset:0;z-index:120;background:rgba(15,23,42,.58);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+  backdrop-filter:blur(2px);
+}
+.comm-attachment-preview{
+  width:min(1180px,calc(100vw - 48px));height:min(820px,calc(100vh - 48px));
+  display:grid;grid-template-rows:auto minmax(0,1fr);
+  background:#fff;border:1px solid #dbe4ee;border-radius:12px;overflow:hidden;
+  box-shadow:0 26px 80px rgba(15,23,42,.32);
+}
+.comm-attachment-preview>header{
+  display:flex;justify-content:space-between;align-items:center;gap:16px;
+  padding:11px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc;
+}
+.comm-attachment-preview>header>div:first-child{min-width:0;display:grid;gap:2px}
+.comm-attachment-preview>header b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a}
+.comm-attachment-preview>header span{font-size:11px;color:#64748b}
+.comm-attachment-preview>header>div:last-child{display:flex;gap:7px;flex:0 0 auto}
+.comm-attachment-preview-body{min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;background:#eef2f7}
+.comm-attachment-preview-body img{display:block;max-width:100%;max-height:100%;object-fit:contain;background:#fff}
+.comm-attachment-preview-body iframe{width:100%;height:100%;border:0;background:#fff}
+.comm-attachment-preview-body pre{align-self:stretch;width:100%;margin:0;padding:18px;overflow:auto;white-space:pre-wrap;background:#fff;color:#172033;font:12px/1.5 Consolas,monospace}
+
+/* Outlook benzeri mail satırı sağ-tık menüsü */
+.comm-context-menu{
+  position:fixed;z-index:140;width:230px;padding:6px;
+  border:1px solid #d8e1eb;border-radius:9px;background:#fff;
+  box-shadow:0 16px 42px rgba(15,23,42,.23);
+}
+.comm-context-menu button{
+  display:block;width:100%;text-align:left;border:0!important;border-radius:6px!important;
+  padding:8px 10px!important;background:#fff!important;color:#1e293b!important;
+  font-size:12px!important;font-weight:650!important;
+}
+.comm-context-menu button:hover{background:#eef5fc!important}
+.comm-context-menu button.danger{color:#b42318!important}
+.comm-context-menu button.danger:hover{background:#fff1f0!important}
+.comm-context-separator{height:1px;background:#e5eaf0;margin:5px 2px}
+
+@media(max-width:1100px){
+  .comm-mail-layout-resizable{grid-template-columns:220px 1fr}
+  .comm-mail-layout-resizable>.comm-preview{grid-column:1/-1}
+  .comm-pane-resizer{display:none}
+}
+@media(max-width:720px){
+  .comm-mail-layout-resizable{grid-template-columns:1fr}
+  .comm-attachment-preview-backdrop{padding:8px}
+  .comm-attachment-preview{width:100%;height:calc(100vh - 16px)}
+  .comm-attachment-preview>header{align-items:flex-start;flex-direction:column}
+  .comm-attachment-preview>header>div:last-child{width:100%}
+  .comm-attachment-preview>header>div:last-child button{flex:1}
+}

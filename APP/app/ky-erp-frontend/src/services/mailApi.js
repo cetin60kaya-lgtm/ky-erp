@@ -42,12 +42,15 @@ export const runMailMessageAction = (messageId, action, values = {}) =>
 export const listMailAttachments = (messageId) =>
   apiGet(`/mail/messages/${encodeURIComponent(messageId)}/attachments`, { _ts: Date.now() }).then(unwrap);
 
-export const downloadMailAttachment = async (messageId, attachmentId, fileName = "ek") => {
-  const blob = await apiFetch(`/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download`, {
+export const getMailAttachmentBlob = (messageId, attachmentId) =>
+  apiFetch(`/mail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/download`, {
     method: "GET",
     responseType: "blob",
     timeoutMs: 60_000,
   });
+
+export const downloadMailAttachment = async (messageId, attachmentId, fileName = "ek") => {
+  const blob = await getMailAttachmentBlob(messageId, attachmentId);
   const url = URL.createObjectURL(blob);
   try {
     const link = document.createElement("a");
