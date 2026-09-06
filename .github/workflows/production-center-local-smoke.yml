@@ -6,6 +6,8 @@ on:
       - "APP/cloud/ky-erp-api/src/main.ts"
       - "APP/cloud/ky-erp-api/src/e-belge-*.ts"
       - "APP/cloud/ky-erp-api/src/accounting-document-*.ts"
+      - "APP/cloud/ky-erp-api/src/accounting-report-*.ts"
+      - "APP/cloud/ky-erp-api/migrations/0046_accounting_canonical_report_controls.sql"
       - "APP/cloud/ky-erp-api/src/isnet-live-sync.ts"
       - "APP/cloud/ky-erp-api/src/production-center.ts"
       - "APP/cloud/ky-erp-api/src/boyahane-inventory.ts"
