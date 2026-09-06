@@ -21,10 +21,7 @@
     "required": [
       "RESEND_API_KEY",
       "TURNSTILE_SECRET_KEY",
-      "TURNSTILE_SITE_KEY",
-      "MAIL_CREDENTIAL_KEY",
-      "MICROSOFT_MAIL_CLIENT_ID",
-      "MICROSOFT_MAIL_CLIENT_SECRET"
+      "TURNSTILE_SITE_KEY"
     ]
   },
   "vars": {
