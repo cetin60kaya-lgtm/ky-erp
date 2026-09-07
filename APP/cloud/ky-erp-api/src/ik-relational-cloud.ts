@@ -944,6 +944,27 @@ async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, 
   return calculateOvertimeAmount(baseSalary, hours, multiplierValue, divisor);
 }
 
+async function absenceDeductionForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, mode: "DAY" | "HOUR", hoursValue: unknown) {
+  const employee = await first(c, `SELECT e.salary,e.road_allowance,s.deduction_hourly_base
+    FROM hr_monthly_employees e
+    LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+    WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  if (!employee) return { hours: 0, deductionDivisor: 300, salaryHourly: 0, salaryCut: 0, roadDaily: 0, roadCut: 0, total: 0 };
+  const salary = Math.max(0, number(employee.salary));
+  const road = Math.max(0, number(employee.road_allowance));
+  const deductionDivisor = number(employee.deduction_hourly_base) || 300;
+  const salaryDaily = Math.round((salary / 30) * 100) / 100;
+  const roadDaily = Math.round((road / 30) * 100) / 100;
+  if (mode === "DAY") {
+    return { hours: 10, deductionDivisor, salaryHourly: Math.round((salary / deductionDivisor) * 100) / 100, salaryCut: salaryDaily, roadDaily, roadCut: roadDaily, total: Math.round((salaryDaily + roadDaily) * 100) / 100 };
+  }
+  const hours = Math.max(0, Math.min(number(hoursValue), 10));
+  const salaryHourly = Math.round((salary / deductionDivisor) * 100) / 100;
+  const salaryCut = Math.round((salaryHourly * hours) * 100) / 100;
+  const roadCut = hours >= 10 ? roadDaily : 0;
+  return { hours, deductionDivisor, salaryHourly, salaryCut, roadDaily, roadCut, total: Math.round((salaryCut + roadCut) * 100) / 100 };
+}
+
 async function saveAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
@@ -962,10 +983,16 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
 
   const date = hrDateOnly(body.date) || hrDateOnly(nowIso());
   const hourOrDay = number(body.hourOrDay || body.hours);
-  const isOvertime = upper(adjustmentType).includes("MESAI");
+  const typeUpper = upper(adjustmentType);
+  const isOvertime = typeUpper.includes("MESAI");
+  const isAbsenceDay = (typeUpper.includes("EKSIK") || typeUpper.includes("EKSİK")) && (typeUpper.includes("GUN") || typeUpper.includes("GÜN"));
+  const isAbsenceHour = (typeUpper.includes("EKSIK") || typeUpper.includes("EKSİK")) && typeUpper.includes("SAAT");
+  const isAbsence = isAbsenceDay || isAbsenceHour || typeUpper.includes("DEVAMSIZ") || typeUpper.includes("GELMEDI") || typeUpper.includes("GELMEDİ");
+  const absenceMode: "DAY" | "HOUR" = isAbsenceDay || typeUpper.includes("DEVAMSIZ") || typeUpper.includes("GELMEDI") || typeUpper.includes("GELMEDİ") ? "DAY" : "HOUR";
   if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
+  if (isAbsence && absenceMode === "HOUR" && (hourOrDay <= 0 || hourOrDay > 10)) return error(c, 400, "ABSENCE_HOURS_INVALID", "Eksik saat 0 dan büyük ve en fazla 10 saat olmalıdır.");
   let amount = number(body.amount);
-  if (!isOvertime && amount <= 0 && hourOrDay <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Tutar veya süre sıfırdan büyük olmalıdır.");
+  if (!isOvertime && !isAbsence && amount <= 0 && hourOrDay <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Tutar veya süre sıfırdan büyük olmalıdır.");
 
   const paymentMethod = text(body.paymentMethod) || (isOvertime ? "Bordro" : "Elden");
   const payrollEffect = text(body.payrollEffect) || (isOvertime ? "Bordroya yansir" : "Bordrodan düş");
@@ -974,13 +1001,22 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
   const statements: D1PreparedStatement[] = [];
 
   for (const employeeId of employeeIds) {
+    const absence = isAbsence ? await absenceDeductionForEmployee(c, companyId, employeeId, absenceMode, hourOrDay) : null;
     const rowAmount = isOvertime
       ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
-      : amount;
+      : isAbsence ? number(absence?.total) : amount;
     if (rowAmount <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Hesaplanan tutar sıfırdan büyük olmalıdır.");
-    const rowNote = isOvertime ? overtimeStoredNote(body.note || body.reason, multiplier) : (text(body.note || body.reason) || null);
+    const storedHourOrDay = isAbsence && absenceMode === "DAY" ? 1 : hourOrDay;
+    const rowNote = isOvertime
+      ? overtimeStoredNote(body.note || body.reason, multiplier)
+      : isAbsence
+        ? [absenceMode === "DAY"
+            ? `1 gün eksik · Maaş/30: ${number(absence?.salaryCut).toFixed(2)} · Yol/30: ${number(absence?.roadCut).toFixed(2)}`
+            : `Eksik saat: ${number(absence?.hours)}/10 · Kesinti böleni: ${number(absence?.deductionDivisor)} · Maaş kesintisi: ${number(absence?.salaryCut).toFixed(2)} · Yol kesintisi: ${number(absence?.roadCut).toFixed(2)}`,
+          text(body.note || body.reason)].filter(Boolean).join(" · ")
+        : (text(body.note || body.reason) || null);
     statements.push(c.env.DB.prepare("INSERT INTO hr_monthly_adjustments_v2 (id,employee_id,date,adjustment_type,hour_or_day,amount,payment_method,payroll_effect,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(), employeeId, date, adjustmentType, hourOrDay, rowAmount, isOvertime ? "Bordro" : paymentMethod, isOvertime ? "Bordroya yansir" : payrollEffect, rowNote, status, nowIso()));
+      .bind(crypto.randomUUID(), employeeId, date, adjustmentType, storedHourOrDay, rowAmount, isOvertime ? "Bordro" : paymentMethod, isOvertime || isAbsence ? "Bordroya yansir" : payrollEffect, rowNote, status, nowIso()));
   }
   await c.env.DB.batch(statements);
   return okData(c, { savedCount: statements.length, employeeIds, adjustmentType, overtimeMultiplier: isOvertime ? multiplier : undefined });
@@ -1004,22 +1040,34 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   if (!valid) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
 
   const adjustmentType = text(body.adjustmentType || body.type || current.adjustment_type);
-  const isOvertime = upper(adjustmentType).includes("MESAI");
+  const typeUpper = upper(adjustmentType);
+  const isOvertime = typeUpper.includes("MESAI");
+  const isAbsenceDay = (typeUpper.includes("EKSIK") || typeUpper.includes("EKSİK")) && (typeUpper.includes("GUN") || typeUpper.includes("GÜN"));
+  const isAbsenceHour = (typeUpper.includes("EKSIK") || typeUpper.includes("EKSİK")) && typeUpper.includes("SAAT");
+  const isAbsence = isAbsenceDay || isAbsenceHour || typeUpper.includes("DEVAMSIZ") || typeUpper.includes("GELMEDI") || typeUpper.includes("GELMEDİ");
+  const absenceMode: "DAY" | "HOUR" = isAbsenceDay || typeUpper.includes("DEVAMSIZ") || typeUpper.includes("GELMEDI") || typeUpper.includes("GELMEDİ") ? "DAY" : "HOUR";
   const hourOrDay = number(body.hourOrDay ?? body.hours ?? current.hour_or_day);
   const multiplier = overtimeMultiplierValue(body.overtimeMultiplier || overtimeMetaFromNote(current.note).multiplier);
+  if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
+  if (isAbsence && absenceMode === "HOUR" && (hourOrDay <= 0 || hourOrDay > 10)) return error(c, 400, "ABSENCE_HOURS_INVALID", "Eksik saat 0 dan büyük ve en fazla 10 saat olmalıdır.");
+  const absence = isAbsence ? await absenceDeductionForEmployee(c, companyId, employeeId, absenceMode, hourOrDay) : null;
   const amount = isOvertime
     ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
-    : number(body.amount ?? current.amount);
-  if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
+    : isAbsence ? number(absence?.total) : number(body.amount ?? current.amount);
   if (amount <= 0) return error(c, 400, "AMOUNT_REQUIRED", "Tutar sıfırdan büyük olmalıdır.");
 
   const note = isOvertime
     ? overtimeStoredNote(body.note ?? overtimeMetaFromNote(current.note).note, multiplier)
-    : (text(body.note ?? overtimeMetaFromNote(current.note).note) || null);
+    : isAbsence
+      ? [absenceMode === "DAY"
+          ? `1 gün eksik · Maaş/30: ${number(absence?.salaryCut).toFixed(2)} · Yol/30: ${number(absence?.roadCut).toFixed(2)}`
+          : `Eksik saat: ${number(absence?.hours)}/10 · Kesinti böleni: ${number(absence?.deductionDivisor)} · Maaş kesintisi: ${number(absence?.salaryCut).toFixed(2)} · Yol kesintisi: ${number(absence?.roadCut).toFixed(2)}`,
+        text(body.note ?? overtimeMetaFromNote(current.note).note)].filter(Boolean).join(" · ")
+      : (text(body.note ?? overtimeMetaFromNote(current.note).note) || null);
   await c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET employee_id=?,date=?,adjustment_type=?,hour_or_day=?,amount=?,payment_method=?,payroll_effect=?,note=?,status=? WHERE id=?")
-    .bind(employeeId, hrDateOnly(body.date || current.date), adjustmentType, hourOrDay, amount,
+    .bind(employeeId, hrDateOnly(body.date || current.date), adjustmentType, isAbsence && absenceMode === "DAY" ? 1 : hourOrDay, amount,
       isOvertime ? "Bordro" : (text(body.paymentMethod || current.payment_method) || "Elden"),
-      isOvertime ? "Bordroya yansir" : text(body.payrollEffect || current.payroll_effect),
+      isOvertime || isAbsence ? "Bordroya yansir" : text(body.payrollEffect || current.payroll_effect),
       note, text(body.status || current.status), id).run();
   const saved = await first(c, "SELECT * FROM hr_monthly_adjustments_v2 WHERE id=?", [id]);
   return okData(c, mapAdjustment(saved || current));
@@ -1269,7 +1317,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
   const employees = rawEmployees.filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period));
   const employeesById = new Map(rawEmployees.map((employee) => [text(employee.id), employee]));
   const byEmployee = new Map(saved.filter((row) => number(row.year) === year && number(row.month) === month).map((row) => [text(row.employeeId), row]));
-  const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
+  const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const lines = employees.map((employee) => {
     const row = byEmployee.get(text(employee.id));
     const baseEmployee = employee.baseEmployeeId ? employeesById.get(text(employee.baseEmployeeId)) : null;
@@ -1431,7 +1479,7 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const baseSalary = baseEmployee ? number(baseEmployee.salary) : number(employee.salary);
   const autoPremium = baseEmployee ? Math.max(number(employee.salary) - baseSalary, 0) : number(employee.extra_payment_amount);
   const allAdjustments = await adjustmentRows(c, companyId);
-  const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
+  const normalizeType = (value: unknown) => { const valueUpper = upper(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const own = allAdjustments.filter((item) => text(item.employeeId) === employeeId && text(item.date).startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
   const overtime = own.filter((item) => normalizeType(item.adjustmentType) === "MESAI").reduce((sum, item) => sum + number(item.amount), 0);
   const advanceRows = own.filter((item) => ["AVANS", "TOPLU_AVANS"].includes(normalizeType(item.adjustmentType)));
@@ -1511,7 +1559,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     if (valueUpper.includes("AVANS")) return "AVANS";
     if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ";
     if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA";
-    if (valueUpper.includes("KESINT")) return "KESINTI";
+    if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI";
     if (valueUpper.includes("MESAI")) return "MESAI";
     return valueUpper;
   };
