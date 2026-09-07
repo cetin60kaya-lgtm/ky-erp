@@ -134,7 +134,7 @@ public sealed class PdksConfig
     public string DeviceName { get; set; } = "Cihaz1";
     public int DeviceNo { get; set; } = 1;
     public int MachineNo { get; set; } = 1;
-    public string Direction { get; set; } = "GIRIS";
+    public string Direction { get; set; } = "AUTO";
     public string SourceMode { get; set; } = "HEDEF_TR500";
     public string TcpHost { get; set; } = "192.168.1.224";
     public int TcpPort { get; set; } = 5005;
