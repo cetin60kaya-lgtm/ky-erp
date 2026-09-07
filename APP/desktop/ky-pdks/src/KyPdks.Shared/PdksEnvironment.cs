@@ -54,6 +54,11 @@ public sealed class ConfigStore(PdksPaths paths)
             }
             var config = JsonSerializer.Deserialize<PdksConfig>(File.ReadAllText(paths.ConfigFile, Encoding.UTF8), Json) ?? new PdksConfig();
             config.Normalize();
+            // 1.9.0 öncesi kurulumlarda setup.completed yoktur. Gerçek Hedef tek-terminal
+            // akışında aynı dosyada sabah+akşam hareketleri bulunduğundan, sihirbaz onaylanana
+            // kadar eski sabit GİRİŞ değerini güvenli AUTO'ya indir.
+            if (!File.Exists(paths.SetupCompletedFile) && config.NormalizedMode == "HEDEF_TR500")
+                config.Direction = "AUTO";
             return config;
         }
         catch
