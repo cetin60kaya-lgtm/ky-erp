@@ -282,3 +282,22 @@ Secret, parola, MFA kodu, recovery cevabı veya API token değeri hiçbir zaman 
 - Kullanıcı arayüzünde eski tek kullanımlık kurtarma-kodu mantığı kaldırıldı. Canonical kurtarma: parola doğrulaması -> doğrulanmış e-posta/SMS -> rastgele 2 güvenlik sorusu -> Authenticator yeniden kurulumudur.
 - Cloudflare Access / Zero Trust, ileride yalnız Süper Yönetici için ek dış güvenlik katmanı olarak değerlendirilebilir; mevcut KY ERP kurtarmasının yerine geçirilmedi ve normal kullanıcı akışına ikinci giriş eklenmedi.
 - Regression: `APP/cloud/ky-erp-api/src/super-admin-recovery-final-contract.test.ts`.
+
+## 07.09.2026 — KY PDKS Pro 1.9.0 canonical ürün mimarisi
+
+- Kullanıcı PDKS'yi modern/pro bir ürün olarak baştan sona tamamlama yönünü onayladı; bu kayıt **feature branch** durumudur, production onayı değildir.
+- Aktif PDKS feature branch: `codex/pdks-desktop-1.8.1-device-final-20260907`.
+- Milestone sürümü: **KY PDKS Pro 1.9.0**.
+- PDKS Desktop artık ayrı/eski native iş ekranını ana ürün olarak kullanmaz. Paketlenmiş canonical KY ERP React frontendini WebView2 ile açar ve document-start `PDKS` ürün işareti sayesinde yalnız PDKS modülünü gösterir.
+- Windows native katman yalnız terminal/Agent/offline/log/yedek/kurulum köprüsüdür.
+- Canlı dashboard vardiya-aware hale getirildi: `WAITING`, `NO_SHOW`, `INSIDE`, `LEFT`, `MISSING_OUT`, yıllık izin, rapor ve diğer izin durumları ayrıdır. Vardiyası başlamayan kişi devamsız sayılmaz; vardiya bitmeden tek kart eksik çıkış sayılmaz.
+- PDKS ana navigasyonu altı odaktır: Günlük, Personel & İK, Tanımlar, Terminal & Sistem, AI & Kontrol, Rapor & Denetim.
+- AI Kontrol Merkezi canlı snapshot ile analiz yapar. Canlı personel snapshot'ı `ephemeral` modda işlenir ve AI sohbet geçmişine kaydedilmez.
+- PDKS doğal dil write işlemleri preview-first + açık onay ile sınırlıdır; finans/bordro komutları PDKS'den yürütülmez.
+- Windows Terminal Kurulum Sihirbazı eklendi: Hedef500 / FILE / TCP / SERIAL profilleri, cihaz kimliği, GİRİŞ/ÇIKIŞ, IP/port, veri dosyası, COM/baud, tarama/senkron, read-only TCP/dosya tanılama.
+- İşyeri Hedef500 hazır profili: Cihaz1 / cihaz 1 / makine 1 / GİRİŞ / `192.168.1.224:5005` / COM1 38400 / `C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt`.
+- Cihaz saati yazma, zil, kapı rölesi, cihaz kodu, restart ve yönetici silme gibi üretici komutları exact marka-model/protokol doğrulanmadan tahmini paketle çalıştırılmaz.
+- PDKS terminal TCP portu internete/WAN'a açılmaz; Agent LAN'dan okuyup KY ERP'ye HTTPS ile çıkar.
+- Build/installer hedefi: `KY-PDKS-Pro-Setup-1.9.0.exe`; canonical frontend PDKS paketine de gömülür.
+- Gerçek test kapısı değişmedi: frontend/API/.NET test+build -> Windows setup artifact -> temiz Windows kurulumu -> gerçek terminal/kart/offline/DENETIM preflight -> kullanıcı açık `canlıya al` -> production merge -> Cloudflare Git Integration -> canlı smoke.
+- Bu kayıtta production merge/deploy yapılmamıştır.
