@@ -29,6 +29,36 @@ async function readDevice() {
   });
 }
 
+async function writeDevice(value) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(value, RECORD_KEY);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function hasRecentWake() {
+  try {
+    const device = await readDevice();
+    const wake = Date.parse(String(device?.pendingWakeAt || ""));
+    return Number.isFinite(wake) && Date.now() - wake < 15 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+async function clearWakeMarker() {
+  try {
+    const device = await readDevice();
+    if (!device?.pendingWakeAt) return;
+    const next = { ...device };
+    delete next.pendingWakeAt;
+    await writeDevice(next);
+  } catch {}
+}
+
 async function deviceFetch(path, options = {}) {
   const device = await readDevice();
   if (!device?.deviceId || !device?.deviceToken) return null;
@@ -99,21 +129,25 @@ export default function PhoneApprovalInboxBridge() {
         setMessage(error?.message || "Telefon onayı isteği alınamadı.");
         setOpen(true);
       }
+    } finally {
+      if (forceOpen) await clearWakeMarker();
     }
   }, [syncBadge]);
 
   useEffect(() => {
-    const forceOpen = (() => {
+    const queryForcesOpen = (() => {
       try { return new URL(window.location.href).searchParams.get(OPEN_PARAM) === "1"; }
       catch { return false; }
     })();
-    const kickoff = window.setTimeout(() => checkPending({ forceOpen }), 350);
+    const kickoff = window.setTimeout(async () => {
+      checkPending({ forceOpen: queryForcesOpen || await hasRecentWake() });
+    }, 350);
 
-    const onVisible = () => {
-      if (document.visibilityState === "visible") checkPending({ forceOpen: true });
+    const onVisible = async () => {
+      if (document.visibilityState === "visible") checkPending({ forceOpen: await hasRecentWake() });
     };
     const onFocus = () => checkPending({ forceOpen: false });
-    const onPageShow = () => checkPending({ forceOpen: true });
+    const onPageShow = async () => checkPending({ forceOpen: queryForcesOpen || await hasRecentWake() });
     const onWorkerMessage = (event) => {
       if (event?.data?.type === "KYERP_PUSH_PENDING_WAKE") checkPending({ forceOpen: true });
     };
