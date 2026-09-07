@@ -509,8 +509,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const pre = calcRow({ salary, road, overtime, extra, advance, deduction, garnishment });
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   const bankPlanAfterDeductions = Math.max(num(employee.bankAmount) - bankDeductions, 0);
-  const bank = saved?.final ? num(saved.final.bank) : Math.min(pre.net, bankPlanAfterDeductions);
-  const cash = saved?.final ? num(saved.final.cash) : Math.max(pre.net - bank, 0);
+  const bank = Math.min(pre.net, bankPlanAfterDeductions);
+  const cash = Math.max(pre.net - bank, 0);
   return {
     employee, actualSalary, baseEmployee, salary, road, extraLabel, extra, overtime, advance, deduction,
     legalType, garnishmentSource, garnishment, legalBank, legalCash, bankDeductions, cashDeductions,
@@ -525,17 +525,41 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const system = planFor(employee);
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
-  const salary = num(saved.final.salaryPay);
-  const road = num(saved.final.roadPay);
+
+  // Mesai, avans, kesinti ve icra/haciz her zaman kaynak hareket ekranindan okunur.
+  // Son bordroda yapilan manuel farklar da kaynak hareketine duzeltme kaydi olarak yazildigi icin
+  // kayitli bordro snapshot'i bu canli hareketlerin ustunu ortemez.
+  const salary = saved.final.salaryPay !== undefined ? num(saved.final.salaryPay) : system.salary;
+  const road = saved.final.roadPay !== undefined ? num(saved.final.roadPay) : system.road;
   const extraLabel = "EK";
   const extra = saved.final.premiumAmount !== undefined ? num(saved.final.premiumAmount) : system.extra;
-  const overtime = num(saved.final.overtimeAmount);
-  const advance = num(saved.final.advanceAmount);
-  const deduction = num(saved.final.deductionAmount);
-  const garnishment = saved.final.garnishmentAmount !== undefined ? num(saved.final.garnishmentAmount) : system.garnishment;
-  const bank = num(saved.final.bank);
-  const cash = num(saved.final.cash);
-  return { ...system, salary, road, extraLabel, extra, overtime, advance, deduction, garnishment, bank, cash, saved, ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }) };
+  const overtime = system.overtime;
+  const advance = system.advance;
+  const deduction = system.deduction;
+  const garnishment = system.garnishment;
+
+  const savedOvertime = saved.final.overtimeAmount !== undefined ? num(saved.final.overtimeAmount) : overtime;
+  const savedAdvance = saved.final.advanceAmount !== undefined ? num(saved.final.advanceAmount) : advance;
+  const savedDeduction = saved.final.deductionAmount !== undefined ? num(saved.final.deductionAmount) : deduction;
+  const savedGarnishment = saved.final.garnishmentAmount !== undefined ? num(saved.final.garnishmentAmount) : garnishment;
+  const sourceChangedSinceSave = [savedOvertime - overtime, savedAdvance - advance, savedDeduction - deduction, savedGarnishment - garnishment]
+    .some((value) => Math.abs(round(value)) > 0.01);
+
+  const liveTotals = calcRow({ salary, road, extra, overtime, advance, deduction, garnishment });
+  const liveBankPlan = Math.max(num(employee.bankAmount) - system.bankDeductions, 0);
+  const liveBank = Math.min(liveTotals.net, liveBankPlan);
+  const liveCash = Math.max(liveTotals.net - liveBank, 0);
+  const savedPaymentMatchesLiveNet = Math.abs(round(num(saved.final.bank) + num(saved.final.cash) - liveTotals.net)) <= 0.01;
+  const useSavedPaymentSplit = !sourceChangedSinceSave && savedPaymentMatchesLiveNet;
+  const bank = useSavedPaymentSplit ? num(saved.final.bank) : liveBank;
+  const cash = useSavedPaymentSplit ? num(saved.final.cash) : liveCash;
+
+  return {
+    ...system,
+    salary, road, extraLabel, extra, overtime, advance, deduction, garnishment, bank, cash, saved,
+    sourceChangedSinceSave,
+    ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }),
+  };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
