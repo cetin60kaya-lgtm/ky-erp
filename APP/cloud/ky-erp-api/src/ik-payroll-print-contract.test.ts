@@ -229,7 +229,10 @@ test("IK payroll period persists and new periods require explicit preparation", 
   assert.match(page, /const periodPrepared = preparedPeriods\.includes\(period\)/);
   assert.match(page, /Bilgileri Hazırla/);
   assert.match(page, /preparePeriod/);
-  assert.match(page, /includePayroll = prepare \|\| periodPrepared/);
+  assert.match(page, /getIkAdvancedPeriodState/);
+  assert.match(page, /prepareIkAdvancedPeriod/);
+  assert.match(page, /const preparedForView =/);
+  assert.match(page, /const includePayroll = prepare \|\| preparedForView/);
   assert.match(page, /periodPrepared \? employees\.map/);
 });
 
