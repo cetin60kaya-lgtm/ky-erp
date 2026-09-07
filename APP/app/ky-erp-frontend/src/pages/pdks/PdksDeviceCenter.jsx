@@ -8,7 +8,7 @@ const online=(value)=>Boolean(value)&&Date.now()-new Date(value).getTime()<5*60*
 
 export default function PdksDeviceCenter({ activeTab="cihaz-baglantilari", activeMainCompany, isAuditAccount=false }){
   const desktop=typeof window!=="undefined"?window.KYERP_DESKTOP:null;
-  const desktopPdks=Boolean(desktop?.isDesktop);
+  const desktopPdks=Boolean(desktop?.isDesktop&&desktop?.product==="PDKS");
   const company=activeMainCompany?.slug||activeMainCompany?.id||"mecit-hakan";
   const [devices,setDevices]=useState([]),[logs,setLogs]=useState([]),[selected,setSelected]=useState("");
   const [form,setForm]=useState({deviceLabel:"",machineName:""});
