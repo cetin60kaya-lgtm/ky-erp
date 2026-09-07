@@ -612,16 +612,30 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   async function downloadAllAttachments() {
     if (!selectedMessage?.id || !attachments.length || downloadAllLoading) return;
     setDownloadAllLoading(true);
-    let completed = 0;
     try {
+      const files = [];
+      let totalBytes = 0;
       for (const attachment of attachments) {
-        await downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment));
-        completed += 1;
-        await new Promise((resolve) => window.setTimeout(resolve, 140));
+        const blob = await getMailAttachmentBlob(selectedMessage.id, attachment.id);
+        totalBytes += blob.size;
+        if (totalBytes > 120 * 1024 * 1024) throw new Error("Toplam ek boyutu 120 MB sınırını aşıyor. Ekleri tek tek indirin.");
+        files.push({ name: attachmentName(attachment), bytes: new Uint8Array(await blob.arrayBuffer()) });
       }
-      setNotice(`${completed} ek için indirme başlatıldı.`);
+      const zip = zipStore(files);
+      const url = URL.createObjectURL(zip);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${String(selectedMessage.subject || "mail-ekleri").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "mail-ekleri"}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+      setNotice(`${files.length} ek tek ZIP dosyasında indirildi.`);
     } catch (error) {
-      setNotice(`Hata: ${completed} ek indirildi; kalan eklerde sorun oluştu: ${error?.message || "İndirme tamamlanamadı."}`);
+      setNotice(`Hata: ${error?.message || "Tüm ekler indirilemedi."}`);
     } finally {
       setDownloadAllLoading(false);
     }
