@@ -692,8 +692,12 @@ export class IkAdvancedService implements OnModuleInit {
     const employee = await (this.prisma as any).hrMonthlyEmployee.findUnique({ where: { id: employeeId } });
     if (!employee) throw new BadRequestException("Personel bulunamadı.");
     const companyId = this.companyCandidates(body)[0];
+    const existingSetting = (await (this.prisma as any).$queryRawUnsafe(
+      `SELECT deduction_hourly_base FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1`,
+      employeeId, companyId,
+    ) as AnyRow[])[0];
     const overtimeHourlyBase = this.number(body.overtimeHourlyBase ?? employee.overtimeHourlyBase) || 225;
-    const deductionHourlyBase = this.number(body.deductionHourlyBase) || 300;
+    const deductionHourlyBase = this.number(body.deductionHourlyBase ?? existingSetting?.deduction_hourly_base) || 300;
     if (overtimeHourlyBase <= 0) throw new BadRequestException("Mesai saat böleni sıfırdan büyük olmalıdır.");
     if (deductionHourlyBase <= 0) throw new BadRequestException("Kesinti saat böleni sıfırdan büyük olmalıdır.");
     const cardNo = this.text(body.cardNo);
@@ -1185,7 +1189,6 @@ export class IkAdvancedService implements OnModuleInit {
       const followsSgk = employee.sgkFollow === true;
       // PDKS gun durumu SGK/puantaj kontroludur. Parasal devamsizlik kesintisi
       // yalniz "Eksik gün / Eksik saat" finans hareketinden gelir; boylece cift kesinti olmaz.
-      const cutDays = followsSgk ? stats.unpaid + stats.absent + stats.report : 0;
       const salaryCut = 0;
       const salaryPay = salary;
       const roadPay = road;
