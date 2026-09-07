@@ -34,7 +34,7 @@
       <TextBlock x:Name="ErpStateText" Text="ERP: Oturum yok" Foreground="#31587E" FontWeight="SemiBold"/>
      </Border>
      <Button Content="DENETİM TEMP" Click="ExportAuditTempButton_Click" Margin="0,0,5,0"/>
-     <Button Content="Detay Yönetim" Click="OpenAdministrationButton_Click"/>
+     <Button x:Name="DetailAdminButton" Content="Detay Yönetim" Click="OpenAdministrationButton_Click"/>
     </StackPanel>
    </Grid>
   </Border>
@@ -43,7 +43,7 @@
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <TextBlock Text="GÜNLÜK İŞ AKIŞI" FontSize="11" FontWeight="Bold" Foreground="#64788F" Margin="4,0,0,5"/>
-    <UniformGrid Grid.Row="1" Columns="9">
+    <UniformGrid Grid.Row="1" Columns="8">
      <Button x:Name="ImportButton" Click="ImportCardsButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
       <StackPanel><TextBlock Text="1  BİLGİ AKTAR" FontWeight="Bold"/><TextBlock Text="Kart dosyası al" FontSize="11" Foreground="#718399"/></StackPanel>
      </Button>
@@ -62,14 +62,11 @@
      <Button x:Name="ClosePeriodButton" Click="ClosePeriodSingleDataButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
       <StackPanel><TextBlock Text="6  DÖNEM KAPAT" FontWeight="Bold"/><TextBlock Text="D1 kontrollü kilit" FontSize="11" Foreground="#718399"/></StackPanel>
      </Button>
-     <Button x:Name="PayrollButton" Click="ExportPayrollSingleDataButton_Click" Margin="4" Padding="8" Background="#EEF9F1" BorderBrush="#A9D5B5">
-      <StackPanel><TextBlock Text="7  BORDRO" FontWeight="Bold"/><TextBlock Text="D1 bordro çıktısı" FontSize="11" Foreground="#3D754A"/></StackPanel>
-     </Button>
      <Button x:Name="BackupButton" Click="BackupWorkflowButton_Click" Margin="4" Padding="8" Background="#FFFFFF" BorderBrush="#C8D6E6">
-      <StackPanel><TextBlock Text="8  YEDEK" FontWeight="Bold"/><TextBlock Text="Yerel tampon DB" FontSize="11" Foreground="#718399"/></StackPanel>
+      <StackPanel><TextBlock Text="7  YEDEK" FontWeight="Bold"/><TextBlock Text="Yerel tampon DB" FontSize="11" Foreground="#718399"/></StackPanel>
      </Button>
      <Button Click="ExportAuditTempButton_Click" Margin="4" Padding="8" Background="#F5F0FF" BorderBrush="#C9B8E8">
-      <StackPanel><TextBlock Text="9  DENETİM TEMP" FontWeight="Bold"/><TextBlock Text="Yıl yıl D1 snapshot" FontSize="11" Foreground="#68508C"/></StackPanel>
+      <StackPanel><TextBlock Text="8  DENETİM TEMP" FontWeight="Bold"/><TextBlock Text="Yıl yıl D1 snapshot" FontSize="11" Foreground="#68508C"/></StackPanel>
      </Button>
     </UniformGrid>
    </Grid>
@@ -103,7 +100,7 @@
       </StackPanel>
      </Border>
 
-     <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,10">
+     <Border x:Name="CorrectionPanel" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,10">
       <StackPanel>
        <TextBlock Text="SEÇİLİ GÜNÜ DÜZELT" FontSize="11" FontWeight="Bold" Foreground="#708196"/>
        <ComboBox x:Name="CorrectionPersonCombo" DisplayMemberPath="FullName" Margin="0,5,0,4"/>
@@ -120,7 +117,7 @@
       </StackPanel>
      </Border>
 
-     <Expander Header="Hızlı İzin" IsExpanded="False" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
+     <Expander x:Name="LeavePanel" Header="Hızlı İzin" IsExpanded="False" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
       <StackPanel>
        <ComboBox x:Name="LeavePersonCombo" DisplayMemberPath="FullName"/>
        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><DatePicker x:Name="LeaveStartPicker"/><DatePicker Grid.Column="1" x:Name="LeaveEndPicker"/></Grid>
@@ -130,15 +127,7 @@
       </StackPanel>
      </Expander>
 
-     <Expander Header="Hızlı Avans" IsExpanded="False" Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" Padding="10">
-      <StackPanel>
-       <ComboBox x:Name="AdvancePersonCombo" DisplayMemberPath="FullName"/>
-       <DatePicker x:Name="AdvanceDatePicker"/>
-       <TextBox x:Name="AdvanceAmountBox" ToolTip="Tutar"/>
-       <TextBox x:Name="AdvanceNoteBox" Text="PDKS avans"/>
-       <Button x:Name="AdvanceSaveButton" Content="Avansı D1'e Kaydet" Click="SaveAdvanceSingleDataButton_Click"/>
-      </StackPanel>
-     </Expander>
+
     </StackPanel>
    </ScrollViewer>
 
