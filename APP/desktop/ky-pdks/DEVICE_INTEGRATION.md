@@ -40,13 +40,17 @@ Fingerprint `kart no + kesin tarih/saat` üzerinden alınır. Aynı fiziksel bas
 
 ## ERP eşleştirmesi
 
-Senkron sırasında masaüstü uygulama KY ERP'den personel listesini yeniler. Yalnız:
+Senkron sırasında masaüstü uygulama KY ERP'den PDKS kapsamındaki personel listesini yeniler.
 
-- `SGK = VAR`
-- kart numarası dolu
-- kart tarihi işe giriş/işten çıkış aralığında
+Normal operasyon hesabında:
+- personel aktif olmalı,
+- kart numarası dolu olmalı,
+- kart tarihi işe giriş/işten çıkış aralığında olmalı,
+- SGK durumu kart hareketini toplama şartı değildir.
 
-olan hareketler `/api/ik/personnel-control/time-events/import` endpointine gönderilir. Eşleşmeyen hareket silinmez; yerelde `ERROR` durumunda kontrol bekler.
+`DENETIM` / AUDIT hesabında SGK kapsam filtresi sunucu tarafında ayrıca uygulanır ve ekran salt okunurdur.
+
+Uygun normal hareketler `/api/auth/pdks-device/time-events/import` endpointine gönderilir. Eşleşmeyen hareket silinmez; yerelde `ERROR` durumunda kontrol bekler.
 
 ## Üreticiye özel binary protokol
 
