@@ -1027,7 +1027,7 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const id = text(body.id);
   const companyId = companyIdOf(c, body);
-  const current = await first(c, "SELECT a.id FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
+  const current = await first(c, "SELECT a.id,a.note FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
   if (upper(current.note).includes("SON BORDRO KONTROL")) {
     return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından silinemez.");
