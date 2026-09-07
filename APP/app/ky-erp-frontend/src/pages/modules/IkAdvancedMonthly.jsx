@@ -228,6 +228,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const [month, setMonth] = useState(initial.month);
   const [data, setData] = useState({});
   const [payrollData, setPayrollData] = useState(null);
+  const [payrollReadFailed, setPayrollReadFailed] = useState(false);
   const [preparedPeriods, setPreparedPeriods] = useState(() => readPreparedPeriods(companyId));
   const [logs, setLogs] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -305,6 +306,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         const audit = auditState.status === "fulfilled" ? auditState.value : [];
         const payroll = payrollState.status === "fulfilled" ? payrollState.value : null;
         const center = centerState.status === "fulfilled" ? centerState.value : null;
+        const payrollFailed = includePayroll && payrollState.status === "rejected";
         const auxiliaryFailed = [auditState, payrollState, centerState].some((state) => state.status === "rejected");
         if (loadRequestRef.current.seq !== requestId) return;
 
@@ -325,12 +327,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
 
         setData(cleanResult);
         setLogs(safeList(audit));
-        setPayrollData(includePayroll ? cleanPayroll : null);
+        setPayrollData(includePayroll && !payrollFailed ? cleanPayroll : null);
+        setPayrollReadFailed(Boolean(payrollFailed));
         setLeaveCenter(center || { plans: [], conflicts: [] });
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
-        setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
+        setNotice(payrollFailed ? "Bordro verisi doğrulanamadı. Ödeme/çıktı işlemleri veri yeniden okunana kadar kilitlendi." : auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
         return true;
       } catch (error) {
         if (loadRequestRef.current.seq === requestId) {
@@ -383,6 +386,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setYear(Number(nextYear));
     setMonth(Number(nextMonth));
     setPayrollData(null);
+    setPayrollReadFailed(false);
     setSelectedPayrollIds([]);
     setNotice("");
   };
@@ -453,7 +457,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   };
 }, [movements, payrollLines, rawEmployees]);
 
-  const payrollRows = useMemo(() => periodPrepared ? employees.map((employee) => {
+  const payrollRows = useMemo(() => periodPrepared && !payrollReadFailed ? employees.map((employee) => {
   const system = planFor(employee);
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
@@ -468,7 +472,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const bank = num(saved.final.bank);
   const cash = num(saved.final.cash);
   return { ...system, salary, road, extraLabel, extra, overtime, advance, deduction, garnishment, bank, cash, saved, ...calcRow({ salary, road, overtime, extra, advance, deduction, garnishment, bank, cash }) };
-}): [], [employees, payrollLines, planFor, periodPrepared]);
+}): [], [employees, payrollLines, planFor, periodPrepared, payrollReadFailed]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
     count: acc.count + 1,
@@ -1474,7 +1478,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="page-head"><div><h1>Son Bordro ve Odeme Merkezi</h1><p>Resmi bordro, puantaj, avans/kesinti ve banka odemesi cikti oncesi burada son kez duzenlenir.</p></div><span className={`badge ${balanced ? "green" : "red"}`}>{balanced ? "Odeme dengeli" : "Odeme kontrol gerekli"}</span></div>
         {filters({ third: "Personel ara", fourth: "Odeme", fifth: "Durum" })}
         <div className="sumgrid short">{summaryBox("Odeme listesi", payrollRows.length, "", `${selectedPayrollIds.length || payrollRows.length} secili`)}{summaryBox("Resmi bordro neti", money(employees.reduce((sum,item)=>sum+num(item.sgkNet),0)))}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("EK / İcra-Haciz", `${money(summary.extra)} / ${money(summary.garnishment)}`, summary.garnishment ? "orange" : "")}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" onClick={savePayroll}>Secilileri Kaydet</button><button className="btn green" onClick={openBulkPayment}>Odeme Merkezi</button><button className="btn" onClick={() => openPayroll()}>Seciliyi Duzenle</button><button className="btn" onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
+        {payrollReadFailed && <div className="warnline warn">Bordro kaydı doğrulanamadı. Yeniden Hesapla ile veri başarıyla okunana kadar ödeme, kayıt ve çıktı işlemleri kapalıdır.</div>}<div className="workbar"><div className="group"><button className="btn primary" onClick={refreshPayroll}>Yeniden Hesapla</button><button className="btn" disabled={payrollReadFailed} onClick={savePayroll}>Secilileri Kaydet</button><button className="btn green" disabled={payrollReadFailed} onClick={openBulkPayment}>Odeme Merkezi</button><button className="btn" disabled={payrollReadFailed} onClick={() => openPayroll()}>Seciliyi Duzenle</button><button className="btn" disabled={payrollReadFailed} onClick={printPayrollReport}>Ödeme Listesi / PDF</button><button className="btn" disabled={payrollReadFailed} onClick={printPaymentSlips}>10’lu Toplu Fiş / PDF</button><button className="btn" disabled={payrollReadFailed} onClick={() => setModal("fis")}>Tek Kişi Fişi</button></div><button className="btn green" disabled={payrollReadFailed} onClick={exportPayroll}>Ödeme Listesi / Excel</button></div>
         <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Toplam odeme dengeli: Banka + Elden = Net Toplam." : "Toplam odeme banka + elden ile eslesmiyor."}</div>
         <div className="card">
           <div className="ch"><div><b>Cikti Oncesi Son Bordro</b><span>Resmi Net bordro dosyasindan gelir; Banka + Elden = sirket net odemesi olmalidir.</span></div></div>
