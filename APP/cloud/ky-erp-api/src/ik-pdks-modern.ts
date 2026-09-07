@@ -388,10 +388,24 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/personnel-control/people/:employeeId/corrections",async(c)=>{const auth=await authContext(c);if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");await seedCompany(c,auth.company);const rows=await all(c,`SELECT id,work_date AS workDate,old_json AS oldJson,new_json AS newJson,reason,actor_user_id AS actorUserId,actor_name AS actorName,created_at AS createdAt FROM ik_pdks_correction_logs WHERE main_company_id=? AND employee_id=? ORDER BY created_at DESC LIMIT 300`,[auth.company,text(c.req.param("employeeId"))]);return ok(c,rows);});
 
   app.get("/api/ik/personnel-control/dashboard-live", async (c) => {
-    const auth=await authContext(c);if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");await seedCompany(c,auth.company);const date=dateOnly(c.req.query("date"))||todayTr();
-    const period=`${date.slice(0,7)}`;
-    const people=auth.audit
-      ? await all(c,`SELECT e.id,e.code,e.full_name,e.department,e.title,s.card_no
+    const auth = await authContext(c);
+    if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+    await seedCompany(c, auth.company);
+
+    const date = dateOnly(c.req.query("date")) || todayTr();
+    const period = date.slice(0, 7);
+    const nowParts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Istanbul",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const nowHour = Number(nowParts.find((part) => part.type === "hour")?.value || 0);
+    const nowMinute = Number(nowParts.find((part) => part.type === "minute")?.value || 0);
+    const nowMinutes = nowHour * 60 + nowMinute;
+
+    const people = auth.audit
+      ? await all(c, `SELECT e.id,e.code,e.full_name,e.department,e.title,s.card_no
           FROM hr_monthly_employees e
           LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
           LEFT JOIN ik_person_monthly_compliance mc ON mc.main_company_id=e.main_company_id AND mc.employee_id=e.id AND mc.period=?
@@ -400,20 +414,215 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
             AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'
             AND TRIM(COALESCE(s.card_no,''))<>''
             AND ((mc.employee_id IS NOT NULL AND mc.sgk_covered=1)
-              OR (mc.employee_id IS NULL AND UPPER(COALESCE(e.sgk_status,'VAR'))<>'YOK'))`,[period,auth.company])
-      : await all(c,`SELECT e.id,e.code,e.full_name,e.department,e.title,s.card_no
+              OR (mc.employee_id IS NULL AND UPPER(COALESCE(e.sgk_status,'VAR'))<>'YOK'))`, [period, auth.company])
+      : await all(c, `SELECT e.id,e.code,e.full_name,e.department,e.title,s.card_no
           FROM hr_monthly_employees e
           LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
           WHERE e.main_company_id=?
             AND UPPER(COALESCE(s.active_passive,'AKTIF')) NOT LIKE '%PAS%'
-            AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'`,[auth.company]);
-    const events=await all(c,`SELECT t.id,t.employee_id AS employeeId,t.card_no AS cardNo,t.work_date AS workDate,t.event_time AS eventTime,t.direction,t.source,t.created_at AS createdAt,e.full_name AS fullName,e.department FROM ik_time_clock_events t LEFT JOIN hr_monthly_employees e ON e.id=t.employee_id WHERE t.main_company_id=? AND t.work_date=? ORDER BY t.event_time DESC`,[auth.company,date]);
-    const leaveMap=new Map<string,Row>();try{const leaveRows=await all(c,`SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,d.leave_fraction AS leaveFraction,p.record_type AS recordType FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,''))<>'CANCELLED'`,[auth.company,date]);leaveRows.forEach((r)=>leaveMap.set(text(r.employeeId),r));}catch{}
-    const eventMap=new Map<string,Row[]>();events.forEach((e)=>{const list=eventMap.get(text(e.employeeId))||[];list.push(e);eventMap.set(text(e.employeeId),list);});
-    let late=0,inside=0,absent=0,permitted=0,missing=0;const cards:Row[]=[];
-    for(const person of people){const rows=(eventMap.get(text(person.id))||[]).slice().sort((a,b)=>text(a.eventTime).localeCompare(text(b.eventTime))),leave=leaveMap.get(text(person.id));if(leave){permitted+=1;continue;}if(!rows.length){absent+=1;continue;}if(rows.length===1)missing+=1;const schedule=await resolveSchedule(c,auth.company,person);const firstMin=minutesOf(rows[0].eventTime),expected=minutesOf(schedule.entryTime);if(firstMin!==null&&expected!==null&&firstMin>expected+schedule.lateTolerance)late+=1;const last=rows[rows.length-1];const dir=upper(last.direction);const isInside=dir==="IN"||(dir==="AUTO"&&rows.length%2===1);if(isInside)inside+=1;cards.push({employeeId:person.id,fullName:person.full_name,department:person.department,cardNo:person.card_no,lastTime:last.eventTime,direction:dir||"AUTO",inside:isInside});}
-    let devices:Row[]=[];try{devices=await all(c,`SELECT id,device_label AS deviceLabel,machine_name AS machineName,active,last_seen_at AS lastSeenAt,last_sync_at AS lastSyncAt,last_sync_count AS lastSyncCount FROM ik_pdks_devices WHERE main_company_id=? ORDER BY active DESC,device_label`,[auth.company]);}catch{}
-    const onlineDevices=devices.filter((d)=>Number(d.active)!==0&&d.lastSeenAt&&Date.now()-new Date(d.lastSeenAt).getTime()<300000).length;
-    return ok(c,{date,metrics:{activePersonnel:people.length,inside,absent,late,permitted,missingPunch:missing,deviceCount:devices.length,onlineDevices},liveCards:cards.slice(-30).reverse(),events:events.slice(0,50),devices});
+            AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'`, [auth.company]);
+
+    const events = await all(c, `SELECT t.id,t.employee_id AS employeeId,t.card_no AS cardNo,t.work_date AS workDate,
+        t.event_time AS eventTime,t.direction,t.source,t.created_at AS createdAt,e.full_name AS fullName,e.department
+      FROM ik_time_clock_events t
+      LEFT JOIN hr_monthly_employees e ON e.id=t.employee_id
+      WHERE t.main_company_id=? AND t.work_date=?
+      ORDER BY t.event_time DESC`, [auth.company, date]);
+
+    const leaveMap = new Map<string, Row>();
+    try {
+      const leaveRows = await all(c, `SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,
+          d.leave_fraction AS leaveFraction,p.record_type AS recordType,p.status,p.note
+        FROM ik_leave_plan_days d
+        JOIN ik_leave_plans p ON p.id=d.leave_plan_id
+        WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,''))<>'CANCELLED'`, [auth.company, date]);
+      leaveRows.forEach((row) => leaveMap.set(text(row.employeeId), row));
+    } catch {}
+
+    const todayHoliday = (await holidayMap(c, auth.company, date, date)).get(date) || null;
+    const eventMap = new Map<string, Row[]>();
+    events.forEach((event) => {
+      const list = eventMap.get(text(event.employeeId)) || [];
+      list.push(event);
+      eventMap.set(text(event.employeeId), list);
+    });
+
+    const metrics: Row = {
+      activePersonnel: people.length,
+      scheduledToday: 0,
+      arrivedToday: 0,
+      waiting: 0,
+      noShow: 0,
+      absent: 0,
+      annualLeave: 0,
+      sickLeave: 0,
+      otherLeave: 0,
+      permitted: 0,
+      inside: 0,
+      left: 0,
+      late: 0,
+      missingPunch: 0,
+      offDay: 0,
+      deviceCount: 0,
+      onlineDevices: 0,
+    };
+
+    const roster: Row[] = [];
+    const cards: Row[] = [];
+    const todayKey = todayTr();
+
+    for (const person of people) {
+      const employeeId = text(person.id);
+      const rows = (eventMap.get(employeeId) || []).slice().sort((a, b) => text(a.eventTime).localeCompare(text(b.eventTime)));
+      const leave = leaveMap.get(employeeId);
+      const schedule = await resolveSchedule(c, auth.company, person);
+      const wd = weekday(date);
+      const isFullHoliday = Number(todayHoliday?.nonWorkFraction || 0) >= 1;
+      const expectedWorkDay = schedule.workDays.includes(wd) && !schedule.restDays.includes(wd) && !isFullHoliday;
+      const expectedIn = minutesOf(schedule.entryTime);
+      const expectedOut = minutesOf(schedule.exitTime);
+      const first = rows[0] || null;
+      const last = rows[rows.length - 1] || null;
+      const firstTime = text(first?.eventTime).slice(0, 5);
+      const lastTime = text(last?.eventTime).slice(0, 5);
+      const firstMin = minutesOf(firstTime);
+      const lastDirection = upper(last?.direction);
+      const isInside = Boolean(last) && (lastDirection === "IN" || (lastDirection === "AUTO" && rows.length % 2 === 1));
+      const isLate = firstMin !== null && expectedIn !== null && firstMin > expectedIn + schedule.lateTolerance;
+
+      let status = "OFF_DAY";
+      let statusLabel = todayHoliday?.name ? `Resmî Tatil · ${text(todayHoliday.name)}` : "Çalışma Dışı";
+      let leaveType = "";
+
+      if (leave) {
+        const folded = upper(`${leave.leaveTypeCode} ${leave.recordType}`);
+        metrics.permitted += 1;
+        if (folded.includes("YILLIK")) {
+          metrics.annualLeave += 1;
+          status = "ANNUAL_LEAVE";
+          statusLabel = "Yıllık İzinde";
+          leaveType = "YILLIK_IZIN";
+        } else if (folded.includes("RAPOR") || folded.includes("HASTA")) {
+          metrics.sickLeave += 1;
+          status = "SICK_LEAVE";
+          statusLabel = "Raporlu";
+          leaveType = text(leave.leaveTypeCode || leave.recordType);
+        } else {
+          metrics.otherLeave += 1;
+          status = "LEAVE";
+          statusLabel = text(leave.recordType || leave.leaveTypeCode) || "İzinli";
+          leaveType = text(leave.leaveTypeCode || leave.recordType);
+        }
+      } else if (!expectedWorkDay) {
+        metrics.offDay += 1;
+      } else {
+        metrics.scheduledToday += 1;
+        if (!rows.length) {
+          const lateBoundary = expectedIn === null ? 0 : expectedIn + schedule.lateTolerance;
+          if (date === todayKey && expectedIn !== null && nowMinutes <= lateBoundary) {
+            metrics.waiting += 1;
+            status = "WAITING";
+            statusLabel = "Vardiya Bekleniyor";
+          } else {
+            metrics.noShow += 1;
+            metrics.absent += 1;
+            status = "NO_SHOW";
+            statusLabel = "Gelmedi";
+          }
+        } else {
+          metrics.arrivedToday += 1;
+          if (isLate) metrics.late += 1;
+          if (isInside) {
+            metrics.inside += 1;
+            status = isLate ? "INSIDE_LATE" : "INSIDE";
+            statusLabel = isLate ? "İçeride · Geç Geldi" : "İçeride";
+          } else {
+            metrics.left += 1;
+            status = isLate ? "LEFT_LATE" : "LEFT";
+            statusLabel = isLate ? "Çıktı · Geç Gelmişti" : "Çıktı";
+          }
+
+          const shiftFinished = date < todayKey
+            || (date === todayKey && expectedOut !== null && nowMinutes > expectedOut + schedule.earlyTolerance);
+          if (rows.length === 1 && shiftFinished) {
+            metrics.missingPunch += 1;
+            status = "MISSING_OUT";
+            statusLabel = "Çıkış Basımı Eksik";
+          }
+
+          cards.push({
+            employeeId,
+            fullName: text(person.full_name),
+            department: text(person.department),
+            cardNo: text(person.card_no),
+            firstTime,
+            lastTime,
+            direction: lastDirection || "AUTO",
+            inside: isInside,
+            late: isLate,
+            eventCount: rows.length,
+            status,
+            statusLabel,
+          });
+        }
+      }
+
+      roster.push({
+        employeeId,
+        personnelCode: text(person.code),
+        fullName: text(person.full_name),
+        department: text(person.department),
+        title: text(person.title),
+        cardNo: text(person.card_no),
+        status,
+        statusLabel,
+        leaveType,
+        firstTime,
+        lastTime,
+        eventCount: rows.length,
+        inside: isInside,
+        late: isLate,
+        expectedWorkDay,
+        schedule: {
+          groupName: schedule.groupName,
+          entryTime: schedule.entryTime,
+          exitTime: schedule.exitTime,
+          lateTolerance: schedule.lateTolerance,
+          earlyTolerance: schedule.earlyTolerance,
+        },
+      });
+    }
+
+    let devices: Row[] = [];
+    try {
+      devices = await all(c, `SELECT id,device_label AS deviceLabel,machine_name AS machineName,active,
+          last_seen_at AS lastSeenAt,last_sync_at AS lastSyncAt,last_sync_count AS lastSyncCount
+        FROM ik_pdks_devices WHERE main_company_id=? ORDER BY active DESC,device_label`, [auth.company]);
+    } catch {}
+    metrics.deviceCount = devices.length;
+    metrics.onlineDevices = devices.filter((device) =>
+      Number(device.active) !== 0 && device.lastSeenAt && Date.now() - new Date(device.lastSeenAt).getTime() < 300000
+    ).length;
+
+    const statusRank: Record<string, number> = {
+      NO_SHOW: 1, MISSING_OUT: 2, INSIDE_LATE: 3, LEFT_LATE: 4, WAITING: 5,
+      ANNUAL_LEAVE: 6, SICK_LEAVE: 7, LEAVE: 8, INSIDE: 9, LEFT: 10, OFF_DAY: 11,
+    };
+    roster.sort((a, b) => {
+      const rank = (statusRank[text(a.status)] || 99) - (statusRank[text(b.status)] || 99);
+      if (rank !== 0) return rank;
+      return text(a.fullName).localeCompare(text(b.fullName), "tr");
+    });
+
+    return ok(c, {
+      date,
+      generatedAt: nowIso(),
+      holiday: todayHoliday ? { name: text(todayHoliday.name), nonWorkFraction: Number(todayHoliday.nonWorkFraction || 0) } : null,
+      metrics,
+      roster,
+      liveCards: cards.slice().sort((a, b) => text(b.lastTime).localeCompare(text(a.lastTime))).slice(0, 40),
+      events: events.slice(0, 100),
+      devices,
+    });
   });
 }
