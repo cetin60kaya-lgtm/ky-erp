@@ -191,6 +191,10 @@ public partial class PdksMasterWindow : Window
     private void LoadTerminal()
     {
         var config = _configStore.Load();
+        DeviceNameBox.Text = config.DeviceName;
+        DeviceNoBox.Text = config.DeviceNo.ToString(CultureInfo.InvariantCulture);
+        MachineNoBox.Text = config.MachineNo.ToString(CultureInfo.InvariantCulture);
+        SelectTag(DirectionCombo, config.Direction);
         SelectTag(SourceModeCombo, config.NormalizedMode);
         HedefReadBox.Text = config.HedefReadFile;
         HedefWriteBox.Text = config.HedefWriteFile;
@@ -202,10 +206,15 @@ public partial class PdksMasterWindow : Window
         SyncIntervalBox.Text = config.SyncIntervalSeconds.ToString(CultureInfo.InvariantCulture);
         AutoSyncCheck.IsChecked = config.AutoSync;
         FileImportCheck.IsChecked = config.FileImportEnabled;
+        PcClockText.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture);
     }
 
     private void HedefDefaultsButton_Click(object sender, RoutedEventArgs e)
     {
+        DeviceNameBox.Text = "Cihaz1";
+        DeviceNoBox.Text = "1";
+        MachineNoBox.Text = "1";
+        SelectTag(DirectionCombo, "GIRIS");
         SelectTag(SourceModeCombo, "HEDEF_TR500");
         HedefReadBox.Text = @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt";
         HedefWriteBox.Text = @"C:\Hedef500\Terminal Bilgi Aktar\TR500.txt";
@@ -213,20 +222,31 @@ public partial class PdksMasterWindow : Window
         TcpPortBox.Text = "5005";
         SerialPortBox.Text = "COM1";
         SerialBaudBox.Text = "38400";
-        StatusText.Text = "İşyeri Hedef500 profili yüklendi · Cihaz1 / Makine 1 · 192.168.1.224:5005 · timerecords.txt. Kaydet ile Agent ayarı güncellenir.";
+        ScanIntervalBox.Text = "1000";
+        SyncIntervalBox.Text = "30";
+        AutoSyncCheck.IsChecked = true;
+        FileImportCheck.IsChecked = true;
+        StatusText.Text = "İşyeri Hedef500 profili forma yüklendi · Cihaz1 / Makine 1 / GİRİŞ · 192.168.1.224:5005 · timerecords.txt.";
     }
+
+    private async void RunTerminalDiagnosticsButton_Click(object sender, RoutedEventArgs e) => await RunTerminalDiagnosticsAsync();
 
     private async void SaveTerminalButton_Click(object sender, RoutedEventArgs e)
     {
         if (!_canWrite) { StatusText.Text = "Bu hesap terminal ayarı değiştiremez."; return; }
-        if (!int.TryParse(TcpPortBox.Text, out var tcpPort) || !int.TryParse(SerialBaudBox.Text, out var baud)
+        if (!int.TryParse(DeviceNoBox.Text, out var deviceNo) || !int.TryParse(MachineNoBox.Text, out var machineNo)
+            || !int.TryParse(TcpPortBox.Text, out var tcpPort) || !int.TryParse(SerialBaudBox.Text, out var baud)
             || !int.TryParse(ScanIntervalBox.Text, out var scan) || !int.TryParse(SyncIntervalBox.Text, out var sync))
-        { StatusText.Text = "Port, baud ve süre alanları sayı olmalıdır."; return; }
+        {
+            StatusText.Text = "Cihaz No, Makine No, port, baud ve süre alanları sayı olmalıdır.";
+            return;
+        }
+
         var config = _configStore.Load();
-        config.DeviceName = "Cihaz1";
-        config.DeviceNo = 1;
-        config.MachineNo = 1;
-        config.Direction = "GIRIS";
+        config.DeviceName = DeviceNameBox.Text.Trim();
+        config.DeviceNo = deviceNo;
+        config.MachineNo = machineNo;
+        config.Direction = SelectedTag(DirectionCombo);
         config.SourceMode = SelectedTag(SourceModeCombo);
         config.HedefReadFile = HedefReadBox.Text.Trim();
         config.HedefWriteFile = HedefWriteBox.Text.Trim();
@@ -239,7 +259,7 @@ public partial class PdksMasterWindow : Window
         config.AutoSync = AutoSyncCheck.IsChecked != false;
         config.FileImportEnabled = FileImportCheck.IsChecked != false;
         _configStore.Save(config);
-        StatusText.Text = $"Terminal ayarı kaydedildi · {config.DeviceName} · {config.TcpHost}:{config.TcpPort} · {config.NormalizedMode}. D1 iş verisine dokunulmadı.";
+        StatusText.Text = $"Terminal ayarı kaydedildi · {config.DeviceName} / cihaz {config.DeviceNo} / makine {config.MachineNo} / {config.Direction} · {config.TcpHost}:{config.TcpPort}.";
         await RunTerminalDiagnosticsAsync();
     }
 
@@ -247,17 +267,35 @@ public partial class PdksMasterWindow : Window
     {
         try
         {
+            var host = string.IsNullOrWhiteSpace(TcpHostBox.Text) ? _configStore.Load().TcpHost : TcpHostBox.Text.Trim();
+            var port = int.TryParse(TcpPortBox.Text, out var enteredPort) ? enteredPort : _configStore.Load().TcpPort;
+            var filePath = string.IsNullOrWhiteSpace(HedefReadBox.Text) ? _configStore.Load().HedefReadFile : HedefReadBox.Text.Trim();
             var config = _configStore.Load();
-            var tcpTask = TerminalDiagnostics.ProbeTcpAsync(config.TcpHost, config.TcpPort, 2500);
-            var fileTask = TerminalDiagnostics.ProbeHedefFileAsync(config.HedefReadFile, config.LineEncoding);
+
+            PcClockText.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture);
+            TcpProbeText.Text = "Kontrol ediliyor...";
+            FileProbeText.Text = "Kontrol ediliyor...";
+            LastPunchText.Text = "Okunuyor...";
+
+            var tcpTask = TerminalDiagnostics.ProbeTcpAsync(host, port, 2500);
+            var fileTask = TerminalDiagnostics.ProbeHedefFileAsync(filePath, config.LineEncoding);
             await Task.WhenAll(tcpTask, fileTask);
+
             var tcp = await tcpTask;
             var file = await fileTask;
-            var pcClock = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture);
-            StatusText.Text = $"{tcp.Message} | {file.Message} | PC {pcClock}";
+            TcpProbeText.Text = tcp.Message;
+            FileProbeText.Text = file.Message;
+            LastPunchText.Text = file.LastPunch is null
+                ? "Son kart bulunamadı."
+                : $"{file.LastPunch.CardNo} · {file.LastPunch.EventAt:dd.MM.yyyy HH:mm:ss}";
+
+            StatusText.Text = $"Terminal kontrolü tamamlandı · TCP={(tcp.Connected ? "AÇIK" : "KAPALI")} · Hedef dosyası={(file.Readable ? "OK" : "HATA")}.";
         }
         catch (Exception error)
         {
+            TcpProbeText.Text = "Kontrol hatası";
+            FileProbeText.Text = "Kontrol hatası";
+            LastPunchText.Text = "-";
             StatusText.Text = $"Terminal kontrol hatası · {error.Message}";
         }
     }
