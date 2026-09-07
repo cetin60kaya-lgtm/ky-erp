@@ -62,6 +62,7 @@ Push-Location $FrontendRoot
 try {
     Invoke-Native 'Frontend npm ci' { npm ci }
     Invoke-Native 'Frontend test' { npm test }
+    Invoke-Native 'Frontend lint' { npm run lint }
     Invoke-Native 'Frontend build' { npm run build }
 } finally { Pop-Location }
 if (-not (Test-Path (Join-Path $FrontendDist 'index.html'))) { throw 'Frontend dist/index.html oluşmadı.' }
@@ -77,7 +78,7 @@ Write-Host '4/8 İki ayrı Windows publish...' -ForegroundColor Cyan
 Invoke-Native 'KY ERP Desktop publish' {
     dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:ProductMode=ERP -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $ErpDesktopOut
 }
-Invoke-Native 'KY PDKS Desktop publish' {
+Invoke-Native 'KY PDKS Pro publish' {
     dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:ProductMode=PDKS -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $PdksDesktopOut
 }
 Invoke-Native 'PDKS Agent publish' {
