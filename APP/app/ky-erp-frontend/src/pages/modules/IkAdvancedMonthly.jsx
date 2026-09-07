@@ -1270,8 +1270,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       td.person strong{display:block;font-size:7.1pt;line-height:1.02;overflow:hidden;text-overflow:ellipsis}
       td.person small{display:block;margin-top:1px;color:#6a7b8c;font-size:5.6pt}
       td.bank,td.cash,td.net{font-weight:800}
-      .total-row td{font-weight:900;background:#eef4fa;border-top:2.4px solid #15283b;font-size:10.75pt;line-height:1;padding-top:4px;padding-bottom:4px}
-      .total-row td.person{font-size:8.1pt}
+      .total-row td{background:#eef4fa;border-top:2.2px solid #15283b;line-height:1;padding:3px 3.5px;white-space:nowrap}
+      .total-row td:not(.person){font-size:10.25pt;font-weight:800;text-align:right}
+      .total-row td.person{font-size:7.1pt;font-weight:900;text-align:left}
     </style></head><body>
       <div class="report-head">
         <div><h1>İK Ödeme Listesi</h1><div class="sub">${escapeHtml(periodLabel)} · ${rows.length} personel</div></div>
