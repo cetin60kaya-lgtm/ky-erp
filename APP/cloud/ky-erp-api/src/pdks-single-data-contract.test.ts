@@ -188,7 +188,8 @@ test("PDKS live dashboard counts all active workers for HR but keeps audit month
   assert.match(source, /const people=auth\.audit/);
   assert.match(source, /ik_person_monthly_compliance mc/);
   assert.match(source, /mc\.sgk_covered=1/);
-  assert.match(source, /UPPER\(COALESCE\(s\.active_passive,e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.match(source, /UPPER\(COALESCE\(s\.active_passive,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.match(source, /UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
   assert.doesNotMatch(source, /WHERE e\.main_company_id=\? AND UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PASIF%' AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\)<>'YOK'/);
 });
 
