@@ -818,19 +818,19 @@ export function registerAuthPolicyRoutes(app: any) {
         stage: "PHONE_APPROVAL_PENDING",
         phoneApprovalId: approval.id,
         phoneApprovalToken: text(body.phoneApprovalToken),
-        phoneApprovalExpiresAt: approval.expires_at,
+        phoneApprovalExpiresAt: approval.expiresAt,
         message: "Telefonunuzdan onay bekleniyor.",
       });
     }
-    if (approval.consumed_at) return c.json(jsonError("PHONE_APPROVAL_CONSUMED", "Bu telefon giriş onayı daha önce kullanıldı."), 409);
-    const user = await userById(c, text(approval.user_id));
+    if (approval.consumedAt) return c.json(jsonError("PHONE_APPROVAL_CONSUMED", "Bu telefon giriş onayı daha önce kullanıldı."), 409);
+    const user = await userById(c, text(approval.userId));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     if (!(await consumePhoneApproval(c, approval.id))) return c.json(jsonError("PHONE_APPROVAL_CONSUMED", "Bu telefon giriş onayı daha önce kullanıldı."), 409);
     await audit(c, "PHONE_LOGIN_FACTOR_VERIFIED", user.id, user.id, text(user.main_company_slug), "", { phoneApprovalId: approval.id });
     return c.json(await afterFactors(c, user, {
-      deviceLabel: approval.device_label,
-      userAgent: approval.user_agent,
-      ipAddress: approval.ip_address,
+      deviceLabel: approval.deviceLabel,
+      userAgent: approval.userAgent,
+      ipAddress: approval.ipAddress,
     }));
   });
 
@@ -838,14 +838,14 @@ export function registerAuthPolicyRoutes(app: any) {
     const body = await bodyOf(c);
     const approval = await phoneApprovalFromRequest(c, c.req.param("id"), body.phoneApprovalToken);
     if (!approval || approval.status !== "PENDING") return c.json(jsonError("PHONE_APPROVAL_INVALID", "Telefon giriş onayı bulunamadı veya artık beklemiyor."), 401);
-    const user = await userById(c, text(approval.user_id));
+    const user = await userById(c, text(approval.userId));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     await cancelPhoneApproval(c, approval.id);
     await audit(c, "PHONE_LOGIN_FALLBACK_TO_TOTP", user.id, user.id, text(user.main_company_slug), "", { phoneApprovalId: approval.id });
     return c.json(await beginPolicyLogin(c, user, {
-      deviceLabel: approval.device_label,
-      userAgent: approval.user_agent,
-      ipAddress: approval.ip_address,
+      deviceLabel: approval.deviceLabel,
+      userAgent: approval.userAgent,
+      ipAddress: approval.ipAddress,
     }, { skipPhone: true }));
   });
 
@@ -928,11 +928,11 @@ export function registerAuthPolicyRoutes(app: any) {
     const body = await bodyOf(c);
     const approval = await c.env.DB.prepare("SELECT * FROM auth_login_approvals WHERE id=? LIMIT 1").bind(text(c.req.param("id"))).first<AnyRow>();
     if (!approval || !safeEqual(text(approval.approval_token_hash), await sha256(text(body.approvalToken)))) return c.json(jsonError("APPROVAL_INVALID", "Giriş onayı bulunamadı."), 401);
-    if (Date.parse(text(approval.expires_at)) <= Date.now() && approval.status === "PENDING") return c.json({ ok: true, stage: "APPROVAL_EXPIRED", message: "Giriş onayının süresi doldu." });
+    if (Date.parse(text(approval.expiresAt)) <= Date.now() && approval.status === "PENDING") return c.json({ ok: true, stage: "APPROVAL_EXPIRED", message: "Giriş onayının süresi doldu." });
     if (approval.status === "DENIED") return c.json({ ok: true, stage: "APPROVAL_DENIED", message: "Giriş isteği reddedildi." });
-    if (approval.status !== "APPROVED") return c.json({ ok: true, stage: "APPROVAL_PENDING", approvalId: approval.id, approvalToken: text(body.approvalToken), approvalExpiresAt: approval.expires_at });
-    if (approval.consumed_at) return c.json(jsonError("APPROVAL_CONSUMED", "Bu giriş onayı daha önce kullanıldı."), 409);
-    const user = await userById(c, text(approval.user_id));
+    if (approval.status !== "APPROVED") return c.json({ ok: true, stage: "APPROVAL_PENDING", approvalId: approval.id, approvalToken: text(body.approvalToken), approvalExpiresAt: approval.expiresAt });
+    if (approval.consumedAt) return c.json(jsonError("APPROVAL_CONSUMED", "Bu giriş onayı daha önce kullanıldı."), 409);
+    const user = await userById(c, text(approval.userId));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     const claimedAt = nowIso();
     const claim = await c.env.DB.prepare(
