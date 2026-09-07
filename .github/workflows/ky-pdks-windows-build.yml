@@ -1,8 +1,13 @@
 name: KY ERP Masaüstü Windows Setup
 
 on:
-  # Automatic GitHub Actions disabled. Run only when explicitly requested.
   workflow_dispatch:
+  push:
+    branches:
+      - codex/pdks-device-direct-final-20260907
+    paths:
+      - 'APP/desktop/ky-pdks/**'
+      - '.github/workflows/ky-pdks-windows-build.yml'
 permissions:
   contents: read
 
