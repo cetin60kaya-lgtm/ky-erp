@@ -26,3 +26,11 @@ test("AI status exposes gateway state without secrets", () => {
   assert.match(ai, /gateway:\{enabled:Boolean\(c\.env\.AI\),id:gatewayId\(c\),skipCache:true,collectLog:gatewayCollectLogs\(c\)\}/);
   assert.doesNotMatch(ai, /AI_GATEWAY_TOKEN|CLOUDFLARE_API_TOKEN/);
 });
+
+
+test("PDKS live AI analysis can run ephemerally without persisting the attendance snapshot", () => {
+  assert.match(ai, /const ephemeral=body\.ephemeral===true/);
+  assert.match(ai, /const current=ephemeral\?null:await conversationGet/);
+  assert.match(ai, /if\(ephemeral\)\{/);
+  assert.match(ai, /ephemeral:true/);
+});
