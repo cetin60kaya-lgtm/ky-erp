@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Activity, AlertTriangle, Bot, CalendarDays, CheckCircle2, Clock3, DoorOpen,
+  LogIn, LogOut, RefreshCw, Search, ShieldCheck, Stethoscope, Users, Wifi, WifiOff,
+} from "lucide-react";
 import { getPdksLiveDashboard } from "../../services/pdksApi";
 import "./PdksLiveHome.css";
 
@@ -9,28 +13,60 @@ const fmtDate = (value) => {
 };
 const isOnline = (value) => Boolean(value) && Date.now() - new Date(value).getTime() < 300000;
 
-const QUICK = [
-  ["giris-cikislar", "Giriş / Çıkış", "Son kart hareketleri ve personel geçişleri", "↔"],
-  ["puantaj-sonuclari", "Puantaj Özeti", "Çalışma, eksik basım, geç/erken ve mesai", "▦"],
-  ["personel-bilgileri", "Personel", "İK ana kaynağındaki kartlı çalışanlar", "♟"],
-  ["izinler", "İzinler", "İK izin kaydının puantaj yansıması", "◷"],
-  ["cihaz-baglantilari", "Cihaz Sağlığı", "Windows Agent ve terminal bağlantıları", "▣"],
-  ["denetim-yillik-temp", "Yıllık Denetim", "Kart ve puantaj denetim paketini hazırla", "✓"],
-]
+const FILTERS = [
+  ["ALL", "Tümü"],
+  ["INSIDE", "İçeride"],
+  ["NO_SHOW", "Gelmeyen"],
+  ["WAITING", "Beklenen"],
+  ["LATE", "Geç"],
+  ["LEAVE", "İzin / Rapor"],
+  ["MISSING", "Eksik Basım"],
+];
+
+function statusTone(status) {
+  if (["NO_SHOW", "MISSING_OUT"].includes(status)) return "bad";
+  if (["INSIDE_LATE", "LEFT_LATE", "WAITING"].includes(status)) return "warn";
+  if (["ANNUAL_LEAVE", "SICK_LEAVE", "LEAVE"].includes(status)) return "leave";
+  if (status === "INSIDE") return "ok";
+  if (status === "LEFT") return "neutral";
+  return "muted";
+}
+
+function matchesFilter(row, filter) {
+  if (filter === "ALL") return true;
+  if (filter === "INSIDE") return ["INSIDE", "INSIDE_LATE"].includes(row.status);
+  if (filter === "NO_SHOW") return row.status === "NO_SHOW";
+  if (filter === "WAITING") return row.status === "WAITING";
+  if (filter === "LATE") return row.late === true;
+  if (filter === "LEAVE") return ["ANNUAL_LEAVE", "SICK_LEAVE", "LEAVE"].includes(row.status);
+  if (filter === "MISSING") return row.status === "MISSING_OUT";
+  return true;
+}
+
+function Metric({ icon: Icon, label, value, hint, tone, onClick }) {
+  return (
+    <button type="button" className={`plh-pro-metric ${tone || ""}`} onClick={onClick}>
+      <i><Icon size={18} /></i>
+      <span><strong>{Number(value || 0).toLocaleString("tr-TR")}</strong><b>{label}</b><small>{hint}</small></span>
+    </button>
+  );
+}
 
 export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const company = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
-  const [data, setData] = useState({ metrics: {}, events: [], liveCards: [], devices: [] });
+  const [data, setData] = useState({ metrics: {}, events: [], liveCards: [], devices: [], roster: [] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [filter, setFilter] = useState("ALL");
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     setBusy(true);
     setError("");
     try {
       const result = await getPdksLiveDashboard({ mainCompanyId: company });
-      setData(result || { metrics: {}, events: [], liveCards: [], devices: [] });
+      setData(result || { metrics: {}, events: [], liveCards: [], devices: [], roster: [] });
       setLastRefresh(new Date());
     } catch (cause) {
       setError(cause?.message || "Canlı PDKS verisi alınamadı.");
@@ -41,89 +77,108 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const id = window.setInterval(load, 60000);
+    const id = window.setInterval(load, 30000);
     return () => window.clearInterval(id);
   }, [load]);
 
   const metrics = useMemo(() => data?.metrics || {}, [data]);
-  const cards = useMemo(() => [
-    ["Bugün Devamsız", metrics.absent || 0, "bad", "⊘", "raporlar"],
-    ["Geç Kalan", metrics.late || 0, "warn", "◷", "raporlar"],
-    ["Aktif Personel", metrics.activePersonnel || 0, "ok", "♟", "personel-bilgileri"],
-    ["İzinli Personel", metrics.permitted || 0, "accent", "⌛", "izinler"],
-    ["İçerideki Personel", metrics.inside || 0, "teal", "↪", "giris-cikislar"],
-    ["Eksik Basım", metrics.missingPunch || 0, "violet", "!", "puantaj"],
-  ], [metrics]);
+  const roster = useMemo(() => Array.isArray(data?.roster) ? data.roster : [], [data]);
+  const visibleRoster = useMemo(() => {
+    const q = query.trim().toLocaleUpperCase("tr-TR");
+    return roster.filter((row) => {
+      if (!matchesFilter(row, filter)) return false;
+      if (!q) return true;
+      return `${row.personnelCode || ""} ${row.fullName || ""} ${row.department || ""} ${row.statusLabel || ""}`
+        .toLocaleUpperCase("tr-TR").includes(q);
+    });
+  }, [filter, query, roster]);
 
+  const devices = Array.isArray(data?.devices) ? data.devices : [];
+  const offlineDevices = devices.filter((row) => Number(row.active) !== 0 && !isOnline(row.lastSeenAt));
+  const issueCount = Number(metrics.noShow || 0) + Number(metrics.missingPunch || 0) + offlineDevices.length;
   const go = (tabKey) => openModule?.("pdks", { tabKey });
 
   return (
-    <div className="plh-page">
-      <header className="plh-hero">
-        <div>
-          <span className="plh-kicker">KY ERP · PDKS CANLI MERKEZ</span>
-          <h1>Canlı Geçişler</h1>
-          <p>Kart cihazı, Windows Agent, D1 ve İK tek veri akışında. Sayfa açıkken her dakika otomatik yenilenir.</p>
+    <div className="plh-pro-page">
+      <header className="plh-pro-hero">
+        <div className="plh-pro-title">
+          <span><Activity size={15} /> KY PDKS · CANLI OPERASYON</span>
+          <h1>Bugünün Personel Kontrol Merkezi</h1>
+          <p>Vardiya, izin, kart geçişi, terminal ve senkron durumu tek ekranda. “Gelmeyen” hesabı vardiya başlangıcını ve çalışma gününü dikkate alır.</p>
         </div>
-        <div className="plh-livebox">
-          <i className={busy ? "pulse" : ""} />
-          <span>{busy ? "Yenileniyor" : "Canlı"}</span>
-          <small>{lastRefresh ? `Son: ${lastRefresh.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : "Bağlanıyor"}</small>
-          <button type="button" onClick={load} disabled={busy}>Yenile</button>
+        <div className="plh-pro-actions">
+          <div className={`plh-pro-live ${busy ? "busy" : ""}`}><i /><span>{busy ? "Yenileniyor" : "Canlı"}</span><small>30 sn otomatik</small></div>
+          <button type="button" className="ai" onClick={() => go("ai-kontrol")}><Bot size={16} /> AI Kontrol</button>
+          <button type="button" onClick={load} disabled={busy}><RefreshCw size={16} className={busy ? "spin" : ""} /> Yenile</button>
         </div>
       </header>
 
-      {error ? <div className="plh-error">{error}</div> : null}
+      {error ? <div className="plh-pro-error"><AlertTriangle size={17} /> {error}</div> : null}
 
-      <section className="plh-metrics">
-        {cards.map(([label, value, tone, icon, tab]) => (
-          <button type="button" key={label} className={`plh-metric ${tone}`} onClick={() => go(tab)}>
-            <b className="plh-metric-icon">{icon}</b>
-            <span><strong>{Number(value).toLocaleString("tr-TR")}</strong><small>{label}</small></span>
-            <em>›</em>
-          </button>
-        ))}
+      <section className="plh-pro-healthbar">
+        <div><ShieldCheck size={16} /><span>Aktif personel</span><strong>{metrics.activePersonnel || 0}</strong></div>
+        <div><CalendarDays size={16} /><span>Bugün vardiyalı</span><strong>{metrics.scheduledToday || 0}</strong></div>
+        <div className={issueCount ? "warn" : "ok"}><AlertTriangle size={16} /><span>Kontrol gereken</span><strong>{issueCount}</strong></div>
+        <div className={offlineDevices.length ? "warn" : "ok"}>{offlineDevices.length ? <WifiOff size={16} /> : <Wifi size={16} />}<span>Cihaz</span><strong>{metrics.onlineDevices || 0}/{metrics.deviceCount || 0}</strong></div>
+        <small>{lastRefresh ? `Son kontrol: ${lastRefresh.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Bağlanıyor..."}</small>
       </section>
 
-      <section className="plh-section">
-        <div className="plh-title"><div><span>GERÇEK ZAMANLI</span><h2>Son Geçişler</h2></div><button type="button" onClick={() => go("giris-cikislar")}>Tümünü Aç</button></div>
-        <div className="plh-live-grid">
-          {(data.liveCards || []).slice(0, 10).map((row) => (
-            <button type="button" className="plh-person-card" key={`${row.employeeId}-${row.lastTime}`} onClick={() => go("giris-cikislar")}>
-              <div className="plh-avatar">{String(row.fullName || "?").split(/\s+/).slice(0,2).map((v) => v[0]).join("")}</div>
-              <div><strong>{row.fullName}</strong><small>{row.department || "Bölüm yok"}</small><span className={row.inside ? "in" : "out"}>{row.inside ? "Giriş / İçeride" : "Çıkış"} · {row.lastTime}</span></div>
-            </button>
-          ))}
-          {!data.liveCards?.length ? <div className="plh-empty">Bugün henüz canlı kart geçişi yok.</div> : null}
-        </div>
+      <section className="plh-pro-metrics">
+        <Metric icon={LogIn} label="Bugün Gelen" value={metrics.arrivedToday} hint="En az bir kart basımı" tone="ok" onClick={() => setFilter("ALL")} />
+        <Metric icon={DoorOpen} label="İçeride" value={metrics.inside} hint="Son hareket içeride" tone="teal" onClick={() => setFilter("INSIDE")} />
+        <Metric icon={LogOut} label="Çıkan" value={metrics.left} hint="Çıkışı tamamlanan" tone="neutral" onClick={() => setFilter("ALL")} />
+        <Metric icon={AlertTriangle} label="Gelmeyen" value={metrics.noShow} hint="Vardiyası başlayıp kartı yok" tone="bad" onClick={() => setFilter("NO_SHOW")} />
+        <Metric icon={Clock3} label="Beklenen" value={metrics.waiting} hint="Vardiya saati henüz gelmedi" tone="warn" onClick={() => setFilter("WAITING")} />
+        <Metric icon={CalendarDays} label="Yıllık İzin" value={metrics.annualLeave} hint="Bugün yıllık izinde" tone="leave" onClick={() => setFilter("LEAVE")} />
+        <Metric icon={Stethoscope} label="Raporlu" value={metrics.sickLeave} hint="Sağlık/rapor kaydı" tone="leave" onClick={() => setFilter("LEAVE")} />
+        <Metric icon={Users} label="Diğer İzin" value={metrics.otherLeave} hint="Mazeret/ücretsiz vb." tone="leave" onClick={() => setFilter("LEAVE")} />
+        <Metric icon={Clock3} label="Geç Gelen" value={metrics.late} hint="Vardiya toleransı aşıldı" tone="warn" onClick={() => setFilter("LATE")} />
+        <Metric icon={AlertTriangle} label="Eksik Çıkış" value={metrics.missingPunch} hint="Vardiya bitti, çıkış yok" tone="bad" onClick={() => setFilter("MISSING")} />
       </section>
 
-      <div className="plh-two">
-        <section className="plh-section">
-          <div className="plh-title"><div><span>TEK TIK</span><h2>Hızlı İşlemler</h2></div></div>
-          <div className="plh-quick">
-            {QUICK.map(([tab, label, hint, icon], index) => (
-              <button type="button" key={`${tab}-${index}`} onClick={() => go(tab)}>
-                <i>{icon}</i><span><strong>{label}</strong><small>{hint}</small></span><b>›</b>
+      <div className="plh-pro-layout">
+        <section className="plh-pro-card roster">
+          <header>
+            <div><small>CANLI PERSONEL LİSTESİ</small><h2>Kim nerede, kim neden yok?</h2></div>
+            <div className="plh-pro-search"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Personel / bölüm / durum ara" /></div>
+          </header>
+          <nav className="plh-pro-filters">
+            {FILTERS.map(([key, label]) => <button type="button" key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{label}</button>)}
+          </nav>
+          <div className="plh-pro-roster">
+            <div className="head"><span>Personel</span><span>Durum</span><span>Vardiya</span><span>İlk Giriş</span><span>Son Hareket</span><span>Basım</span></div>
+            {visibleRoster.map((row) => (
+              <button type="button" className="row" key={row.employeeId} onClick={() => go("giris-cikislar")}>
+                <span className="person"><b>{String(row.fullName || "?").split(/\s+/).slice(0,2).map((v) => v[0]).join("")}</b><em><strong>{row.fullName}</strong><small>{row.personnelCode || "-"} · {row.department || "Bölüm yok"}</small></em></span>
+                <span><i className={`status ${statusTone(row.status)}`}>{row.statusLabel || row.status}</i></span>
+                <span><strong>{row.schedule?.groupName || "-"}</strong><small>{row.schedule?.entryTime || "-"} – {row.schedule?.exitTime || "-"}</small></span>
+                <span>{row.firstTime || "-"}</span>
+                <span>{row.lastTime || "-"}</span>
+                <span>{row.eventCount || 0}</span>
               </button>
             ))}
+            {!visibleRoster.length ? <div className="empty"><CheckCircle2 size={20} /> Bu filtrede personel yok.</div> : null}
           </div>
         </section>
 
-        <section className="plh-section plh-device-section">
-          <div className="plh-title"><div><span>AGENT / TERMİNAL</span><h2>Cihaz Sağlığı</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Cihaz Merkezi</button></div>
-          <div className="plh-device-summary">
-            <div><strong>{metrics.onlineDevices || 0}</strong><span>Çevrimiçi</span></div>
-            <div><strong>{Math.max(0, (metrics.deviceCount || 0) - (metrics.onlineDevices || 0))}</strong><span>Çevrimdışı</span></div>
-            <div><strong>{metrics.deviceCount || 0}</strong><span>Toplam</span></div>
-          </div>
-          <div className="plh-device-list">
-            {(data.devices || []).slice(0, 8).map((row) => (
-              <div key={row.id}><i className={Number(row.active) === 0 ? "passive" : isOnline(row.lastSeenAt) ? "online" : "offline"} /><span><strong>{row.deviceLabel}</strong><small>{row.machineName || "Bilgisayar adı yok"}</small></span><em>{row.lastSeenAt ? fmtDate(row.lastSeenAt) : "Bağlanmadı"}</em></div>
-            ))}
-            {!data.devices?.length ? <div className="plh-empty">Henüz yetkilendirilmiş terminal yok.</div> : null}
-          </div>
-        </section>
+        <aside className="plh-pro-side">
+          <section className="plh-pro-card">
+            <header><div><small>TERMİNAL / AGENT</small><h2>Cihaz Sağlığı</h2></div><button type="button" onClick={() => go("cihaz-baglantilari")}>Yönet</button></header>
+            <div className="plh-pro-device-list">
+              {devices.slice(0, 8).map((row) => {
+                const ok = Number(row.active) !== 0 && isOnline(row.lastSeenAt);
+                return <button type="button" key={row.id} onClick={() => go("cihaz-baglantilari")}><i className={ok ? "online" : "offline"}>{ok ? <Wifi size={15} /> : <WifiOff size={15} />}</i><span><strong>{row.deviceLabel}</strong><small>{row.machineName || "Bilgisayar adı yok"}</small></span><em>{row.lastSeenAt ? fmtDate(row.lastSeenAt) : "Bağlanmadı"}</em></button>;
+              })}
+              {!devices.length ? <div className="empty">Henüz yetkilendirilmiş terminal yok.</div> : null}
+            </div>
+          </section>
+
+          <section className="plh-pro-card plh-pro-ai">
+            <header><div><small>YAPAY ZEKA</small><h2>PDKS Kontrol Asistanı</h2></div><Bot size={20} /></header>
+            <p>“Bugün kim gelmedi?”, “çıkış basmayı unutan var mı?”, “hangi cihaz çevrimdışı?” gibi soruları canlı PDKS bağlamıyla kontrol eder.</p>
+            <button type="button" className="primary" onClick={() => go("ai-kontrol")}><Bot size={16} /> AI Kontrol Merkezini Aç</button>
+          </section>
+        </aside>
       </div>
     </div>
   );
