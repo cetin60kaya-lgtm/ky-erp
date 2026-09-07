@@ -252,3 +252,135 @@
     padding-left: 0;
   }
 }
+
+
+/* KY PDKS Pro 1.9 — okunabilirlik ve tek ürün görsel standardı */
+.pdks-context-bar{padding:11px 14px;gap:14px;border-radius:13px}
+.pdks-context-title small{font-size:10px}
+.pdks-context-title strong{font-size:17px}
+.pdks-context-title span{font-size:11px}
+.pdks-context-tabs{gap:6px}
+.pdks-context-tabs button{min-height:34px;padding:6px 11px;font-size:11px;border-radius:8px}
+.pdks-context-mode{padding:6px 10px;font-size:9.5px}
+.pdks-quick-assistant{padding:10px 12px;border-radius:12px}
+.pdks-assistant-label{min-width:115px}
+.pdks-assistant-label strong{font-size:12px}
+.pdks-assistant-label small{font-size:9.5px}
+.pdks-assistant-row input{min-height:36px;padding:7px 10px;font-size:12px}
+.pdks-assistant-row>button{min-width:82px;min-height:36px;font-size:11px}
+.pdks-assistant-examples{padding-left:122px;gap:5px;margin-top:7px}
+.pdks-assistant-examples button{min-height:26px;padding:4px 9px;font-size:9.5px}
+.pdks-assistant-success,.pdks-assistant-error{font-size:10.5px}
+.pdks-assistant-preview{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;padding:10px 11px;border:1px solid #b9d9c7;border-radius:9px;background:#f2faf5}
+.pdks-assistant-preview small,.pdks-assistant-preview strong{display:block}
+.pdks-assistant-preview small{color:#688273;font-size:8.5px;font-weight:900;letter-spacing:.05em}
+.pdks-assistant-preview strong{margin-top:2px;color:#225f3d;font-size:11px}
+.pdks-assistant-preview-actions{display:flex;gap:6px;flex:0 0 auto}
+.pdks-assistant-preview-actions button{min-height:30px;padding:5px 9px;border:1px solid #cbd9e5;border-radius:7px;background:#fff;color:#53697d;cursor:pointer;font-size:9.5px;font-weight:800}
+.pdks-assistant-preview-actions button.commit{border-color:#237448;background:#237448;color:#fff}
+
+/* Canlı operasyon */
+.pdks-module-shell .plh-pro-title>span{font-size:10.5px}
+.pdks-module-shell .plh-pro-title h1{font-size:24px}
+.pdks-module-shell .plh-pro-title p{font-size:12.5px}
+.pdks-module-shell .plh-pro-actions button,.pdks-module-shell .plh-pro-card header button{font-size:11px}
+.pdks-module-shell .plh-pro-live span{font-size:11px}
+.pdks-module-shell .plh-pro-live small{font-size:9px}
+.pdks-module-shell .plh-pro-healthbar>div{font-size:10.5px}
+.pdks-module-shell .plh-pro-healthbar>small{font-size:9.5px}
+.pdks-module-shell .plh-pro-metric b{font-size:11.5px}
+.pdks-module-shell .plh-pro-metric small{font-size:9px}
+.pdks-module-shell .plh-pro-card header small{font-size:9px}
+.pdks-module-shell .plh-pro-card header h2{font-size:16px}
+.pdks-module-shell .plh-pro-search input{font-size:11px}
+.pdks-module-shell .plh-pro-filters button{font-size:10px}
+.pdks-module-shell .plh-pro-roster>.head{font-size:9px}
+.pdks-module-shell .plh-pro-roster>.row{font-size:11px}
+.pdks-module-shell .plh-pro-roster .person strong{font-size:11px}
+.pdks-module-shell .plh-pro-roster .person small,.pdks-module-shell .plh-pro-roster .row>span>small{font-size:9px}
+.pdks-module-shell .plh-pro-roster .status{font-size:9px}
+.pdks-module-shell .plh-pro-device-list span strong{font-size:11px}
+.pdks-module-shell .plh-pro-device-list span small,.pdks-module-shell .plh-pro-device-list em{font-size:9px}
+.pdks-module-shell .plh-pro-ai>p{font-size:11px}
+.pdks-module-shell .plh-pro-ai .primary{font-size:10.5px}
+.pdks-module-shell .plh-pro-issue-list .status{font-size:9px}
+.pdks-module-shell .plh-pro-issue-list span strong{font-size:11px}
+.pdks-module-shell .plh-pro-issue-list span small{font-size:9px}
+.pdks-module-shell .plh-pro-departments>header>span{font-size:9.5px}
+.pdks-module-shell .plh-pro-dept-table>.head{font-size:9px}
+.pdks-module-shell .plh-pro-dept-table>.row{font-size:10.5px}
+
+/* AI */
+.pdks-module-shell .pai-hero small,.pdks-module-shell .pai-panel header small{font-size:9px}
+.pdks-module-shell .pai-hero h1{font-size:22px}
+.pdks-module-shell .pai-hero p{font-size:11px}
+.pdks-module-shell .pai-hero>span{font-size:10px}
+.pdks-module-shell .pai-hero>button,.pdks-module-shell .pai-panel button{font-size:10.5px}
+.pdks-module-shell .pai-riskbar span{font-size:9.5px}
+.pdks-module-shell .pai-panel header h2{font-size:16px}
+.pdks-module-shell .pai-quick button{font-size:9.5px}
+.pdks-module-shell .pai-answer .empty,.pdks-module-shell .pai-answer .loading{font-size:11px}
+.pdks-module-shell .pai-answer .answer p{font-size:11.5px}
+.pdks-module-shell .pai-composer input{font-size:11px}
+.pdks-module-shell .pai-action .intro{font-size:10.5px}
+.pdks-module-shell .pai-action textarea{font-size:11px}
+.pdks-module-shell .pai-preview small{font-size:8.5px}
+.pdks-module-shell .pai-preview strong{font-size:11px}
+.pdks-module-shell .pai-note,.pdks-module-shell .pai-privacy{font-size:9.5px}
+
+/* Personel / puantaj */
+.pdks-module-shell .ppd-topline span{font-size:11px}
+.pdks-module-shell .ppd-topline strong{font-size:15px}
+.pdks-module-shell .ppd-topline small{font-size:11px}
+.pdks-module-shell .ppd-period select,.pdks-module-shell .ppd-period input,.pdks-module-shell .ppd-period button{font-size:11px}
+.pdks-module-shell .ppd-panel-title strong{font-size:13px}
+.pdks-module-shell .ppd-person-headrow{font-size:10px}
+.pdks-module-shell .ppd-person-list code{font-size:10px}
+.pdks-module-shell .ppd-person-list strong{font-size:11.5px}
+.pdks-module-shell .ppd-person-list small{font-size:9px}
+.pdks-module-shell .ppd-person-list em{font-size:10px}
+.pdks-module-shell .ppd-person-search input{font-size:11px}
+.pdks-module-shell .ppd-filter button,.pdks-module-shell .ppd-person-actions button{font-size:10px}
+.pdks-module-shell .ppd-mini-detail span{font-size:9px}
+.pdks-module-shell .ppd-mini-detail b{font-size:10px}
+.pdks-module-shell .ppd-tabs button{font-size:11px}
+.pdks-module-shell .ppd-center-footer button{font-size:10px}
+.pdks-module-shell .ppd-person-hero span{font-size:11px}
+.pdks-module-shell .ppd-person-badges b{font-size:9px}
+.pdks-module-shell .ppd-info-grid span{font-size:9px}
+.pdks-module-shell .ppd-info-grid strong{font-size:11px}
+.pdks-module-shell .ppd-hint,.pdks-module-shell .ppd-audit-note,.pdks-module-shell .ppd-legal-note{font-size:10px}
+.pdks-module-shell .ppd-sectionbar strong{font-size:13px}
+.pdks-module-shell .ppd-sectionbar small{font-size:10px}
+.pdks-module-shell .ppd-movement-table>.head{font-size:9px}
+.pdks-module-shell .ppd-movement-table>button,.pdks-module-shell .ppd-movement-table.leave>div:not(.ppd-empty){font-size:10.5px}
+.pdks-module-shell .ppd-att-head{font-size:9px}
+.pdks-module-shell .ppd-att-list>button{font-size:10px}
+.pdks-module-shell .ppd-att-list small{font-size:8.5px}
+.pdks-module-shell .ppd-att-totals>div{font-size:10px}
+.pdks-module-shell .ppd-att-totals b{font-size:10.5px}
+
+/* Kurallar / rapor */
+.pdks-module-shell .prc-head small,.pdks-module-shell .prc-card-title span,.pdks-module-shell .prp-head small,.pdks-module-shell .prp-card-title small{font-size:10px}
+.pdks-module-shell .prc-head p,.pdks-module-shell .prp-head p{font-size:12px}
+.pdks-module-shell .prc-card-title h2,.pdks-module-shell .prp-card-title h2{font-size:16px}
+.pdks-module-shell .prc-dayfield>span{font-size:10px}
+.pdks-module-shell .prc-dayfield button{font-size:9.5px}
+.pdks-module-shell .prc-field>span{font-size:9.5px}
+.pdks-module-shell .prc-field input{font-size:11px}
+.pdks-module-shell .prc-field em{font-size:9px}
+.pdks-module-shell .prc-switches b{font-size:10.5px}
+.pdks-module-shell .prc-switches small{font-size:9px}
+.pdks-module-shell .prc-leaves strong{font-size:11px}
+.pdks-module-shell .prc-leaves span,.pdks-module-shell .prc-leaves small{font-size:9.5px}
+.pdks-module-shell .prp-period select,.pdks-module-shell .prp-period input,.pdks-module-shell .prp-period button,.pdks-module-shell .prp-toolbar input,.pdks-module-shell .prp-toolbar button,.pdks-module-shell .prp-card-title button{font-size:10px}
+.pdks-module-shell .prp-stats span,.pdks-module-shell .prp-stats small{font-size:9.5px}
+.pdks-module-shell .prp-filters button{font-size:9.5px}
+.pdks-module-shell .prp-table>.head,.pdks-module-shell .prp-exceptions>.head{font-size:9px}
+.pdks-module-shell .prp-table>div:not(.head):not(.prp-empty),.pdks-module-shell .prp-exceptions>div:not(.head):not(.prp-empty){font-size:10px}
+.pdks-module-shell .prp-table strong small,.pdks-module-shell .prp-exceptions strong small{font-size:8.5px}
+
+@media(max-width:700px){
+  .pdks-assistant-examples{padding-left:0}
+  .pdks-assistant-preview{align-items:flex-start;flex-direction:column}
+}
