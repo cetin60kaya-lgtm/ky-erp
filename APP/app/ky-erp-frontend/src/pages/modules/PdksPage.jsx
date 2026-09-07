@@ -3,6 +3,7 @@ import "../../app/pdksModuleRegistryPatch";
 import { commitPdksAssistantCommand, previewPdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksAiControlCenter from "../pdks/PdksAiControlCenter";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
+import PdksDefinitionsCenter from "../pdks/PdksDefinitionsCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
 import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
 import PdksReportCenter from "../pdks/PdksReportCenter";
@@ -117,6 +118,7 @@ export default function PdksPage(props) {
   const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
   const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
   const reportCenterTab = ["puantaj-sonuclari", "raporlar"].includes(activeTab);
+  const definitionsCenterTab = ["gruplar-vardiyalar", "donemler", "servisler", "tatiller"].includes(activeTab);
 
   return (
     <div className="pdks-module-shell">
@@ -148,11 +150,13 @@ export default function PdksPage(props) {
           <PdksPersonnelDesk {...props} />
         ) : rulesCenterTab ? (
           <PdksRulesCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+        ) : definitionsCenterTab ? (
+          <PdksDefinitionsCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : reportCenterTab ? (
           <PdksReportCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : (
           <>
-            {!isAuditAccount && ["bilgi-aktar", "gruplar-vardiyalar", "donemler", "servisler", "tatiller"].includes(activeTab)
+            {!isAuditAccount && ["bilgi-aktar"].includes(activeTab)
               ? <QuickAssistant disabled={false} mainCompanyId={mainCompanyId} /> : null}
             <PdksPageV2 {...props} />
           </>
