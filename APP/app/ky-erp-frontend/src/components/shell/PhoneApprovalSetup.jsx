@@ -20,6 +20,16 @@ function applicationServerKey(value) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
+function isIosDevice() {
+  const ua = String(navigator.userAgent || "");
+  return /iPhone|iPad|iPod/i.test(ua) ||
+    (String(navigator.platform || "") === "MacIntel" && Number(navigator.maxTouchPoints || 0) > 1);
+}
+
+function isStandaloneWebApp() {
+  return Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone === true);
+}
+
 function defaultDeviceLabel() {
   const ua = String(navigator.userAgent || "");
   const mobile = /Android|iPhone|iPad|Mobile/i.test(ua);
@@ -47,16 +57,20 @@ export default function PhoneApprovalSetup({ onClose }) {
   const [message, setMessage] = useState("Telefon onayı durumu kontrol ediliyor...");
 
   const manager = ["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(String(user?.role || "").toUpperCase());
+  const ios = isIosDevice();
+  const standalone = isStandaloneWebApp();
   const devices = useMemo(() => rowsOf(config), [config]);
   const localDeviceId = (() => {
     try { return String(window.localStorage.getItem(LOCAL_DEVICE_ID) || ""); }
     catch { return ""; }
   })();
 
-  const supported = typeof window !== "undefined" &&
+  const browserSupported = typeof window !== "undefined" &&
     "Notification" in window &&
     "PushManager" in window &&
     "serviceWorker" in navigator;
+  const iosReady = !ios || standalone;
+  const supported = browserSupported && iosReady;
 
   const load = useCallback(async () => {
     try {
@@ -72,7 +86,8 @@ export default function PhoneApprovalSetup({ onClose }) {
   useEffect(() => { load(); }, [load]);
 
   async function registerDevice() {
-    if (!supported) return setMessage("Hata: Bu tarayıcı güvenli web bildirimlerini desteklemiyor.");
+    if (ios && !standalone) return setMessage("Hata: iPhone bildirimleri için KY ERP önce Ana Ekrana eklenip uygulama olarak açılmalıdır.");
+    if (!browserSupported) return setMessage("Hata: Bu tarayıcı güvenli web bildirimlerini desteklemiyor.");
     if (!password) return setMessage("Hata: Güvenilir telefon kaydı için mevcut şifrenizi girin.");
     if (!config?.applicationServerKey) return setMessage("Hata: KY ERP bildirim anahtarı hazırlanmadı.");
 
@@ -169,10 +184,15 @@ export default function PhoneApprovalSetup({ onClose }) {
 
         <div className={`phone-approval-notice ${message.startsWith("Hata:") ? "bad" : ""}`}>{message}</div>
 
-        {!supported ? (
+        {ios && !standalone ? (
+          <div className="phone-approval-warning">
+            <strong>iPhone kurulumu gerekli</strong>
+            <span>Safari’de app.kyerp.net’i açın → Paylaş → Ana Ekrana Ekle. iOS 26 ve üzerindeyse “Web Uygulaması Olarak Aç” seçeneği açık kalsın. Sonra Ana Ekrandaki KY ERP ikonundan açıp bu ekrandan bildirim izni verin.</span>
+          </div>
+        ) : !browserSupported ? (
           <div className="phone-approval-warning">
             <strong>Bu tarayıcı push bildirimini desteklemiyor.</strong>
-            <span>Android Chrome/Edge veya iPhone/iPad’de ana ekrana eklenmiş KY ERP uygulamasını kullanın.</span>
+            <span>Android Chrome/Edge veya iPhone/iPad’de Ana Ekrana eklenmiş KY ERP web uygulamasını kullanın.</span>
           </div>
         ) : null}
 
@@ -192,7 +212,7 @@ export default function PhoneApprovalSetup({ onClose }) {
               <BellRing size={17}/>{busy ? "Kaydediliyor..." : "Bildirimleri Aç ve Bu Cihazı Kaydet"}
             </button>
             <button type="button" onClick={localTest} disabled={busy || !supported}>Bu cihazda deneme bildirimi</button>
-            <small className="phone-approval-help">Cihaz ekleme, açık oturumla tek başına yapılamaz; mevcut şifreyle yeniden doğrulama zorunludur.</small>
+            <small className="phone-approval-help">Cihaz ekleme, açık oturumla tek başına yapılamaz; mevcut şifreyle yeniden doğrulama zorunludur. iPhone’da bildirimde ayrı Onayla/Reddet butonları görünmese bile bildirime dokununca KY ERP güvenli onay ekranı açılır.</small>
           </section>
 
           <section className="phone-approval-card">
