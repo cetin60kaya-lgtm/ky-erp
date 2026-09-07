@@ -85,7 +85,15 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
+async function tableExists(c: any, tableName: string) {
+  const row = await c.env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+  ).bind(tableName).first<AnyRow>();
+  return Boolean(row?.name);
+}
+
 async function storeGet(c: any, scope: string, fileName: string) {
+  if (!(await tableExists(c, "json_store"))) return null;
   const row = await c.env.DB.prepare(
     `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
        FROM json_store
@@ -105,6 +113,7 @@ async function storeGet(c: any, scope: string, fileName: string) {
 }
 
 async function storeList(c: any, scope: string, companySlug = "") {
+  if (!(await tableExists(c, "json_store"))) return [];
   const result = companySlug
     ? await c.env.DB.prepare(
         `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
@@ -131,6 +140,7 @@ async function storeList(c: any, scope: string, companySlug = "") {
 }
 
 async function storePut(c: any, scope: string, fileName: string, companySlug: string, data: AnyRow) {
+  if (!(await tableExists(c, "json_store"))) throw new Error("Telefon onayı depolama katmanı hazır değil.");
   const current = await storeGet(c, scope, fileName);
   const timestamp = nowIso();
   const payload = {
