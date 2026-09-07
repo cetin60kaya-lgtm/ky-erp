@@ -278,6 +278,7 @@ export class IkAdvancedService implements OnModuleInit {
     await this.ensureColumn("ik_person_card_settings", "work_type", "TEXT NOT NULL DEFAULT 'AYLIK'");
     await this.ensureColumn("ik_person_card_settings", "sgk_follow", "INTEGER NOT NULL DEFAULT 1");
     await this.ensureColumn("ik_person_card_settings", "payment_type", "TEXT NOT NULL DEFAULT 'BANKA_ELDEN'");
+    await this.ensureColumn("ik_person_card_settings", "deduction_hourly_base", "REAL NOT NULL DEFAULT 300");
     await this.ensureColumn("ik_person_card_settings", "note", "TEXT NOT NULL DEFAULT ''");
     await this.ensureColumn("ik_monthly_attendance", "early_exit", "TEXT NOT NULL DEFAULT ''");
     await this.ensureColumn("ik_monthly_attendance", "late_entry", "TEXT NOT NULL DEFAULT ''");
@@ -437,6 +438,8 @@ export class IkAdvancedService implements OnModuleInit {
         status: s.active_passive || row.status || "AKTIF",
         hireDate: this.dateOnly(row.hireDate), exitDate: s.exit_date || "",
         salary: this.number(row.salary), roadAllowance: this.number(row.roadAllowance),
+        overtimeHourlyBase: this.number(row.overtimeHourlyBase) || 225,
+        deductionHourlyBase: this.number(s.deduction_hourly_base) || 300,
         bankAmount: this.number(row.bankAmount), cashAmount: this.number(row.cashAmount),
         annualLeaveEntitlement: this.number(row.annualLeaveEntitlement), annualLeaveCarryover: this.number(row.annualLeaveCarryover),
         cardNo: s.card_no || "", identityNo: s.identity_no || "", payrollIncluded: s.payroll_included !== 0,
@@ -651,6 +654,10 @@ export class IkAdvancedService implements OnModuleInit {
     const employee = await (this.prisma as any).hrMonthlyEmployee.findUnique({ where: { id: employeeId } });
     if (!employee) throw new BadRequestException("Personel bulunamadı.");
     const companyId = this.companyCandidates(body)[0];
+    const overtimeHourlyBase = this.number(body.overtimeHourlyBase ?? employee.overtimeHourlyBase) || 225;
+    const deductionHourlyBase = this.number(body.deductionHourlyBase) || 300;
+    if (overtimeHourlyBase <= 0) throw new BadRequestException("Mesai saat böleni sıfırdan büyük olmalıdır.");
+    if (deductionHourlyBase <= 0) throw new BadRequestException("Kesinti saat böleni sıfırdan büyük olmalıdır.");
     const cardNo = this.text(body.cardNo);
     if (cardNo) {
       const duplicate = (await (this.prisma as any).$queryRawUnsafe(
@@ -659,14 +666,14 @@ export class IkAdvancedService implements OnModuleInit {
       if (duplicate) throw new BadRequestException("Bu kart numarası başka bir personele bağlı.");
     }
     await (this.prisma as any).$executeRawUnsafe(
-      `INSERT INTO ik_person_card_settings (employee_id, main_company_id, card_no, identity_no, payroll_included, card_source, personel_kodu, exit_date, active_passive, work_type, sgk_follow, payment_type, note, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no, identity_no=excluded.identity_no, payroll_included=excluded.payroll_included, card_source=excluded.card_source, personel_kodu=excluded.personel_kodu, exit_date=excluded.exit_date, active_passive=excluded.active_passive, work_type=excluded.work_type, sgk_follow=excluded.sgk_follow, payment_type=excluded.payment_type, note=excluded.note, updated_at=CURRENT_TIMESTAMP`,
+      `INSERT INTO ik_person_card_settings (employee_id, main_company_id, card_no, identity_no, payroll_included, card_source, personel_kodu, exit_date, active_passive, work_type, sgk_follow, payment_type, deduction_hourly_base, note, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no, identity_no=excluded.identity_no, payroll_included=excluded.payroll_included, card_source=excluded.card_source, personel_kodu=excluded.personel_kodu, exit_date=excluded.exit_date, active_passive=excluded.active_passive, work_type=excluded.work_type, sgk_follow=excluded.sgk_follow, payment_type=excluded.payment_type, deduction_hourly_base=excluded.deduction_hourly_base, note=excluded.note, updated_at=CURRENT_TIMESTAMP`,
       employeeId, companyId, cardNo, this.text(body.identityNo), body.payrollIncluded === false ? 0 : 1,
       this.text(body.cardSource || "TNF"), this.text(body.personelKodu || employee.code || ""),
       this.dateOnly(body.exitDate || ""), this.text(body.activePassive || employee.status || "AKTIF"),
       this.text(body.workType || employee.workType || "AYLIK"), body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1,
-      this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"), this.text(body.note || employee.note || ""),
+      this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"), deductionHourlyBase, this.text(body.note || employee.note || ""),
     );
     const hireDate = this.dateOnly(body.hireDate || body.startDate || employee.hireDate);
     await (this.prisma as any).hrMonthlyEmployee.update({
@@ -679,6 +686,7 @@ export class IkAdvancedService implements OnModuleInit {
         hireDate: hireDate ? new Date(`${hireDate}T00:00:00.000Z`) : null,
         salary: this.number(body.salary ?? employee.salary),
         roadAllowance: this.number(body.roadAllowance ?? employee.roadAllowance),
+        overtimeHourlyBase,
         bankAmount: this.number(body.bankAmount ?? employee.bankAmount),
         cashAmount: this.number(body.cashAmount ?? employee.cashAmount),
         annualLeaveEntitlement: this.number(body.annualLeaveEntitlement ?? employee.annualLeaveEntitlement),
