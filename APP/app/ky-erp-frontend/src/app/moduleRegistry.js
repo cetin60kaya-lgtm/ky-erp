@@ -40,7 +40,7 @@ const ILETISIM_MODULE = {
       tabs: [
         ["mail-gelen", "Gelen Kutusu", "eposta"],
         ["mail-sabitlenen", "Sabitlenenler", "file-check"],
-        ["mail-gonderilen", "Gönderilenler", "eposta"],
+        ["mail-gonderilen", "Gönderilmiş Postalar", "eposta"],
         ["mail-taslaklar", "Taslaklar", "dosya"],
         ["mail-yanit-bekleyen", "Yanıt Bekleyenler", "file-check"],
         ["mail-sablonlar", "Şablonlar", "dosya"],
