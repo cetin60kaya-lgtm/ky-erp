@@ -283,6 +283,13 @@ async function invalidateUserLoginArtifacts(c: any, userId: string, actorId: str
         SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?)
       WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')`,
   ).bind(timestamp, actorId || userId, userId).run();
+  if (await tableExists(c, "auth_phone_login_challenges")) {
+    await c.env.DB.prepare(
+      `UPDATE auth_phone_login_challenges
+          SET status='DENIED',decided_at=COALESCE(decided_at,?),consumed_at=COALESCE(consumed_at,?)
+        WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')`,
+    ).bind(timestamp, timestamp, userId).run();
+  }
   await revokeUserSessions(c, userId, actorId || userId);
 }
 
