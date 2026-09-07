@@ -96,16 +96,16 @@ export async function savePdksWorkGroup(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/work-groups", payload));
 }
 
-export async function assignPdksWorkGroup(employeeId, groupId) {
-  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/work-group`, { groupId }));
+export async function assignPdksWorkGroup(employeeId, groupId, params = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/work-group`, { ...params, groupId }));
 }
 
 export async function savePdksService(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/services", payload));
 }
 
-export async function assignPdksService(employeeId, serviceId) {
-  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { serviceId }));
+export async function assignPdksService(employeeId, serviceId, params = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { ...params, serviceId }));
 }
 
 // PDKS kritik iş verileri personnel-control altında açık D1 operasyon endpointlerinden çalışır.
