@@ -10,8 +10,8 @@ const PDKS_MODULE = {
     ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve çalışma bağlantısı"],
     ["gruplar-vardiyalar", "Tanımlar", "ayarlar", "Vardiya ve çalışma kuralları"],
     ["saat-terminal", "Terminal & Sistem", "ayarlar", "Cihaz, saat ve senkron yönetimi"],
-    ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],
     ["ai-kontrol", "AI & Kontrol", "dashboard", "Canlı analiz, anomali ve kontrollü işlemler"],
+    ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],
   ],
   groups: [
     {
