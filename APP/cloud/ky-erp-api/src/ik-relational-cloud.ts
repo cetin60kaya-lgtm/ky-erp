@@ -151,6 +151,7 @@ function mapMonthly(row: Row): Row {
     garnishmentActive: flag(row.garnishment_active) || number(row.garnishment_amount) > 0,
     garnishmentAmount: number(row.garnishment_amount),
     garnishmentSource: text(row.garnishment_source) || "BANKA",
+    deductionHourlyBase: number(row.deduction_hourly_base) || 300,
     legalStartPeriod: text(row.legal_start_period),
     legalEndPeriod: text(row.legal_end_period),
     garnishmentNote: text(row.garnishment_note),
@@ -346,6 +347,7 @@ async function monthlyRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
               s.garnishment_active,
               s.garnishment_amount,
               s.garnishment_source,
+              s.deduction_hourly_base,
               s.legal_start_period,
               s.legal_end_period,
               s.garnishment_note
@@ -1325,6 +1327,10 @@ async function savePersonCard(c: Context<AppEnv>) {
   const legalAmount = legalType === "YOK" ? 0 : number(body.garnishmentAmount);
   const legalSource = upper(body.garnishmentSource) === "ELDEN" ? "ELDEN" : "BANKA";
   const personnelStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(body.personnelStatus)) ? "RETIRED" : "NORMAL";
+  const overtimeHourlyBase = number(body.overtimeHourlyBase ?? body.overtimeBaseHours ?? current.overtime_hourly_base) || 225;
+  const deductionHourlyBase = number(body.deductionHourlyBase ?? currentCard?.deduction_hourly_base) || 300;
+  if (overtimeHourlyBase <= 0) return error(c, 400, "OVERTIME_DIVISOR_INVALID", "Mesai saat böleni sıfırdan büyük olmalıdır.");
+  if (deductionHourlyBase <= 0) return error(c, 400, "DEDUCTION_DIVISOR_INVALID", "Kesinti saat böleni sıfırdan büyük olmalıdır.");
   const period = /^\d{4}-\d{2}$/.test(text(body.period))
     ? text(body.period)
     : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
@@ -1347,8 +1353,8 @@ async function savePersonCard(c: Context<AppEnv>) {
        employee_id,main_company_id,card_no,identity_no,payroll_included,card_source,personel_kodu,exit_date,
        active_passive,work_type,sgk_follow,payment_type,note,phone,extra_payment_label,extra_payment_amount,
        base_employee_id,legal_deduction_type,garnishment_active,garnishment_amount,garnishment_source,
-       legal_start_period,legal_end_period,garnishment_note,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       deduction_hourly_base,legal_start_period,legal_end_period,garnishment_note,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(employee_id) DO UPDATE SET
        main_company_id=excluded.main_company_id,
        card_no=excluded.card_no,
@@ -1370,6 +1376,7 @@ async function savePersonCard(c: Context<AppEnv>) {
        garnishment_active=excluded.garnishment_active,
        garnishment_amount=excluded.garnishment_amount,
        garnishment_source=excluded.garnishment_source,
+       deduction_hourly_base=excluded.deduction_hourly_base,
        legal_start_period=excluded.legal_start_period,
        legal_end_period=excluded.legal_end_period,
        garnishment_note=excluded.garnishment_note,
@@ -1381,7 +1388,7 @@ async function savePersonCard(c: Context<AppEnv>) {
     body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1, text(body.paymentType) || "BANKA_ELDEN",
     text(body.note), text(body.phone), "EK", autoExtra, baseEmployeeId, legalType,
     legalType !== "YOK" && legalAmount > 0 ? 1 : 0, legalAmount, legalSource,
-    text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
+    deductionHourlyBase, text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
@@ -1399,13 +1406,14 @@ async function savePersonCard(c: Context<AppEnv>) {
   return okData(c, {
     employeeId, saved: true, baseEmployeeId, extraPaymentAmount: autoExtra,
     legalDeductionType: legalType, garnishmentSource: legalSource,
+    overtimeHourlyBase, deductionHourlyBase,
     personnelStatus, period, sgkCovered, sgkDays,
   });
 }
 async function updateMonthlyEmployeeFromCard(c: Context<AppEnv>, employeeId: string, companyId: string, body: Row, current: Row) {
   const merged: Row = { ...current, ...body, code: body.personelKodu || body.code || current.code, bankPaymentType: body.paymentType || current.bank_payment_type, sgkStatus: body.sgkFollow === false ? "YOK" : "VAR", status: body.activePassive || body.status || current.status };
   const value = monthlyValues(merged, current);
-  await c.env.DB.prepare("UPDATE hr_monthly_employees SET code=?,full_name=?,department=?,title=?,work_type=?,sgk_status=?,status=?,hire_date=?,salary=?,road_allowance=?,bank_payment_type=?,bank_amount=?,cash_amount=?,annual_leave_entitlement=?,annual_leave_carryover=?,note=?,updated_at=? WHERE id=? AND main_company_id=?").bind(value.code || null, value.fullName, value.department, value.title, value.workType, value.sgkStatus, value.status, value.hireDate, value.salary, value.roadAllowance, value.bankPaymentType, value.bankAmount, value.cashAmount, value.annualLeaveEntitlement, value.annualLeaveCarryover, value.note, nowIso(), employeeId, companyId).run();
+  await c.env.DB.prepare("UPDATE hr_monthly_employees SET code=?,full_name=?,department=?,title=?,work_type=?,sgk_status=?,status=?,hire_date=?,salary=?,road_allowance=?,bank_payment_type=?,bank_amount=?,cash_amount=?,overtime_hourly_base=?,annual_leave_entitlement=?,annual_leave_carryover=?,note=?,updated_at=? WHERE id=? AND main_company_id=?").bind(value.code || null, value.fullName, value.department, value.title, value.workType, value.sgkStatus, value.status, value.hireDate, value.salary, value.roadAllowance, value.bankPaymentType, value.bankAmount, value.cashAmount, overtimeHourlyBase, value.annualLeaveEntitlement, value.annualLeaveCarryover, value.note, nowIso(), employeeId, companyId).run();
 }
 
 async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
