@@ -7,11 +7,10 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-#if PDKS_ONLY
-        var window = new PdksWorkbenchWindow();
-#else
+        // ERP Desktop ve PDKS Desktop aynı canonical React kabuğunu kullanır.
+        // PDKS_ONLY derlemesinde ürün işareti WebView document-start aşamasında enjekte edilir
+        // ve frontend yalnız PDKS modülünü görünür tutar.
         var window = new KyErpDesktopWindow();
-#endif
         MainWindow = window;
         window.Show();
     }
