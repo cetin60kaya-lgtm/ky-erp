@@ -61,7 +61,7 @@ test("company owner is default approver and application owner notifications are 
   assert.match(push, /isCompanyAdmin\(actor\.role\)/);
   assert.match(push, /isSuper\(actor\.role\)/);
   assert.match(companySettings, /Firma Sahibi \/ İşveren telefonuna onay bildirimi gönder/);
-  assert.match(companySettings, /Uygulama Sahibine de onay bildirimi gönder/);
+  assert.match(companySettings, /Süper Yöneticiye de onay bildirimi gönder/);
 });
 
 test("service worker decisions use device capability headers and native approve deny actions", () => {
@@ -84,7 +84,7 @@ test("every user can register a phone from the authenticated shell but registrat
 test("iPhone fallback does not depend on notification action buttons", () => {
   assert.match(serviceWorker, /kyerpPhoneApproval=1/);
   assert.match(serviceWorker, /KYERP_PUSH_PENDING_WAKE/);
-  assert.match(serviceWorker, /userVisibleOnly/);
+  assert.match(phoneSetup, /userVisibleOnly/);
   assert.match(phoneSetup, /Ana Ekrana Ekle/);
   assert.match(phoneSetup, /isStandaloneWebApp/);
   assert.match(phoneInbox, /visibilitychange/);
