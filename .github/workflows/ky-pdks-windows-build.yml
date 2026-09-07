@@ -1,18 +1,19 @@
-name: KY ERP Masaüstü Windows Setup
+name: KY ERP + PDKS Windows Setup
 
 on:
   # Automatic GitHub Actions disabled. Run only when explicitly requested.
   workflow_dispatch:
+
 permissions:
   contents: read
 
 concurrency:
-  group: ky-erp-desktop-windows-${{ github.ref }}
+  group: ky-erp-pdks-desktop-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Test, publish ve Setup.exe
+    name: Test, iki ürün publish ve Setup.exe
     runs-on: windows-latest
     steps:
       - name: Kaynak kodu al
@@ -23,28 +24,39 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Inno Setup 6
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: KY ERP Masaüstü test ve paket
+      - name: KY ERP + KY PDKS test ve paket
         shell: pwsh
         run: ./APP/desktop/ky-pdks/BUILD_SETUP.ps1
 
-      - name: Setup çıktısını doğrula
+      - name: İki Setup çıktısını doğrula
         shell: pwsh
         run: |
-          $setup = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-ERP-Masaustu-Setup-*.exe' | Select-Object -First 1
-          if (-not $setup) { throw 'KY ERP Masaüstü Setup.exe bulunamadı.' }
-          Get-FileHash $setup.FullName -Algorithm SHA256
-          Get-Content "$($setup.FullName).sha256.txt"
+          $erp = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-ERP-Desktop-Setup-*.exe' | Select-Object -First 1
+          $pdks = Get-ChildItem ./APP/desktop/ky-pdks/dist/setup -Filter 'KY-PDKS-Desktop-Setup-*.exe' | Select-Object -First 1
+          if (-not $erp) { throw 'KY ERP Desktop Setup.exe bulunamadı.' }
+          if (-not $pdks) { throw 'KY PDKS Desktop Setup.exe bulunamadı.' }
+          Get-FileHash $erp.FullName -Algorithm SHA256
+          Get-FileHash $pdks.FullName -Algorithm SHA256
+          Get-Content "$($erp.FullName).sha256.txt"
+          Get-Content "$($pdks.FullName).sha256.txt"
+          Get-Content ./APP/desktop/ky-pdks/dist/setup/build-info.json
 
-      - name: Windows kurulum paketini sakla
+      - name: Windows kurulum paketlerini sakla
         uses: actions/upload-artifact@v4
         with:
-          name: KY-ERP-Masaustu-Windows-Setup-${{ github.run_number }}
+          name: KY-ERP-PDKS-Windows-Setup-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-ERP-Masaustu-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-ERP-Desktop-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.exe
             APP/desktop/ky-pdks/dist/setup/*.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
