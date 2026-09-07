@@ -1274,7 +1274,12 @@ async function advancedMonth(c: Context<AppEnv>) {
     all(c, "SELECT file_name,data FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_PERSON_CARD_CALC_SCOPE, `${companyId}:%`]).catch(() => []),
   ]);
   const calcPrefix = `${companyId}:`;
-  const calcByEmployee = new Map(calcRows.map((row) => [text(row.file_name).startsWith(calcPrefix) ? text(row.file_name).slice(calcPrefix.length) : "", parsePersonCardCalc(row)]).filter(([employeeId]) => Boolean(employeeId)));
+  const calcByEmployee = new Map<string, Row>();
+  for (const row of calcRows) {
+    const fileName = text(row.file_name);
+    if (!fileName.startsWith(calcPrefix)) continue;
+    calcByEmployee.set(fileName.slice(calcPrefix.length), parsePersonCardCalc(row));
+  }
   const rawEmployeesWithCalc = employees.map((employee) => ({ ...employee, deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300 }));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const profileByEmployee = new Map(profiles.map((row) => [text(row.employee_id), row]));
