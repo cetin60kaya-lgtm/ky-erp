@@ -80,18 +80,42 @@ export class IkAdvancedService implements OnModuleInit {
     return null;
   }
 
+  private async personCardCalc(companyId: string, employeeId: string) {
+    const fileName = `${companyId}:${employeeId}`;
+    const row = (await (this.prisma as any).$queryRawUnsafe(
+      `SELECT data FROM json_store WHERE scope=? AND file_name=? LIMIT 1`,
+      "IK_PERSON_CARD_CALC", fileName,
+    ) as AnyRow[])[0];
+    try {
+      const parsed = JSON.parse(this.text(row?.data) || "{}");
+      return { deductionHourlyBase: this.number(parsed.deductionHourlyBase) || 300 };
+    } catch {
+      return { deductionHourlyBase: 300 };
+    }
+  }
+
+  private async savePersonCardCalc(companyId: string, employeeId: string, deductionHourlyBase: number) {
+    const id = `ik-person-card-calc:${companyId}:${employeeId}`;
+    const fileName = `${companyId}:${employeeId}`;
+    const data = JSON.stringify({ deductionHourlyBase, updatedAt: new Date().toISOString() });
+    await (this.prisma as any).$executeRawUnsafe(
+      `INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at)
+       VALUES (?, ?, NULL, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=NULL,file_name=excluded.file_name,data=excluded.data,updated_at=CURRENT_TIMESTAMP`,
+      id, "IK_PERSON_CARD_CALC", fileName, data,
+    );
+  }
+
   private async absenceDeduction(employeeId: string, mode: "DAY" | "HOUR", hoursValue: any) {
     const row = (await (this.prisma as any).$queryRawUnsafe(
-      `SELECT e.salary, e.road_allowance, s.deduction_hourly_base
-       FROM hr_monthly_employees e
-       LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-       WHERE e.id=? LIMIT 1`,
+      `SELECT salary, road_allowance, main_company_id FROM hr_monthly_employees WHERE id=? LIMIT 1`,
       employeeId,
     ) as AnyRow[])[0];
     if (!row) throw new BadRequestException("Personel bulunamadı.");
     const salary = Math.max(0, this.number(row.salary));
     const road = Math.max(0, this.number(row.road_allowance));
-    const divisor = this.number(row.deduction_hourly_base) || 300;
+    const calc = await this.personCardCalc(this.text(row.main_company_id), employeeId);
+    const divisor = this.number(calc.deductionHourlyBase) || 300;
     const salaryDaily = Math.round((salary / 30) * 100) / 100;
     const roadDaily = Math.round((road / 30) * 100) / 100;
     if (mode === "DAY") {
@@ -316,7 +340,6 @@ export class IkAdvancedService implements OnModuleInit {
     await this.ensureColumn("ik_person_card_settings", "work_type", "TEXT NOT NULL DEFAULT 'AYLIK'");
     await this.ensureColumn("ik_person_card_settings", "sgk_follow", "INTEGER NOT NULL DEFAULT 1");
     await this.ensureColumn("ik_person_card_settings", "payment_type", "TEXT NOT NULL DEFAULT 'BANKA_ELDEN'");
-    await this.ensureColumn("ik_person_card_settings", "deduction_hourly_base", "REAL NOT NULL DEFAULT 300");
     await this.ensureColumn("ik_person_card_settings", "note", "TEXT NOT NULL DEFAULT ''");
     await this.ensureColumn("ik_monthly_attendance", "early_exit", "TEXT NOT NULL DEFAULT ''");
     await this.ensureColumn("ik_monthly_attendance", "late_entry", "TEXT NOT NULL DEFAULT ''");
@@ -463,9 +486,16 @@ export class IkAdvancedService implements OnModuleInit {
     const settings = ids.length ? await (this.prisma as any).$queryRawUnsafe(
       `SELECT * FROM ik_person_card_settings WHERE employee_id IN (${ids.map(() => "?").join(",")})`, ...ids,
     ) : [];
+    const calcRows = await (this.prisma as any).$queryRawUnsafe(
+      `SELECT file_name,data FROM json_store WHERE scope=?`, "IK_PERSON_CARD_CALC",
+    ) as AnyRow[];
+    const calcMap = new Map(calcRows.map((item) => [this.text(item.file_name), item]));
     const map = new Map((settings as AnyRow[]).map((row) => [row.employee_id, row]));
     return liveRows.map((row: AnyRow) => {
       const s = map.get(row.id) || {};
+      const calcRow = calcMap.get(`${row.mainCompanyId}:${row.id}`);
+      let calc: AnyRow = {};
+      try { calc = JSON.parse(this.text(calcRow?.data) || "{}"); } catch {}
       const hasSetting = map.has(row.id);
       const rawSgkStatus = this.norm(row.sgkStatus || "");
       const inferredSgkFollow = rawSgkStatus.includes("YOK") ? false : rawSgkStatus.includes("VAR") ? true : null;
@@ -477,7 +507,7 @@ export class IkAdvancedService implements OnModuleInit {
         hireDate: this.dateOnly(row.hireDate), exitDate: s.exit_date || "",
         salary: this.number(row.salary), roadAllowance: this.number(row.roadAllowance),
         overtimeHourlyBase: this.number(row.overtimeHourlyBase) || 225,
-        deductionHourlyBase: this.number(s.deduction_hourly_base) || 300,
+        deductionHourlyBase: this.number(calc.deductionHourlyBase) || 300,
         bankAmount: this.number(row.bankAmount), cashAmount: this.number(row.cashAmount),
         annualLeaveEntitlement: this.number(row.annualLeaveEntitlement), annualLeaveCarryover: this.number(row.annualLeaveCarryover),
         cardNo: s.card_no || "", identityNo: s.identity_no || "", payrollIncluded: s.payroll_included !== 0,
@@ -692,12 +722,9 @@ export class IkAdvancedService implements OnModuleInit {
     const employee = await (this.prisma as any).hrMonthlyEmployee.findUnique({ where: { id: employeeId } });
     if (!employee) throw new BadRequestException("Personel bulunamadı.");
     const companyId = this.companyCandidates(body)[0];
-    const existingSetting = (await (this.prisma as any).$queryRawUnsafe(
-      `SELECT deduction_hourly_base FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1`,
-      employeeId, companyId,
-    ) as AnyRow[])[0];
+    const existingCalc = await this.personCardCalc(companyId, employeeId);
     const overtimeHourlyBase = this.number(body.overtimeHourlyBase ?? employee.overtimeHourlyBase) || 225;
-    const deductionHourlyBase = this.number(body.deductionHourlyBase ?? existingSetting?.deduction_hourly_base) || 300;
+    const deductionHourlyBase = this.number(body.deductionHourlyBase ?? existingCalc.deductionHourlyBase) || 300;
     if (overtimeHourlyBase <= 0) throw new BadRequestException("Mesai saat böleni sıfırdan büyük olmalıdır.");
     if (deductionHourlyBase <= 0) throw new BadRequestException("Kesinti saat böleni sıfırdan büyük olmalıdır.");
     const cardNo = this.text(body.cardNo);
@@ -708,15 +735,16 @@ export class IkAdvancedService implements OnModuleInit {
       if (duplicate) throw new BadRequestException("Bu kart numarası başka bir personele bağlı.");
     }
     await (this.prisma as any).$executeRawUnsafe(
-      `INSERT INTO ik_person_card_settings (employee_id, main_company_id, card_no, identity_no, payroll_included, card_source, personel_kodu, exit_date, active_passive, work_type, sgk_follow, payment_type, deduction_hourly_base, note, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no, identity_no=excluded.identity_no, payroll_included=excluded.payroll_included, card_source=excluded.card_source, personel_kodu=excluded.personel_kodu, exit_date=excluded.exit_date, active_passive=excluded.active_passive, work_type=excluded.work_type, sgk_follow=excluded.sgk_follow, payment_type=excluded.payment_type, deduction_hourly_base=excluded.deduction_hourly_base, note=excluded.note, updated_at=CURRENT_TIMESTAMP`,
+      `INSERT INTO ik_person_card_settings (employee_id, main_company_id, card_no, identity_no, payroll_included, card_source, personel_kodu, exit_date, active_passive, work_type, sgk_follow, payment_type, note, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(employee_id) DO UPDATE SET card_no=excluded.card_no, identity_no=excluded.identity_no, payroll_included=excluded.payroll_included, card_source=excluded.card_source, personel_kodu=excluded.personel_kodu, exit_date=excluded.exit_date, active_passive=excluded.active_passive, work_type=excluded.work_type, sgk_follow=excluded.sgk_follow, payment_type=excluded.payment_type, note=excluded.note, updated_at=CURRENT_TIMESTAMP`,
       employeeId, companyId, cardNo, this.text(body.identityNo), body.payrollIncluded === false ? 0 : 1,
       this.text(body.cardSource || "TNF"), this.text(body.personelKodu || employee.code || ""),
       this.dateOnly(body.exitDate || ""), this.text(body.activePassive || employee.status || "AKTIF"),
       this.text(body.workType || employee.workType || "AYLIK"), body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1,
-      this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"), deductionHourlyBase, this.text(body.note || employee.note || ""),
+      this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"), this.text(body.note || employee.note || ""),
     );
+    await this.savePersonCardCalc(companyId, employeeId, deductionHourlyBase);
     const hireDate = this.dateOnly(body.hireDate || body.startDate || employee.hireDate);
     await (this.prisma as any).hrMonthlyEmployee.update({
       where: { id: employeeId },

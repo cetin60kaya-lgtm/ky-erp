@@ -151,7 +151,6 @@ function mapMonthly(row: Row): Row {
     garnishmentActive: flag(row.garnishment_active) || number(row.garnishment_amount) > 0,
     garnishmentAmount: number(row.garnishment_amount),
     garnishmentSource: text(row.garnishment_source) || "BANKA",
-    deductionHourlyBase: number(row.deduction_hourly_base) || 300,
     legalStartPeriod: text(row.legal_start_period),
     legalEndPeriod: text(row.legal_end_period),
     garnishmentNote: text(row.garnishment_note),
@@ -347,7 +346,6 @@ async function monthlyRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
               s.garnishment_active,
               s.garnishment_amount,
               s.garnishment_source,
-              s.deduction_hourly_base,
               s.legal_start_period,
               s.legal_end_period,
               s.garnishment_note
@@ -944,15 +942,43 @@ async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, 
   return calculateOvertimeAmount(baseSalary, hours, multiplierValue, divisor);
 }
 
+const IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC";
+
+function personCardCalcFileName(companyId: string, employeeId: string) {
+  return `${companyId}:${employeeId}`;
+}
+
+function parsePersonCardCalc(row: Row | null | undefined) {
+  try {
+    const parsed = JSON.parse(text(row?.data) || "{}") as Row;
+    return { deductionHourlyBase: number(parsed.deductionHourlyBase) || 300 };
+  } catch {
+    return { deductionHourlyBase: 300 };
+  }
+}
+
+async function personCardCalc(c: Context<AppEnv>, companyId: string, employeeId: string) {
+  const row = await first(c, "SELECT data FROM json_store WHERE scope=? AND file_name=? LIMIT 1", [IK_PERSON_CARD_CALC_SCOPE, personCardCalcFileName(companyId, employeeId)]);
+  return parsePersonCardCalc(row);
+}
+
+async function savePersonCardCalc(c: Context<AppEnv>, companyId: string, employeeId: string, deductionHourlyBase: number) {
+  const fileName = personCardCalcFileName(companyId, employeeId);
+  const id = `ik-person-card-calc:${companyId}:${employeeId}`;
+  const data = JSON.stringify({ deductionHourlyBase, updatedAt: nowIso() });
+  await c.env.DB.prepare(`INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=excluded.main_company_slug,file_name=excluded.file_name,data=excluded.data,updated_at=excluded.updated_at`)
+    .bind(id, IK_PERSON_CARD_CALC_SCOPE, null, fileName, data, nowIso(), nowIso()).run();
+}
+
 async function absenceDeductionForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, mode: "DAY" | "HOUR", hoursValue: unknown) {
-  const employee = await first(c, `SELECT e.salary,e.road_allowance,s.deduction_hourly_base
-    FROM hr_monthly_employees e
-    LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
-    WHERE e.id=? AND e.main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const employee = await first(c, "SELECT salary,road_allowance FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return { hours: 0, deductionDivisor: 300, salaryHourly: 0, salaryCut: 0, roadDaily: 0, roadCut: 0, total: 0 };
   const salary = Math.max(0, number(employee.salary));
   const road = Math.max(0, number(employee.road_allowance));
-  const deductionDivisor = number(employee.deduction_hourly_base) || 300;
+  const calc = await personCardCalc(c, companyId, employeeId);
+  const deductionDivisor = number(calc.deductionHourlyBase) || 300;
   const salaryDaily = Math.round((salary / 30) * 100) / 100;
   const roadDaily = Math.round((road / 30) * 100) / 100;
   if (mode === "DAY") {
@@ -1234,7 +1260,7 @@ async function advancedMonth(c: Context<AppEnv>) {
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const periodStart = `${period}-01`;
   const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
-  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows] = await Promise.all([
+  const [employees, cards, adjustments, leaves, payroll, documents, contracts, profiles, compliance, cardDayRows, calcRows] = await Promise.all([
     monthlyRows(c, companyId),
     all(c, "SELECT * FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
     adjustmentRows(c, companyId),
@@ -1245,12 +1271,16 @@ async function advancedMonth(c: Context<AppEnv>) {
     all(c, "SELECT employee_id,personnel_status FROM ik_person_hr_profiles WHERE main_company_id=?", [companyId]).catch(() => []),
     all(c, "SELECT employee_id,sgk_covered,sgk_days,note FROM ik_person_monthly_compliance WHERE main_company_id=? AND period=?", [companyId, period]).catch(() => []),
     all(c, "SELECT employee_id,COUNT(DISTINCT work_date) AS card_days FROM ik_time_clock_events WHERE main_company_id=? AND work_date BETWEEN ? AND ? GROUP BY employee_id", [companyId, periodStart, periodEnd]).catch(() => []),
+    all(c, "SELECT file_name,data FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_PERSON_CARD_CALC_SCOPE, `${companyId}:%`]).catch(() => []),
   ]);
+  const calcPrefix = `${companyId}:`;
+  const calcByEmployee = new Map(calcRows.map((row) => [text(row.file_name).startsWith(calcPrefix) ? text(row.file_name).slice(calcPrefix.length) : "", parsePersonCardCalc(row)]).filter(([employeeId]) => Boolean(employeeId)));
+  const rawEmployeesWithCalc = employees.map((employee) => ({ ...employee, deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300 }));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const profileByEmployee = new Map(profiles.map((row) => [text(row.employee_id), row]));
   const complianceByEmployee = new Map(compliance.map((row) => [text(row.employee_id), row]));
   const cardDaysByEmployee = new Map(cardDayRows.map((row) => [text(row.employee_id), number(row.card_days)]));
-  const mergedEmployees = employees
+  const mergedEmployees = rawEmployeesWithCalc
     .filter((employee) => advancedEmployeeVisible(employee, cardsByEmployee.get(text(employee.id)) || {}, period))
     .map((employee) => {
       const card = cardsByEmployee.get(text(employee.id)) || {};
@@ -1288,7 +1318,7 @@ async function advancedMonth(c: Context<AppEnv>) {
     year,
     month,
     employees: mergedEmployees,
-    rawEmployees: employees,
+    rawEmployees: rawEmployeesWithCalc,
     adjustments: adjustments.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
     leaves: leaves.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
     payroll: payroll.filter((row) => visibleEmployeeIds.has(text(row.employeeId))),
@@ -1358,6 +1388,7 @@ async function savePersonCard(c: Context<AppEnv>) {
   const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [employeeId, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const currentCard = await first(c, "SELECT * FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const currentCalc = await personCardCalc(c, companyId, employeeId);
   const cardNo = text(body.cardNo);
   if (cardNo) {
     const duplicate = await first(c, "SELECT employee_id FROM ik_person_card_settings WHERE main_company_id=? AND card_no=? AND employee_id<>?", [companyId, cardNo, employeeId]);
@@ -1376,7 +1407,7 @@ async function savePersonCard(c: Context<AppEnv>) {
   const legalSource = upper(body.garnishmentSource) === "ELDEN" ? "ELDEN" : "BANKA";
   const personnelStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(body.personnelStatus)) ? "RETIRED" : "NORMAL";
   const overtimeHourlyBase = number(body.overtimeHourlyBase ?? body.overtimeBaseHours ?? current.overtime_hourly_base) || 225;
-  const deductionHourlyBase = number(body.deductionHourlyBase ?? currentCard?.deduction_hourly_base) || 300;
+  const deductionHourlyBase = number(body.deductionHourlyBase ?? currentCalc.deductionHourlyBase) || 300;
   if (overtimeHourlyBase <= 0) return error(c, 400, "OVERTIME_DIVISOR_INVALID", "Mesai saat böleni sıfırdan büyük olmalıdır.");
   if (deductionHourlyBase <= 0) return error(c, 400, "DEDUCTION_DIVISOR_INVALID", "Kesinti saat böleni sıfırdan büyük olmalıdır.");
   const period = /^\d{4}-\d{2}$/.test(text(body.period))
@@ -1401,8 +1432,8 @@ async function savePersonCard(c: Context<AppEnv>) {
        employee_id,main_company_id,card_no,identity_no,payroll_included,card_source,personel_kodu,exit_date,
        active_passive,work_type,sgk_follow,payment_type,note,phone,extra_payment_label,extra_payment_amount,
        base_employee_id,legal_deduction_type,garnishment_active,garnishment_amount,garnishment_source,
-       deduction_hourly_base,legal_start_period,legal_end_period,garnishment_note,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       legal_start_period,legal_end_period,garnishment_note,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(employee_id) DO UPDATE SET
        main_company_id=excluded.main_company_id,
        card_no=excluded.card_no,
@@ -1424,7 +1455,6 @@ async function savePersonCard(c: Context<AppEnv>) {
        garnishment_active=excluded.garnishment_active,
        garnishment_amount=excluded.garnishment_amount,
        garnishment_source=excluded.garnishment_source,
-       deduction_hourly_base=excluded.deduction_hourly_base,
        legal_start_period=excluded.legal_start_period,
        legal_end_period=excluded.legal_end_period,
        garnishment_note=excluded.garnishment_note,
@@ -1436,8 +1466,9 @@ async function savePersonCard(c: Context<AppEnv>) {
     body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1, text(body.paymentType) || "BANKA_ELDEN",
     text(body.note), text(body.phone), "EK", autoExtra, baseEmployeeId, legalType,
     legalType !== "YOK" && legalAmount > 0 ? 1 : 0, legalAmount, legalSource,
-    deductionHourlyBase, text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
+    text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
+  await savePersonCardCalc(c, companyId, employeeId, deductionHourlyBase);
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
       VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET
