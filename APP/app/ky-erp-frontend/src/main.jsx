@@ -26,6 +26,7 @@ async function renderErpApp() {
 
   const [
     { default: AppV3 },
+    { default: PhoneApprovalInboxBridge },
     { ActiveCompanyProvider },
     { AuthProvider },
     { installAuthenticatedAssetBridge },
@@ -33,6 +34,7 @@ async function renderErpApp() {
     { installPersistentModalSizing },
   ] = await Promise.all([
     import("./AppV3.jsx"),
+    import("./components/shell/PhoneApprovalInboxBridge.jsx"),
     import("./context/ActiveCompanyContext"),
     import("./context/AuthContext"),
     import("./utils/installAuthenticatedAssetBridge"),
@@ -51,6 +53,7 @@ async function renderErpApp() {
   function RootApp() {
     return (
       <AuthProvider>
+        <PhoneApprovalInboxBridge />
         <ActiveCompanyProvider>
           <AppV3 />
         </ActiveCompanyProvider>
