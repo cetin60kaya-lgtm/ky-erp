@@ -14,6 +14,14 @@ public partial class KyErpDesktopWindow : Window
     private static readonly Uri AppUri = new("https://app.kyerp.net/");
     private static readonly Uri BundledAppUri = new("https://app.kyerp.net/index.html");
     private const string FileHubTaskName = "KY ERP File Hub Agent";
+    private const string DesktopVersion = "1.9.0";
+#if PDKS_ONLY
+    private const string ProductCode = "PDKS";
+    private const string ProductName = "KY PDKS Pro";
+#else
+    private const string ProductCode = "ERP";
+    private const string ProductName = "KY ERP Desktop";
+#endif
 
     private readonly PdksPaths _pdksPaths = new();
     private readonly ErpApiClient _erp = new();
@@ -24,18 +32,23 @@ public partial class KyErpDesktopWindow : Window
     public KyErpDesktopWindow()
     {
         InitializeComponent();
+        Title = ProductName;
+        StartupTitle.Text = ProductName;
+        StartupSubtitle.Text = ProductCode == "PDKS"
+            ? "Canlı PDKS • Windows Agent • terminal köprüsü • aynı KY ERP verisi"
+            : "Aynı KY ERP arayüzü • aynı canlı veri • Windows entegrasyonu";
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         try
         {
-            StartupText.Text = "KY ERP arayüzü hazırlanıyor...";
+            StartupText.Text = ProductCode == "PDKS" ? "KY PDKS Pro hazırlanıyor..." : "KY ERP arayüzü hazırlanıyor...";
             await InitializeWebViewAsync();
         }
         catch (Exception error)
         {
-            StartupText.Text = $"KY ERP açılamadı: {error.Message}";
+            StartupText.Text = $"{ProductName} açılamadı: {error.Message}";
         }
     }
 
@@ -51,6 +64,7 @@ public partial class KyErpDesktopWindow : Window
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "KY ERP",
             "Desktop",
+            ProductCode,
             "WebView2");
         Directory.CreateDirectory(webData);
 
@@ -65,6 +79,7 @@ public partial class KyErpDesktopWindow : Window
         core.NavigationCompleted += CoreWebView2_NavigationCompleted;
         core.NavigationStarting += CoreWebView2_NavigationStarting;
         core.WebMessageReceived += CoreWebView2_WebMessageReceived;
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(GetDesktopBridgeScript());
 
         var bundledRoot = Path.Combine(AppContext.BaseDirectory, "web");
         var bundledIndex = Path.Combine(bundledRoot, "index.html");
@@ -72,12 +87,12 @@ public partial class KyErpDesktopWindow : Window
         {
             core.SetVirtualHostNameToFolderMapping(AppUri.Host, bundledRoot, CoreWebView2HostResourceAccessKind.Allow);
             _bundledFrontend = true;
-            StartupText.Text = "KY ERP Desktop açılıyor...";
+            StartupText.Text = ProductCode == "PDKS" ? "KY PDKS Pro açılıyor..." : "KY ERP Desktop açılıyor...";
         }
         else
         {
             _bundledFrontend = false;
-            StartupText.Text = "Canlı KY ERP açılıyor...";
+            StartupText.Text = ProductCode == "PDKS" ? "Canlı KY PDKS açılıyor..." : "Canlı KY ERP açılıyor...";
         }
 
         ErpWebView.Source = _bundledFrontend ? BundledAppUri : AppUri;
@@ -98,19 +113,24 @@ public partial class KyErpDesktopWindow : Window
         StartupOverlay.Visibility = Visibility.Collapsed;
     }
 
-    private async Task InstallDesktopBridgeAsync()
+    private string GetDesktopBridgeScript()
     {
-        if (ErpWebView.CoreWebView2 is null) return;
-
-        const string script = """
+        var firstRun = !File.Exists(_pdksPaths.ConfigFile);
+        const string template = """
         (() => {
+          window.__KYERP_DESKTOP_PRODUCT = '__PRODUCT__';
           document.documentElement.dataset.kyerpDesktopHost = '1';
-          document.documentElement.dataset.kyerpDesktopVersion = '1.8.1';
+          document.documentElement.dataset.kyerpDesktopVersion = '__VERSION__';
+          document.documentElement.dataset.kyerpDesktopProduct = '__PRODUCT__';
           const post = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
           window.KYERP_DESKTOP = Object.freeze({
-            version: '1.8.1',
+            version: '__VERSION__',
+            product: '__PRODUCT__',
             isDesktop: true,
+            isPdks: '__PRODUCT__' === 'PDKS',
+            firstRun: __FIRST_RUN__,
             openPdksDevice: () => post({ type: 'pdks.open-device' }),
+            openPdksTerminalSettings: () => post({ type: 'pdks.open-terminal-settings' }),
             configureFileAgent: (secret, mainCompanySlug) => post({
               type: 'file-hub.configure-agent',
               secret: String(secret || ''),
@@ -144,8 +164,16 @@ public partial class KyErpDesktopWindow : Window
           return true;
         })()
         """;
+        return template
+            .Replace("__PRODUCT__", ProductCode, StringComparison.Ordinal)
+            .Replace("__VERSION__", DesktopVersion, StringComparison.Ordinal)
+            .Replace("__FIRST_RUN__", firstRun ? "true" : "false", StringComparison.Ordinal);
+    }
 
-        try { await ErpWebView.CoreWebView2.ExecuteScriptAsync(script); }
+    private async Task InstallDesktopBridgeAsync()
+    {
+        if (ErpWebView.CoreWebView2 is null) return;
+        try { await ErpWebView.CoreWebView2.ExecuteScriptAsync(GetDesktopBridgeScript()); }
         catch { }
     }
 
@@ -159,9 +187,10 @@ public partial class KyErpDesktopWindow : Window
             using var doc = JsonDocument.Parse(raw);
             var root = doc.RootElement;
             var type = root.TryGetProperty("type", out var node) ? node.GetString() : null;
-            if (string.Equals(type, "pdks.open-device", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(type, "pdks.open-device", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(type, "pdks.open-terminal-settings", StringComparison.OrdinalIgnoreCase))
             {
-                await OpenNativePdksAsync();
+                await OpenPdksTerminalSettingsAsync();
                 return;
             }
             if (string.Equals(type, "file-hub.configure-agent", StringComparison.OrdinalIgnoreCase))
@@ -186,7 +215,7 @@ public partial class KyErpDesktopWindow : Window
         if (!e.Uri.StartsWith("kyerp://", StringComparison.OrdinalIgnoreCase)) return;
         e.Cancel = true;
         if (e.Uri.StartsWith("kyerp://pdks-device", StringComparison.OrdinalIgnoreCase))
-            await OpenNativePdksAsync();
+            await OpenPdksTerminalSettingsAsync();
     }
 
     private async Task ConfigureFileHubAgentAsync(string secret, string mainCompanySlug)
@@ -234,28 +263,30 @@ public partial class KyErpDesktopWindow : Window
         catch { return -1; }
     }
 
-    private async Task OpenNativePdksAsync()
+    private async Task OpenPdksTerminalSettingsAsync()
     {
         if (ErpWebView.CoreWebView2 is null) return;
         var token = await ReadTokenAsync();
         if (string.IsNullOrWhiteSpace(token))
         {
-            MessageBox.Show(this, "Önce KY ERP oturumunu açın. Kart cihazı aynı ERP oturumunu kullanır.", "KY ERP Desktop", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "Önce KY ERP hesabınızla giriş yapın. Terminal ayarları aynı yetki bağlamını kullanır.", ProductName, MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+
         try
         {
             var profile = await _erp.GetPdksProfileAsync(token, _lifetime.Token);
             var audit = profile.Audit
                 || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
-            if (_pdksPeople.Count == 0)
-                _pdksPeople = await _erp.GetPdksPeopleAsync(token, _lifetime.Token);
-            new PdksUnifiedWindow(token, _pdksPeople, _pdksPaths, !audit) { Owner = this }.ShowDialog();
+            _pdksPeople = await _erp.GetPdksPeopleAsync(token, _lifetime.Token);
+            var window = new PdksMasterWindow(token, _pdksPeople, _pdksPaths, !audit) { Owner = this };
+            window.ShowDialog();
+            await InstallDesktopBridgeAsync();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "KY ERP PDKS", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, error.Message, "KY PDKS Terminal Ayarları", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -288,7 +319,7 @@ public partial class KyErpDesktopWindow : Window
         }
         if (e.Key == Key.P && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
-            await OpenNativePdksAsync();
+            await OpenPdksTerminalSettingsAsync();
             e.Handled = true;
         }
     }
