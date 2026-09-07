@@ -92,11 +92,15 @@ public sealed class ErpApiClient : IDisposable
         foreach (var row in data.EnumerateArray())
         {
             var sgk = Text(row, "sgkStatus", "sgk_status");
+            var status = Text(row, "status", "personnelStatus", "activePassive", "active_passive");
             var card = PunchParser.NormalizeCard(Text(row, "cardNo", "card_no"));
-            if (!string.Equals(sgk.Trim(), "VAR", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(card)) continue;
+            var passive = status.Contains("PAS", StringComparison.OrdinalIgnoreCase)
+                || status.Contains("CIK", StringComparison.OrdinalIgnoreCase)
+                || status.Contains("AYRIL", StringComparison.OrdinalIgnoreCase);
+            if (passive || string.IsNullOrWhiteSpace(card)) continue;
             list.Add(new CachedPerson(
                 Text(row, "id"), Text(row, "personnelCode", "code"), Text(row, "fullName", "full_name"),
-                Text(row, "department"), Text(row, "title"), "VAR", Text(row, "status"), card,
+                Text(row, "department"), Text(row, "title"), sgk, status, card,
                 Text(row, "startDate", "hire_date"), Text(row, "exitDate", "exit_date")));
         }
         return list;
