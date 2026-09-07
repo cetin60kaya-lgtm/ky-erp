@@ -235,6 +235,58 @@ function MailMessageMedia({ message }) {
   </div>;
 }
 
+function folderType(row) {
+  return String(row?.folder_type || row?.folderType || "").toUpperCase();
+}
+
+function folderProviderId(row) {
+  return String(row?.provider_folder_id || row?.providerFolderId || "").toUpperCase();
+}
+
+function folderDisplayName(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  const map = {
+    INBOX: "Gelen Kutusu",
+    SENT: "Gönderilmiş Postalar",
+    DRAFTS: "Taslaklar",
+    JUNK: "Spam",
+    TRASH: "Çöp Kutusu",
+    STARRED: "Yıldızlı",
+    IMPORTANT: "Önemli",
+    CATEGORY_PERSONAL: "Birincil",
+    CATEGORY_PROMOTIONS: "Tanıtımlar",
+    CATEGORY_SOCIAL: "Sosyal",
+    CATEGORY_UPDATES: "Güncellemeler",
+    CATEGORY_FORUMS: "Forumlar",
+    CHAT: "Sohbetler",
+    UNREAD: "Okunmamış",
+  };
+  return map[provider] || map[type] || row?.name || "Klasör";
+}
+
+function folderIcon(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  if (type === "INBOX") return "📥";
+  if (type === "SENT") return "➤";
+  if (type === "DRAFTS") return "📝";
+  if (type === "JUNK") return "⛔";
+  if (type === "TRASH") return "🗑";
+  if (provider === "STARRED") return "★";
+  if (provider === "IMPORTANT") return "❗";
+  if (provider.startsWith("CATEGORY_")) return "▰";
+  return "▱";
+}
+
+function folderGroup(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT"].includes(provider)) return "system";
+  if (provider.startsWith("CATEGORY_")) return "category";
+  return "label";
+}
+
 function flattenFolders(rows) {
   const list = safeArray(rows);
   const byProvider = new Map(list.map((row) => [String(row.provider_folder_id || row.providerFolderId || ""), row]));
@@ -326,6 +378,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [renderedHtml, setRenderedHtml] = useState("");
   const [renderedHtmlMessageId, setRenderedHtmlMessageId] = useState("");
   const mailLayoutRef = useRef(null);
+  const backgroundSyncRef = useRef(false);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
@@ -339,6 +392,11 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     [providers, requestForm.providerType],
   );
   const folderRows = useMemo(() => flattenFolders(folders), [folders]);
+  const folderGroups = useMemo(() => ({
+    system: folderRows.filter((row) => folderGroup(row) === "system"),
+    category: folderRows.filter((row) => folderGroup(row) === "category"),
+    label: folderRows.filter((row) => folderGroup(row) === "label"),
+  }), [folderRows]);
   const selectedFolder = useMemo(
     () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
     [folders, selectedFolderId],
