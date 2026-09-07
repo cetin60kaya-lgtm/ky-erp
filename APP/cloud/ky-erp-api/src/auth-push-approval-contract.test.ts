@@ -33,6 +33,7 @@ test("trusted push device enrollment requires password step-up and stores only a
   assert.match(push, /deviceTokenHash/);
   assert.match(push, /await sha256\(deviceToken\)/);
   assert.doesNotMatch(push, /device_token\s+TEXT/i);
+  assert.doesNotMatch(push, /p256dhKey|authKey/);
   assert.match(push, /PUSH_ENDPOINT_ALREADY_BOUND/);
 });
 
