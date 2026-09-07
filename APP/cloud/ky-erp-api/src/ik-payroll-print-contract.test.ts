@@ -314,3 +314,27 @@ test("kıdem preview keeps the complete payroll settlement breakdown", () => {
   }
   assert.match(block, /Bordro düzeltmesi · kilitli|KIDEM ÇIKTISI/);
 });
+
+
+test("final payroll save auto-reconciles bank cash and supports serial personnel review", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const css = frontend("pages/modules/ik.advanced.css");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
+  assert.match(page, /payment\.bank/);
+  assert.match(page, /payment\.cash/);
+  assert.match(page, /Kaydet \+ Sonraki/);
+  assert.match(page, /Personeller/);
+  assert.match(page, /payroll-person-rail-list/);
+  assert.match(page, /openPayroll\(nextRow\)/);
+  assert.doesNotMatch(page, /disabled=\{busy\|\|Math\.abs\(totals\.diff\)>0\.01\}/);
+
+  assert.match(css, /payroll-final-layout/);
+  assert.match(css, /payroll-person-rail/);
+  assert.match(css, /payroll-control-grid/);
+
+  // Backend still keeps the hard invariant; only the UI reconciles before posting.
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+});
