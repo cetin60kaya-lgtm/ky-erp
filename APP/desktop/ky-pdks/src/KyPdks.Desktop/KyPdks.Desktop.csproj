@@ -8,9 +8,9 @@
     <RootNamespace>KyPdks.Desktop</RootNamespace>
     <ProductMode Condition="'$(ProductMode)' == ''">ERP</ProductMode>
     <AssemblyName Condition="'$(ProductMode)' != 'PDKS'">KY ERP Desktop</AssemblyName>
-    <AssemblyName Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Desktop</AssemblyName>
+    <AssemblyName Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Pro</AssemblyName>
     <Product Condition="'$(ProductMode)' != 'PDKS'">KY ERP Desktop</Product>
-    <Product Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Desktop</Product>
+    <Product Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Pro</Product>
     <Description Condition="'$(ProductMode)' != 'PDKS'">KY ERP Windows çalışma merkezi • tam ERP + File Hub + AI + İK/PDKS cihaz köprüsü</Description>
     <Description Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Pro • canlı devam kontrolü + AI + kart + puantaj + vardiya + izin + terminal + rapor</Description>
     <Company>KY ERP</Company>
