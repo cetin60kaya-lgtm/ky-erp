@@ -115,7 +115,7 @@ public partial class KyErpDesktopWindow : Window
 
     private string GetDesktopBridgeScript()
     {
-        var firstRun = !File.Exists(_pdksPaths.ConfigFile);
+        var firstRun = ProductCode == "PDKS" && !File.Exists(_pdksPaths.SetupCompletedFile);
         const string template = """
         (() => {
           window.__KYERP_DESKTOP_PRODUCT = '__PRODUCT__';
