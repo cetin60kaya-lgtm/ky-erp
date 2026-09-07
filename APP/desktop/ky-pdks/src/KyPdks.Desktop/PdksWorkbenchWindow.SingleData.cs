@@ -26,25 +26,6 @@ public partial class PdksWorkbenchWindow
         });
     }
 
-    private async void SaveAdvanceSingleDataButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (AdvancePersonCombo.SelectedItem is not CachedPerson person) { StatusText.Text = "Avans için personel seçin."; return; }
-        var date = AdvanceDatePicker.SelectedDate ?? DateTime.Today;
-        if (!decimal.TryParse(AdvanceAmountBox.Text.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var amount) || amount <= 0)
-        {
-            StatusText.Text = "Geçerli avans tutarı girin.";
-            return;
-        }
-
-        await BusyAsync("Avans KY ERP D1'e kaydediliyor...", async () =>
-        {
-            if (!CanWrite) throw new InvalidOperationException("Avans kaydı için yazma yetkisi gerekir.");
-            await _erp.SaveAdvanceAsync(_token, person, date.ToString("yyyy-MM-dd"), amount, AdvanceNoteBox.Text, _lifetime.Token);
-            AdvanceAmountBox.Clear();
-            StatusText.Text = $"{person.FullName} · {amount:N2} TL avans D1'e işlendi. İK Bordro ile aynıdır.";
-        });
-    }
-
     private async void ClosePeriodSingleDataButton_Click(object sender, RoutedEventArgs e)
     {
         await BusyAsync("D1 ay sonu kontrolleri çalışıyor...", async () =>
@@ -63,24 +44,6 @@ public partial class PdksWorkbenchWindow
             PeriodStateText.Text = "KAPALI · D1";
             PeriodStateText.Foreground = System.Windows.Media.Brushes.Firebrick;
             StatusText.Text = $"{month:D2}/{year} D1 üzerinde kilitlendi · kontrol {result.OkCount}/{result.TotalChecks} · yedek {Path.GetFileName(backup)}";
-        });
-    }
-
-    private async void ExportPayrollSingleDataButton_Click(object sender, RoutedEventArgs e)
-    {
-        await BusyAsync("Bordro KY ERP D1'den alınıyor...", async () =>
-        {
-            if (!CanWrite) throw new InvalidOperationException("Bordro finans çıktısı denetim hesabında kapalıdır.");
-            var (year, month) = SelectedPeriod();
-            var rows = await _erp.GetPayrollAsync(_token, year, month, _lifetime.Token);
-            var reportDir = Path.Combine(_paths.Root, "Reports", year.ToString(CultureInfo.InvariantCulture));
-            Directory.CreateDirectory(reportDir);
-            var path = Path.Combine(reportDir, $"KY-PDKS-BORDRO-D1-{year:D4}-{month:D2}.csv");
-            var lines = new List<string> { Csv("Personel Kodu", "Personel", "Maaş", "Mesai", "Avans", "Kesinti", "Banka", "Elden", "Net") };
-            lines.AddRange(rows.Select(row => Csv(row.PersonnelCode, row.FullName, row.Salary, row.Overtime, row.Advance, row.Deduction, row.Bank, row.Cash, row.Net)));
-            await File.WriteAllLinesAsync(path, lines, new UTF8Encoding(true), _lifetime.Token);
-            StatusText.Text = $"Bordro D1'den hazırlandı · {rows.Count} personel · {path}";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         });
     }
 
