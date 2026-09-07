@@ -143,3 +143,13 @@ test("Gmail mailbox refreshes silently without page reload and keeps folder UX G
   assert.match(css, /comm-folder-group/);
   assert.match(css, /comm-folder-subheading/);
 });
+
+
+test("trash and spam are visually excluded from unread badges and unsafe delete controls", () => {
+  assert.match(page, /selectedFolderIsTrash/);
+  assert.match(page, /selectedFolderIsJunk/);
+  assert.match(page, /selectedFolderCountsUnread/);
+  assert.match(page, /!selectedFolderIsTrash && !selectedFolderIsJunk/);
+  assert.match(page, /\["TRASH","JUNK"\]\.includes\(folderType\(folder\)\)/);
+  assert.match(page, /!selectedFolderIsTrash \? <button[^>]+messageAction\("DELETE"\)/);
+});
