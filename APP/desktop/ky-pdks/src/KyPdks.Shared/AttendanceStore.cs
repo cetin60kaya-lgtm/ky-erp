@@ -198,7 +198,7 @@ public sealed class AttendanceStore(PdksPaths paths)
     {
         var people = new List<CachedPerson>();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT employee_id,personnel_code,full_name,department,title,sgk_status,status,card_no,start_date,exit_date FROM people_cache WHERE UPPER(sgk_status)='VAR' AND TRIM(card_no)<>'' ORDER BY full_name COLLATE NOCASE";
+        command.CommandText = "SELECT employee_id,personnel_code,full_name,department,title,sgk_status,status,card_no,start_date,exit_date FROM people_cache WHERE TRIM(card_no)<>'' AND UPPER(COALESCE(status,'AKTIF')) NOT LIKE '%PAS%' AND UPPER(COALESCE(status,'AKTIF')) NOT LIKE '%CIK%' AND UPPER(COALESCE(status,'AKTIF')) NOT LIKE '%AYRIL%' ORDER BY full_name COLLATE NOCASE";
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             people.Add(new CachedPerson(reader.GetString(0), Text(reader, 1), reader.GetString(2), Text(reader, 3), Text(reader, 4), reader.GetString(5), Text(reader, 6), reader.GetString(7), Text(reader, 8), Text(reader, 9)));
