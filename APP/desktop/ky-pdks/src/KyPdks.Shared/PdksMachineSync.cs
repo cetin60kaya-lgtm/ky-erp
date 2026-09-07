@@ -66,7 +66,7 @@ public sealed class PdksMachineApiClient : IDisposable
     {
         _http = new HttpClient { BaseAddress = new Uri(baseAddress.TrimEnd('/')), Timeout = TimeSpan.FromSeconds(30) };
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Agent/1.3.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Agent/1.9.0");
     }
 
     public async Task<PdksMachineCredential> EnrollAsync(string userToken, PdksPaths paths, CancellationToken ct = default)
