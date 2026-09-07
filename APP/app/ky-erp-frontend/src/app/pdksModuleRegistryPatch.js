@@ -10,7 +10,7 @@ const PDKS_MODULE = {
     ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve çalışma bağlantısı"],
     ["gruplar-vardiyalar", "Tanımlar", "ayarlar", "Vardiya ve çalışma kuralları"],
     ["saat-terminal", "Terminal & Sistem", "ayarlar", "Cihaz, saat ve senkron yönetimi"],
-    ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],
+    ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],\n    ["ai-kontrol", "AI & Kontrol", "dashboard", "Canlı analiz, anomali ve kontrollü işlemler"],
   ],
   groups: [
     {
@@ -90,6 +90,6 @@ MODULE_ROUTE_ALIASES.pdks = {
   "saat": "saat-terminal",
   "cihazlar": "cihaz-baglantilari",
   "sync": "senkron",
-  "denetim": "denetim-yillik-temp",
+  "ai": "ai-kontrol",\n  "asistan": "ai-kontrol",\n  "kontrol-merkezi": "ai-kontrol",\n  "denetim": "denetim-yillik-temp",
   "temp": "denetim-yillik-temp",
 };
