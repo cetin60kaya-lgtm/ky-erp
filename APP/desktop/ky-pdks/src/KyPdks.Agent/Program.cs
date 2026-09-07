@@ -58,6 +58,8 @@ sealed class HeartbeatWorker(LocalPdksStore store, ConfigStore configStore, Text
 
 sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore configStore, TextFileLog fileLog, ILogger<FileImportWorker> logger) : BackgroundService
 {
+    private string _lastHedefSignature = "";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await store.InitializeAsync(stoppingToken);
@@ -88,6 +90,10 @@ sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore
             await store.TouchStateAsync("terminal_state", $"Hedef/TR500 bekleniyor · {file}", ct);
             return;
         }
+
+        var info = new FileInfo(file);
+        var signature = $"{Path.GetFullPath(file)}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
+        if (string.Equals(_lastHedefSignature, signature, StringComparison.Ordinal)) return;
 
         string[] lines;
         try
@@ -124,8 +130,10 @@ sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore
             if (await store.AddAsync(punch, ct)) accepted++; else duplicate++;
         }
 
+        _lastHedefSignature = signature;
         var message = $"Hedef/TR500 · {Path.GetFileName(file)} · yeni={accepted}, tekrar={duplicate}, tanınmayan={rejected}";
         await store.TouchStateAsync("terminal_state", $"Hedef/TR500 bağlı · {file}", ct);
+        await store.TouchStateAsync("terminal_file_signature", signature, ct);
         await store.TouchStateAsync("last_import", message, ct);
         if (accepted > 0)
         {
