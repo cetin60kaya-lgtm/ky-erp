@@ -153,3 +153,21 @@ test("trash and spam are visually excluded from unread badges and unsafe delete 
   assert.match(page, /\["TRASH","JUNK"\]\.includes\(folderType\(folder\)\)/);
   assert.match(page, /!selectedFolderIsTrash \? <button[^>]+messageAction\("DELETE"\)/);
 });
+
+
+test("unread UX is inbox-scoped, immediate and visually explicit", () => {
+  assert.match(page, /selectedInboxUnreadCount/);
+  assert.match(page, /activeUnreadFolderId/);
+  assert.match(page, /adjustInboxUnreadCount/);
+  assert.match(page, /selectedFolderCountsUnread = \(!selectedFolderId && activeTab === "mail-gelen"\)/);
+  assert.match(page, /provider === "UNREAD"\) return "●"/);
+  assert.match(page, /comm-unread-metric/);
+  assert.match(page, /aria-label=\{\`\$\{Number\(row\.is_read/);
+  assert.match(css, /comm-message-list>button\.unread::before/);
+  assert.match(css, /comm-unread-metric>span>i/);
+  assert.match(css, /comm-folder-group>button em:not\(:empty\)/);
+});
+
+test("mailbox refresh no longer auto-opens the first message", () => {
+  assert.match(page, /setSelectedMessage\(\(current\) => list\.find\(\(row\) => row\.id === current\?\.id\) \|\| null\)/);
+});
