@@ -28,6 +28,7 @@ public partial class KyErpDesktopWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private IReadOnlyList<CachedPerson> _pdksPeople = Array.Empty<CachedPerson>();
     private bool _bundledFrontend;
+    private bool _pdksEnrollmentWatchStarted;
 
     public KyErpDesktopWindow()
     {
@@ -111,6 +112,11 @@ public partial class KyErpDesktopWindow : Window
 
         await InstallDesktopBridgeAsync();
         StartupOverlay.Visibility = Visibility.Collapsed;
+        if (ProductCode == "PDKS" && !_pdksEnrollmentWatchStarted)
+        {
+            _pdksEnrollmentWatchStarted = true;
+            _ = WatchPdksAgentEnrollmentAsync();
+        }
     }
 
     private string GetDesktopBridgeScript()
@@ -284,6 +290,7 @@ public partial class KyErpDesktopWindow : Window
             var audit = profile.Audit
                 || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
+            if (!audit) await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token);
             var window = new PdksTerminalSetupWindow(_pdksPaths, !audit) { Owner = this };
             window.ShowDialog();
             await InstallDesktopBridgeAsync();
@@ -298,10 +305,73 @@ public partial class KyErpDesktopWindow : Window
     {
         try
         {
-            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync("localStorage.getItem('kyerp_auth_token') || ''");
+            if (ErpWebView.CoreWebView2 is null) return "";
+            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync(
+                "sessionStorage.getItem('kyerp_auth_token') || localStorage.getItem('kyerp_auth_token') || ''");
             return JsonSerializer.Deserialize<string>(result) ?? "";
         }
         catch { return ""; }
+    }
+
+    private async Task WatchPdksAgentEnrollmentAsync()
+    {
+        if (ProductCode != "PDKS") return;
+        while (!_lifetime.IsCancellationRequested)
+        {
+            try
+            {
+                var token = await ReadTokenAsync();
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    var profile = await _erp.GetPdksProfileAsync(token, _lifetime.Token);
+                    var audit = profile.Audit
+                        || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
+                    if (audit) return;
+                    if (await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token)) return;
+                }
+            }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+            catch { /* ağ geçici olabilir; aktif oturum için tekrar dene */ }
+
+            try { await Task.Delay(TimeSpan.FromSeconds(5), _lifetime.Token); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private async Task<bool> EnsurePdksAgentEnrollmentAsync(string token, CancellationToken ct)
+    {
+        if (ProductCode != "PDKS" || string.IsNullOrWhiteSpace(token)) return false;
+
+        var credentials = new MachineCredentialStore(_pdksPaths);
+        using var api = new PdksMachineApiClient();
+        var store = new LocalPdksStore(_pdksPaths);
+        var current = credentials.Load();
+
+        if (current is not null
+            && string.Equals(current.DeviceLabel, _pdksPaths.DeviceLabel, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(current.DeviceId)
+            && !string.IsNullOrWhiteSpace(current.Secret))
+        {
+            try
+            {
+                await api.HeartbeatAsync(current, ct);
+                await store.TouchStateAsync("d1_sync", "D1 cihaz yetkisi hazır · Agent otomatik sync aktif", ct);
+                return true;
+            }
+            catch
+            {
+                credentials.Clear();
+            }
+        }
+
+        var enrolled = await api.EnrollAsync(token, _pdksPaths, ct);
+        if (string.IsNullOrWhiteSpace(enrolled.DeviceId) || string.IsNullOrWhiteSpace(enrolled.Secret))
+            throw new InvalidOperationException("PDKS cihaz yetkilendirmesi eksik döndü.");
+
+        credentials.Save(enrolled);
+        await store.TouchStateAsync("d1_sync", "D1 cihaz yetkisi oluşturuldu · Agent otomatik sync aktif", ct);
+        return true;
     }
 
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
