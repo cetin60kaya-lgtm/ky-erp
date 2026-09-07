@@ -214,7 +214,7 @@ public partial class PdksMasterWindow : Window
         DeviceNameBox.Text = "Cihaz1";
         DeviceNoBox.Text = "1";
         MachineNoBox.Text = "1";
-        SelectTag(DirectionCombo, "GIRIS");
+        SelectTag(DirectionCombo, "AUTO");
         SelectTag(SourceModeCombo, "HEDEF_TR500");
         HedefReadBox.Text = @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt";
         HedefWriteBox.Text = @"C:\Hedef500\Terminal Bilgi Aktar\TR500.txt";
