@@ -9,7 +9,6 @@ import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
 import PdksReportCenter from "../pdks/PdksReportCenter";
 import PdksTransferCenter from "../pdks/PdksTransferCenter";
 import PdksRulesCenter from "../pdks/PdksRulesCenter";
-import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
 
 const NAV_GROUPS = [
@@ -158,7 +157,7 @@ export default function PdksPage(props) {
         ) : reportCenterTab ? (
           <PdksReportCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : (
-          <PdksPageV2 {...props} />
+          <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
         )}
       </main>
     </div>
