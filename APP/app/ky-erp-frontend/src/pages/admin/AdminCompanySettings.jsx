@@ -235,7 +235,7 @@ export default function AdminCompanySettings({ activeMainCompany }) {
 
     {selected?<section className="admpro-card">
       <div className="admpro-card-head">
-        <div><h3>Telefon Giriş Onayları · {selected.name}</h3><p>Firma kullanıcılarının giriş isteği önce firma sahibine gider. İsterseniz aynı onay Uygulama Sahibinin telefonuna da gönderilir.</p></div>
+        <div><h3>Telefon Giriş Onayları · {selected.name}</h3><p>Firma kullanıcılarının giriş isteği önce firma sahibine gider. İsterseniz aynı onay Süper Yöneticinin telefonuna da gönderilir.</p></div>
         <span className="admpro-badge ok">Push + Tenant Kilitli</span>
       </div>
       <div className="admpro-form-grid">
@@ -245,13 +245,13 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         </label>
         <label className="admpro-check wide">
           <input type="checkbox" checked={Boolean(approvalSettings?.notifyApplicationOwner)} disabled={approvalBusy} onChange={(e)=>saveApprovalSetting("notifyApplicationOwner",e.target.checked)}/>
-          Uygulama Sahibine de onay bildirimi gönder
+          Süper Yöneticiye de onay bildirimi gönder
         </label>
       </div>
       <div className="admpro-notice success" style={{marginTop:12}}>
-        İki bildirim de açıksa firma sahibi veya Uygulama Sahibi güvenli telefonundan Onayla / Reddet diyebilir; ilk geçerli karar uygulanır. 6 haneli Authenticator kodları yedek yöntem olarak korunur.
+        İki bildirim de açıksa firma sahibi veya Süper Yönetici güvenli telefonundan Onayla / Reddet diyebilir; ilk geçerli karar uygulanır. 6 haneli Authenticator kodları yedek yöntem olarak korunur.
       </div>
-      {!owners.length?<div className="admpro-notice warn" style={{marginTop:10}}>Bu firmada Firma Sahibi / İşveren atanmadığı için firma sahibi push onayı gönderilemez. Uygulama Sahibi bildirimi açıksa onay size gelir.</div>:null}
+      {!owners.length?<div className="admpro-notice warn" style={{marginTop:10}}>Bu firmada Firma Sahibi / İşveren atanmadığı için firma sahibi push onayı gönderilemez. Süper Yönetici bildirimi açıksa onay size gelir.</div>:null}
     </section>:null}
 
     {selected?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Yedek & Geri Dönüş · {selected.name}</h3><p>Bu firmanın tenant verileri, R2 dosyaları ve SQL arşivi tek işlemde korunur.</p></div><div className="admpro-actions"><button className="primary" type="button" onClick={backupSelected} disabled={backupBusy}>{backupBusy?"İşleniyor...":"Tam Yedek Al"}</button></div></div><div className="admpro-notice success">Yedek firma bazlıdır. Geri dönüş başlamadan önce ayrıca PRE_RESTORE güvenlik yedeği alınır; auth/session/MFA kayıtları firma geri dönüşüyle geriye sarılmaz.</div><div className="admpro-table" style={{marginTop:12}}><table><thead><tr><th>Tarih</th><th>Veri</th><th>Dosya</th><th>SQL</th><th>İşlem</th></tr></thead><tbody>{companyBackups.slice(0,5).map((row)=><tr key={row.id}><td>{dateText(row.createdAt||row.completedAt)}</td><td>{Number(row.totalRows||0).toLocaleString("tr-TR")} satır</td><td>{Number(row.totalFiles||0).toLocaleString("tr-TR")}</td><td><button type="button" onClick={()=>downloadSql(row)} disabled={backupBusy}>{row.sqlKey?"SQL İndir":"SQL Hazırla & İndir"}</button></td><td><button type="button" className="danger" onClick={()=>setRestore({backup:row,password:"",confirmText:""})}>Bu Yedeğe Dön</button></td></tr>)}{!companyBackups.length?<tr><td colSpan="5">Bu firma için henüz yedek yok.</td></tr>:null}</tbody></table></div></section>:null}
