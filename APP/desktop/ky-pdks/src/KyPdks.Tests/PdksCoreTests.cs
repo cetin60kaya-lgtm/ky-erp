@@ -45,6 +45,30 @@ public class PdksCoreTests
     }
 
 
+
+    [Fact]
+    public void Pre_1_9_Hedef_Config_Uses_Auto_Until_Setup_Is_Confirmed()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ky-pdks-config-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var paths = new PdksPaths(root);
+            var store = new ConfigStore(paths);
+            store.Save(new PdksConfig { SourceMode = "HEDEF_TR500", Direction = "GIRIS" });
+
+            Assert.Equal("AUTO", store.Load().Direction);
+
+            File.WriteAllText(paths.SetupCompletedFile, DateTimeOffset.Now.ToString("O"));
+            store.Save(new PdksConfig { SourceMode = "HEDEF_TR500", Direction = "GIRIS" });
+
+            Assert.Equal("GIRIS", store.Load().Direction);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData("GIRIS", "AUTO", "IN")]
     [InlineData("GİRİŞ", "AUTO", "IN")]
