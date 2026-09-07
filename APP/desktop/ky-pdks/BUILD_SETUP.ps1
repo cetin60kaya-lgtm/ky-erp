@@ -54,6 +54,13 @@ if ($ProjectText -notmatch 'Page Remove="KyErpShellWindow.xaml"') { throw 'PDKS-
 if ($ProjectText -notmatch 'BaseIntermediateOutputPath') { throw 'ERP/PDKS ayrı MSBuild ara klasörleri tanımlı değil.' }
 if ($ProjectText -notmatch 'BaseOutputPath') { throw 'ERP/PDKS ayrı MSBuild çıktı klasörleri tanımlı değil.' }
 
+$ErpInstallerText = Get-Content (Join-Path $Root 'installer\KY-ERP.iss') -Raw
+$PdksInstallerText = Get-Content (Join-Path $Root 'installer\KY-PDKS.iss') -Raw
+if ($ErpInstallerText -match 'KYERP\.PDKS\.Agent') { throw 'KY ERP Desktop installer PDKS Agent servisini sahiplenmemeli.' }
+if ($ErpInstallerText -match '\\agent\\\*') { throw 'KY ERP Desktop installer PDKS Agent binary paketlememeli.' }
+if ($PdksInstallerText -notmatch 'KYERP\.PDKS\.Agent') { throw 'KY PDKS Pro installer PDKS Agent servisini içermiyor.' }
+if ($PdksInstallerText -notmatch '\\agent\\\*') { throw 'KY PDKS Pro installer PDKS Agent binary paketlemiyor.' }
+
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
 
@@ -102,6 +109,11 @@ Copy-Item $Node.Source (Join-Path $RuntimeOut 'node.exe') -Force
 foreach ($required in @('file-hub-agent.mjs','accounting-archive-worker.mjs','start-file-hub-agent.cmd','start-file-hub-agent-hidden.vbs','install-file-hub-agent.ps1')) {
     if (-not (Test-Path (Join-Path $FileAgentOut $required))) { throw "KY File Agent paketi eksik: $required" }
 }
+if (-not (Test-Path (Join-Path $RuntimeOut 'node.exe'))) { throw 'KY File Agent gömülü node.exe eksik.' }
+$FileAgentStartText = Get-Content (Join-Path $FileAgentOut 'start-file-hub-agent.cmd') -Raw
+if ($FileAgentStartText -notmatch 'runtime\\node\.exe') { throw 'KY File Agent launcher gömülü Node runtime kullanmıyor.' }
+$FileAgentInstallText = Get-Content (Join-Path $FileAgentOut 'install-file-hub-agent.ps1') -Raw
+if ($FileAgentInstallText -notmatch 'runtime\\node\.exe') { throw 'KY File Agent installer gömülü Node runtime kullanmıyor.' }
 
 $ErpExe = Join-Path $ErpDesktopOut 'KY ERP Desktop.exe'
 $PdksExe = Join-Path $PdksDesktopOut 'KY PDKS Pro.exe'
@@ -156,6 +168,7 @@ $BuildInfo = [ordered]@{
             exe = 'KY ERP Desktop.exe'
             version = [string]$ErpVersion
             includesFileHubAgent = $true
+            includesPdksAgent = $false
             includesWebView = $true
         },
         [ordered]@{
@@ -166,6 +179,7 @@ $BuildInfo = [ordered]@{
             exe = 'KY PDKS Pro.exe'
             version = [string]$PdksVersion
             includesFileHubAgent = $false
+            includesPdksAgent = $true
             includesWebView = $true
             includesCanonicalFrontend = $true
             standaloneProduct = 'PDKS'
