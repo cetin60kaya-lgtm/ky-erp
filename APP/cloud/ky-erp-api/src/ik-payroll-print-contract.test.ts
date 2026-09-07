@@ -81,7 +81,8 @@ test("IK refresh uses canonical personnel and latest-wins request guard", () => 
   assert.match(page, /canonicalEmployeeIds/);
   assert.match(page, /currentIds\.has\(item\.employeeId\)/);
 
-  assert.match(cloud, /rawEmployees: employees/);
+  assert.match(cloud, /rawEmployees: rawEmployeesWithCalc/);
+  assert.match(cloud, /IK_PERSON_CARD_CALC_SCOPE/);
   assert.match(cloud, /visibleEmployeeIds/);
   assert.match(cloud, /payroll: payroll\.filter/);
 });
