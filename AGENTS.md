@@ -129,8 +129,12 @@ KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kul
 ## Auth standardı
 
 - Auth contract: `canonical-v3`.
-- Akış: `POST /api/auth/login` -> gerekirse `POST /api/auth/mfa/verify` -> session -> `GET /api/auth/me`.
-- Owner/admin MFA zorunluluğunu kaldırma.
+- Birincil ikinci faktör, kullanıcı güvenilir telefon kaydettiyse **KY ERP Telefonla Onay** push akışıdır: parola -> telefondan Onayla/Reddet -> gerekirse firma giriş onayı -> session.
+- Google/Microsoft Authenticator kaldırılmaz; kullanıcı `6 haneli kod ile devam et` diyerek güvenli fallback kullanabilir.
+- Güvenilir telefon kaydı yalnız açık session ile yapılamaz; mevcut parola step-up zorunludur. Cihaz capability tokenı D1'de plaintext tutulmaz.
+- iPhone/iPad Web Push için KY ERP Ana Ekrana eklenmiş web app olarak açılmalıdır. iOS bildirim action butonlarını göstermese veya `notificationclick` olayı güvenilmez olsa bile uygulama foreground olduğunda pending onay güvenli KY ERP ekranında açılır.
+- Firma kullanıcısının `approvalRequired` kararı varsa onay varsayılan olarak kendi `COMPANY_ADMIN` / Firma Sahibi telefonuna gider. Süper Yöneticiye aynalama firma bazında ayrıca açılabilir.
+- Owner/admin MFA zorunluluğunu kaldırma. `BOTH_MFA` politikası telefon onayı ile sessizce tek faktöre düşürülmez.
 - PASSWORD_ONLY session: 28800 saniye.
 - MFA/owner/admin session: 36000 saniye.
 - Geçici network/5xx hatası geçerli sessionı silmemelidir.

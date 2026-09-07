@@ -120,9 +120,11 @@ Bu incident, Cloudflare Workers Builds otomatik tetik zincirinin çalıştığı
 
 # 6. AUTH / GİRİŞ SON DURUMU
 
-Final kullanıcı akışı:
+07.09.2026 itibarıyla final kullanıcı akışı:
 
-`Turnstile -> kullanıcı adı/şifre -> MFA -> session -> ERP`
+`Turnstile -> kullanıcı adı/şifre -> kayıtlı telefon varsa KY ERP Telefonla Onay -> gerekirse firma sahibi onayı -> session -> ERP`
+
+Telefon kaydı yoksa veya kullanıcı açıkça isterse Google/Microsoft Authenticator 6 haneli kodu fallback olarak devam eder. iPhone/iPad için Web Push yalnız Ana Ekrana eklenmiş KY ERP web app içinde etkinleştirilir; iOS action butonu göstermese bile bildirim uygulamayı açtığında foreground onay ekranı pending isteği cihaz capability anahtarıyla çeker. Telefon push verileri yeni D1 tablosu açmadan mevcut tenant-kapsamlı `json_store` içinde tutulur; bu özellik için production migration gerekmez.
 
 Uygulama sahibi için:
 

@@ -103,3 +103,38 @@
     height: 34px;
   }
 }
+
+.approved-phone-approval-button {
+  order: -19;
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--approved-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #31516f;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.approved-phone-approval-button:hover {
+  border-color: #b9c8d8;
+  background: var(--approved-primary-soft);
+  color: var(--approved-primary);
+}
+
+.approved-phone-approval-button:focus-visible {
+  outline: 2px solid rgba(13, 108, 168, 0.28);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .approved-phone-approval-button {
+    flex-basis: 34px;
+    width: 34px;
+    height: 34px;
+  }
+}

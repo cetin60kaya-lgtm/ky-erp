@@ -1293,3 +1293,18 @@
     text-align: right;
   }
 }
+
+.auth-phone-approval-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 4px;
+  border-radius: 18px;
+  background: linear-gradient(145deg,#e6f6ec,#d8f0e2);
+  border: 1px solid #bfe2cc;
+  color: #187640;
+  font-size: 28px;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(24,118,64,.12);
+}
