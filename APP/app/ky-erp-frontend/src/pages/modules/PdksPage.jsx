@@ -118,7 +118,7 @@ export default function PdksPage(props) {
   const deviceCenterTab = !isAuditAccount && ["saat-terminal", "cihaz-baglantilari", "senkron"].includes(activeTab);
   const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
   const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
-  const reportCenterTab = ["puantaj-sonuclari", "raporlar"].includes(activeTab);
+  const reportCenterTab = ["puantaj-sonuclari", "raporlar", "denetim-yillik-temp"].includes(activeTab);
   const definitionsCenterTab = ["gruplar-vardiyalar", "donemler", "servisler", "tatiller"].includes(activeTab);
 
   return (
@@ -156,7 +156,7 @@ export default function PdksPage(props) {
         ) : definitionsCenterTab ? (
           <PdksDefinitionsCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : reportCenterTab ? (
-          <PdksReportCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+          <PdksReportCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : (
           <PdksPageV2 {...props} />
         )}
