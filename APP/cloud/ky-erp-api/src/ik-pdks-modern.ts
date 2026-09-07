@@ -462,6 +462,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
       left: 0,
       late: 0,
       missingPunch: 0,
+      missingEntry: 0,
+      missingExit: 0,
       offDay: 0,
       deviceCount: 0,
       onlineDevices: 0,
@@ -486,6 +488,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
       const firstTime = text(first?.eventTime).slice(0, 5);
       const lastTime = text(last?.eventTime).slice(0, 5);
       const firstMin = minutesOf(firstTime);
+      const firstDirection = upper(first?.direction);
       const lastDirection = upper(last?.direction);
       const isInside = Boolean(last) && (lastDirection === "IN" || (lastDirection === "AUTO" && rows.length % 2 === 1));
       const isLate = firstMin !== null && expectedIn !== null && firstMin > expectedIn + schedule.lateTolerance;
@@ -542,10 +545,23 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
             statusLabel = isLate ? "Çıktı · Geç Gelmişti" : "Çıktı";
           }
 
+          // Canlı istisna hesabı fail-safe çalışır:
+          // - geceye sarkan bugünkü vardiya ertesi gün tamamlanmadan "çıkış eksik" sayılmaz;
+          // - açık OUT ile başlayan normal vardiya "giriş eksik" kabul edilir;
+          // - vardiya bitmişken son durum hâlâ içerideyse (IN veya AUTO tek sayım) "çıkış eksik" olur.
           const shiftFinished = date < todayKey
-            || (date === todayKey && expectedOut !== null && nowMinutes > expectedOut + schedule.earlyTolerance);
-          if (rows.length === 1 && shiftFinished) {
+            || (date === todayKey && !schedule.crossMidnight && expectedOut !== null && nowMinutes > expectedOut + schedule.earlyTolerance);
+          let missingKind = "";
+          if (!schedule.crossMidnight && firstDirection === "OUT") {
             metrics.missingPunch += 1;
+            metrics.missingEntry += 1;
+            missingKind = "ENTRY";
+            status = "MISSING_IN";
+            statusLabel = "Giriş Basımı Eksik";
+          } else if (isInside && shiftFinished) {
+            metrics.missingPunch += 1;
+            metrics.missingExit += 1;
+            missingKind = "EXIT";
             status = "MISSING_OUT";
             statusLabel = "Çıkış Basımı Eksik";
           }
@@ -563,6 +579,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
             eventCount: rows.length,
             status,
             statusLabel,
+            missingKind,
           });
         }
       }
@@ -576,6 +593,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
         cardNo: text(person.card_no),
         status,
         statusLabel,
+        missingKind: status === "MISSING_IN" ? "ENTRY" : status === "MISSING_OUT" ? "EXIT" : "",
         leaveType,
         firstTime,
         lastTime,
@@ -605,8 +623,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
     ).length;
 
     const statusRank: Record<string, number> = {
-      NO_SHOW: 1, MISSING_OUT: 2, INSIDE_LATE: 3, LEFT_LATE: 4, WAITING: 5,
-      ANNUAL_LEAVE: 6, SICK_LEAVE: 7, LEAVE: 8, INSIDE: 9, LEFT: 10, OFF_DAY: 11,
+      NO_SHOW: 1, MISSING_IN: 2, MISSING_OUT: 3, INSIDE_LATE: 4, LEFT_LATE: 5, WAITING: 6,
+      ANNUAL_LEAVE: 7, SICK_LEAVE: 8, LEAVE: 9, INSIDE: 10, LEFT: 11, OFF_DAY: 12,
     };
     roster.sort((a, b) => {
       const rank = (statusRank[text(a.status)] || 99) - (statusRank[text(b.status)] || 99);
