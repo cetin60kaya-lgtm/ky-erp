@@ -217,3 +217,83 @@
   justify-content:flex-start;
   align-items:center;
 }
+
+
+/* Mail eki üst araçları */
+.comm-attachments-head{
+  display:flex!important;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.comm-attachments-head>div:first-child{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.comm-download-all{
+  flex:0 0 auto;
+  min-width:118px;
+  white-space:nowrap;
+}
+.comm-attachment-row{
+  grid-template-columns:minmax(0,1fr) 34px 34px;
+}
+.comm-attachment-preview-btn{
+  padding:0!important;
+  min-width:34px;
+  border:1px solid #dbe4ee!important;
+  border-radius:7px!important;
+  background:#f8fafc!important;
+  color:#173b67!important;
+  font-size:14px!important;
+}
+.comm-attachment-preview-btn:hover{background:#eaf2fb!important}
+@media(max-width:720px){
+  .comm-attachments-head{align-items:flex-start}
+  .comm-download-all{min-width:0}
+  .comm-attachment-row{grid-template-columns:minmax(0,1fr) 32px 32px}
+}
+
+.comm-attachment-preview-body audio{
+  width:min(720px,calc(100% - 40px));
+}
+.comm-attachment-preview-body video{
+  display:block;
+  max-width:100%;
+  max-height:100%;
+  background:#000;
+}
+
+
+/* Gmail benzeri klasör grupları */
+.comm-folder-group{display:grid;gap:2px}
+.comm-folder-subheading{
+  margin:6px 8px 2px;
+  padding-top:7px;
+  border-top:1px solid #e7edf4;
+  color:#64748b;
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.comm-folder-group>button{
+  width:100%;
+  min-height:31px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  border:0;
+  border-radius:7px;
+  background:transparent;
+  color:#334155;
+  text-align:left;
+  font-size:11px;
+  cursor:pointer;
+}
+.comm-folder-group>button:hover{background:#eef4fb}
+.comm-folder-group>button.active{background:#dbeafe;color:#123b72;font-weight:800}
+.comm-folder-group>button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comm-folder-group>button em{min-width:18px;text-align:center;font-size:10px;font-style:normal;font-weight:900;color:#1d4ed8}
