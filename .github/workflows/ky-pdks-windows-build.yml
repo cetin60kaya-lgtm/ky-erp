@@ -16,8 +16,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  runner-health:
+    name: Runner sağlık kontrolü
+    runs-on: ubuntu-latest
+    steps:
+      - name: GitHub runner hazır
+        run: echo "runner-ok"
+
   build:
     name: Test, publish ve Setup.exe
+    needs: runner-health
     runs-on: windows-latest
     steps:
       - name: Kaynak kodu al
