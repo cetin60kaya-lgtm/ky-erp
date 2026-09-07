@@ -12,6 +12,7 @@ const repoFile = (name: string) => readFileSync(resolve(root, name), "utf8");
 const push = worker("auth-push-cloud.ts");
 const policy = worker("auth-policy-cloud.ts");
 const main = worker("main.ts");
+const mailEntry = worker("main-entry-mail.ts");
 const login = repoFile("APP/app/ky-erp-frontend/src/pages/LoginPage.jsx");
 const authContext = repoFile("APP/app/ky-erp-frontend/src/context/AuthContext.jsx");
 const serviceWorker = repoFile("APP/app/ky-erp-frontend/public/kyerp-push-sw.js");
@@ -70,6 +71,8 @@ test("company owner is default approver and application owner notifications are 
 test("service worker decisions use device capability headers and native approve deny actions", () => {
   assert.match(main, /X-KYERP-Push-Device/);
   assert.match(main, /X-KYERP-Push-Token/);
+  assert.match(mailEntry, /X-KYERP-Push-Device/);
+  assert.match(mailEntry, /X-KYERP-Push-Token/);
   assert.match(serviceWorker, /X-KYERP-Push-Device/);
   assert.match(serviceWorker, /X-KYERP-Push-Token/);
   assert.match(serviceWorker, /action: "approve"/);
