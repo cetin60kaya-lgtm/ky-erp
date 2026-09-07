@@ -1,7 +1,8 @@
-name: KY ERP + PDKS Desktop Windows Setup
+name: KY ERP + PDKS Pro Windows Setup
 
 on:
-  # Automatic GitHub Actions disabled. Run only when explicitly requested.\n  workflow_dispatch:
+  # Automatic GitHub Actions disabled. Run only when explicitly requested.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,17 +44,19 @@ jobs:
         run: |
           $dir = './APP/desktop/ky-pdks/dist/setup'
           $erp = Get-ChildItem $dir -Filter 'KY-ERP-Desktop-Setup-*.exe' | Select-Object -First 1
-          $pdks = Get-ChildItem $dir -Filter 'KY-PDKS-Desktop-Setup-*.exe' | Select-Object -First 1
+          $pdks = Get-ChildItem $dir -Filter 'KY-PDKS-Pro-Setup-*.exe' | Select-Object -First 1
           if (-not $erp) { throw 'KY ERP Desktop Setup.exe bulunamadı.' }
-          if (-not $pdks) { throw 'KY PDKS Desktop Setup.exe bulunamadı.' }
+          if (-not $pdks) { throw 'KY PDKS Pro Setup.exe bulunamadı.' }
           if (-not (Test-Path "$($erp.FullName).sha256.txt")) { throw 'KY ERP SHA256 dosyası yok.' }
           if (-not (Test-Path "$($pdks.FullName).sha256.txt")) { throw 'KY PDKS SHA256 dosyası yok.' }
           $info = Get-Content "$dir/build-info.json" -Raw | ConvertFrom-Json
-          if ($info.version -ne '1.8.0') { throw "build-info sürümü yanlış: $($info.version)" }
+          if ($info.version -ne '1.9.0') { throw "build-info sürümü yanlış: $($info.version)" }
           if ($info.products.Count -ne 2) { throw 'build-info iki ürün içermiyor.' }
           if ($info.products[0].scope -ne 'FULL_ERP_DESKTOP') { throw 'Tam ERP scope yanlış.' }
-          if ($info.products[1].scope -ne 'PDKS_ONLY_DESKTOP') { throw 'PDKS-only scope yanlış.' }
-          if ($info.products[1].includesWebView -ne $false) { throw 'PDKS-only build WebView içeriyor görünüyor.' }
+          if ($info.products[1].scope -ne 'PDKS_STANDALONE_CANONICAL_UI') { throw 'PDKS Pro scope yanlış.' }
+          if ($info.products[1].includesWebView -ne $true) { throw 'PDKS Pro canonical WebView eksik.' }
+          if ($info.products[1].includesCanonicalFrontend -ne $true) { throw 'PDKS Pro canonical frontend eksik.' }
+          if ($info.products[1].standaloneProduct -ne 'PDKS') { throw 'PDKS Pro standalone product işareti yanlış.' }
           if ($info.products[1].denetimWriteControls -ne 'HIDDEN') { throw 'DENETİM write-controls politikası yanlış.' }
           Get-FileHash $erp.FullName -Algorithm SHA256
           Get-FileHash $pdks.FullName -Algorithm SHA256
@@ -69,13 +72,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: KY PDKS Desktop paketini sakla
+      - name: KY PDKS Pro paketini sakla
         uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-Desktop-Windows-Setup-${{ github.run_number }}
+          name: KY-PDKS-Pro-Windows-Setup-${{ github.run_number }}
           path: |
-            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.exe
-            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Desktop-Setup-*.sha256.txt
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Pro-Setup-*.exe
+            APP/desktop/ky-pdks/dist/setup/KY-PDKS-Pro-Setup-*.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
           retention-days: 30
