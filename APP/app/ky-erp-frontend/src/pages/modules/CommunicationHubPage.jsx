@@ -398,9 +398,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     label: folderRows.filter((row) => folderGroup(row) === "label"),
   }), [folderRows]);
   const selectedFolder = useMemo(
-    () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
-    [folders, selectedFolderId],
+    () => folderRows.find((row) => String(row.id) === String(selectedFolderId)) || null,
+    [folderRows, selectedFolderId],
   );
+  const selectedFolderType = folderType(selectedFolder);
+  const selectedFolderProviderId = folderProviderId(selectedFolder);
+  const selectedFolderIsTrash = selectedFolderType === "TRASH" || selectedFolderProviderId === "TRASH";
+  const selectedFolderIsJunk = selectedFolderType === "JUNK" || selectedFolderProviderId === "SPAM";
+  const selectedFolderCountsUnread = !selectedFolderIsTrash && !selectedFolderIsJunk;
   const defaultInboxFolderId = useMemo(
     () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "INBOX")?.id || ""),
     [folders],
@@ -544,14 +549,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     const messageId = selectedMessage.id;
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
     setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
-    setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
     runMailMessageAction(messageId, "MARK_READ", {}).catch((error) => {
       setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
       setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
-      setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     });
-  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab]);
+  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab, selectedFolderCountsUnread]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -751,13 +756,13 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     const messageId = row.id;
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
     setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
-    setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
     try {
       await runMailMessageAction(messageId, "MARK_READ", {});
     } catch (error) {
       setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
       setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
-      setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     }
   }
@@ -1041,8 +1046,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     try {
       await runMailMessageAction(messageId, action, values);
       applyMessageActionLocally(messageId, action, values);
-      if (action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
-      if (action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread && action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+      if (selectedFolderCountsUnread && action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice(action === "ARCHIVE" ? "Mail arşive taşındı." : action === "DELETE" ? "Mail silinmiş öğelere taşındı." : action === "MOVE" ? "Mail klasöre taşındı." : "Mail durumu güncellendi.");
       setMoveTargetId("");
       setMailboxRefresh((value) => value + 1);
@@ -1106,7 +1111,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const renderFolderButton = (folder) => (
     <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
       <span>{folderIcon(folder)} {folderDisplayName(folder)}</span>
-      <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
+      <em>{["TRASH","JUNK"].includes(folderType(folder)) || ["TRASH","SPAM"].includes(folderProviderId(folder)) ? "" : Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
     </button>
   );
 
@@ -1225,7 +1230,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             {activeTab === "mail-sablonlar" && !selectedFolderId ? (
               <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
-              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
+              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${!selectedFolderIsTrash && !selectedFolderIsJunk && Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
                 <div><b>{Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "📌 " : ""}{row.sender_name || row.sender_email || row.subject || "Taslak"}</b><span>{dateText(row.received_at || row.sent_at || row.updated_at)}</span></div>
                 <strong>{row.subject || "(Konu yok)"}{Number(row.is_flagged ?? row.isFlagged ?? 0) === 1 ? "  ⚑" : ""}</strong>
                 <p>{row.body_text || row.bodyText || (row.body_html || row.bodyHtml ? "HTML mail içeriği" : "İçerik önizlemesi yok.")}{Number(row.has_attachments ?? row.hasAttachments ?? 0) === 1 ? " · 📎 Ek var" : ""}</p>
@@ -1251,8 +1256,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className={Number(selectedMessage.is_pinned ?? selectedMessage.isPinned ?? 0) === 1 ? "pin-active" : "secondary"} onClick={togglePin}>{Number(selectedMessage.is_pinned ?? selectedMessage.isPinned ?? 0) === 1 ? "📌 Sabitten Çıkar" : "📌 Sabitle"}</button>
                 <button type="button" className="secondary" onClick={() => messageAction(Number(selectedMessage.is_read ?? selectedMessage.isRead ?? 1) === 1 ? "MARK_UNREAD" : "MARK_READ")}>{Number(selectedMessage.is_read ?? selectedMessage.isRead ?? 1) === 1 ? "Okunmadı Yap" : "Okundu Yap"}</button>
                 <button type="button" className="secondary" onClick={() => messageAction(Number(selectedMessage.is_flagged ?? selectedMessage.isFlagged ?? 0) === 1 ? "UNFLAG" : "FLAG")}>{Number(selectedMessage.is_flagged ?? selectedMessage.isFlagged ?? 0) === 1 ? "Bayrağı Kaldır" : "⚑ Bayrak"}</button>
-                <button type="button" className="secondary" onClick={() => messageAction("ARCHIVE")}>Arşivle</button>
-                <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button>
+                {!selectedFolderIsTrash ? <button type="button" className="secondary" onClick={() => messageAction("ARCHIVE")}>Arşivle</button> : null}
+                {!selectedFolderIsTrash ? <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button> : null}
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
               {attachments.length ? <div className="comm-attachments">
@@ -1301,9 +1306,9 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         <button type="button" onClick={() => runContextAction("PIN")}>{Number(contextMenu.row?.is_pinned ?? contextMenu.row?.isPinned ?? 0) === 1 ? "📌 Sabitten Çıkar" : "📌 Sabitle"}</button>
         <button type="button" onClick={() => runContextAction("READ_TOGGLE")}>{Number(contextMenu.row?.is_read ?? contextMenu.row?.isRead ?? 1) === 1 ? "○ Okunmadı Yap" : "● Okundu Yap"}</button>
         <button type="button" onClick={() => runContextAction("FLAG_TOGGLE")}>{Number(contextMenu.row?.is_flagged ?? contextMenu.row?.isFlagged ?? 0) === 1 ? "⚑ Bayrağı Kaldır" : "⚑ Bayrak Ekle"}</button>
-        <div className="comm-context-separator" />
-        <button type="button" onClick={() => runContextAction("ARCHIVE")}>▣ Arşivle</button>
-        <button type="button" className="danger" onClick={() => runContextAction("DELETE")}>🗑 Sil</button>
+        {!selectedFolderIsTrash ? <div className="comm-context-separator" /> : null}
+        {!selectedFolderIsTrash ? <button type="button" onClick={() => runContextAction("ARCHIVE")}>▣ Arşivle</button> : null}
+        {!selectedFolderIsTrash ? <button type="button" className="danger" onClick={() => runContextAction("DELETE")}>🗑 Sil</button> : null}
       </div> : null}
 
       {attachmentPreview ? <div className="comm-attachment-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAttachmentPreview(); }}>

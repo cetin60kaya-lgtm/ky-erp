@@ -126,3 +126,11 @@ test("legacy pending mail request is auto-approved from requester role, not view
   assert.match(source, /ownerRole\(requesterRole\)/);
   assert.doesNotMatch(source, /requested_by=\? ORDER BY r\.created_at/);
 });
+
+
+test("trash and spam never contribute to Mail Center unread counters", () => {
+  const source = read("./mail-communication-core.ts");
+  assert.match(source, /NOT IN \('TRASH','JUNK'\)/);
+  assert.match(source, /IN \('TRASH','JUNK'\) THEN 0/);
+  assert.match(source, /LEFT JOIN mail_folders f ON f\.id=m\.folder_id/);
+});
