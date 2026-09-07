@@ -405,6 +405,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "INBOX")?.id || ""),
     [folders],
   );
+  const defaultSentFolderId = useMemo(
+    () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "SENT")?.id || ""),
+    [folders],
+  );
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -606,6 +610,50 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     loadMailbox();
     return () => { cancelled = true; };
   }, [activeTab, isMail, selectedAccountId, selectedFolderId, defaultInboxFolderId, mailboxRefresh]);
+
+  useEffect(() => {
+    const provider = String(selectedAccount?.provider_type || selectedAccount?.providerType || "").toUpperCase();
+    const active = String(selectedAccount?.status || "").toUpperCase() === "ACTIVE";
+    if (!isMail || !selectedAccountId || !active || provider !== "GMAIL") return undefined;
+
+    let cancelled = false;
+    const targetFolderId = () => {
+      if (selectedFolderId) return selectedFolderId;
+      if (activeTab === "mail-gonderilen" || activeTab === "mail-yanit-bekleyen") return defaultSentFolderId;
+      return defaultInboxFolderId;
+    };
+    const run = async () => {
+      if (cancelled || document.visibilityState === "hidden" || backgroundSyncRef.current) return;
+      const folderId = targetFolderId();
+      if (!folderId) return;
+      backgroundSyncRef.current = true;
+      try {
+        await syncMailFolder(selectedAccountId, folderId, { quick: true });
+        if (cancelled) return;
+        const freshOverview = await getMailOverview().catch(() => null);
+        if (freshOverview && !cancelled) setOverview(freshOverview);
+        setMailboxRefresh((value) => value + 1);
+      } catch {
+        // Sessiz canlı yenileme kullanıcı akışını kesmez; manuel senkronizasyon ayrıntılı hata verir.
+      } finally {
+        backgroundSyncRef.current = false;
+      }
+    };
+
+    const timer = window.setInterval(run, 20_000);
+    const onFocus = () => run();
+    const onVisibility = () => { if (document.visibilityState === "visible") run(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.setTimeout(run, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isMail, selectedAccountId, selectedAccount?.provider_type, selectedAccount?.providerType, selectedAccount?.status, selectedFolderId, activeTab, defaultInboxFolderId, defaultSentFolderId]);
 
   function beginPaneResize(pane, event) {
     if (window.innerWidth <= 1100 || !mailLayoutRef.current) return;
