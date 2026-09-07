@@ -24,7 +24,7 @@ const FILTERS = [
 ];
 
 function statusTone(status) {
-  if (["NO_SHOW", "MISSING_OUT"].includes(status)) return "bad";
+  if (["NO_SHOW", "MISSING_IN", "MISSING_OUT"].includes(status)) return "bad";
   if (["INSIDE_LATE", "LEFT_LATE", "WAITING"].includes(status)) return "warn";
   if (["ANNUAL_LEAVE", "SICK_LEAVE", "LEAVE"].includes(status)) return "leave";
   if (status === "INSIDE") return "ok";
@@ -39,7 +39,7 @@ function matchesFilter(row, filter) {
   if (filter === "WAITING") return row.status === "WAITING";
   if (filter === "LATE") return row.late === true;
   if (filter === "LEAVE") return ["ANNUAL_LEAVE", "SICK_LEAVE", "LEAVE"].includes(row.status);
-  if (filter === "MISSING") return row.status === "MISSING_OUT";
+  if (filter === "MISSING") return ["MISSING_IN", "MISSING_OUT"].includes(row.status);
   return true;
 }
 
@@ -97,9 +97,9 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const offlineDevices = devices.filter((row) => Number(row.active) !== 0 && !isOnline(row.lastSeenAt));
   const issueCount = Number(metrics.noShow || 0) + Number(metrics.missingPunch || 0) + offlineDevices.length;
   const controlQueue = useMemo(() => roster
-    .filter((row) => row.status === "NO_SHOW" || row.status === "MISSING_OUT" || row.late === true)
+    .filter((row) => row.status === "NO_SHOW" || ["MISSING_IN", "MISSING_OUT"].includes(row.status) || row.late === true)
     .sort((a, b) => {
-      const rank = (row) => row.status === "NO_SHOW" ? 1 : row.status === "MISSING_OUT" ? 2 : 3;
+      const rank = (row) => row.status === "NO_SHOW" ? 1 : ["MISSING_IN", "MISSING_OUT"].includes(row.status) ? 2 : 3;
       return rank(a) - rank(b) || String(a.fullName || "").localeCompare(String(b.fullName || ""), "tr");
     })
     .slice(0, 12), [roster]);
@@ -157,7 +157,7 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
         <Metric icon={Stethoscope} label="Raporlu" value={metrics.sickLeave} hint="Sağlık/rapor kaydı" tone="leave" onClick={() => setFilter("LEAVE")} />
         <Metric icon={Users} label="Diğer İzin" value={metrics.otherLeave} hint="Mazeret/ücretsiz vb." tone="leave" onClick={() => setFilter("LEAVE")} />
         <Metric icon={Clock3} label="Geç Gelen" value={metrics.late} hint="Vardiya toleransı aşıldı" tone="warn" onClick={() => setFilter("LATE")} />
-        <Metric icon={AlertTriangle} label="Eksik Çıkış" value={metrics.missingPunch} hint="Vardiya bitti, çıkış yok" tone="bad" onClick={() => setFilter("MISSING")} />
+        <Metric icon={AlertTriangle} label="Eksik Basım" value={metrics.missingPunch} hint={`Giriş ${metrics.missingEntry || 0} · Çıkış ${metrics.missingExit || 0}`} tone="bad" onClick={() => setFilter("MISSING")} />
       </section>
 
       <div className="plh-pro-layout">
@@ -202,10 +202,10 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
             <div className="plh-pro-issue-list">
               {controlQueue.map((row) => (
                 <button type="button" key={`${row.employeeId}-${row.status}`} onClick={() => {
-                  setFilter(row.status === "NO_SHOW" ? "NO_SHOW" : row.status === "MISSING_OUT" ? "MISSING" : "LATE");
+                  setFilter(row.status === "NO_SHOW" ? "NO_SHOW" : ["MISSING_IN", "MISSING_OUT"].includes(row.status) ? "MISSING" : "LATE");
                   setQuery(row.fullName || "");
                 }}>
-                  <i className={`status ${statusTone(row.status)}`}>{row.status === "NO_SHOW" ? "Gelmedi" : row.status === "MISSING_OUT" ? "Eksik Çıkış" : "Geç"}</i>
+                  <i className={`status ${statusTone(row.status)}`}>{row.status === "NO_SHOW" ? "Gelmedi" : row.status === "MISSING_IN" ? "Eksik Giriş" : row.status === "MISSING_OUT" ? "Eksik Çıkış" : "Geç"}</i>
                   <span><strong>{row.fullName}</strong><small>{row.department || "Bölüm yok"}{row.firstTime ? ` · ${row.firstTime}` : ""}</small></span>
                   <em>›</em>
                 </button>
