@@ -42,7 +42,7 @@ if ($DeclaredVersion -ne $Version) { throw "VERSION uyuşmuyor. Beklenen=$Versio
 $DesktopWindowSource = Join-Path $Root 'src\KyPdks.Desktop\KyErpDesktopWindow.xaml.cs'
 $DesktopWindowText = Get-Content $DesktopWindowSource -Raw
 if ($DesktopWindowText -notmatch 'https://app\.kyerp\.net/index\.html') { throw 'Tam ERP Desktop canonical app.kyerp.net/index.html kullanmıyor.' }
-if ($DesktopWindowText -notmatch "kyerpDesktopVersion = '1\.8\.0'") { throw 'Desktop bridge sürümü 1.8.1 değil.' }
+if ($DesktopWindowText -notmatch "kyerpDesktopVersion = '1\.8\.1'") { throw 'Desktop bridge sürümü 1.8.1 değil.' }
 
 $ProjectText = Get-Content $DesktopProject -Raw
 if ($ProjectText -notmatch 'ProductMode') { throw 'Desktop project dual ProductMode içermiyor.' }
