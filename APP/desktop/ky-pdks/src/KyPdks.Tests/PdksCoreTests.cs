@@ -44,6 +44,20 @@ public class PdksCoreTests
         Assert.EndsWith(@"Hedef500\Terminal Bilgi Aktar\timerecords.txt", config.HedefReadFile, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Theory]
+    [InlineData("GIRIS", "AUTO", "IN")]
+    [InlineData("GİRİŞ", "AUTO", "IN")]
+    [InlineData("CIKIS", "AUTO", "OUT")]
+    [InlineData("ÇIKIŞ", "AUTO", "OUT")]
+    [InlineData("AUTO", "IN", "IN")]
+    [InlineData("AUTO", "OUT", "OUT")]
+    [InlineData("AUTO", "AUTO", "AUTO")]
+    public void Terminal_Direction_Is_Normalized_And_Applied(string configured, string parsed, string expected)
+    {
+        Assert.Equal(expected, PdksDirection.Apply(configured, parsed));
+    }
+
     [Fact]
     public void Fingerprint_Deduplicates_Same_Physical_Punch_From_Different_Sources()
     {
