@@ -11,6 +11,7 @@ $SESSION_GUARD_FILE = Join-Path $WORKER "migrations\0022_auth_same_browser_sessi
 $ALIAS_SCHEMA_FILE = Join-Path $WORKER "migrations\0023_admin_company_alias_schema.sql"
 $AUDIT_USER_FILE = Join-Path $WORKER "migrations\0024_denetime_pdks_system_user.sql"
 $MAIL_CORE_FILE = Join-Path $WORKER "migrations\0050_mail_communication_core.sql"
+$PHONE_PUSH_FILE = Join-Path $WORKER "migrations\0052_auth_phone_push_approval.sql"
 $BACKUP_DIR = Join-Path $ROOT "BACKUPS\D1\PRE_DEPLOY"
 
 function Fail($message) {
@@ -139,6 +140,9 @@ WITH required(name) AS (
     ('auth_system_secrets'),
     ('auth_login_challenges'),
     ('auth_login_approvals'),
+    ('auth_phone_login_challenges'),
+    ('auth_push_devices'),
+    ('auth_company_login_approval_settings'),
     ('auth_sessions'),
     ('auth_security_audit'),
     ('auth_owner_recovery_challenges'),
@@ -203,7 +207,7 @@ Write-Host "KORUMA:" -ForegroundColor Yellow
 Write-Host "- Tum Worker + frontend test/build bitmeden canliya yazma YOK." -ForegroundColor Yellow
 Write-Host "- Production D1 RESET YOK." -ForegroundColor Yellow
 Write-Host "- Genel migration zinciri YOK." -ForegroundColor Yellow
-Write-Host "- Yalniz additive 0023, DENETIM 0024, gerekli 0022 session guard ve Mail Core 0050 uygulanabilir." -ForegroundColor Yellow
+Write-Host "- Yalniz additive 0023, DENETIM 0024, gerekli 0022 session guard, Mail Core 0050 ve Telefon Push 0052 uygulanabilir." -ForegroundColor Yellow
 Write-Host "- D1 uyumluluk adimlarindan once tam D1 export yedegi alinir." -ForegroundColor Yellow
 Write-Host "- Production test INSERT/UPDATE/DELETE YOK." -ForegroundColor Yellow
 Write-Host "- Kirli tracked Git agaci otomatik resetlenmez." -ForegroundColor Yellow
@@ -216,6 +220,7 @@ if (-not (Test-Path $SESSION_GUARD_FILE)) { Fail "0022 session guard dosyasi bul
 if (-not (Test-Path $ALIAS_SCHEMA_FILE)) { Fail "0023 firma eslestirme sema dosyasi bulunamadi: $ALIAS_SCHEMA_FILE" }
 if (-not (Test-Path $AUDIT_USER_FILE)) { Fail "0024 DENETIM sistem kullanicisi dosyasi bulunamadi: $AUDIT_USER_FILE" }
 if (-not (Test-Path $MAIL_CORE_FILE)) { Fail "0050 Mail Core sema dosyasi bulunamadi: $MAIL_CORE_FILE" }
+if (-not (Test-Path $PHONE_PUSH_FILE)) { Fail "0052 Telefon Push sema dosyasi bulunamadi: $PHONE_PUSH_FILE" }
 
 Write-Host "=== 1/11 REPO ===" -ForegroundColor Cyan
 Set-Location $ROOT
@@ -310,9 +315,13 @@ Write-Host "0050 Mail / Iletisim Core additive semasi kontrol/uygulama..." -Fore
 wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
 Check-Exit "0050 Mail Core additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
 
+Write-Host "0052 Telefon Push / Kodsuz Giris additive semasi kontrol/uygulama..." -ForegroundColor Yellow
+wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $PHONE_PUSH_FILE
+Check-Exit "0052 Telefon Push additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+
 Assert-Remote-Schema-Readiness
 Assert-Denetime-System-User
-Write-Host "D1 hedefli uyumluluk + sema + DENETIM + MAIL: HAZIR" -ForegroundColor Green
+Write-Host "D1 hedefli uyumluluk + sema + DENETIM + MAIL + TELEFON PUSH: HAZIR" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 6/11 WORKER PRODUCTION DEPLOY ===" -ForegroundColor Green
