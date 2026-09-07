@@ -1,5 +1,31 @@
-# KY PDKS Windows 1.0 — Ürün Kapsamı
+# KY PDKS Pro 1.9.0 — Ürün Kapsamı
 
-Bu paket Windows PDKS'nin bağımsız yerel çalışma çekirdeğidir. Kart toplama servis üzerinden yerelde kesintisiz yürür; masaüstü kullanıcı uygulaması ERP hesabı/MFA ile oturum açar ve kartları mevcut KY ERP personel-control API'sine senkronize eder.
+KY PDKS Pro, KY ERP PDKS modülünün bağımsız Windows ürünüdür; ancak ayrı bir iş uygulaması değildir. **Aynı canonical React PDKS arayüzünü ve aynı D1 verisini** kullanır.
 
-V1 ürün sınırı: satır üreten FILE/TCP/Serial terminaller doğrudan desteklenir. Üreticiye özel kapalı binary SDK kullanan terminal için marka/model protokol adapterı ayrıca eklenir; yerel DB, UI, Setup ve ERP sync değiştirilmez.
+Windows'a özel kapsam:
+- WebView2 içinde PDKS-only canonical UI,
+- KYERP.PDKS.Agent,
+- HEDEF_TR500 / FILE / TCP / SERIAL kart toplama,
+- SQLite offline ham kart kuyruğu,
+- Windows terminal kurulum sihirbazı,
+- bağlantı tanılama, log ve yedek.
+
+PDKS iş kapsamı:
+- canlı devam,
+- giriş/çıkış,
+- puantaj,
+- vardiya,
+- izin,
+- terminal/senkron,
+- rapor/denetim,
+- AI canlı kontrol + preview-first operasyon.
+
+PDKS kapsamı DIŞI:
+- maaş,
+- banka/elden,
+- avans/kesinti,
+- icra/haciz,
+- bordro,
+- ikinci personel masterı.
+
+Kapalı binary/SDK kullanan terminal için marka-model adapterı eklenir. Doğrulanmamış cihaz protokolüne saat/kapı/restart/yönetici-sil komutu tahmin edilmez.
