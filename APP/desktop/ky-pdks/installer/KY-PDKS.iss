@@ -44,6 +44,7 @@ Name: "{commonappdata}\KY ERP\PDKS\Reports"; Permissions: users-modify
 [Files]
 Source: "{#Dist}\pdks-desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Dist}\agent\*"; DestDir: "{app}\Agent"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "install-pdks-agent.ps1"; DestDir: "{app}\Installer"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\KY ERP\KY PDKS Pro"; Filename: "{app}\KY PDKS Pro.exe"
@@ -55,18 +56,11 @@ Name: "desktopicon"; Description: "Masaüstünde KY PDKS Pro kısayolu oluştur"
 Name: "autostart"; Description: "Windows açıldığında KY PDKS Pro'ı başlat"; GroupDescription: "Başlangıç:"; Flags: unchecked
 
 [Run]
-Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "create KYERP.PDKS.Agent binPath= &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; start= delayed-auto DisplayName= &quot;KY ERP PDKS Agent&quot;"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "description KYERP.PDKS.Agent &quot;KY ERP kart cihazı toplama ve D1 arka plan senkron servisi&quot;"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "failure KYERP.PDKS.Agent reset= 86400 actions= restart/5000/restart/15000/restart/30000"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "failureflag KYERP.PDKS.Agent 1"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "start KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File &quot;{app}\Installer\install-pdks-agent.ps1&quot; -ExePath &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot;"; Flags: runhidden waituntilterminated; StatusMsg: "KY PDKS Agent kuruluyor ve doğrulanıyor..."
 Filename: "{app}\KY PDKS Pro.exe"; Description: "KY PDKS Pro uygulamasını aç"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File &quot;{app}\Installer\install-pdks-agent.ps1&quot; -ExePath &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; -Uninstall"; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
