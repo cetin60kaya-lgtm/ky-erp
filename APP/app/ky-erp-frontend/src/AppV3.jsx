@@ -62,6 +62,7 @@ const PDKS_AUDIT_TABS = [
   ["puantaj", "Puantaj", "takvim"],
   ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
   ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+  ["ai-kontrol", "AI Kontrol", "dashboard"],
   ["raporlar", "Raporlar", "raporlar"],
   ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
 ];
