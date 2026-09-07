@@ -144,7 +144,11 @@ export function registerAiCloudRoutes(app:Hono<AppEnv>){
     const body=await bodyOf(c),message=text(body.message);if(!message)return c.json({ok:false,error:{code:"MESSAGE_REQUIRED",message:"Mesaj boş olamaz."}},400);if(!c.env.AI)return c.json({ok:false,error:{code:"AI_BINDING_MISSING",message:"Cloudflare Workers AI bağlantısı yapılandırılmamış."}},503);
     const scope=await secureSlugOf(c,user,body);if(!scope.ok)return scopeError(c,scope);const slug=scope.slug;
     const allowance=await checkCompanyAiAllowance(c.env.DB,slug);if(!allowance.allowed)return c.json({ok:false,error:{code:allowance.code||"AI_USAGE_BLOCKED",message:allowance.message||"Firma AI kullanımına kapalı.",details:{usage:allowance.usage||null,profile:allowance.profile||null}}},allowance.code==="AI_MONTHLY_LIMIT_REACHED"?429:403);
-    const conversationId=text(body.conversationId||crypto.randomUUID()),current=await conversationGet(c,conversationId,slug),previous=cleanMessages(current?.messages).filter(row=>row.role!=="tool"),pageContext=objectOf(body.pageContext);
+    const ephemeral=body.ephemeral===true;
+    const conversationId=text(body.conversationId||crypto.randomUUID());
+    const current=ephemeral?null:await conversationGet(c,conversationId,slug);
+    const previous=ephemeral?[]:cleanMessages(current?.messages).filter(row=>row.role!=="tool");
+    const pageContext=objectOf(body.pageContext);
     const [source,files]=await Promise.all([sourceContext(c,slug,pageContext.module,user),fileHubContext(c,slug,message,pageContext.module,user)]);
     const compactContext=JSON.stringify(source.rows).slice(0,22000),fileContext=JSON.stringify(files.rows).slice(0,22000),history=previous.slice(-MAX_HISTORY_MESSAGES).map(row=>({role:row.role,content:row.content}));
     const messages=[{role:"system",content:systemPrompt(pageContext,source.count,files.count)},{role:"system",content:`Canlı KY ERP iş bağlamı (JSON, sadece bu tenant ve yetkili modül): ${compactContext||"[]"}`},{role:"system",content:`File Hub dosya/ilişki bağlamı (JSON, sadece bu tenant ve kullanıcının yetkili olduğu modüller): ${fileContext||"[]"}`},...history,{role:"user",content:message}];
@@ -152,9 +156,13 @@ export function registerAiCloudRoutes(app:Hono<AppEnv>){
     const usage=(result as Row)?.usage||null;
     let billingUsage:Row={recorded:false,reason:"PROVIDER_USAGE_MISSING"};
     try{billingUsage=await recordCompanyAiUsage(c.env.DB,{mainCompanySlug:slug,usage,sourceRef:text(c.get?.("requestId"))||crypto.randomUUID(),actorUserId:text(user.id),model:MODEL,note:"KY ERP AI chat"});}catch(error){console.error("KY ERP AI billing ledger write failed",error);billingUsage={recorded:false,reason:"LEDGER_WRITE_FAILED"};}
-    const answer=aiText(result)||"KY ERP AI yanıt üretemedi.",ts=nowIso(),totalSources=source.count+files.count,nextMessages=[...previous,{id:crypto.randomUUID(),role:"user",content:message,createdAt:ts,actions:[],sourceCount:0},{id:crypto.randomUUID(),role:"assistant",content:answer,createdAt:ts,actions:[],sourceCount:totalSources}];
+    const answer=aiText(result)||"KY ERP AI yanıt üretemedi.",ts=nowIso(),totalSources=source.count+files.count;
+    if(ephemeral){
+      return c.json({ok:true,success:true,conversationId:"",answer,actions:[],sourceCount:totalSources,fileHubSourceCount:files.count,sourceContextDegraded:source.degraded||files.degraded,usage,billingUsage,model:MODEL,provider:"Cloudflare Workers AI",gateway:{id:gatewayId(c),logging:gatewayCollectLogs(c)},ephemeral:true,updatedAt:ts});
+    }
+    const nextMessages=[...previous,{id:crypto.randomUUID(),role:"user",content:message,createdAt:ts,actions:[],sourceCount:0},{id:crypto.randomUUID(),role:"assistant",content:answer,createdAt:ts,actions:[],sourceCount:totalSources}];
     const saved=await conversationPut(c,conversationId,slug,{...current,id:conversationId,title:current?.title||titleFrom(message),pageContext:{...pageContext,mainCompanySlug:slug},messages:nextMessages});
-    return c.json({ok:true,success:true,conversationId,answer,actions:[],sourceCount:totalSources,fileHubSourceCount:files.count,sourceContextDegraded:source.degraded||files.degraded,usage,billingUsage,model:MODEL,provider:"Cloudflare Workers AI",gateway:{id:gatewayId(c),logging:gatewayCollectLogs(c)},updatedAt:saved.updatedAt});
+    return c.json({ok:true,success:true,conversationId,answer,actions:[],sourceCount:totalSources,fileHubSourceCount:files.count,sourceContextDegraded:source.degraded||files.degraded,usage,billingUsage,model:MODEL,provider:"Cloudflare Workers AI",gateway:{id:gatewayId(c),logging:gatewayCollectLogs(c)},ephemeral:false,updatedAt:saved.updatedAt});
   });
 
   app.post("/api/ai/actions/confirm",async c=>{const user=await getAuthenticatedUser(c) as Row|null;if(!user)return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gerekli."}},401);const body=await bodyOf(c),scope=await secureSlugOf(c,user,body);if(!scope.ok)return scopeError(c,scope);const actionId=text(body.actionId);if(!actionId)return c.json({ok:false,error:{code:"ACTION_REQUIRED",message:"İşlem kimliği zorunludur."}},400);const row=await c.env.DB.prepare(`SELECT data FROM json_store WHERE scope=? AND file_name=? AND main_company_slug=? ORDER BY updated_at DESC LIMIT 1`).bind(ACTION_SCOPE,actionId,scope.slug).first<Row>();if(!row)return c.json({ok:false,error:{code:"ACTION_NOT_FOUND",message:"Onaylanacak AI işlemi bulunamadı."}},404);return c.json({ok:false,error:{code:"ACTION_EXECUTOR_DISABLED",message:"Bu AI işlemi otomatik yürütmeye açık değil; ilgili ERP ekranından onaylayın."}},409);});
