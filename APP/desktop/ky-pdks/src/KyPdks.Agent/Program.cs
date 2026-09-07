@@ -120,7 +120,7 @@ sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore
                 rejected++;
                 continue;
             }
-            var punch = parsed with { Source = "HEDEF_TR500", SourceRef = file };
+            var punch = parsed with { Source = "HEDEF_TR500", SourceRef = file, Direction = PdksDirection.Apply(config.Direction, parsed.Direction) };
             if (await store.AddAsync(punch, ct)) accepted++; else duplicate++;
         }
 
@@ -158,7 +158,7 @@ sealed class FileImportWorker(LocalPdksStore store, PdksPaths paths, ConfigStore
                     rejected.Add(line);
                     continue;
                 }
-                var punch = parsed with { Source = "FILE", SourceRef = Path.GetFileName(file) };
+                var punch = parsed with { Source = "FILE", SourceRef = Path.GetFileName(file), Direction = PdksDirection.Apply(config.Direction, parsed.Direction) };
                 if (await store.AddAsync(punch, ct)) accepted++; else duplicate++;
             }
 
@@ -281,7 +281,7 @@ sealed class TerminalCaptureWorker(LocalPdksStore store, PdksPaths paths, Config
         {
             var line = await reader.ReadLineAsync(ct);
             if (line is null) break;
-            await CaptureLineAsync(line, "SERIAL", $"{config.SerialPort}:{config.SerialBaud}", ct);
+            await CaptureLineAsync(line, "SERIAL", $"{config.SerialPort}:{config.SerialBaud}", config, ct);
         }
     }
 
@@ -292,11 +292,11 @@ sealed class TerminalCaptureWorker(LocalPdksStore store, PdksPaths paths, Config
         {
             var line = await reader.ReadLineAsync(ct);
             if (line is null) break;
-            await CaptureLineAsync(line, source, sourceRef, ct);
+            await CaptureLineAsync(line, source, sourceRef, config, ct);
         }
     }
 
-    private async Task CaptureLineAsync(string line, string source, string sourceRef, CancellationToken ct)
+    private async Task CaptureLineAsync(string line, string source, string sourceRef, PdksConfig config, CancellationToken ct)
     {
         if (!PunchParser.TryParse(line, sourceRef, out var parsed) || parsed is null)
         {
@@ -305,11 +305,11 @@ sealed class TerminalCaptureWorker(LocalPdksStore store, PdksPaths paths, Config
             await store.TouchStateAsync("last_message", $"Terminal satırı tanınmadı · {sourceRef}", ct);
             return;
         }
-        var punch = parsed with { Source = source, SourceRef = sourceRef };
+        var punch = parsed with { Source = source, SourceRef = sourceRef, Direction = PdksDirection.Apply(config.Direction, parsed.Direction) };
         var inserted = await store.AddAsync(punch, ct);
         if (inserted)
         {
-            var message = $"Kart {punch.CardNo} · {punch.WorkDate} {punch.EventTime[..5]} · {source}";
+            var message = $"Kart {punch.CardNo} · {punch.WorkDate} {punch.EventTime[..5]} · {punch.Direction} · {source}";
             await store.TouchStateAsync("last_terminal_punch", message, ct);
             await store.TouchStateAsync("last_message", message, ct);
             await fileLog.WriteAsync("PUNCH", message, ct);
