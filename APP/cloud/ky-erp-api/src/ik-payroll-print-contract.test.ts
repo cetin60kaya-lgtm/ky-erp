@@ -112,11 +112,13 @@ test("payroll print HTML escapes employee-entered text and shows every payment c
   }
 });
 
-test("payroll payment balance cannot be bypassed and backend enforces the same contract", () => {
+test("payroll payment balance is auto-reconciled in UI while backend keeps the hard invariant", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.ok(page.includes("Banka + elden toplamı net ödenecek tutara eşit olmalıdır."));
+  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
+  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /calculatePayrollAmounts/);
