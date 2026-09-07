@@ -85,3 +85,18 @@ test("incoming view waits for the canonical INBOX and hydrated HTML is keyed to 
   assert.match(page, /renderedHtmlMessageId/);
   assert.match(page, /renderedHtmlMessageId === String\(selectedMessage\.id\)/);
 });
+
+
+test("attachments expose explicit preview controls and download-all", () => {
+  assert.match(page, /downloadAllAttachments/);
+  assert.match(page, /Tümünü İndir/);
+  assert.match(page, /comm-attachment-preview-btn/);
+  assert.match(page, /attachmentPreviewKind/);
+  assert.match(page, /kind === "image"/);
+  assert.match(page, /kind === "pdf"/);
+  assert.match(page, /png/);
+  assert.match(page, /jpg/);
+  assert.match(page, /jpeg/);
+  assert.match(css, /comm-download-all/);
+  assert.match(css, /comm-attachment-preview-btn/);
+});
