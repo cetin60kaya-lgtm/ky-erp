@@ -65,14 +65,33 @@ async function deviceFetch(path, options = {}) {
   return payload;
 }
 
+async function broadcastPendingWake() {
+  const windows = await clients.matchAll({ type: "window", includeUncontrolled: true });
+  await Promise.all(windows.map((client) => client.postMessage({ type: "KYERP_PUSH_PENDING_WAKE" })));
+}
+
 async function showPending() {
-  let payload;
+  let payload = null;
   try {
     payload = await deviceFetch("/auth/push/device/pending", { method: "GET" });
   } catch {
-    return;
+    // Safari/iOS userVisibleOnly kuralı gereği push hiçbir koşulda sessiz kalmaz.
   }
   const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+  if (!items.length) {
+    await self.registration.showNotification("KY ERP güvenlik isteği", {
+      body: "Yeni bir giriş onayı var. KY ERP uygulamasını açıp Onayla veya Reddet seçin.",
+      tag: "kyerp-generic-security-wake",
+      renotify: true,
+      requireInteraction: true,
+      badge: "/kyerp-icon.svg",
+      icon: "/kyerp-icon.svg",
+      data: { openApproval: true },
+    });
+    await broadcastPendingWake();
+    return;
+  }
+
   await Promise.all(items.slice(0, 8).map((item) => self.registration.showNotification(
     item.title || "KY ERP güvenlik onayı",
     {
@@ -86,13 +105,17 @@ async function showPending() {
         kind: item.kind,
         id: item.id,
         mainCompanySlug: item.mainCompanySlug || "",
+        openApproval: true,
       },
+      // Chromium doğrudan aksiyonları kullanır. iPhone bu aksiyonları göstermese bile
+      // bildirime dokunulduğunda KY ERP foreground köprüsü aynı isteği güvenli ekranda açar.
       actions: [
         { action: "approve", title: "Onayla" },
         { action: "deny", title: "Reddet" },
       ],
     },
   )));
+  await broadcastPendingWake();
 }
 
 async function decide(kind, id, decision) {
@@ -102,7 +125,7 @@ async function decide(kind, id, decision) {
   });
 }
 
-async function focusOrOpen(path = "/") {
+async function focusOrOpen(path = "/?kyerpPhoneApproval=1") {
   const windows = await clients.matchAll({ type: "window", includeUncontrolled: true });
   const existing = windows.find((client) => {
     try { return new URL(client.url).origin === self.location.origin; }
@@ -144,7 +167,10 @@ self.addEventListener("notificationclick", (event) => {
   event.notification?.close();
 
   if (!data.id || !data.kind || !["approve", "deny"].includes(action)) {
-    event.waitUntil(focusOrOpen(data.kind === "MANAGER_APPROVAL" ? "/admin/giris-onaylari" : "/"));
+    // iOS'ta notification action butonları görünmeyebilir veya notificationclick
+    // kimi sürümlerde JS handler'ına ulaşmayabilir. Sistem yine uygulamayı foreground'a
+    // getirir; sayfadaki PhoneApprovalInboxBridge görünür olur olmaz pending isteği çeker.
+    event.waitUntil(focusOrOpen("/?kyerpPhoneApproval=1"));
     return;
   }
 
