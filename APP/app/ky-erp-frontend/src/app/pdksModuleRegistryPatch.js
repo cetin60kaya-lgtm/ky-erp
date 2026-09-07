@@ -51,6 +51,12 @@ const PDKS_MODULE = {
       ],
     },
     {
+      label: "AI & Kontrol",
+      tabs: [
+        ["ai-kontrol", "AI Kontrol Merkezi", "dashboard"],
+      ],
+    },
+    {
       label: "Rapor & Denetim",
       tabs: [
         ["raporlar", "Raporlar", "raporlar"],
