@@ -1,13 +1,8 @@
 name: KY ERP Masaüstü Windows Setup
 
 on:
+  # Automatic GitHub Actions disabled. Run only when explicitly requested.
   workflow_dispatch:
-  push:
-    branches:
-      - codex/pdks-device-direct-final-20260907
-    paths:
-      - 'APP/desktop/ky-pdks/**'
-      - '.github/workflows/ky-pdks-windows-build.yml'
 permissions:
   contents: read
 
@@ -16,16 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  runner-health:
-    name: Runner sağlık kontrolü
-    runs-on: ubuntu-latest
-    steps:
-      - name: GitHub runner hazır
-        run: echo "runner-ok"
-
   build:
     name: Test, publish ve Setup.exe
-    needs: runner-health
     runs-on: windows-latest
     steps:
       - name: Kaynak kodu al
