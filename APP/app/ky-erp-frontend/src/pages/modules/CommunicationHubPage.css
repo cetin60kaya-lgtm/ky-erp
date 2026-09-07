@@ -254,3 +254,13 @@
   .comm-download-all{min-width:0}
   .comm-attachment-row{grid-template-columns:minmax(0,1fr) 32px 32px}
 }
+
+.comm-attachment-preview-body audio{
+  width:min(720px,calc(100% - 40px));
+}
+.comm-attachment-preview-body video{
+  display:block;
+  max-width:100%;
+  max-height:100%;
+  background:#000;
+}
