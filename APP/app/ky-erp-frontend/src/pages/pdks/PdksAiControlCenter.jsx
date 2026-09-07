@@ -108,7 +108,8 @@ export default function PdksAiControlCenter({ activeMainCompany, isAuditAccount 
       const response = await sendAiMessage({
         message: prompt,
         mainCompanySlug: company,
-        pageContext: { module: "ik", route: "/pdks/ai-kontrol", mainCompanySlug: company, assistantMode: "erp" },
+        pageContext: { module: "pdks", route: "/pdks/ai-kontrol", mainCompanySlug: company, assistantMode: "erp" },
+        ephemeral: true,
       });
       setAnswer(response?.answer || "AI yanıt üretemedi.");
       setQuestion("");
@@ -171,6 +172,7 @@ export default function PdksAiControlCenter({ activeMainCompany, isAuditAccount 
           <div className="pai-quick">
             {QUICK.map((item) => <button type="button" key={item} disabled={busy || !snapshot} onClick={() => ask(item)}>{item}</button>)}
           </div>
+          <div className="pai-privacy"><ShieldCheck size={14} /><span>Canlı personel snapshot'ı bu analiz için geçici kullanılır; AI sohbet geçmişine kaydedilmez.</span></div>
           <div className="pai-answer">
             {busy ? <div className="loading"><LoaderCircle size={18} className="spin" /><span>Canlı PDKS verisi analiz ediliyor…</span></div>
               : answer ? <div className="answer"><Bot size={18} /><p>{answer}</p></div>
