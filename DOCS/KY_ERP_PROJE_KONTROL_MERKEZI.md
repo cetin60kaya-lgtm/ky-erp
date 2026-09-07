@@ -397,3 +397,15 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Kullanıcı arayüzünde eski tek kullanımlık kurtarma-kodu mantığı kaldırıldı. Canonical kurtarma: parola doğrulaması -> doğrulanmış e-posta/SMS -> rastgele 2 güvenlik sorusu -> Authenticator yeniden kurulumudur.
 - Cloudflare Access / Zero Trust, ileride yalnız Süper Yönetici için ek dış güvenlik katmanı olarak değerlendirilebilir; mevcut KY ERP kurtarmasının yerine geçirilmedi ve normal kullanıcı akışına ikinci giriş eklenmedi.
 - Regression: `APP/cloud/ky-erp-api/src/super-admin-recovery-final-contract.test.ts`.
+
+
+## 07.09.2026 — iPhone kesin telefon onayı + firma sahibi/Süper Yönetici akışı
+
+- Kullanıcı KY ERP girişinde 6 haneli Authenticator kodu yerine güvenilir telefona gelen bildirimin birincil ikinci faktör olmasını ve iPhone desteğinin kesinleştirilmesini onayladı.
+- Aktif paket: PR #234 / `codex/auth-phone-push-approval-v1-20260907`.
+- Güvenilir cihaz ekleme mevcut parola step-up ister; cihaz capability tokenı yalnız ilk kayıt cevabında verilir ve sunucuda hash tutulur.
+- iPhone/iPad Web Push için KY ERP Ana Ekrana eklenmiş web app olarak açılır. iOS native bildirim action butonlarını göstermese veya `notificationclick` olayı çalışmasa bile uygulama foreground olduğunda global PhoneApprovalInboxBridge pending isteği okuyup **Onayla / Reddet** ekranını açar.
+- Google/Microsoft Authenticator kaldırılmadı; `6 haneli kod ile devam et` fallback'i korunur. `BOTH_MFA` politikası telefon onayıyla gevşetilmez.
+- Normal kullanıcıda `approvalRequired` açıksa giriş onayı varsayılan olarak ilgili Firma Sahibi / İşveren (`COMPANY_ADMIN`) telefonuna gider. Süper Yönetici push aynalaması firma bazında Yönetim ekranından açılabilir.
+- Telefon push device/challenge/firma bildirim tercihleri yeni D1 migration yerine mevcut tenant-kapsamlı `json_store` üzerinde tutulur; bu paket production D1 schema write gerektirmez.
+- Canlı yayın kullanıcı tarafından açıkça onaylandı. Canonical yol değişmez: production merge -> Cloudflare Git Integration Pages + Workers Builds -> canlı health/auth/frontend smoke. GitHub Actions production deploy için kullanılmaz.
