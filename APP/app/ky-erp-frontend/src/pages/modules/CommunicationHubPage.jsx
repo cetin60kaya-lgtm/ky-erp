@@ -1095,13 +1095,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       ].some((value) => String(value || "").toLocaleLowerCase("tr-TR").includes(messageNeedle)))
     : baseMessageRows;
 
-  const mailViewTitle = selectedFolder?.name
-    || (activeTab === "mail-sabitlenen" ? "Sabitlenenler"
-      : activeTab === "mail-gonderilen" ? "Gönderilenler"
+  const mailViewTitle = selectedFolder ? folderDisplayName(selectedFolder)
+    : (activeTab === "mail-sabitlenen" ? "Sabitlenenler"
+      : activeTab === "mail-gonderilen" ? "Gönderilmiş Postalar"
       : activeTab === "mail-taslaklar" ? "Taslaklar"
       : activeTab === "mail-yanit-bekleyen" ? "Yanıt Bekleyenler"
       : activeTab === "mail-sablonlar" ? "Şablonlar"
       : "Gelen Kutusu");
+
+  const renderFolderButton = (folder) => (
+    <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
+      <span>{folderIcon(folder)} {folderDisplayName(folder)}</span>
+      <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
+    </button>
+  );
 
   return (
     <div className="comm-page">
@@ -1203,13 +1210,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 : null}
             </div> : null}
             {selectedAccount ? <div className="comm-folder-tree">
-              <div className="comm-folder-heading"><b>Klasörler</b><small>{folders.length}</small></div>
-              {folderRows.length ? folderRows.map((folder) => (
-                <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
-                  <span>{String(folder.folder_type || folder.folderType || "").toUpperCase() === "INBOX" ? "📥" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "SENT" ? "➤" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "ARCHIVE" ? "▣" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "TRASH" ? "🗑" : "▱"} {folder.name || "Klasör"}</span>
-                  <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : ""}</em>
-                </button>
-              )) : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
+              <div className="comm-folder-heading"><b>Posta Kutuları</b><small>{folders.length}</small></div>
+              {folderRows.length ? <>
+                {folderGroups.system.length ? <div className="comm-folder-group">{folderGroups.system.map(renderFolderButton)}</div> : null}
+                {folderGroups.category.length ? <><div className="comm-folder-subheading">Kategoriler</div><div className="comm-folder-group">{folderGroups.category.map(renderFolderButton)}</div></> : null}
+                {folderGroups.label.length ? <><div className="comm-folder-subheading">Etiketler</div><div className="comm-folder-group">{folderGroups.label.map(renderFolderButton)}</div></> : null}
+              </> : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
             </div> : null}
           </aside>
           <div className="comm-pane-resizer" role="separator" aria-orientation="vertical" aria-label="Posta kutuları genişliğini ayarla" onPointerDown={(event) => beginPaneResize("mailbox", event)} />
