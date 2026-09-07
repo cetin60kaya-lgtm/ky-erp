@@ -10,6 +10,14 @@ const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
 const rootElement = document.getElementById("root");
 
 async function renderErpApp() {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/kyerp-push-sw.js", { scope: "/" }).catch((error) => {
+        console.warn("KY ERP telefon bildirim servisi kaydedilemedi", error);
+      });
+    }, { once: true });
+  }
+
   const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
   installPersistedAuthBootstrap();
 
