@@ -85,6 +85,7 @@ export default function AppShellV3({
   activeCompanySlug,
   user,
   displayPreferences,
+  standaloneProduct = "",
   mobileMenuOpen,
   onToggleModuleMenu,
   onOpenTab,
@@ -112,6 +113,7 @@ export default function AppShellV3({
     generatedAt: "",
   });
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
+  const standalonePdks = String(standaloneProduct || "").toUpperCase() === "PDKS";
 
   const refreshNotifications = useCallback(async (silent = false) => {
     const normalizedRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
@@ -254,7 +256,7 @@ export default function AppShellV3({
       <aside className="shell-v3-sidebar">
         <header className="shell-v3-sidebar-brand">
           <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("muhasebe")}>
-            <b>KY</b><span><strong>KY ERP</strong><small>{activeModule?.label || "Yönetim Sistemi"}</small></span>
+            <b>KY</b><span><strong>{standalonePdks ? "KY PDKS PRO" : "KY ERP"}</strong><small>{standalonePdks ? "Personel Devam Kontrol" : (activeModule?.label || "Yönetim Sistemi")}</small></span>
           </button>
           <button type="button" className="shell-v3-sidebar-close" aria-label="Menüyü kapat" onClick={onCloseMobileMenu}><X size={18} /></button>
         </header>
@@ -314,7 +316,7 @@ export default function AppShellV3({
       <main className="shell-v3-main">
         <header className="shell-v3-topbar">
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç"><Menu size={19} /></button>
-          <label className="shell-v3-search"><Search size={17} /><input placeholder="Firma, belge, model veya ürün ara" /></label>
+          <label className="shell-v3-search"><Search size={17} /><input placeholder={standalonePdks ? "Personel, kart, vardiya veya durum ara" : "Firma, belge, model veya ürün ara"} /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><Plus size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
           <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
