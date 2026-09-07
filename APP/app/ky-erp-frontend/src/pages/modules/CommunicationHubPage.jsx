@@ -1046,8 +1046,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     try {
       await runMailMessageAction(messageId, action, values);
       applyMessageActionLocally(messageId, action, values);
-      if (action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
-      if (action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread && action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+      if (selectedFolderCountsUnread && action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice(action === "ARCHIVE" ? "Mail arşive taşındı." : action === "DELETE" ? "Mail silinmiş öğelere taşındı." : action === "MOVE" ? "Mail klasöre taşındı." : "Mail durumu güncellendi.");
       setMoveTargetId("");
       setMailboxRefresh((value) => value + 1);
@@ -1111,7 +1111,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const renderFolderButton = (folder) => (
     <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
       <span>{folderIcon(folder)} {folderDisplayName(folder)}</span>
-      <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
+      <em>{["TRASH","JUNK"].includes(folderType(folder)) || ["TRASH","SPAM"].includes(folderProviderId(folder)) ? "" : Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
     </button>
   );
 
