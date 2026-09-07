@@ -61,6 +61,8 @@ function attachmentPreviewKind(row) {
   const ext = name.includes(".") ? name.split(".").pop() : "";
   if ((mime.startsWith("image/") && mime !== "image/svg+xml") || ["png","jpg","jpeg","gif","webp","bmp","ico","avif"].includes(ext)) return "image";
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (mime.startsWith("audio/") || ["mp3","wav","ogg","m4a","aac","flac"].includes(ext)) return "audio";
+  if (mime.startsWith("video/") || ["mp4","webm","ogv","mov","m4v"].includes(ext)) return "video";
   if (mime.startsWith("text/") || ["txt","csv","log","md","json","xml"].includes(ext)) return "text";
   return "unsupported";
 }
@@ -88,7 +90,94 @@ function blobToDataUrl(blob) {
 }
 
 function regexEscape(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\function regexEscape(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+");
+}
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc ^= bytes[i];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function concatUint8Arrays(parts) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) { out.set(part, offset); offset += part.length; }
+  return out;
+}
+
+function zipStore(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let localOffset = 0;
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.name || "ek");
+    const data = file.bytes;
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    localParts.push(local, data);
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, localOffset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+    localOffset += local.length + data.length;
+  }
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, localOffset, true);
+  return new Blob([concatUint8Arrays([...localParts, ...centralParts, end])], { type: "application/zip" });
+}
+
+function mailHtmlWithExternalLinks(html) {
+  const source = String(html || "");
+  if (!source) return "";
+  try {
+    const doc = new DOMParser().parseFromString(source, "text/html");
+    if (!doc.querySelector("base")) {
+      const base = doc.createElement("base");
+      base.target = "_blank";
+      doc.head.prepend(base);
+    }
+    for (const link of doc.querySelectorAll("a[href]")) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
+    return "<!doctype html>" + doc.documentElement.outerHTML;
+  } catch {
+    return source;
+  }
 }
 
 function MailMessageMedia({ message }) {
@@ -234,6 +323,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [paneWidths, setPaneWidths] = useState(initialMailPaneWidths);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadAllLoading, setDownloadAllLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [renderedHtml, setRenderedHtml] = useState("");
   const [renderedHtmlMessageId, setRenderedHtmlMessageId] = useState("");
@@ -381,7 +471,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         } catch {}
       }
       if (!cancelled) {
-        setRenderedHtml(hydrated);
+        setRenderedHtml(mailHtmlWithExternalLinks(hydrated));
         setRenderedHtmlMessageId(messageId);
       }
     }
@@ -517,6 +607,38 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       if (current?.url) URL.revokeObjectURL(current.url);
       return null;
     });
+  }
+
+  async function downloadAllAttachments() {
+    if (!selectedMessage?.id || !attachments.length || downloadAllLoading) return;
+    setDownloadAllLoading(true);
+    try {
+      const files = [];
+      let totalBytes = 0;
+      for (const attachment of attachments) {
+        const blob = await getMailAttachmentBlob(selectedMessage.id, attachment.id);
+        totalBytes += blob.size;
+        if (totalBytes > 120 * 1024 * 1024) throw new Error("Toplam ek boyutu 120 MB sınırını aşıyor. Ekleri tek tek indirin.");
+        files.push({ name: attachmentName(attachment), bytes: new Uint8Array(await blob.arrayBuffer()) });
+      }
+      const zip = zipStore(files);
+      const url = URL.createObjectURL(zip);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${String(selectedMessage.subject || "mail-ekleri").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "mail-ekleri"}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+      setNotice(`${files.length} ek tek ZIP dosyasında indirildi.`);
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Tüm ekler indirilemedi."}`);
+    } finally {
+      setDownloadAllLoading(false);
+    }
   }
 
   async function selectMessage(row) {
@@ -1023,8 +1145,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button>
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
-              {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya · tıklayınca önizleme</small></div>{attachments.map((attachment) => <div className="comm-attachment-row" key={attachment.id}><button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : attachmentPreviewKind(attachment) === "unsupported" ? "Dosya" : "Önizle"}</em></button><button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button></div>)}</div> : null}
-              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
+              {attachments.length ? <div className="comm-attachments">
+                <div className="comm-attachments-head"><div><b>Ekler</b><small>{attachments.length} dosya · dosyaya tıklayınca önizleme</small></div><button type="button" className="secondary comm-download-all" onClick={downloadAllAttachments} disabled={downloadAllLoading}>{downloadAllLoading ? "İndiriliyor…" : "⇩ Tümünü İndir"}</button></div>
+                {attachments.map((attachment) => {
+                  const kind = attachmentPreviewKind(attachment);
+                  const size = Number(attachment.size_bytes || attachment.sizeBytes || 0);
+                  const typeLabel = kind === "image" ? "Görsel" : kind === "pdf" ? "PDF" : kind === "text" ? "Metin" : "Dosya";
+                  return <div className="comm-attachment-row" key={attachment.id}>
+                    <button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{typeLabel}{size > 0 ? ` · ${Math.max(1, Math.round(size / 1024))} KB` : ""}</em></button>
+                    {kind !== "unsupported" ? <button type="button" className="comm-attachment-preview-btn" title="Önizle" aria-label={`${attachmentName(attachment)} önizle`} onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}>👁</button> : null}
+                    <button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button>
+                  </div>;
+                })}
+              </div> : null}
+              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerPolicy="no-referrer" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : mailHtmlWithExternalLinks(selectedMessage.body_html || selectedMessage.bodyHtml)}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
           </aside>
@@ -1064,10 +1198,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
       {attachmentPreview ? <div className="comm-attachment-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAttachmentPreview(); }}>
         <section className="comm-attachment-preview" role="dialog" aria-modal="true" aria-label={`${attachmentPreview.name} önizleme`}>
-          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
+          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "audio" ? "Ses önizleme" : attachmentPreview.kind === "video" ? "Video önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
           <div className="comm-attachment-preview-body">
             {attachmentPreview.kind === "image" && attachmentPreview.url ? <img src={attachmentPreview.url} alt={attachmentPreview.name}/> : null}
             {attachmentPreview.kind === "pdf" && attachmentPreview.url ? <iframe src={attachmentPreview.url} title={attachmentPreview.name}/> : null}
+            {attachmentPreview.kind === "audio" && attachmentPreview.url ? <audio controls src={attachmentPreview.url}/> : null}
+            {attachmentPreview.kind === "video" && attachmentPreview.url ? <video controls src={attachmentPreview.url}/> : null}
             {attachmentPreview.kind === "text" ? <pre>{attachmentPreview.text}</pre> : null}
             {attachmentPreview.kind === "unsupported" ? <div className="comm-empty large"><b>Bu dosya türü tarayıcı içinde güvenli önizlenemiyor.</b><span>Dosyayı indirmek için sağ üstteki İndir düğmesini kullanın.</span></div> : null}
           </div>

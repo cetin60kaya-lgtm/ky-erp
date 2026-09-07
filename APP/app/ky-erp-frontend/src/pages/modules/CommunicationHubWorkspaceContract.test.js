@@ -85,3 +85,38 @@ test("incoming view waits for the canonical INBOX and hydrated HTML is keyed to 
   assert.match(page, /renderedHtmlMessageId/);
   assert.match(page, /renderedHtmlMessageId === String\(selectedMessage\.id\)/);
 });
+
+
+test("attachments expose explicit preview controls and download-all", () => {
+  assert.match(page, /downloadAllAttachments/);
+  assert.match(page, /Tümünü İndir/);
+  assert.match(page, /comm-attachment-preview-btn/);
+  assert.match(page, /attachmentPreviewKind/);
+  assert.match(page, /kind === "image"/);
+  assert.match(page, /kind === "pdf"/);
+  assert.match(page, /png/);
+  assert.match(page, /jpg/);
+  assert.match(page, /jpeg/);
+  assert.match(css, /comm-download-all/);
+  assert.match(css, /comm-attachment-preview-btn/);
+});
+
+
+test("mail attachment download-all is a single zip and external OneDrive links can escape safely", () => {
+  assert.match(page, /function zipStore/);
+  assert.match(page, /application\/zip/);
+  assert.match(page, /Tümünü İndir/);
+  assert.match(page, /mailHtmlWithExternalLinks/);
+  assert.match(page, /base\.target = "_blank"/);
+  assert.match(page, /allow-popups allow-popups-to-escape-sandbox allow-downloads/);
+  assert.match(page, /referrerPolicy="no-referrer"/);
+});
+
+test("mail preview supports browser-native audio and video in addition to image pdf and text", () => {
+  assert.match(page, /return "audio"/);
+  assert.match(page, /return "video"/);
+  assert.match(page, /<audio controls/);
+  assert.match(page, /<video controls/);
+  assert.match(css, /comm-attachment-preview-body audio/);
+  assert.match(css, /comm-attachment-preview-body video/);
+});
