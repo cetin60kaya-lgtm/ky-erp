@@ -131,7 +131,8 @@ public sealed class LocalPdksStore(PdksPaths paths)
     {
         await InitializeAsync(ct);
         var safe = people
-            .Where(p => string.Equals(p.SgkStatus?.Trim(), "VAR", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(p.CardNo))
+            .Where(p => !string.IsNullOrWhiteSpace(p.CardNo)
+                && !IsPassiveStatus(p.Status))
             .GroupBy(p => p.CardNo.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToArray();
@@ -152,13 +153,14 @@ public sealed class LocalPdksStore(PdksPaths paths)
             command.CommandText = """
                 INSERT INTO people_cache
                   (employee_id,personnel_code,full_name,department,title,sgk_status,status,card_no,start_date,exit_date,updated_at)
-                VALUES($id,$code,$name,$department,$title,'VAR',$status,$card,$start,$exit,$now);
+                VALUES($id,$code,$name,$department,$title,$sgk,$status,$card,$start,$exit,$now);
                 """;
             command.Parameters.AddWithValue("$id", person.Id);
             command.Parameters.AddWithValue("$code", person.PersonnelCode ?? "");
             command.Parameters.AddWithValue("$name", person.FullName ?? "");
             command.Parameters.AddWithValue("$department", person.Department ?? "");
             command.Parameters.AddWithValue("$title", person.Title ?? "");
+            command.Parameters.AddWithValue("$sgk", person.SgkStatus ?? "");
             command.Parameters.AddWithValue("$status", person.Status ?? "Aktif");
             command.Parameters.AddWithValue("$card", person.CardNo.Trim());
             command.Parameters.AddWithValue("$start", person.StartDate ?? "");
@@ -168,6 +170,14 @@ public sealed class LocalPdksStore(PdksPaths paths)
         }
         await transaction.CommitAsync(ct);
         await TouchStateAsync("people_cache_count", safe.Length.ToString(CultureInfo.InvariantCulture), ct);
+    }
+
+    private static bool IsPassiveStatus(string? value)
+    {
+        var status = (value ?? "").Trim();
+        return status.Contains("PAS", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("CIK", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("AYRIL", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<IReadOnlyList<CachedPerson>> GetPeopleAsync(CancellationToken ct = default)
