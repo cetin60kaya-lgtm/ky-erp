@@ -122,19 +122,27 @@ test("payroll payment balance cannot be bypassed and backend enforces the same c
   assert.match(cloud, /calculatePayrollAmounts/);
 });
 
-test("payment list PDF and Excel use the same canonical payrollRows data with a totals row", () => {
+test("payment list PDF is a compact single-row list and prints one totals row only at the end", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const start = page.indexOf("const printPayrollReport = async");
+  const end = page.indexOf("const legalLabel =", start);
+  const block = page.slice(start, end);
 
   assert.match(page, /const exportPayroll = \(\) =>/);
-  assert.match(page, /const rows = payrollRows\.filter/);
   assert.match(page, /excelRows\.push\(\{/);
   assert.match(page, /personel: "TOPLAM"/);
-  assert.match(page, /const printPayrollReport = async \(\) =>/);
-  assert.match(page, /<h1>İK Ödeme Listesi<\/h1>/);
-  assert.match(page, /Personel \/ HKN/);
-  assert.match(page, /<th class="medium">Maaş<\/th><th class="narrow">Yol<\/th><th class="narrow">EK<\/th><th class="narrow">Mesai<\/th>/);
-  assert.match(page, /<th class="narrow">Avans<\/th><th class="narrow">Kesinti<\/th><th class="medium">İcra\/Haciz<\/th><th class="medium">Banka<\/th><th class="medium">Elden<\/th><th class="total">Toplam Ödeme<\/th>/);
-  assert.match(page, /<tr class="tot"><td class="person"><strong>TOPLAM<\/strong>/);
+  assert.match(block, /const rows = payrollRows\.filter/);
+  assert.match(block, /<h1>İK Ödeme Listesi<\/h1>/);
+  assert.match(block, /Personel \/ HKN/);
+  for (const label of ["Maaş","Yol","EK","Mesai","Avans","Kesinti","İcra/Haciz","Banka","Elden","Net"]) {
+    assert.ok(block.includes(`>${label}<`), `Eksik ödeme listesi kolonu: ${label}`);
+  }
+  assert.match(block, /<tr class="total-row">/);
+  assert.match(block, /TOPLAM · \$\{rows\.length\} personel/);
+  assert.doesNotMatch(block, /<tfoot>/);
+  assert.doesNotMatch(block, /Hak Ediş<\/th>/);
+  assert.doesNotMatch(block, /Durum<\/th>/);
+  assert.match(block, /toplam yalnız listenin en sonunda bir kez gösterilir/);
   assert.ok(page.includes("Ödeme Listesi / PDF"));
   assert.ok(page.includes("Ödeme Listesi / Excel"));
 });
@@ -313,4 +321,28 @@ test("kıdem preview keeps the complete payroll settlement breakdown", () => {
     assert.ok(block.includes(label), `Eksik kıdem alanı: ${label}`);
   }
   assert.match(block, /Bordro düzeltmesi · kilitli|KIDEM ÇIKTISI/);
+});
+
+
+test("final payroll save auto-reconciles bank cash and supports serial personnel review", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const css = frontend("pages/modules/ik.advanced.css");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+
+  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
+  assert.match(page, /payment\.bank/);
+  assert.match(page, /payment\.cash/);
+  assert.match(page, /Kaydet \+ Sonraki/);
+  assert.match(page, /Personeller/);
+  assert.match(page, /payroll-person-rail-list/);
+  assert.match(page, /openPayroll\(nextRow\)/);
+  assert.doesNotMatch(page, /disabled=\{busy\|\|Math\.abs\(totals\.diff\)>0\.01\}/);
+
+  assert.match(css, /payroll-final-layout/);
+  assert.match(css, /payroll-person-rail/);
+  assert.match(css, /payroll-control-grid/);
+
+  // Backend still keeps the hard invariant; only the UI reconciles before posting.
+  assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
 });
