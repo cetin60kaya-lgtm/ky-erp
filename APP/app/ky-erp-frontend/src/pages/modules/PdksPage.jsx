@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import "../../app/pdksModuleRegistryPatch";
 import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
-import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
+import PdksAiControlCenter from "../pdks/PdksAiControlCenter";\nimport PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
 import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
 import PdksReportCenter from "../pdks/PdksReportCenter";
@@ -22,7 +22,7 @@ const NAV_GROUPS = [
   { key: "terminal", label: "Terminal & Sistem", hint: "Cihaz, agent ve senkron", items: [
     ["saat-terminal", "Terminal"], ["cihaz-baglantilari", "Cihazlar"], ["senkron", "Senkron"],
   ]},
-  { key: "rapor", label: "Rapor & Denetim", hint: "Puantaj raporları ve yıllık denetim", items: [
+  { key: "ai", label: "AI & Kontrol", hint: "Canlı analiz, anomali ve kontrollü işlemler", items: [\n    ["ai-kontrol", "AI Kontrol"],\n  ]},\n  { key: "rapor", label: "Rapor & Denetim", hint: "Puantaj raporları ve yıllık denetim", items: [
     ["raporlar", "Raporlar"], ["denetim-yillik-temp", "Yıllık TEMP"],
   ]},
 ];
@@ -113,7 +113,7 @@ export default function PdksPage(props) {
             {!isAuditAccount ? <QuickAssistant disabled={false} mainCompanyId={mainCompanyId} /> : null}
             <PdksLiveHome activeMainCompany={activeMainCompany} openModule={openModule} />
           </>
-        ) : deviceCenterTab ? (
+        ) : activeTab === "ai-kontrol" ? (\n          <PdksAiControlCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />\n        ) : deviceCenterTab ? (
           <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : personnelDeskTab ? (
           <PdksPersonnelDesk {...props} />
