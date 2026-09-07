@@ -37,6 +37,8 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   const [selectedId,setSelectedId]=useState("");
   const [delivery,setDelivery]=useState(null);
   const [recovery,setRecovery]=useState(null);
+  const [approvalSettings,setApprovalSettings]=useState(null);
+  const [approvalBusy,setApprovalBusy]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("Firma ve sistem ayarları yükleniyor...");
   const [danger,setDanger]=useState({ mode:"", item:null, password:"", targetId:"" });
@@ -76,6 +78,34 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   const activePeople=selectedPeople.filter((row)=>row.isActive!==false);
   const deliveryData=delivery||{};
   const recoveryData=recovery||{};
+
+  const loadApprovalSettings=useCallback(async()=>{
+    if(!selected?.slug){setApprovalSettings(null);return;}
+    try{
+      const result=await apiGet(`/admin/security/company-approval-settings/${encodeURIComponent(selected.slug)}`,{_ts:Date.now()});
+      setApprovalSettings(result?.data||result||null);
+    }catch(error){
+      setApprovalSettings(null);
+      setMessage(`Hata: ${error?.message||"Firma giriş onayı ayarları alınamadı."}`);
+    }
+  },[selected?.slug]);
+  useEffect(()=>{loadApprovalSettings();},[loadApprovalSettings]);
+
+  async function saveApprovalSetting(key,value){
+    if(!selected?.slug||approvalBusy)return;
+    setApprovalBusy(true);
+    try{
+      const payload={
+        notifyCompanyOwner:key==="notifyCompanyOwner"?Boolean(value):approvalSettings?.notifyCompanyOwner!==false,
+        notifyApplicationOwner:key==="notifyApplicationOwner"?Boolean(value):Boolean(approvalSettings?.notifyApplicationOwner),
+      };
+      const result=await apiPatch(`/admin/security/company-approval-settings/${encodeURIComponent(selected.slug)}`,payload);
+      setApprovalSettings(result?.data||result||payload);
+      setMessage("Firma giriş onayı bildirim tercihleri kaydedildi.");
+    }catch(error){
+      setMessage(`Hata: ${error?.message||"Giriş onayı bildirimi kaydedilemedi."}`);
+    }finally{setApprovalBusy(false);}
+  }
 
   const loadSelectedBackups=useCallback(async()=>{
     if(!selected?.slug){setCompanyBackups([]);return;}
@@ -201,6 +231,27 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         </div>)}
         {!selectedPeople.length?<div className="admpro-empty">Bu firmaya bağlı kullanıcı bulunamadı.</div>:null}
       </div>
+    </section>:null}
+
+    {selected?<section className="admpro-card">
+      <div className="admpro-card-head">
+        <div><h3>Telefon Giriş Onayları · {selected.name}</h3><p>Firma kullanıcılarının giriş isteği önce firma sahibine gider. İsterseniz aynı onay Uygulama Sahibinin telefonuna da gönderilir.</p></div>
+        <span className="admpro-badge ok">Push + Tenant Kilitli</span>
+      </div>
+      <div className="admpro-form-grid">
+        <label className="admpro-check wide">
+          <input type="checkbox" checked={approvalSettings?.notifyCompanyOwner!==false} disabled={approvalBusy} onChange={(e)=>saveApprovalSetting("notifyCompanyOwner",e.target.checked)}/>
+          Firma Sahibi / İşveren telefonuna onay bildirimi gönder
+        </label>
+        <label className="admpro-check wide">
+          <input type="checkbox" checked={Boolean(approvalSettings?.notifyApplicationOwner)} disabled={approvalBusy} onChange={(e)=>saveApprovalSetting("notifyApplicationOwner",e.target.checked)}/>
+          Uygulama Sahibine de onay bildirimi gönder
+        </label>
+      </div>
+      <div className="admpro-notice success" style={{marginTop:12}}>
+        İki bildirim de açıksa firma sahibi veya Uygulama Sahibi güvenli telefonundan Onayla / Reddet diyebilir; ilk geçerli karar uygulanır. 6 haneli Authenticator kodları yedek yöntem olarak korunur.
+      </div>
+      {!owners.length?<div className="admpro-notice warn" style={{marginTop:10}}>Bu firmada Firma Sahibi / İşveren atanmadığı için firma sahibi push onayı gönderilemez. Uygulama Sahibi bildirimi açıksa onay size gelir.</div>:null}
     </section>:null}
 
     {selected?<section className="admpro-card"><div className="admpro-card-head"><div><h3>Firma Yedek & Geri Dönüş · {selected.name}</h3><p>Bu firmanın tenant verileri, R2 dosyaları ve SQL arşivi tek işlemde korunur.</p></div><div className="admpro-actions"><button className="primary" type="button" onClick={backupSelected} disabled={backupBusy}>{backupBusy?"İşleniyor...":"Tam Yedek Al"}</button></div></div><div className="admpro-notice success">Yedek firma bazlıdır. Geri dönüş başlamadan önce ayrıca PRE_RESTORE güvenlik yedeği alınır; auth/session/MFA kayıtları firma geri dönüşüyle geriye sarılmaz.</div><div className="admpro-table" style={{marginTop:12}}><table><thead><tr><th>Tarih</th><th>Veri</th><th>Dosya</th><th>SQL</th><th>İşlem</th></tr></thead><tbody>{companyBackups.slice(0,5).map((row)=><tr key={row.id}><td>{dateText(row.createdAt||row.completedAt)}</td><td>{Number(row.totalRows||0).toLocaleString("tr-TR")} satır</td><td>{Number(row.totalFiles||0).toLocaleString("tr-TR")}</td><td><button type="button" onClick={()=>downloadSql(row)} disabled={backupBusy}>{row.sqlKey?"SQL İndir":"SQL Hazırla & İndir"}</button></td><td><button type="button" className="danger" onClick={()=>setRestore({backup:row,password:"",confirmText:""})}>Bu Yedeğe Dön</button></td></tr>)}{!companyBackups.length?<tr><td colSpan="5">Bu firma için henüz yedek yok.</td></tr>:null}</tbody></table></div></section>:null}
