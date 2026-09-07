@@ -292,7 +292,10 @@ test("PDKS report people query follows the selected historical year and month", 
 
 test("IK validates monthly SGK before card writes and final-control corrections are immutable", () => {
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
-  assert.ok(cloud.indexOf("SGK_DAYS_INVALID") < cloud.indexOf("INSERT INTO ik_person_card_settings"));
+  const cardSaveStart = cloud.indexOf("async function savePersonCard");
+  const cardSaveEnd = cloud.indexOf("async function updateMonthlyEmployeeFromCard", cardSaveStart);
+  const cardSave = cloud.slice(cardSaveStart, cardSaveEnd);
+  assert.ok(cardSave.indexOf("SGK_DAYS_INVALID") < cardSave.indexOf("INSERT INTO ik_person_card_settings"));
   assert.match(cloud, /FINAL_CONTROL_CORRECTION_IMMUTABLE/);
   assert.match(cloud, /wasPassive/);
   assert.match(cloud, /hrTodayIstanbul\(\)/);
