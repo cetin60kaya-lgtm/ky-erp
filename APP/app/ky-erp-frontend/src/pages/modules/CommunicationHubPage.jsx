@@ -862,10 +862,19 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     };
     const apiAction = actionMap[action];
     if (!apiAction) return;
+    const wasUnread = Number(row.is_read ?? row.isRead ?? 1) === 0;
     setLoading(true);
     try {
       await runMailMessageAction(row.id, apiAction, {});
       applyMessageActionLocally(row.id, apiAction, {});
+      if (selectedFolderCountsUnread && wasUnread && ["MARK_READ","ARCHIVE","DELETE"].includes(apiAction)) {
+        adjustInboxUnreadCount(-1);
+        setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+      }
+      if (selectedFolderCountsUnread && !wasUnread && apiAction === "MARK_UNREAD") {
+        adjustInboxUnreadCount(1);
+        setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      }
       setNotice(apiAction === "ARCHIVE" ? "Mail arşive taşındı." : apiAction === "DELETE" ? "Mail silinmiş öğelere taşındı." : "Mail durumu güncellendi.");
       setMailboxRefresh((value) => value + 1);
       await loadBase();
@@ -1083,6 +1092,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       if (selectedFolderCountsUnread && action === "MARK_UNREAD" && !wasUnread) {
         adjustInboxUnreadCount(1);
         setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      }
+      if (selectedFolderCountsUnread && wasUnread && ["ARCHIVE","DELETE","MOVE"].includes(action)) {
+        adjustInboxUnreadCount(-1);
+        setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
       }
       setNotice(action === "ARCHIVE" ? "Mail arşive taşındı." : action === "DELETE" ? "Mail silinmiş öğelere taşındı." : action === "MOVE" ? "Mail klasöre taşındı." : "Mail durumu güncellendi.");
       setMoveTargetId("");
