@@ -1209,58 +1209,117 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const printPayrollReport = async () => {
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Ödeme listesi için personel bulunamadı.");
+
     const totals = rows.reduce((sum, row) => ({
       salary: sum.salary + row.salary,
       road: sum.road + row.road,
       extra: sum.extra + row.extra,
       overtime: sum.overtime + row.overtime,
+      hakedis: sum.hakedis + row.hakedis,
       advance: sum.advance + row.advance,
       deduction: sum.deduction + row.deduction,
       garnishment: sum.garnishment + row.garnishment,
       bank: sum.bank + row.bank,
       cash: sum.cash + row.cash,
       net: sum.net + row.net,
-    }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
+    }), { salary: 0, road: 0, extra: 0, overtime: 0, hakedis: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
+
+    const periodLabel = `${MONTHS[month - 1]} ${year}`;
     const html = `<html><head><meta charset="utf-8"><style>
-      @page{size:A4 landscape;margin:6mm}
+      @page{size:A4 landscape;margin:8mm}
       *{box-sizing:border-box}
-      body{font:9px Arial;color:#14263a;padding:0;margin:0}
-      h1{font-size:17px;margin:0}
-      p{color:#52657b;margin:3px 0 7px;font-size:8px}
+      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:9.5px}
+      .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:9px;padding-bottom:7px;border-bottom:2px solid #9fb0c3}
+      h1{font-size:18px;margin:0}
+      .sub{margin-top:3px;color:#5c6f84;font-size:8px}
+      .meta{text-align:right;line-height:1.45;font-size:8.5px}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #aebfd0;padding:4px 3px;text-align:right;white-space:nowrap;vertical-align:middle}
-      th{background:#eaf1f8;font-size:8px;line-height:1.15}
-      th.person,td.person{text-align:left;width:22%}
-      td.person strong{display:block;font-size:9.5px;overflow:hidden;text-overflow:ellipsis}
-      td.person small{display:block;margin-top:1px;font-size:7px;color:#60758c}
-      th.narrow{width:6.5%}
-      th.medium{width:7.5%}
-      th.total{width:9.5%}
-      .tot{font-weight:900;background:#eef5ff;border-top:2px solid #111}
-      .tot td{font-size:9px}
-      .money-strong{font-weight:900}
-      .ek-positive{font-weight:900;background:#f2fbf4}
+      th,td{border:1px solid #b5c3d2;padding:5px 6px;vertical-align:top}
+      th{background:#edf3f8;text-align:left;font-size:8px;letter-spacing:.01em}
+      th.person{width:21%} th.earn{width:24%} th.cut{width:19%} th.pay{width:25%} th.state{width:11%}
+      .person-name{font-weight:900;font-size:10.5px;line-height:1.2}
+      .person-meta{display:block;margin-top:2px;color:#62768b;font-size:7px}
+      .stack{display:grid;gap:2px}
+      .line{display:flex;justify-content:space-between;gap:8px;line-height:1.28}
+      .line span{color:#52657b}
+      .line b{white-space:nowrap;text-align:right}
+      .line.total{margin-top:2px;padding-top:3px;border-top:1px dashed #9fb0c3;font-weight:900}
+      .pay-net{font-size:11px}
+      .pill{display:inline-block;border-radius:999px;padding:3px 6px;font-size:7px;font-weight:900;background:#e8f7ed;color:#147a3d}
+      .pill.warn{background:#fff3dc;color:#9a5a00}
+      .source{display:block;margin-top:5px;color:#62768b;font-size:7px}
+      tfoot td{background:#f3f7fb;font-weight:900;border-top:2px solid #16283b}
+      .total-title{font-size:10px}
     </style></head><body>
-      <h1>İK Ödeme Listesi</h1>
-      <p>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)} · A4 yatay okunaklı ödeme özeti · HKN personel adının altında · Ekrandaki bordro ile aynı kaynak</p>
-      <table><thead><tr>
-        <th class="person">Personel / HKN</th><th class="medium">Maaş</th><th class="narrow">Yol</th><th class="narrow">EK</th><th class="narrow">Mesai</th>
-        <th class="narrow">Avans</th><th class="narrow">Kesinti</th><th class="medium">İcra/Haciz</th><th class="medium">Banka</th><th class="medium">Elden</th><th class="total">Toplam Ödeme</th>
-      </tr></thead><tbody>
-      ${rows.map((row) => `<tr>
-        <td class="person"><strong>${escapeHtml(row.employee.fullName)}</strong><small>${escapeHtml(row.employee.code || "-")}</small></td>
-        <td>${money(row.salary)}</td><td>${money(row.road)}</td><td class="${row.extra > 0 ? "ek-positive" : ""}">${money(row.extra)}</td>
-        <td>${money(row.overtime)}</td><td>${money(row.advance)}</td><td>${money(row.deduction)}</td>
-        <td>${money(row.garnishment)}</td><td class="money-strong">${money(row.bank)}</td><td class="money-strong">${money(row.cash)}</td><td class="money-strong">${money(row.net)}</td>
-      </tr>`).join("")}
-      <tr class="tot"><td class="person"><strong>TOPLAM</strong><small>${rows.length} personel</small></td>
-        <td>${money(totals.salary)}</td><td>${money(totals.road)}</td><td>${money(totals.extra)}</td>
-        <td>${money(totals.overtime)}</td><td>${money(totals.advance)}</td><td>${money(totals.deduction)}</td>
-        <td>${money(totals.garnishment)}</td><td>${money(totals.bank)}</td><td>${money(totals.cash)}</td><td>${money(totals.net)}</td>
-      </tr></tbody></table></body></html>`;
+      <div class="head">
+        <div><h1>İK Ödeme Listesi</h1><div class="sub">${escapeHtml(periodLabel)} · ${rows.length} personel · Ekrandaki son bordro kaynağı</div></div>
+        <div class="meta"><b>Net Toplam: ${money(totals.net)}</b><br>Banka: ${money(totals.bank)} · Elden: ${money(totals.cash)}</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th class="person">Personel</th>
+          <th class="earn">Hak Ediş</th>
+          <th class="cut">Kesintiler</th>
+          <th class="pay">Ödeme</th>
+          <th class="state">Durum</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((row) => `<tr>
+            <td>
+              <div class="person-name">${escapeHtml(row.employee.fullName)}</div>
+              <span class="person-meta">${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span>
+            </td>
+            <td><div class="stack">
+              <div class="line"><span>Maaş</span><b>${money(row.salary)}</b></div>
+              <div class="line"><span>Yol</span><b>${money(row.road)}</b></div>
+              <div class="line"><span>EK</span><b>${money(row.extra)}</b></div>
+              <div class="line"><span>Mesai</span><b>${money(row.overtime)}</b></div>
+              <div class="line total"><span>Hak Ediş</span><b>${money(row.hakedis)}</b></div>
+            </div></td>
+            <td><div class="stack">
+              <div class="line"><span>Avans</span><b>${money(row.advance)}</b></div>
+              <div class="line"><span>Kesinti</span><b>${money(row.deduction)}</b></div>
+              <div class="line"><span>İcra / Haciz</span><b>${money(row.garnishment)}</b></div>
+              <div class="line total"><span>Toplam</span><b>${money(round(row.advance + row.deduction + row.garnishment))}</b></div>
+            </div></td>
+            <td><div class="stack">
+              <div class="line"><span>Banka</span><b>${money(row.bank)}</b></div>
+              <div class="line"><span>Elden</span><b>${money(row.cash)}</b></div>
+              <div class="line total pay-net"><span>Net Ödenecek</span><b>${money(row.net)}</b></div>
+            </div></td>
+            <td>
+              <span class="pill ${row.diff === 0 ? "" : "warn"}">${row.diff === 0 ? "Hazır" : "Kontrol"}</span>
+              <span class="source">${num(row.employee.sgkNet) > 0 ? "Kaynak: Resmi bordro" : "Kaynak: Ödeme planı"}</span>
+            </td>
+          </tr>`).join("")}
+        </tbody>
+        <tfoot><tr>
+          <td><span class="total-title">TOPLAM</span><span class="person-meta">${rows.length} personel</span></td>
+          <td><div class="stack">
+            <div class="line"><span>Maaş</span><b>${money(totals.salary)}</b></div>
+            <div class="line"><span>Yol</span><b>${money(totals.road)}</b></div>
+            <div class="line"><span>EK</span><b>${money(totals.extra)}</b></div>
+            <div class="line"><span>Mesai</span><b>${money(totals.overtime)}</b></div>
+            <div class="line total"><span>Hak Ediş</span><b>${money(totals.hakedis)}</b></div>
+          </div></td>
+          <td><div class="stack">
+            <div class="line"><span>Avans</span><b>${money(totals.advance)}</b></div>
+            <div class="line"><span>Kesinti</span><b>${money(totals.deduction)}</b></div>
+            <div class="line"><span>İcra/Haciz</span><b>${money(totals.garnishment)}</b></div>
+          </div></td>
+          <td><div class="stack">
+            <div class="line"><span>Banka</span><b>${money(totals.bank)}</b></div>
+            <div class="line"><span>Elden</span><b>${money(totals.cash)}</b></div>
+            <div class="line total pay-net"><span>Net Toplam</span><b>${money(totals.net)}</b></div>
+          </div></td>
+          <td>Özet</td>
+        </tr></tfoot>
+      </table>
+    </body></html>`;
+
     try {
       await printHtmlDocument({ title: `İK Ödeme Listesi - ${period}`, html });
-      setNotice("Ödeme listesi yazdırma / PDF ekranına gönderildi; en altta tüm sütun toplamları var.");
+      setNotice("Ödeme listesi temiz ve taşmasız yazdırma / PDF görünümüyle açıldı.");
     } catch (error) {
       setNotice(error?.message || "Ödeme listesi açılamadı.");
     }
@@ -1567,9 +1626,27 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "Toplam odeme dengeli: Banka + Elden = Net Toplam." : "Toplam odeme banka + elden ile eslesmiyor."}</div>
         <div className="card">
           <div className="ch"><div><b>Cikti Oncesi Son Bordro</b><span>Resmi Net bordro dosyasindan gelir; Banka + Elden = sirket net odemesi olmalidir.</span></div></div>
-          <div className="tw"><table><thead><tr><th><input type="checkbox" checked={payrollRows.length>0&&selectedPayrollIds.length===payrollRows.length} onChange={(event)=>setSelectedPayrollIds(event.target.checked?payrollRows.map((row)=>row.employee.id):[])} /></th><th>Personel</th><th>SGK Gun</th><th>Resmi Net</th><th>Maas</th><th>Yol</th><th>EK</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>İcra/Haciz</th><th>Hak Edis</th><th>Net Odenecek</th><th>Banka</th><th>Elden</th><th>Kaynak</th><th>Durum</th><th>Islem</th></tr></thead><tbody>
-            {payrollRows.map((row) => <tr key={row.employee.id}><td><input type="checkbox" checked={selectedPayrollIds.includes(row.employee.id)} onChange={(event)=>setSelectedPayrollIds((old)=>event.target.checked?[...new Set([...old,row.employee.id])]:old.filter((id)=>id!==row.employee.id))} /></td><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{num(row.employee.sgkDays)||"-"}</td><td className="money">{num(row.employee.sgkNet)>0?money(row.employee.sgkNet):"-"}</td><td className="money">{money(row.salary)}</td><td className="money">{money(row.road)}</td><td className="money">{money(row.extra)}</td><td className="money">{money(row.overtime)}</td><td className="money">{money(row.advance)}</td><td className="money">{money(row.deduction)}</td><td className="money">{money(row.garnishment)}</td><td className="money">{money(row.hakedis)}</td><td className="money">{money(row.net)}</td><td className="money">{money(row.bank)}</td><td className="money">{money(row.cash)}</td><td><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span></td><td><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazir":"Kontrol"}</span></td><td><button className="btn" onClick={()=>openPayroll(row)}>Son Kontrol / Düzenle</button> <button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fis</button></td></tr>)}
-            <EmptyRow show={!payrollRows.length} colSpan={18} text="Bordro icin personel bulunamadi." />
+          <div className="tw payroll-screen-table-wrap"><table className="payroll-screen-table"><thead><tr>
+            <th className="check-col"><input type="checkbox" checked={payrollRows.length>0&&selectedPayrollIds.length===payrollRows.length} onChange={(event)=>setSelectedPayrollIds(event.target.checked?payrollRows.map((row)=>row.employee.id):[])} /></th>
+            <th className="person-col">Personel</th>
+            <th className="official-col">Resmi Bordro</th>
+            <th className="summary-col">Hak Ediş</th>
+            <th className="summary-col">Kesintiler</th>
+            <th className="payment-col">Ödeme</th>
+            <th className="status-col">Durum</th>
+            <th className="action-col">İşlem</th>
+          </tr></thead><tbody>
+            {payrollRows.map((row) => <tr key={row.employee.id}>
+              <td className="check-col"><input type="checkbox" checked={selectedPayrollIds.includes(row.employee.id)} onChange={(event)=>setSelectedPayrollIds((old)=>event.target.checked?[...new Set([...old,row.employee.id])]:old.filter((id)=>id!==row.employee.id))} /></td>
+              <td className="person-col"><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"} · {row.employee.department || "Bölüm yok"}</span></td>
+              <td className="official-col"><div className="payroll-cell-stack"><span><em>SGK Gün</em><b>{num(row.employee.sgkDays)||"-"}</b></span><span><em>Resmi Net</em><b>{num(row.employee.sgkNet)>0?money(row.employee.sgkNet):"-"}</b></span></div></td>
+              <td className="summary-col"><div className="payroll-cell-stack"><span><em>Maaş</em><b>{money(row.salary)}</b></span><span><em>Yol / EK</em><b>{money(row.road)} / {money(row.extra)}</b></span><span><em>Mesai</em><b>{money(row.overtime)}</b></span><span className="cell-total"><em>Hak Ediş</em><b>{money(row.hakedis)}</b></span></div></td>
+              <td className="summary-col"><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(row.advance)}</b></span><span><em>Kesinti</em><b>{money(row.deduction)}</b></span><span><em>İcra/Haciz</em><b>{money(row.garnishment)}</b></span></div></td>
+              <td className="payment-col"><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(row.bank)}</b></span><span><em>Elden</em><b>{money(row.cash)}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(row.net)}</b></span></div></td>
+              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${row.diff===0?"green":"red"}`}>{row.diff===0?"Hazır":"Kontrol"}</span></td>
+              <td className="action-col"><button className="btn" onClick={()=>openPayroll(row)}>Son Kontrol</button><button className="btn" onClick={()=>{setSelectedId(row.employee.id);setModal("fis");}}>Fiş</button></td>
+            </tr>)}
+            <EmptyRow show={!payrollRows.length} colSpan={8} text="Bordro için personel bulunamadı." />
           </tbody></table></div>
         </div>
         <LogTable title="Bordro Islem Loglari" rows={scopedLogs} onEdit={editFromLog} />
