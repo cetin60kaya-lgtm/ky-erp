@@ -1,12 +1,12 @@
-# KY PDKS 1.3.0 — Windows Masaüstü
+# KY PDKS 1.8.0 — Windows Masaüstü
 
 KY ERP'nin PDKS modülüyle aynı D1 iş verisini kullanan gerçek Windows masaüstü uygulamasıdır. Windows tarafındaki SQLite ikinci personel/izin/avans/bordro veritabanı değildir; yalnız ham kart, offline kuyruk, cache, log ve yedek içindir.
 
 ## Kurulan ürün
 
-- `KY PDKS.exe`: WPF masaüstü uygulaması.
+- `KY PDKS Desktop.exe`: PDKS-only WPF masaüstü uygulaması.\n- `KY ERP Desktop.exe`: aynı build zincirinden üretilen tam ERP Windows kabuğu.
 - `KYERP.PDKS.Agent`: Windows hizmeti; uygulama kapalı olsa bile kart hareketini yerelde toplamaya devam eder.
-- Setup: `KY-PDKS-Setup-1.3.0.exe`.
+- PDKS Setup: `KY-PDKS-Desktop-Setup-1.8.0.exe`.\n- Tam ERP Setup: `KY-ERP-Desktop-Setup-1.8.0.exe`.
 - Yerel DB: `C:\ProgramData\KY ERP\PDKS\Data\pdks.db`.
 - Import/Archive/Reject/Backup/Logs/Reports: `C:\ProgramData\KY ERP\PDKS` altında.
 - ERP API: `https://api.kyerp.net`.
@@ -15,7 +15,7 @@ KY ERP'nin PDKS modülüyle aynı D1 iş verisini kullanan gerçek Windows masa�
 
 İş verisinin ana kaynağı KY ERP D1'dir:
 
-- Personel: İK Personel Kartı; PDKS yalnız `SGK=VAR` + kart numarası bulunan kişileri kullanır.
+- Personel: İK Personel Kartı; normal PDKS kart importu aktif + kart numarası bulunan personeli SGK durumundan bağımsız kullanır. `DENETIM` görünümü SGK kapsamını ayrı salt-okunur filtreler.
 - Kart olayları: `ik_time_clock_events`.
 - Puantaj düzeltmeleri: `ik_attendance_day_overrides`.
 - Vardiya ve personel vardiyası: PDKS D1 vardiya tabloları.
@@ -77,3 +77,23 @@ GitHub Actions: `.github/workflows/ky-pdks-windows-build.yml`.
 Setup yönetici yetkisi ister, uygulamayı `Program Files\KY ERP\KY PDKS` altına kurar, `KYERP.PDKS.Agent` hizmetini Automatic (Delayed Start) olarak oluşturur ve recovery ayarlarını yapar. Uninstall, kart güvenliği için `C:\ProgramData\KY ERP\PDKS` içindeki DB ve yedekleri silmez.
 
 Production D1 migration/deploy işlemleri Windows build sürecinin parçası değildir; önce API/frontend/Windows testleri ve şema readiness doğrulanır.
+
+## Terminal / Cihaz Merkezi — 07.09.2026
+
+PDKS-only masaüstünde üst çubuktaki **Terminal / Cihaz** penceresi:
+
+- Hedef500 hazır profilini uygular,
+- cihaz adı/no/makine no/yön/IP/port/baud ayarını saklar,
+- `192.168.1.224:5005` için payload göndermeden güvenli TCP erişim testi yapar,
+- `timerecords.txt` dosyasını paylaşımlı-okuma ile analiz eder,
+- toplam/okunan/tekrar/tanınmayan satır sayılarını gösterir,
+- son terminal kart kaydını gösterir,
+- PC saatini canlı gösterir.
+
+Üretici binary protokolü veya resmi SDK doğrulanmadan cihaz tarih/saat yazma, kapı testi, yeniden başlatma, yönetici silme ve kayıt silme komutları kilitlidir. Bu kilit çalışan Hedef PDKS bağlantısını koruyan fail-closed donanım güvenliği kuralıdır.
+
+Ana veri yolu:
+
+`Kart cihazı -> Hedef PDKS -> timerecords.txt -> KYERP.PDKS.Agent -> offline SQLite/WAL -> KY ERP D1`
+
+Agent `timerecords.txt` değişmediği sürece dosyayı tekrar tekrar baştan taramaz; dosya değiştiğinde yeniden okur ve fingerprint dedupe uygular.
