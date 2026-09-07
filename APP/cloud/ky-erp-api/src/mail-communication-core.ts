@@ -198,7 +198,7 @@ export function registerMailCommunicationRoutes(app:any){
     const accountWhere=elevated?"a.main_company_slug=?":"a.main_company_slug=? AND EXISTS (SELECT 1 FROM mail_account_members mm WHERE mm.main_company_slug=a.main_company_slug AND mm.account_id=a.id AND mm.user_id=? AND mm.can_view=1)";
     const args=elevated?[tenant]:[tenant,userId];
     const accounts=await c.env.DB.prepare("SELECT COUNT(*) n,SUM(CASE WHEN a.status='ACTIVE' THEN 1 ELSE 0 END) active_n,SUM(CASE WHEN a.approval_status='PENDING' THEN 1 ELSE 0 END) pending_n FROM mail_accounts a WHERE "+accountWhere).bind(...args).first<AnyRow>();
-    const messages=await c.env.DB.prepare("SELECT COUNT(*) n,SUM(CASE WHEN m.direction='INCOMING' AND m.is_read=0 THEN 1 ELSE 0 END) unread_n FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE "+accountWhere).bind(...args).first<AnyRow>();
+    const messages=await c.env.DB.prepare("SELECT COUNT(*) n,SUM(CASE WHEN m.direction='INCOMING' AND m.is_read=0 AND UPPER(COALESCE(f.folder_type,'')) NOT IN ('TRASH','JUNK') THEN 1 ELSE 0 END) unread_n FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug LEFT JOIN mail_folders f ON f.id=m.folder_id AND f.main_company_slug=m.main_company_slug WHERE "+accountWhere).bind(...args).first<AnyRow>();
     const drafts=await c.env.DB.prepare("SELECT COUNT(*) n FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.status='DRAFT' AND "+accountWhere).bind(...args).first<AnyRow>();
     return c.json({ok:true,data:{accountCount:Number(accounts?.n||0),activeAccountCount:Number(accounts?.active_n||0),pendingAccountCount:Number(accounts?.pending_n||0),messageCount:Number(messages?.n||0),unreadCount:Number(messages?.unread_n||0),draftCount:Number(drafts?.n||0),tenant}});
   });
@@ -369,7 +369,9 @@ export function registerMailCommunicationRoutes(app:any){
     if(!(await canAccessAccount(c,current,tenant,accountId,"can_view")))return c.json(jsonError("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunu görüntüleme yetkiniz yok."),403);
     const r=await c.env.DB.prepare(`SELECT f.*,
       (SELECT COUNT(*) FROM mail_messages m WHERE m.main_company_slug=f.main_company_slug AND m.account_id=f.account_id AND m.folder_id=f.id) message_count,
-      (SELECT COUNT(*) FROM mail_messages m WHERE m.main_company_slug=f.main_company_slug AND m.account_id=f.account_id AND m.folder_id=f.id AND m.direction='INCOMING' AND m.is_read=0) unread_count
+      CASE WHEN UPPER(COALESCE(f.folder_type,'')) IN ('TRASH','JUNK') THEN 0 ELSE
+        (SELECT COUNT(*) FROM mail_messages m WHERE m.main_company_slug=f.main_company_slug AND m.account_id=f.account_id AND m.folder_id=f.id AND m.direction='INCOMING' AND m.is_read=0)
+      END unread_count
       FROM mail_folders f
       WHERE f.main_company_slug=? AND f.account_id=?
       ORDER BY CASE UPPER(COALESCE(f.folder_type,'')) WHEN 'INBOX' THEN 0 WHEN 'DRAFTS' THEN 1 WHEN 'SENT' THEN 2 WHEN 'ARCHIVE' THEN 3 WHEN 'JUNK' THEN 4 WHEN 'TRASH' THEN 5 ELSE 10 END,
