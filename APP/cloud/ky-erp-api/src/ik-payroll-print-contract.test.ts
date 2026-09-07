@@ -122,24 +122,27 @@ test("payroll payment balance cannot be bypassed and backend enforces the same c
   assert.match(cloud, /calculatePayrollAmounts/);
 });
 
-test("payment list PDF and Excel use the same canonical payrollRows data with a clean grouped totals layout", () => {
+test("payment list PDF is a compact single-row list and prints one totals row only at the end", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const start = page.indexOf("const printPayrollReport = async");
+  const end = page.indexOf("const legalLabel =", start);
+  const block = page.slice(start, end);
 
   assert.match(page, /const exportPayroll = \(\) =>/);
-  assert.match(page, /const rows = payrollRows\.filter/);
   assert.match(page, /excelRows\.push\(\{/);
   assert.match(page, /personel: "TOPLAM"/);
-  assert.match(page, /const printPayrollReport = async \(\) =>/);
-  assert.match(page, /<h1>İK Ödeme Listesi<\/h1>/);
-  assert.match(page, /<th class="person">Personel<\/th>/);
-  assert.match(page, /<th class="earn">Hak Ediş<\/th>/);
-  assert.match(page, /<th class="cut">Kesintiler<\/th>/);
-  assert.match(page, /<th class="pay">Ödeme<\/th>/);
-  assert.match(page, /<th class="state">Durum<\/th>/);
-  assert.match(page, /Net Ödenecek/);
-  assert.match(page, /Net Toplam/);
-  assert.match(page, /payroll-screen-table/);
-  assert.match(page, /payroll-cell-stack/);
+  assert.match(block, /const rows = payrollRows\.filter/);
+  assert.match(block, /<h1>İK Ödeme Listesi<\/h1>/);
+  assert.match(block, /Personel \/ HKN/);
+  for (const label of ["Maaş","Yol","EK","Mesai","Avans","Kesinti","İcra/Haciz","Banka","Elden","Net"]) {
+    assert.ok(block.includes(`>${label}<`), `Eksik ödeme listesi kolonu: ${label}`);
+  }
+  assert.match(block, /<tr class="total-row">/);
+  assert.match(block, /TOPLAM · \$\{rows\.length\} personel/);
+  assert.doesNotMatch(block, /<tfoot>/);
+  assert.doesNotMatch(block, /Hak Ediş<\/th>/);
+  assert.doesNotMatch(block, /Durum<\/th>/);
+  assert.match(block, /toplam yalnız listenin en sonunda bir kez gösterilir/);
   assert.ok(page.includes("Ödeme Listesi / PDF"));
   assert.ok(page.includes("Ödeme Listesi / Excel"));
 });

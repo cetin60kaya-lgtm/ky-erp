@@ -1211,115 +1211,96 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (!rows.length) return setNotice("Ödeme listesi için personel bulunamadı.");
 
     const totals = rows.reduce((sum, row) => ({
-      salary: sum.salary + row.salary,
-      road: sum.road + row.road,
-      extra: sum.extra + row.extra,
-      overtime: sum.overtime + row.overtime,
-      hakedis: sum.hakedis + row.hakedis,
-      advance: sum.advance + row.advance,
-      deduction: sum.deduction + row.deduction,
-      garnishment: sum.garnishment + row.garnishment,
-      bank: sum.bank + row.bank,
-      cash: sum.cash + row.cash,
-      net: sum.net + row.net,
-    }), { salary: 0, road: 0, extra: 0, overtime: 0, hakedis: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
+      salary: sum.salary + num(row.salary),
+      road: sum.road + num(row.road),
+      extra: sum.extra + num(row.extra),
+      overtime: sum.overtime + num(row.overtime),
+      advance: sum.advance + num(row.advance),
+      deduction: sum.deduction + num(row.deduction),
+      garnishment: sum.garnishment + num(row.garnishment),
+      bank: sum.bank + num(row.bank),
+      cash: sum.cash + num(row.cash),
+      net: sum.net + num(row.net),
+    }), { salary: 0, road: 0, extra: 0, overtime: 0, advance: 0, deduction: 0, garnishment: 0, bank: 0, cash: 0, net: 0 });
 
     const periodLabel = `${MONTHS[month - 1]} ${year}`;
     const html = `<html><head><meta charset="utf-8"><style>
-      @page{size:A4 landscape;margin:8mm}
+      @page{size:A4 landscape;margin:6mm}
       *{box-sizing:border-box}
-      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:9.5px}
-      .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:9px;padding-bottom:7px;border-bottom:2px solid #9fb0c3}
-      h1{font-size:18px;margin:0}
-      .sub{margin-top:3px;color:#5c6f84;font-size:8px}
-      .meta{text-align:right;line-height:1.45;font-size:8.5px}
+      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:7.6px}
+      .report-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:6px;padding-bottom:5px;border-bottom:1.5px solid #8194a8}
+      h1{font-size:15px;margin:0;line-height:1}
+      .sub{margin-top:2px;color:#63778b;font-size:7px}
+      .head-total{text-align:right;font-size:7.4px;line-height:1.35}
       table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #b5c3d2;padding:5px 6px;vertical-align:top}
-      th{background:#edf3f8;text-align:left;font-size:8px;letter-spacing:.01em}
-      th.person{width:21%} th.earn{width:24%} th.cut{width:19%} th.pay{width:25%} th.state{width:11%}
-      .person-name{font-weight:900;font-size:10.5px;line-height:1.2}
-      .person-meta{display:block;margin-top:2px;color:#62768b;font-size:7px}
-      .stack{display:grid;gap:2px}
-      .line{display:flex;justify-content:space-between;gap:8px;line-height:1.28}
-      .line span{color:#52657b}
-      .line b{white-space:nowrap;text-align:right}
-      .line.total{margin-top:2px;padding-top:3px;border-top:1px dashed #9fb0c3;font-weight:900}
-      .pay-net{font-size:11px}
-      .pill{display:inline-block;border-radius:999px;padding:3px 6px;font-size:7px;font-weight:900;background:#e8f7ed;color:#147a3d}
-      .pill.warn{background:#fff3dc;color:#9a5a00}
-      .source{display:block;margin-top:5px;color:#62768b;font-size:7px}
-      tfoot td{background:#f3f7fb;font-weight:900;border-top:2px solid #16283b}
-      .total-title{font-size:10px}
+      thead{display:table-header-group}
+      tr{break-inside:avoid;page-break-inside:avoid}
+      th,td{border:1px solid #b7c4d1;padding:3px 3.5px;vertical-align:middle;white-space:nowrap}
+      th{background:#eef3f8;text-align:center;font-size:7px;line-height:1.1}
+      td{text-align:right;font-variant-numeric:tabular-nums}
+      th.person,td.person{text-align:left;width:16%}
+      th.salary{width:9%} th.road{width:7%} th.extra{width:7%} th.overtime{width:7%}
+      th.advance{width:8%} th.deduction{width:8%} th.garnishment{width:8%}
+      th.bank{width:9%} th.cash{width:9%} th.net{width:12%}
+      td.person strong{display:block;font-size:7.8px;line-height:1.05;overflow:hidden;text-overflow:ellipsis}
+      td.person small{display:block;margin-top:1px;color:#6a7b8c;font-size:6.2px}
+      td.bank,td.cash,td.net{font-weight:800}
+      td.net{font-size:8.2px}
+      .total-row td{font-weight:900;background:#f4f7fb;border-top:2px solid #15283b;font-size:7.5px}
+      .total-row td.person{font-size:8px}
     </style></head><body>
-      <div class="head">
-        <div><h1>İK Ödeme Listesi</h1><div class="sub">${escapeHtml(periodLabel)} · ${rows.length} personel · Ekrandaki son bordro kaynağı</div></div>
-        <div class="meta"><b>Net Toplam: ${money(totals.net)}</b><br>Banka: ${money(totals.bank)} · Elden: ${money(totals.cash)}</div>
+      <div class="report-head">
+        <div><h1>İK Ödeme Listesi</h1><div class="sub">${escapeHtml(periodLabel)} · ${rows.length} personel</div></div>
+        <div class="head-total">Net: <b>${money(totals.net)}</b> · Banka: <b>${money(totals.bank)}</b> · Elden: <b>${money(totals.cash)}</b></div>
       </div>
       <table>
         <thead><tr>
-          <th class="person">Personel</th>
-          <th class="earn">Hak Ediş</th>
-          <th class="cut">Kesintiler</th>
-          <th class="pay">Ödeme</th>
-          <th class="state">Durum</th>
+          <th class="person">Personel / HKN</th>
+          <th class="salary">Maaş</th>
+          <th class="road">Yol</th>
+          <th class="extra">EK</th>
+          <th class="overtime">Mesai</th>
+          <th class="advance">Avans</th>
+          <th class="deduction">Kesinti</th>
+          <th class="garnishment">İcra/Haciz</th>
+          <th class="bank">Banka</th>
+          <th class="cash">Elden</th>
+          <th class="net">Net</th>
         </tr></thead>
         <tbody>
           ${rows.map((row) => `<tr>
-            <td>
-              <div class="person-name">${escapeHtml(row.employee.fullName)}</div>
-              <span class="person-meta">${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span>
-            </td>
-            <td><div class="stack">
-              <div class="line"><span>Maaş</span><b>${money(row.salary)}</b></div>
-              <div class="line"><span>Yol</span><b>${money(row.road)}</b></div>
-              <div class="line"><span>EK</span><b>${money(row.extra)}</b></div>
-              <div class="line"><span>Mesai</span><b>${money(row.overtime)}</b></div>
-              <div class="line total"><span>Hak Ediş</span><b>${money(row.hakedis)}</b></div>
-            </div></td>
-            <td><div class="stack">
-              <div class="line"><span>Avans</span><b>${money(row.advance)}</b></div>
-              <div class="line"><span>Kesinti</span><b>${money(row.deduction)}</b></div>
-              <div class="line"><span>İcra / Haciz</span><b>${money(row.garnishment)}</b></div>
-              <div class="line total"><span>Toplam</span><b>${money(round(row.advance + row.deduction + row.garnishment))}</b></div>
-            </div></td>
-            <td><div class="stack">
-              <div class="line"><span>Banka</span><b>${money(row.bank)}</b></div>
-              <div class="line"><span>Elden</span><b>${money(row.cash)}</b></div>
-              <div class="line total pay-net"><span>Net Ödenecek</span><b>${money(row.net)}</b></div>
-            </div></td>
-            <td>
-              <span class="pill ${row.diff === 0 ? "" : "warn"}">${row.diff === 0 ? "Hazır" : "Kontrol"}</span>
-              <span class="source">${num(row.employee.sgkNet) > 0 ? "Kaynak: Resmi bordro" : "Kaynak: Ödeme planı"}</span>
-            </td>
+            <td class="person"><strong>${escapeHtml(row.employee.fullName)}</strong><small>${escapeHtml(row.employee.code || "-")}</small></td>
+            <td>${money(row.salary)}</td>
+            <td>${money(row.road)}</td>
+            <td>${money(row.extra)}</td>
+            <td>${money(row.overtime)}</td>
+            <td>${money(row.advance)}</td>
+            <td>${money(row.deduction)}</td>
+            <td>${money(row.garnishment)}</td>
+            <td class="bank">${money(row.bank)}</td>
+            <td class="cash">${money(row.cash)}</td>
+            <td class="net">${money(row.net)}</td>
           </tr>`).join("")}
+          <tr class="total-row">
+            <td class="person">TOPLAM · ${rows.length} personel</td>
+            <td>${money(totals.salary)}</td>
+            <td>${money(totals.road)}</td>
+            <td>${money(totals.extra)}</td>
+            <td>${money(totals.overtime)}</td>
+            <td>${money(totals.advance)}</td>
+            <td>${money(totals.deduction)}</td>
+            <td>${money(totals.garnishment)}</td>
+            <td class="bank">${money(totals.bank)}</td>
+            <td class="cash">${money(totals.cash)}</td>
+            <td class="net">${money(totals.net)}</td>
+          </tr>
         </tbody>
-        <tfoot><tr>
-          <td><span class="total-title">TOPLAM</span><span class="person-meta">${rows.length} personel</span></td>
-          <td><div class="stack">
-            <div class="line"><span>Maaş</span><b>${money(totals.salary)}</b></div>
-            <div class="line"><span>Yol</span><b>${money(totals.road)}</b></div>
-            <div class="line"><span>EK</span><b>${money(totals.extra)}</b></div>
-            <div class="line"><span>Mesai</span><b>${money(totals.overtime)}</b></div>
-            <div class="line total"><span>Hak Ediş</span><b>${money(totals.hakedis)}</b></div>
-          </div></td>
-          <td><div class="stack">
-            <div class="line"><span>Avans</span><b>${money(totals.advance)}</b></div>
-            <div class="line"><span>Kesinti</span><b>${money(totals.deduction)}</b></div>
-            <div class="line"><span>İcra/Haciz</span><b>${money(totals.garnishment)}</b></div>
-          </div></td>
-          <td><div class="stack">
-            <div class="line"><span>Banka</span><b>${money(totals.bank)}</b></div>
-            <div class="line"><span>Elden</span><b>${money(totals.cash)}</b></div>
-            <div class="line total pay-net"><span>Net Toplam</span><b>${money(totals.net)}</b></div>
-          </div></td>
-          <td>Özet</td>
-        </tr></tfoot>
       </table>
     </body></html>`;
 
     try {
       await printHtmlDocument({ title: `İK Ödeme Listesi - ${period}`, html });
-      setNotice("Ödeme listesi temiz ve taşmasız yazdırma / PDF görünümüyle açıldı.");
+      setNotice("Ödeme listesi tek satırlı sade düzende açıldı; toplam yalnız listenin en sonunda bir kez gösterilir.");
     } catch (error) {
       setNotice(error?.message || "Ödeme listesi açılamadı.");
     }
