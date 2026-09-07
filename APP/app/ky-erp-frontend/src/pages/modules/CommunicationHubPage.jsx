@@ -275,6 +275,7 @@ function folderIcon(row) {
   if (type === "TRASH") return "🗑";
   if (provider === "STARRED") return "★";
   if (provider === "IMPORTANT") return "❗";
+  if (provider === "UNREAD") return "●";
   if (provider.startsWith("CATEGORY_")) return "▰";
   return "▱";
 }
@@ -282,7 +283,7 @@ function folderIcon(row) {
 function folderGroup(row) {
   const type = folderType(row);
   const provider = folderProviderId(row);
-  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT"].includes(provider)) return "system";
+  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT","UNREAD"].includes(provider)) return "system";
   if (provider.startsWith("CATEGORY_")) return "category";
   return "label";
 }
@@ -405,15 +406,22 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const selectedFolderProviderId = folderProviderId(selectedFolder);
   const selectedFolderIsTrash = selectedFolderType === "TRASH" || selectedFolderProviderId === "TRASH";
   const selectedFolderIsJunk = selectedFolderType === "JUNK" || selectedFolderProviderId === "SPAM";
-  const selectedFolderCountsUnread = !selectedFolderIsTrash && !selectedFolderIsJunk;
-  const defaultInboxFolderId = useMemo(
-    () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "INBOX")?.id || ""),
-    [folders],
+  const inboxFolder = useMemo(
+    () => folderRows.find((row) => folderType(row) === "INBOX" || folderProviderId(row) === "INBOX") || null,
+    [folderRows],
   );
+  const defaultInboxFolderId = String(inboxFolder?.id || "");
   const defaultSentFolderId = useMemo(
-    () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "SENT")?.id || ""),
-    [folders],
+    () => String(folderRows.find((row) => folderType(row) === "SENT" || folderProviderId(row) === "SENT")?.id || ""),
+    [folderRows],
   );
+  const selectedFolderCountsUnread = (!selectedFolderId && activeTab === "mail-gelen")
+    || selectedFolderType === "INBOX"
+    || selectedFolderProviderId === "INBOX";
+  const activeUnreadFolderId = selectedFolderCountsUnread ? String(selectedFolderId || defaultInboxFolderId) : "";
+  const selectedInboxUnreadCount = inboxFolder
+    ? Number(inboxFolder.unread_count ?? inboxFolder.unreadCount ?? 0)
+    : Number(overview?.unreadCount || 0);
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -606,7 +614,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         if (!cancelled) {
           const list = safeArray(rows);
           setMessages(list);
-          setSelectedMessage((current) => list.find((row) => row.id === current?.id) || list[0] || null);
+          setSelectedMessage((current) => list.find((row) => row.id === current?.id) || null);
         }
       } catch (error) {
         if (!cancelled) setNotice(error?.message || "Posta kutusu okunamadı.");
@@ -1133,7 +1141,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       {notice ? <div className={`comm-notice ${notice.startsWith("Hata:") ? "error" : ""}`}>{notice}</div> : null}
 
       <section className="comm-metrics" aria-label="Mail merkezi durum özeti">
-        <div><span>Okunmamış</span><b>{overview?.unreadCount ?? 0}</b></div>
+        <div className="comm-unread-metric" title="Seçili posta kutusunun Gelen Kutusu okunmamış sayısı"><span><i aria-hidden="true" />Okunmamış</span><b>{selectedInboxUnreadCount}</b></div>
         <div><span>Aktif hesap</span><b>{overview?.activeAccountCount ?? 0}</b></div>
         <div><span>Onay bekleyen</span><b>{overview?.pendingAccountCount ?? 0}</b></div>
         <div><span>Firma dosyası</span><b>{files.length}</b></div>
@@ -1230,7 +1238,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             {activeTab === "mail-sablonlar" && !selectedFolderId ? (
               <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
-              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${!selectedFolderIsTrash && !selectedFolderIsJunk && Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
+              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${!selectedFolderIsTrash && !selectedFolderIsJunk && Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} aria-label={`${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "Okunmamış mail" : "Okunmuş mail"}: ${row.subject || "(Konu yok)"}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
                 <div><b>{Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "📌 " : ""}{row.sender_name || row.sender_email || row.subject || "Taslak"}</b><span>{dateText(row.received_at || row.sent_at || row.updated_at)}</span></div>
                 <strong>{row.subject || "(Konu yok)"}{Number(row.is_flagged ?? row.isFlagged ?? 0) === 1 ? "  ⚑" : ""}</strong>
                 <p>{row.body_text || row.bodyText || (row.body_html || row.bodyHtml ? "HTML mail içeriği" : "İçerik önizlemesi yok.")}{Number(row.has_attachments ?? row.hasAttachments ?? 0) === 1 ? " · 📎 Ek var" : ""}</p>
