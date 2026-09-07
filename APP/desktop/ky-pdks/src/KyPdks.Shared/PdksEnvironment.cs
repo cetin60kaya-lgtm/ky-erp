@@ -52,7 +52,22 @@ public sealed class ConfigStore(PdksPaths paths)
                 return created;
             }
             var config = JsonSerializer.Deserialize<PdksConfig>(File.ReadAllText(paths.ConfigFile, Encoding.UTF8), Json) ?? new PdksConfig();
+            var legacyHedef = string.Equals(config.HedefReadFile?.Trim(), @"F:\Ekin\bilgi.dat", StringComparison.OrdinalIgnoreCase);
+            var detectedHedef = @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt";
+            var migrated = false;
+            if (legacyHedef && File.Exists(detectedHedef))
+            {
+                config.HedefReadFile = detectedHedef;
+                migrated = true;
+            }
+            if (migrated && string.Equals(config.TcpHost?.Trim(), "127.0.0.1", StringComparison.OrdinalIgnoreCase) && config.TcpPort == 4370)
+            {
+                config.TcpHost = "192.168.1.224";
+                config.TcpPort = 5005;
+                config.SerialBaud = 38400;
+            }
             config.Normalize();
+            if (migrated) Save(config);
             return config;
         }
         catch
