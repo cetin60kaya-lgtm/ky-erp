@@ -43,6 +43,9 @@ export class IkAdvancedService implements OnModuleInit {
     if (normalized.includes("MESAI")) return "Mesai";
     if (normalized.includes("PRIM")) return "Prim";
     if (normalized.includes("AVANS")) return "Avans";
+    if (normalized.includes("EKSIK") && normalized.includes("GUN")) return "Eksik gün";
+    if (normalized.includes("EKSIK") && normalized.includes("SAAT")) return "Eksik saat";
+    if (normalized.includes("DEVAMSIZ") || normalized.includes("GELMEDI")) return "Eksik gün";
     if (normalized.includes("KESINTI")) return "Özel kesinti";
     return raw;
   }
@@ -56,7 +59,11 @@ export class IkAdvancedService implements OnModuleInit {
     return this.norm(value).includes("AVANS");
   }
   private isDeductionType(value: any) {
-    return this.norm(value).includes("KESINTI");
+    const normalized = this.norm(value);
+    return normalized.includes("KESINTI")
+      || (normalized.includes("EKSIK") && (normalized.includes("GUN") || normalized.includes("SAAT")))
+      || normalized.includes("DEVAMSIZ")
+      || normalized.includes("GELMEDI");
   }
   private financePayrollEffect(type: string, fallback?: any) {
     const current = this.text(fallback);
@@ -1145,15 +1152,13 @@ export class IkAdvancedService implements OnModuleInit {
       const salary = this.number(employee.salary);
       const road = this.number(employee.roadAllowance);
       const followsSgk = employee.sgkFollow === true;
+      // PDKS gun durumu SGK/puantaj kontroludur. Parasal devamsizlik kesintisi
+      // yalniz "Eksik gün / Eksik saat" finans hareketinden gelir; boylece cift kesinti olmaz.
       const cutDays = followsSgk ? stats.unpaid + stats.absent + stats.report : 0;
-      const salaryCut = Math.round((salary / 30) * cutDays * 100) / 100;
-      const salaryPay = Math.max(0, salary - salaryCut);
-      const roadPay = !followsSgk
-        ? road
-        : policy.roadByActualPresence
-          ? Math.max(0, Math.round((road - (road / 30) * cutDays) * 100) / 100)
-          : road;
-      const roadCut = Math.max(0, road - roadPay);
+      const salaryCut = 0;
+      const salaryPay = salary;
+      const roadPay = road;
+      const roadCut = 0;
       const overtimeAmount = ownAdjustments.filter((row) => this.isOvertimeType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
       const premiumAmount = ownAdjustments.filter((row) => this.isPremiumType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
       const advanceAmount = ownAdjustments.filter((row) => this.isAdvanceType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
