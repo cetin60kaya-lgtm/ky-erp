@@ -311,3 +311,29 @@ test("kıdem preview keeps the complete payroll settlement breakdown", () => {
   }
   assert.match(block, /Bordro düzeltmesi · kilitli|KIDEM ÇIKTISI/);
 });
+
+
+test("prepared payroll fails closed when the payroll read cannot be verified", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  assert.match(page, /payrollReadFailed/);
+  assert.match(page, /periodPrepared && !payrollReadFailed/);
+  assert.match(page, /Bordro verisi doğrulanamadı/);
+  assert.match(page, /disabled=\{payrollReadFailed\}/);
+});
+
+test("locked IK periods block payroll and finance writes through the canonical D1 lock table", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+  assert.match(cloud, /SELECT is_locked FROM ik_monthly_close/);
+  assert.match(cloud, /IK_PERIOD_LOCKED/);
+  assert.match(cloud, /advancedPeriodWriteGuard/);
+  assert.match(cloud, /advancedDateWriteGuard/);
+  assert.match(cloud, /saveAdvancedPayrollFinalControl/);
+  assert.match(cloud, /saveAdvancedPayrollOverride/);
+});
+
+test("repeated personnel deactivation preserves an existing historical exit date", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+  assert.match(cloud, /alreadyPassive/);
+  assert.match(cloud, /existingExitDate/);
+  assert.match(cloud, /alreadyPassive && existingExitDate \? existingExitDate : hrTodayIstanbul\(\)/);
+});
