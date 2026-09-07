@@ -8,7 +8,7 @@ import "./PdksAiControlCenter.css";
 const QUICK = [
   "Bugün kim gelmedi? Vardiyası başlamamış olanları gelmeyen sayma.",
   "Bugün yıllık izinde, raporlu veya diğer izinli personeli ayrı ayrı özetle.",
-  "Bugün çıkış basmayı unutmuş veya eksik basımı olanları göster.",
+  "Bugün giriş veya çıkış basımı eksik olanları ayrı ayrı göster.",
   "Geç gelenleri ve kaçta geldiklerini özetle.",
   "Şu an içeride olan personeli bölüm bazında özetle.",
   "Terminal ve cihaz sağlığını kontrol et; çevrimdışı olanları belirt.",
@@ -31,6 +31,7 @@ function compactSnapshot(data) {
       firstTime: row.firstTime,
       lastTime: row.lastTime,
       eventCount: row.eventCount,
+      missingKind: row.missingKind,
       late: row.late,
       schedule: row.schedule ? {
         groupName: row.schedule.groupName,
@@ -82,7 +83,7 @@ export default function PdksAiControlCenter({ activeMainCompany, isAuditAccount 
     const m = snapshot?.metrics || {};
     return [
       { label: "Gelmeyen", value: Number(m.noShow || 0), tone: Number(m.noShow || 0) ? "bad" : "ok" },
-      { label: "Eksik çıkış", value: Number(m.missingPunch || 0), tone: Number(m.missingPunch || 0) ? "bad" : "ok" },
+      { label: "Eksik basım", value: Number(m.missingPunch || 0), tone: Number(m.missingPunch || 0) ? "bad" : "ok" },
       { label: "Geç gelen", value: Number(m.late || 0), tone: Number(m.late || 0) ? "warn" : "ok" },
       { label: "Çevrimdışı cihaz", value: Math.max(0, Number(m.deviceCount || 0) - Number(m.onlineDevices || 0)), tone: Number(m.deviceCount || 0) > Number(m.onlineDevices || 0) ? "bad" : "ok" },
     ];
@@ -100,6 +101,7 @@ export default function PdksAiControlCenter({ activeMainCompany, isAuditAccount 
         "Sen KY ERP içindeki PDKS Kontrol Asistanısın.",
         "Aşağıdaki JSON, sunucudan az önce alınmış canlı PDKS durumudur. Sadece bu veriyi esas al.",
         "NO_SHOW gerçekten vardiyası başlamış ve kartı olmayan kişidir; WAITING vardiya saati gelmemiş kişidir.",
+        "MISSING_IN giriş basımı eksik; MISSING_OUT çıkış basımı eksik anlamına gelir. Geceye sarkan bugünkü vardiyayı bitmeden eksik çıkış sayma.",
         "Finans/bordro alanına girme. Bulguları kısa, operasyonel ve önem sırasıyla ver.",
         "Bir veri değişikliği gerekiyorsa kendin uyguladığını söyleme; hangi kontrollü işlemin onaylanması gerektiğini belirt.",
         `CANLI_PDKS_JSON=${JSON.stringify(live)}`,
