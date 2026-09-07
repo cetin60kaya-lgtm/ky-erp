@@ -236,6 +236,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [previewLoading, setPreviewLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [renderedHtml, setRenderedHtml] = useState("");
+  const [renderedHtmlMessageId, setRenderedHtmlMessageId] = useState("");
   const mailLayoutRef = useRef(null);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
@@ -357,8 +358,13 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   useEffect(() => {
     let cancelled = false;
     async function hydrateInlineImages() {
+      const messageId = String(selectedMessage?.id || "");
       const html = String(selectedMessage?.body_html || selectedMessage?.bodyHtml || "");
-      if (!html) { setRenderedHtml(""); return; }
+      if (!html) {
+        setRenderedHtml("");
+        setRenderedHtmlMessageId("");
+        return;
+      }
       let hydrated = html;
       const inlineRows = attachments.filter((row) => attachmentPreviewKind(row) === "image" && String(row.content_id || row.contentId || "").trim());
       for (const attachment of inlineRows) {
@@ -374,7 +380,10 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           hydrated = hydrated.replace(matcher, dataUrl);
         } catch {}
       }
-      if (!cancelled) setRenderedHtml(hydrated);
+      if (!cancelled) {
+        setRenderedHtml(hydrated);
+        setRenderedHtmlMessageId(messageId);
+      }
     }
     hydrateInlineImages();
     return () => { cancelled = true; };
@@ -424,9 +433,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           }
           return;
         }
+        if (!selectedFolderId && activeTab === "mail-gelen" && !defaultInboxFolderId) {
+          setMessages([]);
+          setSelectedMessage(null);
+          return;
+        }
         const params = selectedFolderId
           ? { folderId: selectedFolderId, take: 200 }
-          : activeTab === "mail-gelen" && defaultInboxFolderId
+          : activeTab === "mail-gelen"
             ? { folderId: defaultInboxFolderId, take: 200 }
             : activeTab === "mail-sabitlenen"
               ? { pinned: 1, take: 200 }
@@ -1010,7 +1024,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
               {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya · tıklayınca önizleme</small></div>{attachments.map((attachment) => <div className="comm-attachment-row" key={attachment.id}><button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : attachmentPreviewKind(attachment) === "unsupported" ? "Dosya" : "Önizle"}</em></button><button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button></div>)}</div> : null}
-              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={renderedHtml || selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
+              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
           </aside>
