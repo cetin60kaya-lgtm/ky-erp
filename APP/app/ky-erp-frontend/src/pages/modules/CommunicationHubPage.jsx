@@ -471,7 +471,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         } catch {}
       }
       if (!cancelled) {
-        setRenderedHtml(hydrated);
+        setRenderedHtml(mailHtmlWithExternalLinks(hydrated));
         setRenderedHtmlMessageId(messageId);
       }
     }
@@ -1158,7 +1158,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                   </div>;
                 })}
               </div> : null}
-              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
+              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerPolicy="no-referrer" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : mailHtmlWithExternalLinks(selectedMessage.body_html || selectedMessage.bodyHtml)}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
           </aside>
@@ -1198,10 +1198,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
 
       {attachmentPreview ? <div className="comm-attachment-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAttachmentPreview(); }}>
         <section className="comm-attachment-preview" role="dialog" aria-modal="true" aria-label={`${attachmentPreview.name} önizleme`}>
-          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
+          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "audio" ? "Ses önizleme" : attachmentPreview.kind === "video" ? "Video önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
           <div className="comm-attachment-preview-body">
             {attachmentPreview.kind === "image" && attachmentPreview.url ? <img src={attachmentPreview.url} alt={attachmentPreview.name}/> : null}
             {attachmentPreview.kind === "pdf" && attachmentPreview.url ? <iframe src={attachmentPreview.url} title={attachmentPreview.name}/> : null}
+            {attachmentPreview.kind === "audio" && attachmentPreview.url ? <audio controls src={attachmentPreview.url}/> : null}
+            {attachmentPreview.kind === "video" && attachmentPreview.url ? <video controls src={attachmentPreview.url}/> : null}
             {attachmentPreview.kind === "text" ? <pre>{attachmentPreview.text}</pre> : null}
             {attachmentPreview.kind === "unsupported" ? <div className="comm-empty large"><b>Bu dosya türü tarayıcı içinde güvenli önizlenemiyor.</b><span>Dosyayı indirmek için sağ üstteki İndir düğmesini kullanın.</span></div> : null}
           </div>
