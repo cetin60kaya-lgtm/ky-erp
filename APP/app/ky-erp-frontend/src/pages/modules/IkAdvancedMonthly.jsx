@@ -1227,7 +1227,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const html = `<html><head><meta charset="utf-8"><style>
       @page{size:A4 landscape;margin:6mm}
       *{box-sizing:border-box}
-      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:7.6px}
+      body{font-family:Arial,Helvetica,sans-serif;color:#14263a;margin:0;font-size:7.15px}
       .report-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:6px;padding-bottom:5px;border-bottom:1.5px solid #8194a8}
       h1{font-size:15px;margin:0;line-height:1}
       .sub{margin-top:2px;color:#63778b;font-size:7px}
@@ -1238,16 +1238,16 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       th,td{border:1px solid #b7c4d1;padding:3px 3.5px;vertical-align:middle;white-space:nowrap}
       th{background:#eef3f8;text-align:center;font-size:7px;line-height:1.1}
       td{text-align:right;font-variant-numeric:tabular-nums}
-      th.person,td.person{text-align:left;width:16%}
-      th.salary{width:9%} th.road{width:7%} th.extra{width:7%} th.overtime{width:7%}
-      th.advance{width:8%} th.deduction{width:8%} th.garnishment{width:8%}
-      th.bank{width:9%} th.cash{width:9%} th.net{width:12%}
-      td.person strong{display:block;font-size:7.8px;line-height:1.05;overflow:hidden;text-overflow:ellipsis}
-      td.person small{display:block;margin-top:1px;color:#6a7b8c;font-size:6.2px}
-      td.bank,td.cash,td.net{font-weight:800}
-      td.net{font-size:8.2px}
-      .total-row td{font-weight:900;background:#f4f7fb;border-top:2px solid #15283b;font-size:7.5px}
-      .total-row td.person{font-size:8px}
+      th.person,td.person{text-align:left;width:13.5%}
+      th.salary{width:9.2%} th.road{width:7.2%} th.extra{width:7.1%} th.overtime{width:7.1%}
+      th.advance{width:8.1%} th.deduction{width:8.1%} th.garnishment{width:8.1%}
+      th.bank{width:9.2%} th.cash{width:9.2%} th.net{width:13.2%}
+      td.person strong{display:block;font-size:7.25px;line-height:1.02;overflow:hidden;text-overflow:ellipsis}
+      td.person small{display:block;margin-top:1px;color:#6a7b8c;font-size:5.75px}
+      td.bank,td.cash,td.net{font-weight:800;font-size:7.35px}
+      td.net{font-size:7.55px}
+      .total-row td{font-weight:900;background:#eef4fa;border-top:2.4px solid #15283b;font-size:8.15px;padding-top:4px;padding-bottom:4px}
+      .total-row td.person{font-size:8.35px}
     </style></head><body>
       <div class="report-head">
         <div><h1>İK Ödeme Listesi</h1><div class="sub">${escapeHtml(periodLabel)} · ${rows.length} personel</div></div>
