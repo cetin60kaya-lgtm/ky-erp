@@ -398,8 +398,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     label: folderRows.filter((row) => folderGroup(row) === "label"),
   }), [folderRows]);
   const selectedFolder = useMemo(
-    () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
-    [folders, selectedFolderId],
+    () => folderRows.find((row) => String(row.id) === String(selectedFolderId)) || null,
+    [folderRows, selectedFolderId],
   );
   const selectedFolderType = folderType(selectedFolder);
   const selectedFolderProviderId = folderProviderId(selectedFolder);
