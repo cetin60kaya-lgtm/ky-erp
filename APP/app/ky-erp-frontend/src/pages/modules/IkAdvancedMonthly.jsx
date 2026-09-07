@@ -31,7 +31,7 @@ import "./ik.advanced.css";
 const MONTHS = ["Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"];
 const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"];
 const LEAVE_TYPES = ["Yillik izin", "Normal izin", "Ucretsiz izin", "Mazeret izni", "Dogum izni", "Olum izni"];
-const DAILY_TYPES = ["Gelmedi - net kesinti", "Isi vardi - sadece not", "Rapor", "Istisna", "Erken cikma", "Gec gelme", "Normal izin", "Ucretsiz izin", "Dogum izni", "Olum izni"];
+const DAILY_TYPES = ["Isi vardi - sadece not", "Rapor", "Normal izin", "Ucretsiz izin", "Dogum izni", "Olum izni"];
 const DOCUMENT_LOG_WORDS = ["EVRAK", "BELGE", "SOZLESME", "RAPOR", "IZIN FORM"];
 const PAYROLL_LOG_WORDS = ["BORDRO", "ODEME", "FIS"];
 
@@ -654,11 +654,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setModalDraft({
       employeeId: targetEmployee.id,
       leaveType: "Yillik izin",
-      statusType: forced || "Gelmedi - net kesinti",
+      statusType: forced || "Isi vardi - sadece not",
       dayCount: 1,
       hourOrDay: "",
       wageEffect: "Ucretli",
-      payrollEffect: kind === "gunluk" ? "Yok" : "Yansit",
+      payrollEffect: "Yok",
       hasDeduction: "Hayir",
       deductionAmount: "",
       documentNo: "",
@@ -939,8 +939,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (!modalDraft.employeeId) return setNotice("Personel secilmeden kayit yapilamaz.");
     if (modal === "yillik" && (!modalDraft.startDate || !modalDraft.endDate)) return setNotice("Izin baslangic ve bitis tarihleri zorunludur.");
     if (modal === "gunluk" && !selectedDays.length) return setNotice("Gun secilmeden kayit yapilamaz.");
-    if (modal === "gunluk" && modalDraft.statusType === "Gelmedi - net kesinti" && modalDraft.hasDeduction === "Evet" && num(modalDraft.deductionAmount) <= 0) return setNotice("Kesinti tutari girilmelidir.");
-    if (modal === "gunluk" && ["Erken cikma", "Gec gelme"].includes(modalDraft.statusType) && num(modalDraft.hourOrDay) <= 0) return setNotice("Saat alani zorunludur.");
+    if (modal === "gunluk" && modalDraft.payrollEffect !== "Yok") return setNotice("Gunluk durum kaydi bordro kesintisi yapmaz. Devamsizlik icin Mesai / Avans / Kesinti ekranindaki Devamsizlik Kesintisi kullanilmalidir.");
     setBusy(true);
     try {
       const recordType = modal === "yillik" ? modalDraft.leaveType : modalDraft.statusType;
@@ -973,8 +972,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       } else {
         for (const day of selectedDays) await saveIkAdvancedException({
           mainCompanyId: companyId, employeeId: modalDraft.employeeId, workDate: dateKey(year, month, day), recordType,
-          status: recordType, dayCount: 1, hourOrDay: modalDraft.hourOrDay, payrollEffect: modalDraft.payrollEffect,
-          deductionAmount: num(modalDraft.deductionAmount), documentId: modalDraft.documentNo, note: modalDraft.note, source: "MANUAL",
+          status: recordType, dayCount: 1, hourOrDay: modalDraft.hourOrDay, payrollEffect: "Yok",
+          deductionAmount: 0, documentId: modalDraft.documentNo, note: modalDraft.note, source: "MANUAL",
         });
       }
       setModal(null);
@@ -1995,12 +1994,9 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return (
       <>
         <Field label="Personel" half><select value={modalDraft.employeeId || selected?.id || ""} onChange={(event) => setModalDraft((old) => ({ ...old, employeeId: event.target.value }))}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></Field>
-        <Field label="Durum" half><select value={modalDraft.statusType || "Gelmedi - net kesinti"} onChange={(event) => setModalDraft((old) => ({ ...old, statusType: event.target.value }))}>{DAILY_TYPES.map((item) => <option key={item}>{item}</option>)}</select></Field>
+        <Field label="Durum" half><select value={modalDraft.statusType || "Isi vardi - sadece not"} onChange={(event) => setModalDraft((old) => ({ ...old, statusType: event.target.value, payrollEffect: "Yok", deductionAmount: "" }))}>{DAILY_TYPES.map((item) => <option key={item}>{item}</option>)}</select></Field>
         <Field label="Gun sayisi"><input type="number" value={modalDraft.dayCount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, dayCount: event.target.value }))} /></Field>
-        <Field label="Saat"><input value={modalDraft.hourOrDay || ""} onChange={(event) => setModalDraft((old) => ({ ...old, hourOrDay: event.target.value }))} /></Field>
-        <Field label="Kesinti var mi?"><select value={modalDraft.hasDeduction || "Hayir"} onChange={(event) => setModalDraft((old) => ({ ...old, hasDeduction: event.target.value }))}><option>Hayir</option><option>Evet</option></select></Field>
-        <Field label="Kesinti tutari"><input type="number" value={modalDraft.deductionAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, deductionAmount: event.target.value }))} /></Field>
-        <Field label="Bordroya etki"><select value={modalDraft.payrollEffect || "Yok"} onChange={(event) => setModalDraft((old) => ({ ...old, payrollEffect: event.target.value }))}><option>Yok</option><option>Yansit</option></select></Field>
+        <div className="wide warnline ok">Bu kayit bilgi / belge kaydidir ve bordrodan para kesmez. Eksik gun veya eksik saat kesintisi Mesai / Avans / Kesinti ekranindaki Devamsizlik Kesintisi ile girilir.</div>
         <Field label="Belge" wide><input value={modalDraft.documentNo || ""} onChange={(event) => setModalDraft((old) => ({ ...old, documentNo: event.target.value }))} /></Field>
         <Field label="Not" wide><textarea value={modalDraft.note || ""} onChange={(event) => setModalDraft((old) => ({ ...old, note: event.target.value }))} placeholder="Isi vardi, erken cikti, gec geldi vb." /></Field>
         <div className="wide warnline warn">Ayni gun kayit varsa sistem duzenlemeye yonlendirir.</div>
