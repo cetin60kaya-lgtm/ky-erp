@@ -96,6 +96,30 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
   const devices = Array.isArray(data?.devices) ? data.devices : [];
   const offlineDevices = devices.filter((row) => Number(row.active) !== 0 && !isOnline(row.lastSeenAt));
   const issueCount = Number(metrics.noShow || 0) + Number(metrics.missingPunch || 0) + offlineDevices.length;
+  const controlQueue = useMemo(() => roster
+    .filter((row) => row.status === "NO_SHOW" || row.status === "MISSING_OUT" || row.late === true)
+    .sort((a, b) => {
+      const rank = (row) => row.status === "NO_SHOW" ? 1 : row.status === "MISSING_OUT" ? 2 : 3;
+      return rank(a) - rank(b) || String(a.fullName || "").localeCompare(String(b.fullName || ""), "tr");
+    })
+    .slice(0, 12), [roster]);
+  const departments = useMemo(() => {
+    const map = new Map();
+    roster.forEach((row) => {
+      const key = String(row.department || "Bölüm Yok").trim() || "Bölüm Yok";
+      const current = map.get(key) || { name: key, total: 0, scheduled: 0, arrived: 0, inside: 0, noShow: 0, waiting: 0, leave: 0, late: 0 };
+      current.total += 1;
+      if (row.expectedWorkDay) current.scheduled += 1;
+      if (Number(row.eventCount || 0) > 0) current.arrived += 1;
+      if (["INSIDE", "INSIDE_LATE"].includes(row.status)) current.inside += 1;
+      if (row.status === "NO_SHOW") current.noShow += 1;
+      if (row.status === "WAITING") current.waiting += 1;
+      if (["ANNUAL_LEAVE", "SICK_LEAVE", "LEAVE"].includes(row.status)) current.leave += 1;
+      if (row.late === true) current.late += 1;
+      map.set(key, current);
+    });
+    return [...map.values()].sort((a, b) => b.inside - a.inside || b.scheduled - a.scheduled || a.name.localeCompare(b.name, "tr"));
+  }, [roster]);
   const go = (tabKey) => openModule?.("pdks", { tabKey });
 
   return (
@@ -173,6 +197,24 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
             </div>
           </section>
 
+          <section className="plh-pro-card">
+            <header><div><small>AKILLI KONTROL KUYRUĞU</small><h2>Bugün Bakılması Gerekenler</h2></div><b className={controlQueue.length ? "plh-pro-issue-count bad" : "plh-pro-issue-count ok"}>{controlQueue.length}</b></header>
+            <div className="plh-pro-issue-list">
+              {controlQueue.map((row) => (
+                <button type="button" key={`${row.employeeId}-${row.status}`} onClick={() => {
+                  setFilter(row.status === "NO_SHOW" ? "NO_SHOW" : row.status === "MISSING_OUT" ? "MISSING" : "LATE");
+                  setQuery(row.fullName || "");
+                }}>
+                  <i className={`status ${statusTone(row.status)}`}>{row.status === "NO_SHOW" ? "Gelmedi" : row.status === "MISSING_OUT" ? "Eksik Çıkış" : "Geç"}</i>
+                  <span><strong>{row.fullName}</strong><small>{row.department || "Bölüm yok"}{row.firstTime ? ` · ${row.firstTime}` : ""}</small></span>
+                  <em>›</em>
+                </button>
+              ))}
+              {!controlQueue.length ? <div className="empty"><CheckCircle2 size={18} /> Şu an kritik personel istisnası yok.</div> : null}
+              {offlineDevices.map((row) => <button type="button" key={`device-${row.id}`} onClick={() => go("cihaz-baglantilari")}><i className="status bad">Cihaz</i><span><strong>{row.deviceLabel}</strong><small>Çevrimdışı · {row.machineName || "Makine adı yok"}</small></span><em>›</em></button>)}
+            </div>
+          </section>
+
           <section className="plh-pro-card plh-pro-ai">
             <header><div><small>YAPAY ZEKA</small><h2>PDKS Kontrol Asistanı</h2></div><Bot size={20} /></header>
             <p>“Bugün kim gelmedi?”, “çıkış basmayı unutan var mı?”, “hangi cihaz çevrimdışı?” gibi soruları canlı PDKS bağlamıyla kontrol eder.</p>
@@ -180,6 +222,17 @@ export default function PdksLiveHome({ activeMainCompany, openModule }) {
           </section>
         </aside>
       </div>
+
+      <section className="plh-pro-card plh-pro-departments">
+        <header><div><small>BÖLÜM BAZLI CANLI GÖRÜNÜM</small><h2>İşyeri Doluluk & Devam Dağılımı</h2></div><span>{departments.length} bölüm</span></header>
+        <div className="plh-pro-dept-table">
+          <div className="head"><span>Bölüm</span><span>Toplam</span><span>Vardiyalı</span><span>Gelen</span><span>İçeride</span><span>Gelmeyen</span><span>Beklenen</span><span>İzinli</span><span>Geç</span></div>
+          {departments.map((row) => <button type="button" className="row" key={row.name} onClick={() => { setFilter("ALL"); setQuery(row.name === "Bölüm Yok" ? "" : row.name); }}>
+            <strong>{row.name}</strong><span>{row.total}</span><span>{row.scheduled}</span><b>{row.arrived}</b><b className="inside">{row.inside}</b><em className={row.noShow ? "bad" : ""}>{row.noShow}</em><span>{row.waiting}</span><span>{row.leave}</span><em className={row.late ? "warn" : ""}>{row.late}</em>
+          </button>)}
+          {!departments.length ? <div className="empty">Bölüm dağılımı için canlı personel verisi bekleniyor.</div> : null}
+        </div>
+      </section>
     </div>
   );
 }
