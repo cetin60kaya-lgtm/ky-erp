@@ -163,11 +163,11 @@ public sealed class PdksConfig
         DeviceName = string.IsNullOrWhiteSpace(DeviceName) ? "Cihaz1" : DeviceName.Trim();
         DeviceNo = Math.Clamp(DeviceNo, 1, 9999);
         MachineNo = Math.Clamp(MachineNo, 1, 9999);
-        Direction = (Direction ?? "GIRIS").Trim().ToUpperInvariant() switch
+        Direction = (Direction ?? "AUTO").Trim().ToUpperInvariant() switch
         {
-            "CIKIS" => "CIKIS",
-            "AUTO" => "AUTO",
-            _ => "GIRIS",
+            "GIRIS" or "GİRİŞ" or "IN" => "GIRIS",
+            "CIKIS" or "ÇIKIŞ" or "OUT" => "CIKIS",
+            _ => "AUTO",
         };
         SourceMode = NormalizedMode;
         TcpHost = string.IsNullOrWhiteSpace(TcpHost) ? "192.168.1.224" : TcpHost.Trim();
