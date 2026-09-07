@@ -3,7 +3,7 @@ param([switch]$SkipTests)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.8.0'
+$Version = '1.8.1'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 $Dist = Join-Path $Root 'dist'
@@ -42,7 +42,7 @@ if ($DeclaredVersion -ne $Version) { throw "VERSION uyuşmuyor. Beklenen=$Versio
 $DesktopWindowSource = Join-Path $Root 'src\KyPdks.Desktop\KyErpDesktopWindow.xaml.cs'
 $DesktopWindowText = Get-Content $DesktopWindowSource -Raw
 if ($DesktopWindowText -notmatch 'https://app\.kyerp\.net/index\.html') { throw 'Tam ERP Desktop canonical app.kyerp.net/index.html kullanmıyor.' }
-if ($DesktopWindowText -notmatch "kyerpDesktopVersion = '1\.8\.0'") { throw 'Desktop bridge sürümü 1.8.0 değil.' }
+if ($DesktopWindowText -notmatch "kyerpDesktopVersion = '1\.8\.0'") { throw 'Desktop bridge sürümü 1.8.1 değil.' }
 
 $ProjectText = Get-Content $DesktopProject -Raw
 if ($ProjectText -notmatch 'ProductMode') { throw 'Desktop project dual ProductMode içermiyor.' }
