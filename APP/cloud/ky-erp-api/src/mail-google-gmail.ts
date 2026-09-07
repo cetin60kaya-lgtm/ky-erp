@@ -199,15 +199,15 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
   };
   const collect=(part:any)=>{
     if(!part||typeof part!=="object")return;
-    const attachmentId=text(part?.body?.attachmentId),contentId=partHeader(part,"Content-ID").replace(/^<|>$/g,""),disposition=partHeader(part,"Content-Disposition").toLowerCase();
-    if(attachmentId&&(text(part.filename)||contentId))attachmentParts.push({...part,_contentId:contentId,_isInline:disposition.includes("inline")||Boolean(contentId)});
+    const attachmentId=text(part?.body?.attachmentId),inlineData=text(part?.body?.data),partId=text(part?.partId),contentId=partHeader(part,"Content-ID").replace(/^<|>$/g,""),disposition=partHeader(part,"Content-Disposition").toLowerCase();
+    if((attachmentId||(inlineData&&partId))&&(text(part.filename)||contentId))attachmentParts.push({...part,_contentId:contentId,_isInline:disposition.includes("inline")||Boolean(contentId),_providerAttachmentId:attachmentId||(inlineData&&partId?`INLINE_PART:${partId}`:"")});
     for(const child of Array.isArray(part.parts)?part.parts:[])collect(child);
   };
   collect(item.payload||{});
   for(const part of attachmentParts){
     const mime=text(part.mimeType)||"application/octet-stream",fallbackName=part._contentId?`inline-${text(part.partId)||crypto.randomUUID()}`:"ek";
     await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,id,text(part.body.attachmentId),null,text(part.filename)||fallbackName,mime,Number(part?.body?.size||0)||null,part._isInline?1:0,text(part._contentId)||null,JSON.stringify({provider:"GMAIL",partId:text(part.partId)}),ts).run();
+      .bind(crypto.randomUUID(),tenant,id,text(part._providerAttachmentId),null,text(part.filename)||fallbackName,mime,Number(part?.body?.size||0)||null,part._isInline?1:0,text(part._contentId)||null,JSON.stringify({provider:"GMAIL",partId:text(part.partId),inlineBodyData:Boolean(text(part?.body?.data))}),ts).run();
   }
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
@@ -404,7 +404,22 @@ export function registerGoogleMailRoutes(app:any){
     if(!row)return c.json(err("MAIL_ATTACHMENT_NOT_FOUND","Mail eki bulunamadı."),404);
     const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
     if(upper(row.provider_type)!=="GMAIL"||!row.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
-    const token=(await usableToken(c,tenant,account)).text,payload=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(row.provider_message_id))+"/attachments/"+encodeURIComponent(text(row.provider_attachment_id)),token)).payload,data=text(payload.data);
+    const token=(await usableToken(c,tenant,account)).text,providerAttachmentId=text(row.provider_attachment_id);
+    let data="";
+    if(providerAttachmentId.startsWith("INLINE_PART:")){
+      const partId=providerAttachmentId.slice("INLINE_PART:".length);
+      const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(row.provider_message_id))+"?format=full",token)).payload;
+      const findPart=(part:any):any=>{
+        if(!part||typeof part!=="object")return null;
+        if(text(part.partId)===partId)return part;
+        for(const child of Array.isArray(part.parts)?part.parts:[]){const found=findPart(child);if(found)return found;}
+        return null;
+      };
+      data=text(findPart(full?.payload||{})?.body?.data);
+    }else{
+      const payload=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(row.provider_message_id))+"/attachments/"+encodeURIComponent(providerAttachmentId),token)).payload;
+      data=text(payload.data);
+    }
     if(!data)return c.json(err("MAIL_ATTACHMENT_CONTENT_UNAVAILABLE","Gmail ek içeriği alınamadı."),409);
     const bytes=unb64url(data);
     if(bytes.byteLength>25*1024*1024)return c.json(err("MAIL_ATTACHMENT_TOO_LARGE","25 MB üzerindeki ekler KY ERP içinden indirilemez."),413);
