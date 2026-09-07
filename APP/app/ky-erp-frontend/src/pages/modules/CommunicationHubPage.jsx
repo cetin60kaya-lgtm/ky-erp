@@ -61,6 +61,8 @@ function attachmentPreviewKind(row) {
   const ext = name.includes(".") ? name.split(".").pop() : "";
   if ((mime.startsWith("image/") && mime !== "image/svg+xml") || ["png","jpg","jpeg","gif","webp","bmp","ico","avif"].includes(ext)) return "image";
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (mime.startsWith("audio/") || ["mp3","wav","ogg","m4a","aac","flac"].includes(ext)) return "audio";
+  if (mime.startsWith("video/") || ["mp4","webm","ogv","mov","m4v"].includes(ext)) return "video";
   if (mime.startsWith("text/") || ["txt","csv","log","md","json","xml"].includes(ext)) return "text";
   return "unsupported";
 }
@@ -89,6 +91,91 @@ function blobToDataUrl(blob) {
 
 function regexEscape(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc ^= bytes[i];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function concatUint8Arrays(parts) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) { out.set(part, offset); offset += part.length; }
+  return out;
+}
+
+function zipStore(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let localOffset = 0;
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.name || "ek");
+    const data = file.bytes;
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    localParts.push(local, data);
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, localOffset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+    localOffset += local.length + data.length;
+  }
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, localOffset, true);
+  return new Blob([concatUint8Arrays([...localParts, ...centralParts, end])], { type: "application/zip" });
+}
+
+function mailHtmlWithExternalLinks(html) {
+  const source = String(html || "");
+  if (!source) return "";
+  try {
+    const doc = new DOMParser().parseFromString(source, "text/html");
+    if (!doc.querySelector("base")) {
+      const base = doc.createElement("base");
+      base.target = "_blank";
+      doc.head.prepend(base);
+    }
+    for (const link of doc.querySelectorAll("a[href]")) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
+    return "<!doctype html>" + doc.documentElement.outerHTML;
+  } catch {
+    return source;
+  }
 }
 
 function MailMessageMedia({ message }) {
@@ -146,6 +233,58 @@ function MailMessageMedia({ message }) {
   return <div ref={rootRef} className="comm-message-media" aria-label="Mail görselleri">
     {media.map((item) => <img key={item.id} src={item.url} alt={item.name} loading="lazy"/>)}
   </div>;
+}
+
+function folderType(row) {
+  return String(row?.folder_type || row?.folderType || "").toUpperCase();
+}
+
+function folderProviderId(row) {
+  return String(row?.provider_folder_id || row?.providerFolderId || "").toUpperCase();
+}
+
+function folderDisplayName(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  const map = {
+    INBOX: "Gelen Kutusu",
+    SENT: "Gönderilmiş Postalar",
+    DRAFTS: "Taslaklar",
+    JUNK: "Spam",
+    TRASH: "Çöp Kutusu",
+    STARRED: "Yıldızlı",
+    IMPORTANT: "Önemli",
+    CATEGORY_PERSONAL: "Birincil",
+    CATEGORY_PROMOTIONS: "Tanıtımlar",
+    CATEGORY_SOCIAL: "Sosyal",
+    CATEGORY_UPDATES: "Güncellemeler",
+    CATEGORY_FORUMS: "Forumlar",
+    CHAT: "Sohbetler",
+    UNREAD: "Okunmamış",
+  };
+  return map[provider] || map[type] || row?.name || "Klasör";
+}
+
+function folderIcon(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  if (type === "INBOX") return "📥";
+  if (type === "SENT") return "➤";
+  if (type === "DRAFTS") return "📝";
+  if (type === "JUNK") return "⛔";
+  if (type === "TRASH") return "🗑";
+  if (provider === "STARRED") return "★";
+  if (provider === "IMPORTANT") return "❗";
+  if (provider.startsWith("CATEGORY_")) return "▰";
+  return "▱";
+}
+
+function folderGroup(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT"].includes(provider)) return "system";
+  if (provider.startsWith("CATEGORY_")) return "category";
+  return "label";
 }
 
 function flattenFolders(rows) {
@@ -234,10 +373,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [paneWidths, setPaneWidths] = useState(initialMailPaneWidths);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadAllLoading, setDownloadAllLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [renderedHtml, setRenderedHtml] = useState("");
   const [renderedHtmlMessageId, setRenderedHtmlMessageId] = useState("");
   const mailLayoutRef = useRef(null);
+  const backgroundSyncRef = useRef(false);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
@@ -251,12 +392,26 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     [providers, requestForm.providerType],
   );
   const folderRows = useMemo(() => flattenFolders(folders), [folders]);
+  const folderGroups = useMemo(() => ({
+    system: folderRows.filter((row) => folderGroup(row) === "system"),
+    category: folderRows.filter((row) => folderGroup(row) === "category"),
+    label: folderRows.filter((row) => folderGroup(row) === "label"),
+  }), [folderRows]);
   const selectedFolder = useMemo(
-    () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
-    [folders, selectedFolderId],
+    () => folderRows.find((row) => String(row.id) === String(selectedFolderId)) || null,
+    [folderRows, selectedFolderId],
   );
+  const selectedFolderType = folderType(selectedFolder);
+  const selectedFolderProviderId = folderProviderId(selectedFolder);
+  const selectedFolderIsTrash = selectedFolderType === "TRASH" || selectedFolderProviderId === "TRASH";
+  const selectedFolderIsJunk = selectedFolderType === "JUNK" || selectedFolderProviderId === "SPAM";
+  const selectedFolderCountsUnread = !selectedFolderIsTrash && !selectedFolderIsJunk;
   const defaultInboxFolderId = useMemo(
     () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "INBOX")?.id || ""),
+    [folders],
+  );
+  const defaultSentFolderId = useMemo(
+    () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "SENT")?.id || ""),
     [folders],
   );
 
@@ -381,7 +536,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         } catch {}
       }
       if (!cancelled) {
-        setRenderedHtml(hydrated);
+        setRenderedHtml(mailHtmlWithExternalLinks(hydrated));
         setRenderedHtmlMessageId(messageId);
       }
     }
@@ -394,14 +549,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     const messageId = selectedMessage.id;
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
     setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
-    setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
     runMailMessageAction(messageId, "MARK_READ", {}).catch((error) => {
       setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
       setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
-      setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     });
-  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab]);
+  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab, selectedFolderCountsUnread]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -461,6 +616,50 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     return () => { cancelled = true; };
   }, [activeTab, isMail, selectedAccountId, selectedFolderId, defaultInboxFolderId, mailboxRefresh]);
 
+  useEffect(() => {
+    const provider = String(selectedAccount?.provider_type || selectedAccount?.providerType || "").toUpperCase();
+    const active = String(selectedAccount?.status || "").toUpperCase() === "ACTIVE";
+    if (!isMail || !selectedAccountId || !active || provider !== "GMAIL") return undefined;
+
+    let cancelled = false;
+    const targetFolderId = () => {
+      if (selectedFolderId) return selectedFolderId;
+      if (activeTab === "mail-gonderilen" || activeTab === "mail-yanit-bekleyen") return defaultSentFolderId;
+      return defaultInboxFolderId;
+    };
+    const run = async () => {
+      if (cancelled || document.visibilityState === "hidden" || backgroundSyncRef.current) return;
+      const folderId = targetFolderId();
+      if (!folderId) return;
+      backgroundSyncRef.current = true;
+      try {
+        await syncMailFolder(selectedAccountId, folderId, { quick: true });
+        if (cancelled) return;
+        const freshOverview = await getMailOverview().catch(() => null);
+        if (freshOverview && !cancelled) setOverview(freshOverview);
+        setMailboxRefresh((value) => value + 1);
+      } catch {
+        // Sessiz canlı yenileme kullanıcı akışını kesmez; manuel senkronizasyon ayrıntılı hata verir.
+      } finally {
+        backgroundSyncRef.current = false;
+      }
+    };
+
+    const timer = window.setInterval(run, 20_000);
+    const onFocus = () => run();
+    const onVisibility = () => { if (document.visibilityState === "visible") run(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.setTimeout(run, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isMail, selectedAccountId, selectedAccount?.provider_type, selectedAccount?.providerType, selectedAccount?.status, selectedFolderId, activeTab, defaultInboxFolderId, defaultSentFolderId]);
+
   function beginPaneResize(pane, event) {
     if (window.innerWidth <= 1100 || !mailLayoutRef.current) return;
     event.preventDefault();
@@ -519,19 +718,51 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     });
   }
 
+  async function downloadAllAttachments() {
+    if (!selectedMessage?.id || !attachments.length || downloadAllLoading) return;
+    setDownloadAllLoading(true);
+    try {
+      const files = [];
+      let totalBytes = 0;
+      for (const attachment of attachments) {
+        const blob = await getMailAttachmentBlob(selectedMessage.id, attachment.id);
+        totalBytes += blob.size;
+        if (totalBytes > 120 * 1024 * 1024) throw new Error("Toplam ek boyutu 120 MB sınırını aşıyor. Ekleri tek tek indirin.");
+        files.push({ name: attachmentName(attachment), bytes: new Uint8Array(await blob.arrayBuffer()) });
+      }
+      const zip = zipStore(files);
+      const url = URL.createObjectURL(zip);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${String(selectedMessage.subject || "mail-ekleri").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "mail-ekleri"}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+      setNotice(`${files.length} ek tek ZIP dosyasında indirildi.`);
+    } catch (error) {
+      setNotice(`Hata: ${error?.message || "Tüm ekler indirilemedi."}`);
+    } finally {
+      setDownloadAllLoading(false);
+    }
+  }
+
   async function selectMessage(row) {
     setSelectedMessage(row);
     if (Number(row?.is_read ?? row?.isRead ?? 1) !== 0 || activeTab === "mail-gonderilen" || activeTab === "mail-taslaklar") return;
     const messageId = row.id;
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
     setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
-    setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
     try {
       await runMailMessageAction(messageId, "MARK_READ", {});
     } catch (error) {
       setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
       setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
-      setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     }
   }
@@ -815,8 +1046,8 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     try {
       await runMailMessageAction(messageId, action, values);
       applyMessageActionLocally(messageId, action, values);
-      if (action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
-      if (action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread && action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+      if (selectedFolderCountsUnread && action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
       setNotice(action === "ARCHIVE" ? "Mail arşive taşındı." : action === "DELETE" ? "Mail silinmiş öğelere taşındı." : action === "MOVE" ? "Mail klasöre taşındı." : "Mail durumu güncellendi.");
       setMoveTargetId("");
       setMailboxRefresh((value) => value + 1);
@@ -869,13 +1100,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       ].some((value) => String(value || "").toLocaleLowerCase("tr-TR").includes(messageNeedle)))
     : baseMessageRows;
 
-  const mailViewTitle = selectedFolder?.name
-    || (activeTab === "mail-sabitlenen" ? "Sabitlenenler"
-      : activeTab === "mail-gonderilen" ? "Gönderilenler"
+  const mailViewTitle = selectedFolder ? folderDisplayName(selectedFolder)
+    : (activeTab === "mail-sabitlenen" ? "Sabitlenenler"
+      : activeTab === "mail-gonderilen" ? "Gönderilmiş Postalar"
       : activeTab === "mail-taslaklar" ? "Taslaklar"
       : activeTab === "mail-yanit-bekleyen" ? "Yanıt Bekleyenler"
       : activeTab === "mail-sablonlar" ? "Şablonlar"
       : "Gelen Kutusu");
+
+  const renderFolderButton = (folder) => (
+    <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
+      <span>{folderIcon(folder)} {folderDisplayName(folder)}</span>
+      <em>{["TRASH","JUNK"].includes(folderType(folder)) || ["TRASH","SPAM"].includes(folderProviderId(folder)) ? "" : Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
+    </button>
+  );
 
   return (
     <div className="comm-page">
@@ -977,13 +1215,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 : null}
             </div> : null}
             {selectedAccount ? <div className="comm-folder-tree">
-              <div className="comm-folder-heading"><b>Klasörler</b><small>{folders.length}</small></div>
-              {folderRows.length ? folderRows.map((folder) => (
-                <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
-                  <span>{String(folder.folder_type || folder.folderType || "").toUpperCase() === "INBOX" ? "📥" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "SENT" ? "➤" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "ARCHIVE" ? "▣" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "TRASH" ? "🗑" : "▱"} {folder.name || "Klasör"}</span>
-                  <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : ""}</em>
-                </button>
-              )) : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
+              <div className="comm-folder-heading"><b>Posta Kutuları</b><small>{folders.length}</small></div>
+              {folderRows.length ? <>
+                {folderGroups.system.length ? <div className="comm-folder-group">{folderGroups.system.map(renderFolderButton)}</div> : null}
+                {folderGroups.category.length ? <><div className="comm-folder-subheading">Kategoriler</div><div className="comm-folder-group">{folderGroups.category.map(renderFolderButton)}</div></> : null}
+                {folderGroups.label.length ? <><div className="comm-folder-subheading">Etiketler</div><div className="comm-folder-group">{folderGroups.label.map(renderFolderButton)}</div></> : null}
+              </> : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
             </div> : null}
           </aside>
           <div className="comm-pane-resizer" role="separator" aria-orientation="vertical" aria-label="Posta kutuları genişliğini ayarla" onPointerDown={(event) => beginPaneResize("mailbox", event)} />
@@ -993,7 +1230,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
             {activeTab === "mail-sablonlar" && !selectedFolderId ? (
               <div className="comm-empty large"><b>Kurumsal Mail Şablonları</b><span>Mevcut muhasebe şablonları bu merkeze taşınırken tek canonical şablon kaynağı korunacak.</span><button type="button" onClick={() => openModule?.("muhasebe", { tabKey: "mail-sablonlari" })}>Mevcut Şablonları Aç</button></div>
             ) : messageRows.length ? messageRows.map((row) => (
-              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
+              <button type="button" key={row.id} className={`${selectedMessage?.id === row.id ? "active " : ""}${!selectedFolderIsTrash && !selectedFolderIsJunk && Number(row.is_read ?? row.isRead ?? 1) === 0 ? "unread " : ""}${Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "pinned" : ""}`} onClick={() => selectMessage(row)} onContextMenu={(event) => openMessageContextMenu(event, row)}>
                 <div><b>{Number(row.is_pinned ?? row.isPinned ?? 0) === 1 ? "📌 " : ""}{row.sender_name || row.sender_email || row.subject || "Taslak"}</b><span>{dateText(row.received_at || row.sent_at || row.updated_at)}</span></div>
                 <strong>{row.subject || "(Konu yok)"}{Number(row.is_flagged ?? row.isFlagged ?? 0) === 1 ? "  ⚑" : ""}</strong>
                 <p>{row.body_text || row.bodyText || (row.body_html || row.bodyHtml ? "HTML mail içeriği" : "İçerik önizlemesi yok.")}{Number(row.has_attachments ?? row.hasAttachments ?? 0) === 1 ? " · 📎 Ek var" : ""}</p>
@@ -1019,12 +1256,24 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className={Number(selectedMessage.is_pinned ?? selectedMessage.isPinned ?? 0) === 1 ? "pin-active" : "secondary"} onClick={togglePin}>{Number(selectedMessage.is_pinned ?? selectedMessage.isPinned ?? 0) === 1 ? "📌 Sabitten Çıkar" : "📌 Sabitle"}</button>
                 <button type="button" className="secondary" onClick={() => messageAction(Number(selectedMessage.is_read ?? selectedMessage.isRead ?? 1) === 1 ? "MARK_UNREAD" : "MARK_READ")}>{Number(selectedMessage.is_read ?? selectedMessage.isRead ?? 1) === 1 ? "Okunmadı Yap" : "Okundu Yap"}</button>
                 <button type="button" className="secondary" onClick={() => messageAction(Number(selectedMessage.is_flagged ?? selectedMessage.isFlagged ?? 0) === 1 ? "UNFLAG" : "FLAG")}>{Number(selectedMessage.is_flagged ?? selectedMessage.isFlagged ?? 0) === 1 ? "Bayrağı Kaldır" : "⚑ Bayrak"}</button>
-                <button type="button" className="secondary" onClick={() => messageAction("ARCHIVE")}>Arşivle</button>
-                <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button>
+                {!selectedFolderIsTrash ? <button type="button" className="secondary" onClick={() => messageAction("ARCHIVE")}>Arşivle</button> : null}
+                {!selectedFolderIsTrash ? <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button> : null}
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
-              {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya · tıklayınca önizleme</small></div>{attachments.map((attachment) => <div className="comm-attachment-row" key={attachment.id}><button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : attachmentPreviewKind(attachment) === "unsupported" ? "Dosya" : "Önizle"}</em></button><button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button></div>)}</div> : null}
-              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
+              {attachments.length ? <div className="comm-attachments">
+                <div className="comm-attachments-head"><div><b>Ekler</b><small>{attachments.length} dosya · dosyaya tıklayınca önizleme</small></div><button type="button" className="secondary comm-download-all" onClick={downloadAllAttachments} disabled={downloadAllLoading}>{downloadAllLoading ? "İndiriliyor…" : "⇩ Tümünü İndir"}</button></div>
+                {attachments.map((attachment) => {
+                  const kind = attachmentPreviewKind(attachment);
+                  const size = Number(attachment.size_bytes || attachment.sizeBytes || 0);
+                  const typeLabel = kind === "image" ? "Görsel" : kind === "pdf" ? "PDF" : kind === "text" ? "Metin" : "Dosya";
+                  return <div className="comm-attachment-row" key={attachment.id}>
+                    <button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{typeLabel}{size > 0 ? ` · ${Math.max(1, Math.round(size / 1024))} KB` : ""}</em></button>
+                    {kind !== "unsupported" ? <button type="button" className="comm-attachment-preview-btn" title="Önizle" aria-label={`${attachmentName(attachment)} önizle`} onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}>👁</button> : null}
+                    <button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button>
+                  </div>;
+                })}
+              </div> : null}
+              {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerPolicy="no-referrer" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : mailHtmlWithExternalLinks(selectedMessage.body_html || selectedMessage.bodyHtml)}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
           </aside>
@@ -1057,17 +1306,19 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
         <button type="button" onClick={() => runContextAction("PIN")}>{Number(contextMenu.row?.is_pinned ?? contextMenu.row?.isPinned ?? 0) === 1 ? "📌 Sabitten Çıkar" : "📌 Sabitle"}</button>
         <button type="button" onClick={() => runContextAction("READ_TOGGLE")}>{Number(contextMenu.row?.is_read ?? contextMenu.row?.isRead ?? 1) === 1 ? "○ Okunmadı Yap" : "● Okundu Yap"}</button>
         <button type="button" onClick={() => runContextAction("FLAG_TOGGLE")}>{Number(contextMenu.row?.is_flagged ?? contextMenu.row?.isFlagged ?? 0) === 1 ? "⚑ Bayrağı Kaldır" : "⚑ Bayrak Ekle"}</button>
-        <div className="comm-context-separator" />
-        <button type="button" onClick={() => runContextAction("ARCHIVE")}>▣ Arşivle</button>
-        <button type="button" className="danger" onClick={() => runContextAction("DELETE")}>🗑 Sil</button>
+        {!selectedFolderIsTrash ? <div className="comm-context-separator" /> : null}
+        {!selectedFolderIsTrash ? <button type="button" onClick={() => runContextAction("ARCHIVE")}>▣ Arşivle</button> : null}
+        {!selectedFolderIsTrash ? <button type="button" className="danger" onClick={() => runContextAction("DELETE")}>🗑 Sil</button> : null}
       </div> : null}
 
       {attachmentPreview ? <div className="comm-attachment-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAttachmentPreview(); }}>
         <section className="comm-attachment-preview" role="dialog" aria-modal="true" aria-label={`${attachmentPreview.name} önizleme`}>
-          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
+          <header><div><b>{attachmentPreview.name}</b><span>{attachmentPreview.kind === "image" ? "Görsel önizleme" : attachmentPreview.kind === "pdf" ? "PDF önizleme" : attachmentPreview.kind === "audio" ? "Ses önizleme" : attachmentPreview.kind === "video" ? "Video önizleme" : attachmentPreview.kind === "text" ? "Metin önizleme" : "Önizleme desteklenmiyor"}</span></div><div><button type="button" className="secondary" onClick={() => downloadMailAttachment(selectedMessage.id, attachmentPreview.attachment.id, attachmentPreview.name)}>İndir</button><button type="button" className="secondary" onClick={closeAttachmentPreview}>Kapat</button></div></header>
           <div className="comm-attachment-preview-body">
             {attachmentPreview.kind === "image" && attachmentPreview.url ? <img src={attachmentPreview.url} alt={attachmentPreview.name}/> : null}
             {attachmentPreview.kind === "pdf" && attachmentPreview.url ? <iframe src={attachmentPreview.url} title={attachmentPreview.name}/> : null}
+            {attachmentPreview.kind === "audio" && attachmentPreview.url ? <audio controls src={attachmentPreview.url}/> : null}
+            {attachmentPreview.kind === "video" && attachmentPreview.url ? <video controls src={attachmentPreview.url}/> : null}
             {attachmentPreview.kind === "text" ? <pre>{attachmentPreview.text}</pre> : null}
             {attachmentPreview.kind === "unsupported" ? <div className="comm-empty large"><b>Bu dosya türü tarayıcı içinde güvenli önizlenemiyor.</b><span>Dosyayı indirmek için sağ üstteki İndir düğmesini kullanın.</span></div> : null}
           </div>
