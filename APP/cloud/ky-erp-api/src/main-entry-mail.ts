@@ -42,6 +42,15 @@ async function providerForMessage(env:Cloudflare.Env,id:string){
   return normalizedProvider(row?.provider_type);
 }
 function rewritePath(request:Request,path:string){const url=new URL(request.url);url.pathname=path;return new Request(url.toString(),request);}
+async function rewriteJsonPostPath(request:Request,path:string){
+  const url=new URL(request.url);url.pathname=path;
+  const headers=new Headers(request.headers);
+  headers.set("Content-Type","application/json");
+  const raw=await request.clone().text().catch(()=>"");
+  let payload:any={};
+  try{payload=raw?JSON.parse(raw):{};}catch{payload={};}
+  return new Request(url.toString(),{method:"POST",headers,body:JSON.stringify(payload),redirect:request.redirect});
+}
 
 async function dispatch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext){
     const url=new URL(request.url),path=url.pathname,method=request.method.toUpperCase();
@@ -78,7 +87,7 @@ async function dispatch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext)
     const messageActionMatch=path.match(/^\/api\/mail\/messages\/([^/]+)\/action$/);
     if(method==="POST"&&messageActionMatch){
       const messageId=decodeURIComponent(messageActionMatch[1]),provider=await providerForMessage(env,messageId);
-      if(provider==="GMAIL")return overlay.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/action/google`),env,ctx);
+      if(provider==="GMAIL")return overlay.fetch(await rewriteJsonPostPath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/action/google`),env,ctx);
       if(provider==="MICROSOFT_365")return base.fetch(rewritePath(request,`/api/mail/messages/${encodeURIComponent(messageId)}/action/microsoft`),env,ctx);
     }
 
