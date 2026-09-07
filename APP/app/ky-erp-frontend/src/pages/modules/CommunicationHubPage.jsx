@@ -234,6 +234,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [paneWidths, setPaneWidths] = useState(initialMailPaneWidths);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadAllLoading, setDownloadAllLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [renderedHtml, setRenderedHtml] = useState("");
   const [renderedHtmlMessageId, setRenderedHtmlMessageId] = useState("");
@@ -517,6 +518,24 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       if (current?.url) URL.revokeObjectURL(current.url);
       return null;
     });
+  }
+
+  async function downloadAllAttachments() {
+    if (!selectedMessage?.id || !attachments.length || downloadAllLoading) return;
+    setDownloadAllLoading(true);
+    let completed = 0;
+    try {
+      for (const attachment of attachments) {
+        await downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment));
+        completed += 1;
+        await new Promise((resolve) => window.setTimeout(resolve, 140));
+      }
+      setNotice(`${completed} ek için indirme başlatıldı.`);
+    } catch (error) {
+      setNotice(`Hata: ${completed} ek indirildi; kalan eklerde sorun oluştu: ${error?.message || "İndirme tamamlanamadı."}`);
+    } finally {
+      setDownloadAllLoading(false);
+    }
   }
 
   async function selectMessage(row) {
@@ -1023,7 +1042,19 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 <button type="button" className="danger-lite" onClick={() => messageAction("DELETE")}>Sil</button>
               </div>
               <div className="comm-move-row"><select value={moveTargetId} onChange={(event) => setMoveTargetId(event.target.value)}><option value="">Klasöre taşı…</option>{folderRows.filter((folder) => String(folder.id) !== String(selectedMessage.folder_id || selectedMessage.folderId || "")).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" className="secondary" disabled={!moveTargetId} onClick={() => messageAction("MOVE", { folderId: moveTargetId })}>Taşı</button></div>
-              {attachments.length ? <div className="comm-attachments"><div><b>Ekler</b><small>{attachments.length} dosya · tıklayınca önizleme</small></div>{attachments.map((attachment) => <div className="comm-attachment-row" key={attachment.id}><button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{Number(attachment.size_bytes || attachment.sizeBytes || 0) > 0 ? `${Math.max(1, Math.round(Number(attachment.size_bytes || attachment.sizeBytes) / 1024))} KB` : attachmentPreviewKind(attachment) === "unsupported" ? "Dosya" : "Önizle"}</em></button><button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button></div>)}</div> : null}
+              {attachments.length ? <div className="comm-attachments">
+                <div className="comm-attachments-head"><div><b>Ekler</b><small>{attachments.length} dosya · dosyaya tıklayınca önizleme</small></div><button type="button" className="secondary comm-download-all" onClick={downloadAllAttachments} disabled={downloadAllLoading}>{downloadAllLoading ? "İndiriliyor…" : "⇩ Tümünü İndir"}</button></div>
+                {attachments.map((attachment) => {
+                  const kind = attachmentPreviewKind(attachment);
+                  const size = Number(attachment.size_bytes || attachment.sizeBytes || 0);
+                  const typeLabel = kind === "image" ? "Görsel" : kind === "pdf" ? "PDF" : kind === "text" ? "Metin" : "Dosya";
+                  return <div className="comm-attachment-row" key={attachment.id}>
+                    <button type="button" className="comm-attachment-open" onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}><span>📎 {attachmentName(attachment)}</span><em>{typeLabel}{size > 0 ? ` · ${Math.max(1, Math.round(size / 1024))} KB` : ""}</em></button>
+                    {kind !== "unsupported" ? <button type="button" className="comm-attachment-preview-btn" title="Önizle" aria-label={`${attachmentName(attachment)} önizle`} onClick={() => openAttachmentPreview(attachment)} disabled={previewLoading}>👁</button> : null}
+                    <button type="button" className="comm-attachment-download" title="İndir" aria-label={`${attachmentName(attachment)} indir`} onClick={() => downloadMailAttachment(selectedMessage.id, attachment.id, attachmentName(attachment))}>⇩</button>
+                  </div>;
+                })}
+              </div> : null}
               {selectedMessage.body_html || selectedMessage.bodyHtml ? <iframe className="comm-html-body" title="Mail içeriği" sandbox="" srcDoc={renderedHtmlMessageId === String(selectedMessage.id) && renderedHtml ? renderedHtml : selectedMessage.body_html || selectedMessage.bodyHtml}/> : <div className="comm-body">{selectedMessage.body_text || selectedMessage.bodyText || "Mail gövdesi henüz senkronize edilmemiş."}</div>}
               <div className="comm-context-box"><b>KY ERP Bağlamı</b><span>Bu mail için kayıtlı ERP ilişkisi varsa firma / cari / model / desen / fatura bağlamında kullanılır; ilişki yoksa sistem tahmin üretmez.</span><span>File Hub ekleri ayrı kopya üretmeden aynı dosya kimliğiyle ilişkilendirilir.</span></div>
             </> : <div className="comm-empty large">Bir mail seçildiğinde içerik ve KY ERP ilişkileri burada açılır.</div>}
