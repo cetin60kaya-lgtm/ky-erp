@@ -37,6 +37,60 @@ public class PdksCoreTests
     }
 
     [Fact]
+    public void Parses_Real_Hedef500_Timerecords_Format()
+    {
+        Assert.True(PunchParser.TryParse("00048,08:29,070926,1,001", "timerecords.txt", out var punch));
+        Assert.NotNull(punch);
+        Assert.Equal("00048", punch!.CardNo);
+        Assert.Equal("2026-09-07", punch.WorkDate);
+        Assert.Equal("08:29", punch.ApiEventTime);
+    }
+
+    [Fact]
+    public async Task Hedef_File_Probe_Counts_Parsed_Duplicates_And_Rejected_Lines()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ky-pdks-hedef-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var file = Path.Combine(root, "timerecords.txt");
+        try
+        {
+            await File.WriteAllLinesAsync(file, new[]
+            {
+                "00057,08:29,070926,1,001",
+                "00057,08:29,070926,1,001",
+                "00048,08:30,070926,1,001",
+                "bozuk-satir",
+            });
+
+            var result = await TerminalDiagnostics.InspectHedefFileAsync(file);
+
+            Assert.True(result.Exists);
+            Assert.Equal(4, result.TotalLines);
+            Assert.Equal(3, result.ParsedLines);
+            Assert.Equal(1, result.DuplicateLines);
+            Assert.Equal(1, result.RejectedLines);
+            Assert.Equal("00048", result.LastPunch!.CardNo);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void New_Config_Uses_Workplace_Hedef500_Safe_Profile()
+    {
+        var config = new PdksConfig();
+        config.Normalize();
+        Assert.Equal("HEDEF_TR500", config.NormalizedMode);
+        Assert.Equal("192.168.1.224", config.TcpHost);
+        Assert.Equal(5005, config.TcpPort);
+        Assert.Equal(38400, config.SerialBaud);
+        Assert.Equal(@"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt", config.HedefReadFile);
+        Assert.False(config.DirectCommandsEnabled);
+    }
+
+    [Fact]
     public async Task Local_Store_Keeps_One_Copy_And_Survives_Backup()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-pdks-test-" + Guid.NewGuid().ToString("N"));
