@@ -122,7 +122,7 @@ test("payroll payment balance cannot be bypassed and backend enforces the same c
   assert.match(cloud, /calculatePayrollAmounts/);
 });
 
-test("payment list PDF and Excel use the same canonical payrollRows data with a totals row", () => {
+test("payment list PDF and Excel use the same canonical payrollRows data with a clean grouped totals layout", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
   assert.match(page, /const exportPayroll = \(\) =>/);
@@ -131,10 +131,15 @@ test("payment list PDF and Excel use the same canonical payrollRows data with a 
   assert.match(page, /personel: "TOPLAM"/);
   assert.match(page, /const printPayrollReport = async \(\) =>/);
   assert.match(page, /<h1>İK Ödeme Listesi<\/h1>/);
-  assert.match(page, /Personel \/ HKN/);
-  assert.match(page, /<th class="medium">Maaş<\/th><th class="narrow">Yol<\/th><th class="narrow">EK<\/th><th class="narrow">Mesai<\/th>/);
-  assert.match(page, /<th class="narrow">Avans<\/th><th class="narrow">Kesinti<\/th><th class="medium">İcra\/Haciz<\/th><th class="medium">Banka<\/th><th class="medium">Elden<\/th><th class="total">Toplam Ödeme<\/th>/);
-  assert.match(page, /<tr class="tot"><td class="person"><strong>TOPLAM<\/strong>/);
+  assert.match(page, /<th class="person">Personel<\/th>/);
+  assert.match(page, /<th class="earn">Hak Ediş<\/th>/);
+  assert.match(page, /<th class="cut">Kesintiler<\/th>/);
+  assert.match(page, /<th class="pay">Ödeme<\/th>/);
+  assert.match(page, /<th class="state">Durum<\/th>/);
+  assert.match(page, /Net Ödenecek/);
+  assert.match(page, /Net Toplam/);
+  assert.match(page, /payroll-screen-table/);
+  assert.match(page, /payroll-cell-stack/);
   assert.ok(page.includes("Ödeme Listesi / PDF"));
   assert.ok(page.includes("Ödeme Listesi / Excel"));
 });
