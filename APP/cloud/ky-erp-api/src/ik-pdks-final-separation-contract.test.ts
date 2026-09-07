@@ -94,14 +94,14 @@ test("PDKS remains the operational owner of leave movement and attendance", () =
   assert.match(pdks, /getPdksLeaveEntitlement/);
 });
 
-test("IK payment outputs keep EK visible and A4 list readable", () => {
+test("IK payment outputs keep EK visible and A4 outputs readable", () => {
   const monthly = frontend("pages/modules/IkAdvancedMonthly.jsx");
 
-  assert.match(monthly, /A4 yatay okunaklı ödeme özeti/);
+  assert.match(monthly, /@page\{size:A4 landscape/);
+  assert.match(monthly, /<h1>İK Ödeme Listesi<\/h1>/);
   assert.match(monthly, /Personel \/ HKN/);
-  assert.match(monthly, /row\.extra > 0 \? "ek-positive"/);
-  assert.match(monthly, /extra-coupon/);
-  assert.match(monthly, /compact-extra/);
+  assert.match(monthly, /row\.extra > 0 \? `<div class="extra-coupon"/);
+  assert.match(monthly, /row\.extra > 0 \? `<div class="compact-extra"/);
   assert.match(monthly, /✂ EK ÖDEME/);
   assert.match(monthly, /index \+= 10/);
   assert.match(monthly, /A4 başına 10 adet kesimli toplu ödeme fişi/);
