@@ -928,11 +928,11 @@ export function registerAuthPolicyRoutes(app: any) {
     const body = await bodyOf(c);
     const approval = await c.env.DB.prepare("SELECT * FROM auth_login_approvals WHERE id=? LIMIT 1").bind(text(c.req.param("id"))).first<AnyRow>();
     if (!approval || !safeEqual(text(approval.approval_token_hash), await sha256(text(body.approvalToken)))) return c.json(jsonError("APPROVAL_INVALID", "Giriş onayı bulunamadı."), 401);
-    if (Date.parse(text(approval.expiresAt)) <= Date.now() && approval.status === "PENDING") return c.json({ ok: true, stage: "APPROVAL_EXPIRED", message: "Giriş onayının süresi doldu." });
+    if (Date.parse(text(approval.expires_at)) <= Date.now() && approval.status === "PENDING") return c.json({ ok: true, stage: "APPROVAL_EXPIRED", message: "Giriş onayının süresi doldu." });
     if (approval.status === "DENIED") return c.json({ ok: true, stage: "APPROVAL_DENIED", message: "Giriş isteği reddedildi." });
-    if (approval.status !== "APPROVED") return c.json({ ok: true, stage: "APPROVAL_PENDING", approvalId: approval.id, approvalToken: text(body.approvalToken), approvalExpiresAt: approval.expiresAt });
-    if (approval.consumedAt) return c.json(jsonError("APPROVAL_CONSUMED", "Bu giriş onayı daha önce kullanıldı."), 409);
-    const user = await userById(c, text(approval.userId));
+    if (approval.status !== "APPROVED") return c.json({ ok: true, stage: "APPROVAL_PENDING", approvalId: approval.id, approvalToken: text(body.approvalToken), approvalExpiresAt: approval.expires_at });
+    if (approval.consumed_at) return c.json(jsonError("APPROVAL_CONSUMED", "Bu giriş onayı daha önce kullanıldı."), 409);
+    const user = await userById(c, text(approval.user_id));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     const claimedAt = nowIso();
     const claim = await c.env.DB.prepare(
