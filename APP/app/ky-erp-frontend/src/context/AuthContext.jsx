@@ -631,6 +631,20 @@ export function AuthProvider({ children }) {
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
+  const checkPhoneApproval = useCallback(async ({ phoneApprovalId, phoneApprovalToken }) => {
+    const response = await directAuthRequest(`/auth/phone-approval/${phoneApprovalId}/status`, {
+      body: { phoneApprovalToken },
+      timeoutMs: 12000,
+    });
+    return finalizeResponse(response);
+  }, [finalizeResponse]);
+
+  const useAuthenticatorFallback = useCallback(async ({ phoneApprovalId, phoneApprovalToken }) =>
+    runAuthOnce(`PHONE-FALLBACK:${phoneApprovalId}`, () => directAuthRequest(`/auth/phone-approval/${phoneApprovalId}/fallback`, {
+      body: { phoneApprovalToken },
+      timeoutMs: 12000,
+    })), [runAuthOnce]);
+
   const logout = useCallback(async () => {
     try { if (token) await directAuthRequest("/auth/logout", { token }); }
     catch { /* cihaz oturumu yine kapanır */ }
@@ -656,9 +670,10 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa,
-    startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can,
+    startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, useAuthenticatorFallback,
+    logout, hasModule, can,
     isAuthenticated: Boolean(token && user), loading,
-  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, logout, hasModule, can, loading]);
+  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
