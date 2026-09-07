@@ -60,6 +60,13 @@ if ($ErpInstallerText -match 'KYERP\.PDKS\.Agent') { throw 'KY ERP Desktop insta
 if ($ErpInstallerText -match '\\agent\\\*') { throw 'KY ERP Desktop installer PDKS Agent binary paketlememeli.' }
 if ($PdksInstallerText -notmatch 'KYERP\.PDKS\.Agent') { throw 'KY PDKS Pro installer PDKS Agent servisini içermiyor.' }
 if ($PdksInstallerText -notmatch '\\agent\\\*') { throw 'KY PDKS Pro installer PDKS Agent binary paketlemiyor.' }
+$PdksServiceInstaller = Join-Path $Root 'installer\install-pdks-agent.ps1'
+if (-not (Test-Path $PdksServiceInstaller)) { throw 'PDKS Agent servis kurulum scripti eksik.' }
+$PdksServiceInstallerText = Get-Content $PdksServiceInstaller -Raw
+if ($PdksInstallerText -notmatch 'install-pdks-agent\.ps1') { throw 'KY PDKS Pro installer doğrulanmış Agent servis scriptini kullanmıyor.' }
+if ($PdksInstallerText -match 'sc\.exe"; Parameters: "delete KYERP\.PDKS\.Agent') { throw 'KY PDKS Pro installer ham sc delete/create yarışına geri dönmüş.' }
+if ($PdksServiceInstallerText -notmatch 'Wait-ServiceGone') { throw 'Agent servis installer marked-for-deletion bekleme kapısını içermiyor.' }
+if ($PdksServiceInstallerText -notmatch "Status -eq 'Running'") { throw 'Agent servis installer Running doğrulaması yapmıyor.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
