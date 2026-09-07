@@ -297,3 +297,74 @@
 .comm-folder-group>button.active{background:#dbeafe;color:#123b72;font-weight:800}
 .comm-folder-group>button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .comm-folder-group>button em{min-width:18px;text-align:center;font-size:10px;font-style:normal;font-weight:900;color:#1d4ed8}
+
+
+/* Mail final polish — Gmail/Outlook yakın okunmamış görünümü */
+.comm-unread-metric{
+  border-color:#bfdbfe!important;
+  background:#f4f8ff!important;
+}
+.comm-unread-metric>span{
+  display:flex!important;
+  align-items:center;
+  gap:6px;
+  color:#174ea6!important;
+  font-weight:800;
+}
+.comm-unread-metric>span>i{
+  width:8px;
+  height:8px;
+  flex:0 0 8px;
+  border-radius:50%;
+  background:#1a73e8;
+  box-shadow:0 0 0 3px rgba(26,115,232,.10);
+}
+.comm-unread-metric>b{color:#174ea6}
+
+.comm-message-list>button{
+  position:relative;
+  padding-left:31px;
+  transition:background .12s ease,border-color .12s ease;
+}
+.comm-message-list>button::before{
+  content:"";
+  position:absolute;
+  left:12px;
+  top:17px;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  border:1.5px solid #cbd5e1;
+  background:#fff;
+  box-sizing:border-box;
+}
+.comm-message-list>button.unread::before{
+  border-color:#1a73e8;
+  background:#1a73e8;
+  box-shadow:0 0 0 3px rgba(26,115,232,.10);
+}
+.comm-message-list>button.unread{
+  background:#f8fbff;
+}
+.comm-message-list>button.unread:hover,
+.comm-message-list>button.unread.active{
+  background:#eef5ff;
+}
+.comm-message-list>button.unread>div span{color:#335f94}
+.comm-message-list>button:not(.unread) b,
+.comm-message-list>button:not(.unread) strong{font-weight:650}
+
+.comm-folder-group>button em:not(:empty),
+.comm-folder-tree>button em:not(:empty){
+  min-width:22px;
+  padding:2px 6px;
+  border-radius:999px;
+  background:#e8f0fe;
+  color:#174ea6;
+  line-height:1.15;
+}
+.comm-folder-group>button.active em:not(:empty),
+.comm-folder-tree>button.active em:not(:empty){
+  background:#174ea6;
+  color:#fff;
+}
