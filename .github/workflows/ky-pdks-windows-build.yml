@@ -56,6 +56,8 @@ jobs:
           if ($info.products[1].scope -ne 'PDKS_STANDALONE_CANONICAL_UI') { throw 'PDKS Pro scope yanlış.' }
           if ($info.products[1].includesWebView -ne $true) { throw 'PDKS Pro canonical WebView eksik.' }
           if ($info.products[1].includesCanonicalFrontend -ne $true) { throw 'PDKS Pro canonical frontend eksik.' }
+          if ($info.products[0].includesPdksAgent -ne $false) { throw 'KY ERP Desktop PDKS Agent servisini sahiplenmemeli.' }
+          if ($info.products[1].includesPdksAgent -ne $true) { throw 'KY PDKS Pro PDKS Agent servisini içermeli.' }
           if ($info.products[1].standaloneProduct -ne 'PDKS') { throw 'PDKS Pro standalone product işareti yanlış.' }
           if ($info.products[1].denetimWriteControls -ne 'HIDDEN') { throw 'DENETİM write-controls politikası yanlış.' }
           Get-FileHash $erp.FullName -Algorithm SHA256
