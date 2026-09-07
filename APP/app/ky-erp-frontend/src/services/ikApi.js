@@ -289,6 +289,14 @@ export async function getIkAdvancedPayroll(params = {}) {
   return unwrap(await apiGet("/ik/advanced/payroll", params));
 }
 
+export async function getIkAdvancedPeriodState(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/period-state", params));
+}
+
+export async function prepareIkAdvancedPeriod(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/period-prepare", payload));
+}
+
 export async function saveIkAdvancedPersonCard(employeeId, payload = {}) {
   return unwrap(
     await apiPost(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}`, payload),

@@ -359,6 +359,60 @@ export class IkAdvancedService implements OnModuleInit {
     }));
   }
 
+  async periodState(query: AnyRow = {}) {
+    await this.ensureSchema();
+    const companyId = this.companyCandidates(query)[0];
+    const year = Number(query.year || new Date().getFullYear());
+    const month = Number(query.month || new Date().getMonth() + 1);
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new BadRequestException("Geçerli bir ay seçilmelidir.");
+    }
+    const period = `${year}-${String(month).padStart(2, "0")}`;
+    const rows = await (this.prisma as any).$queryRawUnsafe(
+      `SELECT id, created_at
+         FROM ik_audit_logs
+        WHERE main_company_id = ? AND period = ? AND action_type = ?
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1`,
+      companyId,
+      period,
+      "MONTH_PREPARED",
+    ) as AnyRow[];
+    const row = rows[0] || null;
+    return {
+      mainCompanyId: companyId,
+      year,
+      month,
+      period,
+      prepared: Boolean(row),
+      preparedAt: row?.created_at || null,
+    };
+  }
+
+  async preparePeriod(body: AnyRow = {}) {
+    await this.ensureSchema();
+    const companyId = this.companyCandidates(body)[0];
+    const year = Number(body.year || new Date().getFullYear());
+    const month = Number(body.month || new Date().getMonth() + 1);
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new BadRequestException("Geçerli bir ay seçilmelidir.");
+    }
+    const period = `${year}-${String(month).padStart(2, "0")}`;
+    const current = await this.periodState({ ...body, mainCompanyId: companyId, year, month });
+    if (current.prepared) return current;
+
+    await this.writeAuditLog({
+      ...body,
+      mainCompanyId: companyId,
+      period,
+      actionType: "MONTH_PREPARED",
+      sourceScreen: "İK İşlem Merkezi",
+      newValue: { year, month, prepared: true },
+      reason: "Aylık İK dönemi hazırlandı.",
+    });
+    return this.periodState({ ...body, mainCompanyId: companyId, year, month });
+  }
+
   private async employees(query: AnyRow) {
     const candidates = this.companyCandidates(query);
     const rows = await (this.prisma as any).hrMonthlyEmployee.findMany({
