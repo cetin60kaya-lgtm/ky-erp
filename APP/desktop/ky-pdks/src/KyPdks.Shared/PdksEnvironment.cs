@@ -16,6 +16,7 @@ public sealed class PdksPaths
     public string Database => Path.Combine(Data, "pdks.db");
     public string ConfigFile => Path.Combine(Root, "config.json");
     public string DeviceFile => Path.Combine(Root, "device.id");
+    public string SetupCompletedFile => Path.Combine(Root, "setup.completed");
     public string UserRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KY ERP", "PDKS");
     public string SessionFile => Path.Combine(UserRoot, "session.bin");
     public string DeviceId { get; }
