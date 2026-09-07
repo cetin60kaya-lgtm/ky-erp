@@ -147,7 +147,7 @@ test("compose final supports explicit send-now and rich HTML preview stays sandb
   assert.match(ui,/saveDraft\(true\)/);
   assert.match(ui,/Taslağı Kaydet/);
   assert.match(ui,/comm-html-body/);
-  assert.match(ui,/sandbox=""/);
+  assert.match(ui,/sandbox="allow-popups allow-popups-to-escape-sandbox allow-downloads"/);
   assert.match(ui,/Klasöre taşı/);
 });
 
@@ -207,4 +207,24 @@ test("Microsoft department mailboxes request shared mailbox scopes",()=> {
   assert.match(microsoft,/\["SHARED","DEPARTMENT"\]\.includes/);
   assert.match(microsoft,/Mail\.ReadWrite\.Shared/);
   assert.match(microsoft,/Mail\.Send\.Shared/);
+});
+
+
+test("Gmail folder sync supports a lightweight background mode",()=>{
+  const gmail=read("./mail-google-gmail.ts");
+  assert.match(gmail,/body\.quick/);
+  assert.match(gmail,/maxResults=quick\?20:100/);
+  assert.match(gmail,/quick,maxResults/);
+});
+
+
+test("Gmail delete is idempotent and posts explicit JSON to the trash endpoint",()=>{
+  const gmail=read("./mail-google-gmail.ts");
+  const wrapper=read("./main-entry-mail.ts");
+  assert.match(gmail,/alreadyInTrash/);
+  assert.match(gmail,/body:"\{\}"/);
+  assert.match(gmail,/GOOGLE_TRASH_FAILED/);
+  assert.match(gmail,/MAIL_PROVIDER_MESSAGE_ID_MISSING/);
+  assert.match(wrapper,/rewriteJsonPostPath/);
+  assert.match(wrapper,/JSON\.stringify\(payload\)/);
 });
