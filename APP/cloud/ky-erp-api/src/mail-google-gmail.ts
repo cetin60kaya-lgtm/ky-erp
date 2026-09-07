@@ -344,7 +344,8 @@ export function registerGoogleMailRoutes(app:any){
     if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
     const folder=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(text(c.req.param("folderId")),account.id,tenant).first<AnyRow>();
     if(!folder)return c.json(err("MAIL_FOLDER_NOT_FOUND","Posta klasörü bulunamadı."),404);
-    const token=(await usableToken(c,tenant,account)).text,labelId=text(folder.provider_folder_id),list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
+    const quick=body.quick===true||body.quick===1||body.quick==="1",maxResults=quick?20:100;
+    const token=(await usableToken(c,tenant,account)).text,labelId=text(folder.provider_folder_id),list=(await googleJson(GMAIL+"/messages?maxResults="+maxResults+"&labelIds="+encodeURIComponent(labelId),token)).payload;
     let count=0,failed=0;const failures:any[]=[];
     for(const item of Array.isArray(list.messages)?list.messages:[]){
       try{
@@ -355,17 +356,19 @@ export function registerGoogleMailRoutes(app:any){
         if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
       }
     }
-    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count,failed,partial:failed>0,failures,warning:failed?String(failed)+" mesaj atlandı; diğer kayıtlar güncellendi.":""}},failed?207:200);
+    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count,failed,partial:failed>0,quick,maxResults,failures,warning:failed?String(failed)+" mesaj atlandı; diğer kayıtlar güncellendi.":""}},failed?207:200);
   });
 
   app.post("/api/mail/messages/:id/action/google",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,messageId=text(c.req.param("id"));
     if(!perm(current,"canView"))return c.json(err("MAIL_UPDATE_FORBIDDEN","Mail işlemi yetkiniz yok."),403);
-    const row=await c.env.DB.prepare("SELECT m.*,a.provider_type,a.provider_connected,a.email_address FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
+    const row=await c.env.DB.prepare("SELECT m.*,a.provider_type,a.provider_connected,a.email_address,f.folder_type current_folder_type,f.provider_folder_id current_provider_folder_id FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug LEFT JOIN mail_folders f ON f.id=m.folder_id AND f.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? LIMIT 1").bind(messageId,tenant).first<AnyRow>();
     if(!row)return c.json(err("MAIL_MESSAGE_NOT_FOUND","Mail bulunamadı."),404);
     const account=await accountForUser(c,current,tenant,text(row.account_id));if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusuna erişim yok."),403);
     if(upper(row.provider_type)!=="GMAIL"||!row.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
-    const token=(await usableToken(c,tenant,account)).text,providerMessageId=text(row.provider_message_id),action=upper(body.action),url=GMAIL+"/messages/"+encodeURIComponent(providerMessageId),ts=nowIso();
+    const token=(await usableToken(c,tenant,account)).text,providerMessageId=text(row.provider_message_id),action=upper(body.action),ts=nowIso();
+    if(!providerMessageId)return c.json(err("MAIL_PROVIDER_MESSAGE_ID_MISSING","Mail sağlayıcı kimliği bulunamadı; posta kutusunu yeniden senkronize edin."),409);
+    const url=GMAIL+"/messages/"+encodeURIComponent(providerMessageId);
     const modify=async(addLabelIds:string[]=[],removeLabelIds:string[]=[])=>googleJson(url+"/modify",token,{method:"POST",body:JSON.stringify({addLabelIds,removeLabelIds})});
     if(action==="MARK_READ"||action==="MARK_UNREAD"){
       const isRead=action==="MARK_READ";await modify(isRead?[]:["UNREAD"],isRead?["UNREAD"]:[]);
@@ -383,10 +386,22 @@ export function registerGoogleMailRoutes(app:any){
       return c.json({ok:true,data:{messageId,action}});
     }
     if(action==="DELETE"){
-      await googleJson(url+"/trash",token,{method:"POST"});
       const target=await ensureFolder(c,tenant,text(row.account_id),"TRASH","Çöp Kutusu","TRASH");
+      let providerLabels:string[]=[];
+      try{const meta=JSON.parse(text(row.provider_metadata)||"{}");providerLabels=Array.isArray(meta?.labelIds)?meta.labelIds.map((value:any)=>upper(value)):[];}catch{}
+      const alreadyInTrash=upper(row.current_folder_type)==="TRASH"||upper(row.current_provider_folder_id)==="TRASH"||providerLabels.includes("TRASH");
+      if(alreadyInTrash){
+        await c.env.DB.prepare("UPDATE mail_messages SET folder_id=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
+        return c.json({ok:true,data:{messageId,action,folderId:text(target?.id)||null,alreadyInTrash:true}});
+      }
+      try{
+        await googleJson(url+"/trash",token,{method:"POST",body:"{}"});
+      }catch(error:any){
+        const detail=text(error?.message)||"Gmail maili çöp kutusuna taşıyamadı.";
+        return c.json(err("GOOGLE_TRASH_FAILED","Mail Gmail Çöp Kutusu'na taşınamadı. Tekrar deneyin.",{providerMessageId,detail}),502);
+      }
       await c.env.DB.prepare("UPDATE mail_messages SET folder_id=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(text(target?.id)||null,ts,messageId,tenant).run();
-      return c.json({ok:true,data:{messageId,action,folderId:text(target?.id)||null}});
+      return c.json({ok:true,data:{messageId,action,folderId:text(target?.id)||null,alreadyInTrash:false}});
     }
     if(action==="MOVE"){
       const folderId=text(body.folderId),target=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(folderId,row.account_id,tenant).first<AnyRow>();
