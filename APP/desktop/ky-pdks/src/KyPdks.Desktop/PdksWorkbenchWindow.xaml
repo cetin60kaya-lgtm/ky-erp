@@ -34,6 +34,7 @@
       <TextBlock x:Name="ErpStateText" Text="ERP: Oturum yok" Foreground="#31587E" FontWeight="SemiBold"/>
      </Border>
      <Button Content="DENETİM TEMP" Click="ExportAuditTempButton_Click" Margin="0,0,5,0"/>
+     <Button Content="Terminal / Cihaz" Click="OpenDeviceButton_Click" Margin="0,0,5,0"/>
      <Button x:Name="DetailAdminButton" Content="Detay Yönetim" Click="OpenAdministrationButton_Click"/>
     </StackPanel>
    </Grid>
