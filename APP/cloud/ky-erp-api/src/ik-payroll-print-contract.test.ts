@@ -274,3 +274,37 @@ test("final payroll control edits every amount and writes movement deltas back t
   assert.match(cloud, /status=excluded\.status/);
   assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
 });
+
+
+test("IK canonical month survives auxiliary read failures and uses Istanbul business dates", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  assert.match(page, /Promise\.allSettled/);
+  assert.match(page, /resultState\.status !== "fulfilled"/);
+  assert.match(page, /auxiliaryFailed/);
+  assert.match(page, /timeZone: "Europe\/Istanbul"/);
+  assert.match(page, /istanbulDateKey\(\)/);
+});
+
+test("PDKS report people query follows the selected historical year and month", () => {
+  const report = frontend("pages/pdks/PdksReportCenter.jsx");
+  assert.match(report, /getPdksPeople\(\{year,month\}\)/);
+});
+
+test("IK validates monthly SGK before card writes and final-control corrections are immutable", () => {
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
+  assert.ok(cloud.indexOf("SGK_DAYS_INVALID") < cloud.indexOf("INSERT INTO ik_person_card_settings"));
+  assert.match(cloud, /FINAL_CONTROL_CORRECTION_IMMUTABLE/);
+  assert.match(cloud, /wasPassive/);
+  assert.match(cloud, /hrTodayIstanbul\(\)/);
+});
+
+test("kıdem preview keeps the complete payroll settlement breakdown", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const start = page.indexOf('modal === "fis" || modal === "kidemCikti"');
+  const end = page.indexOf('if (modal === "topluOdeme")', start);
+  const block = page.slice(start, end);
+  for (const label of ["Maaş","Yol","EK","Mesai","Avans","Özel Kesinti","İcra / Haciz","Banka","Elden","Toplam"]) {
+    assert.ok(block.includes(label), `Eksik kıdem alanı: ${label}`);
+  }
+  assert.match(block, /Bordro düzeltmesi · kilitli|KIDEM ÇIKTISI/);
+});
