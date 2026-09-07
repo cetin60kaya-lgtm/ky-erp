@@ -94,6 +94,19 @@ test("iPhone fallback does not depend on notification action buttons", () => {
   assert.match(phoneInbox, /Reddet/);
 });
 
+test("json_store phone challenge uses camelCase while legacy manager approval stays SQL snake_case", () => {
+  assert.match(policy, /phoneApprovalExpiresAt: approval\.expiresAt/);
+  assert.match(policy, /approval\.consumedAt/);
+  assert.match(policy, /approval\.userId/);
+  assert.match(policy, /deviceLabel: approval\.deviceLabel/);
+  assert.match(policy, /userAgent: approval\.userAgent/);
+  assert.match(policy, /ipAddress: approval\.ipAddress/);
+  assert.doesNotMatch(policy, /phoneApprovalExpiresAt: approval\.expires_at/);
+  assert.match(policy, /approvalExpiresAt: approval\.expires_at/);
+  assert.match(policy, /approval\.consumed_at/);
+  assert.match(policy, /approval\.user_id/);
+});
+
 test("legacy direct MFA reset remains fail-closed", () => {
   assert.match(main, /MFA_REAUTH_REQUIRED/);
   assert.match(main, /reset-mfa/);
