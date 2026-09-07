@@ -14,9 +14,9 @@
     <Description Condition="'$(ProductMode)' != 'PDKS'">KY ERP Windows çalışma merkezi • tam ERP + File Hub + AI + İK/PDKS cihaz köprüsü</Description>
     <Description Condition="'$(ProductMode)' == 'PDKS'">KY PDKS Windows işlem merkezi • kart + puantaj + vardiya + izin + terminal + rapor</Description>
     <Company>KY ERP</Company>
-    <Version>1.8.0</Version>
-    <FileVersion>1.8.0.0</FileVersion>
-    <AssemblyVersion>1.8.0.0</AssemblyVersion>
+    <Version>1.8.1</Version>
+    <FileVersion>1.8.1.0</FileVersion>
+    <AssemblyVersion>1.8.1.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
