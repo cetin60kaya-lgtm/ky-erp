@@ -44,6 +44,14 @@ async function clearDevice() {
   });
 }
 
+async function markPendingWake() {
+  try {
+    const current = await readDevice();
+    if (!current) return;
+    await writeDevice({ ...current, pendingWakeAt: new Date().toISOString() });
+  } catch {}
+}
+
 async function deviceFetch(path, options = {}) {
   const device = await readDevice();
   if (!device?.deviceId || !device?.deviceToken) throw new Error("PUSH_DEVICE_NOT_CONFIGURED");
@@ -158,7 +166,10 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  event.waitUntil(showPending());
+  event.waitUntil((async () => {
+    await markPendingWake();
+    await showPending();
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {
