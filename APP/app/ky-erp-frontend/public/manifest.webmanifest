@@ -1,6 +1,7 @@
 {
   "name": "KY ERP",
   "short_name": "KY ERP",
+  "id": "/",
   "description": "KY ERP kurumsal yönetim ve güvenli telefon onayı",
   "start_url": "/",
   "scope": "/",
