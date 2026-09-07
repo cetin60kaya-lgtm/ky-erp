@@ -13,10 +13,12 @@ public partial class PdksDeviceWindow : Window
     private readonly ConfigStore _configStore;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly bool _readOnly;
 
-    public PdksDeviceWindow()
+    public PdksDeviceWindow(bool readOnly = false)
     {
         InitializeComponent();
+        _readOnly = readOnly;
         _configStore = new ConfigStore(_paths);
         _clock.Tick += (_, _) => PcTimeText.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.GetCultureInfo("tr-TR"));
     }
@@ -24,6 +26,7 @@ public partial class PdksDeviceWindow : Window
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         LoadConfig();
+        ApplyReadOnlyGuard();
         _clock.Start();
         PcTimeText.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.GetCultureInfo("tr-TR"));
         await InspectFileAsync();
@@ -128,7 +131,7 @@ public partial class PdksDeviceWindow : Window
             FileParsedCountText.Text = result.ParsedLines.ToString(CultureInfo.InvariantCulture);
             FileDuplicateCountText.Text = result.DuplicateLines.ToString(CultureInfo.InvariantCulture);
             FileRejectedCountText.Text = result.RejectedLines.ToString(CultureInfo.InvariantCulture);
-            FileStatusText.Text = result.Message + (result.LastWriteAt is null ? "" : $" · son yazma {result.LastWriteAt:dd.MM.yyyy HH:mm:ss}");
+            FileStatusText.Text = result.Message + (result.LastWriteAt is DateTimeOffset lastWrite ? $" · son yazma {lastWrite:dd.MM.yyyy HH:mm:ss}" : "");
             LastPunchText.Text = $"Son kayıt: {TerminalDiagnostics.FormatPunch(result.LastPunch)}";
             StatusText.Text = result.Exists && result.ParsedLines > 0 ? "Hedef PDKS dosya köprüsü hazır." : "Hedef PDKS dosya köprüsü kontrol gerekiyor.";
         }
@@ -148,6 +151,23 @@ public partial class PdksDeviceWindow : Window
             CheckFileExists = true,
         };
         if (dialog.ShowDialog(this) == true) HedefFileBox.Text = dialog.FileName;
+    }
+
+    private void ApplyReadOnlyGuard()
+    {
+        if (!_readOnly) return;
+        DeviceNameBox.IsReadOnly = true;
+        DeviceNoBox.IsReadOnly = true;
+        MachineNoBox.IsReadOnly = true;
+        IpBox.IsReadOnly = true;
+        PortBox.IsReadOnly = true;
+        BaudBox.IsReadOnly = true;
+        HedefFileBox.IsReadOnly = true;
+        DirectionCombo.IsEnabled = false;
+        ApplyProfileButton.IsEnabled = false;
+        SaveConfigButton.IsEnabled = false;
+        BrowseHedefFileButton.IsEnabled = false;
+        StatusText.Text = "Salt-okunur terminal görünümü. Ayar değiştirme yetkisi yok.";
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
