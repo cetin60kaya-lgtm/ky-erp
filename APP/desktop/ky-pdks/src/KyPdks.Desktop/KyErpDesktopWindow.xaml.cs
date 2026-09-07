@@ -265,6 +265,11 @@ public partial class KyErpDesktopWindow : Window
 
     private async Task OpenPdksTerminalSettingsAsync()
     {
+        if (ProductCode != "PDKS")
+        {
+            MessageBox.Show(this, "Yerel terminal ve Agent yönetimi KY PDKS Pro ürününe aittir.", ProductName, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (ErpWebView.CoreWebView2 is null) return;
         var token = await ReadTokenAsync();
         if (string.IsNullOrWhiteSpace(token))
