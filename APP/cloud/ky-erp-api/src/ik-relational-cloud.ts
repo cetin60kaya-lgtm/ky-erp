@@ -120,6 +120,26 @@ async function first(c: Context<AppEnv>, sql: string, values: unknown[] = []) {
   return c.env.DB.prepare(sql).bind(...values).first<Row>();
 }
 
+async function advancedPeriodWriteGuard(c: Context<AppEnv>, companyId: string, year: number, month: number) {
+  if (!(year >= 2020 && year <= 2100 && month >= 1 && month <= 12)) {
+    return error(c, 400, "IK_PERIOD_INVALID", "Bordro dönemi geçersiz.");
+  }
+  const exists = await first(c, "SELECT name FROM sqlite_master WHERE type='table' AND name='ik_monthly_close' LIMIT 1");
+  if (!exists?.name) return null;
+  const row = await first(c, "SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1", [companyId, year, month]);
+  if (number(row?.is_locked) !== 0) {
+    return error(c, 409, "IK_PERIOD_LOCKED", `Dönem kilitli: ${year}-${String(month).padStart(2, "0")}. Önce ay sonu kilidini açın.`);
+  }
+  return null;
+}
+
+async function advancedDateWriteGuard(c: Context<AppEnv>, companyId: string, value: unknown) {
+  const date = hrDateOnly(value);
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+  if (!match) return error(c, 400, "IK_DATE_INVALID", "İşlem tarihi geçersiz.");
+  return advancedPeriodWriteGuard(c, companyId, Number(match[1]), Number(match[2]));
+}
+
 function mapMonthly(row: Row): Row {
   const hireDate = hrDateOnly(row.hire_date);
   const paymentType = text(row.bank_payment_type) || "Banka + Elden";
@@ -757,7 +777,10 @@ async function deleteMonthly(c: Context<AppEnv>) {
   const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id = ? AND main_company_id = ?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Aylık personel bulunamadı.");
   const timestamp = nowIso();
-  const effectiveExitDate = hrTodayIstanbul();
+  const currentCard = await first(c, "SELECT active_passive,exit_date FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [id, companyId]);
+  const alreadyPassive = upper(`${text(current.status)} ${text(currentCard?.active_passive)}`).includes("PAS");
+  const existingExitDate = hrDateOnly(currentCard?.exit_date);
+  const effectiveExitDate = alreadyPassive && existingExitDate ? existingExitDate : hrTodayIstanbul();
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE hr_monthly_employees SET status='Pasif', updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp, id, companyId),
     c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,exit_date,updated_at)
@@ -905,7 +928,14 @@ async function saveAdjustment(c: Context<AppEnv>) {
   const id = c.req.param("id") || text(body.id) || crypto.randomUUID();
   const current = c.req.param("id") ? await first(c, "SELECT * FROM hr_monthly_adjustments_v2 WHERE id=? AND employee_id=?", [id, employeeId]) : null;
   if (c.req.param("id") && !current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
-  const date = hrDateOnly(body.date ?? current?.date) || hrDateOnly(nowIso());
+  const date = hrDateOnly(body.date ?? current?.date) || hrTodayIstanbul();
+  const currentDate = hrDateOnly(current?.date);
+  if (currentDate && currentDate !== date) {
+    const currentPeriodGuard = await advancedDateWriteGuard(c, companyId, currentDate);
+    if (currentPeriodGuard) return currentPeriodGuard;
+  }
+  const periodGuard = await advancedDateWriteGuard(c, companyId, date);
+  if (periodGuard) return periodGuard;
   const adjustmentType = text(body.adjustmentType ?? body.type ?? current?.adjustment_type) || "Mesai";
   const hourOrDay = number(body.hourOrDay ?? body.hours ?? current?.hour_or_day);
   const isOvertime = upper(adjustmentType).includes("MESAI");
@@ -958,7 +988,9 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
   const valid = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
   if (valid.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
 
-  const date = hrDateOnly(body.date) || hrDateOnly(nowIso());
+  const date = hrDateOnly(body.date) || hrTodayIstanbul();
+  const periodGuard = await advancedDateWriteGuard(c, companyId, date);
+  if (periodGuard) return periodGuard;
   const hourOrDay = number(body.hourOrDay || body.hours);
   const isOvertime = upper(adjustmentType).includes("MESAI");
   if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
@@ -1000,6 +1032,14 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   const employeeId = text(body.employeeId || current.employee_id);
   const valid = await first(c, "SELECT id FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!valid) return error(c, 400, "INVALID_EMPLOYEE", "Başka firmaya ait veya geçersiz personel var.");
+  const currentDate = hrDateOnly(current.date);
+  const targetDate = hrDateOnly(body.date || current.date);
+  const currentPeriodGuard = await advancedDateWriteGuard(c, companyId, currentDate);
+  if (currentPeriodGuard) return currentPeriodGuard;
+  if (targetDate !== currentDate) {
+    const targetPeriodGuard = await advancedDateWriteGuard(c, companyId, targetDate);
+    if (targetPeriodGuard) return targetPeriodGuard;
+  }
 
   const adjustmentType = text(body.adjustmentType || body.type || current.adjustment_type);
   const isOvertime = upper(adjustmentType).includes("MESAI");
@@ -1015,7 +1055,7 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
     ? overtimeStoredNote(body.note ?? overtimeMetaFromNote(current.note).note, multiplier)
     : (text(body.note ?? overtimeMetaFromNote(current.note).note) || null);
   await c.env.DB.prepare("UPDATE hr_monthly_adjustments_v2 SET employee_id=?,date=?,adjustment_type=?,hour_or_day=?,amount=?,payment_method=?,payroll_effect=?,note=?,status=? WHERE id=?")
-    .bind(employeeId, hrDateOnly(body.date || current.date), adjustmentType, hourOrDay, amount,
+    .bind(employeeId, targetDate, adjustmentType, hourOrDay, amount,
       isOvertime ? "Bordro" : (text(body.paymentMethod || current.payment_method) || "Elden"),
       isOvertime ? "Bordroya yansir" : text(body.payrollEffect || current.payroll_effect),
       note, text(body.status || current.status), id).run();
@@ -1027,11 +1067,13 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const id = text(body.id);
   const companyId = companyIdOf(c, body);
-  const current = await first(c, "SELECT a.id,a.note FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
+  const current = await first(c, "SELECT a.id,a.note,a.date FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
   if (upper(current.note).includes("SON BORDRO KONTROL")) {
     return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından silinemez.");
   }
+  const periodGuard = await advancedDateWriteGuard(c, companyId, current.date);
+  if (periodGuard) return periodGuard;
   await c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id).run();
   return okData(c, { id, deleted: true });
 }
@@ -1041,6 +1083,8 @@ async function deleteAdjustment(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const row = await first(c, "SELECT a.* FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!row) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
+  const periodGuard = await advancedDateWriteGuard(c, companyId, row.date);
+  if (periodGuard) return periodGuard;
   await c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id).run();
   return okData(c, { id, deleted: true });
 }
@@ -1339,6 +1383,8 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const year = number(body.year) || new Date().getFullYear();
   const month = number(body.month) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
+  const periodGuard = await advancedPeriodWriteGuard(c, companyId, year, month);
+  if (periodGuard) return periodGuard;
   const override = body.override && typeof body.override === "object" && !Array.isArray(body.override) ? body.override as Row : {};
   const employee = await first(c, `SELECT e.*, s.extra_payment_amount, s.base_employee_id FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=?`, [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
@@ -1400,6 +1446,8 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   const year = number(body.year) || new Date().getFullYear();
   const month = number(body.month) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
+  const periodGuard = await advancedPeriodWriteGuard(c, companyId, year, month);
+  if (periodGuard) return periodGuard;
   const employee = await first(c, "SELECT id,full_name FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
 
