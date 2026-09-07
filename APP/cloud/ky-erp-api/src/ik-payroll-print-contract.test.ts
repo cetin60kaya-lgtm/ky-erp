@@ -124,23 +124,25 @@ test("payroll payment balance cannot be bypassed and backend enforces the same c
 
 test("payment list PDF is a compact single-row list and prints one totals row only at the end", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+  const start = page.indexOf("const printPayrollReport = async");
+  const end = page.indexOf("const legalLabel =", start);
+  const block = page.slice(start, end);
 
   assert.match(page, /const exportPayroll = \(\) =>/);
-  assert.match(page, /const rows = payrollRows\.filter/);
   assert.match(page, /excelRows\.push\(\{/);
   assert.match(page, /personel: "TOPLAM"/);
-  assert.match(page, /const printPayrollReport = async \(\) =>/);
-  assert.match(page, /<h1>İK Ödeme Listesi<\/h1>/);
-  assert.match(page, /Personel \/ HKN/);
+  assert.match(block, /const rows = payrollRows\.filter/);
+  assert.match(block, /<h1>İK Ödeme Listesi<\/h1>/);
+  assert.match(block, /Personel \/ HKN/);
   for (const label of ["Maaş","Yol","EK","Mesai","Avans","Kesinti","İcra/Haciz","Banka","Elden","Net"]) {
-    assert.ok(page.includes(`>${label}<`), `Eksik ödeme listesi kolonu: ${label}`);
+    assert.ok(block.includes(`>${label}<`), `Eksik ödeme listesi kolonu: ${label}`);
   }
-  assert.match(page, /<tr class="total-row">/);
-  assert.match(page, /TOPLAM · \$\{rows\.length\} personel/);
-  assert.doesNotMatch(page, /<tfoot>/);
-  assert.doesNotMatch(page, /Hak Ediş<\/th>/);
-  assert.doesNotMatch(page, /<th class="state">Durum<\/th>/);
-  assert.match(page, /toplam yalnız listenin en sonunda bir kez gösterilir/);
+  assert.match(block, /<tr class="total-row">/);
+  assert.match(block, /TOPLAM · \$\{rows\.length\} personel/);
+  assert.doesNotMatch(block, /<tfoot>/);
+  assert.doesNotMatch(block, /Hak Ediş<\/th>/);
+  assert.doesNotMatch(block, /Durum<\/th>/);
+  assert.match(block, /toplam yalnız listenin en sonunda bir kez gösterilir/);
   assert.ok(page.includes("Ödeme Listesi / PDF"));
   assert.ok(page.includes("Ödeme Listesi / Excel"));
 });
