@@ -1,5 +1,5 @@
 #define MyAppName "KY PDKS Desktop"
-#define MyAppVersion "1.8.0"
+#define MyAppVersion "1.8.1"
 #define MyPublisher "KY ERP"
 #define Dist GetEnv("KY_PDKS_DIST")
 #define SetupOut GetEnv("KY_PDKS_SETUP_OUT")
@@ -9,7 +9,7 @@ AppId={{66C7B6AA-FF3F-4F46-9D53-1F6EFD95C82A}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
-VersionInfoVersion=1.8.0.0
+VersionInfoVersion=1.8.1.0
 VersionInfoCompany={#MyPublisher}
 VersionInfoDescription=KY PDKS Desktop • kart, puantaj, vardiya, izin, terminal ve denetim çalışma merkezi
 AppPublisher={#MyPublisher}
