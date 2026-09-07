@@ -282,3 +282,38 @@ Secret, parola, MFA kodu, recovery cevabı veya API token değeri hiçbir zaman 
 - Kullanıcı arayüzünde eski tek kullanımlık kurtarma-kodu mantığı kaldırıldı. Canonical kurtarma: parola doğrulaması -> doğrulanmış e-posta/SMS -> rastgele 2 güvenlik sorusu -> Authenticator yeniden kurulumudur.
 - Cloudflare Access / Zero Trust, ileride yalnız Süper Yönetici için ek dış güvenlik katmanı olarak değerlendirilebilir; mevcut KY ERP kurtarmasının yerine geçirilmedi ve normal kullanıcı akışına ikinci giriş eklenmedi.
 - Regression: `APP/cloud/ky-erp-api/src/super-admin-recovery-final-contract.test.ts`.
+
+
+---
+
+## 2026-09-07 — MAIL MERKEZİ / HOTMAIL GEÇİCİ ENTEGRASYON KARARI
+
+Bu karar sonraki mail çalışmalarında kaynak kabul edilecektir.
+
+- Gmail doğrudan Google OAuth + Gmail API ile çalışmaya devam edecek. Mevcut Gmail bağlantısına dokunulmayacak.
+- Desen mailbox: `hkndesen@gmail.com`.
+- Hotmail/Microsoft kişisel hesap için mevcut doğrudan Microsoft OAuth yolu şimdilik zorlanmayacak.
+- Hakan Emprime ana mail: `hkngursu@hotmail.com`.
+- Hotmail için tercih edilen ikinci yol yalnız bu hesapta aracı provider kullanmaktır.
+- İlk değerlendirilecek aracı: **Nylas**.
+- Mimari hedef: `Gmail -> mevcut direkt Google adapter`, `Hotmail -> Nylas Microsoft/Outlook adapter`.
+- Nylas katmanı yalnız Hotmail tarafına eklenecek; Gmail kodu, OAuth secretları, senkron mantığı ve çalışan mailbox etkilenmeyecek.
+- KY ERP Mail Merkezi tek arayüz olarak kalacak. Kullanıcı iki hesabı aynı posta merkezi içinde görecek.
+- Hotmail adapterı şu yetenekleri sağlamadan tamamlandı sayılmayacak: gelen/giden, klasörler, okundu/okunmadı, sil/çöp kutusu, arşiv, taşıma, bayrak/sabitleme eşlemesi, ek indirme/önizleme, gönderim ve güvenli OAuth/token yenileme.
+- Provider farkı kullanıcıya mümkün olduğunca gösterilmeyecek; provider-specific hata/log bilgisi yönetim tarafında tutulacak.
+- Nylas hesabı açılırken secret/API key değerleri repoya veya sohbete yazılmayacak; Cloudflare secret olarak girilecek.
+- Nylas uygun olmazsa ikinci alternatif araştırılacak; Gmail tarafı yine değiştirilmeyecek.
+- Bu iş, mevcut Gmail final kontrolleri tamamlandıktan sonra ele alınacak.
+
+### Uygulama sırası
+
+1. Nylas hesabı/projesi oluştur.
+2. Hotmail kişisel Microsoft hesabı desteğini ve Hosted OAuth akışını gerçek hesapla doğrula.
+3. Gerekli Client ID / API key / callback değerlerini Cloudflare secret olarak tanımla.
+4. Worker tarafına provider adapter ekle.
+5. Mevcut `mail_accounts`, klasör, mesaj, attachment ve action contractlarını bozmadan Nylas cevabını canonical mail modeline map et.
+6. `hkngursu@hotmail.com` hesabını yalnız Nylas üzerinden bağla.
+7. Gelen kutusu, gönderilmiş postalar, çöp kutusu, okundu, sil, taşı, ek, gönderim ve token refresh uçtan uca testlerini tamamla.
+8. Gmail hesabında regression testi yap; hiçbir davranış değişmediğini doğrula.
+9. Sonra production yayını yap ve gerçek Hotmail smoke testi ile kapat.
+
