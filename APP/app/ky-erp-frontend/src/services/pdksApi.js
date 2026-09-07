@@ -18,8 +18,8 @@ export async function getPdksPeople(params = {}) {
 
 // Modern attendance motoru: vardiya, Cumartesi/Pazar, yarım gün tatil, izin günü,
 // duplicate punch, tolerans ve mesai hesabını tek server cevabında döndürür.
-export async function getPdksAttendance(employeeId, year, month) {
-  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance-v2`, { year, month }));
+export async function getPdksAttendance(employeeId, year, month, params = {}) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance-v2`, { ...params, year, month }));
 }
 
 export async function getPdksLegacyAttendance(employeeId, year, month) {
