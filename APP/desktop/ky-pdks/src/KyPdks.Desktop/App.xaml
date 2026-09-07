@@ -1,7 +1,6 @@
 <Application x:Class="KyPdks.Desktop.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="KyErpShellWindow.xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Application.Resources>
     <SolidColorBrush x:Key="KyBlue" Color="#1F5D96"/>
     <SolidColorBrush x:Key="KyDark" Color="#172D49"/>
