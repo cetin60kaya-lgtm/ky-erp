@@ -1242,12 +1242,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       th.salary{width:9.2%} th.road{width:7.2%} th.extra{width:7.1%} th.overtime{width:7.1%}
       th.advance{width:8.1%} th.deduction{width:8.1%} th.garnishment{width:8.1%}
       th.bank{width:9.2%} th.cash{width:9.2%} th.net{width:13.2%}
-      td.person strong{display:block;font-size:7.25px;line-height:1.02;overflow:hidden;text-overflow:ellipsis}
-      td.person small{display:block;margin-top:1px;color:#6a7b8c;font-size:5.75px}
-      td.bank,td.cash,td.net{font-weight:800;font-size:7.35px}
-      td.net{font-size:7.55px}
-      .total-row td{font-weight:900;background:#eef4fa;border-top:2.4px solid #15283b;font-size:8.15px;padding-top:4px;padding-bottom:4px}
-      .total-row td.person{font-size:8.35px}
+      tbody tr:not(.total-row) td:not(.person){font-size:10.25pt;line-height:1;font-weight:500}
+      td.person strong{display:block;font-size:7.1pt;line-height:1.02;overflow:hidden;text-overflow:ellipsis}
+      td.person small{display:block;margin-top:1px;color:#6a7b8c;font-size:5.6pt}
+      td.bank,td.cash,td.net{font-weight:800}
+      .total-row td{font-weight:900;background:#eef4fa;border-top:2.4px solid #15283b;font-size:10.75pt;line-height:1;padding-top:4px;padding-bottom:4px}
+      .total-row td.person{font-size:8.1pt}
     </style></head><body>
       <div class="report-head">
         <div><h1>İK Ödeme Listesi</h1><div class="sub">${escapeHtml(periodLabel)} · ${rows.length} personel</div></div>
