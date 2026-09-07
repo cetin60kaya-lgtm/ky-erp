@@ -590,8 +590,6 @@ export function registerAuthPushRoutes(app: any) {
 
     const subscription = body.subscription && typeof body.subscription === "object" ? body.subscription : {};
     const endpoint = text(subscription.endpoint);
-    const p256dh = text(subscription.keys?.p256dh);
-    const authKey = text(subscription.keys?.auth);
     if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Tarayıcı bildirim aboneliği geçersiz."), 400);
 
     const allDevices = await storeList(c, DEVICE_SCOPE);
@@ -610,8 +608,6 @@ export function registerAuthPushRoutes(app: any) {
       userId: current.id,
       mainCompanySlug: companySlug,
       pushEndpoint: endpoint,
-      p256dhKey: p256dh,
-      authKey,
       deviceTokenHash: await sha256(deviceToken),
       deviceLabel: label,
       userAgent: userAgent(c),
