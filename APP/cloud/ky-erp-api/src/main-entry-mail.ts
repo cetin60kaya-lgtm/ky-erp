@@ -45,6 +45,8 @@ function rewritePath(request:Request,path:string){const url=new URL(request.url)
 async function rewriteJsonPostPath(request:Request,path:string){
   const url=new URL(request.url);url.pathname=path;
   const headers=new Headers(request.headers);
+  headers.delete("Content-Length");
+  headers.delete("Transfer-Encoding");
   headers.set("Content-Type","application/json");
   const raw=await request.clone().text().catch(()=>"");
   let payload:any={};
