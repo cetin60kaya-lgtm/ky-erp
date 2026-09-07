@@ -346,3 +346,21 @@ test("final payroll save auto-reconciles bank cash and supports serial personnel
   // Backend still keeps the hard invariant; only the UI reconciles before posting.
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
 });
+
+
+test("final payroll always reads live overtime advance deduction and garnishment movements", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const overtime = system\.overtime/);
+  assert.match(page, /const advance = system\.advance/);
+  assert.match(page, /const deduction = system\.deduction/);
+  assert.match(page, /const garnishment = system\.garnishment/);
+  assert.match(page, /sourceChangedSinceSave/);
+  assert.match(page, /savedPaymentMatchesLiveNet/);
+  assert.match(page, /const liveBank = Math\.min\(liveTotals\.net, liveBankPlan\)/);
+  assert.match(page, /const useSavedPaymentSplit = !sourceChangedSinceSave && savedPaymentMatchesLiveNet/);
+
+  // planFor must be a pure live-source calculation; stale payroll snapshots cannot hide new movements.
+  assert.doesNotMatch(page, /const bank = saved\?\.final \? num\(saved\.final\.bank\)/);
+  assert.doesNotMatch(page, /const overtime = num\(saved\.final\.overtimeAmount\)/);
+});
