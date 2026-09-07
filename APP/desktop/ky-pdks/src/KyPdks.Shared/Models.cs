@@ -132,17 +132,23 @@ public sealed record StoredSession(
 public sealed class PdksConfig
 {
     public string SourceMode { get; set; } = "HEDEF_TR500";
-    public string TcpHost { get; set; } = "127.0.0.1";
-    public int TcpPort { get; set; } = 4370;
+    public string DeviceName { get; set; } = "Cihaz1";
+    public int DeviceNo { get; set; } = 1;
+    public int MachineNo { get; set; } = 1;
+    public string Direction { get; set; } = "GIRIS";
+    public string TcpHost { get; set; } = "192.168.1.224";
+    public int TcpPort { get; set; } = 5005;
     public string SerialPort { get; set; } = "COM1";
-    public int SerialBaud { get; set; } = 9600;
+    public int SerialBaud { get; set; } = 38400;
     public int ScanIntervalMs { get; set; } = 1000;
     public int SyncIntervalSeconds { get; set; } = 30;
     public bool AutoSync { get; set; } = true;
     public bool FileImportEnabled { get; set; } = true;
     public string LineEncoding { get; set; } = "windows-1254";
-    public string HedefReadFile { get; set; } = @"F:\Ekin\bilgi.dat";
-    public string HedefWriteFile { get; set; } = @"F:\Ekin\TR500.txt";
+    public string HedefReadFile { get; set; } = @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt";
+    public string HedefWriteFile { get; set; } = "";
+    public string TerminalProtocol { get; set; } = "HEDEF_UNKNOWN_BINARY";
+    public bool DirectCommandsEnabled { get; set; } = false;
 
     public string NormalizedMode => (SourceMode ?? "HEDEF_TR500").Trim().ToUpperInvariant() switch
     {
@@ -157,14 +163,21 @@ public sealed class PdksConfig
     public void Normalize()
     {
         SourceMode = NormalizedMode;
-        TcpHost = string.IsNullOrWhiteSpace(TcpHost) ? "127.0.0.1" : TcpHost.Trim();
+        DeviceName = string.IsNullOrWhiteSpace(DeviceName) ? "Cihaz1" : DeviceName.Trim();
+        DeviceNo = Math.Max(1, DeviceNo);
+        MachineNo = Math.Max(1, MachineNo);
+        Direction = string.Equals(Direction, "CIKIS", StringComparison.OrdinalIgnoreCase) ? "CIKIS" : "GIRIS";
+        TcpHost = string.IsNullOrWhiteSpace(TcpHost) ? "192.168.1.224" : TcpHost.Trim();
         TcpPort = Math.Clamp(TcpPort, 1, 65535);
         SerialPort = string.IsNullOrWhiteSpace(SerialPort) ? "COM1" : SerialPort.Trim().ToUpperInvariant();
-        SerialBaud = SerialBaud is 1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200 ? SerialBaud : 9600;
+        SerialBaud = SerialBaud is 1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200 ? SerialBaud : 38400;
         ScanIntervalMs = Math.Clamp(ScanIntervalMs, 250, 30000);
         SyncIntervalSeconds = Math.Clamp(SyncIntervalSeconds, 10, 3600);
         LineEncoding = string.IsNullOrWhiteSpace(LineEncoding) ? "windows-1254" : LineEncoding.Trim();
-        HedefReadFile = string.IsNullOrWhiteSpace(HedefReadFile) ? @"F:\Ekin\bilgi.dat" : HedefReadFile.Trim();
-        HedefWriteFile = string.IsNullOrWhiteSpace(HedefWriteFile) ? @"F:\Ekin\TR500.txt" : HedefWriteFile.Trim();
+        HedefReadFile = string.IsNullOrWhiteSpace(HedefReadFile) ? @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt" : HedefReadFile.Trim();
+        HedefWriteFile = (HedefWriteFile ?? "").Trim();
+        TerminalProtocol = string.IsNullOrWhiteSpace(TerminalProtocol) ? "HEDEF_UNKNOWN_BINARY" : TerminalProtocol.Trim().ToUpperInvariant();
+        // Saat/kapı/restart/yönetici gibi üretici komutları protokol/SDK doğrulanmadan açılmaz.
+        if (!string.Equals(TerminalProtocol, "HEDEF_VERIFIED", StringComparison.OrdinalIgnoreCase)) DirectCommandsEnabled = false;
     }
 }
