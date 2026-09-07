@@ -630,6 +630,12 @@ public partial class PdksWorkbenchWindow : Window
         GridSubtitleText.Text = subtitle;
     }
 
+    private void OpenDeviceButton_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new PdksDeviceWindow { Owner = this };
+        window.ShowDialog();
+    }
+
     private void OpenAdministrationButton_Click(object sender, RoutedEventArgs e)
     {
         var window = new MainWindow { Owner = this };
