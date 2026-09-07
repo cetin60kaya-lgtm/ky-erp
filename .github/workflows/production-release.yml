@@ -270,21 +270,7 @@ jobs:
             exit 1
           fi
 
-          echo "0052 Telefon Push / kodsuz giris semasi kontrol ediliyor..."
-          test -f migrations/0052_auth_phone_push_approval.sql
-          phone_push_state="$(npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('auth_push_devices','auth_phone_login_challenges','auth_company_login_approval_settings');" --json)"
-          phone_push_tables="$(jq -r '.[0].results[0].n // -1' <<<"$phone_push_state")"
-          if [ "$phone_push_tables" = "0" ]; then
-            echo "0052 semasi yok; tam D1 yedegi sonrasi additive migration uygulanacak."
-            npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file migrations/0052_auth_phone_push_approval.sql
-          elif [ "$phone_push_tables" = "3" ]; then
-            echo "0052 semasi zaten tam; tekrar uygulanmiyor."
-          else
-            echo "GUVENLIK DURDURMASI: 0052 kismi sema bulundu (tables=$phone_push_tables)." >&2
-            exit 1
-          fi
-
-      - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme + Telefon Push semasini dogrula
+      - name: Migration sonrasi File Hub + Muhasebe + FIBE + PDKS + AI ucretlendirme semasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
@@ -300,7 +286,6 @@ jobs:
             accounting_bank_import_rows accounting_document_archive_jobs
             ik_pdks_devices ik_pdks_device_sync_logs
             ik_person_hr_profiles ik_person_monthly_compliance
-            auth_push_devices auth_phone_login_challenges auth_company_login_approval_settings
             company_billing_profiles company_billing_ledger
           )
           triggers=(trg_file_hub_outgoing_package_teammates trg_file_hub_primary_location_failover trg_accounting_documents_enqueue_archive)
