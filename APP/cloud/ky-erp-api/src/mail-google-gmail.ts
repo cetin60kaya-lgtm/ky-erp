@@ -344,7 +344,8 @@ export function registerGoogleMailRoutes(app:any){
     if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
     const folder=await c.env.DB.prepare("SELECT * FROM mail_folders WHERE id=? AND account_id=? AND main_company_slug=? LIMIT 1").bind(text(c.req.param("folderId")),account.id,tenant).first<AnyRow>();
     if(!folder)return c.json(err("MAIL_FOLDER_NOT_FOUND","Posta klasörü bulunamadı."),404);
-    const token=(await usableToken(c,tenant,account)).text,labelId=text(folder.provider_folder_id),list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
+    const quick=body.quick===true||body.quick===1||body.quick==="1",maxResults=quick?20:100;
+    const token=(await usableToken(c,tenant,account)).text,labelId=text(folder.provider_folder_id),list=(await googleJson(GMAIL+"/messages?maxResults="+maxResults+"&labelIds="+encodeURIComponent(labelId),token)).payload;
     let count=0,failed=0;const failures:any[]=[];
     for(const item of Array.isArray(list.messages)?list.messages:[]){
       try{
@@ -355,7 +356,7 @@ export function registerGoogleMailRoutes(app:any){
         if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
       }
     }
-    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count,failed,partial:failed>0,failures,warning:failed?String(failed)+" mesaj atlandı; diğer kayıtlar güncellendi.":""}},failed?207:200);
+    return c.json({ok:true,data:{accountId:account.id,folderId:folder.id,count,failed,partial:failed>0,quick,maxResults,failures,warning:failed?String(failed)+" mesaj atlandı; diğer kayıtlar güncellendi.":""}},failed?207:200);
   });
 
   app.post("/api/mail/messages/:id/action/google",async(c:any)=>{
