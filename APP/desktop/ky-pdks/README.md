@@ -112,7 +112,7 @@ Hazır profiller:
 Tanımlanabilen alanlar:
 
 - cihaz adı / cihaz no / makine no
-- GİRİŞ / ÇIKIŞ / AUTO
+- AUTO / GİRİŞ / ÇIKIŞ
 - kaynak modu
 - IP / port
 - veri dosyası
@@ -128,7 +128,7 @@ Tanımlanabilen alanlar:
 Cihaz1
 Cihaz No: 1
 Makine No: 1
-Yön: GİRİŞ
+Yön: AUTO (tek terminal giriş/çıkış)
 IP: 192.168.1.224
 Port: 5005
 COM1 / 38400
