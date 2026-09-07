@@ -15,7 +15,7 @@ const SCOPES = [
   "openid","profile","email","offline_access","User.Read",
   "Mail.ReadWrite","Mail.Send"
 ].join(" ");
-const scopesForAccount=(account:AnyRow)=>String(account?.account_type||"").toUpperCase()==="SHARED"
+const scopesForAccount=(account:AnyRow)=>["SHARED","DEPARTMENT"].includes(String(account?.account_type||"").toUpperCase().replace(/İ/g,"I"))
   ? SCOPES+" Mail.ReadWrite.Shared Mail.Send.Shared" : SCOPES;
 
 const text=(v:unknown)=>v==null?"":String(v).trim();

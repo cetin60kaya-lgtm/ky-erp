@@ -191,3 +191,20 @@ test("Gmail partial sync keeps successful mail data usable instead of surfacing 
   assert.match(gmail,/MAIL_SYNC_FAILED/);
   assert.doesNotMatch(gmail,/ok:!partial,data:\{accountId:account\.id/);
 });
+
+
+test("Gmail keeps inline body.data parts retrievable without storing raw image content",()=> {
+  const gmail=read("./mail-google-gmail.ts");
+  assert.match(gmail,/inlineData=text\(part\?\.body\?\.data\)/);
+  assert.match(gmail,/INLINE_PART:/);
+  assert.match(gmail,/\?format=full/);
+  assert.match(gmail,/findPart/);
+  assert.match(gmail,/inlineBodyData:Boolean/);
+});
+
+test("Microsoft department mailboxes request shared mailbox scopes",()=> {
+  const microsoft=read("./mail-microsoft-graph.ts");
+  assert.match(microsoft,/\["SHARED","DEPARTMENT"\]\.includes/);
+  assert.match(microsoft,/Mail\.ReadWrite\.Shared/);
+  assert.match(microsoft,/Mail\.Send\.Shared/);
+});
