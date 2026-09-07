@@ -5,6 +5,8 @@ import {
   getIkAdvancedAuditLogs,
   getIkAdvancedMonth,
   getIkAdvancedPayroll,
+  getIkAdvancedPeriodState,
+  prepareIkAdvancedPeriod,
   getIkAdvancedLeaveCenter,
   runIkAdvancedCloseCheck,
   saveIkAdvancedException,
@@ -293,19 +295,52 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     const task = (async () => {
       setBusy(true);
       try {
-        const includePayroll = prepare || periodPrepared;
-        const [resultState, auditState, payrollState, centerState] = await Promise.allSettled([
+        const [resultState, auditState, centerState, periodState] = await Promise.allSettled([
           getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
           getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 })),
-          includePayroll ? getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month })) : Promise.resolve(null),
           getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: `${year - 1}-01-01`, to: `${year + 1}-12-31` })),
+          getIkAdvancedPeriodState(params({ mainCompanyId: companyId, year, month })),
         ]);
         if (resultState.status !== "fulfilled") throw resultState.reason;
         const result = resultState.value;
         const audit = auditState.status === "fulfilled" ? auditState.value : [];
-        const payroll = payrollState.status === "fulfilled" ? payrollState.value : null;
         const center = centerState.status === "fulfilled" ? centerState.value : null;
-        const auxiliaryFailed = [auditState, payrollState, centerState].some((state) => state.status === "rejected");
+
+        let authoritativePrepared = periodState.status === "fulfilled"
+          ? Boolean(periodState.value?.prepared)
+          : null;
+        let periodStateFailed = periodState.status === "rejected";
+
+        // Eski tarayıcı hafızasında bu ay daha önce hazırlanmışsa, yeni sunucu
+        // kaydına bir kez sessizce taşı. Böylece mevcut kullanıcı tekrar düğmeye basmaz.
+        if (authoritativePrepared === false && periodPrepared) {
+          try {
+            const promoted = await prepareIkAdvancedPeriod({ mainCompanyId: companyId, year, month });
+            authoritativePrepared = Boolean(promoted?.prepared);
+          } catch {
+            periodStateFailed = true;
+          }
+        }
+
+        const preparedForView = authoritativePrepared === null || periodStateFailed
+          ? periodPrepared
+          : authoritativePrepared;
+        const includePayroll = prepare || preparedForView;
+
+        let payroll = null;
+        let payrollFailed = false;
+        if (includePayroll) {
+          try {
+            payroll = await getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month }));
+          } catch {
+            payrollFailed = true;
+          }
+        }
+
+        const auxiliaryFailed = auditState.status === "rejected"
+          || centerState.status === "rejected"
+          || periodStateFailed
+          || payrollFailed;
         if (loadRequestRef.current.seq !== requestId) return;
 
         const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
@@ -326,6 +361,17 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         setData(cleanResult);
         setLogs(safeList(audit));
         setPayrollData(includePayroll ? cleanPayroll : null);
+        if (authoritativePrepared !== null && !periodStateFailed) {
+          setPreparedPeriods((old) => {
+            const withoutCurrent = old.filter((value) => value !== period);
+            const next = authoritativePrepared ? [...withoutCurrent, period] : withoutCurrent;
+            const unchanged = next.length === old.length && next.every((value, index) => value === old[index]);
+            if (!unchanged && typeof window !== "undefined") {
+              window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
+            }
+            return unchanged ? old : next;
+          });
+        }
         setLeaveCenter(center || { plans: [], conflicts: [] });
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
@@ -369,14 +415,23 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   }, [load]);
 
   const preparePeriod = async () => {
-    const ok = await load({ force: true, prepare: true });
-    if (!ok) return;
-    setPreparedPeriods((old) => {
-      const next = [...new Set([...old, period])];
-      if (typeof window !== "undefined") window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
-      return next;
-    });
-    setNotice(`${MONTHS[month - 1]} ${year} bilgileri hazırlandı. Bordro ve ödeme kontrolü artık açılabilir.`);
+    setBusy(true);
+    try {
+      const state = await prepareIkAdvancedPeriod({ mainCompanyId: companyId, year, month });
+      if (!state?.prepared) throw new Error("Aylık dönem hazırlık kaydı doğrulanamadı.");
+      setPreparedPeriods((old) => {
+        const next = [...new Set([...old, period])];
+        if (typeof window !== "undefined") window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
+        return next;
+      });
+      const ok = await load({ force: true, prepare: true });
+      if (!ok) return;
+      setNotice(`${MONTHS[month - 1]} ${year} bir kez hazırlandı ve sunucuya kaydedildi. Sayfa kapansa da tekrar hazırlamanız gerekmez.`);
+    } catch (error) {
+      setNotice(error?.message || "Aylık dönem hazırlanamadı.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const changePeriod = (nextYear, nextMonth) => {
@@ -1347,7 +1402,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         </div>
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
         <div className={`warnline ${periodPrepared ? "ok" : "warn"}`}>
-          <b>Ödeme dönemi: {MONTHS[month - 1]} {year}</b> · Seçtiğiniz dönem sayfadan çıkınca korunur.
+          <b>Ödeme dönemi: {MONTHS[month - 1]} {year}</b> · Ay bir kez hazırlandığında firma bazında sunucuya kaydedilir ve tekrar hazırlanmaz.
           {!periodPrepared ? <><span> Bu dönem bordro hesabı henüz açılmadı.</span> <button className="btn primary" onClick={preparePeriod} disabled={busy}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></> : <span> Bordro verileri hazır.</span>}
         </div>
 
