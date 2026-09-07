@@ -40,3 +40,9 @@ test("device center exposes the native Windows terminal wizard without duplicati
   assert.match(device, /Kurulum Sihirbazını Aç/);
   assert.match(device, /Yerel Terminal Köprüsü/);
 });
+
+
+test("standalone shell registers the PDKS module before computing visible modules", () => {
+  assert.match(app, /import "\.\/app\/pdksModuleRegistryPatch";/);
+  assert.match(app, /const visibleModules = useMemo/);
+});
