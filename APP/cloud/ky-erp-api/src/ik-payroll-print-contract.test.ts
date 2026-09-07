@@ -94,7 +94,7 @@ test("IK base salary reference uses raw employees and overtime metadata is strip
   assert.match(page, /const employee = rawEmployees\.find/);
   assert.match(cloud, /new Map\(rawEmployees\.map/);
   assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
-  assert.match(cloud, /exit_date=COALESCE\(ik_person_card_settings\.exit_date, excluded\.exit_date\)/);
+  assert.match(cloud, /exit_date=excluded\.exit_date/);
 });
 
 
