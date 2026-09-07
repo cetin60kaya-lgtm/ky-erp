@@ -283,7 +283,7 @@ function folderIcon(row) {
 function folderGroup(row) {
   const type = folderType(row);
   const provider = folderProviderId(row);
-  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT","UNREAD"].includes(provider)) return "system";
+  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT"].includes(provider)) return "system";
   if (provider.startsWith("CATEGORY_")) return "category";
   return "label";
 }
