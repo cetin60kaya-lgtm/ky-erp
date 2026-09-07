@@ -2375,3 +2375,183 @@
 .modal-bg .leave-calendar-legend .not-counted { background:#cbd5e1; }
 .modal-bg .leave-calendar-legend .return-legend { background:#22c55e; }
 @media (max-width:1100px){.ik-html .leave-main-tabs{flex-wrap:nowrap}.modal-bg .leave-modal-layout{grid-template-columns:1fr}.modal-bg .leave-preview-panel{position:static}}
+
+/* IK final payroll review: serial personnel rail + full-width control layout */
+.modal-bg .payroll-final-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.modal-bg .payroll-person-rail {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-bg .payroll-person-rail-head {
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.modal-bg .payroll-person-rail-head > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.modal-bg .payroll-person-rail-head b {
+  font-size: 16px;
+}
+
+.modal-bg .payroll-person-rail-head span,
+.modal-bg .payroll-person-rail-head small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.modal-bg .payroll-person-rail-head small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.modal-bg .payroll-person-rail-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.modal-bg .payroll-person-rail-list button {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 9px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-bg .payroll-person-rail-list button.active {
+  border-color: #7aa7ef;
+  box-shadow: inset 3px 0 0 var(--blue);
+  background: #eef5ff;
+}
+
+.modal-bg .payroll-person-rail-list button span,
+.modal-bg .payroll-person-rail-list button b,
+.modal-bg .payroll-person-rail-list button small {
+  display: block;
+  min-width: 0;
+}
+
+.modal-bg .payroll-person-rail-list button b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.modal-bg .payroll-person-rail-list button small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.modal-bg .payroll-person-rail-list button em {
+  border-radius: 999px;
+  padding: 4px 6px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.modal-bg .payroll-person-rail-list button em.done {
+  background: #e8f7ed;
+  color: #168245;
+}
+
+.modal-bg .payroll-person-rail-list button em.ready {
+  background: #eef5ff;
+  color: var(--blue);
+}
+
+.modal-bg .payroll-person-rail-list button em.warn {
+  background: #fff4dc;
+  color: #9a5a00;
+}
+
+.modal-bg .payroll-final-main {
+  min-width: 0;
+  min-height: 0;
+}
+
+.modal-bg .payroll-control-grid {
+  grid-template-columns: minmax(520px, 1.08fr) minmax(420px, .92fr);
+  align-items: start;
+}
+
+.modal-bg .payroll-control-grid > .modal-section:last-child {
+  grid-column: auto;
+}
+
+.modal-bg .payroll-smart-check {
+  position: sticky;
+  top: 0;
+}
+
+.modal-bg .payroll-control-grid .payment-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1280px) {
+  .modal-bg .payroll-final-layout {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .modal-bg .payroll-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-bg .payroll-control-grid > .modal-section:last-child {
+    grid-column: 1;
+  }
+
+  .modal-bg .payroll-smart-check {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .modal-bg .payroll-final-layout {
+    display: block;
+  }
+
+  .modal-bg .payroll-person-rail {
+    max-height: 220px;
+    margin-bottom: 12px;
+  }
+
+  .modal-bg .payroll-person-rail-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
