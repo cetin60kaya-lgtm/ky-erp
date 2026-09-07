@@ -77,3 +77,11 @@ test("partial Gmail sync is shown as a usable warning and refreshes successful r
   assert.match(page, /kalanlar sonraki senkronizasyonda tekrar denenecek/);
   assert.match(page, /syncMailFolder/);
 });
+
+
+test("incoming view waits for the canonical INBOX and hydrated HTML is keyed to the selected mail", () => {
+  assert.match(page, /activeTab === "mail-gelen" && !defaultInboxFolderId/);
+  assert.match(page, /setSelectedMessage\(null\)/);
+  assert.match(page, /renderedHtmlMessageId/);
+  assert.match(page, /renderedHtmlMessageId === String\(selectedMessage\.id\)/);
+});
