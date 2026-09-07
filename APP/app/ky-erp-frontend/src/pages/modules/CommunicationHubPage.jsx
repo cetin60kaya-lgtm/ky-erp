@@ -90,11 +90,9 @@ function blobToDataUrl(blob) {
 }
 
 function regexEscape(value) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\function regexEscape(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-");
-}
+
 function crc32(bytes) {
   let crc = 0xffffffff;
   for (let i = 0; i < bytes.length; i += 1) {

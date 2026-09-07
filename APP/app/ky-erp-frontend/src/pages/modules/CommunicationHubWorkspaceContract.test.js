@@ -120,3 +120,10 @@ test("mail preview supports browser-native audio and video in addition to image 
   assert.match(css, /comm-attachment-preview-body audio/);
   assert.match(css, /comm-attachment-preview-body video/);
 });
+
+
+test("mail regex escape helper stays syntactically intact", () => {
+  assert.match(page, /function regexEscape\(value\)/);
+  assert.match(page, /replace\(\/\[\.\*\+\?\^\$\{\}\(\)\|\[\\\]\\\\\]\/g, "\\\\$&"\)/);
+  assert.doesNotMatch(page, /\\function regexEscape/);
+});
