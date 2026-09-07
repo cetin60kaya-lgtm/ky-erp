@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import "../../app/pdksModuleRegistryPatch";
-import { executePdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
+import { commitPdksAssistantCommand, previewPdksAssistantCommand, PDKS_ASSISTANT_EXAMPLES } from "../../services/pdksAssistant";
 import PdksAiControlCenter from "../pdks/PdksAiControlCenter";
 import PdksDeviceCenter from "../pdks/PdksDeviceCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
@@ -41,18 +41,34 @@ function groupForTab(tabKey, groups) {
 function QuickAssistant({ disabled, mainCompanyId }) {
   const [command, setCommand] = useState("");
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const execute = async () => {
+  const clearFeedback = () => { setPreview(null); setMessage(""); setError(""); };
+
+  const runPreview = async () => {
     if (disabled || busy || !command.trim()) return;
+    setBusy(true); setError(""); setMessage(""); setPreview(null);
+    try {
+      setPreview(await previewPdksAssistantCommand(command, { mainCompanyId }));
+    } catch (cause) {
+      setError(cause?.message || "İşlem önizlenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commit = async () => {
+    if (disabled || busy || !preview || !command.trim()) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const result = await executePdksAssistantCommand(command, { mainCompanyId });
-      setMessage(result?.message || "İşlem tamamlandı.");
+      const result = await commitPdksAssistantCommand(command, { mainCompanyId });
+      setMessage(result?.summary || "PDKS işlemi uygulandı.");
       setCommand("");
+      setPreview(null);
     } catch (cause) {
-      setError(cause?.message || "Asistan işlemi tamamlanamadı.");
+      setError(cause?.message || "PDKS işlemi uygulanamadı.");
     } finally {
       setBusy(false);
     }
@@ -61,16 +77,23 @@ function QuickAssistant({ disabled, mainCompanyId }) {
   return (
     <section className="pdks-quick-assistant compact">
       <div className="pdks-assistant-row">
-        <div className="pdks-assistant-label"><strong>Hızlı İşlem</strong><small>Personel + işlemi yaz</small></div>
-        <input value={command} disabled={disabled || busy} onChange={(event) => setCommand(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") execute(); }}
+        <div className="pdks-assistant-label"><strong>Hızlı İşlem</strong><small>Önce önizle, sonra onayla</small></div>
+        <input value={command} disabled={disabled || busy} onChange={(event) => { setCommand(event.target.value); clearFeedback(); }}
+          onKeyDown={(event) => { if (event.key === "Enter") runPreview(); }}
           placeholder="Örn: Ali Akkaya bugün gelmedi, yok yaz" />
-        <button type="button" onClick={execute} disabled={disabled || busy || !command.trim()}>{busy ? "İşleniyor" : "Uygula"}</button>
+        <button type="button" onClick={runPreview} disabled={disabled || busy || !command.trim()}>{busy ? "Kontrol..." : "Önizle"}</button>
       </div>
       {!disabled ? <div className="pdks-assistant-examples">
         {PDKS_ASSISTANT_EXAMPLES.slice(0, 3).map((example) => (
-          <button type="button" key={example} disabled={busy} onClick={() => setCommand(example)}>{example}</button>
+          <button type="button" key={example} disabled={busy} onClick={() => { setCommand(example); clearFeedback(); }}>{example}</button>
         ))}
+      </div> : null}
+      {preview ? <div className="pdks-assistant-preview">
+        <div><small>UYGULANACAK İŞLEM</small><strong>{preview?.summary || preview?.action || "PDKS işlemi"}</strong></div>
+        <div className="pdks-assistant-preview-actions">
+          <button type="button" onClick={() => setPreview(null)} disabled={busy}>İptal</button>
+          <button type="button" className="commit" onClick={commit} disabled={busy}>Onayla ve Uygula</button>
+        </div>
       </div> : null}
       {disabled ? <div className="pdks-assistant-success">Denetim hesabı · salt okunur</div> : null}
       {message ? <div className="pdks-assistant-success">{message}</div> : null}
