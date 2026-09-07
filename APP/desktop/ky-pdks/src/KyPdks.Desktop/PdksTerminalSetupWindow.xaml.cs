@@ -59,7 +59,7 @@ public partial class PdksTerminalSetupWindow : Window
         DeviceNameBox.Text = "Cihaz1";
         DeviceNoBox.Text = "1";
         MachineNoBox.Text = "1";
-        SelectTag(DirectionCombo, "GIRIS");
+        SelectTag(DirectionCombo, "AUTO");
         SelectTag(SourceModeCombo, "HEDEF_TR500");
         TcpHostBox.Text = "192.168.1.224";
         TcpPortBox.Text = "5005";
@@ -71,7 +71,7 @@ public partial class PdksTerminalSetupWindow : Window
         SyncIntervalBox.Text = "30";
         AutoSyncCheck.IsChecked = true;
         FileImportCheck.IsChecked = true;
-        StatusText.Text = "İşyeri Hedef500 profili yüklendi. Kaydetmeden önce Bağlantıyı Test Et.";
+        StatusText.Text = "İşyeri Hedef500 profili yüklendi · tek terminal giriş/çıkış için AUTO. Ayrı terminaller varsa GİRİŞ/ÇIKIŞ seçin. Kaydetmeden önce bağlantıyı test edin.";
     }
 
     private void FileProfile_Click(object sender, RoutedEventArgs e)
