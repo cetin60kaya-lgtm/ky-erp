@@ -91,6 +91,35 @@ public class PdksCoreTests
     }
 
     [Fact]
+    public async Task People_Cache_Keeps_Active_Carded_Person_Regardless_Of_Sgk()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ky-pdks-people-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var paths = new PdksPaths(root);
+            var store = new LocalPdksStore(paths);
+            await store.InitializeAsync();
+            await store.CachePeopleAsync(new[]
+            {
+                new CachedPerson("1", "P1", "SGK Yok Aktif", "Baskı", "", "YOK", "AKTIF", "00041", "2026-01-01", ""),
+                new CachedPerson("2", "P2", "SGK Var Aktif", "Baskı", "", "VAR", "AKTIF", "00042", "2026-01-01", ""),
+                new CachedPerson("3", "P3", "Pasif", "Baskı", "", "VAR", "PASIF", "00043", "2026-01-01", ""),
+            });
+
+            var people = await store.GetPeopleAsync();
+
+            Assert.Equal(2, people.Count);
+            Assert.Contains(people, person => person.CardNo == "00041" && person.SgkStatus == "YOK");
+            Assert.Contains(people, person => person.CardNo == "00042" && person.SgkStatus == "VAR");
+            Assert.DoesNotContain(people, person => person.CardNo == "00043");
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task Local_Store_Keeps_One_Copy_And_Survives_Backup()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-pdks-test-" + Guid.NewGuid().ToString("N"));
