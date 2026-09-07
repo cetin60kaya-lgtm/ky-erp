@@ -145,7 +145,7 @@ test("Web PDKS uses the left sidebar as primary navigation and only a compact gr
 
   assert.match(registry, /key: "pdks"/);
   assert.match(registry, /label: "PDKS"/);
-  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
+  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "AI & Kontrol", "Rapor & Denetim"])
     assert.match(page, new RegExp(group));
 
   assert.match(page, /pdks-context-bar/);
@@ -159,11 +159,11 @@ test("Web PDKS uses the left sidebar as primary navigation and only a compact gr
   assert.match(css, /\.pdks-context-tabs/);
 });
 
-test("PDKS primary sidebar exposes exactly five operation groups without dumping every subtab", () => {
+test("PDKS primary sidebar exposes six focused operation groups without dumping every subtab", () => {
   const registry = frontend("app/pdksModuleRegistryPatch.js");
   const shell = frontend("layouts/AppShellV3.jsx");
 
-  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
+  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "AI & Kontrol", "Rapor & Denetim"]) {
     assert.ok(registry.includes(label), `Eksik PDKS ana grup: ${label}`);
   }
   assert.match(registry, /sidebarGroups:\s*\[/);
@@ -171,6 +171,7 @@ test("PDKS primary sidebar exposes exactly five operation groups without dumping
   assert.match(registry, /\["personel-bilgileri", "Personel & İK"/);
   assert.match(registry, /\["gruplar-vardiyalar", "Tanımlar"/);
   assert.match(registry, /\["saat-terminal", "Terminal & Sistem"/);
+  assert.match(registry, /\["ai-kontrol", "AI & Kontrol"/);
   assert.match(registry, /\["raporlar", "Rapor & Denetim"/);
 
   assert.match(shell, /hasPrimarySidebarGroups/);
@@ -185,11 +186,15 @@ test("PDKS live dashboard counts all active workers for HR but keeps audit month
   const source = api("ik-pdks-modern.ts");
 
   assert.match(source, /\/api\/ik\/personnel-control\/dashboard-live/);
-  assert.match(source, /const people=auth\.audit/);
+  assert.match(source, /const people\s*=\s*auth\.audit/);
   assert.match(source, /ik_person_monthly_compliance mc/);
   assert.match(source, /mc\.sgk_covered=1/);
   assert.match(source, /UPPER\(COALESCE\(s\.active_passive,'AKTIF'\)\) NOT LIKE '%PAS%'/);
   assert.match(source, /UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.match(source, /scheduledToday/);
+  assert.match(source, /status = "WAITING"/);
+  assert.match(source, /status = "NO_SHOW"/);
+  assert.match(source, /status = "MISSING_OUT"/);
   assert.doesNotMatch(source, /WHERE e\.main_company_id=\? AND UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PASIF%' AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\)<>'YOK'/);
 });
 
