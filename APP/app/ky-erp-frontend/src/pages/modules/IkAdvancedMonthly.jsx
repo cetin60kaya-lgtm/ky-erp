@@ -29,7 +29,7 @@ import { exportRowsToExcelFile } from "../../utils/excelExport";
 import "./ik.advanced.css";
 
 const MONTHS = ["Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"];
-const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz"];
+const FINANCE_TYPES = ["Mesai", "Avans", "Toplu avans", "Ozel kesinti", "Icra", "Haciz", "Eksik saat"];
 const LEAVE_TYPES = ["Yillik izin", "Normal izin", "Ucretsiz izin", "Mazeret izni", "Dogum izni", "Olum izni"];
 const DAILY_TYPES = ["Gelmedi - net kesinti", "Isi vardi - sadece not", "Rapor", "Istisna", "Erken cikma", "Gec gelme", "Normal izin", "Ucretsiz izin", "Dogum izni", "Olum izni"];
 const DOCUMENT_LOG_WORDS = ["EVRAK", "BELGE", "SOZLESME", "RAPOR", "IZIN FORM"];
@@ -133,6 +133,8 @@ function normalizeFinanceType(value) {
   if (text.includes("AVANS")) return "Avans";
   if (text.includes("HACIZ") || text.includes("HACİZ")) return "Haciz";
   if (text.includes("ICRA") || text.includes("İCRA")) return "Icra";
+  if ((text.includes("EKSIK") || text.includes("EKSİK")) && text.includes("SAAT")) return "Eksik saat";
+  if (text.includes("DEVAMSIZ") || text.includes("GELMEDI") || text.includes("GELMEDİ")) return "Eksik saat";
   if (text.includes("KESINT")) return "Ozel kesinti";
   if (text.includes("MESAI") || text.includes("HAFTA SONU")) return "Mesai";
   return FINANCE_TYPES.includes(value) ? value : "";
@@ -481,7 +483,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const effective = own.filter((item) => !upper(item.payrollEffect).includes("SADECE"));
   const overtimeRows = effective.filter((item) => item.type === "Mesai");
   const advanceRows = effective.filter((item) => item.type === "Avans" || item.type === "Toplu avans");
-  const deductionRows = effective.filter((item) => item.type === "Ozel kesinti");
+  const deductionRows = effective.filter((item) => item.type === "Ozel kesinti" || item.type === "Eksik saat");
   const legalRows = effective.filter((item) => item.type === "Icra" || item.type === "Haciz");
   const overtime = overtimeRows.reduce((sum, item) => sum + num(item.amount), 0);
   const advance = advanceRows.reduce((sum, item) => sum + num(item.amount), 0);
@@ -631,7 +633,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       payrollEffect: row?.payrollEffect || "Bordroya yansir",
       note: normalized === "Mesai" ? stripOvertimeMeta(row?.note || row?.description || "") : (row?.note || row?.description || ""),
     });
-    setModal(normalized === "Toplu avans" ? "topluAvans" : normalized === "Avans" ? "avans" : ["Ozel kesinti", "Icra", "Haciz"].includes(normalized) ? "kesinti" : "mesai");
+    setModal(normalized === "Toplu avans" ? "topluAvans" : normalized === "Avans" ? "avans" : ["Ozel kesinti", "Icra", "Haciz", "Eksik saat"].includes(normalized) ? "kesinti" : "mesai");
   };
 
   const openLeave = (kind = "yillik", forced = "", employeeOverride = null) => {
@@ -818,11 +820,24 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     return round((baseSalary / divisor) * num(hours) * normalizeOvertimeMultiplier(multiplier));
   };
 
+  const absenceDeductionFor = (employeeId, hoursValue) => {
+    const employee = rawEmployees.find((item) => item.id === employeeId);
+    const hours = Math.max(0, Math.min(num(hoursValue), 10));
+    const salary = num(employee?.salary);
+    const road = num(employee?.roadAllowance);
+    const salaryHourly = salary > 0 ? round(salary / 30 / 10) : 0;
+    const salaryCut = round(salaryHourly * hours);
+    const roadDaily = road > 0 ? round(road / 30) : 0;
+    const roadCut = hours >= 10 ? roadDaily : 0;
+    return { hours, salaryHourly, salaryCut, roadDaily, roadCut, total: round(salaryCut + roadCut) };
+  };
+
   const validateFinance = (draft = modalDraft) => {
     if (draft.adjustmentType !== "Toplu avans" && !draft.employeeId) return "Personel secilmeden kayit yapilamaz.";
     if (draft.adjustmentType === "Toplu avans" && !safeList(draft.employeeIds).length) return "En az 1 personel secilmelidir.";
     if (!draft.date) return "Tarih secilmeden kayit yapilamaz.";
     if (draft.adjustmentType === "Mesai" && num(draft.hourOrDay) <= 0) return "Mesai saati 0 dan buyuk olmalidir.";
+    if (draft.adjustmentType === "Eksik saat" && (num(draft.hourOrDay) <= 0 || num(draft.hourOrDay) > 10)) return "Eksik saat 0 dan buyuk ve en fazla 10 saat olmalidir.";
     if (num(draft.amount) <= 0) return "Tutar bos veya negatif olamaz.";
     if (num(draft.hourOrDay) < 0) return "Saat / gun negatif olamaz.";
     const duplicate = movements.some((item) => item.id !== draft.id && item.employeeId === draft.employeeId && (item.date || item.adjustmentDate) === draft.date && num(item.amount) === num(draft.amount) && item.type === draft.adjustmentType);
@@ -841,6 +856,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         overtimeMultiplier: multiplier,
         overtimeKind: multiplier === 2 ? "WEEKEND_100" : "WEEKDAY_50",
         paymentMethod: "Bordro",
+        payrollEffect: "Bordroya yansir",
+      };
+    }
+    if (draft.adjustmentType === "Eksik saat") {
+      const absence = absenceDeductionFor(draft.employeeId, draft.hourOrDay);
+      draft = {
+        ...draft,
+        amount: absence.total,
         payrollEffect: "Bordroya yansir",
       };
     }
@@ -1523,7 +1546,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
-            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button>
+            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik saat")}>Eksik Saat</button>
             <button className="btn green" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
             <button className="btn" disabled={!periodPrepared} onClick={() => setModal("fis")}>Tek Kişi Fişi</button>
           </div></div>
@@ -1566,7 +1589,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       <section>
         <div className="page-head"><div><h1>Mesai - Avans - Kesinti</h1><p>Tek hareket giris ekrani. Toplu avans sadece burada ve sihirbaz pencerede yapilir.</p></div></div>
         {filters({ third: "Personel ara", fourth: "Tip", fifth: "Bordro etkisi" })}
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
+        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik saat")}>Eksik Saat</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
         <div className="sumgrid short">{summaryBox("Personel", employees.length)}{summaryBox("Mesai toplamı", money(summary.overtime))}{summaryBox("Avans toplamı", money(summary.advance), "orange")}{summaryBox("Özel kesinti", money(summary.deduction), "red")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}</div>
         <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bordro sonucu gosterilmez; sadece hareket kaydi.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{movements.map((item) => {
           const employee = employees.find((row) => row.id === item.employeeId);
@@ -1892,7 +1915,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
   function financeForm(type, bulk = false) {
   const isMesai = type === "Mesai";
-  const isKesinti = ["Ozel kesinti", "Icra", "Haciz"].includes(type);
+  const isAbsence = type === "Eksik saat";
+  const isKesinti = ["Ozel kesinti", "Icra", "Haciz", "Eksik saat"].includes(type);
   const isLegal = ["Icra", "Haciz"].includes(type);
   const financeEmployee = employees.find((employee) => employee.id === modalDraft.employeeId) || null;
   const financeBaseEmployee = financeEmployee?.baseEmployeeId ? employees.find((employee) => employee.id === financeEmployee.baseEmployeeId) : null;
@@ -1901,11 +1925,12 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   const overtimeHourly = overtimeDivisor > 0 ? round(overtimeBaseSalary / overtimeDivisor) : 0;
   const multiplier = normalizeOvertimeMultiplier(modalDraft.overtimeMultiplier);
   const overtimeSuggested = overtimeAmountFor(modalDraft.employeeId, modalDraft.hourOrDay, multiplier);
+  const absence = absenceDeductionFor(modalDraft.employeeId, modalDraft.hourOrDay);
   const currentTotal = movements
     .filter((item) => item.id !== modalDraft.id && item.employeeId === modalDraft.employeeId && item.type === type)
     .reduce((sum, item) => sum + num(item.amount), 0);
-  const afterTotal = round(currentTotal + (isMesai ? overtimeSuggested : num(modalDraft.amount)));
-  const typeLabel = type === "Icra" ? "İcra" : type === "Haciz" ? "Haciz" : type === "Ozel kesinti" ? "Özel Kesinti" : type;
+  const afterTotal = round(currentTotal + (isMesai ? overtimeSuggested : isAbsence ? absence.total : num(modalDraft.amount)));
+  const typeLabel = type === "Icra" ? "İcra" : type === "Haciz" ? "Haciz" : type === "Ozel kesinti" ? "Özel Kesinti" : type === "Eksik saat" ? "Eksik Saat" : type;
   return (
     <div className="form">
       {!bulk && <Field label="Personel" half><select value={modalDraft.employeeId || ""} onChange={(event) => { const employeeId = event.target.value; setSelectedId(employeeId); setModalDraft((old) => ({ ...old, employeeId, employeeIds: undefined })); }}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName} · {employee.code || "Kod yok"}</option>)}</select></Field>}
@@ -1918,13 +1943,19 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <Field label="Hesaplanan Mesai Tutarı" half><input value={money(overtimeSuggested)} readOnly /></Field>
         <Field label="Bordro Etkisi" half><input value="Maaşa eklenir" readOnly /></Field>
       </> : <>
-        {isKesinti && <Field label="Kesinti Türü" half><select value={type} onChange={(event) => setModalDraft((old) => ({ ...old, adjustmentType: event.target.value, payrollEffect: "Bordroya yansir" }))}><option value="Ozel kesinti">Özel Kesinti</option><option value="Icra">İcra</option><option value="Haciz">Haciz</option></select></Field>}
-        <Field label={isKesinti ? `${typeLabel} Tutarı` : "Avans Tutarı"} half><input type="number" min="0" value={modalDraft.amount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, amount: event.target.value, adjustmentType: type }))} /></Field>
+        {isKesinti && <Field label="Kesinti Türü" half><select value={type} onChange={(event) => setModalDraft((old) => ({ ...old, adjustmentType: event.target.value, hourOrDay: event.target.value === "Eksik saat" ? "" : old.hourOrDay, amount: event.target.value === "Eksik saat" ? "" : old.amount, payrollEffect: "Bordroya yansir" }))}><option value="Ozel kesinti">Özel Kesinti</option><option value="Eksik saat">Eksik Saat / Devamsızlık</option><option value="Icra">İcra</option><option value="Haciz">Haciz</option></select></Field>}
+        {isAbsence ? <>
+          <Field label="Eksik Saat (10 = tam gün)" half><input type="number" min="0" max="10" step="0.5" value={modalDraft.hourOrDay || ""} onChange={(event) => setModalDraft((old) => ({ ...old, hourOrDay: event.target.value, adjustmentType: "Eksik saat" }))} /></Field>
+          <Field label="Saatlik Maaş Kesintisi" half><input value={money(absence.salaryHourly)} readOnly /></Field>
+          <Field label="Maaş Kesintisi" half><input value={money(absence.salaryCut)} readOnly /></Field>
+          <Field label="Yol Kesintisi" half><input value={money(absence.roadCut)} readOnly /></Field>
+          <Field label="Toplam Kesinti" half><input value={money(absence.total)} readOnly /></Field>
+        </> : <Field label={isKesinti ? `${typeLabel} Tutarı` : "Avans Tutarı"} half><input type="number" min="0" value={modalDraft.amount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, amount: event.target.value, adjustmentType: type }))} /></Field>}
         <Field label={isKesinti ? "Kesinti Yeri" : "Ödeme Şekli"} half><select value={modalDraft.paymentMethod || "Elden"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentMethod: event.target.value }))}><option>Elden</option><option>Banka</option></select></Field>
-        <Field label="Bordro Etkisi" half>{isLegal ? <input value="Bordrodan düşer" readOnly /> : <select value={modalDraft.payrollEffect || "Bordroya yansir"} onChange={(event) => setModalDraft((old) => ({ ...old, payrollEffect: event.target.value }))}><option>Bordroya yansir</option><option>Sadece kayit</option></select>}</Field>
+        <Field label="Bordro Etkisi" half>{isLegal || isAbsence ? <input value="Bordrodan düşer" readOnly /> : <select value={modalDraft.payrollEffect || "Bordroya yansir"} onChange={(event) => setModalDraft((old) => ({ ...old, payrollEffect: event.target.value }))}><option>Bordroya yansir</option><option>Sadece kayit</option></select>}</Field>
       </>}
       <Field label="Açıklama" wide><textarea value={modalDraft.note || ""} onChange={(event) => setModalDraft((old) => ({ ...old, note: event.target.value }))} placeholder={isMesai ? "Mesai nedeni / vardiya notu" : isLegal ? "Dosya no / icra-haciz açıklaması" : isKesinti ? "Kesinti nedeni" : "Avans açıklaması"} /></Field>
-      {!bulk && <div className={`wide warnline ${isKesinti ? "warn" : "ok"}`}>{isMesai ? `Bu ay mevcut mesai: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)} · Hesap: baz maaş / ${overtimeDivisor} × saat × ${String(multiplier).replace(".", ",")} (${multiplier === 2 ? "hafta sonu %100" : "hafta içi %50"}).` : isKesinti ? `Bu ay mevcut ${typeLabel.toLocaleLowerCase("tr-TR")}: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)} · ${modalDraft.paymentMethod || "Elden"} ödemesinden düşer.` : `Bu ay mevcut avans: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)}.`}</div>}
+      {!bulk && <div className={`wide warnline ${isKesinti ? "warn" : "ok"}`}>{isMesai ? `Bu ay mevcut mesai: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)} · Hesap: baz maaş / ${overtimeDivisor} × saat × ${String(multiplier).replace(".", ",")} (${multiplier === 2 ? "hafta sonu %100" : "hafta içi %50"}).` : isAbsence ? `Hesap: gerçek maaş / 30 / 10 × eksik saat. 10 saat tam gün olduğunda ayrıca yol / 30 kesilir. ${modalDraft.hourOrDay || 0} saat için maaş kesintisi ${money(absence.salaryCut)}, yol kesintisi ${money(absence.roadCut)}, toplam ${money(absence.total)}.` : isKesinti ? `Bu ay mevcut ${typeLabel.toLocaleLowerCase("tr-TR")}: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)} · ${modalDraft.paymentMethod || "Elden"} ödemesinden düşer.` : `Bu ay mevcut avans: ${money(currentTotal)} · Bu kayıt sonrası: ${money(afterTotal)}.`}</div>}
       {bulk && <div className="wide warnline warn">Toplu avans kaydında seçili personellerin her biri için aynı tarih ve kişi başı tutar kaydedilir.</div>}
     </div>
   );
