@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   canonicalHrCompanyId,
   hrDateOnly,
+  hrTodayIstanbul,
   hrListResponse,
   mergeDailyRosterIds,
   calculateAnnualLeaveRange,
@@ -110,4 +111,9 @@ test("canonical payroll equation includes earnings and all deductions", () => {
     garnishment: 100,
   });
   assert.deepEqual(result, { earnings: 45600, net: 44000 });
+});
+
+
+test("Istanbul business date does not fall back to the previous UTC day", () => {
+  assert.equal(hrTodayIstanbul(new Date("2026-09-30T21:30:00.000Z")), "2026-10-01");
 });

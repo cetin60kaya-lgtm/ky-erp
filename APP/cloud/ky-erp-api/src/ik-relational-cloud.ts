@@ -47,6 +47,17 @@ export function hrDateOnly(value: unknown) {
   return text(value).slice(0, 10);
 }
 
+export function hrTodayIstanbul(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function companyIdOf(c: Context<AppEnv>, body: Row = {}) {
   return canonicalHrCompanyId(
     c.req.header("X-KYERP-Tenant-Slug") ||
@@ -746,14 +757,14 @@ async function deleteMonthly(c: Context<AppEnv>) {
   const current = await first(c, "SELECT * FROM hr_monthly_employees WHERE id = ? AND main_company_id = ?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Aylık personel bulunamadı.");
   const timestamp = nowIso();
-  const effectiveExitDate = hrDateOnly(timestamp);
+  const effectiveExitDate = hrTodayIstanbul();
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE hr_monthly_employees SET status='Pasif', updated_at=? WHERE id=? AND main_company_id=?").bind(timestamp, id, companyId),
     c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,active_passive,exit_date,updated_at)
       VALUES (?,?,?,?,?)
       ON CONFLICT(employee_id) DO UPDATE SET
         active_passive=excluded.active_passive,
-        exit_date=COALESCE(ik_person_card_settings.exit_date, excluded.exit_date),
+        exit_date=excluded.exit_date,
         updated_at=excluded.updated_at`)
       .bind(id, companyId, "Pasif", effectiveExitDate, timestamp),
   ]);
@@ -979,6 +990,9 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const current = await first(c, "SELECT a.* FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
+  if (upper(current.note).includes("SON BORDRO KONTROL")) {
+    return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından değiştirilemez.");
+  }
 
   if (Array.isArray(body.employeeIds) && body.employeeIds.length) {
     return error(c, 400, "SINGLE_EMPLOYEE_ONLY", "Hareket güncellemesinde yalnız employeeId kullanılmalıdır.");
@@ -1013,8 +1027,11 @@ async function deleteAdvancedFinance(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const id = text(body.id);
   const companyId = companyIdOf(c, body);
-  const current = await first(c, "SELECT a.id FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
+  const current = await first(c, "SELECT a.id,a.note FROM hr_monthly_adjustments_v2 a JOIN hr_monthly_employees e ON e.id=a.employee_id WHERE a.id=? AND e.main_company_id=?", [id, companyId]);
   if (!current) return error(c, 404, "NOT_FOUND", "Mesai/avans/kesinti kaydı bulunamadı.");
+  if (upper(current.note).includes("SON BORDRO KONTROL")) {
+    return error(c, 409, "FINAL_CONTROL_CORRECTION_IMMUTABLE", "Son bordro kontrolü düzeltmesi hareket ekranından silinemez.");
+  }
   await c.env.DB.prepare("DELETE FROM hr_monthly_adjustments_v2 WHERE id=?").bind(id).run();
   return okData(c, { id, deleted: true });
 }
@@ -1231,11 +1248,24 @@ async function savePersonCard(c: Context<AppEnv>) {
   const legalType = legalTypeRaw === "HACIZ" ? "HACIZ" : legalTypeRaw === "ICRA" ? "ICRA" : "YOK";
   const legalAmount = legalType === "YOK" ? 0 : number(body.garnishmentAmount);
   const legalSource = upper(body.garnishmentSource) === "ELDEN" ? "ELDEN" : "BANKA";
+  const personnelStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(body.personnelStatus)) ? "RETIRED" : "NORMAL";
+  const period = /^\d{4}-\d{2}$/.test(text(body.period))
+    ? text(body.period)
+    : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
+  const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
+  const maxSgkDays = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate() || 31;
+  const rawSgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.round(number(body.sgkDays));
+  if (rawSgkDays !== null && (rawSgkDays < 0 || rawSgkDays > maxSgkDays)) {
+    return error(c, 400, "SGK_DAYS_INVALID", `SGK gün sayısı 0-${maxSgkDays} arasında olmalıdır.`);
+  }
+  const sgkDays = sgkCovered ? rawSgkDays : 0;
   const activePassive = text(body.activePassive || body.status || currentCard?.active_passive || current.status) || "AKTIF";
+  const wasPassive = upper(currentCard?.active_passive || current.status).includes("PAS");
   const isPassive = upper(activePassive).includes("PAS");
   const explicitExitDate = hrDateOnly(body.exitDate);
-  const effectiveExitDate = explicitExitDate ||
-    (isPassive ? (hrDateOnly(currentCard?.exit_date) || hrDateOnly(body.effectiveDate) || hrDateOnly(nowIso())) : (hrDateOnly(currentCard?.exit_date) || null));
+  const effectiveExitDate = isPassive
+    ? (explicitExitDate || (wasPassive ? hrDateOnly(currentCard?.exit_date) : "") || hrDateOnly(body.effectiveDate) || hrTodayIstanbul())
+    : null;
   await c.env.DB.prepare(
     `INSERT INTO ik_person_card_settings (
        employee_id,main_company_id,card_no,identity_no,payroll_included,card_source,personel_kodu,exit_date,
@@ -1277,17 +1307,6 @@ async function savePersonCard(c: Context<AppEnv>) {
     legalType !== "YOK" && legalAmount > 0 ? 1 : 0, legalAmount, legalSource,
     text(body.legalStartPeriod), text(body.legalEndPeriod), text(body.garnishmentNote), nowIso(),
   ).run();
-  const personnelStatus = ["RETIRED","EMEKLI","EMEKLİ"].includes(upper(body.personnelStatus)) ? "RETIRED" : "NORMAL";
-  const period = /^\d{4}-\d{2}$/.test(text(body.period))
-    ? text(body.period)
-    : `${number(body.year) || new Date().getFullYear()}-${String(number(body.month) || new Date().getMonth() + 1).padStart(2, "0")}`;
-  const sgkCovered = body.sgkFollow === true || upper(body.sgkStatus) === "VAR";
-  const maxSgkDays = new Date(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0).getDate() || 31;
-  const rawSgkDays = body.sgkDays === null || body.sgkDays === undefined || body.sgkDays === "" ? null : Math.round(number(body.sgkDays));
-  if (rawSgkDays !== null && (rawSgkDays < 0 || rawSgkDays > maxSgkDays)) {
-    return error(c, 400, "SGK_DAYS_INVALID", `SGK gün sayısı 0-${maxSgkDays} arasında olmalıdır.`);
-  }
-  const sgkDays = sgkCovered ? rawSgkDays : 0;
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT INTO ik_person_hr_profiles(employee_id,main_company_id,personnel_status,updated_by,updated_at)
       VALUES (?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET

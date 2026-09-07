@@ -33,6 +33,17 @@ const DAILY_TYPES = ["Gelmedi - net kesinti", "Isi vardi - sadece not", "Rapor",
 const DOCUMENT_LOG_WORDS = ["EVRAK", "BELGE", "SOZLESME", "RAPOR", "IZIN FORM"];
 const PAYROLL_LOG_WORDS = ["BORDRO", "ODEME", "FIS"];
 
+function istanbulDateKey(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function previousPeriod() {
   const now = new Date();
   now.setDate(1);
@@ -283,12 +294,18 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       setBusy(true);
       try {
         const includePayroll = prepare || periodPrepared;
-        const [result, audit, payroll, center] = await Promise.all([
+        const [resultState, auditState, payrollState, centerState] = await Promise.allSettled([
           getIkAdvancedMonth(params({ mainCompanyId: companyId, year, month })),
           getIkAdvancedAuditLogs(params({ mainCompanyId: companyId, period, limit: 180 })),
           includePayroll ? getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month })) : Promise.resolve(null),
           getIkAdvancedLeaveCenter(params({ mainCompanyId: companyId, from: `${year - 1}-01-01`, to: `${year + 1}-12-31` })),
         ]);
+        if (resultState.status !== "fulfilled") throw resultState.reason;
+        const result = resultState.value;
+        const audit = auditState.status === "fulfilled" ? auditState.value : [];
+        const payroll = payrollState.status === "fulfilled" ? payrollState.value : null;
+        const center = centerState.status === "fulfilled" ? centerState.value : null;
+        const auxiliaryFailed = [auditState, payrollState, centerState].some((state) => state.status === "rejected");
         if (loadRequestRef.current.seq !== requestId) return;
 
         const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
@@ -313,7 +330,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
         if (center?.policy) setPolicyDraft(center.policy);
         setSelectedId((old) => currentIds.has(old) ? old : nextEmployees[0]?.id || "");
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
-        setNotice("");
+        setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
         return true;
       } catch (error) {
         if (loadRequestRef.current.seq === requestId) {
@@ -530,7 +547,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (!targetEmployee) return setNotice("Personel secilmeden kayit yapilamaz.");
     setSelectedId(targetEmployee.id);
     setSelectedDays([1]);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istanbulDateKey();
     const periodStart = dateKey(year, month, 1);
     const startDate = periodStart > today ? periodStart : today;
     setLeaveCalendarMonth(startDate.slice(0, 7));
@@ -1239,7 +1256,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return {
       documentTitle: "IZIN BELGESI",
       documentNo: selectedPlan.documentNo || "",
-      documentDate: new Date().toISOString().slice(0, 10),
+      documentDate: istanbulDateKey(),
       fullName: employee?.fullName || "",
       registryNo: employee?.cardNo || employee?.code || "",
       department: employee?.department || "",
@@ -1399,7 +1416,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="sumgrid short">{summaryBox("Personel", employees.length)}{summaryBox("Mesai toplamı", money(summary.overtime))}{summaryBox("Avans toplamı", money(summary.advance), "orange")}{summaryBox("Özel kesinti", money(summary.deduction), "red")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}</div>
         <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bordro sonucu gosterilmez; sadece hareket kaydi.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{movements.map((item) => {
           const employee = employees.find((row) => row.id === item.employeeId);
-          return <tr key={item.id || `${item.employeeId}-${item.date}-${item.type}`}><td>{item.date || item.adjustmentDate || "-"}</td><td><span className="person">{employee?.fullName || item.fullName || "-"}</span><span className="code">{employee?.code || "-"}</span></td><td>{item.type}{item.type === "Mesai" ? <span className="code">{upper(item.note).includes("SON BORDRO KONTROL") ? "Son bordro düzeltmesi" : overtimeTypeLabel(item.overtimeMultiplier || (upper(item.note).includes("X2") ? 2 : 1.5))}</span> : null}</td><td>{item.hourOrDay || item.quantity || "-"}</td><td className="money">{money(item.amount)}</td><td>{item.paymentMethod || "-"}</td><td>{item.payrollEffect || "Bordroya yansir"}</td><td>{item.note || item.description || "-"}</td><td><span className="badge green">Kayitli</span></td><td><button className="btn" onClick={() => setNotice(item.note || "Hareket detayi acildi.")}>Detay</button> <button className="btn" onClick={() => openFinance(item.type, item)}>Duzenle</button> <button className="btn red" onClick={() => deleteFinance(item)}>Sil</button></td></tr>;
+          const finalCorrection = upper(item.note).includes("SON BORDRO KONTROL");
+          return <tr key={item.id || `${item.employeeId}-${item.date}-${item.type}`}><td>{item.date || item.adjustmentDate || "-"}</td><td><span className="person">{employee?.fullName || item.fullName || "-"}</span><span className="code">{employee?.code || "-"}</span></td><td>{item.type}{item.type === "Mesai" ? <span className="code">{upper(item.note).includes("SON BORDRO KONTROL") ? "Son bordro düzeltmesi" : overtimeTypeLabel(item.overtimeMultiplier || (upper(item.note).includes("X2") ? 2 : 1.5))}</span> : null}</td><td>{item.hourOrDay || item.quantity || "-"}</td><td className="money">{money(item.amount)}</td><td>{item.paymentMethod || "-"}</td><td>{item.payrollEffect || "Bordroya yansir"}</td><td>{item.note || item.description || "-"}</td><td><span className="badge green">Kayitli</span></td><td><button className="btn" onClick={() => setNotice(item.note || "Hareket detayi acildi.")}>Detay</button> {finalCorrection ? <span className="badge blue">Bordro düzeltmesi · kilitli</span> : <><button className="btn" onClick={() => openFinance(item.type, item)}>Duzenle</button> <button className="btn red" onClick={() => deleteFinance(item)}>Sil</button></>}</td></tr>;
         })}<EmptyRow show={!movements.length} colSpan={10} text="Bu ay hareket kaydi yok." /></tbody></table></div></div>
         <LogTable title="Hareket Loglari" rows={scopedLogs} onEdit={editFromLog} />
       </section>
@@ -1410,7 +1428,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     const otherLeaves = leaves.filter((item) => !upper(item.recordType || item.type).includes("YILLIK"));
     const dailyRecords = safeList(data.attendance).filter((item) => !["G", "W", "X"].includes(upper(item.status)));
     const plans = safeList(leaveCenter.plans).filter((item) => item.status !== "CANCELLED");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istanbulDateKey();
     const currentPlans = plans.filter((item) => item.startDate <= today && item.endDate >= today);
     const upcomingPlans = plans.filter((item) => item.startDate > today).sort((a, b) => a.startDate.localeCompare(b.startDate));
     const yearPlans = plans.filter((item) => item.startDate?.startsWith(String(year)) || item.endDate?.startsWith(String(year)));
@@ -1652,7 +1670,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       return (
         <Modal title={modal === "fis" ? "Tek Kişi Ödeme Fişi" : "Kıdem Çıktısı"} sub={modal === "fis" ? "Personeli seçin; yanlış tutar varsa son bordrodan düzeltip yalnız bu fişi tekrar alın." : "Yazdırmadan önce önizleme"} size="small" onClose={() => setModal(null)}>
           {modal === "fis" && <div className="form"><Field label="Fişi alınacak personel" wide><select value={row?.employee?.id || ""} onChange={(event)=>setSelectedId(event.target.value)}>{payrollRows.map((item)=><option key={item.employee.id} value={item.employee.id}>{item.employee.fullName} · {item.employee.code || "HKN yok"}</option>)}</select></Field></div>}
-          <div className="print-sheet"><h2>{modal === "fis" ? "ÖDEME FİŞİ" : "KIDEM ÇIKTISI"}</h2><div className="print-row"><span>Personel</span><b>{row?.employee?.fullName || "-"}</b></div><div className="print-row"><span>Dönem</span><b>{MONTHS[month - 1]} {year}</b></div>{modal === "fis" ? <><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans / Kesinti / İcra-Haciz</span><b>{money(num(row?.advance)+num(row?.deduction)+num(row?.garnishment))}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row" style={{fontSize:18,fontWeight:900,border:"2px solid #111",padding:8}}><span>ELDEN</span><b>{money(row?.cash)}</b></div><div className="print-row" style={{fontSize:20,fontWeight:900,border:"2px solid #111",padding:8,marginTop:6}}><span>TOPLAM ÖDEME</span><b>{money(row?.net)}</b></div></> : <><div className="print-row"><span>Maaş</span><b>{money(row?.salary)}</b></div><div className="print-row"><span>Toplam</span><b>{money(row?.net)}</b></div></>}</div>
+          <div className="print-sheet"><h2>{modal === "fis" ? "ÖDEME FİŞİ" : "KIDEM ÇIKTISI"}</h2><div className="print-row"><span>Personel</span><b>{row?.employee?.fullName || "-"}</b></div><div className="print-row"><span>Dönem</span><b>{MONTHS[month - 1]} {year}</b></div>{modal === "fis" ? <><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans / Kesinti / İcra-Haciz</span><b>{money(num(row?.advance)+num(row?.deduction)+num(row?.garnishment))}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row" style={{fontSize:18,fontWeight:900,border:"2px solid #111",padding:8}}><span>ELDEN</span><b>{money(row?.cash)}</b></div><div className="print-row" style={{fontSize:20,fontWeight:900,border:"2px solid #111",padding:8,marginTop:6}}><span>TOPLAM ÖDEME</span><b>{money(row?.net)}</b></div></> : <><div className="print-row"><span>Maaş</span><b>{money(row?.salary)}</b></div><div className="print-row"><span>Yol</span><b>{money(row?.road)}</b></div><div className="print-row"><span>EK</span><b>{money(row?.extra)}</b></div><div className="print-row"><span>Mesai</span><b>{money(row?.overtime)}</b></div><div className="print-row"><span>Avans</span><b>{money(row?.advance)}</b></div><div className="print-row"><span>Özel Kesinti</span><b>{money(row?.deduction)}</b></div><div className="print-row"><span>İcra / Haciz</span><b>{money(row?.garnishment)}</b></div><div className="print-row"><span>Banka</span><b>{money(row?.bank)}</b></div><div className="print-row"><span>Elden</span><b>{money(row?.cash)}</b></div><div className="print-row"><span>Toplam</span><b>{money(row?.net)}</b></div></>}</div>
           <ModalFooter onClose={() => setModal(null)} actions={modal === "fis" ? <><button className="btn" disabled={!row} onClick={()=>openPayroll(row)}>Yanlışsa Düzenle</button><button className="btn primary" disabled={!row} onClick={() => printSlip(row)}>Sadece Bu Fişi Yazdır / PDF</button></> : <button className="btn primary" onClick={() => printSlip(row)}>Yazdır / PDF</button>} />
         </Modal>
       );
@@ -1765,7 +1783,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         const excludedRow = safeList(leavePreview?.excludedDates).find((item) => item.date === date);
         const isOfficial = Boolean(excludedRow && upper(excludedRow.reason).includes("RESMI"));
         const dayPlans = monthPlans.filter((item) => item.startDate <= date && item.endDate >= date);
-        return <button type="button" key={date} title={isReturn ? "Ise donus" : excludedRow?.reason || (counted ? "Izinden sayilir" : "")} className={`${inRange ? "in-range" : ""} ${counted ? "counted-day" : ""} ${excludedRow ? "excluded-day" : ""} ${isOfficial ? "official-day" : ""} ${isStart ? "range-start" : ""} ${isReturn ? "return-day" : ""} ${date === new Date().toISOString().slice(0, 10) ? "today" : ""}`} onClick={() => chooseDate(date)}><b>{index + 1}</b><span>{isReturn ? <i className="return-label">Donus</i> : excludedRow ? <i className="excluded-label">{isOfficial ? "Tatil" : "Sayilmaz"}</i> : dayPlans.slice(0, 1).map((item) => <i key={item.id} title={`${item.fullName} ${item.startDate}-${item.endDate}`}>{item.fullName.split(" ")[0]}</i>)}</span></button>;
+        return <button type="button" key={date} title={isReturn ? "Ise donus" : excludedRow?.reason || (counted ? "Izinden sayilir" : "")} className={`${inRange ? "in-range" : ""} ${counted ? "counted-day" : ""} ${excludedRow ? "excluded-day" : ""} ${isOfficial ? "official-day" : ""} ${isStart ? "range-start" : ""} ${isReturn ? "return-day" : ""} ${date === istanbulDateKey() ? "today" : ""}`} onClick={() => chooseDate(date)}><b>{index + 1}</b><span>{isReturn ? <i className="return-label">Donus</i> : excludedRow ? <i className="excluded-label">{isOfficial ? "Tatil" : "Sayilmaz"}</i> : dayPlans.slice(0, 1).map((item) => <i key={item.id} title={`${item.fullName} ${item.startDate}-${item.endDate}`}>{item.fullName.split(" ")[0]}</i>)}</span></button>;
       })}</div>
       <div className="leave-calendar-legend"><span><i className="selected" /> Izinden sayilan</span><span><i className="not-counted" /> Sayilmayan</span><span><i className="return-legend" /> Ise donus</span><span><i className="occupied" /> Kayitli izin</span><b>{modalDraft.startDate || "Izne cikis secilmedi"} → {modalDraft.endDate || "Ise donus secilmedi"}</b></div>
     </div>;
