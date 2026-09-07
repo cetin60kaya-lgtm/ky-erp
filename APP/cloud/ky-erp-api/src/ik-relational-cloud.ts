@@ -1101,6 +1101,82 @@ export function advancedEmployeeVisible(employee: Row, card: Row, period: string
   return Boolean(exitPeriod && exitPeriod === period);
 }
 
+const IK_MONTH_PREPARED_ENTITY = "IK_DONEM";
+const IK_MONTH_PREPARED_ACTION = "MONTH_PREPARED";
+
+async function advancedPeriodState(c: Context<AppEnv>) {
+  const companyId = companyIdOf(c);
+  const year = number(c.req.query("year")) || new Date().getFullYear();
+  const month = number(c.req.query("month")) || new Date().getMonth() + 1;
+  if (month < 1 || month > 12) return error(c, 400, "INVALID_MONTH", "Geçerli bir ay seçilmelidir.");
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+  const row = await first(
+    c,
+    `SELECT id,created_at
+       FROM hr_monthly_audit_logs
+      WHERE main_company_id=? AND period=? AND entity_type=? AND action=?
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [companyId, period, IK_MONTH_PREPARED_ENTITY, IK_MONTH_PREPARED_ACTION],
+  );
+  return okData(c, {
+    mainCompanyId: companyId,
+    year,
+    month,
+    period,
+    prepared: Boolean(row),
+    preparedAt: row?.created_at || null,
+  });
+}
+
+async function prepareAdvancedPeriod(c: Context<AppEnv>) {
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c, body);
+  const year = number(body.year) || new Date().getFullYear();
+  const month = number(body.month) || new Date().getMonth() + 1;
+  if (month < 1 || month > 12) return error(c, 400, "INVALID_MONTH", "Geçerli bir ay seçilmelidir.");
+  const period = `${year}-${String(month).padStart(2, "0")}`;
+
+  let row = await first(
+    c,
+    `SELECT id,created_at
+       FROM hr_monthly_audit_logs
+      WHERE main_company_id=? AND period=? AND entity_type=? AND action=?
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [companyId, period, IK_MONTH_PREPARED_ENTITY, IK_MONTH_PREPARED_ACTION],
+  );
+
+  if (!row) {
+    await audit(c, {
+      mainCompanyId: companyId,
+      period,
+      entityType: IK_MONTH_PREPARED_ENTITY,
+      action: IK_MONTH_PREPARED_ACTION,
+      summary: "Aylık İK dönemi hazırlandı.",
+      details: { year, month, prepared: true },
+    });
+    row = await first(
+      c,
+      `SELECT id,created_at
+         FROM hr_monthly_audit_logs
+        WHERE main_company_id=? AND period=? AND entity_type=? AND action=?
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [companyId, period, IK_MONTH_PREPARED_ENTITY, IK_MONTH_PREPARED_ACTION],
+    );
+  }
+
+  return okData(c, {
+    mainCompanyId: companyId,
+    year,
+    month,
+    period,
+    prepared: true,
+    preparedAt: row?.created_at || nowIso(),
+  });
+}
+
 async function advancedMonth(c: Context<AppEnv>) {
   const companyId = companyIdOf(c);
   const year = number(c.req.query("year")) || new Date().getFullYear();
@@ -1840,6 +1916,8 @@ export function registerIkRelationalCloudRoutes(app: Hono<AppEnv>) {
   app.delete("/api/ik/leaves/:id", protect(deleteLeave));
   app.get("/api/ik/payroll", protect(listPayrolls));
 
+  app.get("/api/ik/advanced/period-state", protect(advancedPeriodState));
+  app.post("/api/ik/advanced/period-prepare", protect(prepareAdvancedPeriod));
   app.get("/api/ik/advanced/month", protect(advancedMonth));
   app.get("/api/ik/advanced/payroll", protect(advancedPayroll));
   app.post("/api/ik/advanced/payroll/override", protect(saveAdvancedPayrollOverride));
