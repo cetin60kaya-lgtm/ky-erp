@@ -410,7 +410,7 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - AI Kontrol Merkezi canlı snapshot ile analiz yapar. Canlı personel snapshot'ı `ephemeral` modda işlenir ve AI sohbet geçmişine kaydedilmez.
 - PDKS doğal dil write işlemleri preview-first + açık onay ile sınırlıdır; finans/bordro komutları PDKS'den yürütülmez.
 - Windows Terminal Kurulum Sihirbazı eklendi: Hedef500 / FILE / TCP / SERIAL profilleri, cihaz kimliği, GİRİŞ/ÇIKIŞ, IP/port, veri dosyası, COM/baud, tarama/senkron, read-only TCP/dosya tanılama.
-- İşyeri Hedef500 hazır profili: Cihaz1 / cihaz 1 / makine 1 / GİRİŞ / `192.168.1.224:5005` / COM1 38400 / `C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt`.
+- İşyeri Hedef500 hazır profili: Cihaz1 / cihaz 1 / makine 1 / AUTO (tek terminal giriş/çıkış) / `192.168.1.224:5005` / COM1 38400 / `C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt`.
 - Cihaz saati yazma, zil, kapı rölesi, cihaz kodu, restart ve yönetici silme gibi üretici komutları exact marka-model/protokol doğrulanmadan tahmini paketle çalıştırılmaz.
 - PDKS terminal TCP portu internete/WAN'a açılmaz; Agent LAN'dan okuyup KY ERP'ye HTTPS ile çıkar.
 - Build/installer hedefi: `KY-PDKS-Pro-Setup-1.9.0.exe`; canonical frontend PDKS paketine de gömülür.
