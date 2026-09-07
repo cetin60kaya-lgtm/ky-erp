@@ -279,8 +279,7 @@ public partial class KyErpDesktopWindow : Window
             var audit = profile.Audit
                 || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
-            _pdksPeople = await _erp.GetPdksPeopleAsync(token, _lifetime.Token);
-            var window = new PdksMasterWindow(token, _pdksPeople, _pdksPaths, !audit) { Owner = this };
+            var window = new PdksTerminalSetupWindow(_pdksPaths, !audit) { Owner = this };
             window.ShowDialog();
             await InstallDesktopBridgeAsync();
         }
