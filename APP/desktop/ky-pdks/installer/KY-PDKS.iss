@@ -46,7 +46,7 @@ Source: "{#Dist}\pdks-desktop\*"; DestDir: "{app}"; Flags: ignoreversion recurse
 Source: "{#Dist}\agent\*"; DestDir: "{app}\Agent"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\KY ERP\KY PDKS Pro"; Filename: "{app}\KY PDKS Desktop.exe"
+Name: "{autoprograms}\KY ERP\KY PDKS Pro"; Filename: "{app}\KY PDKS Pro.exe"
 Name: "{autodesktop}\KY PDKS Pro"; Filename: "{app}\KY PDKS Pro.exe"; Tasks: desktopicon
 Name: "{userstartup}\KY PDKS Pro"; Filename: "{app}\KY PDKS Pro.exe"; WorkingDir: "{app}"; Tasks: autostart
 
