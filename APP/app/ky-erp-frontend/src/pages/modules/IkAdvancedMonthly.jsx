@@ -598,7 +598,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
       return { ...log, text, personName: employee?.fullName || log.fullName || "-" };
     });
     if (page === "personel") return rows.filter((log) => log.text.includes("PERSON") || log.text.includes("KART") || log.text.includes("SOZLESME") || log.text.includes("MAAS"));
-    if (page === "hareket") return rows.filter((log) => log.text.includes("MESAI") || log.text.includes("AVANS") || log.text.includes("KESINT"));
+    if (page === "hareket") return rows.filter((log) => log.text.includes("MESAI") || log.text.includes("AVANS") || log.text.includes("KESINT") || log.text.includes("EKSIK") || log.text.includes("EKSİK") || log.text.includes("DEVAMSIZ") || log.text.includes("GELMEDI") || log.text.includes("GELMEDİ"));
     if (page === "izin") return rows.filter((log) => log.text.includes("IZIN") || log.text.includes("RAPOR") || log.text.includes("ISTISNA") || log.text.includes("GUNLUK"));
     if (page === "bordro") return rows.filter((log) => PAYROLL_LOG_WORDS.some((word) => log.text.includes(word)));
     if (page === "evrak") return rows.filter((log) => DOCUMENT_LOG_WORDS.some((word) => log.text.includes(word)));
@@ -749,6 +749,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (text.includes("AVANS")) return openFinance("Avans");
     if (text.includes("HACIZ") || text.includes("HACİZ")) return openFinance("Haciz");
     if (text.includes("ICRA") || text.includes("İCRA")) return openFinance("Icra");
+    if ((text.includes("EKSIK") || text.includes("EKSİK")) && (text.includes("GUN") || text.includes("GÜN"))) return openFinance("Eksik gün");
+    if ((text.includes("EKSIK") || text.includes("EKSİK")) && text.includes("SAAT")) return openFinance("Eksik saat");
+    if (text.includes("DEVAMSIZ") || text.includes("GELMEDI") || text.includes("GELMEDİ")) return openFinance("Eksik gün");
     if (text.includes("KESINT")) return openFinance("Ozel kesinti");
     if (text.includes("MESAI")) return openFinance("Mesai");
     if (text.includes("BORDRO") || text.includes("ODEME")) return openPayroll();
@@ -1561,7 +1564,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
-            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik saat")}>Devamsızlık Kesintisi</button>
+            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik gün")}>Devamsızlık Kesintisi</button>
             <button className="btn green" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
             <button className="btn" disabled={!periodPrepared} onClick={() => setModal("fis")}>Tek Kişi Fişi</button>
           </div></div>
@@ -1604,7 +1607,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       <section>
         <div className="page-head"><div><h1>Mesai - Avans - Kesinti</h1><p>Tek hareket giris ekrani. Toplu avans sadece burada ve sihirbaz pencerede yapilir.</p></div></div>
         {filters({ third: "Personel ara", fourth: "Tip", fifth: "Bordro etkisi" })}
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik saat")}>Devamsızlık Kesintisi</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
+        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik gün")}>Devamsızlık Kesintisi</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
         <div className="sumgrid short">{summaryBox("Personel", employees.length)}{summaryBox("Mesai toplamı", money(summary.overtime))}{summaryBox("Avans toplamı", money(summary.advance), "orange")}{summaryBox("Özel kesinti", money(summary.deduction), "red")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}</div>
         <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bordro sonucu gosterilmez; sadece hareket kaydi.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{movements.map((item) => {
           const employee = employees.find((row) => row.id === item.employeeId);
