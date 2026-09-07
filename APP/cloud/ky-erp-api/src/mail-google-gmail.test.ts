@@ -208,3 +208,11 @@ test("Microsoft department mailboxes request shared mailbox scopes",()=> {
   assert.match(microsoft,/Mail\.ReadWrite\.Shared/);
   assert.match(microsoft,/Mail\.Send\.Shared/);
 });
+
+
+test("Gmail folder sync supports a lightweight background mode",()=>{
+  const gmail=read("./mail-google-gmail.ts");
+  assert.match(gmail,/body\.quick/);
+  assert.match(gmail,/maxResults=quick\?20:100/);
+  assert.match(gmail,/quick,maxResults/);
+});
