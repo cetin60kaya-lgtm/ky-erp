@@ -1,0 +1,93 @@
+<Window x:Class="KyPdks.Desktop.PdksDeviceWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="KY PDKS · Terminal / Cihaz" Height="760" Width="1040" MinHeight="680" MinWidth="900"
+ WindowStartupLocation="CenterOwner" Background="#F3F6FA" Loaded="Window_Loaded" Closed="Window_Closed">
+ <Grid Margin="18">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Grid>
+   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <StackPanel>
+    <TextBlock Text="Terminal / Cihaz Merkezi" FontSize="25" FontWeight="Bold" Foreground="{StaticResource KyDark}"/>
+    <TextBlock Text="Hedef PDKS çalışan bağlantısını bozmadan salt-okunur dosya köprüsü + güvenli TCP erişim testi" Foreground="#6F8196" Margin="0,4,0,12"/>
+   </StackPanel>
+   <Border Grid.Column="1" Background="#EEFAF3" BorderBrush="#BFE2CD" BorderThickness="1" CornerRadius="12" Padding="12,7" VerticalAlignment="Top">
+    <TextBlock Text="SALT-OKUNUR KORUMA AÇIK" Foreground="#267048" FontWeight="Bold"/>
+   </Border>
+  </Grid>
+
+  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+   <StackPanel>
+    <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,12">
+     <StackPanel>
+      <TextBlock Text="CİHAZ PROFİLİ" FontSize="12" FontWeight="Bold" Foreground="#708196"/>
+      <Grid Margin="0,10,0,0">
+       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel Margin="0,0,8,0"><TextBlock Text="Cihaz Adı"/><TextBox x:Name="DeviceNameBox"/></StackPanel>
+       <StackPanel Grid.Column="1" Margin="0,0,8,0"><TextBlock Text="Cihaz No"/><TextBox x:Name="DeviceNoBox"/></StackPanel>
+       <StackPanel Grid.Column="2" Margin="0,0,8,0"><TextBlock Text="Makine No"/><TextBox x:Name="MachineNoBox"/></StackPanel>
+       <StackPanel Grid.Column="3"><TextBlock Text="Yön"/><ComboBox x:Name="DirectionCombo"><ComboBoxItem Content="GİRİŞ" Tag="GIRIS"/><ComboBoxItem Content="ÇIKIŞ" Tag="CIKIS"/></ComboBox></StackPanel>
+      </Grid>
+      <Grid Margin="0,10,0,0">
+       <Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel Margin="0,0,8,0"><TextBlock Text="IP Adresi"/><TextBox x:Name="IpBox"/></StackPanel>
+       <StackPanel Grid.Column="1" Margin="0,0,8,0"><TextBlock Text="IP Port"/><TextBox x:Name="PortBox"/></StackPanel>
+       <StackPanel Grid.Column="2"><TextBlock Text="Baudrate"/><TextBox x:Name="BaudBox"/></StackPanel>
+      </Grid>
+      <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+       <Button Content="Hedef500 Profilini Uygula" Click="ApplyHedefProfileButton_Click"/>
+       <Button Content="Ayarı Kaydet" Click="SaveButton_Click" Background="{StaticResource KyBlue}" Foreground="White" BorderThickness="0"/>
+       <Button Content="Bağlantıyı Test Et" Click="ProbeButton_Click"/>
+      </StackPanel>
+      <TextBlock x:Name="TcpStatusText" Text="TCP henüz test edilmedi." TextWrapping="Wrap" Foreground="#31587E" Margin="0,8,0,0"/>
+     </StackPanel>
+    </Border>
+
+    <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,12">
+     <StackPanel>
+      <TextBlock Text="HEDEF PDKS / KART DOSYASI KÖPRÜSÜ" FontSize="12" FontWeight="Bold" Foreground="#708196"/>
+      <TextBlock Text="Aktif veri alma yolu budur. KYERP.PDKS.Agent dosyayı yalnız okur; taşımaz, silmez ve Hedef verisine yazmaz." Foreground="#5D7085" Margin="0,5,0,8" TextWrapping="Wrap"/>
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <TextBox x:Name="HedefFileBox"/>
+       <Button Grid.Column="1" Content="Dosya Seç" Click="BrowseFileButton_Click" Margin="8,0,0,0"/>
+       <Button Grid.Column="2" Content="Kontrol Et" Click="InspectFileButton_Click" Margin="8,0,0,0"/>
+      </Grid>
+      <UniformGrid Columns="4" Margin="0,12,0,0">
+       <Border Background="#F6F9FC" CornerRadius="8" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="Satır"/><TextBlock x:Name="FileLineCountText" Text="-" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+       <Border Background="#F6F9FC" CornerRadius="8" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="Okunan"/><TextBlock x:Name="FileParsedCountText" Text="-" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+       <Border Background="#F6F9FC" CornerRadius="8" Padding="10" Margin="0,0,6,0"><StackPanel><TextBlock Text="Tekrar"/><TextBlock x:Name="FileDuplicateCountText" Text="-" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+       <Border Background="#F6F9FC" CornerRadius="8" Padding="10"><StackPanel><TextBlock Text="Tanınmayan"/><TextBlock x:Name="FileRejectedCountText" Text="-" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
+      </UniformGrid>
+      <TextBlock x:Name="FileStatusText" Text="timerecords henüz kontrol edilmedi." TextWrapping="Wrap" Foreground="#31587E" Margin="0,8,0,0"/>
+      <TextBlock x:Name="LastPunchText" Text="Son kayıt: -" FontWeight="SemiBold" Margin="0,5,0,0"/>
+     </StackPanel>
+    </Border>
+
+    <Border Background="White" BorderBrush="{StaticResource KyBorder}" BorderThickness="1" CornerRadius="12" Padding="16">
+     <StackPanel>
+      <TextBlock Text="SAAT VE CİHAZ KOMUTLARI" FontSize="12" FontWeight="Bold" Foreground="#708196"/>
+      <Grid Margin="0,8,0,0">
+       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <Border Background="#F6F9FC" CornerRadius="8" Padding="10" Margin="0,0,8,0"><StackPanel><TextBlock Text="Bu PC"/><TextBlock x:Name="PcTimeText" FontSize="18" FontWeight="Bold"/></StackPanel></Border>
+       <Border Grid.Column="1" Background="#FFF7E9" CornerRadius="8" Padding="10"><StackPanel><TextBlock Text="Cihaz Tarih/Saat"/><TextBlock Text="Üretici protokolü doğrulaması bekliyor" FontSize="15" FontWeight="Bold" Foreground="#8A6318"/></StackPanel></Border>
+      </Grid>
+      <TextBlock Text="Port erişimi ayrı test edilir. Cihazın binary komut protokolü/SDK'sı doğrulanmadan tarih-saat yazma, kapı testi, yeniden başlatma, yönetici silme veya kayıt silme komutu gönderilmez." TextWrapping="Wrap" Foreground="#8A6318" Margin="0,10,0,8"/>
+      <StackPanel Orientation="Horizontal">
+       <Button Content="Cihaz Tarih/Saat Oku" IsEnabled="False" ToolTip="Üretici protokolü doğrulanınca açılır"/>
+       <Button Content="PC Saatine Ayarla" IsEnabled="False" ToolTip="Üretici protokolü doğrulanınca açılır"/>
+       <Button Content="Kapı Testi" IsEnabled="False" ToolTip="Üretici protokolü doğrulanınca açılır"/>
+       <Button Content="Yeniden Başlat" IsEnabled="False" ToolTip="Üretici protokolü doğrulanınca açılır"/>
+      </StackPanel>
+     </StackPanel>
+    </Border>
+   </StackPanel>
+  </ScrollViewer>
+
+  <Grid Grid.Row="2" Margin="0,12,0,0">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <TextBlock x:Name="StatusText" Text="Hazır" VerticalAlignment="Center" Foreground="#506579"/>
+   <Button Grid.Column="1" Content="Kapat" Click="CloseButton_Click"/>
+  </Grid>
+ </Grid>
+</Window>
