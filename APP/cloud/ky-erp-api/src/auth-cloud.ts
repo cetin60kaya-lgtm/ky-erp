@@ -283,12 +283,19 @@ async function invalidateUserLoginArtifacts(c: any, userId: string, actorId: str
         SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?)
       WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')`,
   ).bind(timestamp, actorId || userId, userId).run();
-  if (await tableExists(c, "auth_phone_login_challenges")) {
-    await c.env.DB.prepare(
-      `UPDATE auth_phone_login_challenges
-          SET status='DENIED',decided_at=COALESCE(decided_at,?),consumed_at=COALESCE(consumed_at,?)
-        WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')`,
-    ).bind(timestamp, timestamp, userId).run();
+  if (await tableExists(c, "json_store")) {
+    const phoneRows = await c.env.DB.prepare(
+      "SELECT id,data FROM json_store WHERE scope='AUTH_PHONE_LOGIN'",
+    ).all<AnyRow>();
+    for (const row of phoneRows.results || []) {
+      let data: AnyRow = {};
+      try { data = JSON.parse(text(row.data) || "{}"); } catch { data = {}; }
+      if (text(data.userId) !== text(userId) || text(data.consumedAt) || !["PENDING","APPROVED"].includes(upper(data.status))) continue;
+      const next = { ...data, status:"DENIED", decidedAt:text(data.decidedAt || timestamp), consumedAt:timestamp, updatedAt:timestamp };
+      await c.env.DB.prepare(
+        "UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope='AUTH_PHONE_LOGIN'",
+      ).bind(JSON.stringify(next), timestamp, row.id).run();
+    }
   }
   await revokeUserSessions(c, userId, actorId || userId);
 }
