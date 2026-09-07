@@ -30,8 +30,8 @@ export const listMailMessages = (accountId, params = {}) =>
 export const listMailFolders = (accountId) =>
   apiGet("/mail/folders", { accountId, _ts: Date.now() }).then(unwrap);
 
-export const syncMailFolder = (accountId, folderId) =>
-  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/folders/${encodeURIComponent(folderId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
+export const syncMailFolder = (accountId, folderId, options = {}) =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/folders/${encodeURIComponent(folderId)}/sync`, options, { timeoutMs: options.quick ? 30_000 : 120_000 }).then(unwrap);
 
 export const pinMailMessage = (messageId, pinned) =>
   apiPut(`/mail/messages/${encodeURIComponent(messageId)}/pin`, { pinned }).then(unwrap);

@@ -235,6 +235,58 @@ function MailMessageMedia({ message }) {
   </div>;
 }
 
+function folderType(row) {
+  return String(row?.folder_type || row?.folderType || "").toUpperCase();
+}
+
+function folderProviderId(row) {
+  return String(row?.provider_folder_id || row?.providerFolderId || "").toUpperCase();
+}
+
+function folderDisplayName(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  const map = {
+    INBOX: "Gelen Kutusu",
+    SENT: "Gönderilmiş Postalar",
+    DRAFTS: "Taslaklar",
+    JUNK: "Spam",
+    TRASH: "Çöp Kutusu",
+    STARRED: "Yıldızlı",
+    IMPORTANT: "Önemli",
+    CATEGORY_PERSONAL: "Birincil",
+    CATEGORY_PROMOTIONS: "Tanıtımlar",
+    CATEGORY_SOCIAL: "Sosyal",
+    CATEGORY_UPDATES: "Güncellemeler",
+    CATEGORY_FORUMS: "Forumlar",
+    CHAT: "Sohbetler",
+    UNREAD: "Okunmamış",
+  };
+  return map[provider] || map[type] || row?.name || "Klasör";
+}
+
+function folderIcon(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  if (type === "INBOX") return "📥";
+  if (type === "SENT") return "➤";
+  if (type === "DRAFTS") return "📝";
+  if (type === "JUNK") return "⛔";
+  if (type === "TRASH") return "🗑";
+  if (provider === "STARRED") return "★";
+  if (provider === "IMPORTANT") return "❗";
+  if (provider.startsWith("CATEGORY_")) return "▰";
+  return "▱";
+}
+
+function folderGroup(row) {
+  const type = folderType(row);
+  const provider = folderProviderId(row);
+  if (["INBOX","SENT","DRAFTS","JUNK","TRASH"].includes(type) || ["STARRED","IMPORTANT"].includes(provider)) return "system";
+  if (provider.startsWith("CATEGORY_")) return "category";
+  return "label";
+}
+
 function flattenFolders(rows) {
   const list = safeArray(rows);
   const byProvider = new Map(list.map((row) => [String(row.provider_folder_id || row.providerFolderId || ""), row]));
@@ -326,6 +378,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const [renderedHtml, setRenderedHtml] = useState("");
   const [renderedHtmlMessageId, setRenderedHtmlMessageId] = useState("");
   const mailLayoutRef = useRef(null);
+  const backgroundSyncRef = useRef(false);
 
   const activeCompanyName = activeMainCompany?.name || activeMainCompany?.ad || activeMainCompany?.slug || "Aktif Firma";
   const activeCompanyKey = String(activeMainCompany?.slug || activeCompanyName || "").toLocaleLowerCase("tr-TR");
@@ -339,12 +392,21 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     [providers, requestForm.providerType],
   );
   const folderRows = useMemo(() => flattenFolders(folders), [folders]);
+  const folderGroups = useMemo(() => ({
+    system: folderRows.filter((row) => folderGroup(row) === "system"),
+    category: folderRows.filter((row) => folderGroup(row) === "category"),
+    label: folderRows.filter((row) => folderGroup(row) === "label"),
+  }), [folderRows]);
   const selectedFolder = useMemo(
     () => folders.find((row) => String(row.id) === String(selectedFolderId)) || null,
     [folders, selectedFolderId],
   );
   const defaultInboxFolderId = useMemo(
     () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "INBOX")?.id || ""),
+    [folders],
+  );
+  const defaultSentFolderId = useMemo(
+    () => String(folders.find((row) => String(row.folder_type || row.folderType || "").toUpperCase() === "SENT")?.id || ""),
     [folders],
   );
 
@@ -548,6 +610,50 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     loadMailbox();
     return () => { cancelled = true; };
   }, [activeTab, isMail, selectedAccountId, selectedFolderId, defaultInboxFolderId, mailboxRefresh]);
+
+  useEffect(() => {
+    const provider = String(selectedAccount?.provider_type || selectedAccount?.providerType || "").toUpperCase();
+    const active = String(selectedAccount?.status || "").toUpperCase() === "ACTIVE";
+    if (!isMail || !selectedAccountId || !active || provider !== "GMAIL") return undefined;
+
+    let cancelled = false;
+    const targetFolderId = () => {
+      if (selectedFolderId) return selectedFolderId;
+      if (activeTab === "mail-gonderilen" || activeTab === "mail-yanit-bekleyen") return defaultSentFolderId;
+      return defaultInboxFolderId;
+    };
+    const run = async () => {
+      if (cancelled || document.visibilityState === "hidden" || backgroundSyncRef.current) return;
+      const folderId = targetFolderId();
+      if (!folderId) return;
+      backgroundSyncRef.current = true;
+      try {
+        await syncMailFolder(selectedAccountId, folderId, { quick: true });
+        if (cancelled) return;
+        const freshOverview = await getMailOverview().catch(() => null);
+        if (freshOverview && !cancelled) setOverview(freshOverview);
+        setMailboxRefresh((value) => value + 1);
+      } catch {
+        // Sessiz canlı yenileme kullanıcı akışını kesmez; manuel senkronizasyon ayrıntılı hata verir.
+      } finally {
+        backgroundSyncRef.current = false;
+      }
+    };
+
+    const timer = window.setInterval(run, 20_000);
+    const onFocus = () => run();
+    const onVisibility = () => { if (document.visibilityState === "visible") run(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.setTimeout(run, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isMail, selectedAccountId, selectedAccount?.provider_type, selectedAccount?.providerType, selectedAccount?.status, selectedFolderId, activeTab, defaultInboxFolderId, defaultSentFolderId]);
 
   function beginPaneResize(pane, event) {
     if (window.innerWidth <= 1100 || !mailLayoutRef.current) return;
@@ -989,13 +1095,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       ].some((value) => String(value || "").toLocaleLowerCase("tr-TR").includes(messageNeedle)))
     : baseMessageRows;
 
-  const mailViewTitle = selectedFolder?.name
-    || (activeTab === "mail-sabitlenen" ? "Sabitlenenler"
-      : activeTab === "mail-gonderilen" ? "Gönderilenler"
+  const mailViewTitle = selectedFolder ? folderDisplayName(selectedFolder)
+    : (activeTab === "mail-sabitlenen" ? "Sabitlenenler"
+      : activeTab === "mail-gonderilen" ? "Gönderilmiş Postalar"
       : activeTab === "mail-taslaklar" ? "Taslaklar"
       : activeTab === "mail-yanit-bekleyen" ? "Yanıt Bekleyenler"
       : activeTab === "mail-sablonlar" ? "Şablonlar"
       : "Gelen Kutusu");
+
+  const renderFolderButton = (folder) => (
+    <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
+      <span>{folderIcon(folder)} {folderDisplayName(folder)}</span>
+      <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : Number(folder.message_count || folder.messageCount || 0) > 0 && folderType(folder) === "DRAFTS" ? folder.message_count || folder.messageCount : ""}</em>
+    </button>
+  );
 
   return (
     <div className="comm-page">
@@ -1097,13 +1210,12 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
                 : null}
             </div> : null}
             {selectedAccount ? <div className="comm-folder-tree">
-              <div className="comm-folder-heading"><b>Klasörler</b><small>{folders.length}</small></div>
-              {folderRows.length ? folderRows.map((folder) => (
-                <button type="button" key={folder.id} className={String(folder.id) === String(selectedFolderId) ? "active" : ""} style={{ paddingLeft: `${12 + Math.min(4, folder._depth || 0) * 14}px` }} onClick={() => openFolder(folder)}>
-                  <span>{String(folder.folder_type || folder.folderType || "").toUpperCase() === "INBOX" ? "📥" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "SENT" ? "➤" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "ARCHIVE" ? "▣" : String(folder.folder_type || folder.folderType || "").toUpperCase() === "TRASH" ? "🗑" : "▱"} {folder.name || "Klasör"}</span>
-                  <em>{Number(folder.unread_count || folder.unreadCount || 0) > 0 ? folder.unread_count || folder.unreadCount : ""}</em>
-                </button>
-              )) : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
+              <div className="comm-folder-heading"><b>Posta Kutuları</b><small>{folders.length}</small></div>
+              {folderRows.length ? <>
+                {folderGroups.system.length ? <div className="comm-folder-group">{folderGroups.system.map(renderFolderButton)}</div> : null}
+                {folderGroups.category.length ? <><div className="comm-folder-subheading">Kategoriler</div><div className="comm-folder-group">{folderGroups.category.map(renderFolderButton)}</div></> : null}
+                {folderGroups.label.length ? <><div className="comm-folder-subheading">Etiketler</div><div className="comm-folder-group">{folderGroups.label.map(renderFolderButton)}</div></> : null}
+              </> : <div className="comm-empty compact">Klasörler ilk senkronizasyondan sonra burada görünür.</div>}
             </div> : null}
           </aside>
           <div className="comm-pane-resizer" role="separator" aria-orientation="vertical" aria-label="Posta kutuları genişliğini ayarla" onPointerDown={(event) => beginPaneResize("mailbox", event)} />

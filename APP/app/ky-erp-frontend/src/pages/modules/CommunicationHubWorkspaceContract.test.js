@@ -127,3 +127,19 @@ test("mail regex escape helper stays syntactically intact", () => {
   assert.match(page, /replace\(\/\[\.\*\+\?\^\$\{\}\(\)\|\[\\\]\\\\\]\/g, "\\\\$&"\)/);
   assert.doesNotMatch(page, /\\function regexEscape/);
 });
+
+
+test("Gmail mailbox refreshes silently without page reload and keeps folder UX Gmail-like", () => {
+  assert.match(page, /window\.setInterval\(run, 20_000\)/);
+  assert.match(page, /visibilitychange/);
+  assert.match(page, /syncMailFolder\(selectedAccountId, folderId, \{ quick: true \}\)/);
+  assert.match(page, /defaultSentFolderId/);
+  assert.match(page, /folderDisplayName/);
+  assert.match(page, /Gelen Kutusu/);
+  assert.match(page, /Gönderilmiş Postalar/);
+  assert.match(page, /Çöp Kutusu/);
+  assert.match(page, /Kategoriler/);
+  assert.match(page, /Etiketler/);
+  assert.match(css, /comm-folder-group/);
+  assert.match(css, /comm-folder-subheading/);
+});
