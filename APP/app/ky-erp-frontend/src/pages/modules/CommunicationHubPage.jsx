@@ -61,6 +61,8 @@ function attachmentPreviewKind(row) {
   const ext = name.includes(".") ? name.split(".").pop() : "";
   if ((mime.startsWith("image/") && mime !== "image/svg+xml") || ["png","jpg","jpeg","gif","webp","bmp","ico","avif"].includes(ext)) return "image";
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (mime.startsWith("audio/") || ["mp3","wav","ogg","m4a","aac","flac"].includes(ext)) return "audio";
+  if (mime.startsWith("video/") || ["mp4","webm","ogv","mov","m4v"].includes(ext)) return "video";
   if (mime.startsWith("text/") || ["txt","csv","log","md","json","xml"].includes(ext)) return "text";
   return "unsupported";
 }
