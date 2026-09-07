@@ -8,6 +8,10 @@ const PHONE_APPROVAL_SECONDS = 10 * 60;
 const VAPID_SECRET_KEY = "VAPID_P256_KEYPAIR_V1";
 const VAPID_SUBJECT = "mailto:admin@kyerp.net";
 
+const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
+const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
+const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
+
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
@@ -33,6 +37,16 @@ async function bodyOf(c: any) {
   try {
     const body = await c.req.json();
     return body && typeof body === "object" && !Array.isArray(body) ? body as AnyRow : {};
+  } catch {
+    return {};
+  }
+}
+function objectOf(value: unknown): AnyRow {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as AnyRow;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -70,17 +84,99 @@ function safeEqual(left: string, right: string) {
   for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
   return diff === 0;
 }
-async function tableExists(c: any, table: string) {
-  const row = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(table).first();
-  return Boolean(row?.name);
+
+async function storeGet(c: any, scope: string, fileName: string) {
+  const row = await c.env.DB.prepare(
+    `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
+       FROM json_store
+      WHERE scope=? AND file_name=?
+      ORDER BY updated_at DESC,id DESC LIMIT 1`,
+  ).bind(scope, fileName).first<AnyRow>();
+  if (!row) return null;
+  return {
+    ...objectOf(row.data),
+    storeId: text(row.id),
+    storeScope: text(row.scope),
+    storeCompanySlug: text(row.main_company_slug),
+    fileName: text(row.file_name),
+    createdAt: text(objectOf(row.data).createdAt || row.created_at),
+    updatedAt: text(objectOf(row.data).updatedAt || row.updated_at),
+  };
 }
-async function schemaReady(c: any) {
-  return (await tableExists(c, "auth_push_devices")) &&
-    (await tableExists(c, "auth_phone_login_challenges")) &&
-    (await tableExists(c, "auth_company_login_approval_settings"));
+
+async function storeList(c: any, scope: string, companySlug = "") {
+  const result = companySlug
+    ? await c.env.DB.prepare(
+        `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
+           FROM json_store
+          WHERE scope=? AND main_company_slug=?
+          ORDER BY updated_at DESC,id DESC`,
+      ).bind(scope, companySlug).all<AnyRow>()
+    : await c.env.DB.prepare(
+        `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
+           FROM json_store
+          WHERE scope=?
+          ORDER BY updated_at DESC,id DESC`,
+      ).bind(scope).all<AnyRow>();
+
+  return (result.results || []).map((row: AnyRow) => ({
+    ...objectOf(row.data),
+    storeId: text(row.id),
+    storeScope: text(row.scope),
+    storeCompanySlug: text(row.main_company_slug),
+    fileName: text(row.file_name),
+    createdAt: text(objectOf(row.data).createdAt || row.created_at),
+    updatedAt: text(objectOf(row.data).updatedAt || row.updated_at),
+  }));
 }
+
+async function storePut(c: any, scope: string, fileName: string, companySlug: string, data: AnyRow) {
+  const current = await storeGet(c, scope, fileName);
+  const timestamp = nowIso();
+  const payload = {
+    ...data,
+    id: text(data.id || fileName),
+    mainCompanySlug: text(data.mainCompanySlug || companySlug),
+    createdAt: text(data.createdAt || current?.createdAt || timestamp),
+    updatedAt: timestamp,
+  };
+  if (current?.storeId) {
+    await c.env.DB.prepare(
+      `UPDATE json_store
+          SET main_company_slug=?,data=?,updated_at=?
+        WHERE id=? AND scope=?`,
+    ).bind(companySlug || null, JSON.stringify(payload), timestamp, current.storeId, scope).run();
+    return { ...payload, storeId: current.storeId, fileName };
+  }
+  const storeId = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO json_store
+      (id,scope,main_company_slug,file_name,data,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?)`,
+  ).bind(storeId, scope, companySlug || null, fileName, JSON.stringify(payload), timestamp, timestamp).run();
+  return { ...payload, storeId, fileName };
+}
+
+async function atomicPhoneUpdate(c: any, current: AnyRow, expectedStatus: string, patch: AnyRow) {
+  if (!current?.storeId) return { changed: false, row: current || null };
+  const timestamp = nowIso();
+  const next = { ...current, ...patch, updatedAt: timestamp };
+  delete next.storeId;
+  delete next.storeScope;
+  delete next.storeCompanySlug;
+  delete next.fileName;
+  const result = await c.env.DB.prepare(
+    `UPDATE json_store
+        SET data=?,updated_at=?
+      WHERE id=? AND scope=?
+        AND UPPER(COALESCE(json_extract(data,'$.status'),''))=?
+        AND COALESCE(json_extract(data,'$.consumedAt'),'')=''`,
+  ).bind(JSON.stringify(next), timestamp, current.storeId, PHONE_SCOPE, upper(expectedStatus)).run();
+  const changed = Number(result?.meta?.changes || 0) > 0;
+  return { changed, row: changed ? { ...next, storeId: current.storeId, fileName: current.id } : await storeGet(c, PHONE_SCOPE, text(current.id)) };
+}
+
 async function audit(c: any, action: string, actorId = "", targetId = "", companySlug = "", detail: AnyRow = {}) {
-  if (!(await tableExists(c, "auth_security_audit"))) return;
   try {
     await c.env.DB.prepare(
       `INSERT INTO auth_security_audit
@@ -152,8 +248,12 @@ async function vapidAuthorization(c: any, endpoint: string) {
   };
 }
 
+async function saveDevice(c: any, device: AnyRow) {
+  return storePut(c, DEVICE_SCOPE, text(device.id), text(device.mainCompanySlug), device);
+}
+
 async function sendWake(c: any, device: AnyRow) {
-  const endpoint = text(device.push_endpoint);
+  const endpoint = text(device.pushEndpoint);
   if (!endpoint) return false;
   try {
     const auth = await vapidAuthorization(c, endpoint);
@@ -167,21 +267,20 @@ async function sendWake(c: any, device: AnyRow) {
     });
     if (!response.ok) {
       const gone = response.status === 404 || response.status === 410;
-      await c.env.DB.prepare(
-        `UPDATE auth_push_devices
-            SET is_active=CASE WHEN ? THEN 0 ELSE is_active END,last_error=?,updated_at=?
-          WHERE id=?`,
-      ).bind(gone ? 1 : 0, `HTTP ${response.status}`, nowIso(), device.id).run();
+      await saveDevice(c, {
+        ...device,
+        isActive: gone ? false : device.isActive !== false,
+        lastError: `HTTP ${response.status}`,
+      });
       return false;
     }
-    await c.env.DB.prepare(
-      "UPDATE auth_push_devices SET last_push_at=?,last_error=NULL,updated_at=? WHERE id=?",
-    ).bind(nowIso(), nowIso(), device.id).run();
+    await saveDevice(c, { ...device, lastPushAt: nowIso(), lastError: "" });
     return true;
   } catch (error) {
-    await c.env.DB.prepare(
-      "UPDATE auth_push_devices SET last_error=?,updated_at=? WHERE id=?",
-    ).bind(error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300), nowIso(), device.id).run();
+    await saveDevice(c, {
+      ...device,
+      lastError: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+    });
     return false;
   }
 }
@@ -189,25 +288,21 @@ async function sendWake(c: any, device: AnyRow) {
 async function sendWakeMany(c: any, devices: AnyRow[]) {
   const unique = new Map<string, AnyRow>();
   for (const row of devices || []) {
-    const endpoint = text(row?.push_endpoint);
+    const endpoint = text(row?.pushEndpoint);
     if (endpoint && !unique.has(endpoint)) unique.set(endpoint, row);
   }
   let success = 0;
-  for (const row of unique.values()) {
-    if (await sendWake(c, row)) success += 1;
-  }
+  for (const row of unique.values()) if (await sendWake(c, row)) success += 1;
   return success;
 }
 
 async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "MANAGER") {
-  if (!(await schemaReady(c))) return [];
-  const flag = purpose === "MANAGER" ? "manager_approval_enabled" : "self_login_enabled";
-  const result = await c.env.DB.prepare(
-    `SELECT * FROM auth_push_devices
-      WHERE user_id=? AND is_active=1 AND ${flag}=1
-      ORDER BY COALESCE(last_seen_at,updated_at,created_at) DESC`,
-  ).bind(userId).all<AnyRow>();
-  return result.results || [];
+  const rows = await storeList(c, DEVICE_SCOPE);
+  return rows.filter((row: AnyRow) =>
+    text(row.userId) === userId &&
+    row.isActive !== false &&
+    (purpose === "MANAGER" ? row.managerApprovalEnabled !== false : row.selfLoginEnabled !== false)
+  );
 }
 
 async function userRow(c: any, userId: string) {
@@ -222,45 +317,44 @@ async function userRow(c: any, userId: string) {
 
 async function companyApprovalSettings(c: any, companySlug: string) {
   const slug = text(companySlug);
-  const row = await c.env.DB.prepare(
-    "SELECT * FROM auth_company_login_approval_settings WHERE main_company_slug=? LIMIT 1",
-  ).bind(slug).first<AnyRow>();
+  const row = await storeGet(c, COMPANY_SETTING_SCOPE, slug);
   return {
     mainCompanySlug: slug,
-    notifyCompanyOwner: row ? Boolean(row.notify_company_owner) : true,
-    notifyApplicationOwner: row ? Boolean(row.notify_application_owner) : false,
-    updatedAt: row?.updated_at || null,
-    updatedBy: row?.updated_by || null,
+    notifyCompanyOwner: row ? row.notifyCompanyOwner !== false : true,
+    notifyApplicationOwner: row ? Boolean(row.notifyApplicationOwner) : false,
+    createdAt: row?.createdAt || null,
+    updatedAt: row?.updatedAt || null,
+    updatedBy: row?.updatedBy || null,
   };
 }
 
 async function actorFromDevice(c: any) {
-  if (!(await schemaReady(c))) return null;
   const deviceId = text(c.req.header("X-KYERP-Push-Device"));
   const deviceToken = text(c.req.header("X-KYERP-Push-Token"));
   if (!deviceId || !deviceToken) return null;
-  const device = await c.env.DB.prepare(
-    `SELECT d.*,u.username,u.full_name,u.role,u.is_active AS user_is_active,
-            s.role_override,s.main_company_slug AS user_company_slug
-       FROM auth_push_devices d
-       JOIN auth_users u ON u.id=d.user_id
+
+  const device = await storeGet(c, DEVICE_SCOPE, deviceId);
+  if (!device || device.isActive === false) return null;
+  if (!safeEqual(text(device.deviceTokenHash), await sha256(deviceToken))) return null;
+
+  const user = await c.env.DB.prepare(
+    `SELECT u.id,u.username,u.full_name,u.role,u.is_active,
+            s.role_override,s.main_company_slug
+       FROM auth_users u
        LEFT JOIN auth_user_security s ON s.user_id=u.id
-      WHERE d.id=? AND d.is_active=1 LIMIT 1`,
-  ).bind(deviceId).first<AnyRow>();
-  if (!device || !Boolean(device.user_is_active)) return null;
-  if (!safeEqual(text(device.device_token_hash), await sha256(deviceToken))) return null;
-  const companySlug = text(device.user_company_slug || device.main_company_slug);
-  c.executionCtx?.waitUntil?.(
-    c.env.DB.prepare(
-      "UPDATE auth_push_devices SET last_seen_at=?,updated_at=? WHERE id=? AND is_active=1",
-    ).bind(nowIso(), nowIso(), device.id).run(),
-  );
+      WHERE u.id=? LIMIT 1`,
+  ).bind(text(device.userId)).first<AnyRow>();
+  if (!user || !Boolean(user.is_active)) return null;
+
+  const companySlug = text(user.main_company_slug || device.mainCompanySlug);
+  c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, lastSeenAt: nowIso() }));
+
   return {
     device,
-    userId: text(device.user_id),
-    role: roleOf(device),
+    userId: text(user.id),
+    role: roleOf(user),
     companySlug,
-    fullName: text(device.full_name || device.username),
+    fullName: text(user.full_name || user.username),
   };
 }
 
@@ -275,7 +369,6 @@ function canApproveTarget(actor: AnyRow, approval: AnyRow, settings: AnyRow) {
 }
 
 export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: AnyRow = {}) {
-  if (!(await schemaReady(c))) return null;
   const devices = await activeDevicesForUser(c, text(user.id), "SELF");
   if (!devices.length) return null;
 
@@ -284,21 +377,26 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
   const requestedAt = nowIso();
   const expiresAt = addSeconds(PHONE_APPROVAL_SECONDS);
-  await c.env.DB.prepare(
-    `INSERT INTO auth_phone_login_challenges
-     (id,user_id,main_company_slug,challenge_token_hash,status,device_label,user_agent,ip_address,requested_at,expires_at)
-     VALUES (?,?,?,?, 'PENDING',?,?,?,?,?)`,
-  ).bind(
-    id, user.id, companySlug, await sha256(token),
-    text(source.deviceLabel || source.device_label), text(source.userAgent || source.user_agent || userAgent(c)),
-    text(source.ipAddress || source.ip_address || clientIp(c)), requestedAt, expiresAt,
-  ).run();
+
+  const challenge = await storePut(c, PHONE_SCOPE, id, companySlug, {
+    id,
+    userId: text(user.id),
+    mainCompanySlug: companySlug,
+    challengeTokenHash: await sha256(token),
+    status: "PENDING",
+    deviceLabel: text(source.deviceLabel || source.device_label),
+    userAgent: text(source.userAgent || source.user_agent || userAgent(c)),
+    ipAddress: text(source.ipAddress || source.ip_address || clientIp(c)),
+    requestedAt,
+    expiresAt,
+    decidedAt: "",
+    decidedByDeviceId: "",
+    consumedAt: "",
+  });
 
   const sent = await sendWakeMany(c, devices);
   if (!sent) {
-    await c.env.DB.prepare(
-      "UPDATE auth_phone_login_challenges SET status='FALLBACK',consumed_at=? WHERE id=? AND status='PENDING'",
-    ).bind(nowIso(), id).run();
+    await atomicPhoneUpdate(c, challenge, "PENDING", { status: "FALLBACK", consumedAt: nowIso() });
     return null;
   }
 
@@ -310,49 +408,37 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     phoneApprovalToken: token,
     phoneApprovalExpiresAt: expiresAt,
     notifiedDevices: sent,
-    message: "Telefonunuza KY ERP giriş onayı gönderildi. Bildirimden Onayla veya Reddet seçin.",
+    message: "Telefonunuza KY ERP giriş onayı gönderildi. Bildirimi açıp Onayla veya Reddet seçin.",
   };
 }
 
 export async function phoneApprovalFromRequest(c: any, idValue: unknown, tokenValue: unknown) {
-  if (!(await schemaReady(c))) return null;
   const id = text(idValue);
   const token = text(tokenValue);
   if (!id || !token) return null;
-  const row = await c.env.DB.prepare(
-    "SELECT * FROM auth_phone_login_challenges WHERE id=? LIMIT 1",
-  ).bind(id).first<AnyRow>();
-  if (!row || !safeEqual(text(row.challenge_token_hash), await sha256(token))) return null;
-  if (row.status === "PENDING" && Date.parse(text(row.expires_at)) <= Date.now()) {
-    await c.env.DB.prepare(
-      "UPDATE auth_phone_login_challenges SET status='EXPIRED',consumed_at=? WHERE id=? AND status='PENDING'",
-    ).bind(nowIso(), id).run();
-    return { ...row, status: "EXPIRED", consumed_at: nowIso() };
+  let row = await storeGet(c, PHONE_SCOPE, id);
+  if (!row || !safeEqual(text(row.challengeTokenHash), await sha256(token))) return null;
+  if (upper(row.status) === "PENDING" && Date.parse(text(row.expiresAt)) <= Date.now()) {
+    const update = await atomicPhoneUpdate(c, row, "PENDING", { status: "EXPIRED", consumedAt: nowIso() });
+    row = update.row || row;
   }
   return row;
 }
 
 export async function consumePhoneApproval(c: any, idValue: unknown) {
-  const id = text(idValue);
-  const result = await c.env.DB.prepare(
-    `UPDATE auth_phone_login_challenges SET consumed_at=?
-      WHERE id=? AND status='APPROVED' AND consumed_at IS NULL`,
-  ).bind(nowIso(), id).run();
-  return Number(result?.meta?.changes || 0) > 0;
+  const row = await storeGet(c, PHONE_SCOPE, text(idValue));
+  if (!row || upper(row.status) !== "APPROVED" || text(row.consumedAt)) return false;
+  const update = await atomicPhoneUpdate(c, row, "APPROVED", { consumedAt: nowIso() });
+  return update.changed;
 }
 
 export async function cancelPhoneApproval(c: any, idValue: unknown) {
-  const id = text(idValue);
-  if (!id || !(await schemaReady(c))) return;
-  await c.env.DB.prepare(
-    `UPDATE auth_phone_login_challenges
-        SET status='FALLBACK',consumed_at=COALESCE(consumed_at,?)
-      WHERE id=? AND status='PENDING'`,
-  ).bind(nowIso(), id).run();
+  const row = await storeGet(c, PHONE_SCOPE, text(idValue));
+  if (!row || upper(row.status) !== "PENDING" || text(row.consumedAt)) return;
+  await atomicPhoneUpdate(c, row, "PENDING", { status: "FALLBACK", consumedAt: nowIso() });
 }
 
 export async function notifyManagerApproval(c: any, approvalId: string, companySlug: string) {
-  if (!(await schemaReady(c))) return { sent: 0 };
   const settings = await companyApprovalSettings(c, companySlug);
   const userIds = new Set<string>();
 
@@ -383,110 +469,109 @@ export async function notifyManagerApproval(c: any, approvalId: string, companyS
 
 async function pendingItems(c: any, actor: AnyRow) {
   const timestamp = nowIso();
-  await c.env.DB.prepare(
-    "UPDATE auth_phone_login_challenges SET status='EXPIRED',consumed_at=? WHERE status='PENDING' AND expires_at<=?",
-  ).bind(timestamp, timestamp).run();
-  await c.env.DB.prepare(
-    "UPDATE auth_login_approvals SET status='EXPIRED' WHERE status='PENDING' AND expires_at<=?",
-  ).bind(timestamp).run();
-
   const items: AnyRow[] = [];
-  const selfRows = await c.env.DB.prepare(
-    `SELECT id,device_label,requested_at,expires_at
-       FROM auth_phone_login_challenges
-      WHERE user_id=? AND status='PENDING' AND consumed_at IS NULL AND expires_at>?
-      ORDER BY requested_at ASC`,
-  ).bind(actor.userId, timestamp).all<AnyRow>();
-  for (const row of selfRows.results || []) {
+
+  const selfRows = (await storeList(c, PHONE_SCOPE))
+    .filter((row: AnyRow) => text(row.userId) === actor.userId && !text(row.consumedAt));
+  for (const row of selfRows) {
+    let current = row;
+    if (upper(current.status) === "PENDING" && Date.parse(text(current.expiresAt)) <= Date.now()) {
+      const update = await atomicPhoneUpdate(c, current, "PENDING", { status: "EXPIRED", consumedAt: timestamp });
+      current = update.row || current;
+    }
+    if (upper(current.status) !== "PENDING" || text(current.consumedAt)) continue;
     items.push({
       kind: "SELF_LOGIN",
-      id: row.id,
+      id: current.id,
       title: "KY ERP giriş isteği",
-      body: `${text(row.device_label) || "Yeni cihaz"} için giriş onayı bekleniyor.`,
-      requestedAt: row.requested_at,
-      expiresAt: row.expires_at,
+      body: `${text(current.deviceLabel) || "Yeni cihaz"} için giriş onayı bekleniyor.`,
+      requestedAt: current.requestedAt,
+      expiresAt: current.expiresAt,
       mainCompanySlug: actor.companySlug,
     });
   }
 
-  if (isCompanyAdmin(actor.role)) {
-    const rows = await c.env.DB.prepare(
-      `SELECT a.id,a.main_company_slug,a.device_label,a.requested_at,a.expires_at,
-              u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
-         FROM auth_login_approvals a
-         JOIN auth_users u ON u.id=a.user_id
-         LEFT JOIN auth_user_security s ON s.user_id=u.id
-        WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>? AND a.main_company_slug=?
-        ORDER BY a.requested_at ASC`,
-    ).bind(timestamp, actor.companySlug).all<AnyRow>();
-    for (const row of rows.results || []) {
-      const settings = await companyApprovalSettings(c, text(row.main_company_slug));
-      if (!settings.notifyCompanyOwner || !canApproveTarget(actor, row, settings)) continue;
-      items.push({
-        kind: "MANAGER_APPROVAL",
-        id: row.id,
-        title: "KY ERP firma giriş onayı",
-        body: `${text(row.full_name || row.username)} · ${text(row.device_label) || "yeni cihaz"}`,
-        requestedAt: row.requested_at,
-        expiresAt: row.expires_at,
-        mainCompanySlug: row.main_company_slug,
-      });
-    }
-  } else if (isSuper(actor.role)) {
-    const rows = await c.env.DB.prepare(
-      `SELECT a.id,a.main_company_slug,a.device_label,a.requested_at,a.expires_at,
-              u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
-         FROM auth_login_approvals a
-         JOIN auth_users u ON u.id=a.user_id
-         LEFT JOIN auth_user_security s ON s.user_id=u.id
-        WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>?
-        ORDER BY a.requested_at ASC`,
-    ).bind(timestamp).all<AnyRow>();
-    for (const row of rows.results || []) {
-      const settings = await companyApprovalSettings(c, text(row.main_company_slug));
-      if (!canApproveTarget(actor, row, settings)) continue;
-      items.push({
-        kind: "MANAGER_APPROVAL",
-        id: row.id,
-        title: "KY ERP firma giriş onayı",
-        body: `${text(row.full_name || row.username)} · ${text(row.main_company_slug)} · ${text(row.device_label) || "yeni cihaz"}`,
-        requestedAt: row.requested_at,
-        expiresAt: row.expires_at,
-        mainCompanySlug: row.main_company_slug,
-      });
-    }
+  await c.env.DB.prepare(
+    "UPDATE auth_login_approvals SET status='EXPIRED' WHERE status='PENDING' AND expires_at<=?",
+  ).bind(timestamp).run();
+
+  const managerRows = isCompanyAdmin(actor.role)
+    ? await c.env.DB.prepare(
+        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.requested_at,a.expires_at,
+                u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
+           FROM auth_login_approvals a
+           JOIN auth_users u ON u.id=a.user_id
+           LEFT JOIN auth_user_security s ON s.user_id=u.id
+          WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>? AND a.main_company_slug=?
+          ORDER BY a.requested_at ASC`,
+      ).bind(timestamp, actor.companySlug).all<AnyRow>()
+    : isSuper(actor.role)
+      ? await c.env.DB.prepare(
+          `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.requested_at,a.expires_at,
+                  u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
+             FROM auth_login_approvals a
+             JOIN auth_users u ON u.id=a.user_id
+             LEFT JOIN auth_user_security s ON s.user_id=u.id
+            WHERE a.status='PENDING' AND a.consumed_at IS NULL AND a.expires_at>?
+            ORDER BY a.requested_at ASC`,
+        ).bind(timestamp).all<AnyRow>()
+      : { results: [] };
+
+  for (const row of managerRows.results || []) {
+    const settings = await companyApprovalSettings(c, text(row.main_company_slug));
+    if (!canApproveTarget(actor, row, settings)) continue;
+    items.push({
+      kind: "MANAGER_APPROVAL",
+      id: row.id,
+      title: "KY ERP firma giriş onayı",
+      body: isSuper(actor.role)
+        ? `${text(row.full_name || row.username)} · ${text(row.main_company_slug)} · ${text(row.device_label) || "yeni cihaz"}`
+        : `${text(row.full_name || row.username)} · ${text(row.device_label) || "yeni cihaz"}`,
+      requestedAt: row.requested_at,
+      expiresAt: row.expires_at,
+      mainCompanySlug: row.main_company_slug,
+    });
   }
 
   return items;
+}
+
+export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
+  const rows = (await storeList(c, PHONE_SCOPE))
+    .filter((row: AnyRow) => text(row.userId) === text(userId) && !text(row.consumedAt) && ["PENDING", "APPROVED"].includes(upper(row.status)));
+  for (const row of rows) {
+    const expected = upper(row.status);
+    await atomicPhoneUpdate(c, row, expected, { status: "DENIED", decidedAt: nowIso(), consumedAt: nowIso() });
+  }
 }
 
 export function registerAuthPushRoutes(app: any) {
   app.get("/api/auth/push/config", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı ayarları için oturum gereklidir."), 401);
-    if (!(await schemaReady(c))) return c.json(jsonError("PUSH_SCHEMA_NOT_READY", "Telefon onayı veritabanı şeması henüz hazır değil."), 503);
+
     const pair = await ensureVapidKeyPair(c);
-    const devices = await c.env.DB.prepare(
-      `SELECT id,device_label,self_login_enabled,manager_approval_enabled,is_active,created_at,updated_at,last_seen_at,last_push_at,last_error
-         FROM auth_push_devices
-        WHERE user_id=? ORDER BY is_active DESC,COALESCE(last_seen_at,updated_at,created_at) DESC`,
-    ).bind(current.id).all<AnyRow>();
+    const devices = (await storeList(c, DEVICE_SCOPE))
+      .filter((row: AnyRow) => text(row.userId) === text(current.id))
+      .sort((a: AnyRow, b: AnyRow) => String(b.lastSeenAt || b.updatedAt || "").localeCompare(String(a.lastSeenAt || a.updatedAt || "")));
+
     return c.json({
       ok: true,
       data: {
         supported: true,
         applicationServerKey: pair.publicKey,
-        devices: (devices.results || []).map((row: AnyRow) => ({
+        storage: "json_store",
+        devices: devices.map((row: AnyRow) => ({
           id: row.id,
-          deviceLabel: text(row.device_label),
-          selfLoginEnabled: Boolean(row.self_login_enabled),
-          managerApprovalEnabled: Boolean(row.manager_approval_enabled),
-          isActive: Boolean(row.is_active),
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-          lastSeenAt: row.last_seen_at,
-          lastPushAt: row.last_push_at,
-          lastError: text(row.last_error),
+          deviceLabel: text(row.deviceLabel),
+          selfLoginEnabled: row.selfLoginEnabled !== false,
+          managerApprovalEnabled: row.managerApprovalEnabled !== false,
+          isActive: row.isActive !== false,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          lastSeenAt: row.lastSeenAt || null,
+          lastPushAt: row.lastPushAt || null,
+          lastError: text(row.lastError),
         })),
       },
     });
@@ -495,61 +580,58 @@ export function registerAuthPushRoutes(app: any) {
   app.post("/api/auth/push/devices/register", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı kaydı için oturum gereklidir."), 401);
-    if (!(await schemaReady(c))) return c.json(jsonError("PUSH_SCHEMA_NOT_READY", "Telefon onayı veritabanı şeması henüz hazır değil."), 503);
+
     const body = await bodyOf(c);
     const password = String(body.password || "");
     const user = await userRow(c, current.id);
     if (!user || !Boolean(user.is_active) || !password || !(await compare(password, text(user.password_hash)))) {
       return c.json(jsonError("STEP_UP_FAILED", "Bu cihazı güvenilir telefon onayı cihazı yapmak için mevcut şifrenizi doğrulayın."), 401);
     }
+
     const subscription = body.subscription && typeof body.subscription === "object" ? body.subscription : {};
     const endpoint = text(subscription.endpoint);
     const p256dh = text(subscription.keys?.p256dh);
     const authKey = text(subscription.keys?.auth);
     if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Tarayıcı bildirim aboneliği geçersiz."), 400);
 
-    const existing = await c.env.DB.prepare("SELECT * FROM auth_push_devices WHERE push_endpoint=? LIMIT 1").bind(endpoint).first<AnyRow>();
-    if (existing && text(existing.user_id) !== text(current.id)) {
+    const allDevices = await storeList(c, DEVICE_SCOPE);
+    const existing = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
+    if (existing && text(existing.userId) !== text(current.id)) {
       return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu bildirim aboneliği başka bir KY ERP hesabına bağlı."), 409);
     }
 
     const deviceId = text(existing?.id) || crypto.randomUUID();
     const deviceToken = randomToken(36);
-    const timestamp = nowIso();
-    const companySlug = text(current.mainCompanySlug || current.security?.main_company_slug || "mecit-hakan");
+    const companySlug = text(current.mainCompanySlug || user.main_company_slug || "mecit-hakan");
     const label = text(body.deviceLabel || current.session?.device_label || userAgent(c)).slice(0, 180);
-    if (existing) {
-      await c.env.DB.prepare(
-        `UPDATE auth_push_devices
-            SET user_id=?,main_company_slug=?,p256dh_key=?,auth_key=?,device_token_hash=?,device_label=?,user_agent=?,
-                self_login_enabled=?,manager_approval_enabled=?,is_active=1,updated_at=?,last_seen_at=?,last_error=NULL
-          WHERE id=?`,
-      ).bind(
-        current.id, companySlug, p256dh || null, authKey || null, await sha256(deviceToken), label, userAgent(c),
-        body.selfLoginEnabled === false ? 0 : 1, body.managerApprovalEnabled === false ? 0 : 1,
-        timestamp, timestamp, deviceId,
-      ).run();
-    } else {
-      await c.env.DB.prepare(
-        `INSERT INTO auth_push_devices
-         (id,user_id,main_company_slug,push_endpoint,p256dh_key,auth_key,device_token_hash,device_label,user_agent,
-          self_login_enabled,manager_approval_enabled,is_active,created_at,updated_at,last_seen_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).bind(
-        deviceId, current.id, companySlug, endpoint, p256dh || null, authKey || null, await sha256(deviceToken),
-        label, userAgent(c), body.selfLoginEnabled === false ? 0 : 1, body.managerApprovalEnabled === false ? 0 : 1,
-        1, timestamp, timestamp, timestamp,
-      ).run();
-    }
+    const saved = await saveDevice(c, {
+      ...(existing || {}),
+      id: deviceId,
+      userId: current.id,
+      mainCompanySlug: companySlug,
+      pushEndpoint: endpoint,
+      p256dhKey: p256dh,
+      authKey,
+      deviceTokenHash: await sha256(deviceToken),
+      deviceLabel: label,
+      userAgent: userAgent(c),
+      selfLoginEnabled: body.selfLoginEnabled !== false,
+      managerApprovalEnabled: body.managerApprovalEnabled !== false,
+      isActive: true,
+      createdAt: existing?.createdAt || nowIso(),
+      lastSeenAt: nowIso(),
+      lastError: "",
+    });
+
     await audit(c, "PUSH_DEVICE_REGISTERED", current.id, current.id, companySlug, { deviceId, deviceLabel: label });
     return c.json({
       ok: true,
       data: {
-        deviceId,
+        deviceId: saved.id,
         deviceToken,
         deviceLabel: label,
-        selfLoginEnabled: body.selfLoginEnabled !== false,
-        managerApprovalEnabled: body.managerApprovalEnabled !== false,
+        selfLoginEnabled: saved.selfLoginEnabled,
+        managerApprovalEnabled: saved.managerApprovalEnabled,
         note: "Cihaz anahtarı yalnız bu kayıt cevabında verilir ve sunucuda hash olarak saklanır.",
       },
     });
@@ -558,11 +640,10 @@ export function registerAuthPushRoutes(app: any) {
   app.delete("/api/auth/push/devices/:id", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Oturum gereklidir."), 401);
-    if (!(await schemaReady(c))) return c.json(jsonError("PUSH_SCHEMA_NOT_READY", "Telefon onayı veritabanı şeması henüz hazır değil."), 503);
-    const device = await c.env.DB.prepare("SELECT * FROM auth_push_devices WHERE id=? LIMIT 1").bind(c.req.param("id")).first<AnyRow>();
-    if (!device || text(device.user_id) !== text(current.id)) return c.json(jsonError("PUSH_DEVICE_NOT_FOUND", "Telefon onayı cihazı bulunamadı."), 404);
-    await c.env.DB.prepare("UPDATE auth_push_devices SET is_active=0,updated_at=? WHERE id=?").bind(nowIso(), device.id).run();
-    await audit(c, "PUSH_DEVICE_DISABLED", current.id, current.id, text(device.main_company_slug), { deviceId: device.id });
+    const device = await storeGet(c, DEVICE_SCOPE, c.req.param("id"));
+    if (!device || text(device.userId) !== text(current.id)) return c.json(jsonError("PUSH_DEVICE_NOT_FOUND", "Telefon onayı cihazı bulunamadı."), 404);
+    await saveDevice(c, { ...device, isActive: false });
+    await audit(c, "PUSH_DEVICE_DISABLED", current.id, current.id, text(device.mainCompanySlug), { deviceId: device.id });
     return c.json({ ok: true });
   });
 
@@ -571,7 +652,6 @@ export function registerAuthPushRoutes(app: any) {
     if (!current || (!isSuper(current.role) && !isCompanyAdmin(current.role))) {
       return c.json(jsonError("FORBIDDEN", "Firma giriş onayı ayarları için yönetici yetkisi gereklidir."), 403);
     }
-    if (!(await schemaReady(c))) return c.json(jsonError("PUSH_SCHEMA_NOT_READY", "Telefon onayı veritabanı şeması henüz hazır değil."), 503);
     const slug = text(c.req.param("slug"));
     if (!isSuper(current.role) && slug !== text(current.mainCompanySlug)) return c.json(jsonError("FORBIDDEN", "Başka firmanın giriş onayı ayarını görüntüleyemezsiniz."), 403);
     return c.json({ ok: true, data: await companyApprovalSettings(c, slug) });
@@ -579,26 +659,23 @@ export function registerAuthPushRoutes(app: any) {
 
   app.patch("/api/admin/security/company-approval-settings/:slug", async (c: any) => {
     const current = await getAuthenticatedUser(c);
-    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Uygulama sahibine bildirim tercihini yalnız Uygulama Sahibi değiştirebilir."), current ? 403 : 401);
-    if (!(await schemaReady(c))) return c.json(jsonError("PUSH_SCHEMA_NOT_READY", "Telefon onayı veritabanı şeması henüz hazır değil."), 503);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Süper Yönetici bildirim tercihini yalnız Süper Yönetici değiştirebilir."), current ? 403 : 401);
     const slug = text(c.req.param("slug"));
     const body = await bodyOf(c);
     const previous = await companyApprovalSettings(c, slug);
-    const notifyCompanyOwner = body.notifyCompanyOwner === undefined ? previous.notifyCompanyOwner : Boolean(body.notifyCompanyOwner);
-    const notifyApplicationOwner = body.notifyApplicationOwner === undefined ? previous.notifyApplicationOwner : Boolean(body.notifyApplicationOwner);
-    const timestamp = nowIso();
-    await c.env.DB.prepare(
-      `INSERT INTO auth_company_login_approval_settings
-       (main_company_slug,notify_company_owner,notify_application_owner,created_at,updated_at,updated_by)
-       VALUES (?,?,?,?,?,?)
-       ON CONFLICT(main_company_slug) DO UPDATE SET
-         notify_company_owner=excluded.notify_company_owner,
-         notify_application_owner=excluded.notify_application_owner,
-         updated_at=excluded.updated_at,
-         updated_by=excluded.updated_by`,
-    ).bind(slug, notifyCompanyOwner ? 1 : 0, notifyApplicationOwner ? 1 : 0, timestamp, timestamp, current.id).run();
-    await audit(c, "COMPANY_LOGIN_APPROVAL_SETTINGS_UPDATED", current.id, "", slug, { notifyCompanyOwner, notifyApplicationOwner });
-    return c.json({ ok: true, data: await companyApprovalSettings(c, slug) });
+    const saved = await storePut(c, COMPANY_SETTING_SCOPE, slug, slug, {
+      ...previous,
+      mainCompanySlug: slug,
+      notifyCompanyOwner: body.notifyCompanyOwner === undefined ? previous.notifyCompanyOwner : Boolean(body.notifyCompanyOwner),
+      notifyApplicationOwner: body.notifyApplicationOwner === undefined ? previous.notifyApplicationOwner : Boolean(body.notifyApplicationOwner),
+      updatedBy: current.id,
+      createdAt: previous.createdAt || nowIso(),
+    });
+    await audit(c, "COMPANY_LOGIN_APPROVAL_SETTINGS_UPDATED", current.id, "", slug, {
+      notifyCompanyOwner: saved.notifyCompanyOwner,
+      notifyApplicationOwner: saved.notifyApplicationOwner,
+    });
+    return c.json({ ok: true, data: saved });
   });
 
   app.get("/api/auth/push/device/pending", async (c: any) => {
@@ -610,6 +687,7 @@ export function registerAuthPushRoutes(app: any) {
   app.post("/api/auth/push/device/decision", async (c: any) => {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "Telefon onayı cihazı doğrulanamadı."), 401);
+
     const body = await bodyOf(c);
     const kind = upper(body.kind);
     const id = text(body.id);
@@ -617,19 +695,20 @@ export function registerAuthPushRoutes(app: any) {
     if (!["APPROVE", "DENY"].includes(decision) || !id) return c.json(jsonError("PUSH_DECISION_INVALID", "Onay veya ret seçilmelidir."), 400);
 
     if (kind === "SELF_LOGIN") {
-      const row = await c.env.DB.prepare(
-        "SELECT * FROM auth_phone_login_challenges WHERE id=? AND user_id=? LIMIT 1",
-      ).bind(id, actor.userId).first<AnyRow>();
-      if (!row || row.status !== "PENDING" || Date.parse(text(row.expires_at)) <= Date.now()) {
+      const row = await storeGet(c, PHONE_SCOPE, id);
+      if (!row || text(row.userId) !== actor.userId || upper(row.status) !== "PENDING" || text(row.consumedAt) || Date.parse(text(row.expiresAt)) <= Date.now()) {
         return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı veya süresi doldu."), 404);
       }
       const status = decision === "APPROVE" ? "APPROVED" : "DENIED";
-      await c.env.DB.prepare(
-        `UPDATE auth_phone_login_challenges SET status=?,decided_at=?,decided_by_device_id=?
-          WHERE id=? AND status='PENDING'`,
-      ).bind(status, nowIso(), actor.device.id, id).run();
-      await audit(c, decision === "APPROVE" ? "PHONE_LOGIN_APPROVED" : "PHONE_LOGIN_DENIED", actor.userId, actor.userId, actor.companySlug, { challengeId: id, deviceId: actor.device.id });
-      return c.json({ ok: true, data: { kind, id, status } });
+      const update = await atomicPhoneUpdate(c, row, "PENDING", {
+        status,
+        decidedAt: nowIso(),
+        decidedByDeviceId: actor.device.id,
+        ...(status === "DENIED" ? { consumedAt: nowIso() } : {}),
+      });
+      const finalStatus = upper(update.row?.status || status);
+      await audit(c, decision === "APPROVE" ? "PHONE_LOGIN_APPROVED" : "PHONE_LOGIN_DENIED", actor.userId, actor.userId, actor.companySlug, { challengeId: id, deviceId: actor.device.id, applied: update.changed });
+      return c.json({ ok: true, data: { kind, id, status: finalStatus, applied: update.changed } });
     }
 
     if (kind === "MANAGER_APPROVAL") {
@@ -645,12 +724,16 @@ export function registerAuthPushRoutes(app: any) {
       }
       const settings = await companyApprovalSettings(c, text(approval.main_company_slug));
       if (!canApproveTarget(actor, approval, settings)) return c.json(jsonError("FORBIDDEN", "Bu firma girişini telefonunuzdan onaylayamazsınız."), 403);
+
       const status = decision === "APPROVE" ? "APPROVED" : "DENIED";
-      await c.env.DB.prepare(
+      const result = await c.env.DB.prepare(
         "UPDATE auth_login_approvals SET status=?,decided_at=?,decided_by=? WHERE id=? AND status='PENDING'",
       ).bind(status, nowIso(), actor.userId, id).run();
-      await audit(c, decision === "APPROVE" ? "LOGIN_APPROVED_PUSH" : "LOGIN_DENIED_PUSH", actor.userId, text(approval.user_id), text(approval.main_company_slug), { approvalId: id, deviceId: actor.device.id });
-      return c.json({ ok: true, data: { kind, id, status } });
+      const applied = Number(result?.meta?.changes || 0) > 0;
+      const current = applied ? { status } : await c.env.DB.prepare("SELECT status FROM auth_login_approvals WHERE id=? LIMIT 1").bind(id).first<AnyRow>();
+      const finalStatus = upper(current?.status || status);
+      await audit(c, decision === "APPROVE" ? "LOGIN_APPROVED_PUSH" : "LOGIN_DENIED_PUSH", actor.userId, text(approval.user_id), text(approval.main_company_slug), { approvalId: id, deviceId: actor.device.id, applied });
+      return c.json({ ok: true, data: { kind, id, status: finalStatus, applied } });
     }
 
     return c.json(jsonError("PUSH_KIND_INVALID", "Telefon onayı türü geçersiz."), 400);
