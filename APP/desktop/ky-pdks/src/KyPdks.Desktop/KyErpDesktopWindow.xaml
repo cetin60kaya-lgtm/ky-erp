@@ -19,11 +19,11 @@
                     <TextBlock Text="KY" Foreground="White" FontWeight="Bold" FontSize="25"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
-                <TextBlock Text="KY ERP Desktop" FontSize="26" FontWeight="Bold" Foreground="#172D49"
+                <TextBlock x:Name="StartupTitle" Text="KY ERP Desktop" FontSize="26" FontWeight="Bold" Foreground="#172D49"
                            HorizontalAlignment="Center" Margin="0,18,0,7"/>
                 <TextBlock x:Name="StartupText" Text="KY ERP hazırlanıyor..." FontSize="13" Foreground="#708197"
                            HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
-                <TextBlock Text="Aynı KY ERP arayüzü • aynı canlı veri • Windows entegrasyonu"
+                <TextBlock x:Name="StartupSubtitle" Text="Aynı KY ERP arayüzü • aynı canlı veri • Windows entegrasyonu"
                            FontSize="11" Foreground="#91A0B1" HorizontalAlignment="Center" Margin="0,9,0,0"/>
             </StackPanel>
         </Border>
