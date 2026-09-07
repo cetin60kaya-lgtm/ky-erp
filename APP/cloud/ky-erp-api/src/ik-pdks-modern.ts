@@ -396,7 +396,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
           LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
           LEFT JOIN ik_person_monthly_compliance mc ON mc.main_company_id=e.main_company_id AND mc.employee_id=e.id AND mc.period=?
           WHERE e.main_company_id=?
-            AND UPPER(COALESCE(s.active_passive,e.status,'AKTIF')) NOT LIKE '%PAS%'
+            AND UPPER(COALESCE(s.active_passive,'AKTIF')) NOT LIKE '%PAS%'
+            AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'
             AND TRIM(COALESCE(s.card_no,''))<>''
             AND ((mc.employee_id IS NOT NULL AND mc.sgk_covered=1)
               OR (mc.employee_id IS NULL AND UPPER(COALESCE(e.sgk_status,'VAR'))<>'YOK'))`,[period,auth.company])
@@ -404,7 +405,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
           FROM hr_monthly_employees e
           LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
           WHERE e.main_company_id=?
-            AND UPPER(COALESCE(s.active_passive,e.status,'AKTIF')) NOT LIKE '%PAS%'`,[auth.company]);
+            AND UPPER(COALESCE(s.active_passive,'AKTIF')) NOT LIKE '%PAS%'
+            AND UPPER(COALESCE(e.status,'AKTIF')) NOT LIKE '%PAS%'`,[auth.company]);
     const events=await all(c,`SELECT t.id,t.employee_id AS employeeId,t.card_no AS cardNo,t.work_date AS workDate,t.event_time AS eventTime,t.direction,t.source,t.created_at AS createdAt,e.full_name AS fullName,e.department FROM ik_time_clock_events t LEFT JOIN hr_monthly_employees e ON e.id=t.employee_id WHERE t.main_company_id=? AND t.work_date=? ORDER BY t.event_time DESC`,[auth.company,date]);
     const leaveMap=new Map<string,Row>();try{const leaveRows=await all(c,`SELECT d.employee_id AS employeeId,d.leave_type_code AS leaveTypeCode,d.leave_fraction AS leaveFraction,p.record_type AS recordType FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.work_date=? AND UPPER(COALESCE(p.status,''))<>'CANCELLED'`,[auth.company,date]);leaveRows.forEach((r)=>leaveMap.set(text(r.employeeId),r));}catch{}
     const eventMap=new Map<string,Row[]>();events.forEach((e)=>{const list=eventMap.get(text(e.employeeId))||[];list.push(e);eventMap.set(text(e.employeeId),list);});
