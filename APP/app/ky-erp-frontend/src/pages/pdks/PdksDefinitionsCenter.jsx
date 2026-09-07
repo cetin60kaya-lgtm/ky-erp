@@ -72,7 +72,7 @@ export default function PdksDefinitionsCenter({activeTab="gruplar-vardiyalar",ac
 
   const assignGroup=()=>run(async()=>{
     if(isAuditAccount||!selectedPerson||!selectedGroup)throw new Error("Personel ve vardiya seçin.");
-    await assignPdksWorkGroup(selectedPerson.id,selectedGroup.id);
+    await assignPdksWorkGroup(selectedPerson.id,selectedGroup.id,{mainCompanyId:company});
   },(selectedPerson?.fullName||"Personel")+" → "+(selectedGroup?.name||"Vardiya")+" atandı.");
 
   const saveService=()=>run(async()=>{
@@ -84,7 +84,7 @@ export default function PdksDefinitionsCenter({activeTab="gruplar-vardiyalar",ac
 
   const assignService=()=>run(async()=>{
     if(isAuditAccount||!selectedPerson||!selectedService)throw new Error("Personel ve servis seçin.");
-    await assignPdksService(selectedPerson.id,selectedService.id);
+    await assignPdksService(selectedPerson.id,selectedService.id,{mainCompanyId:company});
   },(selectedPerson?.fullName||"Personel")+" → "+(selectedService?.name||"Servis")+" atandı.");
 
   const saveHoliday=()=>run(async()=>{
