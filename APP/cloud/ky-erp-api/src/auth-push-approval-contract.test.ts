@@ -25,6 +25,8 @@ test("phone approval uses existing tenant json_store and needs no new production
   assert.match(push, /AUTH_COMPANY_LOGIN_APPROVAL/);
   assert.match(push, /FROM json_store/);
   assert.match(push, /INSERT INTO json_store/);
+  assert.match(push, /tableExists\(c, "json_store"\)/);
+  assert.match(push, /if \(!\(await tableExists\(c, "json_store"\)\)\) return \[\]/);
   assert.doesNotMatch(push, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
 });
 
