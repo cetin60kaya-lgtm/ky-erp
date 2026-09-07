@@ -2555,3 +2555,121 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* IK bordro grouped payment table */
+.ik-html .payroll-screen-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ik-html .payroll-screen-table {
+  width: 100%;
+  min-width: 1120px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.ik-html .payroll-screen-table th,
+.ik-html .payroll-screen-table td {
+  vertical-align: top;
+}
+
+.ik-html .payroll-screen-table .check-col {
+  width: 42px;
+  text-align: center;
+}
+
+.ik-html .payroll-screen-table .person-col {
+  width: 190px;
+}
+
+.ik-html .payroll-screen-table .official-col {
+  width: 120px;
+}
+
+.ik-html .payroll-screen-table .summary-col {
+  width: 165px;
+}
+
+.ik-html .payroll-screen-table .payment-col {
+  width: 170px;
+}
+
+.ik-html .payroll-screen-table .status-col {
+  width: 105px;
+}
+
+.ik-html .payroll-screen-table .action-col {
+  width: 145px;
+}
+
+.ik-html .payroll-cell-stack {
+  display: grid;
+  gap: 3px;
+}
+
+.ik-html .payroll-cell-stack > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.ik-html .payroll-cell-stack em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.ik-html .payroll-cell-stack b {
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11px;
+}
+
+.ik-html .payroll-cell-stack .cell-total {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line);
+}
+
+.ik-html .payroll-cell-stack .cell-total.net b {
+  font-size: 13px;
+}
+
+.ik-html .payroll-screen-table .status-col .badge {
+  display: block;
+  width: fit-content;
+  margin-bottom: 5px;
+}
+
+.ik-html .payroll-screen-table .action-col {
+  white-space: normal;
+}
+
+.ik-html .payroll-screen-table .action-col .btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 5px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .ik-html .payroll-screen-table {
+    min-width: 1040px;
+  }
+
+  .ik-html .payroll-screen-table .person-col {
+    width: 170px;
+  }
+
+  .ik-html .payroll-screen-table .summary-col,
+  .ik-html .payroll-screen-table .payment-col {
+    width: 150px;
+  }
+}
