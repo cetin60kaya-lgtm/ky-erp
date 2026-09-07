@@ -557,14 +557,20 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     const messageId = selectedMessage.id;
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
     setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
-    if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    if (selectedFolderCountsUnread) {
+      adjustInboxUnreadCount(-1);
+      setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    }
     runMailMessageAction(messageId, "MARK_READ", {}).catch((error) => {
       setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
       setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
-      if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread) {
+        adjustInboxUnreadCount(1);
+        setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      }
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     });
-  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab, selectedFolderCountsUnread]);
+  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab, selectedFolderCountsUnread, activeUnreadFolderId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -758,19 +764,35 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     }
   }
 
+  function adjustInboxUnreadCount(delta) {
+    if (!activeUnreadFolderId || !Number.isFinite(Number(delta)) || Number(delta) === 0) return;
+    setFolders((current) => current.map((folder) => {
+      if (String(folder.id) !== String(activeUnreadFolderId)) return folder;
+      const currentUnread = Number(folder.unread_count ?? folder.unreadCount ?? 0);
+      const nextUnread = Math.max(0, currentUnread + Number(delta));
+      return { ...folder, unread_count: nextUnread, unreadCount: nextUnread };
+    }));
+  }
+
   async function selectMessage(row) {
     setSelectedMessage(row);
     if (Number(row?.is_read ?? row?.isRead ?? 1) !== 0 || activeTab === "mail-gonderilen" || activeTab === "mail-taslaklar") return;
     const messageId = row.id;
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 1, isRead: 1 } : item));
     setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 1, isRead: 1 } : current);
-    if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    if (selectedFolderCountsUnread) {
+      adjustInboxUnreadCount(-1);
+      setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+    }
     try {
       await runMailMessageAction(messageId, "MARK_READ", {});
     } catch (error) {
       setMessages((current) => current.map((item) => item.id === messageId ? { ...item, is_read: 0, isRead: 0 } : item));
       setSelectedMessage((current) => current?.id === messageId ? { ...current, is_read: 0, isRead: 0 } : current);
-      if (selectedFolderCountsUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread) {
+        adjustInboxUnreadCount(1);
+        setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      }
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     }
   }
@@ -1054,8 +1076,14 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     try {
       await runMailMessageAction(messageId, action, values);
       applyMessageActionLocally(messageId, action, values);
-      if (selectedFolderCountsUnread && action === "MARK_READ" && wasUnread) setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
-      if (selectedFolderCountsUnread && action === "MARK_UNREAD" && !wasUnread) setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      if (selectedFolderCountsUnread && action === "MARK_READ" && wasUnread) {
+        adjustInboxUnreadCount(-1);
+        setOverview((current) => current ? { ...current, unreadCount: Math.max(0, Number(current.unreadCount || 0) - 1) } : current);
+      }
+      if (selectedFolderCountsUnread && action === "MARK_UNREAD" && !wasUnread) {
+        adjustInboxUnreadCount(1);
+        setOverview((current) => current ? { ...current, unreadCount: Number(current.unreadCount || 0) + 1 } : current);
+      }
       setNotice(action === "ARCHIVE" ? "Mail arşive taşındı." : action === "DELETE" ? "Mail silinmiş öğelere taşındı." : action === "MOVE" ? "Mail klasöre taşındı." : "Mail durumu güncellendi.");
       setMoveTargetId("");
       setMailboxRefresh((value) => value + 1);
