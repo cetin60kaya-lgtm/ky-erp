@@ -128,9 +128,10 @@ test("legacy pending mail request is auto-approved from requester role, not view
 });
 
 
-test("trash and spam never contribute to Mail Center unread counters", () => {
+test("Mail Center unread total follows only the real Inbox and folder badges still exclude trash spam", () => {
   const source = read("./mail-communication-core.ts");
-  assert.match(source, /NOT IN \('TRASH','JUNK'\)/);
+  assert.match(source, /folder_type,''\)\)='INBOX'/);
+  assert.match(source, /provider_folder_id,''\)\)='INBOX'/);
   assert.match(source, /IN \('TRASH','JUNK'\) THEN 0/);
   assert.match(source, /LEFT JOIN mail_folders f ON f\.id=m\.folder_id/);
 });
