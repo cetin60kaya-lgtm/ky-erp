@@ -12,24 +12,25 @@ const repoFile = (name: string) => readFileSync(resolve(root, name), "utf8");
 const push = worker("auth-push-cloud.ts");
 const policy = worker("auth-policy-cloud.ts");
 const main = worker("main.ts");
-const migration = repoFile("APP/cloud/ky-erp-api/migrations/0052_auth_phone_push_approval.sql");
 const login = repoFile("APP/app/ky-erp-frontend/src/pages/LoginPage.jsx");
 const authContext = repoFile("APP/app/ky-erp-frontend/src/context/AuthContext.jsx");
 const serviceWorker = repoFile("APP/app/ky-erp-frontend/public/kyerp-push-sw.js");
 const companySettings = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminCompanySettings.jsx");
 const phoneSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalSetup.jsx");
+const phoneInbox = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalInboxBridge.jsx");
 
-test("phone approval migration is additive and tenant-scoped", () => {
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS auth_push_devices/);
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS auth_phone_login_challenges/);
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS auth_company_login_approval_settings/);
-  assert.match(migration, /main_company_slug TEXT NOT NULL/);
-  assert.doesNotMatch(migration, /\bDROP\b|DELETE FROM auth_|TRUNCATE/i);
+test("phone approval uses existing tenant json_store and needs no new production migration", () => {
+  assert.match(push, /AUTH_PUSH_DEVICE/);
+  assert.match(push, /AUTH_PHONE_LOGIN/);
+  assert.match(push, /AUTH_COMPANY_LOGIN_APPROVAL/);
+  assert.match(push, /FROM json_store/);
+  assert.match(push, /INSERT INTO json_store/);
+  assert.doesNotMatch(push, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
 });
 
 test("trusted push device enrollment requires password step-up and stores only a token hash", () => {
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
-  assert.match(push, /device_token_hash/);
+  assert.match(push, /deviceTokenHash/);
   assert.match(push, /await sha256\(deviceToken\)/);
   assert.doesNotMatch(push, /device_token\s+TEXT/i);
   assert.match(push, /PUSH_ENDPOINT_ALREADY_BOUND/);
@@ -55,8 +56,8 @@ test("phone approval is primary while Authenticator remains an explicit fallback
 });
 
 test("company owner is default approver and application owner notifications are optional", () => {
-  assert.match(push, /notifyCompanyOwner: row \? Boolean\(row\.notify_company_owner\) : true/);
-  assert.match(push, /notifyApplicationOwner: row \? Boolean\(row\.notify_application_owner\) : false/);
+  assert.match(push, /notifyCompanyOwner: row \? row\.notifyCompanyOwner !== false : true/);
+  assert.match(push, /notifyApplicationOwner: row \? Boolean\(row\.notifyApplicationOwner\) : false/);
   assert.match(push, /isCompanyAdmin\(actor\.role\)/);
   assert.match(push, /isSuper\(actor\.role\)/);
   assert.match(companySettings, /Firma Sahibi \/ İşveren telefonuna onay bildirimi gönder/);
@@ -78,6 +79,19 @@ test("every user can register a phone from the authenticated shell but registrat
   assert.match(phoneSetup, /Bildirimleri Aç ve Bu Cihazı Kaydet/);
   assert.match(phoneSetup, /auth\/push\/devices\/register/);
   assert.match(phoneSetup, /KYERP_PUSH_CREDENTIALS/);
+});
+
+test("iPhone fallback does not depend on notification action buttons", () => {
+  assert.match(serviceWorker, /kyerpPhoneApproval=1/);
+  assert.match(serviceWorker, /KYERP_PUSH_PENDING_WAKE/);
+  assert.match(serviceWorker, /userVisibleOnly/);
+  assert.match(phoneSetup, /Ana Ekrana Ekle/);
+  assert.match(phoneSetup, /isStandaloneWebApp/);
+  assert.match(phoneInbox, /visibilitychange/);
+  assert.match(phoneInbox, /pageshow/);
+  assert.match(phoneInbox, /auth\/push\/device\/pending/);
+  assert.match(phoneInbox, /Onayla/);
+  assert.match(phoneInbox, /Reddet/);
 });
 
 test("legacy direct MFA reset remains fail-closed", () => {
