@@ -85,3 +85,71 @@ test("incoming view waits for the canonical INBOX and hydrated HTML is keyed to 
   assert.match(page, /renderedHtmlMessageId/);
   assert.match(page, /renderedHtmlMessageId === String\(selectedMessage\.id\)/);
 });
+
+
+test("attachments expose explicit preview controls and download-all", () => {
+  assert.match(page, /downloadAllAttachments/);
+  assert.match(page, /Tümünü İndir/);
+  assert.match(page, /comm-attachment-preview-btn/);
+  assert.match(page, /attachmentPreviewKind/);
+  assert.match(page, /kind === "image"/);
+  assert.match(page, /kind === "pdf"/);
+  assert.match(page, /png/);
+  assert.match(page, /jpg/);
+  assert.match(page, /jpeg/);
+  assert.match(css, /comm-download-all/);
+  assert.match(css, /comm-attachment-preview-btn/);
+});
+
+
+test("mail attachment download-all is a single zip and external OneDrive links can escape safely", () => {
+  assert.match(page, /function zipStore/);
+  assert.match(page, /application\/zip/);
+  assert.match(page, /Tümünü İndir/);
+  assert.match(page, /mailHtmlWithExternalLinks/);
+  assert.match(page, /base\.target = "_blank"/);
+  assert.match(page, /allow-popups allow-popups-to-escape-sandbox allow-downloads/);
+  assert.match(page, /referrerPolicy="no-referrer"/);
+});
+
+test("mail preview supports browser-native audio and video in addition to image pdf and text", () => {
+  assert.match(page, /return "audio"/);
+  assert.match(page, /return "video"/);
+  assert.match(page, /<audio controls/);
+  assert.match(page, /<video controls/);
+  assert.match(css, /comm-attachment-preview-body audio/);
+  assert.match(css, /comm-attachment-preview-body video/);
+});
+
+
+test("mail regex escape helper stays syntactically intact", () => {
+  assert.match(page, /function regexEscape\(value\)/);
+  assert.match(page, /replace\(\/\[\.\*\+\?\^\$\{\}\(\)\|\[\\\]\\\\\]\/g, "\\\\$&"\)/);
+  assert.doesNotMatch(page, /\\function regexEscape/);
+});
+
+
+test("Gmail mailbox refreshes silently without page reload and keeps folder UX Gmail-like", () => {
+  assert.match(page, /window\.setInterval\(run, 20_000\)/);
+  assert.match(page, /visibilitychange/);
+  assert.match(page, /syncMailFolder\(selectedAccountId, folderId, \{ quick: true \}\)/);
+  assert.match(page, /defaultSentFolderId/);
+  assert.match(page, /folderDisplayName/);
+  assert.match(page, /Gelen Kutusu/);
+  assert.match(page, /Gönderilmiş Postalar/);
+  assert.match(page, /Çöp Kutusu/);
+  assert.match(page, /Kategoriler/);
+  assert.match(page, /Etiketler/);
+  assert.match(css, /comm-folder-group/);
+  assert.match(css, /comm-folder-subheading/);
+});
+
+
+test("trash and spam are visually excluded from unread badges and unsafe delete controls", () => {
+  assert.match(page, /selectedFolderIsTrash/);
+  assert.match(page, /selectedFolderIsJunk/);
+  assert.match(page, /selectedFolderCountsUnread/);
+  assert.match(page, /!selectedFolderIsTrash && !selectedFolderIsJunk/);
+  assert.match(page, /\["TRASH","JUNK"\]\.includes\(folderType\(folder\)\)/);
+  assert.match(page, /!selectedFolderIsTrash \? <button[^>]+messageAction\("DELETE"\)/);
+});
