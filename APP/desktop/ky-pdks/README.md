@@ -4,9 +4,11 @@ KY ERP'nin PDKS modülüyle aynı D1 iş verisini kullanan gerçek Windows masa�
 
 ## Kurulan ürün
 
-- `KY PDKS Desktop.exe`: PDKS-only WPF masaüstü uygulaması.\n- `KY ERP Desktop.exe`: aynı build zincirinden üretilen tam ERP Windows kabuğu.
+- `KY PDKS Desktop.exe`: PDKS-only WPF masaüstü uygulaması.
+- `KY ERP Desktop.exe`: aynı build zincirinden üretilen tam ERP Windows kabuğu.
 - `KYERP.PDKS.Agent`: Windows hizmeti; uygulama kapalı olsa bile kart hareketini yerelde toplamaya devam eder.
-- PDKS Setup: `KY-PDKS-Desktop-Setup-1.8.0.exe`.\n- Tam ERP Setup: `KY-ERP-Desktop-Setup-1.8.0.exe`.
+- PDKS Setup: `KY-PDKS-Desktop-Setup-1.8.0.exe`.
+- Tam ERP Setup: `KY-ERP-Desktop-Setup-1.8.0.exe`.
 - Yerel DB: `C:\ProgramData\KY ERP\PDKS\Data\pdks.db`.
 - Import/Archive/Reject/Backup/Logs/Reports: `C:\ProgramData\KY ERP\PDKS` altında.
 - ERP API: `https://api.kyerp.net`.
@@ -29,7 +31,7 @@ KY ERP'nin PDKS modülüyle aynı D1 iş verisini kullanan gerçek Windows masa�
 
 ## Kart kaynağı ve offline çalışma
 
-Agent aynı çekirdekte `HEDEF_TR500`, `FILE`, `TCP_SERVER`, `TCP_CLIENT` ve `SERIAL/COM` kaynaklarını destekler. Varsayılan Hedef/TR500 akışı `F:\Ekin\bilgi.dat` dosyasını salt okunur biçimde takip eder; kaynak dosyayı taşımaz veya silmez.
+Agent aynı çekirdekte `HEDEF_TR500`, `FILE`, `TCP_SERVER`, `TCP_CLIENT` ve `SERIAL/COM` kaynaklarını destekler. Hakan Emprime işyeri için doğrulanan Hedef PDKS akışı `C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt` dosyasını salt okunur biçimde takip eder; kaynak dosyayı taşımaz, silmez veya değiştirmez.
 
 Tanımlı satır örnekleri:
 
@@ -65,8 +67,10 @@ Build zinciri restore → Shared/Agent/Desktop Release build → xUnit → self-
 Başarılı çıktı:
 
 ```text
-APP\desktop\ky-pdks\dist\setup\KY-PDKS-Setup-1.3.0.exe
-APP\desktop\ky-pdks\dist\setup\KY-PDKS-Setup-1.3.0.exe.sha256.txt
+APP\desktop\ky-pdks\dist\setup\KY-PDKS-Desktop-Setup-1.8.0.exe
+APP\desktop\ky-pdks\dist\setup\KY-PDKS-Desktop-Setup-1.8.0.exe.sha256.txt
+APP\desktop\ky-pdks\dist\setup\KY-ERP-Desktop-Setup-1.8.0.exe
+APP\desktop\ky-pdks\dist\setup\KY-ERP-Desktop-Setup-1.8.0.exe.sha256.txt
 APP\desktop\ky-pdks\dist\setup\build-info.json
 ```
 
