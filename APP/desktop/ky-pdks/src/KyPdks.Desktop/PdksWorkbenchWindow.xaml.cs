@@ -632,7 +632,8 @@ public partial class PdksWorkbenchWindow : Window
 
     private void OpenDeviceButton_Click(object sender, RoutedEventArgs e)
     {
-        var window = new PdksDeviceWindow { Owner = this };
+        var readOnly = _serverAudit || string.IsNullOrWhiteSpace(_token) || !CanWrite;
+        var window = new PdksDeviceWindow(readOnly) { Owner = this };
         window.ShowDialog();
     }
 
