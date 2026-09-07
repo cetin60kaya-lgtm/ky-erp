@@ -7,6 +7,7 @@ import PdksDefinitionsCenter from "../pdks/PdksDefinitionsCenter";
 import PdksLiveHome from "../pdks/PdksLiveHome";
 import PdksPersonnelDesk from "../pdks/PdksPersonnelDesk";
 import PdksReportCenter from "../pdks/PdksReportCenter";
+import PdksTransferCenter from "../pdks/PdksTransferCenter";
 import PdksRulesCenter from "../pdks/PdksRulesCenter";
 import PdksPageV2 from "./PdksPageV2";
 import "./pdks-shell.css";
@@ -144,6 +145,8 @@ export default function PdksPage(props) {
           </>
         ) : activeTab === "ai-kontrol" ? (
           <PdksAiControlCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
+        ) : activeTab === "bilgi-aktar" ? (
+          <PdksTransferCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : deviceCenterTab ? (
           <PdksDeviceCenter activeTab={activeTab} activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : personnelDeskTab ? (
@@ -155,11 +158,7 @@ export default function PdksPage(props) {
         ) : reportCenterTab ? (
           <PdksReportCenter activeMainCompany={activeMainCompany} isAuditAccount={isAuditAccount} />
         ) : (
-          <>
-            {!isAuditAccount && ["bilgi-aktar"].includes(activeTab)
-              ? <QuickAssistant disabled={false} mainCompanyId={mainCompanyId} /> : null}
-            <PdksPageV2 {...props} />
-          </>
+          <PdksPageV2 {...props} />
         )}
       </main>
     </div>
