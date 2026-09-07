@@ -174,6 +174,7 @@ public partial class PdksTerminalSetupWindow : Window
         config.AutoSync = AutoSyncCheck.IsChecked != false;
         config.FileImportEnabled = FileImportCheck.IsChecked != false;
         _store.Save(config);
+        File.WriteAllText(_paths.SetupCompletedFile, DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
 
         await TestAsync(silent: true);
         StatusText.Text = $"Kaydedildi · {config.DeviceName} · {config.NormalizedMode} · {config.Direction} · Agent ayarı otomatik okuyacak.";
