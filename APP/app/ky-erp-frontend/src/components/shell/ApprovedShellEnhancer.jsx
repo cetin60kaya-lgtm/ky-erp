@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-react";
+import { BellRing, PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-react";
+import PhoneApprovalSetup from "./PhoneApprovalSetup";
 import "./approved-shell-menu.css";
 
 const STORAGE_KEY = "kyerp-approved-work-tabs-v1";
@@ -97,6 +98,7 @@ export default function ApprovedShellEnhancer() {
   const [tabs, setTabs] = useState(readTabs);
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(readMenuOpen);
+  const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
 
   useEffect(() => {
     const resolveTargets = () => {
@@ -203,6 +205,15 @@ export default function ApprovedShellEnhancer() {
               >
                 {menuOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
               </button>
+              <button
+                type="button"
+                className="approved-phone-approval-button"
+                onClick={() => setPhoneApprovalOpen(true)}
+                aria-label="Telefon onayı ayarları"
+                title="Telefonla Onay"
+              >
+                <BellRing size={18} />
+              </button>
               <form className="approved-global-search" onSubmit={submitSearch}>
                 <Search size={17} aria-hidden="true" />
                 <input
@@ -264,6 +275,8 @@ export default function ApprovedShellEnhancer() {
             targets.main,
           )
         : null}
+
+      {phoneApprovalOpen ? <PhoneApprovalSetup onClose={() => setPhoneApprovalOpen(false)} /> : null}
     </>
   );
 }
