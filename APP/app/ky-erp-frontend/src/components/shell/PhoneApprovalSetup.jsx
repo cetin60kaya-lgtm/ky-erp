@@ -39,8 +39,12 @@ function defaultDeviceLabel() {
 
 async function activeServiceWorker() {
   if (!("serviceWorker" in navigator)) throw new Error("Bu tarayıcı Service Worker desteklemiyor.");
-  const registration = await navigator.serviceWorker.ready;
-  if (!registration?.active) throw new Error("KY ERP bildirim servisi henüz hazır değil. Sayfayı bir kez yenileyin.");
+  await navigator.serviceWorker.register("/kyerp-push-sw.js", { scope: "/" });
+  const registration = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error("KY ERP bildirim servisi zamanında hazırlanamadı.")), 8000)),
+  ]);
+  if (!registration?.active) throw new Error("KY ERP bildirim servisi henüz hazır değil. Uygulamayı kapatıp Ana Ekrandaki KY ERP ikonundan yeniden açın.");
   return registration;
 }
 
