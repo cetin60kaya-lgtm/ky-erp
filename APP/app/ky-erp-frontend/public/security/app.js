@@ -27,6 +27,7 @@ function applicationServerKey(value){return base64UrlToBytes(value)}
 function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
 async function readDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readonly");const req=tx.objectStore(STORE).get(KEY);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
 async function writeDevice(value){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(value,KEY);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error)})}
+async function clearDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).delete(KEY);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error)})}
 async function jsonFetch(path,options={}){const response=await fetch(`${API_BASE}${path}`,{method:options.method||"GET",headers:{Accept:"application/json",...(options.body!==undefined?{"Content-Type":"text/plain;charset=UTF-8"}:{}),...(options.headers||{})},body:options.body===undefined?undefined:JSON.stringify(options.body),cache:"no-store",mode:"cors"});const payload=await response.json().catch(()=>null);if(!response.ok||payload?.ok===false){const error=new Error(payload?.error?.message||`İşlem tamamlanamadı (HTTP ${response.status}).`);error.code=payload?.error?.code||"";throw error}return payload}
 async function deviceFetch(path,options={}){const device=await readDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("Bu cihaz henüz KY ERP Güvenlik cihazı olarak kayıtlı değil.");return jsonFetch(path,{...options,headers:{"X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken,...(options.headers||{})}})}
 async function ensureWorker(){if(!("serviceWorker" in navigator))throw new Error("Bu tarayıcı güvenlik bildirimlerini desteklemiyor.");registration=await navigator.serviceWorker.register("/security/sw.js",{scope:"/security/"});await navigator.serviceWorker.ready;return registration}
@@ -45,9 +46,26 @@ async function connectDevice(){if(busy)return;const code=String(els.enrollmentCo
     let subscription=await worker.pushManager.getSubscription();if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationServerKey(config.applicationServerKey)});
     const keys=await createSigningKey();
     let localUnlockCredentialId="";try{localUnlockCredentialId=await createLocalUnlock()}catch{localUnlockCredentialId=""}
-    const response=await jsonFetch("/auth/push/security-enrollment/complete",{method:"POST",body:{enrollmentId:enrollmentQuery.id,enrollmentToken:enrollmentQuery.token,enrollmentCode:code,password,deviceLabel:String(els.deviceLabel.value||defaultDeviceLabel()).trim(),subscription:subscription.toJSON(),decisionPublicKeyJwk:keys.publicJwk}});
+
+    // Backend cihazını aktif etmeden önce telefonun özel imza anahtarını gerçekten
+    // kalıcı saklayabildiğini kanıtla. IndexedDB başarısızsa sunucuda yarım cihaz oluşmaz.
+    await writeDevice({
+      pendingEnrollment:true,
+      signingPrivateKey:keys.privateKey,
+      localUnlockCredentialId,
+      savedAt:new Date().toISOString()
+    });
+
+    let response;
+    try{
+      response=await jsonFetch("/auth/push/security-enrollment/complete",{method:"POST",body:{enrollmentId:enrollmentQuery.id,enrollmentToken:enrollmentQuery.token,enrollmentCode:code,password,deviceLabel:String(els.deviceLabel.value||defaultDeviceLabel()).trim(),subscription:subscription.toJSON(),decisionPublicKeyJwk:keys.publicJwk}});
+    }catch(error){
+      await clearDevice().catch(()=>{});
+      throw error;
+    }
+
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v1",savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v1.1",savedAt:new Date().toISOString()};
     await writeDevice(record);cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";toast(localUnlockCredentialId?"Cihaz bağlandı. Face ID / parmak izi / PIN ile onay hazır.":"Cihaz bağlandı. Güvenli cihaz imzası hazır.");await refreshState();worker.active?.postMessage({type:"KYERP_SECURITY_REFRESH"});
   }catch(error){toast(error?.message||"Güvenlik uygulaması kurulamadı.");setBadge("Kurulum hatası","bad")}finally{busy=false;els.connectButton.disabled=false;els.connectButton.textContent="Bildirim + Cihaz Güvenliğini Kur"}}
 function approvalCard(item){const article=document.createElement("article");article.className="approval-item";const when=item.requestedAt?new Date(item.requestedAt).toLocaleString("tr-TR"):"";article.innerHTML=`<div><h3>${escapeHtml(item.title||"KY ERP giriş isteği")}</h3><p>${escapeHtml(item.body||"Yeni giriş isteği.")}</p><small>${escapeHtml(when)}</small></div><div class="approval-actions"><button class="approve" type="button">Onayla</button><button class="deny" type="button">Reddet</button></div>`;article.querySelector(".approve").addEventListener("click",()=>decide(item,"APPROVE"));article.querySelector(".deny").addEventListener("click",()=>decide(item,"DENY"));return article}

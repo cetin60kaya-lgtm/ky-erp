@@ -20,6 +20,7 @@ const companySettings = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminC
 const phoneSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalSetup.jsx");
 const phoneInbox = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalInboxBridge.jsx");
 const securityApp = repoFile("APP/app/ky-erp-frontend/public/security/app.js");
+const securityHtml = repoFile("APP/app/ky-erp-frontend/public/security/index.html");
 const securityWorker = repoFile("APP/app/ky-erp-frontend/public/security/sw.js");
 const securityManifest = repoFile("APP/app/ky-erp-frontend/public/security/manifest.webmanifest");
 
@@ -95,7 +96,7 @@ test("authenticated shell creates one-time security-app enrollment while passwor
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
   assert.match(push, /AUTH_PUSH_SECURITY_ENROLLMENT/);
   assert.match(securityApp, /security-enrollment\/complete/);
-  assert.match(securityApp, /current-password/);
+  assert.match(securityHtml, /autocomplete="current-password"/);
 });
 
 test("dedicated iPhone and Android security app opens the app for approval instead of relying on notification action buttons", () => {
