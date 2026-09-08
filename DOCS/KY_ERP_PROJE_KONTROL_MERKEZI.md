@@ -251,7 +251,7 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Onay kapsamı backend'de korunur: Süper Yönetici tüm firmaların onaylarını görür; Firma Sahibi / İşveren yalnız kendi firmasının onaylarını görür ve sonuçlandırır.
 - Telefon giriş push akışı sağlamlaştırıldı: aynı kullanıcı + aynı tarayıcı/cihaz için mevcut bekleyen challenge yeniden kullanılır; üst üste yeni challenge/push üretilmez. Service Worker tek sabit bildirim etiketi kullanır, eski yığılmış bildirimleri temizler ve sonuç için ikinci bir push üretmez.
 - Güvenlik sınırı korunur: kullanıcının **kendi telefon MFA onayı** genel oturum yetkisiyle bypass edilmez; trusted-device capability akışı devam eder. Bildirim Merkezi doğrudan karar butonları yönetsel/business onayları içindir.
-- Aktif feature branch: `fix/profile-notification-approvals-final-20260908`. D1 migration yoktur. Production merge/deploy bu kayıtla yapılmış sayılmaz; canonical Cloudflare Git Integration yolu geçerlidir.
+- Aktif feature branch: `fix/profile-notification-approvals-final-20260908`; PR **#255**. D1 migration yoktur. Production merge/deploy bu kayıtla yapılmış sayılmaz; canonical Cloudflare Git Integration yolu geçerlidir.
 
 ## Son güncelleme
 
