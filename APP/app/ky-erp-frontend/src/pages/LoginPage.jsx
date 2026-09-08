@@ -486,6 +486,10 @@ export default function LoginPage() {
 
         <section className="auth-card-panel">
           <div className="auth-card">
+            <div className="auth-mobile-brand" aria-hidden="true">
+              <span className="auth-mobile-logo">KY</span>
+              <div><strong>KY ERP</strong><small>Güvenli Giriş</small></div>
+            </div>
             <div className="auth-card-head">
               <div>
                 <span className="auth-section-label">KY ERP / GİRİŞ</span>
