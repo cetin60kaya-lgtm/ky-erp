@@ -183,31 +183,74 @@ export function registerAdminBuildCenterRoutes(app:any) {
   app.get("/api/admin/build-center/status", async(c:any)=>{
     const owner = await ownerCurrent(c);
     if (!owner) return c.json(errorBody("OWNER_ONLY","Sürüm Merkezi yalnız uygulama sahibine açıktır."),403);
-    const [tokenConfig,heartbeat,jobs] = await Promise.all([
-      jsonGet(c.env.FILES,TOKEN_KEY),
-      jsonGet(c.env.FILES,HEARTBEAT_KEY),
+    const [agents,heartbeats,jobs] = await Promise.all([
+      listJsonPrefix(c.env.FILES,AGENT_PREFIX),
+      listJsonPrefix(c.env.FILES,HEARTBEAT_PREFIX),
       listJobObjects(c.env.FILES),
     ]);
+    const activeAgents=agents.filter((row)=>row?.active!==false);
+    const heartbeat=heartbeats.sort((a,b)=>text(b.lastSeenAt).localeCompare(text(a.lastSeenAt)))[0]||null;
     return c.json({ok:true,data:{
-      agentConfigured:Boolean(tokenConfig?.tokenHash),
-      tokenCreatedAt:tokenConfig?.createdAt||null,
+      agentConfigured:activeAgents.length>0,
+      agentCount:activeAgents.length,
+      agents:activeAgents.map((row)=>({agentId:row.agentId,agentName:row.agentName,createdAt:row.createdAt,lastEnrolledAt:row.lastEnrolledAt,active:row.active!==false})),
       heartbeat,
-      jobs,
+      jobs:jobs.slice(0,MAX_JOBS),
       storage:"R2:FILES/build-center",
     }});
   });
 
-  app.post("/api/admin/build-center/agent-token", async(c:any)=>{
+  app.post("/api/admin/build-center/agent-enrollment", async(c:any)=>{
     const owner = await ownerCurrent(c);
-    if (!owner) return c.json(errorBody("OWNER_ONLY","Build Agent anahtarı yalnız uygulama sahibi tarafından üretilebilir."),403);
-    const token = newAgentToken();
-    await jsonPut(c.env.FILES,TOKEN_KEY,{
-      tokenHash:await sha256(token),
-      createdAt:nowIso(),
+    if (!owner) return c.json(errorBody("OWNER_ONLY","Build Agent kurulumu yalnız uygulama sahibi tarafından başlatılabilir."),403);
+    const enrollmentId=crypto.randomUUID();
+    const enrollmentCode=newSecret("kye_");
+    const createdAt=nowIso();
+    const expiresAt=new Date(Date.now()+ENROLLMENT_TTL_MS).toISOString();
+    await jsonPut(c.env.FILES,enrollmentKey(enrollmentId),{
+      enrollmentId,
+      codeHash:await sha256(enrollmentCode),
+      createdAt,
+      expiresAt,
+      usedAt:null,
+      usedByAgentId:"",
       createdBy:text(owner.id),
       createdByName:text(owner.fullName||owner.full_name||owner.username),
     });
-    return c.json({ok:true,data:{token,shownOnce:true,createdAt:nowIso()}});
+    return c.json({ok:true,data:{enrollmentId,enrollmentCode,expiresAt,shownOnce:true}});
+  });
+
+  app.post("/api/build-agent/enroll", async(c:any)=>{
+    const body=await bodyOf(c);
+    const enrollmentId=text(body.enrollmentId);
+    const enrollmentCode=text(body.enrollmentCode);
+    const requestedAgentId=safeName(body.agentId||crypto.randomUUID());
+    const agentName=text(body.agentName||"WINDOWS-BUILDER").slice(0,180);
+    if(!enrollmentId||!enrollmentCode||!requestedAgentId)return c.json(errorBody("BUILD_AGENT_ENROLLMENT_INVALID","Agent enrollment bilgileri eksik."),400);
+
+    const key=enrollmentKey(enrollmentId);
+    const versioned=await jsonGetVersioned(c.env.FILES,key);
+    const enrollment=versioned?.data;
+    if(!enrollment||!versioned?.etag)return c.json(errorBody("BUILD_AGENT_ENROLLMENT_NOT_FOUND","Agent enrollment kaydı bulunamadı."),404);
+    if(enrollment.usedAt||Date.parse(text(enrollment.expiresAt))<=Date.now())return c.json(errorBody("BUILD_AGENT_ENROLLMENT_EXPIRED","Agent enrollment kodu kullanılmış veya süresi dolmuş."),409);
+    if((await sha256(enrollmentCode))!==text(enrollment.codeHash))return c.json(errorBody("BUILD_AGENT_ENROLLMENT_INVALID","Agent enrollment kodu geçersiz."),401);
+
+    const claimed={...enrollment,usedAt:nowIso(),usedByAgentId:requestedAgentId};
+    const claimedObject=await jsonPutIfMatch(c.env.FILES,key,claimed,versioned.etag);
+    if(!claimedObject)return c.json(errorBody("BUILD_AGENT_ENROLLMENT_CONFLICT","Agent enrollment kodu başka bir işlem tarafından kullanıldı."),409);
+
+    const agentToken=newSecret("kyb_");
+    const record={
+      agentId:requestedAgentId,
+      agentName,
+      tokenHash:await sha256(agentToken),
+      active:true,
+      createdAt:nowIso(),
+      lastEnrolledAt:nowIso(),
+      enrolledFromIp:text(c.req.header("CF-Connecting-IP")),
+    };
+    await jsonPut(c.env.FILES,agentKey(requestedAgentId),record);
+    return c.json({ok:true,data:{agentId:requestedAgentId,agentName,agentToken,shownOnce:true}});
   });
 
   app.post("/api/admin/build-center/jobs", async(c:any)=>{
