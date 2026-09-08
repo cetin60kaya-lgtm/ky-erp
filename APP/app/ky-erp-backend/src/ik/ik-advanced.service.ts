@@ -43,6 +43,9 @@ export class IkAdvancedService implements OnModuleInit {
     if (normalized.includes("MESAI")) return "Mesai";
     if (normalized.includes("PRIM")) return "Prim";
     if (normalized.includes("AVANS")) return "Avans";
+    if (normalized.includes("EKSIK") && normalized.includes("GUN")) return "Eksik gün";
+    if (normalized.includes("EKSIK") && normalized.includes("SAAT")) return "Eksik saat";
+    if (normalized.includes("DEVAMSIZ") || normalized.includes("GELMEDI")) return "Eksik gün";
     if (normalized.includes("KESINTI")) return "Özel kesinti";
     return raw;
   }
@@ -56,7 +59,11 @@ export class IkAdvancedService implements OnModuleInit {
     return this.norm(value).includes("AVANS");
   }
   private isDeductionType(value: any) {
-    return this.norm(value).includes("KESINTI");
+    const normalized = this.norm(value);
+    return normalized.includes("KESINTI")
+      || (normalized.includes("EKSIK") && (normalized.includes("GUN") || normalized.includes("SAAT")))
+      || normalized.includes("DEVAMSIZ")
+      || normalized.includes("GELMEDI");
   }
   private financePayrollEffect(type: string, fallback?: any) {
     const current = this.text(fallback);
@@ -64,6 +71,61 @@ export class IkAdvancedService implements OnModuleInit {
     if (this.isOvertimeType(type) || this.isPremiumType(type)) return "BORDRO_ARTIRIR";
     if (this.isAdvanceType(type) || this.isDeductionType(type)) return "BORDRO_AZALTIR";
     return "BORDROYA_YANSIR";
+  }
+
+  private absenceMode(type: any): "DAY" | "HOUR" | null {
+    const normalized = this.norm(type);
+    if (normalized.includes("EKSIK") && normalized.includes("SAAT")) return "HOUR";
+    if ((normalized.includes("EKSIK") && normalized.includes("GUN")) || normalized.includes("DEVAMSIZ") || normalized.includes("GELMEDI")) return "DAY";
+    return null;
+  }
+
+  private async personCardCalc(companyId: string, employeeId: string) {
+    const fileName = `${companyId}:${employeeId}`;
+    const row = (await (this.prisma as any).$queryRawUnsafe(
+      `SELECT data FROM json_store WHERE scope=? AND file_name=? LIMIT 1`,
+      "IK_PERSON_CARD_CALC", fileName,
+    ) as AnyRow[])[0];
+    try {
+      const parsed = JSON.parse(this.text(row?.data) || "{}");
+      return { deductionHourlyBase: this.number(parsed.deductionHourlyBase) || 300 };
+    } catch {
+      return { deductionHourlyBase: 300 };
+    }
+  }
+
+  private async savePersonCardCalc(companyId: string, employeeId: string, deductionHourlyBase: number) {
+    const id = `ik-person-card-calc:${companyId}:${employeeId}`;
+    const fileName = `${companyId}:${employeeId}`;
+    const data = JSON.stringify({ deductionHourlyBase, updatedAt: new Date().toISOString() });
+    await (this.prisma as any).$executeRawUnsafe(
+      `INSERT INTO json_store (id,scope,main_company_slug,file_name,data,created_at,updated_at)
+       VALUES (?, ?, NULL, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET scope=excluded.scope,main_company_slug=NULL,file_name=excluded.file_name,data=excluded.data,updated_at=CURRENT_TIMESTAMP`,
+      id, "IK_PERSON_CARD_CALC", fileName, data,
+    );
+  }
+
+  private async absenceDeduction(employeeId: string, mode: "DAY" | "HOUR", hoursValue: any) {
+    const row = (await (this.prisma as any).$queryRawUnsafe(
+      `SELECT salary, road_allowance, main_company_id FROM hr_monthly_employees WHERE id=? LIMIT 1`,
+      employeeId,
+    ) as AnyRow[])[0];
+    if (!row) throw new BadRequestException("Personel bulunamadı.");
+    const salary = Math.max(0, this.number(row.salary));
+    const road = Math.max(0, this.number(row.road_allowance));
+    const calc = await this.personCardCalc(this.text(row.main_company_id), employeeId);
+    const divisor = this.number(calc.deductionHourlyBase) || 300;
+    const salaryDaily = Math.round((salary / 30) * 100) / 100;
+    const roadDaily = Math.round((road / 30) * 100) / 100;
+    if (mode === "DAY") {
+      return { hours: 10, divisor, salaryCut: salaryDaily, roadCut: roadDaily, total: Math.round((salaryDaily + roadDaily) * 100) / 100 };
+    }
+    const hours = this.number(hoursValue);
+    if (hours <= 0 || hours > 10) throw new BadRequestException("Eksik saat 0 dan büyük ve en fazla 10 saat olmalıdır.");
+    const salaryCut = Math.round(((salary / divisor) * hours) * 100) / 100;
+    const roadCut = hours >= 10 ? roadDaily : 0;
+    return { hours, divisor, salaryCut, roadCut, total: Math.round((salaryCut + roadCut) * 100) / 100 };
   }
   private status(value: any) {
     const status = this.text(value || "G").toLocaleUpperCase("tr-TR");
@@ -424,9 +486,16 @@ export class IkAdvancedService implements OnModuleInit {
     const settings = ids.length ? await (this.prisma as any).$queryRawUnsafe(
       `SELECT * FROM ik_person_card_settings WHERE employee_id IN (${ids.map(() => "?").join(",")})`, ...ids,
     ) : [];
+    const calcRows = await (this.prisma as any).$queryRawUnsafe(
+      `SELECT file_name,data FROM json_store WHERE scope=?`, "IK_PERSON_CARD_CALC",
+    ) as AnyRow[];
+    const calcMap = new Map(calcRows.map((item) => [this.text(item.file_name), item]));
     const map = new Map((settings as AnyRow[]).map((row) => [row.employee_id, row]));
     return liveRows.map((row: AnyRow) => {
       const s = map.get(row.id) || {};
+      const calcRow = calcMap.get(`${row.mainCompanyId}:${row.id}`);
+      let calc: AnyRow = {};
+      try { calc = JSON.parse(this.text(calcRow?.data) || "{}"); } catch {}
       const hasSetting = map.has(row.id);
       const rawSgkStatus = this.norm(row.sgkStatus || "");
       const inferredSgkFollow = rawSgkStatus.includes("YOK") ? false : rawSgkStatus.includes("VAR") ? true : null;
@@ -437,6 +506,8 @@ export class IkAdvancedService implements OnModuleInit {
         status: s.active_passive || row.status || "AKTIF",
         hireDate: this.dateOnly(row.hireDate), exitDate: s.exit_date || "",
         salary: this.number(row.salary), roadAllowance: this.number(row.roadAllowance),
+        overtimeHourlyBase: this.number(row.overtimeHourlyBase) || 225,
+        deductionHourlyBase: this.number(calc.deductionHourlyBase) || 300,
         bankAmount: this.number(row.bankAmount), cashAmount: this.number(row.cashAmount),
         annualLeaveEntitlement: this.number(row.annualLeaveEntitlement), annualLeaveCarryover: this.number(row.annualLeaveCarryover),
         cardNo: s.card_no || "", identityNo: s.identity_no || "", payrollIncluded: s.payroll_included !== 0,
@@ -651,6 +722,11 @@ export class IkAdvancedService implements OnModuleInit {
     const employee = await (this.prisma as any).hrMonthlyEmployee.findUnique({ where: { id: employeeId } });
     if (!employee) throw new BadRequestException("Personel bulunamadı.");
     const companyId = this.companyCandidates(body)[0];
+    const existingCalc = await this.personCardCalc(companyId, employeeId);
+    const overtimeHourlyBase = this.number(body.overtimeHourlyBase ?? employee.overtimeHourlyBase) || 225;
+    const deductionHourlyBase = this.number(body.deductionHourlyBase ?? existingCalc.deductionHourlyBase) || 300;
+    if (overtimeHourlyBase <= 0) throw new BadRequestException("Mesai saat böleni sıfırdan büyük olmalıdır.");
+    if (deductionHourlyBase <= 0) throw new BadRequestException("Kesinti saat böleni sıfırdan büyük olmalıdır.");
     const cardNo = this.text(body.cardNo);
     if (cardNo) {
       const duplicate = (await (this.prisma as any).$queryRawUnsafe(
@@ -668,6 +744,7 @@ export class IkAdvancedService implements OnModuleInit {
       this.text(body.workType || employee.workType || "AYLIK"), body.sgkFollow === null ? 2 : body.sgkFollow === false ? 0 : 1,
       this.text(body.paymentType || employee.bankPaymentType || "BANKA_ELDEN"), this.text(body.note || employee.note || ""),
     );
+    await this.savePersonCardCalc(companyId, employeeId, deductionHourlyBase);
     const hireDate = this.dateOnly(body.hireDate || body.startDate || employee.hireDate);
     await (this.prisma as any).hrMonthlyEmployee.update({
       where: { id: employeeId },
@@ -679,6 +756,7 @@ export class IkAdvancedService implements OnModuleInit {
         hireDate: hireDate ? new Date(`${hireDate}T00:00:00.000Z`) : null,
         salary: this.number(body.salary ?? employee.salary),
         roadAllowance: this.number(body.roadAllowance ?? employee.roadAllowance),
+        overtimeHourlyBase,
         bankAmount: this.number(body.bankAmount ?? employee.bankAmount),
         cashAmount: this.number(body.cashAmount ?? employee.cashAmount),
         annualLeaveEntitlement: this.number(body.annualLeaveEntitlement ?? employee.annualLeaveEntitlement),
@@ -1137,15 +1215,12 @@ export class IkAdvancedService implements OnModuleInit {
       const salary = this.number(employee.salary);
       const road = this.number(employee.roadAllowance);
       const followsSgk = employee.sgkFollow === true;
-      const cutDays = followsSgk ? stats.unpaid + stats.absent + stats.report : 0;
-      const salaryCut = Math.round((salary / 30) * cutDays * 100) / 100;
-      const salaryPay = Math.max(0, salary - salaryCut);
-      const roadPay = !followsSgk
-        ? road
-        : policy.roadByActualPresence
-          ? Math.max(0, Math.round((road - (road / 30) * cutDays) * 100) / 100)
-          : road;
-      const roadCut = Math.max(0, road - roadPay);
+      // PDKS gun durumu SGK/puantaj kontroludur. Parasal devamsizlik kesintisi
+      // yalniz "Eksik gün / Eksik saat" finans hareketinden gelir; boylece cift kesinti olmaz.
+      const salaryCut = 0;
+      const salaryPay = salary;
+      const roadPay = road;
+      const roadCut = 0;
       const overtimeAmount = ownAdjustments.filter((row) => this.isOvertimeType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
       const premiumAmount = ownAdjustments.filter((row) => this.isPremiumType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
       const advanceAmount = ownAdjustments.filter((row) => this.isAdvanceType(row.adjustmentType)).reduce((sum, row) => sum + this.number(row.amount), 0);
@@ -1323,16 +1398,27 @@ export class IkAdvancedService implements OnModuleInit {
     const employeeIds = requestedIds.length ? [...new Set(requestedIds)] : [this.text(body.employeeId)].filter(Boolean);
     const type = this.normalizeAdjustmentType(body.adjustmentType || body.type || "Avans");
     const date = this.dateOnly(body.date || new Date());
-    const amount = this.number(body.amount);
+    const requestedAmount = this.number(body.amount);
+    const requestedHours = this.number(body.hourOrDay || body.hours);
     const note = this.text(body.note || body.reason);
+    const absenceMode = this.absenceMode(type);
     if (!employeeIds.length || !date) throw new BadRequestException("Personel ve tarih zorunlu.");
-    if (amount <= 0) throw new BadRequestException("Tutar sifirdan buyuk olmalidir.");
+    if (!absenceMode && requestedAmount <= 0) throw new BadRequestException("Tutar sifirdan buyuk olmalidir.");
     let saved = 0;
     for (const employeeId of employeeIds) {
+    const absence = absenceMode ? await this.absenceDeduction(employeeId, absenceMode, requestedHours) : null;
+    const amount = absence ? absence.total : requestedAmount;
+    const hourOrDay = absenceMode === "DAY" ? 1 : absence ? absence.hours : requestedHours;
+    const storedNote = absence
+      ? [absenceMode === "DAY"
+          ? `1 gün eksik · Maaş/30: ${absence.salaryCut.toFixed(2)} · Yol/30: ${absence.roadCut.toFixed(2)}`
+          : `Eksik saat: ${absence.hours}/10 · Kesinti böleni: ${absence.divisor} · Maaş kesintisi: ${absence.salaryCut.toFixed(2)} · Yol kesintisi: ${absence.roadCut.toFixed(2)}`,
+        note].filter(Boolean).join(" · ")
+      : note;
     await (this.prisma as any).$executeRawUnsafe(
       `INSERT INTO hr_monthly_adjustments_v2 (id, employee_id, date, adjustment_type, hour_or_day, amount, payroll_effect, note, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      randomUUID(), employeeId, date, type, this.number(body.hourOrDay || body.hours), amount, this.financePayrollEffect(type, body.payrollEffect), note, this.text(body.status || "APPROVED"),
+      randomUUID(), employeeId, date, type, hourOrDay, amount, this.financePayrollEffect(type, body.payrollEffect), storedNote, this.text(body.status || "APPROVED"),
     );
     if (this.isOvertimeType(type) && this.isWeekendDate(date)) {
       await this.saveException({ ...body, employeeId, workDate: date, status: "W", note: note || "Hafta sonu mesaisi", source: "MESAI" });
@@ -1343,8 +1429,8 @@ export class IkAdvancedService implements OnModuleInit {
       period: date.slice(0, 7),
       actionType: "FINANS_HAREKETI",
       sourceScreen: "Mesai • Avans • Kesinti",
-      newValue: { type, date, amount, hourOrDay: this.number(body.hourOrDay || body.hours) },
-      reason: note || `${type} hareketi kaydedildi`,
+      newValue: { type, date, amount, hourOrDay },
+      reason: storedNote || `${type} hareketi kaydedildi`,
     });
     saved += 1;
     }
@@ -1366,14 +1452,24 @@ export class IkAdvancedService implements OnModuleInit {
     const employeeId = this.text(body.employeeId || current.employee_id);
     if (!employeeId) throw new BadRequestException("Personel zorunlu.");
     const type = this.normalizeAdjustmentType(body.adjustmentType || body.type || current.adjustment_type);
-    const amount = body.amount === undefined ? this.number(current.amount) : this.number(body.amount);
-    if (amount <= 0) throw new BadRequestException("Tutar sifirdan buyuk olmalidir.");
-    const hourOrDay = body.hourOrDay === undefined && body.hours === undefined
+    const requestedAmount = body.amount === undefined ? this.number(current.amount) : this.number(body.amount);
+    const requestedHours = body.hourOrDay === undefined && body.hours === undefined
       ? this.number(current.hour_or_day)
       : this.number(body.hourOrDay || body.hours);
-    const note = body.note === undefined && body.reason === undefined
+    const rawNote = body.note === undefined && body.reason === undefined
       ? this.text(current.note)
       : this.text(body.note || body.reason);
+    const absenceMode = this.absenceMode(type);
+    const absence = absenceMode ? await this.absenceDeduction(employeeId, absenceMode, requestedHours) : null;
+    const amount = absence ? absence.total : requestedAmount;
+    if (amount <= 0) throw new BadRequestException("Tutar sifirdan buyuk olmalidir.");
+    const hourOrDay = absenceMode === "DAY" ? 1 : absence ? absence.hours : requestedHours;
+    const note = absence
+      ? [absenceMode === "DAY"
+          ? `1 gün eksik · Maaş/30: ${absence.salaryCut.toFixed(2)} · Yol/30: ${absence.roadCut.toFixed(2)}`
+          : `Eksik saat: ${absence.hours}/10 · Kesinti böleni: ${absence.divisor} · Maaş kesintisi: ${absence.salaryCut.toFixed(2)} · Yol kesintisi: ${absence.roadCut.toFixed(2)}`,
+        rawNote].filter(Boolean).join(" · ")
+      : rawNote;
     const payrollEffect = this.financePayrollEffect(type, body.payrollEffect || current.payroll_effect);
     const status = this.text(body.status || current.status || "APPROVED");
     await (this.prisma as any).$executeRawUnsafe(
