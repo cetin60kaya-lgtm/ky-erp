@@ -81,7 +81,8 @@ test("IK refresh uses canonical personnel and latest-wins request guard", () => 
   assert.match(page, /canonicalEmployeeIds/);
   assert.match(page, /currentIds\.has\(item\.employeeId\)/);
 
-  assert.match(cloud, /rawEmployees: employees/);
+  assert.match(cloud, /rawEmployees: rawEmployeesWithCalc/);
+  assert.match(cloud, /IK_PERSON_CARD_CALC_SCOPE/);
   assert.match(cloud, /visibleEmployeeIds/);
   assert.match(cloud, /payroll: payroll\.filter/);
 });
@@ -112,11 +113,13 @@ test("payroll print HTML escapes employee-entered text and shows every payment c
   }
 });
 
-test("payroll payment balance cannot be bypassed and backend enforces the same contract", () => {
+test("payroll payment balance is auto-reconciled in UI while backend keeps the hard invariant", () => {
   const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.ok(page.includes("Banka + elden toplamı net ödenecek tutara eşit olmalıdır."));
+  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /const balancedSplit = reconcilePaymentSplit\(rowTotals\.net/);
+  assert.match(page, /const payment = reconcilePaymentSplit\(enteredTotals\.net/);
   assert.doesNotMatch(page, /Banka \+ elden net odeme ile eslesmiyor\. Devam edilsin mi/);
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(cloud, /calculatePayrollAmounts/);
@@ -345,4 +348,22 @@ test("final payroll save auto-reconciles bank cash and supports serial personnel
 
   // Backend still keeps the hard invariant; only the UI reconciles before posting.
   assert.match(cloud, /PAYMENT_TOTAL_MISMATCH/);
+});
+
+
+test("final payroll always reads live overtime advance deduction and garnishment movements", () => {
+  const page = frontend("pages/modules/IkAdvancedMonthly.jsx");
+
+  assert.match(page, /const overtime = system\.overtime/);
+  assert.match(page, /const advance = system\.advance/);
+  assert.match(page, /const deduction = system\.deduction/);
+  assert.match(page, /const garnishment = system\.garnishment/);
+  assert.match(page, /sourceChangedSinceSave/);
+  assert.match(page, /savedPaymentMatchesLiveNet/);
+  assert.match(page, /const liveBank = Math\.min\(liveTotals\.net, liveBankPlan\)/);
+  assert.match(page, /const useSavedPaymentSplit = !sourceChangedSinceSave && savedPaymentMatchesLiveNet/);
+
+  // planFor must be a pure live-source calculation; stale payroll snapshots cannot hide new movements.
+  assert.doesNotMatch(page, /const bank = saved\?\.final \? num\(saved\.final\.bank\)/);
+  assert.doesNotMatch(page, /const overtime = num\(saved\.final\.overtimeAmount\)/);
 });
