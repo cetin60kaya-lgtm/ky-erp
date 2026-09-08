@@ -39,18 +39,20 @@ test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", (
 });
 
 
-test("phone approval persists device capability and recovers missing local key", () => {
+test("phone approval is handed off to the dedicated KY ERP Security PWA", () => {
   const setup = read("./components/shell/PhoneApprovalSetup.jsx");
-  const inbox = read("./components/shell/PhoneApprovalInboxBridge.jsx");
-  const shell = read("./layouts/AppShellV3.jsx");
+  const securityApp = read("../public/security/app.js");
+  const securityWorker = read("../public/security/sw.js");
+  const securityManifest = read("../public/security/manifest.webmanifest");
 
-  assert.match(setup, /persistDeviceCredentials/);
-  assert.match(setup, /kyerp-push-security-v1/);
-  assert.match(setup, /await persistDeviceCredentials\(deviceCredentials\)/);
-  assert.match(inbox, /PUSH_DEVICE_NOT_CONFIGURED/);
-  assert.match(inbox, /Telefonu Yeniden Kaydet/);
-  assert.match(inbox, /kyerp:open-phone-approval-setup/);
-  assert.match(shell, /addEventListener\("kyerp:open-phone-approval-setup"/);
+  assert.match(setup, /security-enrollment\/start/);
+  assert.match(setup, /Yeni Kurulum Kodu Oluştur/);
+  assert.match(setup, /app\.kyerp\.net\/security/);
+  assert.match(securityManifest, /"id": "\/security\/"/);
+  assert.match(securityWorker, /tag:"kyerp-security-approval"/);
+  assert.match(securityWorker, /notificationclick/);
+  assert.match(securityApp, /signingPrivateKey/);
+  assert.match(securityApp, /navigator\.credentials\.get/);
 });
 
 
@@ -59,14 +61,20 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   const responsive = read("./styles/responsive-core.css");
   const setup = read("./components/shell/PhoneApprovalSetup.jsx");
   const manifest = read("../public/manifest.webmanifest");
+  const securityManifest = read("../public/security/manifest.webmanifest");
+  const securityApp = read("../public/security/app.js");
 
   assert.match(shell, /beforeinstallprompt/);
   assert.match(shell, /Uygulamayı Yükle/);
   assert.match(shell, /appinstalled/);
   assert.match(responsive, /data-layout-mode="phone"[\s\S]*shell-v3-icon\.notification/);
   assert.match(responsive, /shell-v3-install-button/);
-  assert.match(setup, /Android Telefon/);
-  assert.match(setup, /Android Tablet/);
+  assert.match(setup, /Android: Chrome\/Edge/);
+  assert.match(setup, /iPhone\/iPad/);
+  assert.match(securityApp, /Android Telefon/);
+  assert.match(securityApp, /Android Tablet/);
+  assert.match(securityManifest, /"display": "standalone"/);
+  assert.match(securityManifest, /"scope": "\/security\/"/);
   assert.match(manifest, /"display": "standalone"/);
   assert.match(manifest, /"shortcuts"/);
   assert.match(manifest, /Üretim İş Havuzu/);
