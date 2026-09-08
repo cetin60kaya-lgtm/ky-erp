@@ -466,12 +466,13 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
 
   const id = crypto.randomUUID();
   const token = randomToken(32);
+  const initialTokenHash = await sha256(token);
   let challenge = await storePut(c, PHONE_SCOPE, id, companySlug, {
     id,
     userId: text(user.id),
     mainCompanySlug: companySlug,
-    challengeTokenHash: await sha256(token),
-    challengeTokenHashes: [await sha256(token)],
+    challengeTokenHash: initialTokenHash,
+    challengeTokenHashes: [initialTokenHash],
     status: "PENDING",
     deviceLabel: sourceDeviceLabel,
     userAgent: sourceUserAgent,
