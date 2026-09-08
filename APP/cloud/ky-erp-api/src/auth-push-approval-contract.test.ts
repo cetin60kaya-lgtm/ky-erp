@@ -126,5 +126,17 @@ test("push approval hides raw browser ids and uses Android friendly device label
   assert.match(push, /friendlyDeviceLabel\(current\.deviceLabel, current\.userAgent\)/);
   assert.match(push, /friendlyDeviceLabel\(row\.device_label, row\.user_agent\)/);
   assert.match(serviceWorker, /vibrate: \[180, 80, 180\]/);
-  assert.match(serviceWorker, /KY ERP · Giriş Onaylandı/);
+  assert.match(serviceWorker, /tag: "kyerp-security-pending"/);
+  assert.match(serviceWorker, /renotify: false/);
+  assert.doesNotMatch(serviceWorker, /kyerp-result-/);
+});
+
+
+test("repeated login attempts reuse one pending phone challenge instead of stacking pushes", () => {
+  assert.match(push, /PHONE_LOGIN_APPROVAL_REUSED/);
+  assert.match(push, /pending\.length/);
+  assert.match(push, /duplicateLoginAt/);
+  assert.match(push, /Date\.now\(\) - lastNotifiedAt > 60_000/);
+  assert.match(serviceWorker, /tag: "kyerp-security-pending"/);
+  assert.match(serviceWorker, /renotify: false/);
 });
