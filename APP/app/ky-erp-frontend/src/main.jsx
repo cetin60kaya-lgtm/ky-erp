@@ -10,6 +10,14 @@ const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
 const rootElement = document.getElementById("root");
 
 async function renderErpApp() {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/kyerp-push-sw.js", { scope: "/" }).catch((error) => {
+        console.warn("KY ERP telefon bildirim servisi kaydedilemedi", error);
+      });
+    }, { once: true });
+  }
+
   const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
   installPersistedAuthBootstrap();
 
@@ -18,6 +26,7 @@ async function renderErpApp() {
 
   const [
     { default: AppV3 },
+    { default: PhoneApprovalInboxBridge },
     { ActiveCompanyProvider },
     { AuthProvider },
     { installAuthenticatedAssetBridge },
@@ -25,6 +34,7 @@ async function renderErpApp() {
     { installPersistentModalSizing },
   ] = await Promise.all([
     import("./AppV3.jsx"),
+    import("./components/shell/PhoneApprovalInboxBridge.jsx"),
     import("./context/ActiveCompanyContext"),
     import("./context/AuthContext"),
     import("./utils/installAuthenticatedAssetBridge"),
@@ -43,6 +53,7 @@ async function renderErpApp() {
   function RootApp() {
     return (
       <AuthProvider>
+        <PhoneApprovalInboxBridge />
         <ActiveCompanyProvider>
           <AppV3 />
         </ActiveCompanyProvider>
