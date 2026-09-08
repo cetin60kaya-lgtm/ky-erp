@@ -69,13 +69,16 @@ public sealed class PdksMachineApiClient : IDisposable
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("KY-PDKS-Agent/1.9.0");
     }
 
-    public async Task<PdksMachineCredential> EnrollAsync(string userToken, PdksPaths paths, CancellationToken ct = default)
+    public async Task<PdksMachineCredential> EnrollAsync(string userToken, PdksPaths paths, string mainCompanySlug, CancellationToken ct = default)
     {
+        mainCompanySlug = (mainCompanySlug ?? "").Trim().ToLowerInvariant();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/ik/personnel-control/device/enroll")
         {
-            Content = JsonContent.Create(new { deviceLabel = paths.DeviceLabel, machineName = Environment.MachineName }),
+            Content = JsonContent.Create(new { deviceLabel = paths.DeviceLabel, machineName = Environment.MachineName, mainCompanySlug }),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
+        if (!string.IsNullOrWhiteSpace(mainCompanySlug))
+            request.Headers.Add("X-KYERP-Tenant-Slug", mainCompanySlug);
         using var response = await _http.SendAsync(request, ct);
         var root = await ReadAsync(response, ct);
         var data = Unwrap(root);
