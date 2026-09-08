@@ -1,14 +1,6 @@
 name: KY PDKS Pro 1.9.0 Windows Release
 
 on:
-  push:
-    branches:
-      - codex/pdks-desktop-1.8.1-device-final-20260907
-    paths:
-      - "APP/desktop/ky-pdks/**"
-      - "APP/app/ky-erp-frontend/**"
-      - "APP/cloud/ky-erp-api/src/**"
-      - ".github/workflows/ky-pdks-pro-190-release.yml"
   workflow_dispatch:
 
 permissions:
