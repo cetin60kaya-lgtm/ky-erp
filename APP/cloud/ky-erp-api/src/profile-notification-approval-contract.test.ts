@@ -28,6 +28,9 @@ test("notification feed marks login and mail approvals as actionable", () => {
   assert.match(notifications, /actions: \["APPROVE", "REJECT"\]/);
   assert.match(notifications, /ownerRole\(current\?\.role\)/);
   assert.match(notifications, /companyAdminRole\(current\?\.role\)/);
+  assert.match(notifications, /friendlyDeviceLabel\(row\.device_label, row\.user_agent\)/);
+  assert.match(notifications, /Android telefon/);
+  assert.match(notifications, /Windows bilgisayar/);
 });
 
 test("platform admin module remains routable but is removed from left navigation", () => {
