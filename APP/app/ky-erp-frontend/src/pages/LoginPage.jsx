@@ -50,6 +50,7 @@ function StepRail({ stage }) {
     "MFA_REQUIRED",
     "MFA_LEGACY_REQUIRED",
     "MFA_SETUP",
+    "PHONE_APPROVAL_PENDING",
     "OWNER_RECOVERY_VERIFY",
   ].includes(stage);
   const sessionStage = ["APPROVAL_PENDING", "AUTHENTICATED", "RECOVERY_COMPLETE"].includes(stage);
@@ -124,6 +125,8 @@ export default function LoginPage() {
     startOwnerRecovery,
     verifyOwnerRecovery,
     checkApproval,
+    checkPhoneApproval,
+    useAuthenticatorFallback,
   } = useAuth();
 
   const [username, setUsername] = useState("");
@@ -352,6 +355,41 @@ export default function LoginPage() {
     }
   }
 
+  async function refreshPhoneApproval() {
+    if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
+    try {
+      const response = await checkPhoneApproval({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+      });
+      const nextStage = String(response?.stage || "").toUpperCase();
+      if (["PHONE_APPROVAL_DENIED", "PHONE_APPROVAL_EXPIRED"].includes(nextStage)) {
+        resetToCredentials(response?.message || "Telefon giriş onayı tamamlanmadı. Yeniden giriş yapın.");
+        return;
+      }
+      applyResponse(response);
+    } catch (requestError) {
+      if (String(requestError?.code || "") === "PHONE_APPROVAL_CONSUMED") return;
+      setError(requestError?.message || "Telefon onayı durumu kontrol edilemedi.");
+    }
+  }
+
+  async function switchToAuthenticator() {
+    if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
+    try {
+      setLoading(true);
+      setError("");
+      applyResponse(await useAuthenticatorFallback({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+      }));
+    } catch (requestError) {
+      setError(requestError?.message || "Authenticator yedek yöntemi açılamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function refreshApproval() {
     if (!flow.approvalId || !flow.approvalToken) return;
     try {
@@ -366,6 +404,13 @@ export default function LoginPage() {
       setError(requestError?.message || "Onay durumu kontrol edilemedi.");
     }
   }
+
+  useEffect(() => {
+    if (flow.stage !== "PHONE_APPROVAL_PENDING") return undefined;
+    const timer = window.setInterval(refreshPhoneApproval, 2800);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.stage, flow.phoneApprovalId, flow.phoneApprovalToken]);
 
   useEffect(() => {
     if (flow.stage !== "APPROVAL_PENDING") return undefined;
@@ -551,6 +596,23 @@ export default function LoginPage() {
               </div>
             ) : null}
 
+            {stage === "PHONE_APPROVAL_PENDING" ? (
+              <div className="auth-flow-block auth-centered">
+                <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
+                <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
+                <h3>Telefonunuza bildirim gönderildi</h3>
+                <p>KY ERP bildirimini açıp <strong>Onayla</strong> veya <strong>Reddet</strong> seçin. Kod yazmanız gerekmez.</p>
+                <div className="auth-notice">
+                  <strong>Güvenli bekleme</strong>
+                  <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>
+                </div>
+                <ErrorBox message={error} />
+                <button className="auth-primary" type="button" onClick={refreshPhoneApproval} disabled={loading}>Onayı Şimdi Kontrol Et</button>
+                <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>6 haneli kod ile devam et</button>
+                <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
+              </div>
+            ) : null}
+
             {stage === "MFA_REQUIRED" ? (
               <div className="auth-flow-block">
                 <div className="auth-policy-row">
@@ -654,7 +716,7 @@ export default function LoginPage() {
             ) : null}
 
             {![
-              "CREDENTIALS", "MFA_LEGACY_REQUIRED", "MFA_SETUP", "MFA_REQUIRED",
+              "CREDENTIALS", "MFA_LEGACY_REQUIRED", "MFA_SETUP", "MFA_REQUIRED", "PHONE_APPROVAL_PENDING",
               "OWNER_RECOVERY_VERIFY", "APPROVAL_PENDING", "RECOVERY_COMPLETE", "AUTHENTICATED",
             ].includes(stage) ? (
               <div className="auth-flow-block">
@@ -665,7 +727,7 @@ export default function LoginPage() {
 
             <div className="auth-card-footer">
               <span className="auth-dot" />
-              <span>Şifre, Turnstile, MFA ve oturum politikaları sunucu tarafından doğrulanır.</span>
+              <span>Şifre, Turnstile, telefon onayı, MFA ve oturum politikaları sunucu tarafından doğrulanır.</span>
             </div>
           </div>
         </section>
