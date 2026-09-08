@@ -812,6 +812,13 @@ export function registerAuthPolicyRoutes(app: any) {
     if (approval.status === "EXPIRED") {
       return c.json({ ok: true, stage: "PHONE_APPROVAL_EXPIRED", message: "Telefon giriş onayının süresi doldu." });
     }
+    if (approval.status === "SUPERSEDED") {
+      return c.json({
+        ok: true,
+        stage: "PHONE_APPROVAL_SUPERSEDED",
+        message: "Bu bekleme penceresinin yerine daha yeni bir giriş isteği açıldı. Eski istek reddedilmiş sayılmaz.",
+      });
+    }
     if (approval.status !== "APPROVED") {
       return c.json({
         ok: true,
