@@ -329,14 +329,26 @@
   gap: 7px;
 }
 
-.shell-v3-user > b {
+.shell-v3-user > b,
+.shell-v3-user-avatar {
   display: grid;
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  padding: 0;
   place-items: center;
+  border: 0;
   border-radius: 50%;
   background: #0d4a82;
   color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.shell-v3-user-avatar:focus-visible {
+  outline: 3px solid rgba(37,99,235,.2);
+  outline-offset: 2px;
 }
 
 .shell-v3-user strong,
@@ -850,4 +862,112 @@
 .shell-v3[data-layout-mode="phone"] .shell-v3-phone-approval-button span {
   display: inline !important;
   font-size: 12px;
+}
+
+
+/* Android / tablet ortak cihaz işlemleri: masaüstünde bulunan çekirdek aksiyonların
+   dokunmatik cihazlarda kaybolmasını engelleyen tek merkez. */
+.shell-v3-mobile-utilities-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:5200;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding:18px;
+  background:rgba(15,23,42,.46);
+  backdrop-filter:blur(2px);
+}
+.shell-v3-mobile-utilities{
+  width:min(560px,100%);
+  max-height:min(760px,92dvh);
+  overflow:auto;
+  border:1px solid #d9e3ee;
+  border-radius:20px;
+  background:#f8fbff;
+  box-shadow:0 26px 70px rgba(15,23,42,.3);
+  color:#17324d;
+}
+.shell-v3-mobile-utilities>header{
+  position:sticky;
+  top:0;
+  z-index:2;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  padding:16px 16px 13px;
+  border-bottom:1px solid #dfe7ef;
+  background:#fff;
+}
+.shell-v3-mobile-utilities>header div{display:grid;gap:2px}
+.shell-v3-mobile-utilities>header small{font-size:9px;font-weight:900;letter-spacing:.06em;color:#5d7fa1}
+.shell-v3-mobile-utilities>header strong{font-size:16px;color:#17324d}
+.shell-v3-mobile-utilities>header span{font-size:11px;color:#71859a}
+.shell-v3-mobile-utilities>header>button{
+  display:grid;
+  place-items:center;
+  width:42px;
+  min-width:42px;
+  height:42px;
+  border:1px solid #d4dfeb;
+  border-radius:11px;
+  background:#fff;
+  color:#48647d;
+  cursor:pointer;
+}
+.shell-v3-mobile-utilities-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  padding:14px;
+}
+.shell-v3-mobile-utilities-grid>button{
+  display:grid;
+  grid-template-columns:38px minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  min-height:76px;
+  padding:12px;
+  border:1px solid #dce6ef;
+  border-radius:14px;
+  background:#fff;
+  color:#24445f;
+  text-align:left;
+  cursor:pointer;
+}
+.shell-v3-mobile-utilities-grid>button>svg{
+  width:36px;
+  height:36px;
+  padding:8px;
+  border-radius:11px;
+  background:#edf5ff;
+  color:#2463da;
+}
+.shell-v3-mobile-utilities-grid>button span{display:grid;gap:3px;min-width:0}
+.shell-v3-mobile-utilities-grid>button strong{font-size:12px}
+.shell-v3-mobile-utilities-grid>button small{font-size:9px;line-height:1.35;color:#74879a}
+.shell-v3-mobile-utilities-grid>button.danger{border-color:#efd0d0;color:#8d3030}
+.shell-v3-mobile-utilities-grid>button.danger>svg{background:#fff0f0;color:#b33b3b}
+
+@media(max-width:760px){
+  .shell-v3-mobile-utilities-backdrop{
+    padding:0;
+    align-items:flex-end;
+  }
+  .shell-v3-mobile-utilities{
+    width:100vw;
+    max-height:92dvh;
+    border-width:1px 0 0;
+    border-radius:20px 20px 0 0;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .shell-v3-mobile-utilities-grid{grid-template-columns:1fr;padding:12px}
+  .shell-v3-mobile-utilities-grid>button{min-height:68px}
+}
+
+@media(pointer:coarse){
+  .shell-v3-user-avatar{min-width:44px!important;width:44px!important;height:44px!important}
+  .shell-v3-mobile-utilities-grid>button,
+  .shell-v3-mobile-utilities>header>button{touch-action:manipulation}
 }
