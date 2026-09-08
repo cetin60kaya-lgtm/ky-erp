@@ -606,27 +606,32 @@
 
 .shell-v3-notification-item {
   position: relative;
-  display: grid;
-  grid-template-columns: 6px minmax(0, 1fr) auto;
   width: 100%;
-  gap: 10px;
-  padding: 11px 12px;
-  border: 0;
   border-bottom: 1px solid #eef2f6;
   background: #fff;
-  text-align: left;
-  cursor: pointer;
-}
-
-.shell-v3-notification-item:hover {
-  background: #f8fafc;
 }
 
 .shell-v3-notification-item.unread {
   background: #f7fbff;
 }
 
-.shell-v3-notification-item > i {
+.shell-v3-notification-item-main {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  width: 100%;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell-v3-notification-item-main:hover {
+  background: #f8fafc;
+}
+
+.shell-v3-notification-item-main > i {
   width: 6px;
   height: 6px;
   margin-top: 5px;
@@ -634,19 +639,19 @@
   background: #94a3b8;
 }
 
-.shell-v3-notification-item.unread > i {
+.shell-v3-notification-item.unread .shell-v3-notification-item-main > i {
   background: #2563eb;
 }
 
-.shell-v3-notification-item.severity-critical > i {
+.shell-v3-notification-item.severity-critical .shell-v3-notification-item-main > i {
   background: #dc2626;
 }
 
-.shell-v3-notification-item.severity-warning > i {
+.shell-v3-notification-item.severity-warning .shell-v3-notification-item-main > i {
   background: #d97706;
 }
 
-.shell-v3-notification-item > span {
+.shell-v3-notification-item-main > span {
   min-width: 0;
 }
 
@@ -689,6 +694,39 @@
   color: #94a3b8;
   font-size: 8px;
   white-space: nowrap;
+}
+
+.shell-v3-notification-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding: 0 12px 10px 28px;
+}
+
+.shell-v3-notification-approval-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.shell-v3-notification-approval-actions button.approve {
+  border: 1px solid #9ac7aa;
+  background: #effaf3;
+  color: #17633a;
+}
+
+.shell-v3-notification-approval-actions button.deny {
+  border: 1px solid #e7b8b8;
+  background: #fff5f5;
+  color: #9b3030;
+}
+
+.shell-v3-notification-approval-actions button:disabled {
+  cursor: default;
+  opacity: .55;
 }
 
 .shell-v3-notification-empty {
