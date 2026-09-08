@@ -356,65 +356,126 @@ export function registerAdminBuildCenterRoutes(app:any) {
   });
 
   app.put("/api/build-agent/jobs/:id/file/:kind", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
-    const job = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
-    if (!job) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
-    const kind = upper(c.req.param("kind"));
-    if (!["LOG","SHA256","BUILDINFO"].includes(kind)) return c.json(errorBody("BUILD_FILE_KIND_INVALID","Dosya türü geçersiz."),400);
-    const fileName = safeName(c.req.query("fileName"));
-    const key = fileKeyFor(job,kind,fileName);
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const job=await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if(!job)return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+    if(text(job.agentId)&&text(job.agentId)!==text(auth.agent.agentId))
+      return c.json(errorBody("BUILD_AGENT_JOB_MISMATCH","Bu build başka bir Agent tarafından alınmış."),409);
+    if(["CANCELLED","SUCCESS"].includes(upper(job.status)))
+      return c.json(errorBody("BUILD_STATE_CONFLICT","Bu build artık dosya kabul etmiyor."),409);
+
+    const kind=upper(c.req.param("kind"));
+    if(!["LOG","SHA256","BUILDINFO"].includes(kind))return c.json(errorBody("BUILD_FILE_KIND_INVALID","Dosya türü geçersiz."),400);
+    const fileName=safeName(c.req.query("fileName"));
+    const key=fileKeyFor(job,kind,fileName);
     await c.env.FILES.put(key,c.req.raw.body,{httpMetadata:{contentType:c.req.header("content-type")||"application/octet-stream"}});
+
     const patch:any={};
     if(kind==="LOG")patch.logKey=key;
     if(kind==="SHA256")patch.sha256Key=key;
     if(kind==="BUILDINFO")patch.buildInfoKey=key;
-    const next=await updateJob(c,job.id,patch);
-    return c.json({ok:true,data:{key,job:next}});
+    const result=await updateJobAtomic(c,job.id,patch);
+    if(!result.ok)return c.json(errorBody("BUILD_STATE_CONFLICT","Build durumu değişti; dosya kaydı bağlanamadı."),409);
+    return c.json({ok:true,data:{key,job:result.current}});
   });
 
   app.post("/api/build-agent/jobs/:id/multipart/start", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
-    const job = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
-    if (!job) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
-    const body = await bodyOf(c);
-    const fileName = safeName(body.fileName||("KY-PDKS-Pro-Setup-"+job.version+".exe"));
-    const key = fileKeyFor(job,"ARTIFACT",fileName);
-    const upload = await c.env.FILES.createMultipartUpload(key,{httpMetadata:{contentType:text(body.contentType)||"application/octet-stream"},customMetadata:{buildId:job.id,product:job.product,version:job.version}});
-    await updateJob(c,job.id,{status:"UPLOADING",message:"Setup R2'ye yükleniyor.",artifactFileName:fileName,artifactPendingKey:key});
-    return c.json({ok:true,data:{key,uploadId:upload.uploadId}});
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const job=await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if(!job)return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+    if(text(job.agentId)!==text(auth.agent.agentId))
+      return c.json(errorBody("BUILD_AGENT_JOB_MISMATCH","Bu build başka bir Agent tarafından alınmış."),409);
+    if(!["PACKAGING","UPLOADING"].includes(upper(job.status)))
+      return c.json(errorBody("BUILD_STATE_CONFLICT","Artifact yüklemesi için build paketleme aşamasında olmalıdır."),409);
+
+    const body=await bodyOf(c);
+    const fileName=safeName(body.fileName||("KY-PDKS-Pro-Setup-"+job.version+".exe"));
+    const expectedBytes=Number(body.totalBytes||0);
+    const expectedSha256=text(body.sha256).toLowerCase();
+    if(!Number.isSafeInteger(expectedBytes)||expectedBytes<=0||!/^[a-f0-9]{64}$/.test(expectedSha256))
+      return c.json(errorBody("BUILD_ARTIFACT_METADATA_INVALID","Artifact boyutu ve SHA-256 bilgisi zorunludur."),400);
+
+    const key=fileKeyFor(job,"ARTIFACT",fileName);
+    const upload=await c.env.FILES.createMultipartUpload(key,{
+      httpMetadata:{contentType:text(body.contentType)||"application/octet-stream"},
+      customMetadata:{buildId:job.id,product:job.product,version:job.version,sha256:expectedSha256}
+    });
+    const result=await updateJobAtomic(c,job.id,{
+      status:"UPLOADING",message:"Setup R2'ye yükleniyor.",artifactFileName:fileName,
+      artifactPendingKey:key,artifactUploadId:upload.uploadId,
+      expectedArtifactBytes:expectedBytes,expectedArtifactSha256:expectedSha256
+    });
+    if(!result.ok){
+      try{await upload.abort();}catch{}
+      return c.json(errorBody("BUILD_STATE_CONFLICT","Build durumu değişti; artifact yüklemesi başlatılmadı."),409);
+    }
+    return c.json({ok:true,data:{key,uploadId:upload.uploadId,expectedBytes,expectedSha256}});
   });
 
   app.put("/api/build-agent/jobs/:id/multipart/part", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
-    const job = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
-    if (!job) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
-    const key = text(c.req.query("key")), uploadId=text(c.req.query("uploadId"));
-    const partNumber = Number(c.req.query("partNumber")||0);
-    if (!key.startsWith(ROOT+"artifacts/") || key!==text(job.artifactPendingKey) || !uploadId || !Number.isInteger(partNumber) || partNumber<1 || partNumber>10000) {
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const job=await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if(!job)return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+    if(text(job.agentId)!==text(auth.agent.agentId))
+      return c.json(errorBody("BUILD_AGENT_JOB_MISMATCH","Bu build başka bir Agent tarafından alınmış."),409);
+
+    const key=text(c.req.query("key")),uploadId=text(c.req.query("uploadId"));
+    const partNumber=Number(c.req.query("partNumber")||0);
+    if(upper(job.status)!=="UPLOADING"||key!==text(job.artifactPendingKey)||uploadId!==text(job.artifactUploadId)
+      ||!Number.isInteger(partNumber)||partNumber<1||partNumber>10000)
       return c.json(errorBody("BUILD_UPLOAD_PART_INVALID","Multipart upload parametreleri geçersiz."),400);
-    }
-    const upload = c.env.FILES.resumeMultipartUpload(key,uploadId);
-    const part = await upload.uploadPart(partNumber,c.req.raw.body);
+
+    const upload=c.env.FILES.resumeMultipartUpload(key,uploadId);
+    const part=await upload.uploadPart(partNumber,c.req.raw.body);
     return c.json({ok:true,data:{partNumber:part.partNumber,etag:part.etag}});
   });
 
   app.post("/api/build-agent/jobs/:id/multipart/complete", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
-    const job = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
-    if (!job) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
-    const body = await bodyOf(c);
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const job=await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if(!job)return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+    if(text(job.agentId)!==text(auth.agent.agentId))
+      return c.json(errorBody("BUILD_AGENT_JOB_MISMATCH","Bu build başka bir Agent tarafından alınmış."),409);
+
+    const body=await bodyOf(c);
     const key=text(body.key),uploadId=text(body.uploadId),parts=Array.isArray(body.parts)?body.parts:[];
-    if (!key || !uploadId || !parts.length || key!==text(job.artifactPendingKey)) return c.json(errorBody("BUILD_UPLOAD_COMPLETE_INVALID","Multipart tamamlanma bilgisi geçersiz."),400);
-    const upload = c.env.FILES.resumeMultipartUpload(key,uploadId);
-    const object = await upload.complete(parts.map((row:any)=>({partNumber:Number(row.partNumber),etag:text(row.etag)})));
-    const next = await updateJob(c,job.id,{artifactKey:key,artifactPendingKey:"",artifactSize:Number(object.size||0),message:"Setup R2 artifact hazır."});
-    return c.json({ok:true,data:next});
+    if(upper(job.status)!=="UPLOADING"||key!==text(job.artifactPendingKey)||uploadId!==text(job.artifactUploadId)||!parts.length)
+      return c.json(errorBody("BUILD_UPLOAD_COMPLETE_INVALID","Multipart tamamlanma bilgisi geçersiz."),400);
+
+    const upload=c.env.FILES.resumeMultipartUpload(key,uploadId);
+    const object=await upload.complete(parts.map((row:any)=>({partNumber:Number(row.partNumber),etag:text(row.etag)})));
+    const actualBytes=Number(object.size||0);
+    const expectedBytes=Number(job.expectedArtifactBytes||0);
+    if(!expectedBytes||actualBytes!==expectedBytes){
+      try{await c.env.FILES.delete(key);}catch{}
+      await updateJobAtomic(c,job.id,{
+        status:"FAILED",progress:100,completedAt:nowIso(),
+        message:`Artifact boyutu doğrulanamadı. Beklenen=${expectedBytes}, R2=${actualBytes}`,
+        artifactPendingKey:"",artifactUploadId:""
+      },["UPLOADING"]);
+      return c.json(errorBody("BUILD_ARTIFACT_SIZE_MISMATCH","R2 artifact boyutu kaynak Setup ile eşleşmiyor."),422);
+    }
+
+    const result=await updateJobAtomic(c,job.id,{
+      artifactKey:key,artifactPendingKey:"",artifactUploadId:"",
+      artifactSize:actualBytes,artifactSha256:text(job.expectedArtifactSha256),
+      message:"Setup R2 artifact hazır."
+    },["UPLOADING"]);
+    if(!result.ok)return c.json(errorBody("BUILD_STATE_CONFLICT","Artifact tamamlandı ancak build durumu eşzamanlı değişti."),409);
+    return c.json({ok:true,data:result.current});
   });
 
   app.post("/api/build-agent/jobs/:id/multipart/abort", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const job=await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if(!job)return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+    if(text(job.agentId)!==text(auth.agent.agentId))
+      return c.json(errorBody("BUILD_AGENT_JOB_MISMATCH","Bu build başka bir Agent tarafından alınmış."),409);
+
     const body=await bodyOf(c),key=text(body.key),uploadId=text(body.uploadId);
-    if(key&&uploadId)await c.env.FILES.resumeMultipartUpload(key,uploadId).abort();
+    if(key===text(job.artifactPendingKey)&&uploadId===text(job.artifactUploadId)){
+      try{await c.env.FILES.resumeMultipartUpload(key,uploadId).abort();}catch{}
+      await updateJobAtomic(c,job.id,{artifactPendingKey:"",artifactUploadId:"",message:"Artifact yüklemesi iptal edildi."},["UPLOADING"]);
+    }
     return c.json({ok:true});
-  });
-}
+  });}
