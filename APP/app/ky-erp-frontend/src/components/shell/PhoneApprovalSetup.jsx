@@ -5,6 +5,9 @@ import { useAuth } from "../../context/AuthContext";
 import "./phone-approval-setup.css";
 
 const LOCAL_DEVICE_ID = "kyerp_push_device_id_v1";
+const DEVICE_DB_NAME = "kyerp-push-security-v1";
+const DEVICE_STORE = "device";
+const DEVICE_RECORD_KEY = "active";
 
 function rowsOf(value) {
   const data = value?.data ?? value;
@@ -32,9 +35,16 @@ function isStandaloneWebApp() {
 
 function defaultDeviceLabel() {
   const ua = String(navigator.userAgent || "");
-  const mobile = /Android|iPhone|iPad|Mobile/i.test(ua);
-  const platform = String(navigator.userAgentData?.platform || navigator.platform || "").trim();
-  return `${mobile ? "Telefon" : "Tarayıcı"}${platform ? ` · ${platform}` : ""}`;
+  const width = Math.min(
+    Number(window.screen?.width || window.innerWidth || 0),
+    Number(window.screen?.height || window.innerHeight || 0),
+  );
+  if (/Android/i.test(ua)) return /Mobile/i.test(ua) || width <= 600 ? "Android Telefon" : "Android Tablet";
+  if (/iPad/i.test(ua) || (String(navigator.platform || "") === "MacIntel" && Number(navigator.maxTouchPoints || 0) > 1)) return "iPad";
+  if (/iPhone|iPod/i.test(ua)) return "iPhone";
+  if (/Windows/i.test(ua)) return "Windows Bilgisayar";
+  if (/Macintosh|Mac OS X/i.test(ua)) return "Mac";
+  return "KY ERP Cihazı";
 }
 
 async function activeServiceWorker() {
@@ -50,6 +60,24 @@ async function activeServiceWorker() {
 
 function sendWorkerCredentials(registration, data) {
   registration?.active?.postMessage({ type: "KYERP_PUSH_CREDENTIALS", ...data });
+}
+
+async function persistDeviceCredentials(data) {
+  if (!("indexedDB" in window)) throw new Error("Bu tarayıcı güvenli cihaz anahtarını saklayamıyor.");
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open(DEVICE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(DEVICE_STORE)) request.result.createObjectStore(DEVICE_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(DEVICE_STORE, "readwrite");
+    tx.objectStore(DEVICE_STORE).put(data, DEVICE_RECORD_KEY);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export default function PhoneApprovalSetup({ onClose }) {
@@ -121,10 +149,13 @@ export default function PhoneApprovalSetup({ onClose }) {
       const device = response?.data || response;
       if (!device?.deviceId || !device?.deviceToken) throw new Error("Güvenilir cihaz anahtarı alınamadı.");
 
-      sendWorkerCredentials(registration, {
+      const deviceCredentials = {
         deviceId: device.deviceId,
         deviceToken: device.deviceToken,
-      });
+        savedAt: new Date().toISOString(),
+      };
+      await persistDeviceCredentials(deviceCredentials);
+      sendWorkerCredentials(registration, deviceCredentials);
       try { window.localStorage.setItem(LOCAL_DEVICE_ID, String(device.deviceId)); } catch {}
       setPassword("");
       setMessage("Bu cihaz güvenilir telefon onayı cihazı olarak kaydedildi. Bundan sonraki girişlerde bildirimden Onayla diyebilirsiniz.");
