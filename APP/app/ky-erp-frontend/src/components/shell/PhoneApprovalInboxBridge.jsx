@@ -39,6 +39,36 @@ async function writeDevice(value) {
   });
 }
 
+function base64UrlToBytes(value) {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  const raw = window.atob(padded);
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+}
+
+async function confirmLocalDeviceUnlock() {
+  const device = await readDevice();
+  if (!device?.localUnlockRequired) return true;
+  if (!device?.localUnlockCredentialId || !navigator.credentials?.get) {
+    throw new Error("Bu cihazın Face ID / ekran kilidi anahtarı bulunamadı. Telefon Onayı ekranından cihazı yeniden kaydedin.");
+  }
+
+  const credential = await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rpId: window.location.hostname,
+      allowCredentials: [{
+        type: "public-key",
+        id: base64UrlToBytes(device.localUnlockCredentialId),
+      }],
+      userVerification: "required",
+      timeout: 60000,
+    },
+  });
+  if (!credential) throw new Error("Telefon ekran kilidi doğrulanamadı.");
+  return true;
+}
+
 async function hasRecentWake() {
   try {
     const device = await readDevice();
@@ -105,7 +135,7 @@ export default function PhoneApprovalInboxBridge() {
   const [needsSetup, setNeedsSetup] = useState(false);
 
   const ordered = useMemo(() => [...items].sort((a, b) =>
-    String(a.requestedAt || "").localeCompare(String(b.requestedAt || ""))), [items]);
+    String(b.requestedAt || "").localeCompare(String(a.requestedAt || ""))), [items]);
 
   const syncBadge = useCallback(async (count) => {
     try {
@@ -184,6 +214,10 @@ export default function PhoneApprovalInboxBridge() {
     setBusyId(item.id);
     setMessage("");
     try {
+      if (decision === "APPROVE") {
+        setMessage("Telefon kilidi doğrulanıyor...");
+        await confirmLocalDeviceUnlock();
+      }
       await deviceFetch("/auth/push/device/decision", {
         method: "POST",
         body: JSON.stringify({ kind: item.kind, id: item.id, decision }),
