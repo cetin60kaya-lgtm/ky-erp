@@ -322,6 +322,18 @@ public partial class KyErpDesktopWindow : Window
         catch { return ""; }
     }
 
+    private async Task<string> ReadActiveCompanySlugAsync()
+    {
+        try
+        {
+            if (ErpWebView.CoreWebView2 is null) return "";
+            var result = await ErpWebView.CoreWebView2.ExecuteScriptAsync(
+                "String(localStorage.getItem('kyerp.activeCompany') || localStorage.getItem('companySlug') || '').trim().toLowerCase()");
+            return (JsonSerializer.Deserialize<string>(result) ?? "").Trim().ToLowerInvariant();
+        }
+        catch { return ""; }
+    }
+
     private async Task WatchPdksAgentEnrollmentAsync()
     {
         if (ProductCode != "PDKS") return;
@@ -372,10 +384,22 @@ public partial class KyErpDesktopWindow : Window
     {
         if (ProductCode != "PDKS" || string.IsNullOrWhiteSpace(token)) return false;
 
+        var activeCompanySlug = await ReadActiveCompanySlugAsync();
+        if (string.IsNullOrWhiteSpace(activeCompanySlug))
+            throw new InvalidOperationException("Aktif ana firma seçimi okunamadı. PDKS cihazı yanlış firmaya bağlanmamak için yetkilendirme durduruldu.");
+
         var credentials = new MachineCredentialStore(_pdksPaths);
         using var api = new PdksMachineApiClient();
         var store = new LocalPdksStore(_pdksPaths);
         var current = credentials.Load();
+
+        if (current is not null
+            && !string.Equals(current.Company, activeCompanySlug, StringComparison.OrdinalIgnoreCase))
+        {
+            credentials.Clear();
+            current = null;
+            await store.TouchStateAsync("d1_sync", $"Firma değişti · cihaz yeniden yetkilendirilecek: {activeCompanySlug}", ct);
+        }
 
         if (current is not null
             && string.Equals(current.DeviceLabel, _pdksPaths.DeviceLabel, StringComparison.OrdinalIgnoreCase)
@@ -394,9 +418,11 @@ public partial class KyErpDesktopWindow : Window
             }
         }
 
-        var enrolled = await api.EnrollAsync(token, _pdksPaths, ct);
+        var enrolled = await api.EnrollAsync(token, _pdksPaths, activeCompanySlug, ct);
         if (string.IsNullOrWhiteSpace(enrolled.DeviceId) || string.IsNullOrWhiteSpace(enrolled.Secret))
             throw new InvalidOperationException("PDKS cihaz yetkilendirmesi eksik döndü.");
+        if (!string.Equals(enrolled.Company, activeCompanySlug, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"PDKS cihazı yanlış firmaya bağlandı. Beklenen={activeCompanySlug}, Dönen={enrolled.Company}.");
 
         credentials.Save(enrolled);
         await store.TouchStateAsync("d1_sync", "D1 cihaz yetkisi oluşturuldu · Agent otomatik sync aktif", ct);
