@@ -52,3 +52,22 @@ test("phone approval persists device capability and recovers missing local key",
   assert.match(inbox, /kyerp:open-phone-approval-setup/);
   assert.match(shell, /addEventListener\("kyerp:open-phone-approval-setup"/);
 });
+
+
+test("Android PWA install, phone notifications and tablet naming stay usable", () => {
+  const shell = read("./layouts/AppShellV3.jsx");
+  const responsive = read("./styles/responsive-core.css");
+  const setup = read("./components/shell/PhoneApprovalSetup.jsx");
+  const manifest = read("../public/manifest.webmanifest");
+
+  assert.match(shell, /beforeinstallprompt/);
+  assert.match(shell, /Uygulamayı Yükle/);
+  assert.match(shell, /appinstalled/);
+  assert.match(responsive, /data-layout-mode="phone"[\s\S]*shell-v3-icon\.notification/);
+  assert.match(responsive, /shell-v3-install-button/);
+  assert.match(setup, /Android Telefon/);
+  assert.match(setup, /Android Tablet/);
+  assert.match(manifest, /"display": "standalone"/);
+  assert.match(manifest, /"shortcuts"/);
+  assert.match(manifest, /Üretim İş Havuzu/);
+});
