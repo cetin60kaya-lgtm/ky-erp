@@ -370,7 +370,7 @@ export default function AppShellV3({
       <aside className="shell-v3-sidebar">
         <header className="shell-v3-sidebar-brand">
           <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("muhasebe")}>
-            <b>KY</b><span><strong>KY ERP</strong><small>{activeModule?.label || "Yönetim Sistemi"}</small></span>
+            <b>KY</b><span><strong>KY ERP</strong><small>{activeModule?.key === "admin" ? "Yönetim Sistemi" : activeModule?.label || "Yönetim Sistemi"}</small></span>
           </button>
           <button type="button" className="shell-v3-sidebar-close" aria-label="Menüyü kapat" onClick={onCloseMobileMenu}><X size={18} /></button>
         </header>
