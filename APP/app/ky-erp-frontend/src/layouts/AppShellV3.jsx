@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BellRing, CheckCheck, ChevronDown, Command, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
@@ -101,6 +101,7 @@ export default function AppShellV3({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
@@ -157,6 +158,20 @@ export default function AppShellV3({
     const openPhoneApprovalSetup = () => setPhoneApprovalOpen(true);
     window.addEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
     return () => window.removeEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
+  }, []);
+
+  useEffect(() => {
+    const onBeforeInstall = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
 
   useEffect(() => {
@@ -233,6 +248,18 @@ export default function AppShellV3({
   function markAllNotificationsRead() {
     const unreadIds = notificationData.items.filter((item) => item.unread).map((item) => item.id);
     markNotificationIdsRead(unreadIds);
+  }
+
+  async function installPwa() {
+    if (!installPrompt) return;
+    try {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+    } catch {
+      // Tarayıcı kurulum penceresini kapattıysa uygulama normal web modunda çalışmaya devam eder.
+    } finally {
+      setInstallPrompt(null);
+    }
   }
 
   const effectiveMode = displayPreferences?.effectiveMode || "pc";
@@ -327,6 +354,18 @@ export default function AppShellV3({
           <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
           </select>
+          {installPrompt ? (
+            <button
+              type="button"
+              className="shell-v3-install-button"
+              onClick={installPwa}
+              aria-label="KY ERP uygulamasını bu cihaza yükle"
+              title="KY ERP'yi uygulama olarak yükle"
+            >
+              <Download size={17} />
+              <span>Uygulamayı Yükle</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="shell-v3-display-button"
