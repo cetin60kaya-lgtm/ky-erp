@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import PublicLandingPage from "./pages/PublicLandingPage.jsx";
+import { installAndroidRuntimeBridge } from "./utils/installAndroidRuntimeBridge";
 
 const PUBLIC_SITE_HOSTS = new Set(["kyerp.net", "www.kyerp.net"]);
 const APP_URL = "https://app.kyerp.net/";
@@ -10,6 +11,8 @@ const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
 const rootElement = document.getElementById("root");
 
 async function renderErpApp() {
+  installAndroidRuntimeBridge();
+
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("/kyerp-push-sw.js", { scope: "/" }).catch((error) => {
