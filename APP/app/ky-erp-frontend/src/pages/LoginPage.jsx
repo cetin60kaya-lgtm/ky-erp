@@ -146,6 +146,7 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
   const qrRef = useRef(null);
+  const phoneApprovalCheckRef = useRef({ busy: false, settled: false, id: "" });
   const turnstileRef = useRef(null);
   const turnstileWidgetRef = useRef(null);
   const otpUri = useMemo(() => compatibleOtpUri(flow.otpauthUri), [flow.otpauthUri]);
@@ -357,20 +358,30 @@ export default function LoginPage() {
 
   async function refreshPhoneApproval() {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
+    const state = phoneApprovalCheckRef.current;
+    if (state.busy || state.settled) return;
+    state.busy = true;
     try {
       const response = await checkPhoneApproval({
         phoneApprovalId: flow.phoneApprovalId,
         phoneApprovalToken: flow.phoneApprovalToken,
       });
       const nextStage = String(response?.stage || "").toUpperCase();
-      if (["PHONE_APPROVAL_DENIED", "PHONE_APPROVAL_EXPIRED"].includes(nextStage)) {
+      if (["PHONE_APPROVAL_DENIED", "PHONE_APPROVAL_EXPIRED", "PHONE_APPROVAL_SUPERSEDED"].includes(nextStage)) {
+        state.settled = true;
         resetToCredentials(response?.message || "Telefon giriş onayı tamamlanmadı. Yeniden giriş yapın.");
         return;
       }
+      if (nextStage !== "PHONE_APPROVAL_PENDING") state.settled = true;
       applyResponse(response);
     } catch (requestError) {
-      if (String(requestError?.code || "") === "PHONE_APPROVAL_CONSUMED") return;
+      if (String(requestError?.code || "") === "PHONE_APPROVAL_CONSUMED") {
+        setError("Telefon onayı işlendi. Aynı onaya tekrar basmayın; oturum sonucu tamamlanıyor.");
+        return;
+      }
       setError(requestError?.message || "Telefon onayı durumu kontrol edilemedi.");
+    } finally {
+      state.busy = false;
     }
   }
 
@@ -407,8 +418,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (flow.stage !== "PHONE_APPROVAL_PENDING") return undefined;
-    const timer = window.setInterval(refreshPhoneApproval, 2800);
-    return () => window.clearInterval(timer);
+    phoneApprovalCheckRef.current = { busy: false, settled: false, id: String(flow.phoneApprovalId || "") };
+    const kickoff = window.setTimeout(refreshPhoneApproval, 700);
+    const timer = window.setInterval(refreshPhoneApproval, 2200);
+    return () => {
+      window.clearTimeout(kickoff);
+      window.clearInterval(timer);
+      phoneApprovalCheckRef.current.settled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow.stage, flow.phoneApprovalId, flow.phoneApprovalToken]);
 
@@ -605,7 +622,7 @@ export default function LoginPage() {
                 <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
                 <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
                 <h3>Telefonunuza bildirim gönderildi</h3>
-                <p>KY ERP bildirimini açıp <strong>Onayla</strong> veya <strong>Reddet</strong> seçin. Kod yazmanız gerekmez.</p>
+                <p>Tek KY ERP bildirimini açıp <strong>Onayla</strong> seçin. Aynı giriş için ikinci bildirim üretilmez. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</p>
                 <div className="auth-notice">
                   <strong>Güvenli bekleme</strong>
                   <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>

@@ -327,6 +327,26 @@ async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "M
   );
 }
 
+async function supersedeOlderSelfChallenges(c: any, userId: string, replacementId: string) {
+  const timestamp = nowIso();
+  const rows = (await storeList(c, PHONE_SCOPE))
+    .filter((row: AnyRow) =>
+      text(row.userId) === text(userId) &&
+      text(row.id) !== text(replacementId) &&
+      upper(row.status) === "PENDING" &&
+      !text(row.consumedAt)
+    );
+
+  for (const row of rows) {
+    await atomicPhoneUpdate(c, row, "PENDING", {
+      status: "SUPERSEDED",
+      decidedAt: timestamp,
+      consumedAt: timestamp,
+      supersededBy: replacementId,
+    });
+  }
+}
+
 async function userRow(c: any, userId: string) {
   return c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.password_hash,u.role,u.is_active,
@@ -397,6 +417,11 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   const id = crypto.randomUUID();
   const token = randomToken(32);
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
+
+  // Aynı kullanıcı yeniden girişe basarsa eski bekleyen telefon isteğini "reddedildi"
+  // yapmayız. Sessizce SUPERSEDED kapatılır; telefonda yalnız en yeni istek yaşar.
+  await supersedeOlderSelfChallenges(c, text(user.id), id);
+
   const requestedAt = nowIso();
   const expiresAt = addSeconds(PHONE_APPROVAL_SECONDS);
 
@@ -494,17 +519,35 @@ async function pendingItems(c: any, actor: AnyRow) {
   const items: AnyRow[] = [];
 
   const selfRows = (await storeList(c, PHONE_SCOPE))
-    .filter((row: AnyRow) => text(row.userId) === actor.userId && !text(row.consumedAt));
+    .filter((row: AnyRow) => text(row.userId) === actor.userId)
+    .sort((a: AnyRow, b: AnyRow) =>
+      String(b.requestedAt || b.createdAt || "").localeCompare(String(a.requestedAt || a.createdAt || "")));
+
+  let latestSelfPending = "";
   for (const row of selfRows) {
     let current = row;
-    if (upper(current.status) === "PENDING" && Date.parse(text(current.expiresAt)) <= Date.now()) {
+    if (upper(current.status) === "PENDING" && !text(current.consumedAt) && Date.parse(text(current.expiresAt)) <= Date.now()) {
       const update = await atomicPhoneUpdate(c, current, "PENDING", { status: "EXPIRED", consumedAt: timestamp });
       current = update.row || current;
     }
     if (upper(current.status) !== "PENDING" || text(current.consumedAt)) continue;
+
+    if (latestSelfPending) {
+      const update = await atomicPhoneUpdate(c, current, "PENDING", {
+        status: "SUPERSEDED",
+        decidedAt: timestamp,
+        consumedAt: timestamp,
+        supersededBy: latestSelfPending,
+      });
+      current = update.row || current;
+      continue;
+    }
+
+    latestSelfPending = text(current.id);
     items.push({
       kind: "SELF_LOGIN",
       id: current.id,
+      dedupeKey: `self:${actor.userId}`,
       title: "KY ERP · Giriş Onayı",
       body: `${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`,
       requestedAt: current.requestedAt,
@@ -545,6 +588,7 @@ async function pendingItems(c: any, actor: AnyRow) {
     items.push({
       kind: "MANAGER_APPROVAL",
       id: row.id,
+      dedupeKey: `manager:${text(row.user_id)}`,
       title: "KY ERP · Firma Giriş Onayı",
       body: isSuper(actor.role)
         ? `${text(row.full_name || row.username)} · ${text(row.main_company_slug)} · ${friendlyDeviceLabel(row.device_label, row.user_agent)}`
@@ -714,9 +758,27 @@ export function registerAuthPushRoutes(app: any) {
 
     if (kind === "SELF_LOGIN") {
       const row = await storeGet(c, PHONE_SCOPE, id);
-      if (!row || text(row.userId) !== actor.userId || upper(row.status) !== "PENDING" || text(row.consumedAt) || Date.parse(text(row.expiresAt)) <= Date.now()) {
-        return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı veya süresi doldu."), 404);
+      if (!row || text(row.userId) !== actor.userId) {
+        return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı."), 404);
       }
+
+      const currentStatus = upper(row.status);
+      if (
+        (decision === "APPROVE" && currentStatus === "APPROVED" && !text(row.consumedAt)) ||
+        (decision === "DENY" && currentStatus === "DENIED")
+      ) {
+        return c.json({ ok: true, data: { kind, id, status: currentStatus, applied: false, idempotent: true } });
+      }
+
+      if (currentStatus !== "PENDING" || text(row.consumedAt) || Date.parse(text(row.expiresAt)) <= Date.now()) {
+        return c.json(jsonError(
+          currentStatus === "SUPERSEDED" ? "PHONE_APPROVAL_SUPERSEDED" : "PHONE_APPROVAL_NOT_FOUND",
+          currentStatus === "SUPERSEDED"
+            ? "Bu giriş isteğinin yerine daha yeni bir giriş isteği açıldı."
+            : "Giriş onayı bulunamadı veya süresi doldu.",
+        ), currentStatus === "SUPERSEDED" ? 409 : 404);
+      }
+
       const status = decision === "APPROVE" ? "APPROVED" : "DENIED";
       const update = await atomicPhoneUpdate(c, row, "PENDING", {
         status,

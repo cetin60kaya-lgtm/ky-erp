@@ -78,6 +78,10 @@ test("service worker decisions use device capability headers and native approve 
   assert.match(serviceWorker, /action: "approve"/);
   assert.match(serviceWorker, /action: "deny"/);
   assert.match(serviceWorker, /auth\/push\/device\/decision/);
+  assert.match(serviceWorker, /stableNotificationTag/);
+  assert.match(serviceWorker, /renotify: false/);
+  assert.match(serviceWorker, /localUnlockRequired/);
+  assert.doesNotMatch(serviceWorker, /kyerp-result-/);
 });
 
 test("every user can register a phone from the authenticated shell but registration is not session-only", () => {
@@ -126,5 +130,23 @@ test("push approval hides raw browser ids and uses Android friendly device label
   assert.match(push, /friendlyDeviceLabel\(current\.deviceLabel, current\.userAgent\)/);
   assert.match(push, /friendlyDeviceLabel\(row\.device_label, row\.user_agent\)/);
   assert.match(serviceWorker, /vibrate: \[180, 80, 180\]/);
-  assert.match(serviceWorker, /KY ERP · Giriş Onaylandı/);
+  assert.match(push, /supersedeOlderSelfChallenges/);
+  assert.match(push, /SUPERSEDED/);
+  assert.match(policy, /PHONE_APPROVAL_SUPERSEDED/);
+});
+
+
+test("phone approval keeps one latest self request, one visible notification and serialized status checks", () => {
+  assert.match(push, /let latestSelfPending = ""/);
+  assert.match(push, /dedupeKey: `self:/);
+  assert.match(push, /idempotent: true/);
+  assert.match(serviceWorker, /stableNotificationTag/);
+  assert.match(serviceWorker, /renotify: false/);
+  assert.doesNotMatch(serviceWorker, /kyerp-result-/);
+  assert.match(phoneSetup, /isUserVerifyingPlatformAuthenticatorAvailable/);
+  assert.match(phoneSetup, /userVerification: "required"/);
+  assert.match(phoneInbox, /navigator\.credentials\.get/);
+  assert.match(phoneInbox, /confirmLocalDeviceUnlock/);
+  assert.match(login, /phoneApprovalCheckRef/);
+  assert.match(login, /state\.busy \|\| state\.settled/);
 });
