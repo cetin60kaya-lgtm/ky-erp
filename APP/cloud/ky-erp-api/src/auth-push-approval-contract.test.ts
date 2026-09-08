@@ -136,6 +136,8 @@ test("repeated login attempts reuse one pending phone challenge instead of stack
   assert.match(push, /PHONE_LOGIN_APPROVAL_REUSED/);
   assert.match(push, /pending\.length/);
   assert.match(push, /duplicateLoginAt/);
+  assert.match(push, /challengeTokenHashes/);
+  assert.match(push, /tokenHashes\.some\(\(candidate\) => safeEqual\(candidate, tokenHash\)\)/);
   assert.match(push, /Date\.now\(\) - lastNotifiedAt > 60_000/);
   assert.match(serviceWorker, /tag: "kyerp-security-pending"/);
   assert.match(serviceWorker, /renotify: false/);
