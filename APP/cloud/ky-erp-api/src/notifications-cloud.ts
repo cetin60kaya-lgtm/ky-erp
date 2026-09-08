@@ -131,6 +131,12 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
     detail: [ownerRole(current?.role) ? text(row.main_company_slug) : "", text(row.user_name), text(row.device_label) || "Yeni cihaz"].filter(Boolean).join(" · "),
     createdAt: toIso(row.requested_at),
     route: { moduleKey: "admin", tabKey: "admin-yonetim-ozeti" },
+    approval: {
+      type: "LOGIN",
+      id: text(row.id),
+      mainCompanySlug: text(row.main_company_slug),
+      actions: ["APPROVE", "REJECT"],
+    },
     meta: { userId: text(row.user_id), mainCompanySlug: text(row.main_company_slug), expiresAt: toIso(row.expires_at) },
   }));
 }
@@ -176,6 +182,12 @@ async function collectMailApprovals(c: any, current: AnyRow, tenant: string) {
     ].filter(Boolean).join(" · "),
     createdAt: toIso(row.created_at),
     route: { moduleKey: "depolama", tabKey: "depolama-mail" },
+    approval: {
+      type: "MAIL_ACCOUNT",
+      id: text(row.id),
+      mainCompanySlug: text(row.main_company_slug),
+      actions: ["APPROVE", "REJECT"],
+    },
     meta: { requestId: text(row.id), mainCompanySlug: text(row.main_company_slug), emailAddress: text(row.email_address) },
   }));
 }
