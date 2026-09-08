@@ -154,6 +154,12 @@ export default function AppShellV3({
   }, [refreshNotifications, user?.id, activeCompanySlug]);
 
   useEffect(() => {
+    const openPhoneApprovalSetup = () => setPhoneApprovalOpen(true);
+    window.addEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
+    return () => window.removeEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
+  }, []);
+
+  useEffect(() => {
     if (!notificationOpen) return undefined;
     const closeOnEscape = (event) => {
       if (event.key === "Escape") setNotificationOpen(false);
