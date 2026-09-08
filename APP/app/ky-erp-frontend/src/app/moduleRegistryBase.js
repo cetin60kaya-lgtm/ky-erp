@@ -179,6 +179,7 @@ export const MODULES = [
           ["dosya-klasor-yonetimi", "Dosya ve Klasör Yönetimi", "dosya"],
           ["eslestirmeler", "Eşleştirmeler", "file-check"],
           ["yedekleme-loglar", "Yedekleme / Loglar", "raporlar"],
+          ["surum-merkezi", "Sürüm Merkezi", "ayarlar"],
         ],
       },
     ],
