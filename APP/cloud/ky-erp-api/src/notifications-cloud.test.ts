@@ -6,6 +6,7 @@ test("notification read ids only keep supported live notification ids", () => {
   assert.deepEqual(
     sanitizeNotificationReadIds([
       "login-approval:a1",
+      "mail-approval:m1",
       "ebelge-issue:d1:2:2026-09-06",
       "payment-due:p1:2026-09-06",
       "fake:3",
@@ -14,6 +15,7 @@ test("notification read ids only keep supported live notification ids", () => {
     ]),
     [
       "login-approval:a1",
+      "mail-approval:m1",
       "ebelge-issue:d1:2:2026-09-06",
       "payment-due:p1:2026-09-06",
     ],
