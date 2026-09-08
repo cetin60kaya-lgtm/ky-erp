@@ -41,8 +41,8 @@ test("PDKS public agent heartbeat and import remain available without SGK gating
   assert.match(device, /Aktif kartlı personel \+ tarih\/saat eşleşmedi/);
 });
 
-test("PDKS five-group navigation keeps dedicated device and sync center", () => {
-  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
+test("PDKS six-group navigation keeps device sync and AI control centers", () => {
+  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "AI & Kontrol", "Rapor & Denetim"]) {
     assert.match(page, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(page, /"cihaz-baglantilari", "senkron"/);
@@ -50,5 +50,7 @@ test("PDKS five-group navigation keeps dedicated device and sync center", () => 
   assert.match(center, /Son Heartbeat/);
   assert.match(center, /Senkronizasyon Geçmişi/);
   assert.match(center, /Bu bilgi yalnız şimdi gösterilir/);
+  assert.match(center, /Windows Terminal Ayarları/);
+  assert.match(center, /Kurulum Sihirbazını Aç/);
   assert.match(service, /device-sync-logs/);
 });

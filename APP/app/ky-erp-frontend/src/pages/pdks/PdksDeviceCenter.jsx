@@ -7,6 +7,8 @@ const agoText=(value)=>{if(!value)return"Henüz bağlantı yok";const ms=Date.no
 const online=(value)=>Boolean(value)&&Date.now()-new Date(value).getTime()<5*60*1000;
 
 export default function PdksDeviceCenter({ activeTab="cihaz-baglantilari", activeMainCompany, isAuditAccount=false }){
+  const desktop=typeof window!=="undefined"?window.KYERP_DESKTOP:null;
+  const desktopPdks=Boolean(desktop?.isDesktop&&desktop?.product==="PDKS");
   const company=activeMainCompany?.slug||activeMainCompany?.id||"mecit-hakan";
   const [devices,setDevices]=useState([]),[logs,setLogs]=useState([]),[selected,setSelected]=useState("");
   const [form,setForm]=useState({deviceLabel:"",machineName:""});
@@ -40,7 +42,9 @@ export default function PdksDeviceCenter({ activeTab="cihaz-baglantilari", activ
   async function copy(value){try{await navigator.clipboard.writeText(String(value||""));setMessage("Cihaz anahtarı panoya kopyalandı.");}catch{setMessage("Anahtar kopyalanamadı; ekrandaki değeri elle alın.");}}
 
   return <div className="pdc-page">
-    <header className="pdc-head"><div><small>PDKS / TERMİNAL & SİSTEM</small><h1>{activeTab==="senkron"?"Senkronizasyon":activeTab==="saat-terminal"?"Terminal & Sistem":"Cihaz Bağlantıları"}</h1><p>Windows Agent, terminal kimliği, bağlantı sağlığı ve D1 senkron geçmişi tek merkezden izlenir.</p></div><button type="button" onClick={load} disabled={busy}>Yenile</button></header>
+    <header className="pdc-head"><div><small>PDKS / TERMİNAL & SİSTEM</small><h1>{activeTab==="senkron"?"Senkronizasyon":activeTab==="saat-terminal"?"Terminal & Sistem":"Cihaz Bağlantıları"}</h1><p>Windows Agent, terminal kimliği, bağlantı sağlığı ve D1 senkron geçmişi tek merkezden izlenir.</p></div><div className="pdc-head-actions">{desktopPdks?<button type="button" className="primary" onClick={()=>desktop?.openPdksTerminalSettings?.()}>Windows Terminal Ayarları</button>:null}<button type="button" onClick={load} disabled={busy}>Yenile</button></div></header>
+    {desktopPdks&&desktop?.firstRun&&!isAuditAccount?<section className="pdc-local-setup"><div><b>İlk kurulum tamamlanmayı bekliyor</b><span>Terminal tipi, IP/port, GİRİŞ/ÇIKIŞ yönü, Hedef veri dosyası ve Agent ayarını bu bilgisayara bir kez tanımlayın.</span></div><button type="button" onClick={()=>desktop?.openPdksTerminalSettings?.()}>Kurulum Sihirbazını Aç</button></section>:null}
+    {desktopPdks?<section className="pdc-local-strip"><div><span>Windows Ürünü</span><b>{desktop?.product==="PDKS"?"KY PDKS Pro":"KY ERP Desktop"}</b></div><div><span>Sürüm</span><b>{desktop?.version||"-"}</b></div><div><span>Yerel Terminal Köprüsü</span><b>Hazır</b></div><div><span>Agent</span><b>Windows Servisi</b></div></section>:null}
     <div className={`pdc-notice ${message.startsWith("Hata:")?"bad":""}`}>{message}</div>
     <section className="pdc-metrics"><div><span>Tanımlı Cihaz</span><b>{devices.length}</b></div><div><span>Çevrimiçi</span><b>{onlineCount}</b></div><div><span>Son Senkron Kayıtları</span><b>{logs.length}</b></div><div><span>Hata / Red</span><b>{failedCount}</b></div></section>
 

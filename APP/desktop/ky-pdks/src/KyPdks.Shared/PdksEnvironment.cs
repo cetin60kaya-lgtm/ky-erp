@@ -16,6 +16,7 @@ public sealed class PdksPaths
     public string Database => Path.Combine(Data, "pdks.db");
     public string ConfigFile => Path.Combine(Root, "config.json");
     public string DeviceFile => Path.Combine(Root, "device.id");
+    public string SetupCompletedFile => Path.Combine(Root, "setup.completed");
     public string UserRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KY ERP", "PDKS");
     public string SessionFile => Path.Combine(UserRoot, "session.bin");
     public string DeviceId { get; }
@@ -53,6 +54,11 @@ public sealed class ConfigStore(PdksPaths paths)
             }
             var config = JsonSerializer.Deserialize<PdksConfig>(File.ReadAllText(paths.ConfigFile, Encoding.UTF8), Json) ?? new PdksConfig();
             config.Normalize();
+            // 1.9.0 öncesi kurulumlarda setup.completed yoktur. Gerçek Hedef tek-terminal
+            // akışında aynı dosyada sabah+akşam hareketleri bulunduğundan, sihirbaz onaylanana
+            // kadar eski sabit GİRİŞ değerini güvenli AUTO'ya indir.
+            if (!File.Exists(paths.SetupCompletedFile) && config.NormalizedMode == "HEDEF_TR500")
+                config.Direction = "AUTO";
             return config;
         }
         catch

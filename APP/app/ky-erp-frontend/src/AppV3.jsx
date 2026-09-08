@@ -1,4 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import "./app/pdksModuleRegistryPatch";
 import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -62,6 +63,7 @@ const PDKS_AUDIT_TABS = [
   ["puantaj", "Puantaj", "takvim"],
   ["puantaj-sonuclari", "Puantaj Sonuçları", "raporlar"],
   ["calisma-tarihi", "Çalışma Tarihi", "takvim"],
+  ["ai-kontrol", "AI Kontrol", "dashboard"],
   ["raporlar", "Raporlar", "raporlar"],
   ["denetim-yillik-temp", "Yıllık TEMP / Denetim", "file-check"],
 ];
@@ -118,6 +120,8 @@ export default function AppV3() {
   const { user, loading: authLoading, isAuthenticated, hasModule, logout } = useAuth();
   const { companies, activeCompany, activeCompanySlug, setActiveCompanySlug } = useActiveCompany();
   const displayPreferences = useDisplayPreferences();
+  const standaloneProduct = String(window.__KYERP_DESKTOP_PRODUCT || "").trim().toUpperCase();
+  const standalonePdks = standaloneProduct === "PDKS";
   const keepModuleMenuExpanded = displayPreferences.effectiveMode === "pc";
   const [moduleMenuOpen, setModuleMenuOpen] = useState(() => keepModuleMenuExpanded);
   const [moduleActionContext, setModuleActionContext] = useState({});
@@ -130,14 +134,16 @@ export default function AppV3() {
 
   const visibleModules = useMemo(() => {
     let allowed = MODULES.filter((item) => hasModule(item.permissionKey));
-    if (!isAuditAccount) return allowed;
-    allowed = allowed.filter((item) => !["admin", "asistan"].includes(item.key));
-    return allowed.map((item) => {
-      if (item.key === "ik") return { ...item, groups: [{ label: "Personel", tabs: IK_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
-      if (item.key === "pdks") return { ...item, groups: [{ label: "PDKS Denetim", tabs: PDKS_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
-      return item;
-    });
-  }, [hasModule, isAuditAccount]);
+    if (isAuditAccount) {
+      allowed = allowed.filter((item) => !["admin", "asistan"].includes(item.key));
+      allowed = allowed.map((item) => {
+        if (item.key === "ik") return { ...item, groups: [{ label: "Personel", tabs: IK_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
+        if (item.key === "pdks") return { ...item, groups: [{ label: "PDKS Denetim", tabs: PDKS_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
+        return item;
+      });
+    }
+    return standalonePdks ? allowed.filter((item) => item.key === "pdks") : allowed;
+  }, [hasModule, isAuditAccount, standalonePdks]);
 
   const initialRoute = useMemo(() => {
     const requested = getInitialRoute(window.location.pathname);
@@ -310,6 +316,7 @@ export default function AppV3() {
       activeCompanySlug={normalizedCompany?.slug || activeCompanySlug}
       user={user}
       displayPreferences={displayPreferences}
+      standaloneProduct={standalonePdks ? "PDKS" : ""}
       mobileMenuOpen={moduleMenuOpen}
       onToggleModuleMenu={toggleModuleMenu}
       onOpenTab={(moduleKey, tabKey) => openTab(moduleKey, tabKey)}

@@ -1,122 +1,210 @@
-param(
-    [switch]$SkipTests
-)
+param([switch]$SkipTests)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.5.0'
+$Version = '1.9.0'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
 $AgentProject = Join-Path $Root 'src\KyPdks.Agent\KyPdks.Agent.csproj'
 $SharedProject = Join-Path $Root 'src\KyPdks.Shared\KyPdks.Shared.csproj'
 $TestProject = Join-Path $Root 'src\KyPdks.Tests\KyPdks.Tests.csproj'
-$DesktopOut = Join-Path $Dist 'desktop'
+$FrontendRoot = Join-Path $RepoRoot 'APP\app\ky-erp-frontend'
+$FrontendDist = Join-Path $FrontendRoot 'dist'
+$FileAgentSource = Join-Path $RepoRoot 'tools\file-hub-agent'
+$ErpDesktopOut = Join-Path $Dist 'erp-desktop'
+$PdksDesktopOut = Join-Path $Dist 'pdks-desktop'
 $AgentOut = Join-Path $Dist 'agent'
+$FileAgentOut = Join-Path $Dist 'file-agent'
 $InstallerOut = Join-Path $Dist 'setup'
+$WebViewOut = Join-Path $Dist 'webview2'
 
 function Invoke-Native {
-    param(
-        [Parameter(Mandatory = $true)][string]$Label,
-        [Parameter(Mandatory = $true)][scriptblock]$Command
-    )
+    param([Parameter(Mandatory=$true)][string]$Label,[Parameter(Mandatory=$true)][scriptblock]$Command)
     & $Command
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Label başarısız oldu. Hata kodu: $LASTEXITCODE"
-    }
+    if ($LASTEXITCODE -ne 0) { throw "$Label başarısız oldu. Hata kodu: $LASTEXITCODE" }
 }
 
-Write-Host "KY ERP Masaüstü $Version build başlıyor..." -ForegroundColor Cyan
-Write-Host "Ürün kapsamı: tüm KY ERP modülleri + İK/PDKS cihaz katmanı" -ForegroundColor DarkCyan
+Write-Host "KY ERP Desktop + KY PDKS Pro $Version dual build başlıyor..." -ForegroundColor Cyan
 
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 8 SDK bulunamadı.' }
+$Dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+$Npm = Get-Command npm -ErrorAction SilentlyContinue
+$Node = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $Dotnet) { throw '.NET 8 SDK bulunamadı.' }
+if (-not $Npm -or -not $Node) { throw 'Node/npm bulunamadı.' }
+if (-not (Test-Path $FrontendRoot)) { throw "Frontend klasörü bulunamadı: $FrontendRoot" }
+if (-not (Test-Path $FileAgentSource)) { throw "KY File Agent kaynağı bulunamadı: $FileAgentSource" }
 
-$VersionFile = Join-Path $Root 'VERSION'
-if (-not (Test-Path $VersionFile)) { throw 'VERSION dosyası bulunamadı.' }
-$DeclaredVersion = (Get-Content $VersionFile -Raw).Trim()
+$DeclaredVersion = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
 if ($DeclaredVersion -ne $Version) { throw "VERSION uyuşmuyor. Beklenen=$Version Bulunan=$DeclaredVersion" }
 
-Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
-New-Item $DesktopOut -ItemType Directory -Force | Out-Null
-New-Item $AgentOut -ItemType Directory -Force | Out-Null
-New-Item $InstallerOut -ItemType Directory -Force | Out-Null
+$DesktopWindowSource = Join-Path $Root 'src\KyPdks.Desktop\KyErpDesktopWindow.xaml.cs'
+$DesktopWindowText = Get-Content $DesktopWindowSource -Raw
+if ($DesktopWindowText -notmatch 'https://app\.kyerp\.net/index\.html') { throw 'Tam ERP Desktop canonical app.kyerp.net/index.html kullanmıyor.' }
+if ($DesktopWindowText -notmatch 'DesktopVersion = "1\.9\.0"') { throw 'Desktop bridge sürümü 1.9.0 değil.' }
+if ($DesktopWindowText -notmatch 'AddScriptToExecuteOnDocumentCreatedAsync') { throw 'Desktop product işareti React başlamadan enjekte edilmiyor.' }
+if ($DesktopWindowText -notmatch 'window\.__KYERP_DESKTOP_PRODUCT') { throw 'Standalone PDKS ürün işareti eksik.' }
 
-Write-Host '1/5 Restore ve derleme...' -ForegroundColor Cyan
-Invoke-Native 'Shared restore' { dotnet restore $SharedProject }
-Invoke-Native 'Agent restore' { dotnet restore $AgentProject }
-Invoke-Native 'Desktop restore' { dotnet restore $DesktopProject }
+$ProjectText = Get-Content $DesktopProject -Raw
+if ($ProjectText -notmatch 'ProductMode') { throw 'Desktop project dual ProductMode içermiyor.' }
+if ($ProjectText -notmatch 'PDKS_ONLY') { throw 'PDKS-only compile constant eksik.' }
+if ($ProjectText -notmatch 'Compile Remove="KyErpShellWindow.xaml.cs"') { throw 'PDKS-only build eski ERP shell code-behind dosyasını dışlamıyor.' }
+if ($ProjectText -notmatch 'Page Remove="KyErpShellWindow.xaml"') { throw 'PDKS-only build eski ERP shell XAML dosyasını dışlamıyor.' }
+if ($ProjectText -notmatch 'BaseIntermediateOutputPath') { throw 'ERP/PDKS ayrı MSBuild ara klasörleri tanımlı değil.' }
+if ($ProjectText -notmatch 'BaseOutputPath') { throw 'ERP/PDKS ayrı MSBuild çıktı klasörleri tanımlı değil.' }
+
+$ErpInstallerText = Get-Content (Join-Path $Root 'installer\KY-ERP.iss') -Raw
+$PdksInstallerText = Get-Content (Join-Path $Root 'installer\KY-PDKS.iss') -Raw
+if ($ErpInstallerText -match 'KYERP\.PDKS\.Agent') { throw 'KY ERP Desktop installer PDKS Agent servisini sahiplenmemeli.' }
+if ($ErpInstallerText -match '\\agent\\\*') { throw 'KY ERP Desktop installer PDKS Agent binary paketlememeli.' }
+if ($PdksInstallerText -notmatch 'KYERP\.PDKS\.Agent') { throw 'KY PDKS Pro installer PDKS Agent servisini içermiyor.' }
+if ($PdksInstallerText -notmatch '\\agent\\\*') { throw 'KY PDKS Pro installer PDKS Agent binary paketlemiyor.' }
+$PdksServiceInstaller = Join-Path $Root 'installer\install-pdks-agent.ps1'
+if (-not (Test-Path $PdksServiceInstaller)) { throw 'PDKS Agent servis kurulum scripti eksik.' }
+$PdksServiceInstallerText = Get-Content $PdksServiceInstaller -Raw
+if ($PdksInstallerText -notmatch 'install-pdks-agent\.ps1') { throw 'KY PDKS Pro installer doğrulanmış Agent servis scriptini kullanmıyor.' }
+if ($PdksInstallerText -match 'sc\.exe"; Parameters: "delete KYERP\.PDKS\.Agent') { throw 'KY PDKS Pro installer ham sc delete/create yarışına geri dönmüş.' }
+if ($PdksServiceInstallerText -notmatch 'Wait-ServiceGone') { throw 'Agent servis installer marked-for-deletion bekleme kapısını içermiyor.' }
+if ($PdksServiceInstallerText -notmatch "Status -eq 'Running'") { throw 'Agent servis installer Running doğrulaması yapmıyor.' }
+
+Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
+foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut,$WebViewOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
+
+Write-Host '1/8 Güncel KY ERP frontend...' -ForegroundColor Cyan
+Push-Location $FrontendRoot
+try {
+    Invoke-Native 'Frontend npm ci' { npm ci }
+    Invoke-Native 'Frontend test' { npm test }
+    Invoke-Native 'Frontend lint' { npm run lint }
+    Invoke-Native 'Frontend build' { npm run build }
+} finally { Pop-Location }
+if (-not (Test-Path (Join-Path $FrontendDist 'index.html'))) { throw 'Frontend dist/index.html oluşmadı.' }
+
+Write-Host '2/8 .NET restore...' -ForegroundColor Cyan
+foreach ($project in @($SharedProject,$AgentProject,$DesktopProject)) { Invoke-Native "Restore $project" { dotnet restore $project } }
 if (Test-Path $TestProject) { Invoke-Native 'Test restore' { dotnet restore $TestProject } }
 
-Invoke-Native 'Shared build' { dotnet build $SharedProject -c Release --no-restore }
-Invoke-Native 'Agent build' { dotnet build $AgentProject -c Release --no-restore }
-Invoke-Native 'Desktop build' { dotnet build $DesktopProject -c Release --no-restore }
+Write-Host '3/8 .NET test...' -ForegroundColor Cyan
+if (-not $SkipTests -and (Test-Path $TestProject)) { Invoke-Native 'xUnit test' { dotnet test $TestProject -c Release --no-restore } }
 
-if (-not $SkipTests -and (Test-Path $TestProject)) {
-    Write-Host '2/5 Testler...' -ForegroundColor Cyan
-    Invoke-Native 'xUnit test' { dotnet test $TestProject -c Release --no-restore }
-} else {
-    Write-Host '2/5 Testler atlandı.' -ForegroundColor Yellow
+Write-Host '4/8 İki ayrı Windows publish...' -ForegroundColor Cyan
+Invoke-Native 'KY ERP Desktop publish' {
+    dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:ProductMode=ERP -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $ErpDesktopOut
+}
+Invoke-Native 'KY PDKS Pro publish' {
+    dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:ProductMode=PDKS -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $PdksDesktopOut
+}
+Invoke-Native 'PDKS Agent publish' {
+    dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut
 }
 
-Write-Host '3/5 Self-contained Windows publish...' -ForegroundColor Cyan
-Invoke-Native 'Desktop publish' { dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $DesktopOut }
-Invoke-Native 'Agent publish' { dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut }
+$ErpWeb = Join-Path $ErpDesktopOut 'web'
+$PdksWeb = Join-Path $PdksDesktopOut 'web'
+foreach ($web in @($ErpWeb,$PdksWeb)) {
+    New-Item $web -ItemType Directory -Force | Out-Null
+    Copy-Item (Join-Path $FrontendDist '*') $web -Recurse -Force
+}
+if (-not (Test-Path (Join-Path $ErpWeb 'index.html'))) { throw 'Tam ERP Desktop web/index.html oluşmadı.' }
+if (-not (Test-Path (Join-Path $PdksWeb 'index.html'))) { throw 'KY PDKS Pro canonical web/index.html oluşmadı.' }
 
-$DesktopExe = Join-Path $DesktopOut 'KY ERP Masaüstü.exe'
-$AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
-if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $DesktopExe" }
-if (-not (Test-Path $AgentExe)) { throw "PDKS cihaz agentı oluşmadı: $AgentExe" }
+Write-Host '5/8 KY File Agent + gömülü Node runtime...' -ForegroundColor Cyan
+Copy-Item (Join-Path $FileAgentSource '*') $FileAgentOut -Recurse -Force
+$RuntimeOut = Join-Path $FileAgentOut 'runtime'
+New-Item $RuntimeOut -ItemType Directory -Force | Out-Null
+Copy-Item $Node.Source (Join-Path $RuntimeOut 'node.exe') -Force
+foreach ($required in @('file-hub-agent.mjs','accounting-archive-worker.mjs','start-file-hub-agent.cmd','start-file-hub-agent-hidden.vbs','install-file-hub-agent.ps1')) {
+    if (-not (Test-Path (Join-Path $FileAgentOut $required))) { throw "KY File Agent paketi eksik: $required" }
+}
+if (-not (Test-Path (Join-Path $RuntimeOut 'node.exe'))) { throw 'KY File Agent gömülü node.exe eksik.' }
+$FileAgentStartText = Get-Content (Join-Path $FileAgentOut 'start-file-hub-agent.cmd') -Raw
+if ($FileAgentStartText -notmatch 'runtime\\node\.exe') { throw 'KY File Agent launcher gömülü Node runtime kullanmıyor.' }
+$FileAgentInstallText = Get-Content (Join-Path $FileAgentOut 'install-file-hub-agent.ps1') -Raw
+if ($FileAgentInstallText -notmatch 'runtime\\node\.exe') { throw 'KY File Agent installer gömülü Node runtime kullanmıyor.' }
 
-$DesktopVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($DesktopExe).ProductVersion
-$AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($AgentExe).ProductVersion
-if (-not ([string]$DesktopVersion).StartsWith($Version)) { throw "Desktop sürümü yanlış: $DesktopVersion" }
-if (-not ([string]$AgentVersion).StartsWith($Version)) { throw "Agent sürümü yanlış: $AgentVersion" }
+$ErpExe = Join-Path $ErpDesktopOut 'KY ERP Desktop.exe'
+$PdksExe = Join-Path $PdksDesktopOut 'KY PDKS Pro.exe'
+$PdksAgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
+foreach ($exe in @($ErpExe,$PdksExe,$PdksAgentExe)) { if (-not (Test-Path $exe)) { throw "Beklenen EXE oluşmadı: $exe" } }
 
-Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
+$ErpVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($ErpExe).ProductVersion
+$PdksVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($PdksExe).ProductVersion
+$AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($PdksAgentExe).ProductVersion
+foreach ($actual in @($ErpVersion,$PdksVersion,$AgentVersion)) {
+    if (-not ([string]$actual).StartsWith($Version)) { throw "Ürün sürümü yanlış: $actual" }
+}
+
+Write-Host '5.5/8 WebView2 bootstrapper...' -ForegroundColor Cyan
+$WebViewBootstrap = Join-Path $WebViewOut 'MicrosoftEdgeWebview2Setup.exe'
+Invoke-WebRequest -UseBasicParsing -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $WebViewBootstrap
+if (-not (Test-Path $WebViewBootstrap) -or (Get-Item $WebViewBootstrap).Length -lt 100000) { throw 'Microsoft WebView2 bootstrapper indirilemedi.' }
+
+Write-Host '6/8 Inno Setup ile iki kurulum paketi...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
-$InnoCandidates = @(
-    @(
-        $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }),
-        $(if ($ProgramFilesX86) { Join-Path $ProgramFilesX86 'Inno Setup 6\ISCC.exe' }),
-        $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
-    ) | Where-Object { $_ -and (Test-Path $_) }
-)
-
-if ($InnoCandidates.Count -eq 0) { throw 'Inno Setup 6 bulunamadı. Setup.exe üretilemedi.' }
-
+$InnoCandidates = @(@(
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }),
+    $(if ($ProgramFilesX86) { Join-Path $ProgramFilesX86 'Inno Setup 6\ISCC.exe' }),
+    $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' })
+) | Where-Object { $_ -and (Test-Path $_) })
+if ($InnoCandidates.Count -eq 0) { throw 'Inno Setup 6 bulunamadı.' }
 $env:KY_PDKS_DIST = $Dist
 $env:KY_PDKS_SETUP_OUT = $InstallerOut
 $InnoExe = [string]$InnoCandidates[0]
-$InnoScript = Join-Path $Root 'installer\KY-PDKS.iss'
-Write-Host "Inno Setup: $InnoExe" -ForegroundColor DarkGray
-Invoke-Native 'Inno Setup' { & $InnoExe $InnoScript }
+Invoke-Native 'KY ERP Setup' { & $InnoExe (Join-Path $Root 'installer\KY-ERP.iss') }
+Invoke-Native 'KY PDKS Setup' { & $InnoExe (Join-Path $Root 'installer\KY-PDKS.iss') }
 
-$ExpectedSetupName = "KY-ERP-Masaustu-Setup-$Version.exe"
-$Setup = Get-ChildItem $InstallerOut -Filter $ExpectedSetupName | Select-Object -First 1
-if (-not $Setup) { throw "$ExpectedSetupName oluşmadı." }
+Write-Host '7/8 Kurulum paketlerini doğrula...' -ForegroundColor Cyan
+$ErpSetupName = "KY-ERP-Desktop-Setup-$Version.exe"
+$PdksSetupName = "KY-PDKS-Pro-Setup-$Version.exe"
+$ErpSetup = Get-ChildItem $InstallerOut -Filter $ErpSetupName | Select-Object -First 1
+$PdksSetup = Get-ChildItem $InstallerOut -Filter $PdksSetupName | Select-Object -First 1
+if (-not $ErpSetup) { throw "$ErpSetupName oluşmadı." }
+if (-not $PdksSetup) { throw "$PdksSetupName oluşmadı." }
 
-Write-Host '5/5 Bütünlük özeti...' -ForegroundColor Cyan
-$Hash = (Get-FileHash $Setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-$HashFile = "$($Setup.FullName).sha256.txt"
-"$Hash  $($Setup.Name)" | Set-Content -Path $HashFile -Encoding ascii
+$ErpHash = (Get-FileHash $ErpSetup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+$PdksHash = (Get-FileHash $PdksSetup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+"$ErpHash  $($ErpSetup.Name)" | Set-Content -Path "$($ErpSetup.FullName).sha256.txt" -Encoding ascii
+"$PdksHash  $($PdksSetup.Name)" | Set-Content -Path "$($PdksSetup.FullName).sha256.txt" -Encoding ascii
 
+Write-Host '8/8 Build bilgisi...' -ForegroundColor Cyan
 $BuildInfo = [ordered]@{
-    product = 'KY ERP Masaüstü'
-    productScope = 'FULL_ERP'
-    pdksRole = 'IK_MODULE_DEVICE_AGENT'
     version = $Version
+    frontendOrigin = 'https://app.kyerp.net'
+    liveApi = 'https://api.kyerp.net'
+    products = @(
+        [ordered]@{
+            product = 'KY ERP Desktop'
+            scope = 'FULL_ERP_DESKTOP'
+            setup = $ErpSetup.Name
+            sha256 = $ErpHash
+            exe = 'KY ERP Desktop.exe'
+            version = [string]$ErpVersion
+            includesFileHubAgent = $true
+            includesPdksAgent = $false
+            includesWebView = $true
+        },
+        [ordered]@{
+            product = 'KY PDKS Pro'
+            scope = 'PDKS_STANDALONE_CANONICAL_UI'
+            setup = $PdksSetup.Name
+            sha256 = $PdksHash
+            exe = 'KY PDKS Pro.exe'
+            version = [string]$PdksVersion
+            includesFileHubAgent = $false
+            includesPdksAgent = $true
+            includesWebView = $true
+            includesCanonicalFrontend = $true
+            standaloneProduct = 'PDKS'
+            denetimWriteControls = 'HIDDEN'
+        }
+    )
+    pdksAgentVersion = [string]$AgentVersion
     builtAt = (Get-Date).ToString('o')
-    setup = $Setup.Name
-    sha256 = $Hash
-    desktopVersion = [string]$DesktopVersion
-    agentVersion = [string]$AgentVersion
-    desktop = (Get-Item $DesktopExe).Length
-    agent = (Get-Item $AgentExe).Length
 }
-$BuildInfo | ConvertTo-Json | Set-Content (Join-Path $InstallerOut 'build-info.json') -Encoding utf8
+$BuildInfo | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $InstallerOut 'build-info.json') -Encoding utf8
 
-Write-Host ''
-Write-Host "KY ERP Masaüstü $Version tam ERP paketi hazır." -ForegroundColor Green
-Write-Host "Setup : $($Setup.FullName)" -ForegroundColor Cyan
-Write-Host "SHA256: $Hash" -ForegroundColor Cyan
+Write-Host "KY ERP Desktop hazır: $($ErpSetup.FullName)" -ForegroundColor Green
+Write-Host "KY PDKS Pro hazır: $($PdksSetup.FullName)" -ForegroundColor Green
+Write-Host "ERP SHA256 : $ErpHash" -ForegroundColor Cyan
+Write-Host "PDKS SHA256: $PdksHash" -ForegroundColor Cyan

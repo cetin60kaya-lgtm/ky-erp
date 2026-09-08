@@ -95,3 +95,23 @@ export async function verifyUserEmail(id, payload = {}) { return unwrap(await ap
 export async function getUserEmailDeliveryStatus(id, messageId) {
   return unwrap(await apiGet(`/admin/security/users/${encodeURIComponent(id)}/email-verification/delivery/${encodeURIComponent(messageId)}`, { _ts: Date.now() }));
 }
+
+
+export async function getBuildCenterStatus() {
+  return unwrap(await apiGet("/admin/build-center/status", { _ts: Date.now() }, { timeoutMs: 60000 }));
+}
+export async function rotateBuildAgentToken() {
+  return unwrap(await apiPost("/admin/build-center/agent-token", {}));
+}
+export async function createBuildJob(payload = {}) {
+  return unwrap(await apiPost("/admin/build-center/jobs", payload));
+}
+export async function cancelBuildJob(id) {
+  return unwrap(await apiPost(`/admin/build-center/jobs/${encodeURIComponent(id)}/cancel`, {}));
+}
+export async function downloadBuildArtifact(id, fileName = "KY-PDKS-Pro-Setup.exe") {
+  return downloadFile(`/admin/build-center/jobs/${encodeURIComponent(id)}/artifact`, undefined, fileName);
+}
+export async function downloadBuildLog(id, fileName = "KYERP-build.log") {
+  return downloadFile(`/admin/build-center/jobs/${encodeURIComponent(id)}/log`, undefined, fileName);
+}

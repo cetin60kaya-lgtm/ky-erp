@@ -151,7 +151,8 @@ test("trash and spam are visually excluded from unread badges and unsafe delete 
   assert.match(page, /selectedFolderCountsUnread/);
   assert.match(page, /!selectedFolderIsTrash && !selectedFolderIsJunk/);
   assert.match(page, /\["TRASH","JUNK"\]\.includes\(folderType\(folder\)\)/);
-  assert.match(page, /!selectedFolderIsTrash \? <button[^>]+messageAction\("DELETE"\)/);
+  assert.match(page, /!selectedFolderIsTrash \? <button type="button" className="danger-lite"/);
+  assert.match(page, /onClick=\{\(\) => messageAction\("DELETE"\)\}>Sil<\/button>/);
 });
 
 

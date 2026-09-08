@@ -1299,7 +1299,10 @@ async function advancedMonth(c: Context<AppEnv>) {
     if (!fileName.startsWith(calcPrefix)) continue;
     calcByEmployee.set(fileName.slice(calcPrefix.length), parsePersonCardCalc(row));
   }
-  const rawEmployeesWithCalc = employees.map((employee) => ({ ...employee, deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300 }));
+  const rawEmployeesWithCalc: Row[] = employees.map((employee): Row => ({
+    ...employee,
+    deductionHourlyBase: number(calcByEmployee.get(text(employee.id))?.deductionHourlyBase) || 300,
+  }));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
   const profileByEmployee = new Map(profiles.map((row) => [text(row.employee_id), row]));
   const complianceByEmployee = new Map(compliance.map((row) => [text(row.employee_id), row]));

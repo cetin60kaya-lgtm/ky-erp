@@ -40,13 +40,9 @@ Fingerprint `kart no + kesin tarih/saat` üzerinden alınır. Aynı fiziksel bas
 
 ## ERP eşleştirmesi
 
-Senkron sırasında masaüstü uygulama KY ERP'den personel listesini yeniler. Yalnız:
+Senkron sırasında Agent/masaüstü KY ERP'nin aktif kartlı personel eşlemesini kullanır. Normal operasyon için SGK statüsü kartın gerçek devam hareketini silmez veya uydurmaz. Kart numarası dolu olmalı ve olay tarihi personelin çalışma aralığında olmalıdır.
 
-- `SGK = VAR`
-- kart numarası dolu
-- kart tarihi işe giriş/işten çıkış aralığında
-
-olan hareketler `/api/ik/personnel-control/time-events/import` endpointine gönderilir. Eşleşmeyen hareket silinmez; yerelde `ERROR` durumunda kontrol bekler.
+DENETIM görünümü ayrıca dönem bazlı SGK kapsamına daraltılır. Eşleşmeyen hareket silinmez; yerelde kontrol/red durumunda korunur.
 
 ## Üreticiye özel binary protokol
 
@@ -61,3 +57,13 @@ Bir cihaz ASCII/CSV satırı vermiyor ve yalnız üreticinin SDK'sı/binary prot
 - Setup ve Windows servisi
 
 Üreticiye özel komut/port/protokol, cihaz marka-model dokümanı görülmeden tahmin edilmez.
+
+## Kontrol komutları güvenlik kapısı
+
+Terminal UI'da ileride bulunabilecek saat okuma/yazma, zil, kapı rölesi, cihaz kodu, yönetici silme ve restart işlemleri `TerminalCommandAdapter` benzeri marka/model adapterı üzerinden açılmalıdır.
+
+- salt-okunur tanılama önce çalışır,
+- komut desteği marka/model bazında açıkça doğrulanır,
+- yazma/kapı/restart işlemleri ikinci onay ister,
+- DENETIM hesabında komut yüzeyi kapalıdır,
+- cihaz TCP portu WAN'a açılmaz.

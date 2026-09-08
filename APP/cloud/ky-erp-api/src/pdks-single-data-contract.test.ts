@@ -145,7 +145,7 @@ test("Web PDKS uses the left sidebar as primary navigation and only a compact gr
 
   assert.match(registry, /key: "pdks"/);
   assert.match(registry, /label: "PDKS"/);
-  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"])
+  for (const group of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "AI & Kontrol", "Rapor & Denetim"])
     assert.match(page, new RegExp(group));
 
   assert.match(page, /pdks-context-bar/);
@@ -159,11 +159,11 @@ test("Web PDKS uses the left sidebar as primary navigation and only a compact gr
   assert.match(css, /\.pdks-context-tabs/);
 });
 
-test("PDKS primary sidebar exposes exactly five operation groups without dumping every subtab", () => {
+test("PDKS primary sidebar exposes six focused operation groups without dumping every subtab", () => {
   const registry = frontend("app/pdksModuleRegistryPatch.js");
   const shell = frontend("layouts/AppShellV3.jsx");
 
-  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "Rapor & Denetim"]) {
+  for (const label of ["Günlük", "Personel & İK", "Tanımlar", "Terminal & Sistem", "AI & Kontrol", "Rapor & Denetim"]) {
     assert.ok(registry.includes(label), `Eksik PDKS ana grup: ${label}`);
   }
   assert.match(registry, /sidebarGroups:\s*\[/);
@@ -171,6 +171,7 @@ test("PDKS primary sidebar exposes exactly five operation groups without dumping
   assert.match(registry, /\["personel-bilgileri", "Personel & İK"/);
   assert.match(registry, /\["gruplar-vardiyalar", "Tanımlar"/);
   assert.match(registry, /\["saat-terminal", "Terminal & Sistem"/);
+  assert.match(registry, /\["ai-kontrol", "AI & Kontrol"/);
   assert.match(registry, /\["raporlar", "Rapor & Denetim"/);
 
   assert.match(shell, /hasPrimarySidebarGroups/);
@@ -185,11 +186,15 @@ test("PDKS live dashboard counts all active workers for HR but keeps audit month
   const source = api("ik-pdks-modern.ts");
 
   assert.match(source, /\/api\/ik\/personnel-control\/dashboard-live/);
-  assert.match(source, /const people=auth\.audit/);
+  assert.match(source, /const people\s*=\s*auth\.audit/);
   assert.match(source, /ik_person_monthly_compliance mc/);
   assert.match(source, /mc\.sgk_covered=1/);
   assert.match(source, /UPPER\(COALESCE\(s\.active_passive,'AKTIF'\)\) NOT LIKE '%PAS%'/);
   assert.match(source, /UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PAS%'/);
+  assert.match(source, /scheduledToday/);
+  assert.match(source, /status = "WAITING"/);
+  assert.match(source, /status = "NO_SHOW"/);
+  assert.match(source, /status = "MISSING_OUT"/);
   assert.doesNotMatch(source, /WHERE e\.main_company_id=\? AND UPPER\(COALESCE\(e\.status,'AKTIF'\)\) NOT LIKE '%PASIF%' AND UPPER\(COALESCE\(e\.sgk_status,'VAR'\)\)<>'YOK'/);
 });
 
@@ -235,4 +240,52 @@ test("PDKS Terminal & Sistem landing opens the actual device center", () => {
 
   assert.match(page, /\["saat-terminal", "cihaz-baglantilari", "senkron"\]/);
   assert.match(device, /activeTab==="saat-terminal"\?"Terminal & Sistem"/);
+});
+
+
+test("PDKS live dashboard bulk-loads schedules and joins adjacent-day cross-midnight punches", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /const previousDate = addDays\(date, -1\)/);
+  assert.match(source, /t\.work_date BETWEEN \? AND \?/);
+  assert.match(source, /const groupRows = await all/);
+  assert.match(source, /const employeeGroupMap = new Map/);
+  assert.match(source, /const departmentGroupMap = new Map/);
+  assert.match(source, /const scheduleFor = \(person: Row\)/);
+  assert.doesNotMatch(source, /for \(const person of people\)[\s\S]{0,1400}await resolveSchedule/);
+  assert.match(source, /const shiftDate = date === todayKey && schedule\.crossMidnight/);
+  assert.match(source, /const shiftEndDate = schedule\.crossMidnight \? addDays\(shiftDate, 1\) : shiftDate/);
+  assert.match(source, /observedEntry/);
+  assert.match(source, /firstDirection === "OUT"/);
+});
+
+test("DENETIM AI can read the finance-free live PDKS snapshot", () => {
+  const guard = api("ik-pdks-guard.ts");
+  const source = api("ik-pdks-modern.ts");
+  assert.match(guard, /"\/api\/ik\/personnel-control\/dashboard-live"/);
+  assert.match(source, /const visibleEmployeeIds = new Set/);
+  assert.match(source, /auth\.audit \? rawEvents\.filter/);
+});
+
+
+test("PDKS live dashboard retains the previous overnight shift until the next entry time", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /schedule\.crossMidnight && expectedIn !== null/);
+  assert.match(source, /nowMinutes < expectedIn \? previousDate : date/);
+  assert.match(source, /shiftEndDate === todayKey && expectedOut !== null && nowMinutes > expectedOut \+ schedule\.earlyTolerance/);
+});
+
+
+test("PDKS overnight lateness uses the next-day timeline offset", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /observedEntryDayOffset = schedule\.crossMidnight/);
+  assert.match(source, /observedEntryTimelineMin/);
+  assert.match(source, /observedEntryTimelineMin > expectedIn \+ schedule\.lateTolerance/);
+});
+
+test("PDKS live roster treats only full-day leave as attendance-precedence", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /const fullDayLeave = Boolean\(leave\) && liveLeaveFraction >= 1/);
+  assert.match(source, /const partialLeave = Boolean\(leave\) && liveLeaveFraction > 0 && liveLeaveFraction < 1/);
+  assert.match(source, /if \(fullDayLeave\)/);
+  assert.match(source, /if \(partialLeave\) metrics\.permitted \+= 1/);
 });

@@ -18,8 +18,8 @@ export async function getPdksPeople(params = {}) {
 
 // Modern attendance motoru: vardiya, Cumartesi/Pazar, yarım gün tatil, izin günü,
 // duplicate punch, tolerans ve mesai hesabını tek server cevabında döndürür.
-export async function getPdksAttendance(employeeId, year, month) {
-  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance-v2`, { year, month }));
+export async function getPdksAttendance(employeeId, year, month, params = {}) {
+  return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance-v2`, { ...params, year, month }));
 }
 
 export async function getPdksLegacyAttendance(employeeId, year, month) {
@@ -96,16 +96,16 @@ export async function savePdksWorkGroup(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/work-groups", payload));
 }
 
-export async function assignPdksWorkGroup(employeeId, groupId) {
-  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/work-group`, { groupId }));
+export async function assignPdksWorkGroup(employeeId, groupId, params = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/work-group`, { ...params, groupId }));
 }
 
 export async function savePdksService(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/services", payload));
 }
 
-export async function assignPdksService(employeeId, serviceId) {
-  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { serviceId }));
+export async function assignPdksService(employeeId, serviceId, params = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { ...params, serviceId }));
 }
 
 // PDKS kritik iş verileri personnel-control altında açık D1 operasyon endpointlerinden çalışır.

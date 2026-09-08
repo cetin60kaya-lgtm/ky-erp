@@ -10,6 +10,7 @@ const PDKS_MODULE = {
     ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve çalışma bağlantısı"],
     ["gruplar-vardiyalar", "Tanımlar", "ayarlar", "Vardiya ve çalışma kuralları"],
     ["saat-terminal", "Terminal & Sistem", "ayarlar", "Cihaz, saat ve senkron yönetimi"],
+    ["ai-kontrol", "AI & Kontrol", "dashboard", "Canlı analiz, anomali ve kontrollü işlemler"],
     ["raporlar", "Rapor & Denetim", "raporlar", "Raporlar ve yıllık denetim paketi"],
   ],
   groups: [
@@ -47,6 +48,12 @@ const PDKS_MODULE = {
         ["saat-terminal", "Saat / Terminal", "ayarlar"],
         ["cihaz-baglantilari", "Cihaz Bağlantıları", "ayarlar"],
         ["senkron", "Senkronizasyon", "sync"],
+      ],
+    },
+    {
+      label: "AI & Kontrol",
+      tabs: [
+        ["ai-kontrol", "AI Kontrol Merkezi", "dashboard"],
       ],
     },
     {
@@ -90,6 +97,9 @@ MODULE_ROUTE_ALIASES.pdks = {
   "saat": "saat-terminal",
   "cihazlar": "cihaz-baglantilari",
   "sync": "senkron",
+  "ai": "ai-kontrol",
+  "asistan": "ai-kontrol",
+  "kontrol-merkezi": "ai-kontrol",
   "denetim": "denetim-yillik-temp",
   "temp": "denetim-yillik-temp",
 };
