@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, CheckCheck, ChevronDown, Command, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
+import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import { getNotifications, markNotificationsRead } from "../services/notificationApi";
@@ -85,7 +86,6 @@ export default function AppShellV3({
   activeCompanySlug,
   user,
   displayPreferences,
-  standaloneProduct = "",
   mobileMenuOpen,
   onToggleModuleMenu,
   onOpenTab,
@@ -101,6 +101,8 @@ export default function AppShellV3({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState("");
@@ -113,7 +115,6 @@ export default function AppShellV3({
     generatedAt: "",
   });
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
-  const standalonePdks = String(standaloneProduct || "").toUpperCase() === "PDKS";
 
   const refreshNotifications = useCallback(async (silent = false) => {
     const normalizedRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
@@ -152,6 +153,26 @@ export default function AppShellV3({
       window.removeEventListener("focus", onFocus);
     };
   }, [refreshNotifications, user?.id, activeCompanySlug]);
+
+  useEffect(() => {
+    const openPhoneApprovalSetup = () => setPhoneApprovalOpen(true);
+    window.addEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
+    return () => window.removeEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
+  }, []);
+
+  useEffect(() => {
+    const onBeforeInstall = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
 
   useEffect(() => {
     if (!notificationOpen) return undefined;
@@ -229,6 +250,18 @@ export default function AppShellV3({
     markNotificationIdsRead(unreadIds);
   }
 
+  async function installPwa() {
+    if (!installPrompt) return;
+    try {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+    } catch {
+      // Tarayıcı kurulum penceresini kapattıysa uygulama normal web modunda çalışmaya devam eder.
+    } finally {
+      setInstallPrompt(null);
+    }
+  }
+
   const effectiveMode = displayPreferences?.effectiveMode || "pc";
   const effectiveScale = Number(displayPreferences?.effectiveScale || 100);
   const scaleFactor = effectiveScale / 100;
@@ -256,7 +289,7 @@ export default function AppShellV3({
       <aside className="shell-v3-sidebar">
         <header className="shell-v3-sidebar-brand">
           <button type="button" className="shell-v3-brand-button" onClick={() => onToggleModuleMenu("muhasebe")}>
-            <b>KY</b><span><strong>{standalonePdks ? "KY PDKS PRO" : "KY ERP"}</strong><small>{standalonePdks ? "Personel Devam Kontrol" : (activeModule?.label || "Yönetim Sistemi")}</small></span>
+            <b>KY</b><span><strong>KY ERP</strong><small>{activeModule?.label || "Yönetim Sistemi"}</small></span>
           </button>
           <button type="button" className="shell-v3-sidebar-close" aria-label="Menüyü kapat" onClick={onCloseMobileMenu}><X size={18} /></button>
         </header>
@@ -316,11 +349,23 @@ export default function AppShellV3({
       <main className="shell-v3-main">
         <header className="shell-v3-topbar">
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç"><Menu size={19} /></button>
-          <label className="shell-v3-search"><Search size={17} /><input placeholder={standalonePdks ? "Personel, kart, vardiya veya durum ara" : "Firma, belge, model veya ürün ara"} /></label>
+          <label className="shell-v3-search"><Search size={17} /><input placeholder="Firma, belge, model veya ürün ara" /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><Plus size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
           <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
           </select>
+          {installPrompt ? (
+            <button
+              type="button"
+              className="shell-v3-install-button"
+              onClick={installPwa}
+              aria-label="KY ERP uygulamasını bu cihaza yükle"
+              title="KY ERP'yi uygulama olarak yükle"
+            >
+              <Download size={17} />
+              <span>Uygulamayı Yükle</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="shell-v3-display-button"
@@ -331,6 +376,16 @@ export default function AppShellV3({
             <Monitor size={17} />
             <span>Ekran</span>
             <small>{displayLabel} · {effectiveScale}%</small>
+          </button>
+          <button
+            type="button"
+            className="shell-v3-phone-approval-button"
+            onClick={() => setPhoneApprovalOpen(true)}
+            aria-label="Telefon Onayı ayarlarını aç"
+            title="Telefon Onayı"
+          >
+            <BellRing size={17} />
+            <span>Telefon Onayı</span>
           </button>
           <div className="shell-v3-notification-wrap">
             <button
@@ -430,6 +485,13 @@ export default function AppShellV3({
               display={displayPreferences}
               onClose={() => setDisplaySettingsOpen(false)}
             />,
+            document.body,
+          )
+        : null}
+
+      {phoneApprovalOpen
+        ? createPortal(
+            <PhoneApprovalSetup onClose={() => setPhoneApprovalOpen(false)} />,
             document.body,
           )
         : null}
