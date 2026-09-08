@@ -34,3 +34,10 @@ test("PDKS live AI analysis can run ephemerally without persisting the attendanc
   assert.match(ai, /if\(ephemeral\)\{/);
   assert.match(ai, /ephemeral:true/);
 });
+
+
+test("DENETIM PDKS AI never receives File Hub context", () => {
+  assert.match(ai, /upper\(user\?\.role\)==="DENETIM"/);
+  assert.match(ai, /return\[\]/);
+  assert.match(ai, /if\(Array\.isArray\(allowedEntities\)&&!allowedEntities\.length\)return\{rows:\[\],count:0,degraded:false\}/);
+});
