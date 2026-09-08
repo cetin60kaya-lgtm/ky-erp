@@ -40,12 +40,11 @@ function closureReason(row: Row) {
 
 export function registerAuthAdminHistoryRoutes(app: Hono<AppEnv>) {
   app.get("/api/admin/security/session-history", async (c) => {
-    const current = await admin(c);
-    if (!current) return error(c, 403, "FORBIDDEN", "Yönetici yetkisi gereklidir.");
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isSuper(current.role)) return error(c, current ? 403 : 401, "OWNER_ONLY", "Tüm kullanıcı oturum geçmişini yalnız Süper Yönetici görüntüleyebilir.");
     const limit = limitOf(c.req.query("limit"));
-    const company = text(current.mainCompanySlug);
-    const companyClause = isSuper(current.role) ? "" : "AND s.main_company_slug=?";
-    const values = isSuper(current.role) ? [limit] : [company, limit];
+    const companyClause = "";
+    const values = [limit];
     const result = await c.env.DB.prepare(`
       SELECT s.*,u.username,u.full_name,us.email,us.role_override,
              (SELECT a.action FROM auth_security_audit a WHERE a.session_id=s.id ORDER BY a.created_at DESC LIMIT 1) AS audit_action,
