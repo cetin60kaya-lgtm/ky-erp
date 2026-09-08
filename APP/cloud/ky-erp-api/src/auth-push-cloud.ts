@@ -12,7 +12,7 @@ const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
 const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
-const SECURITY_ENROLL_SECONDS = 10 * 60;
+const SECURITY_ENROLL_SECONDS = 10 * 60;\nconst SECURITY_APP_VERSION = "security-v1.1";
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -664,7 +664,7 @@ export function registerAuthPushRoutes(app: any) {
       ok: true,
       data: {
         app: "KY ERP Güvenlik",
-        version: "security-v1",
+        version: SECURITY_APP_VERSION,
         applicationServerKey: pair.publicKey,
         approvalUrl: "https://app.kyerp.net/security/",
       },
@@ -787,7 +787,7 @@ export function registerAuthPushRoutes(app: any) {
       deviceLabel: label,
       userAgent: userAgent(c),
       securityApp: true,
-      securityAppVersion: "security-v1",
+      securityAppVersion: SECURITY_APP_VERSION,
       selfLoginEnabled: true,
       managerApprovalEnabled: isSuper(role) || isCompanyAdmin(role),
       isActive: true,
@@ -834,7 +834,7 @@ export function registerAuthPushRoutes(app: any) {
         deviceToken,
         deviceLabel: label,
         securityApp: true,
-        securityAppVersion: "security-v1",
+        securityAppVersion: SECURITY_APP_VERSION,
       },
     });
   });
