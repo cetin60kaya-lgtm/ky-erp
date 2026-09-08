@@ -37,3 +37,18 @@ test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", (
   assert.match(setupCss, /height:100dvh/);
   assert.match(setupCss, /font-size:16px/);
 });
+
+
+test("phone approval persists device capability and recovers missing local key", () => {
+  const setup = read("./components/shell/PhoneApprovalSetup.jsx");
+  const inbox = read("./components/shell/PhoneApprovalInboxBridge.jsx");
+  const shell = read("./layouts/AppShellV3.jsx");
+
+  assert.match(setup, /persistDeviceCredentials/);
+  assert.match(setup, /kyerp-push-security-v1/);
+  assert.match(setup, /await persistDeviceCredentials\(deviceCredentials\)/);
+  assert.match(inbox, /PUSH_DEVICE_NOT_CONFIGURED/);
+  assert.match(inbox, /Telefonu Yeniden Kaydet/);
+  assert.match(inbox, /kyerp:open-phone-approval-setup/);
+  assert.match(shell, /addEventListener\("kyerp:open-phone-approval-setup"/);
+});
