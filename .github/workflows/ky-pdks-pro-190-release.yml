@@ -1,0 +1,76 @@
+name: KY PDKS Pro 1.9.0 Windows Release
+
+on:
+  push:
+    branches:
+      - codex/pdks-desktop-1.8.1-device-final-20260907
+    paths:
+      - "APP/desktop/ky-pdks/**"
+      - "APP/app/ky-erp-frontend/**"
+      - "APP/cloud/ky-erp-api/src/**"
+      - ".github/workflows/ky-pdks-pro-190-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ky-pdks-pro-190-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Test + PDKS Pro Setup 1.9.0
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: KY PDKS Pro tam test + publish + Setup
+        shell: pwsh
+        run: ./APP/desktop/ky-pdks/BUILD_PDKS_PRO_SETUP.ps1
+
+      - name: Release çıktısını doğrula
+        shell: pwsh
+        run: |
+          $dir = './APP/desktop/ky-pdks/dist-pdks/setup'
+          $setup = Get-ChildItem $dir -Filter 'KY-PDKS-Pro-Setup-1.9.0.exe' -File | Select-Object -First 1
+          if (-not $setup) { throw 'KY-PDKS-Pro-Setup-1.9.0.exe bulunamadı.' }
+          if ($setup.Length -lt 5MB) { throw "Setup beklenenden küçük: $($setup.Length)" }
+          if (-not (Test-Path "$($setup.FullName).sha256.txt")) { throw 'SHA256 dosyası eksik.' }
+          $info = Get-Content "$dir/build-info-pdks.json" -Raw | ConvertFrom-Json
+          if ($info.version -ne '1.9.0') { throw "Sürüm yanlış: $($info.version)" }
+          if ($info.product -ne 'KY PDKS Pro') { throw "Ürün yanlış: $($info.product)" }
+          if ($info.includesPdksAgent -ne $true) { throw 'PDKS Agent pakete alınmadı.' }
+          if ($info.includesCanonicalFrontend -ne $true) { throw 'Canonical frontend pakete alınmadı.' }
+          if ($info.includesWebView2Bootstrapper -ne $true) { throw 'WebView2 prerequisite pakete alınmadı.' }
+          Get-FileHash $setup.FullName -Algorithm SHA256
+
+      - name: KY PDKS Pro 1.9.0 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KY-PDKS-Pro-Setup-1.9.0
+          path: |
+            APP/desktop/ky-pdks/dist-pdks/setup/KY-PDKS-Pro-Setup-1.9.0.exe
+            APP/desktop/ky-pdks/dist-pdks/setup/KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt
+            APP/desktop/ky-pdks/dist-pdks/setup/build-info-pdks.json
+          if-no-files-found: error
+          retention-days: 30
