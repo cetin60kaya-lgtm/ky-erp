@@ -648,7 +648,7 @@ body,
 }
 
 .shell-v3[data-layout-mode="phone"] .shell-v3-workspace {
-  padding: 6px 6px max(10px, var(--ky-safe-bottom)) !important;
+  padding: 6px 6px calc(88px + var(--ky-safe-bottom)) !important;
 }
 
 .shell-v3[data-layout-mode="phone"] .shell-v3-close-all {
