@@ -242,6 +242,17 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Bu parite bundan sonra release blocker'dır: desktopta çalışan bir business işlem mobilde yoksa özellik tamam sayılmaz.
 - Production yayın yolu değişmedi: GitHub Actions yok; production merge sonrası Cloudflare Git Integration -> Pages + Workers Builds -> canlı smoke.
 
+## 08.09.2026 — Profil merkezli yönetim + tek Bildirim Onay Merkezi paketi
+
+- Kullanıcı kararı: **Platform Yönetimi / güvenlik sol menüde görünmeyecek.** Yönetim ve profil güvenliği yalnız sağ üst kullanıcı/profil menüsünden açılacak; admin rotaları işlevsel olarak korunur.
+- Süper Yönetici profil satırında aktif firma adı gösterilmez; yalnız **Süper Yönetici** etiketi görünür.
+- Oturum görünürlüğü kesin kuralı: her kullanıcı (Firma Sahibi dahil) yalnız kendi aktif oturumlarını Profil & Giriş Güvenliği alanından görür/kapatır; sistemdeki tüm kullanıcı oturumlarını ve oturum geçmişini yalnız Süper Yönetici görebilir/yönetebilir.
+- Uygulama içi zil/Bildirim Merkezi, yönetsel onayların canonical hızlı karar noktasıdır. Giriş onayı ve mail hesabı bağlantı onayı bildirim kartında doğrudan **Onayla / Reddet** işlemi bulunur.
+- Onay kapsamı backend'de korunur: Süper Yönetici tüm firmaların onaylarını görür; Firma Sahibi / İşveren yalnız kendi firmasının onaylarını görür ve sonuçlandırır.
+- Telefon giriş push akışı sağlamlaştırıldı: aynı kullanıcı + aynı tarayıcı/cihaz için mevcut bekleyen challenge yeniden kullanılır; üst üste yeni challenge/push üretilmez. Service Worker tek sabit bildirim etiketi kullanır, eski yığılmış bildirimleri temizler ve sonuç için ikinci bir push üretmez.
+- Güvenlik sınırı korunur: kullanıcının **kendi telefon MFA onayı** genel oturum yetkisiyle bypass edilmez; trusted-device capability akışı devam eder. Bildirim Merkezi doğrudan karar butonları yönetsel/business onayları içindir.
+- Aktif feature branch: `fix/profile-notification-approvals-final-20260908`. D1 migration yoktur. Production merge/deploy bu kayıtla yapılmış sayılmaz; canonical Cloudflare Git Integration yolu geçerlidir.
+
 ## Son güncelleme
 
 
