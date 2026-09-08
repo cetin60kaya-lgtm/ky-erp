@@ -78,36 +78,66 @@ async function broadcastPendingWake() {
   await Promise.all(windows.map((client) => client.postMessage({ type: "KYERP_PUSH_PENDING_WAKE" })));
 }
 
+function stableNotificationTag(item) {
+  if (String(item?.kind || "") === "SELF_LOGIN") return "kyerp-self-login";
+  const key = String(item?.dedupeKey || item?.mainCompanySlug || item?.id || "approval")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .slice(0, 120);
+  return `kyerp-manager-${key}`;
+}
+
+async function closeStaleApprovalNotifications(activeTags = new Set()) {
+  try {
+    const visible = await self.registration.getNotifications();
+    for (const notification of visible) {
+      const tag = String(notification.tag || "");
+      if (
+        (tag === "kyerp-self-login" || tag.startsWith("kyerp-manager-") || tag === "kyerp-generic-security-wake") &&
+        !activeTags.has(tag)
+      ) notification.close();
+    }
+  } catch {}
+}
+
 async function showPending() {
   let payload = null;
+  let fetchFailed = false;
   try {
     payload = await deviceFetch("/auth/push/device/pending", { method: "GET" });
   } catch {
-    // Safari/iOS userVisibleOnly kuralı gereği push hiçbir koşulda sessiz kalmaz.
+    fetchFailed = true;
   }
+
   const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
   if (!items.length) {
-    await self.registration.showNotification("KY ERP · Giriş Onayı", {
-      body: "Yeni bir giriş isteği var. KY ERP'yi açıp Onayla veya Reddet seçin.",
-      tag: "kyerp-generic-security-wake",
-      renotify: true,
-      requireInteraction: true,
-      badge: "/kyerp-icon.svg",
-      icon: "/kyerp-icon.svg",
-      timestamp: Date.now(),
-      vibrate: [180, 80, 180],
-      data: { openApproval: true },
-    });
+    await closeStaleApprovalNotifications(new Set());
+    if (fetchFailed) {
+      // iOS userVisibleOnly: pending listesi alınamazsa push tamamen sessiz bırakılamaz.
+      await self.registration.showNotification("KY ERP · Giriş Onayı", {
+        body: "KY ERP güvenlik isteğini kontrol etmek için uygulamayı açın.",
+        tag: "kyerp-generic-security-wake",
+        renotify: false,
+        requireInteraction: true,
+        badge: "/kyerp-icon.svg",
+        icon: "/kyerp-icon.svg",
+        timestamp: Date.now(),
+        vibrate: [180, 80, 180],
+        data: { openApproval: true },
+      });
+    }
     await broadcastPendingWake();
     return;
   }
+
+  const activeTags = new Set(items.slice(0, 8).map(stableNotificationTag));
+  await closeStaleApprovalNotifications(activeTags);
 
   await Promise.all(items.slice(0, 8).map((item) => self.registration.showNotification(
     item.title || "KY ERP güvenlik onayı",
     {
       body: item.body || "Yeni bir güvenlik isteği onay bekliyor.",
-      tag: `kyerp-${item.kind || "approval"}-${item.id}`,
-      renotify: true,
+      tag: stableNotificationTag(item),
+      renotify: false,
       requireInteraction: true,
       badge: "/kyerp-icon.svg",
       icon: "/kyerp-icon.svg",
@@ -160,6 +190,8 @@ self.addEventListener("message", (event) => {
     event.waitUntil(writeDevice({
       deviceId: String(data.deviceId),
       deviceToken: String(data.deviceToken),
+      localUnlockRequired: Boolean(data.localUnlockRequired),
+      localUnlockCredentialId: String(data.localUnlockCredentialId || ""),
       savedAt: new Date().toISOString(),
     }));
   } else if (data.type === "KYERP_PUSH_CLEAR") {
@@ -191,22 +223,18 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil((async () => {
     try {
+      const device = await readDevice();
+      if (action === "approve" && device?.localUnlockRequired && device?.localUnlockCredentialId) {
+        // Platform biyometrisi/PIN yalnız foreground pencerede çağrılabilir.
+        await focusOrOpen(`/?kyerpPhoneApproval=1&approvalKind=${encodeURIComponent(data.kind)}&approvalId=${encodeURIComponent(data.id)}`);
+        return;
+      }
+
       await decide(data.kind, data.id, action === "approve" ? "APPROVE" : "DENY");
-      await self.registration.showNotification(
-        action === "approve" ? "KY ERP · Giriş Onaylandı" : "KY ERP · Giriş Reddedildi",
-        {
-          body: action === "approve" ? "Güvenlik isteği telefonunuzdan onaylandı." : "Güvenlik isteği reddedildi.",
-          tag: `kyerp-result-${data.id}`,
-          icon: "/kyerp-icon.svg",
-          badge: "/kyerp-icon.svg",
-        },
-      );
-    } catch (error) {
-      await self.registration.showNotification("KY ERP · İşlem tamamlanamadı", {
-        body: error?.message || "Onay isteğini tekrar kontrol edin.",
-        tag: `kyerp-error-${data.id}`,
-        icon: "/kyerp-icon.svg",
-      });
+      await broadcastPendingWake();
+      // Tek bildirim -> tek karar -> tamam. İkinci "onaylandı" bildirimi üretilmez.
+    } catch {
+      await focusOrOpen("/?kyerpPhoneApproval=1");
     }
   })());
 });
