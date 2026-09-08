@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, Plus, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
@@ -9,7 +9,7 @@ import { getNotifications, markNotificationsRead } from "../services/notificatio
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 
-const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler"]);
+const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
 function isOwnerUser(user) {
   return ["SUPER_ADMIN", "ADMIN"].includes(String(user?.role || "").toUpperCase().replace(/İ/g, "I"));
@@ -103,6 +103,9 @@ export default function AppShellV3({
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
+  const profileMenuRef = useRef(null);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState("");
@@ -115,6 +118,19 @@ export default function AppShellV3({
     generatedAt: "",
   });
   const activeTabLabel = getTabs(activeModule, user).find(([key]) => key === activeTab)?.[1] || "";
+  const activeCompanyName = companies.find((item) => item.slug === activeCompanySlug)?.name || "Firma seçilmedi";
+  const profileImageUrl = String(
+    user?.avatarUrl || user?.profileImageUrl || user?.photoUrl || user?.pictureUrl || user?.picture || "",
+  ).trim();
+  const profileInitials = String(user?.fullName || user?.username || "K")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toLocaleUpperCase("tr-TR"))
+    .join("") || "K";
+  const canOpenPlatformManagement = modules.some((item) => item.key === "admin");
+  const ownerUser = isOwnerUser(user);
 
   const refreshNotifications = useCallback(async (silent = false) => {
     const normalizedRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
@@ -183,6 +199,29 @@ export default function AppShellV3({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [notificationOpen]);
 
+  useEffect(() => {
+    setProfileImageFailed(false);
+  }, [profileImageUrl]);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return undefined;
+    const closeProfileMenu = (event) => {
+      if (event.key === "Escape") {
+        setProfileMenuOpen(false);
+        return;
+      }
+      if (event.type === "pointerdown" && profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeProfileMenu);
+    window.addEventListener("pointerdown", closeProfileMenu);
+    return () => {
+      window.removeEventListener("keydown", closeProfileMenu);
+      window.removeEventListener("pointerdown", closeProfileMenu);
+    };
+  }, [profileMenuOpen]);
+
   const quickActions = useMemo(() => {
     const moduleMap = new Map(modules.map((item) => [item.key, item]));
     const query = normalize(quickSearch);
@@ -248,6 +287,34 @@ export default function AppShellV3({
   function markAllNotificationsRead() {
     const unreadIds = notificationData.items.filter((item) => item.unread).map((item) => item.id);
     markNotificationIdsRead(unreadIds);
+  }
+
+  function openProfileSecurity() {
+    setProfileMenuOpen(false);
+    if (ownerUser) {
+      onOpenTab("admin", "uygulama-sahibi");
+      return;
+    }
+    if (canOpenPlatformManagement) {
+      onOpenTab("admin", "kullanicilar");
+      return;
+    }
+    setPhoneApprovalOpen(true);
+  }
+
+  function openPlatformManagement() {
+    setProfileMenuOpen(false);
+    onOpenTab("admin", "admin-yonetim-ozeti");
+  }
+
+  function openPhoneApprovalFromProfile() {
+    setProfileMenuOpen(false);
+    setPhoneApprovalOpen(true);
+  }
+
+  function openDisplaySettingsFromProfile() {
+    setProfileMenuOpen(false);
+    setDisplaySettingsOpen(true);
   }
 
   async function installPwa() {
@@ -449,10 +516,91 @@ export default function AppShellV3({
               </section>
             ) : null}
           </div>
-          <div className="shell-v3-user">
-            <b>{String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</b>
-            <div><strong>{user?.fullName || user?.username || "Kullanıcı"}</strong><small>{roleLabel(user?.role)}</small></div>
-            <button type="button" onClick={onLogout}>Çıkış</button>
+          <div className="shell-v3-user" ref={profileMenuRef}>
+            <button
+              type="button"
+              className={`shell-v3-user-trigger ${profileMenuOpen ? "active" : ""}`}
+              aria-label="Profil ve güvenlik menüsünü aç"
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              onClick={() => {
+                const next = !profileMenuOpen;
+                setProfileMenuOpen(next);
+                if (next) setNotificationOpen(false);
+              }}
+            >
+              <span className="shell-v3-user-avatar" aria-hidden="true">
+                {profileImageUrl && !profileImageFailed ? (
+                  <img src={profileImageUrl} alt="" onError={() => setProfileImageFailed(true)} />
+                ) : <span>{profileInitials}</span>}
+              </span>
+              <span className="shell-v3-user-meta">
+                <strong>{user?.fullName || user?.username || "Kullanıcı"}</strong>
+                <small>{roleLabel(user?.role)}</small>
+              </span>
+              <ChevronDown size={14} className="shell-v3-user-chevron" aria-hidden="true" />
+            </button>
+
+            {profileMenuOpen ? (
+              <section className="shell-v3-user-menu" role="menu" aria-label="Hesap ve güvenlik">
+                <header className="shell-v3-user-menu-head">
+                  <span className="shell-v3-user-avatar large" aria-hidden="true">
+                    {profileImageUrl && !profileImageFailed ? (
+                      <img src={profileImageUrl} alt="" onError={() => setProfileImageFailed(true)} />
+                    ) : <span>{profileInitials}</span>}
+                  </span>
+                  <span className="shell-v3-user-menu-identity">
+                    <strong>{user?.fullName || user?.username || "Kullanıcı"}</strong>
+                    <small>{user?.email || user?.username || ""}</small>
+                    <em>{roleLabel(user?.role)} · {activeCompanyName}</em>
+                  </span>
+                </header>
+
+                <nav className="shell-v3-user-menu-actions" aria-label="Profil işlemleri">
+                  <button type="button" role="menuitem" onClick={openProfileSecurity}>
+                    <ShieldCheck size={18} />
+                    <span>
+                      <strong>{ownerUser ? "Profil & Süper Yönetici Güvenliği" : "Profil & Giriş Güvenliği"}</strong>
+                      <small>{ownerUser ? "E-posta, MFA, kurtarma ve oturumlar" : "Hesap bilgileri ve giriş güvenliği"}</small>
+                    </span>
+                  </button>
+
+                  {canOpenPlatformManagement ? (
+                    <button type="button" role="menuitem" onClick={openPlatformManagement}>
+                      <Settings2 size={18} />
+                      <span>
+                        <strong>Platform Yönetimi</strong>
+                        <small>Kullanıcılar, firma ayarları ve sistem kontrolleri</small>
+                      </span>
+                    </button>
+                  ) : null}
+
+                  <button type="button" role="menuitem" onClick={openPhoneApprovalFromProfile}>
+                    <Smartphone size={18} />
+                    <span>
+                      <strong>Telefon Onayı</strong>
+                      <small>Bu cihazı güvenli giriş onayı için yönet</small>
+                    </span>
+                  </button>
+
+                  <button type="button" role="menuitem" onClick={openDisplaySettingsFromProfile}>
+                    <Monitor size={18} />
+                    <span>
+                      <strong>Ekran & Görünüm</strong>
+                      <small>PC, tablet ve telefon görünümünü ayarla</small>
+                    </span>
+                  </button>
+                </nav>
+
+                <footer className="shell-v3-user-menu-foot">
+                  <span>KY ERP · Güvenli oturum</span>
+                  <button type="button" role="menuitem" onClick={onLogout}>
+                    <LogOut size={17} />
+                    <span>Çıkış</span>
+                  </button>
+                </footer>
+              </section>
+            ) : null}
           </div>
         </header>
 
