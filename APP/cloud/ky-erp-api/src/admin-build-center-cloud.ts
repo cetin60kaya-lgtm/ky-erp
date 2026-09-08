@@ -269,9 +269,11 @@ export function registerAdminBuildCenterRoutes(app:any) {
 
   app.put("/api/build-agent/jobs/:id/multipart/part", async(c:any)=>{
     const denied = await requireAgent(c); if (denied) return denied;
+    const job = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if (!job) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
     const key = text(c.req.query("key")), uploadId=text(c.req.query("uploadId"));
     const partNumber = Number(c.req.query("partNumber")||0);
-    if (!key.startsWith(ROOT+"artifacts/") || !uploadId || !Number.isInteger(partNumber) || partNumber<1 || partNumber>10000) {
+    if (!key.startsWith(ROOT+"artifacts/") || key!==text(job.artifactPendingKey) || !uploadId || !Number.isInteger(partNumber) || partNumber<1 || partNumber>10000) {
       return c.json(errorBody("BUILD_UPLOAD_PART_INVALID","Multipart upload parametreleri geçersiz."),400);
     }
     const upload = c.env.FILES.resumeMultipartUpload(key,uploadId);
