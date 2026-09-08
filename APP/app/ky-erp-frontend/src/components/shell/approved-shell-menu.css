@@ -138,3 +138,33 @@
     height: 34px;
   }
 }
+
+
+/* Telefon Onayı: yalnız ikon değil, kullanıcıya adıyla görünür. */
+.approved-phone-approval-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  flex:0 0 auto;
+  width:auto;
+  min-width:118px;
+  padding:0 10px;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.approved-phone-approval-label{display:inline}
+
+@media (max-width:760px){
+  .approved-global-search{display:none!important}
+  .approved-phone-approval-button{
+    flex-basis:auto;
+    width:auto;
+    min-width:112px;
+    height:34px;
+    padding:0 9px;
+    gap:6px;
+  }
+  .approved-phone-approval-label{display:inline}
+}
