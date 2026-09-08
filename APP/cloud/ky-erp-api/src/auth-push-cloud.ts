@@ -12,7 +12,8 @@ const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
 const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
-const SECURITY_ENROLL_SECONDS = 10 * 60;\nconst SECURITY_APP_VERSION = "security-v1.1";
+const SECURITY_ENROLL_SECONDS = 10 * 60;
+const SECURITY_APP_VERSION = "security-v1.1";
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
