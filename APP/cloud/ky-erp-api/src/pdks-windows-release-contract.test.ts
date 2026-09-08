@@ -72,13 +72,13 @@ test("standalone frontend registers PDKS before module visibility is computed", 
 
 
 test("PDKS enrollment monitor stays alive after successful heartbeat for tenant switches", () => {
-  const desktop = readFileSync(resolve(root, "src/KyPdks.Desktop/KyErpDesktopWindow.xaml.cs"), "utf8");
+  const desktop = pdks("src/KyPdks.Desktop/KyErpDesktopWindow.xaml.cs");
   assert.doesNotMatch(desktop, /if \(await EnsurePdksAgentEnrollmentAsync\([^\n]+\)\) return;/);
   assert.match(desktop, /await EnsurePdksAgentEnrollmentAsync\(token, _lifetime\.Token\);/);
 });
 
 test("PDKS 1.9 release workflow remains manual-only", () => {
-  const workflow = readFileSync(resolve(root, "../../../..", ".github/workflows/ky-pdks-pro-190-release.yml"), "utf8");
+  const workflow = readFileSync(resolve(here, "../../../../.github/workflows/ky-pdks-pro-190-release.yml"), "utf8");
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /^\s*push:/m);
 });
