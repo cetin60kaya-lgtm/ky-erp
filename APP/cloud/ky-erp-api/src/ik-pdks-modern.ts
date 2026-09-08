@@ -563,14 +563,19 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
       const observedEntry = rows.find((row) => upper(row.direction) === "IN")
         || (firstDirection === "AUTO" ? first : null);
       const observedEntryMin = minutesOf(observedEntry?.eventTime);
+      const observedEntryDayOffset = schedule.crossMidnight && dateOnly(observedEntry?.workDate) === shiftNextDate ? 1440 : 0;
+      const observedEntryTimelineMin = observedEntryMin === null ? null : observedEntryMin + observedEntryDayOffset;
       const isInside = Boolean(last) && (lastDirection === "IN" || (lastDirection === "AUTO" && rows.length % 2 === 1));
-      const isLate = observedEntryMin !== null && expectedIn !== null && observedEntryMin > expectedIn + schedule.lateTolerance;
+      const isLate = observedEntryTimelineMin !== null && expectedIn !== null && observedEntryTimelineMin > expectedIn + schedule.lateTolerance;
+      const liveLeaveFraction = Number(leave?.leaveFraction ?? leave?.leave_fraction ?? 0);
+      const fullDayLeave = Boolean(leave) && liveLeaveFraction >= 1;
+      const partialLeave = Boolean(leave) && liveLeaveFraction > 0 && liveLeaveFraction < 1;
 
       let status = "OFF_DAY";
       let statusLabel = shiftHoliday?.name ? `Resmî Tatil · ${text(shiftHoliday.name)}` : "Çalışma Dışı";
       let leaveType = "";
 
-      if (leave) {
+      if (fullDayLeave) {
         const folded = upper(`${leave.leaveTypeCode} ${leave.recordType}`);
         metrics.permitted += 1;
         if (folded.includes("YILLIK")) {
@@ -593,6 +598,7 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
         metrics.offDay += 1;
       } else {
         metrics.scheduledToday += 1;
+        if (partialLeave) metrics.permitted += 1;
         if (!rows.length) {
           const lateBoundary = expectedIn === null ? 0 : expectedIn + schedule.lateTolerance;
           if (date === todayKey && expectedIn !== null && nowMinutes <= lateBoundary) {
@@ -612,10 +618,12 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
             metrics.inside += 1;
             status = isLate ? "INSIDE_LATE" : "INSIDE";
             statusLabel = isLate ? "İçeride · Geç Geldi" : "İçeride";
+            if (partialLeave) statusLabel += " · Kısmi İzin";
           } else {
             metrics.left += 1;
             status = isLate ? "LEFT_LATE" : "LEFT";
             statusLabel = isLate ? "Çıktı · Geç Gelmişti" : "Çıktı";
+            if (partialLeave) statusLabel += " · Kısmi İzin";
           }
 
           // Canlı istisna hesabı fail-safe çalışır:
@@ -670,7 +678,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
         status,
         statusLabel,
         missingKind: status === "MISSING_IN" ? "ENTRY" : status === "MISSING_OUT" ? "EXIT" : "",
-        leaveType,
+        leaveType: leaveType || (partialLeave ? text(leave?.leaveTypeCode || leave?.recordType) : ""),
+        leaveFraction: liveLeaveFraction,
         firstTime,
         lastTime,
         eventCount: rows.length,
