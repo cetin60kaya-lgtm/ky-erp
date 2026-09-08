@@ -33,6 +33,18 @@ function clientIp(c: any) {
 function userAgent(c: any) {
   return text(c.req.header("User-Agent")).slice(0, 300);
 }
+function friendlyDeviceLabel(labelValue: unknown, userAgentValue: unknown = "") {
+  const label = text(labelValue);
+  const ua = text(userAgentValue);
+  if (label && !upper(label).startsWith("BROWSER:")) return label;
+  if (/Android/i.test(ua)) return /Mobile/i.test(ua) ? "Android telefon" : "Android tablet";
+  if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile/i.test(ua))) return "iPad";
+  if (/iPhone|iPod/i.test(ua)) return "iPhone";
+  if (/Windows/i.test(ua)) return "Windows bilgisayar";
+  if (/Macintosh|Mac OS X/i.test(ua)) return "Mac";
+  if (/Linux/i.test(ua)) return "Linux cihaz";
+  return "Yeni cihaz";
+}
 async function bodyOf(c: any) {
   try {
     const body = await c.req.json();
@@ -493,8 +505,8 @@ async function pendingItems(c: any, actor: AnyRow) {
     items.push({
       kind: "SELF_LOGIN",
       id: current.id,
-      title: "KY ERP giriş isteği",
-      body: `${text(current.deviceLabel) || "Yeni cihaz"} için giriş onayı bekleniyor.`,
+      title: "KY ERP · Giriş Onayı",
+      body: `${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`,
       requestedAt: current.requestedAt,
       expiresAt: current.expiresAt,
       mainCompanySlug: actor.companySlug,
@@ -507,7 +519,7 @@ async function pendingItems(c: any, actor: AnyRow) {
 
   const managerRows = isCompanyAdmin(actor.role)
     ? await c.env.DB.prepare(
-        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.requested_at,a.expires_at,
+        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
                 u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
            FROM auth_login_approvals a
            JOIN auth_users u ON u.id=a.user_id
@@ -517,7 +529,7 @@ async function pendingItems(c: any, actor: AnyRow) {
       ).bind(timestamp, actor.companySlug).all<AnyRow>()
     : isSuper(actor.role)
       ? await c.env.DB.prepare(
-          `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.requested_at,a.expires_at,
+          `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
                   u.full_name,u.username,u.role AS target_role,s.role_override AS target_role_override
              FROM auth_login_approvals a
              JOIN auth_users u ON u.id=a.user_id
@@ -533,10 +545,10 @@ async function pendingItems(c: any, actor: AnyRow) {
     items.push({
       kind: "MANAGER_APPROVAL",
       id: row.id,
-      title: "KY ERP firma giriş onayı",
+      title: "KY ERP · Firma Giriş Onayı",
       body: isSuper(actor.role)
-        ? `${text(row.full_name || row.username)} · ${text(row.main_company_slug)} · ${text(row.device_label) || "yeni cihaz"}`
-        : `${text(row.full_name || row.username)} · ${text(row.device_label) || "yeni cihaz"}`,
+        ? `${text(row.full_name || row.username)} · ${text(row.main_company_slug)} · ${friendlyDeviceLabel(row.device_label, row.user_agent)}`
+        : `${text(row.full_name || row.username)} · ${friendlyDeviceLabel(row.device_label, row.user_agent)}`,
       requestedAt: row.requested_at,
       expiresAt: row.expires_at,
       mainCompanySlug: row.main_company_slug,
