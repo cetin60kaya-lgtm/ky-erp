@@ -78,7 +78,23 @@ async function broadcastPendingWake() {
   await Promise.all(windows.map((client) => client.postMessage({ type: "KYERP_PUSH_PENDING_WAKE" })));
 }
 
+async function closeLegacyApprovalNotifications(includeCurrent = false) {
+  try {
+    const notifications = await self.registration.getNotifications();
+    for (const notification of notifications) {
+      const tag = String(notification.tag || "");
+      const legacy = tag === "kyerp-generic-security-wake" ||
+        tag.startsWith("kyerp-SELF_LOGIN-") ||
+        tag.startsWith("kyerp-MANAGER_APPROVAL-") ||
+        tag.startsWith("kyerp-result-") ||
+        tag.startsWith("kyerp-error-");
+      if (legacy || (includeCurrent && tag === "kyerp-security-pending")) notification.close();
+    }
+  } catch {}
+}
+
 async function showPending() {
+  await closeLegacyApprovalNotifications(false);
   let payload = null;
   try {
     payload = await deviceFetch("/auth/push/device/pending", { method: "GET" });
@@ -183,6 +199,7 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil((async () => {
     try {
       await decide(data.kind, data.id, action === "approve" ? "APPROVE" : "DENY");
+      await closeLegacyApprovalNotifications(true);
       await broadcastPendingWake();
     } catch (error) {
       await self.registration.showNotification("KY ERP · İşlem tamamlanamadı", {
