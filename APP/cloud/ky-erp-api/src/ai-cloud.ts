@@ -52,6 +52,7 @@ function isOwner(user:Row){return ["ADMIN","SUPER_ADMIN"].includes(upper(user?.r
 function normalizeModuleKey(value:unknown){const key=upper(value);if(key==="URETIM"||key==="ÜRETIM")return"IMALAT";if(key==="ASISTAN")return"ASISTAN";return key;}
 function userCanView(user:Row,moduleKey:unknown){if(isOwner(user))return true;const key=normalizeModuleKey(moduleKey);return Array.isArray(user?.permissions)&&user.permissions.some((p:Row)=>normalizeModuleKey(p.moduleKey||p.module_key)===key&&Boolean(p.canView??p.can_view));}
 function allowedFileEntities(user:Row){
+  if(upper(user?.role)==="DENETIM"||text(user?.username).toLocaleLowerCase("tr-TR")==="denetim")return[];
   if(isOwner(user))return null;
   const entities=new Set<string>();
   const add=(...values:string[])=>values.forEach(v=>entities.add(v));
