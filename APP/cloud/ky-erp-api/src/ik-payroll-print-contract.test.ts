@@ -299,9 +299,12 @@ test("IK canonical month survives auxiliary read failures and uses Istanbul busi
   assert.match(page, /istanbulDateKey\(\)/);
 });
 
-test("PDKS report people query follows the selected historical year and month", () => {
+test("PDKS report people query follows the selected historical tenant, year and month", () => {
   const report = frontend("pages/pdks/PdksReportCenter.jsx");
-  assert.match(report, /getPdksPeople\(\{year,month\}\)/);
+  assert.match(report, /getPdksPeople\(\{mainCompanyId:company,year,month\}\)/);
+  assert.match(report, /getPdksAttendance\(person\.id,year,month,\{mainCompanyId:company\}\)/);
+  assert.match(report, /getPdksPeople\(\{mainCompanyId:company,year,month:m\}\)/);
+  assert.match(report, /getPdksAttendance\(person\.id,year,m,\{mainCompanyId:company\}\)/);
 });
 
 test("IK validates monthly SGK before card writes and final-control corrections are immutable", () => {
