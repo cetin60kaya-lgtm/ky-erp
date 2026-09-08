@@ -978,3 +978,36 @@ body,
     max-width: 132px !important;
   }
 }
+
+
+/* Android sanal klavye / visualViewport: form düğmeleri ve aktif alan görünür kalır. */
+html[data-ky-touch][data-ky-keyboard-open] .shell-v3,
+html[data-ky-touch][data-ky-keyboard-open] .shell-v3-main {
+  height: var(--ky-visual-height, 100dvh) !important;
+  max-height: var(--ky-visual-height, 100dvh) !important;
+}
+
+html[data-ky-touch][data-ky-keyboard-open] .shell-v3-workspace {
+  scroll-padding-bottom: calc(var(--ky-keyboard-height, 0px) + 72px);
+}
+
+html[data-ky-touch][data-ky-keyboard-open] .shell-v3-phone-approval-button {
+  display: none !important;
+}
+
+html[data-ky-touch] :is(
+  .phone-approval-modal,
+  .phone-inbox-modal,
+  .display-settings-panel,
+  .shell-v3-mobile-utilities
+) {
+  max-height: min(100dvh, var(--ky-visual-height, 100dvh));
+}
+
+html[data-ky-android] body {
+  overscroll-behavior-y: none;
+}
+
+html[data-ky-android] .shell-v3-workspace {
+  overscroll-behavior-y: contain;
+}
