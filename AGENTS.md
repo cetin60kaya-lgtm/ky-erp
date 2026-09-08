@@ -147,6 +147,18 @@ KY ERP mail sistemi tek bir sağlayıcıya sabit bağlı değildir; günlük kul
 - **İmalat:** net sağlam = brüt üretim - baskı sakatı - kumaş sakatı; çok operasyonlu modelde tamamlanan model adedi zorunlu operasyonların minimum ortak adedidir.
 - **Muhasebe/İşNet:** İşNet belge operasyon merkezidir; Muhasebe aynı resmî belge operasyonunu ikinci kez yaptırmaz. Firma iletişim bilgisinin tek kaynağı `companies` kaydıdır.
 
+## Android / tablet / dokunmatik parite standardı
+
+- Canonical web uygulaması **tek AppV3 kaynağıdır**. Android telefon/tablet için ikinci business ekranı veya ayrı iş mantığı oluşturma; responsive görünüm aynı işlem sözleşmesini kullanır.
+- PC'de görünen ve çalışan bir buton, menü, onay, dosya açma, kayıt, düzenleme, silme, filtre, çıktı veya modal işlemi telefon/tablette kaybolamaz. Görsel olarak gizlenmesi gerekiyorsa aynı yetkiye ve aynı API davranışına sahip dokunmatik karşılığı zorunludur.
+- Kritik işlem yalnız `hover`, `doubleClick`, sağ tık, mouse drag veya masaüstü popup davranışına bağlı olamaz. Dokunmatik için tek dokunma/normal buton alternatifi bulunmalıdır.
+- Dokunmatik ana hedefler en az 44 px olmalıdır. Form alanları telefonda 16 px yazı ile açılmalı; Android sanal klavyesi aktif inputu ve alt işlem düğmelerini kapatmamalıdır.
+- Geniş tablolar mobilde sütun/işlem kaybederek kırpılmaz; güvenli yatay kaydırma kullanır. İşlem sütunu erişilebilir kalır.
+- Modal/drawer/sheet telefon ve tablette viewport içine sığmalı; kapat/kaydet/onay/ret footer'ı klavye veya yüzen buton altında kalmamalıdır.
+- Async PDF/XML/önizleme/yazdırma akışında Android popup engelleyicisi dikkate alınır: yeni sekme gerekiyorsa kullanıcı tıklamasında senkron olarak ayrılır; bu mümkün değilse mevcut sekmede güvenli fallback sağlanır.
+- `phone`, `tablet`, `pc` görünüm seçimi yalnız layout farkıdır; tenant, auth, permission, API, hesaplama ve kayıt kuralları değişmez.
+- Yeni veya revize edilen frontend özelliği için test/build kontrolüne ek olarak Android parite kontratı korunur. Masaüstünde çalışan bir işlem mobilde kayboluyorsa release blocker kabul edilir.
+
 ## Kod ve test standardı
 
 - Önce kök nedeni bul, sonra ortak hata sınıfını düzelt.
