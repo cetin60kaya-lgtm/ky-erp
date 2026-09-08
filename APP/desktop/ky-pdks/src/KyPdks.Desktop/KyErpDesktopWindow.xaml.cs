@@ -29,6 +29,7 @@ public partial class KyErpDesktopWindow : Window
     private IReadOnlyList<CachedPerson> _pdksPeople = Array.Empty<CachedPerson>();
     private bool _bundledFrontend;
     private bool _pdksEnrollmentWatchStarted;
+    private bool _pdksFirstRunWizardShown;
 
     public KyErpDesktopWindow()
     {
@@ -290,10 +291,18 @@ public partial class KyErpDesktopWindow : Window
             var audit = profile.Audit
                 || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
-            if (!audit) await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token);
             var window = new PdksTerminalSetupWindow(_pdksPaths, !audit) { Owner = this };
             window.ShowDialog();
             await InstallDesktopBridgeAsync();
+            if (!audit)
+            {
+                try { await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token); }
+                catch (Exception enrollmentError)
+                {
+                    var store = new LocalPdksStore(_pdksPaths);
+                    await store.TouchStateAsync("d1_sync", $"D1 cihaz yetkilendirmesi bekliyor · {enrollmentError.Message}", _lifetime.Token);
+                }
+            }
         }
         catch (Exception error)
         {
@@ -328,7 +337,27 @@ public partial class KyErpDesktopWindow : Window
                         || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
                     if (audit) return;
-                    if (await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token)) return;
+
+                    if (!File.Exists(_pdksPaths.SetupCompletedFile) && !_pdksFirstRunWizardShown)
+                    {
+                        _pdksFirstRunWizardShown = true;
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            var wizard = new PdksTerminalSetupWindow(_pdksPaths, true) { Owner = this };
+                            wizard.ShowDialog();
+                        });
+                        await InstallDesktopBridgeAsync();
+                    }
+
+                    try
+                    {
+                        if (await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token)) return;
+                    }
+                    catch (Exception enrollmentError)
+                    {
+                        var store = new LocalPdksStore(_pdksPaths);
+                        await store.TouchStateAsync("d1_sync", $"D1 cihaz yetkilendirmesi bekliyor · {enrollmentError.Message}", _lifetime.Token);
+                    }
                 }
             }
             catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
