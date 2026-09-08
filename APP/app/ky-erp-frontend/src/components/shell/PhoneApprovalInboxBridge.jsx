@@ -61,7 +61,11 @@ async function clearWakeMarker() {
 
 async function deviceFetch(path, options = {}) {
   const device = await readDevice();
-  if (!device?.deviceId || !device?.deviceToken) return null;
+  if (!device?.deviceId || !device?.deviceToken) {
+    const error = new Error("Bu telefonda güvenli Telefon Onayı anahtarı bulunamadı. Telefon Onayı ekranından cihazı yeniden kaydedin.");
+    error.code = "PUSH_DEVICE_NOT_CONFIGURED";
+    throw error;
+  }
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -98,6 +102,7 @@ export default function PhoneApprovalInboxBridge() {
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   const ordered = useMemo(() => [...items].sort((a, b) =>
     String(a.requestedAt || "").localeCompare(String(b.requestedAt || ""))), [items]);
@@ -115,6 +120,7 @@ export default function PhoneApprovalInboxBridge() {
       const payload = await deviceFetch("/auth/push/device/pending", { method: "GET" });
       if (!payload) return;
       const next = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+      setNeedsSetup(false);
       setItems(next);
       await syncBadge(next.length);
       if (next.length) {
@@ -125,6 +131,8 @@ export default function PhoneApprovalInboxBridge() {
         cleanOpenParam();
       }
     } catch (error) {
+      const code = String(error?.code || "");
+      if (["PUSH_DEVICE_NOT_CONFIGURED", "PUSH_DEVICE_UNAUTHORIZED"].includes(code)) setNeedsSetup(true);
       if (forceOpen) {
         setMessage(error?.message || "Telefon onayı isteği alınamadı.");
         setOpen(true);
@@ -235,7 +243,21 @@ export default function PhoneApprovalInboxBridge() {
 
         <footer>
           <span>Karar yalnız bu telefona daha önce güvenli şekilde kaydedilmiş cihaz anahtarıyla gönderilir.</span>
-          <button type="button" onClick={() => { setOpen(false); cleanOpenParam(); }}>Kapat</button>
+          <div className="phone-inbox-footer-actions">
+            {needsSetup ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  cleanOpenParam();
+                  window.dispatchEvent(new CustomEvent("kyerp:open-phone-approval-setup"));
+                }}
+              >
+                Telefonu Yeniden Kaydet
+              </button>
+            ) : null}
+            <button type="button" onClick={() => { setOpen(false); cleanOpenParam(); }}>Kapat</button>
+          </div>
         </footer>
       </section>
     </div>
