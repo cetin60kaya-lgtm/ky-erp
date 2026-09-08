@@ -5,7 +5,7 @@ import {
   downloadBuildArtifact,
   downloadBuildLog,
   getBuildCenterStatus,
-  rotateBuildAgentToken,
+  createBuildAgentEnrollment,
 } from "../../services/adminApi";
 import "./AdminBuildCenter.css";
 
@@ -43,7 +43,7 @@ function downloadText(fileName, value) {
 export default function AdminBuildCenter() {
   const [state,setState]=useState({agentConfigured:false,heartbeat:null,jobs:[],storage:""});
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
-  const [token,setToken]=useState("");
+  const [enrollment,setEnrollment]=useState(null);
 
   const load=useCallback(async()=>{
     try{setState(await getBuildCenterStatus()||{});setError("");}
@@ -54,38 +54,41 @@ export default function AdminBuildCenter() {
   const running=useMemo(()=>state.jobs?.find(row=>["CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING"].includes(String(row.status).toUpperCase())),[state.jobs]);
   const latestReady=useMemo(()=>state.jobs?.find(row=>String(row.status).toUpperCase()==="SUCCESS"),[state.jobs]);
 
-  const makeToken=async()=>{
+  const makeEnrollment=async()=>{
     setBusy(true);setError("");setMessage("");
     try{
-      const result=await rotateBuildAgentToken();
-      setToken(result?.token||"");
-      setMessage("Yeni Build Agent anahtarı üretildi. Bu anahtar yalnız şimdi gösterilir.");
+      const result=await createBuildAgentEnrollment();
+      setEnrollment(result||null);
+      setMessage("10 dakikalık tek kullanımlık Build Agent kurulum kodu üretildi.");
       await load();
-    }catch(cause){setError(cause?.message||"Agent anahtarı üretilemedi.");}
+    }catch(cause){setError(cause?.message||"Agent kurulum kodu üretilemedi.");}
     finally{setBusy(false)}
   };
 
   const downloadBootstrap=()=>{
-    if(!token)return;
+    if(!enrollment?.enrollmentId||!enrollment?.enrollmentCode)return;
     const script = [
       "$ErrorActionPreference='Stop'",
       "$Branch='"+BRANCH+"'",
       "$Repo='"+REPO+"'",
-      "$Token='"+token+"'",
+      "$EnrollmentId='"+enrollment.enrollmentId+"'",
+      "$EnrollmentCode='"+enrollment.enrollmentCode+"'",
       "$Temp=Join-Path $env:TEMP 'KYERP-BUILD-AGENT-SETUP'",
-      "if(-not (Get-Command git.exe -ErrorAction SilentlyContinue)){",
-      "  if(-not (Get-Command winget.exe -ErrorAction SilentlyContinue)){throw 'Git ve winget bulunamadı.'}",
-      "  winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity",
-      "  $env:Path += ';C:\\\\Program Files\\\\Git\\\\cmd'",
-      "}",
+      "function Refresh-Path {$env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User')}",
+      "function Need($cmd,$id,$label){Refresh-Path;if(Get-Command $cmd -ErrorAction SilentlyContinue){return};if(-not (Get-Command winget.exe -ErrorAction SilentlyContinue)){throw ($label+' eksik ve winget yok.')};winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity;if($LASTEXITCODE -ne 0){throw ($label+' kurulamadı.')}}",
+      "Need 'git.exe' 'Git.Git' 'Git'",
+      "Need 'dotnet.exe' 'Microsoft.DotNet.SDK.8' '.NET 8 SDK'",
+      "Need 'node.exe' 'OpenJS.NodeJS.LTS' 'Node.js LTS'",
+      "$pf86=${env:ProgramFiles(x86)}",
+      "$inno=@($(if($env:LOCALAPPDATA){Join-Path $env:LOCALAPPDATA 'Programs\\Inno Setup 6\\ISCC.exe'}),$(if($pf86){Join-Path $pf86 'Inno Setup 6\\ISCC.exe'}),$(if($env:ProgramFiles){Join-Path $env:ProgramFiles 'Inno Setup 6\\ISCC.exe'}))|Where-Object {$_ -and (Test-Path $_)}",
+      "if(@($inno).Count -eq 0){Need 'iscc.exe' 'JRSoftware.InnoSetup' 'Inno Setup 6'}",
       "if(Test-Path $Temp){Remove-Item $Temp -Recurse -Force}",
       "git -c core.longpaths=true clone --depth 1 --single-branch --branch $Branch $Repo $Temp",
       "if($LASTEXITCODE -ne 0){throw 'GitHub kaynağı alınamadı. Windows GitHub oturumunu kontrol edin.'}",
-      "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Temp 'tools\\\\ky-build-agent\\\\setup-build-agent.ps1') -Token $Token -ApiBase '"+API+"' -RepoUrl $Repo",
+      "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Temp 'tools\\ky-build-agent\\setup-build-agent.ps1') -EnrollmentId $EnrollmentId -EnrollmentCode $EnrollmentCode -ApiBase '"+API+"' -RepoUrl $Repo",
       "if($LASTEXITCODE -ne 0){throw 'Build Agent hazırlanamadı.'}",
-      "Write-Host 'KY Build Agent hazır. Açılan Agent penceresini build süresince kapatmayın.' -ForegroundColor Green",
-      "Read-Host 'Kapatmak için ENTER'",
-    ].join("\\r\\n");
+      "Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue",
+    ].join("\r\n");
     downloadText("KY_ERP_BUILD_AGENT_KUR.ps1",script);
   };
 
@@ -117,12 +120,12 @@ export default function AdminBuildCenter() {
     <div className="abc-grid">
       <section className="abc-card">
         <header><div><small>1 · WINDOWS BUILDER</small><h2>Build Agent Kurulumu</h2></div><span className={state.heartbeat?.lastSeenAt?"badge ok":"badge wait"}>{state.heartbeat?.lastSeenAt?"Çevrimiçi":"Bekleniyor"}</span></header>
-        <p>Agent anahtarı R2'de yalnız SHA-256 hash olarak tutulur. Düz anahtar sadece üretildiği anda gösterilir.</p>
+        <p>Kurulum dosyasına kalıcı Agent anahtarı yazılmaz. 10 dakikalık tek kullanımlık kod cihazda kalıcı token ile değiştirilir; kalıcı token yalnız DPAPI ile o Windows kullanıcısında saklanır.</p>
         <div className="abc-actions">
-          <button type="button" onClick={makeToken} disabled={busy}>{state.agentConfigured?"Anahtarı Yenile":"Agent Anahtarı Üret"}</button>
-          <button className="primary" type="button" onClick={downloadBootstrap} disabled={!token}>Agent Kurulum Dosyasını İndir</button>
+          <button type="button" onClick={makeEnrollment} disabled={busy}>Tek Kullanımlık Kurulum Kodu Üret</button>
+          <button className="primary" type="button" onClick={downloadBootstrap} disabled={!enrollment?.enrollmentCode}>Agent Kurulum Dosyasını İndir</button>
         </div>
-        {token?<div className="abc-token"><small>TEK SEFERLİK ANAHTAR</small><code>{token}</code><button type="button" onClick={()=>navigator.clipboard?.writeText(token)}>Kopyala</button></div>:null}
+        {enrollment?.enrollmentCode?<div className="abc-token"><small>10 DK · TEK KULLANIM</small><code>{enrollment.enrollmentCode}</code><button type="button" onClick={()=>navigator.clipboard?.writeText(enrollment.enrollmentCode)}>Kopyala</button></div>:null}
       </section>
 
       <section className="abc-card">
