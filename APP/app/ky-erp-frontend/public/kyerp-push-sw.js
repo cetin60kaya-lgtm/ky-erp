@@ -87,13 +87,15 @@ async function showPending() {
   }
   const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
   if (!items.length) {
-    await self.registration.showNotification("KY ERP güvenlik isteği", {
-      body: "Yeni bir giriş onayı var. KY ERP uygulamasını açıp Onayla veya Reddet seçin.",
+    await self.registration.showNotification("KY ERP · Giriş Onayı", {
+      body: "Yeni bir giriş isteği var. KY ERP'yi açıp Onayla veya Reddet seçin.",
       tag: "kyerp-generic-security-wake",
       renotify: true,
       requireInteraction: true,
       badge: "/kyerp-icon.svg",
       icon: "/kyerp-icon.svg",
+      timestamp: Date.now(),
+      vibrate: [180, 80, 180],
       data: { openApproval: true },
     });
     await broadcastPendingWake();
@@ -109,6 +111,8 @@ async function showPending() {
       requireInteraction: true,
       badge: "/kyerp-icon.svg",
       icon: "/kyerp-icon.svg",
+      timestamp: item.requestedAt ? Date.parse(item.requestedAt) || Date.now() : Date.now(),
+      vibrate: [180, 80, 180],
       data: {
         kind: item.kind,
         id: item.id,
@@ -189,7 +193,7 @@ self.addEventListener("notificationclick", (event) => {
     try {
       await decide(data.kind, data.id, action === "approve" ? "APPROVE" : "DENY");
       await self.registration.showNotification(
-        action === "approve" ? "KY ERP · Onaylandı" : "KY ERP · Reddedildi",
+        action === "approve" ? "KY ERP · Giriş Onaylandı" : "KY ERP · Giriş Reddedildi",
         {
           body: action === "approve" ? "Güvenlik isteği telefonunuzdan onaylandı." : "Güvenlik isteği reddedildi.",
           tag: `kyerp-result-${data.id}`,

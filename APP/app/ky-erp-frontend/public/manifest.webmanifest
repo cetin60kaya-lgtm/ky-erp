@@ -2,18 +2,47 @@
   "name": "KY ERP",
   "short_name": "KY ERP",
   "id": "/",
-  "description": "KY ERP kurumsal yönetim ve güvenli telefon onayı",
+  "description": "KY ERP kurumsal yönetim, üretim ve güvenli telefon onayı",
+  "lang": "tr",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#f3f7fb",
   "theme_color": "#10284d",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/kyerp-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Üretim İş Havuzu",
+      "short_name": "Üretim",
+      "description": "Üretim iş havuzunu aç",
+      "url": "/uretim/uretim-is-havuzu",
+      "icons": [{ "src": "/kyerp-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Mesai / Avans",
+      "short_name": "İK",
+      "description": "İK mesai ve avans işlemlerini aç",
+      "url": "/ik/mesai-avans",
+      "icons": [{ "src": "/kyerp-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "İşNet Yönetim Merkezi",
+      "short_name": "İşNet",
+      "description": "İşNet yönetim merkezini aç",
+      "url": "/isnet/yonetim-merkezi",
+      "icons": [{ "src": "/kyerp-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ]
 }

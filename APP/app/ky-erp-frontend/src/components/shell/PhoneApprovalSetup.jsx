@@ -35,9 +35,16 @@ function isStandaloneWebApp() {
 
 function defaultDeviceLabel() {
   const ua = String(navigator.userAgent || "");
-  const mobile = /Android|iPhone|iPad|Mobile/i.test(ua);
-  const platform = String(navigator.userAgentData?.platform || navigator.platform || "").trim();
-  return `${mobile ? "Telefon" : "Tarayıcı"}${platform ? ` · ${platform}` : ""}`;
+  const width = Math.min(
+    Number(window.screen?.width || window.innerWidth || 0),
+    Number(window.screen?.height || window.innerHeight || 0),
+  );
+  if (/Android/i.test(ua)) return /Mobile/i.test(ua) || width <= 600 ? "Android Telefon" : "Android Tablet";
+  if (/iPad/i.test(ua) || (String(navigator.platform || "") === "MacIntel" && Number(navigator.maxTouchPoints || 0) > 1)) return "iPad";
+  if (/iPhone|iPod/i.test(ua)) return "iPhone";
+  if (/Windows/i.test(ua)) return "Windows Bilgisayar";
+  if (/Macintosh|Mac OS X/i.test(ua)) return "Mac";
+  return "KY ERP Cihazı";
 }
 
 async function activeServiceWorker() {
