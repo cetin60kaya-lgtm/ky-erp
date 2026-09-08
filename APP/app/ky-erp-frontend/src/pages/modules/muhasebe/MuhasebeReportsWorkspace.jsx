@@ -735,6 +735,12 @@ function ReportTable({
     </section>
   );
 }
+function runTouchRowAction(event, action) {
+  if (!window.matchMedia?.("(pointer: coarse)")?.matches) return;
+  if (event.target?.closest?.("button,a,input,select,textarea,[role='button']")) return;
+  action?.();
+}
+
 function CompanyReport({ rows, decide, showDetails }) {
   return (
     <section className="mrw-panel">
@@ -774,6 +780,11 @@ function CompanyReport({ rows, decide, showDetails }) {
               <tr
                 className="click"
                 key={row.companyId || row.companyName}
+                onClick={(event) =>
+                  runTouchRowAction(event, () =>
+                    showDetails(row.companyId || row.companyName)
+                  )
+                }
                 onDoubleClick={() =>
                   showDetails(row.companyId || row.companyName)
                 }
