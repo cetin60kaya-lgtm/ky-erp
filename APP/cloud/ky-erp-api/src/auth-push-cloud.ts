@@ -407,6 +407,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
       upper(row.status) === "PENDING" &&
       !text(row.consumedAt) &&
       Date.parse(text(row.expiresAt)) > Date.now() &&
+      text(row.deviceLabel) === sourceDeviceLabel &&
       text(row.userAgent) === sourceUserAgent &&
       text(row.ipAddress) === sourceIpAddress
     )
