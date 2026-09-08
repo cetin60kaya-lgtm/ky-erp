@@ -39,22 +39,13 @@ function safeLines(value) {
 const report = {
   generatedAt: new Date().toISOString(),
   node: process.version,
-  mode: "npm-ci-plus-typecheck",
+  mode: "npm-ci-only",
   stages: {},
   testFiles: readdirSync(path.join(worker, "src")).filter((name) => name.endsWith(".test.ts")).sort(),
 };
 
 const ci = run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 report.stages.npmCi = { ok: ci.ok, status: ci.status, lines: safeLines(ci.stderr + "\n" + ci.stdout) };
-
-if (ci.ok) {
-  const result = run("npm", ["run", "typecheck"]);
-  report.stages.typecheck = {
-    ok: result.ok,
-    status: result.status,
-    lines: safeLines(result.stderr + "\n" + result.stdout),
-  };
-}
 
 mkdirSync(publicDir, { recursive: true });
 writeFileSync(resultPath, JSON.stringify(report, null, 2) + "\n", "utf8");
