@@ -8,3 +8,8 @@
 .phone-inbox-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.phone-inbox-actions button{min-height:46px;border-radius:11px;font-weight:900;font-size:14px;cursor:pointer}.phone-inbox-actions button:disabled{opacity:.58;cursor:not-allowed}.phone-inbox-actions .approve{border:1px solid #197343;background:#1e874e;color:#fff}.phone-inbox-actions .deny{border:1px solid #e0b8b8;background:#fff3f3;color:#a33636}
 .phone-inbox-empty{padding:24px;text-align:center;color:#71879a}.phone-inbox-modal>footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-top:1px solid #dfe8f1;background:#fff;color:#71879a;font-size:10px}.phone-inbox-modal>footer button{min-height:34px;padding:0 14px;border:1px solid #cad7e4;border-radius:9px;background:#fff;color:#294964;font-weight:800}
 @media(max-width:760px){.phone-inbox-backdrop{padding:0;align-items:end}.phone-inbox-modal{width:100vw;max-height:96vh;border-radius:20px 20px 0 0}.phone-inbox-modal>header{padding:18px 16px}.phone-inbox-actions{grid-template-columns:1fr}.phone-inbox-actions button{min-height:52px;font-size:16px}.phone-inbox-modal>footer{align-items:flex-start;flex-direction:column}}
+
+
+.phone-inbox-footer-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.phone-inbox-modal>footer .phone-inbox-footer-actions button{min-height:34px;padding:0 14px;border:1px solid #cad7e4;border-radius:9px;background:#fff;color:#294964;font-weight:800;cursor:pointer}
+@media(max-width:760px){.phone-inbox-footer-actions{width:100%;display:grid;grid-template-columns:1fr}.phone-inbox-modal>footer .phone-inbox-footer-actions button{min-height:46px}}
