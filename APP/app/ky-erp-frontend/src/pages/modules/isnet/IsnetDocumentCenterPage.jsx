@@ -11,7 +11,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { getIsnetDocumentCenter } from "../../../services/isnetDocumentCenterApi";
-import { getIsnetLocalFile, openBlobInNewTab } from "../../../services/isnetLocalFileApi";
+import { getIsnetLocalFile, openBlobInNewTab, reserveBlobTab } from "../../../services/isnetLocalFileApi";
 import { startDailySync } from "../../../services/isnetApi";
 import { prepareIsnetIncomingAutoFlow } from "../../../services/isnetAutoFlowApi";
 import "../IsnetPage.css";
@@ -123,11 +123,13 @@ export default function IsnetDocumentCenterPage({ openModule }) {
   async function openFile(row, format) {
     const key = row.automationKey || row.id;
     if (!key) return;
+    const preview = reserveBlobTab();
     setBusy(`${format}-${row.id}`);
     try {
       const blob = await getIsnetLocalFile(key, format);
-      openBlobInNewTab(blob);
+      openBlobInNewTab(blob, preview);
     } catch (error) {
+      try { preview?.close(); } catch {}
       setNotice({ tone: "error", text: error?.message || `${format.toUpperCase()} dosyası açılamadı.` });
     } finally {
       setBusy("");
