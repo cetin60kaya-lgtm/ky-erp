@@ -72,7 +72,7 @@ export default function AdminOwnerSecurity() {
   const qrRef = useRef(null);
 
   const currentSessionId = useMemo(() => sessionIdFromToken(token), [token]);
-  const ownerSessions = useMemo(() => sessions.filter((row) => String(row.userId || row.user_id || "") === String(owner?.id || "")), [sessions, owner?.id]);
+  const visibleSessions = useMemo(() => sessions, [sessions]);
   const configuredRecoveryCount = Array.isArray(recoveryConfig?.questions) ? recoveryConfig.questions.filter((row) => row?.configured !== false).length : 0;
   const recoveryChannelReady = Boolean(recoveryConfig?.readiness?.emailReady || recoveryConfig?.readiness?.smsReady);
   const recoveryChannelLabel = recoveryConfig?.readiness?.emailReady ? "Doğrulanmış e-posta" : recoveryConfig?.readiness?.smsReady ? "Doğrulanmış SMS" : "Kanal bekliyor";
@@ -363,7 +363,7 @@ export default function AdminOwnerSecurity() {
     <section className="aos-owner-card">
       <div className="aos-owner-badge">SUPER ADMIN</div>
       {!editing ? <>
-        <div className="aos-owner-copy"><h2>{owner.fullName}</h2><p>@{owner.username} · {owner.email || "e-posta yok"}</p><div className="aos-tags"><span>Süper Yönetici</span><span>{owner.mainCompanySlug || "-"}</span><span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmadı"}</span></div></div>
+        <div className="aos-owner-copy"><h2>{owner.fullName}</h2><p>@{owner.username} · {owner.email || "e-posta yok"}</p><div className="aos-tags"><span>Süper Yönetici</span><span className={owner.emailVerified ? "good" : "warn"}>{owner.emailVerified ? "E-posta doğrulandı" : "E-posta doğrulanmadı"}</span></div></div>
         <button className="primary" onClick={() => setEditing(true)}>Profili Düzenle</button>
       </> : <form className="aos-profile-form" onSubmit={saveProfile}><label>Ad Soyad<input value={profile.fullName} onChange={(e) => setProfile((v) => ({ ...v, fullName: e.target.value }))}/></label><label>Kullanıcı Adı<input value={profile.username} onChange={(e) => setProfile((v) => ({ ...v, username: e.target.value }))}/></label><label>E-posta<input type="email" value={profile.email} onChange={(e) => setProfile((v) => ({ ...v, email: e.target.value }))}/></label><div><button className="primary" type="submit">Kaydet</button><button type="button" onClick={() => setEditing(false)}>Vazgeç</button></div></form>}
     </section>
@@ -530,8 +530,8 @@ export default function AdminOwnerSecurity() {
     </section>}
 
     <section className="aos-card">
-      <div className="aos-card-head"><div><h3>Süper Yönetici Oturumları</h3><p>Bu cihaz güvenli çıkış yapabilir; diğer cihazlar tek tek sonlandırılabilir.</p></div><span className="state">{ownerSessions.length} aktif</span></div>
-      <div className="aos-session-table"><div className="head"><span>Cihaz</span><span>Oluşturma</span><span>Son Görülme</span><span>İşlem</span></div>{ownerSessions.length ? ownerSessions.map((row) => { const current = String(row.id) === String(currentSessionId); return <div className="line" key={row.id}><span><b>{friendlyDevice(row)}</b>{current && <small>Bu cihaz</small>}</span><span>{dateText(row.createdAt || row.created_at)}</span><span>{dateText(row.lastSeenAt || row.last_seen_at)}</span><span><button className="danger" disabled={busy} onClick={() => closeSession(row)}>{current ? "Güvenli Çıkış" : "Oturumu Sonlandır"}</button></span></div>; }) : <div className="empty">Aktif oturum bulunamadı.</div>}</div>
+      <div className="aos-card-head"><div><h3>Tüm Aktif Oturumlar</h3><p>Süper Yönetici sistemdeki bütün kullanıcı oturumlarını görür ve gerektiğinde sonlandırabilir.</p></div><span className="state">{visibleSessions.length} aktif</span></div>
+      <div className="aos-session-table"><div className="head"><span>Kullanıcı / Cihaz</span><span>Oluşturma</span><span>Son Görülme</span><span>İşlem</span></div>{visibleSessions.length ? visibleSessions.map((row) => { const current = String(row.id) === String(currentSessionId); return <div className="line" key={row.id}><span><b>{row.fullName || row.username || "Kullanıcı"} · {friendlyDevice(row)}</b>{current && <small>Bu cihaz</small>}</span><span>{dateText(row.createdAt || row.created_at)}</span><span>{dateText(row.lastSeenAt || row.last_seen_at)}</span><span><button className="danger" disabled={busy} onClick={() => closeSession(row)}>{current ? "Güvenli Çıkış" : "Oturumu Sonlandır"}</button></span></div>; }) : <div className="empty">Aktif oturum bulunamadı.</div>}</div>
     </section>
   </div>;
 }

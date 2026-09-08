@@ -308,6 +308,48 @@ export function registerAuthManagementRoutes(app: any) {
     return c.json({ ok: true, user, session: { id: session.id, expiresAt: session.expires_at, lastSeenAt: session.last_seen_at } });
   });
 
+  app.get("/api/auth/security/sessions", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return c.json(jsonError("UNAUTHORIZED", "Oturum gereklidir."), 401);
+    const timestamp = nowIso();
+    const result = await c.env.DB.prepare(
+      `SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,
+              s.created_at,s.last_seen_at,s.expires_at
+         FROM auth_sessions s
+        WHERE s.user_id=? AND s.revoked_at IS NULL AND s.expires_at>?
+        ORDER BY s.created_at DESC`,
+    ).bind(current.id, timestamp).all<AnyRow>();
+    return c.json({ ok: true, data: (result.results || []).map((row: AnyRow) => ({
+      id: row.id,
+      userId: row.user_id,
+      mainCompanySlug: row.main_company_slug,
+      deviceLabel: row.device_label,
+      userAgent: row.user_agent,
+      ipAddress: row.ip_address,
+      createdAt: row.created_at,
+      lastSeenAt: row.last_seen_at,
+      expiresAt: row.expires_at,
+      current: String(row.id) === String(current.session?.id || ""),
+      remainingSeconds: Math.max(0, Math.floor((Date.parse(row.expires_at) - Date.now()) / 1000)),
+    })) });
+  });
+
+  app.post("/api/auth/security/sessions/:id/revoke", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return c.json(jsonError("UNAUTHORIZED", "Oturum gereklidir."), 401);
+    const session = await c.env.DB.prepare(
+      "SELECT id,user_id,main_company_slug FROM auth_sessions WHERE id=? AND revoked_at IS NULL LIMIT 1",
+    ).bind(c.req.param("id")).first<AnyRow>();
+    if (!session || String(session.user_id) !== String(current.id)) {
+      return c.json(jsonError("SESSION_NOT_FOUND", "Bu hesaba ait aktif oturum bulunamadı."), 404);
+    }
+    await c.env.DB.prepare(
+      "UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE id=? AND user_id=? AND revoked_at IS NULL",
+    ).bind(nowIso(), current.id, session.id, current.id).run();
+    await audit(c, "SESSION_SELF_REVOKED", current.id, current.id, text(session.main_company_slug || current.mainCompanySlug), session.id);
+    return c.json({ ok: true, data: { id: session.id, current: String(session.id) === String(current.session?.id || "") } });
+  });
+
   app.post("/api/auth/logout", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (current?.session?.id) {
@@ -487,8 +529,8 @@ export function registerAuthManagementRoutes(app: any) {
   });
 
   app.get("/api/admin/security/sessions", async (c: any) => {
-    const current = await adminCurrent(c);
-    if (!current) return c.json(jsonError("FORBIDDEN", "Yönetici yetkisi gereklidir."), 403);
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Tüm kullanıcı oturumlarını yalnız Süper Yönetici görüntüleyebilir."), current ? 403 : 401);
     const timestamp = nowIso();
     const result = await c.env.DB.prepare(
       `SELECT s.*,u.username,u.full_name,us.email,us.role_override
@@ -508,8 +550,8 @@ export function registerAuthManagementRoutes(app: any) {
   });
 
   app.post("/api/admin/security/sessions/:id/revoke", async (c: any) => {
-    const current = await adminCurrent(c);
-    if (!current) return c.json(jsonError("FORBIDDEN", "Yönetici yetkisi gereklidir."), 403);
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Başka kullanıcı oturumlarını yalnız Süper Yönetici sonlandırabilir."), current ? 403 : 401);
     const session = await c.env.DB.prepare("SELECT * FROM auth_sessions WHERE id=? LIMIT 1").bind(c.req.param("id")).first<AnyRow>();
     if (!session) return c.json(jsonError("SESSION_NOT_FOUND", "Oturum bulunamadı."), 404);
     const target = await targetUserWithSecurity(c, text(session.user_id));
@@ -520,9 +562,10 @@ export function registerAuthManagementRoutes(app: any) {
   });
 
   app.post("/api/admin/security/users/:id/revoke-all", async (c: any) => {
-    const current = await adminCurrent(c);
-    const target = current ? await targetUserWithSecurity(c, c.req.param("id")) : null;
-    if (!current || !target || (!isSuper(current.role) && !adminCanManage(current, target))) return c.json(jsonError("FORBIDDEN", "Bu kullanıcının oturumlarını kapatamazsınız."), 403);
+    const current = await getAuthenticatedUser(c);
+    if (!current || !isSuper(current.role)) return c.json(jsonError("OWNER_ONLY", "Başka bir kullanıcının tüm oturumlarını yalnız Süper Yönetici kapatabilir."), current ? 403 : 401);
+    const target = await targetUserWithSecurity(c, c.req.param("id"));
+    if (!target) return c.json(jsonError("USER_NOT_FOUND", "Kullanıcı bulunamadı."), 404);
     await revokeUserSessions(c, target.id, current.id);
     await audit(c, "ALL_SESSIONS_REVOKED", current.id, target.id, target.mainCompanySlug);
     return c.json({ ok: true });

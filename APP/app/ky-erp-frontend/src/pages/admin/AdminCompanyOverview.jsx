@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { listActiveSessions, listLoginApprovals, listUsers } from "../../services/adminApi";
+import { listLoginApprovals, listUsers } from "../../services/adminApi";
 import { listMailApprovals } from "../../services/mailApi";
 import AdminMailApprovals from "./AdminMailApprovals";
 import "./AdminManagement.css";
@@ -14,7 +14,6 @@ function rowsOf(value) {
 export default function AdminCompanyOverview({ activeMainCompany }) {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
-  const [sessions, setSessions] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [mailApprovals, setMailApprovals] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -22,11 +21,10 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
 
   const load = useCallback(async () => {
     setBusy(true);
-    const jobs = await Promise.allSettled([listUsers(), listActiveSessions(), listLoginApprovals(), listMailApprovals()]);
+    const jobs = await Promise.allSettled([listUsers(), listLoginApprovals(), listMailApprovals()]);
     if (jobs[0].status === "fulfilled") setUsers(rowsOf(jobs[0].value));
-    if (jobs[1].status === "fulfilled") setSessions(rowsOf(jobs[1].value));
-    if (jobs[2].status === "fulfilled") setApprovals(rowsOf(jobs[2].value));
-    if (jobs[3].status === "fulfilled") setMailApprovals(rowsOf(jobs[3].value).filter((row) => String(row?.status || "").toUpperCase() === "PENDING"));
+    if (jobs[1].status === "fulfilled") setApprovals(rowsOf(jobs[1].value));
+    if (jobs[2].status === "fulfilled") setMailApprovals(rowsOf(jobs[2].value).filter((row) => String(row?.status || "").toUpperCase() === "PENDING"));
     const failed = jobs.filter((job) => job.status === "rejected").length;
     setMessage(failed ? `${failed} firma yönetim kontrolü yanıt vermedi.` : "Firma kullanıcı ve giriş kontrolleri güncel.");
     setBusy(false);
@@ -41,10 +39,9 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
   const metrics = useMemo(() => ({
     activeUsers: users.filter((row) => row?.isActive !== false).length,
     passiveUsers: users.filter((row) => row?.isActive === false).length,
-    sessions: sessions.length,
     approvals: approvals.length,
     mailApprovals: mailApprovals.length,
-  }), [approvals.length, mailApprovals.length, sessions.length, users]);
+  }), [approvals.length, mailApprovals.length, users]);
 
   return (
     <div className="admpro-page">
@@ -52,7 +49,7 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
         <div>
           <span className="admpro-kicker">YÖNETİM / FİRMA MERKEZİ</span>
           <h2>{activeMainCompany?.name || user?.mainCompanySlug || "Firma"} Yönetim Merkezi</h2>
-          <p>Firma sahibi/admin yalnız kendi firmasındaki kullanıcıları, oturumları ve giriş onaylarını yönetir.</p>
+          <p>Firma Sahibi / İşveren kendi firmasındaki kullanıcı ve onay işlerini yönetir. Kişisel oturumlar Profil & Giriş Güvenliği alanından yönetilir.</p>
         </div>
         <div className="admpro-actions"><button type="button" className="primary" onClick={load} disabled={busy}>{busy ? "Kontrol Ediliyor..." : "Yenile"}</button></div>
       </header>
@@ -61,7 +58,6 @@ export default function AdminCompanyOverview({ activeMainCompany }) {
 
       <section className="admpro-stats">
         <div className="admpro-stat"><span>Aktif Kullanıcı</span><strong>{metrics.activeUsers}</strong><small>{metrics.passiveUsers} pasif kullanıcı</small></div>
-        <div className="admpro-stat"><span>Aktif Oturum</span><strong>{metrics.sessions}</strong><small>Yalnız bu firma</small></div>
         <div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{metrics.approvals}</strong><small>Karar bekleyen yeni cihaz girişi</small></div>
         <div className="admpro-stat"><span>Bekleyen Mail Onayı</span><strong>{metrics.mailApprovals}</strong><small>Mail hesabı bağlantı kararı</small></div>
       </section>
