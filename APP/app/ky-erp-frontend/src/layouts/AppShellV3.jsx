@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, Plus, RefreshCw, Search, Settings2, Smartphone, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
@@ -101,6 +101,7 @@ export default function AppShellV3({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [mobileUtilitiesOpen, setMobileUtilitiesOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -205,6 +206,7 @@ export default function AppShellV3({
       if (event.key === "Escape") {
         setQuickOpen(false);
         setDisplaySettingsOpen(false);
+        setMobileUtilitiesOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -216,6 +218,28 @@ export default function AppShellV3({
   function runQuickAction(action) {
     onOpenTab(action.moduleKey, action.tabKey);
     setQuickOpen(false);
+    setMobileUtilitiesOpen(false);
+  }
+
+  function openMobileNotifications() {
+    setMobileUtilitiesOpen(false);
+    setNotificationOpen(true);
+    refreshNotifications(false);
+  }
+
+  function openMobilePhoneApproval() {
+    setMobileUtilitiesOpen(false);
+    setPhoneApprovalOpen(true);
+  }
+
+  function openMobileDisplaySettings() {
+    setMobileUtilitiesOpen(false);
+    setDisplaySettingsOpen(true);
+  }
+
+  async function installPwaFromMobileMenu() {
+    setMobileUtilitiesOpen(false);
+    await installPwa();
   }
 
   function applyNotificationRead(ids) {
@@ -450,9 +474,18 @@ export default function AppShellV3({
             ) : null}
           </div>
           <div className="shell-v3-user">
-            <b>{String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</b>
+            <button
+              type="button"
+              className="shell-v3-user-avatar"
+              onClick={() => setMobileUtilitiesOpen((current) => !current)}
+              aria-label="Kullanıcı ve cihaz işlemleri"
+              aria-expanded={mobileUtilitiesOpen}
+              title="Kullanıcı ve cihaz işlemleri"
+            >
+              {String(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}
+            </button>
             <div><strong>{user?.fullName || user?.username || "Kullanıcı"}</strong><small>{roleLabel(user?.role)}</small></div>
-            <button type="button" onClick={onLogout}>Çıkış</button>
+            <button type="button" className="shell-v3-user-logout" onClick={onLogout}>Çıkış</button>
           </div>
         </header>
 
@@ -478,6 +511,52 @@ export default function AppShellV3({
         <section className="shell-v3-workspace">{children}</section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>Firma: {companies.find((item) => item.slug === activeCompanySlug)?.name || "-"}</span><span className="ok">Sistem hazır</span></footer>
       </main>
+
+      {mobileUtilitiesOpen
+        ? createPortal(
+            <div className="shell-v3-mobile-utilities-backdrop" role="presentation" onClick={() => setMobileUtilitiesOpen(false)}>
+              <section
+                className="shell-v3-mobile-utilities"
+                role="dialog"
+                aria-modal="true"
+                aria-label="KY ERP mobil işlemler"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <header>
+                  <div>
+                    <small>KY ERP · CİHAZ İŞLEMLERİ</small>
+                    <strong>{user?.fullName || user?.username || "Kullanıcı"}</strong>
+                    <span>{roleLabel(user?.role)}</span>
+                  </div>
+                  <button type="button" onClick={() => setMobileUtilitiesOpen(false)} aria-label="Mobil işlemleri kapat"><X size={19} /></button>
+                </header>
+                <div className="shell-v3-mobile-utilities-grid">
+                  <button type="button" onClick={() => { setMobileUtilitiesOpen(false); setQuickOpen(true); }}>
+                    <Plus size={18} /><span><strong>Hızlı İşlem</strong><small>Üretim, muhasebe, İK ve diğer hızlı işlemler</small></span>
+                  </button>
+                  <button type="button" onClick={openMobileNotifications}>
+                    <Bell size={18} /><span><strong>Bildirim Merkezi{notificationData.unreadCount ? ` · ${notificationData.unreadCount}` : ""}</strong><small>Onay, e-Belge, ödeme ve sistem bildirimleri</small></span>
+                  </button>
+                  <button type="button" onClick={openMobilePhoneApproval}>
+                    <Smartphone size={18} /><span><strong>Telefon Onayı</strong><small>Güvenilir cihaz, giriş onayı ve bildirim testi</small></span>
+                  </button>
+                  <button type="button" onClick={openMobileDisplaySettings}>
+                    <Settings2 size={18} /><span><strong>Ekran ve Görünüm</strong><small>Otomatik, tablet, telefon ve ölçek ayarları</small></span>
+                  </button>
+                  {installPrompt ? (
+                    <button type="button" onClick={installPwaFromMobileMenu}>
+                      <Download size={18} /><span><strong>Uygulamayı Yükle</strong><small>Android cihazda KY ERP'yi uygulama olarak kur</small></span>
+                    </button>
+                  ) : null}
+                  <button type="button" className="danger" onClick={() => { setMobileUtilitiesOpen(false); onLogout(); }}>
+                    <LogOut size={18} /><span><strong>Güvenli Çıkış</strong><small>Bu cihazdaki KY ERP oturumunu kapat</small></span>
+                  </button>
+                </div>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {displaySettingsOpen && displayPreferences
         ? createPortal(
