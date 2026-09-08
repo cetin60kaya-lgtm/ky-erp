@@ -23,6 +23,46 @@ function applicationServerKey(value) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
+function bytesToBase64Url(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value || []);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return window.btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+async function enrollLocalDeviceUnlock(user, deviceId) {
+  if (!window.PublicKeyCredential || !navigator.credentials?.create) return "";
+  const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.();
+  if (!available) return "";
+
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const rawUserId = new TextEncoder().encode(String(user?.id || deviceId || "kyerp-user"));
+  const userId = rawUserId.length <= 64
+    ? rawUserId
+    : new Uint8Array(await crypto.subtle.digest("SHA-256", rawUserId));
+
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      challenge,
+      rp: { name: "KY ERP", id: window.location.hostname },
+      user: {
+        id: userId,
+        name: String(user?.email || user?.username || user?.id || "kyerp-user"),
+        displayName: String(user?.fullName || user?.username || "KY ERP Kullanıcısı"),
+      },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+      timeout: 60000,
+      authenticatorSelection: {
+        authenticatorAttachment: "platform",
+        residentKey: "preferred",
+        userVerification: "required",
+      },
+      attestation: "none",
+    },
+  });
+  return credential?.rawId ? bytesToBase64Url(credential.rawId) : "";
+}
+
 function isIosDevice() {
   const ua = String(navigator.userAgent || "");
   return /iPhone|iPad|iPod/i.test(ua) ||
@@ -149,16 +189,28 @@ export default function PhoneApprovalSetup({ onClose }) {
       const device = response?.data || response;
       if (!device?.deviceId || !device?.deviceToken) throw new Error("Güvenilir cihaz anahtarı alınamadı.");
 
+      let localUnlockCredentialId = "";
+      try {
+        localUnlockCredentialId = await enrollLocalDeviceUnlock(user, device.deviceId);
+      } catch {
+        // Kullanıcı biyometri/PIN kurulumunu kapatırsa telefon onayı yine mevcut
+        // güvenli cihaz anahtarıyla çalışır; ek yerel kilit sadece opsiyoneldir.
+      }
+
       const deviceCredentials = {
         deviceId: device.deviceId,
         deviceToken: device.deviceToken,
+        localUnlockRequired: Boolean(localUnlockCredentialId),
+        localUnlockCredentialId,
         savedAt: new Date().toISOString(),
       };
       await persistDeviceCredentials(deviceCredentials);
       sendWorkerCredentials(registration, deviceCredentials);
       try { window.localStorage.setItem(LOCAL_DEVICE_ID, String(device.deviceId)); } catch {}
       setPassword("");
-      setMessage("Bu cihaz güvenilir telefon onayı cihazı olarak kaydedildi. Bundan sonraki girişlerde bildirimden Onayla diyebilirsiniz.");
+      setMessage(localUnlockCredentialId
+        ? "Bu cihaz kaydedildi. Bundan sonraki girişlerde tek bildirim gelir; Onayla sonrası Face ID / parmak izi / cihaz PIN'i ile ek doğrulama istenir."
+        : "Bu cihaz kaydedildi. Bundan sonraki girişlerde tek bildirim gelir; Onayla işlemi bir kez gönderilir.");
       await load();
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Telefon onayı cihazı kaydedilemedi."}`);
@@ -247,7 +299,7 @@ export default function PhoneApprovalSetup({ onClose }) {
               <BellRing size={17}/>{busy ? "Kaydediliyor..." : "Bildirimleri Aç ve Bu Cihazı Kaydet"}
             </button>
             <button type="button" onClick={localTest} disabled={busy || !supported}>Bu cihazda deneme bildirimi</button>
-            <small className="phone-approval-help">Cihaz ekleme, açık oturumla tek başına yapılamaz; mevcut şifreyle yeniden doğrulama zorunludur. iPhone’da bildirimde ayrı Onayla/Reddet butonları görünmese bile bildirime dokununca KY ERP güvenli onay ekranı açılır.</small>
+            <small className="phone-approval-help">Cihaz ekleme için mevcut KY ERP şifresi zorunludur. Telefon destekliyorsa kayıt sırasında ek cihaz kilidi de kurulur: iPhone/iPad’de Face ID / Touch ID / cihaz kodu, Android’de parmak izi / ekran kilidi / PIN. Bu ek kilit kurulamazsa telefon onayı mevcut güvenli cihaz anahtarıyla çalışmaya devam eder.</small>
           </section>
 
           <section className="phone-approval-card">
