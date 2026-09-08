@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, CheckCheck, ChevronDown, Command, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Bell, BellRing, CheckCheck, ChevronDown, Command, Menu, Monitor, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
+import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import { getNotifications, markNotificationsRead } from "../services/notificationApi";
@@ -100,6 +101,7 @@ export default function AppShellV3({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
+  const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState("");
@@ -330,6 +332,16 @@ export default function AppShellV3({
             <span>Ekran</span>
             <small>{displayLabel} · {effectiveScale}%</small>
           </button>
+          <button
+            type="button"
+            className="shell-v3-phone-approval-button"
+            onClick={() => setPhoneApprovalOpen(true)}
+            aria-label="Telefon Onayı ayarlarını aç"
+            title="Telefon Onayı"
+          >
+            <BellRing size={17} />
+            <span>Telefon Onayı</span>
+          </button>
           <div className="shell-v3-notification-wrap">
             <button
               type="button"
@@ -428,6 +440,13 @@ export default function AppShellV3({
               display={displayPreferences}
               onClose={() => setDisplaySettingsOpen(false)}
             />,
+            document.body,
+          )
+        : null}
+
+      {phoneApprovalOpen
+        ? createPortal(
+            <PhoneApprovalSetup onClose={() => setPhoneApprovalOpen(false)} />,
             document.body,
           )
         : null}
