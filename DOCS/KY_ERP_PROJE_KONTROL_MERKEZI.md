@@ -231,6 +231,17 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ---
 
+## 08.09.2026 — Android telefon/tablet tam işlem paritesi kilitlendi
+
+- Kullanıcı kalıcı kuralı: PC tarayıcıda çalışan hiçbir KY ERP butonu veya işlemi Android telefon/tablette kaybolamaz ya da çalışamaz halde bırakılamaz.
+- Canonical uygulama AppV3'tür; Android için ayrı business mantığı çoğaltılmaz. Telefon/tablet yalnız responsive görünüm profilidir.
+- Production kaynakta PR #253 ile ortak dokunmatik katman tamamlandı; merge commit: `6340558201589009a163ad6a0755cfc400a81021`.
+- Ortak katman 44 px dokunma hedefi, yatay tablo kaydırma, Android `visualViewport`/sanal klavye güvenliği ve yüzen Telefon Onayı düğmesi için alt güvenli alan sağlar.
+- İşNet async PDF/XML/toplu yazdırma Android popup engeline dayanıklı hale getirildi; Desen ve Muhasebe çift-tıklama kısayollarında dokunmatik tek-dokunma yolu eklendi.
+- Responsive profil/güvenlik menüsü, Bildirim Merkezi, Telefon Onayı, Ekran & Görünüm, PWA kurulumu ve Hızlı İşlem telefon/tablette erişilebilir kalır.
+- Bu parite bundan sonra release blocker'dır: desktopta çalışan bir business işlem mobilde yoksa özellik tamam sayılmaz.
+- Production yayın yolu değişmedi: GitHub Actions yok; production merge sonrası Cloudflare Git Integration -> Pages + Workers Builds -> canlı smoke.
+
 ## Son güncelleme
 
 
