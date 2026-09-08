@@ -14,6 +14,7 @@ import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-c
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
+import { registerAuthPushRoutes } from "./auth-push-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
@@ -233,7 +234,7 @@ shell.use(
   cors({
     origin: allowedOrigin,
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
-    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device", "X-KYERP-Push-Device", "X-KYERP-Push-Token"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id", "X-KYERP-Auth-Version"],
     maxAge: 86400,
     credentials: true,
@@ -380,6 +381,9 @@ shell.get("/api/auth/status", (c) => c.json({
   endpoints: {
     login: "/api/auth/login",
     mfaVerify: "/api/auth/mfa/verify",
+    phoneApprovalStatus: "/api/auth/phone-approval/:id/status",
+    phoneApprovalFallback: "/api/auth/phone-approval/:id/fallback",
+    pushConfig: "/api/auth/push/config",
     me: "/api/auth/me",
     refresh: "/api/auth/refresh",
     logout: "/api/auth/logout",
@@ -407,6 +411,7 @@ shell.get("/api/auth/me", async (c) => {
 registerAuthRecoveryCodeFallbackRoutes(shell);
 registerAuthOwnerGuardRoutes(shell);
 registerAuthSessionRefreshRoutes(shell);
+registerAuthPushRoutes(shell);
 registerAuthPolicyRoutes(shell);
 shell.route("/", app);
 
