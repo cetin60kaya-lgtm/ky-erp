@@ -86,6 +86,18 @@ function dateOnly(value: unknown) {
   return raw ? raw.slice(0, 10) : "";
 }
 
+function friendlyDeviceLabel(labelValue: unknown, userAgentValue: unknown = "") {
+  const label = text(labelValue);
+  const ua = text(userAgentValue);
+  if (label && !upper(label).startsWith("BROWSER:")) return label;
+  if (/Android/i.test(ua)) return /Mobile/i.test(ua) ? "Android telefon" : "Android tablet";
+  if (/iPhone|iPod/i.test(ua)) return "iPhone";
+  if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile/i.test(ua))) return "iPad";
+  if (/Windows/i.test(ua)) return "Windows bilgisayar";
+  if (/Macintosh|Mac OS X/i.test(ua)) return "Mac";
+  return "Yeni cihaz";
+}
+
 function notificationSort(a: AnyRow, b: AnyRow) {
   const severity = { critical: 3, warning: 2, info: 1 };
   const severityDiff = (severity[b.severity] || 0) - (severity[a.severity] || 0);
@@ -102,7 +114,7 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
   const now = new Date().toISOString();
   const result = ownerRole(current?.role)
     ? await c.env.DB.prepare(
-        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.ip_address,a.requested_at,a.expires_at,
+        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
                 COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name
            FROM auth_login_approvals a
            LEFT JOIN auth_users u ON u.id=a.user_id
@@ -112,7 +124,7 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
           LIMIT 30`,
       ).bind(now).all<AnyRow>()
     : await c.env.DB.prepare(
-        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.ip_address,a.requested_at,a.expires_at,
+        `SELECT a.id,a.user_id,a.main_company_slug,a.device_label,a.user_agent,a.ip_address,a.requested_at,a.expires_at,
                 COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name
            FROM auth_login_approvals a
            LEFT JOIN auth_users u ON u.id=a.user_id
@@ -128,7 +140,7 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
     category: "SECURITY",
     severity: "warning",
     title: "Bekleyen giriş onayı",
-    detail: [ownerRole(current?.role) ? text(row.main_company_slug) : "", text(row.user_name), text(row.device_label) || "Yeni cihaz"].filter(Boolean).join(" · "),
+    detail: [ownerRole(current?.role) ? text(row.main_company_slug) : "", text(row.user_name), friendlyDeviceLabel(row.device_label, row.user_agent)].filter(Boolean).join(" · "),
     createdAt: toIso(row.requested_at),
     route: { moduleKey: "admin", tabKey: "admin-yonetim-ozeti" },
     approval: {
