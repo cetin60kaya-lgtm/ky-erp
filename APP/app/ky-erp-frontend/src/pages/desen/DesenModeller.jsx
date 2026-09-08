@@ -39,6 +39,12 @@ import {
   WideModal,
 } from "./DesenWorkflowShared";
 
+function runTouchRowAction(event, action) {
+  if (!window.matchMedia?.("(pointer: coarse)")?.matches) return;
+  if (event.target?.closest?.("button,a,input,select,textarea,[role='button']")) return;
+  action?.();
+}
+
 export default function DesenModeller({ activeMainCompany }) {
   const [models, setModels] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -149,7 +155,7 @@ function ModelCard({ model, selected, onSelect, onDetail, onEdit, onDyehouse }) 
 }
 
 function ModelTable({ models, selectedIds, onSelect, onDetail, onEdit }) {
-  return <div className="dsg-card dsg-table-wrap"><table className="dsg-table model-list"><thead><tr><th /><th>Görsel</th><th>Model</th><th>Firma</th><th>Baskı Bölgeleri</th><th>Bölge</th><th>Kanal</th><th>Kalıp</th><th>Benzersiz Boya</th><th>Kayıtlı / Eksik</th><th>Yerleşim</th><th>Boyahane</th><th>Durum</th><th>ERP Eklenme</th><th>Dosya Tarihi</th><th>Son Güncelleme</th><th /></tr></thead><tbody>{models.map((model) => <tr key={model.id} onDoubleClick={() => onDetail(model)}><td><button className="dsg-icon-btn" onClick={() => onSelect(model.id)}>{selectedIds.includes(model.id) ? <CheckSquare size={17} /> : <Square size={17} />}</button></td><td><button className="dsg-table-thumb" onClick={() => onDetail(model)}>{model.mainImage ? <img src={assetUrl(model.mainImage.thumbnailUrl || model.mainImage.previewUrl)} alt="" /> : <FileImage />}</button></td><td><strong>{model.modelName}</strong></td><td>{model.companyName}</td><td>{model.operations.map((operation) => operation.printAreaName).join(", ")}</td><td>{model.operations.length}</td><td>{model.totals.activeChannelCount}</td><td>{model.totals.totalMoldCount}</td><td>{model.totals.uniqueColorCount}</td><td>{model.totals.registeredColorCount} / {model.totals.unresolvedColorCount}</td><td>{model.operations.every((operation) => operation.placementStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td>{model.operations.every((operation) => operation.dyehouseStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td><StatusBadge value={model.status} /></td><td>{formatDate(model.createdAt)}</td><td>{formatDate(model.sourceModifiedAt)}</td><td>{formatDate(model.updatedAt)}</td><td><button className="dsg-icon-btn" onClick={() => onEdit(model)}><Pencil size={16} /></button></td></tr>)}</tbody></table></div>;
+  return <div className="dsg-card dsg-table-wrap"><table className="dsg-table model-list"><thead><tr><th /><th>Görsel</th><th>Model</th><th>Firma</th><th>Baskı Bölgeleri</th><th>Bölge</th><th>Kanal</th><th>Kalıp</th><th>Benzersiz Boya</th><th>Kayıtlı / Eksik</th><th>Yerleşim</th><th>Boyahane</th><th>Durum</th><th>ERP Eklenme</th><th>Dosya Tarihi</th><th>Son Güncelleme</th><th /></tr></thead><tbody>{models.map((model) => <tr key={model.id} onClick={(event) => runTouchRowAction(event, () => onDetail(model))} onDoubleClick={() => onDetail(model)}><td><button className="dsg-icon-btn" onClick={() => onSelect(model.id)}>{selectedIds.includes(model.id) ? <CheckSquare size={17} /> : <Square size={17} />}</button></td><td><button className="dsg-table-thumb" onClick={() => onDetail(model)}>{model.mainImage ? <img src={assetUrl(model.mainImage.thumbnailUrl || model.mainImage.previewUrl)} alt="" /> : <FileImage />}</button></td><td><strong>{model.modelName}</strong></td><td>{model.companyName}</td><td>{model.operations.map((operation) => operation.printAreaName).join(", ")}</td><td>{model.operations.length}</td><td>{model.totals.activeChannelCount}</td><td>{model.totals.totalMoldCount}</td><td>{model.totals.uniqueColorCount}</td><td>{model.totals.registeredColorCount} / {model.totals.unresolvedColorCount}</td><td>{model.operations.every((operation) => operation.placementStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td>{model.operations.every((operation) => operation.dyehouseStatus === "READY") ? "Hazır" : "Bekliyor"}</td><td><StatusBadge value={model.status} /></td><td>{formatDate(model.createdAt)}</td><td>{formatDate(model.sourceModifiedAt)}</td><td>{formatDate(model.updatedAt)}</td><td><button className="dsg-icon-btn" onClick={() => onEdit(model)}><Pencil size={16} /></button></td></tr>)}</tbody></table></div>;
 }
 
 function BulkEditModal({ activeMainCompany, models, onClose, onSaved }) {
