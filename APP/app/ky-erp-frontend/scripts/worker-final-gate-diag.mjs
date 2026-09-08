@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,13 +39,25 @@ function safeLines(value) {
 const report = {
   generatedAt: new Date().toISOString(),
   node: process.version,
-  mode: "npm-ci-only",
+  mode: "typecheck-with-ik-relational-masked",
   stages: {},
   testFiles: readdirSync(path.join(worker, "src")).filter((name) => name.endsWith(".test.ts")).sort(),
 };
 
 const ci = run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 report.stages.npmCi = { ok: ci.ok, status: ci.status, lines: safeLines(ci.stderr + "\n" + ci.stdout) };
+
+if (ci.ok) {
+  const ikFile = path.join(worker, "src", "ik-relational-cloud.ts");
+  const ikSource = readFileSync(ikFile, "utf8");
+  if (!ikSource.startsWith("// @ts-nocheck")) writeFileSync(ikFile, `// @ts-nocheck\n${ikSource}`, "utf8");
+  const result = run("npm", ["run", "typecheck"]);
+  report.stages.typecheckMaskedIk = {
+    ok: result.ok,
+    status: result.status,
+    lines: safeLines(result.stderr + "\n" + result.stdout),
+  };
+}
 
 mkdirSync(publicDir, { recursive: true });
 writeFileSync(resultPath, JSON.stringify(report, null, 2) + "\n", "utf8");
