@@ -64,4 +64,6 @@ if (ci.ok) {
 
 mkdirSync(publicDir, { recursive: true });
 writeFileSync(resultPath, JSON.stringify(report, null, 2) + "\n", "utf8");
-console.log("WORKER_FINAL_GATE_DIAGNOSTIC_WRITTEN");
+const failedStages = Object.entries(report.stages).filter(([, stage]) => !stage.ok).map(([name]) => name);
+console.log(`WORKER_FINAL_GATE_RESULT=${failedStages.length ? `FAIL:${failedStages.join(",")}` : "PASS"}`);
+if (failedStages.length) process.exitCode = 1;
