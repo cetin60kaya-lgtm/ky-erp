@@ -241,3 +241,27 @@ test("PDKS Terminal & Sistem landing opens the actual device center", () => {
   assert.match(page, /\["saat-terminal", "cihaz-baglantilari", "senkron"\]/);
   assert.match(device, /activeTab==="saat-terminal"\?"Terminal & Sistem"/);
 });
+
+
+test("PDKS live dashboard bulk-loads schedules and joins adjacent-day cross-midnight punches", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /const previousDate = addDays\(date, -1\)/);
+  assert.match(source, /t\.work_date BETWEEN \? AND \?/);
+  assert.match(source, /const groupRows = await all/);
+  assert.match(source, /const employeeGroupMap = new Map/);
+  assert.match(source, /const departmentGroupMap = new Map/);
+  assert.match(source, /const scheduleFor = \(person: Row\)/);
+  assert.doesNotMatch(source, /for \(const person of people\)[\s\S]{0,1400}await resolveSchedule/);
+  assert.match(source, /const shiftDate = date === todayKey && schedule\.crossMidnight/);
+  assert.match(source, /const shiftEndDate = schedule\.crossMidnight \? addDays\(shiftDate, 1\) : shiftDate/);
+  assert.match(source, /observedEntry/);
+  assert.match(source, /firstDirection === "OUT"/);
+});
+
+test("DENETIM AI can read the finance-free live PDKS snapshot", () => {
+  const guard = api("ik-pdks-guard.ts");
+  const source = api("ik-pdks-modern.ts");
+  assert.match(guard, /"\/api\/ik\/personnel-control\/dashboard-live"/);
+  assert.match(source, /const visibleEmployeeIds = new Set/);
+  assert.match(source, /auth\.audit \? rawEvents\.filter/);
+});
