@@ -18,8 +18,8 @@ test("security app enrollment is one-time, password stepped-up and migration ret
 });
 
 test("security app devices are preferred and every decision is signed with device key",()=>{
-  assert.match(push,/const securityApps = eligible\.filter/);
-  assert.match(push,/return securityApps\.length \? securityApps : eligible/);
+  assert.match(push,/return eligible\.filter\(\(row: AnyRow\) => row\.securityApp === true\)/);
+  assert.match(push,/LEGACY_PHONE_APPROVAL_RETIRED/);
   assert.match(push,/verifySecurityAppDecision/);
   assert.match(push,/SECURITY_DEVICE_SIGNATURE_INVALID/);
   assert.match(push,/KYERP-DECISION-V1/);

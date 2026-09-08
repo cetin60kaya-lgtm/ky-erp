@@ -35,13 +35,15 @@ test("phone approval uses existing tenant json_store and needs no new production
   assert.doesNotMatch(push, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
 });
 
-test("trusted push device enrollment requires password step-up and stores only a token hash", () => {
+test("security-app enrollment requires password step-up, stores token hash and retires legacy browser enrollment", () => {
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
   assert.match(push, /deviceTokenHash/);
   assert.match(push, /await sha256\(deviceToken\)/);
   assert.doesNotMatch(push, /device_token\s+TEXT/i);
   assert.doesNotMatch(push, /p256dhKey|authKey/);
   assert.match(push, /PUSH_ENDPOINT_ALREADY_BOUND/);
+  assert.match(push, /LEGACY_PHONE_APPROVAL_RETIRED/);
+  assert.match(push, /securityAppUrl: "https:\/\/app\.kyerp\.net\/security\/");
 });
 
 test("VAPID signing key stays server-side and push uses standard VAPID authorization", () => {

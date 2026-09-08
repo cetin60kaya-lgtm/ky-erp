@@ -341,10 +341,10 @@ async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "M
     (purpose === "MANAGER" ? row.managerApprovalEnabled !== false : row.selfLoginEnabled !== false)
   );
 
-  // Yeni KY ERP Güvenlik uygulaması kaydedildiyse eski ERP tarayıcı push cihazları
-  // artık karar kanalı değildir. Böylece aynı giriş iki farklı uygulamaya düşmez.
-  const securityApps = eligible.filter((row: AnyRow) => row.securityApp === true);
-  return securityApps.length ? securityApps : eligible;
+  // Temiz kesim: telefon onayı yalnız ayrı KY ERP Güvenlik uygulamasından yapılır.
+  // Eski ana-ERP tarayıcı push cihazları artık karar otoritesi değildir.
+  // Güvenlik uygulaması yoksa çağıran auth akışı Authenticator fallback'ine gider.
+  return eligible.filter((row: AnyRow) => row.securityApp === true);
 }
 
 async function supersedeOlderSelfChallenges(c: any, userId: string, replacementId: string) {
@@ -876,58 +876,12 @@ export function registerAuthPushRoutes(app: any) {
 
   app.post("/api/auth/push/devices/register", async (c: any) => {
     const current = await getAuthenticatedUser(c);
-    if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı kaydı için oturum gereklidir."), 401);
-
-    const body = await bodyOf(c);
-    const password = String(body.password || "");
-    const user = await userRow(c, current.id);
-    if (!user || !Boolean(user.is_active) || !password || !(await compare(password, text(user.password_hash)))) {
-      return c.json(jsonError("STEP_UP_FAILED", "Bu cihazı güvenilir telefon onayı cihazı yapmak için mevcut şifrenizi doğrulayın."), 401);
-    }
-
-    const subscription = body.subscription && typeof body.subscription === "object" ? body.subscription : {};
-    const endpoint = text(subscription.endpoint);
-    if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Tarayıcı bildirim aboneliği geçersiz."), 400);
-
-    const allDevices = await storeList(c, DEVICE_SCOPE);
-    const existing = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
-    if (existing && text(existing.userId) !== text(current.id)) {
-      return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu bildirim aboneliği başka bir KY ERP hesabına bağlı."), 409);
-    }
-
-    const deviceId = text(existing?.id) || crypto.randomUUID();
-    const deviceToken = randomToken(36);
-    const companySlug = text(current.mainCompanySlug || user.main_company_slug || "mecit-hakan");
-    const label = text(body.deviceLabel || current.session?.device_label || userAgent(c)).slice(0, 180);
-    const saved = await saveDevice(c, {
-      ...(existing || {}),
-      id: deviceId,
-      userId: current.id,
-      mainCompanySlug: companySlug,
-      pushEndpoint: endpoint,
-      deviceTokenHash: await sha256(deviceToken),
-      deviceLabel: label,
-      userAgent: userAgent(c),
-      selfLoginEnabled: body.selfLoginEnabled !== false,
-      managerApprovalEnabled: body.managerApprovalEnabled !== false,
-      isActive: true,
-      createdAt: existing?.createdAt || nowIso(),
-      lastSeenAt: nowIso(),
-      lastError: "",
-    });
-
-    await audit(c, "PUSH_DEVICE_REGISTERED", current.id, current.id, companySlug, { deviceId, deviceLabel: label });
-    return c.json({
-      ok: true,
-      data: {
-        deviceId: saved.id,
-        deviceToken,
-        deviceLabel: label,
-        selfLoginEnabled: saved.selfLoginEnabled,
-        managerApprovalEnabled: saved.managerApprovalEnabled,
-        note: "Cihaz anahtarı yalnız bu kayıt cevabında verilir ve sunucuda hash olarak saklanır.",
-      },
-    });
+    if (!current) return c.json(jsonError("UNAUTHORIZED", "Oturum gereklidir."), 401);
+    return c.json(jsonError(
+      "LEGACY_PHONE_APPROVAL_RETIRED",
+      "Eski tarayıcı telefon onayı kapatıldı. Profil > Telefon Onayı bölümünden KY ERP Güvenlik uygulamasını kurun.",
+      { securityAppUrl: "https://app.kyerp.net/security/" },
+    ), 410);
   });
 
   app.delete("/api/auth/push/devices/:id", async (c: any) => {
