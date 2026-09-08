@@ -348,7 +348,7 @@ public partial class KyErpDesktopWindow : Window
                     var audit = profile.Audit
                         || string.Equals(profile.Scope, "AUDIT", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(profile.Role, "DENETIM", StringComparison.OrdinalIgnoreCase);
-                    if (audit) return;
+                    if (audit) { await Task.Delay(TimeSpan.FromSeconds(30), _lifetime.Token); continue; }
 
                     if (!File.Exists(_pdksPaths.SetupCompletedFile) && !_pdksFirstRunWizardShown)
                     {
@@ -363,7 +363,7 @@ public partial class KyErpDesktopWindow : Window
 
                     try
                     {
-                        if (await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token)) return;
+                        await EnsurePdksAgentEnrollmentAsync(token, _lifetime.Token);
                     }
                     catch (Exception enrollmentError)
                     {
@@ -375,7 +375,7 @@ public partial class KyErpDesktopWindow : Window
             catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
             catch { /* ağ geçici olabilir; aktif oturum için tekrar dene */ }
 
-            try { await Task.Delay(TimeSpan.FromSeconds(5), _lifetime.Token); }
+            try { await Task.Delay(TimeSpan.FromSeconds(30), _lifetime.Token); }
             catch (OperationCanceledException) { return; }
         }
     }
