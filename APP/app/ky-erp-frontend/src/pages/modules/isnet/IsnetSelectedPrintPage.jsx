@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { getIsnetLocalFile, openBlobInNewTab } from "../../../services/isnetLocalFileApi";
+import { getIsnetLocalFile, openBlobInNewTab, reserveBlobTab } from "../../../services/isnetLocalFileApi";
 import {
   getIsnetSelectedPrintBundle,
   getIsnetSelectedPrintQueue,
@@ -59,12 +59,14 @@ export default function IsnetSelectedPrintPage() {
   }
 
   async function openPdf(row) {
+    const preview = reserveBlobTab();
     setBusy(`pdf-${row.key}`);
     setNotice(null);
     try {
       const blob = await getIsnetLocalFile(row.key, "pdf");
-      openBlobInNewTab(blob);
+      openBlobInNewTab(blob, preview);
     } catch (error) {
+      try { preview?.close(); } catch {}
       setNotice({ tone: "error", text: error?.message || "PDF açılamadı." });
     } finally {
       setBusy("");
@@ -77,11 +79,12 @@ export default function IsnetSelectedPrintPage() {
       setNotice({ tone: "warning", text: "Yazdırılacak bekleyen belge seçilmedi." });
       return;
     }
+    const preview = reserveBlobTab();
     setBusy("print");
     setNotice(null);
     try {
       const blob = await getIsnetSelectedPrintBundle(targetKeys);
-      openBlobInNewTab(blob);
+      openBlobInNewTab(blob, preview);
       if (window.confirm(`${targetKeys.length} belge yazdırma için açıldı. Çıktı alındı olarak işaretlensin mi?`)) {
         await markIsnetSelectedPrintQueuePrinted(targetKeys);
         setNotice({ tone: "success", text: `${targetKeys.length} belge yazdırıldı olarak kaydedildi.` });
@@ -91,6 +94,7 @@ export default function IsnetSelectedPrintPage() {
         setNotice({ tone: "info", text: "PDF açıldı; belgeler kuyrukta beklemeye devam ediyor." });
       }
     } catch (error) {
+      try { preview?.close(); } catch {}
       setNotice({ tone: "error", text: error?.message || "Toplu PDF oluşturulamadı." });
     } finally {
       setBusy("");
