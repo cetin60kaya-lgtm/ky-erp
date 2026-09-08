@@ -117,3 +117,14 @@ test("legacy direct MFA reset remains fail-closed", () => {
   assert.match(main, /MFA_REAUTH_REQUIRED/);
   assert.match(main, /reset-mfa/);
 });
+
+
+test("push approval hides raw browser ids and uses Android friendly device labels", () => {
+  assert.match(push, /function friendlyDeviceLabel/);
+  assert.match(push, /Android telefon/);
+  assert.match(push, /Android tablet/);
+  assert.match(push, /friendlyDeviceLabel\(current\.deviceLabel, current\.userAgent\)/);
+  assert.match(push, /friendlyDeviceLabel\(row\.device_label, row\.user_agent\)/);
+  assert.match(serviceWorker, /vibrate: \[180, 80, 180\]/);
+  assert.match(serviceWorker, /KY ERP · Giriş Onaylandı/);
+});
