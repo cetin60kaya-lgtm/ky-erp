@@ -40,6 +40,7 @@ Name: "{commonappdata}\KY ERP\Desktop\Logs"; Permissions: users-modify
 [Files]
 Source: "{#Dist}\erp-desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Dist}\file-agent\*"; DestDir: "{app}\FileAgent"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Dist}\webview2\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\KY ERP\KY ERP Desktop"; Filename: "{app}\KY ERP Desktop.exe"
@@ -51,6 +52,7 @@ Name: "desktopicon"; Description: "Masaüstünde KY ERP Desktop kısayolu oluşt
 Name: "autostart"; Description: "Windows açıldığında KY ERP Desktop'ı başlat"; GroupDescription: "Başlangıç:"; Flags: unchecked
 
 [Run]
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; Flags: runhidden waituntilterminated; StatusMsg: "Microsoft WebView2 hazırlanıyor..."
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File &quot;{app}\FileAgent\install-file-hub-agent.ps1&quot; -TaskName &quot;KY ERP File Hub Agent&quot;"; Flags: runhidden waituntilterminated
 Filename: "{app}\KY ERP Desktop.exe"; Description: "KY ERP Desktop uygulamasını aç"; Flags: nowait postinstall skipifsilent
 
