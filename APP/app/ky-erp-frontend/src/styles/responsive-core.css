@@ -835,3 +835,86 @@ body,
     animation-iteration-count: 1 !important;
   }
 }
+
+
+/* Profil menüsü responsive kontratı */
+@media (max-width: 1024px) {
+  .shell-v3-user > .shell-v3-user-trigger {
+    display: inline-flex !important;
+    min-width: 40px !important;
+    width: 40px;
+    height: 40px;
+    padding: 3px !important;
+    border-radius: 50%;
+  }
+
+  .shell-v3-user .shell-v3-user-meta,
+  .shell-v3-user .shell-v3-user-chevron {
+    display: none !important;
+  }
+
+  .shell-v3-user .shell-v3-user-avatar {
+    flex-basis: 34px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .shell-v3-user-menu {
+    position: fixed;
+    top: calc(58px + var(--ky-safe-top));
+    right: max(8px, var(--ky-safe-right));
+    width: min(360px, calc(100vw - 16px - var(--ky-safe-left) - var(--ky-safe-right)));
+    max-height: calc(100dvh - 70px - var(--ky-safe-top) - var(--ky-safe-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-user > .shell-v3-user-trigger,
+.shell-v3[data-layout-mode="phone"] .shell-v3-user > .shell-v3-user-trigger {
+  display: inline-flex !important;
+}
+
+.shell-v3[data-layout-mode="tablet"] .shell-v3-user .shell-v3-user-meta,
+.shell-v3[data-layout-mode="tablet"] .shell-v3-user .shell-v3-user-chevron,
+.shell-v3[data-layout-mode="phone"] .shell-v3-user .shell-v3-user-meta,
+.shell-v3[data-layout-mode="phone"] .shell-v3-user .shell-v3-user-chevron {
+  display: none !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-user-menu {
+  top: calc(58px + var(--ky-safe-top));
+  right: max(6px, var(--ky-safe-right));
+  left: max(6px, var(--ky-safe-left));
+  width: auto;
+  border-radius: 14px;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-user-menu-actions > button {
+  min-height: 54px !important;
+}
+
+@media (max-width: 480px) {
+  .shell-v3-user-menu-head {
+    padding: 14px;
+  }
+
+  .shell-v3-user-avatar.large {
+    flex-basis: 52px;
+    width: 52px;
+    height: 52px;
+  }
+
+  .shell-v3-user-menu-identity strong {
+    font-size: 13px;
+  }
+
+  .shell-v3-user-menu-actions {
+    padding: 7px;
+  }
+
+  .shell-v3-user-menu-foot {
+    position: sticky;
+    bottom: 0;
+  }
+}
