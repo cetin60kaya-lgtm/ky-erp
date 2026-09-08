@@ -851,3 +851,252 @@
   display: inline !important;
   font-size: 12px;
 }
+
+
+/* Profil / güvenlik menüsü — masaüstü, tablet ve telefon için tek hesap yüzeyi */
+.shell-v3-user {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.shell-v3-user-trigger {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  min-width: 154px;
+  height: 38px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid transparent !important;
+  border-radius: 10px;
+  background: transparent !important;
+  color: #1e293b !important;
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.shell-v3-user-trigger:hover,
+.shell-v3-user-trigger.active {
+  border-color: #d6e2ef !important;
+  background: #f7faff !important;
+}
+
+.shell-v3-user-trigger.active {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .08);
+}
+
+.shell-v3-user-avatar {
+  position: relative;
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #c8d9ec;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #0f5f9e, #173f73);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  box-shadow: 0 2px 8px rgba(15, 71, 120, .18);
+}
+
+.shell-v3-user-avatar.large {
+  flex-basis: 58px;
+  width: 58px;
+  height: 58px;
+  font-size: 17px;
+}
+
+.shell-v3-user-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shell-v3-user-meta {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shell-v3-user-meta strong,
+.shell-v3-user-meta small {
+  display: block;
+  max-width: 142px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-v3-user-meta strong {
+  color: #172033;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.shell-v3-user-meta small {
+  margin-top: 2px;
+  color: #738196;
+  font-size: 7px;
+  line-height: 1.15;
+}
+
+.shell-v3-user-chevron {
+  flex: 0 0 auto;
+  color: #7b8798;
+  transition: transform .15s ease;
+}
+
+.shell-v3-user-trigger.active .shell-v3-user-chevron {
+  transform: rotate(180deg);
+}
+
+.shell-v3-user-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 1600;
+  width: min(360px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid #d8e3ee;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, .20);
+}
+
+.shell-v3-user-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+  border-bottom: 1px solid #e8eef5;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+}
+
+.shell-v3-user-menu-identity {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shell-v3-user-menu-identity strong,
+.shell-v3-user-menu-identity small,
+.shell-v3-user-menu-identity em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-v3-user-menu-identity strong {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.shell-v3-user-menu-identity small {
+  margin-top: 3px;
+  color: #66758a;
+  font-size: 11px;
+}
+
+.shell-v3-user-menu-identity em {
+  margin-top: 7px;
+  color: #1f5f9f;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.shell-v3-user-menu-actions {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.shell-v3-user-menu-actions > button {
+  display: flex !important;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 50px;
+  padding: 9px 10px;
+  border: 0 !important;
+  border-radius: 10px;
+  background: transparent !important;
+  color: #243247 !important;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell-v3-user-menu-actions > button:hover,
+.shell-v3-user-menu-actions > button:focus-visible {
+  background: #f1f6fc !important;
+  outline: none;
+}
+
+.shell-v3-user-menu-actions > button > svg {
+  flex: 0 0 auto;
+  color: #27659f;
+}
+
+.shell-v3-user-menu-actions > button > span {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shell-v3-user-menu-actions strong,
+.shell-v3-user-menu-actions small {
+  display: block;
+}
+
+.shell-v3-user-menu-actions strong {
+  color: #233047;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.shell-v3-user-menu-actions small {
+  margin-top: 2px;
+  color: #748196;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.shell-v3-user-menu-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px 9px 14px;
+  border-top: 1px solid #e8eef5;
+  background: #fafcff;
+  color: #8290a3;
+  font-size: 9px;
+}
+
+.shell-v3-user-menu-foot > button {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid #dce5ee !important;
+  border-radius: 9px;
+  background: #fff !important;
+  color: #9b2c2c !important;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.shell-v3-user-menu-foot > button:hover {
+  border-color: #efc1c1 !important;
+  background: #fff5f5 !important;
+}
