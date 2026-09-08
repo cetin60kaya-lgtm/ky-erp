@@ -19,6 +19,7 @@ $PdksDesktopOut = Join-Path $Dist 'pdks-desktop'
 $AgentOut = Join-Path $Dist 'agent'
 $FileAgentOut = Join-Path $Dist 'file-agent'
 $InstallerOut = Join-Path $Dist 'setup'
+$WebViewOut = Join-Path $Dist 'webview2'
 
 function Invoke-Native {
     param([Parameter(Mandatory=$true)][string]$Label,[Parameter(Mandatory=$true)][scriptblock]$Command)
@@ -69,7 +70,7 @@ if ($PdksServiceInstallerText -notmatch 'Wait-ServiceGone') { throw 'Agent servi
 if ($PdksServiceInstallerText -notmatch "Status -eq 'Running'") { throw 'Agent servis installer Running doğrulaması yapmıyor.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
-foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
+foreach ($dir in @($ErpDesktopOut,$PdksDesktopOut,$AgentOut,$FileAgentOut,$InstallerOut,$WebViewOut)) { New-Item $dir -ItemType Directory -Force | Out-Null }
 
 Write-Host '1/8 Güncel KY ERP frontend...' -ForegroundColor Cyan
 Push-Location $FrontendRoot
@@ -133,6 +134,11 @@ $AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($PdksAgentExe).Pro
 foreach ($actual in @($ErpVersion,$PdksVersion,$AgentVersion)) {
     if (-not ([string]$actual).StartsWith($Version)) { throw "Ürün sürümü yanlış: $actual" }
 }
+
+Write-Host '5.5/8 WebView2 bootstrapper...' -ForegroundColor Cyan
+$WebViewBootstrap = Join-Path $WebViewOut 'MicrosoftEdgeWebview2Setup.exe'
+Invoke-WebRequest -UseBasicParsing -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $WebViewBootstrap
+if (-not (Test-Path $WebViewBootstrap) -or (Get-Item $WebViewBootstrap).Length -lt 100000) { throw 'Microsoft WebView2 bootstrapper indirilemedi.' }
 
 Write-Host '6/8 Inno Setup ile iki kurulum paketi...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
