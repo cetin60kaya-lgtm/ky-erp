@@ -394,26 +394,86 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   const devices = await activeDevicesForUser(c, text(user.id), "SELF");
   if (!devices.length) return null;
 
-  const id = crypto.randomUUID();
-  const token = randomToken(32);
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
+  const sourceDeviceLabel = text(source.deviceLabel || source.device_label);
+  const sourceUserAgent = text(source.userAgent || source.user_agent || userAgent(c));
+  const sourceIpAddress = text(source.ipAddress || source.ip_address || clientIp(c));
   const requestedAt = nowIso();
   const expiresAt = addSeconds(PHONE_APPROVAL_SECONDS);
 
-  const challenge = await storePut(c, PHONE_SCOPE, id, companySlug, {
+  const pending = (await storeList(c, PHONE_SCOPE))
+    .filter((row: AnyRow) =>
+      text(row.userId) === text(user.id) &&
+      upper(row.status) === "PENDING" &&
+      !text(row.consumedAt) &&
+      Date.parse(text(row.expiresAt)) > Date.now() &&
+      text(row.userAgent) === sourceUserAgent &&
+      text(row.ipAddress) === sourceIpAddress
+    )
+    .sort((a: AnyRow, b: AnyRow) => String(b.updatedAt || b.requestedAt || "").localeCompare(String(a.updatedAt || a.requestedAt || "")));
+
+  if (pending.length) {
+    const current = pending[0];
+    const token = randomToken(32);
+    const lastNotifiedAt = Date.parse(text(current.lastNotifiedAt) || "0");
+    const shouldNotify = !Number.isFinite(lastNotifiedAt) || Date.now() - lastNotifiedAt > 60_000;
+    let sent = 0;
+
+    let reused = await storePut(c, PHONE_SCOPE, text(current.id), companySlug, {
+      ...current,
+      challengeTokenHash: await sha256(token),
+      deviceLabel: sourceDeviceLabel,
+      userAgent: sourceUserAgent,
+      ipAddress: sourceIpAddress,
+      expiresAt,
+      duplicateLoginAt: requestedAt,
+    });
+
+    if (shouldNotify) {
+      sent = await sendWakeMany(c, devices);
+      reused = await storePut(c, PHONE_SCOPE, text(current.id), companySlug, {
+        ...reused,
+        lastNotifiedAt: sent ? nowIso() : text(reused.lastNotifiedAt),
+        notifiedDevices: sent || Number(reused.notifiedDevices || 0),
+      });
+    }
+
+    await audit(c, "PHONE_LOGIN_APPROVAL_REUSED", user.id, user.id, companySlug, {
+      challengeId: current.id,
+      pushRepeated: shouldNotify && sent > 0,
+      notifiedDevices: sent,
+    });
+
+    return {
+      ok: true,
+      stage: "PHONE_APPROVAL_PENDING",
+      phoneApprovalId: text(current.id),
+      phoneApprovalToken: token,
+      phoneApprovalExpiresAt: expiresAt,
+      notifiedDevices: sent,
+      reused: true,
+      message: "Mevcut telefon giriş onayı kullanılıyor. Telefonunuzdaki tek KY ERP onayından devam edin.",
+    };
+  }
+
+  const id = crypto.randomUUID();
+  const token = randomToken(32);
+  let challenge = await storePut(c, PHONE_SCOPE, id, companySlug, {
     id,
     userId: text(user.id),
     mainCompanySlug: companySlug,
     challengeTokenHash: await sha256(token),
     status: "PENDING",
-    deviceLabel: text(source.deviceLabel || source.device_label),
-    userAgent: text(source.userAgent || source.user_agent || userAgent(c)),
-    ipAddress: text(source.ipAddress || source.ip_address || clientIp(c)),
+    deviceLabel: sourceDeviceLabel,
+    userAgent: sourceUserAgent,
+    ipAddress: sourceIpAddress,
     requestedAt,
     expiresAt,
     decidedAt: "",
     decidedByDeviceId: "",
     consumedAt: "",
+    lastNotifiedAt: "",
+    notifiedDevices: 0,
   });
 
   const sent = await sendWakeMany(c, devices);
@@ -421,6 +481,12 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     await atomicPhoneUpdate(c, challenge, "PENDING", { status: "FALLBACK", consumedAt: nowIso() });
     return null;
   }
+
+  challenge = await storePut(c, PHONE_SCOPE, id, companySlug, {
+    ...challenge,
+    lastNotifiedAt: nowIso(),
+    notifiedDevices: sent,
+  });
 
   await audit(c, "PHONE_LOGIN_APPROVAL_REQUESTED", user.id, user.id, companySlug, { challengeId: id, notifiedDevices: sent });
   return {
@@ -430,7 +496,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     phoneApprovalToken: token,
     phoneApprovalExpiresAt: expiresAt,
     notifiedDevices: sent,
-    message: "Telefonunuza KY ERP giriş onayı gönderildi. Bildirimi açıp Onayla veya Reddet seçin.",
+    message: "Telefonunuza KY ERP giriş onayı gönderildi. Bildirimden Onayla veya Reddet seçin.",
   };
 }
 
