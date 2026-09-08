@@ -128,7 +128,7 @@ test("push approval hides raw browser ids and uses Android friendly device label
   assert.match(serviceWorker, /vibrate: \[180, 80, 180\]/);
   assert.match(serviceWorker, /tag: "kyerp-security-pending"/);
   assert.match(serviceWorker, /renotify: false/);
-  assert.doesNotMatch(serviceWorker, /kyerp-result-/);
+  assert.match(serviceWorker, /closeLegacyApprovalNotifications/);
 });
 
 
