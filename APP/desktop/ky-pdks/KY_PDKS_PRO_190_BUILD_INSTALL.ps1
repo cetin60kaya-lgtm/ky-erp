@@ -23,7 +23,7 @@ function Is-Administrator {
 
 if(-not (Is-Administrator)){
     $quotedPath='"' + $PSCommandPath + '"'
-    $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$quotedPath)
+    $args=@('-NoExit','-NoProfile','-ExecutionPolicy','Bypass','-File',$quotedPath)
     if($BuildOnly){$args+='-BuildOnly'}
     Start-Process powershell.exe -Verb RunAs -ArgumentList $args
     exit
@@ -195,12 +195,18 @@ try{
     Write-Host "Uygulama açılıyor. Girişten sonra ilk terminal sihirbazı otomatik gelir." -ForegroundColor Cyan
 
     Start-Process -FilePath $appPath
+    if ($env:KY_PDKS_KEEP_OPEN -eq '1') {
+        [void](Read-Host 'Kurulum tamamlandi. Pencereyi kapatmak icin ENTER')
+    }
 }
 catch{
     Write-Host ""
     Write-Host "HATA: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Kaynak/build klasörü korundu: $Work" -ForegroundColor Yellow
     Write-Host "Log: $Log" -ForegroundColor Yellow
+    if ($env:KY_PDKS_KEEP_OPEN -eq '1') {
+        [void](Read-Host 'Hata ekranda kalacak. Kapatmak icin ENTER')
+    }
     throw
 }
 finally{
