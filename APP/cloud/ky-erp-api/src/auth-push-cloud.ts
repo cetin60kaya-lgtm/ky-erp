@@ -420,9 +420,16 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     const shouldNotify = !Number.isFinite(lastNotifiedAt) || Date.now() - lastNotifiedAt > 60_000;
     let sent = 0;
 
+    const newTokenHash = await sha256(token);
+    const tokenHashes = [...new Set([
+      text(current.challengeTokenHash),
+      ...(Array.isArray(current.challengeTokenHashes) ? current.challengeTokenHashes.map(text) : []),
+      newTokenHash,
+    ].filter(Boolean))].slice(-4);
     let reused = await storePut(c, PHONE_SCOPE, text(current.id), companySlug, {
       ...current,
-      challengeTokenHash: await sha256(token),
+      challengeTokenHash: text(current.challengeTokenHash) || newTokenHash,
+      challengeTokenHashes: tokenHashes,
       deviceLabel: sourceDeviceLabel,
       userAgent: sourceUserAgent,
       ipAddress: sourceIpAddress,
@@ -464,6 +471,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     userId: text(user.id),
     mainCompanySlug: companySlug,
     challengeTokenHash: await sha256(token),
+    challengeTokenHashes: [await sha256(token)],
     status: "PENDING",
     deviceLabel: sourceDeviceLabel,
     userAgent: sourceUserAgent,
@@ -506,7 +514,13 @@ export async function phoneApprovalFromRequest(c: any, idValue: unknown, tokenVa
   const token = text(tokenValue);
   if (!id || !token) return null;
   let row = await storeGet(c, PHONE_SCOPE, id);
-  if (!row || !safeEqual(text(row.challengeTokenHash), await sha256(token))) return null;
+  if (!row) return null;
+  const tokenHash = await sha256(token);
+  const tokenHashes = [...new Set([
+    text(row.challengeTokenHash),
+    ...(Array.isArray(row.challengeTokenHashes) ? row.challengeTokenHashes.map(text) : []),
+  ].filter(Boolean))];
+  if (!tokenHashes.some((candidate) => safeEqual(candidate, tokenHash))) return null;
   if (upper(row.status) === "PENDING" && Date.parse(text(row.expiresAt)) <= Date.now()) {
     const update = await atomicPhoneUpdate(c, row, "PENDING", { status: "EXPIRED", consumedAt: nowIso() });
     row = update.row || row;
