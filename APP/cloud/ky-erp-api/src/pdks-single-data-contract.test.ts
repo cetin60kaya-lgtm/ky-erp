@@ -273,3 +273,19 @@ test("PDKS live dashboard retains the previous overnight shift until the next en
   assert.match(source, /nowMinutes < expectedIn \? previousDate : date/);
   assert.match(source, /shiftEndDate === todayKey && expectedOut !== null && nowMinutes > expectedOut \+ schedule\.earlyTolerance/);
 });
+
+
+test("PDKS overnight lateness uses the next-day timeline offset", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /observedEntryDayOffset = schedule\.crossMidnight/);
+  assert.match(source, /observedEntryTimelineMin/);
+  assert.match(source, /observedEntryTimelineMin > expectedIn \+ schedule\.lateTolerance/);
+});
+
+test("PDKS live roster treats only full-day leave as attendance-precedence", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /const fullDayLeave = Boolean\(leave\) && liveLeaveFraction >= 1/);
+  assert.match(source, /const partialLeave = Boolean\(leave\) && liveLeaveFraction > 0 && liveLeaveFraction < 1/);
+  assert.match(source, /if \(fullDayLeave\)/);
+  assert.match(source, /if \(partialLeave\) metrics\.permitted \+= 1/);
+});
