@@ -278,11 +278,14 @@ export function registerAdminBuildCenterRoutes(app:any) {
   app.post("/api/admin/build-center/jobs/:id/cancel", async(c:any)=>{
     const owner = await ownerCurrent(c);
     if (!owner) return c.json(errorBody("OWNER_ONLY","Build iptali yalnız uygulama sahibine açıktır."),403);
-    const current = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
-    if (!current) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
-    if (!["QUEUED","CLAIMED"].includes(upper(current.status))) return c.json(errorBody("BUILD_NOT_CANCELLABLE","Başlamış build bu ekrandan iptal edilemez."),409);
-    const next = await updateJob(c,current.id,{status:"CANCELLED",progress:0,message:"Build uygulama sahibi tarafından iptal edildi.",completedAt:nowIso()});
-    return c.json({ok:true,data:next});
+    const result=await updateJobAtomic(c,c.req.param("id"),{
+      status:"CANCELLED",progress:0,message:"Build uygulama sahibi tarafından iptal edildi.",completedAt:nowIso()
+    },["QUEUED","CLAIMED"]);
+    if(!result.ok){
+      if(result.code==="BUILD_NOT_FOUND")return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+      return c.json(errorBody("BUILD_NOT_CANCELLABLE","Build durumu değişti; iptal uygulanmadı."),409);
+    }
+    return c.json({ok:true,data:result.current});
   });
 
   app.get("/api/admin/build-center/jobs/:id/artifact", async(c:any)=>{
@@ -304,34 +307,52 @@ export function registerAdminBuildCenterRoutes(app:any) {
   // Build Agent endpoints are outside browser auth. They are fail-closed behind
   // a 256-bit rotating token whose hash lives in the already-bound R2 FILES bucket.
   app.get("/api/build-agent/next", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
-    const agentName = text(c.req.query("agent")||c.req.header("X-KYERP-Build-Agent")||"WINDOWS-BUILDER");
-    await jsonPut(c.env.FILES,HEARTBEAT_KEY,{agentName,lastSeenAt:nowIso(),ip:text(c.req.header("CF-Connecting-IP"))});
-    const jobs = (await listJobObjects(c.env.FILES)).filter((row)=>upper(row.status)==="QUEUED").sort((a,b)=>text(a.createdAt).localeCompare(text(b.createdAt)));
-    const job = jobs[0];
-    if (!job) return c.json({ok:true,data:null});
-    const claimed = await updateJob(c,job.id,{status:"CLAIMED",progress:1,message:"Windows Build Agent işi aldı.",agentName,startedAt:job.startedAt||nowIso()});
-    return c.json({ok:true,data:claimed});
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const agent=auth.agent;
+    const agentId=text(agent.agentId);
+    const agentName=text(c.req.query("agent")||c.req.header("X-KYERP-Build-Agent")||agent.agentName||"WINDOWS-BUILDER");
+    await jsonPut(c.env.FILES,heartbeatKey(agentId),{
+      agentId,agentName,lastSeenAt:nowIso(),ip:text(c.req.header("CF-Connecting-IP"))
+    });
+
+    const queued=(await listJobObjects(c.env.FILES))
+      .filter((row)=>upper(row.status)==="QUEUED")
+      .sort((a,b)=>text(a.createdAt).localeCompare(text(b.createdAt)));
+    for(const job of queued){
+      const claim=await updateJobAtomic(c,job.id,{
+        status:"CLAIMED",progress:1,message:"Windows Build Agent işi aldı.",
+        agentId,agentName,startedAt:job.startedAt||nowIso()
+      },["QUEUED"]);
+      if(claim.ok)return c.json({ok:true,data:claim.current});
+    }
+    return c.json({ok:true,data:null});
   });
 
   app.post("/api/build-agent/jobs/:id/progress", async(c:any)=>{
-    const denied = await requireAgent(c); if (denied) return denied;
-    const body = await bodyOf(c);
-    const status = upper(body.status||"BUILDING");
-    const allowed = new Set(["CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING","SUCCESS","FAILED"]);
-    if (!allowed.has(status)) return c.json(errorBody("BUILD_STATUS_INVALID","Build durumu geçersiz."),400);
-    const current = await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
-    if (!current) return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
-    const patch:any = {
+    const auth=await requireAgent(c); if(auth.denied)return auth.denied;
+    const body=await bodyOf(c);
+    const status=upper(body.status||"BUILDING");
+    const allowed=new Set(["CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING","SUCCESS","FAILED"]);
+    if(!allowed.has(status))return c.json(errorBody("BUILD_STATUS_INVALID","Build durumu geçersiz."),400);
+
+    const current=await jsonGet(c.env.FILES,jobKey(c.req.param("id")));
+    if(!current)return c.json(errorBody("BUILD_NOT_FOUND","Build kaydı bulunamadı."),404);
+    if(text(current.agentId)&&text(current.agentId)!==text(auth.agent.agentId))
+      return c.json(errorBody("BUILD_AGENT_JOB_MISMATCH","Bu build başka bir Agent tarafından alınmış."),409);
+
+    const patch:any={
       status,
       progress:Math.max(0,Math.min(100,Number(body.progress||0))),
       message:text(body.message).slice(0,500),
       commitSha:text(body.commitSha||current.commitSha).slice(0,64),
-      agentName:text(body.agentName||current.agentName),
+      agentId:text(auth.agent.agentId),
+      agentName:text(body.agentName||current.agentName||auth.agent.agentName),
     };
-    if (["SUCCESS","FAILED"].includes(status)) patch.completedAt=nowIso();
-    const next = await updateJob(c,current.id,patch);
-    return c.json({ok:true,data:next});
+    if(["SUCCESS","FAILED"].includes(status))patch.completedAt=nowIso();
+
+    const result=await updateJobAtomic(c,current.id,patch);
+    if(!result.ok)return c.json(errorBody("BUILD_STATE_CONFLICT","Build durumu eşzamanlı değişti; ilerleme uygulanmadı."),409);
+    return c.json({ok:true,data:result.current});
   });
 
   app.put("/api/build-agent/jobs/:id/file/:kind", async(c:any)=>{
