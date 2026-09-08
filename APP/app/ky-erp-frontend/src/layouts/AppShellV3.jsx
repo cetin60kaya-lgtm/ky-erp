@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, Plus, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
+import ProfileSecurityPanel from "../components/shell/ProfileSecurityPanel";
 import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
-import { getNotifications, markNotificationsRead } from "../services/notificationApi";
+import { decideNotificationApproval, getNotifications, markNotificationsRead } from "../services/notificationApi";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 
@@ -103,11 +104,13 @@ export default function AppShellV3({
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
+  const [profileSecurityOpen, setProfileSecurityOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const profileMenuRef = useRef(null);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationBusyId, setNotificationBusyId] = useState("");
   const [notificationError, setNotificationError] = useState("");
   const [notificationData, setNotificationData] = useState({
     items: [],
@@ -288,6 +291,21 @@ export default function AppShellV3({
     const unreadIds = notificationData.items.filter((item) => item.unread).map((item) => item.id);
     markNotificationIdsRead(unreadIds);
   }
+  async function decideNotification(item, decision) {
+    if (!item?.approval?.id || notificationBusyId) return;
+    setNotificationBusyId(item.id);
+    setNotificationError("");
+    try {
+      await decideNotificationApproval(item, decision);
+      if (item.unread) await markNotificationIdsRead([item.id]);
+      await refreshNotifications(true);
+    } catch (error) {
+      setNotificationError(error?.message || "Onay işlemi tamamlanamadı.");
+    } finally {
+      setNotificationBusyId("");
+    }
+  }
+
 
   function openProfileSecurity() {
     setProfileMenuOpen(false);
@@ -295,11 +313,7 @@ export default function AppShellV3({
       onOpenTab("admin", "uygulama-sahibi");
       return;
     }
-    if (canOpenPlatformManagement) {
-      onOpenTab("admin", "kullanicilar");
-      return;
-    }
-    setPhoneApprovalOpen(true);
+    setProfileSecurityOpen(true);
   }
 
   function openPlatformManagement() {
@@ -362,7 +376,7 @@ export default function AppShellV3({
         </header>
 
         <nav className="shell-v3-sidebar-nav" aria-label="Ana modüller">
-          {modules.map((module) => {
+          {modules.filter((module) => module.key !== "admin").map((module) => {
             const isActiveModule = activeModule?.key === module.key;
             const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
             const isExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
@@ -493,20 +507,40 @@ export default function AppShellV3({
                     </div>
                   ) : null}
                   {notificationData.items.map((item) => (
-                    <button
-                      type="button"
+                    <article
                       key={item.id}
                       className={`shell-v3-notification-item ${item.unread ? "unread" : ""} severity-${item.severity || "info"}`}
-                      onClick={() => openNotification(item)}
                     >
-                      <i aria-hidden="true" />
-                      <span>
-                        <em>{notificationCategoryLabel(item.category)}</em>
-                        <strong>{item.title}</strong>
-                        <small>{item.detail}</small>
-                      </span>
-                      <time>{notificationTime(item.createdAt)}</time>
-                    </button>
+                      <button type="button" className="shell-v3-notification-item-main" onClick={() => openNotification(item)}>
+                        <i aria-hidden="true" />
+                        <span>
+                          <em>{notificationCategoryLabel(item.category)}</em>
+                          <strong>{item.title}</strong>
+                          <small>{item.detail}</small>
+                        </span>
+                        <time>{notificationTime(item.createdAt)}</time>
+                      </button>
+                      {item.approval?.id ? (
+                        <div className="shell-v3-notification-approval-actions">
+                          <button
+                            type="button"
+                            className="approve"
+                            disabled={Boolean(notificationBusyId)}
+                            onClick={() => decideNotification(item, "APPROVE")}
+                          >
+                            {notificationBusyId === item.id ? "İşleniyor..." : "Onayla"}
+                          </button>
+                          <button
+                            type="button"
+                            className="deny"
+                            disabled={Boolean(notificationBusyId)}
+                            onClick={() => decideNotification(item, "REJECT")}
+                          >
+                            Reddet
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
                   ))}
                 </div>
                 <footer>
@@ -552,7 +586,7 @@ export default function AppShellV3({
                   <span className="shell-v3-user-menu-identity">
                     <strong>{user?.fullName || user?.username || "Kullanıcı"}</strong>
                     <small>{user?.email || user?.username || ""}</small>
-                    <em>{roleLabel(user?.role)} · {activeCompanyName}</em>
+                    <em>{ownerUser ? roleLabel(user?.role) : `${roleLabel(user?.role)} · ${activeCompanyName}`}</em>
                   </span>
                 </header>
 
@@ -643,6 +677,20 @@ export default function AppShellV3({
             document.body,
           )
         : null}
+
+      {profileSecurityOpen
+        ? createPortal(
+            <ProfileSecurityPanel
+              onClose={() => setProfileSecurityOpen(false)}
+              onOpenPhoneApproval={() => {
+                setProfileSecurityOpen(false);
+                setPhoneApprovalOpen(true);
+              }}
+            />,
+            document.body,
+          )
+        : null}
+
 
       {quickOpen ? (
         <div className="shell-v3-quick-backdrop" role="presentation" onMouseDown={() => setQuickOpen(false)}>
