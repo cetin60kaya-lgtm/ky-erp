@@ -120,13 +120,41 @@ function buildSpec(product:string,version:string,branch:string) {
     buildInfoRelativePath: "APP/desktop/ky-pdks/dist/setup/build-info.json",
   };
 }
-async function updateJob(c:any,id:string,patch:Row) {
-  const key = jobKey(id);
-  const current = await jsonGet(c.env.FILES,key);
-  if (!current) return null;
-  const next = { ...current, ...patch, updatedAt: nowIso() };
-  await jsonPut(c.env.FILES,key,next);
-  return next;
+function transitionAllowed(fromStatus:string,toStatus:string) {
+  const from=upper(fromStatus),to=upper(toStatus);
+  if (!to || from===to) return true;
+  const allowed:Record<string,string[]> = {
+    QUEUED:["CLAIMED","CANCELLED","FAILED"],
+    CLAIMED:["BUILDING","CANCELLED","FAILED"],
+    BUILDING:["TESTING","FAILED"],
+    TESTING:["PACKAGING","FAILED"],
+    PACKAGING:["UPLOADING","FAILED"],
+    UPLOADING:["SUCCESS","FAILED"],
+    SUCCESS:[],
+    FAILED:[],
+    CANCELLED:[],
+  };
+  return (allowed[from]||[]).includes(to);
+}
+async function updateJobAtomic(c:any,id:string,patch:Row,requiredStatuses:string[]=[]){
+  const key=jobKey(id);
+  for(let attempt=0;attempt<4;attempt+=1){
+    const versioned=await jsonGetVersioned(c.env.FILES,key);
+    if(!versioned?.data)return {ok:false,code:"BUILD_NOT_FOUND",current:null};
+    const current=versioned.data;
+    if(requiredStatuses.length&&!requiredStatuses.includes(upper(current.status))){
+      return {ok:false,code:"BUILD_STATE_CONFLICT",current};
+    }
+    const nextStatus=patch.status===undefined?upper(current.status):upper(patch.status);
+    if(!transitionAllowed(current.status,nextStatus)){
+      return {ok:false,code:"BUILD_STATE_CONFLICT",current};
+    }
+    const next={...current,...patch,status:nextStatus,updatedAt:nowIso(),revision:Number(current.revision||0)+1};
+    const stored=await jsonPutIfMatch(c.env.FILES,key,next,versioned.etag);
+    if(stored)return {ok:true,current:next};
+  }
+  const latest=await jsonGet(c.env.FILES,key);
+  return {ok:false,code:"BUILD_CONCURRENT_UPDATE",current:latest};
 }
 function safeName(value:unknown) {
   return text(value).replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,180);
