@@ -5,9 +5,11 @@ type Row = Record<string, any>;
 
 const ROOT = "build-center/";
 const JOB_PREFIX = ROOT + "jobs/";
-const TOKEN_KEY = ROOT + "config/agent-token.json";
-const HEARTBEAT_KEY = ROOT + "status/agent-heartbeat.json";
+const ENROLL_PREFIX = ROOT + "enrollments/";
+const AGENT_PREFIX = ROOT + "agents/";
+const HEARTBEAT_PREFIX = ROOT + "status/agents/";
 const MAX_JOBS = 100;
+const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
 
 const text = (v: unknown) => v == null ? "" : String(v).trim();
 const upper = (v: unknown) => text(v).toUpperCase().replace(/İ/g, "I");
@@ -31,43 +33,66 @@ async function jsonGet(bucket:any,key:string) {
   if (!object) return null;
   try { return JSON.parse(await object.text()); } catch { return null; }
 }
+async function jsonGetVersioned(bucket:any,key:string) {
+  const object = await bucket.get(key);
+  if (!object) return null;
+  try { return { data: JSON.parse(await object.text()), etag: text(object.etag || object.httpEtag) }; }
+  catch { return null; }
+}
 async function jsonPut(bucket:any,key:string,value:Row) {
   await bucket.put(key, JSON.stringify(value), { httpMetadata:{ contentType:"application/json; charset=utf-8" } });
   return value;
 }
-async function listJobObjects(bucket:any) {
+async function jsonPutIfMatch(bucket:any,key:string,value:Row,etag:string) {
+  return bucket.put(key, JSON.stringify(value), {
+    onlyIf:{ etagMatches:etag },
+    httpMetadata:{ contentType:"application/json; charset=utf-8" },
+  });
+}
+async function listJsonPrefix(bucket:any,prefix:string) {
   const rows: Row[] = [];
   let cursor: string | undefined;
   do {
-    const result = await bucket.list({ prefix: JOB_PREFIX, limit: 1000, ...(cursor ? { cursor } : {}) });
+    const result = await bucket.list({ prefix, limit:1000, ...(cursor ? { cursor } : {}) });
     for (const object of result.objects || []) {
-      const row = await jsonGet(bucket, object.key);
-      if (row?.id) rows.push(row);
+      const row = await jsonGet(bucket,object.key);
+      if (row) rows.push(row);
     }
     cursor = result.truncated ? text(result.cursor) || undefined : undefined;
   } while (cursor);
-  return rows.sort((a,b)=>text(b.createdAt).localeCompare(text(a.createdAt))).slice(0,MAX_JOBS);
+  return rows;
+}
+async function listJobObjects(bucket:any) {
+  return (await listJsonPrefix(bucket,JOB_PREFIX))
+    .filter((row)=>row?.id)
+    .sort((a,b)=>text(b.createdAt).localeCompare(text(a.createdAt)));
 }
 async function sha256(value:string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((b)=>b.toString(16).padStart(2,"0")).join("");
 }
-function newAgentToken() {
+function newSecret(prefix:string) {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   const encoded = btoa(String.fromCharCode(...bytes)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-  return "kyb_" + encoded;
+  return prefix + encoded;
 }
+function enrollmentKey(id:string){ return ENROLL_PREFIX + safeName(id) + ".json"; }
+function agentKey(id:string){ return AGENT_PREFIX + safeName(id) + ".json"; }
+function heartbeatKey(id:string){ return HEARTBEAT_PREFIX + safeName(id) + ".json"; }
 async function agentAuthorized(c:any) {
   const supplied = text(c.req.header("X-KYERP-Build-Agent-Token"));
-  if (!supplied) return false;
-  const config = await jsonGet(c.env.FILES, TOKEN_KEY);
-  if (!config?.tokenHash) return false;
-  return (await sha256(supplied)) === text(config.tokenHash);
+  const agentId = text(c.req.header("X-KYERP-Build-Agent-Id"));
+  if (!supplied || !agentId) return null;
+  const config = await jsonGet(c.env.FILES,agentKey(agentId));
+  if (!config?.tokenHash || config.active===false) return null;
+  if ((await sha256(supplied)) !== text(config.tokenHash)) return null;
+  return config;
 }
 async function requireAgent(c:any) {
-  if (await agentAuthorized(c)) return null;
-  return c.json(errorBody("BUILD_AGENT_UNAUTHORIZED","Build Agent anahtarı geçersiz veya kurulmamış."),401);
+  const agent = await agentAuthorized(c);
+  if (agent) return { agent, denied:null };
+  return { agent:null, denied:c.json(errorBody("BUILD_AGENT_UNAUTHORIZED","Build Agent kimliği veya anahtarı geçersiz."),401) };
 }
 function normalizeProduct(value:unknown) {
   const key = upper(value);
