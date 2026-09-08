@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#10284d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
+  <link rel="manifest" href="/security/manifest.webmanifest" />
+  <link rel="icon" href="/kyerp-icon.svg" />
+  <link rel="stylesheet" href="/security/app.css" />
+  <title>KY ERP Güvenlik</title>
+</head>
+<body>
+  <main class="security-shell">
+    <header class="security-header">
+      <div class="security-brand">
+        <span class="security-logo">KY</span>
+        <div><b>KY ERP Güvenlik</b><small>Telefon / Tablet Onay Uygulaması</small></div>
+      </div>
+      <span id="connectionBadge" class="security-badge">Hazırlanıyor</span>
+    </header>
+
+    <section id="installPanel" class="security-card hidden">
+      <div>
+        <span class="eyebrow">UYGULAMA KURULUMU</span>
+        <h1>KY ERP Güvenlik</h1>
+        <p>Microsoft Authenticator benzeri ayrı onay uygulaması. Bildirime dokun, uygulamada Onayla, cihaz kilidiyle doğrula.</p>
+      </div>
+      <button id="installButton" class="primary hidden" type="button">Uygulamayı Yükle</button>
+      <div id="iosInstallNote" class="note hidden"><b>iPhone / iPad</b><span>Safari → Paylaş → Ana Ekrana Ekle. Sonra Ana Ekrandaki KY ERP Güvenlik ikonundan açın.</span></div>
+    </section>
+
+    <section id="setupPanel" class="security-card">
+      <span class="eyebrow">İLK KURULUM</span>
+      <h2>Bu cihazı KY ERP'ye bağla</h2>
+      <p class="muted">KY ERP → Profil → Telefon Onayı bölümünden oluşturduğun 8 karakterli kurulum kodunu kullan.</p>
+      <label>Kurulum kodu
+        <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
+      </label>
+      <label>Mevcut KY ERP şifren
+        <input id="password" type="password" autocomplete="current-password" placeholder="Şifren" />
+      </label>
+      <label>Cihaz adı
+        <input id="deviceLabel" maxlength="80" />
+      </label>
+      <button id="connectButton" class="primary" type="button">Bildirim + Cihaz Güvenliğini Kur</button>
+      <div class="note"><b>Ek güvenlik</b><span>Destekleyen cihazlarda iPhone/iPad için Face ID / Touch ID / cihaz kodu; Android için parmak izi / ekran kilidi / PIN açılır.</span></div>
+    </section>
+
+    <section id="readyPanel" class="security-card hidden">
+      <div class="ready-head">
+        <div>
+          <span class="eyebrow">GÜVENİLİR CİHAZ</span>
+          <h2>Telefon onayı hazır</h2>
+          <p id="deviceSummary" class="muted"></p>
+        </div>
+        <span class="ready-mark">✓</span>
+      </div>
+      <button id="refreshButton" type="button">Bekleyen girişleri yenile</button>
+    </section>
+
+    <section id="pendingPanel" class="security-card hidden">
+      <div class="pending-title">
+        <div><span class="eyebrow">GİRİŞ İSTEĞİ</span><h2>Onay bekliyor</h2></div>
+        <span id="pendingCount" class="count">0</span>
+      </div>
+      <div id="pendingList" class="pending-list"></div>
+    </section>
+
+    <section id="emptyPanel" class="security-card hidden">
+      <div class="empty-mark">✓</div>
+      <h2>Bekleyen giriş yok</h2>
+      <p class="muted">Yeni bir KY ERP giriş isteği geldiğinde burada görünecek ve tek bildirim alacaksın.</p>
+    </section>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <footer class="security-footer">
+      <span>KY ERP · Güvenli cihaz anahtarı · Tek bildirim · Tek karar</span>
+      <a href="/">Ana KY ERP</a>
+    </footer>
+  </main>
+
+  <script type="module" src="/security/app.js"></script>
+</body>
+</html>

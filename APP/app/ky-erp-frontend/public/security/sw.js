@@ -1,0 +1,31 @@
+const DB_NAME="kyerp-security-app-v1";
+const STORE="device";
+const KEY="active";
+const API_BASE="https://api.kyerp.net/api";
+const APP_URL="/security/?open=1";
+
+function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+async function readDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readonly");const req=tx.objectStore(STORE).get(KEY);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
+async function deviceFetch(path){const device=await readDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("DEVICE_NOT_READY");const response=await fetch(`${API_BASE}${path}`,{method:"GET",headers:{Accept:"application/json","X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken},cache:"no-store",mode:"cors"});const payload=await response.json().catch(()=>null);if(!response.ok||payload?.ok===false)throw new Error(payload?.error?.message||"Telefon onayı alınamadı.");return payload}
+async function closeApprovalNotifications(){try{const list=await self.registration.getNotifications({tag:"kyerp-security-approval"});for(const item of list)item.close()}catch{}}
+async function showPending(){let items=[];try{const payload=await deviceFetch("/auth/push/device/pending");items=Array.isArray(payload?.data?.items)?payload.data.items:[]}catch{}
+  if(!items.length){await closeApprovalNotifications();return}
+  const first=items[0];const many=items.length>1;
+  await self.registration.showNotification(many?"KY ERP · Güvenlik Onayları":(first.title||"KY ERP · Giriş Onayı"),{
+    body:many?`${items.length} giriş isteği onay bekliyor. Uygulamayı açıp kontrol edin.`:(first.body||"Yeni giriş isteği onay bekliyor."),
+    tag:"kyerp-security-approval",
+    renotify:false,
+    requireInteraction:true,
+    badge:"/kyerp-icon.svg",
+    icon:"/kyerp-icon.svg",
+    timestamp:first.requestedAt?Date.parse(first.requestedAt)||Date.now():Date.now(),
+    vibrate:[180,80,180],
+    data:{openApproval:true}
+  })}
+async function focusOrOpen(){const windows=await clients.matchAll({type:"window",includeUncontrolled:true});const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/security/")}catch{return false}});if(existing){await existing.focus();try{await existing.navigate(APP_URL)}catch{};return}await clients.openWindow(APP_URL)}
+self.addEventListener("install",(event)=>event.waitUntil((async()=>{await self.skipWaiting();const cache=await caches.open("kyerp-security-shell-v1");await cache.addAll(["/security/","/security/app.js","/security/app.css","/security/manifest.webmanifest","/kyerp-icon.svg"])} )()));
+self.addEventListener("activate",(event)=>event.waitUntil(self.clients.claim()));
+self.addEventListener("push",(event)=>event.waitUntil(showPending()));
+self.addEventListener("notificationclick",(event)=>{event.notification?.close();event.waitUntil(focusOrOpen())});
+self.addEventListener("message",(event)=>{if(event.data?.type==="KYERP_SECURITY_REFRESH")event.waitUntil(showPending())});
+self.addEventListener("fetch",(event)=>{const url=new URL(event.request.url);if(url.origin===self.location.origin&&url.pathname.startsWith("/security/")){event.respondWith(fetch(event.request).catch(()=>caches.match(event.request).then((r)=>r||caches.match("/security/"))))}});

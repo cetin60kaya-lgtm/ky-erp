@@ -1,0 +1,23 @@
+{
+  "name": "KY ERP Güvenlik",
+  "short_name": "KY Güvenlik",
+  "id": "/security/",
+  "description": "KY ERP telefon ve tablet giriş onayı uygulaması",
+  "lang": "tr",
+  "start_url": "/security/",
+  "scope": "/security/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#eef4fb",
+  "theme_color": "#10284d",
+  "categories": ["business", "security", "productivity"],
+  "icons": [
+    {
+      "src": "/kyerp-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

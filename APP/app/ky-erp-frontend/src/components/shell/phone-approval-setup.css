@@ -50,3 +50,22 @@
   }
   .phone-approval-title h2{font-size:20px}
 }
+
+
+/* KY ERP Güvenlik uygulaması kurulum yüzeyi */
+.phone-approval-app-hero{background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%)}
+.phone-approval-flow{display:grid;gap:9px;padding:12px;border:1px solid #dce8f5;border-radius:12px;background:#f8fbff}
+.phone-approval-flow>div{display:grid;grid-template-columns:28px 1fr;align-items:start;gap:9px}
+.phone-approval-flow b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#e4efff;color:#1f5fb7;font-size:11px}
+.phone-approval-flow span{padding-top:3px;color:#4b657d;font-size:12px;line-height:1.45}
+.phone-approval-enrollment{display:grid;gap:8px;padding:16px;border:1px solid #bcd4f2;border-radius:14px;background:#eef6ff;text-align:center}
+.phone-approval-enrollment>span{font-size:9px;font-weight:900;letter-spacing:.12em;color:#54779c}
+.phone-approval-enrollment>strong{font-size:30px;letter-spacing:.16em;color:#153f74}
+.phone-approval-enrollment>small{font-size:11px;color:#607b96}
+.phone-approval-app-actions{display:grid;grid-template-columns:1.6fr 1fr .7fr;gap:8px;margin-top:4px}
+.phone-approval-app-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
+@media(max-width:760px){
+  .phone-approval-flow span{font-size:13px}
+  .phone-approval-enrollment>strong{font-size:28px}
+  .phone-approval-app-actions{grid-template-columns:1fr}
+}

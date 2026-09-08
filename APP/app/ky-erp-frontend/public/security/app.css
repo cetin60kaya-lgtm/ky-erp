@@ -1,0 +1,24 @@
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#12243a;background:#eef4fb;--navy:#10284d;--blue:#2563eb;--line:#d7e3f0;--muted:#6b7f95}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;background:radial-gradient(circle at 10% 0,rgba(37,99,235,.12),transparent 34%),linear-gradient(180deg,#f7fbff,#edf3fa)}
+button,input{font:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+.security-shell{width:min(680px,100%);min-height:100dvh;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 14px calc(22px + env(safe-area-inset-bottom))}
+.security-header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-16px -14px 14px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;border-bottom:1px solid rgba(215,227,240,.9);background:rgba(247,251,255,.93);backdrop-filter:blur(16px)}
+.security-brand{display:flex;align-items:center;gap:10px;min-width:0}.security-brand>div{display:grid;gap:1px}.security-brand b{font-size:14px}.security-brand small{color:var(--muted);font-size:10px}
+.security-logo{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:linear-gradient(145deg,#1f5ea8,#10284d);color:#fff;font-size:12px;font-weight:900;box-shadow:0 8px 24px rgba(16,40,77,.22)}
+.security-badge{padding:6px 9px;border:1px solid #c9d8e8;border-radius:999px;background:#fff;color:#58708a;font-size:9px;font-weight:800;white-space:nowrap}
+.security-badge.ok{border-color:#b9dec6;background:#effaf3;color:#287342}.security-badge.bad{border-color:#efc9c9;background:#fff2f2;color:#a33b3b}
+.security-card{display:grid;gap:13px;margin:0 0 12px;padding:18px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.97);box-shadow:0 12px 34px rgba(27,52,82,.07)}
+.security-card h1,.security-card h2{margin:0;color:#142b45;letter-spacing:-.02em}.security-card h1{font-size:28px}.security-card h2{font-size:19px}.security-card p{margin:0;line-height:1.55}
+.eyebrow{color:#2f69aa;font-size:9px;font-weight:900;letter-spacing:.12em}.muted{color:var(--muted);font-size:12px}
+.security-card label{display:grid;gap:6px;color:#47627c;font-size:11px;font-weight:800}.security-card input{width:100%;min-height:50px;border:1px solid #cad9e8;border-radius:12px;padding:0 13px;background:#fbfdff;color:#18324d;font-size:16px;outline:none}.security-card input:focus{border-color:#6a99dd;box-shadow:0 0 0 3px rgba(37,99,235,.10)}
+.security-card button{min-height:50px;border:1px solid #cbd9e7;border-radius:12px;background:#fff;color:#244966;font-weight:800}.security-card button.primary{border-color:var(--blue);background:var(--blue);color:#fff}.security-card button.danger{border-color:#e7bcbc;background:#fff4f4;color:#9d3535}
+.note{display:grid;gap:3px;padding:11px 12px;border:1px solid #d8e5f1;border-radius:12px;background:#f7fbff}.note b{font-size:11px;color:#294e71}.note span{font-size:10px;line-height:1.45;color:#6b8095}
+.ready-head,.pending-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.ready-mark,.empty-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#e8f7ee;color:#23834c;font-size:20px;font-weight:900}.empty-mark{margin:2px auto 0}
+.count{display:grid;place-items:center;min-width:34px;height:34px;border-radius:999px;background:#eaf2ff;color:#1e5fb9;font-size:12px;font-weight:900}
+.pending-list{display:grid;gap:10px}.approval-item{display:grid;gap:12px;padding:14px;border:1px solid #d8e4ef;border-radius:14px;background:#fbfdff}.approval-item h3{margin:0 0 4px;font-size:15px}.approval-item p{margin:0;color:#5f768c;font-size:12px;line-height:1.45}.approval-item small{color:#7e91a3;font-size:10px}.approval-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:9px}.approval-actions button{min-height:52px}.approval-actions .approve{border-color:#16814d;background:#16814d;color:#fff}.approval-actions .deny{border-color:#e2bcbc;background:#fff5f5;color:#9f3838}
+.security-footer{display:flex;justify-content:space-between;gap:12px;padding:8px 2px;color:#7a8fa3;font-size:9px}.security-footer a{color:#31669c;text-decoration:none;font-weight:800}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));z-index:20;width:min(560px,calc(100vw - 28px));transform:translateX(-50%);padding:12px 14px;border-radius:12px;background:#10284d;color:#fff;font-size:12px;box-shadow:0 18px 40px rgba(12,28,47,.28)}
+@media(min-width:720px){.security-shell{padding-top:28px}.security-header{position:relative;margin:0 0 16px;padding:0 2px 2px;border:0;background:transparent;backdrop-filter:none}.security-card{padding:22px}.approval-actions{grid-template-columns:1fr 1fr}}
