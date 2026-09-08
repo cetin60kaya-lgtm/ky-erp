@@ -10,6 +10,7 @@ import AdminCompanyBilling from "../admin/AdminCompanyBilling";
 import AdminStorageCenter from "../admin/AdminStorageCenter";
 import AdminMappings from "../admin/AdminMappings";
 import AdminBackupLogs from "../admin/AdminBackupLogs";
+import AdminBuildCenter from "../admin/AdminBuildCenter";
 import DepolamaPage from "./DepolamaPage";
 
 function canonicalRole(role) {
@@ -70,6 +71,9 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   }
   if (activeTab === "yedekleme-loglar") {
     return owner ? <AdminBackupLogs activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+  }
+  if (activeTab === "surum-merkezi") {
+    return owner ? <AdminBuildCenter /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   return owner
     ? <AdminSystemOverview activeMainCompany={activeMainCompany} />
