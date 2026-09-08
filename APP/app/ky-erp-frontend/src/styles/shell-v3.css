@@ -740,3 +740,71 @@
     max-height: calc(100dvh - 170px);
   }
 }
+
+
+/* Telefon Onayı: gerçek AppShellV3 üst bar kısayolu */
+.shell-v3-phone-approval-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-width: 112px;
+  height: 35px;
+  padding: 0 10px;
+  border: 1px solid #bcd2ec;
+  border-radius: 8px;
+  background: #f5f9ff;
+  color: #1f5f9f;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shell-v3-phone-approval-button:hover {
+  border-color: #7ea5d8;
+  background: #eaf3ff;
+  color: #174e86;
+}
+
+.shell-v3-phone-approval-button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 2px;
+}
+
+@media (max-width: 980px) {
+  .shell-v3-phone-approval-button {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  .shell-v3-phone-approval-button span {
+    display: none;
+  }
+}
+
+/* Telefon modunda üst barı sıkıştırmak yerine güvenlik kısayolunu görünür bir yüzen düğme yap. */
+.shell-v3[data-layout-mode="phone"] .shell-v3-phone-approval-button {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(42px + env(safe-area-inset-bottom));
+  z-index: 75;
+  width: auto !important;
+  min-width: 132px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 14px !important;
+  border-color: #1f64d7;
+  border-radius: 999px;
+  background: #2463da;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(20, 66, 130, 0.28);
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-phone-approval-button span {
+  display: inline !important;
+  font-size: 12px;
+}

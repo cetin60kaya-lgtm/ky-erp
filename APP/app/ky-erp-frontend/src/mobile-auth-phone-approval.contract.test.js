@@ -18,13 +18,22 @@ test("mobile login keeps credentials first and touch friendly", () => {
   assert.match(css, /min-height:52px!important/);
 });
 
-test("phone approval is named in topbar and mobile setup is full screen", () => {
-  const shell = read("./components/shell/ApprovedShellEnhancer.jsx");
-  const shellCss = read("./components/shell/approved-shell-menu.css");
+test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", () => {
+  const main = read("./main.jsx");
+  const appV3 = read("./AppV3.jsx");
+  const shell = read("./layouts/AppShellV3.jsx");
+  const shellCss = read("./styles/shell-v3.css");
   const setupCss = read("./components/shell/phone-approval-setup.css");
-  assert.match(shell, /approved-phone-approval-label">Telefon Onayı</);
-  assert.match(shellCss, /\.approved-phone-approval-label\{display:inline\}/);
-  assert.match(shellCss, /\.approved-global-search\{display:none!important\}/);
+
+  assert.match(main, /import\("\.\/AppV3\.jsx"\)/);
+  assert.match(appV3, /AppShellV3/);
+  assert.match(shell, /PhoneApprovalSetup/);
+  assert.match(shell, /shell-v3-phone-approval-button/);
+  assert.match(shell, />Telefon Onayı</);
+  assert.match(shell, /setPhoneApprovalOpen\(true\)/);
+  assert.match(shellCss, /shell-v3-phone-approval-button/);
+  assert.match(shellCss, /data-layout-mode="phone"/);
+  assert.match(shellCss, /min-width: 132px !important/);
   assert.match(setupCss, /height:100dvh/);
   assert.match(setupCss, /font-size:16px/);
 });
