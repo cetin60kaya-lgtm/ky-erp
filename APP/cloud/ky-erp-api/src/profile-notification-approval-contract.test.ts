@@ -43,3 +43,14 @@ test("phone push uses one replaceable notification and one pending challenge per
   assert.match(serviceWorker, /closeLegacyApprovalNotifications/);
   assert.doesNotMatch(serviceWorker, /kyerp-result-\$\{data\.id\}/);
 });
+
+
+test("cross-user active sessions and session history are super-admin only", () => {
+  const history = worker("auth-admin-history.ts");
+  const companyOverview = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminCompanyOverview.jsx");
+  assert.match(auth, /Tüm kullanıcı oturumlarını yalnız Süper Yönetici görüntüleyebilir/);
+  assert.match(auth, /Başka kullanıcı oturumlarını yalnız Süper Yönetici sonlandırabilir/);
+  assert.match(history, /Tüm kullanıcı oturum geçmişini yalnız Süper Yönetici görüntüleyebilir/);
+  assert.doesNotMatch(companyOverview, /listActiveSessions/);
+  assert.doesNotMatch(companyOverview, /Aktif Oturum/);
+});
