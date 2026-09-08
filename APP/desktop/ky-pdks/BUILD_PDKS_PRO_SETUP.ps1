@@ -16,6 +16,7 @@ $SharedProject = Join-Path $Root 'src\KyPdks.Shared\KyPdks.Shared.csproj'
 $TestProject = Join-Path $Root 'src\KyPdks.Tests\KyPdks.Tests.csproj'
 $FrontendRoot = Join-Path $RepoRoot 'APP\app\ky-erp-frontend'
 $FrontendDist = Join-Path $FrontendRoot 'dist'
+$CloudRoot = Join-Path $RepoRoot 'APP\cloud\ky-erp-api'
 $PdksDesktopOut = Join-Path $Dist 'pdks-desktop'
 $AgentOut = Join-Path $Dist 'agent'
 $InstallerOut = Join-Path $Dist 'setup'
@@ -83,7 +84,19 @@ foreach ($dir in @($PdksDesktopOut,$AgentOut,$InstallerOut,$WebViewOut)) {
 }
 
 Write-Host ""
-Write-Host "1/7 Frontend test + lint + production build" -ForegroundColor Cyan
+Write-Host "1/8 Cloud Worker unit + typecheck + dry-run" -ForegroundColor Cyan
+Push-Location $CloudRoot
+try {
+    Invoke-Native 'Cloud npm ci' { npm ci }
+    if (-not $SkipTests) { Invoke-Native 'Cloud unit tests' { npm run test:unit } }
+    Invoke-Native 'Cloud TypeScript typecheck' { npm run typecheck }
+    Invoke-Native 'Cloud Wrangler dry-run' { npm run build }
+} finally {
+    Pop-Location
+}
+
+Write-Host ""
+Write-Host "2/8 Frontend test + lint + production build" -ForegroundColor Cyan
 Push-Location $FrontendRoot
 try {
     Invoke-Native 'Frontend npm ci' { npm ci }
@@ -96,7 +109,7 @@ try {
 Require-File (Join-Path $FrontendDist 'index.html') 'Frontend dist/index.html oluşmadı.'
 
 Write-Host ""
-Write-Host "2/7 .NET restore + xUnit" -ForegroundColor Cyan
+Write-Host "3/8 .NET restore + xUnit" -ForegroundColor Cyan
 foreach ($project in @($SharedProject,$AgentProject,$DesktopProject)) {
     Invoke-Native "Restore $project" { dotnet restore $project }
 }
@@ -106,7 +119,7 @@ if (Test-Path $TestProject) {
 }
 
 Write-Host ""
-Write-Host "3/7 KY PDKS Pro + Agent win-x64 publish" -ForegroundColor Cyan
+Write-Host "4/8 KY PDKS Pro + Agent win-x64 publish" -ForegroundColor Cyan
 Invoke-Native 'KY PDKS Pro publish' {
     dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:ProductMode=PDKS -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $PdksDesktopOut
 }
@@ -131,14 +144,14 @@ foreach ($actual in @($PdksVersion,$AgentVersion)) {
 }
 
 Write-Host ""
-Write-Host "4/7 Microsoft WebView2 prerequisite" -ForegroundColor Cyan
+Write-Host "5/8 Microsoft WebView2 prerequisite" -ForegroundColor Cyan
 $WebViewBootstrap = Join-Path $WebViewOut 'MicrosoftEdgeWebview2Setup.exe'
 Invoke-WebRequest -UseBasicParsing -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $WebViewBootstrap
 Require-File $WebViewBootstrap 'Microsoft WebView2 bootstrapper indirilemedi.'
 if ((Get-Item $WebViewBootstrap).Length -lt 100000) { throw 'Microsoft WebView2 bootstrapper beklenenden küçük/bozuk.' }
 
 Write-Host ""
-Write-Host "5/7 Inno Setup 6 ile tek PDKS Setup.exe" -ForegroundColor Cyan
+Write-Host "6/8 Inno Setup 6 ile tek PDKS Setup.exe" -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
 $InnoCandidates = @(
     $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }),
@@ -154,7 +167,7 @@ $InnoExe = [string]$InnoCandidates[0]
 Invoke-Native 'KY PDKS Pro Setup' { & $InnoExe $PdksInstaller }
 
 Write-Host ""
-Write-Host "6/7 Paket bütünlüğü + SHA256" -ForegroundColor Cyan
+Write-Host "7/8 Paket bütünlüğü + SHA256" -ForegroundColor Cyan
 $SetupName = "KY-PDKS-Pro-Setup-$Version.exe"
 $Setup = @(Get-ChildItem $InstallerOut -Filter $SetupName -File -ErrorAction SilentlyContinue) | Select-Object -First 1
 if (-not $Setup) { throw "$SetupName oluşmadı." }
@@ -181,7 +194,7 @@ $BuildInfo = [ordered]@{
 $BuildInfo | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $InstallerOut 'build-info-pdks.json') -Encoding utf8
 
 Write-Host ""
-Write-Host "7/7 TAMAMLANDI" -ForegroundColor Green
+Write-Host "8/8 TAMAMLANDI" -ForegroundColor Green
 Write-Host "Setup  : $($Setup.FullName)" -ForegroundColor Green
 Write-Host "SHA256 : $Hash" -ForegroundColor Cyan
 Write-Host "Sürüm  : $PdksVersion" -ForegroundColor Cyan
