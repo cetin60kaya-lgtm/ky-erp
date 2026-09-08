@@ -100,8 +100,8 @@ export async function getUserEmailDeliveryStatus(id, messageId) {
 export async function getBuildCenterStatus() {
   return unwrap(await apiGet("/admin/build-center/status", { _ts: Date.now() }, { timeoutMs: 60000 }));
 }
-export async function rotateBuildAgentToken() {
-  return unwrap(await apiPost("/admin/build-center/agent-token", {}));
+export async function createBuildAgentEnrollment() {
+  return unwrap(await apiPost("/admin/build-center/agent-enrollment", {}));
 }
 export async function createBuildJob(payload = {}) {
   return unwrap(await apiPost("/admin/build-center/jobs", payload));
