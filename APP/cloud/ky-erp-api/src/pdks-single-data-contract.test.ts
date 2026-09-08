@@ -265,3 +265,11 @@ test("DENETIM AI can read the finance-free live PDKS snapshot", () => {
   assert.match(source, /const visibleEmployeeIds = new Set/);
   assert.match(source, /auth\.audit \? rawEvents\.filter/);
 });
+
+
+test("PDKS live dashboard retains the previous overnight shift until the next entry time", () => {
+  const source = api("ik-pdks-modern.ts");
+  assert.match(source, /schedule\.crossMidnight && expectedIn !== null/);
+  assert.match(source, /nowMinutes < expectedIn \? previousDate : date/);
+  assert.match(source, /shiftEndDate === todayKey && expectedOut !== null && nowMinutes > expectedOut \+ schedule\.earlyTolerance/);
+});
