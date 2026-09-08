@@ -12,8 +12,8 @@ test("KY PDKS Pro 1.9.0 release chain is standalone and version-locked", () => {
   assert.equal(pdks("VERSION").trim(), "1.9.0");
   const build = pdks("BUILD_PDKS_PRO_SETUP.ps1");
   assert.match(build, /\$Version = '1\.9\.0'/);
-  assert.match(build, /npm run test:unit/);
-  assert.match(build, /npm run typecheck/);
+  assert.match(build, /npm test/);
+  assert.match(build, /npm run lint/);
   assert.match(build, /npm run build/);
   assert.match(build, /Frontend test/);
   assert.match(build, /dotnet test/);
@@ -34,6 +34,7 @@ test("PDKS installer owns Agent, WebView2 and legacy-brand cleanup but ERP insta
   assert.match(installer, /install-pdks-agent\.ps1/);
   assert.match(installer, /KY PDKS Desktop\.exe/);
   assert.doesNotMatch(erp, /KYERP\.PDKS\.Agent/);
+  assert.match(erp, /MicrosoftEdgeWebview2Setup\.exe/);
   assert.match(service, /Wait-ServiceGone/);
   assert.match(service, /Status -eq 'Running'/);
   assert.match(service, /failureflag/);
@@ -57,6 +58,9 @@ test("standalone first run keeps local terminal setup available while D1 enrollm
   assert.match(desktop, /PdksTerminalSetupWindow/);
   assert.match(desktop, /D1 cihaz yetkilendirmesi bekliyor/);
   assert.match(desktop, /EnsurePdksAgentEnrollmentAsync/);
+  assert.match(desktop, /localStorage\.getItem\('kyerp\.activeCompany'\)/);
+  assert.match(desktop, /current\.Company, activeCompanySlug/);
+  assert.match(desktop, /EnrollAsync\(token, _pdksPaths, activeCompanySlug, ct\)/);
 });
 
 test("standalone frontend registers PDKS before module visibility is computed", () => {
