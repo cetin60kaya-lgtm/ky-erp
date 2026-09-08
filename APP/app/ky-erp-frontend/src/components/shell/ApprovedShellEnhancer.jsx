@@ -213,6 +213,7 @@ export default function ApprovedShellEnhancer() {
                 title="Telefonla Onay"
               >
                 <BellRing size={18} />
+                <span className="approved-phone-approval-label">Telefon Onayı</span>
               </button>
               <form className="approved-global-search" onSubmit={submitSearch}>
                 <Search size={17} aria-hidden="true" />

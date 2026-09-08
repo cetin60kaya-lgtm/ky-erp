@@ -11,3 +11,42 @@
 .phone-approval-card button,.phone-approval-modal>footer button{min-height:36px;border:1px solid #cbd8e5;border-radius:9px;background:#fff;color:#294964;font-weight:700;cursor:pointer}.phone-approval-card button:disabled{opacity:.55;cursor:not-allowed}.phone-approval-card .phone-approval-primary{display:flex;align-items:center;justify-content:center;gap:7px;border-color:#2463da;background:#2463da;color:#fff}.phone-approval-card .danger{display:grid;place-items:center;min-width:34px;width:34px;padding:0;border-color:#eccaca;color:#a63b3b;background:#fff7f7}
 .phone-approval-help{line-height:1.45;color:#70869a}.phone-approval-device-list{display:grid;gap:8px}.phone-approval-device{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px;border:1px solid #e0e8f0;border-radius:10px;background:#fbfdff}.phone-approval-device.disabled{opacity:.58}.phone-approval-device>div{display:grid;gap:2px}.phone-approval-device strong{font-size:12px}.phone-approval-device span,.phone-approval-device small{font-size:11px;color:#71869a}.phone-approval-device-error{color:#a54444!important}.phone-approval-empty{padding:18px;border:1px dashed #cedae6;border-radius:10px;text-align:center;color:#70869a;font-size:12px}
 @media(max-width:760px){.phone-approval-backdrop{padding:0;align-items:end}.phone-approval-modal{width:100vw;max-height:94vh;border-radius:18px 18px 0 0}.phone-approval-grid{grid-template-columns:1fr;padding:12px}.phone-approval-modal>header,.phone-approval-modal>footer{padding:14px}.phone-approval-title p{display:none}.phone-approval-modal>footer{align-items:flex-start;flex-direction:column}}
+
+
+/* Telefon kurulumu mobilde tam ekran ve büyük dokunma alanları. */
+@media(max-width:760px){
+  .phone-approval-backdrop{padding:0;align-items:stretch}
+  .phone-approval-modal{
+    width:100vw;
+    height:100dvh;
+    max-height:100dvh;
+    border:0;
+    border-radius:0;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .phone-approval-modal>header{
+    position:sticky;
+    top:0;
+    z-index:3;
+    padding:max(12px,env(safe-area-inset-top)) 14px 12px;
+  }
+  .phone-approval-modal>footer{
+    position:sticky;
+    bottom:0;
+    z-index:2;
+    padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+  .phone-approval-notice,.phone-approval-warning{margin-left:12px;margin-right:12px}
+  .phone-approval-grid{padding:12px;gap:10px}
+  .phone-approval-card{padding:14px}
+  .phone-approval-card input{
+    min-height:48px;
+    height:48px;
+    font-size:16px;
+  }
+  .phone-approval-card button,.phone-approval-modal>footer button{
+    min-height:46px;
+    font-size:13px;
+  }
+  .phone-approval-title h2{font-size:20px}
+}
