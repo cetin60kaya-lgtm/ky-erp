@@ -1,7 +1,7 @@
 type AnyRow = Record<string, any>;
 
 const MAX_READ_IDS = 1000;
-const ALLOWED_ID_PREFIXES = ["login-approval:", "ebelge-issue:", "payment-due:"];
+const ALLOWED_ID_PREFIXES = ["login-approval:", "mail-approval:", "ebelge-issue:", "payment-due:"];
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
