@@ -9,7 +9,7 @@ import { getNotifications, markNotificationsRead } from "../services/notificatio
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 
-const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler"]);
+const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
 function isOwnerUser(user) {
   return ["SUPER_ADMIN", "ADMIN"].includes(String(user?.role || "").toUpperCase().replace(/İ/g, "I"));
