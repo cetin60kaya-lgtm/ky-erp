@@ -58,4 +58,6 @@ if (ci.ok) {
 
 mkdirSync(publicDir, { recursive: true });
 writeFileSync(resultPath, JSON.stringify(report, null, 2) + "\n", "utf8");
-console.log("WORKER_TYPECHECK_CAPTURE_WRITTEN");
+const typecheckOk = report.stages.typecheck?.ok === true;
+console.log(`WORKER_TYPECHECK_PR_GATE=${typecheckOk ? "PASS" : "FAIL"}`);
+if (!typecheckOk) process.exitCode = 1;

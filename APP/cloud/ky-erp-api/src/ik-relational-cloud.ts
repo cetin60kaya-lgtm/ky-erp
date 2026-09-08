@@ -944,11 +944,25 @@ async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, 
 
 const IK_PERSON_CARD_CALC_SCOPE = "IK_PERSON_CARD_CALC";
 
+type PersonCardCalc = {
+  deductionHourlyBase: number;
+};
+
+type AbsenceDeductionResult = {
+  hours: number;
+  deductionDivisor: number;
+  salaryHourly: number;
+  salaryCut: number;
+  roadDaily: number;
+  roadCut: number;
+  total: number;
+};
+
 function personCardCalcFileName(companyId: string, employeeId: string) {
   return `${companyId}:${employeeId}`;
 }
 
-function parsePersonCardCalc(row: Row | null | undefined) {
+function parsePersonCardCalc(row: Row | null | undefined): PersonCardCalc {
   try {
     const parsed = JSON.parse(text(row?.data) || "{}") as Row;
     return { deductionHourlyBase: number(parsed.deductionHourlyBase) || 300 };
@@ -957,7 +971,7 @@ function parsePersonCardCalc(row: Row | null | undefined) {
   }
 }
 
-async function personCardCalc(c: Context<AppEnv>, companyId: string, employeeId: string) {
+async function personCardCalc(c: Context<AppEnv>, companyId: string, employeeId: string): Promise<PersonCardCalc> {
   const row = await first(c, "SELECT data FROM json_store WHERE scope=? AND file_name=? LIMIT 1", [IK_PERSON_CARD_CALC_SCOPE, personCardCalcFileName(companyId, employeeId)]);
   return parsePersonCardCalc(row);
 }
@@ -972,7 +986,7 @@ async function savePersonCardCalc(c: Context<AppEnv>, companyId: string, employe
     .bind(id, IK_PERSON_CARD_CALC_SCOPE, null, fileName, data, nowIso(), nowIso()).run();
 }
 
-async function absenceDeductionForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, mode: "DAY" | "HOUR", hoursValue: unknown) {
+async function absenceDeductionForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, mode: "DAY" | "HOUR", hoursValue: unknown): Promise<AbsenceDeductionResult> {
   const employee = await first(c, "SELECT salary,road_allowance FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
   if (!employee) return { hours: 0, deductionDivisor: 300, salaryHourly: 0, salaryCut: 0, roadDaily: 0, roadCut: 0, total: 0 };
   const salary = Math.max(0, number(employee.salary));
@@ -1000,8 +1014,8 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
   if (!isBulkAdvance && Array.isArray(body.employeeIds) && body.employeeIds.length) {
     return error(c, 400, "SINGLE_EMPLOYEE_ONLY", "Tekli avans/kesinti/mesai işleminde yalnız employeeId kullanılmalıdır.");
   }
-  const employeeIds = isBulkAdvance && Array.isArray(body.employeeIds)
-    ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
+  const employeeIds: string[] = isBulkAdvance && Array.isArray(body.employeeIds)
+    ? [...new Set(body.employeeIds.map((value: unknown) => text(value)).filter(Boolean))]
     : [singleEmployeeId].filter(Boolean);
   if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", isBulkAdvance ? "Toplu işlem için employeeIds zorunludur." : "Tekli işlem için employeeId zorunludur.");
   const valid = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
@@ -1027,7 +1041,9 @@ async function saveAdvancedFinance(c: Context<AppEnv>) {
   const statements: D1PreparedStatement[] = [];
 
   for (const employeeId of employeeIds) {
-    const absence = isAbsence ? await absenceDeductionForEmployee(c, companyId, employeeId, absenceMode, hourOrDay) : null;
+    const absence: AbsenceDeductionResult | null = isAbsence
+      ? await absenceDeductionForEmployee(c, companyId, employeeId, absenceMode, hourOrDay)
+      : null;
     const rowAmount = isOvertime
       ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
       : isAbsence ? number(absence?.total) : amount;
@@ -1076,7 +1092,9 @@ async function updateAdvancedFinance(c: Context<AppEnv>) {
   const multiplier = overtimeMultiplierValue(body.overtimeMultiplier || overtimeMetaFromNote(current.note).multiplier);
   if (isOvertime && hourOrDay <= 0) return error(c, 400, "OVERTIME_HOURS_REQUIRED", "Mesai saati sıfırdan büyük olmalıdır.");
   if (isAbsence && absenceMode === "HOUR" && (hourOrDay <= 0 || hourOrDay > 10)) return error(c, 400, "ABSENCE_HOURS_INVALID", "Eksik saat 0 dan büyük ve en fazla 10 saat olmalıdır.");
-  const absence = isAbsence ? await absenceDeductionForEmployee(c, companyId, employeeId, absenceMode, hourOrDay) : null;
+  const absence: AbsenceDeductionResult | null = isAbsence
+    ? await absenceDeductionForEmployee(c, companyId, employeeId, absenceMode, hourOrDay)
+    : null;
   const amount = isOvertime
     ? await overtimeAmountForEmployee(c, companyId, employeeId, hourOrDay, multiplier)
     : isAbsence ? number(absence?.total) : number(body.amount ?? current.amount);
@@ -1274,7 +1292,7 @@ async function advancedMonth(c: Context<AppEnv>) {
     all(c, "SELECT file_name,data FROM json_store WHERE scope=? AND file_name LIKE ?", [IK_PERSON_CARD_CALC_SCOPE, `${companyId}:%`]).catch(() => []),
   ]);
   const calcPrefix = `${companyId}:`;
-  const calcByEmployee = new Map<string, Row>();
+  const calcByEmployee = new Map<string, PersonCardCalc>();
   for (const row of calcRows) {
     const fileName = text(row.file_name);
     if (!fileName.startsWith(calcPrefix)) continue;
