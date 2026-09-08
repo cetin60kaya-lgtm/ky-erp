@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,15 +31,15 @@ function safeLines(value) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => /not ok\b|ERR_[A-Z0-9_]+|error TS\d+|failed|failure|error|assert|\.test\.ts|npm ERR|wrangler|SyntaxError|TypeError|ReferenceError/i.test(line))
+    .filter((line) => /error TS\d+|\.ts\(\d+,\d+\)|not ok\b|ERR_[A-Z0-9_]+|SyntaxError|TypeError|ReferenceError/i.test(line))
     .filter((line) => !/token|secret|password|authorization|cookie|api[_-]?key/i.test(line))
-    .slice(0, 180);
+    .slice(0, 240);
 }
 
 const report = {
   generatedAt: new Date().toISOString(),
   node: process.version,
-  mode: "typecheck-with-ik-relational-masked",
+  mode: "exact-worker-typecheck-capture",
   stages: {},
   testFiles: readdirSync(path.join(worker, "src")).filter((name) => name.endsWith(".test.ts")).sort(),
 };
@@ -48,11 +48,8 @@ const ci = run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 report.stages.npmCi = { ok: ci.ok, status: ci.status, lines: safeLines(ci.stderr + "\n" + ci.stdout) };
 
 if (ci.ok) {
-  const ikFile = path.join(worker, "src", "ik-relational-cloud.ts");
-  const ikSource = readFileSync(ikFile, "utf8");
-  if (!ikSource.startsWith("// @ts-nocheck")) writeFileSync(ikFile, `// @ts-nocheck\n${ikSource}`, "utf8");
-  const result = run("npm", ["run", "typecheck"]);
-  report.stages.typecheckMaskedIk = {
+  const result = run("npm", ["run", "typecheck", "--", "--pretty", "false"]);
+  report.stages.typecheck = {
     ok: result.ok,
     status: result.status,
     lines: safeLines(result.stderr + "\n" + result.stdout),
@@ -61,6 +58,4 @@ if (ci.ok) {
 
 mkdirSync(publicDir, { recursive: true });
 writeFileSync(resultPath, JSON.stringify(report, null, 2) + "\n", "utf8");
-const failedStages = Object.entries(report.stages).filter(([, stage]) => !stage.ok).map(([name]) => name);
-console.log(`WORKER_FINAL_GATE_RESULT=${failedStages.length ? `FAIL:${failedStages.join(",")}` : "PASS"}`);
-if (failedStages.length) process.exitCode = 1;
+console.log("WORKER_TYPECHECK_CAPTURE_WRITTEN");
