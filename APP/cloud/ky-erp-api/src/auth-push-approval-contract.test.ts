@@ -43,7 +43,7 @@ test("security-app enrollment requires password step-up, stores token hash and r
   assert.doesNotMatch(push, /p256dhKey|authKey/);
   assert.match(push, /PUSH_ENDPOINT_ALREADY_BOUND/);
   assert.match(push, /LEGACY_PHONE_APPROVAL_RETIRED/);
-  assert.match(push, /securityAppUrl: "https:\/\/app\.kyerp\.net\/security\/");
+  assert.match(push, /securityAppUrl: "https:\/\/app\.kyerp\.net\/security\/"/);
 });
 
 test("VAPID signing key stays server-side and push uses standard VAPID authorization", () => {
