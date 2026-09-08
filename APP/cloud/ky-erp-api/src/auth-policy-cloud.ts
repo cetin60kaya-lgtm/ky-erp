@@ -2,6 +2,13 @@
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
+import {
+  cancelPhoneApproval,
+  consumePhoneApproval,
+  notifyManagerApproval,
+  phoneApprovalFromRequest,
+  startPhoneApprovalChallenge,
+} from "./auth-push-cloud";
 
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
 const CHALLENGE_SECONDS = 10 * 60;
@@ -591,9 +598,12 @@ async function afterFactors(c: any, user: AnyRow, source: AnyRow) {
      VALUES (?,?,?,?, 'PENDING',?,?,?,?,?)`,
   ).bind(id, user.id, companySlug, await sha256(approvalToken), resolved.deviceLabel, resolved.userAgent, resolved.ipAddress, timestamp, addSeconds(APPROVAL_SECONDS)).run();
   await audit(c, "LOGIN_APPROVAL_REQUESTED_POLICY", user.id, user.id, companySlug, "", { approvalId: id });
-  return { ok: true, stage: "APPROVAL_PENDING", approvalId: id, approvalToken, approvalExpiresAt: addSeconds(APPROVAL_SECONDS), message: "Giriş doğrulandı. Yönetici onayı bekleniyor." };
+  const pushDispatch = notifyManagerApproval(c, id, companySlug);
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(pushDispatch);
+  else await pushDispatch;
+  return { ok: true, stage: "APPROVAL_PENDING", approvalId: id, approvalToken, approvalExpiresAt: addSeconds(APPROVAL_SECONDS), message: "Giriş doğrulandı. Firma Sahibi onayı bekleniyor." };
 }
-async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}) {
+async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, options: AnyRow = {}) {
   const refreshed = await userById(c, user.id);
   const role = roleOf(refreshed || user);
   const policy = effectivePolicy(refreshed || user, role);
@@ -617,6 +627,15 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}) {
     await audit(c, "PASSWORD_ONLY_LOGIN_ACCEPTED", user.id, user.id, text(refreshed?.main_company_slug), "", { ttl });
     return afterFactors(c, refreshed || user, source);
   }
+
+  // Telefon onayı, kayıtlı güvenilir cihaz varsa kod yazmadan kullanılan birincil
+  // ikinci faktördür. BOTH_MFA politikası iki ayrı Authenticator kanalı istediği için
+  // telefon onayı bu özel politikayı sessizce gevşetmez.
+  if (!options.skipPhone && policy !== "BOTH_MFA") {
+    const phoneApproval = await startPhoneApprovalChallenge(c, refreshed || user, source);
+    if (phoneApproval) return phoneApproval;
+  }
+
   if (policy === "GOOGLE" && !available.includes("GOOGLE")) return beginProviderSetup(c, refreshed || user, "GOOGLE", source);
   if (policy === "MICROSOFT" && !available.includes("MICROSOFT")) return beginProviderSetup(c, refreshed || user, "MICROSOFT", source);
   if (policy === "BOTH_MFA") {
@@ -781,6 +800,53 @@ export function registerAuthPolicyRoutes(app: any) {
     const role = roleOf(user);
     await audit(c, "PASSWORD_VERIFIED_POLICY", user.id, user.id, text(user.main_company_slug), "", { policy: effectivePolicy(user, role) });
     return c.json(await beginPolicyLogin(c, user, { deviceLabel: deviceLabel(c, body), userAgent: userAgent(c), ipAddress: clientIp(c) }));
+  });
+
+  app.post("/api/auth/phone-approval/:id/status", async (c: any) => {
+    const body = await bodyOf(c);
+    const approval = await phoneApprovalFromRequest(c, c.req.param("id"), body.phoneApprovalToken);
+    if (!approval) return c.json(jsonError("PHONE_APPROVAL_INVALID", "Telefon giriş onayı bulunamadı."), 401);
+    if (approval.status === "DENIED") {
+      return c.json({ ok: true, stage: "PHONE_APPROVAL_DENIED", message: "Telefonunuzdan giriş isteği reddedildi." });
+    }
+    if (approval.status === "EXPIRED") {
+      return c.json({ ok: true, stage: "PHONE_APPROVAL_EXPIRED", message: "Telefon giriş onayının süresi doldu." });
+    }
+    if (approval.status !== "APPROVED") {
+      return c.json({
+        ok: true,
+        stage: "PHONE_APPROVAL_PENDING",
+        phoneApprovalId: approval.id,
+        phoneApprovalToken: text(body.phoneApprovalToken),
+        phoneApprovalExpiresAt: approval.expiresAt,
+        message: "Telefonunuzdan onay bekleniyor.",
+      });
+    }
+    if (approval.consumedAt) return c.json(jsonError("PHONE_APPROVAL_CONSUMED", "Bu telefon giriş onayı daha önce kullanıldı."), 409);
+    const user = await userById(c, text(approval.userId));
+    if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
+    if (!(await consumePhoneApproval(c, approval.id))) return c.json(jsonError("PHONE_APPROVAL_CONSUMED", "Bu telefon giriş onayı daha önce kullanıldı."), 409);
+    await audit(c, "PHONE_LOGIN_FACTOR_VERIFIED", user.id, user.id, text(user.main_company_slug), "", { phoneApprovalId: approval.id });
+    return c.json(await afterFactors(c, user, {
+      deviceLabel: approval.deviceLabel,
+      userAgent: approval.userAgent,
+      ipAddress: approval.ipAddress,
+    }));
+  });
+
+  app.post("/api/auth/phone-approval/:id/fallback", async (c: any) => {
+    const body = await bodyOf(c);
+    const approval = await phoneApprovalFromRequest(c, c.req.param("id"), body.phoneApprovalToken);
+    if (!approval || approval.status !== "PENDING") return c.json(jsonError("PHONE_APPROVAL_INVALID", "Telefon giriş onayı bulunamadı veya artık beklemiyor."), 401);
+    const user = await userById(c, text(approval.userId));
+    if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
+    await cancelPhoneApproval(c, approval.id);
+    await audit(c, "PHONE_LOGIN_FALLBACK_TO_TOTP", user.id, user.id, text(user.main_company_slug), "", { phoneApprovalId: approval.id });
+    return c.json(await beginPolicyLogin(c, user, {
+      deviceLabel: approval.deviceLabel,
+      userAgent: approval.userAgent,
+      ipAddress: approval.ipAddress,
+    }, { skipPhone: true }));
   });
 
   app.post("/api/auth/mfa/verify", async (c: any) => {
