@@ -46,10 +46,11 @@ build-center/artifacts/
 
 - Yönetim endpointleri yalnız ADMIN / SUPER_ADMIN.
 - Windows Agent normal kullanıcı session tokenı kullanmaz.
-- Owner "Agent Anahtarı Üret" dediğinde 256-bit token üretilir.
-- R2'de yalnız SHA-256 token hash saklanır.
-- Düz token yalnız üretildiği cevapta görünür.
-- Agent her istekte X-KYERP-Build-Agent-Token gönderir.
+- Owner "Tek Kullanımlık Kurulum Kodu Üret" dediğinde 10 dakika geçerli enrollment kodu oluşur.
+- Enrollment kodunun yalnız SHA-256 hash'i R2'de tutulur ve kod tek kullanımdır.
+- Windows setup kodu /api/build-agent/enroll üzerinden cihaz kimliğine bağlı 256-bit Agent secret ile değiştirir.
+- Kalıcı Agent secret yalnız Windows DPAPI CurrentUser ile token.dat içinde saklanır.
+- Agent her istekte X-KYERP-Build-Agent-Id + X-KYERP-Build-Agent-Token gönderir.
 - Büyük Setup dosyaları 8 MB parçalarla R2 multipart upload edilir.
 - Multipart parçaları yalnız ilgili job'ın artifactPendingKey alanına yazılabilir.
 - Build Agent Windows kullanıcısının mevcut Git Credential Manager oturumunu kullanır; private repo tokenı kaynak dosyasına yazılmaz.
@@ -71,13 +72,15 @@ Yerel klasör:
 
 Token DPAPI CurrentUser ile şifreli token.dat dosyasında tutulur.
 
+Agent Windows kullanıcı Startup klasörüne eklenir ve oturum açılışında otomatik başlar.
+
 Agent açıkken 15 saniyede bir:
 
 ```text
 GET /api/build-agent/next
 ```
 
-kontrolü yapar.
+kontrolü yapar. Claim/cancel/progress R2 ETag compare-and-set ile atomiktir.
 
 ## PDKS 1.9.0
 
@@ -111,7 +114,7 @@ Setup Worker unit/typecheck/build, frontend test/lint/build, .NET/xUnit, win-x64
 Platform Yönetimi -> Sürüm Merkezi
 
 - Agent durum / heartbeat
-- Agent anahtarı üret / yenile
+- 10 dakikalık tek-kullanımlık Agent kurulum kodu üret
 - Agent kurulum PowerShell dosyası indir
 - PDKS 1.9.0 Build Al
 - canlı ilerleme
@@ -136,3 +139,11 @@ feature test
 -> ilk PDKS build
 -> R2 Setup indirme doğrulaması
 ```
+
+
+## Artifact bütünlüğü
+
+- Windows Agent Setup dosyasının byte uzunluğunu ve SHA-256 özetini multipart başlangıcında gönderir.
+- R2 tamamlanan object boyutu kaynak dosyayla birebir eşleşmezse object silinir ve job FAILED olur.
+- SHA-256 değeri build kaydında artifactSha256 olarak tutulur; ayrıca bağımsız .sha256.txt artifact saklanır.
+- R2 multipart parça boyutu 8 MiB'dir; 5 MiB minimum sınırın üzerindedir.
