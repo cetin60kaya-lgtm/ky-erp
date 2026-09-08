@@ -203,6 +203,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
     "/api/ik/personnel-control/profile",
     "/api/ik/personnel-control/people",
     "/api/ik/personnel-control/pdks-masters",
+    "/api/ik/personnel-control/dashboard-live",
   ]);
   const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance(?:-v2)?|photo|photo-meta)$/i);
   if (!safeStatic.has(path) && !personReadMatch) {
