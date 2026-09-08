@@ -379,7 +379,7 @@ body,
   }
 
   .shell-v3-icon.notification {
-    display: none;
+    display: grid;
   }
 
   .shell-v3-user > b {
@@ -623,6 +623,14 @@ body,
   padding-right: max(6px, var(--ky-safe-right)) !important;
 }
 
+.shell-v3[data-layout-mode="phone"] .shell-v3-display-button {
+  display: none !important;
+}
+
+.shell-v3[data-layout-mode="phone"] .shell-v3-icon.notification {
+  display: grid !important;
+}
+
 .shell-v3[data-layout-mode="phone"] .shell-v3-search,
 .shell-v3[data-layout-mode="phone"] .shell-v3-crumb,
 .shell-v3[data-layout-mode="phone"] .shell-v3-status {
@@ -640,12 +648,14 @@ body,
 .shell-v3[data-layout-mode="phone"] .shell-v3-close-all span,
 .shell-v3[data-layout-mode="phone"] .shell-v3-quick-button span,
 .shell-v3[data-layout-mode="phone"] .shell-v3-quick-button kbd,
+.shell-v3[data-layout-mode="phone"] .shell-v3-install-button span,
 .shell-v3[data-layout-mode="phone"] .shell-v3-display-button span,
 .shell-v3[data-layout-mode="phone"] .shell-v3-display-button small {
   display: none !important;
 }
 
 .shell-v3[data-layout-mode="phone"] .shell-v3-quick-button,
+.shell-v3[data-layout-mode="phone"] .shell-v3-install-button,
 .shell-v3[data-layout-mode="phone"] .shell-v3-display-button,
 .shell-v3[data-layout-mode="phone"] .shell-v3-icon {
   width: 40px !important;
