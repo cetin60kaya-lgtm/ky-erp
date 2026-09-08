@@ -13,6 +13,7 @@ export function reserveBlobTab() {
   try {
     const preview = window.open("", "_blank");
     if (preview) {
+      try { preview.opener = null; } catch {}
       preview.document.title = "KY ERP belge hazırlanıyor";
       preview.document.body.innerHTML = '<p style="font-family:system-ui,sans-serif;padding:20px">KY ERP belgesi hazırlanıyor...</p>';
     }
