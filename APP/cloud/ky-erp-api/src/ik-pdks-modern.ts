@@ -532,8 +532,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
 
       // 22:00-06:00 gibi vardiyalarda gece yarısından sonraki canlı görünüm bir önceki
       // takvim gününde başlayan vardiyayı temsil eder.
-      const shiftDate = date === todayKey && schedule.crossMidnight && expectedOut !== null
-        && nowMinutes <= expectedOut + schedule.earlyTolerance ? previousDate : date;
+      const shiftDate = date === todayKey && schedule.crossMidnight && expectedIn !== null
+        && nowMinutes < expectedIn ? previousDate : date;
       const shiftNextDate = addDays(shiftDate, 1);
       const baseRows = (eventMap.get(`${employeeId}|${shiftDate}`) || []).slice();
       let rows = baseRows;
