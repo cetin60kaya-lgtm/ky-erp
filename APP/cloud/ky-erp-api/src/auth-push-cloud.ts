@@ -11,6 +11,9 @@ const VAPID_SUBJECT = "mailto:admin@kyerp.net";
 const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
 const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
+const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
+const SECURITY_ENROLL_SECONDS = 10 * 60;
+const SECURITY_APP_VERSION = "security-v1.1";
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -77,6 +80,18 @@ function base64Url(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+function base64UrlToBytes(value: unknown) {
+  const normalized = text(value).replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+function randomEnrollmentCode(length = 8) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 }
 function encodeJson(value: unknown) {
   return base64Url(new TextEncoder().encode(JSON.stringify(value)));
@@ -320,11 +335,36 @@ async function sendWakeMany(c: any, devices: AnyRow[]) {
 
 async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "MANAGER") {
   const rows = await storeList(c, DEVICE_SCOPE);
-  return rows.filter((row: AnyRow) =>
+  const eligible = rows.filter((row: AnyRow) =>
     text(row.userId) === userId &&
     row.isActive !== false &&
     (purpose === "MANAGER" ? row.managerApprovalEnabled !== false : row.selfLoginEnabled !== false)
   );
+
+  // Temiz kesim: telefon onayı yalnız ayrı KY ERP Güvenlik uygulamasından yapılır.
+  // Eski ana-ERP tarayıcı push cihazları artık karar otoritesi değildir.
+  // Güvenlik uygulaması yoksa çağıran auth akışı Authenticator fallback'ine gider.
+  return eligible.filter((row: AnyRow) => row.securityApp === true);
+}
+
+async function supersedeOlderSelfChallenges(c: any, userId: string, replacementId: string) {
+  const timestamp = nowIso();
+  const rows = (await storeList(c, PHONE_SCOPE))
+    .filter((row: AnyRow) =>
+      text(row.userId) === text(userId) &&
+      text(row.id) !== text(replacementId) &&
+      upper(row.status) === "PENDING" &&
+      !text(row.consumedAt)
+    );
+
+  for (const row of rows) {
+    await atomicPhoneUpdate(c, row, "PENDING", {
+      status: "SUPERSEDED",
+      decidedAt: timestamp,
+      consumedAt: timestamp,
+      supersededBy: replacementId,
+    });
+  }
 }
 
 async function userRow(c: any, userId: string) {
@@ -350,14 +390,119 @@ async function companyApprovalSettings(c: any, companySlug: string) {
   };
 }
 
-async function actorFromDevice(c: any) {
+async function verifySecurityAppDecision(device: AnyRow, kind: string, id: string, decision: string, signatureValue: unknown) {
+  if (device?.securityApp !== true) return true;
+  const jwk = objectOf(device?.decisionPublicKeyJwk);
+  const signature = text(signatureValue);
+  if (!jwk?.kty || !jwk?.crv || !jwk?.x || !jwk?.y || !signature) return false;
+  try {
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
+    const message = new TextEncoder().encode(
+      `KYERP-DECISION-V1|${text(device.id)}|${kind}|${id}|${decision}`,
+    );
+    return crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      base64UrlToBytes(signature),
+      message,
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function verifySecurityDeviceAuth(c: any, device: AnyRow) {
+  if (device?.securityApp !== true) return false;
+  const jwk = objectOf(device?.decisionPublicKeyJwk);
+  const timestamp = text(c.req.header("X-KYERP-Security-Timestamp"));
+  const signature = text(c.req.header("X-KYERP-Security-Signature"));
+  const timestampMs = Number(timestamp);
+  if (
+    !jwk?.kty || !jwk?.crv || !jwk?.x || !jwk?.y ||
+    !timestamp || !signature || !Number.isFinite(timestampMs) ||
+    Math.abs(Date.now() - timestampMs) > 120_000
+  ) return false;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
+    const method = upper(c.req.method || "GET");
+    const pathname = new URL(c.req.url).pathname;
+    const message = new TextEncoder().encode(
+      `KYERP-DEVICE-AUTH-V1|${text(device.id)}|${method}|${pathname}|${timestamp}`,
+    );
+    return crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      base64UrlToBytes(signature),
+      message,
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function signedSecurityActorForRecovery(c: any) {
   const deviceId = text(c.req.header("X-KYERP-Push-Device"));
   const deviceToken = text(c.req.header("X-KYERP-Push-Token"));
   if (!deviceId || !deviceToken) return null;
 
   const device = await storeGet(c, DEVICE_SCOPE, deviceId);
+  if (!device || device.securityApp !== true) return null;
+  if (!(await verifySecurityDeviceAuth(c, device))) return null;
+
+  const user = await c.env.DB.prepare(
+    `SELECT u.id,u.username,u.full_name,u.role,u.is_active,
+            s.role_override,s.main_company_slug
+       FROM auth_users u
+       LEFT JOIN auth_user_security s ON s.user_id=u.id
+      WHERE u.id=? LIMIT 1`,
+  ).bind(text(device.userId)).first<AnyRow>();
+  if (!user || !Boolean(user.is_active)) return null;
+
+  return {
+    device,
+    userId: text(user.id),
+    role: roleOf(user),
+    companySlug: text(user.main_company_slug || device.mainCompanySlug),
+    fullName: text(user.full_name || user.username),
+  };
+}
+
+async function actorFromDevice(c: any) {
+  const deviceId = text(c.req.header("X-KYERP-Push-Device"));
+  const deviceToken = text(c.req.header("X-KYERP-Push-Token"));
+  if (!deviceId || !deviceToken) return null;
+
+  let device = await storeGet(c, DEVICE_SCOPE, deviceId);
   if (!device || device.isActive === false) return null;
-  if (!safeEqual(text(device.deviceTokenHash), await sha256(deviceToken))) return null;
+
+  const suppliedHash = await sha256(deviceToken);
+  if (!safeEqual(text(device.deviceTokenHash), suppliedHash)) {
+    const signedRecovery = await verifySecurityDeviceAuth(c, device);
+    if (!signedRecovery) return null;
+
+    device = await saveDevice(c, {
+      ...device,
+      deviceTokenHash: suppliedHash,
+      tokenRepairedAt: nowIso(),
+      lastError: "",
+    });
+    await audit(c, "SECURITY_DEVICE_TOKEN_REPAIRED", text(device.userId), text(device.userId), text(device.mainCompanySlug), {
+      deviceId: device.id,
+    });
+  }
 
   const user = await c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.role,u.is_active,
@@ -397,6 +542,11 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   const id = crypto.randomUUID();
   const token = randomToken(32);
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
+
+  // Aynı kullanıcı yeniden girişe basarsa eski bekleyen telefon isteğini "reddedildi"
+  // yapmayız. Sessizce SUPERSEDED kapatılır; telefonda yalnız en yeni istek yaşar.
+  await supersedeOlderSelfChallenges(c, text(user.id), id);
+
   const requestedAt = nowIso();
   const expiresAt = addSeconds(PHONE_APPROVAL_SECONDS);
 
@@ -447,6 +597,21 @@ export async function phoneApprovalFromRequest(c: any, idValue: unknown, tokenVa
   return row;
 }
 
+export async function resendPhoneApprovalChallenge(c: any, idValue: unknown, tokenValue: unknown) {
+  const approval = await phoneApprovalFromRequest(c, idValue, tokenValue);
+  if (!approval) return { ok: false, code: "PHONE_APPROVAL_INVALID", approval: null, sent: 0 };
+  if (upper(approval.status) !== "PENDING" || text(approval.consumedAt)) {
+    return { ok: false, code: "PHONE_APPROVAL_NOT_PENDING", approval, sent: 0 };
+  }
+  const devices = await activeDevicesForUser(c, text(approval.userId), "SELF");
+  const sent = await sendWakeMany(c, devices);
+  await audit(c, "PHONE_LOGIN_APPROVAL_RESENT", approval.userId, approval.userId, text(approval.mainCompanySlug), {
+    challengeId: approval.id,
+    notifiedDevices: sent,
+  });
+  return { ok: sent > 0, code: sent > 0 ? "" : "PHONE_APPROVAL_DEVICE_OFFLINE", approval, sent };
+}
+
 export async function consumePhoneApproval(c: any, idValue: unknown) {
   const row = await storeGet(c, PHONE_SCOPE, text(idValue));
   if (!row || upper(row.status) !== "APPROVED" || text(row.consumedAt)) return false;
@@ -494,17 +659,35 @@ async function pendingItems(c: any, actor: AnyRow) {
   const items: AnyRow[] = [];
 
   const selfRows = (await storeList(c, PHONE_SCOPE))
-    .filter((row: AnyRow) => text(row.userId) === actor.userId && !text(row.consumedAt));
+    .filter((row: AnyRow) => text(row.userId) === actor.userId)
+    .sort((a: AnyRow, b: AnyRow) =>
+      String(b.requestedAt || b.createdAt || "").localeCompare(String(a.requestedAt || a.createdAt || "")));
+
+  let latestSelfPending = "";
   for (const row of selfRows) {
     let current = row;
-    if (upper(current.status) === "PENDING" && Date.parse(text(current.expiresAt)) <= Date.now()) {
+    if (upper(current.status) === "PENDING" && !text(current.consumedAt) && Date.parse(text(current.expiresAt)) <= Date.now()) {
       const update = await atomicPhoneUpdate(c, current, "PENDING", { status: "EXPIRED", consumedAt: timestamp });
       current = update.row || current;
     }
     if (upper(current.status) !== "PENDING" || text(current.consumedAt)) continue;
+
+    if (latestSelfPending) {
+      const update = await atomicPhoneUpdate(c, current, "PENDING", {
+        status: "SUPERSEDED",
+        decidedAt: timestamp,
+        consumedAt: timestamp,
+        supersededBy: latestSelfPending,
+      });
+      current = update.row || current;
+      continue;
+    }
+
+    latestSelfPending = text(current.id);
     items.push({
       kind: "SELF_LOGIN",
       id: current.id,
+      dedupeKey: `self:${actor.userId}`,
       title: "KY ERP · Giriş Onayı",
       body: `${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`,
       requestedAt: current.requestedAt,
@@ -545,6 +728,7 @@ async function pendingItems(c: any, actor: AnyRow) {
     items.push({
       kind: "MANAGER_APPROVAL",
       id: row.id,
+      dedupeKey: `manager:${text(row.user_id)}`,
       title: "KY ERP · Firma Giriş Onayı",
       body: isSuper(actor.role)
         ? `${text(row.full_name || row.username)} · ${text(row.main_company_slug)} · ${friendlyDeviceLabel(row.device_label, row.user_agent)}`
@@ -568,6 +752,187 @@ export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
 }
 
 export function registerAuthPushRoutes(app: any) {
+  app.get("/api/auth/push/security-config", async (c: any) => {
+    const pair = await ensureVapidKeyPair(c);
+    return c.json({
+      ok: true,
+      data: {
+        app: "KY ERP Güvenlik",
+        version: SECURITY_APP_VERSION,
+        applicationServerKey: pair.publicKey,
+        approvalUrl: "https://app.kyerp.net/security/",
+      },
+    });
+  });
+
+  app.post("/api/auth/push/security-enrollment/start", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return c.json(jsonError("UNAUTHORIZED", "Güvenlik uygulaması kurulumu için KY ERP oturumu gereklidir."), 401);
+
+    const pair = await ensureVapidKeyPair(c);
+    const enrollmentId = crypto.randomUUID();
+    const enrollmentToken = randomToken(32);
+    const enrollmentCode = randomEnrollmentCode(8);
+    const companySlug = text(current.mainCompanySlug || "mecit-hakan");
+    const expiresAt = addSeconds(SECURITY_ENROLL_SECONDS);
+
+    await storePut(c, SECURITY_ENROLL_SCOPE, enrollmentId, companySlug, {
+      id: enrollmentId,
+      userId: text(current.id),
+      mainCompanySlug: companySlug,
+      tokenHash: await sha256(enrollmentToken),
+      codeHash: await sha256(enrollmentCode),
+      status: "PENDING",
+      expiresAt,
+      consumedAt: "",
+      createdFromIp: clientIp(c),
+      createdFromUserAgent: userAgent(c),
+    });
+
+    await audit(c, "SECURITY_APP_ENROLLMENT_STARTED", current.id, current.id, companySlug, { enrollmentId });
+    return c.json({
+      ok: true,
+      data: {
+        enrollmentId,
+        enrollmentToken,
+        enrollmentCode,
+        expiresAt,
+        applicationServerKey: pair.publicKey,
+        appUrl: `https://app.kyerp.net/security/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
+      },
+    });
+  });
+
+  app.post("/api/auth/push/security-enrollment/complete", async (c: any) => {
+    const body = await bodyOf(c);
+    const enrollmentId = text(body.enrollmentId);
+    const enrollmentToken = text(body.enrollmentToken);
+    const enrollmentCode = upper(body.enrollmentCode).replace(/[^A-Z0-9]/g, "");
+    let enrollment = enrollmentId ? await storeGet(c, SECURITY_ENROLL_SCOPE, enrollmentId) : null;
+
+    if (enrollment) {
+      if (!enrollmentToken || !safeEqual(text(enrollment.tokenHash), await sha256(enrollmentToken))) enrollment = null;
+    } else if (enrollmentCode) {
+      const codeHash = await sha256(enrollmentCode);
+      const candidates = (await storeList(c, SECURITY_ENROLL_SCOPE))
+        .filter((row: AnyRow) =>
+          upper(row.status) === "PENDING" &&
+          !text(row.consumedAt) &&
+          Date.parse(text(row.expiresAt)) > Date.now() &&
+          safeEqual(text(row.codeHash), codeHash)
+        );
+      enrollment = candidates[0] || null;
+    }
+
+    if (!enrollment || upper(enrollment.status) !== "PENDING" || text(enrollment.consumedAt)) {
+      return c.json(jsonError("SECURITY_ENROLLMENT_INVALID", "Kurulum kodu geçersiz veya daha önce kullanılmış."), 401);
+    }
+    if (Date.parse(text(enrollment.expiresAt)) <= Date.now()) {
+      await storePut(c, SECURITY_ENROLL_SCOPE, text(enrollment.id), text(enrollment.mainCompanySlug), {
+        ...enrollment,
+        status: "EXPIRED",
+        consumedAt: nowIso(),
+      });
+      return c.json(jsonError("SECURITY_ENROLLMENT_EXPIRED", "Kurulum kodunun süresi doldu. KY ERP'den yeni kod oluşturun."), 410);
+    }
+
+    const user = await userRow(c, text(enrollment.userId));
+    const password = String(body.password || "");
+    if (!user || !Boolean(user.is_active) || !password || !(await compare(password, text(user.password_hash)))) {
+      return c.json(jsonError("STEP_UP_FAILED", "Mevcut KY ERP şifresi doğrulanamadı."), 401);
+    }
+
+    const subscription = objectOf(body.subscription);
+    const endpoint = text(subscription.endpoint);
+    if (!/^https:\/\//i.test(endpoint)) {
+      return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Güvenlik uygulaması bildirim aboneliği geçersiz."), 400);
+    }
+
+    const decisionPublicKeyJwk = objectOf(body.decisionPublicKeyJwk);
+    if (
+      upper(decisionPublicKeyJwk.kty) !== "EC" ||
+      upper(decisionPublicKeyJwk.crv) !== "P-256" ||
+      !text(decisionPublicKeyJwk.x) ||
+      !text(decisionPublicKeyJwk.y)
+    ) {
+      return c.json(jsonError("SECURITY_DEVICE_KEY_INVALID", "Güvenlik uygulaması cihaz anahtarı geçersiz."), 400);
+    }
+
+    const allDevices = await storeList(c, DEVICE_SCOPE);
+    const existing = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
+    if (existing && text(existing.userId) !== text(user.id)) {
+      return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu telefon başka bir KY ERP hesabına bağlı."), 409);
+    }
+
+    const deviceId = text(existing?.id) || crypto.randomUUID();
+    const deviceToken = randomToken(36);
+    const companySlug = text(user.main_company_slug || enrollment.mainCompanySlug || "mecit-hakan");
+    const role = roleOf(user);
+    const label = text(body.deviceLabel || friendlyDeviceLabel("", userAgent(c))).slice(0, 180);
+
+    const saved = await saveDevice(c, {
+      ...(existing || {}),
+      id: deviceId,
+      userId: text(user.id),
+      mainCompanySlug: companySlug,
+      pushEndpoint: endpoint,
+      deviceTokenHash: await sha256(deviceToken),
+      decisionPublicKeyJwk,
+      deviceLabel: label,
+      userAgent: userAgent(c),
+      securityApp: true,
+      securityAppVersion: SECURITY_APP_VERSION,
+      selfLoginEnabled: true,
+      managerApprovalEnabled: isSuper(role) || isCompanyAdmin(role),
+      isActive: true,
+      createdAt: existing?.createdAt || nowIso(),
+      lastSeenAt: nowIso(),
+      lastError: "",
+      retiredReason: "",
+    });
+
+    // Yeni güvenlik uygulaması aktif olduğunda aynı hesaptaki eski web-onay cihazlarını kapat.
+    for (const row of allDevices) {
+      if (
+        text(row.userId) === text(user.id) &&
+        text(row.id) !== text(saved.id) &&
+        row.isActive !== false &&
+        row.securityApp !== true
+      ) {
+        await saveDevice(c, {
+          ...row,
+          isActive: false,
+          retiredAt: nowIso(),
+          retiredReason: "KY ERP Güvenlik uygulamasına taşındı",
+        });
+      }
+    }
+
+    await storePut(c, SECURITY_ENROLL_SCOPE, text(enrollment.id), companySlug, {
+      ...enrollment,
+      status: "COMPLETED",
+      consumedAt: nowIso(),
+      completedByDeviceId: saved.id,
+    });
+
+    await audit(c, "SECURITY_APP_DEVICE_REGISTERED", user.id, user.id, companySlug, {
+      deviceId: saved.id,
+      deviceLabel: label,
+      legacyDevicesRetired: true,
+    });
+
+    return c.json({
+      ok: true,
+      data: {
+        deviceId: saved.id,
+        deviceToken,
+        deviceLabel: label,
+        securityApp: true,
+        securityAppVersion: SECURITY_APP_VERSION,
+      },
+    });
+  });
+
   app.get("/api/auth/push/config", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı ayarları için oturum gereklidir."), 401);
@@ -588,11 +953,16 @@ export function registerAuthPushRoutes(app: any) {
           deviceLabel: text(row.deviceLabel),
           selfLoginEnabled: row.selfLoginEnabled !== false,
           managerApprovalEnabled: row.managerApprovalEnabled !== false,
+          securityApp: row.securityApp === true,
+          securityAppVersion: text(row.securityAppVersion),
+          retiredReason: text(row.retiredReason),
           isActive: row.isActive !== false,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
           lastSeenAt: row.lastSeenAt || null,
           lastPushAt: row.lastPushAt || null,
+          lastRefreshAt: row.lastRefreshAt || null,
+          tokenRepairedAt: row.tokenRepairedAt || null,
           lastError: text(row.lastError),
         })),
       },
@@ -601,58 +971,12 @@ export function registerAuthPushRoutes(app: any) {
 
   app.post("/api/auth/push/devices/register", async (c: any) => {
     const current = await getAuthenticatedUser(c);
-    if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı kaydı için oturum gereklidir."), 401);
-
-    const body = await bodyOf(c);
-    const password = String(body.password || "");
-    const user = await userRow(c, current.id);
-    if (!user || !Boolean(user.is_active) || !password || !(await compare(password, text(user.password_hash)))) {
-      return c.json(jsonError("STEP_UP_FAILED", "Bu cihazı güvenilir telefon onayı cihazı yapmak için mevcut şifrenizi doğrulayın."), 401);
-    }
-
-    const subscription = body.subscription && typeof body.subscription === "object" ? body.subscription : {};
-    const endpoint = text(subscription.endpoint);
-    if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Tarayıcı bildirim aboneliği geçersiz."), 400);
-
-    const allDevices = await storeList(c, DEVICE_SCOPE);
-    const existing = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
-    if (existing && text(existing.userId) !== text(current.id)) {
-      return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu bildirim aboneliği başka bir KY ERP hesabına bağlı."), 409);
-    }
-
-    const deviceId = text(existing?.id) || crypto.randomUUID();
-    const deviceToken = randomToken(36);
-    const companySlug = text(current.mainCompanySlug || user.main_company_slug || "mecit-hakan");
-    const label = text(body.deviceLabel || current.session?.device_label || userAgent(c)).slice(0, 180);
-    const saved = await saveDevice(c, {
-      ...(existing || {}),
-      id: deviceId,
-      userId: current.id,
-      mainCompanySlug: companySlug,
-      pushEndpoint: endpoint,
-      deviceTokenHash: await sha256(deviceToken),
-      deviceLabel: label,
-      userAgent: userAgent(c),
-      selfLoginEnabled: body.selfLoginEnabled !== false,
-      managerApprovalEnabled: body.managerApprovalEnabled !== false,
-      isActive: true,
-      createdAt: existing?.createdAt || nowIso(),
-      lastSeenAt: nowIso(),
-      lastError: "",
-    });
-
-    await audit(c, "PUSH_DEVICE_REGISTERED", current.id, current.id, companySlug, { deviceId, deviceLabel: label });
-    return c.json({
-      ok: true,
-      data: {
-        deviceId: saved.id,
-        deviceToken,
-        deviceLabel: label,
-        selfLoginEnabled: saved.selfLoginEnabled,
-        managerApprovalEnabled: saved.managerApprovalEnabled,
-        note: "Cihaz anahtarı yalnız bu kayıt cevabında verilir ve sunucuda hash olarak saklanır.",
-      },
-    });
+    if (!current) return c.json(jsonError("UNAUTHORIZED", "Oturum gereklidir."), 401);
+    return c.json(jsonError(
+      "LEGACY_PHONE_APPROVAL_RETIRED",
+      "Eski tarayıcı telefon onayı kapatıldı. Profil > Telefon Onayı bölümünden KY ERP Güvenlik uygulamasını kurun.",
+      { securityAppUrl: "https://app.kyerp.net/security/" },
+    ), 410);
   });
 
   app.delete("/api/auth/push/devices/:id", async (c: any) => {
@@ -696,6 +1020,71 @@ export function registerAuthPushRoutes(app: any) {
     return c.json({ ok: true, data: saved });
   });
 
+  app.get("/api/auth/push/device/health", async (c: any) => {
+    const actor = await actorFromDevice(c);
+    if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihaz bağlantısı doğrulanamadı. Bağlantıyı Yenile işlemini kullanın."), 401);
+    const items = await pendingItems(c, actor);
+    return c.json({ ok: true, data: {
+      ready: true,
+      checkedAt: nowIso(),
+      serverVersion: SECURITY_APP_VERSION,
+      pendingCount: items.length,
+      device: {
+        id: actor.device.id,
+        deviceLabel: text(actor.device.deviceLabel),
+        securityAppVersion: text(actor.device.securityAppVersion),
+        isActive: actor.device.isActive !== false,
+        lastSeenAt: actor.device.lastSeenAt || null,
+        lastPushAt: actor.device.lastPushAt || null,
+        lastRefreshAt: actor.device.lastRefreshAt || null,
+        tokenRepairedAt: actor.device.tokenRepairedAt || null,
+        lastError: text(actor.device.lastError),
+      },
+    }});
+  });
+
+  app.post("/api/auth/push/device/refresh", async (c: any) => {
+    const actor = await signedSecurityActorForRecovery(c);
+    if (!actor) return c.json(jsonError("PUSH_DEVICE_RECOVERY_UNAUTHORIZED", "Güvenlik cihazı yenileme imzası doğrulanamadı. KY ERP'den yeni Erişim Yenileme Kodu oluşturun."), 401);
+    const body = await bodyOf(c);
+    const subscription = objectOf(body.subscription);
+    const endpoint = text(subscription.endpoint);
+    if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Telefon bildirim aboneliği yenilenemedi."), 400);
+
+    const timestamp = nowIso();
+    const deviceToken = randomToken(36);
+    const saved = await saveDevice(c, {
+      ...actor.device,
+      mainCompanySlug: actor.companySlug,
+      pushEndpoint: endpoint,
+      deviceTokenHash: await sha256(deviceToken),
+      deviceLabel: text(body.deviceLabel || actor.device.deviceLabel || friendlyDeviceLabel("", userAgent(c))).slice(0, 180),
+      userAgent: userAgent(c),
+      securityApp: true,
+      securityAppVersion: SECURITY_APP_VERSION,
+      selfLoginEnabled: true,
+      managerApprovalEnabled: isSuper(actor.role) || isCompanyAdmin(actor.role),
+      isActive: true,
+      lastSeenAt: timestamp,
+      lastRefreshAt: timestamp,
+      lastError: "",
+      retiredReason: "",
+    });
+    await audit(c, "SECURITY_APP_CONNECTION_REFRESHED", actor.userId, actor.userId, actor.companySlug, {
+      deviceId: saved.id,
+      reactivated: actor.device.isActive === false,
+      pushEndpointChanged: text(actor.device.pushEndpoint) !== endpoint,
+    });
+    return c.json({ ok: true, data: {
+      ready: true,
+      deviceId: saved.id,
+      deviceToken,
+      deviceLabel: text(saved.deviceLabel),
+      securityAppVersion: SECURITY_APP_VERSION,
+      refreshedAt: timestamp,
+    }});
+  });
+
   app.get("/api/auth/push/device/pending", async (c: any) => {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "Telefon onayı cihazı doğrulanamadı."), 401);
@@ -712,11 +1101,42 @@ export function registerAuthPushRoutes(app: any) {
     const decision = upper(body.decision);
     if (!["APPROVE", "DENY"].includes(decision) || !id) return c.json(jsonError("PUSH_DECISION_INVALID", "Onay veya ret seçilmelidir."), 400);
 
+    if (actor.device?.securityApp === true) {
+      const verified = await verifySecurityAppDecision(actor.device, kind, id, decision, body.signature);
+      if (!verified) {
+        await audit(c, "SECURITY_APP_DECISION_SIGNATURE_FAILED", actor.userId, actor.userId, actor.companySlug, {
+          deviceId: actor.device.id,
+          kind,
+          id,
+          decision,
+        });
+        return c.json(jsonError("SECURITY_DEVICE_SIGNATURE_INVALID", "Güvenlik uygulaması cihaz imzası doğrulanamadı."), 401);
+      }
+    }
+
     if (kind === "SELF_LOGIN") {
       const row = await storeGet(c, PHONE_SCOPE, id);
-      if (!row || text(row.userId) !== actor.userId || upper(row.status) !== "PENDING" || text(row.consumedAt) || Date.parse(text(row.expiresAt)) <= Date.now()) {
-        return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı veya süresi doldu."), 404);
+      if (!row || text(row.userId) !== actor.userId) {
+        return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı."), 404);
       }
+
+      const currentStatus = upper(row.status);
+      if (
+        (decision === "APPROVE" && currentStatus === "APPROVED" && !text(row.consumedAt)) ||
+        (decision === "DENY" && currentStatus === "DENIED")
+      ) {
+        return c.json({ ok: true, data: { kind, id, status: currentStatus, applied: false, idempotent: true } });
+      }
+
+      if (currentStatus !== "PENDING" || text(row.consumedAt) || Date.parse(text(row.expiresAt)) <= Date.now()) {
+        return c.json(jsonError(
+          currentStatus === "SUPERSEDED" ? "PHONE_APPROVAL_SUPERSEDED" : "PHONE_APPROVAL_NOT_FOUND",
+          currentStatus === "SUPERSEDED"
+            ? "Bu giriş isteğinin yerine daha yeni bir giriş isteği açıldı."
+            : "Giriş onayı bulunamadı veya süresi doldu.",
+        ), currentStatus === "SUPERSEDED" ? 409 : 404);
+      }
+
       const status = decision === "APPROVE" ? "APPROVED" : "DENIED";
       const update = await atomicPhoneUpdate(c, row, "PENDING", {
         status,
