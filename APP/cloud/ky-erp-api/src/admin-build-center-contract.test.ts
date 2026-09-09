@@ -59,6 +59,7 @@ test("heartbeat is considered connected only while fresh and last timestamp stay
 test("build agent routes bypass user session only behind enrollment or agent secret", () => {
   assert.match(main, /path\.startsWith\("\/api\/build-agent\/"\)/);
   assert.match(main, /registerAdminBuildCenterRoutes/);
+  assert.match(main, /X-KYERP-Build-Agent-Id/);
   assert.match(source, /requireAgent/);
   assert.match(source, /BUILD_AGENT_UNAUTHORIZED/);
 });
