@@ -13,7 +13,7 @@ const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v1.1";
+const SECURITY_APP_VERSION = "security-v1.2";
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -859,11 +859,20 @@ export function registerAuthPushRoutes(app: any) {
     }
 
     const allDevices = await storeList(c, DEVICE_SCOPE);
-    const existing = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
-    if (existing && text(existing.userId) !== text(user.id)) {
+    const replaceDeviceId = text(body.replaceDeviceId);
+    const replaceCandidate = replaceDeviceId
+      ? allDevices.find((row: AnyRow) => text(row.id) === replaceDeviceId) || null
+      : null;
+    if (replaceCandidate && (text(replaceCandidate.userId) !== text(user.id) || replaceCandidate.securityApp !== true)) {
+      return c.json(jsonError("SECURITY_DEVICE_RELINK_INVALID", "Erişim yenileme cihazı bu hesaba ait değil."), 409);
+    }
+
+    const endpointCandidate = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
+    if (endpointCandidate && text(endpointCandidate.userId) !== text(user.id)) {
       return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu telefon başka bir KY ERP hesabına bağlı."), 409);
     }
 
+    const existing = replaceCandidate || endpointCandidate;
     const deviceId = text(existing?.id) || crypto.randomUUID();
     const deviceToken = randomToken(36);
     const companySlug = text(user.main_company_slug || enrollment.mainCompanySlug || "mecit-hakan");
@@ -918,6 +927,7 @@ export function registerAuthPushRoutes(app: any) {
     await audit(c, "SECURITY_APP_DEVICE_REGISTERED", user.id, user.id, companySlug, {
       deviceId: saved.id,
       deviceLabel: label,
+      relinkedDevice: Boolean(replaceCandidate),
       legacyDevicesRetired: true,
     });
 
