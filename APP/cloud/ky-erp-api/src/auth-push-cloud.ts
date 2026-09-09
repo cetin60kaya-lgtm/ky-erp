@@ -14,6 +14,8 @@ const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
 const SECURITY_ENROLL_SECONDS = 10 * 60;
 const SECURITY_APP_VERSION = "security-v1.2";
+const SECURITY_LOGIN_CODE_SECONDS = 60;
+const SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5;
 
 function text(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -92,6 +94,11 @@ function randomEnrollmentCode(length = 8) {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+function randomSixDigitCode() {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(bytes[0] % 1_000_000).padStart(6, "0");
 }
 function encodeJson(value: unknown) {
   return base64Url(new TextEncoder().encode(JSON.stringify(value)));
@@ -612,6 +619,51 @@ export async function resendPhoneApprovalChallenge(c: any, idValue: unknown, tok
   return { ok: sent > 0, code: sent > 0 ? "" : "PHONE_APPROVAL_DEVICE_OFFLINE", approval, sent };
 }
 
+export async function verifySecurityLoginCode(c: any, idValue: unknown, tokenValue: unknown, codeValue: unknown) {
+  const row = await phoneApprovalFromRequest(c, idValue, tokenValue);
+  if (!row) return { ok: false, code: "PHONE_APPROVAL_INVALID", row: null };
+  if (upper(row.status) !== "PENDING" || text(row.consumedAt)) return { ok: false, code: "PHONE_APPROVAL_NOT_PENDING", row };
+
+  const candidate = text(codeValue).replace(/\D/g, "");
+  const attempts = Number(row.securityCodeAttempts || 0);
+  if (!/^\d{6}$/.test(candidate)) return { ok: false, code: "SECURITY_LOGIN_CODE_INVALID", row };
+  if (!row.securityCodeHash || !row.securityCodeSalt || Date.parse(text(row.securityCodeExpiresAt)) <= Date.now()) {
+    return { ok: false, code: "SECURITY_LOGIN_CODE_EXPIRED", row };
+  }
+  if (attempts >= SECURITY_LOGIN_CODE_MAX_ATTEMPTS) return { ok: false, code: "SECURITY_LOGIN_CODE_LOCKED", row };
+
+  const valid = safeEqual(
+    text(row.securityCodeHash),
+    await sha256(`${text(row.securityCodeSalt)}:${candidate}`),
+  );
+  if (!valid) {
+    await storePut(c, PHONE_SCOPE, text(row.id), text(row.mainCompanySlug), {
+      ...row,
+      securityCodeAttempts: attempts + 1,
+    });
+    return {
+      ok: false,
+      code: attempts + 1 >= SECURITY_LOGIN_CODE_MAX_ATTEMPTS ? "SECURITY_LOGIN_CODE_LOCKED" : "SECURITY_LOGIN_CODE_INVALID",
+      row,
+      attempts: attempts + 1,
+    };
+  }
+
+  const update = await atomicPhoneUpdate(c, row, "PENDING", {
+    status: "APPROVED",
+    decidedAt: nowIso(),
+    decidedByDeviceId: text(row.securityCodeDeviceId),
+    securityCodeUsedAt: nowIso(),
+  });
+  if (!update.changed) return { ok: false, code: "PHONE_APPROVAL_NOT_PENDING", row: update.row || row };
+
+  await audit(c, "SECURITY_APP_LOGIN_CODE_VERIFIED", text(row.userId), text(row.userId), text(row.mainCompanySlug), {
+    challengeId: row.id,
+    deviceId: text(row.securityCodeDeviceId),
+  });
+  return { ok: true, code: "", row: update.row };
+}
+
 export async function consumePhoneApproval(c: any, idValue: unknown) {
   const row = await storeGet(c, PHONE_SCOPE, text(idValue));
   if (!row || upper(row.status) !== "APPROVED" || text(row.consumedAt)) return false;
@@ -1030,6 +1082,38 @@ export function registerAuthPushRoutes(app: any) {
     return c.json({ ok: true, data: saved });
   });
 
+  app.post("/api/auth/push/security-refresh", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon bağlantısını yenilemek için oturum gereklidir."), 401);
+    const devices = await activeDevicesForUser(c, text(current.id), "SELF");
+    if (!devices.length) return c.json(jsonError("SECURITY_APP_NOT_ENROLLED", "Aktif KY ERP Güvenlik cihazı bulunamadı."), 404);
+
+    const sent = await sendWakeMany(c, devices);
+    const currentDevices = (await storeList(c, DEVICE_SCOPE))
+      .filter((row: AnyRow) => text(row.userId) === text(current.id) && row.securityApp === true && row.isActive !== false)
+      .sort((a: AnyRow, b: AnyRow) => String(b.lastSeenAt || b.updatedAt || "").localeCompare(String(a.lastSeenAt || a.updatedAt || "")));
+
+    await audit(c, "SECURITY_APP_CONNECTION_PROBE", current.id, current.id, text(current.mainCompanySlug), {
+      devices: currentDevices.length,
+      delivered: sent,
+    });
+    return c.json({
+      ok: true,
+      data: {
+        connected: sent > 0,
+        delivered: sent,
+        checkedAt: nowIso(),
+        devices: currentDevices.map((row: AnyRow) => ({
+          id: row.id,
+          deviceLabel: friendlyDeviceLabel(row.deviceLabel, row.userAgent),
+          lastSeenAt: row.lastSeenAt || null,
+          lastPushAt: row.lastPushAt || null,
+          lastError: text(row.lastError),
+        })),
+      },
+    });
+  });
+
   app.get("/api/auth/push/device/health", async (c: any) => {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihaz bağlantısı doğrulanamadı. Bağlantıyı Yenile işlemini kullanın."), 401);
@@ -1093,6 +1177,51 @@ export function registerAuthPushRoutes(app: any) {
       securityAppVersion: SECURITY_APP_VERSION,
       refreshedAt: timestamp,
     }});
+  });
+
+  app.post("/api/auth/push/device/login-code", async (c: any) => {
+    const actor = await actorFromDevice(c);
+    if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihazı doğrulanamadı."), 401);
+
+    const rows = (await storeList(c, PHONE_SCOPE))
+      .filter((row: AnyRow) =>
+        text(row.userId) === actor.userId &&
+        upper(row.status) === "PENDING" &&
+        !text(row.consumedAt) &&
+        Date.parse(text(row.expiresAt)) > Date.now()
+      )
+      .sort((a: AnyRow, b: AnyRow) => String(b.requestedAt || "").localeCompare(String(a.requestedAt || "")));
+
+    const row = rows[0] || null;
+    if (!row) return c.json(jsonError("SECURITY_LOGIN_CODE_NO_REQUEST", "Kod üretmek için önce bilgisayarda KY ERP girişini başlatın."), 404);
+
+    const code = randomSixDigitCode();
+    const salt = randomToken(12);
+    const expiresAt = addSeconds(SECURITY_LOGIN_CODE_SECONDS);
+    await storePut(c, PHONE_SCOPE, text(row.id), text(row.mainCompanySlug), {
+      ...row,
+      securityCodeHash: await sha256(`${salt}:${code}`),
+      securityCodeSalt: salt,
+      securityCodeExpiresAt: expiresAt,
+      securityCodeAttempts: 0,
+      securityCodeDeviceId: actor.device.id,
+      securityCodeCreatedAt: nowIso(),
+    });
+    await audit(c, "SECURITY_APP_LOGIN_CODE_CREATED", actor.userId, actor.userId, actor.companySlug, {
+      challengeId: row.id,
+      deviceId: actor.device.id,
+      expiresAt,
+    });
+    return c.json({
+      ok: true,
+      data: {
+        challengeId: row.id,
+        code,
+        expiresAt,
+        validSeconds: SECURITY_LOGIN_CODE_SECONDS,
+        deviceLabel: friendlyDeviceLabel(row.deviceLabel, row.userAgent),
+      },
+    });
   });
 
   app.get("/api/auth/push/device/pending", async (c: any) => {

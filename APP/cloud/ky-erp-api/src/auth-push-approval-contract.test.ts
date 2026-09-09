@@ -168,3 +168,12 @@ test("phone approval can resend the same challenge without creating a second req
   assert.match(policy, /phone-approval\/:id\/resend/);
   assert.match(policy, /PHONE_APPROVAL_DEVICE_OFFLINE/);
 });
+
+
+test("KY Security short code stays tied to the same pending phone challenge", () => {
+  assert.match(push, /auth\/push\/device\/login-code/);
+  assert.match(policy, /phone-approval\/:id\/code/);
+  assert.match(policy, /SECURITY_LOGIN_CODE_EXPIRED/);
+  assert.match(authContext, /verifyPhoneApprovalCode/);
+  assert.match(login, /KY Güvenlik Giriş Kodu/);
+});

@@ -78,3 +78,6 @@
 .phone-approval-healthbar>div{display:flex;gap:7px}
 .phone-approval-healthbar button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:0 10px}
 @media(max-width:760px){.phone-approval-healthbar{align-items:stretch;flex-direction:column}.phone-approval-healthbar>div{display:grid;grid-template-columns:1fr 1fr}.phone-approval-healthbar button{min-height:46px!important}}
+
+.phone-approval-connection-actions{display:grid;grid-template-columns:1.35fr 1fr;gap:8px}.phone-approval-connection-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
+@media(max-width:760px){.phone-approval-connection-actions{grid-template-columns:1fr}}

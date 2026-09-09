@@ -9,6 +9,7 @@ import {
   phoneApprovalFromRequest,
   resendPhoneApprovalChallenge,
   startPhoneApprovalChallenge,
+  verifySecurityLoginCode,
 } from "./auth-push-cloud";
 
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
@@ -840,6 +841,28 @@ export function registerAuthPolicyRoutes(app: any) {
       userAgent: approval.userAgent,
       ipAddress: approval.ipAddress,
     }));
+  });
+
+  app.post("/api/auth/phone-approval/:id/code", async (c: any) => {
+    const body = await bodyOf(c);
+    const result = await verifySecurityLoginCode(c, c.req.param("id"), body.phoneApprovalToken, body.code);
+    if (result.ok) {
+      return c.json({
+        ok: true,
+        stage: "PHONE_APPROVAL_PENDING",
+        phoneApprovalId: text(c.req.param("id")),
+        phoneApprovalToken: text(body.phoneApprovalToken),
+        message: "KY ERP Güvenlik kodu doğrulandı. Oturum tamamlanıyor.",
+      });
+    }
+    const messages: Record<string,string> = {
+      SECURITY_LOGIN_CODE_INVALID: "KY ERP Güvenlik kodu hatalı.",
+      SECURITY_LOGIN_CODE_EXPIRED: "KY ERP Güvenlik kodunun süresi doldu. Telefonda yeni kod üretin.",
+      SECURITY_LOGIN_CODE_LOCKED: "Çok fazla hatalı kod denendi. Telefonda yeni giriş kodu üretin.",
+      PHONE_APPROVAL_NOT_PENDING: "Bu giriş isteği artık kod beklemiyor.",
+    };
+    const status = result.code === "PHONE_APPROVAL_INVALID" ? 401 : result.code === "PHONE_APPROVAL_NOT_PENDING" ? 409 : 400;
+    return c.json(jsonError(result.code || "SECURITY_LOGIN_CODE_INVALID", messages[result.code] || "KY ERP Güvenlik kodu doğrulanamadı."), status);
   });
 
   app.post("/api/auth/phone-approval/:id/resend", async (c: any) => {

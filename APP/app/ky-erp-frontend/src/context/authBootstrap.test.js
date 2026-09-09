@@ -22,9 +22,11 @@ test("F5 bootstrap reads the canonical persisted auth token before ERP render", 
 });
 
 
-test("owner bootstrap never restores a localStorage token after browser restart", () => {
+test("owner bootstrap stays desktop-session-only but mobile app can resume a bounded session", () => {
   assert.match(bootstrap, /ownerToken/);
   assert.match(bootstrap, /clearPersistentOwnerAuth/);
-  assert.match(bootstrap, /Owner browser restart sonrası kalıcı token kullanamaz/);
+  assert.match(bootstrap, /AUTH_MOBILE_OWNER_RESUME_KEY/);
+  assert.match(bootstrap, /mobileOwnerResumeAllowed/);
+  assert.match(bootstrap, /Masaüstünde owner browser restart sonrası kalıcı token kullanamaz/);
   assert.match(bootstrap, /sessionStorage\?\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
 });

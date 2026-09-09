@@ -84,6 +84,23 @@ export default function PhoneApprovalSetup({ onClose }) {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function refreshSecurityConnection() {
+    if (busy || !securityDevices.length) return;
+    setBusy(true);
+    try {
+      const response = await apiPost("/auth/push/security-refresh", {});
+      const data = response?.data || response;
+      setMessage(data?.connected
+        ? `Telefon bağlantısı doğrulandı. ${Number(data?.delivered || 0)} güvenilir cihaza erişildi.`
+        : "Güvenilir cihaz kayıtlı; bildirim erişimi doğrulanamadı. Telefonda KY ERP Güvenlik → Cihaz bölümünden Bağlantıyı Yenile seçin.");
+      await load();
+    } catch (error) {
+      setMessage(`Hata: ${error?.message || "Telefon bağlantısı yenilenemedi."}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function disableDevice(row) {
     if (!row?.id || busy) return;
     setBusy(true);
@@ -179,6 +196,14 @@ export default function PhoneApprovalSetup({ onClose }) {
               </div>
               <ShieldCheck size={22}/>
             </div>
+
+            <div className="phone-approval-connection-actions">
+              <button type="button" className="phone-approval-primary" onClick={refreshSecurityConnection} disabled={busy || !securityDevices.length}>
+                <RefreshCw size={16}/>{busy ? "Kontrol ediliyor..." : "Telefon Bağlantısını Yenile"}
+              </button>
+              <button type="button" onClick={load} disabled={busy}>Durumu Yenile</button>
+            </div>
+            <small className="phone-approval-help">Güvenilir cihaz kaydı silinmeden KY ERP ↔ Güvenlik uygulaması push yolu tekrar kontrol edilir.</small>
 
             <div className="phone-approval-device-list">
               {devices.map((row) => (

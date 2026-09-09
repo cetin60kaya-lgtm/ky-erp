@@ -44,11 +44,20 @@ test("normal sessions refresh silently while owner automatic refresh is disabled
   assert.doesNotMatch(source, /OWNER_ROLLING_REFRESH_BEFORE_MS/);
 });
 
-test("normal users persist across browser restart while owner auth stays session-only", () => {
+test("normal users persist while owner stays desktop-session-only and mobile app gets bounded resume", () => {
   assert.match(source, /window\.localStorage\.setItem\(AUTH_TOKEN_KEY/);
   assert.match(source, /window\.sessionStorage\.setItem\(AUTH_TOKEN_KEY/);
   assert.match(source, /isOwnerAuthPair/);
   assert.match(source, /clearPersistentAuth\(\)/);
-  assert.match(source, /Owner kimliği browser restart sonrasında otomatik geri yüklenmez/);
+  assert.match(source, /AUTH_MOBILE_OWNER_RESUME_KEY/);
+  assert.match(source, /isMobileAppRuntime/);
+  assert.match(source, /storeMobileOwnerResume/);
   assert.match(source, /payload\.exp/);
+});
+
+
+test("mobile app revalidates an existing session when returning from background instead of dropping login", () => {
+  assert.match(source, /visibilitychange/);
+  assert.match(source, /revalidateOnResume/);
+  assert.match(source, /directAuthRequest\("\/auth\/me"/);
 });

@@ -56,3 +56,13 @@ test("access refresh reuses the same security device id instead of creating dupl
   assert.match(push,/relinkedDevice: Boolean\(replaceCandidate\)/);
   assert.match(push,/SECURITY_APP_VERSION = "security-v1\.2"/);
 });
+
+
+test("security app creates a one-minute challenge-bound login code with attempt limiting",()=>{
+  assert.match(push,/SECURITY_LOGIN_CODE_SECONDS = 60/);
+  assert.match(push,/SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5/);
+  assert.match(push,/\/api\/auth\/push\/device\/login-code/);
+  assert.match(push,/SECURITY_APP_LOGIN_CODE_CREATED/);
+  assert.match(push,/verifySecurityLoginCode/);
+  assert.match(push,/SECURITY_APP_LOGIN_CODE_VERIFIED/);
+});

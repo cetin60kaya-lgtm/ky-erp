@@ -126,6 +126,7 @@ export default function LoginPage() {
     verifyOwnerRecovery,
     checkApproval,
     checkPhoneApproval,
+    verifyPhoneApprovalCode,
     resendPhoneApproval,
     useAuthenticatorFallback,
   } = useAuth();
@@ -139,6 +140,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [phoneStatusMessage, setPhoneStatusMessage] = useState("");
+  const [phoneSecurityCode, setPhoneSecurityCode] = useState("");
   const [qrError, setQrError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -384,6 +386,28 @@ export default function LoginPage() {
       setError(requestError?.message || "Telefon onayı durumu kontrol edilemedi.");
     } finally {
       state.busy = false;
+    }
+  }
+
+  async function submitPhoneSecurityCode(event) {
+    event?.preventDefault?.();
+    if (!/^\d{6}$/.test(phoneSecurityCode) || loading) return;
+    try {
+      setLoading(true);
+      setError("");
+      const response = await verifyPhoneApprovalCode({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+        code: phoneSecurityCode,
+      });
+      setPhoneStatusMessage(response?.message || "KY ERP Güvenlik kodu doğrulandı.");
+      setPhoneSecurityCode("");
+      phoneApprovalCheckRef.current.settled = false;
+      window.setTimeout(() => refreshPhoneApproval(), 250);
+    } catch (requestError) {
+      setError(requestError?.message || "KY ERP Güvenlik kodu doğrulanamadı.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -647,11 +671,27 @@ export default function LoginPage() {
                   <strong>Güvenli bekleme</strong>
                   <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>
                 </div>
+                <form className="auth-security-code-box" onSubmit={submitPhoneSecurityCode}>
+                  <div>
+                    <strong>KY Güvenlik Giriş Kodu</strong>
+                    <span>Telefondaki KY ERP Güvenlik → Giriş Kodu bölümünden 6 haneli kısa süreli kod üretin.</span>
+                  </div>
+                  <input
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={phoneSecurityCode}
+                    onChange={(event) => setPhoneSecurityCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    aria-label="KY Güvenlik giriş kodu"
+                  />
+                  <button type="submit" disabled={loading || phoneSecurityCode.length !== 6}>Kodu Kullan</button>
+                </form>
                 {phoneStatusMessage ? <div className="auth-notice"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
                 <ErrorBox message={error} />
                 <button className="auth-primary" type="button" onClick={refreshPhoneApproval} disabled={loading}>Onayı Şimdi Kontrol Et</button>
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
-                <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>6 haneli kod ile devam et</button>
+                <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>Google/Microsoft Authenticator ile devam et</button>
                 <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
             ) : null}

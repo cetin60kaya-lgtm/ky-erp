@@ -9,7 +9,9 @@ const AUTH_DEVICE_KEY = "kyerp_auth_device_v1";
 const AUTH_REFRESH_PENDING_KEY = "kyerp_auth_refresh_pending_v1";
 const AUTH_REFRESH_LOCK_KEY = "kyerp_auth_refresh_lock_v1";
 const AUTH_TAB_KEY = "kyerp_auth_tab_v1";
+const AUTH_MOBILE_OWNER_RESUME_KEY = "kyerp_owner_mobile_resume_v1";
 const AUTH_VERSION = "canonical-v3";
+const MOBILE_OWNER_RESUME_MS = 12 * 60 * 60 * 1000;
 const NORMAL_REFRESH_BEFORE_MS = 30 * 60 * 1000;
 const REFRESH_RETRY_MS = 60 * 1000;
 const REFRESH_LOCK_MS = 30 * 1000;
@@ -117,6 +119,33 @@ function isSuperAdmin(role) {
 function isOwnerAuthPair(token, user) {
   const tokenRole = parseJwtPayload(token)?.role;
   return isSuperAdmin(tokenRole) || isSuperAdmin(user?.role);
+}
+
+function isMobileAppRuntime() {
+  try {
+    const ua = String(window.navigator?.userAgent || "");
+    const standalone = Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone === true);
+    return standalone || /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  } catch { return false; }
+}
+
+function mobileOwnerResumeAllowed(token = "") {
+  if (!isMobileAppRuntime()) return false;
+  try {
+    const row = JSON.parse(window.localStorage.getItem(AUTH_MOBILE_OWNER_RESUME_KEY) || "null");
+    const tokenExp = Number(parseJwtPayload(token)?.exp || 0) * 1000;
+    return Boolean(row?.enabled) && Number(row.expiresAt || 0) > Date.now() && tokenExp > Date.now() + 5000;
+  } catch { return false; }
+}
+
+function storeMobileOwnerResume(token) {
+  if (!isMobileAppRuntime()) return false;
+  try {
+    const tokenExp = Number(parseJwtPayload(token)?.exp || 0) * 1000;
+    const expiresAt = Math.min(tokenExp || (Date.now() + MOBILE_OWNER_RESUME_MS), Date.now() + MOBILE_OWNER_RESUME_MS);
+    window.localStorage.setItem(AUTH_MOBILE_OWNER_RESUME_KEY, JSON.stringify({ enabled: true, expiresAt, updatedAt: Date.now() }));
+    return true;
+  } catch { return false; }
 }
 
 function sessionRefreshDelay(token, role) {
@@ -238,6 +267,7 @@ function clearPersistentAuth() {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
     window.localStorage.removeItem(AUTH_USER_KEY);
     window.localStorage.removeItem(AUTH_REFRESH_LOCK_KEY);
+    window.localStorage.removeItem(AUTH_MOBILE_OWNER_RESUME_KEY);
   } catch { /* noop */ }
 }
 
@@ -303,9 +333,11 @@ function readStoredAuth() {
     const persistentToken = String(window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
     const persistentUser = parseStoredUser(window.localStorage.getItem(AUTH_USER_KEY));
     if (persistentToken && persistentUser && isOwnerAuthPair(persistentToken, persistentUser)) {
-      // Önceki sürümlerin kalıcı owner tokenı yeni güvenlik politikasında geçerli
-      // bir browser-restore kaynağı değildir. Sunucu sessionı burada silinmez;
-      // yalnız istemci kalıcı oturumu bırakır ve yeniden giriş ister.
+      if (mobileOwnerResumeAllowed(persistentToken) && isTokenUsable(persistentToken)) {
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY, persistentToken);
+        window.sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(persistentUser));
+        return authSnapshot(persistentToken, persistentUser);
+      }
       clearPersistentAuth();
       clearPendingRefresh();
       return { token: "", user: null, permissions: [] };
@@ -368,9 +400,13 @@ export function AuthProvider({ children }) {
     const ownerSession = isOwnerAuthPair(payload.token, payload.user);
     try {
       if (ownerSession) {
-        // Owner kimliği browser restart sonrasında otomatik geri yüklenmez.
-        // F5 / aynı aktif sekme sessionStorage sayesinde çalışmaya devam eder.
-        clearPersistentAuth();
+        if (isMobileAppRuntime() && storeMobileOwnerResume(payload.token)) {
+          // Mobil/PWA owner oturumu arka plana atılınca WebView yeniden oluşsa da token süresi içinde devam eder.
+          window.localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
+          window.localStorage.setItem(AUTH_USER_KEY, storedUser);
+        } else {
+          clearPersistentAuth();
+        }
         clearPendingRefresh();
       } else {
         window.localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
@@ -581,6 +617,37 @@ export function AuthProvider({ children }) {
   }, [refreshSession, token, user]);
 
   useEffect(() => {
+    if (!token || !user || !isMobileAppRuntime()) return undefined;
+    let hiddenAt = 0;
+    let checking = false;
+    const revalidateOnResume = async () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (!hiddenAt || Date.now() - hiddenAt < 1000 || checking) return;
+      checking = true;
+      try {
+        const response = await directAuthRequest("/auth/me", { method: "GET", token: tokenRef.current, timeoutMs: 12000 });
+        if (response?.user && tokenRef.current) saveAuth(tokenRef.current, response.user, response.user?.permissions || permissions);
+      } catch (error) {
+        const status = Number(error?.status || 0);
+        const code = String(error?.code || "");
+        if (shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) clearAuth();
+      } finally {
+        hiddenAt = 0;
+        checking = false;
+      }
+    };
+    document.addEventListener("visibilitychange", revalidateOnResume);
+    window.addEventListener("pageshow", revalidateOnResume);
+    return () => {
+      document.removeEventListener("visibilitychange", revalidateOnResume);
+      window.removeEventListener("pageshow", revalidateOnResume);
+    };
+  }, [clearAuth, permissions, saveAuth, token, user]);
+
+  useEffect(() => {
     const syncFromStorage = (event) => {
       if (![AUTH_TOKEN_KEY, AUTH_USER_KEY].includes(String(event.key || ""))) return;
       if (isSuperAdmin(authSnapshotRef.current.user?.role)) return;
@@ -639,6 +706,12 @@ export function AuthProvider({ children }) {
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
+  const verifyPhoneApprovalCode = useCallback(async ({ phoneApprovalId, phoneApprovalToken, code }) =>
+    runAuthOnce(`PHONE-CODE:${phoneApprovalId}`, () => directAuthRequest(`/auth/phone-approval/${phoneApprovalId}/code`, {
+      body: { phoneApprovalToken, code },
+      timeoutMs: 12000,
+    })), [runAuthOnce]);
+
   const resendPhoneApproval = useCallback(async ({ phoneApprovalId, phoneApprovalToken }) =>
     runAuthOnce(`PHONE-RESEND:${phoneApprovalId}`, () => directAuthRequest(`/auth/phone-approval/${phoneApprovalId}/resend`, {
       body: { phoneApprovalToken },
@@ -676,10 +749,10 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa,
-    startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, resendPhoneApproval, useAuthenticatorFallback,
+    startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, verifyPhoneApprovalCode, resendPhoneApproval, useAuthenticatorFallback,
     logout, hasModule, can,
     isAuthenticated: Boolean(token && user), loading,
-  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, resendPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
+  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, verifyPhoneApprovalCode, resendPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
