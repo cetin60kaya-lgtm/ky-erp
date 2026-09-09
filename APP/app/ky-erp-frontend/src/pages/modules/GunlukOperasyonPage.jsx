@@ -413,7 +413,7 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
   );
 
   const changeWeek = useCallback((amount) => {
-    const nextWeekStart = addDays(selectedWeekStart, amount * 7);
+    const nextWeekStart = amount === 0 ? startOfWeek(today) : addDays(selectedWeekStart, amount * 7);
     const nextDay = amount === 0 ? today : nextWeekStart;
     setSelectedWeekStart(nextWeekStart);
     setSelectedDay(nextDay);
@@ -478,7 +478,7 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
       <section className="gop-quick" aria-label="Günlük Operasyon hızlı işlemleri">
         <button type="button" onClick={() => openOperationTab("gunluk-giris")}>
           <ClipboardList size={18} />
-          <span><strong>Günlük Giriş</strong><small>{shortDate(selectedDay)} kaydını aç</small></span>
+          <span><strong>Günlük Giriş</strong><small>Gündüz / gece giriş ekranını aç</small></span>
           <ChevronRight size={16} />
         </button>
         <button type="button" onClick={() => openOperationTab("personel-kartlari")}>
