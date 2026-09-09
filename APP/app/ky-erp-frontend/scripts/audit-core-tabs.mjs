@@ -39,6 +39,9 @@ const expected = {
     "ozet", "personel-kartlari", "ucret-odeme-plani",
     "mesai-avans", "bordro-odeme", "sgk-evrak-kontrol",
   ],
+  "gunluk-operasyon": [
+    "ana-ekran", "gunluk-giris", "personel-kartlari", "haftalik-ozet", "odeme-fisleri",
+  ],
 };
 
 for (const [moduleKey, expectedTabs] of Object.entries(expected)) {
@@ -91,6 +94,24 @@ for (const [tab, component] of Object.entries(isnetComponents)) {
 requireCheck(
   appV3.includes('activeTab === "irsaliyeden-faturaya"') && appV3.includes("IsnetPreparedInvoicePage"),
   "İşNet/fatura önizleme: gizli güvenli rota bağlı",
+);
+
+const dailyOperationsPage = read("src/pages/modules/GunlukOperasyonPage.jsx");
+requireCheck(
+  appV3.includes('activeModule?.key === "gunluk-operasyon"') &&
+  appV3.includes("GunlukOperasyonPage") &&
+  dailyOperationsPage.includes("Operasyon Ana Ekranı"),
+  "Günlük Operasyon: bağımsız modül ve ana ekran bağlı",
+);
+requireCheck(
+  dailyOperationsPage.includes("dailyOnly") &&
+  dailyOperationsPage.includes("Gün Gün Operasyon") &&
+  dailyOperationsPage.includes("Haftalık Operasyon"),
+  "Günlük Operasyon: günlük veri akışı İK aylık yüklerinden ayrılmış",
+);
+requireCheck(
+  !expected.ik.some((tab) => ["gunluk-personel", "gunluk-personel-kartlari", "gunluk-odeme-fisleri"].includes(tab)),
+  "İK: günlük operasyon sekmeleri görünür İK menüsünden ayrılmış",
 );
 
 const ikCombined = [appV3, ikPersonnelFinance, ikFinance, ikAdvanced, main].join("\n");
