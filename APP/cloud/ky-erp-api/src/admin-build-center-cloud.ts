@@ -10,6 +10,8 @@ const AGENT_PREFIX = ROOT + "agents/";
 const HEARTBEAT_PREFIX = ROOT + "status/agents/";
 const MAX_JOBS = 100;
 const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+const HEARTBEAT_STALE_MS = 45 * 1000;
+const ACTIVE_JOB_STATUSES = new Set(["QUEUED","CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING"]);
 
 const text = (v: unknown) => v == null ? "" : String(v).trim();
 const upper = (v: unknown) => text(v).toUpperCase().replace(/İ/g, "I");
@@ -189,12 +191,16 @@ export function registerAdminBuildCenterRoutes(app:any) {
       listJobObjects(c.env.FILES),
     ]);
     const activeAgents=agents.filter((row)=>row?.active!==false);
-    const heartbeat=heartbeats.sort((a,b)=>text(b.lastSeenAt).localeCompare(text(a.lastSeenAt)))[0]||null;
+    const lastHeartbeat=heartbeats.sort((a,b)=>text(b.lastSeenAt).localeCompare(text(a.lastSeenAt)))[0]||null;
+    const heartbeatAgeMs=lastHeartbeat?.lastSeenAt ? Date.now()-Date.parse(text(lastHeartbeat.lastSeenAt)) : Number.POSITIVE_INFINITY;
+    const heartbeat=Number.isFinite(heartbeatAgeMs)&&heartbeatAgeMs<=HEARTBEAT_STALE_MS ? lastHeartbeat : null;
     return c.json({ok:true,data:{
       agentConfigured:activeAgents.length>0,
       agentCount:activeAgents.length,
       agents:activeAgents.map((row)=>({agentId:row.agentId,agentName:row.agentName,createdAt:row.createdAt,lastEnrolledAt:row.lastEnrolledAt,active:row.active!==false})),
       heartbeat,
+      lastHeartbeat,
+      heartbeatStaleMs:HEARTBEAT_STALE_MS,
       jobs:jobs.slice(0,MAX_JOBS),
       storage:"R2:FILES/build-center",
     }});
@@ -263,6 +269,13 @@ export function registerAdminBuildCenterRoutes(app:any) {
     if (!/^\d+\.\d+\.\d+$/.test(version)) return c.json(errorBody("BUILD_VERSION_INVALID","Sürüm x.y.z biçiminde olmalıdır."),400);
     const branch = text(body.branch || "codex/pdks-desktop-1.8.1-device-final-20260907");
     if (!/^[a-zA-Z0-9._\/-]{3,180}$/.test(branch) || branch.includes("..")) return c.json(errorBody("BUILD_BRANCH_INVALID","Branch adı geçersiz."),400);
+    const duplicate=(await listJobObjects(c.env.FILES)).find((row)=>
+      ACTIVE_JOB_STATUSES.has(upper(row.status)) &&
+      upper(row.product)===upper(product) &&
+      text(row.version)===version &&
+      text(row.branch)===branch
+    );
+    if(duplicate)return c.json(errorBody("BUILD_ALREADY_ACTIVE","Aynı ürün, sürüm ve branch için aktif build zaten var."),409);
     const id = crypto.randomUUID();
     const spec = buildSpec(product,version,branch);
     const job = {

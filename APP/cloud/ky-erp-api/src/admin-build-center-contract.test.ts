@@ -43,6 +43,19 @@ test("large Setup upload uses R2 multipart chunks and verifies declared size", (
   assert.match(source, /expectedArtifactSha256/);
 });
 
+test("queued builds are active and duplicate requests are rejected server-side", () => {
+  assert.match(source, /ACTIVE_JOB_STATUSES = new Set\(\["QUEUED","CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING"\]\)/);
+  assert.match(source, /BUILD_ALREADY_ACTIVE/);
+  assert.match(source, /ACTIVE_JOB_STATUSES\.has\(upper\(row\.status\)\)/);
+});
+
+test("heartbeat is considered connected only while fresh and last timestamp stays available for diagnostics", () => {
+  assert.match(source, /HEARTBEAT_STALE_MS = 45 \* 1000/);
+  assert.match(source, /heartbeatAgeMs/);
+  assert.match(source, /lastHeartbeat/);
+  assert.match(source, /heartbeatStaleMs:HEARTBEAT_STALE_MS/);
+});
+
 test("build agent routes bypass user session only behind enrollment or agent secret", () => {
   assert.match(main, /path\.startsWith\("\/api\/build-agent\/"\)/);
   assert.match(main, /registerAdminBuildCenterRoutes/);

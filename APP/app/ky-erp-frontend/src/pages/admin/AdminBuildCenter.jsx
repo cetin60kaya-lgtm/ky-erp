@@ -51,7 +51,7 @@ export default function AdminBuildCenter() {
   },[]);
   useEffect(()=>{load();const id=window.setInterval(load,10000);return()=>window.clearInterval(id)},[load]);
 
-  const running=useMemo(()=>state.jobs?.find(row=>["CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING"].includes(String(row.status).toUpperCase())),[state.jobs]);
+  const running=useMemo(()=>state.jobs?.find(row=>["QUEUED","CLAIMED","BUILDING","TESTING","PACKAGING","UPLOADING"].includes(String(row.status).toUpperCase())),[state.jobs]);
   const latestReady=useMemo(()=>state.jobs?.find(row=>String(row.status).toUpperCase()==="SUCCESS"),[state.jobs]);
 
   const makeEnrollment=async()=>{
