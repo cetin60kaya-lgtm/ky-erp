@@ -265,7 +265,7 @@ function DailyOperationsOverview({ activeMainCompany }) {
 
 export default function GunlukOperasyonPage({ activeTab = "ana-ekran", activeMainCompany }) {
   if (activeTab !== "ana-ekran") {
-    return <IkPage activeTab={SUBVIEW_MAP[activeTab] || "gunluk-personel"} activeMainCompany={activeMainCompany} />;
+    return <IkPage activeTab={SUBVIEW_MAP[activeTab] || "gunluk-personel"} activeMainCompany={activeMainCompany} dailyOnly />;
   }
   return <DailyOperationsOverview activeMainCompany={activeMainCompany} />;
 }
