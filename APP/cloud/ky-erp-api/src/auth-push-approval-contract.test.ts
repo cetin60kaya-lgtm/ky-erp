@@ -161,3 +161,10 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(login, /phoneApprovalCheckRef/);
   assert.match(login, /state\.busy \|\| state\.settled/);
 });
+
+
+test("phone approval can resend the same challenge without creating a second request", () => {
+  assert.match(push, /resendPhoneApprovalChallenge/);
+  assert.match(policy, /phone-approval\/:id\/resend/);
+  assert.match(policy, /PHONE_APPROVAL_DEVICE_OFFLINE/);
+});

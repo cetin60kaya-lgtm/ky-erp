@@ -36,3 +36,13 @@ test("security device token drift self-heals only with a fresh signed device-aut
   assert.match(push,/SECURITY_DEVICE_TOKEN_REPAIRED/);
   assert.match(push,/deviceTokenHash: suppliedHash/);
 });
+
+
+test("security app health and signed connection refresh can recover an inactive push channel",()=>{
+  assert.match(push,/auth\/push\/device\/health/);
+  assert.match(push,/auth\/push\/device\/refresh/);
+  assert.match(push,/signedSecurityActorForRecovery/);
+  assert.match(push,/SECURITY_APP_CONNECTION_REFRESHED/);
+  assert.match(push,/PUSH_DEVICE_RECOVERY_UNAUTHORIZED/);
+  assert.match(push,/lastRefreshAt/);
+});

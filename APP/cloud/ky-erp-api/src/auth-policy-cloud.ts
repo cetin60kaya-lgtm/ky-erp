@@ -7,6 +7,7 @@ import {
   consumePhoneApproval,
   notifyManagerApproval,
   phoneApprovalFromRequest,
+  resendPhoneApprovalChallenge,
   startPhoneApprovalChallenge,
 } from "./auth-push-cloud";
 
@@ -839,6 +840,23 @@ export function registerAuthPolicyRoutes(app: any) {
       userAgent: approval.userAgent,
       ipAddress: approval.ipAddress,
     }));
+  });
+
+  app.post("/api/auth/phone-approval/:id/resend", async (c: any) => {
+    const body = await bodyOf(c);
+    const result = await resendPhoneApprovalChallenge(c, c.req.param("id"), body.phoneApprovalToken);
+    if (!result.approval) return c.json(jsonError("PHONE_APPROVAL_INVALID", "Telefon giriş onayı bulunamadı."), 401);
+    if (result.code === "PHONE_APPROVAL_NOT_PENDING") return c.json(jsonError("PHONE_APPROVAL_NOT_PENDING", "Bu giriş isteği artık bildirim beklemiyor. Durumu tekrar kontrol edin."), 409);
+    if (!result.ok) return c.json(jsonError("PHONE_APPROVAL_DEVICE_OFFLINE", "KY ERP Güvenlik uygulamasına bildirim ulaştırılamadı. Telefonda Bağlantıyı Yenile işlemini çalıştırın."), 409);
+    return c.json({
+      ok: true,
+      stage: "PHONE_APPROVAL_PENDING",
+      phoneApprovalId: result.approval.id,
+      phoneApprovalToken: text(body.phoneApprovalToken),
+      phoneApprovalExpiresAt: result.approval.expiresAt,
+      notifiedDevices: result.sent,
+      message: "Giriş bildirimi aynı onay isteği üzerinden yeniden gönderildi.",
+    });
   });
 
   app.post("/api/auth/phone-approval/:id/fallback", async (c: any) => {
