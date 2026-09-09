@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, ExternalLink, RefreshCw, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "../../utils/api";
 import "./phone-approval-setup.css";
 
@@ -22,12 +22,21 @@ export default function PhoneApprovalSetup({ onClose }) {
     () => devices.filter((row) => row.isActive && row.securityApp),
     [devices],
   );
+  const securityHasError = useMemo(
+    () => securityDevices.some((row) => Boolean(row.lastError)),
+    [securityDevices],
+  );
 
   const load = useCallback(async () => {
     try {
       const result = await apiGet("/auth/push/config", { _ts: Date.now() });
-      setConfig(result?.data || result);
-      setMessage("KY ERP Güvenlik durumu hazır.");
+      const data = result?.data || result;
+      setConfig(data);
+      const active = rowsOf(data).filter((row) => row.isActive && row.securityApp);
+      const hasError = active.some((row) => Boolean(row.lastError));
+      setMessage(active.length
+        ? (hasError ? "KY ERP Güvenlik kayıtlı; bağlantı uyarısı var. Telefonda Bağlantıyı Yenile işlemini kullanın." : "KY ERP Güvenlik kayıtlı ve sunucuda aktif.")
+        : "Henüz aktif KY ERP Güvenlik cihazı yok. Telefon veya tablet bağlantısını kurun.");
     } catch (error) {
       setConfig(null);
       setMessage(`Hata: ${error?.message || "Güvenlik cihazları alınamadı."}`);
@@ -44,7 +53,9 @@ export default function PhoneApprovalSetup({ onClose }) {
       const response = await apiPost("/auth/push/security-enrollment/start", {});
       const data = response?.data || response;
       setEnrollment(data);
-      setMessage("10 dakika geçerli kurulum kodu oluşturuldu. Telefon veya tablette KY ERP Güvenlik uygulamasını açıp bu kodu girin.");
+      setMessage(securityDevices.length
+        ? "10 dakika geçerli Erişim Yenileme Kodu oluşturuldu. Telefonda KY ERP Güvenlik → Erişimi Yeniden Bağla bölümüne girin."
+        : "10 dakika geçerli kurulum kodu oluşturuldu. Telefon veya tablette KY ERP Güvenlik uygulamasını açıp bu kodu girin.");
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Kurulum kodu oluşturulamadı."}`);
     } finally {
@@ -110,8 +121,8 @@ export default function PhoneApprovalSetup({ onClose }) {
           <section className="phone-approval-card phone-approval-app-hero">
             <div className="phone-approval-card-head">
               <div>
-                <h3>Güvenlik uygulamasını kur</h3>
-                <p>Telefon onayı artık ana ERP ekranından değil bu ayrı uygulamadan verilir.</p>
+                <h3>{securityDevices.length ? "Güvenlik uygulaması erişimi" : "Güvenlik uygulamasını kur"}</h3>
+                <p>{securityDevices.length ? "Bağlantı koparsa erişim yenileme koduyla aynı telefonu güvenli şekilde yeniden bağlayabilirsiniz." : "Telefon onayı artık ana ERP ekranından değil bu ayrı uygulamadan verilir."}</p>
               </div>
               <Smartphone size={24}/>
             </div>
@@ -125,7 +136,7 @@ export default function PhoneApprovalSetup({ onClose }) {
 
             {!enrollment ? (
               <button type="button" className="phone-approval-primary" onClick={createEnrollment} disabled={busy}>
-                <ShieldCheck size={17}/>{busy ? "Hazırlanıyor..." : "Yeni Kurulum Kodu Oluştur"}
+                <ShieldCheck size={17}/>{busy ? "Hazırlanıyor..." : securityDevices.length ? "Erişim Yenileme Kodu Oluştur" : "Yeni Kurulum Kodu Oluştur"}
               </button>
             ) : (
               <div className="phone-approval-enrollment">
@@ -151,6 +162,16 @@ export default function PhoneApprovalSetup({ onClose }) {
           </section>
 
           <section className="phone-approval-card">
+            <div className="phone-approval-healthbar">
+              <span className={securityDevices.length && !securityHasError ? "ok" : securityDevices.length ? "warn" : "off"}>
+                {securityDevices.length && !securityHasError ? <CheckCircle2 size={16}/> : <AlertTriangle size={16}/>}
+                {securityDevices.length && !securityHasError ? "Bağlantı kayıtlı" : securityDevices.length ? "Bağlantı kontrolü gerekli" : "Cihaz bağlı değil"}
+              </span>
+              <div>
+                <button type="button" onClick={load} disabled={busy}><RefreshCw size={15}/> Durumu Yenile</button>
+                <button type="button" onClick={openSecurityApp}><ExternalLink size={15}/> KY Güvenlik Aç</button>
+              </div>
+            </div>
             <div className="phone-approval-card-head">
               <div>
                 <h3>Güvenilir telefon ve tabletler</h3>
@@ -168,7 +189,9 @@ export default function PhoneApprovalSetup({ onClose }) {
                       {row.securityApp ? "KY ERP Güvenlik" : "Eski web onayı"} · {row.isActive ? "Aktif" : "Pasif"}
                       {row.securityAppVersion ? ` · ${row.securityAppVersion}` : ""}
                     </span>
-                    <small>Son kullanım: {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small>
+                    <small>Son bağlantı: {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small>
+                    <small>Son bildirim: {row.lastPushAt ? new Date(row.lastPushAt).toLocaleString("tr-TR") : "Henüz yok"}</small>
+                    {row.lastRefreshAt ? <small>Son erişim yenileme: {new Date(row.lastRefreshAt).toLocaleString("tr-TR")}</small> : null}
                     {row.retiredReason ? <small>{row.retiredReason}</small> : null}
                     {row.lastError ? <small className="phone-approval-device-error">{row.lastError}</small> : null}
                   </div>

@@ -69,3 +69,12 @@
   .phone-approval-enrollment>strong{font-size:28px}
   .phone-approval-app-actions{grid-template-columns:1fr}
 }
+
+
+/* KY ERP Güvenlik bağlantı sağlığı ve erişim yenileme */
+.phone-approval-healthbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid #dce7f2;border-radius:11px;background:#f8fbff}
+.phone-approval-healthbar>span{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800}
+.phone-approval-healthbar>span.ok{color:#247447}.phone-approval-healthbar>span.warn{color:#96681d}.phone-approval-healthbar>span.off{color:#7a8794}
+.phone-approval-healthbar>div{display:flex;gap:7px}
+.phone-approval-healthbar button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px!important;padding:0 10px}
+@media(max-width:760px){.phone-approval-healthbar{align-items:stretch;flex-direction:column}.phone-approval-healthbar>div{display:grid;grid-template-columns:1fr 1fr}.phone-approval-healthbar button{min-height:46px!important}}

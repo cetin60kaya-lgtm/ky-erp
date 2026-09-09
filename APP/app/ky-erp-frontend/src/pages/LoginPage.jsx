@@ -126,6 +126,7 @@ export default function LoginPage() {
     verifyOwnerRecovery,
     checkApproval,
     checkPhoneApproval,
+    resendPhoneApproval,
     useAuthenticatorFallback,
   } = useAuth();
 
@@ -137,6 +138,7 @@ export default function LoginPage() {
   const [flow, setFlow] = useState({ stage: "CREDENTIALS" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [phoneStatusMessage, setPhoneStatusMessage] = useState("");
   const [qrError, setQrError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -385,6 +387,24 @@ export default function LoginPage() {
     }
   }
 
+  async function resendPhoneApprovalNotification() {
+    if (!flow.phoneApprovalId || !flow.phoneApprovalToken || loading) return;
+    try {
+      setLoading(true);
+      setError("");
+      setPhoneStatusMessage("");
+      const response = await resendPhoneApproval({
+        phoneApprovalId: flow.phoneApprovalId,
+        phoneApprovalToken: flow.phoneApprovalToken,
+      });
+      setPhoneStatusMessage(response?.message || "Giriş bildirimi KY ERP Güvenlik uygulamasına yeniden gönderildi.");
+    } catch (requestError) {
+      setError(requestError?.message || "Telefon bildirimi yeniden gönderilemedi. KY ERP Güvenlik uygulamasında Bağlantıyı Yenile işlemini kullanın.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function switchToAuthenticator() {
     if (!flow.phoneApprovalId || !flow.phoneApprovalToken) return;
     try {
@@ -627,8 +647,10 @@ export default function LoginPage() {
                   <strong>Güvenli bekleme</strong>
                   <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>
                 </div>
+                {phoneStatusMessage ? <div className="auth-notice"><strong>Telefon bağlantısı</strong><span>{phoneStatusMessage}</span></div> : null}
                 <ErrorBox message={error} />
                 <button className="auth-primary" type="button" onClick={refreshPhoneApproval} disabled={loading}>Onayı Şimdi Kontrol Et</button>
+                <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
                 <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>6 haneli kod ile devam et</button>
                 <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
