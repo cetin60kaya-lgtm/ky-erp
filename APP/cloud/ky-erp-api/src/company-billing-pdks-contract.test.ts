@@ -32,6 +32,6 @@ test("PDKS audit account remains monthly-SGK + card filtered and read-only",()=>
 
 test("company billing workspace is reachable from Yönetim",()=>{assert.match(registry,/firma-ucretlendirme/);assert.match(registry,/Firma Paket \/ Kullanım/);assert.match(adminPage,/AdminCompanyBilling/);assert.match(adminPage,/activeTab === "firma-ucretlendirme"/);assert.match(adminPage,/owner \? <AdminCompanyBilling/)});
 
-test("owner-only admin workspaces stay hidden and direct routes guarded",()=>{assert.match(shell,/OWNER_ONLY_ADMIN_TABS = new Set\(\["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler"\]\)/);assert.match(shell,/return isOwnerUser\(user\)/);assert.match(adminPage,/activeTab === "uygulama-sahibi"/);assert.match(adminPage,/owner \? <AdminOwnerSecurity \/>/)});
+test("owner-only admin workspaces stay hidden and direct routes guarded",()=>{for(const tab of ["uygulama-sahibi","firma-ucretlendirme","eslestirmeler","surum-merkezi"])assert.match(shell,new RegExp(`OWNER_ONLY_ADMIN_TABS[^\\n]+${tab}`));assert.match(shell,/return isOwnerUser\(user\)/);assert.match(adminPage,/activeTab === "uygulama-sahibi"/);assert.match(adminPage,/owner \? <AdminOwnerSecurity \/>/)});
 
 test("billing amount parser supports comma and dot decimal forms",()=>{assert.match(billingPage,/raw\.includes\(","\)&&raw\.includes\("\."\)/);assert.match(billingPage,/raw\.lastIndexOf\(","\)>raw\.lastIndexOf\("\."\)/);assert.match(billingPage,/raw\.replace\(\/\\\.\/g,""\)\.replace\(",","\."\)/);assert.match(billingPage,/raw\.replace\(",","\."\)/)});
