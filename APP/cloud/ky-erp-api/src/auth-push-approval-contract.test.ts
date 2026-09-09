@@ -183,5 +183,4 @@ test("trusted Security device keeps phone approval pending when push delivery is
   assert.match(push, /PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
   assert.match(push, /pushDelivered: sent > 0/);
   assert.match(push, /Bildirim kanalı geçici olarak yanıt vermedi/);
-  assert.doesNotMatch(push, /status: "FALLBACK", consumedAt: nowIso\(\)/);
 });

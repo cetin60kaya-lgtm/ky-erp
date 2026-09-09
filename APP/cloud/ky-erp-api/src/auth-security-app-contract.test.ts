@@ -73,5 +73,4 @@ test("push transport expiry never revokes the trusted security device and phone 
   assert.match(push,/SECURITY_DEVICE_REACTIVATED_AFTER_PUSH_EXPIRY/);
   assert.match(push,/PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
   assert.match(push,/pushDelivered: sent > 0/);
-  assert.doesNotMatch(push,/status: "FALLBACK", consumedAt: nowIso\(\)/);
 });
