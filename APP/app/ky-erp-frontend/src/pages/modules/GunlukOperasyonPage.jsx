@@ -448,3 +448,153 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
 
   return (
     <div className={"gop-page " + (loading ? "is-loading" : "")}>
+      <header className="gop-hero">
+        <div className="gop-hero-copy">
+          <span>GÜNLÜK OPERASYON / KONTROL MERKEZİ</span>
+          <h1>Operasyon Ana Ekranı</h1>
+          <p>{longDate(selectedDay)} · gündüz/gece ekip, haftalık hareket ve aylık ödeme raporu tek ekranda.</p>
+        </div>
+        <div className="gop-hero-actions">
+          <button className="gop-period-button" type="button" onClick={() => changeWeek(-1)} aria-label="Önceki hafta">
+            <ChevronLeft size={17} />
+          </button>
+          <button className="gop-period-main" type="button" onClick={() => changeWeek(0)} title="Bu haftaya dön">
+            <CalendarDays size={16} />
+            <span>{compactDate(selectedWeekStart)} — {compactDate(weekEnd)}</span>
+            {!isCurrentWeek ? <b>Bu haftaya dön</b> : null}
+          </button>
+          <button className="gop-period-button" type="button" onClick={() => changeWeek(1)} aria-label="Sonraki hafta">
+            <ChevronRight size={17} />
+          </button>
+          <button className="gop-refresh" type="button" onClick={load} disabled={loading}>
+            <RefreshCw size={16} />
+            {loading ? "Yenileniyor..." : "Yenile"}
+          </button>
+        </div>
+      </header>
+
+      {notice ? <div className="gop-notice">{notice}</div> : null}
+
+      <section className="gop-quick" aria-label="Günlük Operasyon hızlı işlemleri">
+        <button type="button" onClick={() => openOperationTab("gunluk-giris")}>
+          <ClipboardList size={18} />
+          <span><strong>Günlük Giriş</strong><small>{shortDate(selectedDay)} kaydını aç</small></span>
+          <ChevronRight size={16} />
+        </button>
+        <button type="button" onClick={() => openOperationTab("personel-kartlari")}>
+          <UserPlus size={18} />
+          <span><strong>Personel Kartı</strong><small>Günlük personel ekle / düzenle</small></span>
+          <ChevronRight size={16} />
+        </button>
+        <button type="button" onClick={() => openOperationTab("haftalik-ozet")}>
+          <CalendarDays size={18} />
+          <span><strong>Haftalık Özet</strong><small>Hafta bazlı detay ve ödeme</small></span>
+          <ChevronRight size={16} />
+        </button>
+        <button type="button" onClick={() => openOperationTab("odeme-fisleri")}>
+          <WalletCards size={18} />
+          <span><strong>Ödeme Fişleri</strong><small>Toplu / tekli fiş ekranı</small></span>
+          <ChevronRight size={16} />
+        </button>
+      </section>
+
+      <section className="gop-kpis">
+        <article>
+          <div className="gop-icon"><Users size={20} /></div>
+          <span>{selectedDay === today ? "Bugün Gelen" : "Seçili Gün Gelen"}</span>
+          <strong>{selectedDayRow.peopleCount}</strong>
+          <small>{activePeople.length} aktif günlük personel</small>
+        </article>
+        <article>
+          <div className="gop-icon sun"><Sun size={20} /></div>
+          <span>Gündüz</span>
+          <strong>{selectedDayRow.dayCount}</strong>
+          <small>{shortDate(selectedDay)} vardiya kaydı</small>
+        </article>
+        <article>
+          <div className="gop-icon night"><Moon size={20} /></div>
+          <span>Gece</span>
+          <strong>{selectedDayRow.nightCount}</strong>
+          <small>{shortDate(selectedDay)} vardiya kaydı</small>
+        </article>
+        <article>
+          <div className="gop-icon money"><WalletCards size={20} /></div>
+          <span>Gün Tahmini</span>
+          <strong>{money(selectedDayRow.total)}</strong>
+          <small>Gündüz + gece ücret karşılığı</small>
+        </article>
+        <article>
+          <div className="gop-icon week"><CalendarDays size={20} /></div>
+          <span>Seçili Hafta</span>
+          <strong>{money(weekSummary.current.total)}</strong>
+          <small>{weekSummary.current.people.size} farklı personel</small>
+        </article>
+        <article>
+          <div className="gop-icon people"><Users size={20} /></div>
+          <span>Aktif Personel</span>
+          <strong>{activePeople.length}</strong>
+          <small>Günlük operasyon havuzu</small>
+        </article>
+      </section>
+
+      <section className="gop-card gop-week-card">
+        <div className="gop-card-head">
+          <div>
+            <span>HAFTA KONTROLÜ</span>
+            <h2>Gün Gün Operasyon</h2>
+            <p>{compactDate(selectedWeekStart)} — {compactDate(weekEnd)} · bir güne tıklayıp ekip detayını aç.</p>
+          </div>
+          <div className={"gop-completion " + (missingPastDays ? "warn" : "ok")}>
+            {missingPastDays ? missingPastDays + " geçmiş gün kayıt bekliyor" : "Geçmiş günler kayıtlı"}
+          </div>
+        </div>
+        <div className="gop-week-grid">
+          {selectedWeekDays.map((date) => {
+            const row = daily.get(date);
+            const future = date > today;
+            const isToday = date === today;
+            const isSelected = date === selectedDay;
+            return (
+              <button
+                type="button"
+                key={date}
+                className={(isToday ? "is-today " : "") + (future ? "is-future " : "") + (isSelected ? "is-selected" : "")}
+                onClick={() => setSelectedDay(date)}
+              >
+                <div className="gop-day-title">
+                  <b>{shortDate(date)}</b>
+                  {isToday ? <span>BUGÜN</span> : null}
+                </div>
+                {row ? (
+                  <>
+                    <div className="gop-shifts">
+                      <span><Sun size={14} /> {row.dayCount}</span>
+                      <span><Moon size={14} /> {row.nightCount}</span>
+                    </div>
+                    <strong>{row.peopleCount} kişi</strong>
+                    <small>{money(row.total)}</small>
+                  </>
+                ) : (
+                  <div className="gop-day-empty">{future ? "Bekleniyor" : "Kayıt yok"}</div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="gop-main-grid">
+        <section className="gop-card gop-team-card">
+          <div className="gop-card-head gop-team-head">
+            <div>
+              <span>SEÇİLİ GÜN</span>
+              <h2>{shortDate(selectedDay)} Ekibi</h2>
+              <p>{selectedDayRow.peopleCount} kişi · {money(selectedDayRow.total)} tahmini ödeme</p>
+            </div>
+            <button type="button" className="gop-inline-action" onClick={() => openOperationTab("gunluk-giris")}>
+              Girişi Düzenle <ChevronRight size={15} />
+            </button>
+          </div>
+          <div className="gop-team-tools">
+            <label>
+              <Search size={15} />
