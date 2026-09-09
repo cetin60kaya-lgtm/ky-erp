@@ -46,3 +46,10 @@ test("security app signs device-authenticated API calls and service worker cache
   assert.match(sw,/CACHE_NAME="kyerp-security-shell-v2"/);
   assert.match(sw,/caches\.delete/);
 });
+
+
+test("main ERP exposes connection diagnostics and a one-time access refresh path",()=>{
+  assert.match(setup,/Erişim Yenileme Kodu Oluştur/);
+  assert.match(setup,/Bağlantı kontrolü gerekli/);
+  assert.match(setup,/Durumu Yenile/);
+});
