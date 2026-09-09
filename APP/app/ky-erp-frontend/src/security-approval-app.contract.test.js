@@ -35,3 +35,14 @@ test("approval is protected by device signature and optional local biometric scr
   assert.match(app,/navigator\.credentials\.get/);
   assert.match(app,/userVerification:"required"/);
 });
+
+
+test("security app signs device-authenticated API calls and service worker cache upgrades cleanly",()=>{
+  assert.match(app,/signDeviceAuth/);
+  assert.match(app,/KYERP-DEVICE-AUTH-V1/);
+  assert.match(app,/X-KYERP-Security-Timestamp/);
+  assert.match(app,/X-KYERP-Security-Signature/);
+  assert.match(sw,/signDeviceAuth/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v2"/);
+  assert.match(sw,/caches\.delete/);
+});
