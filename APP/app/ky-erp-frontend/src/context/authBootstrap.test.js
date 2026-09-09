@@ -30,3 +30,8 @@ test("owner bootstrap stays desktop-session-only but mobile app can resume a bou
   assert.match(bootstrap, /Masaüstünde owner browser restart sonrası kalıcı token kullanamaz/);
   assert.match(bootstrap, /sessionStorage\?\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
 });
+
+
+test("mobile owner session bootstrap preserves bounded resume state while desktop still clears it", () => {
+  assert.match(bootstrap, /ownerToken\(sessionToken\) && !mobileOwnerResumeAllowed\(sessionToken\)/);
+});

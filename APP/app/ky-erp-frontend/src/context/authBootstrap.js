@@ -45,7 +45,7 @@ export function readPersistedAuthToken() {
 
     const sessionToken = String(window.sessionStorage?.getItem(AUTH_TOKEN_STORAGE_KEY) || "").trim();
     if (sessionToken) {
-      if (ownerToken(sessionToken)) clearPersistentOwnerAuth();
+      if (ownerToken(sessionToken) && !mobileOwnerResumeAllowed(sessionToken)) clearPersistentOwnerAuth();
       return sessionToken;
     }
 

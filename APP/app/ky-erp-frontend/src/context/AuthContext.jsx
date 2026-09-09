@@ -318,9 +318,9 @@ function readStoredAuth() {
     const sessionUser = parseStoredUser(window.sessionStorage.getItem(AUTH_USER_KEY));
     if (sessionToken && sessionUser && isTokenUsable(sessionToken)) {
       if (isOwnerAuthPair(sessionToken, sessionUser)) {
-        // Uygulama sahibi yalnız aktif tarayıcı oturumunda tutulur.
-        // Eski localStorage kalıntıları bilinçli olarak temizlenir.
-        clearPersistentAuth();
+        // Masaüstü owner session-only kalır. Mobil/PWA'da ise arka plan suspend
+        // WebView'i yeniden kurarsa aynı geçerli oturuma dönebilmek için bounded resume korunur.
+        if (!mobileOwnerResumeAllowed(sessionToken)) clearPersistentAuth();
         clearPendingRefresh();
         return authSnapshot(sessionToken, sessionUser);
       }

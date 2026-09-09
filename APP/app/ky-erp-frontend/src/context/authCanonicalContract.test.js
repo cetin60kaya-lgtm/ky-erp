@@ -61,3 +61,8 @@ test("mobile app revalidates an existing session when returning from background 
   assert.match(source, /revalidateOnResume/);
   assert.match(source, /directAuthRequest\("\/auth\/me"/);
 });
+
+
+test("mobile owner session token does not erase its own bounded resume marker while the app is alive", () => {
+  assert.match(source, /if \(!mobileOwnerResumeAllowed\(sessionToken\)\) clearPersistentAuth\(\)/);
+});
