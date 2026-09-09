@@ -143,3 +143,59 @@
 .gop-history>button:hover{background:#f9fbfe}
 .gop-history>button.is-today{background:#f7faff}
 .gop-history>button.is-selected{box-shadow:inset 3px 0 #2563eb;background:#eef5ff}
+.gop-history>button b{color:#174ea6}
+
+@media(max-width:1380px){.gop-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gop-quick{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media(max-width:1120px){.gop-week-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.gop-main-grid,.gop-month-layout{grid-template-columns:1fr}
+.gop-side-stack{grid-template-columns:1fr 1fr}
+.gop-history{max-height:360px}
+}
+
+@media(max-width:760px){.gop-page{gap:11px;padding-bottom:88px}
+.gop-hero{align-items:flex-start;flex-direction:column;padding:14px}
+.gop-hero h1{font-size:21px}
+.gop-hero-actions{width:100%;justify-content:flex-start}
+.gop-period-main{flex:1;justify-content:center}
+.gop-period-main b{display:none}
+.gop-refresh{width:100%;justify-content:center}
+.gop-quick{grid-template-columns:1fr 1fr}
+.gop-quick>button{grid-template-columns:32px minmax(0,1fr);min-height:64px}
+.gop-quick>button>svg:last-child{display:none}
+.gop-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.gop-kpis article{min-height:98px}
+.gop-week-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.gop-card-head{align-items:flex-start;flex-direction:column}
+.gop-completion{white-space:normal}
+.gop-team-head{flex-direction:row;align-items:center}
+.gop-team-tools{align-items:stretch;flex-direction:column}
+.gop-team-tools>label{min-height:44px}
+.gop-filter-pills{display:grid;grid-template-columns:repeat(3,1fr)}
+.gop-filter-pills button{justify-content:center;min-height:44px}
+.gop-person{grid-template-columns:36px minmax(0,1fr) auto}
+.gop-shift-tags{grid-column:2/4;justify-content:flex-start}
+.gop-person-amount{grid-column:3;grid-row:1;text-align:right}
+.gop-side-stack{grid-template-columns:1fr}
+.gop-month-head{align-items:flex-start}
+.gop-month-actions{width:100%;justify-content:stretch}
+.gop-month-picker,.gop-month-actions>button{min-height:44px;flex:1;justify-content:center}
+.gop-month-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.gop-week-list>button{grid-template-columns:minmax(110px,1fr) .52fr .65fr}
+.gop-week-list>button>span:nth-of-type(4),.gop-week-list>button>svg{display:none}
+.gop-history{overflow:auto}
+.gop-hero-actions button,.gop-week-grid>button,.gop-quick>button,.gop-inline-action{min-height:44px}
+}
+
+@media(max-width:460px){.gop-quick{grid-template-columns:1fr}
+.gop-kpis{grid-template-columns:1fr 1fr}
+.gop-week-grid{grid-template-columns:1fr 1fr}
+.gop-month-kpis{grid-template-columns:1fr 1fr}
+.gop-team-head{align-items:flex-start;flex-direction:column}
+.gop-inline-action{width:100%;justify-content:center}
+.gop-week-list>button{grid-template-columns:minmax(105px,1fr) .55fr .75fr}
+.gop-hero-actions{display:grid;grid-template-columns:44px 1fr 44px}
+.gop-refresh{grid-column:1/-1}
+}
