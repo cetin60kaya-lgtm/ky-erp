@@ -598,3 +598,177 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
           <div className="gop-team-tools">
             <label>
               <Search size={15} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Personel veya vasıf ara" />
+            </label>
+            <div className="gop-filter-pills" role="group" aria-label="Vardiya filtresi">
+              <button type="button" className={shiftFilter === "all" ? "active" : ""} onClick={() => setShiftFilter("all")}>Tümü</button>
+              <button type="button" className={shiftFilter === "day" ? "active" : ""} onClick={() => setShiftFilter("day")}><Sun size={13} /> Gündüz</button>
+              <button type="button" className={shiftFilter === "night" ? "active" : ""} onClick={() => setShiftFilter("night")}><Moon size={13} /> Gece</button>
+            </div>
+          </div>
+          <div className="gop-people-list">
+            {visibleEntries.length ? visibleEntries.map((entry, index) => (
+              <div className="gop-person" key={(entry.employeeId || personName(entry.person)) + "-" + index}>
+                <div className="gop-avatar">
+                  {personName(entry.person).split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
+                </div>
+                <div className="gop-person-main">
+                  <strong>{personName(entry.person)}</strong>
+                  <small>{personRole(entry.person)}</small>
+                </div>
+                <div className="gop-shift-tags">
+                  {entry.day ? <span className="day"><Sun size={12} /> Gündüz</span> : null}
+                  {entry.night ? <span className="night"><Moon size={12} /> Gece</span> : null}
+                </div>
+                <b className="gop-person-amount">{money(entry.amount)}</b>
+              </div>
+            )) : (
+              <div className="gop-empty">
+                <Users size={24} />
+                <strong>Kayıt bulunamadı</strong>
+                <span>{selectedDayRow.peopleCount ? "Filtreyi değiştirin." : "Bu gün için henüz günlük giriş yapılmamış."}</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <aside className="gop-side-stack">
+          <section className="gop-card">
+            <div className="gop-card-head">
+              <div><span>VARDİYA DENGESİ</span><h2>Gündüz / Gece</h2></div>
+              <small>{totalShifts} vardiya</small>
+            </div>
+            <div className="gop-shift-balance">
+              <div className="gop-balance-row">
+                <div><span><Sun size={15} /> Gündüz</span><b>{weekSummary.current.day} · %{dayRatio}</b></div>
+                <div className="gop-meter"><i style={{ width: String(dayRatio) + "%" }} /></div>
+              </div>
+              <div className="gop-balance-row night">
+                <div><span><Moon size={15} /> Gece</span><b>{weekSummary.current.night} · %{nightRatio}</b></div>
+                <div className="gop-meter"><i style={{ width: String(nightRatio) + "%" }} /></div>
+              </div>
+            </div>
+          </section>
+
+          <section className="gop-card">
+            <div className="gop-card-head"><div><span>KARŞILAŞTIRMA</span><h2>Bu Hafta / Geçen Hafta</h2></div></div>
+            <div className="gop-compare">
+              <article>
+                <span>Bu Hafta</span>
+                <strong>{weekSummary.current.people.size} kişi</strong>
+                <small>G {weekSummary.current.day} · N {weekSummary.current.night} · {weekSummary.current.activeDays} aktif gün</small>
+                <b>{money(weekSummary.current.total)}</b>
+              </article>
+              <article>
+                <span>Geçen Hafta</span>
+                <strong>{weekSummary.previous.people.size} kişi</strong>
+                <small>G {weekSummary.previous.day} · N {weekSummary.previous.night} · {weekSummary.previous.activeDays} aktif gün</small>
+                <b>{money(weekSummary.previous.total)}</b>
+              </article>
+              <div className="gop-deltas">
+                <span><small>Vardiya farkı</small><b>{deltaLabel(totalShifts, weekSummary.previous.day + weekSummary.previous.night)}</b></span>
+                <span><small>Ödeme farkı</small><b>{deltaLabel(weekSummary.current.total, weekSummary.previous.total)}</b></span>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <section className="gop-card gop-month-card">
+        <div className="gop-card-head gop-month-head">
+          <div>
+            <span>AYLIK RAPOR</span>
+            <h2>{monthLabel(selectedMonth)} Operasyon Özeti</h2>
+            <p>Ayı hafta hafta incele; gündüz/gece, kişi ve tahmini ödeme toplamlarını karşılaştır.</p>
+          </div>
+          <div className="gop-month-actions">
+            <label className="gop-month-picker">
+              <CalendarDays size={15} />
+              <input type="month" value={selectedMonth} onChange={(event) => selectMonth(event.target.value)} />
+            </label>
+            <button type="button" onClick={downloadMonthlyCsv} disabled={!reportDays.length}>
+              <Download size={15} /> CSV İndir
+            </button>
+          </div>
+        </div>
+
+        <div className="gop-month-kpis">
+          <article><span>Farklı Personel</span><strong>{monthSummary.people.size}</strong><small>{monthSummary.activeDays} aktif gün</small></article>
+          <article><span>Gündüz</span><strong>{monthSummary.day}</strong><small>vardiya kaydı</small></article>
+          <article><span>Gece</span><strong>{monthSummary.night}</strong><small>vardiya kaydı</small></article>
+          <article><span>Tahmini Ödeme</span><strong>{money(monthSummary.total)}</strong><small>seçili ay toplamı</small></article>
+        </div>
+
+        <div className="gop-month-layout">
+          <div className="gop-week-list">
+            <div className="gop-section-mini-head"><strong>Hafta Hafta</strong><small>{monthWeeks.length} hafta dilimi</small></div>
+            {monthWeeks.map((week) => (
+              <button
+                type="button"
+                key={week.key}
+                className={week.key === selectedWeekStart ? "active" : ""}
+                onClick={() => {
+                  setSelectedWeekStart(week.key);
+                  setSelectedDay(week.days.find((date) => daily.has(date)) || week.days[0]);
+                }}
+              >
+                <span>
+                  <strong>{week.label}</strong>
+                  <small>{compactDate(week.days[0])} — {compactDate(week.days.at(-1))}</small>
+                </span>
+                <span><small>Kişi</small><b>{week.summary.people.size}</b></span>
+                <span><small>G / N</small><b>{week.summary.day} / {week.summary.night}</b></span>
+                <span><small>Ödeme</small><b>{money(week.summary.total)}</b></span>
+                <ChevronRight size={16} />
+              </button>
+            ))}
+          </div>
+
+          <div className="gop-history-wrap">
+            <div className="gop-section-mini-head"><strong>Günlük Hareket</strong><small>{reportDays.length} gün</small></div>
+            <div className="gop-history">
+              <div className="gop-history-head"><span>Tarih</span><span>Gündüz</span><span>Gece</span><span>Kişi</span><span>Tahmini Ödeme</span></div>
+              {reportDays.map((date) => {
+                const row = daily.get(date);
+                return (
+                  <button
+                    type="button"
+                    className={(date === today ? "is-today " : "") + (date === selectedDay ? "is-selected" : "")}
+                    key={date}
+                    onClick={() => {
+                      setSelectedDay(date);
+                      setSelectedWeekStart(startOfWeek(date));
+                    }}
+                  >
+                    <strong>{shortDate(date)}</strong>
+                    <span>{row?.dayCount || 0}</span>
+                    <span>{row?.nightCount || 0}</span>
+                    <span>{row?.peopleCount || 0}</span>
+                    <b>{money(row?.total || 0)}</b>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default function GunlukOperasyonPage({
+  activeTab = "ana-ekran",
+  activeMainCompany,
+  openModule,
+}) {
+  if (activeTab !== "ana-ekran") {
+    return (
+      <IkPage
+        activeTab={SUBVIEW_MAP[activeTab] || "gunluk-personel"}
+        activeMainCompany={activeMainCompany}
+        dailyOnly
+      />
+    );
+  }
+  return <DailyOperationsOverview activeMainCompany={activeMainCompany} openModule={openModule} />;
+}
