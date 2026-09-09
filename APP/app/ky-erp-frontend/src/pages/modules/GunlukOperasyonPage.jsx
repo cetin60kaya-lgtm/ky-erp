@@ -376,7 +376,7 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
         if (shiftFilter === "day" && !entry.day) return false;
         if (shiftFilter === "night" && !entry.night) return false;
         if (!normalizedQuery) return true;
-        return personName(entry.person) + " " + personRole(entry.person)
+        return (personName(entry.person) + " " + personRole(entry.person))
           .toLocaleLowerCase("tr-TR")
           .includes(normalizedQuery);
       })
