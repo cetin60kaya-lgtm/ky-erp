@@ -31,3 +31,14 @@ button{cursor:pointer}
 .security-last-sync{color:#7b8fa3;font-size:10px}
 .security-repair-actions{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
 @media(max-width:620px){.security-repair-actions{grid-template-columns:1fr}.security-repair-actions button{min-height:52px}}
+
+
+.security-tabs{position:sticky;top:68px;z-index:4;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 0 12px;padding:5px;border:1px solid #d7e3ef;border-radius:14px;background:rgba(244,248,253,.96);backdrop-filter:blur(12px)}
+.security-tabs button{min-height:44px;border:0;border-radius:10px;background:transparent;color:#688097;font-size:11px;font-weight:900}
+.security-tabs button.active{background:#fff;color:#1d4f84;box-shadow:0 3px 12px rgba(29,79,132,.10)}
+.security-tabs span{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:4px;border-radius:999px;background:#e8f0fb;font-size:9px}
+.code-card{text-align:center}.login-code-box{display:grid;gap:5px;padding:22px;border:1px dashed #c9d8e8;border-radius:16px;background:#f9fbfe}
+.login-code-box strong{font-size:34px;letter-spacing:.12em;color:#153d68}.login-code-box span{font-size:11px;color:#6d8298}
+.login-code-box.active{border-style:solid;border-color:#a9c9ef;background:#eef6ff}.login-code-box.expired{border-color:#e7c2c2;background:#fff6f6}.login-code-box.expired strong{color:#9a4444}
+@media(min-width:720px){.security-tabs{top:10px}}
+@media(max-width:560px){.security-tabs{top:68px}.login-code-box strong{font-size:30px}}

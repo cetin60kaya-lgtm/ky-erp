@@ -6,11 +6,12 @@ const KEY="active";
 const qs=(selector)=>document.querySelector(selector);
 const els={
   connectionBadge:qs("#connectionBadge"),installPanel:qs("#installPanel"),installButton:qs("#installButton"),iosInstallNote:qs("#iosInstallNote"),
-  setupPanel:qs("#setupPanel"),readyPanel:qs("#readyPanel"),pendingPanel:qs("#pendingPanel"),emptyPanel:qs("#emptyPanel"),
+  setupPanel:qs("#setupPanel"),appPanel:qs("#appPanel"),readyPanel:qs("#readyPanel"),pendingPanel:qs("#pendingPanel"),emptyPanel:qs("#emptyPanel"),
   enrollmentCode:qs("#enrollmentCode"),password:qs("#password"),deviceLabel:qs("#deviceLabel"),connectButton:qs("#connectButton"),
   refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
   readyTitle:qs("#readyTitle"),readyMark:qs("#readyMark"),apiHealth:qs("#apiHealth"),pushHealth:qs("#pushHealth"),keyHealth:qs("#keyHealth"),unlockHealth:qs("#unlockHealth"),lastSync:qs("#lastSync"),
-  setupTitle:qs("#setupTitle"),setupCopy:qs("#setupCopy"),deviceSummary:qs("#deviceSummary"),pendingCount:qs("#pendingCount"),pendingList:qs("#pendingList"),toast:qs("#toast")
+  setupTitle:qs("#setupTitle"),setupCopy:qs("#setupCopy"),deviceSummary:qs("#deviceSummary"),pendingCount:qs("#pendingCount"),pendingList:qs("#pendingList"),tabCount:qs("#tabCount"),
+  loginCodeBox:qs("#loginCodeBox"),loginCodeValue:qs("#loginCodeValue"),loginCodeCountdown:qs("#loginCodeCountdown"),generateCodeButton:qs("#generateCodeButton"),toast:qs("#toast")
 };
 
 let installPrompt=null;
@@ -18,6 +19,7 @@ let registration=null;
 let enrollmentQuery={id:"",token:""};
 let busy=false;
 let relinkMode=false;
+let loginCodeTimer=null;
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
 function isStandalone(){return Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true)}
@@ -54,6 +56,10 @@ async function confirmLocalUnlock(device){if(!device?.localUnlockCredentialId)re
 async function signDecision(device,kind,id,decision){if(!device?.signingPrivateKey)throw new Error("Güvenlik cihazı imza anahtarı bulunamadı. Cihazı yeniden kurun.");const message=new TextEncoder().encode(`KYERP-DECISION-V1|${device.deviceId}|${kind}|${id}|${decision}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return base64Url(signature)}
 function cleanEnrollmentQuery(){try{const url=new URL(location.href);url.searchParams.delete("enrollmentId");url.searchParams.delete("enrollmentToken");history.replaceState({},"",url.pathname+url.search+url.hash)}catch{}}
 function renderInstall(){const ios=isIos();if(ios&&!isStandalone()){els.installPanel.classList.remove("hidden");els.iosInstallNote.classList.remove("hidden")}else if(installPrompt){els.installPanel.classList.remove("hidden");els.installButton.classList.remove("hidden")}}
+function showTab(name){
+  document.querySelectorAll(".security-tabs button").forEach((button)=>button.classList.toggle("active",button.dataset.tab===name));
+  ["approvals","code","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
+}
 async function connectDevice(){
   if(busy)return;
   const previousDevice=await readDevice().catch(()=>null);
@@ -99,7 +105,7 @@ async function decide(item,decision){if(busy)return;busy=true;try{const device=a
 async function refreshPending(){
   const payload=await deviceFetch("/auth/push/device/pending");
   const items=Array.isArray(payload?.data?.items)?payload.data.items:[];
-  els.pendingList.innerHTML="";els.pendingCount.textContent=String(items.length);
+  els.pendingList.innerHTML="";els.pendingCount.textContent=String(items.length);if(els.tabCount)els.tabCount.textContent=String(items.length);
   if(items.length){
     els.pendingPanel.classList.remove("hidden");els.emptyPanel.classList.add("hidden");
     for(const item of items)els.pendingList.appendChild(approvalCard(item));
@@ -110,6 +116,35 @@ async function refreshPending(){
   }
   registration?.active?.postMessage({type:"KYERP_SECURITY_REFRESH"});
   return items;
+}
+function startLoginCodeCountdown(expiresAt){
+  clearInterval(loginCodeTimer);
+  const tick=()=>{
+    const seconds=Math.max(0,Math.ceil((Date.parse(expiresAt)-Date.now())/1000));
+    els.loginCodeCountdown.textContent=seconds ? seconds+" sn geçerli" : "Süresi doldu";
+    els.loginCodeBox.classList.toggle("expired",!seconds);
+    if(!seconds) clearInterval(loginCodeTimer);
+  };
+  tick();
+  loginCodeTimer=setInterval(tick,1000);
+}
+async function generateLoginCode(){
+  if(busy)return;
+  busy=true;els.generateCodeButton.disabled=true;
+  try{
+    const device=await readDevice();
+    await confirmLocalUnlock(device);
+    const response=await deviceFetch("/auth/push/device/login-code",{method:"POST",body:{}});
+    const data=response?.data||{};
+    els.loginCodeValue.textContent=String(data.code||"").replace(/(\d{3})(\d{3})/,"$1 $2");
+    els.loginCodeBox.className="login-code-box active";
+    startLoginCodeCountdown(data.expiresAt);
+    toast("60 saniyelik KY Güvenlik giriş kodu üretildi.");
+  }catch(error){
+    els.loginCodeValue.textContent="— — — — — —";
+    els.loginCodeCountdown.textContent="Kod üretilemedi";
+    toast(error?.message||"Giriş kodu üretilemedi.");
+  }finally{busy=false;els.generateCodeButton.disabled=false}
 }
 async function repairConnection(){
   if(busy)return;
@@ -133,9 +168,9 @@ async function repairConnection(){
 async function refreshState(){
   const device=await readDevice().catch(()=>null);
   if(!device?.deviceId||!device?.deviceToken||!device?.signingPrivateKey){
-    els.setupPanel.classList.remove("hidden");els.readyPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");setBadge("Kurulum gerekli");return;
+    els.setupPanel.classList.remove("hidden");els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");setBadge("Kurulum gerekli");return;
   }
-  els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
+  els.appPanel.classList.remove("hidden");els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
   els.deviceSummary.textContent=(device.deviceLabel||"KY ERP Güvenlik cihazı")+" · Güvenli cihaz imzası aktif"+(device.localUnlockCredentialId?" · Cihaz kilidi aktif":"");
   setHealth(els.keyHealth,"Hazır","ok");setHealth(els.unlockHealth,device.localUnlockCredentialId?"Aktif":"Opsiyonel",device.localUnlockCredentialId?"ok":"");
   els.readyTitle.textContent="Bağlantı doğrulanıyor";els.readyMark.textContent="↻";setBadge("Kontrol","");
@@ -160,6 +195,8 @@ async function refreshState(){
 window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();installPrompt=event;renderInstall()});
 els.installButton.addEventListener("click",async()=>{if(!installPrompt)return;await installPrompt.prompt();installPrompt=null;els.installButton.classList.add("hidden")});
 els.connectButton.addEventListener("click",connectDevice);
+els.generateCodeButton.addEventListener("click",generateLoginCode);
+document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
 els.refreshButton.addEventListener("click",refreshState);
 els.repairButton.addEventListener("click",repairConnection);
 els.relinkButton.addEventListener("click",showRelink);
@@ -173,6 +210,6 @@ navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECUR
   document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
   const url=new URL(location.href);enrollmentQuery={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
   if(enrollmentQuery.id&&enrollmentQuery.token){showRelink();toast("Erişim bağlantısı alındı. Mevcut KY ERP şifreni gir.")}
-  renderInstall();try{await ensureWorker()}catch{}await refreshState();
+  renderInstall();showTab("approvals");try{await ensureWorker()}catch{}await refreshState();
   setInterval(()=>{if(document.visibilityState==="visible"&&navigator.onLine)refreshState()},15000);
 })();

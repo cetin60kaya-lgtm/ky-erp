@@ -43,7 +43,7 @@ test("security app signs device-authenticated API calls and service worker cache
   assert.match(app,/X-KYERP-Security-Timestamp/);
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.match(sw,/signDeviceAuth/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v3"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v4"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -68,4 +68,14 @@ test("push fetch failure stays visible and routes user to connection recovery",(
   assert.match(sw,/KY ERP · Bağlantı Kontrolü/);
   assert.match(sw,/KYERP_SECURITY_CONNECTION_WAKE/);
   assert.match(sw,/fetchFailed/);
+});
+
+
+test("professional security app exposes approvals, short login code and trusted-device tabs",()=>{
+  assert.match(app,/showTab/);
+  assert.match(app,/generateLoginCode/);
+  assert.match(app,/auth\/push\/device\/login-code/);
+  assert.match(app,/repairConnection/);
+  assert.match(setup,/Telefon Bağlantısını Yenile/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v4"/);
 });

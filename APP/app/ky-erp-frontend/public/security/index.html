@@ -17,25 +17,26 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Telefon / Tablet Onay Uygulaması</small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet</small></div>
       </div>
-      <span id="connectionBadge" class="security-badge">Hazırlanıyor</span>
+      <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
 
     <section id="installPanel" class="security-card hidden">
-      <div>
-        <span class="eyebrow">UYGULAMA KURULUMU</span>
-        <h1>KY ERP Güvenlik</h1>
-        <p>Microsoft Authenticator benzeri ayrı onay uygulaması. Bildirime dokun, uygulamada Onayla, cihaz kilidiyle doğrula.</p>
-      </div>
+      <span class="eyebrow">UYGULAMA KURULUMU</span>
+      <h1>KY ERP Güvenlik</h1>
+      <p>Giriş onayları, kısa süreli giriş kodu ve güvenilir cihaz bağlantısı tek güvenlik uygulamasında.</p>
       <button id="installButton" class="primary hidden" type="button">Uygulamayı Yükle</button>
-      <div id="iosInstallNote" class="note hidden"><b>iPhone / iPad</b><span>Safari → Paylaş → Ana Ekrana Ekle. Sonra Ana Ekrandaki KY ERP Güvenlik ikonundan açın.</span></div>
+      <div id="iosInstallNote" class="note hidden">
+        <b>iPhone / iPad</b>
+        <span>Safari → Paylaş → Ana Ekrana Ekle. Sonra KY Güvenlik ikonundan açın.</span>
+      </div>
     </section>
 
     <section id="setupPanel" class="security-card">
-      <span class="eyebrow">KURULUM / ERİŞİM YENİLEME</span>
+      <span class="eyebrow">GÜVENİLİR CİHAZ KURULUMU</span>
       <h2 id="setupTitle">Bu cihazı KY ERP'ye bağla</h2>
-      <p id="setupCopy" class="muted">KY ERP → Profil → Telefon Onayı bölümünden oluşturduğun 8 karakterli kurulum kodunu kullan.</p>
+      <p id="setupCopy" class="muted">Ana KY ERP → Profil → Telefon Onayı bölümündeki 8 karakterli kurulum / erişim yenileme kodunu kullan.</p>
       <label>Kurulum / erişim yenileme kodu
         <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
       </label>
@@ -45,57 +46,90 @@
       <label>Cihaz adı
         <input id="deviceLabel" maxlength="80" />
       </label>
-      <button id="connectButton" class="primary" type="button">Bildirim + Cihaz Güvenliğini Kur / Yenile</button>
+      <button id="connectButton" class="primary" type="button">Güvenilir Cihazı Kur / Yenile</button>
       <button id="cancelRelinkButton" class="hidden" type="button">Yenilemeyi İptal Et</button>
-      <div class="note"><b>Ek güvenlik</b><span>Destekleyen cihazlarda iPhone/iPad için Face ID / Touch ID / cihaz kodu; Android için parmak izi / ekran kilidi / PIN açılır.</span></div>
+      <div class="note">
+        <b>Güvenilir cihaz korunur</b>
+        <span>Kararlar bu telefonun cihaz imzasıyla verilir. Destekleyen cihazlarda Face ID / Touch ID / parmak izi / PIN ek doğrulama olarak kullanılır.</span>
+      </div>
     </section>
 
-    <section id="readyPanel" class="security-card hidden">
-      <div class="ready-head">
-        <div>
-          <span class="eyebrow">GÜVENİLİR CİHAZ</span>
-          <h2 id="readyTitle">Bağlantı doğrulanıyor</h2>
-          <p id="deviceSummary" class="muted"></p>
-        </div>
-        <span id="readyMark" class="ready-mark">↻</span>
-      </div>
-      <div class="security-health-grid">
-        <div><span>Sunucu</span><b id="apiHealth">Kontrol</b></div>
-        <div><span>Bildirim</span><b id="pushHealth">Kontrol</b></div>
-        <div><span>Cihaz imzası</span><b id="keyHealth">Kontrol</b></div>
-        <div><span>Telefon kilidi</span><b id="unlockHealth">Kontrol</b></div>
-      </div>
-      <small id="lastSync" class="security-last-sync">Son kontrol: -</small>
-      <div class="security-repair-actions">
-        <button id="repairButton" class="primary" type="button">Bağlantıyı Yenile</button>
-        <button id="refreshButton" type="button">Giriş İsteklerini Yenile</button>
-        <button id="relinkButton" type="button">Erişimi Yeniden Bağla</button>
-      </div>
-      <div class="note"><b>Otomatik toparlama</b><span>Bağlantı veya bildirim kanalı bozulursa Bağlantıyı Yenile tek tuşla push erişimini yeniden kurar.</span></div>
-    </section>
+    <section id="appPanel" class="hidden">
+      <nav class="security-tabs" aria-label="KY ERP Güvenlik bölümleri">
+        <button type="button" data-tab="approvals" class="active">Onaylar <span id="tabCount">0</span></button>
+        <button type="button" data-tab="code">Giriş Kodu</button>
+        <button type="button" data-tab="device">Cihaz</button>
+      </nav>
 
-    <section id="pendingPanel" class="security-card hidden">
-      <div class="pending-title">
-        <div><span class="eyebrow">GİRİŞ İSTEĞİ</span><h2>Onay bekliyor</h2></div>
-        <span id="pendingCount" class="count">0</span>
-      </div>
-      <div id="pendingList" class="pending-list"></div>
-    </section>
+      <section id="approvalsTab" class="security-tab-panel">
+        <section id="pendingPanel" class="security-card hidden">
+          <div class="pending-title">
+            <div><span class="eyebrow">GİRİŞ İSTEĞİ</span><h2>Onay bekliyor</h2></div>
+            <span id="pendingCount" class="count">0</span>
+          </div>
+          <div id="pendingList" class="pending-list"></div>
+        </section>
 
-    <section id="emptyPanel" class="security-card hidden">
-      <div class="empty-mark">✓</div>
-      <h2>Bekleyen giriş yok</h2>
-      <p class="muted">Yeni bir KY ERP giriş isteği geldiğinde burada görünecek ve tek bildirim alacaksın.</p>
+        <section id="emptyPanel" class="security-card">
+          <div class="empty-mark">✓</div>
+          <h2>Bekleyen giriş yok</h2>
+          <p class="muted">Bağlantı hazır. Yeni KY ERP giriş isteği geldiğinde burada görünür ve tek bildirim alırsın.</p>
+        </section>
+      </section>
+
+      <section id="codeTab" class="security-tab-panel hidden">
+        <section class="security-card code-card">
+          <span class="eyebrow">KY GÜVENLİK GİRİŞ KODU</span>
+          <h2>6 haneli kısa süreli kod</h2>
+          <p class="muted">Bilgisayarda giriş başlatıldıysa bildirime alternatif olarak bu kodu kullanabilirsin.</p>
+          <div id="loginCodeBox" class="login-code-box idle">
+            <strong id="loginCodeValue">— — — — — —</strong>
+            <span id="loginCodeCountdown">Kod üretilmedi</span>
+          </div>
+          <button id="generateCodeButton" class="primary" type="button">Giriş Kodu Üret</button>
+          <div class="note">
+            <b>Tek kullanımlık güvenlik</b>
+            <span>Kod yalnız en son bekleyen kendi giriş isteğine bağlıdır. 60 saniye geçerlidir; 5 hatalı denemede kullanılamaz.</span>
+          </div>
+        </section>
+      </section>
+
+      <section id="deviceTab" class="security-tab-panel hidden">
+        <section id="readyPanel" class="security-card">
+          <div class="ready-head">
+            <div>
+              <span class="eyebrow">GÜVENİLİR CİHAZ</span>
+              <h2 id="readyTitle">Bağlantı doğrulanıyor</h2>
+              <p id="deviceSummary" class="muted"></p>
+            </div>
+            <span id="readyMark" class="ready-mark">↻</span>
+          </div>
+          <div class="security-health-grid">
+            <div><span>Sunucu</span><b id="apiHealth">Kontrol</b></div>
+            <div><span>Bildirim</span><b id="pushHealth">Kontrol</b></div>
+            <div><span>Cihaz imzası</span><b id="keyHealth">Kontrol</b></div>
+            <div><span>Telefon kilidi</span><b id="unlockHealth">Kontrol</b></div>
+          </div>
+          <small id="lastSync" class="security-last-sync">Son kontrol: -</small>
+          <div class="security-repair-actions">
+            <button id="repairButton" class="primary" type="button">Bağlantıyı Yenile</button>
+            <button id="refreshButton" type="button">Durumu Yenile</button>
+            <button id="relinkButton" type="button">Erişimi Yeniden Bağla</button>
+          </div>
+          <div class="note">
+            <b>Bağlantı sorunu olursa</b>
+            <span>Önce Bağlantıyı Yenile kullanılır. Güvenilir cihaz kaydı silinmez; bildirim aboneliği ve sunucu erişimi tekrar doğrulanır.</span>
+          </div>
+        </section>
+      </section>
     </section>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-
     <footer class="security-footer">
-      <span>KY ERP · Güvenli cihaz anahtarı · Tek bildirim · Tek karar</span>
+      <span>KY ERP · Güvenilir cihaz · Tek bildirim · Giriş kodu</span>
       <a href="/">Ana KY ERP</a>
     </footer>
   </main>
-
   <script type="module" src="/security/app.js"></script>
 </body>
 </html>
