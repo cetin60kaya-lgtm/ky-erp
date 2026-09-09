@@ -46,3 +46,13 @@ test("security app health and signed connection refresh can recover an inactive 
   assert.match(push,/PUSH_DEVICE_RECOVERY_UNAUTHORIZED/);
   assert.match(push,/lastRefreshAt/);
 });
+
+
+test("access refresh reuses the same security device id instead of creating duplicate push devices",()=>{
+  assert.match(push,/replaceDeviceId/);
+  assert.match(push,/replaceCandidate = replaceDeviceId/);
+  assert.match(push,/const existing = replaceCandidate \|\| endpointCandidate/);
+  assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
+  assert.match(push,/relinkedDevice: Boolean\(replaceCandidate\)/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v1\.2"/);
+});

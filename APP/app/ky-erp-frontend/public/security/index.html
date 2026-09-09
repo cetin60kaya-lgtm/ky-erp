@@ -33,10 +33,10 @@
     </section>
 
     <section id="setupPanel" class="security-card">
-      <span class="eyebrow">İLK KURULUM</span>
-      <h2>Bu cihazı KY ERP'ye bağla</h2>
-      <p class="muted">KY ERP → Profil → Telefon Onayı bölümünden oluşturduğun 8 karakterli kurulum kodunu kullan.</p>
-      <label>Kurulum kodu
+      <span class="eyebrow">KURULUM / ERİŞİM YENİLEME</span>
+      <h2 id="setupTitle">Bu cihazı KY ERP'ye bağla</h2>
+      <p id="setupCopy" class="muted">KY ERP → Profil → Telefon Onayı bölümünden oluşturduğun 8 karakterli kurulum kodunu kullan.</p>
+      <label>Kurulum / erişim yenileme kodu
         <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
       </label>
       <label>Mevcut KY ERP şifren
@@ -45,7 +45,8 @@
       <label>Cihaz adı
         <input id="deviceLabel" maxlength="80" />
       </label>
-      <button id="connectButton" class="primary" type="button">Bildirim + Cihaz Güvenliğini Kur</button>
+      <button id="connectButton" class="primary" type="button">Bildirim + Cihaz Güvenliğini Kur / Yenile</button>
+      <button id="cancelRelinkButton" class="hidden" type="button">Yenilemeyi İptal Et</button>
       <div class="note"><b>Ek güvenlik</b><span>Destekleyen cihazlarda iPhone/iPad için Face ID / Touch ID / cihaz kodu; Android için parmak izi / ekran kilidi / PIN açılır.</span></div>
     </section>
 
@@ -53,12 +54,24 @@
       <div class="ready-head">
         <div>
           <span class="eyebrow">GÜVENİLİR CİHAZ</span>
-          <h2>Telefon onayı hazır</h2>
+          <h2 id="readyTitle">Bağlantı doğrulanıyor</h2>
           <p id="deviceSummary" class="muted"></p>
         </div>
-        <span class="ready-mark">✓</span>
+        <span id="readyMark" class="ready-mark">↻</span>
       </div>
-      <button id="refreshButton" type="button">Bekleyen girişleri yenile</button>
+      <div class="security-health-grid">
+        <div><span>Sunucu</span><b id="apiHealth">Kontrol</b></div>
+        <div><span>Bildirim</span><b id="pushHealth">Kontrol</b></div>
+        <div><span>Cihaz imzası</span><b id="keyHealth">Kontrol</b></div>
+        <div><span>Telefon kilidi</span><b id="unlockHealth">Kontrol</b></div>
+      </div>
+      <small id="lastSync" class="security-last-sync">Son kontrol: -</small>
+      <div class="security-repair-actions">
+        <button id="repairButton" class="primary" type="button">Bağlantıyı Yenile</button>
+        <button id="refreshButton" type="button">Giriş İsteklerini Yenile</button>
+        <button id="relinkButton" type="button">Erişimi Yeniden Bağla</button>
+      </div>
+      <div class="note"><b>Otomatik toparlama</b><span>Bağlantı veya bildirim kanalı bozulursa Bağlantıyı Yenile tek tuşla push erişimini yeniden kurar.</span></div>
     </section>
 
     <section id="pendingPanel" class="security-card hidden">
