@@ -298,3 +298,153 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
     const [peopleResult, attendanceResult] = await Promise.allSettled([
       getGunlukPersonel({ mainCompanyId: companyId }),
       getGunlukDurum({ mainCompanyId: companyId, start: rangeStart, end: rangeEnd }),
+    ]);
+
+    if (peopleResult.status === "fulfilled") {
+      setPeople(Array.isArray(peopleResult.value) ? peopleResult.value : []);
+    } else {
+      setPeople([]);
+    }
+
+    if (attendanceResult.status === "fulfilled") {
+      setAttendance(Array.isArray(attendanceResult.value) ? attendanceResult.value : []);
+    } else {
+      setAttendance([]);
+    }
+
+    if (peopleResult.status === "rejected" || attendanceResult.status === "rejected") {
+      const detail = attendanceResult.status === "rejected"
+        ? attendanceResult.reason?.message
+        : peopleResult.reason?.message;
+      setNotice(detail || "Günlük Operasyon verilerinin bir bölümü okunamadı.");
+    }
+    setLoading(false);
+  }, [companyId, rangeEnd, rangeStart]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const activePeople = useMemo(
+    () => people.filter((row) => {
+      const status = String(row.status || "").toLocaleUpperCase("tr-TR");
+      return row.active !== false && !["PASSIVE", "PASIF", "PASİF"].includes(status);
+    }),
+    [people],
+  );
+
+  const peopleById = useMemo(
+    () => new Map(people.map((row) => [String(row.id || row.employeeId || row.personId || ""), row])),
+    [people],
+  );
+  const daily = useMemo(() => summarize(attendance, peopleById), [attendance, peopleById]);
+  const selectedDayRow = daily.get(selectedDay) || {
+    dayCount: 0,
+    nightCount: 0,
+    peopleCount: 0,
+    total: 0,
+    entries: [],
+  };
+  const weekSummary = useMemo(
+    () => ({
+      current: collectSummary(selectedWeekDays, daily),
+      previous: collectSummary(previousWeekDays, daily),
+    }),
+    [daily, previousWeekDays, selectedWeekDays],
+  );
+  const monthSummary = useMemo(() => collectSummary(monthDays, daily), [daily, monthDays]);
+
+  const monthWeeks = useMemo(() => {
+    const starts = [...new Set(monthDays.map((date) => startOfWeek(date)))];
+    return starts.map((weekStartValue, index) => {
+      const days = daysBetween(weekStartValue, addDays(weekStartValue, 6)).filter(
+        (date) => date >= selectedMonthStart && date <= selectedMonthEnd,
+      );
+      return {
+        key: weekStartValue,
+        label: String(index + 1) + ". Hafta",
+        days,
+        summary: collectSummary(days, daily),
+      };
+    });
+  }, [daily, monthDays, selectedMonthEnd, selectedMonthStart]);
+
+  const visibleEntries = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("tr-TR");
+    return [...selectedDayRow.entries]
+      .filter((entry) => {
+        if (shiftFilter === "day" && !entry.day) return false;
+        if (shiftFilter === "night" && !entry.night) return false;
+        if (!normalizedQuery) return true;
+        return personName(entry.person) + " " + personRole(entry.person)
+          .toLocaleLowerCase("tr-TR")
+          .includes(normalizedQuery);
+      })
+      .sort((a, b) => personName(a.person).localeCompare(personName(b.person), "tr"));
+  }, [query, selectedDayRow.entries, shiftFilter]);
+
+  const reportDays = useMemo(
+    () => [...monthDays]
+      .filter((date) => selectedMonth !== currentMonth || date <= today)
+      .reverse(),
+    [currentMonth, monthDays, selectedMonth, today],
+  );
+
+  const totalShifts = weekSummary.current.day + weekSummary.current.night;
+  const dayRatio = totalShifts ? Math.round((weekSummary.current.day / totalShifts) * 100) : 0;
+  const nightRatio = totalShifts ? 100 - dayRatio : 0;
+  const missingPastDays = selectedWeekDays.filter((date) => date <= today && !daily.has(date)).length;
+  const weekEnd = selectedWeekDays[6];
+  const isCurrentWeek = selectedWeekStart === startOfWeek(today);
+
+  const openOperationTab = useCallback(
+    (tabKey) => {
+      openModule?.("gunluk-operasyon", {
+        tabKey,
+        actionContext: {
+          source: "gunluk-operasyon-dashboard",
+          date: selectedDay,
+          weekStart: selectedWeekStart,
+          month: selectedMonth,
+        },
+      });
+    },
+    [openModule, selectedDay, selectedMonth, selectedWeekStart],
+  );
+
+  const changeWeek = useCallback((amount) => {
+    const nextWeekStart = addDays(selectedWeekStart, amount * 7);
+    const nextDay = amount === 0 ? today : nextWeekStart;
+    setSelectedWeekStart(nextWeekStart);
+    setSelectedDay(nextDay);
+    setSelectedMonth(nextDay.slice(0, 7));
+  }, [selectedWeekStart, today]);
+
+  const selectMonth = useCallback((value) => {
+    if (!/^\d{4}-\d{2}$/.test(value)) return;
+    const first = monthStart(value);
+    const focus = value === currentMonth ? today : first;
+    setSelectedMonth(value);
+    setSelectedDay(focus);
+    setSelectedWeekStart(startOfWeek(focus));
+  }, [currentMonth, today]);
+
+  const downloadMonthlyCsv = useCallback(() => {
+    const header = ["Tarih", "Gündüz", "Gece", "Kişi", "Tahmini Ödeme"];
+    const rows = reportDays.map((date) => {
+      const row = daily.get(date);
+      return [date, row?.dayCount || 0, row?.nightCount || 0, row?.peopleCount || 0, numberValue(row?.total || 0)];
+    });
+    const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "gunluk-operasyon-" + selectedMonth + ".csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, [daily, reportDays, selectedMonth]);
+
+  return (
+    <div className={"gop-page " + (loading ? "is-loading" : "")}>
