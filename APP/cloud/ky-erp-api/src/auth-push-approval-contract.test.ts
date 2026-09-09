@@ -79,7 +79,7 @@ test("dedicated Security worker owns phone approval while the legacy main worker
   assert.match(main, /X-KYERP-Push-Device/);
   assert.match(main, /X-KYERP-Push-Token/);
   assert.match(mailEntry, /X-KYERP-Push-Device/);
-  assert.match(mailEntry, /X-KYERP-Push-Token/);
+  assert.match(mailEntry, /X-KYERP-Push-Token/);\n  assert.match(mailEntry, /X-KYERP-Security-Timestamp/);\n  assert.match(mailEntry, /X-KYERP-Security-Signature/);
   assert.match(frontendMain, /retireLegacyPhoneApprovalWorker/);
   assert.doesNotMatch(frontendMain, /PhoneApprovalInboxBridge/);
   assert.match(serviceWorker, /registration\.unregister/);

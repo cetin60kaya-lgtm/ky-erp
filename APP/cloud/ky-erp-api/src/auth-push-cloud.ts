@@ -13,7 +13,7 @@ const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v1.2";
+const SECURITY_APP_VERSION = "security-v2.0";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -318,7 +318,7 @@ async function sendWake(c: any, device: AnyRow) {
         ...device,
         // Push aboneliğinin 404/410 dönmesi güvenilir cihaz kimliğini iptal etmez.
         // Kimlik ve bildirim kanalı ayrı tutulur; uygulama açıldığında abonelik yenilenebilir.
-        isActive: trustedSecurityDevice ? device.isActive !== false : (gone ? false : device.isActive !== false),
+        isActive: trustedSecurityDevice ? true : (gone ? false : device.isActive !== false),
         pushReachable: false,
         pushInvalidAt: gone ? nowIso() : text(device.pushInvalidAt),
         lastError: `HTTP ${response.status}`,
@@ -355,16 +355,23 @@ async function sendWakeMany(c: any, devices: AnyRow[]) {
 
 async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "MANAGER") {
   const rows = await storeList(c, DEVICE_SCOPE);
-  const eligible = rows.filter((row: AnyRow) =>
-    text(row.userId) === userId &&
-    row.isActive !== false &&
-    (purpose === "MANAGER" ? row.managerApprovalEnabled !== false : row.selfLoginEnabled !== false)
-  );
+  const eligible = rows.filter((row: AnyRow) => {
+    if (text(row.userId) !== userId || row.securityApp !== true) return false;
+    if (purpose === "MANAGER" && row.managerApprovalEnabled === false) return false;
+    if (purpose === "SELF" && row.selfLoginEnabled === false) return false;
 
-  // Temiz kesim: telefon onayı yalnız ayrı KY ERP Güvenlik uygulamasından yapılır.
-  // Eski ana-ERP tarayıcı push cihazları artık karar otoritesi değildir.
-  // Güvenlik uygulaması yoksa çağıran auth akışı Authenticator fallback'ine gider.
-  return eligible.filter((row: AnyRow) => row.securityApp === true);
+    const explicitlyRetired = Boolean(text(row.retiredAt) || text(row.retiredReason));
+    if (explicitlyRetired) return false;
+
+    // Güvenilir cihaz kimliği ile Web Push aboneliği farklı şeylerdir.
+    // Eski bir sürüm push 404/410 yüzünden isActive=false bırakmış olsa bile
+    // SELF girişinde cihazı kaybetmeyiz; uygulama kendi imzasıyla bağlantıyı yeniler.
+    if (purpose === "SELF") return true;
+    return row.isActive !== false;
+  });
+
+  // Telefon onayı yalnız ayrı KY ERP Güvenlik uygulamasına aittir.
+  return eligible;
 }
 
 async function supersedeOlderSelfChallenges(c: any, userId: string, replacementId: string) {

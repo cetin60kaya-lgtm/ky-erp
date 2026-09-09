@@ -540,7 +540,7 @@ export default function LoginPage() {
           <div className="auth-security-points">
             <div><span className="auth-point-icon">S</span><p><strong>Güvenli oturum</strong><small>Sunucu kontrollü JWT, session süresi ve otomatik zaman aşımı.</small></p></div>
             <div><span className="auth-point-icon">T</span><p><strong>Turnstile koruması</strong><small>Cloudflare Turnstile ile otomatik bot ve kötüye kullanım kontrolü.</small></p></div>
-            <div><span className="auth-point-icon">M</span><p><strong>MFA desteği</strong><small>Google ve Microsoft Authenticator ile güçlü ikinci doğrulama.</small></p></div>
+            <div><span className="auth-point-icon">K</span><p><strong>KY ERP Güvenlik</strong><small>Telefon onayı birincildir; Authenticator yalnız isteğe bağlı yedek yöntemdir.</small></p></div>
           </div>
           <div className="auth-brand-footer">KY ERP · Verimlilik · Kontrol · Güven</div>
         </aside>
@@ -665,8 +665,8 @@ export default function LoginPage() {
               <div className="auth-flow-block auth-centered">
                 <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
                 <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
-                <h3>Telefonunuza bildirim gönderildi</h3>
-                <p>Tek KY ERP bildirimini açıp <strong>Onayla</strong> seçin. Aynı giriş için ikinci bildirim üretilmez. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</p>
+                <h3>{flow.pushDelivered === false ? "KY ERP Güvenlik uygulamasını açın" : "Telefonunuza bildirim gönderildi"}</h3>
+                <p>{flow.pushDelivered === false ? "Bildirim kanalı yenileniyor. KY ERP Güvenlik uygulamasını açın; bekleyen giriş Onaylar bölümünde görünür." : <>Tek KY ERP bildirimini açıp <strong>Onayla</strong> seçin. Aynı giriş için ikinci bildirim üretilmez. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</>}</p>
                 <div className="auth-notice">
                   <strong>Güvenli bekleme</strong>
                   <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>
@@ -691,7 +691,10 @@ export default function LoginPage() {
                 <ErrorBox message={error} />
                 <button className="auth-primary" type="button" onClick={refreshPhoneApproval} disabled={loading}>Onayı Şimdi Kontrol Et</button>
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
-                <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>Google/Microsoft Authenticator ile devam et</button>
+                <details className="auth-fallback-details">
+                  <summary>Yedek giriş yöntemi</summary>
+                  <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>Authenticator yedeğini aç</button>
+                </details>
                 <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
             ) : null}

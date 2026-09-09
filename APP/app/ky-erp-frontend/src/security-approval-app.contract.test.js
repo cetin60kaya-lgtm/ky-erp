@@ -37,13 +37,14 @@ test("approval is protected by device signature and optional local biometric scr
 });
 
 
-test("security app signs device-authenticated API calls and service worker cache upgrades cleanly",()=>{
+test("security app owns signed API calls while the service worker is notification transport only",()=>{
   assert.match(app,/signDeviceAuth/);
   assert.match(app,/KYERP-DEVICE-AUTH-V1/);
   assert.match(app,/X-KYERP-Security-Timestamp/);
   assert.match(app,/X-KYERP-Security-Signature/);
-  assert.match(sw,/signDeviceAuth/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v6"/);
+  assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
+  assert.match(sw,/showWakeNotification/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v7"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -64,10 +65,12 @@ test("security app verifies server health before ready and provides one-tap conn
   assert.match(app,/replaceDeviceId/);
 });
 
-test("push fetch failure stays visible and routes user to connection recovery",()=>{
-  assert.match(sw,/KY ERP · Bağlantı Kontrolü/);
-  assert.match(sw,/KYERP_SECURITY_CONNECTION_WAKE/);
-  assert.match(sw,/fetchFailed/);
+test("push delivery always shows one wake notification without depending on an API fetch",()=>{
+  assert.match(sw,/self\.addEventListener\("push"/);
+  assert.match(sw,/showWakeNotification/);
+  assert.match(sw,/tag:TAG/);
+  assert.match(sw,/renotify:false/);
+  assert.doesNotMatch(sw,/deviceFetch|fetchFailed|KY ERP · Bağlantı Kontrolü/);
 });
 
 
@@ -77,7 +80,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/auth\/push\/device\/login-code/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Telefon Bağlantısını Yenile/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v6"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v7"/);
 });
 
 
@@ -90,7 +93,7 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(app,/appinstalled/);
   assert.match(app,/Android'e KY Güvenlik'i Yükle/);
   assert.match(app,/Safari → Paylaş → Ana Ekrana Ekle/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v6"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v7"/);
 });
 
 
@@ -108,5 +111,21 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
   assert.match(manifest,/\/security\/kyerp-security-icon\.svg/);
-  assert.match(sw,/kyerp-security-shell-v6/);
+  assert.match(sw,/kyerp-security-shell-v7/);
+});
+
+
+test("security app never renders a blank approvals screen on connection failure",()=>{
+  const html=readFileSync(resolve(root,"public/security/index.html"),"utf8");
+  assert.match(html,/id="emptyTitle"/);
+  assert.match(html,/id="emptyCopy"/);
+  assert.match(app,/setEmptyState/);
+  assert.match(app,/NETWORK_ERROR/);
+  assert.match(app,/repairConnection\(\{automatic:true\}\)/);
+});
+
+test("security app does not navigate into the main ERP application",()=>{
+  const html=readFileSync(resolve(root,"public/security/index.html"),"utf8");
+  assert.doesNotMatch(html,/href="\/"[^>]*>Ana KY ERP/);
+  assert.match(html,/KY Güvenlik · Ayrı uygulama/);
 });

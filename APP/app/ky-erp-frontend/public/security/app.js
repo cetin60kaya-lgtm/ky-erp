@@ -7,7 +7,7 @@ const qs=(selector)=>document.querySelector(selector);
 const els={
   connectionBadge:qs("#connectionBadge"),installPanel:qs("#installPanel"),installButton:qs("#installButton"),iosInstallNote:qs("#iosInstallNote"),androidInstallNote:qs("#androidInstallNote"),
   installTitle:qs("#installTitle"),installCopy:qs("#installCopy"),installState:qs("#installState"),installStateText:qs("#installStateText"),
-  setupPanel:qs("#setupPanel"),appPanel:qs("#appPanel"),readyPanel:qs("#readyPanel"),pendingPanel:qs("#pendingPanel"),emptyPanel:qs("#emptyPanel"),
+  setupPanel:qs("#setupPanel"),appPanel:qs("#appPanel"),readyPanel:qs("#readyPanel"),pendingPanel:qs("#pendingPanel"),emptyPanel:qs("#emptyPanel"),emptyTitle:qs("#emptyTitle"),emptyCopy:qs("#emptyCopy"),emptyMark:qs("#emptyMark"),
   enrollmentCode:qs("#enrollmentCode"),password:qs("#password"),deviceLabel:qs("#deviceLabel"),connectButton:qs("#connectButton"),
   refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
   readyTitle:qs("#readyTitle"),readyMark:qs("#readyMark"),apiHealth:qs("#apiHealth"),pushHealth:qs("#pushHealth"),keyHealth:qs("#keyHealth"),unlockHealth:qs("#unlockHealth"),lastSync:qs("#lastSync"),
@@ -20,7 +20,7 @@ let registration=null;
 let enrollmentQuery={id:"",token:""};
 let busy=false;
 let relinkMode=false;
-let loginCodeTimer=null;
+let loginCodeTimer=null;\nlet lastAutoRepairAt=0;
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
 function isStandalone(){return Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true)}
@@ -34,10 +34,63 @@ function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open
 async function readDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readonly");const req=tx.objectStore(STORE).get(KEY);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
 async function writeDevice(value){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(value,KEY);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error)})}
 async function clearDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).delete(KEY);tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error)})}
-async function jsonFetch(path,options={}){const response=await fetch(`${API_BASE}${path}`,{method:options.method||"GET",headers:{Accept:"application/json",...(options.body!==undefined?{"Content-Type":"text/plain;charset=UTF-8"}:{}),...(options.headers||{})},body:options.body===undefined?undefined:JSON.stringify(options.body),cache:"no-store",mode:"cors"});const payload=await response.json().catch(()=>null);if(!response.ok||payload?.ok===false){const error=new Error(payload?.error?.message||`İşlem tamamlanamadı (HTTP ${response.status}).`);error.code=payload?.error?.code||"";throw error}return payload}
+async function jsonFetch(path,options={}){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),Number(options.timeoutMs||15000));
+  let response;
+  try{
+    response=await fetch(`${API_BASE}${path}`,{
+      method:options.method||"GET",
+      headers:{Accept:"application/json",...(options.body!==undefined?{"Content-Type":"text/plain;charset=UTF-8"}:{}),...(options.headers||{})},
+      body:options.body===undefined?undefined:JSON.stringify(options.body),
+      cache:"no-store",
+      mode:"cors",
+      signal:controller.signal
+    });
+  }catch(error){
+    const wrapped=new Error(error?.name==="AbortError"
+      ?"KY ERP Güvenlik sunucusu zamanında yanıt vermedi."
+      :navigator.onLine
+        ?"KY ERP Güvenlik sunucusuna bağlanılamadı. Bağlantı otomatik olarak tekrar denenecek."
+        :"Telefon çevrimdışı. İnternet bağlantısı geldiğinde otomatik tekrar denenecek.");
+    wrapped.code=error?.name==="AbortError"?"REQUEST_TIMEOUT":"NETWORK_ERROR";
+    wrapped.cause=error;
+    throw wrapped;
+  }finally{
+    clearTimeout(timer);
+  }
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok||payload?.ok===false){
+    const error=new Error(payload?.error?.message||`İşlem tamamlanamadı (HTTP ${response.status}).`);
+    error.code=payload?.error?.code||"";
+    error.status=response.status;
+    throw error;
+  }
+  return payload;
+}
 async function signDeviceAuth(device,method,path){if(!device?.signingPrivateKey)return{};const timestamp=String(Date.now());const pathname=`/api${path}`;const message=new TextEncoder().encode(`KYERP-DEVICE-AUTH-V1|${device.deviceId}|${String(method||"GET").toUpperCase()}|${pathname}|${timestamp}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return{"X-KYERP-Security-Timestamp":timestamp,"X-KYERP-Security-Signature":base64Url(signature)}}
 async function deviceFetch(path,options={}){const device=await readDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("Bu cihaz henüz KY ERP Güvenlik cihazı olarak kayıtlı değil.");const method=String(options.method||"GET").toUpperCase();const signedHeaders=await signDeviceAuth(device,method,path);return jsonFetch(path,{...options,headers:{"X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken,...signedHeaders,...(options.headers||{})}})}
-async function ensureWorker(){if(!("serviceWorker" in navigator))throw new Error("Bu tarayıcı güvenlik bildirimlerini desteklemiyor.");registration=await navigator.serviceWorker.register("/security/sw.js",{scope:"/security/"});try{await registration.update()}catch{}await navigator.serviceWorker.ready;return registration}
+async function retireLegacyApprovalWorker(){
+  if(!("serviceWorker" in navigator))return;
+  try{
+    const registrations=await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(async(item)=>{
+      const worker=item.active||item.waiting||item.installing;
+      const script=String(worker?.scriptURL||"");
+      if(!script.endsWith("/kyerp-push-sw.js"))return;
+      try{const notes=await item.getNotifications();notes.forEach((note)=>note.close())}catch{}
+      try{await item.unregister()}catch{}
+    }));
+  }catch{}
+}
+async function ensureWorker(){
+  if(!("serviceWorker" in navigator))throw new Error("Bu tarayıcı güvenlik bildirimlerini desteklemiyor.");
+  await retireLegacyApprovalWorker();
+  registration=await navigator.serviceWorker.register("/security/sw.js",{scope:"/security/"});
+  try{await registration.update()}catch{}
+  await navigator.serviceWorker.ready;
+  return registration;
+}
 async function ensurePushSubscription(forceNew=false){
   const worker=await ensureWorker();
   const permission=Notification.permission==="granted"?"granted":await Notification.requestPermission();
@@ -48,7 +101,7 @@ async function ensurePushSubscription(forceNew=false){
   if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationServerKey(config.applicationServerKey)});
   return{worker,subscription};
 }
-function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}
+function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}\nfunction setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
 function showRelink(){relinkMode=true;els.setupPanel.classList.remove("hidden");els.setupTitle.textContent="Erişimi yeniden bağla";els.setupCopy.textContent="Ana KY ERP → Profil → Telefon Onayı → Erişim Yenileme Kodu Oluştur. Kodu ve mevcut KY ERP şifreni gir.";els.cancelRelinkButton.classList.remove("hidden")}
 function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden")}
 async function createSigningKey(){const generated=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);const publicJwk=await crypto.subtle.exportKey("jwk",generated.publicKey);const privateJwk=await crypto.subtle.exportKey("jwk",generated.privateKey);const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);return{publicJwk,privateKey}}
@@ -148,7 +201,7 @@ async function connectDevice(){
       throw error;
     }
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v1.2",savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.0",savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast(localUnlockCredentialId?"Erişim hazır. Face ID / parmak izi / PIN ile güvenli onay aktif.":"Erişim hazır. Güvenli cihaz imzası aktif.");
@@ -171,9 +224,10 @@ async function refreshPending(){
     if("setAppBadge" in navigator)navigator.setAppBadge(items.length).catch(()=>{});
   }else{
     els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.remove("hidden");
+    setEmptyState("Bekleyen giriş yok","Bağlantı hazır. Yeni KY ERP giriş isteği geldiğinde burada görünür ve tek bildirim alırsın.","✓");
     if("clearAppBadge" in navigator)navigator.clearAppBadge().catch(()=>{});
   }
-  registration?.active?.postMessage({type:"KYERP_SECURITY_REFRESH"});
+  registration?.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"});
   return items;
 }
 function startLoginCodeCountdown(expiresAt){
@@ -205,26 +259,38 @@ async function generateLoginCode(){
     toast(error?.message||"Giriş kodu üretilemedi.");
   }finally{busy=false;els.generateCodeButton.disabled=false}
 }
-async function repairConnection(){
-  if(busy)return;
+async function repairConnection(options={}){
+  const automatic=Boolean(options?.automatic);
+  if(busy)return false;
   const device=await readDevice().catch(()=>null);
-  if(!device?.deviceId||!device?.signingPrivateKey){showRelink();return toast("Cihaz erişim kaydı eksik. Erişim Yenileme Kodu ile yeniden bağlayın.")}
-  busy=true;els.repairButton.disabled=true;els.repairButton.textContent="Bağlantı yenileniyor...";
+  if(!device?.deviceId||!device?.signingPrivateKey){
+    showRelink();
+    if(!automatic)toast("Cihaz erişim kaydı eksik. Erişim Yenileme Kodu ile yeniden bağlayın.");
+    return false;
+  }
+  busy=true;
+  if(els.repairButton){els.repairButton.disabled=true;els.repairButton.textContent=automatic?"Otomatik onarılıyor...":"Bağlantı yenileniyor...";}
   try{
     const bundle=await ensurePushSubscription(true);
     const response=await deviceFetch("/auth/push/device/refresh",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
     const data=response?.data||{};
-    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v1.2",refreshedAt:data.refreshedAt||new Date().toISOString()});
-    bundle.worker.active?.postMessage({type:"KYERP_SECURITY_REFRESH"});
-    toast("Bağlantı yenilendi. Bildirim ve giriş onayı yeniden hazır.");
-    await refreshState();
+    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v2.0",refreshedAt:data.refreshedAt||new Date().toISOString()});
+    bundle.worker.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"});
+    if(!automatic)toast("Bağlantı yenilendi. Bildirim ve giriş onayı yeniden hazır.");
+    return true;
   }catch(error){
-    setBadge("Yenileme gerekli","bad");els.readyTitle.textContent="Bağlantı yenileme gerekli";
+    setBadge("Yenileme gerekli","bad");
+    if(els.readyTitle)els.readyTitle.textContent="Bağlantı yenileme gerekli";
     if(["PUSH_DEVICE_RECOVERY_UNAUTHORIZED","PUSH_DEVICE_UNAUTHORIZED"].includes(String(error?.code||"")))showRelink();
-    toast(error?.message||"Bağlantı yenilenemedi.");
-  }finally{busy=false;els.repairButton.disabled=false;els.repairButton.textContent="Bağlantıyı Yenile"}
+    if(!automatic)toast(error?.message||"Bağlantı yenilenemedi.");
+    return false;
+  }finally{
+    busy=false;
+    if(els.repairButton){els.repairButton.disabled=false;els.repairButton.textContent="Bağlantıyı Yenile";}
+  }
 }
-async function refreshState(){
+
+async function refreshState(options={}){
   const device=await readDevice().catch(()=>null);
   if(!device?.deviceId||!device?.deviceToken||!device?.signingPrivateKey){
     els.setupPanel.classList.remove("hidden");els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");setBadge("Kurulum gerekli");return;
@@ -238,17 +304,36 @@ async function refreshState(){
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
     els.readyTitle.textContent="Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
-    setHealth(els.pushHealth,health?.device?.lastError?"Kontrol gerekli":"Hazır",health?.device?.lastError?"warn":"ok");
+    setHealth(els.pushHealth,health?.device?.lastError?"Otomatik yenilenecek":"Hazır",health?.device?.lastError?"warn":"ok");
     els.lastSync.textContent="Son kontrol: "+new Date(health.checkedAt||Date.now()).toLocaleString("tr-TR");
     await refreshPending();
   }catch(error){
-    els.readyTitle.textContent=navigator.onLine?"Bağlantı yenileme gerekli":"Telefon çevrimdışı";els.readyMark.textContent="!";setBadge(navigator.onLine?"Yenile":"Çevrimdışı","bad");
-    setHealth(els.apiHealth,navigator.onLine?"Bağlantı yok":"Çevrimdışı","bad");
+    const code=String(error?.code||"");
+    const canAutoRepair=!options?.skipAutoRepair&&["PUSH_DEVICE_UNAUTHORIZED","DEVICE_NOT_READY"].includes(code)&&Date.now()-lastAutoRepairAt>120000;
+    if(canAutoRepair){
+      lastAutoRepairAt=Date.now();
+      const repaired=await repairConnection({automatic:true});
+      if(repaired)return refreshState({skipAutoRepair:true});
+    }
+
+    const offline=!navigator.onLine;
+    els.readyTitle.textContent=offline?"Telefon çevrimdışı":"Bağlantı kontrolü gerekli";
+    els.readyMark.textContent="!";
+    setBadge(offline?"Çevrimdışı":"Yenile","bad");
+    setHealth(els.apiHealth,offline?"Çevrimdışı":"Bağlantı yok","bad");
     setHealth(els.pushHealth,Notification.permission==="granted"?"Kontrol gerekli":"İzin kapalı","warn");
     els.lastSync.textContent="Son kontrol başarısız: "+new Date().toLocaleString("tr-TR");
-    els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");
-    if(["PUSH_DEVICE_UNAUTHORIZED","DEVICE_NOT_READY"].includes(String(error?.code||"")))showRelink();
-    toast(error?.message||"Telefon bağlantısı doğrulanamadı.");
+    els.pendingPanel.classList.add("hidden");
+    els.emptyPanel.classList.remove("hidden");
+    setEmptyState(
+      offline?"İnternet bağlantısı bekleniyor":"KY ERP Güvenlik bağlantısı yenileniyor",
+      offline
+        ?"İnternet geldiğinde uygulama otomatik olarak tekrar bağlanacak."
+        :(error?.message||"Güvenli telefon bağlantısı doğrulanamadı. Cihaz sekmesinden Bağlantıyı Yenile kullanılabilir."),
+      "!"
+    );
+    if(["PUSH_DEVICE_RECOVERY_UNAUTHORIZED"].includes(code))showRelink();
+    if(code!=="NETWORK_ERROR"&&code!=="REQUEST_TIMEOUT")toast(error?.message||"Telefon bağlantısı doğrulanamadı.");
   }
 }
 window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();installPrompt=event;renderInstall()});
@@ -290,7 +375,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 window.addEventListener("focus",refreshState);
 window.addEventListener("online",()=>{toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState()});
 window.addEventListener("offline",()=>{setBadge("Çevrimdışı","bad");if(els.readyTitle)els.readyTitle.textContent="Telefon çevrimdışı"});
-navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
+navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
 (async function boot(){
   document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
   const url=new URL(location.href);enrollmentQuery={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};

@@ -4,3 +4,9 @@
   Cache-Control: no-store, no-cache, must-revalidate
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/security/*
+  Cache-Control: no-store, no-cache, must-revalidate
+/security/sw.js
+  Cache-Control: no-store, no-cache, must-revalidate
+  Service-Worker-Allowed: /security/
