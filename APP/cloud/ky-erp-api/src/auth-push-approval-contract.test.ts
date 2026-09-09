@@ -189,3 +189,12 @@ test("trusted Security device keeps phone approval pending when push delivery is
   assert.match(push, /pushDelivered: sent > 0/);
   assert.match(push, /Bildirim kanalı geçici olarak yanıt vermedi/);
 });
+
+
+test("phone approval is attempted before legacy Authenticator migration",()=>{
+  const phoneIndex=policy.indexOf("startPhoneApprovalChallenge(c, refreshed || user, source)");
+  const legacyIndex=policy.indexOf("POLICY_MFA_LEGACY_REQUIRED");
+  assert.ok(phoneIndex >= 0);
+  assert.ok(legacyIndex >= 0);
+  assert.ok(phoneIndex < legacyIndex);
+});

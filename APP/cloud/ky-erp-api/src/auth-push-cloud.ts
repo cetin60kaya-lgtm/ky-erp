@@ -360,13 +360,17 @@ async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "M
     if (purpose === "MANAGER" && row.managerApprovalEnabled === false) return false;
     if (purpose === "SELF" && row.selfLoginEnabled === false) return false;
 
-    const explicitlyRetired = Boolean(text(row.retiredAt) || text(row.retiredReason));
+    const explicitlyRetired =
+      row.isActive === false &&
+      Boolean(text(row.retiredAt) || text(row.retiredReason));
     if (explicitlyRetired) return false;
 
     // Güvenilir cihaz kimliği ile Web Push aboneliği farklı şeylerdir.
-    // Eski bir sürüm push 404/410 yüzünden isActive=false bırakmış olsa bile
-    // SELF girişinde cihazı kaybetmeyiz; uygulama kendi imzasıyla bağlantıyı yeniler.
-    if (purpose === "SELF") return true;
+    // Güvenlik uygulaması yeniden kurulduğunda/yenilendiğinde isActive=true otoritedir;
+    // eski retiredAt/retiredReason kalıntısı telefon girişini Authenticator'a düşürmez.
+    // Eski bir sürüm push 404/410 yüzünden isActive=false bırakmış ama gerçekten
+    // emekli edilmemiş cihazı da SELF girişinde kaybetmeyiz.
+    if (purpose === "SELF") return row.isActive !== false || !Boolean(text(row.retiredAt) || text(row.retiredReason));
     return row.isActive !== false;
   });
 
@@ -1004,6 +1008,7 @@ export function registerAuthPushRoutes(app: any) {
       createdAt: existing?.createdAt || nowIso(),
       lastSeenAt: nowIso(),
       lastError: "",
+      retiredAt: "",
       retiredReason: "",
     });
 
@@ -1222,6 +1227,7 @@ export function registerAuthPushRoutes(app: any) {
       lastSeenAt: timestamp,
       lastRefreshAt: timestamp,
       lastError: "",
+      retiredAt: "",
       retiredReason: "",
     });
     await audit(c, "SECURITY_APP_CONNECTION_REFRESHED", actor.userId, actor.userId, actor.companySlug, {

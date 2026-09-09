@@ -613,6 +613,14 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, optio
   const available = enabledProviders(refreshed || user);
   const ownerRecovery = isSuper(role) ? await ownerRecoveryReadiness(c, refreshed || user) : { ready: false };
 
+  // Telefon onayı kayıtlı güvenilir cihaz varsa her normal girişte ilk denenir.
+  // Böylece eski/taşınmış MFA kolonları kullanıcıyı istemeden Google'a göndermez.
+  // BOTH_MFA özel politikası iki ayrı Authenticator kanalı istediği için korunur.
+  if (!options.skipPhone && policy !== "BOTH_MFA") {
+    const phoneApproval = await startPhoneApprovalChallenge(c, refreshed || user, source);
+    if (phoneApproval) return phoneApproval;
+  }
+
   if (Boolean(refreshed?.mfa_enabled) && text(refreshed?.mfa_secret) && !available.length) {
     const challenge = await createChallenge(c, refreshed || user, "POLICY_MFA_LEGACY_REQUIRED", source, policy, ttl);
     return {
@@ -628,14 +636,6 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, optio
   if (policy === "PASSWORD_ONLY") {
     await audit(c, "PASSWORD_ONLY_LOGIN_ACCEPTED", user.id, user.id, text(refreshed?.main_company_slug), "", { ttl });
     return afterFactors(c, refreshed || user, source);
-  }
-
-  // Telefon onayı, kayıtlı güvenilir cihaz varsa kod yazmadan kullanılan birincil
-  // ikinci faktördür. BOTH_MFA politikası iki ayrı Authenticator kanalı istediği için
-  // telefon onayı bu özel politikayı sessizce gevşetmez.
-  if (!options.skipPhone && policy !== "BOTH_MFA") {
-    const phoneApproval = await startPhoneApprovalChallenge(c, refreshed || user, source);
-    if (phoneApproval) return phoneApproval;
   }
 
   if (policy === "GOOGLE" && !available.includes("GOOGLE")) return beginProviderSetup(c, refreshed || user, "GOOGLE", source);

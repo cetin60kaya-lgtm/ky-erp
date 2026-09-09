@@ -75,3 +75,11 @@ test("push transport expiry never revokes the trusted security device and phone 
   assert.match(push,/PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
   assert.match(push,/pushDelivered: sent > 0/);
 });
+
+
+test("reactivated Security device clears stale retirement markers so phone login stays primary",()=>{
+  assert.match(push,/row\.isActive === false/);
+  assert.match(push,/retiredAt: ""/);
+  assert.match(push,/retiredReason: ""/);
+  assert.match(push,/if \(purpose === "SELF"\) return row\.isActive !== false \|\|/);
+});
