@@ -417,14 +417,65 @@ async function verifySecurityAppDecision(device: AnyRow, kind: string, id: strin
   }
 }
 
+async function verifySecurityDeviceAuth(c: any, device: AnyRow) {
+  if (device?.securityApp !== true) return false;
+  const jwk = objectOf(device?.decisionPublicKeyJwk);
+  const timestamp = text(c.req.header("X-KYERP-Security-Timestamp"));
+  const signature = text(c.req.header("X-KYERP-Security-Signature"));
+  const timestampMs = Number(timestamp);
+  if (
+    !jwk?.kty || !jwk?.crv || !jwk?.x || !jwk?.y ||
+    !timestamp || !signature || !Number.isFinite(timestampMs) ||
+    Math.abs(Date.now() - timestampMs) > 120_000
+  ) return false;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
+    const method = upper(c.req.method || "GET");
+    const pathname = new URL(c.req.url).pathname;
+    const message = new TextEncoder().encode(
+      `KYERP-DEVICE-AUTH-V1|${text(device.id)}|${method}|${pathname}|${timestamp}`,
+    );
+    return crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      base64UrlToBytes(signature),
+      message,
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function actorFromDevice(c: any) {
   const deviceId = text(c.req.header("X-KYERP-Push-Device"));
   const deviceToken = text(c.req.header("X-KYERP-Push-Token"));
   if (!deviceId || !deviceToken) return null;
 
-  const device = await storeGet(c, DEVICE_SCOPE, deviceId);
+  let device = await storeGet(c, DEVICE_SCOPE, deviceId);
   if (!device || device.isActive === false) return null;
-  if (!safeEqual(text(device.deviceTokenHash), await sha256(deviceToken))) return null;
+
+  const suppliedHash = await sha256(deviceToken);
+  if (!safeEqual(text(device.deviceTokenHash), suppliedHash)) {
+    const signedRecovery = await verifySecurityDeviceAuth(c, device);
+    if (!signedRecovery) return null;
+
+    device = await saveDevice(c, {
+      ...device,
+      deviceTokenHash: suppliedHash,
+      tokenRepairedAt: nowIso(),
+      lastError: "",
+    });
+    await audit(c, "SECURITY_DEVICE_TOKEN_REPAIRED", text(device.userId), text(device.userId), text(device.mainCompanySlug), {
+      deviceId: device.id,
+    });
+  }
 
   const user = await c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.role,u.is_active,
