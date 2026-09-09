@@ -130,3 +130,9 @@ test("security app does not navigate into the main ERP application",()=>{
   assert.doesNotMatch(html,/href="\/"[^>]*>Ana KY ERP/);
   assert.match(html,/KY Güvenlik · Ayrı uygulama/);
 });
+
+
+test("security runtime files stay JavaScript-syntax valid",()=>{
+  assert.doesNotThrow(()=>new Function(app));
+  assert.doesNotThrow(()=>new Function(sw));
+});

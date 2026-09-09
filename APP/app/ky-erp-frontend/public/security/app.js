@@ -20,7 +20,8 @@ let registration=null;
 let enrollmentQuery={id:"",token:""};
 let busy=false;
 let relinkMode=false;
-let loginCodeTimer=null;\nlet lastAutoRepairAt=0;
+let loginCodeTimer=null;
+let lastAutoRepairAt=0;
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
 function isStandalone(){return Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true)}
@@ -101,7 +102,8 @@ async function ensurePushSubscription(forceNew=false){
   if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationServerKey(config.applicationServerKey)});
   return{worker,subscription};
 }
-function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}\nfunction setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
+function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}
+function setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
 function showRelink(){relinkMode=true;els.setupPanel.classList.remove("hidden");els.setupTitle.textContent="Erişimi yeniden bağla";els.setupCopy.textContent="Ana KY ERP → Profil → Telefon Onayı → Erişim Yenileme Kodu Oluştur. Kodu ve mevcut KY ERP şifreni gir.";els.cancelRelinkButton.classList.remove("hidden")}
 function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden")}
 async function createSigningKey(){const generated=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);const publicJwk=await crypto.subtle.exportKey("jwk",generated.publicKey);const privateJwk=await crypto.subtle.exportKey("jwk",generated.privateKey);const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);return{publicJwk,privateKey}}
