@@ -61,7 +61,7 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(policy, /phone-approval\/:id\/fallback/);
   assert.match(policy, /skipPhone: true/);
   assert.match(login, /Telefonunuza bildirim gönderildi/);
-  assert.match(login, /6 haneli kod ile devam et/);
+  assert.match(login, /Google\/Microsoft Authenticator ile devam et/);
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
