@@ -141,7 +141,7 @@ test("push approval hides raw browser ids and uses Android friendly device label
   assert.match(push, /Android tablet/);
   assert.match(push, /friendlyDeviceLabel\(current\.deviceLabel, current\.userAgent\)/);
   assert.match(push, /friendlyDeviceLabel\(row\.device_label, row\.user_agent\)/);
-  assert.match(serviceWorker, /vibrate: \[180, 80, 180\]/);
+  assert.match(securityWorker, /vibrate:\\[180,80,180\\]/);
   assert.match(push, /supersedeOlderSelfChallenges/);
   assert.match(push, /SUPERSEDED/);
   assert.match(policy, /PHONE_APPROVAL_SUPERSEDED/);
