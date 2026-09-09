@@ -121,6 +121,24 @@ export const MODULES = [
     ],
   },
   {
+    key: "gunluk-operasyon",
+    permissionKey: "GUNLUK_OPERASYON",
+    label: "Günlük Operasyon",
+    icon: "takvim",
+    groups: [
+      {
+        label: "Operasyon",
+        tabs: [
+          ["ana-ekran", "Ana Ekran", "dashboard"],
+          ["gunluk-giris", "Günlük Giriş", "users"],
+          ["personel-kartlari", "Personel Kartları", "users"],
+          ["haftalik-ozet", "Haftalık Özet", "takvim"],
+          ["odeme-fisleri", "Ödeme Fişleri", "odemeler"],
+        ],
+      },
+    ],
+  },
+  {
     key: "ik",
     permissionKey: "IK",
     label: "İK",
@@ -264,6 +282,20 @@ export const MODULE_ROUTE_ALIASES = {
     "recete": "receteler",
     "uretim-gecmis": "uretim-gecmisi",
     "urun-ve-lotlar": "urun-lotlar",
+  },
+  "gunluk-operasyon": {
+    ozet: "ana-ekran",
+    genel: "ana-ekran",
+    "genel-bakis": "ana-ekran",
+    "gunluk-personel": "gunluk-giris",
+    "gun-giris": "gunluk-giris",
+    "daily-entry": "gunluk-giris",
+    "gunluk-personel-kartlari": "personel-kartlari",
+    "daily-personnel": "personel-kartlari",
+    "gun-haftalik-ozet": "haftalik-ozet",
+    "daily-weekly-summary": "haftalik-ozet",
+    "gunluk-odeme-fisleri": "odeme-fisleri",
+    "daily-payments": "odeme-fisleri",
   },
   ik: {
     "ik-ozet": "ozet",
