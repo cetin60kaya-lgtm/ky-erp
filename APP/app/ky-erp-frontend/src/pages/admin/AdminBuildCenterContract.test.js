@@ -6,6 +6,7 @@ const page = readFileSync(new URL("./AdminBuildCenter.jsx", import.meta.url), "u
 const admin = readFileSync(new URL("../modules/AdminPage.jsx", import.meta.url), "utf8");
 const registry = readFileSync(new URL("../../app/moduleRegistryBase.js", import.meta.url), "utf8");
 const shell = readFileSync(new URL("../../layouts/AppShellV3.jsx", import.meta.url), "utf8");
+const service = readFileSync(new URL("../../services/adminApi.js", import.meta.url), "utf8");
 
 test("owner release center exposes one-time agent enrollment, build, R2 and Setup actions", () => {
   assert.match(page, /Windows Build & Sürüm Merkezi/);
@@ -22,4 +23,11 @@ test("release center is owner-only in route and shell navigation", () => {
   assert.match(admin, /owner \? <AdminBuildCenter/);
   assert.match(registry, /\["surum-merkezi", "Sürüm Merkezi"/);
   assert.match(shell, /OWNER_ONLY_ADMIN_TABS[^\n]+surum-merkezi/);
+});
+
+
+test("release center service uses one-time enrollment instead of reusable token rotation", () => {
+  assert.match(service, /createBuildAgentEnrollment/);
+  assert.match(service, /\/admin\/build-center\/agent-enrollment/);
+  assert.doesNotMatch(service, /rotateBuildAgentToken/);
 });
