@@ -16,7 +16,7 @@ const REFRESH_LOCK_MS = 30 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
 const AuthContext = createContext(null);
@@ -639,6 +639,12 @@ export function AuthProvider({ children }) {
     return finalizeResponse(response);
   }, [finalizeResponse]);
 
+  const resendPhoneApproval = useCallback(async ({ phoneApprovalId, phoneApprovalToken }) =>
+    runAuthOnce(`PHONE-RESEND:${phoneApprovalId}`, () => directAuthRequest(`/auth/phone-approval/${phoneApprovalId}/resend`, {
+      body: { phoneApprovalToken },
+      timeoutMs: 12000,
+    })), [runAuthOnce]);
+
   const useAuthenticatorFallback = useCallback(async ({ phoneApprovalId, phoneApprovalToken }) =>
     runAuthOnce(`PHONE-FALLBACK:${phoneApprovalId}`, () => directAuthRequest(`/auth/phone-approval/${phoneApprovalId}/fallback`, {
       body: { phoneApprovalToken },
@@ -670,10 +676,10 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa,
-    startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, useAuthenticatorFallback,
+    startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, resendPhoneApproval, useAuthenticatorFallback,
     logout, hasModule, can,
     isAuthenticated: Boolean(token && user), loading,
-  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
+  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, resendPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
