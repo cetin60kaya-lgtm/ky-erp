@@ -92,3 +92,9 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(app,/Safari → Paylaş → Ana Ekrana Ekle/);
   assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
 });
+
+
+test("appearance center centralizes KY ERP and KY Security install entry points",()=>{
+  assert.match(setup,/Android için KY Güvenlik'i İndir \/ Kur/);
+  assert.match(setup,/iPhone \/ iPad için KY Güvenlik'i Kur/);
+});

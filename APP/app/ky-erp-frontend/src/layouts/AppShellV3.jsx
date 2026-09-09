@@ -586,8 +586,8 @@ export default function AppShellV3({
                   <button type="button" role="menuitem" onClick={openDisplaySettingsFromProfile}>
                     <Monitor size={18} />
                     <span>
-                      <strong>Ekran & Görünüm</strong>
-                      <small>PC, tablet ve telefon görünümünü ayarla</small>
+                      <strong>Görünüm & Uygulamalar</strong>
+                      <small>Ekran düzeni ve KY ERP uygulama kurulumları</small>
                     </span>
                   </button>
                 </nav>
@@ -631,6 +631,12 @@ export default function AppShellV3({
         ? createPortal(
             <DisplaySettingsPanel
               display={displayPreferences}
+              canInstallMainApp={Boolean(installPrompt)}
+              onInstallMainApp={installPwa}
+              onOpenSecurityCenter={() => {
+                setDisplaySettingsOpen(false);
+                setPhoneApprovalOpen(true);
+              }}
               onClose={() => setDisplaySettingsOpen(false)}
             />,
             document.body,

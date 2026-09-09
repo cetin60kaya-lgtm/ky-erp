@@ -1,8 +1,11 @@
 import {
   Check,
+  Download,
+  ExternalLink,
   Monitor,
   RotateCcw,
   Settings2,
+  ShieldCheck,
   Smartphone,
   Tablet,
   X,
@@ -32,10 +35,55 @@ function SettingRow({ icon: Icon, title, description, children }) {
   );
 }
 
-export default function DisplaySettingsPanel({ display, onClose }) {
+function detectPlatform() {
+  try {
+    const ua = String(window.navigator?.userAgent || "");
+    const ios = /iPhone|iPad|iPod/i.test(ua)
+      || (String(window.navigator?.platform || "") === "MacIntel" && Number(window.navigator?.maxTouchPoints || 0) > 1);
+    if (ios) return { key: "ios", label: "iPhone / iPad" };
+    if (/Android/i.test(ua)) return { key: "android", label: "Android" };
+    if (/Windows/i.test(ua)) return { key: "windows", label: "Windows / PC" };
+    if (/Macintosh|Mac OS X/i.test(ua)) return { key: "mac", label: "macOS" };
+  } catch { /* noop */ }
+  return { key: "other", label: "Bu cihaz" };
+}
+
+function isStandaloneApp() {
+  try {
+    return Boolean(
+      window.matchMedia?.("(display-mode: standalone)")?.matches
+      || window.navigator?.standalone === true,
+    );
+  } catch { return false; }
+}
+
+export default function DisplaySettingsPanel({
+  display,
+  canInstallMainApp = false,
+  onInstallMainApp,
+  onOpenSecurityCenter,
+  onClose,
+}) {
   const orientation = display.viewport.width >= display.viewport.height ? "Yatay" : "Dikey";
   const detected = displayModeLabel(display.recommendedMode);
   const active = displayModeLabel(display.effectiveMode);
+  const platform = detectPlatform();
+  const standalone = isStandaloneApp();
+
+  function openSecurityInstaller(target) {
+    const url = new URL("https://app.kyerp.net/security/");
+    url.searchParams.set("install", "1");
+    url.searchParams.set("platform", target);
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  }
+
+  const mainInstallLabel = standalone
+    ? "KY ERP bu cihazda yüklü"
+    : canInstallMainApp
+      ? `KY ERP'yi ${platform.label} cihazına kur`
+      : platform.key === "ios"
+        ? "iPhone / iPad kurulum adımı"
+        : "Kurulum desteğini kontrol et";
 
   return (
     <div className="display-settings-backdrop" role="presentation" onMouseDown={onClose}>
@@ -43,19 +91,111 @@ export default function DisplaySettingsPanel({ display, onClose }) {
         className="display-settings-panel"
         role="dialog"
         aria-modal="true"
-        aria-label="Ekran ayarları"
+        aria-label="Görünüm ve uygulamalar"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="display-settings-head">
           <div>
             <small>Ayarlar</small>
-            <h2>Sistem <span>›</span> Ekran</h2>
-            <p>KY ERP görünümünü Windows ekran ayarları mantığıyla otomatik veya manuel yönetin.</p>
+            <h2>Sistem <span>›</span> Görünüm & Uygulamalar</h2>
+            <p>Ekran düzeni, cihaz görünümü ve KY ERP uygulama kurulumlarını tek merkezden yönetin.</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Ekran ayarlarını kapat"><X size={20} /></button>
+          <button type="button" onClick={onClose} aria-label="Görünüm ve uygulamaları kapat"><X size={20} /></button>
         </header>
 
         <div className="display-settings-body">
+          <section className="display-settings-section">
+            <h3>Uygulamalar</h3>
+            <div className="display-apps-grid">
+              <article className="display-app-card primary">
+                <div className="display-app-card-head">
+                  <span className="display-app-icon"><Monitor size={22} /></span>
+                  <div>
+                    <small>ANA UYGULAMA</small>
+                    <strong>KY ERP</strong>
+                    <p>Muhasebe, İK, PDKS, üretim, mail ve yönetim merkezi.</p>
+                  </div>
+                </div>
+
+                <div className="display-platform-badges">
+                  <span>Windows / PC</span>
+                  <span>Android</span>
+                  <span>iPhone / iPad</span>
+                  <span>Tablet</span>
+                </div>
+
+                <button
+                  type="button"
+                  className="display-app-install"
+                  disabled={standalone || (!canInstallMainApp && platform.key !== "ios")}
+                  onClick={() => {
+                    if (platform.key === "ios" && !canInstallMainApp) return;
+                    onInstallMainApp?.();
+                  }}
+                >
+                  <Download size={17} />
+                  {mainInstallLabel}
+                </button>
+
+                {platform.key === "ios" && !standalone ? (
+                  <div className="display-install-note">
+                    <strong>iPhone / iPad</strong>
+                    <span>Safari → Paylaş → Ana Ekrana Ekle → Ekle. Apple, web uygulamalarında sessiz tek tuş kurulumuna izin vermez.</span>
+                  </div>
+                ) : null}
+
+                {!standalone && !canInstallMainApp && platform.key !== "ios" ? (
+                  <div className="display-install-note">
+                    <strong>{platform.label}</strong>
+                    <span>Chrome / Edge kurulum penceresi hazır olduğunda düğme otomatik aktif olur. Tarayıcı menüsündeki “Uygulamayı yükle” seçeneği de aynı KY ERP uygulamasını kurar.</span>
+                  </div>
+                ) : null}
+
+                {standalone ? (
+                  <div className="display-installed-state"><Check size={16} /> Bu cihaz KY ERP uygulama modunda çalışıyor.</div>
+                ) : null}
+              </article>
+
+              <article className="display-app-card security">
+                <div className="display-app-card-head">
+                  <span className="display-app-icon"><ShieldCheck size={22} /></span>
+                  <div>
+                    <small>GÜVENLİK UYGULAMASI</small>
+                    <strong>KY ERP Güvenlik</strong>
+                    <p>Güvenilir cihaz, giriş onayı, 6 haneli giriş kodu ve bağlantı yenileme.</p>
+                  </div>
+                </div>
+
+                <div className="display-platform-badges">
+                  <span>Android Telefon</span>
+                  <span>Android Tablet</span>
+                  <span>iPhone</span>
+                  <span>iPad</span>
+                </div>
+
+                <div className="display-security-install-actions">
+                  <button type="button" onClick={() => openSecurityInstaller("android")}>
+                    <Download size={16} /> Android için indir / kur
+                  </button>
+                  <button type="button" onClick={() => openSecurityInstaller("ios")}>
+                    <Smartphone size={16} /> iPhone / iPad için kur
+                  </button>
+                </div>
+
+                <button type="button" className="display-security-center" onClick={onOpenSecurityCenter}>
+                  <ShieldCheck size={16} />
+                  Telefon Onayı & Güvenilir Cihaz Merkezi
+                  <ExternalLink size={14} />
+                </button>
+              </article>
+            </div>
+
+            <div className="display-apps-footnote">
+              <strong>Tek uygulama merkezi:</strong>
+              <span>Yeni Windows masaüstü paketi, Android paketi veya başka platform çıkarsa indirme seçeneği bu bölüme eklenecek; kullanıcı farklı menülerde aramayacak.</span>
+            </div>
+          </section>
+
           <section className="display-settings-section">
             <h3>Görünüm modu</h3>
             <div className="display-mode-grid">
@@ -80,6 +220,8 @@ export default function DisplaySettingsPanel({ display, onClose }) {
               Algılanan cihaz: <strong>{detected}</strong>
               <span>•</span>
               Aktif düzen: <strong>{active}</strong>
+              <span>•</span>
+              Platform: <strong>{platform.label}</strong>
             </div>
           </section>
 

@@ -12,7 +12,7 @@ test("topbar account chip opens one profile and security surface", () => {
   assert.match(source, /Profil & Süper Yönetici Güvenliği/);
   assert.match(source, /Platform Yönetimi/);
   assert.match(source, /Telefon Onayı/);
-  assert.match(source, /Ekran & Görünüm/);
+  assert.match(source, /Görünüm & Uygulamalar/);
   assert.match(source, /onLogout/);
   assert.doesNotMatch(source, />Çıkış<\/button>/);
 });
@@ -30,4 +30,11 @@ test("profile menu stays usable on tablet and phone", () => {
   assert.match(responsiveCss, /data-layout-mode="tablet"/);
   assert.match(responsiveCss, /data-layout-mode="phone"/);
   assert.match(responsiveCss, /min-height: 54px !important/);
+});
+
+
+test("display settings is also the central app installation hub", () => {
+  assert.match(source, /canInstallMainApp=\{Boolean\(installPrompt\)\}/);
+  assert.match(source, /onInstallMainApp=\{installPwa\}/);
+  assert.match(source, /onOpenSecurityCenter/);
 });
