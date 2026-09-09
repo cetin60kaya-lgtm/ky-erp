@@ -23,13 +23,21 @@
     </header>
 
     <section id="installPanel" class="security-card hidden">
-      <span class="eyebrow">UYGULAMA KURULUMU</span>
-      <h1>KY ERP Güvenlik</h1>
-      <p>Giriş onayları, kısa süreli giriş kodu ve güvenilir cihaz bağlantısı tek güvenlik uygulamasında.</p>
-      <button id="installButton" class="primary hidden" type="button">Uygulamayı Yükle</button>
+      <span class="eyebrow">KY GÜVENLİK UYGULAMASI</span>
+      <h1 id="installTitle">KY ERP Güvenlik'i Kur</h1>
+      <p id="installCopy">Giriş onayları, kısa süreli giriş kodu ve güvenilir cihaz bağlantısı tek uygulamada.</p>
+      <div id="installState" class="install-state">
+        <span class="install-state-mark">KY</span>
+        <div><strong>KY ERP Güvenlik</strong><small id="installStateText">Cihaz uyumluluğu kontrol ediliyor.</small></div>
+      </div>
+      <button id="installButton" class="primary hidden" type="button">Android'e KY Güvenlik'i Yükle</button>
+      <div id="androidInstallNote" class="note hidden">
+        <b>Android kurulumu</b>
+        <span>Chrome veya Edge bu cihazda uygulama kurulumunu destekliyorsa yukarıdaki düğme Android'in kendi yükleme penceresini açar.</span>
+      </div>
       <div id="iosInstallNote" class="note hidden">
-        <b>iPhone / iPad</b>
-        <span>Safari → Paylaş → Ana Ekrana Ekle. Sonra KY Güvenlik ikonundan açın.</span>
+        <b>iPhone / iPad kurulumu</b>
+        <span>Apple doğrudan web yükleme düğmesine izin vermez: Safari → Paylaş → Ana Ekrana Ekle → Ekle. Sonra KY Güvenlik ikonundan açın.</span>
       </div>
     </section>
 

@@ -3,7 +3,7 @@ const STORE="device";
 const KEY="active";
 const API_BASE="https://api.kyerp.net/api";
 const APP_URL="/security/?open=1";
-const CACHE_NAME="kyerp-security-shell-v4";
+const CACHE_NAME="kyerp-security-shell-v5";
 
 function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
 async function readDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readonly");const req=tx.objectStore(STORE).get(KEY);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}

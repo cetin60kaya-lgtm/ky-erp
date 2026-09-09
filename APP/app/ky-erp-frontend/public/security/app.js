@@ -5,7 +5,8 @@ const KEY="active";
 
 const qs=(selector)=>document.querySelector(selector);
 const els={
-  connectionBadge:qs("#connectionBadge"),installPanel:qs("#installPanel"),installButton:qs("#installButton"),iosInstallNote:qs("#iosInstallNote"),
+  connectionBadge:qs("#connectionBadge"),installPanel:qs("#installPanel"),installButton:qs("#installButton"),iosInstallNote:qs("#iosInstallNote"),androidInstallNote:qs("#androidInstallNote"),
+  installTitle:qs("#installTitle"),installCopy:qs("#installCopy"),installState:qs("#installState"),installStateText:qs("#installStateText"),
   setupPanel:qs("#setupPanel"),appPanel:qs("#appPanel"),readyPanel:qs("#readyPanel"),pendingPanel:qs("#pendingPanel"),emptyPanel:qs("#emptyPanel"),
   enrollmentCode:qs("#enrollmentCode"),password:qs("#password"),deviceLabel:qs("#deviceLabel"),connectButton:qs("#connectButton"),
   refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
@@ -55,7 +56,65 @@ async function createLocalUnlock(){if(!window.PublicKeyCredential||!navigator.cr
 async function confirmLocalUnlock(device){if(!device?.localUnlockCredentialId)return true;if(!navigator.credentials?.get)throw new Error("Cihaz kilidi doğrulaması kullanılamıyor.");const result=await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rpId:location.hostname,allowCredentials:[{type:"public-key",id:base64UrlToBytes(device.localUnlockCredentialId)}],userVerification:"required",timeout:60000}});if(!result)throw new Error("Cihaz kilidi doğrulanamadı.");return true}
 async function signDecision(device,kind,id,decision){if(!device?.signingPrivateKey)throw new Error("Güvenlik cihazı imza anahtarı bulunamadı. Cihazı yeniden kurun.");const message=new TextEncoder().encode(`KYERP-DECISION-V1|${device.deviceId}|${kind}|${id}|${decision}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return base64Url(signature)}
 function cleanEnrollmentQuery(){try{const url=new URL(location.href);url.searchParams.delete("enrollmentId");url.searchParams.delete("enrollmentToken");history.replaceState({},"",url.pathname+url.search+url.hash)}catch{}}
-function renderInstall(){const ios=isIos();if(ios&&!isStandalone()){els.installPanel.classList.remove("hidden");els.iosInstallNote.classList.remove("hidden")}else if(installPrompt){els.installPanel.classList.remove("hidden");els.installButton.classList.remove("hidden")}}
+function requestedInstall(){
+  try{
+    const params=new URL(location.href).searchParams;
+    return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase()};
+  }catch{return{requested:false,platform:""}}
+}
+function renderInstall(){
+  const request=requestedInstall();
+  const ios=isIos()||request.platform==="ios";
+  const android=/Android/i.test(String(navigator.userAgent||""))||request.platform==="android";
+  const standalone=isStandalone();
+
+  els.androidInstallNote.classList.add("hidden");
+  els.iosInstallNote.classList.add("hidden");
+  els.installButton.classList.add("hidden");
+  els.installButton.disabled=false;
+
+  if(standalone){
+    if(request.requested){
+      els.installPanel.classList.remove("hidden");
+      els.installTitle.textContent="KY ERP Güvenlik zaten yüklü";
+      els.installCopy.textContent="Bu cihaz uygulama modunda çalışıyor. Kurulumu tekrar yapmana gerek yok.";
+      els.installStateText.textContent="Yüklü · Uygulama modu aktif";
+      els.installState.classList.add("installed");
+    }else{
+      els.installPanel.classList.add("hidden");
+    }
+    return;
+  }
+
+  if(ios){
+    els.installPanel.classList.remove("hidden");
+    els.installTitle.textContent="iPhone / iPad'e KY Güvenlik'i Kur";
+    els.installCopy.textContent="iOS kurulumunu Safari'nin Ana Ekrana Ekle sistemi tamamlar.";
+    els.installStateText.textContent="iOS kurulumu için Safari adımı gerekli";
+    els.iosInstallNote.classList.remove("hidden");
+    return;
+  }
+
+  if(android||request.requested||installPrompt){
+    els.installPanel.classList.remove("hidden");
+    els.installTitle.textContent="Android'e KY Güvenlik'i İndir / Kur";
+    els.installCopy.textContent="Aşağıdaki düğme desteklenen Android tarayıcısında sistem uygulama kurulum penceresini açar.";
+    els.androidInstallNote.classList.remove("hidden");
+    if(installPrompt){
+      els.installStateText.textContent="Kuruluma hazır";
+      els.installButton.textContent="Android'e KY Güvenlik'i Yükle";
+      els.installButton.classList.remove("hidden");
+    }else{
+      els.installStateText.textContent="Kurulum desteği hazırlanıyor veya bu tarayıcı yüklemeyi desteklemiyor";
+      els.installButton.textContent="Android Yükleme Hazırlanıyor";
+      els.installButton.classList.remove("hidden");
+      els.installButton.disabled=true;
+    }
+    return;
+  }
+
+  els.installPanel.classList.add("hidden");
+}
 function showTab(name){
   document.querySelectorAll(".security-tabs button").forEach((button)=>button.classList.toggle("active",button.dataset.tab===name));
   ["approvals","code","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
@@ -193,7 +252,33 @@ async function refreshState(){
   }
 }
 window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();installPrompt=event;renderInstall()});
-els.installButton.addEventListener("click",async()=>{if(!installPrompt)return;await installPrompt.prompt();installPrompt=null;els.installButton.classList.add("hidden")});
+window.addEventListener("appinstalled",()=>{
+  installPrompt=null;
+  els.installPanel.classList.remove("hidden");
+  els.installTitle.textContent="KY ERP Güvenlik yüklendi";
+  els.installCopy.textContent="Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan açabilirsin.";
+  els.installStateText.textContent="Yüklendi · Hazır";
+  els.installState.classList.add("installed");
+  els.installButton.classList.add("hidden");
+  els.androidInstallNote.classList.add("hidden");
+  toast("KY ERP Güvenlik uygulaması yüklendi.");
+});
+els.installButton.addEventListener("click",async()=>{
+  if(!installPrompt){
+    renderInstall();
+    return;
+  }
+  const prompt=installPrompt;
+  installPrompt=null;
+  await prompt.prompt();
+  const choice=await prompt.userChoice.catch(()=>null);
+  if(choice?.outcome==="accepted"){
+    els.installStateText.textContent="Kurulum onaylandı; Android tamamlıyor.";
+  }else{
+    els.installStateText.textContent="Kurulum iptal edildi. İstersen tekrar deneyebilirsin.";
+  }
+  renderInstall();
+});
 els.connectButton.addEventListener("click",connectDevice);
 els.generateCodeButton.addEventListener("click",generateLoginCode);
 document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
@@ -210,6 +295,6 @@ navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECUR
   document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
   const url=new URL(location.href);enrollmentQuery={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
   if(enrollmentQuery.id&&enrollmentQuery.token){showRelink();toast("Erişim bağlantısı alındı. Mevcut KY ERP şifreni gir.")}
-  renderInstall();showTab("approvals");try{await ensureWorker()}catch{}await refreshState();
+  renderInstall();showTab("approvals");try{await ensureWorker()}catch{}renderInstall();await refreshState();
   setInterval(()=>{if(document.visibilityState==="visible"&&navigator.onLine)refreshState()},15000);
 })();

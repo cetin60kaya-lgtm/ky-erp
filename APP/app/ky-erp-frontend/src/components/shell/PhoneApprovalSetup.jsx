@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, ExternalLink, RefreshCw, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, ExternalLink, RefreshCw, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "../../utils/api";
 import "./phone-approval-setup.css";
 
@@ -26,6 +26,15 @@ export default function PhoneApprovalSetup({ onClose }) {
     () => securityDevices.some((row) => Boolean(row.lastError)),
     [securityDevices],
   );
+  const clientPlatform = useMemo(() => {
+    try {
+      const ua = String(window.navigator?.userAgent || "");
+      const ios = /iPhone|iPad|iPod/i.test(ua) || (String(window.navigator?.platform || "") === "MacIntel" && Number(window.navigator?.maxTouchPoints || 0) > 1);
+      if (ios) return "ios";
+      if (/Android/i.test(ua)) return "android";
+    } catch { /* noop */ }
+    return "desktop";
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -79,9 +88,24 @@ export default function PhoneApprovalSetup({ onClose }) {
     }
   }
 
+  function securityAppUrl(extra = {}) {
+    const raw = enrollment?.appUrl || "https://app.kyerp.net/security/";
+    const url = new URL(raw, window.location.origin);
+    Object.entries(extra).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(key, String(value));
+    });
+    return url.toString();
+  }
+
   function openSecurityApp() {
-    const url = enrollment?.appUrl || "https://app.kyerp.net/security/";
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(securityAppUrl({ open: 1 }), "_blank", "noopener,noreferrer");
+  }
+
+  function openSecurityInstaller(platform) {
+    window.open(securityAppUrl({ install: 1, platform }), "_blank", "noopener,noreferrer");
+    setMessage(platform === "android"
+      ? "KY Güvenlik Android kurulum ekranı açıldı. Oradaki Android'e Yükle düğmesi sistem kurulum penceresini açar."
+      : "KY Güvenlik iPhone/iPad kurulum ekranı açıldı. iOS'ta Safari → Paylaş → Ana Ekrana Ekle adımı Apple tarafından zorunludur.");
   }
 
   async function refreshSecurityConnection() {
@@ -144,11 +168,38 @@ export default function PhoneApprovalSetup({ onClose }) {
               <Smartphone size={24}/>
             </div>
 
+            <div className="phone-approval-install-box">
+              <div>
+                <span className="phone-approval-install-kicker">KY GÜVENLİK UYGULAMASI</span>
+                <strong>Önce güvenlik uygulamasını telefona kur</strong>
+                <small>Tarayıcı adresi ezberlemek yok; buradan doğrudan cihaz kurulum ekranına geç.</small>
+              </div>
+              <div className="phone-approval-install-actions">
+                <button
+                  type="button"
+                  className={clientPlatform === "android" ? "phone-approval-install-primary is-device" : "phone-approval-install-primary"}
+                  onClick={() => openSecurityInstaller("android")}
+                >
+                  <Download size={18}/> Android için KY Güvenlik'i İndir / Kur
+                </button>
+                <button
+                  type="button"
+                  className={clientPlatform === "ios" ? "phone-approval-install-secondary is-device" : "phone-approval-install-secondary"}
+                  onClick={() => openSecurityInstaller("ios")}
+                >
+                  <Smartphone size={18}/> iPhone / iPad için KY Güvenlik'i Kur
+                </button>
+              </div>
+              <small className="phone-approval-install-note">
+                Android'de KY Güvenlik ekranındaki yükleme düğmesi sistem kurulum penceresini açar. iPhone/iPad'de Apple, web uygulamalarının sessiz kurulmasına izin vermediği için Safari → Paylaş → Ana Ekrana Ekle adımı gösterilir.
+              </small>
+            </div>
+
             <div className="phone-approval-flow">
-              <div><b>1</b><span>Kurulum kodu oluştur.</span></div>
-              <div><b>2</b><span>Telefon/tablette <strong>app.kyerp.net/security</strong> aç.</span></div>
-              <div><b>3</b><span>Kodu ve mevcut KY ERP şifreni gir; bildirim + cihaz güvenliği kurulsun.</span></div>
-              <div><b>4</b><span>Sonraki girişlerde tek bildirim → uygulamayı aç → Onayla → Face ID/parmak izi/PIN.</span></div>
+              <div><b>1</b><span>KY Güvenlik uygulamasını telefona kur.</span></div>
+              <div><b>2</b><span>Kurulum kodu oluştur.</span></div>
+              <div><b>3</b><span>Kodu ve mevcut KY ERP şifreni gir; güvenilir cihaz bağlantısı tamamlansın.</span></div>
+              <div><b>4</b><span>Sonraki girişlerde tek bildirim → Onayla veya Giriş Kodu → Face ID/parmak izi/PIN.</span></div>
             </div>
 
             {!enrollment ? (
@@ -173,8 +224,7 @@ export default function PhoneApprovalSetup({ onClose }) {
             )}
 
             <small className="phone-approval-help">
-              Android: Chrome/Edge üzerinden uygulamayı yükleyebilirsiniz. iPhone/iPad: Safari → Paylaş → Ana Ekrana Ekle.
-              iOS bildirimleri Ana Ekrana eklenmiş web uygulamasında çalışır.
+              Kurulum tamamlandıktan sonra KY Güvenlik telefonda ayrı uygulama gibi açılır. Güvenilir cihaz kaydı uygulamayı yeniden açtığınızda korunur.
             </small>
           </section>
 

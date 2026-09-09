@@ -42,3 +42,10 @@ button{cursor:pointer}
 .login-code-box.active{border-style:solid;border-color:#a9c9ef;background:#eef6ff}.login-code-box.expired{border-color:#e7c2c2;background:#fff6f6}.login-code-box.expired strong{color:#9a4444}
 @media(min-width:720px){.security-tabs{top:10px}}
 @media(max-width:560px){.security-tabs{top:68px}.login-code-box strong{font-size:30px}}
+
+
+.install-state{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid #d8e5f2;border-radius:13px;background:#f8fbff}
+.install-state-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:linear-gradient(145deg,#2162ad,#10284d);color:#fff;font-size:11px;font-weight:900}
+.install-state>div{display:grid;gap:2px}.install-state strong{font-size:13px;color:#173a61}.install-state small{font-size:10px;color:#6a8096}
+.install-state.installed{border-color:#b8dfc7;background:#effaf3}.install-state.installed .install-state-mark{background:#22824d}
+#installButton:disabled{opacity:.55;cursor:wait}

@@ -43,7 +43,7 @@ test("security app signs device-authenticated API calls and service worker cache
   assert.match(app,/X-KYERP-Security-Timestamp/);
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.match(sw,/signDeviceAuth/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v4"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -77,5 +77,18 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/auth\/push\/device\/login-code/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Telefon Bağlantısını Yenile/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v4"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
+});
+
+
+test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
+  assert.match(setup,/Android için KY Güvenlik'i İndir \/ Kur/);
+  assert.match(setup,/iPhone \/ iPad için KY Güvenlik'i Kur/);
+  assert.match(setup,/openSecurityInstaller/);
+  assert.match(app,/requestedInstall/);
+  assert.match(app,/beforeinstallprompt/);
+  assert.match(app,/appinstalled/);
+  assert.match(app,/Android'e KY Güvenlik'i Yükle/);
+  assert.match(app,/Safari → Paylaş → Ana Ekrana Ekle/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
 });

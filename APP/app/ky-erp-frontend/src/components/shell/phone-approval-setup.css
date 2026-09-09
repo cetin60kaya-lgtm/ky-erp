@@ -81,3 +81,21 @@
 
 .phone-approval-connection-actions{display:grid;grid-template-columns:1.35fr 1fr;gap:8px}.phone-approval-connection-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
 @media(max-width:760px){.phone-approval-connection-actions{grid-template-columns:1fr}}
+
+
+/* Telefon Onayı içinden doğrudan KY Güvenlik kurulum yönlendirmesi */
+.phone-approval-install-box{display:grid;gap:10px;padding:14px;border:1px solid #bcd5f3;border-radius:14px;background:linear-gradient(145deg,#edf6ff,#f8fbff)}
+.phone-approval-install-box>div:first-child{display:grid;gap:3px}
+.phone-approval-install-kicker{font-size:9px;font-weight:900;letter-spacing:.12em;color:#4b78a8}
+.phone-approval-install-box strong{font-size:14px;color:#173a61}
+.phone-approval-install-box small{font-size:10px;line-height:1.45;color:#6a8096}
+.phone-approval-install-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.phone-approval-install-actions button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:8px 11px}
+.phone-approval-install-primary{border-color:#2563da!important;background:#2563da!important;color:#fff!important}
+.phone-approval-install-secondary{border-color:#23364a!important;background:#23364a!important;color:#fff!important}
+.phone-approval-install-actions .is-device{box-shadow:0 0 0 3px rgba(37,99,218,.12),0 8px 18px rgba(28,74,130,.12)}
+.phone-approval-install-note{padding-top:1px}
+@media(max-width:760px){
+  .phone-approval-install-actions{grid-template-columns:1fr}
+  .phone-approval-install-actions button{min-height:52px;font-size:13px}
+}
