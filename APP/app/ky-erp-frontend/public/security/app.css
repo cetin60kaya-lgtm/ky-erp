@@ -22,3 +22,12 @@ button{cursor:pointer}
 .security-footer{display:flex;justify-content:space-between;gap:12px;padding:8px 2px;color:#7a8fa3;font-size:9px}.security-footer a{color:#31669c;text-decoration:none;font-weight:800}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));z-index:20;width:min(560px,calc(100vw - 28px));transform:translateX(-50%);padding:12px 14px;border-radius:12px;background:#10284d;color:#fff;font-size:12px;box-shadow:0 18px 40px rgba(12,28,47,.28)}
 @media(min-width:720px){.security-shell{padding-top:28px}.security-header{position:relative;margin:0 0 16px;padding:0 2px 2px;border:0;background:transparent;backdrop-filter:none}.security-card{padding:22px}.approval-actions{grid-template-columns:1fr 1fr}}
+
+.security-health-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.security-health-grid>div{display:grid;gap:3px;padding:10px 11px;border:1px solid #dce6f0;border-radius:11px;background:#f8fbff}
+.security-health-grid span{font-size:9px;font-weight:800;color:#73889d}
+.security-health-grid b{font-size:12px;color:#38536d}
+.security-health-grid b.ok{color:#24804b}.security-health-grid b.warn{color:#9a691a}.security-health-grid b.bad{color:#a63d3d}
+.security-last-sync{color:#7b8fa3;font-size:10px}
+.security-repair-actions{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
+@media(max-width:620px){.security-repair-actions{grid-template-columns:1fr}.security-repair-actions button{min-height:52px}}

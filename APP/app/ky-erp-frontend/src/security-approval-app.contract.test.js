@@ -43,7 +43,7 @@ test("security app signs device-authenticated API calls and service worker cache
   assert.match(app,/X-KYERP-Security-Timestamp/);
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.match(sw,/signDeviceAuth/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v2"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v3"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -52,4 +52,20 @@ test("main ERP exposes connection diagnostics and a one-time access refresh path
   assert.match(setup,/Erişim Yenileme Kodu Oluştur/);
   assert.match(setup,/Bağlantı kontrolü gerekli/);
   assert.match(setup,/Durumu Yenile/);
+});
+
+
+test("security app verifies server health before ready and provides one-tap connection repair",()=>{
+  assert.match(app,/auth\/push\/device\/health/);
+  assert.match(app,/auth\/push\/device\/refresh/);
+  assert.match(app,/repairConnection/);
+  assert.match(app,/Bağlantı yenilendi/);
+  assert.match(app,/Erişim Yenileme Kodu/);
+  assert.match(app,/replaceDeviceId/);
+});
+
+test("push fetch failure stays visible and routes user to connection recovery",()=>{
+  assert.match(sw,/KY ERP · Bağlantı Kontrolü/);
+  assert.match(sw,/KYERP_SECURITY_CONNECTION_WAKE/);
+  assert.match(sw,/fetchFailed/);
 });
