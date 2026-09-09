@@ -18,14 +18,15 @@ test("security app enrollment is one-time, password stepped-up and migration ret
 });
 
 test("security app devices are preferred and every decision is signed with device key",()=>{
-  assert.match(push,/return eligible\.filter\(\(row: AnyRow\) => row\.securityApp === true\)/);
+  assert.match(push,/row\.securityApp !== true/);
+  assert.match(push,/explicitlyRetired/);
+  assert.match(push,/purpose === "SELF"/);
   assert.match(push,/LEGACY_PHONE_APPROVAL_RETIRED/);
   assert.match(push,/verifySecurityAppDecision/);
   assert.match(push,/SECURITY_DEVICE_SIGNATURE_INVALID/);
   assert.match(push,/KYERP-DECISION-V1/);
   assert.match(push,/decisionPublicKeyJwk/);
 });
-
 
 test("security device token drift self-heals only with a fresh signed device-auth proof",()=>{
   assert.match(push,/verifySecurityDeviceAuth/);
@@ -54,7 +55,7 @@ test("access refresh reuses the same security device id instead of creating dupl
   assert.match(push,/const existing = replaceCandidate \|\| endpointCandidate/);
   assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
   assert.match(push,/relinkedDevice: Boolean\(replaceCandidate\)/);
-  assert.match(push,/SECURITY_APP_VERSION = "security-v1\.2"/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.0"/);
 });
 
 

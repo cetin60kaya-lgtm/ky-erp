@@ -62,7 +62,8 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(policy, /phone-approval\/:id\/fallback/);
   assert.match(policy, /skipPhone: true/);
   assert.match(login, /Telefonunuza bildirim gönderildi/);
-  assert.match(login, /Google\/Microsoft Authenticator ile devam et/);
+  assert.match(login, /Yedek giriş yöntemi/);
+  assert.match(login, /Authenticator yedeğini aç/);
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
@@ -79,14 +80,18 @@ test("dedicated Security worker owns phone approval while the legacy main worker
   assert.match(main, /X-KYERP-Push-Device/);
   assert.match(main, /X-KYERP-Push-Token/);
   assert.match(mailEntry, /X-KYERP-Push-Device/);
-  assert.match(mailEntry, /X-KYERP-Push-Token/);\n  assert.match(mailEntry, /X-KYERP-Security-Timestamp/);\n  assert.match(mailEntry, /X-KYERP-Security-Signature/);
+  assert.match(mailEntry, /X-KYERP-Push-Token/);
+  assert.match(mailEntry, /X-KYERP-Security-Timestamp/);
+  assert.match(mailEntry, /X-KYERP-Security-Signature/);
   assert.match(frontendMain, /retireLegacyPhoneApprovalWorker/);
   assert.doesNotMatch(frontendMain, /PhoneApprovalInboxBridge/);
   assert.match(serviceWorker, /registration\.unregister/);
   assert.doesNotMatch(serviceWorker, /auth\/push\/device\/decision/);
-  assert.match(securityWorker, /X-KYERP-Push-Device/);
-  assert.match(securityWorker, /X-KYERP-Push-Token/);
-  assert.match(securityWorker, /tag:"kyerp-security-approval"/);
+  assert.doesNotMatch(securityWorker, /API_BASE|X-KYERP-Push-Device|X-KYERP-Push-Token|signDeviceAuth|deviceFetch/);
+  assert.match(securityApp, /X-KYERP-Push-Device/);
+  assert.match(securityApp, /X-KYERP-Push-Token/);
+  assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
+  assert.match(securityWorker, /tag:TAG/);
   assert.match(securityWorker, /renotify:false/);
   assert.doesNotMatch(securityWorker, /action:"approve"/);
   assert.doesNotMatch(securityWorker, /action:"deny"/);
@@ -153,7 +158,8 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(push, /dedupeKey: `self:/);
   assert.match(push, /idempotent: true/);
   assert.match(serviceWorker, /registration\.unregister/);
-  assert.match(securityWorker, /tag:"kyerp-security-approval"/);
+  assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
+  assert.match(securityWorker, /tag:TAG/);
   assert.match(securityWorker, /renotify:false/);
   assert.doesNotMatch(securityWorker, /kyerp-result-/);
   assert.match(securityApp, /createSigningKey/);
@@ -162,7 +168,6 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(login, /phoneApprovalCheckRef/);
   assert.match(login, /state\.busy \|\| state\.settled/);
 });
-
 
 test("phone approval can resend the same challenge without creating a second request", () => {
   assert.match(push, /resendPhoneApprovalChallenge/);

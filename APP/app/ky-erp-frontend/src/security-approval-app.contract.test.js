@@ -20,7 +20,8 @@ test("KY ERP Security is a separate installable phone tablet PWA",()=>{
 });
 
 test("security app uses one consolidated notification and opens app for decision",()=>{
-  assert.match(sw,/tag:"kyerp-security-approval"/);
+  assert.match(sw,/const TAG="kyerp-security-approval"/);
+  assert.match(sw,/tag:TAG/);
   assert.match(sw,/renotify:false/);
   assert.match(sw,/notificationclick/);
   assert.doesNotMatch(sw,/action:"approve"/);
