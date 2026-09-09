@@ -66,3 +66,12 @@ test("security app creates a one-minute challenge-bound login code with attempt 
   assert.match(push,/verifySecurityLoginCode/);
   assert.match(push,/SECURITY_APP_LOGIN_CODE_VERIFIED/);
 });
+
+test("push transport expiry never revokes the trusted security device and phone approval stays primary",()=>{
+  assert.match(push,/trustedSecurityDevice/);
+  assert.match(push,/pushReachable: false/);
+  assert.match(push,/SECURITY_DEVICE_REACTIVATED_AFTER_PUSH_EXPIRY/);
+  assert.match(push,/PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
+  assert.match(push,/pushDelivered: sent > 0/);
+  assert.doesNotMatch(push,/status: "FALLBACK", consumedAt: nowIso\(\)/);
+});

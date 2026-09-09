@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="KY ERP Güvenlik">
+  <rect width="512" height="512" rx="116" fill="#10284d"/>
+  <path d="M256 74 402 126v112c0 95-59 164-146 202-87-38-146-107-146-202V126L256 74Z" fill="#f4f8ff"/>
+  <path d="M256 112 365 151v87c0 70-41 123-109 157-68-34-109-87-109-157v-87L256 112Z" fill="#176b57"/>
+  <path d="m201 250 36 36 78-86" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="256" y="354" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="54" font-weight="700" fill="#fff">KY</text>
+</svg>

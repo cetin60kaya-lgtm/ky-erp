@@ -75,6 +75,8 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   assert.match(securityApp, /Android Tablet/);
   assert.match(securityManifest, /"display": "standalone"/);
   assert.match(securityManifest, /"scope": "\/security\/"/);
+  assert.match(securityManifest, /kyerp-security-icon\.svg/);
+  assert.match(manifest, /"id": "\/"/);
   assert.match(manifest, /"display": "standalone"/);
   assert.match(manifest, /"shortcuts"/);
   assert.match(manifest, /Üretim İş Havuzu/);

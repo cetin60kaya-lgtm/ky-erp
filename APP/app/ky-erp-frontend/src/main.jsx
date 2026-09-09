@@ -10,16 +10,28 @@ const isPublicSite = PUBLIC_SITE_HOSTS.has(hostname);
 const publicRedirectPaths = new Set(["/giris", "/login", "/app"]);
 const rootElement = document.getElementById("root");
 
+async function retireLegacyPhoneApprovalWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(async (registration) => {
+      const worker = registration.active || registration.waiting || registration.installing;
+      const scriptUrl = String(worker?.scriptURL || "");
+      if (!scriptUrl.endsWith("/kyerp-push-sw.js")) return;
+      try {
+        const notifications = await registration.getNotifications();
+        notifications.forEach((notification) => notification.close());
+      } catch {}
+      await registration.unregister();
+    }));
+  } catch (error) {
+    console.warn("Eski KY ERP telefon bildirim servisi temizlenemedi", error);
+  }
+}
+
 async function renderErpApp() {
   installAndroidRuntimeBridge();
-
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/kyerp-push-sw.js", { scope: "/" }).catch((error) => {
-        console.warn("KY ERP telefon bildirim servisi kaydedilemedi", error);
-      });
-    }, { once: true });
-  }
+  void retireLegacyPhoneApprovalWorker();
 
   const { installPersistedAuthBootstrap } = await import("./context/authBootstrap");
   installPersistedAuthBootstrap();
@@ -29,7 +41,6 @@ async function renderErpApp() {
 
   const [
     { default: AppV3 },
-    { default: PhoneApprovalInboxBridge },
     { ActiveCompanyProvider },
     { AuthProvider },
     { installAuthenticatedAssetBridge },
@@ -37,7 +48,6 @@ async function renderErpApp() {
     { installPersistentModalSizing },
   ] = await Promise.all([
     import("./AppV3.jsx"),
-    import("./components/shell/PhoneApprovalInboxBridge.jsx"),
     import("./context/ActiveCompanyContext"),
     import("./context/AuthContext"),
     import("./utils/installAuthenticatedAssetBridge"),
@@ -56,7 +66,6 @@ async function renderErpApp() {
   function RootApp() {
     return (
       <AuthProvider>
-        <PhoneApprovalInboxBridge />
         <ActiveCompanyProvider>
           <AppV3 />
         </ActiveCompanyProvider>

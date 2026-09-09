@@ -3,7 +3,7 @@ const STORE="device";
 const KEY="active";
 const API_BASE="https://api.kyerp.net/api";
 const APP_URL="/security/?open=1";
-const CACHE_NAME="kyerp-security-shell-v5";
+const CACHE_NAME="kyerp-security-shell-v6";
 
 function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB_NAME,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
 async function readDevice(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,"readonly");const req=tx.objectStore(STORE).get(KEY);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
@@ -16,20 +16,20 @@ async function showPending(){
   let items=[];let fetchFailed=false;
   try{const payload=await deviceFetch("/auth/push/device/pending");items=Array.isArray(payload?.data?.items)?payload.data.items:[]}catch{fetchFailed=true}
   if(fetchFailed){
-    await self.registration.showNotification("KY ERP · Bağlantı Kontrolü",{body:"Giriş isteği geldi. KY ERP Güvenlik uygulamasını açıp bağlantıyı yenileyin.",tag:"kyerp-security-approval",renotify:false,requireInteraction:true,badge:"/kyerp-icon.svg",icon:"/kyerp-icon.svg",timestamp:Date.now(),vibrate:[180,80,180],data:{openApproval:true,connectionRepair:true}});
+    await self.registration.showNotification("KY ERP · Bağlantı Kontrolü",{body:"Giriş isteği geldi. KY ERP Güvenlik uygulamasını açıp bağlantıyı yenileyin.",tag:"kyerp-security-approval",renotify:false,requireInteraction:true,badge:"/security/kyerp-security-icon.svg",icon:"/security/kyerp-security-icon.svg",timestamp:Date.now(),vibrate:[180,80,180],data:{openApproval:true,connectionRepair:true}});
     await broadcast("KYERP_SECURITY_CONNECTION_WAKE");return;
   }
   if(!items.length){await closeApprovalNotifications();await broadcast("KYERP_SECURITY_PENDING_WAKE");return}
   const first=items[0];const many=items.length>1;
   await self.registration.showNotification(many?"KY ERP · Güvenlik Onayları":(first.title||"KY ERP · Giriş Onayı"),{
     body:many?(String(items.length)+" giriş isteği onay bekliyor. Uygulamayı açıp kontrol edin."):(first.body||"Yeni giriş isteği onay bekliyor."),
-    tag:"kyerp-security-approval",renotify:false,requireInteraction:true,badge:"/kyerp-icon.svg",icon:"/kyerp-icon.svg",
+    tag:"kyerp-security-approval",renotify:false,requireInteraction:true,badge:"/security/kyerp-security-icon.svg",icon:"/security/kyerp-security-icon.svg",
     timestamp:first.requestedAt?Date.parse(first.requestedAt)||Date.now():Date.now(),vibrate:[180,80,180],data:{openApproval:true}
   });
   await broadcast("KYERP_SECURITY_PENDING_WAKE");
 }
 async function focusOrOpen(){const windows=await clients.matchAll({type:"window",includeUncontrolled:true});const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/security/")}catch{return false}});if(existing){await existing.focus();try{await existing.navigate(APP_URL)}catch{};return}await clients.openWindow(APP_URL)}
-self.addEventListener("install",(event)=>event.waitUntil((async()=>{await self.skipWaiting();const cache=await caches.open(CACHE_NAME);await cache.addAll(["/security/","/security/app.js","/security/app.css","/security/manifest.webmanifest","/kyerp-icon.svg"])} )()));
+self.addEventListener("install",(event)=>event.waitUntil((async()=>{await self.skipWaiting();const cache=await caches.open(CACHE_NAME);await cache.addAll(["/security/","/security/app.js","/security/app.css","/security/manifest.webmanifest","/security/kyerp-security-icon.svg"])} )()));
 self.addEventListener("activate",(event)=>event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter((key)=>key.startsWith("kyerp-security-shell-")&&key!==CACHE_NAME).map((key)=>caches.delete(key)));await self.clients.claim()})()));
 self.addEventListener("push",(event)=>event.waitUntil(showPending()));
 self.addEventListener("notificationclick",(event)=>{event.notification?.close();event.waitUntil(focusOrOpen())});

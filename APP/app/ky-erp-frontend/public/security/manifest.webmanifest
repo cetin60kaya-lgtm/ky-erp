@@ -14,7 +14,7 @@
   "categories": ["business", "security", "productivity"],
   "icons": [
     {
-      "src": "/kyerp-icon.svg",
+      "src": "/security/kyerp-security-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

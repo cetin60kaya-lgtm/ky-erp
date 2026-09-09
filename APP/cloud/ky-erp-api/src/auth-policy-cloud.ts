@@ -870,7 +870,7 @@ export function registerAuthPolicyRoutes(app: any) {
     const result = await resendPhoneApprovalChallenge(c, c.req.param("id"), body.phoneApprovalToken);
     if (!result.approval) return c.json(jsonError("PHONE_APPROVAL_INVALID", "Telefon giriş onayı bulunamadı."), 401);
     if (result.code === "PHONE_APPROVAL_NOT_PENDING") return c.json(jsonError("PHONE_APPROVAL_NOT_PENDING", "Bu giriş isteği artık bildirim beklemiyor. Durumu tekrar kontrol edin."), 409);
-    if (!result.ok) return c.json(jsonError("PHONE_APPROVAL_DEVICE_OFFLINE", "KY ERP Güvenlik uygulamasına bildirim ulaştırılamadı. Telefonda Bağlantıyı Yenile işlemini çalıştırın."), 409);
+    if (!result.ok) return c.json(jsonError("PHONE_APPROVAL_DEVICE_OFFLINE", "Aktif KY ERP Güvenlik cihazı bulunamadı. Telefon Onayı merkezinden cihaz bağlantısını yenileyin."), 409);
     return c.json({
       ok: true,
       stage: "PHONE_APPROVAL_PENDING",
@@ -878,7 +878,10 @@ export function registerAuthPolicyRoutes(app: any) {
       phoneApprovalToken: text(body.phoneApprovalToken),
       phoneApprovalExpiresAt: result.approval.expiresAt,
       notifiedDevices: result.sent,
-      message: "Giriş bildirimi aynı onay isteği üzerinden yeniden gönderildi.",
+      pushDelivered: result.sent > 0,
+      message: result.sent
+        ? "Giriş bildirimi aynı onay isteği üzerinden yeniden gönderildi."
+        : "Bildirim kanalı yanıt vermedi; istek açık kalıyor. KY ERP Güvenlik uygulamasını açıp Onaylar bölümünü yenileyin.",
     });
   });
 

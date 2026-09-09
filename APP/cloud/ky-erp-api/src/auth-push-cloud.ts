@@ -311,14 +311,25 @@ async function sendWake(c: any, device: AnyRow) {
     });
     if (!response.ok) {
       const gone = response.status === 404 || response.status === 410;
+      const trustedSecurityDevice = device.securityApp === true;
       await saveDevice(c, {
         ...device,
-        isActive: gone ? false : device.isActive !== false,
+        // Push aboneliğinin 404/410 dönmesi güvenilir cihaz kimliğini iptal etmez.
+        // Kimlik ve bildirim kanalı ayrı tutulur; uygulama açıldığında abonelik yenilenebilir.
+        isActive: trustedSecurityDevice ? device.isActive !== false : (gone ? false : device.isActive !== false),
+        pushReachable: false,
+        pushInvalidAt: gone ? nowIso() : text(device.pushInvalidAt),
         lastError: `HTTP ${response.status}`,
       });
       return false;
     }
-    await saveDevice(c, { ...device, lastPushAt: nowIso(), lastError: "" });
+    await saveDevice(c, {
+      ...device,
+      pushReachable: true,
+      pushInvalidAt: "",
+      lastPushAt: nowIso(),
+      lastError: "",
+    });
     return true;
   } catch (error) {
     await saveDevice(c, {
@@ -493,10 +504,35 @@ async function actorFromDevice(c: any) {
   if (!deviceId || !deviceToken) return null;
 
   let device = await storeGet(c, DEVICE_SCOPE, deviceId);
-  if (!device || device.isActive === false) return null;
+  if (!device) return null;
 
   const suppliedHash = await sha256(deviceToken);
-  if (!safeEqual(text(device.deviceTokenHash), suppliedHash)) {
+  const tokenMatches = safeEqual(text(device.deviceTokenHash), suppliedHash);
+
+  if (device.isActive === false) {
+    const oldPushExpiryDisable =
+      device.securityApp === true &&
+      !text(device.retiredAt) &&
+      !text(device.retiredReason) &&
+      /^HTTP (404|410)$/i.test(text(device.lastError));
+    if (!oldPushExpiryDisable) return null;
+
+    const signedRecovery = tokenMatches || await verifySecurityDeviceAuth(c, device);
+    if (!signedRecovery) return null;
+
+    device = await saveDevice(c, {
+      ...device,
+      isActive: true,
+      pushReachable: false,
+      reactivatedFromPushExpiryAt: nowIso(),
+    });
+    await audit(c, "SECURITY_DEVICE_REACTIVATED_AFTER_PUSH_EXPIRY", text(device.userId), text(device.userId), text(device.mainCompanySlug), {
+      deviceId: device.id,
+      previousError: text(device.lastError),
+    });
+  }
+
+  if (!tokenMatches) {
     const signedRecovery = await verifySecurityDeviceAuth(c, device);
     if (!signedRecovery) return null;
 
@@ -574,12 +610,14 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   });
 
   const sent = await sendWakeMany(c, devices);
-  if (!sent) {
-    await atomicPhoneUpdate(c, challenge, "PENDING", { status: "FALLBACK", consumedAt: nowIso() });
-    return null;
-  }
-
-  await audit(c, "PHONE_LOGIN_APPROVAL_REQUESTED", user.id, user.id, companySlug, { challengeId: id, notifiedDevices: sent });
+  await audit(
+    c,
+    sent ? "PHONE_LOGIN_APPROVAL_REQUESTED" : "PHONE_LOGIN_APPROVAL_PUSH_DEFERRED",
+    user.id,
+    user.id,
+    companySlug,
+    { challengeId: id, notifiedDevices: sent },
+  );
   return {
     ok: true,
     stage: "PHONE_APPROVAL_PENDING",
@@ -587,7 +625,10 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     phoneApprovalToken: token,
     phoneApprovalExpiresAt: expiresAt,
     notifiedDevices: sent,
-    message: "Telefonunuza KY ERP giriş onayı gönderildi. Bildirimi açıp Onayla veya Reddet seçin.",
+    pushDelivered: sent > 0,
+    message: sent
+      ? "Telefonunuza KY ERP giriş onayı gönderildi. KY ERP Güvenlik uygulamasından Onayla veya Reddet seçin."
+      : "Telefon onayı hazır. Bildirim kanalı geçici olarak yanıt vermedi; KY ERP Güvenlik uygulamasını açın, istek Onaylar bölümünde görünecektir.",
   };
 }
 
@@ -616,7 +657,12 @@ export async function resendPhoneApprovalChallenge(c: any, idValue: unknown, tok
     challengeId: approval.id,
     notifiedDevices: sent,
   });
-  return { ok: sent > 0, code: sent > 0 ? "" : "PHONE_APPROVAL_DEVICE_OFFLINE", approval, sent };
+  return {
+    ok: devices.length > 0,
+    code: sent > 0 ? "" : "PHONE_APPROVAL_PUSH_DEFERRED",
+    approval,
+    sent,
+  };
 }
 
 export async function verifySecurityLoginCode(c: any, idValue: unknown, tokenValue: unknown, codeValue: unknown) {
@@ -1046,7 +1092,12 @@ export function registerAuthPushRoutes(app: any) {
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Oturum gereklidir."), 401);
     const device = await storeGet(c, DEVICE_SCOPE, c.req.param("id"));
     if (!device || text(device.userId) !== text(current.id)) return c.json(jsonError("PUSH_DEVICE_NOT_FOUND", "Telefon onayı cihazı bulunamadı."), 404);
-    await saveDevice(c, { ...device, isActive: false });
+    await saveDevice(c, {
+      ...device,
+      isActive: false,
+      retiredAt: nowIso(),
+      retiredReason: "Kullanıcı tarafından devre dışı bırakıldı",
+    });
     await audit(c, "PUSH_DEVICE_DISABLED", current.id, current.id, text(device.mainCompanySlug), { deviceId: device.id });
     return c.json({ ok: true });
   });

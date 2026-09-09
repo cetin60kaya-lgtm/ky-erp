@@ -43,7 +43,7 @@ test("security app signs device-authenticated API calls and service worker cache
   assert.match(app,/X-KYERP-Security-Timestamp/);
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.match(sw,/signDeviceAuth/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v6"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -77,7 +77,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/auth\/push\/device\/login-code/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Telefon Bağlantısını Yenile/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v6"/);
 });
 
 
@@ -90,11 +90,23 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(app,/appinstalled/);
   assert.match(app,/Android'e KY Güvenlik'i Yükle/);
   assert.match(app,/Safari → Paylaş → Ana Ekrana Ekle/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v5"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v6"/);
 });
 
 
 test("appearance center centralizes KY ERP and KY Security install entry points",()=>{
   assert.match(setup,/Android için KY Güvenlik'i İndir \/ Kur/);
   assert.match(setup,/iPhone \/ iPad için KY Güvenlik'i Kur/);
+});
+
+test("main ERP and KY Security have separate install and service-worker ownership",()=>{
+  const main=readFileSync(resolve(here,"main.jsx"),"utf8");
+  const legacy=readFileSync(resolve(root,"public/kyerp-push-sw.js"),"utf8");
+  assert.match(main,/retireLegacyPhoneApprovalWorker/);
+  assert.doesNotMatch(main,/PhoneApprovalInboxBridge/);
+  assert.doesNotMatch(main,/serviceWorker\.register\("\/kyerp-push-sw\.js"/);
+  assert.match(legacy,/registration\.unregister/);
+  assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
+  assert.match(manifest,/\/security\/kyerp-security-icon\.svg/);
+  assert.match(sw,/kyerp-security-shell-v6/);
 });

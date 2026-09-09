@@ -16,6 +16,7 @@ const mailEntry = worker("main-entry-mail.ts");
 const login = repoFile("APP/app/ky-erp-frontend/src/pages/LoginPage.jsx");
 const authContext = repoFile("APP/app/ky-erp-frontend/src/context/AuthContext.jsx");
 const serviceWorker = repoFile("APP/app/ky-erp-frontend/public/kyerp-push-sw.js");
+const frontendMain = repoFile("APP/app/ky-erp-frontend/src/main.jsx");
 const companySettings = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminCompanySettings.jsx");
 const phoneSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalSetup.jsx");
 const phoneInbox = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalInboxBridge.jsx");
@@ -74,20 +75,21 @@ test("company owner is default approver and application owner notifications are 
   assert.match(companySettings, /Süper Yöneticiye de onay bildirimi gönder/);
 });
 
-test("service worker decisions use device capability headers and native approve deny actions", () => {
+test("dedicated Security worker owns phone approval while the legacy main worker retires itself", () => {
   assert.match(main, /X-KYERP-Push-Device/);
   assert.match(main, /X-KYERP-Push-Token/);
   assert.match(mailEntry, /X-KYERP-Push-Device/);
   assert.match(mailEntry, /X-KYERP-Push-Token/);
-  assert.match(serviceWorker, /X-KYERP-Push-Device/);
-  assert.match(serviceWorker, /X-KYERP-Push-Token/);
-  assert.match(serviceWorker, /action: "approve"/);
-  assert.match(serviceWorker, /action: "deny"/);
-  assert.match(serviceWorker, /auth\/push\/device\/decision/);
-  assert.match(serviceWorker, /stableNotificationTag/);
-  assert.match(serviceWorker, /renotify: false/);
-  assert.match(serviceWorker, /localUnlockRequired/);
-  assert.doesNotMatch(serviceWorker, /kyerp-result-/);
+  assert.match(frontendMain, /retireLegacyPhoneApprovalWorker/);
+  assert.doesNotMatch(frontendMain, /PhoneApprovalInboxBridge/);
+  assert.match(serviceWorker, /registration\.unregister/);
+  assert.doesNotMatch(serviceWorker, /auth\/push\/device\/decision/);
+  assert.match(securityWorker, /X-KYERP-Push-Device/);
+  assert.match(securityWorker, /X-KYERP-Push-Token/);
+  assert.match(securityWorker, /tag:"kyerp-security-approval"/);
+  assert.match(securityWorker, /renotify:false/);
+  assert.doesNotMatch(securityWorker, /action:"approve"/);
+  assert.doesNotMatch(securityWorker, /action:"deny"/);
 });
 
 test("authenticated shell creates one-time security-app enrollment while password step-up happens on the phone", () => {
@@ -150,11 +152,10 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(push, /let latestSelfPending = ""/);
   assert.match(push, /dedupeKey: `self:/);
   assert.match(push, /idempotent: true/);
-  assert.match(serviceWorker, /stableNotificationTag/);
-  assert.match(serviceWorker, /renotify: false/);
-  assert.doesNotMatch(serviceWorker, /kyerp-result-/);
+  assert.match(serviceWorker, /registration\.unregister/);
   assert.match(securityWorker, /tag:"kyerp-security-approval"/);
   assert.match(securityWorker, /renotify:false/);
+  assert.doesNotMatch(securityWorker, /kyerp-result-/);
   assert.match(securityApp, /createSigningKey/);
   assert.match(securityApp, /signDecision/);
   assert.match(securityApp, /navigator\.credentials\.get/);
@@ -176,4 +177,11 @@ test("KY Security short code stays tied to the same pending phone challenge", ()
   assert.match(policy, /SECURITY_LOGIN_CODE_EXPIRED/);
   assert.match(authContext, /verifyPhoneApprovalCode/);
   assert.match(login, /KY Güvenlik Giriş Kodu/);
+});
+
+test("trusted Security device keeps phone approval pending when push delivery is temporarily unavailable", () => {
+  assert.match(push, /PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
+  assert.match(push, /pushDelivered: sent > 0/);
+  assert.match(push, /Bildirim kanalı geçici olarak yanıt vermedi/);
+  assert.doesNotMatch(push, /status: "FALLBACK", consumedAt: nowIso\(\)/);
 });

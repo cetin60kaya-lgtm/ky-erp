@@ -2,7 +2,7 @@
   "name": "KY ERP",
   "short_name": "KY ERP",
   "id": "/",
-  "description": "KY ERP kurumsal yönetim, üretim ve güvenli telefon onayı",
+  "description": "KY ERP kurumsal yönetim, muhasebe, İK, PDKS ve üretim uygulaması",
   "lang": "tr",
   "dir": "ltr",
   "start_url": "/",
