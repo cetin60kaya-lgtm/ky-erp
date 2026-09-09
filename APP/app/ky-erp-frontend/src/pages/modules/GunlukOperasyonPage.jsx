@@ -148,3 +148,153 @@ function flagValue(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   const normalized = String(value ?? "").trim().toLocaleUpperCase("tr-TR");
+  return ["1", "TRUE", "EVET", "YES", "VAR", "GÜNDÜZ", "GUNDUZ", "GECE"].includes(normalized);
+}
+
+function firstAmount(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function summarize(rows = [], peopleById = new Map()) {
+  const map = new Map();
+  rows.forEach((row, rowIndex) => {
+    const date = rowDate(row);
+    if (!date) return;
+
+    const employeeId = rowPersonId(row);
+    const person = peopleById.get(employeeId) || row.person || row.employee || {
+      fullName: row.employeeName || row.personName || row.name,
+      role: row.role || row.qualification,
+    };
+    const day = flagValue(row.day ?? row.dayShift);
+    const night = flagValue(row.night ?? row.nightShift);
+    const explicitAmount = firstAmount(row.totalAmount, row.amount, row.paymentAmount, row.tutar);
+    const amount = explicitAmount !== null
+      ? explicitAmount
+      : (day ? numberValue(row.dayWage ?? personDayRate(person)) : 0)
+        + (night ? numberValue(row.nightWage ?? personNightRate(person)) : 0);
+
+    const current = map.get(date) || {
+      date,
+      dayCount: 0,
+      nightCount: 0,
+      total: 0,
+      entriesByPerson: new Map(),
+    };
+    const personKey = employeeId || personName(person) + "-" + rowIndex;
+    const existing = current.entriesByPerson.get(personKey) || {
+      employeeId,
+      person,
+      day: false,
+      night: false,
+      amount: 0,
+    };
+
+    if (day) current.dayCount += 1;
+    if (night) current.nightCount += 1;
+    current.total += amount;
+    current.entriesByPerson.set(personKey, {
+      ...existing,
+      person: Object.keys(existing.person || {}).length ? existing.person : person,
+      day: existing.day || day,
+      night: existing.night || night,
+      amount: existing.amount + amount,
+    });
+    map.set(date, current);
+  });
+
+  return new Map(
+    [...map.entries()].map(([date, row]) => [
+      date,
+      {
+        date,
+        dayCount: row.dayCount,
+        nightCount: row.nightCount,
+        total: row.total,
+        entries: [...row.entriesByPerson.values()],
+        peopleCount: row.entriesByPerson.size,
+      },
+    ]),
+  );
+}
+
+function collectSummary(days, daily) {
+  return days.reduce(
+    (acc, date) => {
+      const row = daily.get(date);
+      if (!row) return acc;
+      acc.day += row.dayCount;
+      acc.night += row.nightCount;
+      acc.total += row.total;
+      acc.activeDays += row.peopleCount > 0 ? 1 : 0;
+      row.entries.forEach((entry) => {
+        const key = entry.employeeId || personName(entry.person);
+        if (key) acc.people.add(key);
+      });
+      return acc;
+    },
+    { day: 0, night: 0, total: 0, activeDays: 0, people: new Set() },
+  );
+}
+
+function deltaLabel(current, previous) {
+  if (!previous && !current) return "Değişim yok";
+  if (!previous) return "Yeni hareket";
+  const ratio = Math.round(((current - previous) / Math.abs(previous)) * 100);
+  if (!ratio) return "Aynı seviyede";
+  return (ratio > 0 ? "+" : "") + ratio + "%";
+}
+
+function csvCell(value) {
+  return '"' + String(value ?? "").replace(/"/g, '""') + '"';
+}
+
+function DailyOperationsOverview({ activeMainCompany, openModule }) {
+  const today = useMemo(() => dateOnly(new Date()), []);
+  const currentMonth = today.slice(0, 7);
+  const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(today));
+  const [selectedDay, setSelectedDay] = useState(today);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [people, setPeople] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState("");
+  const [query, setQuery] = useState("");
+  const [shiftFilter, setShiftFilter] = useState("all");
+
+  const companyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
+  const selectedWeekDays = useMemo(
+    () => daysBetween(selectedWeekStart, addDays(selectedWeekStart, 6)),
+    [selectedWeekStart],
+  );
+  const previousWeekStart = useMemo(() => addDays(selectedWeekStart, -7), [selectedWeekStart]);
+  const previousWeekDays = useMemo(
+    () => daysBetween(previousWeekStart, addDays(previousWeekStart, 6)),
+    [previousWeekStart],
+  );
+  const selectedMonthStart = useMemo(() => monthStart(selectedMonth), [selectedMonth]);
+  const selectedMonthEnd = useMemo(() => monthEnd(selectedMonth), [selectedMonth]);
+  const monthDays = useMemo(
+    () => daysBetween(selectedMonthStart, selectedMonthEnd),
+    [selectedMonthEnd, selectedMonthStart],
+  );
+  const rangeStart = useMemo(
+    () => [previousWeekStart, selectedMonthStart].filter(Boolean).sort()[0] || previousWeekStart,
+    [previousWeekStart, selectedMonthStart],
+  );
+  const rangeEnd = useMemo(
+    () => [addDays(selectedWeekStart, 6), selectedMonthEnd].filter(Boolean).sort().at(-1) || selectedMonthEnd,
+    [selectedMonthEnd, selectedWeekStart],
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setNotice("");
+    const [peopleResult, attendanceResult] = await Promise.allSettled([
+      getGunlukPersonel({ mainCompanyId: companyId }),
+      getGunlukDurum({ mainCompanyId: companyId, start: rangeStart, end: rangeEnd }),
