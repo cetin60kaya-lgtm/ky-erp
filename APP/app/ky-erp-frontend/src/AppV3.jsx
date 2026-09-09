@@ -13,6 +13,7 @@ const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admi
 const IkPersonnelFinancePage = lazyWithRetry(() => import("./pages/modules/ik/IkPersonnelFinancePage"), "ik-personnel-finance-v1");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
 const IkFinancePage = lazyWithRetry(() => import("./pages/modules/ik/IkFinancePage"), "ik-finance-v1");
+const GunlukOperasyonPage = lazyWithRetry(() => import("./pages/modules/GunlukOperasyonPage"), "gunluk-operasyon-v1");
 const PdksPage = lazyWithRetry(() => import("./pages/modules/PdksPage"), "pdks-v1");
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
@@ -37,6 +38,7 @@ const MODULE_LOADERS = {
     import("./pages/modules/ik/IkFinancePage"),
     import("./pages/modules/ik/IkAuditPersonnelPage"),
   ]),
+  "gunluk-operasyon": () => import("./pages/modules/GunlukOperasyonPage"),
   pdks: () => import("./pages/modules/PdksPage"),
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
@@ -285,6 +287,7 @@ export default function AppV3() {
       }
       return <IkFinancePage activeTab={activeTab} {...sharedProps} />;
     }
+    if (activeModule?.key === "gunluk-operasyon") return <GunlukOperasyonPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "pdks") return <PdksPage activeTab={activeTab} isAuditAccount={isAuditAccount} {...sharedProps} />;
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "iletisim") return <CommunicationHubPage activeTab={activeTab} {...sharedProps} />;

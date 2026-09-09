@@ -8191,6 +8191,7 @@ function DailyPayments({ daily, dailyEntries, range, setRange, skills = [] }) {
 export default function IkPage({
   activeTab = "ik-yonetim-ozeti",
   activeMainCompany,
+  dailyOnly = false,
 }) {
   const screen = TAB_MAP[activeTab] || "overview";
   const [monthly, setMonthly] = useState([]);
@@ -8215,60 +8216,55 @@ export default function IkPage({
     let cancelled = false;
     async function loadIkData() {
       try {
+        const dailySources = {
+          daily: { critical: true, fallback: [], load: () => getGunlukPersonel({ mainCompanyId: companyId }) },
+          attendance: {
+            fallback: [],
+            load: () => getGunlukDurum({
+              mainCompanyId: companyId,
+              start: dailyDateRange.start,
+              end: dailyDateRange.end,
+            }),
+          },
+          skills: { fallback: [], load: () => getIkSkills({ mainCompanyId: companyId }) },
+          holidays: {
+            fallback: DEFAULT_OFFICIAL_HOLIDAYS_2026,
+            load: () => getResmiTatiller({ year: CURRENT_YEAR }),
+          },
+        };
         const result = await loadModuleData({
-          scope: `ik:${companyId}:${dailyDateRange.start}:${dailyDateRange.end}`,
-          sources: {
+          scope: `${dailyOnly ? "gunluk-operasyon" : "ik"}:${companyId}:${dailyDateRange.start}:${dailyDateRange.end}`,
+          sources: dailyOnly ? dailySources : {
             monthly: { critical: true, fallback: [], load: () => getAylikPersonel({ mainCompanyId: companyId }) },
             leaves: { fallback: [], load: () => getAylikIzinler({ mainCompanyId: companyId }) },
             adjustments: { fallback: [], load: () => getAylikMesailer({ mainCompanyId: companyId }) },
             documents: { fallback: [], load: () => getAylikEvraklar({ mainCompanyId: companyId }) },
-            daily: { critical: true, fallback: [], load: () => getGunlukPersonel({ mainCompanyId: companyId }) },
-            attendance: {
-              fallback: [],
-              load: () => getGunlukDurum({
-                mainCompanyId: companyId,
-                start: dailyDateRange.start,
-                end: dailyDateRange.end,
-              }),
-            },
-            skills: { fallback: [], load: () => getIkSkills({ mainCompanyId: companyId }) },
-            holidays: {
-              fallback: DEFAULT_OFFICIAL_HOLIDAYS_2026,
-              load: () => getResmiTatiller({ year: CURRENT_YEAR }),
-            },
             logs: { fallback: [], load: () => getAylikLoglar({ mainCompanyId: companyId, limit: 200 }) },
+            ...dailySources,
           },
         });
         if (cancelled) return;
         const {
-          monthly: monthlyRows,
-          leaves: leaveRows,
-          adjustments: adjustmentRows,
-          documents: documentRows,
-          daily: dailyRows,
-          attendance: attendanceRows,
-          skills: skillRows,
-          holidays: holidayRows,
-          logs: logRows,
-        } = result.data;
+          monthly: monthlyRows = [],
+          leaves: leaveRows = [],
+          adjustments: adjustmentRows = [],
+          documents: documentRows = [],
+          daily: dailyRows = [],
+          attendance: attendanceRows = [],
+          skills: skillRows = [],
+          holidays: holidayRows = [],
+          logs: logRows = [],
+        } = result.data || {};
         const normalized = Array.isArray(monthlyRows)
-           ? monthlyRows.map(normalizeMonthlyPerson)
+          ? monthlyRows.map(normalizeMonthlyPerson)
           : [];
-        setMonthly(normalized);
-        setLeaves(
-          Array.isArray(leaveRows) ? leaveRows.map(normalizeLeave) : [],
-        );
-        setAdjustments(
-          Array.isArray(adjustmentRows)
-             ? adjustmentRows.map(normalizeAdjustment)
-            : [],
-        );
-        setDocs(
-          Array.isArray(documentRows)
-             ? documentRows.map(normalizeDocument)
-            : [],
-        );
-        setMonthlyLogs(Array.isArray(logRows) ? logRows : []);
+        if (!dailyOnly) {
+          setMonthly(normalized);
+          setLeaves(Array.isArray(leaveRows) ? leaveRows.map(normalizeLeave) : []);
+          setAdjustments(Array.isArray(adjustmentRows) ? adjustmentRows.map(normalizeAdjustment) : []);
+          setDocs(Array.isArray(documentRows) ? documentRows.map(normalizeDocument) : []);
+          setMonthlyLogs(Array.isArray(logRows) ? logRows : []);
+        }
         setDaily(
           Array.isArray(dailyRows) ? dailyRows.map(normalizeDailyPerson) : [],
         );
@@ -8292,25 +8288,31 @@ export default function IkPage({
         setDailyWeekOptions(
           Array.isArray(attendanceRows) ? buildDailyWeekOptions(attendanceRows) : [],
         );
-        setSelectedMonthlyId((current) =>
-          normalized.some((person) => person.id === current)
-             ? current
-            : normalized[0]?.id || "",
-        );
+        if (!dailyOnly) {
+          setSelectedMonthlyId((current) =>
+            normalized.some((person) => person.id === current)
+              ? current
+              : normalized[0]?.id || "",
+          );
+        }
         setNotice(moduleLoadMessage(
           result,
-          "İK ana personel kaynağı geçici olarak okunamadı; diğer başarılı bilgiler korunuyor.",
-          "Bazı yardımcı İK bilgileri yenilenemedi; personel havuzu ve son başarılı veriler korunuyor.",
+          dailyOnly
+            ? "Günlük Operasyon personel kaynağı geçici olarak okunamadı; son başarılı veriler korunuyor."
+            : "İK ana personel kaynağı geçici olarak okunamadı; diğer başarılı bilgiler korunuyor.",
+          dailyOnly
+            ? "Bazı yardımcı Günlük Operasyon bilgileri yenilenemedi; başarılı günlük veriler korunuyor."
+            : "Bazı yardımcı İK bilgileri yenilenemedi; personel havuzu ve son başarılı veriler korunuyor.",
         ));
       } catch (error) {
-        setNotice(error?.message || "İK verisi okunamadı.");
+        setNotice(error?.message || (dailyOnly ? "Günlük Operasyon verisi okunamadı." : "İK verisi okunamadı."));
       }
     }
     loadIkData();
     return () => {
       cancelled = true;
     };
-  }, [companyId, dailyDateRange.end, dailyDateRange.start]);
+  }, [companyId, dailyDateRange.end, dailyDateRange.start, dailyOnly]);
 
   const updateDailyDateRange = (nextRange) => {
     setDailyDateRange((current) => {

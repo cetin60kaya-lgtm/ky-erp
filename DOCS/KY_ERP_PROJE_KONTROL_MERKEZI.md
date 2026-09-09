@@ -420,3 +420,17 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Normal kullanıcıda `approvalRequired` açıksa giriş onayı varsayılan olarak ilgili Firma Sahibi / İşveren (`COMPANY_ADMIN`) telefonuna gider. Süper Yönetici push aynalaması firma bazında Yönetim ekranından açılabilir.
 - Telefon push device/challenge/firma bildirim tercihleri yeni D1 migration yerine mevcut tenant-kapsamlı `json_store` üzerinde tutulur; bu paket production D1 schema write gerektirmez.
 - Canlı yayın kullanıcı tarafından açıkça onaylandı. Canonical yol değişmez: production merge -> Cloudflare Git Integration Pages + Workers Builds -> canlı health/auth/frontend smoke. GitHub Actions production deploy için kullanılmaz.
+
+
+## 09.09.2026 — Günlük Operasyon bağımsız modül olarak kilitlendi
+
+- İK içindeki günlük çalışan akışı görünür İK menüsünden ayrıldı.
+- Yeni bağımsız modül: **Günlük Operasyon** (`GUNLUK_OPERASYON`).
+- Sekmeler: **Ana Ekran**, Günlük Giriş, Personel Kartları, Haftalık Özet, Ödeme Fişleri.
+- Ana Ekran operasyon kontrol panelidir: bugün gelen kişi, gündüz/gece adetleri, bu haftanın tahmini ödemesi, gün gün haftalık durum, bugünkü ekip, bu hafta/geçen hafta karşılaştırması ve son dönem günlük hareket özeti.
+- Günlük Operasyon alt ekranları mevcut canonical günlük personel / devam API'lerini kullanır; aylık İK personel, izin, mesai, bordro ve evrak kaynaklarını yüklemez.
+- İK görünür sekmeleri yalnız aylık/personel-finans akışıdır. Günlük Operasyon ayrı modül/yetki olarak yönetilir.
+- **DENETIM** rolünde Günlük Operasyon varsayılan ve canonical olarak kapalıdır; Denetim yalnız mevcut İK denetim kapsamını görür.
+- Süper Yönetici yeni `GUNLUK_OPERASYON` yetkisini Kullanıcı & Yetkiler ekranından ayrı yönetebilir.
+- Legacy Prisma `ModuleKey` enum ve migration da `GUNLUK_OPERASYON` ile hizalandı.
+- Regression: `APP/cloud/ky-erp-api/src/daily-operations-separation-contract.test.ts`.

@@ -319,3 +319,17 @@ Bu karar sonraki mail çalışmalarında kaynak kabul edilecektir.
 8. Gmail hesabında regression testi yap; hiçbir davranış değişmediğini doğrula.
 9. Sonra production yayını yap ve gerçek Hotmail smoke testi ile kapat.
 
+
+
+## 09.09.2026 — Günlük Operasyon bağımsız modül olarak kilitlendi
+
+- İK içindeki günlük çalışan akışı görünür İK menüsünden ayrıldı.
+- Yeni bağımsız modül: **Günlük Operasyon** (`GUNLUK_OPERASYON`).
+- Sekmeler: **Ana Ekran**, Günlük Giriş, Personel Kartları, Haftalık Özet, Ödeme Fişleri.
+- Ana Ekran operasyon kontrol panelidir: bugün gelen kişi, gündüz/gece adetleri, bu haftanın tahmini ödemesi, gün gün haftalık durum, bugünkü ekip, bu hafta/geçen hafta karşılaştırması ve son dönem günlük hareket özeti.
+- Günlük Operasyon alt ekranları mevcut canonical günlük personel / devam API'lerini kullanır; aylık İK personel, izin, mesai, bordro ve evrak kaynaklarını yüklemez.
+- İK görünür sekmeleri yalnız aylık/personel-finans akışıdır. Günlük Operasyon ayrı modül/yetki olarak yönetilir.
+- **DENETIM** rolünde Günlük Operasyon varsayılan ve canonical olarak kapalıdır; Denetim yalnız mevcut İK denetim kapsamını görür.
+- Süper Yönetici yeni `GUNLUK_OPERASYON` yetkisini Kullanıcı & Yetkiler ekranından ayrı yönetebilir.
+- Legacy Prisma `ModuleKey` enum ve migration da `GUNLUK_OPERASYON` ile hizalandı.
+- Regression: `APP/cloud/ky-erp-api/src/daily-operations-separation-contract.test.ts`.
