@@ -1,0 +1,8 @@
+.shell-v3-notification-entry{display:grid;border-bottom:1px solid var(--border,#e5e7eb)}
+.shell-v3-notification-entry .shell-v3-notification-item{border-bottom:0;width:100%}
+.shell-v3-notification-inline-actions{display:flex;gap:8px;padding:0 12px 10px 34px;background:#fff}
+.shell-v3-notification-inline-actions button{border:1px solid #cbd5e1;border-radius:8px;padding:7px 12px;font-weight:800;font-size:12px;cursor:pointer;background:#fff;color:#334155}
+.shell-v3-notification-inline-actions button.approve{background:#166534;border-color:#166534;color:#fff}
+.shell-v3-notification-inline-actions button.deny{background:#fff1f2;border-color:#fecdd3;color:#be123c}
+.shell-v3-notification-inline-actions button:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:620px){.shell-v3-notification-inline-actions{padding-left:28px}.shell-v3-notification-inline-actions button{flex:1}}

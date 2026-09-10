@@ -6,8 +6,10 @@ import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import { getNotifications, markNotificationsRead } from "../services/notificationApi";
+import { decideSecurityCenterLoginApproval } from "../services/securityCenterApi";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
+import "../styles/security-notification-actions.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
@@ -108,6 +110,7 @@ export default function AppShellV3({
   const profileMenuRef = useRef(null);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationActionBusy, setNotificationActionBusy] = useState("");
   const [notificationError, setNotificationError] = useState("");
   const [notificationData, setNotificationData] = useState({
     items: [],
@@ -278,10 +281,34 @@ export default function AppShellV3({
 
   function openNotification(item) {
     if (item?.unread) markNotificationIdsRead([item.id]);
+    if (item?.meta?.securityCenter === true) {
+      if (ownerUser) onOpenTab("admin", "uygulama-sahibi");
+      else setPhoneApprovalOpen(true);
+      setNotificationOpen(false);
+      return;
+    }
     if (item?.route?.moduleKey && item?.route?.tabKey) {
       onOpenTab(item.route.moduleKey, item.route.tabKey);
     }
     setNotificationOpen(false);
+  }
+
+  async function decideNotificationApproval(event, item, decision) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const approvalId = String(item?.meta?.approvalId || "").trim();
+    if (!approvalId || notificationActionBusy) return;
+    setNotificationActionBusy(item.id);
+    setNotificationError("");
+    try {
+      await decideSecurityCenterLoginApproval(approvalId, decision);
+      if (item?.unread) await markNotificationIdsRead([item.id]);
+      await refreshNotifications(true);
+    } catch (error) {
+      setNotificationError(error?.message || "Giriş onayı tamamlanamadı.");
+    } finally {
+      setNotificationActionBusy("");
+    }
   }
 
   function markAllNotificationsRead() {
@@ -492,22 +519,29 @@ export default function AppShellV3({
                       <span>Bekleyen onay, e-Belge sorunu veya vadesi gelen ödeme olduğunda burada görünecek.</span>
                     </div>
                   ) : null}
-                  {notificationData.items.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={`shell-v3-notification-item ${item.unread ? "unread" : ""} severity-${item.severity || "info"}`}
-                      onClick={() => openNotification(item)}
-                    >
-                      <i aria-hidden="true" />
-                      <span>
-                        <em>{notificationCategoryLabel(item.category)}</em>
-                        <strong>{item.title}</strong>
-                        <small>{item.detail}</small>
-                      </span>
-                      <time>{notificationTime(item.createdAt)}</time>
-                    </button>
-                  ))}
+                  {notificationData.items.map((item) => {
+                    const actionable = item?.category === "SECURITY" && item?.meta?.actionable === true && Boolean(item?.meta?.approvalId);
+                    const actionBusy = notificationActionBusy === item.id;
+                    return <div className="shell-v3-notification-entry" key={item.id}>
+                      <button
+                        type="button"
+                        className={`shell-v3-notification-item ${item.unread ? "unread" : ""} severity-${item.severity || "info"}`}
+                        onClick={() => openNotification(item)}
+                      >
+                        <i aria-hidden="true" />
+                        <span>
+                          <em>{notificationCategoryLabel(item.category)}</em>
+                          <strong>{item.title}</strong>
+                          <small>{item.detail}</small>
+                        </span>
+                        <time>{notificationTime(item.createdAt)}</time>
+                      </button>
+                      {actionable ? <div className="shell-v3-notification-inline-actions">
+                        <button type="button" className="approve" disabled={Boolean(notificationActionBusy)} onClick={(event) => decideNotificationApproval(event, item, "APPROVE")}>{actionBusy ? "İşleniyor..." : "Onayla"}</button>
+                        <button type="button" className="deny" disabled={Boolean(notificationActionBusy)} onClick={(event) => decideNotificationApproval(event, item, "DENY")}>Reddet</button>
+                      </div> : null}
+                    </div>;
+                  })}
                 </div>
                 <footer>
                   <span>Gerçek kayıtlar · Firma ve kullanıcı yetkisine göre</span>
