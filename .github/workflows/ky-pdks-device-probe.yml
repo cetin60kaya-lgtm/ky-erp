@@ -1,0 +1,92 @@
+name: KY PDKS Direct Device Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/pdks-desktop-1.8.1-device-final-20260907
+    paths:
+      - '.github/workflows/ky-pdks-device-probe.yml'
+      - 'APP/desktop/ky-pdks-device-probe/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ky-pdks-device-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build read-only x86 RISS probe
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Get pinned Realand/RISS 2911 SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = 'APP/desktop/ky-pdks-device-probe/sdk'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $url = 'https://raw.githubusercontent.com/hoangh-e/ZDC2911_Demo/faafc6cd99991818dcdd1145ffaecb431dca754a/RL10079DesktopDemo/Data/C%23/Riss.Devices.dll'
+          $dll = Join-Path $dir 'Riss.Devices.dll'
+          Invoke-WebRequest -Uri $url -OutFile $dll -UseBasicParsing
+          $blob = (git hash-object $dll).Trim()
+          if ($blob -ne 'feaa848e80bc470dcf9c8bed890838823ebeae51') {
+            throw "Riss.Devices.dll blob doğrulaması başarısız: $blob"
+          }
+          $hash = (Get-FileHash $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "RISS SDK OK · bytes=$((Get-Item $dll).Length) · sha256=$hash"
+
+      - name: Build x86 .NET Framework probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $proj = 'APP/desktop/ky-pdks-device-probe/KY.PDKS.DeviceProbe.csproj'
+          msbuild $proj /restore /t:Rebuild /p:Configuration=Release /p:PlatformTarget=x86 /m
+
+      - name: Verify single EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = 'APP/desktop/ky-pdks-device-probe/bin/Release/net48'
+          $exe = Join-Path $out 'KY-PDKS-Direct-Cihaz-Testi-v1.exe'
+          if (-not (Test-Path $exe)) { throw 'Probe EXE oluşmadı.' }
+          if ((Get-Item $exe).Length -lt 180KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-Direct-Cihaz-Testi-v1.exe" -Encoding ascii
+          $info = [ordered]@{
+            product = 'KY PDKS Direct Device Probe'
+            version = '1.0.0'
+            architecture = 'x86'
+            target = '.NET Framework 4.8'
+            mode = 'READ_ONLY'
+            host = '192.168.1.224'
+            port = 5005
+            deviceNo = 1
+            sdk = 'Riss.Devices.dll / ZDC2911'
+            sdkGitBlob = 'feaa848e80bc470dcf9c8bed890838823ebeae51'
+            sdkSourceCommit = 'faafc6cd99991818dcdd1145ffaecb431dca754a'
+            exeSha256 = $sha
+          }
+          $info | ConvertTo-Json | Set-Content -Path (Join-Path $out 'build-info-device-probe.json') -Encoding utf8
+          Write-Host "PROBE EXE OK: $exe"
+          Get-Item $exe | Format-List Name,Length,FullName
+          Get-FileHash $exe -Algorithm SHA256
+
+      - name: Upload probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KY-PDKS-Direct-Cihaz-Testi-v1
+          path: |
+            APP/desktop/ky-pdks-device-probe/bin/Release/net48/KY-PDKS-Direct-Cihaz-Testi-v1.exe
+            APP/desktop/ky-pdks-device-probe/bin/Release/net48/KY-PDKS-Direct-Cihaz-Testi-v1.exe.sha256.txt
+            APP/desktop/ky-pdks-device-probe/bin/Release/net48/build-info-device-probe.json
+          if-no-files-found: error
+          retention-days: 30
