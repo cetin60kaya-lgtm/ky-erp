@@ -175,7 +175,9 @@ async function deviceActor(c: any) {
   const token = text(c.req.header("X-KYERP-Push-Token"));
   if (!deviceId || !token) return null;
   const device = await storeGet(c, DEVICE_SCOPE, deviceId);
-  if (!device || device.securityApp !== true || device.isActive === false) return null;
+  if (!device || device.securityApp !== true) return null;
+  const explicitlyRetired = device.isActive === false && Boolean(text(device.retiredAt) || text(device.retiredReason));
+  if (explicitlyRetired) return null;
   if (!safeEqual(text(device.deviceTokenHash), await sha256(token))) return null;
   if (!(await verifyDeviceAuth(c, device))) return null;
   const user = await c.env.DB.prepare(
@@ -188,7 +190,12 @@ async function deviceActor(c: any) {
 }
 async function activeSecurityDevices(c: any, userId: string) {
   const rows = await storeList(c, DEVICE_SCOPE);
-  return rows.filter((row: AnyRow) => text(row.userId) === userId && row.securityApp === true && row.isActive !== false && !text(row.retiredAt) && !text(row.retiredReason));
+  return rows.filter((row: AnyRow) => {
+    if (text(row.userId) !== userId || row.securityApp !== true) return false;
+    const explicitlyRetired = row.isActive === false && Boolean(text(row.retiredAt) || text(row.retiredReason));
+    if (explicitlyRetired) return false;
+    return row.isActive !== false || !Boolean(text(row.retiredAt) || text(row.retiredReason));
+  });
 }
 
 async function ensureVapidKeyPair(c: any) {
@@ -279,7 +286,7 @@ export function registerSecurityActionRoutes(app: any) {
     await storePut(c, ACTION_SCOPE, id, companySlug, {
       id, userId: text(auth.current.id), mainCompanySlug: companySlug, actionType,
       actionTokenHash: await sha256(token), status: "PENDING", requestedAt, expiresAt,
-      decidedAt: "", decidedByDeviceId: "", consumedAt: "", sourceIp: clientIp(c), sourceUserAgent: userAgent(c),
+      decidedAt: "", decidedByDeviceId: "", claimedAt: "", consumedAt: "", sourceIp: clientIp(c), sourceUserAgent: userAgent(c),
     });
     const sent = await sendWakeMany(c, devices);
     await audit(c, sent ? "SECURITY_ACTION_REQUESTED" : "SECURITY_ACTION_PUSH_DEFERRED", auth.current.id, auth.current.id, companySlug, { actionId: id, actionType, notifiedDevices: sent });
@@ -360,20 +367,37 @@ export function registerSecurityActionRoutes(app: any) {
       if (old) statements.push(c.env.DB.prepare("UPDATE auth_owner_recovery_questions SET question_text=?,answer_hash=?,answer_salt=?,answer_iterations=?,updated_at=? WHERE id=? AND user_id=?").bind(question, hashed.hash, hashed.salt, hashed.iterations, timestamp, old.id, auth.current.id));
       else statements.push(c.env.DB.prepare("INSERT INTO auth_owner_recovery_questions(id,user_id,position,question_text,answer_hash,answer_salt,answer_iterations,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(), auth.current.id, position, question, hashed.hash, hashed.salt, hashed.iterations, timestamp, timestamp));
     }
-    if (statements.length) await c.env.DB.batch(statements);
 
-    const readBack = (await c.env.DB.prepare("SELECT position,question_text,answer_hash,answer_salt,answer_iterations,updated_at FROM auth_owner_recovery_questions WHERE user_id=? ORDER BY position").bind(auth.current.id).all<AnyRow>()).results || [];
-    const verified = readBack.length === 3 && expected.every((item, index) => Number(readBack[index]?.position) === item.position && text(readBack[index]?.question_text) === item.question && Boolean(text(readBack[index]?.answer_hash)) && Boolean(text(readBack[index]?.answer_salt)) && Number(readBack[index]?.answer_iterations || 0) >= 100000);
-    if (!verified) {
-      await audit(c, "OWNER_RECOVERY_QUESTIONS_READBACK_FAILED", auth.current.id, auth.current.id, text(action.mainCompanySlug), { actionId: action.id, rowCount: readBack.length });
-      return c.json(jsonError("RECOVERY_READBACK_FAILED", "Güvenlik soruları yazıldıktan sonra doğrulanamadı; telefon onayı tüketilmedi. Tekrar deneyin."), 500);
+    // Telefon onayı tek kullanımlıdır. Yazmadan önce APPROVED -> PROCESSING atomik claim
+    // yapılır; iki eşzamanlı PUT aynı onayla D1'e iki kez yazamaz.
+    const claimed = await atomicActionUpdate(c, action, "APPROVED", { status: "PROCESSING", claimedAt: nowIso() });
+    if (!claimed.changed) return c.json(jsonError("SECURITY_ACTION_CONSUMED", "KY Güvenlik onayı başka bir işlem tarafından kullanılıyor veya daha önce kullanıldı."), 409);
+    const claimedAction = claimed.row;
+    let finalized = false;
+    try {
+      if (statements.length) await c.env.DB.batch(statements);
+
+      const readBack = (await c.env.DB.prepare("SELECT position,question_text,answer_hash,answer_salt,answer_iterations,updated_at FROM auth_owner_recovery_questions WHERE user_id=? ORDER BY position").bind(auth.current.id).all<AnyRow>()).results || [];
+      const verified = readBack.length === 3 && expected.every((item, index) => Number(readBack[index]?.position) === item.position && text(readBack[index]?.question_text) === item.question && Boolean(text(readBack[index]?.answer_hash)) && Boolean(text(readBack[index]?.answer_salt)) && Number(readBack[index]?.answer_iterations || 0) >= 100000);
+      if (!verified) {
+        await atomicActionUpdate(c, claimedAction, "PROCESSING", { status: "APPROVED", claimedAt: "" });
+        await audit(c, "OWNER_RECOVERY_QUESTIONS_READBACK_FAILED", auth.current.id, auth.current.id, text(action.mainCompanySlug), { actionId: action.id, rowCount: readBack.length });
+        return c.json(jsonError("RECOVERY_READBACK_FAILED", "Güvenlik soruları yazıldıktan sonra doğrulanamadı; telefon onayı tüketilmedi. Tekrar deneyin."), 500);
+      }
+
+      await retireLegacyRecoveryCodes(c, auth.current.id);
+      const readiness = await recoveryReadiness(c, auth.current.id);
+      const consumed = await atomicActionUpdate(c, claimedAction, "PROCESSING", { status: "APPROVED", claimedAt: "", consumedAt: nowIso() });
+      if (!consumed.changed) throw new Error("SECURITY_ACTION_FINALIZE_FAILED");
+      finalized = true;
+      await audit(c, "OWNER_RECOVERY_QUESTIONS_UPDATED", auth.current.id, auth.current.id, text(action.mainCompanySlug), { actionId: action.id, readBackVerified: true, questionCount: 3, recoveryEnabled: readiness.ready, legacyRecoveryCodesRetired: true });
+      return c.json({ ok: true, data: { saved: true, readBackVerified: true, recoveryEnabled: readiness.ready, legacyRecoveryCodesRetired: true, questions: readBack.map((row: AnyRow) => ({ position: Number(row.position), question: text(row.question_text), configured: true, updatedAt: row.updated_at })) } });
+    } catch (error) {
+      if (!finalized) {
+        try { await atomicActionUpdate(c, claimedAction, "PROCESSING", { status: "APPROVED", claimedAt: "" }); } catch {}
+      }
+      await audit(c, "OWNER_RECOVERY_QUESTIONS_WRITE_FAILED", auth.current.id, auth.current.id, text(action.mainCompanySlug), { actionId: action.id, code: error instanceof Error ? error.message.slice(0, 120) : "UNKNOWN" });
+      return c.json(jsonError("RECOVERY_SAVE_FAILED", "Güvenlik soruları kalıcı olarak doğrulanamadı; KY Güvenlik onayı güvenli şekilde yeniden kullanılabilir durumda bırakıldı."), 500);
     }
-
-    await retireLegacyRecoveryCodes(c, auth.current.id);
-    const readiness = await recoveryReadiness(c, auth.current.id);
-    const consumed = await atomicActionUpdate(c, action, "APPROVED", { consumedAt: nowIso() });
-    if (!consumed.changed) return c.json(jsonError("SECURITY_ACTION_CONSUMED", "KY Güvenlik onayı başka bir işlem tarafından kullanıldı."), 409);
-    await audit(c, "OWNER_RECOVERY_QUESTIONS_UPDATED", auth.current.id, auth.current.id, text(action.mainCompanySlug), { actionId: action.id, readBackVerified: true, questionCount: 3, recoveryEnabled: readiness.ready, legacyRecoveryCodesRetired: true });
-    return c.json({ ok: true, data: { saved: true, readBackVerified: true, recoveryEnabled: readiness.ready, legacyRecoveryCodesRetired: true, questions: readBack.map((row: AnyRow) => ({ position: Number(row.position), question: text(row.question_text), configured: true, updatedAt: row.updated_at })) } });
   });
 }
