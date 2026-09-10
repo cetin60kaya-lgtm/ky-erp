@@ -84,14 +84,29 @@ function financialAllocation(args: Row) {
   const doc = args.financialDocument;
   const line = args.financialLine;
   if (!doc || !line) return null;
+  const lineQty = Math.max(0, numberValue(line.quantity));
+  const physicalQty = Math.max(0, numberValue(args.physicalLine?.quantity));
+  const allocatedQuantity = Math.max(
+    0,
+    numberValue(
+      args.financialAllocatedQuantity ??
+      (lineQty > 0 && physicalQty > 0 ? Math.min(lineQty, physicalQty) : lineQty),
+    ),
+  );
+  const lineTotal = numberValue(line.line_total || line.lineTotal);
+  const allocatedTotal = args.financialAllocatedTotal !== undefined
+    ? numberValue(args.financialAllocatedTotal)
+    : lineQty > 0
+      ? lineTotal * (allocatedQuantity / lineQty)
+      : lineTotal;
   return {
     key: `${text(doc.id)}:${text(line.id)}`,
     documentId: text(doc.id),
     documentNo: text(doc.document_no || doc.documentNo),
     documentLineId: text(line.id),
-    quantity: numberValue(args.financialAllocatedQuantity ?? line.quantity),
-    unitPrice: numberValue(line.unit_price || line.unitPrice),
-    totalAmount: numberValue(args.financialAllocatedTotal ?? line.line_total || line.lineTotal),
+    quantity: allocatedQuantity,
+    unitPrice: allocatedQuantity > 0 ? allocatedTotal / allocatedQuantity : numberValue(line.unit_price || line.unitPrice),
+    totalAmount: allocatedTotal,
     currency: text(doc.currency) || "TRY",
     issueDate: text(doc.issue_date || doc.issueDate) || null,
   };
@@ -173,17 +188,46 @@ export async function recordBoyahanePhysicalReceipt(
 
   // Invoice-only provisional receipt can later be claimed by the real dispatch.
   if (!existingMovement && !args.provisional) {
-    existingMovement = movements.find((row) =>
+    const provisionalCandidates = movements.filter((row) =>
       row.provisionalPhysicalReceipt === true &&
       text(row.productId || row.inventoryId) === productId &&
       normalizeLotNo(row.lotNo) === normalizeLotNo(lotNo) &&
-      Math.abs(numberValue(row.quantity || row.amountKg) - quantity) <= 0.0005 &&
       (!supplierCompanyId || !text(row.supplierCompanyId) || text(row.supplierCompanyId) === supplierCompanyId),
     );
+    if (provisionalCandidates.length > 1) {
+      throw Object.assign(new Error("Aynı ürün/LOT için birden fazla geçici fiziksel giriş var; irsaliye eşleştirmesi kullanıcı kontrolü gerektiriyor."), {
+        code: "PROVISIONAL_RECEIPT_AMBIGUOUS",
+      });
+    }
+    existingMovement = provisionalCandidates[0];
     if (existingMovement) {
       const movementFile = text(existingMovement.fileName || existingMovement.id);
+      const oldQuantity = numberValue(existingMovement.quantity || existingMovement.amountKg);
+      const delta = quantity - oldQuantity;
+      const lotId = text(existingMovement.lotId) || text(existingLot?.id || existingLot?.fileName);
+      const lot = existingLot || lots.find((row) => text(row.id || row.fileName) === lotId);
+      if (lot && Math.abs(delta) > 0.0005) {
+        const entryBefore = numberValue(lot.entryKg || lot.quantity);
+        const remainingBefore = numberValue(lot.remainingKg ?? lot.remainingQuantity ?? entryBefore);
+        if (remainingBefore + delta < -0.0005) {
+          throw Object.assign(new Error("Gerçek irsaliye miktarı, geçici stoktan yapılan tüketim nedeniyle geriye doğru düzeltilemiyor."), {
+            code: "PROVISIONAL_QUANTITY_CONFLICT",
+          });
+        }
+        existingLot = await storePut(c, "BOYAHANE_LOT", lotId, {
+          ...lot,
+          entryKg: entryBefore + delta,
+          quantity: entryBefore + delta,
+          remainingKg: remainingBefore + delta,
+          remainingQuantity: remainingBefore + delta,
+          status: remainingBefore + delta <= 0.0005 ? "DEPLETED" : "AVAILABLE",
+          provisionalQuantityAdjustedAt: now(),
+        }, slug);
+      }
       await storePut(c, "BOYAHANE_STOCK_MOVEMENT", movementFile, {
         ...existingMovement,
+        quantity,
+        amountKg: quantity,
         physicalDocumentId,
         physicalDocumentLineId: physicalLineId,
         linkedDispatchDocumentId: physicalDocumentId,
@@ -195,7 +239,7 @@ export async function recordBoyahanePhysicalReceipt(
     }
   }
 
-  const nextFinancial = financialAllocation(args);
+  const nextFinancial = financialAllocation({ ...args, physicalLine: line });
   if (existingMovement) {
     const lotId = text(existingMovement.lotId) || text(existingLot?.id || existingLot?.fileName);
     if (lotId) {
@@ -306,6 +350,8 @@ export async function recordGenericPhysicalReceipt(
     provisional?: boolean;
     financialDocument?: Row | null;
     financialLine?: Row | null;
+    financialAllocatedQuantity?: number;
+    financialAllocatedTotal?: number;
   },
 ) {
   if (!(await tableExists(c, "stock_movements"))) {
@@ -315,25 +361,124 @@ export async function recordGenericPhysicalReceipt(
   const line = args.physicalLine;
   const physicalDocumentId = text(doc.id);
   const physicalLineId = text(line.id);
+  const productId = text(args.productId);
   const quantity = numberValue(line.quantity);
-  if (!physicalDocumentId || !physicalLineId || !text(args.productId) || quantity <= 0) {
+  const supplierId = text(doc.party_company_id || doc.partyCompanyId || args.financialDocument?.party_company_id);
+  if (!physicalDocumentId || !physicalLineId || !productId || quantity <= 0) {
     throw Object.assign(new Error("Fiziksel stok hareketi kimliği veya miktarı eksik."), {
       code: "PHYSICAL_RECEIPT_INVALID",
     });
   }
-  const existing = await c.env.DB.prepare(
-    `SELECT id FROM stock_movements
+
+  const columns = await tableColumns(c, "stock_movements");
+  let existing = await c.env.DB.prepare(
+    `SELECT * FROM stock_movements
       WHERE main_company_slug=? AND document_line_id=? AND movement_type='PURCHASE_IN'
       LIMIT 1`,
   ).bind(slug, physicalLineId).first<Row>();
-  if (existing?.id) return { created: false, idempotent: true, movementId: text(existing.id) };
+  let provisionalReconciled = false;
 
-  const columns = await tableColumns(c, "stock_movements");
+  if (!existing && !args.provisional && columns.has("product_id")) {
+    const result = await c.env.DB.prepare(
+      `SELECT * FROM stock_movements
+        WHERE main_company_slug=? AND product_id=? AND movement_type='PURCHASE_IN'
+        ORDER BY created_at DESC LIMIT 100`,
+    ).bind(slug, productId).all<Row>();
+    const candidates = (result.results || []).filter((row) => {
+      const raw = json(row.raw);
+      if (raw.provisional !== true) return false;
+      if (columns.has("active") && Number(row.active ?? 1) === 0) return false;
+      if (supplierId && text(row.firm_id) && text(row.firm_id) !== supplierId) return false;
+      const rowLot = normalizeLotNo(row.lot_no || raw.lotNo);
+      const wantedLot = normalizeLotNo(args.lotNo);
+      if (rowLot && wantedLot && rowLot !== wantedLot) return false;
+      return true;
+    });
+    if (candidates.length > 1) {
+      throw Object.assign(new Error("Aynı ürün için birden fazla geçici stok girişi var; gerçek irsaliye otomatik bağlanamadı."), {
+        code: "PROVISIONAL_RECEIPT_AMBIGUOUS",
+      });
+    }
+    if (candidates.length === 1) {
+      existing = candidates[0];
+      const raw = json(existing.raw);
+      const updates: Row = {
+        document_id: physicalDocumentId,
+        document_line_id: physicalLineId,
+        source_type: text(args.sourceType) || "CANONICAL_DISPATCH",
+        quantity,
+        unit: text(line.unit_code || line.unitCode || existing.unit),
+        lot_no: text(args.lotNo || existing.lot_no) || null,
+        raw: {
+          ...raw,
+          provisional: false,
+          linkedDispatchDocumentId: physicalDocumentId,
+          linkedDispatchLineId: physicalLineId,
+          provisionalQuantity: numberValue(existing.quantity),
+          reconciledQuantity: quantity,
+          reconciledAt: now(),
+        },
+        updated_at: now(),
+      };
+      const entries = Object.entries(updates).filter(([key]) => columns.has(key));
+      if (entries.length) {
+        await c.env.DB.prepare(
+          `UPDATE stock_movements SET ${entries.map(([key]) => `"${key}"=?`).join(",")} WHERE id=? AND main_company_slug=?`,
+        ).bind(
+          ...entries.map(([, value]) => typeof value === "object" && value !== null ? JSON.stringify(value) : value),
+          existing.id,
+          slug,
+        ).run();
+      }
+      existing = { ...existing, ...updates };
+      provisionalReconciled = true;
+    }
+  }
+
+  const nextFinancial = financialAllocation({ ...args, physicalLine: line });
+  if (existing?.id) {
+    if (nextFinancial) {
+      const raw = json(existing.raw);
+      const financialDocuments = mergeFinancialAllocations(raw.financialDocuments, nextFinancial);
+      const costs = costSummary(financialDocuments);
+      const updates: Row = {
+        unit_price: costs.unitCost,
+        total_amount: costs.totalCost,
+        raw: {
+          ...raw,
+          financialDocuments,
+          costedQuantity: costs.costedQuantity,
+          totalCost: costs.totalCost,
+          unitCost: costs.unitCost,
+          latestFinancialDocumentId: nextFinancial.documentId,
+          latestFinancialDocumentLineId: nextFinancial.documentLineId,
+          latestFinancialDocumentNo: nextFinancial.documentNo,
+          costUpdatedAt: now(),
+          provisional: args.provisional === true ? true : raw.provisional === true && !provisionalReconciled,
+        },
+        updated_at: now(),
+      };
+      const entries = Object.entries(updates).filter(([key]) => columns.has(key));
+      if (entries.length) {
+        await c.env.DB.prepare(
+          `UPDATE stock_movements SET ${entries.map(([key]) => `"${key}"=?`).join(",")} WHERE id=? AND main_company_slug=?`,
+        ).bind(
+          ...entries.map(([, value]) => typeof value === "object" && value !== null ? JSON.stringify(value) : value),
+          existing.id,
+          slug,
+        ).run();
+      }
+    }
+    return { created: false, idempotent: true, movementId: text(existing.id), provisionalReconciled };
+  }
+
+  const financialDocuments = mergeFinancialAllocations([], nextFinancial);
+  const costs = costSummary(financialDocuments);
   const data: Row = {
     id: crypto.randomUUID(),
     main_company_slug: slug,
-    product_id: text(args.productId),
-    firm_id: text(doc.party_company_id || doc.partyCompanyId) || null,
+    product_id: productId,
+    firm_id: supplierId || null,
     document_id: physicalDocumentId,
     document_line_id: physicalLineId,
     movement_type: "PURCHASE_IN",
@@ -341,8 +486,8 @@ export async function recordGenericPhysicalReceipt(
     date: text(doc.issue_date || doc.issueDate) || now(),
     quantity,
     unit: text(line.unit_code || line.unitCode),
-    unit_price: numberValue(args.financialLine?.unit_price || args.financialLine?.unitPrice),
-    total_amount: numberValue(args.financialLine?.line_total || args.financialLine?.lineTotal),
+    unit_price: costs.unitCost || numberValue(args.financialLine?.unit_price || args.financialLine?.unitPrice),
+    total_amount: costs.totalCost || numberValue(args.financialLine?.line_total || args.financialLine?.lineTotal),
     lot_no: text(args.lotNo) || null,
     note: `${text(doc.document_no || doc.documentNo) || "Belge"} fiziksel stok girişi`,
     active: 1,
@@ -350,8 +495,14 @@ export async function recordGenericPhysicalReceipt(
       eBelge: true,
       physicalReceipt: true,
       provisional: args.provisional === true,
-      financialDocumentId: text(args.financialDocument?.id) || null,
-      financialDocumentLineId: text(args.financialLine?.id) || null,
+      physicalDocumentId,
+      physicalDocumentLineId: physicalLineId,
+      financialDocuments,
+      costedQuantity: costs.costedQuantity,
+      totalCost: costs.totalCost,
+      unitCost: costs.unitCost,
+      financialDocumentId: nextFinancial?.documentId || null,
+      financialDocumentLineId: nextFinancial?.documentLineId || null,
     },
     created_at: now(),
     updated_at: now(),
@@ -361,5 +512,5 @@ export async function recordGenericPhysicalReceipt(
     `INSERT INTO stock_movements(${entries.map(([key]) => `"${key}"`).join(",")})
      VALUES(${entries.map(() => "?").join(",")})`,
   ).bind(...entries.map(([, value]) => typeof value === "object" && value !== null ? JSON.stringify(value) : value)).run();
-  return { created: true, idempotent: false, movementId: text(data.id) };
+  return { created: true, idempotent: false, movementId: text(data.id), provisional: args.provisional === true };
 }
