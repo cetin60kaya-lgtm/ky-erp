@@ -3,6 +3,8 @@ import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { hasNotificationPermission, NOTIFICATION_MAX_READ_IDS, sanitizeNotificationReadIds } from "./notifications-core.ts";
 
 const READ_SCOPE = "SYSTEM_NOTIFICATIONS_READ_V1";
+const SECURITY_GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
+const SECURITY_PREF_SCOPE = "AUTH_SECURITY_NOTIFICATION_PREF";
 const MAX_READ_IDS = NOTIFICATION_MAX_READ_IDS;
 
 type AnyRow = Record<string, any>;
@@ -21,6 +23,17 @@ function ownerRole(role: unknown) {
 
 function companyAdminRole(role: unknown) {
   return upper(role) === "COMPANY_ADMIN";
+}
+
+function objectOf(value: unknown): AnyRow {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as AnyRow;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 async function tableExists(c: any, tableName: string) {
@@ -74,6 +87,31 @@ function requestedTenant(c: any, current: AnyRow) {
   return own;
 }
 
+async function hasDelegatedLoginApproval(c: any, current: AnyRow, tenant: string) {
+  if (!tenant || !(await tableExists(c, "json_store"))) return false;
+  const row = await c.env.DB.prepare(
+    `SELECT data FROM json_store
+      WHERE scope=? AND main_company_slug=? AND file_name=?
+      ORDER BY updated_at DESC,id DESC LIMIT 1`,
+  ).bind(SECURITY_GRANT_SCOPE, tenant, `${tenant}:${text(current.id)}`).first<AnyRow>();
+  if (!row?.data) return false;
+  const grant = objectOf(row.data);
+  if (grant.isActive === false) return false;
+  const capabilities = Array.isArray(grant.capabilities) ? grant.capabilities.map(upper) : [];
+  return capabilities.includes("LOGIN_APPROVE");
+}
+
+async function securityNotificationEnabled(c: any, current: AnyRow, key: string, fallback = true) {
+  if (!(await tableExists(c, "json_store"))) return fallback;
+  const row = await c.env.DB.prepare(
+    `SELECT data FROM json_store WHERE scope=? AND file_name=? ORDER BY updated_at DESC,id DESC LIMIT 1`,
+  ).bind(SECURITY_PREF_SCOPE, text(current.id)).first<AnyRow>();
+  if (!row?.data) return fallback;
+  const payload = objectOf(row.data);
+  const preferences = objectOf(payload.preferences);
+  return preferences[key] === undefined ? fallback : Boolean(preferences[key]);
+}
+
 function toIso(value: unknown) {
   const raw = text(value);
   if (!raw) return "";
@@ -94,10 +132,12 @@ function notificationSort(a: AnyRow, b: AnyRow) {
 }
 
 async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
-  const canApprove = ownerRole(current?.role) ||
-    companyAdminRole(current?.role) ||
-    hasNotificationPermission(current, ["ADMIN"], "canApprove");
+  const delegated = !ownerRole(current?.role) && !companyAdminRole(current?.role)
+    ? await hasDelegatedLoginApproval(c, current, tenant)
+    : false;
+  const canApprove = ownerRole(current?.role) || companyAdminRole(current?.role) || delegated;
   if (!canApprove || !(await tableExists(c, "auth_login_approvals"))) return [];
+  if (!(await securityNotificationEnabled(c, current, "companyLoginRequests", true))) return [];
 
   const now = new Date().toISOString();
   const result = ownerRole(current?.role)
@@ -116,9 +156,11 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
                 COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name
            FROM auth_login_approvals a
            LEFT JOIN auth_users u ON u.id=a.user_id
+           LEFT JOIN auth_user_security us ON us.user_id=a.user_id
           WHERE UPPER(COALESCE(a.status,''))='PENDING'
             AND a.expires_at>?
             AND COALESCE(NULLIF(TRIM(a.main_company_slug),''),?)=?
+            AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN')
           ORDER BY a.requested_at DESC
           LIMIT 12`,
       ).bind(now, tenant, tenant).all<AnyRow>();
@@ -130,8 +172,17 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
     title: "Bekleyen giriş onayı",
     detail: [ownerRole(current?.role) ? text(row.main_company_slug) : "", text(row.user_name), text(row.device_label) || "Yeni cihaz"].filter(Boolean).join(" · "),
     createdAt: toIso(row.requested_at),
-    route: { moduleKey: "admin", tabKey: "admin-yonetim-ozeti" },
-    meta: { userId: text(row.user_id), mainCompanySlug: text(row.main_company_slug), expiresAt: toIso(row.expires_at) },
+    route: ownerRole(current?.role)
+      ? { moduleKey: "admin", tabKey: "uygulama-sahibi" }
+      : { moduleKey: "admin", tabKey: "kullanicilar" },
+    meta: {
+      approvalId: text(row.id),
+      actionable: true,
+      securityCenter: true,
+      userId: text(row.user_id),
+      mainCompanySlug: text(row.main_company_slug),
+      expiresAt: toIso(row.expires_at),
+    },
   }));
 }
 
