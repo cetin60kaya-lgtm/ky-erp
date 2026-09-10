@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, RefreshCcw, Truck } from "lucide-react";
 import { getEBelgePool } from "../../../services/eBelgeApi";
-import SupplierInventoryWorkspace from "./SupplierInventoryWorkspace";
+import CanonicalSupplierInventoryWorkspace from "./CanonicalSupplierInventoryWorkspace";
 import DocumentPoolPanel from "./DocumentPoolPanel";
 import "./supplierDocumentsWorkspace.css";
 
@@ -83,10 +83,10 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
       </section>
 
       <section className="sdw-invoice-head">
-        <div><FileText size={18} /><strong>Tedarikçiden Gelen Faturalar ve Lot İşlemleri</strong></div>
-        <small>Fatura işlenince gider/KDV kaydı oluşur; cari borç yalnız firma kartı cari takipliyse eklenir.</small>
+        <div><FileText size={18} /><strong>Tedarikçiden Gelen Faturalar ve Ürün Bazlı LOT İşlemleri</strong></div>
+        <small>İrsaliye fiziksel stok gerçeğidir; fatura maliyet/KDV/cari gerçeğidir. LOT zorunluluğu firma yerine ürün kartından gelir.</small>
       </section>
-      <SupplierInventoryWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
+      <CanonicalSupplierInventoryWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
     </section>
   );
 }
