@@ -1,0 +1,83 @@
+version: 2.1
+
+jobs:
+  pdks_windows_release:
+    machine:
+      image: windows-server-2022-gui:current
+      shell: powershell.exe -ExecutionPolicy Bypass
+    resource_class: windows.medium
+    steps:
+      - checkout
+
+      - run:
+          name: Prepare Windows build toolchain
+          shell: powershell.exe -ExecutionPolicy Bypass
+          command: |
+            $ErrorActionPreference = 'Stop'
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            choco feature enable -n allowGlobalConfirmation | Out-Null
+            if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+              choco install dotnet-8.0-sdk -y --no-progress
+            }
+            $dotnetVersion = (& dotnet --version)
+            if (-not $dotnetVersion.StartsWith('8.')) {
+              choco install dotnet-8.0-sdk -y --no-progress
+            }
+            choco install nodejs-lts -y --no-progress
+            choco install innosetup -y --no-progress
+            refreshenv
+            Write-Host "Node   :" (node --version)
+            Write-Host "npm    :" (npm --version)
+            Write-Host ".NET   :" (dotnet --version)
+            $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+            if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 bulunamadı.' }
+            Write-Host "Inno   : $iscc"
+
+      - run:
+          name: Build KY PDKS Pro 1.9.0 complete Windows setup
+          shell: powershell.exe -ExecutionPolicy Bypass
+          command: |
+            $ErrorActionPreference = 'Stop'
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            .\APP\desktop\ky-pdks\BUILD_PDKS_PRO_SETUP.ps1
+
+      - run:
+          name: Verify final setup and release metadata
+          shell: powershell.exe -ExecutionPolicy Bypass
+          command: |
+            $ErrorActionPreference = 'Stop'
+            $dir = Join-Path $env:CIRCLE_WORKING_DIRECTORY 'APP\desktop\ky-pdks\dist-pdks\setup'
+            $setup = Join-Path $dir 'KY-PDKS-Pro-Setup-1.9.0.exe'
+            $shaFile = "$setup.sha256.txt"
+            $infoFile = Join-Path $dir 'build-info-pdks.json'
+            if (-not (Test-Path $setup)) { throw 'KY-PDKS-Pro-Setup-1.9.0.exe bulunamadı.' }
+            if ((Get-Item $setup).Length -lt 5MB) { throw 'Setup beklenenden küçük.' }
+            if (-not (Test-Path $shaFile)) { throw 'SHA256 dosyası eksik.' }
+            if (-not (Test-Path $infoFile)) { throw 'build-info-pdks.json eksik.' }
+            $info = Get-Content $infoFile -Raw | ConvertFrom-Json
+            if ($info.version -ne '1.9.0') { throw "Sürüm yanlış: $($info.version)" }
+            if ($info.product -ne 'KY PDKS Pro') { throw "Ürün yanlış: $($info.product)" }
+            if ($info.includesPdksAgent -ne $true) { throw 'PDKS Agent pakete alınmadı.' }
+            if ($info.includesCanonicalFrontend -ne $true) { throw 'Canonical frontend pakete alınmadı.' }
+            if ($info.includesWebView2Bootstrapper -ne $true) { throw 'WebView2 prerequisite pakete alınmadı.' }
+            $actual = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+            $declared = ((Get-Content $shaFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+            if ($actual -ne $declared) { throw 'Setup SHA256 doğrulaması başarısız.' }
+            Write-Host "SETUP_OK $setup"
+            Write-Host "SHA256   $actual"
+
+      - store_artifacts:
+          path: APP/desktop/ky-pdks/dist-pdks/setup
+          destination: KY-PDKS-Pro-Setup-1.9.0
+
+workflows:
+  pdks_release:
+    jobs:
+      - pdks_windows_release:
+          filters:
+            branches:
+              only:
+                - codex/pdks-desktop-1.8.1-device-final-20260907
+            tags:
+              ignore: /.*/
