@@ -7,12 +7,15 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const entry = readFileSync(resolve(here, "main-entry.ts"), "utf8");
 const main = readFileSync(resolve(here, "main.ts"), "utf8");
+const securityEntry = readFileSync(resolve(here, "main-entry-security.ts"), "utf8");
+const mailEntry = readFileSync(resolve(here, "main-entry-mail.ts"), "utf8");
 const wrangler = readFileSync(resolve(here, "../wrangler.jsonc"), "utf8");
 const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
 
 test("worker accepts canonical V6 browser origins through the explicit CORS allowlist", () => {
-  assert.match(wrangler, /"main"\s*:\s*"src\/main-entry-mail\.ts"/);
-  assert.match(readFileSync(resolve(here, "main-entry-mail.ts"), "utf8"), /import base from "\.\/main-entry"/);
+  assert.match(wrangler, /"main"\s*:\s*"src\/main-entry-security\.ts"/);
+  assert.match(securityEntry, /import base from "\.\/main-entry-mail"/);
+  assert.match(mailEntry, /import base from "\.\/main-entry"/);
   assert.match(main, /const LIVE_ORIGINS = new Set\(\[/);
   assert.match(main, /"https:\/\/kyerp\.net"/);
   assert.match(main, /"https:\/\/www\.kyerp\.net"/);
