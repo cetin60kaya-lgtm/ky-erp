@@ -5,7 +5,7 @@
     <PlatformTarget>x86</PlatformTarget>
     <Prefer32Bit>true</Prefer32Bit>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>KY-PDKS-Direct-Cihaz-Testi-App</AssemblyName>
+    <AssemblyName>KY-PDKS-Direct-Cihaz-Testi-v1</AssemblyName>
     <RootNamespace>KyPdksDeviceProbe</RootNamespace>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -13,9 +13,12 @@
   <ItemGroup>
     <Reference Include="Riss.Devices">
       <HintPath>sdk\Riss.Devices.dll</HintPath>
-      <Private>true</Private>
+      <Private>false</Private>
     </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+    <EmbeddedResource Include="sdk\Riss.Devices.dll">
+      <LogicalName>KyPdksDeviceProbe.Riss.Devices.dll</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>
