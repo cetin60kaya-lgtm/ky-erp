@@ -192,7 +192,7 @@ export default function SecurityCenterPanel() {
     </div>}
 
     {tab === "sessions" && canSessionView && <div className="sc-panel">
-      <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile oturum güveni ayrıdır. Yeni oturumlar güven kararı verilene kadar “Onay Bekliyor” görünür.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Sadece Ben Kalayım tamamlandı; diğer aktif oturumlar kapatıldı.")}>Sadece Ben Kalayım</button>}</div>
+      <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile oturum güveni ayrıdır. Yeni oturumlar güven kararı verilene kadar “Onay Bekliyor” görünür.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Sadece Ben Kalayım tamamlandı; Süper Admin dışındaki aktif oturumlar kapatıldı.")}>Sadece Ben Kalayım</button>}</div>
       <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı / Cihaz</span><span>Firma / IP</span><span>Güven</span><span>Durum</span><span>İşlem</span></div>
         {sessions.map((row) => <div className="sc-table-row" key={row.id}>
           <span><strong>{row.fullName || row.username}</strong><small>{row.deviceLabel || "Tarayıcı"}<br/>{dateText(row.createdAt)}</small></span>
