@@ -20,6 +20,13 @@ function isOwnerRole(role: unknown) {
 function isCompanyAdminRole(role: unknown) {
   return upper(role) === "COMPANY_ADMIN";
 }
+export function ordinaryAdminRequestsOwnerRole(value: unknown) {
+  return isOwnerRole(value);
+}
+function requestedOwnerRole(body: AnyRow) {
+  const requested = body?.role ?? body?.roleOverride ?? body?.role_override;
+  return requested !== undefined && ordinaryAdminRequestsOwnerRole(requested);
+}
 function jsonError(code: string, message: string) {
   return { ok: false, error: { code, message } };
 }
@@ -33,7 +40,7 @@ function parseDetail(value: unknown) {
 }
 async function bodyOf(c: any) {
   try {
-    const body = await c.req.json();
+    const body = await c.req.raw.clone().json();
     return body && typeof body === "object" && !Array.isArray(body) ? body as AnyRow : {};
   } catch {
     return {};
@@ -60,17 +67,17 @@ async function audit(c: any, current: AnyRow, target: AnyRow, action: string, de
        VALUES (?,?,?,?,?,?,?,?,?)`,
     ).bind(
       crypto.randomUUID(),
-      current.id || null,
-      target.id || null,
-      text(target.main_company_slug || current.mainCompanySlug) || null,
+      current?.id || null,
+      target?.id || null,
+      text(target?.main_company_slug || current?.mainCompanySlug) || null,
       action,
-      current.session?.id || null,
+      current?.session?.id || null,
       text(c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For")?.split(",")[0]) || null,
       JSON.stringify(detail || {}),
       nowIso(),
     ).run();
   } catch {
-    // Güvenlik kaydı hatası profil güncellemesini bozmaz.
+    // Fail-closed karar audit yazımı yüzünden gevşetilmez.
   }
 }
 
@@ -113,8 +120,25 @@ function closeReason(events: AnyRow[], session: AnyRow) {
 }
 
 export function registerAuthOwnerGuardRoutes(app: any) {
-  // Tam oturum geçmişi: aktif + kapanmış + süresi dolmuş oturumlar.
-  // Yalnız okuma yapar; migration veya production write içermez.
+  app.post("/api/admin/users", async (c: any, next: any) => {
+    const body = await bodyOf(c);
+    if (!requestedOwnerRole(body)) return next();
+    const current = await getAuthenticatedUser(c);
+    if (current) {
+      await audit(c, current, {}, "SUPER_ADMIN_ORDINARY_ROUTE_BLOCKED", {
+        route: "/api/admin/users",
+        requestedRole: upper(body.role ?? body.roleOverride ?? body.role_override),
+      });
+    }
+    return c.json(
+      jsonError(
+        "SUPER_ADMIN_SECURITY_ACTION_REQUIRED",
+        "Süper Yönetici yalnız KY Güvenlik telefonunda yeniden doğrulanan kritik güvenlik işlemi ile atanabilir.",
+      ),
+      409,
+    );
+  });
+
   app.get("/api/admin/security/session-history", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current || (!isOwnerRole(current.role) && !isCompanyAdminRole(current.role))) {
@@ -177,22 +201,50 @@ export function registerAuthOwnerGuardRoutes(app: any) {
     return c.json({ ok: true, data: rows });
   });
 
-  // Uygulama sahibinin kritik güvenlik alanları genel kullanıcı düzenleme rotasından değiştirilemez.
-  // E-posta doğrulama/değiştirme yalnız MFA step-up kullanan owner-recovery rotasıyla yapılır.
   app.patch("/api/admin/users/:id", async (c: any, next: any) => {
     const current = await getAuthenticatedUser(c);
-    if (!current || !isOwnerRole(current.role)) return next();
+    if (!current) return next();
 
     const target = await targetUser(c, text(c.req.param("id")));
-    if (!target || !isOwnerRole(effectiveRole(target))) return next();
-
+    if (!target) return next();
     const body = await bodyOf(c);
+    const targetIsOwner = isOwnerRole(effectiveRole(target));
+
+    if (!targetIsOwner && requestedOwnerRole(body)) {
+      await audit(c, current, target, "SUPER_ADMIN_ORDINARY_ROUTE_BLOCKED", {
+        route: "/api/admin/users/:id",
+        requestedRole: upper(body.role ?? body.roleOverride ?? body.role_override),
+      });
+      return c.json(
+        jsonError(
+          "SUPER_ADMIN_SECURITY_ACTION_REQUIRED",
+          "Süper Yönetici rolüne yükseltme yalnız KY Güvenlik telefonunda yeniden doğrulanan kritik güvenlik işlemi ile yapılabilir.",
+        ),
+        409,
+      );
+    }
+
+    if (!targetIsOwner) return next();
+    if (!isOwnerRole(current.role)) {
+      return c.json(jsonError("OWNER_ONLY", "Süper Yönetici hesabı normal kullanıcı yönetiminden değiştirilemez."), 403);
+    }
+    if (text(current.id) !== text(target.id)) {
+      await audit(c, current, target, "OWNER_CHANGE_ORDINARY_ROUTE_BLOCKED", { route: "/api/admin/users/:id" });
+      return c.json(
+        jsonError(
+          "OWNER_SECURITY_ACTION_REQUIRED",
+          "Başka bir Süper Yönetici hesabındaki değişiklik yalnız KY Güvenlik kritik güvenlik işlemi ile yapılabilir.",
+        ),
+        409,
+      );
+    }
+
     const requestedEmail = body.email === undefined ? text(target.email) : text(body.email).toLocaleLowerCase("tr-TR");
     if (requestedEmail !== text(target.email).toLocaleLowerCase("tr-TR")) {
       return c.json(
         jsonError(
           "OWNER_EMAIL_SECURITY_ROUTE_REQUIRED",
-          "Uygulama sahibi kurtarma e-postası yalnız Güvenlik > Uygulama Sahibi Kurtarma alanından Authenticator doğrulamasıyla değiştirilebilir.",
+          "Uygulama sahibi kurtarma e-postası yalnız Güvenlik > Uygulama Sahibi Kurtarma alanından güçlü yeniden doğrulama ile değiştirilebilir.",
         ),
         409,
       );
@@ -209,10 +261,9 @@ export function registerAuthOwnerGuardRoutes(app: any) {
       "UPDATE auth_users SET username=?,full_name=?,is_active=1,updated_at=? WHERE id=?",
     ).bind(username, fullName, timestamp, target.id).run();
 
-    // Crafted API isteklerinde gönderilse bile role/company/emailVerified/approval/policy/session/MFA alanlarına dokunulmaz.
     await audit(c, current, target, "OWNER_PROFILE_UPDATED_SECURITY_FIELDS_LOCKED", {
       ignoredFields: [
-        "role", "mainCompanySlug", "isActive", "emailVerified", "approvalRequired",
+        "role", "roleOverride", "role_override", "mainCompanySlug", "isActive", "emailVerified", "approvalRequired",
         "loginPolicy", "sessionSeconds", "mfa", "googleMfa", "microsoftMfa",
       ],
     });
@@ -237,4 +288,25 @@ export function registerAuthOwnerGuardRoutes(app: any) {
       },
     });
   });
+
+  const ownerCriticalRouteGuard = async (c: any, next: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return next();
+    const target = await targetUser(c, text(c.req.param("id")));
+    if (!target || !isOwnerRole(effectiveRole(target))) return next();
+    await audit(c, current, target, "OWNER_CRITICAL_ORDINARY_ROUTE_BLOCKED", {
+      route: new URL(c.req.url).pathname,
+      method: upper(c.req.method),
+    });
+    return c.json(
+      jsonError(
+        "OWNER_SECURITY_ACTION_REQUIRED",
+        "Süper Yönetici için bu kritik işlem normal kullanıcı yönetiminden yapılamaz; KY Güvenlik yeniden doğrulaması gerekir.",
+      ),
+      409,
+    );
+  };
+
+  app.post("/api/admin/users/:id/deactivate", ownerCriticalRouteGuard);
+  app.post("/api/admin/users/:id/reset-password", ownerCriticalRouteGuard);
 }
