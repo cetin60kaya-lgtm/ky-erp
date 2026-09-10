@@ -28,7 +28,7 @@ public partial class PdksWorkbenchWindow
             }
         }
 
-        var enrolled = await api.EnrollAsync(_token, _paths, _lifetime.Token);
+        var enrolled = await api.EnrollAsync(_token, _paths, "", _lifetime.Token);
         credentials.Save(enrolled);
         await _store.TouchStateAsync("d1_sync", "D1 cihaz yetkisi oluşturuldu · Agent otomatik sync aktif", _lifetime.Token);
         StatusText.Text = "Windows Agent D1'e yetkilendirildi. Uygulama kapalıyken de kart senkronu devam eder.";
