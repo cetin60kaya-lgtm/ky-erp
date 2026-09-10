@@ -85,7 +85,15 @@ export async function confirmSecureMfaRenewal(id, provider, payload = {}) {
 export async function listLoginSecurityPolicies() { return unwrap(await apiGet("/admin/security/policies", { _ts: Date.now() })); }
 export async function updateLoginSecurityPolicy(id, payload = {}) { return unwrap(await apiPatch(`/admin/security/users/${encodeURIComponent(id)}/policy`, payload)); }
 export async function getOwnerRecoveryConfig() { return unwrap(await apiGet("/admin/security/owner-recovery", { _ts: Date.now() })); }
+// Authenticator yalnız yedek/kurtarma yöntemidir. Yeni birincil kayıt akışı KY Güvenlik telefon onayıdır.
 export async function saveOwnerRecoveryQuestions(payload = {}) { return unwrap(await apiPut("/admin/security/owner-recovery/questions", payload)); }
+export async function startOwnerSecurityAction(payload = {}) { return unwrap(await apiPost("/admin/security/actions/start", payload)); }
+export async function getOwnerSecurityActionStatus(id, actionToken) {
+  return unwrap(await apiPost(`/admin/security/actions/${encodeURIComponent(id)}/status`, { actionToken }));
+}
+export async function saveOwnerRecoveryQuestionsSecure(payload = {}) {
+  return unwrap(await apiPut("/admin/security/owner-recovery/questions/secure", payload));
+}
 export async function startOwnerRecoveryContactVerification(payload = {}) { return unwrap(await apiPost("/admin/security/owner-recovery/contact/start", payload)); }
 export async function verifyOwnerRecoveryContact(payload = {}) { return unwrap(await apiPost("/admin/security/owner-recovery/contact/verify", payload)); }
 
@@ -95,7 +103,6 @@ export async function verifyUserEmail(id, payload = {}) { return unwrap(await ap
 export async function getUserEmailDeliveryStatus(id, messageId) {
   return unwrap(await apiGet(`/admin/security/users/${encodeURIComponent(id)}/email-verification/delivery/${encodeURIComponent(messageId)}`, { _ts: Date.now() }));
 }
-
 
 export async function getBuildCenterStatus() {
   return unwrap(await apiGet("/admin/build-center/status", { _ts: Date.now() }, { timeoutMs: 60000 }));
