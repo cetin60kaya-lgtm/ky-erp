@@ -58,17 +58,27 @@ function movementDate(row: Row) {
   return text(row.movementDate || row.date || row.usedAt || row.createdAt || row.created_at);
 }
 
+function movementDirection(row: Row) {
+  const explicit = upper(row.type);
+  if (explicit === "IN") return 1;
+  if (explicit === "OUT") return -1;
+  const type = upper(row.movementType || row.reason);
+  if (/ADJUSTMENT_IN|CORRECTION_IN|PURCHASE_IN|RECEIPT|(^|_)IN$|GIRIS|GİRİŞ/.test(type)) return 1;
+  if (/ADJUSTMENT_OUT|CORRECTION_OUT|RETURN|IADE|İADE|PRODUCTION|SAMPLE|FIRE|WASTE|CONSUM|(^|_)OUT$|CIKIS|ÇIKIŞ/.test(type)) return -1;
+  return 0;
+}
+
 export function classifyBoyahaneMovement(row: Row) {
-  const type = upper(row.movementType || row.type);
+  const type = upper(row.movementType || row.reason || row.type);
   const note = upper(`${row.reason || ""} ${row.consumptionReason || ""} ${row.note || ""} ${row.description || ""}`);
-  const incoming = /(^|_)IN$|RECEIPT|PURCHASE_IN|GIRIS/.test(type) && !/OUT/.test(type);
-  if (incoming) return "RECEIPT";
-  if (/RETURN|IADE/.test(type) || /IADE/.test(note)) return "RETURN";
-  if (/FIRE|FIRE|WASTE|HURDA/.test(note)) return "WASTE";
-  if (/NUMUNE|SAMPLE|TEST/.test(note)) return "SAMPLE";
-  if (/DUZELT|DÜZELT|CORRECTION|ADJUSTMENT/.test(type) || /DUZELT|DÜZELT|CORRECTION/.test(note)) return "ADJUSTMENT";
-  if (text(row.productionId) || text(row.recipeId) || /URETIM|ÜRETIM|PRODUCTION|RECIPE|RECETE|REÇETE/.test(note)) return "PRODUCTION";
-  if (/OUT|CIKIS|ÇIKIŞ|CONSUM/.test(type)) return "OTHER_CONSUMPTION";
+  if (/ADJUSTMENT_IN|CORRECTION_IN/.test(type)) return "ADJUSTMENT_IN";
+  if (/ADJUSTMENT_OUT|CORRECTION_OUT/.test(type)) return "ADJUSTMENT_OUT";
+  if (/RETURN|IADE|İADE/.test(type) || /IADE|İADE/.test(note)) return "RETURN";
+  if (/FIRE|WASTE|HURDA/.test(type) || /FIRE|WASTE|HURDA/.test(note)) return "WASTE";
+  if (/NUMUNE|SAMPLE|TEST/.test(type) || /NUMUNE|SAMPLE|TEST/.test(note)) return "SAMPLE";
+  if (text(row.productionId) || text(row.recipeId) || /URETIM|ÜRETIM|ÜRETİM|PRODUCTION|RECIPE|RECETE|REÇETE/.test(type) || /URETIM|ÜRETIM|ÜRETİM|PRODUCTION|RECIPE|RECETE|REÇETE/.test(note)) return "PRODUCTION";
+  if (movementDirection(row) > 0) return "RECEIPT";
+  if (movementDirection(row) < 0) return "OTHER_CONSUMPTION";
   return "OTHER";
 }
 
@@ -116,9 +126,7 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
         const date = movementDate(row);
         return date && date >= bounds.from && date < bounds.next;
       });
-      const signed = (row: Row) => classifyBoyahaneMovement(row) === "RECEIPT"
-        ? movementQuantity(row)
-        : -movementQuantity(row);
+      const signed = (row: Row) => movementDirection(row) * movementQuantity(row);
       const openingQty = before.reduce((sum, row) => sum + signed(row), 0);
       const byCategory = (category: string) => current
         .filter((row) => classifyBoyahaneMovement(row) === category)
@@ -127,7 +135,9 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
       const productionQty = byCategory("PRODUCTION");
       const wasteQty = byCategory("WASTE");
       const sampleQty = byCategory("SAMPLE");
-      const adjustmentQty = byCategory("ADJUSTMENT");
+      const adjustmentInQty = byCategory("ADJUSTMENT_IN");
+      const adjustmentOutQty = byCategory("ADJUSTMENT_OUT");
+      const adjustmentQty = adjustmentOutQty - adjustmentInQty;
       const returnQty = byCategory("RETURN");
       const otherConsumptionQty = byCategory("OTHER_CONSUMPTION");
       const monthNet = current.reduce((sum, row) => sum + signed(row), 0);
@@ -140,7 +150,9 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
       const historyIncomplete = !all.length && num(lot.entryKg || lot.quantity) > 0;
       if (historyIncomplete && bounds.month === todayMonth) closingQty = currentBalance;
 
-      const consumedQty = productionQty + wasteQty + sampleQty + adjustmentQty + returnQty + otherConsumptionQty;
+      // Supplier returns reduce inventory but are not production/operational consumption.
+      // Inbound corrections also must not become material expense.
+      const consumedQty = productionQty + wasteQty + sampleQty + adjustmentOutQty + otherConsumptionQty;
       return {
         lotId,
         lotNo: text(lot.lotNo),
@@ -156,6 +168,8 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
         productionQty,
         wasteQty,
         sampleQty,
+        adjustmentInQty,
+        adjustmentOutQty,
         adjustmentQty,
         returnQty,
         otherConsumptionQty,
@@ -167,8 +181,9 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
         productionCost: productionQty * unitCost,
         wasteCost: wasteQty * unitCost,
         sampleCost: sampleQty * unitCost,
-        adjustmentCost: adjustmentQty * unitCost,
-        returnCost: returnQty * unitCost,
+        adjustmentInValue: adjustmentInQty * unitCost,
+        adjustmentCost: adjustmentOutQty * unitCost,
+        returnValue: returnQty * unitCost,
         otherConsumptionCost: otherConsumptionQty * unitCost,
         consumedCost: consumedQty * unitCost,
         closingValue: closingQty * unitCost,
@@ -188,6 +203,8 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
         productionQty: 0,
         wasteQty: 0,
         sampleQty: 0,
+        adjustmentInQty: 0,
+        adjustmentOutQty: 0,
         adjustmentQty: 0,
         returnQty: 0,
         otherConsumptionQty: 0,
@@ -195,10 +212,11 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
         closingQty: 0,
         consumedCost: 0,
         closingValue: 0,
+        returnValue: 0,
         lotCount: 0,
         depletedLotCount: 0,
       };
-      for (const field of ["openingQty","receiptQty","productionQty","wasteQty","sampleQty","adjustmentQty","returnQty","otherConsumptionQty","consumedQty","closingQty","consumedCost","closingValue"]) row[field] += num(lot[field]);
+      for (const field of ["openingQty","receiptQty","productionQty","wasteQty","sampleQty","adjustmentInQty","adjustmentOutQty","adjustmentQty","returnQty","otherConsumptionQty","consumedQty","closingQty","consumedCost","closingValue","returnValue"]) row[field] += num(lot[field]);
       row.lotCount += 1;
       if (lot.closingQty <= 0 || upper(lot.status) === "DEPLETED") row.depletedLotCount += 1;
       products.set(key, row);
@@ -210,9 +228,9 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
     });
     const generalExpenseTotal = monthExpenses.reduce((sum, row) => sum + num(row.amount || row.totalAmount || row.total), 0);
     const totals = lotRows.reduce((acc, lot) => {
-      for (const field of ["openingQty","receiptQty","productionQty","wasteQty","sampleQty","adjustmentQty","returnQty","otherConsumptionQty","consumedQty","closingQty","openingValue","receiptValue","productionCost","wasteCost","sampleCost","adjustmentCost","returnCost","otherConsumptionCost","consumedCost","closingValue"]) acc[field] += num(lot[field]);
+      for (const field of ["openingQty","receiptQty","productionQty","wasteQty","sampleQty","adjustmentInQty","adjustmentOutQty","adjustmentQty","returnQty","otherConsumptionQty","consumedQty","closingQty","openingValue","receiptValue","productionCost","wasteCost","sampleCost","adjustmentInValue","adjustmentCost","returnValue","otherConsumptionCost","consumedCost","closingValue"]) acc[field] += num(lot[field]);
       return acc;
-    }, {openingQty:0,receiptQty:0,productionQty:0,wasteQty:0,sampleQty:0,adjustmentQty:0,returnQty:0,otherConsumptionQty:0,consumedQty:0,closingQty:0,openingValue:0,receiptValue:0,productionCost:0,wasteCost:0,sampleCost:0,adjustmentCost:0,returnCost:0,otherConsumptionCost:0,consumedCost:0,closingValue:0} as Row);
+    }, {openingQty:0,receiptQty:0,productionQty:0,wasteQty:0,sampleQty:0,adjustmentInQty:0,adjustmentOutQty:0,adjustmentQty:0,returnQty:0,otherConsumptionQty:0,consumedQty:0,closingQty:0,openingValue:0,receiptValue:0,productionCost:0,wasteCost:0,sampleCost:0,adjustmentInValue:0,adjustmentCost:0,returnValue:0,otherConsumptionCost:0,consumedCost:0,closingValue:0} as Row);
 
     return c.json({
       ok: true,
@@ -223,6 +241,7 @@ export function registerBoyahaneLotReportingRoutes(app: Hono<AppEnv>) {
           ...totals,
           materialExpenseRecognized: totals.consumedCost,
           inventoryAssetClosing: totals.closingValue,
+          supplierReturnValue: totals.returnValue,
           generalExpenseTotal,
           totalOperationalCost: totals.consumedCost + generalExpenseTotal,
         },
