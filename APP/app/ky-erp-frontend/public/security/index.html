@@ -84,7 +84,7 @@
         <section id="emptyPanel" class="security-card">
           <div id="emptyMark" class="empty-mark">✓</div>
           <h2 id="emptyTitle">Bekleyen giriş yok</h2>
-          <p id="emptyCopy" class="muted">Bağlantı hazır. Yeni KY ERP giriş isteği geldiğinde burada görünür ve tek bildirim alırsın.</p>
+          <p id="emptyCopy" class="muted">Bağlantı hazır. Yeni KY ERP giriş veya kritik güvenlik isteği geldiğinde burada görünür.</p>
         </section>
       </section>
 
@@ -137,10 +137,11 @@
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <footer class="security-footer">
-      <span>KY Güvenlik · Android · iPhone Safari · Tek bildirim · Giriş kodu</span>
+      <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
     </footer>
   </main>
   <script src="/security/ios-safari.js"></script>
   <script type="module" src="/security/app.js"></script>
+  <script type="module" src="/security/security-actions.js"></script>
 </body>
 </html>
