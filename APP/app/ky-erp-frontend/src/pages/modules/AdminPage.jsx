@@ -2,6 +2,7 @@ import { useAuth } from "../../context/AuthContext";
 import AdminSystemOverview from "../admin/AdminSystemOverview";
 import AdminCompanyOverview from "../admin/AdminCompanyOverview";
 import AdminOwnerSecurity from "../admin/AdminOwnerSecurity";
+import SecurityCenterPanel from "../admin/SecurityCenterPanel";
 import AdminUsersPanel from "../admin/AdminUsersPanel";
 import AdminCompanyUsersPanel from "../admin/AdminCompanyUsersPanel";
 import AdminCompanySettings from "../admin/AdminCompanySettings";
@@ -39,7 +40,7 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
       : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "uygulama-sahibi") {
-    return owner ? <AdminOwnerSecurity /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    return owner ? <><AdminOwnerSecurity /><SecurityCenterPanel /></> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "giris-onaylari") {
     return owner ? <AdminSystemOverview activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
@@ -47,7 +48,9 @@ export default function AdminPage({ activeTab, activeMainCompany }) {
   if (activeTab === "kullanicilar") {
     return owner
       ? <AdminUsersPanel activeMainCompany={activeMainCompany} />
-      : <AdminCompanyUsersPanel activeMainCompany={activeMainCompany} />;
+      : companyAdmin
+        ? <><AdminCompanyUsersPanel activeMainCompany={activeMainCompany} /><SecurityCenterPanel /></>
+        : <AdminCompanyUsersPanel activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "ana-firma-ayarlar") {
     if (owner) {
