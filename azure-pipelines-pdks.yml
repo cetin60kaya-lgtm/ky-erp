@@ -1,0 +1,61 @@
+trigger: none
+pr: none
+
+pool:
+  vmImage: windows-2022
+
+steps:
+  - checkout: self
+    clean: true
+    fetchDepth: 1
+
+  - task: NodeTool@0
+    displayName: Node.js 22
+    inputs:
+      versionSpec: '22.x'
+
+  - task: UseDotNet@2
+    displayName: .NET 8 SDK
+    inputs:
+      packageType: sdk
+      version: '8.0.x'
+
+  - powershell: |
+      $ErrorActionPreference = 'Stop'
+      node --version
+      npm --version
+      dotnet --version
+      $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+      if (-not (Test-Path $iscc)) {
+        choco install innosetup -y --no-progress
+      }
+      if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 bulunamadı.' }
+    displayName: Build araçlarını doğrula
+
+  - powershell: |
+      $ErrorActionPreference = 'Stop'
+      Set-ExecutionPolicy Bypass -Scope Process -Force
+      .\APP\desktop\ky-pdks\BUILD_PDKS_PRO_SETUP.ps1
+    displayName: KY PDKS Pro 1.9.0 tam Windows paket zinciri
+
+  - powershell: |
+      $ErrorActionPreference = 'Stop'
+      $src = Join-Path '$(Build.SourcesDirectory)' 'APP\desktop\ky-pdks\dist-pdks\setup'
+      $dst = '$(Build.ArtifactStagingDirectory)\KY-PDKS-Pro-Setup-1.9.0'
+      New-Item $dst -ItemType Directory -Force | Out-Null
+      foreach ($name in @('KY-PDKS-Pro-Setup-1.9.0.exe','KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt','build-info-pdks.json')) {
+        $file = Join-Path $src $name
+        if (-not (Test-Path $file)) { throw "Artifact eksik: $name" }
+        Copy-Item $file $dst -Force
+      }
+      $setup = Join-Path $dst 'KY-PDKS-Pro-Setup-1.9.0.exe'
+      if ((Get-Item $setup).Length -lt 5MB) { throw 'Setup beklenenden küçük.' }
+      Get-FileHash $setup -Algorithm SHA256 | Format-List
+    displayName: Final artifact doğrulaması
+
+  - task: PublishPipelineArtifact@1
+    displayName: KY PDKS Pro 1.9.0 artifact
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)\KY-PDKS-Pro-Setup-1.9.0'
+      artifactName: 'KY-PDKS-Pro-Setup-1.9.0'
+      publishLocation: pipeline
