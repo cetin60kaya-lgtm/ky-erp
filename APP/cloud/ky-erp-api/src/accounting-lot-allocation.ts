@@ -25,6 +25,7 @@ export function resolveAllocatedLotEvidence(args: {
   invoicedQuantity?: unknown;
   allocations?: Allocation[] | null;
 }) {
+  const invoiceLotNo = text(args.invoiceLotNo);
   const allocations = (Array.isArray(args.allocations) ? args.allocations : [])
     .filter((row) => numberValue(row?.quantity) > 0)
     .map((row) => ({
@@ -32,7 +33,10 @@ export function resolveAllocatedLotEvidence(args: {
       dispatchNo: text(row.dispatchNo),
       dispatchLineId: text(row.dispatchLineId),
       quantity: numberValue(row.quantity),
-      lotNo: text(row.lotNo),
+      // Fatura LOT'u, yalnız irsaliye satırının kendi LOT'u boşsa kanıtı tamamlar.
+      // İrsaliyede farklı LOT varsa aşağıdaki conflict kontrolü devreye girer.
+      lotNo: text(row.lotNo) || invoiceLotNo,
+      lotSource: text(row.lotNo) ? "DISPATCH" : invoiceLotNo ? "INVOICE" : "NONE",
     }));
   const targetQuantity = Math.max(0, numberValue(args.invoicedQuantity));
   const allocatedQuantity = allocations.reduce((sum, row) => sum + row.quantity, 0);
@@ -45,7 +49,6 @@ export function resolveAllocatedLotEvidence(args: {
   const missingLotQuantity = allocations
     .filter((row) => !normalizeLotNo(row.lotNo))
     .reduce((sum, row) => sum + row.quantity, 0);
-  const invoiceLotNo = text(args.invoiceLotNo);
 
   if (!allocations.length) {
     const single = reconcileLotEvidence({
@@ -63,31 +66,38 @@ export function resolveAllocatedLotEvidence(args: {
     };
   }
 
+  const dispatchLots = [...new Set(
+    allocations
+      .filter((row) => row.lotSource === "DISPATCH")
+      .map((row) => normalizeLotNo(row.lotNo))
+      .filter(Boolean),
+  )];
+  if (invoiceLotNo && dispatchLots.some((lot) => lot !== normalizeLotNo(invoiceLotNo))) {
+    return {
+      policy: args.policy,
+      status: "CONFLICT" as const,
+      resolvedLotNo: "",
+      dispatchLotNo: lots.join(" + "),
+      invoiceLotNo,
+      canPostStock: false,
+      requiresReview: true,
+      message: "Fatura LOT'u ile bağlı irsaliye LOT'u farklı.",
+      lotAllocations: allocations,
+      allocatedQuantity,
+      targetQuantity,
+      completePhysicalAllocation,
+      multiLot: lots.length > 1,
+    };
+  }
+
   if (lots.length > 1) {
-    if (invoiceLotNo) {
-      return {
-        policy: args.policy,
-        status: "CONFLICT" as const,
-        resolvedLotNo: "",
-        dispatchLotNo: lots.join(" + "),
-        invoiceLotNo,
-        canPostStock: false,
-        requiresReview: true,
-        message: "Fatura tek LOT taşıyor ancak bağlı irsaliyeler birden fazla LOT içeriyor.",
-        lotAllocations: allocations,
-        allocatedQuantity,
-        targetQuantity,
-        completePhysicalAllocation,
-        multiLot: true,
-      };
-    }
     if (args.policy === "REQUIRED" && missingLotQuantity > 0.0005) {
       return {
         policy: args.policy,
         status: "MISSING_REQUIRED" as const,
         resolvedLotNo: "",
         dispatchLotNo: lots.join(" + "),
-        invoiceLotNo: "",
+        invoiceLotNo,
         canPostStock: false,
         requiresReview: true,
         message: "Bağlı irsaliye miktarının bir bölümünde LOT eksik.",
@@ -103,7 +113,7 @@ export function resolveAllocatedLotEvidence(args: {
       status: "FROM_DISPATCH_MULTI" as const,
       resolvedLotNo: "",
       dispatchLotNo: lots.join(" + "),
-      invoiceLotNo: "",
+      invoiceLotNo,
       canPostStock: true,
       requiresReview: false,
       message: completePhysicalAllocation
@@ -117,14 +127,14 @@ export function resolveAllocatedLotEvidence(args: {
     };
   }
 
-  const dispatchLotNo = lots[0] || "";
+  const dispatchLotNo = dispatchLots.length ? lots[0] || "" : "";
   const single = reconcileLotEvidence({
     policy: args.policy,
     invoiceLotNo,
     dispatchLotNo,
   });
   const requiredAllocationMissing =
-    args.policy === "REQUIRED" && missingLotQuantity > 0.0005 && !invoiceLotNo;
+    args.policy === "REQUIRED" && missingLotQuantity > 0.0005;
   if (requiredAllocationMissing) {
     return {
       ...single,
@@ -143,6 +153,7 @@ export function resolveAllocatedLotEvidence(args: {
 
   return {
     ...single,
+    resolvedLotNo: lots[0] || single.resolvedLotNo,
     lotAllocations: allocations,
     allocatedQuantity,
     targetQuantity,
