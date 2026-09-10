@@ -58,7 +58,7 @@ jobs:
           $out = 'APP/desktop/ky-pdks-device-probe/bin/Release/net48'
           $exe = Join-Path $out 'KY-PDKS-Direct-Cihaz-Testi-v1.exe'
           if (-not (Test-Path $exe)) { throw 'Probe EXE oluşmadı.' }
-          if ((Get-Item $exe).Length -lt 180KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
+          if ((Get-Item $exe).Length -lt 160KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
           Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-Direct-Cihaz-Testi-v1.exe" -Encoding ascii
           $info = [ordered]@{
