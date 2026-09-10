@@ -101,7 +101,7 @@ Push-Location $FrontendRoot
 try {
     Invoke-Native 'Frontend npm ci' { npm ci }
     if (-not $SkipTests) { Invoke-Native 'Frontend test' { npm test } }
-    Invoke-Native 'Frontend lint' { npm run lint }
+    if (-not $SkipTests) { Invoke-Native 'Frontend lint' { npm run lint } }
     Invoke-Native 'Frontend build' { npm run build }
 } finally {
     Pop-Location
