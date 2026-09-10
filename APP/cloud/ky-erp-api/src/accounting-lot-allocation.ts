@@ -36,6 +36,7 @@ export function resolveAllocatedLotEvidence(args: {
     }));
   const targetQuantity = Math.max(0, numberValue(args.invoicedQuantity));
   const allocatedQuantity = allocations.reduce((sum, row) => sum + row.quantity, 0);
+  const completePhysicalAllocation = Math.abs(targetQuantity - allocatedQuantity) <= 0.0005;
   const lots = [...new Map(
     allocations
       .filter((row) => normalizeLotNo(row.lotNo))
@@ -76,8 +77,7 @@ export function resolveAllocatedLotEvidence(args: {
         lotAllocations: allocations,
         allocatedQuantity,
         targetQuantity,
-        completePhysicalAllocation:
-          Math.abs(targetQuantity - allocatedQuantity) <= 0.0005,
+        completePhysicalAllocation,
         multiLot: true,
       };
     }
@@ -106,12 +106,13 @@ export function resolveAllocatedLotEvidence(args: {
       invoiceLotNo: "",
       canPostStock: true,
       requiresReview: false,
-      message: "Fatura kalemi bağlı irsaliyelerde birden fazla LOT'a dağıtıldı.",
+      message: completePhysicalAllocation
+        ? "Fatura kalemi bağlı irsaliyelerde birden fazla LOT'a dağıtıldı."
+        : "Fatura kaleminin yalnız bir bölümü bağlı irsaliyelerde LOT'lara dağıtıldı.",
       lotAllocations: allocations,
       allocatedQuantity,
       targetQuantity,
-      completePhysicalAllocation:
-        Math.abs(targetQuantity - allocatedQuantity) <= 0.0005,
+      completePhysicalAllocation,
       multiLot: true,
     };
   }
@@ -145,8 +146,7 @@ export function resolveAllocatedLotEvidence(args: {
     lotAllocations: allocations,
     allocatedQuantity,
     targetQuantity,
-    completePhysicalAllocation:
-      Math.abs(targetQuantity - allocatedQuantity) <= 0.0005,
+    completePhysicalAllocation,
     multiLot: false,
   };
 }
@@ -158,11 +158,18 @@ export function requiredLotCoverageComplete(args: {
   lotAllocations?: Allocation[] | null;
 }) {
   if (args.policy !== "REQUIRED") return true;
-  if (normalizeLotNo(args.lotNo)) return true;
+  const allocations = Array.isArray(args.lotAllocations) ? args.lotAllocations : [];
   const target = Math.max(0, numberValue(args.quantity));
-  if (target <= 0) return false;
-  const covered = (Array.isArray(args.lotAllocations) ? args.lotAllocations : [])
-    .filter((row) => normalizeLotNo(row?.lotNo))
-    .reduce((sum, row) => sum + Math.max(0, numberValue(row?.quantity)), 0);
-  return covered + 0.0005 >= target;
+
+  // Once dispatch allocations exist, they are the physical truth. A single
+  // invoice LOT must not make an unallocated quantity appear physically received.
+  if (allocations.length) {
+    if (target <= 0) return false;
+    const covered = allocations
+      .filter((row) => normalizeLotNo(row?.lotNo))
+      .reduce((sum, row) => sum + Math.max(0, numberValue(row?.quantity)), 0);
+    return covered + 0.0005 >= target;
+  }
+
+  return Boolean(normalizeLotNo(args.lotNo));
 }
