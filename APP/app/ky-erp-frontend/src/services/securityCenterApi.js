@@ -6,36 +6,18 @@ function unwrap(payload) {
     : payload;
 }
 
-export async function getSecurityCenterOverview() {
-  return unwrap(await apiGet("/security-center/overview", { _ts: Date.now() }));
-}
-export async function listSecurityCenterSessions() {
-  return unwrap(await apiGet("/security-center/sessions", { _ts: Date.now() }));
-}
-export async function listSecurityCenterAudit(limit = 250) {
-  return unwrap(await apiGet("/security-center/audit", { limit, _ts: Date.now() }));
-}
-export async function getSecurityNotificationPreferences() {
-  return unwrap(await apiGet("/security-center/notifications", { _ts: Date.now() }));
-}
-export async function saveSecurityNotificationPreferences(payload = {}) {
-  return unwrap(await apiPut("/security-center/notifications", payload));
-}
-export async function listSecurityGrantUsers() {
-  return unwrap(await apiGet("/security-center/users", { _ts: Date.now() }));
-}
-export async function listSecurityCapabilityGrants() {
-  return unwrap(await apiGet("/security-center/grants", { _ts: Date.now() }));
-}
-export async function startSecurityCenterAction(payload = {}) {
-  return unwrap(await apiPost("/security-center/actions/start", payload));
-}
-export async function getSecurityCenterActionStatus(id, actionToken) {
-  return unwrap(await apiPost(`/security-center/actions/${encodeURIComponent(id)}/status`, { actionToken }));
-}
-export async function executeSecurityCenterAction(id, actionToken) {
-  return unwrap(await apiPost(`/security-center/actions/${encodeURIComponent(id)}/execute`, { actionToken }));
-}
+export async function getSecurityCenterOverview() { return unwrap(await apiGet("/security-center/overview", { _ts: Date.now() })); }
+export async function listSecurityCenterSessions() { return unwrap(await apiGet("/security-center/sessions", { _ts: Date.now() })); }
+export async function listSecurityCenterAudit(limit = 250) { return unwrap(await apiGet("/security-center/audit", { limit, _ts: Date.now() })); }
+export async function listSecurityCenterLoginApprovals() { return unwrap(await apiGet("/security-center/login-approvals", { _ts: Date.now() })); }
+export async function decideSecurityCenterLoginApproval(id, decision) { return unwrap(await apiPost(`/security-center/login-approvals/${encodeURIComponent(id)}/${decision === "DENY" ? "deny" : "approve"}`, {})); }
+export async function getSecurityNotificationPreferences() { return unwrap(await apiGet("/security-center/notifications", { _ts: Date.now() })); }
+export async function saveSecurityNotificationPreferences(payload = {}) { return unwrap(await apiPut("/security-center/notifications", payload)); }
+export async function listSecurityGrantUsers() { return unwrap(await apiGet("/security-center/users", { _ts: Date.now() })); }
+export async function listSecurityCapabilityGrants() { return unwrap(await apiGet("/security-center/grants", { _ts: Date.now() })); }
+export async function startSecurityCenterAction(payload = {}) { return unwrap(await apiPost("/security-center/actions/start", payload)); }
+export async function getSecurityCenterActionStatus(id, actionToken) { return unwrap(await apiPost(`/security-center/actions/${encodeURIComponent(id)}/status`, { actionToken })); }
+export async function executeSecurityCenterAction(id, actionToken) { return unwrap(await apiPost(`/security-center/actions/${encodeURIComponent(id)}/execute`, { actionToken })); }
 
 export async function runPhoneApprovedSecurityAction(payload = {}, options = {}) {
   const started = await startSecurityCenterAction(payload);
