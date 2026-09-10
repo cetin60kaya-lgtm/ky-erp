@@ -13,38 +13,45 @@ build_script:
       $ErrorActionPreference = 'Stop'
       Set-ExecutionPolicy Bypass -Scope Process -Force
       Write-Host '============================================================'
-      Write-Host 'KY PDKS Pro 1.9.0 - AppVeyor temiz Windows build'
+      Write-Host 'KY PDKS Pro 1.9.0 - FINAL RELEASE PACKAGING'
       Write-Host '============================================================'
 
       $src = 'C:\projects\KYERP-PDKS-FINAL'
       if (Test-Path $src) { Remove-Item $src -Recurse -Force }
+      Write-Host '1/5 Final PDKS kaynagi temiz aliniyor...'
       git clone --depth 1 --single-branch --branch codex/pdks-desktop-1.8.1-device-final-20260907 https://github.com/cetin60kaya-lgtm/ky-erp.git $src
-      if ($LASTEXITCODE -ne 0) { throw 'Final PDKS branch temiz clone başarısız.' }
+      if ($LASTEXITCODE -ne 0) { throw 'Final PDKS branch clone basarisiz.' }
       Set-Location $src
       Write-Host 'PDKS source HEAD:' (git rev-parse HEAD)
 
+      Write-Host '2/5 Windows build araclari kontrol ediliyor...'
       if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) { choco install nodejs-lts -y --no-progress }
-      if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'npm bulunamadı.' }
+      if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'npm bulunamadi.' }
       if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) { choco install dotnet-8.0-sdk -y --no-progress }
       Write-Host 'Node:' (node --version)
       Write-Host 'npm :' (npm --version)
       Write-Host '.NET:' (dotnet --version)
-
       $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
       if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-      if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 bulunamadı.' }
+      if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 bulunamadi.' }
 
-      .\APP\desktop\ky-pdks\BUILD_PDKS_PRO_SETUP.ps1
+      Write-Host '3/5 Release build + publish + Setup uretiliyor...'
+      .\APP\desktop\ky-pdks\BUILD_PDKS_PRO_SETUP.ps1 -SkipTests
 
+      Write-Host '4/5 Setup butunlugu dogrulaniyor...'
       $out = Join-Path $src 'APP\desktop\ky-pdks\dist-pdks\setup'
       $setup = Join-Path $out 'KY-PDKS-Pro-Setup-1.9.0.exe'
       $sha = "$setup.sha256.txt"
       $info = Join-Path $out 'build-info-pdks.json'
-      if (-not (Test-Path $setup)) { throw 'KY-PDKS-Pro-Setup-1.9.0.exe oluşmadı.' }
-      if ((Get-Item $setup).Length -lt 5MB) { throw 'Setup beklenenden küçük.' }
-      if (-not (Test-Path $sha)) { throw 'SHA256 dosyası eksik.' }
+      if (-not (Test-Path $setup)) { throw 'KY-PDKS-Pro-Setup-1.9.0.exe olusmadi.' }
+      if ((Get-Item $setup).Length -lt 5MB) { throw 'Setup beklenenden kucuk.' }
+      if (-not (Test-Path $sha)) { throw 'SHA256 dosyasi eksik.' }
       if (-not (Test-Path $info)) { throw 'build-info-pdks.json eksik.' }
+      $expected = ((Get-Content $sha -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+      $actual = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($expected -ne $actual) { throw 'Setup SHA256 dogrulamasi basarisiz.' }
 
+      Write-Host '5/5 AppVeyor artifact yukleniyor...'
       $artifactDir = Join-Path $env:APPVEYOR_BUILD_FOLDER 'pdks-artifacts'
       New-Item $artifactDir -ItemType Directory -Force | Out-Null
       Copy-Item $setup $artifactDir -Force
@@ -53,6 +60,8 @@ build_script:
       Push-AppveyorArtifact (Join-Path $artifactDir 'KY-PDKS-Pro-Setup-1.9.0.exe') -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe'
       Push-AppveyorArtifact (Join-Path $artifactDir 'KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt') -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt'
       Push-AppveyorArtifact (Join-Path $artifactDir 'build-info-pdks.json') -FileName 'build-info-pdks.json'
+      Write-Host 'FINAL PDKS SETUP HAZIR:' $setup
+      Write-Host 'SHA256:' $actual
 
 test: off
 
