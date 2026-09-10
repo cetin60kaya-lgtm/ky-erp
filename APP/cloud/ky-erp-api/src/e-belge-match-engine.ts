@@ -6,6 +6,7 @@ export type EBelgeLine = {
   description?: string | null;
   quantity?: number | string | null;
   unitCode?: string | null;
+  lotNo?: string | null;
 };
 
 export type EBelgeDocument = {
@@ -23,6 +24,7 @@ export type EBelgeAllocation = {
   dispatchNo: string;
   dispatchLineId: string;
   quantity: number;
+  lotNo: string;
   productScore: number;
   productMatchSource: string;
 };
@@ -220,6 +222,7 @@ export function reconcileEBelgeInvoice(
         dispatchNo: String(item.candidate.row.documentNo || ""),
         dispatchLineId: String(item.dispatchLine.id || ""),
         quantity: Number(take.toFixed(6)),
+        lotNo: String(item.dispatchLine.lotNo || "").trim(),
         productScore: item.product.score,
         productMatchSource: item.product.source,
       });
