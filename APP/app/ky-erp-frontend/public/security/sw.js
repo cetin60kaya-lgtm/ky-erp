@@ -1,5 +1,5 @@
 const APP_URL="/security/?open=1";
-const CACHE_NAME="kyerp-security-shell-v8";
+const CACHE_NAME="kyerp-security-shell-v9";
 const ICON="/security/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -14,8 +14,8 @@ async function closeApprovalNotifications(){
   }catch{}
 }
 async function showWakeNotification(){
-  await self.registration.showNotification("KY ERP · Giriş Onayı",{
-    body:"Yeni bir KY ERP giriş isteği var. KY ERP Güvenlik uygulamasını açıp kontrol edin.",
+  await self.registration.showNotification("KY ERP · Güvenlik Onayı",{
+    body:"Yeni bir KY ERP güvenlik isteği var. KY ERP Güvenlik uygulamasını açıp kontrol edin.",
     tag:TAG,
     renotify:false,
     requireInteraction:true,
@@ -44,6 +44,7 @@ self.addEventListener("install",(event)=>event.waitUntil((async()=>{
   await cache.addAll([
     "/security/",
     "/security/app.js",
+    "/security/security-actions.js",
     "/security/ios-safari.js",
     "/security/app.css",
     "/security/manifest.webmanifest",

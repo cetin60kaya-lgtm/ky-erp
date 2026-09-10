@@ -16,6 +16,7 @@ import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
 import { registerAuthPolicyRoutes } from "./auth-policy-cloud";
 import { registerAuthSessionRefreshRoutes } from "./auth-session-refresh";
 import { registerAuthPushRoutes } from "./auth-push-cloud";
+import { registerSecurityActionRoutes } from "./security-action-cloud";
 import { registerAccountingCompanyDirectoryRoutes } from "./accounting-company-directory";
 import { registerAccountingCompanyProfileRoutes } from "./accounting-company-profile";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
@@ -415,6 +416,7 @@ registerAuthOwnerGuardRoutes(shell);
 registerAuthSessionRefreshRoutes(shell);
 registerAuthPushRoutes(shell);
 registerAuthPolicyRoutes(shell);
+registerSecurityActionRoutes(shell);
 shell.route("/", app);
 
 shell.onError((error, c) => {

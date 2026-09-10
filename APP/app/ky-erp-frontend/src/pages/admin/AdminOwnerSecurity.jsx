@@ -5,12 +5,15 @@ import {
   getApplicationOwner,
   getDeliveryCapabilities,
   getOwnerRecoveryConfig,
+  getOwnerSecurityActionStatus,
   getUserEmailDeliveryStatus,
   listActiveSessions,
   reauthOwnerWithPassword,
   revokeSession,
   saveOwnerRecoveryQuestions,
+  saveOwnerRecoveryQuestionsSecure,
   startOwnerEmailReauth,
+  startOwnerSecurityAction,
   startSecureMfaRenewal,
   startUserEmailVerification,
   updateUser,
@@ -35,6 +38,7 @@ function maskSecurityQuestion(value) {
   }).join("");
 }
 function compatibleOtpUri(value) { const raw = String(value || "").trim(); const prefix = "otpauth://totp/"; if (!raw.toLowerCase().startsWith(prefix)) return raw; try { const remainder = raw.slice(prefix.length); const questionIndex = remainder.indexOf("?"); const encodedLabel = questionIndex >= 0 ? remainder.slice(0, questionIndex) : remainder; const query = questionIndex >= 0 ? remainder.slice(questionIndex + 1) : ""; const decodedLabel = decodeURIComponent(encodedLabel); const separatorIndex = decodedLabel.indexOf(":"); if (separatorIndex < 0) return raw; const issuer = decodedLabel.slice(0, separatorIndex).trim(); const account = decodedLabel.slice(separatorIndex + 1).trim(); if (!issuer || !account) return raw; return `${prefix}${encodeURIComponent(issuer)}:${encodeURIComponent(account)}${query ? `?${query}` : ""}`; } catch { return raw; } }
+function sleep(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
 
 export default function AdminOwnerSecurity() {
   const { token, logout } = useAuth();
@@ -53,6 +57,7 @@ export default function AdminOwnerSecurity() {
   ]);
   const [recoveryProvider, setRecoveryProvider] = useState("GOOGLE");
   const [recoveryStepUpCode, setRecoveryStepUpCode] = useState("");
+  const [recoveryAction, setRecoveryAction] = useState(null);
   const [showRecoveryAnswers, setShowRecoveryAnswers] = useState([false, false, false]);
   const [showRecoveryQuestions, setShowRecoveryQuestions] = useState([false, false, false]);
 
@@ -103,31 +108,20 @@ export default function AdminOwnerSecurity() {
         const recovery = recoveryResult.value || null;
         const configured = Array.isArray(recovery?.questions) ? recovery.questions : [];
         setRecoveryConfig(recovery);
-        setRecoveryQuestions([0, 1, 2].map((index) => ({
-          question: String(configured[index]?.question || ""),
-          answer: "",
-        })));
+        setRecoveryQuestions([0, 1, 2].map((index) => ({ question: String(configured[index]?.question || ""), answer: "" })));
         setShowRecoveryAnswers([false, false, false]);
         setShowRecoveryQuestions([false, false, false]);
       } else {
         setRecoveryConfig(null);
-        setRecoveryQuestions([
-          { question: "", answer: "" },
-          { question: "", answer: "" },
-          { question: "", answer: "" },
-        ]);
+        setRecoveryQuestions([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }]);
         setShowRecoveryAnswers([false, false, false]);
         setShowRecoveryQuestions([false, false, false]);
         unavailable.push("hesap kurtarma güvenliği");
       }
-      setMessage(unavailable.length
-        ? `Süper Yönetici hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.`
-        : "Süper Yönetici hesabı ve güvenlik durumu güncel.");
+      setMessage(unavailable.length ? `Süper Yönetici hesabı yüklendi. Alınamayan yardımcı kaynak: ${unavailable.join(", ")}.` : "Süper Yönetici hesabı ve güvenlik durumu güncel.");
     } catch (error) {
       setMessage(`Hata: ${error?.message || "Süper Yönetici güvenlik bilgileri alınamadı."}`);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   useEffect(() => { loadAll(); }, []);
@@ -138,21 +132,12 @@ export default function AdminOwnerSecurity() {
     const sameEmail = String(profile.email || "").trim().toLowerCase() === String(owner.email || "").trim().toLowerCase();
     setBusy(true);
     try {
-      await updateUser(owner.id, {
-        fullName: profile.fullName,
-        username: profile.username,
-        email: profile.email,
-        mainCompanySlug: owner.mainCompanySlug,
-        role: "SUPER_ADMIN",
-        isActive: true,
-        emailVerified: sameEmail && owner.emailVerified === true,
-      });
+      await updateUser(owner.id, { fullName: profile.fullName, username: profile.username, email: profile.email, mainCompanySlug: owner.mainCompanySlug, role: "SUPER_ADMIN", isActive: true, emailVerified: sameEmail && owner.emailVerified === true });
       setEditing(false);
       setMessage(sameEmail ? "Süper Yönetici profili güncellendi." : "E-posta değişti. Yeni adres güvenlik nedeniyle yeniden doğrulanmalıdır.");
       await loadAll();
-    } catch (error) {
-      setMessage(`Hata: ${error?.message || "Profil güncellenemedi."}`);
-    } finally { setBusy(false); }
+    } catch (error) { setMessage(`Hata: ${error?.message || "Profil güncellenemedi."}`); }
+    finally { setBusy(false); }
   }
 
   async function checkEmailDelivery(messageId = emailChallenge?.providerMessageId) {
@@ -164,62 +149,75 @@ export default function AdminOwnerSecurity() {
       if (status?.delivered) setMessage(`E-posta Resend tarafından teslim edildi (${event}). Gelen kutusundaki 6 haneli kodu girin.`);
       else if (status?.failed) setMessage(`Hata: E-posta teslimatı başarısız (${event}). Resend teslimat kaydı kontrol edilmelidir.`);
       else setMessage(`E-posta Resend tarafından kabul edildi. Teslimat durumu: ${event}.`);
-    } catch (error) {
-      setMessage(`Hata: ${error?.message || "E-posta teslimat durumu alınamadı."}`);
-    }
+    } catch (error) { setMessage(`Hata: ${error?.message || "E-posta teslimat durumu alınamadı."}`); }
   }
 
   useEffect(() => {
     if (!emailChallenge?.providerMessageId || emailDelivery?.delivered || emailDelivery?.failed || mailPollCount >= 24) return undefined;
-    const timer = window.setTimeout(async () => {
-      await checkEmailDelivery(emailChallenge.providerMessageId);
-      setMailPollCount((value) => value + 1);
-    }, 5000);
+    const timer = window.setTimeout(async () => { await checkEmailDelivery(emailChallenge.providerMessageId); setMailPollCount((value) => value + 1); }, 5000);
     return () => window.clearTimeout(timer);
   }, [emailChallenge?.providerMessageId, emailDelivery?.delivered, emailDelivery?.failed, mailPollCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function preparedRecoveryQuestions() {
+    const questions = recoveryQuestions.map((row) => ({ question: String(row?.question || "").trim(), answer: String(row?.answer || "").trim() }));
+    if (questions.some((row) => row.question.length < 6)) { setMessage("Hata: Üç özel güvenlik sorusunun her biri en az 6 karakter olmalıdır."); return null; }
+    const existing = Array.isArray(recoveryConfig?.questions) ? recoveryConfig.questions : [];
+    const missingNewAnswer = questions.some((row, index) => row.question !== String(existing[index]?.question || "").trim() && !row.answer);
+    if (missingNewAnswer) { setMessage("Hata: Yeni veya değiştirilen her güvenlik sorusu için cevap girin."); return null; }
+    return questions;
+  }
+
   async function saveRecoverySecurity(event) {
     event.preventDefault();
-    const cleanCode = String(recoveryStepUpCode || "").replace(/\D/g, "");
-    const questions = recoveryQuestions.map((row) => ({
-      question: String(row?.question || "").trim(),
-      answer: String(row?.answer || "").trim(),
-    }));
-    if (questions.some((row) => row.question.length < 6)) {
-      setMessage("Hata: Üç özel güvenlik sorusunun her biri en az 6 karakter olmalıdır.");
-      return;
-    }
-    if (!/^\d{6}$/.test(cleanCode)) {
-      setMessage("Hata: Kaydetmek için mevcut Google veya Microsoft Authenticator uygulamanızdaki 6 haneli kodu girin.");
-      return;
-    }
-    const existing = Array.isArray(recoveryConfig?.questions) ? recoveryConfig.questions : [];
-    const missingNewAnswer = questions.some((row, index) => {
-      const oldQuestion = String(existing[index]?.question || "").trim();
-      return row.question !== oldQuestion && !row.answer;
-    });
-    if (missingNewAnswer) {
-      setMessage("Hata: Yeni veya değiştirilen her güvenlik sorusu için cevap girin.");
-      return;
-    }
-
+    const questions = preparedRecoveryQuestions();
+    if (!questions) return;
     setBusy(true);
+    setRecoveryAction(null);
     try {
-      const result = await saveOwnerRecoveryQuestions({
-        provider: recoveryProvider,
-        code: cleanCode,
-        questions,
-      });
-      setRecoveryStepUpCode("");
+      const action = await startOwnerSecurityAction({ actionType: "OWNER_RECOVERY_QUESTIONS_UPDATE" });
+      setRecoveryAction(action);
+      setMessage(action?.pushDelivered
+        ? "KY Güvenlik telefonuna kritik işlem onayı gönderildi. Telefonda ‘Güvenlik sorularını değiştir’ isteğini onaylayın."
+        : "KY Güvenlik onayı hazır. Bildirim ulaşmadıysa telefonda KY Güvenlik uygulamasını açın; istek Onaylar bölümünde görünecek.");
+
+      let approved = false;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(2500);
+        const status = await getOwnerSecurityActionStatus(action.actionId, action.actionToken);
+        const state = String(status?.status || "").toUpperCase();
+        if (state === "APPROVED") { approved = true; break; }
+        if (state === "DENIED") throw new Error("Telefonunuzdan güvenlik sorusu değişikliği reddedildi.");
+        if (state === "EXPIRED") throw new Error("KY Güvenlik telefon onayının süresi doldu. Kaydet işlemini yeniden başlatın.");
+      }
+      if (!approved) throw new Error("KY Güvenlik telefon onayı tamamlanmadı. İşlem yapılmadı.");
+
+      setMessage("Telefon onayı doğrulandı. Güvenlik soruları sunucuya kaydediliyor ve tekrar okunarak doğrulanıyor...");
+      const result = await saveOwnerRecoveryQuestionsSecure({ actionId: action.actionId, actionToken: action.actionToken, questions });
+      if (result?.readBackVerified !== true) throw new Error("Kayıt sonrası sunucu doğrulaması tamamlanmadı.");
+      setRecoveryAction(null);
       setMessage(result?.recoveryEnabled
-        ? "Hesap kurtarma güvenliği kaydedildi. Üç güvenlik sorusu ve doğrulanmış kanal aktif."
-        : "Güvenlik soruları kaydedildi. Hesap kurtarmanın aktif olması için doğrulanmış e-posta veya SMS kanalı da hazır olmalıdır.");
+        ? "Güvenlik soruları kaydedildi ve sunucudan tekrar okunarak doğrulandı. Hesap kurtarma güvenliği aktif."
+        : "Güvenlik soruları kaydedildi ve sunucudan tekrar okunarak doğrulandı. Kurtarmanın aktif olması için doğrulanmış e-posta veya SMS kanalı da hazır olmalıdır.");
       await loadAll();
     } catch (error) {
-      setMessage(`Hata: ${error?.message || "Özel güvenlik soruları kaydedilemedi."}`);
-    } finally {
-      setBusy(false);
-    }
+      setRecoveryAction(null);
+      setMessage(`Hata: ${error?.message || "KY Güvenlik telefon onayıyla güvenlik soruları kaydedilemedi."}`);
+    } finally { setBusy(false); }
+  }
+
+  async function saveRecoveryWithAuthenticator() {
+    const questions = preparedRecoveryQuestions();
+    if (!questions) return;
+    const cleanCode = String(recoveryStepUpCode || "").replace(/\D/g, "");
+    if (!/^\d{6}$/.test(cleanCode)) { setMessage("Hata: Yedek yöntem için mevcut Google veya Microsoft Authenticator uygulamanızdaki 6 haneli kodu girin."); return; }
+    setBusy(true);
+    try {
+      const result = await saveOwnerRecoveryQuestions({ provider: recoveryProvider, code: cleanCode, questions });
+      setRecoveryStepUpCode("");
+      setMessage(result?.recoveryEnabled ? "Güvenlik soruları yedek Authenticator yöntemiyle kaydedildi." : "Güvenlik soruları yedek yöntemle kaydedildi; doğrulanmış kurtarma kanalı ayrıca gereklidir.");
+      await loadAll();
+    } catch (error) { setMessage(`Hata: ${error?.message || "Yedek Authenticator yöntemiyle güvenlik soruları kaydedilemedi."}`); }
+    finally { setBusy(false); }
   }
 
   async function startEmailVerification() {
@@ -230,17 +228,11 @@ export default function AdminOwnerSecurity() {
       const result = await startUserEmailVerification(owner.id);
       if (result?.alreadyVerified) { setMessage("Süper Yönetici e-postası zaten doğrulanmış."); await loadAll(); return; }
       if (result?.deliveryStatus !== "PROVIDER_ACCEPTED" || !result?.providerMessageId) throw new Error("Resend sağlayıcı kabul kimliği dönmedi.");
-      setEmailChallenge(result);
-      setEmailOtp("");
-      setEmailDelivery({ event: "accepted", delivered: false, failed: false, messageId: result.providerMessageId });
-      setMailPollCount(0);
+      setEmailChallenge(result); setEmailOtp(""); setEmailDelivery({ event: "accepted", delivered: false, failed: false, messageId: result.providerMessageId }); setMailPollCount(0);
       setMessage(`Resend gönderim isteğini kabul etti. Sağlayıcı ID: ${result.providerMessageId}. Teslimat ayrıca kontrol ediliyor.`);
       window.setTimeout(() => checkEmailDelivery(result.providerMessageId), 1200);
-    } catch (error) {
-      setEmailChallenge(null);
-      setEmailDelivery(null);
-      setMessage(`Hata: ${error?.message || "E-posta doğrulama isteği gönderilemedi."}`);
-    } finally { setBusy(false); }
+    } catch (error) { setEmailChallenge(null); setEmailDelivery(null); setMessage(`Hata: ${error?.message || "E-posta doğrulama isteği gönderilemedi."}`); }
+    finally { setBusy(false); }
   }
 
   async function finishEmailVerification() {
@@ -258,73 +250,54 @@ export default function AdminOwnerSecurity() {
   }
 
   function beginRenew(provider) {
-    setRenewProvider(provider);
-    setRenewStage("CHOOSE");
+    setRenewProvider(provider); setRenewStage("CHOOSE");
     setReauthPassword(""); setReauthEmailChallenge(null); setReauthEmailOtp(""); setRenewal(null); setRenewCode(""); setQrError("");
     setMessage(`${PROVIDER_LABELS[provider]} yenileme için önce yeniden kimlik doğrulaması gerekir.`);
   }
-
   function cancelRenew() {
     setRenewProvider(""); setRenewStage(""); setReauthPassword(""); setReauthEmailChallenge(null); setReauthEmailOtp(""); setRenewal(null); setRenewCode(""); setQrError("");
     setMessage("MFA yenileme iptal edildi. Mevcut Authenticator kaydı değiştirilmedi.");
   }
-
   async function openQrFromGrant(grant) {
     if (!owner || !renewProvider) return;
     const result = await startSecureMfaRenewal(owner.id, renewProvider, { reauthId: grant.reauthId, reauthToken: grant.reauthToken });
     setRenewal(result); setRenewCode(""); setRenewStage("QR");
     setMessage(`${PROVIDER_LABELS[renewProvider]} için yeni QR hazır. Yeni kaydı okutun ve 6 haneli kodu doğrulayın. Mevcut kayıt henüz değiştirilmedi.`);
   }
-
   async function passwordReauth(event) {
     event.preventDefault();
     if (!owner || !renewProvider || !reauthPassword) return setMessage("Hata: Süper Yönetici şifresini girin.");
     setBusy(true);
-    try {
-      const grant = await reauthOwnerWithPassword({ password: reauthPassword, targetUserId: owner.id, provider: renewProvider });
-      setReauthPassword("");
-      await openQrFromGrant(grant);
-    } catch (error) { setMessage(`Hata: ${error?.message || "Şifre ile yeniden doğrulama başarısız."}`); }
+    try { const grant = await reauthOwnerWithPassword({ password: reauthPassword, targetUserId: owner.id, provider: renewProvider }); setReauthPassword(""); await openQrFromGrant(grant); }
+    catch (error) { setMessage(`Hata: ${error?.message || "Şifre ile yeniden doğrulama başarısız."}`); }
     finally { setBusy(false); }
   }
-
   async function startEmailReauth() {
     if (!owner || !renewProvider) return;
     if (!owner.emailVerified) return setMessage("Hata: E-posta ile MFA yenileme doğrulaması için önce Süper Yönetici e-postasını doğrulayın.");
     setBusy(true);
-    try {
-      const result = await startOwnerEmailReauth({ targetUserId: owner.id, provider: renewProvider });
-      setReauthEmailChallenge(result); setReauthEmailOtp(""); setRenewStage("EMAIL_OTP");
-      setMessage(`${result.masked || owner.email} adresine MFA yenileme güvenlik kodu gönderildi. Sağlayıcı ID: ${result.providerMessageId || "-"}.`);
-    } catch (error) { setMessage(`Hata: ${error?.message || "E-posta güvenlik kodu gönderilemedi."}`); }
+    try { const result = await startOwnerEmailReauth({ targetUserId: owner.id, provider: renewProvider }); setReauthEmailChallenge(result); setReauthEmailOtp(""); setRenewStage("EMAIL_OTP"); setMessage(`${result.masked || owner.email} adresine MFA yenileme güvenlik kodu gönderildi. Sağlayıcı ID: ${result.providerMessageId || "-"}.`); }
+    catch (error) { setMessage(`Hata: ${error?.message || "E-posta güvenlik kodu gönderilemedi."}`); }
     finally { setBusy(false); }
   }
-
   async function verifyEmailReauth(event) {
     event.preventDefault();
     if (!reauthEmailChallenge) return;
     const otp = String(reauthEmailOtp || "").replace(/\D/g, "");
     if (!/^\d{6}$/.test(otp)) return setMessage("Hata: E-postadaki 6 haneli güvenlik kodunu girin.");
     setBusy(true);
-    try {
-      const grant = await verifyOwnerEmailReauth({ reauthId: reauthEmailChallenge.reauthId, reauthToken: reauthEmailChallenge.reauthToken, otp });
-      setReauthEmailChallenge(null); setReauthEmailOtp("");
-      await openQrFromGrant(grant);
-    } catch (error) { setMessage(`Hata: ${error?.message || "E-posta güvenlik kodu doğrulanamadı."}`); }
+    try { const grant = await verifyOwnerEmailReauth({ reauthId: reauthEmailChallenge.reauthId, reauthToken: reauthEmailChallenge.reauthToken, otp }); setReauthEmailChallenge(null); setReauthEmailOtp(""); await openQrFromGrant(grant); }
+    catch (error) { setMessage(`Hata: ${error?.message || "E-posta güvenlik kodu doğrulanamadı."}`); }
     finally { setBusy(false); }
   }
 
   useEffect(() => {
     if (renewStage !== "QR" || !renewal?.otpauthUri) return undefined;
-    const holder = qrRef.current;
-    if (!holder) return undefined;
-    holder.replaceChildren();
+    const holder = qrRef.current; if (!holder) return undefined; holder.replaceChildren();
     const QRCodeCtor = window.QRCode;
     if (typeof QRCodeCtor !== "function") { setQrError("QR bileşeni yüklenemedi. Sayfayı yenileyip yeniden deneyin."); return undefined; }
-    try {
-      new QRCodeCtor(holder, { text: compatibleOtpUri(renewal.otpauthUri), width: 210, height: 210, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCodeCtor.CorrectLevel?.M });
-      setQrError("");
-    } catch { setQrError("QR kodu oluşturulamadı. Yenilemeyi iptal edip yeniden başlayın."); }
+    try { new QRCodeCtor(holder, { text: compatibleOtpUri(renewal.otpauthUri), width: 210, height: 210, colorDark: "#0f172a", colorLight: "#ffffff", correctLevel: QRCodeCtor.CorrectLevel?.M }); setQrError(""); }
+    catch { setQrError("QR kodu oluşturulamadı. Yenilemeyi iptal edip yeniden başlayın."); }
     return () => holder.replaceChildren();
   }, [renewStage, renewal?.otpauthUri]);
 
@@ -336,8 +309,7 @@ export default function AdminOwnerSecurity() {
     setBusy(true);
     try {
       const result = await confirmSecureMfaRenewal(owner.id, renewProvider, { renewalId: renewal.renewalId, renewalToken: renewal.renewalToken, code });
-      const provider = renewProvider;
-      setRenewProvider(""); setRenewStage(""); setRenewal(null); setRenewCode("");
+      const provider = renewProvider; setRenewProvider(""); setRenewStage(""); setRenewal(null); setRenewCode("");
       setMessage(`${result?.providerLabel || PROVIDER_LABELS[provider]} güvenli şekilde yenilendi. Bu oturum korundu; diğer eski oturumlar kapatıldı.`);
       await loadAll();
     } catch (error) { setMessage(`Hata: ${error?.message || "Yeni Authenticator kodu doğrulanamadı. Mevcut kayıt değiştirilmedi."}`); }
@@ -378,9 +350,9 @@ export default function AdminOwnerSecurity() {
       </section>
 
       <section className="aos-card">
-        <div className="aos-card-head"><div><h3>Authenticator Kayıtları</h3><p>QR yenileme, açık oturum olsa bile yeniden kimlik doğrulaması ister.</p></div></div>
-        <div className="aos-provider"><div><b>Google Authenticator</b><small>{owner.googleMfaEnabled ? "Aktif" : "Kurulu değil"}</small></div><button onClick={() => beginRenew("GOOGLE")}>Google QR Yenile</button></div>
-        <div className="aos-provider"><div><b>Microsoft Authenticator</b><small>{owner.microsoftMfaEnabled ? "Aktif" : "Kurulu değil"}</small></div><button onClick={() => beginRenew("MICROSOFT")}>Microsoft QR Yenile</button></div>
+        <div className="aos-card-head"><div><h3>Authenticator Kayıtları</h3><p>Google/Microsoft günlük girişin ana yöntemi değil; yedek/kurtarma yöntemi olarak korunur.</p></div></div>
+        <div className="aos-provider"><div><b>Google Authenticator</b><small>{owner.googleMfaEnabled ? "Yedek yöntem aktif" : "Kurulu değil"}</small></div><button onClick={() => beginRenew("GOOGLE")}>Google QR Yenile</button></div>
+        <div className="aos-provider"><div><b>Microsoft Authenticator</b><small>{owner.microsoftMfaEnabled ? "Yedek yöntem aktif" : "Kurulu değil"}</small></div><button onClick={() => beginRenew("MICROSOFT")}>Microsoft QR Yenile</button></div>
       </section>
     </div>
 
@@ -389,34 +361,16 @@ export default function AdminOwnerSecurity() {
         <div>
           <small className="aos-section-kicker">HESAP KURTARMA / SÜPER YÖNETİCİ</small>
           <h3>Hesap Kurtarma ve Kimlik Doğrulama</h3>
-          <p>Üç güvenlik sorusu tanımlanır. Hesap kurtarma sırasında doğrulanmış iletişim kanalı ile birlikte rastgele iki soru sorulur; başarılı doğrulamadan sonra Authenticator kayıtları güvenli şekilde yeniden kurulur.</p>
+          <p>Üç güvenlik sorusu tanımlanır. Kaydetme işlemi birincil olarak KY Güvenlik telefon onayı ister; Google/Microsoft Authenticator yalnız yedek yöntemdir.</p>
         </div>
-        <span className={recoveryConfig?.recoveryEnabled ? "state good" : "state warn"}>
-          {recoveryConfig?.recoveryEnabled ? "Kurtarma Hazır" : "Kurulum Bekliyor"}
-        </span>
+        <span className={recoveryConfig?.recoveryEnabled ? "state good" : "state warn"}>{recoveryConfig?.recoveryEnabled ? "Kurtarma Hazır" : "Kurulum Bekliyor"}</span>
       </div>
 
       <div className="aos-recovery-summary">
-        <div className={recoveryConfig?.recoveryEnabled ? "ready" : "pending"}>
-          <span>Kurtarma Durumu</span>
-          <strong>{recoveryConfig?.recoveryEnabled ? "Aktif" : "Hazırlanıyor"}</strong>
-          <small>{recoveryConfig?.recoveryEnabled ? "Güvenli kurtarma kullanılabilir" : "Eksik adımları tamamlayın"}</small>
-        </div>
-        <div className={configuredRecoveryCount === 3 ? "ready" : "pending"}>
-          <span>Güvenlik Soruları</span>
-          <strong>{configuredRecoveryCount}/3</strong>
-          <small>{configuredRecoveryCount === 3 ? "Üç soru kayıtlı" : "Üç soru zorunlu"}</small>
-        </div>
-        <div className={owner.emailVerified ? "ready" : "pending"}>
-          <span>E-posta</span>
-          <strong>{owner.emailVerified ? "Doğrulandı" : "Bekliyor"}</strong>
-          <small>{owner.email || "E-posta kayıtlı değil"}</small>
-        </div>
-        <div className={recoveryChannelReady ? "ready" : "pending"}>
-          <span>Kurtarma Kanalı</span>
-          <strong>{recoveryChannelReady ? "Hazır" : "Bekliyor"}</strong>
-          <small>{recoveryChannelLabel}</small>
-        </div>
+        <div className={recoveryConfig?.recoveryEnabled ? "ready" : "pending"}><span>Kurtarma Durumu</span><strong>{recoveryConfig?.recoveryEnabled ? "Aktif" : "Hazırlanıyor"}</strong><small>{recoveryConfig?.recoveryEnabled ? "Güvenli kurtarma kullanılabilir" : "Eksik adımları tamamlayın"}</small></div>
+        <div className={configuredRecoveryCount === 3 ? "ready" : "pending"}><span>Güvenlik Soruları</span><strong>{configuredRecoveryCount}/3</strong><small>{configuredRecoveryCount === 3 ? "Üç soru kayıtlı" : "Üç soru zorunlu"}</small></div>
+        <div className={owner.emailVerified ? "ready" : "pending"}><span>E-posta</span><strong>{owner.emailVerified ? "Doğrulandı" : "Bekliyor"}</strong><small>{owner.email || "E-posta kayıtlı değil"}</small></div>
+        <div className={recoveryChannelReady ? "ready" : "pending"}><span>Kurtarma Kanalı</span><strong>{recoveryChannelReady ? "Hazır" : "Bekliyor"}</strong><small>{recoveryChannelLabel}</small></div>
       </div>
 
       <form className="aos-recovery-form" onSubmit={saveRecoverySecurity}>
@@ -425,100 +379,29 @@ export default function AdminOwnerSecurity() {
             const saved = Boolean(recoveryConfig?.questions?.[index]?.configured);
             const answerVisible = Boolean(showRecoveryAnswers[index]);
             const questionVisible = !saved || Boolean(showRecoveryQuestions[index]);
-            return (
-              <div className="aos-question-card" key={index}>
-                <div className="aos-question-title">
-                  <div><span>{index + 1}</span><div><b>Güvenlik Sorusu</b><small>{saved ? "Kayıtlı · cevaplamak veya düzenlemek için soruyu açın" : "Henüz kaydedilmedi"}</small></div></div>
-                  <span className={saved ? "saved" : "new"}>{saved ? "Kayıtlı" : "Yeni"}</span>
-                </div>
-
-                {questionVisible ? (
-                  <label>Soru
-                    <div className="aos-question-field">
-                      <input
-                        value={row.question}
-                        onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))}
-                        placeholder="Yalnız sizin bildiğiniz, tahmin edilmesi zor bir soru yazın"
-                        maxLength={220}
-                      />
-                      {saved ? <button
-                        type="button"
-                        className="aos-question-toggle"
-                        onClick={() => {
-                          setShowRecoveryQuestions((current) => current.map((value, itemIndex) => itemIndex === index ? false : value));
-                          setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? false : value));
-                        }}
-                      >Soruyu Gizle</button> : null}
-                    </div>
-                  </label>
-                ) : (
-                  <div className="aos-question-preview">
-                    <span>Soru</span>
-                    <div>
-                      <strong>{maskSecurityQuestion(row.question)}</strong>
-                      <button
-                        type="button"
-                        className="aos-question-toggle"
-                        onClick={() => setShowRecoveryQuestions((current) => current.map((value, itemIndex) => itemIndex === index ? true : value))}
-                      >Soruyu Göster</button>
-                    </div>
-                    <small>Cevabı girmeden önce sorunun tamamını görmek için açın.</small>
-                  </div>
-                )}
-
-                <label>Cevap
-                  <div className="aos-answer-field">
-                    <input
-                      type={answerVisible ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={row.answer}
-                      disabled={saved && !questionVisible}
-                      onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, answer: event.target.value } : item))}
-                      placeholder={saved ? (questionVisible ? "Kayıtlı — değiştirmek için yeni cevap yazın" : "Önce soruyu gösterin") : "Özel cevabınızı yazın"}
-                    />
-                    <button
-                      type="button"
-                      className="aos-answer-toggle"
-                      disabled={!row.answer || (saved && !questionVisible)}
-                      onClick={() => setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? !value : value))}
-                      aria-label={answerVisible ? "Cevabı gizle" : "Cevabı göster"}
-                    >{answerVisible ? "Gizle" : "Göster"}</button>
-                  </div>
-                </label>
-              </div>
-            );
+            return <div className="aos-question-card" key={index}>
+              <div className="aos-question-title"><div><span>{index + 1}</span><div><b>Güvenlik Sorusu</b><small>{saved ? "Kayıtlı · cevaplamak veya düzenlemek için soruyu açın" : "Henüz kaydedilmedi"}</small></div></div><span className={saved ? "saved" : "new"}>{saved ? "Kayıtlı" : "Yeni"}</span></div>
+              {questionVisible ? <label>Soru<div className="aos-question-field"><input value={row.question} onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question: event.target.value } : item))} placeholder="Yalnız sizin bildiğiniz, tahmin edilmesi zor bir soru yazın" maxLength={220}/>{saved ? <button type="button" className="aos-question-toggle" onClick={() => { setShowRecoveryQuestions((current) => current.map((value, itemIndex) => itemIndex === index ? false : value)); setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? false : value)); }}>Soruyu Gizle</button> : null}</div></label> : <div className="aos-question-preview"><span>Soru</span><div><strong>{maskSecurityQuestion(row.question)}</strong><button type="button" className="aos-question-toggle" onClick={() => setShowRecoveryQuestions((current) => current.map((value, itemIndex) => itemIndex === index ? true : value))}>Soruyu Göster</button></div><small>Cevabı girmeden önce sorunun tamamını görmek için açın.</small></div>}
+              <label>Cevap<div className="aos-answer-field"><input type={answerVisible ? "text" : "password"} autoComplete="new-password" value={row.answer} disabled={saved && !questionVisible} onChange={(event) => setRecoveryQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, answer: event.target.value } : item))} placeholder={saved ? (questionVisible ? "Kayıtlı — değiştirmek için yeni cevap yazın" : "Önce soruyu gösterin") : "Özel cevabınızı yazın"}/><button type="button" className="aos-answer-toggle" disabled={!row.answer || (saved && !questionVisible)} onClick={() => setShowRecoveryAnswers((current) => current.map((value, itemIndex) => itemIndex === index ? !value : value))} aria-label={answerVisible ? "Cevabı gizle" : "Cevabı göster"}>{answerVisible ? "Gizle" : "Göster"}</button></div></label>
+            </div>;
           })}
         </div>
 
         <div className="aos-recovery-stepup">
-          <div>
-            <b>Değişikliği doğrula</b>
-            <small>Güvenlik soruları yalnız mevcut Authenticator kodunuz doğrulandıktan sonra kaydedilir.</small>
-          </div>
-          <label>Authenticator
-            <select value={recoveryProvider} onChange={(event) => setRecoveryProvider(event.target.value)}>
-              <option value="GOOGLE">Google Authenticator</option>
-              <option value="MICROSOFT">Microsoft Authenticator</option>
-            </select>
-          </label>
-          <label>6 haneli kod
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={recoveryStepUpCode}
-              onChange={(event) => setRecoveryStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              aria-label="Mevcut Authenticator kodu"
-            />
-          </label>
-          <button className="primary" type="submit" disabled={busy}>Kurtarma Güvenliğini Kaydet</button>
+          <div><b>Birincil doğrulama · KY Güvenlik</b><small>Kaydet dediğinizde telefonunuza kritik işlem onayı gelir. Onaydan sonra sunucu kaydı tekrar okuyup doğrulamadan başarı göstermez.</small></div>
+          <button className="primary" type="submit" disabled={busy}>{recoveryAction ? "Telefonda onay bekleniyor..." : "Telefondan Onayla ve Kaydet"}</button>
+          <details>
+            <summary>Yedek yöntem · Authenticator</summary>
+            <div className="aos-row">
+              <label>Authenticator<select value={recoveryProvider} onChange={(event) => setRecoveryProvider(event.target.value)}><option value="GOOGLE">Google Authenticator</option><option value="MICROSOFT">Microsoft Authenticator</option></select></label>
+              <label>6 haneli kod<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={recoveryStepUpCode} onChange={(event) => setRecoveryStepUpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" aria-label="Yedek Authenticator kodu"/></label>
+              <button type="button" disabled={busy} onClick={saveRecoveryWithAuthenticator}>Yedek Yöntemle Kaydet</button>
+            </div>
+          </details>
         </div>
       </form>
 
-      <div className="aos-security-note">
-        <b>Gizlilik:</b> Kayıtlı sorular sayfa açılışında kısmen maskelenir; “Soruyu Göster” ile yalnız işlem sırasında tam görünür. Kayıtlı cevapların düz metni sunucudan geri getirilemez. Cevaplar salt + PBKDF2 hash olarak tutulur; “Göster / Gizle” yalnız şu anda yazdığınız yeni cevabı gösterir.
-      </div>
+      <div className="aos-security-note"><b>Gizlilik:</b> Kayıtlı sorular sayfa açılışında kısmen maskelenir. Kayıtlı cevapların düz metni sunucudan geri getirilemez; cevaplar salt + PBKDF2 hash olarak tutulur. Telefon onayı tek kullanımlıktır ve soru metinleri dışında cevap içeriği audit loguna yazılmaz.</div>
     </section>
 
     {renewProvider && <section className="aos-card aos-renew">
