@@ -1,0 +1,4 @@
+KY PDKS Pro 1.9.0 cloud Windows build bootstrap
+Primary: AppVeyor (appveyor.yml)
+Fallback: Azure DevOps (azure-pipelines-pdks.yml)
+Expected artifact: KY-PDKS-Pro-Setup-1.9.0.exe
