@@ -21,7 +21,28 @@ test("100 KG invoice can be allocated to dispatch LOT-A 60 + LOT-B 40", () => {
   assert.equal(result.lotAllocations.length, 2);
 });
 
-test("single invoice lot conflicts with two different dispatch lots", () => {
+test("invoice lot fills allocation when dispatch line has no lot", () => {
+  const result = resolveAllocatedLotEvidence({
+    policy: "REQUIRED",
+    invoiceLotNo: "FAT-LOT-7",
+    invoicedQuantity: 100,
+    allocations: [
+      { dispatchId: "d1", dispatchLineId: "d1-1", quantity: 100, lotNo: "" },
+    ],
+  });
+  assert.equal(result.status, "FROM_INVOICE");
+  assert.equal(result.resolvedLotNo, "FAT-LOT-7");
+  assert.equal(result.lotAllocations[0].lotNo, "FAT-LOT-7");
+  assert.equal(result.lotAllocations[0].lotSource, "INVOICE");
+  assert.equal(requiredLotCoverageComplete({
+    policy: "REQUIRED",
+    quantity: 100,
+    lotNo: result.resolvedLotNo,
+    lotAllocations: result.lotAllocations,
+  }), true);
+});
+
+test("invoice lot conflicts with different dispatch lot", () => {
   const result = resolveAllocatedLotEvidence({
     policy: "REQUIRED",
     invoiceLotNo: "LOT-A",
@@ -49,7 +70,7 @@ test("required multi allocation blocks when one allocated segment has no lot", (
   assert.equal(result.canPostStock, false);
 });
 
-test("required lot coverage accepts allocation sum when no single lot exists", () => {
+test("required lot coverage accepts full allocation sum when no single lot exists", () => {
   assert.equal(
     requiredLotCoverageComplete({
       policy: "REQUIRED",
@@ -61,10 +82,14 @@ test("required lot coverage accepts allocation sum when no single lot exists", (
     }),
     true,
   );
+});
+
+test("partial 60/100 physical allocation is never treated as full lot coverage", () => {
   assert.equal(
     requiredLotCoverageComplete({
       policy: "REQUIRED",
       quantity: 100,
+      lotNo: "A",
       lotAllocations: [{ quantity: 60, lotNo: "A" }],
     }),
     false,
