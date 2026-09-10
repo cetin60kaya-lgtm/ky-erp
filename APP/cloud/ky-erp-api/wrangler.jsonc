@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ky-erp-api",
-  "main": "src/main-entry-mail.ts",
+  "main": "src/main-entry-security.ts",
   "workers_dev": false,
   "routes": [
     {
