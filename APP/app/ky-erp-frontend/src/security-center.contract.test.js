@@ -40,3 +40,17 @@ test("KY Security PWA labels every critical security action and refreshes cache"
   }
   assert.match(sw, /kyerp-security-shell-v10/);
 });
+
+test("notification center exposes direct scoped login approval actions", async () => {
+  const shell = await read("layouts/AppShellV3.jsx");
+  const notifications = await read("../../../cloud/ky-erp-api/src/notifications-cloud.ts");
+  assert.match(shell, /decideSecurityCenterLoginApproval/);
+  assert.match(shell, /shell-v3-notification-inline-actions/);
+  assert.match(shell, /"APPROVE"/);
+  assert.match(shell, /"DENY"/);
+  assert.match(notifications, /AUTH_SECURITY_CAPABILITY_GRANT/);
+  assert.match(notifications, /LOGIN_APPROVE/);
+  assert.match(notifications, /actionable:\s*true/);
+  assert.match(notifications, /securityCenter:\s*true/);
+  assert.match(notifications, /NOT IN \('SUPER_ADMIN','ADMIN'\)/);
+});
