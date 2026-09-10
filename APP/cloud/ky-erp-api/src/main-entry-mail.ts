@@ -2,6 +2,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getAuthenticatedUser } from "./auth-cloud.ts";
+import { canonicalAccountingRouteGuard } from "./accounting-canonical-route-guard";
 import base from "./main-entry";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
 import { ensureMailWorkspaceUx } from "./runtime-migration-mail-ux";
@@ -112,6 +113,23 @@ async function dispatch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext)
 // up a mailbox provider so anonymous requests cannot inspect schema or accounts.
 const gateway = new Hono<Env>();
 gateway.use("/api/*", cors({origin:allowedOrigin,allowMethods:["GET","POST","PATCH","PUT","DELETE","HEAD","OPTIONS"],allowHeaders:["Accept","Authorization","Content-Type","X-KYERP-Tenant-Slug","X-KYERP-Device","X-KYERP-Push-Device","X-KYERP-Push-Token","X-KYERP-Security-Timestamp","X-KYERP-Security-Signature"],exposeHeaders:["Content-Length","Content-Type","ETag","X-Request-Id"],maxAge:86400,credentials:true}));
+gateway.use("/api/*", async (c, next) => {
+  const guarded = canonicalAccountingRouteGuard(new URL(c.req.url).pathname, c.req.method);
+  if (!guarded) return next();
+  c.header("Cache-Control", "no-store");
+  if (!(await getAuthenticatedUser(c))) {
+    return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gereklidir."}},401);
+  }
+  return c.json({
+    ok:false,
+    success:false,
+    error:{
+      code:guarded.code,
+      message:guarded.message,
+      details:{replacement:guarded.replacement},
+    },
+  },409);
+});
 gateway.use("/api/mail/*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   if (!(await getAuthenticatedUser(c))) return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gereklidir."}},401);
