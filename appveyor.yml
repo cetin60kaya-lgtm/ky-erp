@@ -5,63 +5,88 @@ image: Visual Studio 2022
 skip_tags: true
 clone_depth: 1
 
-init:
-  - ps: git config --global core.autocrlf false
-
 build_script:
   - ps: |
       $ErrorActionPreference = 'Stop'
       Set-ExecutionPolicy Bypass -Scope Process -Force
       Write-Host '============================================================'
-      Write-Host 'KY PDKS Pro 1.9.0 - FINAL RELEASE PACKAGING'
+      Write-Host 'KY PDKS Pro 1.9.0 - SAF PAKETLEME'
       Write-Host '============================================================'
 
       $src = 'C:\projects\KYERP-PDKS-FINAL'
       if (Test-Path $src) { Remove-Item $src -Recurse -Force }
-      Write-Host '1/5 Final PDKS kaynagi temiz aliniyor...'
       git clone --depth 1 --single-branch --branch codex/pdks-desktop-1.8.1-device-final-20260907 https://github.com/cetin60kaya-lgtm/ky-erp.git $src
       if ($LASTEXITCODE -ne 0) { throw 'Final PDKS branch clone basarisiz.' }
       Set-Location $src
-      Write-Host 'PDKS source HEAD:' (git rev-parse HEAD)
+      Write-Host 'Kaynak HEAD:' (git rev-parse HEAD)
 
-      Write-Host '2/5 Windows build araclari kontrol ediliyor...'
       if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) { choco install nodejs-lts -y --no-progress }
-      if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'npm bulunamadi.' }
       if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) { choco install dotnet-8.0-sdk -y --no-progress }
-      Write-Host 'Node:' (node --version)
-      Write-Host 'npm :' (npm --version)
-      Write-Host '.NET:' (dotnet --version)
       $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
       if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
       if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 bulunamadi.' }
 
-      Write-Host '3/5 Release build + publish + Setup uretiliyor...'
-      .\APP\desktop\ky-pdks\BUILD_PDKS_PRO_SETUP.ps1 -SkipTests
+      $root = Join-Path $src 'APP\desktop\ky-pdks'
+      $frontend = Join-Path $src 'APP\app\ky-erp-frontend'
+      $dist = Join-Path $root 'dist-pdks'
+      $desktopOut = Join-Path $dist 'pdks-desktop'
+      $agentOut = Join-Path $dist 'agent'
+      $setupOut = Join-Path $dist 'setup'
+      $webviewOut = Join-Path $dist 'webview2'
+      Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($d in @($desktopOut,$agentOut,$setupOut,$webviewOut)) { New-Item $d -ItemType Directory -Force | Out-Null }
 
-      Write-Host '4/5 Setup butunlugu dogrulaniyor...'
-      $out = Join-Path $src 'APP\desktop\ky-pdks\dist-pdks\setup'
-      $setup = Join-Path $out 'KY-PDKS-Pro-Setup-1.9.0.exe'
-      $sha = "$setup.sha256.txt"
-      $info = Join-Path $out 'build-info-pdks.json'
-      if (-not (Test-Path $setup)) { throw 'KY-PDKS-Pro-Setup-1.9.0.exe olusmadi.' }
-      if ((Get-Item $setup).Length -lt 5MB) { throw 'Setup beklenenden kucuk.' }
-      if (-not (Test-Path $sha)) { throw 'SHA256 dosyasi eksik.' }
-      if (-not (Test-Path $info)) { throw 'build-info-pdks.json eksik.' }
-      $expected = ((Get-Content $sha -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
-      $actual = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-      if ($expected -ne $actual) { throw 'Setup SHA256 dogrulamasi basarisiz.' }
+      Write-Host '1/4 Frontend production build'
+      Push-Location $frontend
+      npm ci
+      if ($LASTEXITCODE -ne 0) { throw 'Frontend npm ci basarisiz.' }
+      npm run build
+      if ($LASTEXITCODE -ne 0) { throw 'Frontend production build basarisiz.' }
+      Pop-Location
+      if (-not (Test-Path (Join-Path $frontend 'dist\index.html'))) { throw 'Frontend dist/index.html olusmadi.' }
 
-      Write-Host '5/5 AppVeyor artifact yukleniyor...'
-      $artifactDir = Join-Path $env:APPVEYOR_BUILD_FOLDER 'pdks-artifacts'
-      New-Item $artifactDir -ItemType Directory -Force | Out-Null
-      Copy-Item $setup $artifactDir -Force
-      Copy-Item $sha $artifactDir -Force
-      Copy-Item $info $artifactDir -Force
-      Push-AppveyorArtifact (Join-Path $artifactDir 'KY-PDKS-Pro-Setup-1.9.0.exe') -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe'
-      Push-AppveyorArtifact (Join-Path $artifactDir 'KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt') -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt'
-      Push-AppveyorArtifact (Join-Path $artifactDir 'build-info-pdks.json') -FileName 'build-info-pdks.json'
-      Write-Host 'FINAL PDKS SETUP HAZIR:' $setup
-      Write-Host 'SHA256:' $actual
+      Write-Host '2/4 PDKS Desktop + Agent publish'
+      $desktopProject = Join-Path $root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
+      $agentProject = Join-Path $root 'src\KyPdks.Agent\KyPdks.Agent.csproj'
+      dotnet publish $desktopProject -c Release -r win-x64 --self-contained true -p:ProductMode=PDKS -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $desktopOut
+      if ($LASTEXITCODE -ne 0) { throw 'KY PDKS Pro publish basarisiz.' }
+      dotnet publish $agentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $agentOut
+      if ($LASTEXITCODE -ne 0) { throw 'PDKS Agent publish basarisiz.' }
+      $web = Join-Path $desktopOut 'web'
+      New-Item $web -ItemType Directory -Force | Out-Null
+      Copy-Item (Join-Path $frontend 'dist\*') $web -Recurse -Force
+      if (-not (Test-Path (Join-Path $desktopOut 'KY PDKS Pro.exe'))) { throw 'KY PDKS Pro.exe olusmadi.' }
+      if (-not (Test-Path (Join-Path $agentOut 'KYERP.PDKS.Agent.exe'))) { throw 'KYERP.PDKS.Agent.exe olusmadi.' }
+
+      Write-Host '3/4 WebView2 + Inno Setup'
+      $wv = Join-Path $webviewOut 'MicrosoftEdgeWebview2Setup.exe'
+      Start-FileDownload 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -FileName $wv
+      if (-not (Test-Path $wv)) { throw 'WebView2 bootstrapper indirilemedi.' }
+      $env:KY_PDKS_DIST = $dist
+      $env:KY_PDKS_SETUP_OUT = $setupOut
+      & $iscc (Join-Path $root 'installer\KY-PDKS.iss')
+      if ($LASTEXITCODE -ne 0) { throw 'Inno Setup derlemesi basarisiz.' }
+
+      Write-Host '4/4 Setup dogrulama + artifact'
+      $setup = Join-Path $setupOut 'KY-PDKS-Pro-Setup-1.9.0.exe'
+      if (-not (Test-Path $setup)) { throw 'Final Setup olusmadi.' }
+      if ((Get-Item $setup).Length -lt 5MB) { throw 'Final Setup beklenenden kucuk.' }
+      $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+      $shaFile = "$setup.sha256.txt"
+      "$hash  KY-PDKS-Pro-Setup-1.9.0.exe" | Set-Content $shaFile -Encoding ascii
+      $info = [ordered]@{
+        version='1.9.0'; product='KY PDKS Pro'; scope='PDKS_STANDALONE_CANONICAL_UI';
+        setup='KY-PDKS-Pro-Setup-1.9.0.exe'; sha256=$hash; exe='KY PDKS Pro.exe';
+        includesPdksAgent=$true; includesCanonicalFrontend=$true; includesWebView2Bootstrapper=$true;
+        sourceBranch='codex/pdks-desktop-1.8.1-device-final-20260907'; sourceCommit=(git rev-parse HEAD); builtAt=(Get-Date).ToString('o')
+      }
+      $infoPath = Join-Path $setupOut 'build-info-pdks.json'
+      $info | ConvertTo-Json -Depth 5 | Set-Content $infoPath -Encoding utf8
+      Push-AppveyorArtifact $setup -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe'
+      Push-AppveyorArtifact $shaFile -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt'
+      Push-AppveyorArtifact $infoPath -FileName 'build-info-pdks.json'
+      Write-Host 'SETUP READY:' $setup
+      Write-Host 'SHA256:' $hash
 
 test: off
 
