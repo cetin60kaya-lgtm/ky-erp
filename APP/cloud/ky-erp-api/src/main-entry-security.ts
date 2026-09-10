@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import base from "./main-entry-mail";
 import { registerSecurityCenterRoutes } from "./security-center-cloud";
+import { registerSecurityCenterLoginRoutes } from "./security-center-login-cloud";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -21,6 +22,7 @@ security.use("/api/security-center/*", cors({
   credentials: true,
 }));
 registerSecurityCenterRoutes(security);
+registerSecurityCenterLoginRoutes(security);
 security.onError((error, c) => {
   const requestId = crypto.randomUUID();
   console.error(JSON.stringify({ code: "SECURITY_CENTER_REQUEST_FAILED", requestId, message: error instanceof Error ? error.message : String(error) }));
