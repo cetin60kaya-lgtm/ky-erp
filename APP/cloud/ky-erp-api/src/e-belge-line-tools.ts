@@ -1,5 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { resolveProductLotPolicy } from "./accounting-lot-reconciliation-core";
+import { registerEBelgeLotToolRoutes } from "./e-belge-lot-tools";
 import {
   eBelgeProductRouting,
   getEBelgeProduct,
@@ -19,13 +21,15 @@ const json=(v:unknown)=>{if(v&&typeof v==="object"&&!Array.isArray(v))return v a
 
 async function resolveIfClean(c:Context<AppEnv>,slug:string,documentId:string){
   const lines=(await c.env.DB.prepare(`SELECT product_id,raw_metadata FROM accounting_document_lines WHERE main_company_slug=? AND document_id=?`).bind(slug,documentId).all<Row>()).results||[];
-  const productMissing=lines.some((line)=>{const raw=json(line.raw_metadata),routing=text(raw.routingType||"EXPENSE").toUpperCase();return !text(line.product_id)&&(routing!=="EXPENSE"||raw.lotRequired===true||raw.chemical===true)});
+  const productMissing=lines.some((line)=>{const raw=json(line.raw_metadata),routing=text(raw.routingType||"EXPENSE").toUpperCase();return !text(line.product_id)&&(routing!=="EXPENSE"||raw.lotPolicy==="REQUIRED"||raw.lotRequired===true||raw.chemical===true)});
   if(!productMissing)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='PRODUCT_UNMATCHED' AND is_resolved=0`).bind(now(),slug,documentId).run();
-  const lotMissing=lines.some((line)=>{const raw=json(line.raw_metadata);return raw.lotRequired===true&&!text(raw.lotNo)});
+  const lotMissing=lines.some((line)=>{const raw=json(line.raw_metadata);const required=raw.lotPolicy==="REQUIRED"||raw.lotRequired===true;return required&&!text(raw.lotNo)});
   if(!lotMissing)await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND issue_code='LOT_REQUIRED' AND is_resolved=0`).bind(now(),slug,documentId).run();
 }
 
 export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
+  registerEBelgeLotToolRoutes(app);
+
   app.get("/api/e-belge/products",async c=>{
     const slug=slugOf(c),q=text(c.req.query("q"));
     if(q.length<1)return c.json({ok:true,data:[]});
@@ -45,9 +49,11 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
     if(product){
       const supplierProfile=await getEBelgeSupplierProfile(c,slug,text(doc?.party_company_id));
       const routing=eBelgeProductRouting(product,line,supplierProfile);
+      const lotPolicy=resolveProductLotPolicy(product,routing.routing);
       raw.routingType=routing.routing;
       raw.chemical=routing.chemical;
-      raw.lotRequired=routing.lotRequired===true;
+      raw.lotPolicy=lotPolicy;
+      raw.lotRequired=lotPolicy==="REQUIRED";
       const expense=routing.routing==="EXPENSE"?await resolveEBelgeExpenseCategory(c,slug,{companyId:text(doc?.party_company_id),productId:text(product.id),description:text(line.description),fallbackId:routing.expenseCategoryId,fallbackName:routing.expenseCategoryName}):null;
       raw.expenseCategoryId=expense?.categoryId||routing.expenseCategoryId||null;
       raw.expenseCategoryName=expense?.categoryName||routing.expenseCategoryName||null;
@@ -74,7 +80,7 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
     }
     await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=COALESCE(?,product_id),unit_code=CASE WHEN ?<>'' THEN ? ELSE unit_code END,match_status=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 'MANUAL' ELSE match_status END,match_confidence=CASE WHEN COALESCE(?,product_id) IS NOT NULL THEN 1 ELSE match_confidence END,raw_metadata=?,updated_at=? WHERE id=? AND document_id=? AND main_company_slug=?`).bind(product?.id||null,text(body.unitCode),text(body.unitCode),product?.id||null,product?.id||null,JSON.stringify(raw),now(),lineId,documentId,slug).run();
     await resolveIfClean(c,slug,documentId);
-    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",routingType:raw.routingType||"",expenseCategoryId:raw.expenseCategoryId||null,expenseCategoryName:raw.expenseCategoryName||null,expenseCategorySource:raw.expenseCategorySource||null,expenseRuleId:raw.expenseRuleId||null}});
+    return c.json({ok:true,data:{lineId,productId:product?.id||line.product_id||null,lotNo:raw.lotNo||"",lotPolicy:raw.lotPolicy||null,routingType:raw.routingType||"",expenseCategoryId:raw.expenseCategoryId||null,expenseCategoryName:raw.expenseCategoryName||null,expenseCategorySource:raw.expenseCategorySource||null,expenseRuleId:raw.expenseRuleId||null}});
   });
 
   app.post("/api/e-belge/products/:productId/aliases",async c=>{
