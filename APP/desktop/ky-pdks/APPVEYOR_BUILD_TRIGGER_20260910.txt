@@ -1,0 +1,3 @@
+KY PDKS Pro 1.9.0 AppVeyor Windows build trigger
+Branch: codex/pdks-desktop-1.8.1-device-final-20260907
+Purpose: produce KY-PDKS-Pro-Setup-1.9.0.exe
