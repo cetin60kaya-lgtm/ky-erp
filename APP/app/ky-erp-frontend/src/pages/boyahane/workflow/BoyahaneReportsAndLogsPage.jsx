@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  getBoyahaneLotMonthlyReport,
   getBoyahaneReports,
   listBoyahaneJobs,
   listBoyahaneLogs,
@@ -42,6 +43,10 @@ function downloadCsv(name, headers, rows) {
   URL.revokeObjectURL(url);
 }
 
+function money(value) {
+  return Number(value || 0).toLocaleString("tr-TR", { style: "currency", currency: "TRY" });
+}
+
 function jobType(row) {
   const value = String(row?.jobType || row?.workflowType || row?.type || "PRODUCTION").toUpperCase();
   return ["SAMPLE", "TRIAL"].includes(value) ? "SAMPLE" : "PRODUCTION";
@@ -55,6 +60,8 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
   const [lots, setLots] = useState([]);
   const [logs, setLogs] = useState([]);
   const [report, setReport] = useState({ summary: {}, expenses: [] });
+  const [lotMonth, setLotMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [lotMonthly, setLotMonthly] = useState({ totals: {}, products: [], lots: [], depletedLots: [], warnings: [] });
   const [filters, setFilters] = useState({
     query: "",
     user: "",
@@ -75,7 +82,7 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
       const result = await loadModuleData({
-        scope: `boyahane:${tenant}:raporlar`,
+        scope: `boyahane:${tenant}:raporlar:${lotMonth}`,
         sources: {
           jobs: { critical: true, load: () => listBoyahaneJobs(activeMainCompany) },
           productions: { critical: true, load: () => listBoyahaneProductions(activeMainCompany) },
@@ -83,6 +90,7 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
           lots: { fallback: [], load: () => listBoyahaneLots(activeMainCompany) },
           logs: { fallback: [], load: () => listBoyahaneLogs(activeMainCompany) },
           report: { fallback: {}, load: () => getBoyahaneReports(activeMainCompany) },
+          lotMonthly: { fallback: { totals: {}, products: [], lots: [], depletedLots: [], warnings: [] }, load: () => getBoyahaneLotMonthlyReport(activeMainCompany, lotMonth) },
         },
       });
       if (result.states.jobs.status !== "error") setJobs(safeArray(result.data.jobs));
@@ -91,6 +99,7 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
       if (result.states.lots.status !== "error") setLots(safeArray(result.data.lots));
       if (result.states.logs.status !== "error") setLogs(safeArray(result.data.logs));
       if (result.states.report.status !== "error") setReport(result.data.report || { summary: {}, expenses: [] });
+      if (result.states.lotMonthly.status !== "error") setLotMonthly(result.data.lotMonthly || { totals: {}, products: [], lots: [], depletedLots: [], warnings: [] });
       setError(moduleLoadMessage(result, "Boyahane ana rapor kaynaklarından biri alınamadı; diğer başarılı veriler korunuyor.", "Bazı yardımcı rapor kaynakları yenilenemedi; ana rapor kullanılabilir."));
     } catch (requestError) {
       console.error("Boyahane reports load failed", requestError);
@@ -98,9 +107,9 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
     } finally {
       setLoading(false);
     }
-  }, [activeMainCompany?.slug]);
+  }, [activeMainCompany?.slug, activeMainCompany?.id, lotMonth]);
 
-  useEffect(() => { load(); }, [activeMainCompany?.slug]);
+  useEffect(() => { load(); }, [activeMainCompany?.slug, activeMainCompany?.id, lotMonth]);
 
   const within = (value) => {
     const key = dateKey(value);
@@ -170,6 +179,8 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
     return [...map.values()].filter((row) => includes(row.productName, filters.product)).sort((a, b) => Number(b.usedKg || b.productionKg) - Number(a.usedKg || a.productionKg));
   }, [products, filteredLots, productions, filters.product]);
 
+  const monthlyProductRows = safeArray(lotMonthly?.products).filter((row) => includes(row.productName, filters.product) && includes(row.productName, q));
+  const lotTotals = lotMonthly?.totals || {};
   const summary = report?.summary || {};
   const expenses = safeArray(report?.expenses).filter((row) => within(row.createdAt || row.date) && includes(`${row.description} ${row.category} ${row.productName} ${row.modelName}`, q));
   const sampleRows = filteredProductions.filter((row) => jobType(row) === "SAMPLE");
@@ -182,6 +193,10 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
   function exportCsv() {
     if (tab === "logs") {
       downloadCsv("boyahane-islem-loglari", ["Tarih", "Kullanıcı", "İşlem", "Açıklama", "Kayıt Türü"], filteredLogs.map((row) => [formatDate(row.createdAt), row.actor, row.actionType || row.action, row.description, row.entityType]));
+      return;
+    }
+    if (tab === "product-lot" && monthlyProductRows.length) {
+      downloadCsv(`boyahane-urun-lot-${lotMonth}`, ["Ürün", "Açılış", "Giriş", "Üretim", "Fire", "Numune", "Düzeltme", "İade", "Diğer Sarf", "Kapanış", "Tüketim Maliyeti", "Kapanış Stok Değeri", "Lot", "Biten Lot"], monthlyProductRows.map((row) => [row.productName, row.openingQty, row.receiptQty, row.productionQty, row.wasteQty, row.sampleQty, row.adjustmentQty, row.returnQty, row.otherConsumptionQty, row.closingQty, row.consumedCost, row.closingValue, row.lotCount, row.depletedLotCount]));
       return;
     }
     if (tab === "product-lot") {
@@ -231,7 +246,7 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
             <article><span>Onaylanan renk</span><strong>{summary.approvedColorCount ?? productions.filter((row) => row.recipeId).length}</strong><small>Versiyon geçmişi korunur</small></article>
             <article><span>İmalat boyası</span><strong>{formatKg(summary.preparedKg || productionRows.reduce((sum, row) => sum + Number(row.productionTotalKg || 0), 0))}</strong><small>{productionRows.length} kayıt</small></article>
             <article><span>İmalat bekleyen</span><strong>{jobs.filter((row) => safeArray(row.colors).length && safeArray(row.colors).every((color) => ["COMPLETED", "CANCELLED"].includes(String(color.status).toUpperCase())) && !row.enteredProductionAt && row.status !== "COMPLETED").length}</strong><small>Hazır model</small></article>
-            <article><span>RF</span><strong>{formatKg(filteredRf.reduce((sum, row) => sum + Number(row.usedKg || 0), 0))}</strong><small>{filteredRf.reduce((sum, row) => sum + Number(row.tlValue || 0), 0).toLocaleString("tr-TR", { style: "currency", currency: "TRY" })}</small></article>
+            <article><span>RF</span><strong>{formatKg(filteredRf.reduce((sum, row) => sum + Number(row.usedKg || 0), 0))}</strong><small>{money(filteredRf.reduce((sum, row) => sum + Number(row.tlValue || 0), 0))}</small></article>
             <article><span>Fire / Sayım</span><strong>{formatKg(summary.fireKg || summary.adjustmentKg || 0)}</strong><small>Ters hareketler dahil</small></article>
           </div>
           <div className="bh-dashboard-two-column">
@@ -246,11 +261,18 @@ export default function BoyahaneReportsAndLogsPage({ activeMainCompany }) {
 
       {tab === "expenses" ? <section className="bh-card"><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th>Ürün</th><th>Model</th><th>Tutar</th><th>Para Birimi</th><th>Kullanıcı</th></tr></thead><tbody>{expenses.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt || row.date)}</td><td>{row.category || "Boya gideri"}</td><td>{row.description || "-"}</td><td>{row.productName || "-"}</td><td>{row.modelName || "-"}</td><td>{Number(row.amount || row.tlValue || 0).toLocaleString("tr-TR")}</td><td>{row.currency || "TL"}</td><td>{row.actor || "-"}</td></tr>)}</tbody></table></div>{!expenses.length ? <div className="bh-empty compact">Filtreye uygun boya gideri kaydı yok.</div> : null}</div></section> : null}
 
-      {tab === "product-lot" ? <section className="bh-card"><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Tür</th><th>Numune</th><th>İmalat</th><th>Lot kullanımı</th><th>Aktif lot</th><th>Kalan</th><th>Kullanıldığı modeller</th></tr></thead><tbody>{productUsage.map((row) => <tr key={row.id}><td><strong>{row.productName}</strong></td><td>{row.dyeType || "-"}</td><td>{formatKg(row.sampleKg)}</td><td>{formatKg(row.productionKg)}</td><td>{formatKg(row.usedKg)}</td><td>{row.lots.filter((lot) => Number(lot.remainingKg || 0) > 0).length}</td><td>{formatKg(row.lots.reduce((sum, lot) => sum + Number(lot.remainingKg || 0), 0))}</td><td>{[...row.models].filter(Boolean).join(", ") || "Detay hareketlerinde"}</td></tr>)}</tbody></table></div>{!productUsage.length ? <div className="bh-empty compact">Ürün veya lot kullanımı bulunmuyor.</div> : null}</div></section> : null}
+      {tab === "product-lot" ? <>
+        <section className="bh-card"><div className="bh-card-head"><div><h2>Aylık LOT, Stok ve Maliyet</h2><small>Alışın tamamı gider değildir; kullanılan malzeme maliyeti ile kapanış stok varlığı ayrıdır.</small></div><label className="bh-field"><span>Ay</span><input type="month" value={lotMonth} onChange={(event) => setLotMonth(event.target.value)} /></label></div><div className="bh-card-body">
+          <div className="bh-command-kpis compact"><article><span>Ay içi giriş</span><strong>{formatKg(lotTotals.receiptQty)}</strong><small>Fiziksel giriş</small></article><article><span>Üretim sarfı</span><strong>{formatKg(lotTotals.productionQty)}</strong><small>Reçete / imalat</small></article><article><span>Fire + numune</span><strong>{formatKg(Number(lotTotals.wasteQty || 0) + Number(lotTotals.sampleQty || 0))}</strong><small>Kontrollü sarf</small></article><article><span>Kapanış stok</span><strong>{formatKg(lotTotals.closingQty)}</strong><small>{money(lotTotals.inventoryAssetClosing)}</small></article><article><span>Malzeme gideri</span><strong>{money(lotTotals.materialExpenseRecognized)}</strong><small>Yalnız tüketilen</small></article><article><span>Toplam operasyon maliyeti</span><strong>{money(lotTotals.totalOperationalCost)}</strong><small>Malzeme + genel gider</small></article></div>
+          {safeArray(lotMonthly?.warnings).map((warning) => <div key={warning} className="bh-notice warning">{warning}</div>)}
+          <div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>Açılış</th><th>Giriş</th><th>Üretim</th><th>Fire</th><th>Numune</th><th>Düzeltme</th><th>İade</th><th>Diğer Sarf</th><th>Kapanış</th><th>Tüketim Maliyeti</th><th>Stok Değeri</th><th>Lot</th><th>Biten</th></tr></thead><tbody>{monthlyProductRows.map((row) => <tr key={row.productId || row.productName}><td><strong>{row.productName}</strong></td><td>{formatKg(row.openingQty)}</td><td>{formatKg(row.receiptQty)}</td><td>{formatKg(row.productionQty)}</td><td>{formatKg(row.wasteQty)}</td><td>{formatKg(row.sampleQty)}</td><td>{formatKg(row.adjustmentQty)}</td><td>{formatKg(row.returnQty)}</td><td>{formatKg(row.otherConsumptionQty)}</td><td><strong>{formatKg(row.closingQty)}</strong></td><td>{money(row.consumedCost)}</td><td>{money(row.closingValue)}</td><td>{row.lotCount || 0}</td><td>{row.depletedLotCount || 0}</td></tr>)}</tbody></table></div>{!monthlyProductRows.length ? <div className="bh-empty compact">Bu ay için LOT hareketi bulunmuyor.</div> : null}
+        </div></section>
+        <section className="bh-card"><div className="bh-card-head"><div><h2>LOT Detayı</h2><small>Ürün + tedarikçi + LOT bazında bağımsız izleme</small></div></div><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Ürün</th><th>LOT</th><th>Firma</th><th>Açılış</th><th>Giriş</th><th>Tüketim</th><th>Kalan</th><th>Birim Maliyet</th><th>Kalan Değer</th><th>Durum</th></tr></thead><tbody>{safeArray(lotMonthly?.lots).filter((row) => includes(row.productName, filters.product) && includes(`${row.productName} ${row.lotNo} ${row.supplierName}`, q)).map((row) => <tr key={row.lotId}><td>{row.productName || "-"}</td><td><strong>{row.lotNo || "-"}</strong></td><td>{row.supplierName || "-"}</td><td>{formatKg(row.openingQty)}</td><td>{formatKg(row.receiptQty)}</td><td>{formatKg(row.consumedQty)}</td><td>{formatKg(row.closingQty)}</td><td>{money(row.unitCost)}</td><td>{money(row.closingValue)}</td><td>{row.status || "-"}</td></tr>)}</tbody></table></div></div></section>
+      </> : null}
 
       {tab === "model-color" ? <section className="bh-model-history-grid">{filteredProductions.map((row) => <article key={row.id}><ModelThumbnail src={row.imageUrl} alt={row.modelSnapshot || row.modelName} size="medium" /><div><h3>{row.modelSnapshot || row.modelName || "Model"}</h3><p>{row.companySnapshot || "-"}</p><dl><div><dt>Renk</dt><dd>{row.colorNameSnapshot || row.colorName || "-"}</dd></div><div><dt>Pantone</dt><dd>{row.pantoneSnapshot || "-"}</dd></div><div><dt>Boya türü</dt><dd>{row.paintTypeSnapshot || "-"}</dd></div><div><dt>Versiyon</dt><dd>{row.versionSnapshot || "-"}</dd></div><div><dt>Gramaj</dt><dd>{formatKg(row.productionTotalKg)}</dd></div><div><dt>Tarih</dt><dd>{formatDate(row.createdAt)}</dd></div></dl></div></article>)}{!filteredProductions.length ? <div className="bh-empty compact">Model veya renk geçmişi bulunmuyor.</div> : null}</section> : null}
 
-      {tab === "rf" ? <section className="bh-card"><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Tarih</th><th>Kaynak Model</th><th>Kullanılan Model</th><th>Renk</th><th>İlk KG</th><th>Kullanılan KG</th><th>Kalan KG</th><th>TL</th><th>Kullanıcı</th><th>Durum</th></tr></thead><tbody>{filteredRf.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.sourceModelName || "-"}</td><td>{row.targetModelName || "-"}</td><td>{row.colorName || row.pantone || "-"}</td><td>{formatKg(row.sourceKg)}</td><td><strong>{formatKg(row.usedKg)}</strong></td><td>{formatKg(row.remainingKg)}</td><td>{Number(row.tlValue || 0).toLocaleString("tr-TR", { style: "currency", currency: "TRY" })}</td><td>{row.actor || row.userName || "-"}</td><td><span className={`bh-status ${row.status === "BITTI" ? "gray" : "green"}`}>{row.status === "BITTI" ? "Bitti" : "RF"}</span></td></tr>)}</tbody></table></div>{!filteredRf.length ? <div className="bh-empty compact">Filtreye uygun RF kaydı yok.</div> : null}</div></section> : null}
+      {tab === "rf" ? <section className="bh-card"><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Tarih</th><th>Kaynak Model</th><th>Kullanılan Model</th><th>Renk</th><th>İlk KG</th><th>Kullanılan KG</th><th>Kalan KG</th><th>TL</th><th>Kullanıcı</th><th>Durum</th></tr></thead><tbody>{filteredRf.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.sourceModelName || "-"}</td><td>{row.targetModelName || "-"}</td><td>{row.colorName || row.pantone || "-"}</td><td>{formatKg(row.sourceKg)}</td><td><strong>{formatKg(row.usedKg)}</strong></td><td>{formatKg(row.remainingKg)}</td><td>{money(row.tlValue)}</td><td>{row.actor || row.userName || "-"}</td><td><span className={`bh-status ${row.status === "BITTI" ? "gray" : "green"}`}>{row.status === "BITTI" ? "Bitti" : "RF"}</span></td></tr>)}</tbody></table></div>{!filteredRf.length ? <div className="bh-empty compact">Filtreye uygun RF kaydı yok.</div> : null}</div></section> : null}
 
       {tab === "logs" ? <section className="bh-card"><div className="bh-card-body"><div className="bh-table-wrap wide"><table><thead><tr><th>Tarih-Saat</th><th>Kullanıcı</th><th>İşlem</th><th>Açıklama</th><th>Kayıt Türü</th></tr></thead><tbody>{filteredLogs.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt)}</td><td><strong>{row.actor || "KY ERP"}</strong></td><td>{row.actionType || row.action || "-"}</td><td>{row.description || "-"}</td><td>{row.entityType || "-"}</td></tr>)}</tbody></table></div>{!filteredLogs.length ? <div className="bh-empty compact">Filtreye uygun işlem logu yok.</div> : null}</div></section> : null}
     </div>
