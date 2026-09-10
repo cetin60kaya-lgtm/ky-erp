@@ -2,6 +2,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import base from "./main-entry-mail";
+import { getAuthenticatedUser } from "./auth-cloud";
 import { registerSecurityCenterRoutes } from "./security-center-cloud";
 import { registerSecurityCenterLoginRoutes } from "./security-center-login-cloud";
 
@@ -11,6 +12,7 @@ const LIVE_ORIGINS = new Set(["https://kyerp.net", "https://www.kyerp.net", "htt
 const LOCAL = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
 const PREVIEW = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 const allowedOrigin = (origin: string) => LIVE_ORIGINS.has(origin) || LOCAL.test(origin) || PREVIEW.test(origin) ? origin : undefined;
+const roleCode = (value: unknown) => String(value || "").trim().toUpperCase().replace(/İ/g, "I");
 
 const security = new Hono<Env>();
 security.use("/api/security-center/*", cors({
@@ -21,6 +23,18 @@ security.use("/api/security-center/*", cors({
   maxAge: 86400,
   credentials: true,
 }));
+
+// main.ts içindeki DENETIM fail-closed sınırı security wrapper tarafından bypass edilmemeli.
+// DENETIM yalnız İK audit/PDKS read-only rotalarını görebilir; Güvenlik Merkezi görünmez.
+security.use("/api/security-center/*", async (c, next) => {
+  if (c.req.method === "OPTIONS") return next();
+  const current = await getAuthenticatedUser(c);
+  if (current && roleCode(current.role) === "DENETIM") {
+    return c.json({ ok: false, error: { code: "NOT_FOUND", message: "Endpoint bulunamadı." } }, 404);
+  }
+  return next();
+});
+
 registerSecurityCenterRoutes(security);
 registerSecurityCenterLoginRoutes(security);
 security.onError((error, c) => {
