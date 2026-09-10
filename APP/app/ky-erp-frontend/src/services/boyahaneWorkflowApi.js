@@ -228,19 +228,19 @@ export async function createBoyahaneProduct(company, body) {
   );
   if (!created?.id) return created;
 
-  let result = created;
-  if (created.approvalStatus !== approvalStatus) {
-    result = await updateBoyahaneProduct(company, created.id, {
-      approvalStatus,
-      approvedAt: approvalStatus === "APPROVED" ? new Date().toISOString() : null,
-    });
-  }
+  let result = await updateBoyahaneProduct(company, created.id, {
+    ...body,
+    approvalStatus,
+    approvedAt: approvalStatus === "APPROVED" ? new Date().toISOString() : null,
+  });
+
   if (body?.lotPolicy) {
-    await setBoyahaneProductLotPolicy(company, created.id, body.lotPolicy);
+    const lotPolicy = String(body.lotPolicy).toUpperCase();
+    await setBoyahaneProductLotPolicy(company, created.id, lotPolicy);
     result = {
       ...result,
-      lotPolicy: String(body.lotPolicy).toUpperCase(),
-      lotRequired: String(body.lotPolicy).toUpperCase() === "REQUIRED",
+      lotPolicy,
+      lotRequired: lotPolicy === "REQUIRED",
     };
   }
   return result;
