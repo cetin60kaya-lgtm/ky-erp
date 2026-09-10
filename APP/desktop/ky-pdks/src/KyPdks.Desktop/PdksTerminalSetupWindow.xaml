@@ -87,7 +87,7 @@
 
                     <Border Background="White" BorderBrush="#DBE5EE" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,12">
                         <StackPanel>
-                            <TextBlock Text="2 · KART KAYNAĞI & BAĞLANTI" Foreground="#2A719F" FontWeight="Bold" FontSize="10"/>
+                            <TextBlock Text="2 · KART KAYNAĞI &amp; BAĞLANTI" Foreground="#2A719F" FontWeight="Bold" FontSize="10"/>
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,10,0"><TextBlock Text="Kaynak modu"/><ComboBox x:Name="SourceModeCombo"><ComboBoxItem Content="Hedef / TR500" Tag="HEDEF_TR500"/><ComboBoxItem Content="Dosya" Tag="FILE"/><ComboBoxItem Content="TCP Server" Tag="TCP_SERVER"/><ComboBoxItem Content="TCP Client" Tag="TCP_CLIENT"/><ComboBoxItem Content="Serial / COM" Tag="SERIAL"/></ComboBox></StackPanel>
