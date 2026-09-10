@@ -1,0 +1,49 @@
+version: '1.9.0.{build}'
+
+image: Visual Studio 2022
+
+branches:
+  only:
+    - codex/pdks-desktop-1.8.1-device-final-20260907
+
+skip_tags: true
+clone_depth: 50
+
+init:
+  - ps: git config --global core.autocrlf false
+
+install:
+  - ps: Install-Product node 22 x64
+  - ps: |
+      Write-Host "Node:" (node --version)
+      Write-Host "npm :" (npm --version)
+      Write-Host ".NET:" (dotnet --version)
+      $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+      if (-not (Test-Path $iscc)) {
+        choco install innosetup -y --no-progress
+      }
+      if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 bulunamadı.' }
+
+build_script:
+  - ps: |
+      $ErrorActionPreference = 'Stop'
+      Set-ExecutionPolicy Bypass -Scope Process -Force
+      .\APP\desktop\ky-pdks\BUILD_PDKS_PRO_SETUP.ps1
+
+on_success:
+  - ps: |
+      $dir = Join-Path $env:APPVEYOR_BUILD_FOLDER 'APP\desktop\ky-pdks\dist-pdks\setup'
+      $setup = Join-Path $dir 'KY-PDKS-Pro-Setup-1.9.0.exe'
+      $sha = "$setup.sha256.txt"
+      $info = Join-Path $dir 'build-info-pdks.json'
+      if (-not (Test-Path $setup)) { throw 'Final PDKS Setup bulunamadı.' }
+      if ((Get-Item $setup).Length -lt 5MB) { throw 'Final PDKS Setup beklenenden küçük.' }
+      if (-not (Test-Path $sha)) { throw 'SHA256 dosyası bulunamadı.' }
+      if (-not (Test-Path $info)) { throw 'build-info-pdks.json bulunamadı.' }
+      Push-AppveyorArtifact $setup -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe'
+      Push-AppveyorArtifact $sha -FileName 'KY-PDKS-Pro-Setup-1.9.0.exe.sha256.txt'
+      Push-AppveyorArtifact $info -FileName 'build-info-pdks.json'
+
+test: off
+
+deploy: off
