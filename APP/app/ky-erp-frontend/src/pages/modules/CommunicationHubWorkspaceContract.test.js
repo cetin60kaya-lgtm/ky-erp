@@ -124,7 +124,8 @@ test("mail preview supports browser-native audio and video in addition to image 
 
 test("mail regex escape helper stays syntactically intact", () => {
   assert.match(page, /function regexEscape\(value\)/);
-  assert.match(page, /replace\(\/\[\.\*\+\?\^\$\{\}\(\)\|\[\\\]\\\\\]\/g, "\\\\$&"\)/);
+  const expected = 'return String(value || "").replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");';
+  assert.ok(page.includes(expected));
   assert.doesNotMatch(page, /\\function regexEscape/);
 });
 
@@ -151,7 +152,7 @@ test("trash and spam are visually excluded from unread badges and unsafe delete 
   assert.match(page, /selectedFolderCountsUnread/);
   assert.match(page, /!selectedFolderIsTrash && !selectedFolderIsJunk/);
   assert.match(page, /\["TRASH","JUNK"\]\.includes\(folderType\(folder\)\)/);
-  assert.match(page, /!selectedFolderIsTrash \? <button[^>]+messageAction\("DELETE"\)/);
+  assert.match(page, /!selectedFolderIsTrash \? <button[\s\S]{0,180}runContextAction\("DELETE"\)/);
 });
 
 
