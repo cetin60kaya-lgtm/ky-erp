@@ -206,6 +206,17 @@ export async function listBoyahaneProducts(company, params = {}) {
   return arrayOrDemo(data, DEMO_PRODUCTS);
 }
 
+export async function setBoyahaneProductLotPolicy(company, id, lotPolicy) {
+  const policy = String(lotPolicy || "").toUpperCase();
+  return unwrap(
+    await apiPatch(
+      `/e-belge/products/${encodeURIComponent(id)}/lot-policy`,
+      companyParams(company, { lotPolicy: policy }),
+    ),
+    null,
+  );
+}
+
 export async function createBoyahaneProduct(company, body) {
   const approvalStatus = body?.approvalStatus || "REVIEW_REQUIRED";
   const created = unwrap(
@@ -215,11 +226,24 @@ export async function createBoyahaneProduct(company, body) {
     ),
     null,
   );
-  if (!created?.id || created.approvalStatus === approvalStatus) return created;
-  return updateBoyahaneProduct(company, created.id, {
-    approvalStatus,
-    approvedAt: approvalStatus === "APPROVED" ? new Date().toISOString() : null,
-  });
+  if (!created?.id) return created;
+
+  let result = created;
+  if (created.approvalStatus !== approvalStatus) {
+    result = await updateBoyahaneProduct(company, created.id, {
+      approvalStatus,
+      approvedAt: approvalStatus === "APPROVED" ? new Date().toISOString() : null,
+    });
+  }
+  if (body?.lotPolicy) {
+    await setBoyahaneProductLotPolicy(company, created.id, body.lotPolicy);
+    result = {
+      ...result,
+      lotPolicy: String(body.lotPolicy).toUpperCase(),
+      lotRequired: String(body.lotPolicy).toUpperCase() === "REQUIRED",
+    };
+  }
+  return result;
 }
 
 export async function updateBoyahaneProduct(company, id, body) {
@@ -248,6 +272,16 @@ export async function getBoyahaneStockSummary(company) {
             row.lots?.length ||
             row.movements?.length),
       ),
+  );
+}
+
+export async function getBoyahaneLotMonthlyReport(company, month) {
+  return unwrap(
+    await apiGet(
+      "/boyahane/reports/lot-monthly",
+      companyParams(company, month ? { month } : {}),
+    ),
+    { month: month || "", totals: {}, products: [], lots: [], depletedLots: [], generalExpenses: [], warnings: [] },
   );
 }
 
@@ -283,9 +317,20 @@ export async function createBoyahaneWorkflowLot(company, body) {
 }
 
 export async function createBoyahaneLotMovement(company, id, body) {
+  const reason = body?.reason || body?.movementType || body?.type;
   return unwrap(
     await apiPost(
-      `/boyahane/workflow/lots/${encodeURIComponent(id)}/movements`,
+      `/boyahane/workflow/lots/${encodeURIComponent(id)}/movements-v2`,
+      companyParams(company, { ...body, reason }),
+    ),
+    null,
+  );
+}
+
+export async function reverseBoyahaneLotMovement(company, lotId, movementId, body = {}) {
+  return unwrap(
+    await apiPost(
+      `/boyahane/workflow/lots/${encodeURIComponent(lotId)}/movements-v2/${encodeURIComponent(movementId)}/reverse`,
       companyParams(company, body),
     ),
     null,
