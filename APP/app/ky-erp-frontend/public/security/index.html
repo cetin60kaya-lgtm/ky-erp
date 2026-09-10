@@ -4,11 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#10284d" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
+  <meta name="format-detection" content="telephone=no" />
   <link rel="manifest" href="/security/manifest.webmanifest" />
   <link rel="icon" href="/security/kyerp-security-icon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/security/kyerp-security-apple-touch.png" />
   <link rel="stylesheet" href="/security/app.css" />
   <title>KY ERP Güvenlik</title>
 </head>
@@ -36,8 +39,8 @@
         <span>Chrome veya Edge bu cihazda uygulama kurulumunu destekliyorsa yukarıdaki düğme Android'in kendi yükleme penceresini açar.</span>
       </div>
       <div id="iosInstallNote" class="note hidden">
-        <b>iPhone / iPad kurulumu</b>
-        <span>Apple doğrudan web yükleme düğmesine izin vermez: Safari → Paylaş → Ana Ekrana Ekle → Ekle. Sonra KY Güvenlik ikonundan açın.</span>
+        <b>iPhone / iPad · Safari kurulumu</b>
+        <span>Safari ile açın → Paylaş → Ana Ekrana Ekle → Ekle. Ardından ana ekrandaki KY Güvenlik ikonundan açın. Bildirim izni uygulama içindeki Kur / Yenile düğmesine dokunduğunuzda iPhone tarafından istenir.</span>
       </div>
     </section>
 
@@ -134,9 +137,10 @@
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <footer class="security-footer">
-      <span>KY Güvenlik · Ayrı uygulama · Tek bildirim · Giriş kodu</span>
+      <span>KY Güvenlik · Android · iPhone Safari · Tek bildirim · Giriş kodu</span>
     </footer>
   </main>
+  <script src="/security/ios-safari.js"></script>
   <script type="module" src="/security/app.js"></script>
 </body>
 </html>

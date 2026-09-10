@@ -1,5 +1,5 @@
 const APP_URL="/security/?open=1";
-const CACHE_NAME="kyerp-security-shell-v7";
+const CACHE_NAME="kyerp-security-shell-v8";
 const ICON="/security/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -41,7 +41,17 @@ async function focusOrOpen(){
 self.addEventListener("install",(event)=>event.waitUntil((async()=>{
   await self.skipWaiting();
   const cache=await caches.open(CACHE_NAME);
-  await cache.addAll(["/security/","/security/app.js","/security/app.css","/security/manifest.webmanifest",ICON]);
+  await cache.addAll([
+    "/security/",
+    "/security/app.js",
+    "/security/ios-safari.js",
+    "/security/app.css",
+    "/security/manifest.webmanifest",
+    "/security/kyerp-security-apple-touch.png",
+    "/security/kyerp-security-192.png",
+    "/security/kyerp-security-512.png",
+    ICON
+  ]);
 })()));
 
 self.addEventListener("activate",(event)=>event.waitUntil((async()=>{
