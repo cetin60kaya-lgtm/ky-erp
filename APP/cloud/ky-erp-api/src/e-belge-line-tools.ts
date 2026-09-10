@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { requiredLotCoverageComplete } from "./accounting-lot-allocation";
 import { resolveProductLotPolicy } from "./accounting-lot-reconciliation-core";
+import { registerBoyahaneLotMovementV2Routes } from "./boyahane-lot-movement-v2";
 import { registerBoyahaneLotReportingRoutes } from "./boyahane-lot-reporting";
 import { registerEBelgeLotToolRoutes } from "./e-belge-lot-tools";
 import {
@@ -35,6 +36,7 @@ async function resolveIfClean(c:Context<AppEnv>,slug:string,documentId:string){
 export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
   registerEBelgeLotToolRoutes(app);
   registerBoyahaneLotReportingRoutes(app);
+  registerBoyahaneLotMovementV2Routes(app);
 
   app.get("/api/e-belge/products",async c=>{
     const slug=slugOf(c),q=text(c.req.query("q"));
