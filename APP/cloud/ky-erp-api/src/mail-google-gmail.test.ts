@@ -42,8 +42,10 @@ test("Hakan Emprime mailbox presets are canonical and department-safe",()=>{
 test("worker source no longer contains the literal escaped import regression",()=>{
   const main=read("./main.ts");
   const wrangler=read("../wrangler.jsonc");
+  const securityEntry=read("./main-entry-security.ts");
   assert.doesNotMatch(main,/;\\nimport \{ ensureMailCommunicationCore0050/);
-  assert.match(wrangler,/"main": "src\/main-entry-mail\.ts"/);
+  assert.match(wrangler,/"main": "src\/main-entry-security\.ts"/);
+  assert.match(securityEntry,/import base from "\.\/main-entry-mail"/);
 });
 
 
@@ -192,7 +194,6 @@ test("Gmail partial sync keeps successful mail data usable instead of surfacing 
   assert.doesNotMatch(gmail,/ok:!partial,data:\{accountId:account\.id/);
 });
 
-
 test("Gmail keeps inline body.data parts retrievable without storing raw image content",()=> {
   const gmail=read("./mail-google-gmail.ts");
   assert.match(gmail,/inlineData=text\(part\?\.body\?\.data\)/);
@@ -216,7 +217,6 @@ test("Gmail folder sync supports a lightweight background mode",()=>{
   assert.match(gmail,/maxResults=quick\?20:100/);
   assert.match(gmail,/quick,maxResults/);
 });
-
 
 test("Gmail delete is idempotent and posts explicit JSON to the trash endpoint",()=>{
   const gmail=read("./mail-google-gmail.ts");
