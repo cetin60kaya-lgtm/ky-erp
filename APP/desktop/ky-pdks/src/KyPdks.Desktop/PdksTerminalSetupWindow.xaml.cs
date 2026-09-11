@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using KyPdks.Shared;
@@ -44,14 +44,15 @@ public partial class PdksTerminalSetupWindow : Window
         TcpHostBox.Text = config.TcpHost;
         TcpPortBox.Text = config.TcpPort.ToString(CultureInfo.InvariantCulture);
         CommKeyBox.Text = config.CommKey.ToString(CultureInfo.InvariantCulture);
-        HedefReadBox.Text = config.HedefReadFile;
-        HedefWriteBox.Text = config.HedefWriteFile;
+        var directMode = config.NormalizedMode == "FP_CLOCK_DIRECT";
+        HedefReadBox.Text = directMode ? "" : config.HedefReadFile;
+        HedefWriteBox.Text = directMode ? "" : config.HedefWriteFile;
         SerialPortBox.Text = config.SerialPort;
         SerialBaudBox.Text = config.SerialBaud.ToString(CultureInfo.InvariantCulture);
         ScanIntervalBox.Text = config.ScanIntervalMs.ToString(CultureInfo.InvariantCulture);
         SyncIntervalBox.Text = config.SyncIntervalSeconds.ToString(CultureInfo.InvariantCulture);
         AutoSyncCheck.IsChecked = config.AutoSync;
-        FileImportCheck.IsChecked = config.FileImportEnabled;
+        FileImportCheck.IsChecked = directMode ? false : config.FileImportEnabled;
         PcClockText.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.GetCultureInfo("tr-TR"));
     }
 
@@ -72,8 +73,8 @@ public partial class PdksTerminalSetupWindow : Window
         ScanIntervalBox.Text = "1000";
         SyncIntervalBox.Text = "30";
         AutoSyncCheck.IsChecked = true;
-        FileImportCheck.IsChecked = true;
-        StatusText.Text = "İşyeri Hedef500 profili yüklendi · tek terminal giriş/çıkış için AUTO. Ayrı terminaller varsa GİRİŞ/ÇIKIŞ seçin. Kaydetmeden önce bağlantıyı test edin.";
+        FileImportCheck.IsChecked = false;
+        StatusText.Text = "Doğrudan FP_CLOCK profili yüklendi · 192.168.1.224:5005 · cihaz 1 · Hedef500/TXT kullanılmaz. Kaydetmeden önce bağlantıyı test edin.";
     }
 
     private void FileProfile_Click(object sender, RoutedEventArgs e)
@@ -144,10 +145,17 @@ public partial class PdksTerminalSetupWindow : Window
                         var root = doc.RootElement;
                         var connected = root.TryGetProperty("connected", out var c) && c.GetBoolean();
                         var deviceTime = root.TryGetProperty("deviceTime", out var dt) ? dt.GetString() ?? "" : "";
+                        var serial = root.TryGetProperty("serialNumber", out var sn) ? sn.GetString() ?? "" : "";
+                        var product = root.TryGetProperty("productCode", out var pc) ? pc.GetString() ?? "" : "";
+                        var offset = root.TryGetProperty("clockOffsetMinutes", out var of) && of.TryGetInt32(out var om) ? om : 0;
                         var users = root.TryGetProperty("userCount", out var u) ? u.GetInt32() : -1;
                         var cards = root.TryGetProperty("cardCount", out var ca) ? ca.GetInt32() : -1;
                         var logs = root.TryGetProperty("timeLogCount", out var lg) ? lg.GetInt32() : -1;
-                        FileProbeText.Text = connected ? $"FP_CLOCK bağlı · saat {deviceTime} · kullanıcı {users} · kart {cards} · log {logs}" : "FP_CLOCK bridge bağlantı bekliyor.";
+                        var lastPunch = root.TryGetProperty("lastPunch", out var lp) ? lp.GetString() ?? "" : "";
+                        var bridgeError = root.TryGetProperty("error", out var er) ? er.GetString() ?? "" : "";
+                        FileProbeText.Text = connected
+                            ? $"FP_CLOCK bağlı · saat {deviceTime} · PC farkı ~{offset} dk · seri {serial} · ürün {product} · kullanıcı {users} · kart {cards} · giriş/çıkış log {logs}" + (string.IsNullOrWhiteSpace(lastPunch) ? "" : $" · son kart {lastPunch}")
+                            : $"FP_CLOCK bridge bağlantı bekliyor · {bridgeError}";
                     }
                     catch { FileProbeText.Text = "FP_CLOCK bridge durum dosyası okunamadı."; }
                 }
@@ -196,6 +204,12 @@ public partial class PdksTerminalSetupWindow : Window
         config.SyncIntervalSeconds = syncSeconds;
         config.AutoSync = AutoSyncCheck.IsChecked != false;
         config.FileImportEnabled = FileImportCheck.IsChecked != false;
+        if (config.NormalizedMode == "FP_CLOCK_DIRECT")
+        {
+            config.HedefReadFile = "";
+            config.HedefWriteFile = "";
+            config.FileImportEnabled = false;
+        }
         _store.Save(config);
         File.WriteAllText(_paths.SetupCompletedFile, DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
 

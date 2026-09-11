@@ -164,17 +164,28 @@ sealed class DirectDeviceBridgeWorker(
         var root = doc.RootElement;
         var connected = Bool(root, "connected");
         var deviceTime = Text(root, "deviceTime");
+        var pcTime = Text(root, "pcTime");
+        var serial = Text(root, "serialNumber");
+        var product = Text(root, "productCode");
+        var offsetMinutes = Number(root, "clockOffsetMinutes");
         var error = Text(root, "error");
         var users = Number(root, "userCount");
         var cards = Number(root, "cardCount");
         var logs = Number(root, "timeLogCount");
         var lastPunch = Text(root, "lastPunch");
+        var deviceInfo = root.TryGetProperty("deviceInfo", out var info) ? info.GetRawText() : "{}";
 
         var state = connected
-            ? $"FP_CLOCK bağlı · {config.TcpHost}:{config.TcpPort} · saat={deviceTime} · kullanıcı={users} · kart={cards} · cihaz log={logs}"
+            ? $"FP_CLOCK bağlı · {config.TcpHost}:{config.TcpPort} · seri={serial} · ürün={product} · saat={deviceTime} · fark={offsetMinutes} dk · kullanıcı={users} · kart={cards} · cihaz log={logs}"
             : $"FP_CLOCK bağlantı bekliyor · {error}";
         await store.TouchStateAsync("terminal_state", state, ct);
         await store.TouchStateAsync("fpclock_device_time", deviceTime, ct);
+        await store.TouchStateAsync("fpclock_pc_time", pcTime, ct);
+        await store.TouchStateAsync("fpclock_clock_offset_minutes", offsetMinutes.ToString(CultureInfo.InvariantCulture), ct);
+        await store.TouchStateAsync("fpclock_serial_number", serial, ct);
+        await store.TouchStateAsync("fpclock_product_code", product, ct);
+        await store.TouchStateAsync("fpclock_device_info", deviceInfo, ct);
+        await store.TouchStateAsync("fpclock_last_error", error, ct);
         await store.TouchStateAsync("fpclock_user_count", users.ToString(CultureInfo.InvariantCulture), ct);
         await store.TouchStateAsync("fpclock_card_count", cards.ToString(CultureInfo.InvariantCulture), ct);
         await store.TouchStateAsync("fpclock_log_count", logs.ToString(CultureInfo.InvariantCulture), ct);

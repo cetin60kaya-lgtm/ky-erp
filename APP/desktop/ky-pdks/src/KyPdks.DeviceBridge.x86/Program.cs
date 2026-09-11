@@ -270,10 +270,45 @@ namespace KyPdks.DeviceBridge
             catch { return ""; }
         }
 
+        private string ReadStringRef(string methodName)
+        {
+            try
+            {
+                object[] a = { _o.DeviceNo, "" };
+                var pm = new ParameterModifier(2); pm[1] = true;
+                object ret = _type.InvokeMember(methodName, BindingFlags.InvokeMethod, null, _com, a, new[] { pm }, CultureInfo.InvariantCulture, null);
+                return AsBool(ret) ? Convert.ToString(a[1], CultureInfo.InvariantCulture) ?? "" : "";
+            }
+            catch { return ""; }
+        }
+
+        private Dictionary<string, int> ReadDeviceInfo()
+        {
+            var result = new Dictionary<string, int>();
+            for (int code = 1; code <= 10; code++)
+            {
+                try
+                {
+                    object[] a = { _o.DeviceNo, code, 0 };
+                    var pm = new ParameterModifier(3); pm[2] = true;
+                    object ret = _type.InvokeMember("GetDeviceInfo", BindingFlags.InvokeMethod, null, _com, a, new[] { pm }, CultureInfo.InvariantCulture, null);
+                    if (AsBool(ret)) result[code.ToString(CultureInfo.InvariantCulture)] = I(a[2]);
+                }
+                catch { }
+            }
+            return result;
+        }
+
+        private static int ClockOffsetMinutes(string deviceTime)
+        {
+            if (!DateTime.TryParseExact(deviceTime ?? "", "yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var value)) return 0;
+            return (int)Math.Round((value - DateTime.Now).TotalMinutes, MidpointRounding.AwayFromZero);
+        }
+
         private Dictionary<string, int> ReadCounters()
         {
             var result = new Dictionary<string, int>();
-            for (int code = 1; code <= 7; code++)
+            for (int code = 1; code <= 8; code++)
             {
                 try
                 {
@@ -306,12 +341,17 @@ namespace KyPdks.DeviceBridge
                 port = _o.Port,
                 deviceNo = _o.DeviceNo,
                 deviceTime = deviceTime ?? "",
+                pcTime = DateTimeOffset.Now.ToString("O"),
+                clockOffsetMinutes = ClockOffsetMinutes(deviceTime),
+                serialNumber = connected ? ReadStringRef("GetSerialNumber") : "",
+                productCode = connected ? ReadStringRef("GetProductCode") : "",
+                deviceInfo = connected ? ReadDeviceInfo() : new Dictionary<string, int>(),
                 managerCount = Counter(counters, 1),
                 userCount = Counter(counters, 2),
                 fingerprintCount = Counter(counters, 3),
                 passwordCount = Counter(counters, 4),
                 managementLogCount = Counter(counters, 5),
-                timeLogCount = Counter(counters, 6),
+                timeLogCount = Counter(counters, 8),
                 cardCount = Counter(counters, 7),
                 lastPunch = _lastPunch,
                 error = error ?? "",
