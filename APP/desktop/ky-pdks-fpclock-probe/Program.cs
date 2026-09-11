@@ -6,9 +6,9 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace KyPdksFpClockProbe
 {
@@ -25,51 +25,45 @@ namespace KyPdksFpClockProbe
 
     internal sealed class ProbeForm : Form
     {
-        private readonly TextBox _ocx = new TextBox { Width = 520, Text = @"C:\Hedef500\Terminal Bilgi Aktar\support\FP_CLOCK.ocx" };
         private readonly TextBox _ip = new TextBox { Width = 125, Text = "192.168.1.224" };
         private readonly NumericUpDown _port = new NumericUpDown { Minimum = 1, Maximum = 65535, Value = 5005, Width = 78 };
         private readonly NumericUpDown _dn = new NumericUpDown { Minimum = 1, Maximum = 255, Value = 1, Width = 60 };
         private readonly NumericUpDown _key = new NumericUpDown { Minimum = 0, Maximum = 99999999, Value = 0, Width = 90 };
-        private readonly Button _run = new Button { Text = "FP_CLOCK İLE CİHAZI OKU", AutoSize = true, Height = 34 };
+        private readonly Button _run = new Button { Text = "FP_CLOCK İLE CİHAZI BUL VE OKU", AutoSize = true, Height = 34 };
         private readonly Label _state = new Label { Text = "Hazır", AutoSize = true, Padding = new Padding(8, 8, 0, 0) };
         private readonly TextBox _log = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false, Dock = DockStyle.Fill, Font = new System.Drawing.Font("Consolas", 9.5f) };
         private readonly StringBuilder _report = new StringBuilder();
 
         public ProbeForm()
         {
-            Text = "KY PDKS · FP_CLOCK Doğrudan Cihaz Okuma Testi";
+            Text = "KY PDKS · FP_CLOCK Doğrudan Cihaz Okuma Testi v2";
             Width = 1040;
-            Height = 700;
+            Height = 690;
             StartPosition = FormStartPosition.CenterScreen;
 
-            var row1 = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8), WrapContents = false };
-            row1.Controls.Add(new Label { Text = "FP_CLOCK.ocx", AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
-            row1.Controls.Add(_ocx);
-
-            var row2 = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 50, Padding = new Padding(8), WrapContents = false };
-            row2.Controls.Add(new Label { Text = "IP", AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
-            row2.Controls.Add(_ip);
-            row2.Controls.Add(new Label { Text = "Port", AutoSize = true, Padding = new Padding(8, 7, 0, 0) });
-            row2.Controls.Add(_port);
-            row2.Controls.Add(new Label { Text = "Cihaz No", AutoSize = true, Padding = new Padding(8, 7, 0, 0) });
-            row2.Controls.Add(_dn);
-            row2.Controls.Add(new Label { Text = "Comm Key", AutoSize = true, Padding = new Padding(8, 7, 0, 0) });
-            row2.Controls.Add(_key);
-            row2.Controls.Add(_run);
-            row2.Controls.Add(_state);
+            var row = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(8), WrapContents = false };
+            row.Controls.Add(new Label { Text = "IP", AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
+            row.Controls.Add(_ip);
+            row.Controls.Add(new Label { Text = "Port", AutoSize = true, Padding = new Padding(8, 7, 0, 0) });
+            row.Controls.Add(_port);
+            row.Controls.Add(new Label { Text = "Cihaz No", AutoSize = true, Padding = new Padding(8, 7, 0, 0) });
+            row.Controls.Add(_dn);
+            row.Controls.Add(new Label { Text = "Comm Key", AutoSize = true, Padding = new Padding(8, 7, 0, 0) });
+            row.Controls.Add(_key);
+            row.Controls.Add(_run);
+            row.Controls.Add(_state);
 
             var note = new Label
             {
                 Dock = DockStyle.Top,
-                Height = 55,
+                Height = 72,
                 Padding = new Padding(10, 5, 10, 5),
-                Text = "SALT OKUMA TESTİ: Hedef500/TXT köprüsü kullanılmaz. Cihaz saati, durum ve cihaz bilgileri okunur. Saat ayarlama, zil, kapı, kullanıcı silme, log silme veya yeniden başlatma komutu gönderilmez."
+                Text = "SALT OKUMA TESTİ. Sabit OCX yolu kullanılmaz. Önce çalışan Hedef/Terminal Bilgi Aktar prosesindeki yüklü FP_CLOCK.ocx modülünü, sonra 32-bit COM kayıtlarını ve yaygın klasörleri otomatik bulur. Cihaz saati/durum/bilgi alanlarını okur; saat ayarlama, zil, kapı, silme veya reset komutu göndermez."
             };
 
             Controls.Add(_log);
             Controls.Add(note);
-            Controls.Add(row2);
-            Controls.Add(row1);
+            Controls.Add(row);
             _run.Click += (_, __) => RunProbe();
         }
 
@@ -90,58 +84,64 @@ namespace KyPdksFpClockProbe
             _report.Clear();
             object com = null;
             Type comType = null;
-            bool closeAttempted = false;
 
             try
             {
-                var ocxPath = _ocx.Text.Trim();
                 var ip = _ip.Text.Trim();
                 var port = (int)_port.Value;
                 var dn = (int)_dn.Value;
                 var key = (int)_key.Value;
 
-                Log("KY PDKS - FP_CLOCK DOĞRUDAN CİHAZ OKUMA TESTİ v1.0");
-                Log($"OCX: {ocxPath}");
+                Log("KY PDKS - FP_CLOCK DOĞRUDAN CİHAZ OKUMA TESTİ v2.0");
                 Log($"Hedef: {ip}:{port} · Cihaz No={dn} · Comm Key={key}");
                 Log("Hedef500 Terminal Bilgi Aktar EXE/TXT köprüsü kullanılmıyor.");
                 Log();
 
-                if (!File.Exists(ocxPath)) throw new FileNotFoundException("FP_CLOCK.ocx bulunamadı.", ocxPath);
-                var fvi = FileVersionInfo.GetVersionInfo(ocxPath);
-                Log($"FP_CLOCK.ocx bulundu · Boyut={new FileInfo(ocxPath).Length:n0} bayt · Sürüm={fvi.FileVersion ?? "?"}");
+                var loaded = FindLoadedFpClockModules();
+                foreach (var p in loaded) Log("Çalışan proses modülü: " + p);
 
-                var candidates = InspectTypeLibrary(ocxPath);
-                if (candidates.Count == 0) throw new InvalidOperationException("OCX TypeLib içinde oluşturulabilir COM sınıfı bulunamadı.");
+                var registered = FindRegisteredFpClockClasses();
+                foreach (var r in registered)
+                    Log($"32-bit COM kaydı: CLSID={r.Clsid:B} · Server={r.ServerPath ?? "?"} · ProgID={r.ProgId ?? "?"}");
 
-                foreach (var c in candidates)
-                    Log($"COM sınıfı: {c.Name} · ProgID={c.ProgId ?? "(yok)"} · CLSID={c.Guid:B} · Metot={c.Methods.Count}");
+                var files = FindFpClockFiles(loaded.Select(x => Path.GetDirectoryName(x)).Where(x => !string.IsNullOrWhiteSpace(x)));
+                foreach (var f in files) Log("FP_CLOCK.ocx dosyası: " + f);
 
-                var selected = candidates
-                    .OrderByDescending(c => c.Methods.Contains("SetIPAddress", StringComparer.OrdinalIgnoreCase) && c.Methods.Contains("OpenCommPort", StringComparer.OrdinalIgnoreCase))
-                    .ThenByDescending(c => (c.ProgId ?? "").IndexOf("FP_CLOCK", StringComparison.OrdinalIgnoreCase) >= 0)
-                    .First();
+                if (registered.Count == 0)
+                    throw new InvalidOperationException("FP_CLOCK ActiveX için 32-bit COM kaydı bulunamadı. Çalışan eski uygulama varsa açık bırakıp tekrar deneyin.");
 
-                Log();
-                Log($"Seçilen COM: {selected.Name} · {selected.Guid:B}");
-                Log("Kritik metotlar: " + string.Join(", ", selected.Methods.Where(IsInteresting).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x)));
-
-                comType = Type.GetTypeFromCLSID(selected.Guid, true);
-                com = Activator.CreateInstance(comType);
-                Log("COM nesnesi oluşturuldu.");
-
-                object setIp;
-                try
+                Exception last = null;
+                RegisteredCom selected = null;
+                foreach (var item in registered)
                 {
-                    setIp = Invoke(comType, com, "SetIPAddress", new object[] { ip, port, key }, null);
-                }
-                catch
-                {
-                    setIp = Invoke(comType, com, "SetIPAddress", new object[] { ip, port, key }, new[] { true, false, false });
-                }
-                Log("SetIPAddress taşıma hedefi sonucu: " + Format(setIp));
+                    try
+                    {
+                        comType = Type.GetTypeFromCLSID(item.Clsid, true);
+                        com = Activator.CreateInstance(comType);
+                        Log($"COM nesnesi oluşturuldu: {item.Clsid:B}");
 
-                var open = Invoke(comType, com, "OpenCommPort", new object[] { dn }, null);
-                Log("OpenCommPort ham sonucu: " + Format(open));
+                        var setArgs = new object[] { ip, port, key };
+                        object setResult = Invoke(comType, com, "SetIPAddress", setArgs, null);
+                        Log("SetIPAddress bağlantı hedefi sonucu: " + Format(setResult));
+
+                        var openArgs = new object[] { dn };
+                        object openResult = Invoke(comType, com, "OpenCommPort", openArgs, null);
+                        Log("OpenCommPort ham sonucu: " + Format(openResult));
+                        selected = item;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        last = Unwrap(ex);
+                        Log($"CLSID {item.Clsid:B} uygun değil: {last.Message}");
+                        try { if (com != null && Marshal.IsComObject(com)) Marshal.FinalReleaseComObject(com); } catch { }
+                        com = null;
+                        comType = null;
+                    }
+                }
+
+                if (selected == null)
+                    throw new InvalidOperationException("FP_CLOCK COM sınıfı bulundu ancak SetIPAddress/OpenCommPort ile oturum açılamadı. Son hata: " + (last?.Message ?? "bilinmiyor"));
 
                 Log();
                 ReadDeviceTime(comType, com, dn);
@@ -149,12 +149,12 @@ namespace KyPdksFpClockProbe
                 ReadDeviceInfo(comType, com, dn);
 
                 Log();
-                Log("SONUÇ: FP_CLOCK üzerinden cihaz okuma çağrıları tamamlandı.");
+                Log("SONUÇ: FP_CLOCK üzerinden doğrudan cihaz okuma çağrıları tamamlandı.");
                 _state.Text = "TEST TAMAMLANDI";
             }
             catch (Exception ex)
             {
-                var root = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                var root = Unwrap(ex);
                 Log();
                 Log("HATA: " + root.Message);
                 Log("Tip: " + root.GetType().FullName);
@@ -167,91 +167,86 @@ namespace KyPdksFpClockProbe
                 {
                     if (com != null && comType != null)
                     {
-                        try { Invoke(comType, com, "CloseCommPort", new object[0], null); closeAttempted = true; }
-                        catch { }
+                        try { Invoke(comType, com, "CloseCommPort", Array.Empty<object>(), null); Log("CloseCommPort çağrıldı."); } catch { }
                         if (Marshal.IsComObject(com)) Marshal.FinalReleaseComObject(com);
                     }
                 }
                 catch { }
 
-                if (closeAttempted) Log("CloseCommPort çağrıldı.");
                 var report = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "KY-PDKS-FPClock-Cihaz-Raporu.txt");
                 try { File.WriteAllText(report, _report.ToString(), new UTF8Encoding(true)); Log("Rapor: " + report); } catch { }
                 _run.Enabled = true;
             }
         }
 
-        private List<ComCandidate> InspectTypeLibrary(string path)
+        private List<string> FindLoadedFpClockModules()
         {
-            var result = new List<ComCandidate>();
-            ITypeLib lib;
-            LoadTypeLibEx(path, REGKIND.REGKIND_NONE, out lib);
-            try
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in Process.GetProcesses())
             {
-                int count = lib.GetTypeInfoCount();
-                Log($"TypeLib yüklendi · TypeInfo sayısı={count}");
-                for (int i = 0; i < count; i++)
+                try
                 {
-                    lib.GetTypeInfoType(i, out TYPEKIND kind);
-                    if (kind != TYPEKIND.TKIND_COCLASS) continue;
-                    lib.GetTypeInfo(i, out ITypeInfo ti);
-                    IntPtr pAttr = IntPtr.Zero;
-                    try
+                    var name = p.ProcessName ?? "";
+                    bool relevant = name.IndexOf("hedef", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("terminal", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (!relevant) continue;
+                    foreach (ProcessModule m in p.Modules)
                     {
-                        ti.GetTypeAttr(out pAttr);
-                        var attr = Marshal.PtrToStructure<TYPEATTR>(pAttr);
-                        ti.GetDocumentation(-1, out string name, out _, out _, out _);
-                        var methods = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        for (int impl = 0; impl < attr.cImplTypes; impl++)
-                        {
-                            try
-                            {
-                                ti.GetRefTypeOfImplType(impl, out int href);
-                                ti.GetRefTypeInfo(href, out ITypeInfo iface);
-                                CollectMethods(iface, methods);
-                            }
-                            catch { }
-                        }
-                        var progId = GetProgId(attr.guid);
-                        result.Add(new ComCandidate { Name = name ?? "COM", Guid = attr.guid, ProgId = progId, Methods = methods });
-                    }
-                    finally
-                    {
-                        if (pAttr != IntPtr.Zero) ti.ReleaseTypeAttr(pAttr);
-                        if (Marshal.IsComObject(ti)) Marshal.ReleaseComObject(ti);
+                        var f = m.FileName;
+                        if (!string.IsNullOrWhiteSpace(f) && Path.GetFileName(f).Equals("FP_CLOCK.ocx", StringComparison.OrdinalIgnoreCase))
+                            result.Add(f);
                     }
                 }
+                catch { }
             }
-            finally
+            return result.ToList();
+        }
+
+        private List<RegisteredCom> FindRegisteredFpClockClasses()
+        {
+            var result = new List<RegisteredCom>();
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.ClassesRoot, RegistryView.Registry32))
+            using (var clsids = root.OpenSubKey("CLSID"))
             {
-                if (Marshal.IsComObject(lib)) Marshal.ReleaseComObject(lib);
+                if (clsids == null) return result;
+                foreach (var sub in clsids.GetSubKeyNames())
+                {
+                    Guid g;
+                    if (!Guid.TryParse(sub, out g)) continue;
+                    try
+                    {
+                        using (var ck = clsids.OpenSubKey(sub))
+                        using (var server = ck?.OpenSubKey("InprocServer32"))
+                        {
+                            var path = Convert.ToString(server?.GetValue(null), CultureInfo.InvariantCulture);
+                            if (string.IsNullOrWhiteSpace(path) || path.IndexOf("FP_CLOCK.ocx", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            string prog = null;
+                            try { using (var pk = ck.OpenSubKey("ProgID")) prog = Convert.ToString(pk?.GetValue(null), CultureInfo.InvariantCulture); } catch { }
+                            result.Add(new RegisteredCom { Clsid = g, ServerPath = Environment.ExpandEnvironmentVariables(path.Trim('"')), ProgId = prog });
+                        }
+                    }
+                    catch { }
+                }
             }
             return result;
         }
 
-        private static void CollectMethods(ITypeInfo ti, HashSet<string> methods)
+        private List<string> FindFpClockFiles(IEnumerable<string> extraDirs)
         {
-            IntPtr pAttr = IntPtr.Zero;
-            try
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var candidates = new List<string>
             {
-                ti.GetTypeAttr(out pAttr);
-                var attr = Marshal.PtrToStructure<TYPEATTR>(pAttr);
-                for (int i = 0; i < attr.cFuncs; i++)
-                {
-                    IntPtr pFunc = IntPtr.Zero;
-                    try
-                    {
-                        ti.GetFuncDesc(i, out pFunc);
-                        var fd = Marshal.PtrToStructure<FUNCDESC>(pFunc);
-                        var names = new string[Math.Max(1, fd.cParams + 1)];
-                        ti.GetNames(fd.memid, names, names.Length, out int got);
-                        if (got > 0 && !string.IsNullOrWhiteSpace(names[0])) methods.Add(names[0]);
-                    }
-                    catch { }
-                    finally { if (pFunc != IntPtr.Zero) ti.ReleaseFuncDesc(pFunc); }
-                }
+                @"C:\Hedef500\Terminal Bilgi Aktar\support\FP_CLOCK.ocx",
+                @"C:\Hedef500\support\FP_CLOCK.ocx",
+                @"C:\Windows\SysWOW64\FP_CLOCK.ocx",
+                @"C:\Windows\System32\FP_CLOCK.ocx",
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FP_CLOCK.ocx")
+            };
+            candidates.AddRange(extraDirs.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => Path.Combine(x, "FP_CLOCK.ocx")));
+            foreach (var c in candidates)
+            {
+                try { if (File.Exists(c)) result.Add(Path.GetFullPath(c)); } catch { }
             }
-            finally { if (pAttr != IntPtr.Zero) ti.ReleaseTypeAttr(pAttr); }
+            return result.ToList();
         }
 
         private static object Invoke(Type t, object target, string name, object[] args, bool[] byRef)
@@ -272,7 +267,7 @@ namespace KyPdksFpClockProbe
             {
                 var args = new object[] { dn, 0, 0, 0, 0, 0, 0 };
                 var ret = Invoke(t, com, "GetDeviceTime", args, new[] { false, true, true, true, true, true, true });
-                Log($"GetDeviceTime: {Format(ret)} · {args[1]:D4}-{args[2]:D2}-{args[3]:D2} {args[4]:D2}:{args[5]:D2} · HaftanınGünü={args[6]}");
+                Log($"GetDeviceTime: {Format(ret)} · {args[1]}-{args[2]}-{args[3]} {args[4]}:{args[5]} · HaftanınGünü={args[6]}");
             }
             catch (Exception ex) { Log("GetDeviceTime HATA: " + Unwrap(ex).Message); }
         }
@@ -311,36 +306,12 @@ namespace KyPdksFpClockProbe
 
         private static Exception Unwrap(Exception ex) => ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
         private static string Format(object value) => value == null ? "(null)" : Convert.ToString(value, CultureInfo.InvariantCulture);
-        private static bool IsInteresting(string s)
+
+        private sealed class RegisteredCom
         {
-            var x = s.ToLowerInvariant();
-            return x.Contains("comm") || x.Contains("device") || x.Contains("ipaddress") || x.Contains("log") || x.Contains("bell") || x.Contains("door") || x.Contains("user") || x.Contains("enroll");
+            public Guid Clsid { get; set; }
+            public string ServerPath { get; set; }
+            public string ProgId { get; set; }
         }
-
-        private static string GetProgId(Guid clsid)
-        {
-            IntPtr ptr;
-            var g = clsid;
-            int hr = ProgIDFromCLSID(ref g, out ptr);
-            if (hr != 0 || ptr == IntPtr.Zero) return null;
-            try { return Marshal.PtrToStringUni(ptr); }
-            finally { Marshal.FreeCoTaskMem(ptr); }
-        }
-
-        private sealed class ComCandidate
-        {
-            public string Name;
-            public Guid Guid;
-            public string ProgId;
-            public HashSet<string> Methods;
-        }
-
-        private enum REGKIND { REGKIND_DEFAULT = 0, REGKIND_REGISTER = 1, REGKIND_NONE = 2 }
-
-        [DllImport("oleaut32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
-        private static extern void LoadTypeLibEx(string szFile, REGKIND regKind, out ITypeLib typeLib);
-
-        [DllImport("ole32.dll", CharSet = CharSet.Unicode)]
-        private static extern int ProgIDFromCLSID(ref Guid clsid, out IntPtr lplpszProgID);
     }
 }
