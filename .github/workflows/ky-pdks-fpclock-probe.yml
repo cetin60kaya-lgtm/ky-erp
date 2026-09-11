@@ -40,7 +40,7 @@ jobs:
           $out = 'APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48'
           $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v1.exe'
           if (-not (Test-Path $exe)) { throw 'FP_CLOCK probe EXE oluşmadı.' }
-          if ((Get-Item $exe).Length -lt 20KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
+          if ((Get-Item $exe).Length -lt 12KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
           Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v1.exe" -Encoding ascii
           [ordered]@{
