@@ -1,8 +1,9 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 // Provider-neutral document intelligence for scanned/image/PDF accounting documents.
 // Azure Document Intelligence v4 is the first adapter; callers consume one canonical result.
 // structured fields + line items + confidence
 import type { Context } from "hono";
+import { analyzeAccountingImageWithWorkersAi, workersAiAccountingDocumentStatus } from "./accounting-document-workers-ai.ts";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -22,18 +23,11 @@ const normalize = (v: unknown) => upper(v).replace(/İ/g,"I").normalize("NFD").r
 export function accountingDocumentIntelligenceStatus(env:any){
   const endpoint=text(env?.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || env?.KYERP_DOCINTEL_ENDPOINT).replace(/\/$/,"");
   const keyPresent=Boolean(text(env?.AZURE_DOCUMENT_INTELLIGENCE_KEY || env?.KYERP_DOCINTEL_KEY));
+  const azureConfigured=Boolean(endpoint && keyPresent),workersAi=workersAiAccountingDocumentStatus(env);
   const invoiceModel=text(env?.KYERP_DOCINTEL_INVOICE_MODEL) || "prebuilt-invoice";
   const dispatchModel=text(env?.KYERP_DOCINTEL_DISPATCH_MODEL) || "prebuilt-layout";
   const apiVersion=text(env?.KYERP_DOCINTEL_API_VERSION) || "2024-11-30";
-  return{
-    provider:"AZURE_DOCUMENT_INTELLIGENCE",
-    configured:Boolean(endpoint && keyPresent),
-    endpointConfigured:Boolean(endpoint),
-    keyConfigured:keyPresent,
-    invoiceModel,
-    dispatchModel,
-    apiVersion,
-  };
+  return{provider:azureConfigured?"AZURE_DOCUMENT_INTELLIGENCE":workersAi.configured?workersAi.provider:"NONE",configured:Boolean(azureConfigured||workersAi.configured),azureConfigured,workersAiConfigured:workersAi.configured,workersAiModel:workersAi.model,endpointConfigured:Boolean(endpoint),keyConfigured:keyPresent,invoiceModel,dispatchModel,apiVersion};
 }
 
 export function inferAccountingDocumentKind(rawText: unknown, requestedKind = "AUTO") {
@@ -268,69 +262,39 @@ export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, 
   if(!file.size)throw Object.assign(new Error("Belge dosyası boş."),{code:"EMPTY_DOCUMENT"});
   if(file.size>40_000_000)throw Object.assign(new Error("Belge dosyası 40 MB sınırını aşıyor."),{code:"DOCUMENT_TOO_LARGE"});
 
-  const requested=upper(documentKind)||"AUTO",env=c.env as any;
+  const requested=upper(documentKind)||"AUTO",env=c.env as any,readiness=accountingDocumentIntelligenceStatus(env);
+  if(!readiness.configured)throw Object.assign(new Error("Belge yapay zeka servisi yapılandırılmamış."),{code:"DOCINTEL_NOT_CONFIGURED",detail:{provider:readiness.provider,endpointConfigured:readiness.endpointConfigured,keyConfigured:readiness.keyConfigured,workersAiConfigured:readiness.workersAiConfigured}});
+  const useAzure=readiness.azureConfigured===true;
   let resolvedKind=inferAccountingDocumentKind("",requested),first:Row,autoLayout:Row|null=null;
 
-  if(requested==="AUTO"){
+  if(useAzure&&requested==="AUTO"){
     autoLayout=await azureAnalyze(c,file,"IRSALIYE");
     resolvedKind=inferAccountingDocumentKind(autoLayout.rawText,"AUTO");
-    if(resolvedKind==="FATURA"){
-      try{first=await azureAnalyze(c,file,"FATURA")}
-      catch{first={...autoLayout,autoInvoiceRefineFailed:true}}
-    }else first=autoLayout;
+    if(resolvedKind==="FATURA"){try{first=await azureAnalyze(c,file,"FATURA")}catch{first={...autoLayout,autoInvoiceRefineFailed:true}}}else first=autoLayout;
     first={...first,inferredDocumentKind:resolvedKind,autoDetected:true,autoDetectionSource:"OCR_TEXT"};
-  }else first=await azureAnalyze(c,file,resolvedKind);
+  }else if(useAzure){
+    first=await azureAnalyze(c,file,resolvedKind);
+  }else{
+    first=await analyzeAccountingImageWithWorkersAi(c,file,requested);
+    resolvedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(text(first.inferredDocumentKind))?"IRSALIYE":"FATURA";
+    first={...first,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",autoDetectionSource:"WORKERS_AI_VISION"};
+  }
 
   const profile=await extractionProfile(c,text(first.partyTaxNo),text(first.partyName),resolvedKind);
   const customModel=text(profile?.provider_model_id),threshold=num(profile?.min_confidence)||num(env.KYERP_DOCINTEL_REVIEW_THRESHOLD)||0.75;
   let candidate:Row={...first,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",profileId:profile?.id||null,profileThreshold:threshold};
 
-  if(customModel&&upper(profile?.provider_type)==="AZURE_DOCUMENT_INTELLIGENCE"){
-    try{
-      const refined=await azureAnalyze(c,file,resolvedKind,customModel);
-      await c.env.DB.prepare(`UPDATE accounting_extraction_profiles SET successful_samples=successful_samples+1,last_used_at=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(new Date().toISOString(),new Date().toISOString(),profile.id,slugOf(c)).run();
-      candidate={...refined,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};
-    }catch{
-      candidate={...candidate,customModelFallbackUsed:true};
-    }
+  if(useAzure&&customModel&&upper(profile?.provider_type)==="AZURE_DOCUMENT_INTELLIGENCE"){
+    try{const refined=await azureAnalyze(c,file,resolvedKind,customModel);await c.env.DB.prepare(`UPDATE accounting_extraction_profiles SET successful_samples=successful_samples+1,last_used_at=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(new Date().toISOString(),new Date().toISOString(),profile.id,slugOf(c)).run();candidate={...refined,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};}catch{candidate={...candidate,customModelFallbackUsed:true}}
   }
 
   const missingCritical=!text(candidate.documentNo)||!text(candidate.issueDate)||num(candidate.payableTotal)<=0||!Array.isArray(candidate.lines)||candidate.lines.length===0;
-  const lowConfidence=num(candidate.extractionConfidence)<threshold;
-  const shouldFallback=lowConfidence||missingCritical;
+  const lowConfidence=num(candidate.extractionConfidence)<threshold,shouldFallback=lowConfidence||missingCritical;
   let secondary:Row|null=null;
-
-  if(shouldFallback&&autoLayout&&candidate.extractorModel!==autoLayout.extractorModel)secondary=autoLayout;
-
-  if(shouldFallback&&!secondary){
-    const configuredSecondary=text(env.KYERP_DOCINTEL_SECONDARY_MODEL);
-    const defaultSecondary=resolvedKind==="FATURA"?(text(env.KYERP_DOCINTEL_DISPATCH_MODEL)||"prebuilt-layout"):"";
-    const secondaryModel=configuredSecondary||defaultSecondary;
-    if(secondaryModel&&secondaryModel!==text(candidate.extractorModel)){
-      try{secondary=await azureAnalyze(c,file,resolvedKind,secondaryModel)}
-      catch(error:any){candidate={...candidate,secondaryFallbackFailed:true,secondaryFallbackError:text(error?.code)||"DOCINTEL_SECONDARY_FAILED"}}
-    }
-  }
-
-  if(secondary){
-    candidate={
-      ...selectAccountingExtraction(candidate,secondary),
-      inferredDocumentKind:resolvedKind,
-      autoDetected:requested==="AUTO",
-      secondaryFallbackModel:text(secondary.extractorModel),
-    };
-  }
+  if(useAzure&&shouldFallback&&autoLayout&&candidate.extractorModel!==autoLayout.extractorModel)secondary=autoLayout;
+  if(useAzure&&shouldFallback&&!secondary){const configuredSecondary=text(env.KYERP_DOCINTEL_SECONDARY_MODEL),defaultSecondary=resolvedKind==="FATURA"?(text(env.KYERP_DOCINTEL_DISPATCH_MODEL)||"prebuilt-layout"):"",secondaryModel=configuredSecondary||defaultSecondary;if(secondaryModel&&secondaryModel!==text(candidate.extractorModel)){try{secondary=await azureAnalyze(c,file,resolvedKind,secondaryModel)}catch(error:any){candidate={...candidate,secondaryFallbackFailed:true,secondaryFallbackError:text(error?.code)||"DOCINTEL_SECONDARY_FAILED"}}}}
+  if(secondary)candidate={...selectAccountingExtraction(candidate,secondary),inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",secondaryFallbackModel:text(secondary.extractorModel)};
 
   const finalScore=scoreAccountingExtraction(candidate);
-  return{
-    ...candidate,
-    extractionQualityScore:finalScore,
-    lowConfidence:lowConfidence||finalScore<70,
-    needsManualReview:Boolean(candidate.needsManualReview||missingCritical||finalScore<60),
-    manualReviewReasons:[
-      ...(missingCritical?["CRITICAL_FIELDS_MISSING"]:[]),
-      ...(finalScore<60?["EXTRACTION_QUALITY_LOW"]:[]),
-      ...((candidate.extractionDiscrepancies||[]).filter((item:any)=>item.severity==="ERROR").map((item:any)=>item.code)),
-    ],
-  };
+  return{...candidate,extractionQualityScore:finalScore,lowConfidence:lowConfidence||finalScore<70,needsManualReview:Boolean(candidate.needsManualReview||missingCritical||finalScore<60),manualReviewReasons:[...(missingCritical?["CRITICAL_FIELDS_MISSING"]:[]),...(finalScore<60?["EXTRACTION_QUALITY_LOW"]:[]),...((candidate.extractionDiscrepancies||[]).filter((item:any)=>item.severity==="ERROR").map((item:any)=>item.code))]};
 }
