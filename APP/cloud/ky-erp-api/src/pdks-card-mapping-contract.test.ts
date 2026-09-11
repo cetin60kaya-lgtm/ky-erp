@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const mapping = readFileSync(resolve(here, "ik-pdks-card-mapping.ts"), "utf8");
 const bridge = readFileSync(resolve(here, "ik-pdks-card-bridge.ts"), "utf8");
 const device = readFileSync(resolve(here, "ik-pdks-device.ts"), "utf8");
+const guard = readFileSync(resolve(here, "ik-pdks-guard.ts"), "utf8");
 
 const expected = [
   ["00001", "ADEM YAZER"], ["00002", "AHMET KURT"], ["00003", "AYŞE ÖKSÜZ"], ["00004", "ÇETİN KAYA"],
@@ -24,12 +25,19 @@ test("terminal card numbers stay separate from HKN personnel codes", () => {
   assert.doesNotMatch(mapping, /UPDATE\s+hr_monthly_employees\s+SET\s+code/i);
 });
 
-test("card mapping API is tenant guarded and idempotent", () => {
+test("card mapping routes are registered behind the PDKS guard", () => {
+  assert.match(guard, /import \{ registerIkPdksCardMappingRoutes \} from "\.\/ik-pdks-card-mapping"/);
+  assert.match(guard, /registerIkPdksCardMappingRoutes\(app\)/);
   assert.match(bridge, /registerIkPdksCardMappingRoutes\(app\)/);
   assert.match(mapping, /card-mappings\/apply-initial/);
   assert.match(mapping, /ik_pdks_card_mapping_migrations/);
   assert.match(mapping, /INITIAL_VERSION/);
-  assert.match(mapping, /conflictCleared/);
+});
+
+test("duplicate terminal card never steals another employee mapping", () => {
+  assert.match(mapping, /PDKS_CARD_ALREADY_ASSIGNED/);
+  assert.match(mapping, /if \(result\.conflict\)/);
+  assert.doesNotMatch(mapping, /UPDATE ik_person_card_settings SET card_no=''[^;]*employee_id<>\?/s);
 });
 
 test("device import resolves terminal punches from canonical card_no", () => {
