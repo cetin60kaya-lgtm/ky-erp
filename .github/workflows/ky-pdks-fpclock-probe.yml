@@ -38,18 +38,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $out = 'APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48'
-          $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v1.exe'
+          $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v3.exe'
           if (-not (Test-Path $exe)) { throw 'FP_CLOCK probe EXE oluşmadı.' }
           if ((Get-Item $exe).Length -lt 12KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v1.exe" -Encoding ascii
+          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v3.exe" -Encoding ascii
           [ordered]@{
             product = 'KY PDKS FP_CLOCK Direct Device Probe'
-            version = '1.0.0'
+            version = '3.0.0'
             architecture = 'x86'
             target = '.NET Framework 4.8'
-            mode = 'READ_ONLY'
-            ocx = 'C:\Hedef500\Terminal Bilgi Aktar\support\FP_CLOCK.ocx'
+            mode = 'READ_ONLY_REGISTRATION_FREE'
+            discovery = 'running Hedef/Terminal process + Hedef500 roots + fixed-drive smart scan'
             host = '192.168.1.224'
             port = 5005
             deviceNo = 1
@@ -61,10 +61,10 @@ jobs:
       - name: Upload probe artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-FPClock-Cihaz-Testi-v1
+          name: KY-PDKS-FPClock-Cihaz-Testi-v3
           path: |
-            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v1.exe
-            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v1.exe.sha256.txt
+            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v3.exe
+            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v3.exe.sha256.txt
             APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/build-info-fpclock-probe.json
           if-no-files-found: error
           retention-days: 30
