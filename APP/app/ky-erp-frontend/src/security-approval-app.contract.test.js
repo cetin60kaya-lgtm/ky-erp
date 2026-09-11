@@ -46,7 +46,7 @@ test("security app owns signed API calls while the service worker is notificatio
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
   assert.match(sw,/showWakeNotification/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v10"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v11"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -79,7 +79,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/auth\/push\/device\/login-code/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Telefon Bağlantısını Yenile/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v10"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v11"/);
 });
 
 test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
@@ -91,7 +91,7 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(app,/appinstalled/);
   assert.match(app,/Android'e KY Güvenlik'i Yükle/);
   assert.match(html,/id="iosInstallNote"/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v10"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v11"/);
 });
 
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
@@ -129,7 +129,7 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
   assert.match(manifest,/\/security\/kyerp-security-icon\.svg/);
-  assert.match(sw,/kyerp-security-shell-v10/);
+  assert.match(sw,/kyerp-security-shell-v11/);
 });
 
 test("security app never renders a blank approvals screen on connection failure",()=>{
@@ -143,6 +143,18 @@ test("security app never renders a blank approvals screen on connection failure"
 test("security app does not navigate into the main ERP application",()=>{
   assert.doesNotMatch(html,/href="\/"[^>]*>Ana KY ERP/);
   assert.match(html,/KY Güvenlik · Android · iPhone Safari/);
+});
+
+test("security app shows the verified bound ERP account identity and access scope",()=>{
+  assert.match(html,/BAĞLI HESAP/);
+  assert.match(html,/id="accountEmail"/);
+  assert.match(html,/id="accountUsername"/);
+  assert.match(html,/id="accountScope"/);
+  assert.match(html,/id="accountModules"/);
+  assert.match(html,/id="accountSecurityCaps"/);
+  assert.match(app,/renderAccount\(health\.account,health\.device\|\|device\)/);
+  assert.match(app,/Bu cihaz yalnız/);
+  assert.match(app,/Muhasebe/);
 });
 
 test("security runtime files stay JavaScript-syntax valid",()=>{

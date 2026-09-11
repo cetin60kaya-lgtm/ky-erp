@@ -12,6 +12,7 @@ const els={
   refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
   readyTitle:qs("#readyTitle"),readyMark:qs("#readyMark"),apiHealth:qs("#apiHealth"),pushHealth:qs("#pushHealth"),keyHealth:qs("#keyHealth"),unlockHealth:qs("#unlockHealth"),lastSync:qs("#lastSync"),
   setupTitle:qs("#setupTitle"),setupCopy:qs("#setupCopy"),deviceSummary:qs("#deviceSummary"),pendingCount:qs("#pendingCount"),pendingList:qs("#pendingList"),tabCount:qs("#tabCount"),
+  accountPanel:qs("#accountPanel"),accountFullName:qs("#accountFullName"),accountIdentity:qs("#accountIdentity"),accountRoleBadge:qs("#accountRoleBadge"),accountEmail:qs("#accountEmail"),accountUsername:qs("#accountUsername"),accountScope:qs("#accountScope"),accountDevice:qs("#accountDevice"),accountModules:qs("#accountModules"),accountSecurityCaps:qs("#accountSecurityCaps"),accountNote:qs("#accountNote"),
   loginCodeBox:qs("#loginCodeBox"),loginCodeValue:qs("#loginCodeValue"),loginCodeCountdown:qs("#loginCodeCountdown"),generateCodeButton:qs("#generateCodeButton"),toast:qs("#toast")
 };
 
@@ -104,6 +105,12 @@ async function ensurePushSubscription(forceNew=false){
 }
 function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}
 function setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
+const ROLE_LABELS={SUPER_ADMIN:"Süper Yönetici",ADMIN:"Süper Yönetici",COMPANY_ADMIN:"Firma Sahibi",MANAGER:"Yönetici",ACCOUNTING:"Muhasebe",MUHASEBE:"Muhasebe",USER:"Kullanıcı",VIEWER:"Kullanıcı"};
+const MODULE_LABELS={ALL:"Tüm ERP",DASHBOARD:"Ana Panel",MUHASEBE:"Muhasebe",FIRMA_CARI:"Firma / Cari",BELGE_ISLEM:"Belge İşlem",KDV:"KDV",CEK_ODEME:"Çek / Ödeme",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",GUNLUK_OPERASYON:"Günlük Operasyon",ISNET:"e-Belge / İşNet",MAIL:"Mail",STORAGE_ADMIN:"Dosya / Depolama",ASISTAN:"AI Asistan",ADMIN:"Yönetim",RAPORLAR:"Raporlar"};
+const SECURITY_CAP_LABELS={LOGIN_APPROVE:"Giriş Onayı",SESSION_APPROVE:"Oturum Onayı",SESSION_VIEW:"Oturumları Gör",SESSION_CLOSE:"Oturum Kapat",AUDIT_VIEW:"Güvenlik Geçmişi"};
+function accountRoleLabel(account){const role=String(account?.role||"").toUpperCase();if(["SUPER_ADMIN","ADMIN"].includes(role))return"Süper Yönetici";if(role==="COMPANY_ADMIN")return"Firma Sahibi";if((account?.moduleKeys||[]).includes("MUHASEBE"))return"Muhasebe";return ROLE_LABELS[role]||role.replaceAll("_"," ")||"Kullanıcı"}
+function setChipList(container,values,labelMap,emptyLabel){if(!container)return;container.innerHTML="";const list=Array.isArray(values)?values.filter(Boolean):[];if(!list.length){const chip=document.createElement("span");chip.className="account-chip muted-chip";chip.textContent=emptyLabel;container.appendChild(chip);return}for(const value of list){const chip=document.createElement("span");chip.className="account-chip";chip.textContent=labelMap[value]||String(value).replaceAll("_"," ");container.appendChild(chip)}}
+function renderAccount(account,device){if(!els.accountPanel)return;const data=account&&typeof account==="object"?account:null;const label=data?accountRoleLabel(data):"Kontrol";els.accountFullName.textContent=data?.fullName||"Hesap doğrulanıyor";els.accountIdentity.textContent=data?`${label} · ERP rolü: ${String(data.role||"-").replaceAll("_"," ")}`:"Hesap bilgisi güvenli bağlantıdan alınacak.";els.accountRoleBadge.textContent=label;els.accountRoleBadge.classList.toggle("owner",String(data?.role||"").toUpperCase()==="SUPER_ADMIN");els.accountEmail.textContent=data?.email||"Tanımlı değil";els.accountUsername.textContent=data?.username||"-";els.accountScope.textContent=data?.scopeType==="SYSTEM"?"Tüm Sistem":(data?.companyName||data?.companySlug||"Kendi hesabı");els.accountDevice.textContent=device?.deviceLabel||"KY Güvenlik cihazı";setChipList(els.accountModules,data?.moduleKeys||[],MODULE_LABELS,data?.scopeType==="SYSTEM"?"Tüm ERP":"Standart erişim");setChipList(els.accountSecurityCaps,data?.securityCapabilities||[],SECURITY_CAP_LABELS,"Kendi giriş güvenliği");els.accountNote.textContent=data?.username?`Bu cihaz yalnız ${data.username} hesabına bağlıdır. Onaylar bu hesabın yetkileriyle verilir.`:"Onaylar yalnız doğrulanmış bağlı hesabın yetkileriyle verilir."}
 function showRelink(){relinkMode=true;els.setupPanel.classList.remove("hidden");els.setupTitle.textContent="Erişimi yeniden bağla";els.setupCopy.textContent="Ana KY ERP → Profil → Telefon Onayı → Erişim Yenileme Kodu Oluştur. Kodu ve mevcut KY ERP şifreni gir.";els.cancelRelinkButton.classList.remove("hidden")}
 function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden")}
 async function createSigningKey(){const generated=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);const publicJwk=await crypto.subtle.exportKey("jwk",generated.publicKey);const privateJwk=await crypto.subtle.exportKey("jwk",generated.privateKey);const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);return{publicJwk,privateKey}}
@@ -203,7 +210,7 @@ async function connectDevice(){
       throw error;
     }
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.0",savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.1",savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast(localUnlockCredentialId?"Erişim hazır. Face ID / parmak izi / PIN ile güvenli onay aktif.":"Erişim hazır. Güvenli cihaz imzası aktif.");
@@ -276,7 +283,7 @@ async function repairConnection(options={}){
     const bundle=await ensurePushSubscription(true);
     const response=await deviceFetch("/auth/push/device/refresh",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
     const data=response?.data||{};
-    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v2.0",refreshedAt:data.refreshedAt||new Date().toISOString()});
+    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v2.1",refreshedAt:data.refreshedAt||new Date().toISOString()});
     bundle.worker.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"});
     if(!automatic)toast("Bağlantı yenilendi. Bildirim ve giriş onayı yeniden hazır.");
     return true;
@@ -298,12 +305,14 @@ async function refreshState(options={}){
     els.setupPanel.classList.remove("hidden");els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");setBadge("Kurulum gerekli");return;
   }
   els.appPanel.classList.remove("hidden");els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
+  renderAccount(null,device);
   els.deviceSummary.textContent=(device.deviceLabel||"KY ERP Güvenlik cihazı")+" · Güvenli cihaz imzası aktif"+(device.localUnlockCredentialId?" · Cihaz kilidi aktif":"");
   setHealth(els.keyHealth,"Hazır","ok");setHealth(els.unlockHealth,device.localUnlockCredentialId?"Aktif":"Opsiyonel",device.localUnlockCredentialId?"ok":"");
   els.readyTitle.textContent="Bağlantı doğrulanıyor";els.readyMark.textContent="↻";setBadge("Kontrol","");
   try{
     await ensureWorker();
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
+    renderAccount(health.account,health.device||device);
     els.readyTitle.textContent="Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
     setHealth(els.pushHealth,health?.device?.lastError?"Otomatik yenilenecek":"Hazır",health?.device?.lastError?"warn":"ok");

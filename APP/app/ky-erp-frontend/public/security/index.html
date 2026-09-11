@@ -66,6 +66,32 @@
     </section>
 
     <section id="appPanel" class="hidden">
+      <section id="accountPanel" class="security-card account-card">
+        <div class="account-card-head">
+          <div>
+            <span class="eyebrow">BAĞLI HESAP</span>
+            <h2 id="accountFullName">Hesap doğrulanıyor</h2>
+            <p id="accountIdentity" class="muted">Bu cihazın hangi KY ERP hesabına bağlı olduğu sunucudan doğrulanır.</p>
+          </div>
+          <span id="accountRoleBadge" class="account-role-badge">Kontrol</span>
+        </div>
+        <div class="account-meta-grid">
+          <div><span>E-posta</span><b id="accountEmail">-</b></div>
+          <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
+          <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
+          <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
+        </div>
+        <div class="account-access-block">
+          <span>ERP erişimi</span>
+          <div id="accountModules" class="account-chip-list"><span class="account-chip muted-chip">Kontrol ediliyor</span></div>
+        </div>
+        <div class="account-access-block">
+          <span>Güvenlik yetkileri</span>
+          <div id="accountSecurityCaps" class="account-chip-list"><span class="account-chip muted-chip">Kontrol ediliyor</span></div>
+        </div>
+        <small id="accountNote" class="account-note">Onaylar yalnız bu hesabın yetkileriyle verilir.</small>
+      </section>
+
       <nav class="security-tabs" aria-label="KY ERP Güvenlik bölümleri">
         <button type="button" data-tab="approvals" class="active">Onaylar <span id="tabCount">0</span></button>
         <button type="button" data-tab="code">Giriş Kodu</button>
