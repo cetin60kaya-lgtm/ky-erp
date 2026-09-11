@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerIkPdksCardMappingRoutes } from "./ik-pdks-card-mapping";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -181,6 +182,7 @@ async function confirm(c: Context<AppEnv>) {
 }
 
 export function registerIkPdksCardBridgeRoutes(app: Hono<AppEnv>) {
+  registerIkPdksCardMappingRoutes(app);
   // Eski UI fonksiyon adlarıyla uyumluluk; veri hedefi yalnız canonical D1 kart tablosudur.
   app.post("/api/ik/advanced/card/preview", preview);
   app.post("/api/ik/advanced/card/confirm", confirm);
