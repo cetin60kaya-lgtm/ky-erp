@@ -83,6 +83,10 @@ namespace KyPdks.DeviceBridge
         private string _oldPath = "";
         private DateTime _lastState = DateTime.MinValue;
         private string _lastPunch = "";
+        private bool _lastReadOk;
+        private int _lastReadError;
+        private int _lastReadCount;
+        private string _lastReadAt = "";
 
         public BridgeForm(BridgeOptions options)
         {
@@ -169,7 +173,7 @@ namespace KyPdks.DeviceBridge
             if (!AsBool(Invoke("OpenCommPort", new object[] { _o.DeviceNo })))
                 throw new InvalidOperationException("OpenCommPort başarısız.");
 
-            try { _type.InvokeMember("ReadMark", BindingFlags.SetProperty, null, _com, new object[] { false }, CultureInfo.InvariantCulture); } catch { }
+            try { _type.InvokeMember("ReadMark", BindingFlags.SetProperty, null, _com, new object[] { true }, CultureInfo.InvariantCulture); } catch { }
             Console.WriteLine("BRIDGE_CONNECTED " + _o.Ip + ":" + _o.Port);
             WriteState(true, "", ReadDeviceTime(), ReadCounters());
         }
@@ -178,11 +182,19 @@ namespace KyPdks.DeviceBridge
         {
             if (_polling || _com == null) return;
             _polling = true;
+            var restoreDevice = false;
             try
             {
+                // Vendor FP_CLOCK örneği log okurken cihazı çok kısa süreliğine busy yapıp
+                // işlem sonunda mutlaka tekrar etkinleştiriyor. Kayıt silme komutu gönderilmez.
+                try { restoreDevice = AsBool(Invoke("EnableDevice", new object[] { _o.DeviceNo, 0 })); } catch { }
+
                 int added = 0;
                 object read = Invoke("ReadGeneralLogData", new object[] { _o.DeviceNo });
-                if (AsBool(read))
+                _lastReadOk = AsBool(read);
+                _lastReadError = _lastReadOk ? 0 : ReadLastError();
+                _lastReadAt = DateTimeOffset.Now.ToString("O");
+                if (_lastReadOk)
                 {
                     while (added < 1000 && TryReadPunch(out var punch))
                     {
@@ -195,17 +207,25 @@ namespace KyPdks.DeviceBridge
                         }
                     }
                 }
+                _lastReadCount = added;
                 if ((DateTime.Now - _lastState).TotalSeconds >= 5)
                     WriteState(true, "", ReadDeviceTime(), ReadCounters());
             }
             catch (Exception ex)
             {
+                _lastReadOk = false;
+                _lastReadError = ReadLastError();
+                _lastReadAt = DateTimeOffset.Now.ToString("O");
                 WriteState(false, Unwrap(ex).Message, null, null);
                 Console.Error.WriteLine("BRIDGE_POLL_ERROR " + Unwrap(ex).Message);
                 _timer.Stop();
                 Close();
             }
-            finally { _polling = false; }
+            finally
+            {
+                try { if (_com != null) Invoke("EnableDevice", new object[] { _o.DeviceNo, 1 }); } catch { }
+                _polling = false;
+            }
         }
 
         private bool TryReadPunch(out PunchDto punch)
@@ -222,7 +242,7 @@ namespace KyPdks.DeviceBridge
                 punch = new PunchDto {
                     cardNo = Math.Max(0, enroll).ToString("D5", CultureInfo.InvariantCulture),
                     eventAt = dt.ToString("O", CultureInfo.InvariantCulture),
-                    direction = Direction(verify, inout),
+                    direction = Direction(verify, inout, evt),
                     verifyMode = verify, inout = inout, eventCode = evt,
                     machineNo = I(a[1]), enrollMachineNo = I(a[3]),
                     source = "FP_CLOCK_DIRECT"
@@ -251,10 +271,22 @@ namespace KyPdks.DeviceBridge
             punch = new PunchDto {
                 cardNo = Math.Max(0, enroll).ToString("D5", CultureInfo.InvariantCulture),
                 eventAt = dt.ToString("O", CultureInfo.InvariantCulture),
-                direction = Direction(verify, 0), verifyMode = verify, inout = 0, eventCode = 0,
+                direction = Direction(verify, 0, -1), verifyMode = verify, inout = 0, eventCode = 0,
                 machineNo = I(a[1]), enrollMachineNo = I(a[3]), source = "FP_CLOCK_DIRECT"
             };
             return true;
+        }
+
+        private int ReadLastError()
+        {
+            try
+            {
+                object[] a = { 0 };
+                var pm = new ParameterModifier(1); pm[0] = true;
+                _type.InvokeMember("GetLastError", BindingFlags.InvokeMethod, null, _com, a, new[] { pm }, CultureInfo.InvariantCulture, null);
+                return I(a[0]);
+            }
+            catch { return -1; }
         }
 
         private string ReadDeviceTime()
@@ -354,6 +386,10 @@ namespace KyPdks.DeviceBridge
                 timeLogCount = Counter(counters, 8),
                 cardCount = Counter(counters, 7),
                 lastPunch = _lastPunch,
+                lastReadOk = _lastReadOk,
+                lastReadError = _lastReadError,
+                lastReadCount = _lastReadCount,
+                lastReadAt = _lastReadAt,
                 error = error ?? "",
                 updatedAt = DateTimeOffset.Now.ToString("O")
             };
@@ -365,8 +401,12 @@ namespace KyPdks.DeviceBridge
         }
 
         private static int Counter(Dictionary<string, int> c, int code) => c != null && c.TryGetValue(code.ToString(CultureInfo.InvariantCulture), out var v) ? v : -1;
-        private static string Direction(int verify, int inout)
+        private static string Direction(int verify, int inout, int evt)
         {
+            // FP_CLOCK log örneğinde dwEvent giriş/çıkış statüsüdür.
+            // 0/3/4 giriş sınıfı, 1/2/5 çıkış sınıfı olarak ele alınır.
+            if (evt == 0 || evt == 3 || evt == 4) return "IN";
+            if (evt == 1 || evt == 2 || evt == 5) return "OUT";
             int low = verify & 0xFF;
             if (low >= 51 && low <= 53) return "IN";
             if (low >= 101 && low <= 103) return "OUT";
