@@ -2,7 +2,7 @@ import {
   normalizeLotNo,
   reconcileLotEvidence,
   type LotPolicy,
-} from "./accounting-lot-reconciliation-core";
+} from "./accounting-lot-reconciliation-core.ts";
 
 type Allocation = {
   dispatchId?: string | null;
