@@ -1,0 +1,133 @@
+name: PDKS Final Integration Audit
+
+on:
+  push:
+    branches:
+      - codex/pdks-desktop-1.8.1-device-final-20260907
+    paths:
+      - '.github/workflows/pdks-final-integration-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pdks-desktop-1.8.1-device-final-20260907
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Apply final PDKS integration fixes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  raise SystemExit(f"Missing expected block in {path}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1), encoding='utf-8-sig')
+
+          guard = Path(r'APP/cloud/ky-erp-api/src/ik-pdks-guard.ts')
+          g = guard.read_text(encoding='utf-8-sig')
+          if 'registerIkPdksCardMappingRoutes' not in g:
+              g = g.replace(
+                  'import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";\n',
+                  'import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";\nimport { registerIkPdksCardMappingRoutes } from "./ik-pdks-card-mapping";\n',
+                  1,
+              )
+          if '"/api/ik/personnel-control/card-mappings",' not in g:
+              g = g.replace(
+                  '    "/api/ik/personnel-control/dashboard-live",\n',
+                  '    "/api/ik/personnel-control/dashboard-live",\n    "/api/ik/personnel-control/card-mappings",\n',
+                  1,
+              )
+          if 'registerIkPdksCardMappingRoutes(app);' not in g:
+              g = g.replace(
+                  '  registerIkPdksOperationRoutes(app);\n  registerIkPdksCardBridgeRoutes(app);\n',
+                  '  registerIkPdksOperationRoutes(app);\n  registerIkPdksCardBridgeRoutes(app);\n  registerIkPdksCardMappingRoutes(app);\n',
+                  1,
+              )
+          guard.write_text(g, encoding='utf-8-sig')
+
+          mapping = r'APP/cloud/ky-erp-api/src/ik-pdks-card-mapping.ts'
+          replace_once(mapping,
+          '''  if (conflict) {\n    await c.env.DB.prepare(`UPDATE ik_person_card_settings SET card_no='',updated_at=?\n      WHERE main_company_id=? AND card_no=? AND employee_id<>?`)\n      .bind(stamp, company, cardNo, employeeId).run();\n  }\n\n  await c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,card_no,card_source,updated_at)''',
+          '''  if (conflict) {\n    return {\n      oldCard, cardNo,\n      conflict: { employeeId: text(conflict.employeeId), fullName: text(conflict.fullName), personnelCode: text(conflict.personnelCode) },\n    };\n  }\n\n  await c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,card_no,card_source,updated_at)''')
+
+          replace_once(mapping,
+          '''  return { oldCard, cardNo, conflictCleared: conflict ? { employeeId: text(conflict.employeeId), fullName: text(conflict.fullName), personnelCode: text(conflict.personnelCode) } : null };''',
+          '''  return { oldCard, cardNo, conflict: null };''')
+
+          replace_once(mapping,
+          '''    const result = await saveMapping(c, company, user, employee, cardNo, "FP_CLOCK_DIRECT");\n    return ok(c, { employeeId, personnelCode: text(employee.personnelCode), fullName: text(employee.fullName), ...result, updatedAt: nowIso() });''',
+          '''    const result = await saveMapping(c, company, user, employee, cardNo, "FP_CLOCK_DIRECT");\n    if (result.conflict) {\n      return fail(c, 409, "PDKS_CARD_ALREADY_ASSIGNED", `Terminal kartı ${cardNo}, ${result.conflict.fullName || result.conflict.personnelCode || result.conflict.employeeId} personeline zaten bağlı.`);\n    }\n    return ok(c, { employeeId, personnelCode: text(employee.personnelCode), fullName: text(employee.fullName), ...result, updatedAt: nowIso() });''')
+
+          replace_once(mapping,
+          '''    const applied: Row[] = [];\n    const missing: Row[] = [];''',
+          '''    const applied: Row[] = [];\n    const missing: Row[] = [];\n    const conflicts: Row[] = [];''')
+
+          replace_once(mapping,
+          '''      const result = await saveMapping(c, company, user, employee, cardNo, "FP_CLOCK_DIRECT_INITIAL");\n      applied.push({ employeeId: employee.id, personnelCode: employee.personnelCode, fullName: employee.fullName, cardNo, oldCard: result.oldCard, conflictCleared: result.conflictCleared });''',
+          '''      const result = await saveMapping(c, company, user, employee, cardNo, "FP_CLOCK_DIRECT_INITIAL");\n      if (result.conflict) {\n        conflicts.push({ cardNo, fullName, employeeId: employee.id, conflict: result.conflict });\n        continue;\n      }\n      applied.push({ employeeId: employee.id, personnelCode: employee.personnelCode, fullName: employee.fullName, cardNo, oldCard: result.oldCard });''')
+
+          replace_once(mapping,
+          '''    const details = { applied, missing, requestedCount: INITIAL_MAPPINGS.length, appliedCount: applied.length, missingCount: missing.length };''',
+          '''    const details = { applied, missing, conflicts, requestedCount: INITIAL_MAPPINGS.length, appliedCount: applied.length, missingCount: missing.length, conflictCount: conflicts.length };''')
+          '@ | python -
+
+      - name: Validate Worker
+        shell: pwsh
+        working-directory: APP/cloud/ky-erp-api
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Validate frontend
+        shell: pwsh
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Validate Windows PDKS stack
+        shell: pwsh
+        run: |
+          $root = 'APP/desktop/ky-pdks/src'
+          dotnet restore "$root/KyPdks.DeviceBridge.x86/KyPdks.DeviceBridge.x86.csproj"
+          dotnet build "$root/KyPdks.DeviceBridge.x86/KyPdks.DeviceBridge.x86.csproj" -c Release --no-restore -p:PlatformTarget=x86
+          dotnet restore "$root/KyPdks.Agent/KyPdks.Agent.csproj"
+          dotnet build "$root/KyPdks.Agent/KyPdks.Agent.csproj" -c Release --no-restore
+          dotnet restore "$root/KyPdks.Desktop/KyPdks.Desktop.csproj"
+          dotnet build "$root/KyPdks.Desktop/KyPdks.Desktop.csproj" -c Release --no-restore
+          if (Test-Path "$root/KyPdks.Tests/KyPdks.Tests.csproj") { dotnet test "$root/KyPdks.Tests/KyPdks.Tests.csproj" -c Release }
+
+      - name: Commit final integration fixes
+        shell: pwsh
+        run: |
+          git config user.name "ky-erp-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/cloud/ky-erp-api/src/ik-pdks-guard.ts APP/cloud/ky-erp-api/src/ik-pdks-card-mapping.ts
+          if (git diff --cached --quiet) { Write-Host 'No integration fixes needed'; exit 0 }
+          git commit -m "fix(pdks): finalize card mapping integration"
+          git push origin HEAD:codex/pdks-desktop-1.8.1-device-final-20260907
