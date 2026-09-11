@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#07111f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KY Owner Security" />
+  <title>KY Owner Security</title>
+  <link rel="manifest" href="/owner-security/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/security/kyerp-security-apple-touch.png" />
+  <link rel="icon" href="/security/kyerp-security-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/owner-security/app.css?v=20260911-1" />
+</head>
+<body>
+  <div class="owner-shell">
+    <header class="owner-head">
+      <div class="brand">
+        <div class="shield">KY</div>
+        <div>
+          <span class="eyebrow">ASİL SÜPER YÖNETİCİ / ÖZEL GÜVENLİK UYGULAMASI</span>
+          <h1>Owner Security</h1>
+          <p>Giriş onayları, oturum güveni, firma güvenlik yetkilileri ve sistem güvenlik akışı.</p>
+        </div>
+      </div>
+      <div class="head-actions">
+        <span id="ownerBadge" class="badge waiting">Doğrulanıyor</span>
+        <button id="installButton" class="ghost hidden" type="button">Uygulamayı Kur</button>
+        <button id="refreshButton" class="primary" type="button">Yenile</button>
+      </div>
+    </header>
+
+    <section id="gatePanel" class="gate-card">
+      <div class="gate-icon">◆</div>
+      <div>
+        <strong id="gateTitle">Owner Security doğrulanıyor</strong>
+        <p id="gateCopy">Asıl Süper Yönetici oturumu ve kayıtlı KY Güvenlik cihazı kontrol ediliyor.</p>
+      </div>
+    </section>
+
+    <main id="appPanel" class="hidden">
+      <section class="summary-grid">
+        <article><span>Aktif Oturum</span><strong id="activeSessionCount">0</strong><small>Sistem geneli</small></article>
+        <article><span>Bekleyen Giriş</span><strong id="loginApprovalCount">0</strong><small>Onay / ret</small></article>
+        <article><span>Güven Bekleyen</span><strong id="trustPendingCount">0</strong><small>Oturum inceleme</small></article>
+        <article><span>KY Güvenlik Cihazı</span><strong id="deviceCount">0</strong><small id="trustModeText">REVIEW_ONLY</small></article>
+      </section>
+
+      <nav class="tabs" aria-label="Owner Security bölümleri">
+        <button class="active" data-tab="approvals" type="button">Onaylar <b id="approvalTabCount">0</b></button>
+        <button data-tab="sessions" type="button">Oturumlar</button>
+        <button data-tab="delegates" type="button">Firma Güvenlik Yetkilileri</button>
+        <button data-tab="audit" type="button">Güvenlik Akışı</button>
+      </nav>
+
+      <section id="approvalsTab" class="panel tab-panel">
+        <div class="panel-head">
+          <div><span class="eyebrow">GİRİŞ ONAYI</span><h2>Bekleyen girişler</h2><p>Yetki kapsamı tüm sistemdir. Onaydan önce cihaz kilidi / biyometri kullanılır.</p></div>
+        </div>
+        <div id="loginApprovalList" class="card-list"></div>
+      </section>
+
+      <section id="sessionsTab" class="panel tab-panel hidden">
+        <div class="panel-head split">
+          <div><span class="eyebrow">OTURUM GÜVENİ</span><h2>Gerçek ERP oturumları</h2><p>Giriş onayı ve oturum güveni ayrıdır. Oturum güveni ikinci giriş kilidi değil, güvenlik incelemesidir.</p></div>
+          <button id="onlyMeButton" class="danger strong" type="button">Sadece Ben Kalayım</button>
+        </div>
+        <div class="table-wrap">
+          <div class="session-table session-head"><span>Kullanıcı / cihaz</span><span>Firma / IP</span><span>Güven</span><span>Durum</span><span>İşlem</span></div>
+          <div id="sessionList"></div>
+        </div>
+      </section>
+
+      <section id="delegatesTab" class="panel tab-panel hidden">
+        <div class="panel-head">
+          <div><span class="eyebrow">FİRMA BAZLI YETKİ</span><h2>Firma Güvenlik Yetkilileri</h2><p>ERP rolü yükselmez. Seçilen kişi yalnız kendi firmasının seçili güvenlik işlemlerini yapabilir.</p></div>
+        </div>
+        <div class="delegate-layout">
+          <div class="field-card">
+            <label for="delegateUser">Kullanıcı</label>
+            <select id="delegateUser"><option value="">Kullanıcı seçin</option></select>
+            <div id="delegateIdentity" class="delegate-identity">Firma kullanıcısı seçin.</div>
+          </div>
+          <div class="cap-grid">
+            <label><input type="checkbox" value="LOGIN_APPROVE" /> <span><strong>Giriş Onayı</strong><small>Firma çalışanlarının girişlerini onayla / reddet.</small></span></label>
+            <label><input type="checkbox" value="SESSION_APPROVE" /> <span><strong>Oturum Onayı</strong><small>Yeni oturumu güvenilir yap, reddet veya şüpheli işaretle.</small></span></label>
+            <label><input type="checkbox" value="SESSION_VIEW" /> <span><strong>Oturumları Gör</strong><small>Firma kapsamındaki oturumları görüntüle.</small></span></label>
+            <label><input type="checkbox" value="SESSION_CLOSE" /> <span><strong>Oturum Kapat</strong><small>Firma kapsamındaki aktif oturumu sonlandır.</small></span></label>
+            <label><input type="checkbox" value="AUDIT_VIEW" /> <span><strong>Güvenlik Geçmişi</strong><small>Firma güvenlik kayıtlarını görüntüle.</small></span></label>
+          </div>
+          <div class="delegate-actions">
+            <button id="fullSecurityButton" class="ghost" type="button">Tam Güvenlik Yetkilisi</button>
+            <button id="clearSecurityButton" class="ghost" type="button">Tümünü Kaldır</button>
+            <button id="saveDelegateButton" class="primary" type="button">Telefondan Onayla ve Kaydet</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="auditTab" class="panel tab-panel hidden">
+        <div class="panel-head split">
+          <div><span class="eyebrow">DENETİM</span><h2>Sistem güvenlik akışı</h2><p>Son güvenlik hareketleri, aktör, hedef, firma, IP ve zaman bilgisi.</p></div>
+          <input id="auditFilter" class="audit-filter" type="search" placeholder="Kullanıcı, işlem, firma, IP ara" />
+        </div>
+        <div id="auditList" class="audit-list"></div>
+      </section>
+    </main>
+
+    <footer>
+      <span>KY ERP · Owner Security</span>
+      <span id="lastSync">Henüz senkronize edilmedi</span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/owner-security/app.js?v=20260911-1" defer></script>
+</body>
+</html>
