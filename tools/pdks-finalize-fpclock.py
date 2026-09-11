@@ -1,0 +1,69 @@
+from pathlib import Path
+
+
+def replace_exact(path, old, new, count=1):
+    p = Path(path)
+    text = p.read_text(encoding="utf-8-sig")
+    found = text.count(old)
+    if found < count:
+        raise SystemExit(f"{path}: expected at least {count} match, found {found}: {old[:120]!r}")
+    text = text.replace(old, new, count)
+    p.write_text(text, encoding="utf-8-sig")
+
+
+bridge = r"APP/desktop/ky-pdks/src/KyPdks.DeviceBridge.x86/Program.cs"
+worker = r"APP/desktop/ky-pdks/src/KyPdks.Agent/DirectDeviceBridgeWorker.cs"
+wizard = r"APP/desktop/ky-pdks/src/KyPdks.Desktop/PdksTerminalSetupWindow.xaml.cs"
+
+replace_exact(bridge, "for (int code = 1; code <= 7; code++)", "for (int code = 1; code <= 8; code++)")
+
+marker = """        private Dictionary<string, int> ReadCounters()\n        {"""
+diagnostics = """        private string ReadStringRef(string methodName)\n        {\n            try\n            {\n                object[] a = { _o.DeviceNo, \"\" };\n                var pm = new ParameterModifier(2); pm[1] = true;\n                object ret = _type.InvokeMember(methodName, BindingFlags.InvokeMethod, null, _com, a, new[] { pm }, CultureInfo.InvariantCulture, null);\n                return AsBool(ret) ? Convert.ToString(a[1], CultureInfo.InvariantCulture) ?? \"\" : \"\";\n            }\n            catch { return \"\"; }\n        }\n\n        private Dictionary<string, int> ReadDeviceInfo()\n        {\n            var result = new Dictionary<string, int>();\n            for (int code = 1; code <= 10; code++)\n            {\n                try\n                {\n                    object[] a = { _o.DeviceNo, code, 0 };\n                    var pm = new ParameterModifier(3); pm[2] = true;\n                    object ret = _type.InvokeMember(\"GetDeviceInfo\", BindingFlags.InvokeMethod, null, _com, a, new[] { pm }, CultureInfo.InvariantCulture, null);\n                    if (AsBool(ret)) result[code.ToString(CultureInfo.InvariantCulture)] = I(a[2]);\n                }\n                catch { }\n            }\n            return result;\n        }\n\n        private static int ClockOffsetMinutes(string deviceTime)\n        {\n            if (!DateTime.TryParseExact(deviceTime ?? \"\", \"yyyy-MM-ddTHH:mm:ss\", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var value)) return 0;\n            return (int)Math.Round((value - DateTime.Now).TotalMinutes, MidpointRounding.AwayFromZero);\n        }\n\n        private Dictionary<string, int> ReadCounters()\n        {"""
+replace_exact(bridge, marker, diagnostics)
+
+replace_exact(
+    bridge,
+    '                deviceTime = deviceTime ?? "",\n                managerCount = Counter(counters, 1),',
+    '                deviceTime = deviceTime ?? "",\n                pcTime = DateTimeOffset.Now.ToString("O"),\n                clockOffsetMinutes = ClockOffsetMinutes(deviceTime),\n                serialNumber = connected ? ReadStringRef("GetSerialNumber") : "",\n                productCode = connected ? ReadStringRef("GetProductCode") : "",\n                deviceInfo = connected ? ReadDeviceInfo() : new Dictionary<string, int>(),\n                managerCount = Counter(counters, 1),',
+)
+replace_exact(bridge, '                timeLogCount = Counter(counters, 6),', '                timeLogCount = Counter(counters, 8),')
+
+replace_exact(
+    worker,
+    '        var deviceTime = Text(root, "deviceTime");\n        var error = Text(root, "error");\n        var users = Number(root, "userCount");\n        var cards = Number(root, "cardCount");\n        var logs = Number(root, "timeLogCount");\n        var lastPunch = Text(root, "lastPunch");',
+    '        var deviceTime = Text(root, "deviceTime");\n        var pcTime = Text(root, "pcTime");\n        var serial = Text(root, "serialNumber");\n        var product = Text(root, "productCode");\n        var offsetMinutes = Number(root, "clockOffsetMinutes");\n        var error = Text(root, "error");\n        var users = Number(root, "userCount");\n        var cards = Number(root, "cardCount");\n        var logs = Number(root, "timeLogCount");\n        var lastPunch = Text(root, "lastPunch");\n        var deviceInfo = root.TryGetProperty("deviceInfo", out var info) ? info.GetRawText() : "{}";',
+)
+replace_exact(
+    worker,
+    '        var state = connected\n            ? $"FP_CLOCK bağlı · {config.TcpHost}:{config.TcpPort} · saat={deviceTime} · kullanıcı={users} · kart={cards} · cihaz log={logs}"\n            : $"FP_CLOCK bağlantı bekliyor · {error}";',
+    '        var state = connected\n            ? $"FP_CLOCK bağlı · {config.TcpHost}:{config.TcpPort} · seri={serial} · ürün={product} · saat={deviceTime} · fark={offsetMinutes} dk · kullanıcı={users} · kart={cards} · cihaz log={logs}"\n            : $"FP_CLOCK bağlantı bekliyor · {error}";',
+)
+replace_exact(
+    worker,
+    '        await store.TouchStateAsync("fpclock_device_time", deviceTime, ct);\n        await store.TouchStateAsync("fpclock_user_count", users.ToString(CultureInfo.InvariantCulture), ct);',
+    '        await store.TouchStateAsync("fpclock_device_time", deviceTime, ct);\n        await store.TouchStateAsync("fpclock_pc_time", pcTime, ct);\n        await store.TouchStateAsync("fpclock_clock_offset_minutes", offsetMinutes.ToString(CultureInfo.InvariantCulture), ct);\n        await store.TouchStateAsync("fpclock_serial_number", serial, ct);\n        await store.TouchStateAsync("fpclock_product_code", product, ct);\n        await store.TouchStateAsync("fpclock_device_info", deviceInfo, ct);\n        await store.TouchStateAsync("fpclock_last_error", error, ct);\n        await store.TouchStateAsync("fpclock_user_count", users.ToString(CultureInfo.InvariantCulture), ct);',
+)
+
+replace_exact(
+    wizard,
+    '        HedefReadBox.Text = config.HedefReadFile;\n        HedefWriteBox.Text = config.HedefWriteFile;',
+    '        var directMode = config.NormalizedMode == "FP_CLOCK_DIRECT";\n        HedefReadBox.Text = directMode ? "" : config.HedefReadFile;\n        HedefWriteBox.Text = directMode ? "" : config.HedefWriteFile;',
+)
+replace_exact(wizard, '        FileImportCheck.IsChecked = config.FileImportEnabled;', '        FileImportCheck.IsChecked = directMode ? false : config.FileImportEnabled;')
+replace_exact(
+    wizard,
+    '        FileImportCheck.IsChecked = true;\n        StatusText.Text = "İşyeri Hedef500 profili yüklendi · tek terminal giriş/çıkış için AUTO. Ayrı terminaller varsa GİRİŞ/ÇIKIŞ seçin. Kaydetmeden önce bağlantıyı test edin.";',
+    '        FileImportCheck.IsChecked = false;\n        StatusText.Text = "Doğrudan FP_CLOCK profili yüklendi · 192.168.1.224:5005 · cihaz 1 · Hedef500/TXT kullanılmaz. Kaydetmeden önce bağlantıyı test edin.";',
+)
+
+old_probe = '''                        var connected = root.TryGetProperty("connected", out var c) && c.GetBoolean();\n                        var deviceTime = root.TryGetProperty("deviceTime", out var dt) ? dt.GetString() ?? "" : "";\n                        var users = root.TryGetProperty("userCount", out var u) ? u.GetInt32() : -1;\n                        var cards = root.TryGetProperty("cardCount", out var ca) ? ca.GetInt32() : -1;\n                        var logs = root.TryGetProperty("timeLogCount", out var lg) ? lg.GetInt32() : -1;\n                        FileProbeText.Text = connected ? $"FP_CLOCK bağlı · saat {deviceTime} · kullanıcı {users} · kart {cards} · log {logs}" : "FP_CLOCK bridge bağlantı bekliyor.";'''
+new_probe = '''                        var connected = root.TryGetProperty("connected", out var c) && c.GetBoolean();\n                        var deviceTime = root.TryGetProperty("deviceTime", out var dt) ? dt.GetString() ?? "" : "";\n                        var serial = root.TryGetProperty("serialNumber", out var sn) ? sn.GetString() ?? "" : "";\n                        var product = root.TryGetProperty("productCode", out var pc) ? pc.GetString() ?? "" : "";\n                        var offset = root.TryGetProperty("clockOffsetMinutes", out var of) && of.TryGetInt32(out var om) ? om : 0;\n                        var users = root.TryGetProperty("userCount", out var u) ? u.GetInt32() : -1;\n                        var cards = root.TryGetProperty("cardCount", out var ca) ? ca.GetInt32() : -1;\n                        var logs = root.TryGetProperty("timeLogCount", out var lg) ? lg.GetInt32() : -1;\n                        var lastPunch = root.TryGetProperty("lastPunch", out var lp) ? lp.GetString() ?? "" : "";\n                        var bridgeError = root.TryGetProperty("error", out var er) ? er.GetString() ?? "" : "";\n                        FileProbeText.Text = connected\n                            ? $"FP_CLOCK bağlı · saat {deviceTime} · PC farkı ~{offset} dk · seri {serial} · ürün {product} · kullanıcı {users} · kart {cards} · giriş/çıkış log {logs}" + (string.IsNullOrWhiteSpace(lastPunch) ? "" : $" · son kart {lastPunch}")\n                            : $"FP_CLOCK bridge bağlantı bekliyor · {bridgeError}";'''
+replace_exact(wizard, old_probe, new_probe)
+
+replace_exact(
+    wizard,
+    '        config.FileImportEnabled = FileImportCheck.IsChecked != false;\n        _store.Save(config);',
+    '        config.FileImportEnabled = FileImportCheck.IsChecked != false;\n        if (config.NormalizedMode == "FP_CLOCK_DIRECT")\n        {\n            config.HedefReadFile = "";\n            config.HedefWriteFile = "";\n            config.FileImportEnabled = false;\n        }\n        _store.Save(config);',
+)
+
+print("FP_CLOCK finalize patch applied")
