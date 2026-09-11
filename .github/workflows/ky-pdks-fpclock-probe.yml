@@ -30,10 +30,6 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $src = 'APP/desktop/ky-pdks-fpclock-probe/ProgramV6.cs'
-          $text = Get-Content $src -Raw
-          $text = $text.Replace('public int HostState => (int)ActiveXState;', 'public int HostState => IsHandleCreated ? 1 : 0;')
-          Set-Content -Path $src -Value $text -Encoding utf8
           $proj = 'APP/desktop/ky-pdks-fpclock-probe/KY.PDKS.FpClockProbe.csproj'
           msbuild $proj /restore /t:Rebuild /p:Configuration=Release /p:PlatformTarget=x86 /m
 
@@ -42,33 +38,30 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $out = 'APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48'
-          $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v6.exe'
-          if (-not (Test-Path $exe)) { throw 'FP_CLOCK probe EXE oluşmadı.' }
+          $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v7.exe'
+          if (-not (Test-Path $exe)) { throw 'FP_CLOCK v7 EXE oluşmadı.' }
           if ((Get-Item $exe).Length -lt 12KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v6.exe" -Encoding ascii
+          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v7.exe" -Encoding ascii
           [ordered]@{
-            product = 'KY PDKS FP_CLOCK ActiveX Host Device Probe'
-            version = '6.0.1'
+            product = 'KY PDKS FP_CLOCK Ref String Device Probe'
+            version = '7.0.0'
             architecture = 'x86'
             target = '.NET Framework 4.8'
-            mode = 'READ_ONLY_ACTIVEX_HOST'
-            activation = 'native DllGetClassObject + hidden AxHost site; no COM registration'
+            mode = 'READ_ONLY_REF_STRING_MARSHAL'
             host = '192.168.1.224'
             port = 5005
             deviceNo = 1
             exeSha256 = $sha
           } | ConvertTo-Json | Set-Content -Path (Join-Path $out 'build-info-fpclock-probe.json') -Encoding utf8
-          Get-Item $exe | Format-List Name,Length,FullName
-          Get-FileHash $exe -Algorithm SHA256
 
       - name: Upload probe artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-FPClock-Cihaz-Testi-v6
+          name: KY-PDKS-FPClock-Cihaz-Testi-v7
           path: |
-            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v6.exe
-            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v6.exe.sha256.txt
+            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v7.exe
+            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v7.exe.sha256.txt
             APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/build-info-fpclock-probe.json
           if-no-files-found: error
           retention-days: 30
