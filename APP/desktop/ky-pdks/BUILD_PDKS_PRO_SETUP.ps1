@@ -12,6 +12,7 @@ $RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 $Dist = Join-Path $Root 'dist-pdks'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
 $AgentProject = Join-Path $Root 'src\KyPdks.Agent\KyPdks.Agent.csproj'
+$DeviceBridgeProject = Join-Path $Root 'src\KyPdks.DeviceBridge.x86\KyPdks.DeviceBridge.x86.csproj'
 $SharedProject = Join-Path $Root 'src\KyPdks.Shared\KyPdks.Shared.csproj'
 $TestProject = Join-Path $Root 'src\KyPdks.Tests\KyPdks.Tests.csproj'
 $FrontendRoot = Join-Path $RepoRoot 'APP\app\ky-erp-frontend'
@@ -19,6 +20,7 @@ $FrontendDist = Join-Path $FrontendRoot 'dist'
 $CloudRoot = Join-Path $RepoRoot 'APP\cloud\ky-erp-api'
 $PdksDesktopOut = Join-Path $Dist 'pdks-desktop'
 $AgentOut = Join-Path $Dist 'agent'
+$DeviceBridgeOut = Join-Path $Dist 'device-bridge'
 $InstallerOut = Join-Path $Dist 'setup'
 $WebViewOut = Join-Path $Dist 'webview2'
 
@@ -79,7 +81,7 @@ if ($ServiceInstallerText -notmatch 'Wait-ServiceGone') { throw 'Agent servis ma
 if ($ServiceInstallerText -notmatch "Status -eq 'Running'") { throw 'Agent servis Running doğrulaması eksik.' }
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
-foreach ($dir in @($PdksDesktopOut,$AgentOut,$InstallerOut,$WebViewOut)) {
+foreach ($dir in @($PdksDesktopOut,$AgentOut,$DeviceBridgeOut,$InstallerOut,$WebViewOut)) {
     New-Item $dir -ItemType Directory -Force | Out-Null
 }
 
@@ -110,7 +112,7 @@ Require-File (Join-Path $FrontendDist 'index.html') 'Frontend dist/index.html ol
 
 Write-Host ""
 Write-Host "3/8 .NET restore + xUnit" -ForegroundColor Cyan
-foreach ($project in @($SharedProject,$AgentProject,$DesktopProject)) {
+foreach ($project in @($SharedProject,$AgentProject,$DesktopProject,$DeviceBridgeProject)) {
     Invoke-Native "Restore $project" { dotnet restore $project }
 }
 if (Test-Path $TestProject) {
@@ -127,6 +129,49 @@ Invoke-Native 'KY PDKS Agent publish' {
     dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut
 }
 
+Invoke-Native 'FP_CLOCK x86 bridge build' {
+    dotnet build $DeviceBridgeProject -c Release --no-restore -p:PlatformTarget=x86
+}
+
+$BridgeBin = Join-Path $Root 'src\KyPdks.DeviceBridge.x86\bin\Release\net48'
+Require-File (Join-Path $BridgeBin 'KY.PDKS.DeviceBridge.x86.exe') 'FP_CLOCK x86 DeviceBridge exe oluşmadı.'
+Copy-Item (Join-Path $BridgeBin '*') $DeviceBridgeOut -Force
+
+function Resolve-FpRuntimeFile {
+    param([string]$EnvName,[string[]]$Candidates)
+    $fromEnv = [Environment]::GetEnvironmentVariable($EnvName)
+    if ($fromEnv -and (Test-Path -LiteralPath $fromEnv -PathType Leaf)) { return (Resolve-Path -LiteralPath $fromEnv).Path }
+    foreach ($candidate in $Candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return (Resolve-Path -LiteralPath $candidate).Path }
+    }
+    return $null
+}
+
+$FpClockOcx = Resolve-FpRuntimeFile 'KY_PDKS_FP_CLOCK_OCX' @(
+    'D:\personel yedek son\Terminal Bilgi Aktar\support\FP_CLOCK.ocx',
+    'C:\Hedef500\Terminal Bilgi Aktar\support\FP_CLOCK.ocx'
+)
+$TmpCommDll = Resolve-FpRuntimeFile 'KY_PDKS_TMPCCOMM_DLL' @(
+    'D:\personel yedek son\Terminal Bilgi Aktar\support\TMPCCOMM.dll',
+    'C:\Hedef500\Terminal Bilgi Aktar\support\TMPCCOMM.dll'
+)
+$Ch375Dll = Resolve-FpRuntimeFile 'KY_PDKS_CH375_DLL' @(
+    'C:\Program Files\SAi\SAi Production Suite 21\Program\CH375DLL.DLL',
+    'C:\Program Files (x86)\SAi\SAi Production Suite 21\Program\CH375DLL.DLL'
+)
+if (-not $FpClockOcx -or -not $TmpCommDll -or -not $Ch375Dll) {
+    throw 'FP_CLOCK runtime eksik. KY_PDKS_FP_CLOCK_OCX / KY_PDKS_TMPCCOMM_DLL / KY_PDKS_CH375_DLL yollarını tanımlayın.'
+}
+$FpRuntime = Join-Path $DeviceBridgeOut 'runtime'
+New-Item $FpRuntime -ItemType Directory -Force | Out-Null
+Copy-Item $FpClockOcx (Join-Path $FpRuntime 'FP_CLOCK.ocx') -Force
+Copy-Item $TmpCommDll (Join-Path $FpRuntime 'TMPCCOMM.dll') -Force
+Copy-Item $Ch375Dll (Join-Path $FpRuntime 'CH375DLL.DLL') -Force
+$FpRuntimeReady = $true
+
+$AgentBridge = Join-Path $AgentOut 'DeviceBridge'
+New-Item $AgentBridge -ItemType Directory -Force | Out-Null
+Copy-Item (Join-Path $DeviceBridgeOut '*') $AgentBridge -Recurse -Force
 $PdksWeb = Join-Path $PdksDesktopOut 'web'
 New-Item $PdksWeb -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $FrontendDist '*') $PdksWeb -Recurse -Force
@@ -186,6 +231,8 @@ $BuildInfo = [ordered]@{
     executableVersion = [string]$PdksVersion
     agentVersion = [string]$AgentVersion
     includesPdksAgent = $true
+    includesFpClockDirectBridge = $true
+    includesFpClockRuntime = [bool]$FpRuntimeReady
     includesCanonicalFrontend = $true
     includesWebView2Bootstrapper = $true
     sourceBranch = 'codex/pdks-desktop-1.8.1-device-final-20260907'

@@ -134,28 +134,30 @@ public sealed class PdksConfig
     public string DeviceName { get; set; } = "Cihaz1";
     public int DeviceNo { get; set; } = 1;
     public int MachineNo { get; set; } = 1;
-    public string Direction { get; set; } = "AUTO";
-    public string SourceMode { get; set; } = "HEDEF_TR500";
+    public string Direction { get; set; } = "GIRIS";
+    public string SourceMode { get; set; } = "FP_CLOCK_DIRECT";
     public string TcpHost { get; set; } = "192.168.1.224";
     public int TcpPort { get; set; } = 5005;
+    public int CommKey { get; set; } = 0;
     public string SerialPort { get; set; } = "COM1";
     public int SerialBaud { get; set; } = 38400;
     public int ScanIntervalMs { get; set; } = 1000;
     public int SyncIntervalSeconds { get; set; } = 30;
     public bool AutoSync { get; set; } = true;
-    public bool FileImportEnabled { get; set; } = true;
+    public bool FileImportEnabled { get; set; } = false;
     public string LineEncoding { get; set; } = "windows-1254";
     public string HedefReadFile { get; set; } = @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt";
     public string HedefWriteFile { get; set; } = @"C:\Hedef500\Terminal Bilgi Aktar\TR500.txt";
 
-    public string NormalizedMode => (SourceMode ?? "HEDEF_TR500").Trim().ToUpperInvariant() switch
+    public string NormalizedMode => (SourceMode ?? "FP_CLOCK_DIRECT").Trim().ToUpperInvariant() switch
     {
+        "FP_CLOCK_DIRECT" => "FP_CLOCK_DIRECT",
         "HEDEF_TR500" => "HEDEF_TR500",
         "TCP_SERVER" => "TCP_SERVER",
         "TCP_CLIENT" => "TCP_CLIENT",
         "SERIAL" => "SERIAL",
         "FILE" => "FILE",
-        _ => "HEDEF_TR500",
+        _ => "FP_CLOCK_DIRECT",
     };
 
     public void Normalize()
@@ -172,6 +174,7 @@ public sealed class PdksConfig
         SourceMode = NormalizedMode;
         TcpHost = string.IsNullOrWhiteSpace(TcpHost) ? "192.168.1.224" : TcpHost.Trim();
         TcpPort = Math.Clamp(TcpPort, 1, 65535);
+        CommKey = Math.Clamp(CommKey, 0, 99999999);
         SerialPort = string.IsNullOrWhiteSpace(SerialPort) ? "COM1" : SerialPort.Trim().ToUpperInvariant();
         SerialBaud = SerialBaud is 1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200 ? SerialBaud : 38400;
         ScanIntervalMs = Math.Clamp(ScanIntervalMs, 250, 30000);

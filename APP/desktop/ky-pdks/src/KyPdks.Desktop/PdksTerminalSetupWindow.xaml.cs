@@ -43,6 +43,7 @@ public partial class PdksTerminalSetupWindow : Window
         SelectTag(SourceModeCombo, config.NormalizedMode);
         TcpHostBox.Text = config.TcpHost;
         TcpPortBox.Text = config.TcpPort.ToString(CultureInfo.InvariantCulture);
+        CommKeyBox.Text = config.CommKey.ToString(CultureInfo.InvariantCulture);
         HedefReadBox.Text = config.HedefReadFile;
         HedefWriteBox.Text = config.HedefWriteFile;
         SerialPortBox.Text = config.SerialPort;
@@ -54,17 +55,18 @@ public partial class PdksTerminalSetupWindow : Window
         PcClockText.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.GetCultureInfo("tr-TR"));
     }
 
-    private void HedefProfile_Click(object sender, RoutedEventArgs e)
+    private void DirectProfile_Click(object sender, RoutedEventArgs e)
     {
         DeviceNameBox.Text = "Cihaz1";
         DeviceNoBox.Text = "1";
         MachineNoBox.Text = "1";
         SelectTag(DirectionCombo, "AUTO");
-        SelectTag(SourceModeCombo, "HEDEF_TR500");
+        SelectTag(SourceModeCombo, "FP_CLOCK_DIRECT");
         TcpHostBox.Text = "192.168.1.224";
         TcpPortBox.Text = "5005";
-        HedefReadBox.Text = @"C:\Hedef500\Terminal Bilgi Aktar\timerecords.txt";
-        HedefWriteBox.Text = @"C:\Hedef500\Terminal Bilgi Aktar\TR500.txt";
+        CommKeyBox.Text = "0";
+        HedefReadBox.Text = "";
+        HedefWriteBox.Text = "";
         SerialPortBox.Text = "COM1";
         SerialBaudBox.Text = "38400";
         ScanIntervalBox.Text = "1000";
@@ -118,7 +120,7 @@ public partial class PdksTerminalSetupWindow : Window
             var port = int.TryParse(TcpPortBox.Text, out var parsedPort) ? parsedPort : 5005;
             var config = _store.Load();
 
-            if (mode is "HEDEF_TR500" or "TCP_CLIENT")
+            if (mode is "FP_CLOCK_DIRECT" or "TCP_CLIENT")
             {
                 TcpProbeText.Text = "Kontrol ediliyor...";
                 var tcp = await TerminalDiagnostics.ProbeTcpAsync(host, port, 2500);
@@ -126,11 +128,30 @@ public partial class PdksTerminalSetupWindow : Window
             }
             else TcpProbeText.Text = mode == "TCP_SERVER" ? $"Bu bilgisayar {port} portunu dinleyecek." : "Bu modda TCP testi gerekmiyor.";
 
-            if (mode is "HEDEF_TR500" or "FILE")
+            if (mode == "FILE")
             {
                 FileProbeText.Text = "Kontrol ediliyor...";
                 var file = await TerminalDiagnostics.ProbeHedefFileAsync(HedefReadBox.Text.Trim(), config.LineEncoding);
                 FileProbeText.Text = file.LastPunch is null ? file.Message : $"{file.Message}\n{file.LastPunch.CardNo} · {file.LastPunch.EventAt:dd.MM.yyyy HH:mm:ss}";
+            }
+            else if (mode == "FP_CLOCK_DIRECT")
+            {
+                if (File.Exists(_paths.DeviceBridgeStateFile))
+                {
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(_paths.DeviceBridgeStateFile));
+                        var root = doc.RootElement;
+                        var connected = root.TryGetProperty("connected", out var c) && c.GetBoolean();
+                        var deviceTime = root.TryGetProperty("deviceTime", out var dt) ? dt.GetString() ?? "" : "";
+                        var users = root.TryGetProperty("userCount", out var u) ? u.GetInt32() : -1;
+                        var cards = root.TryGetProperty("cardCount", out var ca) ? ca.GetInt32() : -1;
+                        var logs = root.TryGetProperty("timeLogCount", out var lg) ? lg.GetInt32() : -1;
+                        FileProbeText.Text = connected ? $"FP_CLOCK bağlı · saat {deviceTime} · kullanıcı {users} · kart {cards} · log {logs}" : "FP_CLOCK bridge bağlantı bekliyor.";
+                    }
+                    catch { FileProbeText.Text = "FP_CLOCK bridge durum dosyası okunamadı."; }
+                }
+                else FileProbeText.Text = "FP_CLOCK bridge Agent tarafından başlatılacak.";
             }
             else FileProbeText.Text = mode == "SERIAL" ? $"{SerialPortBox.Text.Trim()} / {SerialBaudBox.Text.Trim()} · kaydettikten sonra Agent açar." : "Dosya köprüsü kullanılmıyor.";
 
@@ -149,6 +170,7 @@ public partial class PdksTerminalSetupWindow : Window
         if (!int.TryParse(DeviceNoBox.Text, out var deviceNo)
             || !int.TryParse(MachineNoBox.Text, out var machineNo)
             || !int.TryParse(TcpPortBox.Text, out var tcpPort)
+            || !int.TryParse(CommKeyBox.Text, out var commKey)
             || !int.TryParse(SerialBaudBox.Text, out var baud)
             || !int.TryParse(ScanIntervalBox.Text, out var scanMs)
             || !int.TryParse(SyncIntervalBox.Text, out var syncSeconds))
@@ -165,6 +187,7 @@ public partial class PdksTerminalSetupWindow : Window
         config.SourceMode = SelectedTag(SourceModeCombo);
         config.TcpHost = TcpHostBox.Text.Trim();
         config.TcpPort = tcpPort;
+        config.CommKey = commKey;
         config.HedefReadFile = HedefReadBox.Text.Trim();
         config.HedefWriteFile = HedefWriteBox.Text.Trim();
         config.SerialPort = SerialPortBox.Text.Trim();
@@ -185,7 +208,7 @@ public partial class PdksTerminalSetupWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
     private static string SelectedTag(ComboBox combo)
-        => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "HEDEF_TR500";
+        => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "FP_CLOCK_DIRECT";
 
     private static void SelectTag(ComboBox combo, string tag)
     {

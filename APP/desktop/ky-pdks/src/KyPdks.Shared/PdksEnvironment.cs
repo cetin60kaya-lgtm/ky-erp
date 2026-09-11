@@ -13,6 +13,9 @@ public sealed class PdksPaths
     public string Reject => Path.Combine(Root, "Reject");
     public string Backup => Path.Combine(Root, "Backup");
     public string Logs => Path.Combine(Root, "Logs");
+    public string DeviceQueue => Path.Combine(Root, "DeviceQueue");
+    public string DeviceArchive => Path.Combine(Root, "DeviceArchive");
+    public string DeviceBridgeStateFile => Path.Combine(Root, "device-bridge-state.json");
     public string Database => Path.Combine(Data, "pdks.db");
     public string ConfigFile => Path.Combine(Root, "config.json");
     public string DeviceFile => Path.Combine(Root, "device.id");
@@ -27,7 +30,7 @@ public sealed class PdksPaths
         Root = string.IsNullOrWhiteSpace(rootOverride)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "KY ERP", "PDKS")
             : Path.GetFullPath(rootOverride);
-        foreach (var path in new[] { Root, Data, Import, Archive, Reject, Backup, Logs }) Directory.CreateDirectory(path);
+        foreach (var path in new[] { Root, Data, Import, Archive, Reject, Backup, Logs, DeviceQueue, DeviceArchive }) Directory.CreateDirectory(path);
         var id = File.Exists(DeviceFile) ? File.ReadAllText(DeviceFile).Trim() : "";
         if (string.IsNullOrWhiteSpace(id))
         {

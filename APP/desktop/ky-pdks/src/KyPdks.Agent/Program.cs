@@ -7,6 +7,17 @@ using KyPdks.Shared;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+Mutex? singletonMutex;
+try
+{
+    singletonMutex = new Mutex(initiallyOwned: true, name: @"Global\KYERP.PDKS.Agent.Singleton", createdNew: out var ownsAgentMutex);
+    if (!ownsAgentMutex) return;
+}
+catch (UnauthorizedAccessException)
+{
+    return;
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "KYERP.PDKS.Agent");
 builder.Services.AddSingleton<PdksPaths>();
@@ -14,6 +25,7 @@ builder.Services.AddSingleton<ConfigStore>();
 builder.Services.AddSingleton<LocalPdksStore>();
 builder.Services.AddSingleton<TextFileLog>();
 builder.Services.AddHostedService<HeartbeatWorker>();
+builder.Services.AddHostedService<DirectDeviceBridgeWorker>();
 builder.Services.AddHostedService<FileImportWorker>();
 builder.Services.AddHostedService<TerminalCaptureWorker>();
 builder.Services.AddHostedService<ErpSyncWorker>();
@@ -211,6 +223,7 @@ sealed class TerminalCaptureWorker(LocalPdksStore store, PdksPaths paths, Config
             {
                 switch (config.NormalizedMode)
                 {
+                    case "FP_CLOCK_DIRECT": await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken); break;
                     case "TCP_SERVER": await RunTcpServerAsync(config, stoppingToken); break;
                     case "TCP_CLIENT": await RunTcpClientAsync(config, stoppingToken); break;
                     case "SERIAL": await RunSerialAsync(config, stoppingToken); break;

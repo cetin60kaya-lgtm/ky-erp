@@ -57,14 +57,14 @@
                 <StackPanel>
                     <TextBlock Text="KY PDKS PRO" Foreground="#8FC7EE" FontWeight="Bold" FontSize="10"/>
                     <TextBlock Text="Hızlı Profiller" Foreground="White" FontWeight="Bold" FontSize="19" Margin="0,4,0,14"/>
-                    <Button Content="İşyeri Hedef500" Click="HedefProfile_Click" HorizontalContentAlignment="Left"/>
+                    <Button Content="Doğrudan FP_CLOCK" Click="DirectProfile_Click" HorizontalContentAlignment="Left"/>
                     <Button Content="Dosya / TXT-DAT" Click="FileProfile_Click" HorizontalContentAlignment="Left"/>
                     <Button Content="TCP Client" Click="TcpProfile_Click" HorizontalContentAlignment="Left"/>
                     <Button Content="Serial / COM" Click="SerialProfile_Click" HorizontalContentAlignment="Left"/>
                     <Separator Margin="0,14,0,14" Background="#3D5F7B"/>
                     <TextBlock Text="Güvenli davranış" Foreground="White" FontWeight="SemiBold"/>
                     <TextBlock TextWrapping="Wrap" Foreground="#B9CBD9" FontSize="10" Margin="0,6,0,0"
-                               Text="Test işlemi TCP port erişimini ve veri dosyasını okur. Cihaz saati, kapı rölesi, yönetici silme veya yeniden başlatma komutu doğrulanmış üretici protokolü olmadan gönderilmez."/>
+                               Text="FP_CLOCK doğrudan cihaz bağlantısı 192.168.1.224:5005 üzerinden çalışır. Hedef500/TXT köprüsü kullanılmaz. Yazma, silme, kapı ve yeniden başlatma işlemleri ayrıca onaylanmadan gönderilmez."/>
                     <TextBlock TextWrapping="Wrap" Foreground="#B9CBD9" FontSize="10" Margin="0,12,0,0"
                                Text="Terminal doğrudan internete açılmaz. Agent işyeri LAN'ından HTTPS ile KY ERP'ye senkron olur."/>
                 </StackPanel>
@@ -89,14 +89,14 @@
                         <StackPanel>
                             <TextBlock Text="2 · KART KAYNAĞI &amp; BAĞLANTI" Foreground="#2A719F" FontWeight="Bold" FontSize="10"/>
                             <Grid Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
-                                <StackPanel Margin="0,0,10,0"><TextBlock Text="Kaynak modu"/><ComboBox x:Name="SourceModeCombo"><ComboBoxItem Content="Hedef / TR500" Tag="HEDEF_TR500"/><ComboBoxItem Content="Dosya" Tag="FILE"/><ComboBoxItem Content="TCP Server" Tag="TCP_SERVER"/><ComboBoxItem Content="TCP Client" Tag="TCP_CLIENT"/><ComboBoxItem Content="Serial / COM" Tag="SERIAL"/></ComboBox></StackPanel>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition/><ColumnDefinition Width="110"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,10,0"><TextBlock Text="Kaynak modu"/><ComboBox x:Name="SourceModeCombo"><ComboBoxItem Content="Doğrudan FP_CLOCK" Tag="FP_CLOCK_DIRECT"/><ComboBoxItem Content="Dosya" Tag="FILE"/><ComboBoxItem Content="TCP Server" Tag="TCP_SERVER"/><ComboBoxItem Content="TCP Client" Tag="TCP_CLIENT"/><ComboBoxItem Content="Serial / COM" Tag="SERIAL"/></ComboBox></StackPanel>
                                 <StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock Text="TCP Host / IP"/><TextBox x:Name="TcpHostBox"/></StackPanel>
-                                <StackPanel Grid.Column="2"><TextBlock Text="TCP Port"/><TextBox x:Name="TcpPortBox"/></StackPanel>
+                                <StackPanel Grid.Column="2" Margin="0,0,10,0"><TextBlock Text="TCP Port"/><TextBox x:Name="TcpPortBox"/></StackPanel><StackPanel Grid.Column="3"><TextBlock Text="Comm Key"/><TextBox x:Name="CommKeyBox"/></StackPanel>
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="170"/><ColumnDefinition Width="170"/></Grid.ColumnDefinitions>
-                                <StackPanel Margin="0,0,10,0"><TextBlock Text="Hedef / veri dosyası"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions><TextBox x:Name="HedefReadBox"/><Button Grid.Column="1" Content="Gözat" Click="BrowseReadFile_Click" Margin="6,4,0,10"/></Grid></StackPanel>
+                                <StackPanel Margin="0,0,10,0"><TextBlock Text="Manuel import dosyası (opsiyonel)"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions><TextBox x:Name="HedefReadBox"/><Button Grid.Column="1" Content="Gözat" Click="BrowseReadFile_Click" Margin="6,4,0,10"/></Grid></StackPanel>
                                 <StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock Text="COM Port"/><TextBox x:Name="SerialPortBox"/></StackPanel>
                                 <StackPanel Grid.Column="2"><TextBlock Text="Baud"/><TextBox x:Name="SerialBaudBox"/></StackPanel>
                             </Grid>
