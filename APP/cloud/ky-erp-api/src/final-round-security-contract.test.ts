@@ -42,7 +42,8 @@ test("final round: owner oturum ve gercek mail akisi korunur", () => {
   assert.match(auth, /\/api\/auth\/logout/);
   assert.match(mail, /https:\/\/api\.resend\.com\/emails/);
   assert.match(mail, /providerMessageId|messageId/);
-  assert.deepEqual(wrangler?.secrets?.required, ["RESEND_API_KEY", "TURNSTILE_SECRET_KEY", "TURNSTILE_SITE_KEY"]);
+  assert.match(mail, /RESEND_API_KEY/);
+  assert.equal(wrangler?.secrets, undefined);
   assert.equal(wrangler?.vars?.RECOVERY_EMAIL_FROM, "KY ERP <admin@kyerp.net>");
 });
 
