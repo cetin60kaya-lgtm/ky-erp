@@ -26,7 +26,8 @@ test("Super Admin recovery UI has show-hide answers and no recovery-code UX", ()
   assert.match(source, /showRecoveryAnswers/);
   assert.match(source, /answerVisible \? "Gizle" : "Göster"/);
   assert.match(source, /Kayıtlı — değiştirmek için yeni cevap yazın/);
-  assert.match(source, /Kurtarma Güvenliğini Kaydet/);
+  assert.match(source, /Telefondan Onayla ve Kaydet/);
+  assert.match(source, /Yedek Yöntemle Kaydet/);
   assert.doesNotMatch(source, /tek kullanımlık acil kurtarma kodu/i);
 });
 
@@ -34,9 +35,9 @@ test("stored recovery answers stay non-reversible in the UI contract", () => {
   const source = read("../../../app/ky-erp-frontend/src/pages/admin/AdminOwnerSecurity.jsx");
   assert.match(source, /Kayıtlı cevapların düz metni sunucudan geri getirilemez/);
   assert.match(source, /salt \+ PBKDF2 hash/);
-  assert.match(source, /“Göster \/ Gizle” yalnız şu anda yazdığınız yeni cevabı gösterir/);
+  assert.match(source, /type=\{answerVisible \? "text" : "password"\}/);
+  assert.match(source, /disabled=\{!row\.answer \|\| \(saved && !questionVisible\)\}/);
 });
-
 
 test("saved recovery questions are masked until explicitly revealed", () => {
   const source = read("../../../app/ky-erp-frontend/src/pages/admin/AdminOwnerSecurity.jsx");
@@ -47,7 +48,6 @@ test("saved recovery questions are masked until explicitly revealed", () => {
   assert.match(source, /Cevabı girmeden önce sorunun tamamını görmek için açın/);
   assert.match(source, /disabled=\{saved && !questionVisible\}/);
 });
-
 
 test("accounting archive source remains parseable after Worker hotfix", () => {
   const source = read("./accounting-document-archive.ts");

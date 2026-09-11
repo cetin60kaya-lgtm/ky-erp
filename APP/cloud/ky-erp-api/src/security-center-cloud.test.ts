@@ -58,11 +58,11 @@ test("owner lock and only-me behavior are fail closed", async () => {
 test("company approval scope cannot list or decide platform Super Admin login", async () => {
   const source = await readFile(loginUrl, "utf8");
   assert.match(source, /u\.platform_role/);
-  assert.match(source, /OWNER_APPROVAL_SYSTEM_ONLY/);
+  assert.match(source, /PRIVILEGED_APPROVAL_SYSTEM_ONLY/);
   assert.match(source, /CROSS_TENANT_FORBIDDEN/);
   assert.match(source, /AUTH_SECURITY_CAPABILITY_GRANT/);
   assert.match(source, /LOGIN_APPROVE/);
-  assert.match(source, /NOT IN \('SUPER_ADMIN','ADMIN'\)/);
+  assert.match(source, /NOT IN \('SUPER_ADMIN','ADMIN','COMPANY_ADMIN'\)/);
   assert.match(source, /main_company_slug=\?/);
 });
 
