@@ -1,0 +1,89 @@
+name: PDKS Standalone Runtime Finalize
+
+on:
+  push:
+    branches:
+      - codex/pdks-desktop-1.8.1-device-final-20260907
+    paths:
+      - '.github/workflows/pdks-runtime-migration-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pdks-desktop-1.8.1-device-final-20260907
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply standalone runtime migration fixes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p=Path(path)
+              text=p.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  raise SystemExit(f'Missing expected block in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old,new,1),encoding='utf-8-sig')
+
+          install=r'APP/desktop/ky-pdks/installer/install-pdks-agent.ps1'
+          marker='''$resolved=(Resolve-Path -LiteralPath $ExePath).Path\nif(-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {\n  throw "PDKS Agent EXE bulunamadı: $resolved"\n}\n\n$quoted='"'+$resolved+'"'\n'''
+          replacement='''$resolved=(Resolve-Path -LiteralPath $ExePath).Path\nif(-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {\n  throw "PDKS Agent EXE bulunamadı: $resolved"\n}\n\n# FP_CLOCK üretici çalışma zamanı yalnız bir kez eski kurulumdan KY PDKS alanına taşınır.\n# Bundan sonraki çalışma Hedef500 uygulamasını, timerecords.txt dosyasını veya eski EXE'leri kullanmaz.\n$agentDir=Split-Path -Parent $resolved\n$runtimeDir=Join-Path $agentDir 'DeviceBridge\\runtime'\nNew-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null\n\nfunction Find-RuntimeSource {\n  param([string]$EnvName,[string[]]$Candidates)\n  $fromEnv=[Environment]::GetEnvironmentVariable($EnvName)\n  if($fromEnv -and (Test-Path -LiteralPath $fromEnv -PathType Leaf)) { return (Resolve-Path -LiteralPath $fromEnv).Path }\n  foreach($candidate in $Candidates) {\n    if($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return (Resolve-Path -LiteralPath $candidate).Path }\n  }\n  return $null\n}\n\n$fpTarget=Join-Path $runtimeDir 'FP_CLOCK.ocx'\n$tmpTarget=Join-Path $runtimeDir 'TMPCCOMM.dll'\n$chTarget=Join-Path $runtimeDir 'CH375DLL.DLL'\n\nif(-not (Test-Path -LiteralPath $fpTarget -PathType Leaf)) {\n  $src=Find-RuntimeSource 'KY_PDKS_FP_CLOCK_OCX' @(\n    'C:\\Hedef500\\Terminal Bilgi Aktar\\support\\FP_CLOCK.ocx',\n    'D:\\personel yedek son\\Terminal Bilgi Aktar\\support\\FP_CLOCK.ocx'\n  )\n  if($src) { Copy-Item -LiteralPath $src -Destination $fpTarget -Force }\n}\nif(-not (Test-Path -LiteralPath $tmpTarget -PathType Leaf)) {\n  $src=Find-RuntimeSource 'KY_PDKS_TMPCCOMM_DLL' @(\n    'C:\\Hedef500\\Terminal Bilgi Aktar\\support\\TMPCCOMM.dll',\n    'D:\\personel yedek son\\Terminal Bilgi Aktar\\support\\TMPCCOMM.dll'\n  )\n  if($src) { Copy-Item -LiteralPath $src -Destination $tmpTarget -Force }\n}\nif(-not (Test-Path -LiteralPath $chTarget -PathType Leaf)) {\n  $src=Find-RuntimeSource 'KY_PDKS_CH375_DLL' @(\n    'C:\\Hedef500\\Terminal Bilgi Aktar\\support\\CH375DLL.DLL',\n    'D:\\personel yedek son\\Terminal Bilgi Aktar\\support\\CH375DLL.DLL',\n    'C:\\Program Files\\SAi\\SAi Production Suite 21\\Program\\CH375DLL.DLL',\n    'C:\\Program Files (x86)\\SAi\\SAi Production Suite 21\\Program\\CH375DLL.DLL'\n  )\n  if($src) { Copy-Item -LiteralPath $src -Destination $chTarget -Force }\n}\n\nif(-not (Test-Path -LiteralPath $fpTarget -PathType Leaf) -or -not (Test-Path -LiteralPath $tmpTarget -PathType Leaf)) {\n  throw 'FP_CLOCK üretici çalışma zamanı bulunamadı. Eski Terminal Bilgi Aktar support klasörü veya KY_PDKS_FP_CLOCK_OCX/KY_PDKS_TMPCCOMM_DLL kaynakları gerekli.'\n}\nWrite-Host "FP_CLOCK runtime hazır: $runtimeDir (Hedef500 çalışma bağımlılığı yok)."\n\n$quoted='"'+$resolved+'"'\n'''
+          replace_once(install,marker,replacement)
+
+          build=r'APP/desktop/ky-pdks/BUILD_PDKS_PRO_SETUP.ps1'
+          old='''if (-not $FpClockOcx -or -not $TmpCommDll -or -not $Ch375Dll) {\n    throw 'FP_CLOCK runtime eksik. KY_PDKS_FP_CLOCK_OCX / KY_PDKS_TMPCCOMM_DLL / KY_PDKS_CH375_DLL yollarını tanımlayın.'\n}\n$FpRuntime = Join-Path $DeviceBridgeOut 'runtime'\nNew-Item $FpRuntime -ItemType Directory -Force | Out-Null\nCopy-Item $FpClockOcx (Join-Path $FpRuntime 'FP_CLOCK.ocx') -Force\nCopy-Item $TmpCommDll (Join-Path $FpRuntime 'TMPCCOMM.dll') -Force\nCopy-Item $Ch375Dll (Join-Path $FpRuntime 'CH375DLL.DLL') -Force\n$FpRuntimeReady = $true\n'''
+          new='''$FpRuntimeReady = $false\n$FpRuntime = Join-Path $DeviceBridgeOut 'runtime'\nif ($FpClockOcx -and $TmpCommDll) {\n    New-Item $FpRuntime -ItemType Directory -Force | Out-Null\n    Copy-Item $FpClockOcx (Join-Path $FpRuntime 'FP_CLOCK.ocx') -Force\n    Copy-Item $TmpCommDll (Join-Path $FpRuntime 'TMPCCOMM.dll') -Force\n    if ($Ch375Dll) { Copy-Item $Ch375Dll (Join-Path $FpRuntime 'CH375DLL.DLL') -Force }\n    else { Write-Warning 'CH375DLL.DLL build makinesinde bulunamadı; ağ bağlantılı FP_CLOCK için opsiyonel bırakıldı.' }\n    $FpRuntimeReady = $true\n} else {\n    Write-Warning 'FP_CLOCK runtime build makinesinde yok; Setup hedef PC üzerindeki mevcut üretici support klasöründen tek seferlik runtime migration yapacak.'\n}\n'''
+          replace_once(build,old,new)
+          replace_once(build,
+              '''    includesFpClockRuntime = [bool]$FpRuntimeReady\n    includesCanonicalFrontend = $true''',
+              '''    includesFpClockRuntime = [bool]$FpRuntimeReady\n    supportsFpClockRuntimeMigration = $true\n    includesCanonicalFrontend = $true''')
+
+          iss=r'APP/desktop/ky-pdks/installer/KY-PDKS.iss'
+          p=Path(iss); text=p.read_text(encoding='utf-8-sig')
+          text=text.replace('Name: "{userstartup}\\KY PDKS Agent"; Filename: "{app}\\Agent\\KYERP.PDKS.Agent.exe"; WorkingDir: "{app}\\Agent"\n','')
+          text=text.replace('Filename: "{app}\\Agent\\KYERP.PDKS.Agent.exe"; Flags: nowait runasoriginaluser; StatusMsg: "KY PDKS Agent kullanıcı oturumu fallback başlatılıyor..."\n','')
+          p.write_text(text,encoding='utf-8-sig')
+          '@ | python -
+
+      - name: Static final checks
+        shell: pwsh
+        run: |
+          $install=Get-Content 'APP/desktop/ky-pdks/installer/install-pdks-agent.ps1' -Raw
+          if($install -notmatch 'FP_CLOCK üretici çalışma zamanı') { throw 'Runtime migration eksik' }
+          if($install -notmatch 'Hedef500 çalışma bağımlılığı yok') { throw 'Hedef500 bağımsızlık işareti eksik' }
+          $build=Get-Content 'APP/desktop/ky-pdks/BUILD_PDKS_PRO_SETUP.ps1' -Raw
+          if($build -notmatch 'supportsFpClockRuntimeMigration') { throw 'Build metadata migration desteği eksik' }
+          $iss=Get-Content 'APP/desktop/ky-pdks/installer/KY-PDKS.iss' -Raw
+          if($iss -match 'KY PDKS Agent kullanıcı oturumu fallback') { throw 'Agent duplicate fallback halen var' }
+
+      - name: Build Windows projects
+        shell: pwsh
+        run: |
+          $root='APP/desktop/ky-pdks/src'
+          dotnet restore "$root/KyPdks.DeviceBridge.x86/KyPdks.DeviceBridge.x86.csproj"
+          dotnet build "$root/KyPdks.DeviceBridge.x86/KyPdks.DeviceBridge.x86.csproj" -c Release --no-restore -p:PlatformTarget=x86
+          dotnet restore "$root/KyPdks.Agent/KyPdks.Agent.csproj"
+          dotnet build "$root/KyPdks.Agent/KyPdks.Agent.csproj" -c Release --no-restore
+          dotnet restore "$root/KyPdks.Desktop/KyPdks.Desktop.csproj"
+          dotnet build "$root/KyPdks.Desktop/KyPdks.Desktop.csproj" -c Release --no-restore
+
+      - name: Commit final runtime migration
+        shell: pwsh
+        run: |
+          git config user.name 'ky-erp-ci'
+          git config user.email 'actions@users.noreply.github.com'
+          git add APP/desktop/ky-pdks/BUILD_PDKS_PRO_SETUP.ps1 APP/desktop/ky-pdks/installer/install-pdks-agent.ps1 APP/desktop/ky-pdks/installer/KY-PDKS.iss
+          if(git diff --cached --quiet) { Write-Host 'No runtime migration changes'; exit 0 }
+          git commit -m 'fix(pdks): remove Hedef runtime dependency after migration'
+          git push origin HEAD:codex/pdks-desktop-1.8.1-device-final-20260907
