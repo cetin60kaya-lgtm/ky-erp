@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$SkipTests
 )
 
@@ -159,15 +159,18 @@ $Ch375Dll = Resolve-FpRuntimeFile 'KY_PDKS_CH375_DLL' @(
     'C:\Program Files\SAi\SAi Production Suite 21\Program\CH375DLL.DLL',
     'C:\Program Files (x86)\SAi\SAi Production Suite 21\Program\CH375DLL.DLL'
 )
-if (-not $FpClockOcx -or -not $TmpCommDll -or -not $Ch375Dll) {
-    throw 'FP_CLOCK runtime eksik. KY_PDKS_FP_CLOCK_OCX / KY_PDKS_TMPCCOMM_DLL / KY_PDKS_CH375_DLL yollarını tanımlayın.'
-}
+$FpRuntimeReady = $false
 $FpRuntime = Join-Path $DeviceBridgeOut 'runtime'
-New-Item $FpRuntime -ItemType Directory -Force | Out-Null
-Copy-Item $FpClockOcx (Join-Path $FpRuntime 'FP_CLOCK.ocx') -Force
-Copy-Item $TmpCommDll (Join-Path $FpRuntime 'TMPCCOMM.dll') -Force
-Copy-Item $Ch375Dll (Join-Path $FpRuntime 'CH375DLL.DLL') -Force
-$FpRuntimeReady = $true
+if ($FpClockOcx -and $TmpCommDll) {
+    New-Item $FpRuntime -ItemType Directory -Force | Out-Null
+    Copy-Item $FpClockOcx (Join-Path $FpRuntime 'FP_CLOCK.ocx') -Force
+    Copy-Item $TmpCommDll (Join-Path $FpRuntime 'TMPCCOMM.dll') -Force
+    if ($Ch375Dll) { Copy-Item $Ch375Dll (Join-Path $FpRuntime 'CH375DLL.DLL') -Force }
+    else { Write-Warning 'CH375DLL.DLL build makinesinde bulunamadı; ağ bağlantılı FP_CLOCK için opsiyonel bırakıldı.' }
+    $FpRuntimeReady = $true
+} else {
+    Write-Warning 'FP_CLOCK runtime build makinesinde yok; Setup hedef PC üzerindeki mevcut üretici support klasöründen tek seferlik runtime migration yapacak.'
+}
 
 $AgentBridge = Join-Path $AgentOut 'DeviceBridge'
 New-Item $AgentBridge -ItemType Directory -Force | Out-Null
@@ -233,6 +236,7 @@ $BuildInfo = [ordered]@{
     includesPdksAgent = $true
     includesFpClockDirectBridge = $true
     includesFpClockRuntime = [bool]$FpRuntimeReady
+    supportsFpClockRuntimeMigration = $true
     includesCanonicalFrontend = $true
     includesWebView2Bootstrapper = $true
     sourceBranch = 'codex/pdks-desktop-1.8.1-device-final-20260907'

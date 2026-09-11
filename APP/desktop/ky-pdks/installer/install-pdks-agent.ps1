@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [switch]$Uninstall
 )
@@ -50,6 +50,55 @@ $resolved=(Resolve-Path -LiteralPath $ExePath).Path
 if(-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
   throw "PDKS Agent EXE bulunamadı: $resolved"
 }
+
+# FP_CLOCK üretici çalışma zamanı yalnız bir kez eski kurulumdan KY PDKS alanına taşınır.
+# Bundan sonraki çalışma Hedef500 uygulamasını, timerecords.txt dosyasını veya eski EXE'leri kullanmaz.
+$agentDir=Split-Path -Parent $resolved
+$runtimeDir=Join-Path $agentDir 'DeviceBridge\runtime'
+New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+
+function Find-RuntimeSource {
+  param([string]$EnvName,[string[]]$Candidates)
+  $fromEnv=[Environment]::GetEnvironmentVariable($EnvName)
+  if($fromEnv -and (Test-Path -LiteralPath $fromEnv -PathType Leaf)) { return (Resolve-Path -LiteralPath $fromEnv).Path }
+  foreach($candidate in $Candidates) {
+    if($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return (Resolve-Path -LiteralPath $candidate).Path }
+  }
+  return $null
+}
+
+$fpTarget=Join-Path $runtimeDir 'FP_CLOCK.ocx'
+$tmpTarget=Join-Path $runtimeDir 'TMPCCOMM.dll'
+$chTarget=Join-Path $runtimeDir 'CH375DLL.DLL'
+
+if(-not (Test-Path -LiteralPath $fpTarget -PathType Leaf)) {
+  $src=Find-RuntimeSource 'KY_PDKS_FP_CLOCK_OCX' @(
+    'C:\Hedef500\Terminal Bilgi Aktar\support\FP_CLOCK.ocx',
+    'D:\personel yedek son\Terminal Bilgi Aktar\support\FP_CLOCK.ocx'
+  )
+  if($src) { Copy-Item -LiteralPath $src -Destination $fpTarget -Force }
+}
+if(-not (Test-Path -LiteralPath $tmpTarget -PathType Leaf)) {
+  $src=Find-RuntimeSource 'KY_PDKS_TMPCCOMM_DLL' @(
+    'C:\Hedef500\Terminal Bilgi Aktar\support\TMPCCOMM.dll',
+    'D:\personel yedek son\Terminal Bilgi Aktar\support\TMPCCOMM.dll'
+  )
+  if($src) { Copy-Item -LiteralPath $src -Destination $tmpTarget -Force }
+}
+if(-not (Test-Path -LiteralPath $chTarget -PathType Leaf)) {
+  $src=Find-RuntimeSource 'KY_PDKS_CH375_DLL' @(
+    'C:\Hedef500\Terminal Bilgi Aktar\support\CH375DLL.DLL',
+    'D:\personel yedek son\Terminal Bilgi Aktar\support\CH375DLL.DLL',
+    'C:\Program Files\SAi\SAi Production Suite 21\Program\CH375DLL.DLL',
+    'C:\Program Files (x86)\SAi\SAi Production Suite 21\Program\CH375DLL.DLL'
+  )
+  if($src) { Copy-Item -LiteralPath $src -Destination $chTarget -Force }
+}
+
+if(-not (Test-Path -LiteralPath $fpTarget -PathType Leaf) -or -not (Test-Path -LiteralPath $tmpTarget -PathType Leaf)) {
+  throw 'FP_CLOCK üretici çalışma zamanı bulunamadı. Eski Terminal Bilgi Aktar support klasörü veya KY_PDKS_FP_CLOCK_OCX/KY_PDKS_TMPCCOMM_DLL kaynakları gerekli.'
+}
+Write-Host "FP_CLOCK runtime hazır: $runtimeDir (Hedef500 çalışma bağımlılığı yok)."
 
 $quoted='"'+$resolved+'"'
 $create=Invoke-Sc create $ServiceName "binPath= $quoted" "start= delayed-auto" "DisplayName= $DisplayName"
