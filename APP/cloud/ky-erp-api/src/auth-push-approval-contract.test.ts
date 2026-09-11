@@ -19,6 +19,7 @@ const serviceWorker = repoFile("APP/app/ky-erp-frontend/public/kyerp-push-sw.js"
 const frontendMain = repoFile("APP/app/ky-erp-frontend/src/main.jsx");
 const companySettings = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminCompanySettings.jsx");
 const phoneSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalSetup.jsx");
+const phoneDeviceSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalDeviceSetup.jsx");
 const phoneInbox = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalInboxBridge.jsx");
 const securityApp = repoFile("APP/app/ky-erp-frontend/public/security/app.js");
 const securityHtml = repoFile("APP/app/ky-erp-frontend/public/security/index.html");
@@ -98,9 +99,10 @@ test("dedicated Security worker owns phone approval while the legacy main worker
 });
 
 test("authenticated shell creates one-time security-app enrollment while password step-up happens on the phone", () => {
-  assert.match(phoneSetup, /security-enrollment\/start/);
-  assert.match(phoneSetup, /Yeni Kurulum Kodu Oluştur/);
-  assert.match(phoneSetup, /app\.kyerp\.net\/security/);
+  assert.match(phoneSetup, /PhoneApprovalDeviceSetup/);
+  assert.match(phoneDeviceSetup, /security-enrollment\/start/);
+  assert.match(phoneDeviceSetup, /Yeni Kurulum Kodu Oluştur/);
+  assert.match(phoneDeviceSetup, /app\.kyerp\.net\/security/);
   assert.match(push, /security-enrollment\/complete/);
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
   assert.match(push, /AUTH_PUSH_SECURITY_ENROLLMENT/);
@@ -118,7 +120,7 @@ test("dedicated iPhone and Android security app opens the app for approval inste
   assert.match(securityApp, /navigator\.credentials\.create/);
   assert.match(securityApp, /navigator\.credentials\.get/);
   assert.match(securityApp, /userVerification:"required"/);
-  assert.match(phoneSetup, /Ana Ekrana Ekle/);
+  assert.match(phoneDeviceSetup, /Ana Ekrana Ekle/);
 });
 
 test("json_store phone challenge uses camelCase while legacy manager approval stays SQL snake_case", () => {
@@ -139,7 +141,6 @@ test("legacy direct MFA reset remains fail-closed", () => {
   assert.match(main, /reset-mfa/);
 });
 
-
 test("push approval hides raw browser ids and uses Android friendly device labels", () => {
   assert.match(push, /function friendlyDeviceLabel/);
   assert.match(push, /Android telefon/);
@@ -151,7 +152,6 @@ test("push approval hides raw browser ids and uses Android friendly device label
   assert.match(push, /SUPERSEDED/);
   assert.match(policy, /PHONE_APPROVAL_SUPERSEDED/);
 });
-
 
 test("phone approval keeps one latest self request, one visible notification and serialized status checks", () => {
   assert.match(push, /let latestSelfPending = ""/);
@@ -175,7 +175,6 @@ test("phone approval can resend the same challenge without creating a second req
   assert.match(policy, /PHONE_APPROVAL_DEVICE_OFFLINE/);
 });
 
-
 test("KY Security short code stays tied to the same pending phone challenge", () => {
   assert.match(push, /auth\/push\/device\/login-code/);
   assert.match(policy, /phone-approval\/:id\/code/);
@@ -189,7 +188,6 @@ test("trusted Security device keeps phone approval pending when push delivery is
   assert.match(push, /pushDelivered: sent > 0/);
   assert.match(push, /Bildirim kanalı geçici olarak yanıt vermedi/);
 });
-
 
 test("phone approval is attempted before legacy Authenticator migration",()=>{
   const phoneIndex=policy.indexOf("startPhoneApprovalChallenge(c, refreshed || user, source)");
