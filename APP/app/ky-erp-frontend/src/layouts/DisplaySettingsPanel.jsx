@@ -61,6 +61,7 @@ export default function DisplaySettingsPanel({
   display,
   canInstallMainApp = false,
   onInstallMainApp,
+  securityAppEligible = false,
   onOpenSecurityCenter,
   onClose,
 }) {
@@ -156,6 +157,7 @@ export default function DisplaySettingsPanel({
                 ) : null}
               </article>
 
+              {securityAppEligible ? (
               <article className="display-app-card security">
                 <div className="display-app-card-head">
                   <span className="display-app-icon"><ShieldCheck size={22} /></span>
@@ -188,6 +190,7 @@ export default function DisplaySettingsPanel({
                   <ExternalLink size={14} />
                 </button>
               </article>
+              ) : null}
             </div>
 
             <div className="display-apps-footnote">

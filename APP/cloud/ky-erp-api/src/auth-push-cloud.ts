@@ -9,11 +9,13 @@ const VAPID_SECRET_KEY = "VAPID_P256_KEYPAIR_V1";
 const VAPID_SUBJECT = "mailto:admin@kyerp.net";
 
 const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
+const SECURITY_GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
+const SECURITY_CAPABILITIES = ["LOGIN_APPROVE", "SESSION_VIEW", "SESSION_APPROVE", "SESSION_CLOSE", "AUDIT_VIEW"];
 const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.0";
+const SECURITY_APP_VERSION = "security-v2.1";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -79,6 +81,18 @@ function isCompanyAdmin(role: unknown) {
 function roleOf(row: AnyRow) {
   const role = upper(row?.role_override || row?.role || "VIEWER");
   return role === "ADMIN" ? "SUPER_ADMIN" : role;
+}
+async function securityAppAccess(c: any, row: AnyRow) {
+  const userId = text(row?.id || row?.userId);
+  const role = roleOf({ role: row?.role, role_override: row?.role_override || row?.roleOverride });
+  const companySlug = text(row?.main_company_slug || row?.mainCompanySlug || row?.companySlug);
+  if (isSuper(role) || isCompanyAdmin(role)) return { eligible: true, capabilities: [...SECURITY_CAPABILITIES], source: "ROLE" };
+  if (!userId || !companySlug) return { eligible: false, capabilities: [], source: "NONE" };
+  const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${userId}`);
+  const capabilities = grant?.isActive === false || !Array.isArray(grant?.capabilities)
+    ? []
+    : [...new Set(grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)))];
+  return { eligible: capabilities.length > 0, capabilities, source: capabilities.length ? "GRANT" : "NONE" };
 }
 function base64Url(bytes: Uint8Array) {
   let binary = "";
@@ -495,18 +509,22 @@ async function signedSecurityActorForRecovery(c: any) {
 
   const user = await c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.role,u.is_active,
-            s.role_override,s.main_company_slug
+            s.email,s.role_override,s.main_company_slug
        FROM auth_users u
        LEFT JOIN auth_user_security s ON s.user_id=u.id
       WHERE u.id=? LIMIT 1`,
   ).bind(text(device.userId)).first<AnyRow>();
   if (!user || !Boolean(user.is_active)) return null;
+  const appAccess = await securityAppAccess(c, user);
+  if (!appAccess.eligible) return null;
 
   return {
     device,
     userId: text(user.id),
     role: roleOf(user),
     companySlug: text(user.main_company_slug || device.mainCompanySlug),
+    username: text(user.username),
+    email: text(user.email),
     fullName: text(user.full_name || user.username),
   };
 }
@@ -562,12 +580,14 @@ async function actorFromDevice(c: any) {
 
   const user = await c.env.DB.prepare(
     `SELECT u.id,u.username,u.full_name,u.role,u.is_active,
-            s.role_override,s.main_company_slug
+            s.email,s.role_override,s.main_company_slug
        FROM auth_users u
        LEFT JOIN auth_user_security s ON s.user_id=u.id
       WHERE u.id=? LIMIT 1`,
   ).bind(text(device.userId)).first<AnyRow>();
   if (!user || !Boolean(user.is_active)) return null;
+  const appAccess = await securityAppAccess(c, user);
+  if (!appAccess.eligible) return null;
 
   const companySlug = text(user.main_company_slug || device.mainCompanySlug);
   c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, lastSeenAt: nowIso() }));
@@ -577,7 +597,60 @@ async function actorFromDevice(c: any) {
     userId: text(user.id),
     role: roleOf(user),
     companySlug,
+    username: text(user.username),
+    email: text(user.email),
     fullName: text(user.full_name || user.username),
+  };
+}
+
+async function securityAccountProfile(c: any, actor: AnyRow) {
+  const role = upper(actor.role);
+  const companySlug = text(actor.companySlug);
+  let companyName = companySlug;
+  if (companySlug && await tableExists(c, "main_companies")) {
+    const company = await c.env.DB.prepare(
+      "SELECT name,title FROM main_companies WHERE slug=? LIMIT 1",
+    ).bind(companySlug).first<AnyRow>();
+    companyName = text(company?.title || company?.name || companySlug);
+  }
+
+  let moduleKeys: string[] = [];
+  if (isSuper(role)) {
+    moduleKeys = ["ALL"];
+  } else if (await tableExists(c, "auth_user_module_permissions")) {
+    const result = await c.env.DB.prepare(
+      "SELECT module_key FROM auth_user_module_permissions WHERE user_id=? AND can_view=1 ORDER BY module_key",
+    ).bind(actor.userId).all<AnyRow>();
+    moduleKeys = [...new Set((result.results || []).map((row: AnyRow) => upper(row.module_key)).filter(Boolean))];
+  }
+  if (isCompanyAdmin(role)) {
+    if (!moduleKeys.includes("ADMIN")) moduleKeys.push("ADMIN");
+    if (!moduleKeys.includes("STORAGE_ADMIN")) moduleKeys.push("STORAGE_ADMIN");
+  }
+
+  let securityCapabilities: string[] = [];
+  if (isSuper(role) || isCompanyAdmin(role)) {
+    securityCapabilities = [...SECURITY_CAPABILITIES];
+  } else if (companySlug) {
+    const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${actor.userId}`);
+    if (grant?.isActive !== false && Array.isArray(grant?.capabilities)) {
+      securityCapabilities = [...new Set(
+        grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)),
+      )];
+    }
+  }
+
+  return {
+    userId: text(actor.userId),
+    fullName: text(actor.fullName || actor.username || "Kullanıcı"),
+    username: text(actor.username),
+    email: text(actor.email),
+    role,
+    companySlug,
+    companyName,
+    scopeType: isSuper(role) ? "SYSTEM" : (isCompanyAdmin(role) ? "COMPANY" : "USER"),
+    moduleKeys,
+    securityCapabilities,
   };
 }
 
@@ -879,6 +952,8 @@ export function registerAuthPushRoutes(app: any) {
   app.post("/api/auth/push/security-enrollment/start", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Güvenlik uygulaması kurulumu için KY ERP oturumu gereklidir."), 401);
+    const appAccess = await securityAppAccess(c, current);
+    if (!appAccess.eligible) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesaba KY Güvenlik uygulaması yetkisi verilmemiş."), 403);
 
     const pair = await ensureVapidKeyPair(c);
     const enrollmentId = crypto.randomUUID();
@@ -948,6 +1023,9 @@ export function registerAuthPushRoutes(app: any) {
     }
 
     const user = await userRow(c, text(enrollment.userId));
+    if (!user || !Boolean(user.is_active)) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesap artık KY Güvenlik uygulamasını kullanamaz."), 403);
+    const appAccess = await securityAppAccess(c, user);
+    if (!appAccess.eligible) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesaba KY Güvenlik uygulaması yetkisi verilmemiş."), 403);
     const password = String(body.password || "");
     if (!user || !Boolean(user.is_active) || !password || !(await compare(password, text(user.password_hash)))) {
       return c.json(jsonError("STEP_UP_FAILED", "Mevcut KY ERP şifresi doğrulanamadı."), 401);
@@ -1060,6 +1138,7 @@ export function registerAuthPushRoutes(app: any) {
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı ayarları için oturum gereklidir."), 401);
 
     const pair = await ensureVapidKeyPair(c);
+    const appAccess = await securityAppAccess(c, current);
     const devices = (await storeList(c, DEVICE_SCOPE))
       .filter((row: AnyRow) => text(row.userId) === text(current.id))
       .sort((a: AnyRow, b: AnyRow) => String(b.lastSeenAt || b.updatedAt || "").localeCompare(String(a.lastSeenAt || a.updatedAt || "")));
@@ -1068,6 +1147,8 @@ export function registerAuthPushRoutes(app: any) {
       ok: true,
       data: {
         supported: true,
+        securityAppEligible: appAccess.eligible,
+        securityCapabilities: appAccess.capabilities,
         applicationServerKey: pair.publicKey,
         storage: "json_store",
         devices: devices.map((row: AnyRow) => ({
@@ -1183,8 +1264,10 @@ export function registerAuthPushRoutes(app: any) {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihaz bağlantısı doğrulanamadı. Bağlantıyı Yenile işlemini kullanın."), 401);
     const items = await pendingItems(c, actor);
+    const account = await securityAccountProfile(c, actor);
     return c.json({ ok: true, data: {
       ready: true,
+      account,
       checkedAt: nowIso(),
       serverVersion: SECURITY_APP_VERSION,
       pendingCount: items.length,

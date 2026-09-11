@@ -7,6 +7,7 @@ import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import { getNotifications, markNotificationsRead } from "../services/notificationApi";
 import { decideSecurityCenterLoginApproval, runPhoneApprovedSecurityAction } from "../services/securityCenterApi";
+import { apiGet } from "../utils/api";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 import "../styles/security-notification-actions.css";
@@ -105,6 +106,7 @@ export default function AppShellV3({
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
+  const [securityAppEligible, setSecurityAppEligible] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const profileMenuRef = useRef(null);
@@ -134,6 +136,18 @@ export default function AppShellV3({
     .join("") || "K";
   const canOpenPlatformManagement = modules.some((item) => item.key === "admin");
   const ownerUser = isOwnerUser(user);
+  const securityRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
+  const builtInSecurityAppAccess = ownerUser || securityRole === "COMPANY_ADMIN";
+
+  useEffect(() => {
+    if (!user?.id) { setSecurityAppEligible(false); return undefined; }
+    let alive = true;
+    setSecurityAppEligible(builtInSecurityAppAccess);
+    apiGet("/auth/push/config", { _ts: Date.now() })
+      .then((result) => { if (alive) setSecurityAppEligible(Boolean((result?.data || result)?.securityAppEligible)); })
+      .catch(() => { if (alive) setSecurityAppEligible(builtInSecurityAppAccess); });
+    return () => { alive = false; };
+  }, [user?.id, user?.role, builtInSecurityAppAccess]);
 
   const refreshNotifications = useCallback(async (silent = false) => {
     const normalizedRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
@@ -174,10 +188,10 @@ export default function AppShellV3({
   }, [refreshNotifications, user?.id, activeCompanySlug]);
 
   useEffect(() => {
-    const openPhoneApprovalSetup = () => setPhoneApprovalOpen(true);
+    const openPhoneApprovalSetup = () => { if (securityAppEligible) setPhoneApprovalOpen(true); };
     window.addEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
     return () => window.removeEventListener("kyerp:open-phone-approval-setup", openPhoneApprovalSetup);
-  }, []);
+  }, [securityAppEligible]);
 
   useEffect(() => {
     const onBeforeInstall = (event) => {
@@ -283,7 +297,7 @@ export default function AppShellV3({
     if (item?.unread) markNotificationIdsRead([item.id]);
     if (item?.meta?.securityCenter === true) {
       if (ownerUser) onOpenTab("admin", "uygulama-sahibi");
-      else setPhoneApprovalOpen(true);
+      else if (securityAppEligible) setPhoneApprovalOpen(true);
       setNotificationOpen(false);
       return;
     }
@@ -332,7 +346,7 @@ export default function AppShellV3({
       onOpenTab("admin", "kullanicilar");
       return;
     }
-    setPhoneApprovalOpen(true);
+    if (securityAppEligible) setPhoneApprovalOpen(true);
   }
 
   function openPlatformManagement() {
@@ -342,7 +356,7 @@ export default function AppShellV3({
 
   function openPhoneApprovalFromProfile() {
     setProfileMenuOpen(false);
-    setPhoneApprovalOpen(true);
+    if (securityAppEligible) setPhoneApprovalOpen(true);
   }
 
   function openDisplaySettingsFromProfile() {
@@ -477,16 +491,18 @@ export default function AppShellV3({
             <span>Ekran</span>
             <small>{displayLabel} · {effectiveScale}%</small>
           </button>
-          <button
-            type="button"
-            className="shell-v3-phone-approval-button"
-            onClick={() => setPhoneApprovalOpen(true)}
-            aria-label="Telefon Onayı ayarlarını aç"
-            title="Telefon Onayı"
-          >
-            <BellRing size={17} />
-            <span>Telefon Onayı</span>
-          </button>
+          {securityAppEligible ? (
+            <button
+              type="button"
+              className="shell-v3-phone-approval-button"
+              onClick={() => setPhoneApprovalOpen(true)}
+              aria-label="Telefon Onayı ayarlarını aç"
+              title="Telefon Onayı"
+            >
+              <BellRing size={17} />
+              <span>Telefon Onayı</span>
+            </button>
+          ) : null}
           <div className="shell-v3-notification-wrap">
             <button
               type="button"
@@ -615,13 +631,15 @@ export default function AppShellV3({
                     </button>
                   ) : null}
 
-                  <button type="button" role="menuitem" onClick={openPhoneApprovalFromProfile}>
-                    <Smartphone size={18} />
-                    <span>
-                      <strong>Telefon Onayı</strong>
-                      <small>Bu cihazı güvenli giriş onayı için yönet</small>
-                    </span>
-                  </button>
+                  {securityAppEligible ? (
+                    <button type="button" role="menuitem" onClick={openPhoneApprovalFromProfile}>
+                      <Smartphone size={18} />
+                      <span>
+                        <strong>Telefon Onayı</strong>
+                        <small>Bu cihazı güvenli giriş onayı için yönet</small>
+                      </span>
+                    </button>
+                  ) : null}
 
                   <button type="button" role="menuitem" onClick={openDisplaySettingsFromProfile}>
                     <Monitor size={18} />
@@ -673,9 +691,10 @@ export default function AppShellV3({
               display={displayPreferences}
               canInstallMainApp={Boolean(installPrompt)}
               onInstallMainApp={installPwa}
+              securityAppEligible={securityAppEligible}
               onOpenSecurityCenter={() => {
                 setDisplaySettingsOpen(false);
-                setPhoneApprovalOpen(true);
+                if (securityAppEligible) setPhoneApprovalOpen(true);
               }}
               onClose={() => setDisplaySettingsOpen(false)}
             />,
@@ -683,7 +702,7 @@ export default function AppShellV3({
           )
         : null}
 
-      {phoneApprovalOpen
+      {phoneApprovalOpen && securityAppEligible
         ? createPortal(
             <PhoneApprovalSetup onClose={() => setPhoneApprovalOpen(false)} />,
             document.body,

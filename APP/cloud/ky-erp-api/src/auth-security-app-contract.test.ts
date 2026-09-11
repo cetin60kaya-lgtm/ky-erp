@@ -55,7 +55,7 @@ test("access refresh reuses the same security device id instead of creating dupl
   assert.match(push,/const existing = replaceCandidate \|\| endpointCandidate/);
   assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
   assert.match(push,/relinkedDevice: Boolean\(replaceCandidate\)/);
-  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.0"/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.1"/);
 });
 
 
@@ -82,4 +82,22 @@ test("reactivated Security device clears stale retirement markers so phone login
   assert.match(push,/retiredAt: ""/);
   assert.match(push,/retiredReason: ""/);
   assert.match(push,/if \(purpose === "SELF"\) return row\.isActive !== false \|\|/);
+});
+
+test("security device health returns the verified bound account identity and permission scope",()=>{
+  assert.match(push,/securityAccountProfile/);
+  assert.match(push,/s\.email,s\.role_override,s\.main_company_slug/);
+  assert.match(push,/scopeType: isSuper\(role\) \? "SYSTEM"/);
+  assert.match(push,/moduleKeys/);
+  assert.match(push,/securityCapabilities/);
+  assert.match(push,/const account = await securityAccountProfile\(c, actor\)/);
+});
+
+
+test("security app install and runtime are limited to owners or delegated security users",()=>{
+  assert.match(push,/securityAppAccess/);
+  assert.match(push,/SECURITY_APP_NOT_ALLOWED/);
+  assert.match(push,/securityAppEligible: appAccess.eligible/);
+  assert.match(push,/capabilities.length > 0/);
+  assert.match(push,/if \(!appAccess\.eligible\) return null/);
 });
