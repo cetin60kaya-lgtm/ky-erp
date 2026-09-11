@@ -59,12 +59,12 @@ Name: "autostart"; Description: "Windows açıldığında KY PDKS Pro'ı başlat
 
 [Run]
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; Flags: runhidden waituntilterminated; StatusMsg: "Microsoft WebView2 hazırlanıyor..."
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File &quot;{app}\Installer\install-pdks-agent.ps1&quot; -ExePath &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot;"; Flags: runhidden waituntilterminated logoutput; StatusMsg: "KY PDKS Agent servis olarak kuruluyor ve doğrulanıyor..."
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Installer\install-pdks-agent.ps1"" -ExePath ""{app}\Agent\KYERP.PDKS.Agent.exe"""; Flags: runhidden waituntilterminated logoutput; StatusMsg: "KY PDKS Agent servis olarak kuruluyor ve doğrulanıyor..."
 Filename: "{app}\Agent\KYERP.PDKS.Agent.exe"; Flags: nowait runasoriginaluser; StatusMsg: "KY PDKS Agent kullanıcı oturumu fallback başlatılıyor..."
 Filename: "{app}\KY PDKS Pro.exe"; Description: "KY PDKS Pro uygulamasını aç"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File &quot;{app}\Installer\install-pdks-agent.ps1&quot; -ExePath &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; -Uninstall"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Installer\install-pdks-agent.ps1"" -ExePath ""{app}\Agent\KYERP.PDKS.Agent.exe"" -Uninstall"; Flags: runhidden waituntilterminated
 
 [InstallDelete]
 Type: files; Name: "{app}\KY PDKS Desktop.exe"
