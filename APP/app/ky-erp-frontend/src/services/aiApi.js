@@ -1,5 +1,7 @@
 import { apiDelete, apiFetch, apiGet, apiPost, apiUpload } from "../utils/api";
 
+let activeAiMainCompanySlug = "";
+
 function normalizeAiAction(action = {}) {
   const id = action.id || action.actionId || "";
   const status = action.status === "COMPLETED" ? "EXECUTED" : action.status;
@@ -13,6 +15,7 @@ function normalizeAiAction(action = {}) {
     paymentMethod: action.paymentMethod || "",
     type: action.type || "",
   };
+  if (action.mainCompanySlug) activeAiMainCompanySlug = action.mainCompanySlug;
   return {
     ...action,
     id,
@@ -32,6 +35,9 @@ function normalizeAiMessage(message = {}) {
 
 function normalizeConversationPayload(payload) {
   if (!payload?.conversation) return payload;
+  if (payload.conversation?.pageContext?.mainCompanySlug) {
+    activeAiMainCompanySlug = payload.conversation.pageContext.mainCompanySlug;
+  }
   return {
     ...payload,
     conversation: {
@@ -50,6 +56,7 @@ export async function getAiConversation(id) {
 }
 export const deleteAiConversation = (id) => apiDelete(`/ai/conversations/${encodeURIComponent(id)}`);
 export async function sendAiMessage(payload, signal) {
+  activeAiMainCompanySlug = payload?.mainCompanySlug || payload?.pageContext?.mainCompanySlug || activeAiMainCompanySlug;
   const response = await apiFetch("/ai/chat", {
     method: "POST",
     body: payload,
@@ -62,8 +69,9 @@ export async function sendAiMessage(payload, signal) {
   };
 }
 export const confirmAiAction = (actionId, confirmationToken) =>
-  apiPost("/ai/actions/confirm", { actionId, confirmationToken }, { timeoutMs: 60000 });
-export const cancelAiAction = (actionId) => apiPost("/ai/actions/cancel", { actionId });
+  apiPost("/ai/actions/confirm", { actionId, confirmationToken, mainCompanySlug: activeAiMainCompanySlug }, { timeoutMs: 60000 });
+export const cancelAiAction = (actionId) =>
+  apiPost("/ai/actions/cancel", { actionId, mainCompanySlug: activeAiMainCompanySlug });
 
 export async function findDesignByImage(activeMainCompany, file) {
   const form = new FormData();
