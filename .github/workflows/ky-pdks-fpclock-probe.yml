@@ -38,18 +38,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $out = 'APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48'
-          $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v5.exe'
+          $exe = Join-Path $out 'KY-PDKS-FPClock-Cihaz-Testi-v6.exe'
           if (-not (Test-Path $exe)) { throw 'FP_CLOCK probe EXE oluşmadı.' }
           if ((Get-Item $exe).Length -lt 12KB) { throw "EXE beklenenden küçük: $((Get-Item $exe).Length)" }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v5.exe" -Encoding ascii
+          Set-Content -Path "$exe.sha256.txt" -Value "$sha  KY-PDKS-FPClock-Cihaz-Testi-v6.exe" -Encoding ascii
           [ordered]@{
-            product = 'KY PDKS FP_CLOCK Dependency + Direct Device Probe'
-            version = '5.0.0'
+            product = 'KY PDKS FP_CLOCK ActiveX Host Device Probe'
+            version = '6.0.0'
             architecture = 'x86'
             target = '.NET Framework 4.8'
-            mode = 'READ_ONLY_NATIVE_DEPENDENCY_DIAGNOSTIC'
-            activation = 'PE import scan + LoadLibraryEx + DllGetClassObject; no COM registration'
+            mode = 'READ_ONLY_ACTIVEX_HOST'
+            activation = 'native DllGetClassObject + hidden AxHost site; no COM registration'
             host = '192.168.1.224'
             port = 5005
             deviceNo = 1
@@ -61,10 +61,10 @@ jobs:
       - name: Upload probe artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KY-PDKS-FPClock-Cihaz-Testi-v5
+          name: KY-PDKS-FPClock-Cihaz-Testi-v6
           path: |
-            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v5.exe
-            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v5.exe.sha256.txt
+            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v6.exe
+            APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/KY-PDKS-FPClock-Cihaz-Testi-v6.exe.sha256.txt
             APP/desktop/ky-pdks-fpclock-probe/bin/Release/net48/build-info-fpclock-probe.json
           if-no-files-found: error
           retention-days: 30
