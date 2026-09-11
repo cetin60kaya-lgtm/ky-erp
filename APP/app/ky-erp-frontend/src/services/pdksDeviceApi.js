@@ -17,3 +17,15 @@ export async function enrollPdksDevice(payload = {}) {
 export async function setPdksDeviceActive(id, active) {
   return unwrap(await apiPatch(`/ik/personnel-control/devices/${encodeURIComponent(id)}`, { active }));
 }
+
+export async function listPdksCardMappings(params = {}) {
+  return unwrap(await apiGet("/ik/personnel-control/card-mappings", { ...params, _ts: Date.now() }));
+}
+
+export async function savePdksCardMapping(employeeId, cardNo, params = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/card-mappings/${encodeURIComponent(employeeId)}`, { ...params, cardNo }));
+}
+
+export async function applyInitialPdksCardMappings(params = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/card-mappings/apply-initial", params));
+}
