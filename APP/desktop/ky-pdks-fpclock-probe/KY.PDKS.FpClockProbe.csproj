@@ -5,11 +5,13 @@
     <PlatformTarget>x86</PlatformTarget>
     <Prefer32Bit>true</Prefer32Bit>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>KY-PDKS-FPClock-Cihaz-Testi-v5</AssemblyName>
-    <RootNamespace>KyPdksFpClockProbe</RootNamespace>
+    <AssemblyName>KY-PDKS-FPClock-Cihaz-Testi-v6</AssemblyName>
+    <RootNamespace>KyPdksFpClockProbeV6</RootNamespace>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ProgramV6.cs" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
   </ItemGroup>
