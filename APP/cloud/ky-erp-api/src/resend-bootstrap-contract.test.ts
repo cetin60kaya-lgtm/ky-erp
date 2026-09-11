@@ -46,8 +46,10 @@ test("resend bootstrap proves DNS, domain verification, worker secret and a real
   assert.ok(proofCall > testMailCall, "D1 readiness proof must be written only after real test acceptance");
 });
 
-test("Worker deploy cannot proceed without RESEND_API_KEY", () => {
-  assert.match(wrangler, /"secrets"\s*:\s*\{[\s\S]*"required"\s*:\s*\[[\s\S]*"RESEND_API_KEY"/);
+test("Worker deploy keeps RESEND_API_KEY in Cloudflare secret binding, not plaintext wrangler config", () => {
+  assert.match(safeBootstrap, /wrangler secret put RESEND_API_KEY/);
+  assert.match(safeBootstrap, /Canli Worker secret komutu beklenen formatta bulunamadi/);
+  assert.doesNotMatch(wrangler, /"RESEND_API_KEY"\s*:/);
 });
 
 test("safe bootstrap never replaces live secret put with a staged-only versions secret", () => {
