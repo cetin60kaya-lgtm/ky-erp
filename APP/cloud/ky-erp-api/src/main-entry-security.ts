@@ -5,6 +5,7 @@ import base from "./main-entry-mail";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerSecurityCenterRoutes } from "./security-center-cloud";
 import { registerSecurityCenterLoginRoutes } from "./security-center-login-cloud";
+import { requireOwnerSecurityApp } from "./owner-security-device-guard";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -18,11 +19,25 @@ const security = new Hono<Env>();
 security.use("/api/security-center/*", cors({
   origin: allowedOrigin,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-  allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device"],
+  allowHeaders: [
+    "Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device",
+    "X-KYERP-Owner-App", "X-KYERP-Push-Device", "X-KYERP-Push-Token",
+    "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature",
+  ],
   exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
   maxAge: 86400,
   credentials: true,
 }));
+
+// Owner Security PWA, normal Security Center'dan farklı olarak iki bağımsız kanıt ister:
+// 1) asıl Süper Yönetici bearer oturumu, 2) aynı hesaba bağlı KY Güvenlik cihazının P-256 imzası.
+security.use("/api/security-center/*", async (c, next) => {
+  if (c.req.method === "OPTIONS") return next();
+  if (String(c.req.header("X-KYERP-Owner-App") || "") !== "1") return next();
+  const gate = await requireOwnerSecurityApp(c);
+  if (!gate.ok) return gate.response;
+  return next();
+});
 
 // main.ts içindeki DENETIM fail-closed sınırı security wrapper tarafından bypass edilmemeli.
 // DENETIM yalnız İK audit/PDKS read-only rotalarını görebilir; Güvenlik Merkezi görünmez.

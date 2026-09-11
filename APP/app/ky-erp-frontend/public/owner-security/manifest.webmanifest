@@ -1,0 +1,14 @@
+{
+  "name": "KY Owner Security",
+  "short_name": "Owner Security",
+  "description": "KY ERP asıl Süper Yönetici güvenlik uygulaması",
+  "start_url": "/owner-security/",
+  "scope": "/owner-security/",
+  "display": "standalone",
+  "background_color": "#050b14",
+  "theme_color": "#07111f",
+  "icons": [
+    { "src": "/security/kyerp-security-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/security/kyerp-security-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
