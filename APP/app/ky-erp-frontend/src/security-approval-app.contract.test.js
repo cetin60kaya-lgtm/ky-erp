@@ -11,7 +11,7 @@ const ios=readFileSync(resolve(root,"public/security/ios-safari.js"),"utf8");
 const sw=readFileSync(resolve(root,"public/security/sw.js"),"utf8");
 const manifest=readFileSync(resolve(root,"public/security/manifest.webmanifest"),"utf8");
 const html=readFileSync(resolve(root,"public/security/index.html"),"utf8");
-const setup=readFileSync(resolve(here,"components/shell/PhoneApprovalSetup.jsx"),"utf8");
+const setup=readFileSync(resolve(here,"components/shell/PhoneApprovalDeviceSetup.jsx"),"utf8");
 
 test("KY ERP Security is a separate installable phone tablet PWA",()=>{
   assert.match(manifest,/"name": "KY ERP Güvenlik"/);
@@ -46,7 +46,7 @@ test("security app owns signed API calls while the service worker is notificatio
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
   assert.match(sw,/showWakeNotification/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v8"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v10"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -79,7 +79,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/auth\/push\/device\/login-code/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Telefon Bağlantısını Yenile/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v8"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v10"/);
 });
 
 test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
@@ -90,8 +90,8 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(app,/beforeinstallprompt/);
   assert.match(app,/appinstalled/);
   assert.match(app,/Android'e KY Güvenlik'i Yükle/);
-  assert.match(app,/Safari → Paylaş → Ana Ekrana Ekle/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v8"/);
+  assert.match(html,/id="iosInstallNote"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v10"/);
 });
 
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
@@ -129,7 +129,7 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
   assert.match(manifest,/\/security\/kyerp-security-icon\.svg/);
-  assert.match(sw,/kyerp-security-shell-v8/);
+  assert.match(sw,/kyerp-security-shell-v10/);
 });
 
 test("security app never renders a blank approvals screen on connection failure",()=>{

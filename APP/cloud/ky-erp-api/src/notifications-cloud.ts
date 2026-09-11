@@ -5,6 +5,7 @@ import { hasNotificationPermission, NOTIFICATION_MAX_READ_IDS, sanitizeNotificat
 const READ_SCOPE = "SYSTEM_NOTIFICATIONS_READ_V1";
 const SECURITY_GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
 const SECURITY_PREF_SCOPE = "AUTH_SECURITY_NOTIFICATION_PREF";
+const SECURITY_TRUST_SCOPE = "AUTH_SESSION_TRUST";
 const MAX_READ_IDS = NOTIFICATION_MAX_READ_IDS;
 
 type AnyRow = Record<string, any>;
@@ -87,18 +88,22 @@ function requestedTenant(c: any, current: AnyRow) {
   return own;
 }
 
-async function hasDelegatedLoginApproval(c: any, current: AnyRow, tenant: string) {
+async function hasDelegatedSecurityCapability(c: any, current: AnyRow, tenant: string, capability: string) {
   if (!tenant || !(await tableExists(c, "json_store"))) return false;
   const row = await c.env.DB.prepare(
     `SELECT data FROM json_store
       WHERE scope=? AND main_company_slug=? AND file_name=?
       ORDER BY updated_at DESC,id DESC LIMIT 1`,
-  ).bind(SECURITY_GRANT_SCOPE, tenant, `${tenant}:${text(current.id)}`).first<AnyRow>();
+  ).bind(SECURITY_GRANT_SCOPE, tenant, tenant + ":" + text(current.id)).first<AnyRow>();
   if (!row?.data) return false;
   const grant = objectOf(row.data);
   if (grant.isActive === false) return false;
   const capabilities = Array.isArray(grant.capabilities) ? grant.capabilities.map(upper) : [];
-  return capabilities.includes("LOGIN_APPROVE");
+  return capabilities.includes(upper(capability));
+}
+
+async function hasDelegatedLoginApproval(c: any, current: AnyRow, tenant: string) {
+  return hasDelegatedSecurityCapability(c, current, tenant, "LOGIN_APPROVE");
 }
 
 async function securityNotificationEnabled(c: any, current: AnyRow, key: string, fallback = true) {
@@ -160,7 +165,7 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
           WHERE UPPER(COALESCE(a.status,''))='PENDING'
             AND a.expires_at>?
             AND COALESCE(NULLIF(TRIM(a.main_company_slug),''),?)=?
-            AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN')
+            AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')
           ORDER BY a.requested_at DESC
           LIMIT 12`,
       ).bind(now, tenant, tenant).all<AnyRow>();
@@ -179,6 +184,56 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
       approvalId: text(row.id),
       actionable: true,
       securityCenter: true,
+      userId: text(row.user_id),
+      mainCompanySlug: text(row.main_company_slug),
+      expiresAt: toIso(row.expires_at),
+    },
+  }));
+}
+
+async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: string) {
+  const delegated = !ownerRole(current?.role) && !companyAdminRole(current?.role)
+    ? await hasDelegatedSecurityCapability(c, current, tenant, "SESSION_APPROVE")
+    : false;
+  const canApprove = ownerRole(current?.role) || companyAdminRole(current?.role) || delegated;
+  if (!canApprove || !(await tableExists(c, "auth_sessions")) || !(await tableExists(c, "json_store"))) return [];
+  if (!(await securityNotificationEnabled(c, current, "newSession", true))) return [];
+
+  const now = new Date().toISOString();
+  const companyOwner = companyAdminRole(current?.role);
+  const trustJoin = `LEFT JOIN json_store t ON t.id=(SELECT js.id FROM json_store js WHERE js.scope=? AND js.file_name=s.id ORDER BY js.updated_at DESC,js.id DESC LIMIT 1)`;
+  const result = ownerRole(current?.role)
+    ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
+              COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
+              UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
+         FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id ${trustJoin}
+        WHERE s.revoked_at IS NULL AND s.expires_at>?
+          AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
+        ORDER BY s.created_at DESC LIMIT 30`).bind(SECURITY_TRUST_SCOPE, now).all<AnyRow>()
+    : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
+              COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
+              UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
+         FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=s.user_id ${trustJoin}
+        WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=?
+          AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))
+          AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
+        ORDER BY s.created_at DESC LIMIT 20`).bind(SECURITY_TRUST_SCOPE, now, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
+
+  return (result.results || []).map((row: AnyRow) => ({
+    id: `session-trust:${text(row.id)}`,
+    category: "SECURITY",
+    severity: "warning",
+    title: "Bekleyen oturum onayı",
+    detail: [ownerRole(current?.role) ? text(row.main_company_slug) : "", text(row.user_name), text(row.device_label) || "Yeni oturum"].filter(Boolean).join(" · "),
+    createdAt: toIso(row.created_at),
+    route: ownerRole(current?.role)
+      ? { moduleKey: "admin", tabKey: "uygulama-sahibi" }
+      : { moduleKey: "admin", tabKey: "kullanicilar" },
+    meta: {
+      sessionId: text(row.id),
+      actionable: true,
+      securityCenter: true,
+      securityAction: "SESSION_TRUST",
       userId: text(row.user_id),
       mainCompanySlug: text(row.main_company_slug),
       expiresAt: toIso(row.expires_at),
@@ -318,6 +373,7 @@ async function collectNotifications(c: any, current: AnyRow, tenant: string) {
 
   for (const [source, collector] of [
     ["SECURITY", collectLoginApprovals],
+    ["SECURITY_SESSION", collectSessionTrustApprovals],
     ["APPROVAL", collectMailApprovals],
     ["E_BELGE", collectEBelgeIssues],
     ["PAYMENT", collectPaymentReminders],

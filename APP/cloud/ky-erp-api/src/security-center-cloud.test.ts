@@ -72,3 +72,11 @@ test("Worker entry isolates Security Center and preserves existing API fallback"
   assert.match(entry, /path\.startsWith\("\/api\/security-center\/"\)/);
   assert.match(entry, /return base\.fetch\(request, env, ctx\)/);
 });
+
+test("delegated session security cannot control the company owner's session", async () => {
+  const source = await readFile(sourceUrl, "utf8");
+  assert.match(source, /isCompanyAdmin\(targetRole\)/);
+  assert.match(source, /text\(row\.user_id\) !== text\(current\.id\)/);
+  assert.ok(source.includes("NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')"));
+  assert.match(source, /companyOwner \? 1 : 0/);
+});

@@ -17,7 +17,7 @@ test("phone and tablet keep desktop shell actions reachable", () => {
   assert.match(shell, /shell-v3-user-trigger/);
   assert.match(shell, /shell-v3-user-menu/);
   assert.match(shell, /Telefon Onayı/);
-  assert.match(shell, /Ekran & Görünüm/);
+  assert.match(shell, /shell-v3-display-button/);
   assert.match(shell, /onLogout/);
   assert.match(responsive, /data-layout-mode="phone"[\s\S]*shell-v3-icon\.notification[\s\S]*display: grid !important/);
   assert.match(responsive, /data-layout-mode="tablet"[\s\S]*shell-v3-user > \.shell-v3-user-trigger/);

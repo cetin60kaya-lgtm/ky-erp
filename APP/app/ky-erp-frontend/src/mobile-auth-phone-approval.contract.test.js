@@ -40,7 +40,7 @@ test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", (
 
 
 test("phone approval is handed off to the dedicated KY ERP Security PWA", () => {
-  const setup = read("./components/shell/PhoneApprovalSetup.jsx");
+  const setup = read("./components/shell/PhoneApprovalDeviceSetup.jsx");
   const securityApp = read("../public/security/app.js");
   const securityWorker = read("../public/security/sw.js");
   const securityManifest = read("../public/security/manifest.webmanifest");
@@ -49,7 +49,8 @@ test("phone approval is handed off to the dedicated KY ERP Security PWA", () => 
   assert.match(setup, /Yeni Kurulum Kodu Oluştur/);
   assert.match(setup, /app\.kyerp\.net\/security/);
   assert.match(securityManifest, /"id": "\/security\/"/);
-  assert.match(securityWorker, /tag:"kyerp-security-approval"/);
+  assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
+  assert.match(securityWorker, /tag:TAG/);
   assert.match(securityWorker, /notificationclick/);
   assert.match(securityApp, /signingPrivateKey/);
   assert.match(securityApp, /navigator\.credentials\.get/);
@@ -59,7 +60,7 @@ test("phone approval is handed off to the dedicated KY ERP Security PWA", () => 
 test("Android PWA install, phone notifications and tablet naming stay usable", () => {
   const shell = read("./layouts/AppShellV3.jsx");
   const responsive = read("./styles/responsive-core.css");
-  const setup = read("./components/shell/PhoneApprovalSetup.jsx");
+  const setup = read("./components/shell/PhoneApprovalDeviceSetup.jsx");
   const manifest = read("../public/manifest.webmanifest");
   const securityManifest = read("../public/security/manifest.webmanifest");
   const securityApp = read("../public/security/app.js");
@@ -69,7 +70,7 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   assert.match(shell, /appinstalled/);
   assert.match(responsive, /data-layout-mode="phone"[\s\S]*shell-v3-icon\.notification/);
   assert.match(responsive, /shell-v3-install-button/);
-  assert.match(setup, /Android: Chrome\/Edge/);
+  assert.match(setup, /openSecurityInstaller\("android"\)/);
   assert.match(setup, /iPhone\/iPad/);
   assert.match(securityApp, /Android Telefon/);
   assert.match(securityApp, /Android Tablet/);

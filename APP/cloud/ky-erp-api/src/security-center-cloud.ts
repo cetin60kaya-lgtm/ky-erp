@@ -106,7 +106,13 @@ async function scopedSession(c: any, current: AnyRow, scope: AnyRow, sessionId: 
   const row = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override,us.main_company_slug AS user_company_slug FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.id=? LIMIT 1`).bind(sessionId).first<AnyRow>();
   if (!row) return null;
   if (scope.type === "SYSTEM") return row;
-  if (scope.type === "COMPANY" && text(row.main_company_slug) === text(scope.companySlug) && !isSuper(effectiveRole(row))) return row;
+  if (scope.type === "COMPANY" && text(row.main_company_slug) === text(scope.companySlug)) {
+    const targetRole = effectiveRole(row);
+    if (isSuper(targetRole)) return null;
+    if (isCompanyAdmin(targetRole) && text(row.user_id) !== text(current.id)) return null;
+    if (isCompanyAdmin(targetRole) && !isCompanyAdmin(current.role)) return null;
+    return row;
+  }
   if (scope.type === "SELF" && text(row.user_id) === text(current.id)) return row;
   return null;
 }
@@ -298,7 +304,10 @@ export function registerSecurityCenterRoutes(app: any) {
     const ownDevices = (await activeSecurityDevices(c, text(current.id))).map((row: AnyRow) => ({ id: row.id, label: row.deviceLabel || row.label || "KY Güvenlik", platform: row.platform || "", lastSeenAt: row.lastSeenAt || row.updatedAt, pushReady: Boolean(row.pushEndpoint), securityApp: true }));
     let sessionCountRow: AnyRow | null = null;
     if (scope.type === "SYSTEM") sessionCountRow = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_sessions WHERE revoked_at IS NULL AND expires_at>?").bind(nowIso()).first<AnyRow>();
-    else if (scope.type === "COMPANY" && hasCap(scope, "SESSION_VIEW")) sessionCountRow = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.main_company_slug=? AND s.revoked_at IS NULL AND s.expires_at>? AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN')`).bind(scope.companySlug, nowIso()).first<AnyRow>();
+    else if (scope.type === "COMPANY" && hasCap(scope, "SESSION_VIEW")) {
+      const companyOwner = isCompanyAdmin(current.role);
+      sessionCountRow = await c.env.DB.prepare(`SELECT COUNT(*) AS total FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.main_company_slug=? AND s.revoked_at IS NULL AND s.expires_at>? AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))`).bind(scope.companySlug, nowIso(), companyOwner ? 1 : 0, current.id).first<AnyRow>();
+    }
     else if (scope.type === "SELF") sessionCountRow = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>?").bind(current.id, nowIso()).first<AnyRow>();
     return c.json({ ok: true, data: { scopeType: scope.type, companySlug: scope.companySlug, delegated: scope.delegated, canDelegateSecurity: scope.canDelegateSecurity, capabilities: scope.capabilities, role: current.role, ownDevices, activeSessionCount: Number(sessionCountRow?.total || 0), trustEnforcement: false, trustMode: "REVIEW_ONLY" } });
   });
@@ -308,7 +317,10 @@ export function registerSecurityCenterRoutes(app: any) {
     if (scope.type === "COMPANY" && !hasCap(scope, "SESSION_VIEW")) return c.json(jsonError("FORBIDDEN", "Oturum görüntüleme yetkiniz yok."), 403);
     let result;
     if (scope.type === "SYSTEM") result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id ORDER BY s.created_at DESC LIMIT 500`).all<AnyRow>();
-    else if (scope.type === "COMPANY") result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.main_company_slug=? AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN') ORDER BY s.created_at DESC LIMIT 300`).bind(scope.companySlug).all<AnyRow>();
+    else if (scope.type === "COMPANY") {
+      const companyOwner = isCompanyAdmin(current.role);
+      result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.main_company_slug=? AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?)) ORDER BY s.created_at DESC LIMIT 300`).bind(scope.companySlug, companyOwner ? 1 : 0, current.id).all<AnyRow>();
+    }
     else result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT 100`).bind(current.id).all<AnyRow>();
     const trusts = new Map((await storeList(c, TRUST_SCOPE)).map((row: AnyRow) => [text(row.sessionId || row.fileName), row]));
     const data = (result.results || []).map((row: AnyRow) => { const trust = trusts.get(text(row.id)); return { id: row.id, userId: row.user_id, username: row.username, fullName: row.full_name, role: effectiveRole(row), mainCompanySlug: row.main_company_slug, deviceLabel: row.device_label, userAgent: row.user_agent, ipAddress: row.ip_address, createdAt: row.created_at, approvedAt: row.approved_at, lastSeenAt: row.last_seen_at, expiresAt: row.expires_at, revokedAt: row.revoked_at, revokedBy: row.revoked_by, active: !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now(), trustStatus: upper(trust?.status || "PENDING"), trustDecidedAt: trust?.decidedAt || null, trustDecidedByUserId: trust?.decidedByUserId || null, own: text(row.user_id) === text(current.id) }; });

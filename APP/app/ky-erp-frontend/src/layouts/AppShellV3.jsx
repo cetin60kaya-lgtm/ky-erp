@@ -6,7 +6,7 @@ import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
 import { displayModeLabel } from "../utils/displayPreferences";
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
 import { getNotifications, markNotificationsRead } from "../services/notificationApi";
-import { decideSecurityCenterLoginApproval } from "../services/securityCenterApi";
+import { decideSecurityCenterLoginApproval, runPhoneApprovedSecurityAction } from "../services/securityCenterApi";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 import "../styles/security-notification-actions.css";
@@ -297,15 +297,21 @@ export default function AppShellV3({
     event?.preventDefault?.();
     event?.stopPropagation?.();
     const approvalId = String(item?.meta?.approvalId || "").trim();
-    if (!approvalId || notificationActionBusy) return;
+    const sessionId = String(item?.meta?.sessionId || "").trim();
+    if ((!approvalId && !sessionId) || notificationActionBusy) return;
     setNotificationActionBusy(item.id);
     setNotificationError("");
     try {
-      await decideSecurityCenterLoginApproval(approvalId, decision);
+      if (sessionId) {
+        const operation = decision === "DENY" ? "SESSION_TRUST_REJECT" : "SESSION_TRUST_APPROVE";
+        await runPhoneApprovedSecurityAction({ operation, sessionId });
+      } else {
+        await decideSecurityCenterLoginApproval(approvalId, decision);
+      }
       if (item?.unread) await markNotificationIdsRead([item.id]);
       await refreshNotifications(true);
     } catch (error) {
-      setNotificationError(error?.message || "Giriş onayı tamamlanamadı.");
+      setNotificationError(error?.message || "Güvenlik onayı tamamlanamadı.");
     } finally {
       setNotificationActionBusy("");
     }
@@ -520,7 +526,7 @@ export default function AppShellV3({
                     </div>
                   ) : null}
                   {notificationData.items.map((item) => {
-                    const actionable = item?.category === "SECURITY" && item?.meta?.actionable === true && Boolean(item?.meta?.approvalId);
+                    const actionable = item?.category === "SECURITY" && item?.meta?.actionable === true && Boolean(item?.meta?.approvalId || item?.meta?.sessionId);
                     const actionBusy = notificationActionBusy === item.id;
                     return <div className="shell-v3-notification-entry" key={item.id}>
                       <button

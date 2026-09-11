@@ -9,4 +9,8 @@ test("topbar notification badge is data driven, not hard coded", () => {
   assert.match(source, /getNotifications/);
   assert.match(source, /notificationData\.unreadCount/);
   assert.match(source, /markNotificationsRead/);
+  assert.match(source, /runPhoneApprovedSecurityAction/);
+  assert.match(source, /SESSION_TRUST_APPROVE/);
+  assert.match(source, /SESSION_TRUST_REJECT/);
+  assert.match(source, /meta\?\.sessionId/);
 });

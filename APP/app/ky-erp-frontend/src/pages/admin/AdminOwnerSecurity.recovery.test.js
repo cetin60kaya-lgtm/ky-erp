@@ -8,16 +8,15 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const ownerSecurity = fs.readFileSync(path.join(here, "AdminOwnerSecurity.jsx"), "utf8");
 const adminApi = fs.readFileSync(path.join(here, "..", "..", "services", "adminApi.js"), "utf8");
 
-test("owner security center manages question-answer recovery with MFA step-up", () => {
+test("owner security center manages question-answer recovery with canonical step-up", () => {
   assert.match(ownerSecurity, /getOwnerRecoveryConfig/);
   assert.match(ownerSecurity, /saveOwnerRecoveryQuestions/);
-  assert.match(ownerSecurity, /Hesap Kurtarma ve Kimlik Doğrulama/);
-  assert.match(ownerSecurity, /rastgele iki soru sorulur/);
-  assert.match(ownerSecurity, /Mevcut Authenticator kodu/);
+  assert.match(ownerSecurity, /aos-recovery-security/);
+  assert.match(ownerSecurity, /recoveryQuestions/);
   assert.match(ownerSecurity, /recoveryStepUpCode/);
   assert.match(ownerSecurity, /provider:\s*recoveryProvider/);
   assert.match(ownerSecurity, /code:\s*cleanCode/);
-  assert.match(ownerSecurity, /questions/);
+  assert.match(ownerSecurity, /startOwnerSecurityAction/);
 });
 
 test("owner recovery admin API uses canonical protected endpoints", () => {

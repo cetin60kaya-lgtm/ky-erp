@@ -14,11 +14,11 @@ import {
 import "./SecurityCenterPanel.css";
 
 const CAPABILITIES = [
-  ["LOGIN_APPROVE", "Giriş onayı"],
-  ["SESSION_VIEW", "Oturum görüntüleme"],
-  ["SESSION_APPROVE", "Oturum güven onayı"],
-  ["SESSION_CLOSE", "Oturum kapatma"],
-  ["AUDIT_VIEW", "Güvenlik logu"],
+  ["LOGIN_APPROVE", "Giriş Onayı"],
+  ["SESSION_APPROVE", "Oturum Onayı"],
+  ["SESSION_VIEW", "Oturumları Gör"],
+  ["SESSION_CLOSE", "Oturum Kapat"],
+  ["AUDIT_VIEW", "Güvenlik Geçmişi"],
 ];
 const PREFS = [
   ["ownLogins", "Kendi girişlerim"],
@@ -158,12 +158,12 @@ export default function SecurityCenterPanel() {
   }
   async function saveGrant() {
     if (!selectedUser) return setMessage("Hata: Yetki verilecek kullanıcıyı seçin.");
-    return critical({ operation: "SECURITY_CAPABILITY_SET", targetUserId: selectedUser.id, companySlug: selectedUser.mainCompanySlug || overview?.companySlug, capabilities: selectedCaps }, selectedCaps.length ? "Güvenlik yetkileri telefondan doğrulanarak kaydedildi." : "Kullanıcının delege güvenlik yetkileri kaldırıldı.");
+    return critical({ operation: "SECURITY_CAPABILITY_SET", targetUserId: selectedUser.id, companySlug: selectedUser.mainCompanySlug || overview?.companySlug, capabilities: selectedCaps }, selectedCaps.length ? "Firma güvenlik yetkileri telefondan doğrulanarak kaydedildi." : "Kullanıcının firma güvenlik yetkileri kaldırıldı.");
   }
 
   return <section className="sc-root">
     <div className="sc-head">
-      <div><small>KY GÜVENLİK / SECURITY CENTER v1</small><h2>Güvenlik Merkezi</h2><p>Giriş onayı, gerçek oturumlar, güvenlik akışı, bildirimler ve delege yetkileri tek merkezde.</p></div>
+      <div><small>KY GÜVENLİK / SECURITY CENTER v1</small><h2>Güvenlik Merkezi</h2><p>Giriş onayı, oturum onayı, güvenlik akışı, bildirimler ve firma güvenlik yetkilileri tek merkezde.</p></div>
       <div className="sc-head-actions"><span className={`sc-scope ${scopeType.toLowerCase()}`}>{scopeLabel(scopeType)}</span><button disabled={busy} onClick={loadAll}>Yenile</button></div>
     </div>
     <div className={`sc-message ${String(message).startsWith("Hata:") ? "bad" : ""}`}>{message}</div>
@@ -180,7 +180,7 @@ export default function SecurityCenterPanel() {
       {canSessionView && <button className={tab === "sessions" ? "active" : ""} onClick={() => setTab("sessions")}>Oturumlar</button>}
       {canAudit && <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>Güvenlik Akışı</button>}
       <button className={tab === "notifications" ? "active" : ""} onClick={() => setTab("notifications")}>Bildirimler</button>
-      {canManage && <button className={tab === "grants" ? "active" : ""} onClick={() => setTab("grants")}>Yetkiler</button>}
+      {canManage && <button className={tab === "grants" ? "active" : ""} onClick={() => setTab("grants")}>Firma Yetkilileri</button>}
     </div>
 
     {tab === "approvals" && <div className="sc-panel">
@@ -222,7 +222,7 @@ export default function SecurityCenterPanel() {
     </div>}
 
     {tab === "grants" && canManage && <div className="sc-panel">
-      <div className="sc-panel-head"><div><h3>Delege Güvenlik Yetkileri</h3><p>Bu yetkiler ERP rolünü yükseltmez; yalnız seçilen firma için güvenlik işi verir.</p></div></div>
+      <div className="sc-panel-head"><div><h3>Firma Güvenlik Yetkilileri</h3><p>Bu kişi yalnız seçilen firmanın güvenlik işlemlerini yönetebilir; ERP rolü değişmez.</p></div></div>
       <div className="sc-grant-editor">
         <label>Kullanıcı<select value={selectedUserId} onChange={(event) => chooseUser(event.target.value)}><option value="">Kullanıcı seçin</option>{users.map((row) => <option value={row.id} key={row.id}>{row.fullName || row.username} · {row.role} · {row.mainCompanySlug || "-"}</option>)}</select></label>
         <div className="sc-cap-grid">{CAPABILITIES.map(([key, label]) => <label key={key}><input type="checkbox" disabled={!selectedUserId} checked={selectedCaps.includes(key)} onChange={() => toggleCap(key)}/><span>{label}</span></label>)}</div>
