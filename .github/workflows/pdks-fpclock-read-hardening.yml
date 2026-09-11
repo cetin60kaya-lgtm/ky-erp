@@ -1,0 +1,47 @@
+name: PDKS FP_CLOCK Attendance Read Hardening
+
+on:
+  push:
+    branches:
+      - codex/pdks-desktop-1.8.1-device-final-20260907
+    paths:
+      - '.github/workflows/pdks-fpclock-read-hardening.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pdks-desktop-1.8.1-device-final-20260907
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply FP_CLOCK attendance reader hardening
+        shell: pwsh
+        run: python tools/pdks-harden-fpclock-read.py
+      - name: Build and test bridge stack
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'APP/desktop/ky-pdks/src'
+          dotnet restore "$root/KyPdks.DeviceBridge.x86/KyPdks.DeviceBridge.x86.csproj"
+          dotnet build "$root/KyPdks.DeviceBridge.x86/KyPdks.DeviceBridge.x86.csproj" -c Release --no-restore -p:PlatformTarget=x86
+          dotnet restore "$root/KyPdks.Agent/KyPdks.Agent.csproj"
+          dotnet build "$root/KyPdks.Agent/KyPdks.Agent.csproj" -c Release --no-restore
+          if (Test-Path "$root/KyPdks.Tests/KyPdks.Tests.csproj") { dotnet test "$root/KyPdks.Tests/KyPdks.Tests.csproj" -c Release }
+      - name: Commit hardening
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name "ky-erp-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add APP/desktop/ky-pdks/src/KyPdks.DeviceBridge.x86/Program.cs
+          if (git diff --cached --quiet) { exit 0 }
+          git commit -m "fix(pdks): harden direct FP_CLOCK attendance reading"
+          git pull --rebase origin codex/pdks-desktop-1.8.1-device-final-20260907
+          git push origin HEAD:codex/pdks-desktop-1.8.1-device-final-20260907
