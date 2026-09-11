@@ -1,6 +1,7 @@
-import type { Context, Hono } from "hono";
+﻿import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerIkPdksCardBridgeRoutes } from "./ik-pdks-card-bridge";
+import { registerIkPdksCardMappingRoutes } from "./ik-pdks-card-mapping";
 import { registerIkPdksOperationRoutes } from "./ik-pdks-operations";
 import { registerIkPdksAdjustmentRoutes } from "./ik-pdks-adjustments";
 import { registerIkPdksAssistantRoutes } from "./ik-pdks-assistant";
@@ -204,6 +205,7 @@ async function enforceAuditReadScope(c: Context<AppEnv>, next: () => Promise<voi
     "/api/ik/personnel-control/people",
     "/api/ik/personnel-control/pdks-masters",
     "/api/ik/personnel-control/dashboard-live",
+    "/api/ik/personnel-control/card-mappings",
   ]);
   const personReadMatch = path.match(/^\/api\/ik\/personnel-control\/people\/([^/]+)\/(attendance(?:-v2)?|photo|photo-meta)$/i);
   if (!safeStatic.has(path) && !personReadMatch) {
@@ -385,6 +387,7 @@ export function registerIkPdksGuardRoutes(app: Hono<AppEnv>) {
 
   registerIkPdksOperationRoutes(app);
   registerIkPdksCardBridgeRoutes(app);
+  registerIkPdksCardMappingRoutes(app);
   registerIkPdksAdjustmentRoutes(app);
   registerIkPdksAssistantRoutes(app);
   registerIkPdksDeviceRoutes(app);

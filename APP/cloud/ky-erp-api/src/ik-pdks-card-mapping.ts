@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 
@@ -129,9 +129,10 @@ async function saveMapping(c: Context<AppEnv>, company: string, user: Row, emplo
       WHERE s.main_company_id=? AND s.card_no=? AND s.employee_id<>? LIMIT 1`)
     .bind(company, cardNo, employeeId).first<Row>();
   if (conflict) {
-    await c.env.DB.prepare(`UPDATE ik_person_card_settings SET card_no='',updated_at=?
-      WHERE main_company_id=? AND card_no=? AND employee_id<>?`)
-      .bind(stamp, company, cardNo, employeeId).run();
+    return {
+      oldCard, cardNo,
+      conflict: { employeeId: text(conflict.employeeId), fullName: text(conflict.fullName), personnelCode: text(conflict.personnelCode) },
+    };
   }
 
   await c.env.DB.prepare(`INSERT INTO ik_person_card_settings(employee_id,main_company_id,card_no,card_source,updated_at)
@@ -150,7 +151,7 @@ async function saveMapping(c: Context<AppEnv>, company: string, user: Row, emplo
       crypto.randomUUID(), company, employeeId, text(employee.personnelCode), text(employee.fullName),
       oldCard, cardNo, source, text(user.id), text(user.fullName || user.name || user.username), stamp,
     ).run();
-  return { oldCard, cardNo, conflictCleared: conflict ? { employeeId: text(conflict.employeeId), fullName: text(conflict.fullName), personnelCode: text(conflict.personnelCode) } : null };
+  return { oldCard, cardNo, conflict: null };
 }
 
 export function registerIkPdksCardMappingRoutes(app: Hono<AppEnv>) {
@@ -181,6 +182,9 @@ export function registerIkPdksCardMappingRoutes(app: Hono<AppEnv>) {
       .bind(company, employeeId).first<Row>();
     if (!employee) return fail(c, 404, "PDKS_PERSON_NOT_FOUND", "Personel bulunamadı.");
     const result = await saveMapping(c, company, user, employee, cardNo, "FP_CLOCK_DIRECT");
+    if (result.conflict) {
+      return fail(c, 409, "PDKS_CARD_ALREADY_ASSIGNED", `Terminal kartı ${cardNo}, ${result.conflict.fullName || result.conflict.personnelCode || result.conflict.employeeId} personeline zaten bağlı.`);
+    }
     return ok(c, { employeeId, personnelCode: text(employee.personnelCode), fullName: text(employee.fullName), ...result, updatedAt: nowIso() });
   });
 
@@ -202,6 +206,7 @@ export function registerIkPdksCardMappingRoutes(app: Hono<AppEnv>) {
     const byName = new Map(people.map((row) => [normalizeName(row.fullName), row]));
     const applied: Row[] = [];
     const missing: Row[] = [];
+    const conflicts: Row[] = [];
     for (const [cardNo, fullName] of INITIAL_MAPPINGS) {
       const employee = byName.get(normalizeName(fullName));
       if (!employee) {
@@ -209,10 +214,14 @@ export function registerIkPdksCardMappingRoutes(app: Hono<AppEnv>) {
         continue;
       }
       const result = await saveMapping(c, company, user, employee, cardNo, "FP_CLOCK_DIRECT_INITIAL");
-      applied.push({ employeeId: employee.id, personnelCode: employee.personnelCode, fullName: employee.fullName, cardNo, oldCard: result.oldCard, conflictCleared: result.conflictCleared });
+      if (result.conflict) {
+        conflicts.push({ cardNo, fullName, employeeId: employee.id, conflict: result.conflict });
+        continue;
+      }
+      applied.push({ employeeId: employee.id, personnelCode: employee.personnelCode, fullName: employee.fullName, cardNo, oldCard: result.oldCard });
     }
 
-    const details = { applied, missing, requestedCount: INITIAL_MAPPINGS.length, appliedCount: applied.length, missingCount: missing.length };
+    const details = { applied, missing, conflicts, requestedCount: INITIAL_MAPPINGS.length, appliedCount: applied.length, missingCount: missing.length, conflictCount: conflicts.length };
     const stamp = nowIso();
     await c.env.DB.prepare(`INSERT INTO ik_pdks_card_mapping_migrations(main_company_id,version,details_json,applied_by,applied_at)
       VALUES(?,?,?,?,?)
