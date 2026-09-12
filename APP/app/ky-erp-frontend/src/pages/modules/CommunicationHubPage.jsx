@@ -201,7 +201,7 @@ function MailMessageMedia({ message }) {
             const url = URL.createObjectURL(blob);
             objectUrls.push(url);
             loaded.push({ id: attachment.id, name: attachmentName(attachment), url });
-          } catch {}
+          } catch { /* Optional preview/cache update; keep mail workspace usable. */ }
         }
         if (!cancelled) setMedia(loaded);
       } catch {
@@ -422,6 +422,15 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   const selectedInboxUnreadCount = inboxFolder
     ? Number(inboxFolder.unread_count ?? inboxFolder.unreadCount ?? 0)
     : Number(overview?.unreadCount || 0);
+  const adjustInboxUnreadCount = useCallback((delta) => {
+    if (!activeUnreadFolderId || !Number.isFinite(Number(delta)) || Number(delta) === 0) return;
+    setFolders((current) => current.map((folder) => {
+      if (String(folder.id) !== String(activeUnreadFolderId)) return folder;
+      const currentUnread = Number(folder.unread_count ?? folder.unreadCount ?? 0);
+      const nextUnread = Math.max(0, currentUnread + Number(delta));
+      return { ...folder, unread_count: nextUnread, unreadCount: nextUnread };
+    }));
+  }, [activeUnreadFolderId]);
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -453,7 +462,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
   useEffect(() => { loadBase(); }, [loadBase]);
 
   useEffect(() => {
-    try { window.localStorage.setItem("kyerp.mailPaneWidths", JSON.stringify(paneWidths)); } catch {}
+    try { window.localStorage.setItem("kyerp.mailPaneWidths", JSON.stringify(paneWidths)); } catch { /* Optional preview/cache update; keep mail workspace usable. */ }
   }, [paneWidths]);
 
   useEffect(() => {
@@ -541,7 +550,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
           const blob = await getMailAttachmentBlob(selectedMessage.id, attachment.id);
           const dataUrl = await blobToDataUrl(blob);
           hydrated = hydrated.replace(matcher, dataUrl);
-        } catch {}
+        } catch { /* Optional preview/cache update; keep mail workspace usable. */ }
       }
       if (!cancelled) {
         setRenderedHtml(mailHtmlWithExternalLinks(hydrated));
@@ -570,7 +579,7 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
       }
       setNotice("Hata: " + (error?.message || "Mail okundu olarak işaretlenemedi."));
     });
-  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab, selectedFolderCountsUnread, activeUnreadFolderId]);
+  }, [selectedMessage?.id, selectedMessage?.is_read, selectedMessage?.isRead, activeTab, selectedFolderCountsUnread, activeUnreadFolderId, adjustInboxUnreadCount]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -762,16 +771,6 @@ export default function CommunicationHubPage({ activeTab, activeMainCompany, ope
     } finally {
       setDownloadAllLoading(false);
     }
-  }
-
-  function adjustInboxUnreadCount(delta) {
-    if (!activeUnreadFolderId || !Number.isFinite(Number(delta)) || Number(delta) === 0) return;
-    setFolders((current) => current.map((folder) => {
-      if (String(folder.id) !== String(activeUnreadFolderId)) return folder;
-      const currentUnread = Number(folder.unread_count ?? folder.unreadCount ?? 0);
-      const nextUnread = Math.max(0, currentUnread + Number(delta));
-      return { ...folder, unread_count: nextUnread, unreadCount: nextUnread };
-    }));
   }
 
   async function selectMessage(row) {

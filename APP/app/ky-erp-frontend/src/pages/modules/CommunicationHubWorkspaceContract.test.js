@@ -162,7 +162,7 @@ test("unread UX is inbox-scoped, immediate and visually explicit", () => {
   assert.match(page, /selectedFolderCountsUnread = \(!selectedFolderId && activeTab === "mail-gelen"\)/);
   assert.match(page, /provider === "UNREAD"\) return "●"/);
   assert.match(page, /comm-unread-metric/);
-  assert.match(page, /aria-label=\{\`\$\{Number\(row\.is_read/);
+  assert.match(page, /aria-label=\{`\$\{Number\(row\.is_read/);
   assert.match(css, /comm-message-list>button\.unread::before/);
   assert.match(css, /comm-unread-metric>span>i/);
   assert.match(css, /comm-folder-group>button em:not\(:empty\)/);

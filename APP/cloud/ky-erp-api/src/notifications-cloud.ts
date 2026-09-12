@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { hasNotificationPermission, NOTIFICATION_MAX_READ_IDS, sanitizeNotificationReadIds } from "./notifications-core.ts";
 
 const READ_SCOPE = "SYSTEM_NOTIFICATIONS_READ_V1";
+const DISMISS_SCOPE = "SYSTEM_NOTIFICATIONS_DISMISSED_V1";
 const SECURITY_GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
 const SECURITY_PREF_SCOPE = "AUTH_SECURITY_NOTIFICATION_PREF";
 const SECURITY_TRUST_SCOPE = "AUTH_SESSION_TRUST";
@@ -77,6 +78,41 @@ async function writeState(c: any, current: AnyRow, tenant: string, ids: string[]
        data=excluded.data,
        updated_at=excluded.updated_at`,
   ).bind(id, READ_SCOPE, tenant, text(current.id), data, timestamp, timestamp).run();
+  return true;
+}
+
+function dismissedStateId(current: AnyRow, tenant: string) {
+  return `system-notification-dismissed:${tenant}:${text(current?.id)}`;
+}
+
+async function dismissedState(c: any, current: AnyRow, tenant: string) {
+  if (!(await tableExists(c, "json_store"))) return new Set<string>();
+  const row = await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? LIMIT 1")
+    .bind(dismissedStateId(current, tenant)).first<AnyRow>();
+  if (!row?.data) return new Set<string>();
+  try {
+    const payload = JSON.parse(text(row.data));
+    return new Set(sanitizeNotificationReadIds(payload?.dismissedIds));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+async function writeDismissedState(c: any, current: AnyRow, tenant: string, ids: string[]) {
+  if (!(await tableExists(c, "json_store"))) return false;
+  const timestamp = new Date().toISOString();
+  const id = dismissedStateId(current, tenant);
+  const data = JSON.stringify({ dismissedIds: ids.slice(-MAX_READ_IDS), updatedAt: timestamp });
+  await c.env.DB.prepare(
+    `INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET
+       scope=excluded.scope,
+       main_company_slug=excluded.main_company_slug,
+       file_name=excluded.file_name,
+       data=excluded.data,
+       updated_at=excluded.updated_at`,
+  ).bind(id, DISMISS_SCOPE, tenant, text(current.id), data, timestamp, timestamp).run();
   return true;
 }
 
@@ -402,11 +438,14 @@ export function registerNotificationRoutes(app: any) {
     const tenant = requestedTenant(c, current);
     if (!tenant) return c.json({ ok: false, error: { code: "TENANT_FORBIDDEN", message: "Bu firma bildirimlerine erişim yetkiniz yok." } }, 403);
 
-    const [{ items, sourceErrors }, readIds] = await Promise.all([
+    const [{ items, sourceErrors }, readIds, dismissedIds] = await Promise.all([
       collectNotifications(c, current, tenant),
       readState(c, current, tenant),
+      dismissedState(c, current, tenant),
     ]);
-    const data = items.map((item) => ({ ...item, unread: !readIds.has(item.id) }));
+    const data = items
+      .filter((item) => !dismissedIds.has(item.id))
+      .map((item) => ({ ...item, unread: !readIds.has(item.id) }));
     return c.json({
       ok: true,
       data: {
@@ -436,5 +475,22 @@ export function registerNotificationRoutes(app: any) {
     const merged = [...existing].slice(-MAX_READ_IDS);
     await writeState(c, current, tenant, merged);
     return c.json({ ok: true, data: { readCount: incoming.length } });
+  });
+
+  app.post("/api/notifications/dismiss", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Oturum gereklidir." } }, 401);
+    const tenant = requestedTenant(c, current);
+    if (!tenant) return c.json({ ok: false, error: { code: "TENANT_FORBIDDEN", message: "Bu firma bildirimlerine erişim yetkiniz yok." } }, 403);
+    let body: AnyRow = {};
+    try { body = await c.req.json(); } catch { body = {}; }
+    const incoming = sanitizeNotificationReadIds(body.ids);
+    if (!incoming.length) return c.json({ ok: true, data: { dismissedCount: 0 } });
+
+    const existing = await dismissedState(c, current, tenant);
+    for (const id of incoming) existing.add(id);
+    const merged = [...existing].slice(-MAX_READ_IDS);
+    await writeDismissedState(c, current, tenant, merged);
+    return c.json({ ok: true, data: { dismissedCount: incoming.length } });
   });
 }

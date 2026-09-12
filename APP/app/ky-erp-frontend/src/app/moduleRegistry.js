@@ -7,7 +7,7 @@ const DEPOLAMA_MODULE = {
   key: "depolama",
   permissionKey: "STORAGE_ADMIN",
   label: "Bağlantılar & Depolama",
-  icon: "dosya",
+  icon: "depolama",
   groups: [
     {
       label: "Bağlantılar",
@@ -124,7 +124,7 @@ function withEBelgeNavigation(module) {
   return {
     ...module,
     label: "e-Belge Merkezi",
-    icon: "dosya",
+    icon: "e-belge",
     groups: [
       { label: "Belge Yönetimi", tabs: [
         ["e-belge-genel", "Genel Bakış", "dashboard"],

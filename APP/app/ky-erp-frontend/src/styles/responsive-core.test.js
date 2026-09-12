@@ -26,7 +26,7 @@ test("AppV3 gorunum profilini cihaz algisindan veya manuel ayardan alir", () => 
 test("AppShellV3 ortak responsive katmani ve Windows benzeri ekran ayarini yukler", () => {
   assert.match(shellV3, /responsive-core\.css/);
   assert.match(shellV3, /data-layout-mode=\{effectiveMode\}/);
-  assert.match(shellV3, /shell-v3-display-button/);
+  assert.match(shellV3, /openDisplaySettingsFromProfile/);
   assert.match(shellV3, /DisplaySettingsPanel/);
   assert.match(shellV3, /data-ui-scale=\{effectiveScale\}/);
   assert.match(shellV3, /zoom: scaleFactor/);

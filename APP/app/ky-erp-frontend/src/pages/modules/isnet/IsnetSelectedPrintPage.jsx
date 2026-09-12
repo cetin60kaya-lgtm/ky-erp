@@ -66,7 +66,7 @@ export default function IsnetSelectedPrintPage() {
       const blob = await getIsnetLocalFile(row.key, "pdf");
       openBlobInNewTab(blob, preview);
     } catch (error) {
-      try { preview?.close(); } catch {}
+      try { preview?.close(); } catch { /* Preview tab cleanup is best-effort. */ }
       setNotice({ tone: "error", text: error?.message || "PDF açılamadı." });
     } finally {
       setBusy("");
@@ -94,7 +94,7 @@ export default function IsnetSelectedPrintPage() {
         setNotice({ tone: "info", text: "PDF açıldı; belgeler kuyrukta beklemeye devam ediyor." });
       }
     } catch (error) {
-      try { preview?.close(); } catch {}
+      try { preview?.close(); } catch { /* Preview tab cleanup is best-effort. */ }
       setNotice({ tone: "error", text: error?.message || "Toplu PDF oluşturulamadı." });
     } finally {
       setBusy("");

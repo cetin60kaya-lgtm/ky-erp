@@ -21,7 +21,7 @@ async function retireLegacyPhoneApprovalWorker() {
       try {
         const notifications = await registration.getNotifications();
         notifications.forEach((notification) => notification.close());
-      } catch {}
+      } catch { /* Legacy notification cleanup is best-effort. */ }
       await registration.unregister();
     }));
   } catch (error) {

@@ -129,7 +129,7 @@ export default function IsnetDocumentCenterPage({ openModule }) {
       const blob = await getIsnetLocalFile(key, format);
       openBlobInNewTab(blob, preview);
     } catch (error) {
-      try { preview?.close(); } catch {}
+      try { preview?.close(); } catch { /* Preview tab cleanup is best-effort. */ }
       setNotice({ tone: "error", text: error?.message || `${format.toUpperCase()} dosyası açılamadı.` });
     } finally {
       setBusy("");

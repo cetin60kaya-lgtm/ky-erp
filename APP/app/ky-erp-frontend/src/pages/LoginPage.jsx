@@ -128,7 +128,7 @@ export default function LoginPage() {
     checkPhoneApproval,
     verifyPhoneApprovalCode,
     resendPhoneApproval,
-    useAuthenticatorFallback,
+    useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
 
   const [username, setUsername] = useState("");
@@ -434,7 +434,7 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError("");
-      applyResponse(await useAuthenticatorFallback({
+      applyResponse(await runAuthenticatorFallback({
         phoneApprovalId: flow.phoneApprovalId,
         phoneApprovalToken: flow.phoneApprovalToken,
       }));

@@ -4,7 +4,7 @@ const PDKS_MODULE = {
   key: "pdks",
   permissionKey: "IK",
   label: "PDKS",
-  icon: "takvim",
+  icon: "pdks",
   sidebarGroups: [
     ["ana-ekran", "Günlük", "dashboard", "Kart, giriş/çıkış ve puantaj"],
     ["personel-bilgileri", "Personel & İK", "users", "Personel, izin ve çalışma bağlantısı"],

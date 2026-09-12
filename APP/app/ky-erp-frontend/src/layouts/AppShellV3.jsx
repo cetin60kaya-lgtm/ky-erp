@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BellRing, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, Plus, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, X } from "lucide-react";
+import { Bell, CheckCheck, ChevronDown, Command, Download, LogOut, Menu, Monitor, RefreshCw, Search, Settings2, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { ErpIcon } from "../components/erp/IconMap";
 import PhoneApprovalSetup from "../components/shell/PhoneApprovalSetup";
-import { displayModeLabel } from "../utils/displayPreferences";
+
 import DisplaySettingsPanel from "./DisplaySettingsPanel";
-import { getNotifications, markNotificationsRead } from "../services/notificationApi";
+import { dismissNotifications, getNotifications, markNotificationsRead } from "../services/notificationApi";
 import { decideSecurityCenterLoginApproval, runPhoneApprovedSecurityAction } from "../services/securityCenterApi";
 import { apiGet } from "../utils/api";
 import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 import "../styles/security-notification-actions.css";
+import "../styles/shell-v3-modern.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
@@ -42,18 +43,53 @@ function getTabs(module, user) {
     : (module.tabs || []).filter((tab) => tabVisible(module, tab, user));
 }
 
-const QUICK_ACTIONS = [
-  { id: "quick-production", moduleKey: "uretim", tabKey: "uretim-hizli-giris", label: "Akıllı Üretim Fişi", description: "Model, adet, bölge, vardiya ve makinacıyı serbest metinden çözümle.", keywords: "imalat üretim fiş hızlı adet makine vardiya" },
-  { id: "production-pool", moduleKey: "uretim", tabKey: "uretim-is-havuzu", label: "Üretim İş Havuzu", description: "İrsaliyeye bağlı işi seç, sakatları ayır ve net sağlam adedi kaydet.", keywords: "irsaliye baskı sakatı kumaş sakatı net sağlam" },
-  { id: "production-balance", moduleKey: "uretim", tabKey: "uretim-denge", label: "İrsaliye / Üretim Dengesi", description: "Gelen adet, operasyonlar, eksik, fazla ve sakat durumunu aç.", keywords: "denge eksik fazla irsaliye rapor" },
-  { id: "isnet-workflow", moduleKey: "isnet", tabKey: "is-akisi", label: "İrsaliyeyi Modele Bağla", description: "İşNet gelen irsaliyesini tek merkez modele ve üretim planına bağla.", keywords: "işnet irsaliye model bağla eşleştir" },
-  { id: "quick-model", moduleKey: "isnet", tabKey: "yonetim-merkezi", label: "Hızlı Model Aç", description: "Modeli Desen merkezinde aç; bütün modüller aynı kimliği kullansın.", keywords: "desen model hızlı yeni kart" },
-  { id: "dyehouse-job", moduleKey: "boyahane", tabKey: "is-akisi", label: "Boyahane İşi Başlat", description: "Desen modelini kuyruğa al, kayıtlı renk ve reçeteyle devam et.", keywords: "boyahane boya iş reçete renk" },
-  { id: "dye-recipe", moduleKey: "boyahane", tabKey: "receteler", label: "Hızlı Reçete", description: "Kayıtlı renk reçetesini aç veya yeni sürüm oluştur.", keywords: "reçete pantone boya hızlı" },
-  { id: "current-account", moduleKey: "muhasebe", tabKey: "cari-hareketler", label: "Hızlı Cari İşlem", description: "Firma hareketi, ödeme veya düzeltme girişine geç.", keywords: "muhasebe cari ödeme tahsilat hareket" },
-  { id: "check-payment", moduleKey: "muhasebe", tabKey: "cek-odeme", label: "Hızlı Çek / Ödeme", description: "Çek ve ödeme takip ekranını aç.", keywords: "çek ödeme banka vade" },
-  { id: "hr-entry", moduleKey: "ik", tabKey: "mesai-avans", label: "Hızlı Mesai / Avans", description: "Mesai, avans veya kesinti işlemini aç.", keywords: "ik personel mesai avans kesinti" },
-];
+const MODULE_VISUALS = {
+  muhasebe: { icon: "muhasebe", hint: "Finans, cari ve mali kontrol" },
+  isnet: { icon: "e-belge", hint: "e-Belge ve entegrasyon" },
+  desen: { icon: "desen", hint: "Desen, model ve yerleşim" },
+  boyahane: { icon: "boyahane", hint: "Renk, reçete ve lot" },
+  "gunluk-operasyon": { icon: "operasyon", hint: "Günlük operasyon" },
+  ik: { icon: "ik", hint: "Personel ve bordro" },
+  pdks: { icon: "pdks", hint: "Kart ve devam kontrolü" },
+  uretim: { icon: "imalat", hint: "İmalat ve üretim" },
+  iletisim: { icon: "eposta", hint: "Mail ve dosyalar" },
+  depolama: { icon: "depolama", hint: "Bağlantılar ve depolama" },
+  admin: { icon: "guvenlik", hint: "Platform ve güvenlik" },
+  asistan: { icon: "asistan", hint: "KY ERP Asistan" },
+};
+function moduleVisual(module) {
+  return MODULE_VISUALS[module?.key] || { icon: module?.icon || "dashboard", hint: module?.label || "Modül" };
+}
+
+function tabVisualIcon(tabKey, fallback = "dashboard") {
+  const key = normalize(tabKey);
+  if (/fatura|belge|evrak|arsiv/.test(key)) return "belge";
+  if (/irsaliye|sevkiyat/.test(key)) return "musteri-irsaliye";
+  if (/cari|firma/.test(key)) return "firma-kartlari";
+  if (/odeme|tahsilat|banka|maas|bordro|avans/.test(key)) return "odemeler";
+  if (/cek/.test(key)) return "cekler";
+  if (/kdv|hesap|kar-zarar|gelir-gider/.test(key)) return "kdv";
+  if (/mail|eposta|gelen-kutusu|gonderilen/.test(key)) return "eposta";
+  if (/personel|kullanici|yetki|servis/.test(key)) return "users";
+  if (/puantaj|takvim|tarih|tatil|izin|vardiya|donem/.test(key)) return "takvim";
+  if (/terminal|cihaz/.test(key)) return "terminal";
+  if (/senkron|sync/.test(key)) return "sync";
+  if (/renk|recete|boya/.test(key)) return "renk";
+  if (/stok|urun|lot|envanter/.test(key)) return "urunler";
+  if (/uretim|imalat|makine/.test(key)) return "imalat";
+  if (/desen|model|yerlesim|kalip/.test(key)) return "desen";
+  if (/rapor|denetim|log|gecmis/.test(key)) return "raporlar";
+  if (/ayar|baglanti|entegrasyon/.test(key)) return "ayarlar";
+  if (/dosya|drive|klasor|depolama/.test(key)) return "dosya";
+  if (/onay|sorun/.test(key)) return "onay";
+  return fallback || "dashboard";
+}
+function quickActionDescription(module, group, tab) {
+  const sidebarRow = (module?.sidebarGroups || []).find(([key]) => key === tab?.[0]);
+  if (sidebarRow?.[3]) return sidebarRow[3];
+  const groupLabel = group?.label ? group.label + " · " : "";
+  return groupLabel + (moduleVisual(module).hint || "İlgili çalışma ekranını aç");
+}
 
 function normalize(value) {
   return String(value || "").toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -103,6 +139,7 @@ export default function AppShellV3({
 }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
+  const [expandedGroupKey, setExpandedGroupKey] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [phoneApprovalOpen, setPhoneApprovalOpen] = useState(false);
@@ -111,6 +148,7 @@ export default function AppShellV3({
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const profileMenuRef = useRef(null);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState("all");
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationActionBusy, setNotificationActionBusy] = useState("");
   const [notificationError, setNotificationError] = useState("");
@@ -138,6 +176,14 @@ export default function AppShellV3({
   const ownerUser = isOwnerUser(user);
   const securityRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
   const builtInSecurityAppAccess = ownerUser || securityRole === "COMPANY_ADMIN";
+  const activeModuleVisual = moduleVisual(activeModule);
+  const notificationView = useMemo(() => {
+    const items = notificationData.items || [];
+    if (notificationFilter === "unread") return items.filter((item) => item.unread);
+    if (notificationFilter === "action") return items.filter((item) => item?.meta?.actionable === true);
+    return items;
+  }, [notificationData.items, notificationFilter]);
+  const notificationActionCount = useMemo(() => (notificationData.items || []).filter((item) => item?.meta?.actionable === true).length, [notificationData.items]);
 
   useEffect(() => {
     if (!user?.id) { setSecurityAppEligible(false); return undefined; }
@@ -240,17 +286,32 @@ export default function AppShellV3({
   }, [profileMenuOpen]);
 
   const quickActions = useMemo(() => {
-    const moduleMap = new Map(modules.map((item) => [item.key, item]));
     const query = normalize(quickSearch);
-    return QUICK_ACTIONS.filter((action) => {
-      const module = moduleMap.get(action.moduleKey);
-      if (!module) return false;
-      const visibleTabs = new Set(getTabs(module, user).map(([key]) => key));
-      if (!visibleTabs.has(action.tabKey)) return false;
-      if (!query) return true;
-      return normalize(`${action.label} ${action.description} ${action.keywords}`).includes(query);
+    const rows = modules.flatMap((module) => {
+      const groups = visibleGroups(module, user);
+      if (groups.length) return groups.flatMap((group) => (group.tabs || []).map((tab) => ({ module, group, tab })));
+      return getTabs(module, user).map((tab) => ({ module, group: null, tab }));
+    }).map(({ module, group, tab }) => ({
+      id: module.key + ":" + tab[0],
+      moduleKey: module.key,
+      tabKey: tab[0],
+      label: tab[1],
+      description: quickActionDescription(module, group, tab),
+      icon: tabVisualIcon(tab[0], tab[2]),
+      moduleIcon: moduleVisual(module).icon,
+      moduleLabel: module.label,
+      keywords: module.label + " " + (group?.label || "") + " " + tab[0] + " " + tab[1],
+    }));
+    const filtered = query
+      ? rows.filter((action) => normalize(action.label + " " + action.description + " " + action.keywords).includes(query))
+      : rows;
+    const ordered = [...filtered].sort((a, b) => {
+      if (a.moduleKey === activeModule?.key && b.moduleKey !== activeModule?.key) return -1;
+      if (b.moduleKey === activeModule?.key && a.moduleKey !== activeModule?.key) return 1;
+      return modules.findIndex((item) => item.key === a.moduleKey) - modules.findIndex((item) => item.key === b.moduleKey);
     });
-  }, [modules, quickSearch, user]);
+    return ordered.slice(0, query ? 40 : 24);
+  }, [activeModule?.key, modules, quickSearch, user]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -268,6 +329,8 @@ export default function AppShellV3({
   }, []);
 
   useEffect(() => { if (!quickOpen) setQuickSearch(""); }, [quickOpen]);
+
+  useEffect(() => { setExpandedGroupKey(""); }, [activeModule?.key, activeTab]);
 
   function runQuickAction(action) {
     onOpenTab(action.moduleKey, action.tabKey);
@@ -336,6 +399,26 @@ export default function AppShellV3({
     markNotificationIdsRead(unreadIds);
   }
 
+  function canDismissNotification(item) {
+    return !(item?.category === "SECURITY" && item?.meta?.actionable === true);
+  }
+
+  async function dismissNotificationIds(ids) {
+    const clean = [...new Set((ids || []).filter(Boolean))];
+    if (!clean.length) return;
+    setNotificationData((current) => {
+      const items = current.items.filter((item) => !clean.includes(item.id));
+      return { ...current, items, unreadCount: items.filter((item) => item.unread).length, totalCount: items.length };
+    });
+    try { await dismissNotifications(clean); }
+    catch { refreshNotifications(true); }
+  }
+
+  function clearReadNotifications() {
+    const ids = notificationData.items.filter((item) => !item.unread && canDismissNotification(item)).map((item) => item.id);
+    dismissNotificationIds(ids);
+  }
+
   function openProfileSecurity() {
     setProfileMenuOpen(false);
     if (ownerUser) {
@@ -379,7 +462,6 @@ export default function AppShellV3({
   const effectiveMode = displayPreferences?.effectiveMode || "pc";
   const effectiveScale = Number(displayPreferences?.effectiveScale || 100);
   const scaleFactor = effectiveScale / 100;
-  const displayLabel = displayModeLabel(effectiveMode);
   const shellStyle = useMemo(() => {
     if (effectiveScale === 100) return undefined;
     return {
@@ -393,6 +475,7 @@ export default function AppShellV3({
   return (
     <div
       className={`shell-v3 ${mobileMenuOpen ? "mobile-open" : ""}`}
+      data-active-module={activeModule?.key || ""}
       data-layout-mode={effectiveMode}
       data-layout-preference={displayPreferences?.preferences?.mode || "auto"}
       data-ui-scale={effectiveScale}
@@ -415,9 +498,9 @@ export default function AppShellV3({
             const isExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
             const groups = visibleGroups(module, user);
             return (
-              <section key={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
+              <section key={module.key} data-module={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
                 <button type="button" className="shell-v3-module-button" onClick={() => onToggleModuleMenu(module.key)} aria-expanded={isExpanded}>
-                  <ErpIcon name={module.icon || "dashboard"} size={18} /><span>{module.label}</span><ChevronDown size={15} className={isExpanded ? "expanded" : ""} />
+                  <span className="shell-v3-module-icon"><ErpIcon name={moduleVisual(module).icon} size={18} /></span><span className="shell-v3-module-copy"><span>{module.label}</span><small>{moduleVisual(module).hint}</small></span><ChevronDown size={15} className={isExpanded ? "expanded" : ""} />
                 </button>
                 {isExpanded ? (
                   <div className="shell-v3-submenu">
@@ -429,7 +512,7 @@ export default function AppShellV3({
                               const groupActive = owningGroup?.tabs?.some(([tabKey]) => tabKey === activeTab) || activeTab === key;
                               return (
                                 <button type="button" key={key} className={groupActive ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                                  <ErpIcon name={icon || "dashboard"} size={16} />
+                                  <ErpIcon name={tabVisualIcon(key, icon)} size={16} />
                                   <span><strong>{label}</strong><small>{description}</small></span>
                                 </button>
                               );
@@ -437,19 +520,25 @@ export default function AppShellV3({
                           </div>
                         )
                       : module.groups
-                        ? groups.map((group) => (
-                            <div key={group.label} className="shell-v3-submenu-group">
-                              <h3>{group.label}</h3>
-                              {group.tabs.map(([key, label, icon]) => (
-                                <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                                  <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
+                        ? groups.map((group) => {
+                            const groupId = module.key + ":" + group.label;
+                            const groupActive = group.tabs.some(([key]) => key === activeTab);
+                            const groupOpen = groupActive || expandedGroupKey === groupId;
+                            const firstTab = group.tabs[0] || [];
+                            return (
+                              <div key={group.label} className={`shell-v3-submenu-group ${groupOpen ? "open" : ""} ${groupActive ? "active" : ""}`}>
+                                <button type="button" className="shell-v3-submenu-group-toggle" onClick={() => setExpandedGroupKey((current) => current === groupId && !groupActive ? "" : groupId)} aria-expanded={groupOpen}>
+                                  <ErpIcon name={tabVisualIcon(firstTab[0], firstTab[2])} size={15} /><span><strong>{group.label}</strong><small>{group.tabs.length} işlem</small></span><ChevronDown size={14} />
                                 </button>
-                              ))}
-                            </div>
-                          ))
+                                {groupOpen ? <div className="shell-v3-submenu-group-items">{group.tabs.map(([key, label, icon]) => (
+                                  <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}><ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span></button>
+                                ))}</div> : null}
+                              </div>
+                            );
+                          })
                         : getTabs(module, user).map(([key, label, icon]) => (
                             <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                              <ErpIcon name={icon || "dashboard"} size={15} /><span>{label}</span>
+                              <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
                             </button>
                           ))}
                   </div>
@@ -463,46 +552,12 @@ export default function AppShellV3({
       <main className="shell-v3-main">
         <header className="shell-v3-topbar">
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç"><Menu size={19} /></button>
-          <label className="shell-v3-search"><Search size={17} /><input placeholder="Firma, belge, model veya ürün ara" /></label>
-          <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><Plus size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
+          <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onFocus={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
+          <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><ErpIcon name="hizli" size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
           <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
             {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
           </select>
-          {installPrompt ? (
-            <button
-              type="button"
-              className="shell-v3-install-button"
-              onClick={installPwa}
-              aria-label="KY ERP uygulamasını bu cihaza yükle"
-              title="KY ERP'yi uygulama olarak yükle"
-            >
-              <Download size={17} />
-              <span>Uygulamayı Yükle</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="shell-v3-display-button"
-            onClick={() => setDisplaySettingsOpen(true)}
-            aria-label="Ekran ve görünüm ayarları"
-            title="Ayarlar > Sistem > Ekran"
-          >
-            <Monitor size={17} />
-            <span>Ekran</span>
-            <small>{displayLabel} · {effectiveScale}%</small>
-          </button>
-          {securityAppEligible ? (
-            <button
-              type="button"
-              className="shell-v3-phone-approval-button"
-              onClick={() => setPhoneApprovalOpen(true)}
-              aria-label="Telefon Onayı ayarlarını aç"
-              title="Telefon Onayı"
-            >
-              <BellRing size={17} />
-              <span>Telefon Onayı</span>
-            </button>
-          ) : null}
+
           <div className="shell-v3-notification-wrap">
             <button
               type="button"
@@ -528,20 +583,26 @@ export default function AppShellV3({
                   <div className="shell-v3-notification-actions">
                     <button type="button" onClick={() => refreshNotifications(false)} disabled={notificationLoading} title="Yenile"><RefreshCw size={15} className={notificationLoading ? "spin" : ""} /></button>
                     <button type="button" onClick={markAllNotificationsRead} disabled={!notificationData.unreadCount} title="Tümünü okundu işaretle"><CheckCheck size={16} /></button>
+                    <button type="button" onClick={clearReadNotifications} disabled={!notificationData.items.some((item) => !item.unread && canDismissNotification(item))} title="Okunan bildirimleri temizle"><Trash2 size={15} /></button>
                   </div>
                 </header>
+                <div className="shell-v3-notification-filters">
+                  <button type="button" className={notificationFilter === "all" ? "active" : ""} onClick={() => setNotificationFilter("all")}>Tümü <b>{notificationData.totalCount}</b></button>
+                  <button type="button" className={notificationFilter === "unread" ? "active" : ""} onClick={() => setNotificationFilter("unread")}>Okunmamış <b>{notificationData.unreadCount}</b></button>
+                  <button type="button" className={notificationFilter === "action" ? "active" : ""} onClick={() => setNotificationFilter("action")}>İşlem Bekleyen <b>{notificationActionCount}</b></button>
+                </div>
                 {notificationError ? <div className="shell-v3-notification-error">{notificationError}</div> : null}
                 {notificationData.partial ? <div className="shell-v3-notification-warning">Bazı bildirim kaynakları geçici olarak alınamadı. Görünen kayıtlar günceldir.</div> : null}
                 <div className="shell-v3-notification-list" aria-live="polite">
                   {notificationLoading && !notificationData.items.length ? <div className="shell-v3-notification-empty">Bildirimler kontrol ediliyor...</div> : null}
-                  {!notificationLoading && !notificationData.items.length ? (
+                  {!notificationLoading && !notificationView.length ? (
                     <div className="shell-v3-notification-empty">
                       <Bell size={22} />
-                      <strong>Bildirim yok</strong>
-                      <span>Bekleyen onay, e-Belge sorunu veya vadesi gelen ödeme olduğunda burada görünecek.</span>
+                      <strong>{notificationData.items.length ? "Bu filtrede bildirim yok" : "Bildirim yok"}</strong>
+                      <span>{notificationData.items.length ? "Başka bir filtre seçebilir veya yeni bildirimleri bekleyebilirsiniz." : "Bekleyen onay, e-Belge sorunu veya vadesi gelen ödeme olduğunda burada görünecek."}</span>
                     </div>
                   ) : null}
-                  {notificationData.items.map((item) => {
+                  {notificationView.map((item) => {
                     const actionable = item?.category === "SECURITY" && item?.meta?.actionable === true && Boolean(item?.meta?.approvalId || item?.meta?.sessionId);
                     const actionBusy = notificationActionBusy === item.id;
                     return <div className="shell-v3-notification-entry" key={item.id}>
@@ -562,6 +623,7 @@ export default function AppShellV3({
                         <button type="button" className="approve" disabled={Boolean(notificationActionBusy)} onClick={(event) => decideNotificationApproval(event, item, "APPROVE")}>{actionBusy ? "İşleniyor..." : "Onayla"}</button>
                         <button type="button" className="deny" disabled={Boolean(notificationActionBusy)} onClick={(event) => decideNotificationApproval(event, item, "DENY")}>Reddet</button>
                       </div> : null}
+                      {!item.unread && canDismissNotification(item) ? <button type="button" className="shell-v3-notification-dismiss" title="Bildirimi temizle" aria-label="Bildirimi temizle" onClick={() => dismissNotificationIds([item.id])}><X size={14} /></button> : null}
                     </div>;
                   })}
                 </div>
@@ -631,6 +693,16 @@ export default function AppShellV3({
                     </button>
                   ) : null}
 
+                  {installPrompt ? (
+                    <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); installPwa(); }}>
+                      <Download size={18} />
+                      <span>
+                        <strong>KY ERP'yi Bu Cihaza Yükle</strong>
+                        <small>Web uygulamasını masaüstü veya ana ekrana kur</small>
+                      </span>
+                    </button>
+                  ) : null}
+
                   {securityAppEligible ? (
                     <button type="button" role="menuitem" onClick={openPhoneApprovalFromProfile}>
                       <Smartphone size={18} />
@@ -665,7 +737,8 @@ export default function AppShellV3({
         <div className="shell-v3-tabs-bar">
           <div className="shell-v3-tabs">
             {tabs.map((tab) => (
-              <button type="button" key={tab.id} className={activeTabId === tab.id ? "active" : ""} onClick={() => onActivateWorkspaceTab(tab)}>
+              <button type="button" key={tab.id} data-module={tab.moduleKey} className={activeTabId === tab.id ? "active" : ""} onClick={() => onActivateWorkspaceTab(tab)}>
+                <ErpIcon name={tabVisualIcon(tab.tabKey, moduleVisual(modules.find((item) => item.key === tab.moduleKey)).icon)} size={14} />
                 <span>{tab.label}</span>
                 {tabs.length > 1 ? (
                   <i role="button" tabIndex={0} aria-label="Sekmeyi kapat" onClick={(event) => { event.stopPropagation(); onCloseWorkspaceTab(tab.id); }} onKeyDown={(event) => {
@@ -680,7 +753,7 @@ export default function AppShellV3({
           </button>
         </div>
 
-        <div className="shell-v3-crumb"><span>KY ERP</span><span>/</span><span>{activeModule?.label}</span>{activeTabLabel ? <><span>/</span><strong>{activeTabLabel}</strong></> : null}</div>
+        <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={activeModuleVisual.icon} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}<small>{activeModuleVisual.hint}</small></div>
         <section className="shell-v3-workspace">{children}</section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>Firma: {companies.find((item) => item.slug === activeCompanySlug)?.name || "-"}</span><span className="ok">Sistem hazır</span></footer>
       </main>
@@ -714,14 +787,14 @@ export default function AppShellV3({
           <section className="shell-v3-quick-palette" role="dialog" aria-modal="true" aria-label="Hızlı işlemler" onMouseDown={(event) => event.stopPropagation()}>
             <header><Command size={19} /><input autoFocus value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="İşlem ara: üretim fişi, model, reçete, cari..." /><button type="button" onClick={() => setQuickOpen(false)} aria-label="Kapat"><X size={18} /></button></header>
             <div className="shell-v3-quick-list">
-              {quickActions.map((action, index) => (
+              {quickActions.map((action) => (
                 <button type="button" key={action.id} className="shell-v3-quick-action" onClick={() => runQuickAction(action)} onKeyDown={(event) => { if (event.key === "Enter") runQuickAction(action); }}>
-                  <b>{index + 1}</b><span><strong>{action.label}</strong><small>{action.description}</small></span><em>{modules.find((item) => item.key === action.moduleKey)?.label}</em>
+                  <b className="shell-v3-quick-action-icon"><ErpIcon name={action.icon} size={18} /></b><span><strong>{action.label}</strong><small>{action.description}</small></span><em><ErpIcon name={action.moduleIcon} size={13} />{action.moduleLabel}</em>
                 </button>
               ))}
               {!quickActions.length ? <div className="shell-v3-quick-empty">Aramaya uygun hızlı işlem bulunamadı.</div> : null}
             </div>
-            <footer><span><kbd>Ctrl</kbd> + <kbd>K</kbd> ile her ekrandan açılır.</span><span>Seçilen işlem yeni çalışma sekmesinde açılır.</span></footer>
+            <footer><span><kbd>Ctrl</kbd> + <kbd>K</kbd> ile her ekrandan açılır.</span><span>Tüm yetkili modül ve işlemler burada aranır.</span></footer>
           </section>
         </div>
       ) : null}

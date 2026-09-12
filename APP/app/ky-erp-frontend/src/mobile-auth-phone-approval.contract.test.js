@@ -28,8 +28,9 @@ test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", (
   assert.match(main, /import\("\.\/AppV3\.jsx"\)/);
   assert.match(appV3, /AppShellV3/);
   assert.match(shell, /PhoneApprovalSetup/);
-  assert.match(shell, /shell-v3-phone-approval-button/);
+  assert.match(shell, /openPhoneApprovalFromProfile/);
   assert.match(shell, />Telefon Onayı</);
+  assert.match(shell, /shell-v3-user-menu/);
   assert.match(shell, /setPhoneApprovalOpen\(true\)/);
   assert.match(shellCss, /shell-v3-phone-approval-button/);
   assert.match(shellCss, /data-layout-mode="phone"/);
@@ -66,7 +67,7 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   const securityApp = read("../public/security/app.js");
 
   assert.match(shell, /beforeinstallprompt/);
-  assert.match(shell, /Uygulamayı Yükle/);
+  assert.match(shell, /KY ERP'yi Bu Cihaza Yükle/);
   assert.match(shell, /appinstalled/);
   assert.match(responsive, /data-layout-mode="phone"[\s\S]*shell-v3-icon\.notification/);
   assert.match(responsive, /shell-v3-install-button/);

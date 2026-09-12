@@ -86,7 +86,7 @@ async function clearWakeMarker() {
     const next = { ...device };
     delete next.pendingWakeAt;
     await writeDevice(next);
-  } catch {}
+  } catch { /* Best-effort UI cleanup; ignore non-critical failure. */ }
 }
 
 async function deviceFetch(path, options = {}) {
@@ -124,7 +124,7 @@ function cleanOpenParam() {
     if (!url.searchParams.has(OPEN_PARAM)) return;
     url.searchParams.delete(OPEN_PARAM);
     window.history.replaceState(window.history.state || {}, "", `${url.pathname}${url.search}${url.hash}`);
-  } catch {}
+  } catch { /* Best-effort UI cleanup; ignore non-critical failure. */ }
 }
 
 export default function PhoneApprovalInboxBridge() {
@@ -142,7 +142,7 @@ export default function PhoneApprovalInboxBridge() {
       if (!("setAppBadge" in navigator)) return;
       if (count > 0) await navigator.setAppBadge(count);
       else if ("clearAppBadge" in navigator) await navigator.clearAppBadge();
-    } catch {}
+    } catch { /* Best-effort UI cleanup; ignore non-critical failure. */ }
   }, []);
 
   const checkPending = useCallback(async ({ forceOpen = false } = {}) => {

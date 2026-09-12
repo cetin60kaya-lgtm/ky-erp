@@ -3,7 +3,7 @@ export const MODULES = [
     key: "muhasebe",
     permissionKey: "MUHASEBE",
     label: "Muhasebe",
-    icon: "cari-kasa",
+    icon: "muhasebe",
     groups: [
       {
         label: "Yönetim",
@@ -47,7 +47,7 @@ export const MODULES = [
     key: "isnet",
     permissionKey: "ISNET",
     label: "İşNet",
-    icon: "eposta",
+    icon: "e-belge",
     groups: [
       {
         label: "Yönetim",
@@ -85,7 +85,7 @@ export const MODULES = [
     key: "desen",
     permissionKey: "DESEN",
     label: "Desen",
-    icon: "dosya",
+    icon: "desen",
     groups: [
       {
         label: "Desen İşlemleri",
@@ -105,56 +105,34 @@ export const MODULES = [
     key: "boyahane",
     permissionKey: "BOYAHANE",
     label: "Boyahane",
-    icon: "renk",
+    icon: "boyahane",
     groups: [
-      {
-        label: "Hakan Emprime Boyahane",
-        tabs: [
-          ["is-akisi", "Ana Ekran", "dashboard"],
-          ["receteler", "Numune Çalışmaları", "file-check"],
-          ["uretim-gecmisi", "İmalat Boyaları", "dosya"],
-          ["kayitli-renkler", "Kayıtlı Renkler", "renk"],
-          ["urun-lotlar", "Stok, Lot ve Ürünler", "urunler"],
-          ["raporlar", "Raporlar ve İşlem Logları", "raporlar"],
-        ],
-      },
+      { label: "Günlük İş", tabs: [["is-akisi", "Ana Ekran", "dashboard"], ["uretim-gecmisi", "İmalat Boyaları", "imalat"]] },
+      { label: "Renk & Reçete", tabs: [["receteler", "Numune Çalışmaları", "renk"], ["kayitli-renkler", "Kayıtlı Renkler", "renk"]] },
+      { label: "Stok & Lot", tabs: [["urun-lotlar", "Stok, Lot ve Ürünler", "urunler"]] },
+      { label: "Rapor & Kayıt", tabs: [["raporlar", "Raporlar ve İşlem Logları", "raporlar"]] },
     ],
   },
   {
     key: "gunluk-operasyon",
     permissionKey: "GUNLUK_OPERASYON",
     label: "Günlük Operasyon",
-    icon: "takvim",
+    icon: "operasyon",
     groups: [
-      {
-        label: "Operasyon",
-        tabs: [
-          ["ana-ekran", "Ana Ekran", "dashboard"],
-          ["gunluk-giris", "Günlük Giriş", "users"],
-          ["personel-kartlari", "Personel Kartları", "users"],
-          ["haftalik-ozet", "Haftalık Özet", "takvim"],
-          ["odeme-fisleri", "Ödeme Fişleri", "odemeler"],
-        ],
-      },
+      { label: "Günlük İş", tabs: [["ana-ekran", "Ana Ekran", "dashboard"], ["gunluk-giris", "Günlük Giriş", "operasyon"]] },
+      { label: "Personel & Ödeme", tabs: [["personel-kartlari", "Personel Kartları", "users"], ["odeme-fisleri", "Ödeme Fişleri", "odemeler"]] },
+      { label: "Özet", tabs: [["haftalik-ozet", "Haftalık Özet", "takvim"]] },
     ],
   },
   {
     key: "ik",
     permissionKey: "IK",
     label: "İK",
-    icon: "users",
+    icon: "ik",
     groups: [
-      {
-        label: "İK Yönetimi",
-        tabs: [
-          ["ozet", "İK Özet", "dashboard"],
-          ["personel-kartlari", "Personel Kartları", "users"],
-          ["ucret-odeme-plani", "Maaş / Yol / Banka / Elden", "odemeler"],
-          ["mesai-avans", "Mesai / Avans / Kesinti", "takvim"],
-          ["bordro-odeme", "Bordro & Ödeme", "odemeler"],
-          ["sgk-evrak-kontrol", "SGK / Evrak / Ay Sonu", "file-check"],
-        ],
-      },
+      { label: "Personel", tabs: [["ozet", "İK Özet", "dashboard"], ["personel-kartlari", "Personel Kartları", "users"]] },
+      { label: "Ücret & Puantaj", tabs: [["ucret-odeme-plani", "Maaş / Yol / Banka / Elden", "odemeler"], ["mesai-avans", "Mesai / Avans / Kesinti", "takvim"], ["bordro-odeme", "Bordro & Ödeme", "odemeler"]] },
+      { label: "Evrak & Kapanış", tabs: [["sgk-evrak-kontrol", "SGK / Evrak / Ay Sonu", "file-check"]] },
     ],
     hiddenTabs: [
       ["denetim-raporu", "Denetim Raporları", "raporlar"],
@@ -164,23 +142,18 @@ export const MODULES = [
     key: "uretim",
     permissionKey: "IMALAT",
     label: "İmalat",
-    icon: "dashboard",
+    icon: "imalat",
     groups: [
-      {
-        label: "Tek Merkez Üretim",
-        tabs: [
-          ["uretim-merkezi", "Model ve Üretim Kontrol Merkezi", "dashboard"],
-          ["uretim-raporlari", "Üretim Raporları", "raporlar"],
-          ["uretim-ayarlari", "Makine ve Vardiya Ayarları", "ayarlar"],
-        ],
-      },
+      { label: "Üretim", tabs: [["uretim-merkezi", "Model ve Üretim Kontrol Merkezi", "imalat"]] },
+      { label: "Rapor", tabs: [["uretim-raporlari", "Üretim Raporları", "raporlar"]] },
+      { label: "Makine & Vardiya", tabs: [["uretim-ayarlari", "Makine ve Vardiya Ayarları", "ayarlar"]] },
     ],
   },
   {
     key: "admin",
     permissionKey: "ADMIN",
     label: "Platform Yönetimi",
-    icon: "ayarlar",
+    icon: "guvenlik",
     groups: [
       {
         label: "Platform Yönetimi",
@@ -206,7 +179,7 @@ export const MODULES = [
     key: "asistan",
     permissionKey: "ASISTAN",
     label: "KY ERP Asistan",
-    icon: "dashboard",
+    icon: "asistan",
     tabs: [["sohbet", "Asistan Sohbeti", "dashboard"]],
   },
 ];
