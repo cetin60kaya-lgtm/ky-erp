@@ -1054,3 +1054,50 @@ html[data-ky-android] body {
 html[data-ky-android] .shell-v3-workspace {
   overscroll-behavior-y: contain;
 }
+
+/* KY ERP FINAL VIEWPORT FLOW 2026-09-12 */
+/* AppShellV3 workspace is the single page-level vertical scroller. */
+.shell-v3-workspace {
+  scroll-padding-bottom: max(28px, var(--ky-safe-bottom));
+  padding-bottom: max(24px, var(--ky-safe-bottom));
+}
+
+.shell-v3-workspace > :is(.clean-workflow-page, .ik-page),
+.shell-v3-workspace :is(.clean-workflow-page, .ik-page) {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.shell-v3-workspace .clean-workflow-page :is(.cw-screen, .cw-work-grid) {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Desen + Boyahane: desktop viewport locks were hiding lower actions. */
+.shell-v3-workspace :is(.bh-grid-3, .bh-grid-2, .bh-work-grid) {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.shell-v3-workspace .bh-grid-3 > .bh-card,
+.shell-v3-workspace :is(.bh-scroll, .bh-list, .bh-work-color-list) {
+  max-height: none !important;
+}
+
+/* Imalat: do not lock the first model list card to the browser viewport. */
+.shell-v3-workspace .iw-grid-3 > .iw-card:first-child {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+/* IK: the page itself flows with the workspace; data tables may still own local scroll. */
+.shell-v3-workspace .ik-page {
+  scrollbar-gutter: auto;
+  padding-bottom: max(32px, var(--ky-safe-bottom)) !important;
+}
