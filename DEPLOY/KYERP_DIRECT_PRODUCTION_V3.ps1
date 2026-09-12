@@ -93,9 +93,12 @@ WHERE user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' L
 "@
     $permJson = Invoke-Remote-D1Json $permSql "DENETIM izin kilidi kontrolu"
     $perm = $permJson[0].results[0]
-    if ([int]($perm.foreign_permissions ?? 0) -ne 0) { Fail "DENETIM hesabinda IK disi aktif izin bulundu." }
-    if ([int]($perm.valid_ik_permissions ?? 0) -lt 1) { Fail "DENETIM hesabinda sabit IK goruntuleme izni bulunamadi." }
-    if ([int]($perm.write_permissions ?? 0) -ne 0) { Fail "DENETIM hesabinda yazma/silme/onay yetkisi bulundu." }
+    $foreignPermissions = if ($null -eq $perm.foreign_permissions) { 0 } else { [int]$perm.foreign_permissions }
+    $validIkPermissions = if ($null -eq $perm.valid_ik_permissions) { 0 } else { [int]$perm.valid_ik_permissions }
+    $writePermissions = if ($null -eq $perm.write_permissions) { 0 } else { [int]$perm.write_permissions }
+    if ($foreignPermissions -ne 0) { Fail "DENETIM hesabinda IK disi aktif izin bulundu." }
+    if ($validIkPermissions -lt 1) { Fail "DENETIM hesabinda sabit IK goruntuleme izni bulunamadi." }
+    if ($writePermissions -ne 0) { Fail "DENETIM hesabinda yazma/silme/onay yetkisi bulundu." }
     Write-Host "DENETIM: hazir sistem hesabi | yalniz IK/PDKS | salt-okunur" -ForegroundColor Green
 }
 
