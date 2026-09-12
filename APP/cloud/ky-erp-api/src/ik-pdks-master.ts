@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { ensurePdksPolicySchema } from "./ik-pdks-policy";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -14,6 +15,8 @@ const number = (value: unknown, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 const nowIso = () => new Date().toISOString();
+const nullableBool = (value: unknown) => value === undefined || value === null || value === "" ? null : (value === true || value === 1 || ["1","TRUE","EVET","YES","ON"].includes(upper(value)) ? 1 : 0);
+const jsonDays = (value: unknown) => { const rows = Array.isArray(value) ? value : []; const clean = [...new Set(rows.map(Number).filter((v) => v >= 0 && v <= 6))]; return clean.length ? JSON.stringify(clean) : null; };
 
 async function bodyOf(c: Context<AppEnv>): Promise<Row> {
   try {
@@ -114,8 +117,9 @@ export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
     const auth = await authContext(c);
     if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
     await ensureSchema(c);
+    await ensurePdksPolicySchema(c);
     await ensureDefaultGroup(c, auth.company);
-    const [groupsResult, servicesResult, groupAssignResult, serviceAssignResult] = await Promise.all([
+    const [groupsResult, servicesResult, groupAssignResult, serviceAssignResult, personnelGroupsResult, personnelGroupAssignResult] = await Promise.all([
       c.env.DB.prepare(`SELECT id,code,name,entry_time AS entryTime,exit_time AS exitTime,
         late_tolerance AS lateTolerance,early_tolerance AS earlyTolerance,active,updated_at AS updatedAt
         FROM ik_pdks_work_groups WHERE main_company_id=? ORDER BY active DESC,name`).bind(auth.company).all<Row>(),
@@ -125,12 +129,16 @@ export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
         FROM ik_pdks_employee_groups WHERE main_company_id=?`).bind(auth.company).all<Row>(),
       c.env.DB.prepare(`SELECT employee_id AS employeeId,service_id AS serviceId,updated_at AS updatedAt
         FROM ik_pdks_employee_services WHERE main_company_id=?`).bind(auth.company).all<Row>(),
+      c.env.DB.prepare(`SELECT id,code,name,personnel_class AS personnelClass,default_shift_id AS defaultShiftId,attendance_mode AS attendanceMode,require_punch AS requirePunch,show_daily_punch_detail AS showDailyPunchDetail,late_early_effect AS lateEarlyEffect,missing_punch_policy AS missingPunchPolicy,overtime_mode AS overtimeMode,night_shift_mode AS nightShiftMode,normal_credit_mode AS normalCreditMode,payroll_monthly_minutes AS payrollMonthlyMinutes,fixed_daily_minutes AS fixedDailyMinutes,contract_weekly_minutes AS contractWeeklyMinutes,work_days_json AS workDaysJson,weekly_rest_days_json AS restDaysJson,active,updated_at AS updatedAt FROM ik_pdks_personnel_groups WHERE main_company_id=? ORDER BY active DESC,name`).bind(auth.company).all<Row>(),
+      c.env.DB.prepare(`SELECT employee_id AS employeeId,personnel_group_id AS personnelGroupId,updated_at AS updatedAt FROM ik_pdks_employee_personnel_groups WHERE main_company_id=?`).bind(auth.company).all<Row>(),
     ]);
     return c.json({ ok: true, data: {
       groups: groupsResult.results || [],
       services: servicesResult.results || [],
       groupAssignments: groupAssignResult.results || [],
       serviceAssignments: serviceAssignResult.results || [],
+      personnelGroups: personnelGroupsResult.results || [],
+      personnelGroupAssignments: personnelGroupAssignResult.results || [],
       audit: auth.audit,
     }});
   });
@@ -177,6 +185,42 @@ export function registerIkPdksMasterRoutes(app: Hono<AppEnv>) {
       updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
       .bind(auth.company, employeeId, groupId, text(auth.user.username), nowIso()).run();
     return c.json({ ok: true, data: { employeeId, groupId } });
+  });
+
+  app.post("/api/ik/personnel-control/personnel-groups", async (c) => {
+    const body = await bodyOf(c);
+    const auth = await authContext(c, body);
+    if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+    if (auth.audit) return fail(c, 403, "HR_AUDIT_READ_ONLY", "Denetim kullanıcısı personel grubu değiştiremez.");
+    await ensurePdksPolicySchema(c);
+    const code = upper(body.code || body.name).replace(/[^A-Z0-9ÇĞİÖŞÜ_-]+/g, "_").replace(/^_+|_+$/g, "");
+    const name = text(body.name);
+    if (!code || !name) return fail(c, 400, "PERSONNEL_GROUP_REQUIRED", "Personel grup kodu ve adı zorunludur.");
+    const cls = ["BLUE_COLLAR","WHITE_COLLAR","CUSTOM"].includes(upper(body.personnelClass)) ? upper(body.personnelClass) : "CUSTOM";
+    const id = text(body.id) || crypto.randomUUID();
+    const active = body.active === false || body.active === 0 ? 0 : 1;
+    const defaultShiftId = text(body.defaultShiftId) || null;
+    if (defaultShiftId) {
+      const shift = await c.env.DB.prepare("SELECT id FROM ik_pdks_work_groups WHERE id=? AND main_company_id=? AND active=1 LIMIT 1").bind(defaultShiftId, auth.company).first<Row>();
+      if (!shift) return fail(c,404,"SHIFT_NOT_FOUND","Varsayılan vardiya bulunamadı.");
+    }
+    const enumOr = (value: unknown, allowed: string[], fallback: string) => allowed.includes(upper(value)) ? upper(value) : fallback;
+    await c.env.DB.prepare(`INSERT INTO ik_pdks_personnel_groups(id,main_company_id,code,name,personnel_class,default_shift_id,attendance_mode,require_punch,show_daily_punch_detail,late_early_effect,missing_punch_policy,overtime_mode,night_shift_mode,normal_credit_mode,payroll_monthly_minutes,fixed_daily_minutes,contract_weekly_minutes,work_days_json,weekly_rest_days_json,active,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,code) DO UPDATE SET name=excluded.name,personnel_class=excluded.personnel_class,default_shift_id=excluded.default_shift_id,attendance_mode=excluded.attendance_mode,require_punch=excluded.require_punch,show_daily_punch_detail=excluded.show_daily_punch_detail,late_early_effect=excluded.late_early_effect,missing_punch_policy=excluded.missing_punch_policy,overtime_mode=excluded.overtime_mode,night_shift_mode=excluded.night_shift_mode,normal_credit_mode=excluded.normal_credit_mode,payroll_monthly_minutes=excluded.payroll_monthly_minutes,fixed_daily_minutes=excluded.fixed_daily_minutes,contract_weekly_minutes=excluded.contract_weekly_minutes,work_days_json=excluded.work_days_json,weekly_rest_days_json=excluded.weekly_rest_days_json,active=excluded.active,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+      .bind(id,auth.company,code,name,cls,defaultShiftId,enumOr(body.attendanceMode,["INHERIT","STRICT_CARD","CARD_CONTROL_ONLY","SUMMARY_ONLY","NO_CARD_REQUIRED"],"INHERIT"),nullableBool(body.requirePunch),nullableBool(body.showDailyPunchDetail),enumOr(body.lateEarlyEffect,["INHERIT","IGNORE","TRACK_ONLY","DEDUCT_CREDIT"],"INHERIT"),enumOr(body.missingPunchPolicy,["INHERIT","FLAG_ONLY","REQUIRE_MANUAL","ZERO_CREDIT","ASSUME_SCHEDULE"],"INHERIT"),enumOr(body.overtimeMode,["INHERIT","AUTO","DISABLED","APPROVAL"],"INHERIT"),enumOr(body.nightShiftMode,["INHERIT","ENABLED","DISABLED"],"INHERIT"),enumOr(body.normalCreditMode,["INHERIT","MONTHLY_DIV_30","MONTHLY_WORKDAYS","FIXED_DAILY","ACTUAL"],"INHERIT"),body.payrollMonthlyMinutes===undefined||body.payrollMonthlyMinutes===""?null:Math.max(0,Math.round(number(body.payrollMonthlyMinutes))),body.fixedDailyMinutes===undefined||body.fixedDailyMinutes===""?null:Math.max(0,Math.round(number(body.fixedDailyMinutes))),body.contractWeeklyMinutes===undefined||body.contractWeeklyMinutes===""?null:Math.max(0,Math.round(number(body.contractWeeklyMinutes))),jsonDays(body.workDays),jsonDays(body.restDays),active,text(auth.user.username),nowIso()).run();
+    return c.json({ok:true,data:{id,code,name,personnelClass:cls,active:Boolean(active)}});
+  });
+
+  app.post("/api/ik/personnel-control/people/:employeeId/personnel-group", async (c) => {
+    const body=await bodyOf(c); const auth=await authContext(c,body);
+    if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");
+    if(auth.audit)return fail(c,403,"HR_AUDIT_READ_ONLY","Denetim kullanıcısı personel grubu atayamaz.");
+    await ensurePdksPolicySchema(c);
+    const employeeId=text(c.req.param("employeeId")),personnelGroupId=text(body.personnelGroupId);
+    if(!employeeId||!personnelGroupId)return fail(c,400,"ASSIGNMENT_REQUIRED","Personel ve personel grubu zorunludur.");
+    const group=await c.env.DB.prepare("SELECT id FROM ik_pdks_personnel_groups WHERE id=? AND main_company_id=? AND active=1 LIMIT 1").bind(personnelGroupId,auth.company).first<Row>();
+    if(!group)return fail(c,404,"PERSONNEL_GROUP_NOT_FOUND","Personel grubu bulunamadı.");
+    await c.env.DB.prepare(`INSERT INTO ik_pdks_employee_personnel_groups(main_company_id,employee_id,personnel_group_id,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(main_company_id,employee_id) DO UPDATE SET personnel_group_id=excluded.personnel_group_id,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(auth.company,employeeId,personnelGroupId,text(auth.user.username),nowIso()).run();
+    return c.json({ok:true,data:{employeeId,personnelGroupId}});
   });
 
   app.post("/api/ik/personnel-control/services", async (c) => {

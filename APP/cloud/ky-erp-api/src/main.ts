@@ -103,15 +103,11 @@ function auditRole(role: unknown) {
   return String(role || "").trim().toUpperCase().replace(/İ/g, "I") === "DENETIM";
 }
 
-function auditPermissionRows() {
-  return [{
-    moduleKey: "IK",
-    canView: true,
-    canCreate: false,
-    canUpdate: false,
-    canDelete: false,
-    canApprove: false,
-  }];
+function auditPermissionRows(rows: unknown) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((row: AnyRow) => String(row?.moduleKey || row?.module_key || "").trim().toUpperCase().replace(/İ/g, "I") === "PDKS")
+    .map((row: AnyRow) => ({ ...row, moduleKey: "PDKS", canView: Boolean(row.canView ?? row.can_view), canCreate: false, canUpdate: false, canDelete: false, canApprove: false }));
 }
 
 function stripSystemAdminPermission(rows: unknown) {
@@ -123,7 +119,7 @@ function sanitizeNonOwnerUser(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const user = value as AnyRow;
   if (ownerRole(user.role)) return user;
-  if (auditRole(user.role)) return { ...user, permissions: auditPermissionRows() };
+  if (auditRole(user.role)) return { ...user, permissions: auditPermissionRows(user.permissions) };
   return { ...user, permissions: stripSystemAdminPermission(user.permissions) };
 }
 
@@ -134,7 +130,7 @@ function sanitizeAuthPayload(payload: unknown) {
   const responseRole = result.user?.role || result.data?.user?.role;
   if (Array.isArray(result.permissions)) {
     result.permissions = auditRole(responseRole)
-      ? auditPermissionRows()
+      ? auditPermissionRows(result.permissions)
       : ownerRole(responseRole)
         ? result.permissions
         : stripSystemAdminPermission(result.permissions);
@@ -302,7 +298,7 @@ registerCanonicalDispatchControlRoutes(shell);
 
 // Sistem Yönetimi yalnız uygulama sahibidir. Eski bir kullanıcı kaydında ADMIN
 // izni kalmış olsa bile auth cevabından normal/firma yöneticisine taşınmaz.
-// DENETIM ise daha da dardır: auth cevabında her zaman yalnız IK/Goruntuleme gelir.
+// DENETIM salt okunurdur; yalnız firma sahibinin verdiği Gör yetkileri auth cevabında korunur.
 shell.use("/api/auth/*", async (c, next) => {
   c.header("X-KYERP-Auth-Version", AUTH_VERSION);
   c.header("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -311,7 +307,7 @@ shell.use("/api/auth/*", async (c, next) => {
 });
 
 // Kullanıcı yetki ekranında owner olmayan hesaba ADMIN izni kalıcılaştırılmaz.
-// DENETIM hedefinde eski/geniş izinler de temizlenir; yalnız IK görüntüleme sabit kalır.
+// DENETIM hedefinde yazma hakları temizlenir; Gör hakları firma sahibinin seçimine bırakılır.
 shell.use("/api/admin/users/*", async (c, next) => {
   await next();
   const path = new URL(c.req.url).pathname;
@@ -326,20 +322,8 @@ shell.use("/api/admin/users/*", async (c, next) => {
     try {
       const timestamp = new Date().toISOString();
       if (isAuditTarget) {
-        await c.env.DB.prepare(
-          `DELETE FROM auth_user_module_permissions
-            WHERE user_id=? AND UPPER(module_key)<>'IK'`,
-        ).bind(userId).run();
-        await c.env.DB.prepare(
-          `UPDATE auth_user_module_permissions
-              SET can_view=1,can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=?
-            WHERE user_id=? AND UPPER(module_key)='IK'`,
-        ).bind(timestamp, userId).run();
-        await c.env.DB.prepare(
-          `INSERT OR IGNORE INTO auth_user_module_permissions
-           (id,user_id,module_key,can_view,can_create,can_update,can_delete,can_approve,created_at,updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)`,
-        ).bind(crypto.randomUUID(), userId, "IK", 1, 0, 0, 0, 0, timestamp, timestamp).run();
+        await c.env.DB.prepare(`UPDATE auth_user_module_permissions SET can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=? WHERE user_id=?`).bind(timestamp, userId).run();
+        await c.env.DB.prepare(`UPDATE auth_user_module_permissions SET can_view=CASE WHEN UPPER(module_key)='PDKS' THEN can_view ELSE 0 END,can_create=0,can_update=0,can_delete=0,can_approve=0,updated_at=? WHERE user_id=?`).bind(timestamp, userId).run();
       } else {
         await c.env.DB.prepare(
           `UPDATE auth_user_module_permissions
@@ -354,7 +338,8 @@ shell.use("/api/admin/users/*", async (c, next) => {
 
   await rewriteJsonResponse(c, (payload) => {
     if (isAuditTarget) {
-      const fixed = auditPermissionRows();
+      const sourceRows = Array.isArray(payload) ? payload : Array.isArray((payload as AnyRow)?.data) ? (payload as AnyRow).data : Array.isArray((payload as AnyRow)?.permissions) ? (payload as AnyRow).permissions : [];
+      const fixed = auditPermissionRows(sourceRows);
       if (Array.isArray(payload)) return fixed;
       if (!payload || typeof payload !== "object") return payload;
       const nextPayload = { ...(payload as AnyRow) };

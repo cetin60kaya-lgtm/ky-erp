@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { readCompanyPdksPolicy, saveCompanyPdksPolicy } from "./ik-pdks-policy";
 
 type Row = Record<string, any>;
 
@@ -263,6 +264,30 @@ export function registerAdminCoreRoutes(app: any) {
     }
     await audit(c, "MAIN_COMPANY_UPDATED", current.id, id, { mainCompanySlug: nextSlug, previousSlug: text(row.slug), name });
     return c.json({ ok: true, data: companyView(await companyById(c, id) || row) });
+  });
+
+  app.get("/api/admin/main-companies/:id/pdks-profile", async (c: any) => {
+    const current = await ownerCurrent(c);
+    if (!current) return c.json(errorBody("OWNER_ONLY", "Firma PDKS profili yalnız uygulama sahibine açıktır."), 403);
+    const row = await companyById(c, text(c.req.param("id")));
+    if (!row) return c.json(errorBody("COMPANY_NOT_FOUND", "Ana firma bulunamadı."), 404);
+    const data = await readCompanyPdksPolicy(c, text(row.slug));
+    return c.json({ ok: true, data: { ...data, companyId: text(row.id), companyName: text(row.name), companySlug: text(row.slug) } });
+  });
+
+  app.patch("/api/admin/main-companies/:id/pdks-profile", async (c: any) => {
+    const current = await ownerCurrent(c);
+    if (!current) return c.json(errorBody("OWNER_ONLY", "Firma PDKS profili yalnız uygulama sahibine açıktır."), 403);
+    const row = await companyById(c, text(c.req.param("id")));
+    if (!row) return c.json(errorBody("COMPANY_NOT_FOUND", "Ana firma bulunamadı."), 404);
+    const body = await bodyOf(c);
+    try {
+      const data = await saveCompanyPdksPolicy(c, text(row.slug), body, text(current.username || current.id));
+      await audit(c, "MAIN_COMPANY_PDKS_POLICY_UPDATED", current.id, text(row.id), { mainCompanySlug: text(row.slug), policyVersion: data.policyVersion, profileName: data.profileName });
+      return c.json({ ok: true, data: { ...data, companyId: text(row.id), companyName: text(row.name), companySlug: text(row.slug) } });
+    } catch (error) {
+      return c.json(errorBody("PDKS_POLICY_INVALID", error instanceof Error ? error.message : "Firma PDKS profili kaydedilemedi."), 400);
+    }
   });
 
   app.post("/api/admin/main-companies/:id/transfer", async (c: any) => {
