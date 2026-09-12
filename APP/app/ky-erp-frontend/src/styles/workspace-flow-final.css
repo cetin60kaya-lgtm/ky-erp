@@ -1,0 +1,84 @@
+/* KY ERP final workspace flow
+   Ana shell tek dikey scroll sahibidir. Moduller viewport yuksekligini yeniden hesaplamaz. */
+
+.shell-v3-workspace {
+  scroll-padding-bottom: 40px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+.shell-v3-workspace > * {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+}
+
+.shell-v3-workspace .clean-workflow-page,
+.shell-v3-workspace .clean-workflow-page .cw-screen,
+.shell-v3-workspace .clean-workflow-page .cw-work-grid {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.shell-v3-workspace .clean-workflow-page {
+  padding-bottom: 30px;
+}
+
+.shell-v3-workspace .ik-page,
+.shell-v3-workspace .ik-html.app {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.shell-v3-workspace .ik-page {
+  padding-bottom: 34px;
+}
+
+.shell-v3-workspace .bh-grid-3,
+.shell-v3-workspace .bh-grid-2 {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.shell-v3-workspace .bh-grid-3 > .bh-card {
+  max-height: none !important;
+}
+
+.shell-v3-workspace .bh-scroll {
+  max-height: min(62vh, 680px);
+}
+
+.shell-v3-workspace .bh-list,
+.shell-v3-workspace .bh-work-color-list {
+  max-height: min(58vh, 620px);
+}
+
+.shell-v3-workspace .iw-grid-3 > .iw-card:first-child {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+.shell-v3-workspace .iw-grid-3 > .iw-card:first-child .iw-list {
+  max-height: min(64vh, 720px);
+  overflow: auto;
+}
+@media (max-height: 760px) and (min-width: 1025px) {
+  .shell-v3-workspace {
+    padding-bottom: 36px;
+  }
+
+  .shell-v3-workspace .bh-scroll,
+  .shell-v3-workspace .bh-list,
+  .shell-v3-workspace .bh-work-color-list,
+  .shell-v3-workspace .iw-grid-3 > .iw-card:first-child .iw-list {
+    max-height: 56vh;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell-v3-workspace {
+    padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

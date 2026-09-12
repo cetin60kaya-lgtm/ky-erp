@@ -12,6 +12,7 @@ import "../styles/shell-v3.css";
 import "../styles/responsive-core.css";
 import "../styles/security-notification-actions.css";
 import "../styles/shell-v3-modern.css";
+import "../styles/workspace-flow-final.css";
 
 const OWNER_ONLY_ADMIN_TABS = new Set(["uygulama-sahibi", "firma-ucretlendirme", "eslestirmeler", "surum-merkezi"]);
 
@@ -544,7 +545,7 @@ export default function AppShellV3({
             const primarySidebarExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
             const isExpanded = (primarySidebarExpanded || (isActiveModule && !hasPrimarySidebarGroups)) && collapsedModuleKey !== module.key;
             const groups = visibleGroups(module, user);
-            const flatModuleTabs = !hasPrimarySidebarGroups && groups.length > 0 && groups.reduce((sum, group) => sum + group.tabs.length, 0) <= 6;
+            const flatModuleTabs = !hasPrimarySidebarGroups && groups.length > 0;
             return (
               <section key={module.key} data-module={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
                 <button type="button" className="shell-v3-module-button" onClick={() => {
