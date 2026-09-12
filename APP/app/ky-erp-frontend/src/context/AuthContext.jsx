@@ -18,7 +18,7 @@ const REFRESH_LOCK_MS = 30 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "COMPLIANCE", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
 const AuthContext = createContext(null);
@@ -734,7 +734,7 @@ export function AuthProvider({ children }) {
     const key = String(moduleKey || "").toUpperCase();
     if (!key) return false;
     if (isSuperAdmin(user?.role)) return true;
-    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && ["ADMIN","STORAGE_ADMIN"].includes(key)) return true;
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && ["ADMIN","STORAGE_ADMIN","COMPLIANCE"].includes(key)) return true;
     return Boolean(permissions.find((row) => row.moduleKey === key)?.canView);
   }, [permissions, user?.role]);
 

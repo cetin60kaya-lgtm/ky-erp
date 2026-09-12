@@ -29,6 +29,7 @@ const IsnetArchiveDeliveryPage = lazyWithRetry(() => import("./pages/modules/isn
 const IsnetSettingsMasterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetSettingsMasterPage"), "isnet-settings-master-v1");
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 const CommunicationHubPage = lazyWithRetry(() => import("./pages/modules/CommunicationHubPage"), "communication-hub-v1");
+const ComplianceCenterPage = lazyWithRetry(() => import("./pages/modules/compliance/ComplianceCenterPage"), "compliance-center-v1");
 
 const MODULE_LOADERS = {
   muhasebe: () => Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
@@ -55,6 +56,7 @@ const MODULE_LOADERS = {
   ]),
   iletisim: () => import("./pages/modules/CommunicationHubPage"),
   asistan: () => import("./pages/modules/AiAssistantPage"),
+  compliance: () => import("./pages/modules/compliance/ComplianceCenterPage"),
 };
 
 const IK_AUDIT_TABS = [["personel-kartlari", "Personel Kartları", "users"]];
@@ -292,6 +294,7 @@ export default function AppV3() {
     if (activeModule?.key === "uretim") return <UretimPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "iletisim") return <CommunicationHubPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "asistan") return <AiAssistantPage {...sharedProps} />;
+    if (activeModule?.key === "compliance") return <ComplianceCenterPage activeTab={activeTab} {...sharedProps} />;
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
   }
 

@@ -25,8 +25,8 @@ import { saveIkUserScope } from "../../services/ikPersonnelControlApi";
 import AdminApprovalCenter from "./AdminApprovalCenter";
 import "./AdminUsersPanelV2.css";
 
-const MODULE_KEYS=["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","GUNLUK_OPERASYON","ISNET","MAIL","STORAGE_ADMIN","ASISTAN","ADMIN","RAPORLAR"];
-const MODULE_LABELS={DASHBOARD:"Yönetim Merkezi",MUHASEBE:"Muhasebe",FIRMA_CARI:"Firma / Cari",BELGE_ISLEM:"Belge İşlemleri",KDV:"KDV",CEK_ODEME:"Çek / Ödeme",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",GUNLUK_OPERASYON:"Günlük Operasyon",ISNET:"e-Belge / İşNet",MAIL:"Mail & Dosyalar",STORAGE_ADMIN:"Bağlantılar & Depolama",ASISTAN:"KY ERP Asistan",ADMIN:"Yönetim",RAPORLAR:"Raporlar"};
+const MODULE_KEYS=["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","GUNLUK_OPERASYON","ISNET","MAIL","STORAGE_ADMIN","COMPLIANCE","ASISTAN","ADMIN","RAPORLAR"];
+const MODULE_LABELS={DASHBOARD:"Yönetim Merkezi",MUHASEBE:"Muhasebe",FIRMA_CARI:"Firma / Cari",BELGE_ISLEM:"Belge İşlemleri",KDV:"KDV",CEK_ODEME:"Çek / Ödeme",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",GUNLUK_OPERASYON:"Günlük Operasyon",ISNET:"e-Belge / İşNet",MAIL:"Mail & Dosyalar",STORAGE_ADMIN:"Bağlantılar & Depolama",COMPLIANCE:"Denetim & Uygunluk",ASISTAN:"KY ERP Asistan",ADMIN:"Yönetim",RAPORLAR:"Raporlar"};
 const ROLE_LABELS={SUPER_ADMIN:"Süper Yönetici",ADMIN:"Süper Yönetici",COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe Kullanıcısı",DESEN:"Desen Kullanıcısı",IMALAT:"İmalat Kullanıcısı",BOYAHANE:"Boyahane Kullanıcısı",IK:"İK Kullanıcısı",DENETIM:"Denetim Kullanıcısı",VIEWER:"Özel Yetkili Kullanıcı"};
 const MANAGED_ROLES=["COMPANY_ADMIN","MUHASEBE","DESEN","IMALAT","BOYAHANE","IK","DENETIM","VIEWER"];
 const OWNER_ROLES=new Set(["SUPER_ADMIN","ADMIN"]);

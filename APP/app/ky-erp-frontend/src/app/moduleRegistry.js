@@ -57,6 +57,25 @@ const ILETISIM_MODULE = {
   ],
 };
 
+const COMPLIANCE_MODULE = {
+  key: "compliance",
+  permissionKey: "COMPLIANCE",
+  label: "Denetim & Uygunluk",
+  icon: "file-check",
+  groups: [
+    { label: "Kontrol Merkezi", tabs: [
+      ["denetim-genel", "Genel Bakış", "dashboard"],
+      ["denetim-evraklar", "Evrak Takip", "dosya"],
+      ["denetim-takvim", "Süre & Takvim", "takvim"],
+      ["denetim-capa", "Düzeltici Faaliyet / CAPA", "uyari"],
+    ]},
+    { label: "Standartlar", tabs: [
+      ["denetim-standartlar", "Denetim Standartları", "file-check"],
+      ["denetim-ayarlar", "Ayarlar & Özelleştirme", "ayarlar"],
+    ]},
+  ],
+};
+
 function withoutStorageDuplicates(module) {
   if (module.key !== "admin") return module;
   const storageKeys = new Set(["dosya-klasor-yonetimi", "yedekleme-loglar"]);
@@ -140,10 +159,11 @@ export const MODULES = adminIndex >= 0
       ...modulesWithoutEBelge.slice(0, adminIndex),
       ...(eBelgeModule ? [eBelgeModule] : []),
       ILETISIM_MODULE,
+      COMPLIANCE_MODULE,
       DEPOLAMA_MODULE,
       ...modulesWithoutEBelge.slice(adminIndex),
     ]
-  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, DEPOLAMA_MODULE];
+  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, COMPLIANCE_MODULE, DEPOLAMA_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
@@ -178,6 +198,15 @@ export const MODULE_ROUTE_ALIASES = {
     dosyalar: "drive-dosyalar",
     "son-kullanilanlar": "drive-son-kullanilanlar",
     "firma-dosyalari": "drive-firma-dosyalari",
+  },
+  compliance: {
+    genel: "denetim-genel",
+    evraklar: "denetim-evraklar",
+    evrak: "denetim-evraklar",
+    takvim: "denetim-takvim",
+    capa: "denetim-capa",
+    standartlar: "denetim-standartlar",
+    ayarlar: "denetim-ayarlar",
   },
   depolama: {
     genel: "depolama-genel",

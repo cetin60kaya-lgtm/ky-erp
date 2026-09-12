@@ -26,7 +26,7 @@ const LOGIN_POLICIES = ["PASSWORD_ONLY", "GOOGLE", "MICROSOFT", "ANY_MFA", "BOTH
 const SESSION_PRESETS = [1800, 3600, 7200, 14400, 28800, 36000, 43200, 86400];
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "COMPLIANCE", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 const ISSUER = "KY ERP";
 const ADMIN_EMAIL_FROM = "KY ERP <admin@kyerp.net>";
@@ -419,6 +419,7 @@ async function permissionRows(c: any, userId: string, role: string) {
   if (isCompanyAdmin(role)) {
     if (!mapped.some((row: AnyRow) => row.moduleKey === "ADMIN")) mapped.push({ moduleKey: "ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
     if (!mapped.some((row: AnyRow) => row.moduleKey === "STORAGE_ADMIN")) mapped.push({ moduleKey: "STORAGE_ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
+    if (!mapped.some((row: AnyRow) => row.moduleKey === "COMPLIANCE")) mapped.push({ moduleKey: "COMPLIANCE", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
   }
   return mapped;
 }

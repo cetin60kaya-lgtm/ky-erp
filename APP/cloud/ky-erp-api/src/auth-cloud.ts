@@ -4,7 +4,7 @@ import { hash } from "bcryptjs";
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV",
-  "CEK_ODEME", "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN",
+  "CEK_ODEME", "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "COMPLIANCE",
   "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
@@ -135,6 +135,9 @@ async function permissionRows(c: any, userId: string, role: string) {
     }
     if (!mapped.some((row: AnyRow) => row.moduleKey === "STORAGE_ADMIN")) {
       mapped.push({ moduleKey: "STORAGE_ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
+    }
+    if (!mapped.some((row: AnyRow) => row.moduleKey === "COMPLIANCE")) {
+      mapped.push({ moduleKey: "COMPLIANCE", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
     }
   }
   return mapped;
