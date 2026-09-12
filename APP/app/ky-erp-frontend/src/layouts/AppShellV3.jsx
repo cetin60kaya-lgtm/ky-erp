@@ -534,7 +534,8 @@ export default function AppShellV3({
           {modules.map((module) => {
             const isActiveModule = activeModule?.key === module.key;
             const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
-            const isExpanded = isActiveModule;
+            const primarySidebarExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
+            const isExpanded = primarySidebarExpanded || (isActiveModule && !hasPrimarySidebarGroups);
             const groups = visibleGroups(module, user);
             const flatModuleTabs = !hasPrimarySidebarGroups && groups.length > 0 && groups.reduce((sum, group) => sum + group.tabs.length, 0) <= 6;
             return (
