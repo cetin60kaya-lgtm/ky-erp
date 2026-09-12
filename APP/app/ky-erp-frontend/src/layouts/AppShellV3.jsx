@@ -428,7 +428,7 @@ export default function AppShellV3({
       } else {
         await decideSecurityCenterLoginApproval(approvalId, decision);
       }
-      if (item?.unread) await markNotificationIdsRead([item.id]);
+      await dismissNotificationIds([item.id]);
       await refreshNotifications(true);
     } catch (error) {
       setNotificationError(error?.message || "Güvenlik onayı tamamlanamadı.");
