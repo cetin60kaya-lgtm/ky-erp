@@ -65,6 +65,21 @@ function Remote-Column-Exists($tableName, $columnName) {
     return ([int]$json[0].results[0].total -gt 0)
 }
 
+function Test-Mail-Core-Ready {
+    $sqlText = Get-Content $MAIL_CORE_FILE -Raw
+    $tables = @([regex]::Matches($sqlText, 'CREATE TABLE IF NOT EXISTS\s+([A-Za-z0-9_]+)') | ForEach-Object { $_.Groups[1].Value })
+    $indexes = @([regex]::Matches($sqlText, 'CREATE INDEX IF NOT EXISTS\s+([A-Za-z0-9_]+)') | ForEach-Object { $_.Groups[1].Value })
+    if ($tables.Count -ne 22 -or $indexes.Count -ne 17) {
+        Fail "0050 Mail Core local contract beklenen 22 tablo / 17 indeks degil."
+    }
+    $values = @()
+    foreach ($name in $tables) { $values += "('table','$name')" }
+    foreach ($name in $indexes) { $values += "('index','$name')" }
+    $sql = "WITH required(type,name) AS (VALUES " + ($values -join ',') + ") SELECT type,name FROM required r WHERE NOT EXISTS (SELECT 1 FROM sqlite_master s WHERE s.type=r.type AND s.name=r.name) ORDER BY type,name;"
+    $json = Invoke-Remote-D1Json $sql "Mail Core 0050 hazirlik kontrolu"
+    return (@($json[0].results).Count -eq 0)
+}
+
 function Test-Denetime-System-Ready {
     $sql = @"
 SELECT
@@ -348,8 +363,13 @@ if (Test-Denetime-System-Ready) {
 Assert-Denetime-System-User
 
 Write-Host "0050 Mail / Iletisim Core additive semasi kontrol/uygulama..." -ForegroundColor Yellow
-wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
-Check-Exit "0050 Mail Core additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+if (Test-Mail-Core-Ready) {
+    Write-Host "0050 Mail Core zaten canonical durumda; tekrar import atlandi." -ForegroundColor Green
+} else {
+    wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
+    Check-Exit "0050 Mail Core additive semasi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+    if (-not (Test-Mail-Core-Ready)) { Fail "0050 Mail Core import sonrasi canonical contract dogrulanamadi." }
+}
 
 Assert-Remote-Schema-Readiness
 Assert-Denetime-System-User
