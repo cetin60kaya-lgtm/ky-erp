@@ -7,6 +7,7 @@ import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
 import { useWorkspaceTabs } from "./hooks/useWorkspaceTabs";
 import { useDisplayPreferences } from "./hooks/useDisplayPreferences";
+import { getSystemSentinelAccess } from "./services/systemSentinelApi";
 import AppShellV3 from "./layouts/AppShellV3";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
@@ -30,6 +31,7 @@ const IsnetSettingsMasterPage = lazyWithRetry(() => import("./pages/modules/isne
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 const CommunicationHubPage = lazyWithRetry(() => import("./pages/modules/CommunicationHubPage"), "communication-hub-v1");
 const ComplianceCenterPage = lazyWithRetry(() => import("./pages/modules/compliance/ComplianceCenterPage"), "compliance-center-v1");
+const SystemSentinelPage = lazyWithRetry(() => import("./pages/modules/SystemSentinelPage"), "system-sentinel-v1");
 
 const MODULE_LOADERS = {
   muhasebe: () => Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
@@ -57,6 +59,7 @@ const MODULE_LOADERS = {
   iletisim: () => import("./pages/modules/CommunicationHubPage"),
   asistan: () => import("./pages/modules/AiAssistantPage"),
   compliance: () => import("./pages/modules/compliance/ComplianceCenterPage"),
+  "sistem-merkezi": () => import("./pages/modules/SystemSentinelPage"),
 };
 
 const IK_AUDIT_TABS = [["personel-kartlari", "Personel Kartları", "users"]];
@@ -125,6 +128,7 @@ export default function AppV3() {
   const keepModuleMenuExpanded = displayPreferences.effectiveMode === "pc";
   const [moduleMenuOpen, setModuleMenuOpen] = useState(() => keepModuleMenuExpanded);
   const [moduleActionContext, setModuleActionContext] = useState({});
+  const [sentinelAccess, setSentinelAccess] = useState(null);
 
   const isAuditAccount = useMemo(() => {
     const username = String(user?.username || "").trim().toLocaleLowerCase("tr-TR");
@@ -132,8 +136,21 @@ export default function AppV3() {
     return role === "DENETIM" || username === "denetim" || String(user?.hrScope || "").toUpperCase() === "AUDIT";
   }, [user]);
 
+  const sentinelOwner = String(user?.role || "").trim().toUpperCase().replace(/İ/g, "I") === "SUPER_ADMIN";
+
+  useEffect(() => {
+    if (!isAuthenticated) { setSentinelAccess(null); return undefined; }
+    let active = true;
+    getSystemSentinelAccess()
+      .then((data) => { if (active) setSentinelAccess(data || { hasAccess: false }); })
+      .catch(() => { if (active) setSentinelAccess({ hasAccess: false }); });
+    return () => { active = false; };
+  }, [isAuthenticated, user?.id]);
+
   const visibleModules = useMemo(() => {
-    let allowed = MODULES.filter((item) => hasModule(item.permissionKey));
+    let allowed = MODULES.filter((item) => item.key === "sistem-merkezi"
+      ? Boolean(sentinelOwner || sentinelAccess?.hasAccess)
+      : hasModule(item.permissionKey));
     if (!isAuditAccount) return allowed;
     allowed = allowed.filter((item) => !["admin", "asistan"].includes(item.key));
     return allowed.map((item) => {
@@ -141,7 +158,7 @@ export default function AppV3() {
       if (item.key === "pdks") return { ...item, groups: [{ label: "PDKS Denetim", tabs: PDKS_AUDIT_TABS }], tabs: undefined, hiddenTabs: [] };
       return item;
     });
-  }, [hasModule, isAuditAccount]);
+  }, [hasModule, isAuditAccount, sentinelAccess?.hasAccess, sentinelOwner]);
 
   const initialRoute = useMemo(() => {
     const requested = getInitialRoute(window.location.pathname);
@@ -295,6 +312,7 @@ export default function AppV3() {
     if (activeModule?.key === "iletisim") return <CommunicationHubPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "asistan") return <AiAssistantPage {...sharedProps} />;
     if (activeModule?.key === "compliance") return <ComplianceCenterPage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule?.key === "sistem-merkezi") return <SystemSentinelPage {...sharedProps} />;
     return <AdminPage activeTab={activeTab} {...sharedProps} />;
   }
 

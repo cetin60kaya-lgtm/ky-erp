@@ -55,6 +55,7 @@ const MODULE_VISUALS = {
   iletisim: { icon: "eposta", hint: "Mail ve dosyalar" },
   depolama: { icon: "depolama", hint: "Bağlantılar ve depolama" },
   admin: { icon: "guvenlik", hint: "Platform ve güvenlik" },
+  "sistem-merkezi": { icon: "terminal", hint: "Cihazlar, Wake-on-LAN ve uzak erişim" },
   asistan: { icon: "asistan", hint: "KY ERP Asistan" },
 };
 function moduleVisual(module) {

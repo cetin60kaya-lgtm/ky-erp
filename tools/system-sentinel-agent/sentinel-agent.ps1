@@ -98,7 +98,9 @@ function Invoke-KyCommand($command, $config) {
   switch ($action) {
     "PING" { return @{ ok = $true; message = "PONG $env:COMPUTERNAME" } }
     "WAKE" {
-      Send-KyMagicPacket ([string]$command.payload.macAddress) ([string]($command.payload.broadcastAddress ?? "255.255.255.255"))
+      $broadcast = [string]$command.payload.broadcastAddress
+      if (-not $broadcast) { $broadcast = "255.255.255.255" }
+      Send-KyMagicPacket ([string]$command.payload.macAddress) $broadcast
       return @{ ok = $true; message = "Magic Packet gönderildi: $($command.payload.targetDeviceId)" }
     }
     "LOCK" {

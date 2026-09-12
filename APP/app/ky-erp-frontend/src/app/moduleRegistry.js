@@ -76,6 +76,14 @@ const COMPLIANCE_MODULE = {
   ],
 };
 
+const SYSTEM_SENTINEL_MODULE = {
+  key: "sistem-merkezi",
+  permissionKey: "SYSTEM_SENTINEL",
+  label: "Sistem Merkezi",
+  icon: "guvenlik",
+  groups: [{ label: "Sistem Kontrol", tabs: [["sistem-nobetcisi", "Sistem Nöbetçisi", "terminal"]] }],
+};
+
 function withoutStorageDuplicates(module) {
   if (module.key !== "admin") return module;
   const storageKeys = new Set(["dosya-klasor-yonetimi", "yedekleme-loglar"]);
@@ -161,9 +169,10 @@ export const MODULES = adminIndex >= 0
       ILETISIM_MODULE,
       COMPLIANCE_MODULE,
       DEPOLAMA_MODULE,
+      SYSTEM_SENTINEL_MODULE,
       ...modulesWithoutEBelge.slice(adminIndex),
     ]
-  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, COMPLIANCE_MODULE, DEPOLAMA_MODULE];
+  : [...modulesWithoutEBelge, ...(eBelgeModule ? [eBelgeModule] : []), ILETISIM_MODULE, COMPLIANCE_MODULE, DEPOLAMA_MODULE, SYSTEM_SENTINEL_MODULE];
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,

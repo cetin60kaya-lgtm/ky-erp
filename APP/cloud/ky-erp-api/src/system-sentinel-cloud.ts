@@ -52,7 +52,7 @@ function addSeconds(seconds: number) {
 }
 
 function isOwner(role: unknown) {
-  return ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
+  return upper(role) === "SUPER_ADMIN";
 }
 
 function jsonError(code: string, message: string, details?: unknown) {
