@@ -10,6 +10,7 @@ import { registerAdminStorageRoutes } from "./admin-storage-cloud";
 import { registerAdminBackupRoutes } from "./admin-backup-cloud";
 import { registerAdminBackupSqlRoutes } from "./admin-backup-sql";
 import { registerAdminBuildCenterRoutes } from "./admin-build-center-cloud";
+import { registerSystemSentinelRoutes } from "./system-sentinel-cloud";
 import { registerAuthAdminHistoryRoutes } from "./auth-admin-history";
 import { registerAuthRecoveryCodeFallbackRoutes } from "./auth-policy-recovery-code";
 import { registerAuthOwnerGuardRoutes } from "./auth-policy-owner-guard";
@@ -223,6 +224,7 @@ registerAdminStorageRoutes(app);
 registerAdminBackupRoutes(app);
 registerAdminBackupSqlRoutes(app);
 registerAdminBuildCenterRoutes(app);
+registerSystemSentinelRoutes(app);
 // ik-admin-cloud contains the legacy /api/admin/* fallback. Hono resolves
 // matching handlers in registration order, so this fallback must stay after
 // every canonical admin route or it will shadow them with JSON-store records.
@@ -241,7 +243,7 @@ shell.use(
   cors({
     origin: allowedOrigin,
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
-    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device", "X-KYERP-Push-Device", "X-KYERP-Push-Token", "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature", "X-KYERP-Build-Agent-Token", "X-KYERP-Build-Agent-Id", "X-KYERP-Build-Agent"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device", "X-KYERP-Push-Device", "X-KYERP-Push-Token", "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature", "X-KYERP-Build-Agent-Token", "X-KYERP-Build-Agent-Id", "X-KYERP-Build-Agent", "X-KYERP-Agent-Id", "X-KYERP-Agent-Token"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id", "X-KYERP-Auth-Version"],
     maxAge: 86400,
     credentials: true,
@@ -254,7 +256,7 @@ shell.use("/api/*", async (c, next) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/");
+  const isPublic = path === "/api/health" || path === "/api/system/status" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/");
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);

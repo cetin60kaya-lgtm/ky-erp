@@ -434,3 +434,17 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - Süper Yönetici yeni `GUNLUK_OPERASYON` yetkisini Kullanıcı & Yetkiler ekranından ayrı yönetebilir.
 - Legacy Prisma `ModuleKey` enum ve migration da `GUNLUK_OPERASYON` ile hizalandı.
 - Regression: `APP/cloud/ky-erp-api/src/daily-operations-separation-contract.test.ts`.
+
+## 12.09.2026 — KY ERP Sistem Merkezi / Sistem Nöbetçisi
+
+- Yeni bağımsız yönetim alanı: **Sistem Merkezi > Sistem Nöbetçisi**. Amaç cihaz sağlığı, Wake-on-LAN, güvenli uzak erişim ve müdahaleyi tek merkezde toplamaktır.
+- Yetki modeli ADMIN modülünden bağımsızdır. Yalnız `SUPER_ADMIN` cihaz/yetki yönetir; diğer kullanıcılar yalnız Süper Yönetici tarafından verilen cihaz + aksiyon kapsamlı `TEMPORARY`, `ONE_TIME` veya `PERMANENT` grant ile erişir.
+- V1 veri modeli yeni production D1 migrationı açmaz; mevcut `json_store` üzerinde additive device, grant, command ve event kayıtları kullanır.
+- Windows KY Sentinel Agent cihaz başına hash'li token kullanır; token Windows'ta DPAPI LocalMachine ile korunur. Agent SYSTEM Scheduled Task olarak açılışta başlar, serbest shell çalıştırmaz ve yalnız allowlist komutları kabul eder.
+- Wake-on-LAN hedef cihaz tarafından değil, aynı site içindeki çevrimiçi `WAKE_BRIDGE` yetenekli agent tarafından gönderilir. Hedef PC'nin MAC adresi kayıtlı olmalıdır.
+- Uzak masaüstü ERP'ye sabit bir ürüne bağlanmaz; adapter alanı korunur. İlk tercih RustDesk, AnyDesk acil fallback; launch URL yalnız HTTPS kabul edilir.
+- Telefon/tablet/PC aynı responsive Sistem Merkezi ekranını kullanır; mobilde uzak bağlantı popup engeline karşı kullanıcı tıklamasında pencere önceden ayrılır.
+- Feature branch: `codex/system-sentinel-remote-access-v1-20260912`.
+- Frontend doğrulama: 131/131 test + lint + production build başarılı. Worker doğrulama: typecheck + 405/405 unit test + local auth integration + Wrangler dry-run build başarılı. Agent PowerShell parse kontrolü başarılı.
+- Production D1'e yazılmadı ve production deploy yapılmadı. Canlı yayın canonical onay/merge/Cloudflare Git Integration kapısından sonra yapılacaktır.
+- Fiziksel WoL kapanma-açılma testi, hedef cihazdan ayrı 7/24 açık LAN Bridge doğrulanmadan yapılmayacaktır.
