@@ -277,7 +277,8 @@ Write-Host ""
 `$script:PAGES_PROJECT = ""
 "@
 
-    Set-Content -LiteralPath $RUNTIME -Value ($runtimePrefix + "`r`n" + $helpers + "`r`n" + $source) -Encoding utf8NoBOM
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($RUNTIME, ($runtimePrefix + "`r`n" + $helpers + "`r`n" + $source), $utf8NoBom)
     & $RUNTIME
     $exitCode = $LASTEXITCODE
     exit $exitCode
