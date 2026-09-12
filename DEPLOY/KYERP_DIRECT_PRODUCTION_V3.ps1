@@ -65,6 +65,39 @@ function Remote-Column-Exists($tableName, $columnName) {
     return ([int]$json[0].results[0].total -gt 0)
 }
 
+function Test-Denetime-System-Ready {
+    $sql = @"
+SELECT
+  CASE WHEN EXISTS (
+    SELECT 1
+      FROM auth_users u
+      LEFT JOIN auth_user_security s ON s.user_id=u.id
+      LEFT JOIN ik_user_hr_scope h ON h.user_id=u.id
+     WHERE LOWER(TRIM(u.username))='denetim'
+       AND UPPER(TRIM(COALESCE(u.role,'')))='DENETIM'
+       AND COALESCE(h.scope,'')='AUDIT'
+  ) THEN 1 ELSE 0 END AS user_ready,
+  CASE WHEN EXISTS (
+    SELECT 1 FROM auth_user_module_permissions p
+     WHERE p.user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' LIMIT 1)
+       AND UPPER(p.module_key)='IK'
+       AND p.can_view=1 AND p.can_create=0 AND p.can_update=0 AND p.can_delete=0 AND p.can_approve=0
+  ) THEN 1 ELSE 0 END AS ik_ready,
+  CASE WHEN NOT EXISTS (
+    SELECT 1 FROM auth_user_module_permissions p
+     WHERE p.user_id=(SELECT id FROM auth_users WHERE LOWER(TRIM(username))='denetim' LIMIT 1)
+       AND UPPER(p.module_key)<>'IK'
+       AND (p.can_view<>0 OR p.can_create<>0 OR p.can_update<>0 OR p.can_delete<>0 OR p.can_approve<>0)
+  ) THEN 1 ELSE 0 END AS no_foreign,
+  CASE WHEN EXISTS (SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_denetime_system_identity_guard')
+         AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_denetime_security_role_guard')
+       THEN 1 ELSE 0 END AS triggers_ready;
+"@
+    $json = Invoke-Remote-D1Json $sql "DENETIM hazirlik kontrolu"
+    $row = $json[0].results[0]
+    return ([int]$row.user_ready -eq 1 -and [int]$row.ik_ready -eq 1 -and [int]$row.no_foreign -eq 1 -and [int]$row.triggers_ready -eq 1)
+}
+
 function Assert-Denetime-System-User {
     $userSql = @"
 SELECT u.id,u.username,u.role,u.is_active,
@@ -306,8 +339,13 @@ if (-not (Remote-Trigger-Exists $guardName)) {
 if (-not (Remote-Trigger-Exists $guardName)) { Fail "Same-browser session guard canli D1'de dogrulanamadi." }
 
 Write-Host "0024 DENETIM / PDKS sistem hesabi kontrol/uygulama..." -ForegroundColor Yellow
-wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $AUDIT_USER_FILE
-Check-Exit "0024 DENETIM sistem hesabi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+if (Test-Denetime-System-Ready) {
+    Write-Host "0024 DENETIM zaten canonical durumda; tekrar import atlandi." -ForegroundColor Green
+} else {
+    wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $AUDIT_USER_FILE
+    Check-Exit "0024 DENETIM sistem hesabi uygulanamadi. D1 yedegi korunuyor; deploy durduruldu."
+}
+Assert-Denetime-System-User
 
 Write-Host "0050 Mail / Iletisim Core additive semasi kontrol/uygulama..." -ForegroundColor Yellow
 wrangler d1 execute $DB_NAME --remote --config $DB_CONFIG --file $MAIL_CORE_FILE
