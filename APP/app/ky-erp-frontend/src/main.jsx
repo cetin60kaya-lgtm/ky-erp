@@ -54,7 +54,6 @@ async function renderErpApp() {
     import("./utils/installMuhasebeDocumentSanitizer"),
     import("./utils/installPersistentModalSizing"),
     import("./App.css"),
-    import("./styles/shell-v3-isnet.css"),
   ]);
 
   installAuthenticatedAssetBridge();

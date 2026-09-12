@@ -176,6 +176,7 @@ export default function AppShellV3({
 }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
+  const [collapsedModuleKey, setCollapsedModuleKey] = useState("");
   const [expandedGroupKey, setExpandedGroupKey] = useState("");
   const [displaySettingsOpen, setDisplaySettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -367,7 +368,12 @@ export default function AppShellV3({
 
   useEffect(() => { if (!quickOpen) setQuickSearch(""); }, [quickOpen]);
 
-  useEffect(() => { setExpandedGroupKey(""); }, [activeModule?.key, activeTab]);
+  useEffect(() => {
+    setCollapsedModuleKey("");
+    setExpandedGroupKey("");
+  }, [activeModule?.key]);
+
+  useEffect(() => { setExpandedGroupKey(""); }, [activeTab]);
 
   function runQuickAction(action) {
     onOpenTab(action.moduleKey, action.tabKey);
@@ -536,12 +542,19 @@ export default function AppShellV3({
             const isActiveModule = activeModule?.key === module.key;
             const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
             const primarySidebarExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
-            const isExpanded = primarySidebarExpanded || (isActiveModule && !hasPrimarySidebarGroups);
+            const isExpanded = (primarySidebarExpanded || (isActiveModule && !hasPrimarySidebarGroups)) && collapsedModuleKey !== module.key;
             const groups = visibleGroups(module, user);
             const flatModuleTabs = !hasPrimarySidebarGroups && groups.length > 0 && groups.reduce((sum, group) => sum + group.tabs.length, 0) <= 6;
             return (
               <section key={module.key} data-module={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
-                <button type="button" className="shell-v3-module-button" onClick={() => onToggleModuleMenu(module.key)} aria-expanded={isExpanded}>
+                <button type="button" className="shell-v3-module-button" onClick={() => {
+                  if (isActiveModule) {
+                    setCollapsedModuleKey((current) => current === module.key ? "" : module.key);
+                    return;
+                  }
+                  setCollapsedModuleKey("");
+                  onToggleModuleMenu(module.key);
+                }} aria-expanded={isExpanded}>
                   <span className="shell-v3-module-icon"><ErpIcon name={moduleVisual(module).icon} size={18} /></span><span className="shell-v3-module-copy"><span>{module.label}</span></span><ChevronDown size={15} className={isExpanded ? "expanded" : ""} />
                 </button>
                 {isExpanded ? (
