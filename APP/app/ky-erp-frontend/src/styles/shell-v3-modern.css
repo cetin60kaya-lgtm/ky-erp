@@ -762,3 +762,120 @@
 .shell-v3-workspace [class*="card"] {
   border-color: color-mix(in srgb, var(--module-line) 72%, #e3e8ee);
 }
+
+/* 2026-09-12 okunabilirlik ve sekme renk dili finali */
+.shell-v3 {
+  --active-tab-accent: var(--module-accent);
+  --active-tab-soft: var(--module-soft);
+  --active-tab-line: var(--module-line);
+}
+
+.shell-v3-sidebar {
+  background: #fbfcfe;
+  color: #1f2a3a;
+}
+.shell-v3-module-button {
+  min-height: 50px;
+  color: #263449;
+  font-size: 12.5px;
+}
+.shell-v3-module-copy > span { font-size: 12.5px; font-weight: 800; }
+.shell-v3-module-copy > small { display: none !important; }
+.shell-v3-module.active > .shell-v3-module-button {
+  background: color-mix(in srgb, var(--mod-soft) 82%, #fff);
+  color: #172033;
+}
+
+.shell-v3-submenu {
+  margin-left: 13px;
+  padding: 6px;
+  background: #fff;
+}
+.shell-v3-submenu-flat {
+  display: grid;
+  gap: 3px;
+}
+.shell-v3-submenu button {
+  --tab-accent: var(--mod);
+  --tab-soft: var(--mod-soft);
+  --tab-line: var(--mod-line);
+  min-height: 36px;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.shell-v3-submenu button > svg { color: var(--tab-accent); }
+.shell-v3-submenu button:hover {
+  border-color: var(--tab-line);
+  background: color-mix(in srgb, var(--tab-soft) 78%, #fff);
+  color: #172033;
+}
+.shell-v3-submenu button.active {
+  border: 1px solid var(--tab-line);
+  background: var(--tab-soft);
+  color: var(--tab-accent);
+  box-shadow: inset 3px 0 0 var(--tab-accent);
+}
+
+.shell-v3-submenu-group-toggle {
+  color: #2f3c50 !important;
+  font-size: 11.5px;
+}
+.shell-v3-submenu-group.active .shell-v3-submenu-group-toggle,
+.shell-v3-submenu-group.open .shell-v3-submenu-group-toggle {
+  border-color: var(--tab-line) !important;
+  background: color-mix(in srgb, var(--tab-soft) 72%, #fff) !important;
+  color: var(--tab-accent) !important;
+}
+.shell-v3-submenu-group-items {
+  border-left-color: var(--tab-line);
+}
+
+.shell-v3-tabs {
+  scrollbar-width: none;
+}
+.shell-v3-tabs::-webkit-scrollbar { display: none; }
+.shell-v3-tabs > button {
+  color: var(--tab-accent);
+  background: color-mix(in srgb, var(--tab-soft) 58%, #fff);
+  border-color: color-mix(in srgb, var(--tab-line) 76%, transparent);
+  font-size: 11.5px;
+  font-weight: 750;
+}
+.shell-v3-tabs > button > svg { color: var(--tab-accent); }
+.shell-v3-tabs > button:hover {
+  background: var(--tab-soft);
+  color: var(--tab-accent);
+}
+
+.shell-v3-tabs > button.active {
+  background: var(--tab-soft);
+  color: var(--tab-accent);
+  box-shadow: inset 0 3px 0 var(--tab-accent), 0 -1px 0 #fff;
+}
+.shell-v3-crumb {
+  border-bottom-color: var(--active-tab-line);
+  background: color-mix(in srgb, var(--active-tab-soft) 72%, #fff);
+}
+.shell-v3-crumb-module { color: var(--active-tab-accent); }
+.shell-v3-crumb-icon {
+  border-color: var(--active-tab-line);
+  background: var(--active-tab-soft);
+  color: var(--active-tab-accent);
+}
+.shell-v3-crumb strong { color: #172033; }
+.shell-v3-workspace {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--active-tab-soft) 82%, #f9fbfd) 0, #f8fafc 170px, #f5f7fa 100%);
+  box-shadow: inset 0 2px 0 var(--active-tab-line);
+}
+.shell-v3-quick-button {
+  border-color: var(--active-tab-line);
+  background: var(--active-tab-soft);
+  color: var(--active-tab-accent);
+}
+.shell-v3-search input:focus,
+.shell-v3-topbar select:focus {
+  border-color: var(--active-tab-line);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--active-tab-accent) 10%, transparent);
+}

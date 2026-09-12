@@ -62,6 +62,41 @@ function moduleVisual(module) {
   return MODULE_VISUALS[module?.key] || { icon: module?.icon || "dashboard", hint: module?.label || "Modül" };
 }
 
+const TAB_PALETTES = [
+  { accent: "#3158b7", soft: "#edf3ff", line: "#cbd9ff" },
+  { accent: "#a65d16", soft: "#fff3e5", line: "#f2d3ad" },
+  { accent: "#087a6d", soft: "#e8f8f4", line: "#bfe8de" },
+  { accent: "#7b4daf", soft: "#f4edfb", line: "#ddccf0" },
+  { accent: "#a93f68", soft: "#fceef4", line: "#efcad9" },
+  { accent: "#26748c", soft: "#eaf7fb", line: "#c2e4ee" },
+  { accent: "#5f6d22", soft: "#f4f7e8", line: "#dde5bd" },
+  { accent: "#8d551f", soft: "#faf1e8", line: "#ead2ba" },
+  { accent: "#496882", soft: "#edf4f8", line: "#cedee8" },
+  { accent: "#6b55b5", soft: "#f1effc", line: "#d8d1f2" },
+];
+
+function tabTheme(tabKey) {
+  const value = normalize(tabKey);
+  if (/ana-ekran|genel-bakis|yonetim-ozeti|dashboard|\bozet\b/.test(value)) return TAB_PALETTES[0];
+  if (/gunluk|giris|is-akisi/.test(value)) return TAB_PALETTES[1];
+  if (/odeme|tahsilat|banka|bordro|maas|avans|cek/.test(value)) return TAB_PALETTES[2];
+  if (/hafta|takvim|tarih|vardiya|izin|donem/.test(value)) return TAB_PALETTES[3];
+  if (/personel|kullanici|yetki|ik-/.test(value)) return TAB_PALETTES[4];
+  if (/firma|cari|musteri|tedarikci/.test(value)) return TAB_PALETTES[5];
+  if (/fatura|belge|evrak|arsiv|irsaliye/.test(value)) return TAB_PALETTES[6];
+  if (/rapor|analiz|denetim|log|kontrol/.test(value)) return TAB_PALETTES[7];
+  if (/mail|eposta|dosya|klasor|drive/.test(value)) return TAB_PALETTES[8];
+  if (/ayar|terminal|cihaz|guvenlik|baglanti|entegrasyon/.test(value)) return TAB_PALETTES[9];
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) hash = ((hash * 31) + value.charCodeAt(index)) | 0;
+  return TAB_PALETTES[Math.abs(hash) % TAB_PALETTES.length];
+}
+
+function tabStyle(tabKey) {
+  const theme = tabTheme(tabKey);
+  return { "--tab-accent": theme.accent, "--tab-soft": theme.soft, "--tab-line": theme.line };
+}
+
 function tabVisualIcon(tabKey, fallback = "dashboard") {
   const key = normalize(tabKey);
   if (/fatura|belge|evrak|arsiv/.test(key)) return "belge";
@@ -463,15 +498,18 @@ export default function AppShellV3({
   const effectiveMode = displayPreferences?.effectiveMode || "pc";
   const effectiveScale = Number(displayPreferences?.effectiveScale || 100);
   const scaleFactor = effectiveScale / 100;
-  const shellStyle = useMemo(() => {
-    if (effectiveScale === 100) return undefined;
-    return {
+  const activeTabTheme = useMemo(() => tabTheme(activeTab || activeModule?.key || "tab"), [activeTab, activeModule?.key]);
+  const shellStyle = useMemo(() => ({
+    "--active-tab-accent": activeTabTheme.accent,
+    "--active-tab-soft": activeTabTheme.soft,
+    "--active-tab-line": activeTabTheme.line,
+    ...(effectiveScale === 100 ? {} : {
       zoom: scaleFactor,
       width: `${100 / scaleFactor}vw`,
       height: `${100 / scaleFactor}dvh`,
       maxWidth: "none",
-    };
-  }, [effectiveScale, scaleFactor]);
+    }),
+  }), [activeTabTheme, effectiveScale, scaleFactor]);
 
   return (
     <div
@@ -496,8 +534,9 @@ export default function AppShellV3({
           {modules.map((module) => {
             const isActiveModule = activeModule?.key === module.key;
             const hasPrimarySidebarGroups = Array.isArray(module.sidebarGroups) && module.sidebarGroups.length > 0;
-            const isExpanded = isActiveModule && (hasPrimarySidebarGroups || mobileMenuOpen);
+            const isExpanded = isActiveModule;
             const groups = visibleGroups(module, user);
+            const flatModuleTabs = !hasPrimarySidebarGroups && groups.length > 0 && groups.reduce((sum, group) => sum + group.tabs.length, 0) <= 6;
             return (
               <section key={module.key} data-module={module.key} className={`shell-v3-module ${isActiveModule ? "active" : ""}`}>
                 <button type="button" className="shell-v3-module-button" onClick={() => onToggleModuleMenu(module.key)} aria-expanded={isExpanded}>
@@ -505,43 +544,47 @@ export default function AppShellV3({
                 </button>
                 {isExpanded ? (
                   <div className="shell-v3-submenu">
-                    {hasPrimarySidebarGroups
-                      ? (
-                          <div className="shell-v3-submenu-primary">
-                            {module.sidebarGroups.map(([key, label, icon]) => {
-                              const owningGroup = groups.find((group) => (group.tabs || []).some(([tabKey]) => tabKey === key));
-                              const groupActive = owningGroup?.tabs?.some(([tabKey]) => tabKey === activeTab) || activeTab === key;
-                              return (
-                                <button type="button" key={key} className={groupActive ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                                  <ErpIcon name={tabVisualIcon(key, icon)} size={16} />
-                                  <span><strong>{label}</strong></span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )
-                      : module.groups
-                        ? groups.map((group) => {
-                            const groupId = module.key + ":" + group.label;
-                            const groupActive = group.tabs.some(([key]) => key === activeTab);
-                            const groupOpen = groupActive || expandedGroupKey === groupId;
-                            const firstTab = group.tabs[0] || [];
-                            return (
-                              <div key={group.label} className={`shell-v3-submenu-group ${groupOpen ? "open" : ""} ${groupActive ? "active" : ""}`}>
-                                <button type="button" className="shell-v3-submenu-group-toggle" onClick={() => setExpandedGroupKey((current) => current === groupId && !groupActive ? "" : groupId)} aria-expanded={groupOpen}>
-                                  <ErpIcon name={tabVisualIcon(firstTab[0], firstTab[2])} size={15} /><span><strong>{group.label}</strong></span><ChevronDown size={14} />
-                                </button>
-                                {groupOpen ? <div className="shell-v3-submenu-group-items">{group.tabs.map(([key, label, icon]) => (
-                                  <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}><ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span></button>
-                                ))}</div> : null}
-                              </div>
-                            );
-                          })
-                        : getTabs(module, user).map(([key, label, icon]) => (
-                            <button type="button" key={key} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
-                              <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
+                    {hasPrimarySidebarGroups ? (
+                      <div className="shell-v3-submenu-primary">
+                        {module.sidebarGroups.map(([key, label, icon]) => {
+                          const owningGroup = groups.find((group) => (group.tabs || []).some(([tabKey]) => tabKey === key));
+                          const groupActive = owningGroup?.tabs?.some(([tabKey]) => tabKey === activeTab) || activeTab === key;
+                          return (
+                            <button type="button" key={key} style={tabStyle(key)} className={groupActive ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                              <ErpIcon name={tabVisualIcon(key, icon)} size={16} />
+                              <span><strong>{label}</strong></span>
                             </button>
-                          ))}
+                          );
+                        })}
+                      </div>
+                    ) : flatModuleTabs ? (
+                      <div className="shell-v3-submenu-flat">
+                        {getTabs(module, user).map(([key, label, icon]) => (
+                          <button type="button" key={key} style={tabStyle(key)} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                            <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : module.groups ? groups.map((group) => {
+                      const groupId = module.key + ":" + group.label;
+                      const groupActive = group.tabs.some(([key]) => key === activeTab);
+                      const groupOpen = groupActive || expandedGroupKey === groupId;
+                      const firstTab = group.tabs[0] || [];
+                      return (
+                        <div key={group.label} className={`shell-v3-submenu-group ${groupOpen ? "open" : ""} ${groupActive ? "active" : ""}`}>
+                          <button type="button" style={tabStyle(firstTab[0])} className="shell-v3-submenu-group-toggle" onClick={() => setExpandedGroupKey((current) => current === groupId && !groupActive ? "" : groupId)} aria-expanded={groupOpen}>
+                            <ErpIcon name={tabVisualIcon(firstTab[0], firstTab[2])} size={15} /><span><strong>{group.label}</strong></span><ChevronDown size={14} />
+                          </button>
+                          {groupOpen ? <div className="shell-v3-submenu-group-items">{group.tabs.map(([key, label, icon]) => (
+                            <button type="button" key={key} style={tabStyle(key)} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}><ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span></button>
+                          ))}</div> : null}
+                        </div>
+                      );
+                    }) : getTabs(module, user).map(([key, label, icon]) => (
+                      <button type="button" key={key} style={tabStyle(key)} className={activeTab === key ? "active" : ""} onClick={() => onOpenTab(module.key, key)}>
+                        <ErpIcon name={tabVisualIcon(key, icon)} size={15} /><span>{label}</span>
+                      </button>
+                    ))}
                   </div>
                 ) : null}
               </section>
@@ -738,7 +781,7 @@ export default function AppShellV3({
         <div className="shell-v3-tabs-bar">
           <div className="shell-v3-tabs">
             {tabs.map((tab) => (
-              <button type="button" key={tab.id} data-module={tab.moduleKey} className={activeTabId === tab.id ? "active" : ""} onClick={() => onActivateWorkspaceTab(tab)}>
+              <button type="button" key={tab.id} data-module={tab.moduleKey} style={tabStyle(tab.tabKey)} className={activeTabId === tab.id ? "active" : ""} onClick={() => onActivateWorkspaceTab(tab)}>
                 <ErpIcon name={tabVisualIcon(tab.tabKey, moduleVisual(modules.find((item) => item.key === tab.moduleKey)).icon)} size={14} />
                 <span>{tab.label}</span>
                 {tabs.length > 1 ? (
@@ -754,7 +797,7 @@ export default function AppShellV3({
           </button>
         </div>
 
-        <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={activeModuleVisual.icon} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}</div>
+        <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}</div>
         <section className="shell-v3-workspace">{children}</section>
         <footer className="shell-v3-status"><span>KY ERP</span><span>Firma: {companies.find((item) => item.slug === activeCompanySlug)?.name || "-"}</span><span className="ok">Sistem hazır</span></footer>
       </main>
