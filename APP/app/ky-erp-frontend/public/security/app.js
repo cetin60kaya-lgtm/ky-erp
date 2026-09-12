@@ -121,7 +121,7 @@ function cleanEnrollmentQuery(){try{const url=new URL(location.href);url.searchP
 function requestedInstall(){
   try{
     const params=new URL(location.href).searchParams;
-    return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase()};
+    return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase(),browser:params.get("browser")==="1"};
   }catch{return{requested:false,platform:""}}
 }
 function openAndroidBrowserInstaller(){const target="https://app.kyerp.net/security/?install=1&platform=android&browser=1";const fallback=encodeURIComponent(target);location.href="intent://app.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";}
@@ -136,17 +136,19 @@ function renderInstall(){
   els.installButton.classList.add("hidden");
   els.installButton.disabled=false;
 
-  if(standalone&&!request.requested){
-    if(request.requested){
+  if(standalone){
+    if(!request.requested){els.installPanel.classList.add("hidden");return;}
+    if(android){
       els.installPanel.classList.remove("hidden");
-      els.installTitle.textContent="KY ERP Güvenlik zaten yüklü";
-      els.installCopy.textContent="Bu cihaz uygulama modunda çalışıyor. Kurulumu tekrar yapmana gerek yok.";
-      els.installStateText.textContent="Yüklü · Uygulama modu aktif";
-      els.installState.classList.add("installed");
-    }else{
-      els.installPanel.classList.add("hidden");
+      els.installTitle.textContent="KY Güvenlik’i ayrı uygulama olarak kur";
+      els.installCopy.textContent="Ana KY ERP uygulamasından çıktık. Kurulumu Chrome üzerinden ayrı KY Güvenlik uygulaması olarak tamamla.";
+      els.installStateText.textContent="Chrome kurulum ekranı hazır";
+      els.androidInstallNote.classList.remove("hidden");
+      els.installButton.textContent="Chrome’da KY Güvenlik Kurulumunu Aç";
+      els.installButton.classList.remove("hidden");
+      els.installButton.disabled=false;
+      return;
     }
-    return;
   }
 
   if(ios){
@@ -363,7 +365,8 @@ window.addEventListener("appinstalled",()=>{
 els.installButton.addEventListener("click",async()=>{
   if(!installPrompt){
     const request=requestedInstall();
-    if(isStandalone()&&request.requested&&request.platform==="android"){openAndroidBrowserInstaller();return;}
+    if(request.requested&&request.platform==="android"&&!request.browser){openAndroidBrowserInstaller();return;}
+    if(request.requested&&request.platform==="android"&&request.browser){toast("Chrome kurulum seçeneği hazırlanamadı. Chrome menüsündeki Uygulamayı yükle seçeneğini kullanabilirsin.");return;}
     renderInstall();
     return;
   }

@@ -16,8 +16,11 @@ export default function PhoneApprovalSetup({ onClose }) {
   const [message, setMessage] = useState("Güvenlik uygulaması durumu kontrol ediliyor...");
   const [enrollment, setEnrollment] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   const devices = useMemo(() => rowsOf(config), [config]);
+  const inactiveDevices = useMemo(() => devices.filter((row) => !row.isActive), [devices]);
+  const visibleDevices = useMemo(() => showInactive ? devices : devices.filter((row) => row.isActive), [devices, showInactive]);
   const securityDevices = useMemo(
     () => devices.filter((row) => row.isActive && row.securityApp),
     [devices],
@@ -102,6 +105,13 @@ export default function PhoneApprovalSetup({ onClose }) {
   }
 
   function openSecurityInstaller(platform) {
+    if (platform === "android" && clientPlatform === "android") {
+      const target = securityAppUrl({ install: 1, platform: "android", browser: 1 });
+      const url = new URL(target);
+      window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`;
+      setMessage("Chrome açılıyor. KY Güvenlik kurulum ekranında Android’e Yükle düğmesine dokunun.");
+      return;
+    }
     window.open(securityAppUrl({ install: 1, platform }), "_blank", "noopener,noreferrer");
     setMessage(platform === "android"
       ? "KY Güvenlik Android kurulum ekranı açıldı. Oradaki Android'e Yükle düğmesi sistem kurulum penceresini açar."
@@ -236,6 +246,7 @@ export default function PhoneApprovalSetup({ onClose }) {
               </span>
               <div>
                 <button type="button" onClick={load} disabled={busy}><RefreshCw size={15}/> Durumu Yenile</button>
+                {inactiveDevices.length ? <button type="button" onClick={() => setShowInactive((value) => !value)}>{showInactive ? "Pasifleri Gizle" : `Pasifleri Göster (${inactiveDevices.length})`}</button> : null}
                 <button type="button" onClick={openSecurityApp}><ExternalLink size={15}/> KY Güvenlik Aç</button>
               </div>
             </div>
@@ -256,7 +267,7 @@ export default function PhoneApprovalSetup({ onClose }) {
             <small className="phone-approval-help">Güvenilir cihaz kaydı silinmeden KY ERP ↔ Güvenlik uygulaması push yolu tekrar kontrol edilir.</small>
 
             <div className="phone-approval-device-list">
-              {devices.map((row) => (
+              {visibleDevices.map((row) => (
                 <div className={`phone-approval-device ${row.isActive ? "" : "disabled"}`} key={row.id}>
                   <div>
                     <strong>{row.deviceLabel || "KY ERP cihazı"}</strong>
@@ -278,6 +289,7 @@ export default function PhoneApprovalSetup({ onClose }) {
                 </div>
               ))}
               {!devices.length ? <div className="phone-approval-empty">Henüz güvenilir telefon/tablet kaydı yok.</div> : null}
+              {devices.length && !visibleDevices.length ? <div className="phone-approval-empty">Aktif cihaz yok. Pasif kayıtları görmek için “Pasifleri Göster” kullanın.</div> : null}
             </div>
           </section>
         </div>
