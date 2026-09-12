@@ -37,11 +37,12 @@ public class PdksCoreTests
         Assert.Equal("Cihaz1", config.DeviceName);
         Assert.Equal(1, config.DeviceNo);
         Assert.Equal(1, config.MachineNo);
-        Assert.Equal("GIRIS", config.Direction);
+        Assert.Equal("AUTO", config.Direction);
         Assert.Equal("192.168.1.224", config.TcpHost);
         Assert.Equal(5005, config.TcpPort);
         Assert.Equal(38400, config.SerialBaud);
-        Assert.EndsWith(@"Hedef500\Terminal Bilgi Aktar\timerecords.txt", config.HedefReadFile, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("FP_CLOCK_DIRECT", config.SourceMode);
+        Assert.False(config.FileImportEnabled);
     }
 
 

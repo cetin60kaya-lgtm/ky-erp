@@ -1,4 +1,4 @@
-﻿param(
+param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [switch]$Uninstall
 )
@@ -101,12 +101,12 @@ if(-not (Test-Path -LiteralPath $fpTarget -PathType Leaf) -or -not (Test-Path -L
 Write-Host "FP_CLOCK runtime hazır: $runtimeDir (Hedef500 çalışma bağımlılığı yok)."
 
 $quoted='"'+$resolved+'"'
-$create=Invoke-Sc create $ServiceName "binPath= $quoted" "start= delayed-auto" "DisplayName= $DisplayName"
+$create=Invoke-Sc @('create',$ServiceName,'binPath=',$quoted,'start=','delayed-auto','DisplayName=',$DisplayName)
 if($create -ne 0) { throw "PDKS Agent servis kaydı oluşturulamadı. Kod=$create" }
 
-Invoke-Sc description $ServiceName "KY ERP kart terminali toplama, offline kuyruk ve D1 HTTPS senkron servisi" | Out-Null
-Invoke-Sc failure $ServiceName "reset= 86400" "actions= restart/5000/restart/15000/restart/30000" | Out-Null
-Invoke-Sc failureflag $ServiceName 1 | Out-Null
+Invoke-Sc @('description',$ServiceName,'KY ERP kart terminali toplama, offline kuyruk ve D1 HTTPS senkron servisi') | Out-Null
+Invoke-Sc @('failure',$ServiceName,'reset=','86400','actions=','restart/5000/restart/15000/restart/30000') | Out-Null
+Invoke-Sc @('failureflag',$ServiceName,'1') | Out-Null
 
 $start=Invoke-Sc start $ServiceName
 if($start -ne 0) { throw "PDKS Agent başlatılamadı. Kod=$start" }

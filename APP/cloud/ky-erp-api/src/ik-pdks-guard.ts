@@ -42,13 +42,13 @@ async function requestBodyClone(c: Context<AppEnv>): Promise<Row> {
 }
 
 function permissionAllows(user: Row, method: string) {
-  if (isOwnerRole(user?.role) || isCompanyAdminRole(user?.role) || upper(user?.role) === "IK") return true;
-  if (isAuditRole(user?.role)) return ["GET", "HEAD"].includes(method);
+  if (isOwnerRole(user?.role) || isCompanyAdminRole(user?.role)) return true;
   const permission = Array.isArray(user?.permissions)
-    ? user.permissions.find((row: Row) => upper(row?.moduleKey || row?.module_key) === "IK")
+    ? user.permissions.find((row: Row) => upper(row?.moduleKey || row?.module_key) === "PDKS")
     : null;
   if (!permission) return false;
   if (["GET", "HEAD"].includes(method)) return Boolean(permission.canView ?? permission.can_view);
+  if (isAuditRole(user?.role)) return false;
   if (method === "POST") return Boolean(permission.canCreate ?? permission.can_create ?? permission.canUpdate ?? permission.can_update);
   if (["PUT", "PATCH"].includes(method)) return Boolean(permission.canUpdate ?? permission.can_update);
   if (method === "DELETE") return Boolean(permission.canDelete ?? permission.can_delete);
@@ -92,7 +92,7 @@ async function enforcePdksTenantAndPermission(c: Context<AppEnv>, next: () => Pr
 
   const method = String(c.req.method || "GET").toUpperCase();
   if (!permissionAllows(user, method)) {
-    c.res = c.json({ ok: false, error: { code: "PDKS_PERMISSION_DENIED", message: "Bu PDKS işlemi için İK yetkiniz bulunmuyor." } }, 403);
+    c.res = c.json({ ok: false, error: { code: "PDKS_PERMISSION_DENIED", message: "Bu PDKS işlemi için PDKS yetkiniz bulunmuyor." } }, 403);
     return;
   }
 

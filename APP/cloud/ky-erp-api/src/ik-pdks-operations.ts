@@ -334,7 +334,7 @@ async function payroll(c: Context<AppEnv>) {
   const { auth } = result;
   const year = Math.trunc(number(c.req.query("year"))) || new Date().getFullYear();
   const month = Math.trunc(number(c.req.query("month"))) || new Date().getMonth() + 1;
-  const employees = await all(c, `SELECT e.id,e.code,e.full_name,e.salary,e.bank_amount,e.cash_amount,s.card_no
+  const employees = await all(c, `SELECT e.id,e.code,e.full_name,e.salary,e.road_allowance,e.bank_amount,e.cash_amount,s.card_no
     FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
     WHERE e.main_company_id=? AND UPPER(TRIM(COALESCE(e.sgk_status,'')))='VAR' AND TRIM(COALESCE(s.card_no,''))<>''
     ORDER BY e.code,e.full_name`, [auth.company]);
@@ -355,8 +355,13 @@ async function payroll(c: Context<AppEnv>) {
     const overtimeAmount = rows.filter((row) => upper(row.adjustmentType).includes("MESAI")).reduce((sum, row) => sum + number(row.amount), 0);
     const advanceAmount = rows.filter((row) => upper(row.adjustmentType).includes("AVANS")).reduce((sum, row) => sum + number(row.amount), 0);
     const deductionAmount = rows.filter((row) => upper(row.adjustmentType).includes("KESINTI")).reduce((sum, row) => sum + number(row.amount), 0);
+    const garnishmentAmount = rows.filter((row) => /ICRA|HACIZ/.test(upper(row.adjustmentType))).reduce((sum, row) => sum + number(row.amount), 0);
+    const besAmount = rows.filter((row) => upper(row.adjustmentType).includes("BES")).reduce((sum, row) => sum + number(row.amount), 0);
+    const roadAdjustmentAmount = rows.filter((row) => upper(row.adjustmentType).includes("YOL")).reduce((sum, row) => sum + number(row.amount), 0);
+    const mealAmount = rows.filter((row) => upper(row.adjustmentType).includes("YEMEK")).reduce((sum, row) => sum + number(row.amount), 0);
     const current = saved.get(text(person.id));
     const salary = current ? number(current.salary) : number(person.salary);
+    const roadAllowance = current ? number(current.road_allowance) : number(person.road_allowance);
     const bank = current ? number(current.bank_amount) : number(person.bank_amount);
     const cash = current ? number(current.cash_amount) : number(person.cash_amount);
     const net = current ? number(current.total_amount) : (bank + cash || Math.max(0, salary + overtimeAmount - advanceAmount - deductionAmount));

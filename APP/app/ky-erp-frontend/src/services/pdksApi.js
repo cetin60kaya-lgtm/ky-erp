@@ -16,8 +16,8 @@ export async function getPdksPeople(params = {}) {
   return unwrap(await apiGet("/ik/personnel-control/people", params));
 }
 
-// Modern attendance motoru: vardiya, Cumartesi/Pazar, yarım gün tatil, izin günü,
-// duplicate punch, tolerans ve mesai hesabını tek server cevabında döndürür.
+// Modern attendance motoru: vardiya, Cumartesi/Pazar, yarÄ±m gÃ¼n tatil, izin gÃ¼nÃ¼,
+// duplicate punch, tolerans ve mesai hesabÄ±nÄ± tek server cevabÄ±nda dÃ¶ndÃ¼rÃ¼r.
 export async function getPdksAttendance(employeeId, year, month, params = {}) {
   return unwrap(await apiGet(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/attendance-v2`, { ...params, year, month }));
 }
@@ -96,6 +96,13 @@ export async function savePdksWorkGroup(payload = {}) {
   return unwrap(await apiPost("/ik/personnel-control/work-groups", payload));
 }
 
+export async function savePdksPersonnelGroup(payload = {}) {
+  return unwrap(await apiPost("/ik/personnel-control/personnel-groups", payload));
+}
+
+export async function assignPdksPersonnelGroup(employeeId, personnelGroupId, params = {}) {
+  return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/personnel-group`, { ...params, personnelGroupId }));
+}
 export async function assignPdksWorkGroup(employeeId, groupId, params = {}) {
   return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/work-group`, { ...params, groupId }));
 }
@@ -108,7 +115,7 @@ export async function assignPdksService(employeeId, serviceId, params = {}) {
   return unwrap(await apiPost(`/ik/personnel-control/people/${encodeURIComponent(employeeId)}/service`, { ...params, serviceId }));
 }
 
-// PDKS kritik iş verileri personnel-control altında açık D1 operasyon endpointlerinden çalışır.
+// PDKS kritik iÅŸ verileri personnel-control altÄ±nda aÃ§Ä±k D1 operasyon endpointlerinden Ã§alÄ±ÅŸÄ±r.
 export async function getPdksAdvancedMonth(params = {}) {
   return unwrap(await apiGet(`${OPS}/month`, params));
 }

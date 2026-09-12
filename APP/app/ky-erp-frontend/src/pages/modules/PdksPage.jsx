@@ -19,7 +19,7 @@ const NAV_GROUPS = [
     ["personel-bilgileri", "Personel"], ["izinler", "İzinler"], ["calisma-tarihi", "Çalışma Tarihi"],
   ]},
   { key: "tanimlar", label: "Tanımlar", hint: "Vardiya ve çalışma kuralları", items: [
-    ["gruplar-vardiyalar", "Vardiyalar"], ["puantaj-kurallari", "Puantaj Kuralları"], ["donemler", "Dönem / Kapanış"], ["servisler", "Servisler"], ["tatiller", "Tatiller"],
+    ["personel-gruplari", "Personel Grupları"], ["gruplar-vardiyalar", "Vardiyalar"], ["puantaj-kurallari", "Firma PDKS Profili"], ["donemler", "Dönem / Kapanış"], ["servisler", "Servisler"], ["tatiller", "Tatiller"],
   ]},
   { key: "terminal", label: "Terminal & Sistem", hint: "Cihaz, agent ve senkron", items: [
     ["saat-terminal", "Terminal"], ["cihaz-baglantilari", "Cihazlar"], ["senkron", "Senkron"],
@@ -28,7 +28,7 @@ const NAV_GROUPS = [
     ["ai-kontrol", "AI Kontrol"],
   ]},
   { key: "rapor", label: "Rapor & Denetim", hint: "Puantaj raporları ve yıllık denetim", items: [
-    ["raporlar", "Raporlar"], ["denetim-yillik-temp", "Yıllık TEMP"],
+    ["raporlar", "Raporlar"], ["bordro-odeme", "Bordro / Ödeme"], ["denetim-yillik-temp", "Yıllık TEMP"],
   ]},
 ];
 
@@ -117,8 +117,8 @@ export default function PdksPage(props) {
   const deviceCenterTab = !isAuditAccount && ["saat-terminal", "cihaz-baglantilari", "senkron"].includes(activeTab);
   const personnelDeskTab = PERSONNEL_DESK_TABS.has(activeTab);
   const rulesCenterTab = !isAuditAccount && activeTab === "puantaj-kurallari";
-  const reportCenterTab = ["puantaj-sonuclari", "raporlar", "denetim-yillik-temp"].includes(activeTab);
-  const definitionsCenterTab = ["gruplar-vardiyalar", "donemler", "servisler", "tatiller"].includes(activeTab);
+  const reportCenterTab = ["puantaj-sonuclari", "raporlar", "bordro-odeme", "denetim-yillik-temp"].includes(activeTab);
+  const definitionsCenterTab = ["personel-gruplari", "gruplar-vardiyalar", "donemler", "servisler", "tatiller"].includes(activeTab);
 
   return (
     <div className="pdks-module-shell">

@@ -16,7 +16,7 @@ const REFRESH_LOCK_MS = 30 * 1000;
 
 const MODULE_KEYS = [
   "DASHBOARD", "MUHASEBE", "FIRMA_CARI", "BELGE_ISLEM", "KDV", "CEK_ODEME",
-  "DESEN", "IMALAT", "BOYAHANE", "IK", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
+  "DESEN", "IMALAT", "BOYAHANE", "IK", "PDKS", "GUNLUK_OPERASYON", "ISNET", "MAIL", "STORAGE_ADMIN", "ASISTAN", "ADMIN", "RAPORLAR",
 ];
 
 const AuthContext = createContext(null);
@@ -140,17 +140,17 @@ function authErrorMessage(status, payload, requestUrl = "") {
   const serverMessage = String(payload?.error?.message || payload?.message || "").trim();
   if (serverMessage) return serverMessage;
   if (status === 400) return "Girilen bilgileri kontrol edip tekrar deneyin.";
-  if (status === 401) return "Kullanıcı adı/e-posta veya şifre hatalı.";
-  if (status === 403) return "Bu hesapla girişe izin verilmiyor.";
+  if (status === 401) return "KullanÄ±cÄ± adÄ±/e-posta veya ÅŸifre hatalÄ±.";
+  if (status === 403) return "Bu hesapla giriÅŸe izin verilmiyor.";
   if (status === 404 || status === 405) {
     const path = requestPathText(requestUrl);
-    return `KY ERP giriş endpointi yanıt vermedi (HTTP ${status}${path ? ` · ${path}` : ""}).`;
+    return `KY ERP giriÅŸ endpointi yanÄ±t vermedi (HTTP ${status}${path ? ` Â· ${path}` : ""}).`;
   }
-  if (status === 409) return "Giriş doğrulaması mevcut durumla çakıştı. Yeniden giriş yapın.";
-  if (status === 422) return "Giriş bilgileri sunucu tarafından işlenemedi. Tekrar deneyin.";
-  if (status === 429) return "Çok fazla giriş denemesi yapıldı. Kısa bir süre sonra tekrar deneyin.";
-  if (status >= 500) return "KY ERP giriş servisi geçici olarak yanıt veremedi. Tekrar deneyin.";
-  return status > 0 ? `Giriş işlemi tamamlanamadı (HTTP ${status}).` : "Giriş işlemi tamamlanamadı.";
+  if (status === 409) return "GiriÅŸ doÄŸrulamasÄ± mevcut durumla Ã§akÄ±ÅŸtÄ±. Yeniden giriÅŸ yapÄ±n.";
+  if (status === 422) return "GiriÅŸ bilgileri sunucu tarafÄ±ndan iÅŸlenemedi. Tekrar deneyin.";
+  if (status === 429) return "Ã‡ok fazla giriÅŸ denemesi yapÄ±ldÄ±. KÄ±sa bir sÃ¼re sonra tekrar deneyin.";
+  if (status >= 500) return "KY ERP giriÅŸ servisi geÃ§ici olarak yanÄ±t veremedi. Tekrar deneyin.";
+  return status > 0 ? `GiriÅŸ iÅŸlemi tamamlanamadÄ± (HTTP ${status}).` : "GiriÅŸ iÅŸlemi tamamlanamadÄ±.";
 }
 
 function wait(ms) {
@@ -171,9 +171,9 @@ async function directAuthRequest(path, options = {}) {
     try {
       const headers = { Accept: "application/json" };
       if (body !== undefined) {
-        // JSON metni text/plain ile taşınır. Bu Content-Type CORS safelist kapsamındadır;
-        // kyerp.net -> api.kyerp.net girişinde gereksiz OPTIONS/preflight oluşmaz.
-        // Backend Request.json() gövdeyi aynı JSON olarak okumaya devam eder.
+        // JSON metni text/plain ile taÅŸÄ±nÄ±r. Bu Content-Type CORS safelist kapsamÄ±ndadÄ±r;
+        // kyerp.net -> api.kyerp.net giriÅŸinde gereksiz OPTIONS/preflight oluÅŸmaz.
+        // Backend Request.json() gÃ¶vdeyi aynÄ± JSON olarak okumaya devam eder.
         headers["Content-Type"] = "text/plain;charset=UTF-8";
       }
       if (token) headers.Authorization = `Bearer ${token}`;
@@ -193,7 +193,7 @@ async function directAuthRequest(path, options = {}) {
       const validJsonPayload = payload && typeof payload === "object" && !Array.isArray(payload);
       if (response.ok && !validJsonPayload) {
         const contentType = String(response.headers.get("Content-Type") || "");
-        const error = new Error(`KY ERP giriş servisi JSON yerine geçersiz yanıt döndürdü${contentType ? ` (${contentType})` : ""}.`);
+        const error = new Error(`KY ERP giriÅŸ servisi JSON yerine geÃ§ersiz yanÄ±t dÃ¶ndÃ¼rdÃ¼${contentType ? ` (${contentType})` : ""}.`);
         Object.assign(error, { status: response.status, code: "AUTH_INVALID_RESPONSE", requestUrl, requestId, responseText: String(raw || "").slice(0, 240) });
         throw error;
       }
@@ -203,7 +203,7 @@ async function directAuthRequest(path, options = {}) {
         throw error;
       }
       if (authVersion && authVersion !== AUTH_VERSION) {
-        const mismatch = new Error("KY ERP giriş servisi ile uygulama sürümü uyuşmuyor. Canlı dağıtımı yenileyin.");
+        const mismatch = new Error("KY ERP giriÅŸ servisi ile uygulama sÃ¼rÃ¼mÃ¼ uyuÅŸmuyor. CanlÄ± daÄŸÄ±tÄ±mÄ± yenileyin.");
         Object.assign(mismatch, { status: 409, code: "AUTH_VERSION_MISMATCH", requestUrl, requestId });
         throw mismatch;
       }
@@ -212,15 +212,15 @@ async function directAuthRequest(path, options = {}) {
       if (Number(error?.status || 0) > 0) throw error;
       lastTransportError = error;
       if (attempt + 1 < maxAttempts) {
-        // Yalnız ilk parola logininde HTTP cevabı hiç alınmadıysa bir kez tekrar deneriz.
-        // Aynı BROWSER kimliği için D1 same-browser guard eski olası sessionı kapattığı için
-        // cevap yolda kaybolmuş olsa bile aktif session birikmez.
+        // YalnÄ±z ilk parola logininde HTTP cevabÄ± hiÃ§ alÄ±nmadÄ±ysa bir kez tekrar deneriz.
+        // AynÄ± BROWSER kimliÄŸi iÃ§in D1 same-browser guard eski olasÄ± sessionÄ± kapattÄ±ÄŸÄ± iÃ§in
+        // cevap yolda kaybolmuÅŸ olsa bile aktif session birikmez.
         await wait(250);
         continue;
       }
       const wrapped = new Error(error?.name === "AbortError"
-        ? "KY ERP giriş servisi zamanında yanıt vermedi. Tekrar deneyin."
-        : "KY ERP giriş servisine bağlanılamadı. Tekrar deneyin.");
+        ? "KY ERP giriÅŸ servisi zamanÄ±nda yanÄ±t vermedi. Tekrar deneyin."
+        : "KY ERP giriÅŸ servisine baÄŸlanÄ±lamadÄ±. Tekrar deneyin.");
       Object.assign(wrapped, { status: 0, code: error?.name === "AbortError" ? "REQUEST_TIMEOUT" : "NETWORK_ERROR", cause: error, requestUrl });
       throw wrapped;
     } finally {
@@ -228,7 +228,7 @@ async function directAuthRequest(path, options = {}) {
     }
   }
 
-  const wrapped = new Error("KY ERP giriş servisine bağlanılamadı. Tekrar deneyin.");
+  const wrapped = new Error("KY ERP giriÅŸ servisine baÄŸlanÄ±lamadÄ±. Tekrar deneyin.");
   Object.assign(wrapped, { status: 0, code: "NETWORK_ERROR", cause: lastTransportError, requestUrl });
   throw wrapped;
 }
@@ -288,8 +288,8 @@ function readStoredAuth() {
     const sessionUser = parseStoredUser(window.sessionStorage.getItem(AUTH_USER_KEY));
     if (sessionToken && sessionUser && isTokenUsable(sessionToken)) {
       if (isOwnerAuthPair(sessionToken, sessionUser)) {
-        // Uygulama sahibi yalnız aktif tarayıcı oturumunda tutulur.
-        // Eski localStorage kalıntıları bilinçli olarak temizlenir.
+        // Uygulama sahibi yalnÄ±z aktif tarayÄ±cÄ± oturumunda tutulur.
+        // Eski localStorage kalÄ±ntÄ±larÄ± bilinÃ§li olarak temizlenir.
         clearPersistentAuth();
         clearPendingRefresh();
         return authSnapshot(sessionToken, sessionUser);
@@ -303,9 +303,9 @@ function readStoredAuth() {
     const persistentToken = String(window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
     const persistentUser = parseStoredUser(window.localStorage.getItem(AUTH_USER_KEY));
     if (persistentToken && persistentUser && isOwnerAuthPair(persistentToken, persistentUser)) {
-      // Önceki sürümlerin kalıcı owner tokenı yeni güvenlik politikasında geçerli
-      // bir browser-restore kaynağı değildir. Sunucu sessionı burada silinmez;
-      // yalnız istemci kalıcı oturumu bırakır ve yeniden giriş ister.
+      // Ã–nceki sÃ¼rÃ¼mlerin kalÄ±cÄ± owner tokenÄ± yeni gÃ¼venlik politikasÄ±nda geÃ§erli
+      // bir browser-restore kaynaÄŸÄ± deÄŸildir. Sunucu sessionÄ± burada silinmez;
+      // yalnÄ±z istemci kalÄ±cÄ± oturumu bÄ±rakÄ±r ve yeniden giriÅŸ ister.
       clearPersistentAuth();
       clearPendingRefresh();
       return { token: "", user: null, permissions: [] };
@@ -368,8 +368,8 @@ export function AuthProvider({ children }) {
     const ownerSession = isOwnerAuthPair(payload.token, payload.user);
     try {
       if (ownerSession) {
-        // Owner kimliği browser restart sonrasında otomatik geri yüklenmez.
-        // F5 / aynı aktif sekme sessionStorage sayesinde çalışmaya devam eder.
+        // Owner kimliÄŸi browser restart sonrasÄ±nda otomatik geri yÃ¼klenmez.
+        // F5 / aynÄ± aktif sekme sessionStorage sayesinde Ã§alÄ±ÅŸmaya devam eder.
         clearPersistentAuth();
         clearPendingRefresh();
       } else {
@@ -421,9 +421,9 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Commit cevabı ağda kaybolmuş olabilir. Hazırlanan yeni token sunucuda geçerliyse
-    // /auth/me bunu kanıtlar ve token güvenle kaydedilir. Değilse eski tokena dokunulmaz;
-    // pending kayıt sonraki denemede idempotent commit için saklanır.
+    // Commit cevabÄ± aÄŸda kaybolmuÅŸ olabilir. HazÄ±rlanan yeni token sunucuda geÃ§erliyse
+    // /auth/me bunu kanÄ±tlar ve token gÃ¼venle kaydedilir. DeÄŸilse eski tokena dokunulmaz;
+    // pending kayÄ±t sonraki denemede idempotent commit iÃ§in saklanÄ±r.
     try {
       const probe = await directAuthRequest("/auth/me", { method: "GET", token: prepared.token, timeoutMs: 6000 });
       if (probe?.user) {
@@ -460,7 +460,7 @@ export function AuthProvider({ children }) {
       const status = Number(error?.status || 0);
       const code = String(error?.code || "");
       if (shouldClearStoredAuthForStatus(status, code, "/api/auth/refresh")) {
-        // Başka sekme tokenı tam bu anda yenilemiş olabilir. Storage olayına kısa bir
+        // BaÅŸka sekme tokenÄ± tam bu anda yenilemiÅŸ olabilir. Storage olayÄ±na kÄ±sa bir
         // pencere ver; yeni token geldiyse logout yerine onu kullan.
         await wait(500);
         const stored = readStoredAuth();
@@ -563,8 +563,8 @@ export function AuthProvider({ children }) {
       try { result = await refreshSession(); }
       finally { releaseRefreshLock(lockOwner); }
       if (cancelled) return;
-      // Başarılı yenilemede saveAuth yeni token state'i oluşturur ve effect yeniden kurulur.
-      // Geçici bağlantı hatasında mevcut token halen geçerliyse 60 sn sonra tekrar denenir.
+      // BaÅŸarÄ±lÄ± yenilemede saveAuth yeni token state'i oluÅŸturur ve effect yeniden kurulur.
+      // GeÃ§ici baÄŸlantÄ± hatasÄ±nda mevcut token halen geÃ§erliyse 60 sn sonra tekrar denenir.
       if (!result && tokenRef.current === scheduledToken && isTokenUsable(scheduledToken)) {
         timer = window.setTimeout(runRefresh, REFRESH_RETRY_MS);
       }
@@ -653,7 +653,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try { if (token) await directAuthRequest("/auth/logout", { token }); }
-    catch { /* cihaz oturumu yine kapanır */ }
+    catch { /* cihaz oturumu yine kapanÄ±r */ }
     finally { clearAuth(); }
   }, [clearAuth, token]);
 
@@ -662,6 +662,7 @@ export function AuthProvider({ children }) {
     if (!key) return false;
     if (isSuperAdmin(user?.role)) return true;
     if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && ["ADMIN","STORAGE_ADMIN"].includes(key)) return true;
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "PDKS") return true;
     return Boolean(permissions.find((row) => row.moduleKey === key)?.canView);
   }, [permissions, user?.role]);
 
@@ -671,6 +672,7 @@ export function AuthProvider({ children }) {
     if (!key || !actionKey) return false;
     if (isSuperAdmin(user?.role)) return true;
     if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && ["ADMIN","STORAGE_ADMIN"].includes(key)) return actionKey !== "canDelete";
+    if (String(user?.role || "").toUpperCase() === "COMPANY_ADMIN" && key === "PDKS") return actionKey !== "canDelete";
     return Boolean(permissions.find((row) => row.moduleKey === key)?.[actionKey]);
   }, [permissions, user?.role]);
 
@@ -686,6 +688,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth AuthProvider içinde kullanılmalıdır.");
+  if (!context) throw new Error("useAuth AuthProvider iÃ§inde kullanÄ±lmalÄ±dÄ±r.");
   return context;
 }

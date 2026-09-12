@@ -9,14 +9,14 @@ const api = (name: string) => readFileSync(resolve(here, name), "utf8");
 const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-erp-frontend/src", name), "utf8");
 const migration = (name: string) => readFileSync(resolve(here, "../migrations", name), "utf8");
 
-test("DENETIM UI is fixed to IK view-only and cannot enable other modules", () => {
+test("DENETIM UI exposes only owner-granted PDKS view and keeps writes disabled", () => {
   const source = frontend("pages/admin/AdminUsersPanelV2.jsx");
-  assert.match(source, /if\(role==="DENETIM"\)view\.add\("IK"\)/);
-  assert.match(source, /roleOf\(createForm\.role\)==="DENETIM"/);
-  assert.match(source, /selectedRole==="DENETIM"\?permissionPreset\("DENETIM"\)/);
-  assert.match(source, /selectedRole==="DENETIM"\)return/);
-  assert.match(source, /DENETİM profili sabittir: yalnız İK \/ SGK kartlı PDKS görüntüleme/);
-  assert.match(source, /Günlük personel ve diğer modüller kapalıdır/);
+  assert.match(source, /moduleKey!=="PDKS"\|\|field!=="canView"/);
+  assert.match(source, /row\.moduleKey==="PDKS"&&row\.canView/);
+  assert.match(source, /canCreate:false,canUpdate:false,canDelete:false,canApprove:false/);
+  assert.match(source, /viewOnlyKeys=\{\["PDKS"\]\}/);
+  assert.match(source, /viewOnlyKeys=\{selectedRole==="DENETIM"\?\["PDKS"\]:null\}/);
+  assert.match(source, /Firma sahibi yalnız PDKS \/ Gör yetkisini açabilir/);
 });
 
 test("DENETIM API is route-locked to strict SGK-card PDKS reads including personnel photo", () => {

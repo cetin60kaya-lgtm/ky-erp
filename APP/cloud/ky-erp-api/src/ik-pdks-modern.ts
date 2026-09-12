@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { ensurePdksPolicySchema, readCompanyPdksPolicy, resolveEmployeePdksPolicy, saveCompanyPdksPolicy } from "./ik-pdks-policy";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -90,7 +91,7 @@ async function ensureSchema(c: Context<AppEnv>) {
 
 async function seedCompany(c: Context<AppEnv>, company: string) {
   await ensureSchema(c);
-  await c.env.DB.prepare(`INSERT OR IGNORE INTO ik_pdks_rule_profiles(main_company_id,updated_by,updated_at) VALUES(?,?,?)`).bind(company, "SYSTEM", nowIso()).run();
+  await ensurePdksPolicySchema(c);
   const statements = LEAVE_TYPES.map((row) => c.env.DB.prepare(`INSERT OR IGNORE INTO ik_pdks_leave_types(id,main_company_id,code,name,category,unit,paid,annual_balance_effect,default_days,requires_document,legal_note,active,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,1,'SYSTEM',?)`)
     .bind(`${company}:${row[0]}`, company, row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], nowIso()));
   if (statements.length) await c.env.DB.batch(statements);
@@ -145,38 +146,48 @@ async function auditSgkVisible(c: Context<AppEnv>, company: string, person: Row,
 
 async function resolveSchedule(c: Context<AppEnv>, company: string, person: Row) {
   await seedCompany(c, company);
-  const companyRule = await first(c, `SELECT * FROM ik_pdks_rule_profiles WHERE main_company_id=? LIMIT 1`, [company]) || {};
+  const policy = await resolveEmployeePdksPolicy(c, company, text(person.id));
+  const preferredShiftId = text(policy.defaultShiftId);
   const group = await first(c, `SELECT g.*,r.work_days_json AS r_work_days_json,r.weekly_rest_days_json AS r_rest_days_json,r.break_minutes AS r_break_minutes,r.overtime_min_minutes AS r_ot_min,r.overtime_round_minutes AS r_ot_round,r.duplicate_punch_window_seconds AS r_dup,r.half_day_minutes AS r_half,r.max_daily_minutes AS r_daily,r.max_weekly_minutes AS r_weekly,r.cross_midnight AS r_cross,r.flexible AS r_flexible,r.flexible_start AS r_flex_start,r.flexible_end AS r_flex_end,r.night_shift AS r_night,r.overtime_requires_approval AS r_ot_approval
     FROM ik_pdks_work_groups g
     LEFT JOIN ik_pdks_group_rules r ON r.main_company_id=g.main_company_id AND r.group_id=g.id
     WHERE g.main_company_id=? AND g.id=COALESCE(
       (SELECT group_id FROM ik_pdks_employee_groups WHERE main_company_id=? AND employee_id=? LIMIT 1),
+      NULLIF(?,''),
       (SELECT group_id FROM ik_pdks_department_groups WHERE main_company_id=? AND department=? LIMIT 1),
       (SELECT id FROM ik_pdks_work_groups WHERE main_company_id=? AND UPPER(code)='NORMAL' LIMIT 1)
-    ) LIMIT 1`, [company, company, person.id, company, text(person.department), company]) || {};
+    ) LIMIT 1`, [company, company, person.id, preferredShiftId, company, text(person.department), company]) || {};
+  const shiftWorkDays = parseDays(group.r_work_days_json, []);
+  const shiftRestDays = parseDays(group.r_rest_days_json, []);
+  const workDays = policy.hasWorkDaysOverride ? policy.workDays : (shiftWorkDays.length ? shiftWorkDays : policy.workDays);
+  const restDays = policy.hasRestDaysOverride ? policy.restDays : (shiftRestDays.length ? shiftRestDays : policy.restDays);
+  const overtimeMode = upper(policy.overtimeMode || (policy.overtimeEnabled ? 'AUTO' : 'DISABLED'));
+  const nightMode = upper(policy.nightShiftMode || (policy.nightShiftEnabled ? 'ENABLED' : 'DISABLED'));
   return {
     groupId: text(group.id), groupCode: text(group.code) || "NORMAL", groupName: text(group.name) || "Normal Mesai",
+    personnelGroup: policy.personnelGroup, personOverride: Boolean(policy.personOverride),
+    profileConfigured: Boolean(policy.configured), profileName: text(policy.profileName), policyVersion: num(policy.policyVersion),
+    attendanceMode: upper(policy.attendanceMode) || "STRICT_CARD", requirePunch: Boolean(policy.requirePunch), showDailyPunchDetail: Boolean(policy.showDailyPunchDetail),
+    lateEarlyEffect: upper(policy.lateEarlyEffect) || "TRACK_ONLY", missingPunchPolicy: upper(policy.missingPunchPolicy) || "REQUIRE_MANUAL",
+    normalCreditMode: upper(policy.normalCreditMode) || "UNCONFIGURED", payrollMonthlyMinutes: policy.payrollMonthlyMinutes ?? null, fixedDailyMinutes: policy.fixedDailyMinutes ?? null, resolvedDailyCreditMinutes: policy.resolvedDailyCreditMinutes ?? null, contractWeeklyMinutes: policy.contractWeeklyMinutes ?? null,
+    overtimeMode, overtimeEnabled: overtimeMode !== "DISABLED", nightShiftMode: nightMode, nightShiftEnabled: nightMode !== "DISABLED",
     entryTime: text(group.entry_time) || "08:30", exitTime: text(group.exit_time) || "19:00",
     lateTolerance: num(group.late_tolerance, 5), earlyTolerance: num(group.early_tolerance, 10),
-    workDays: parseDays(group.r_work_days_json || companyRule.work_days_json, [1,2,3,4,5,6]),
-    restDays: parseDays(group.r_rest_days_json || companyRule.weekly_rest_days_json, [0]),
-    annualCountDays: parseDays(companyRule.annual_leave_counted_weekdays_json, [1,2,3,4,5,6]),
-    breakMinutes: num(group.r_break_minutes ?? companyRule.break_minutes, 60),
-    overtimeMin: num(group.r_ot_min ?? companyRule.overtime_min_minutes, 15),
-    overtimeRound: num(group.r_ot_round ?? companyRule.overtime_round_minutes, 15),
-    duplicateWindow: num(group.r_dup ?? companyRule.duplicate_punch_window_seconds, 60),
-    halfDayMinutes: num(group.r_half ?? companyRule.half_day_minutes, 240),
-    maxDailyMinutes: num(group.r_daily ?? companyRule.max_daily_minutes, 660), maxWeeklyMinutes: num(group.r_weekly ?? companyRule.max_weekly_minutes, 2700),
+    workDays, restDays, annualCountDays: policy.annualCountDays || [],
+    breakMinutes: num(group.r_break_minutes ?? policy.breakMinutes, 0),
+    overtimeMin: num(group.r_ot_min ?? policy.overtimeMin, 0), overtimeRound: Math.max(1, num(group.r_ot_round ?? policy.overtimeRound, 1)),
+    duplicateWindow: num(group.r_dup ?? policy.duplicateWindow, 0), halfDayMinutes: num(group.r_half ?? policy.halfDayMinutes, 0),
+    maxDailyMinutes: num(group.r_daily ?? policy.maxDailyMinutes, 0), maxWeeklyMinutes: num(group.r_weekly ?? policy.maxWeeklyMinutes, 0),
     crossMidnight: Number(group.r_cross || 0) !== 0, flexible: Number(group.r_flexible || 0) !== 0,
     flexibleStart: text(group.r_flex_start), flexibleEnd: text(group.r_flex_end), nightShift: Number(group.r_night || 0) !== 0,
-    overtimeRequiresApproval: Number(group.r_ot_approval || 0) !== 0,
+    overtimeRequiresApproval: overtimeMode === "APPROVAL" || Number(group.r_ot_approval || 0) !== 0,
   };
 }
 
 async function leaveDayMap(c: Context<AppEnv>, company: string, employeeId: string, start: string, end: string) {
   const map = new Map<string, Row>();
   try {
-    const rows = await all(c, `SELECT d.*,p.record_type,p.status,p.note FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id WHERE d.main_company_id=? AND d.employee_id=? AND d.work_date BETWEEN ? AND ? AND UPPER(COALESCE(p.status,''))<>'CANCELLED'`, [company, employeeId, start, end]);
+    const rows = await all(c, `SELECT d.*,p.record_type,p.status,p.note,t.paid AS leave_paid,t.category AS leave_category FROM ik_leave_plan_days d JOIN ik_leave_plans p ON p.id=d.leave_plan_id LEFT JOIN ik_pdks_leave_types t ON t.main_company_id=d.main_company_id AND t.code=d.leave_type_code WHERE d.main_company_id=? AND d.employee_id=? AND d.work_date BETWEEN ? AND ? AND UPPER(COALESCE(p.status,''))<>'CANCELLED'`, [company, employeeId, start, end]);
     rows.forEach((row) => map.set(dateOnly(row.work_date), row));
   } catch {}
   try {
@@ -207,13 +218,14 @@ async function attendanceV2(c: Context<AppEnv>, auth: Row, employeeId: string, y
   if (auth.audit && !(await auditSgkVisible(c, auth.company, person, year, month))) return null;
   const dates = monthDays(year, month), start = dates[0], end = dates[dates.length - 1];
   const schedule = await resolveSchedule(c, auth.company, person);
-  const [events, overrides, holidays, leaves] = await Promise.all([
+  const [events, overrides, holidays, leaves, overtimeApprovals] = await Promise.all([
     all(c, `SELECT id,work_date,event_time,direction,source,note,created_at FROM ik_time_clock_events WHERE main_company_id=? AND employee_id=? AND work_date BETWEEN ? AND ? ORDER BY work_date,event_time`, [auth.company, employeeId, start, end]),
     all(c, `SELECT * FROM ik_attendance_day_overrides WHERE main_company_id=? AND employee_id=? AND work_date BETWEEN ? AND ?`, [auth.company, employeeId, start, end]),
     holidayMap(c, auth.company, start, end), leaveDayMap(c, auth.company, employeeId, start, end),
   ]);
   const byDate = new Map<string, Row[]>(); events.forEach((row) => { const key = dateOnly(row.work_date); const list = byDate.get(key) || []; list.push(row); byDate.set(key, list); });
   const overrideMap = new Map(overrides.map((row) => [dateOnly(row.work_date), row]));
+  const overtimeApprovalMap = new Map(overtimeApprovals.map((row) => [dateOnly(row.work_date), num(row.approved_minutes)]));
   const expectedIn = minutesOf(schedule.entryTime), expectedOut = minutesOf(schedule.exitTime);
   const scheduledSpan = Math.max(0, timeDiff(expectedIn, expectedOut, schedule.crossMidnight) - schedule.breakMinutes);
   const today = todayTr();
@@ -241,20 +253,43 @@ async function attendanceV2(c: Context<AppEnv>, auth: Row, employeeId: string, y
       else if (times.length === 1) status = "EKSIK_BASIM";
       else status = holidayFraction === 0.5 ? "YARIM_GUN_TATIL_CALISMA" : "CALISTI";
     }
-    const lateRaw = inMin === null || expectedIn === null ? 0 : Math.max(0, inMin - expectedIn - schedule.lateTolerance);
-    const earlyRaw = outMin === null || expectedOut === null ? 0 : Math.max(0, expectedOut - outMin - schedule.earlyTolerance);
+    const rawLate = inMin === null || expectedIn === null ? 0 : Math.max(0, inMin - expectedIn - schedule.lateTolerance);
+    const rawEarly = outMin === null || expectedOut === null ? 0 : Math.max(0, expectedOut - outMin - schedule.earlyTolerance);
     const workedMinutes = Math.max(0, timeDiff(inMin, outMin, schedule.crossMidnight) - (inMin !== null && outMin !== null ? schedule.breakMinutes : 0));
     const overtimeRaw = Math.max(0, workedMinutes - scheduledSpan);
-    const overtime = override?.overtime_minutes ?? roundOvertime(overtimeRaw, schedule.overtimeMin, schedule.overtimeRound);
-    const late = override?.late_minutes ?? lateRaw, early = override?.early_minutes ?? earlyRaw;
+    const calculatedOvertime = schedule.overtimeEnabled ? roundOvertime(overtimeRaw, schedule.overtimeMin, schedule.overtimeRound) : 0;
+    const approvedOvertime = overtimeApprovalMap.get(date);
+    const overtime = override?.overtime_minutes ?? (schedule.overtimeRequiresApproval ? (approvedOvertime ?? 0) : calculatedOvertime);
+    const late = override?.late_minutes ?? (schedule.lateEarlyEffect === "IGNORE" ? 0 : rawLate);
+    const early = override?.early_minutes ?? (schedule.lateEarlyEffect === "IGNORE" ? 0 : rawEarly);
+    const scheduledWorkday = schedule.workDays.includes(wd) && !schedule.restDays.includes(wd) && holidayFraction < 1;
+    let normalReferenceMinutes = 0;
+    if (schedule.profileConfigured && !outside) {
+      if (schedule.normalCreditMode === "MONTHLY_DIV_30") normalReferenceMinutes = num(schedule.resolvedDailyCreditMinutes);
+      else if (schedule.normalCreditMode === "MONTHLY_WORKDAYS" && scheduledWorkday) normalReferenceMinutes = num(monthlyWorkdayCredit);
+      else if (schedule.normalCreditMode === "FIXED_DAILY" && scheduledWorkday) normalReferenceMinutes = num(schedule.fixedDailyMinutes);
+      else if (schedule.normalCreditMode === "ACTUAL") normalReferenceMinutes = workedMinutes;
+    }
+    const unpaidLeave = Boolean(leave && (Number(leave.leave_paid) === 0 || upper(leave.leave_type_code) === "UCRETSIZ"));
+    const punchProblem = ["KART_YOK","EKSIK_BASIM"].includes(status);
+    let deductionMinutes = 0; let payrollBlocked = false;
+    if (unpaidLeave) deductionMinutes = normalReferenceMinutes;
+    else if (punchProblem && schedule.requirePunch) {
+      if (schedule.missingPunchPolicy === "ZERO_CREDIT") deductionMinutes = normalReferenceMinutes;
+      else if (schedule.missingPunchPolicy === "REQUIRE_MANUAL") { deductionMinutes = normalReferenceMinutes; payrollBlocked = true; }
+    }
+    if (!deductionMinutes && schedule.lateEarlyEffect === "DEDUCT_CREDIT" && scheduledWorkday && ["CALISTI","EKSIK_BASIM","YARIM_GUN_TATIL_CALISMA"].includes(status)) deductionMinutes = Math.min(normalReferenceMinutes, num(late) + num(early));
+    const normalPayableMinutes = Math.max(0, normalReferenceMinutes - deductionMinutes);
     return {
       date, weekday: wd, status, entry, exit, eventCount: times.length, duplicatePunches: duplicateCount(times, schedule.duplicateWindow),
-      lateMinutes: num(late), earlyMinutes: num(early), overtimeMinutes: num(overtime), workedMinutes,
+      lateMinutes: num(late), earlyMinutes: num(early), rawLateMinutes: rawLate, rawEarlyMinutes: rawEarly, overtimeMinutes: num(overtime), calculatedOvertimeMinutes: calculatedOvertime, pendingOvertimeApprovalMinutes: schedule.overtimeRequiresApproval && approvedOvertime === undefined ? calculatedOvertime : 0, workedMinutes,
+      normalReferenceMinutes, normalPayableMinutes, deductionMinutes, payrollBlocked,
       missingPunch: Boolean(override?.missing_punch) || status === "EKSIK_BASIM", leaveFraction, countedLeaveFraction: num(leave?.counted_fraction, 0),
       leaveTypeCode: text(leave?.leave_type_code), dayPart: text(leave?.day_part), holidayName: text(holiday?.name), holidayFraction,
-      expectedIn: schedule.entryTime, expectedOut: schedule.exitTime, breakMinutes: schedule.breakMinutes,
+      expectedIn: schedule.entryTime, expectedOut: schedule.exitTime, breakMinutes: schedule.breakMinutes, displayPunchDetail: schedule.showDailyPunchDetail, attendanceMode: schedule.attendanceMode,
       warning: workedMinutes > schedule.maxDailyMinutes ? `Günlük ${schedule.maxDailyMinutes} dk sınırı aşıldı.` : "",
       note: text(override?.note || leave?.note || leave?.reason), source: override ? "MANUAL_OVERRIDE" : "AUTO",
+      edited: Boolean(override), manualEntry: Boolean(text(override?.manual_in)), manualExit: Boolean(text(override?.manual_out)),
     };
   });
   const summary = days.reduce((acc: Row, day: Row) => {
@@ -264,9 +299,12 @@ async function attendanceV2(c: Context<AppEnv>, auth: Row, employeeId: string, y
     if (day.status === "KART_YOK") acc.noPunchDays += 1;
     if (day.status === "EKSIK_BASIM") acc.missingPunchDays += 1;
     if (day.lateMinutes > 0) acc.lateDays += 1;
-    acc.lateMinutes += day.lateMinutes; acc.earlyMinutes += day.earlyMinutes; acc.overtimeMinutes += day.overtimeMinutes; acc.workedMinutes += day.workedMinutes; acc.duplicatePunches += day.duplicatePunches;
+    acc.lateMinutes += day.lateMinutes; acc.earlyMinutes += day.earlyMinutes; acc.overtimeMinutes += day.overtimeMinutes; acc.workedMinutes += day.workedMinutes; acc.duplicatePunches += day.duplicatePunches; acc.normalReferenceMinutes += day.normalReferenceMinutes; acc.normalDeductionMinutes += day.deductionMinutes; if(day.payrollBlocked) acc.blockedDays += 1;
     return acc;
-  }, { workedDays:0, annualLeaveDays:0, noPunchDays:0, missingPunchDays:0, lateDays:0, lateMinutes:0, earlyMinutes:0, overtimeMinutes:0, workedMinutes:0, duplicatePunches:0 });
+  }, { workedDays:0, annualLeaveDays:0, noPunchDays:0, missingPunchDays:0, lateDays:0, lateMinutes:0, earlyMinutes:0, overtimeMinutes:0, workedMinutes:0, duplicatePunches:0, normalReferenceMinutes:0, normalDeductionMinutes:0, blockedDays:0 });
+  summary.profileConfigured = schedule.profileConfigured; summary.normalCreditMode = schedule.normalCreditMode; summary.payrollBasisMinutes = schedule.payrollMonthlyMinutes; summary.dailyReferenceMinutes = schedule.resolvedDailyCreditMinutes; summary.contractWeeklyMinutes = schedule.contractWeeklyMinutes; summary.actualWorkedMinutes = summary.workedMinutes;
+  const monthlyTarget = schedule.normalCreditMode.startsWith("MONTHLY_") ? num(schedule.payrollMonthlyMinutes) : summary.normalReferenceMinutes;
+  summary.normalTargetMinutes = monthlyTarget; summary.payableNormalMinutes = Math.max(0, monthlyTarget - summary.normalDeductionMinutes); summary.payrollReady = schedule.profileConfigured && summary.blockedDays === 0;
   return { person: { id: person.id, personnelCode: person.code, fullName: person.full_name, department: person.department, title: person.title, cardNo: person.card_no, startDate: dateOnly(person.hire_date), exitDate: dateOnly(person.exit_date) }, year, month, schedule, summary, days };
 }
 
@@ -338,23 +376,32 @@ async function entitlementLedger(c: Context<AppEnv>, company: string, employeeId
 
 export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
   app.get("/api/ik/personnel-control/modern/config", async (c) => {
-    const auth = await authContext(c); if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı."); await seedCompany(c, auth.company);
-    const profile = await first(c, `SELECT * FROM ik_pdks_rule_profiles WHERE main_company_id=? LIMIT 1`, [auth.company]);
+    const auth = await authContext(c);
+    if (!auth) return fail(c, 401, "UNAUTHORIZED", "Oturum doğrulanamadı.");
+    await seedCompany(c, auth.company);
+    const profile = await readCompanyPdksPolicy(c, auth.company);
     const groups = await all(c, `SELECT g.id,g.code,g.name,g.entry_time AS entryTime,g.exit_time AS exitTime,g.late_tolerance AS lateTolerance,g.early_tolerance AS earlyTolerance,g.active,r.* FROM ik_pdks_work_groups g LEFT JOIN ik_pdks_group_rules r ON r.main_company_id=g.main_company_id AND r.group_id=g.id WHERE g.main_company_id=? ORDER BY g.active DESC,g.name`, [auth.company]);
     const leaveTypes = await all(c, `SELECT id,code,name,category,unit,paid,annual_balance_effect AS annualBalanceEffect,default_days AS defaultDays,requires_document AS requiresDocument,legal_note AS legalNote,active FROM ik_pdks_leave_types WHERE main_company_id=? ORDER BY active DESC,name`, [auth.company]);
-    return ok(c, { audit: auth.audit, profile: { workDays: parseDays(profile?.work_days_json,[1,2,3,4,5,6]), restDays: parseDays(profile?.weekly_rest_days_json,[0]), annualCountDays: parseDays(profile?.annual_leave_counted_weekdays_json,[1,2,3,4,5,6]), breakMinutes:num(profile?.break_minutes,60), overtimeMin:num(profile?.overtime_min_minutes,15), overtimeRound:num(profile?.overtime_round_minutes,15), duplicateWindow:num(profile?.duplicate_punch_window_seconds,60), halfDayMinutes:num(profile?.half_day_minutes,240), maxDailyMinutes:num(profile?.max_daily_minutes,660), maxWeeklyMinutes:num(profile?.max_weekly_minutes,2700) }, groups, leaveTypes });
+    return ok(c, { audit: auth.audit, profile, groups, leaveTypes });
   });
 
   app.post("/api/ik/personnel-control/modern/config", async (c) => {
-    const body = await bodyOf(c), auth = await authContext(c, body); if (!auth) return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı."); if (auth.audit) return fail(c,403,"HR_AUDIT_READ_ONLY","Denetim kullanıcısı kural değiştiremez."); await seedCompany(c,auth.company);
-    const workDays = parseDays(JSON.stringify(body.workDays),[1,2,3,4,5,6]), restDays = parseDays(JSON.stringify(body.restDays),[0]), annual = parseDays(JSON.stringify(body.annualCountDays),[1,2,3,4,5,6]);
-    await c.env.DB.prepare(`UPDATE ik_pdks_rule_profiles SET work_days_json=?,weekly_rest_days_json=?,annual_leave_counted_weekdays_json=?,break_minutes=?,overtime_min_minutes=?,overtime_round_minutes=?,duplicate_punch_window_seconds=?,half_day_minutes=?,max_daily_minutes=?,max_weekly_minutes=?,updated_by=?,updated_at=? WHERE main_company_id=?`).bind(JSON.stringify(workDays),JSON.stringify(restDays),JSON.stringify(annual),clamp(body.breakMinutes,0,240,60),clamp(body.overtimeMin,0,240,15),clamp(body.overtimeRound,1,120,15),clamp(body.duplicateWindow,0,3600,60),clamp(body.halfDayMinutes,60,600,240),clamp(body.maxDailyMinutes,60,900,660),clamp(body.maxWeeklyMinutes,60,3600,2700),text(auth.user.username),nowIso(),auth.company).run();
-    return ok(c,{saved:true});
+    const body = await bodyOf(c);
+    const auth = await authContext(c, body);
+    if (!auth) return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı.");
+    if (auth.audit) return fail(c,403,"HR_AUDIT_READ_ONLY","Denetim kullanıcısı kural değiştiremez.");
+    await seedCompany(c,auth.company);
+    try {
+      const profile = await saveCompanyPdksPolicy(c, auth.company, body, text(auth.user.username || auth.user.id));
+      return ok(c,{saved:true,profile});
+    } catch (error) {
+      return fail(c,400,"PDKS_POLICY_INVALID",error instanceof Error ? error.message : "Firma PDKS profili kaydedilemedi.");
+    }
   });
 
   app.post("/api/ik/personnel-control/work-groups/:groupId/rules", async (c) => {
-    const body=await bodyOf(c),auth=await authContext(c,body); if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı."); if(auth.audit)return fail(c,403,"HR_AUDIT_READ_ONLY","Denetim kullanıcısı vardiya kuralı değiştiremez."); await seedCompany(c,auth.company); const groupId=text(c.req.param("groupId"));
-    await c.env.DB.prepare(`INSERT INTO ik_pdks_group_rules(main_company_id,group_id,work_days_json,weekly_rest_days_json,break_minutes,overtime_min_minutes,overtime_round_minutes,duplicate_punch_window_seconds,half_day_minutes,max_daily_minutes,max_weekly_minutes,cross_midnight,flexible,flexible_start,flexible_end,night_shift,overtime_requires_approval,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,group_id) DO UPDATE SET work_days_json=excluded.work_days_json,weekly_rest_days_json=excluded.weekly_rest_days_json,break_minutes=excluded.break_minutes,overtime_min_minutes=excluded.overtime_min_minutes,overtime_round_minutes=excluded.overtime_round_minutes,duplicate_punch_window_seconds=excluded.duplicate_punch_window_seconds,half_day_minutes=excluded.half_day_minutes,max_daily_minutes=excluded.max_daily_minutes,max_weekly_minutes=excluded.max_weekly_minutes,cross_midnight=excluded.cross_midnight,flexible=excluded.flexible,flexible_start=excluded.flexible_start,flexible_end=excluded.flexible_end,night_shift=excluded.night_shift,overtime_requires_approval=excluded.overtime_requires_approval,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(auth.company,groupId,JSON.stringify(parseDays(JSON.stringify(body.workDays),[1,2,3,4,5,6])),JSON.stringify(parseDays(JSON.stringify(body.restDays),[0])),clamp(body.breakMinutes,0,240,60),clamp(body.overtimeMin,0,240,15),clamp(body.overtimeRound,1,120,15),clamp(body.duplicateWindow,0,3600,60),clamp(body.halfDayMinutes,60,600,240),clamp(body.maxDailyMinutes,60,900,660),clamp(body.maxWeeklyMinutes,60,3600,2700),body.crossMidnight?1:0,body.flexible?1:0,text(body.flexibleStart),text(body.flexibleEnd),body.nightShift?1:0,body.overtimeRequiresApproval?1:0,text(auth.user.username),nowIso()).run(); return ok(c,{saved:true,groupId});
+    const body=await bodyOf(c),auth=await authContext(c,body); if(!auth)return fail(c,401,"UNAUTHORIZED","Oturum doğrulanamadı."); if(auth.audit)return fail(c,403,"HR_AUDIT_READ_ONLY","Denetim kullanıcısı vardiya kuralı değiştiremez."); await seedCompany(c,auth.company); const groupId=text(c.req.param("groupId")); const companyPolicy=await readCompanyPdksPolicy(c,auth.company);
+    await c.env.DB.prepare(`INSERT INTO ik_pdks_group_rules(main_company_id,group_id,work_days_json,weekly_rest_days_json,break_minutes,overtime_min_minutes,overtime_round_minutes,duplicate_punch_window_seconds,half_day_minutes,max_daily_minutes,max_weekly_minutes,cross_midnight,flexible,flexible_start,flexible_end,night_shift,overtime_requires_approval,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_id,group_id) DO UPDATE SET work_days_json=excluded.work_days_json,weekly_rest_days_json=excluded.weekly_rest_days_json,break_minutes=excluded.break_minutes,overtime_min_minutes=excluded.overtime_min_minutes,overtime_round_minutes=excluded.overtime_round_minutes,duplicate_punch_window_seconds=excluded.duplicate_punch_window_seconds,half_day_minutes=excluded.half_day_minutes,max_daily_minutes=excluded.max_daily_minutes,max_weekly_minutes=excluded.max_weekly_minutes,cross_midnight=excluded.cross_midnight,flexible=excluded.flexible,flexible_start=excluded.flexible_start,flexible_end=excluded.flexible_end,night_shift=excluded.night_shift,overtime_requires_approval=excluded.overtime_requires_approval,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(auth.company,groupId,JSON.stringify(parseDays(JSON.stringify(body.workDays),companyPolicy.workDays||[])),JSON.stringify(parseDays(JSON.stringify(body.restDays),companyPolicy.restDays||[])),clamp(body.breakMinutes,0,240,60),clamp(body.overtimeMin,0,240,15),clamp(body.overtimeRound,1,120,15),clamp(body.duplicateWindow,0,3600,60),clamp(body.halfDayMinutes,60,600,240),clamp(body.maxDailyMinutes,60,900,660),clamp(body.maxWeeklyMinutes,60,3600,2700),body.crossMidnight?1:0,body.flexible?1:0,text(body.flexibleStart),text(body.flexibleEnd),body.nightShift?1:0,body.overtimeRequiresApproval?1:0,text(auth.user.username),nowIso()).run(); return ok(c,{saved:true,groupId});
   });
 
   app.get("/api/ik/personnel-control/people/:employeeId/attendance-v2", async (c) => {
@@ -480,8 +527,8 @@ export function registerIkPdksModernRoutes(app: Hono<AppEnv>) {
         groupId: text(group.id), groupCode: text(group.code) || "NORMAL", groupName: text(group.name) || "Normal Mesai",
         entryTime: text(group.entry_time) || "08:30", exitTime: text(group.exit_time) || "19:00",
         lateTolerance: num(group.late_tolerance, 5), earlyTolerance: num(group.early_tolerance, 10),
-        workDays: parseDays(group.r_work_days_json || companyRule.work_days_json, [1,2,3,4,5,6]),
-        restDays: parseDays(group.r_rest_days_json || companyRule.weekly_rest_days_json, [0]),
+        workDays: parseDays(group.r_work_days_json || companyRule.work_days_json, [1,2,3,4,5]),
+        restDays: parseDays(group.r_rest_days_json || companyRule.weekly_rest_days_json, [0,6]),
         annualCountDays: parseDays(companyRule.annual_leave_counted_weekdays_json, [1,2,3,4,5,6]),
         breakMinutes: num(group.r_break_minutes ?? companyRule.break_minutes, 60),
         overtimeMin: num(group.r_ot_min ?? companyRule.overtime_min_minutes, 15),
