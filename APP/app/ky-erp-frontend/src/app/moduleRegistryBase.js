@@ -119,9 +119,8 @@ export const MODULES = [
     label: "Günlük Operasyon",
     icon: "operasyon",
     groups: [
-      { label: "Günlük İş", tabs: [["ana-ekran", "Ana Ekran", "dashboard"], ["gunluk-giris", "Günlük Giriş", "operasyon"]] },
+      { label: "Operasyon", tabs: [["ana-ekran", "Ana Ekran", "dashboard"], ["gunluk-giris", "Günlük Giriş", "operasyon"], ["haftalik-ozet", "Haftalık Rapor", "takvim"]] },
       { label: "Personel & Ödeme", tabs: [["personel-kartlari", "Personel Kartları", "users"], ["odeme-fisleri", "Ödeme Fişleri", "odemeler"]] },
-      { label: "Özet", tabs: [["haftalik-ozet", "Haftalık Özet", "takvim"]] },
     ],
   },
   {

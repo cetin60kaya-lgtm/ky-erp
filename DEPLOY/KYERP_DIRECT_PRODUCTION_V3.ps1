@@ -396,8 +396,10 @@ if ([string]$statusJson.endpoints.refresh -ne "/api/auth/refresh") { Fail "Auth 
 if ([bool]$statusJson.sessionPolicy.passwordOnlyEnabled -ne $false) { Fail "Password-only giris kapali degil." }
 if ([int]$statusJson.sessionPolicy.passwordOnlySeconds -ne 0) { Fail "Password-only session suresi 0 degil." }
 if ([int]$statusJson.sessionPolicy.mfaSeconds -ne 36000) { Fail "MFA session 10 saat degil." }
-if ([int]$statusJson.sessionPolicy.ownerRollingSeconds -ne 86400) { Fail "Owner rolling session 24 saat degil." }
-Write-Host "Auth: $AUTH_VERSION | parola-only KAPALI | MFA 10h | owner rolling 24h" -ForegroundColor Green
+if ([int]$statusJson.sessionPolicy.ownerRollingSeconds -ne 0) { Fail "Owner rolling session kapali degil." }
+if ([bool]$statusJson.sessionPolicy.ownerPersistentBrowserSession -ne $false) { Fail "Owner kalici tarayici oturumu kapali degil." }
+if ([bool]$statusJson.sessionPolicy.ownerAutomaticRefresh -ne $false) { Fail "Owner otomatik refresh kapali degil." }
+Write-Host "Auth: $AUTH_VERSION | parola-only KAPALI | MFA 10h | owner kalici oturum KAPALI" -ForegroundColor Green
 
 $refreshContractOk = $false
 try {

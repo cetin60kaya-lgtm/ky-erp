@@ -546,3 +546,219 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* 2026 UX refresh: high-legibility, task-first ERP shell */
+.shell-v3[data-active-module="compliance"] {
+  --module-accent: #a5612a;
+  --module-soft: #fff6e9;
+  --module-line: #f0d9bd;
+}
+
+.shell-v3 {
+  grid-template-columns: 252px minmax(0, 1fr);
+}
+
+.shell-v3-main {
+  grid-template-rows: 58px 42px 34px minmax(0, 1fr);
+  background: #f7f9fb;
+}
+
+.shell-v3-status { display: none; }
+.shell-v3-sidebar-brand { min-height: 58px; }
+.shell-v3-sidebar-nav { padding: 8px 7px 14px; }
+.shell-v3-module { margin-bottom: 4px; }
+.shell-v3-module-button {
+  grid-template-columns: 36px minmax(0, 1fr) 18px;
+  min-height: 46px;
+  padding: 5px 9px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+.shell-v3-module-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+.shell-v3-module-copy > span {
+  color: #253247;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+.shell-v3-module-copy > small { display: none !important; }
+.shell-v3-module.active > .shell-v3-module-button {
+  background: var(--mod-soft);
+  border-color: var(--mod-line);
+  box-shadow: inset 3px 0 0 var(--mod);
+}
+.shell-v3-module.active .shell-v3-module-copy > span { color: #172033; }
+
+.shell-v3-submenu {
+  margin: 4px 2px 8px 14px;
+  padding: 5px 5px 7px 8px;
+  border-color: var(--mod-line);
+  background: color-mix(in srgb, var(--mod-soft) 55%, #ffffff);
+  box-shadow: none;
+}
+.shell-v3-submenu button {
+  min-height: 34px;
+  padding: 6px 8px;
+  color: #425168;
+  font-size: 11.5px;
+}
+
+.shell-v3-submenu button > svg { color: var(--mod); opacity: .86; }
+.shell-v3-submenu button:hover {
+  background: rgba(255,255,255,.78);
+  transform: none;
+}
+.shell-v3-submenu button.active {
+  border-color: var(--mod-line);
+  background: #ffffff;
+  color: #172033;
+  box-shadow: inset 3px 0 0 var(--mod);
+}
+.shell-v3-submenu-primary button {
+  min-height: 38px;
+  padding: 6px 8px;
+}
+.shell-v3-submenu-primary button small { display: none !important; }
+.shell-v3-submenu-primary button strong { font-size: 11.5px; }
+
+.shell-v3-submenu-group { margin: 2px 0; }
+.shell-v3-submenu-group-toggle {
+  grid-template-columns: 23px minmax(0,1fr) 18px;
+  min-height: 35px !important;
+  padding: 5px 7px !important;
+  border-radius: 8px !important;
+}
+.shell-v3-submenu-group-toggle strong {
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.shell-v3-submenu-group-toggle small { display: none !important; }
+.shell-v3-submenu-group.open .shell-v3-submenu-group-toggle {
+  background: rgba(255,255,255,.7) !important;
+}
+
+.shell-v3-submenu-group.active .shell-v3-submenu-group-toggle {
+  background: color-mix(in srgb, var(--mod-soft) 78%, #fff) !important;
+  color: var(--mod) !important;
+}
+.shell-v3-submenu-group-items {
+  gap: 1px;
+  padding: 2px 0 4px 11px;
+  border-left: 1px solid var(--mod-line);
+}
+.shell-v3-submenu-group-items > button {
+  min-height: 32px;
+  padding: 5px 8px !important;
+  font-size: 11px;
+}
+
+.shell-v3-topbar {
+  gap: 8px;
+  padding: 0 12px;
+  background: rgba(255,255,255,.98);
+}
+.shell-v3-search input,
+.shell-v3-topbar select,
+.shell-v3-quick-button { height: 38px; }
+.shell-v3-search input { font-size: 12px; }
+.shell-v3-quick-button { font-size: 11px; }
+.shell-v3-topbar select { font-size: 11px; }
+
+.shell-v3-tabs-bar { background: #f7f9fc; }
+.shell-v3-tabs { gap: 5px; padding: 5px 7px 0; }
+.shell-v3-tabs > button {
+  --tab-accent: #64748b;
+  --tab-soft: #f2f5f8;
+  --tab-line: #dbe3ea;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  color: #445168;
+  font-size: 10.5px;
+}
+
+.shell-v3-tabs > button[data-module="muhasebe"] { --tab-accent:#3568d4; --tab-soft:#eef4ff; --tab-line:#cfddfb; }
+.shell-v3-tabs > button[data-module="isnet"] { --tab-accent:#0f8a73; --tab-soft:#e9faf5; --tab-line:#c8eee4; }
+.shell-v3-tabs > button[data-module="desen"] { --tab-accent:#7a4bc4; --tab-soft:#f4efff; --tab-line:#dfd2f6; }
+.shell-v3-tabs > button[data-module="boyahane"] { --tab-accent:#1686a7; --tab-soft:#eaf9fd; --tab-line:#c9ebf4; }
+.shell-v3-tabs > button[data-module="gunluk-operasyon"] { --tab-accent:#c86b24; --tab-soft:#fff3e8; --tab-line:#f3d5bd; }
+.shell-v3-tabs > button[data-module="ik"] { --tab-accent:#b04f79; --tab-soft:#fff0f6; --tab-line:#f1cfe0; }
+.shell-v3-tabs > button[data-module="pdks"] { --tab-accent:#3f73a5; --tab-soft:#edf6ff; --tab-line:#d1e4f4; }
+.shell-v3-tabs > button[data-module="uretim"] { --tab-accent:#2d8a63; --tab-soft:#ebf8f1; --tab-line:#cce9db; }
+.shell-v3-tabs > button[data-module="iletisim"] { --tab-accent:#4f67c8; --tab-soft:#eef1ff; --tab-line:#d5dcfa; }
+.shell-v3-tabs > button[data-module="compliance"] { --tab-accent:#a5612a; --tab-soft:#fff6e9; --tab-line:#f0d9bd; }
+.shell-v3-tabs > button[data-module="depolama"] { --tab-accent:#63718a; --tab-soft:#f1f4f8; --tab-line:#d9e0e9; }
+.shell-v3-tabs > button[data-module="admin"] { --tab-accent:#9a5b3e; --tab-soft:#fff3ee; --tab-line:#ecd6cb; }
+.shell-v3-tabs > button[data-module="asistan"] { --tab-accent:#7252c7; --tab-soft:#f4f0ff; --tab-line:#ddd4f8; }
+
+.shell-v3-tabs > button > svg {
+  color: var(--tab-accent);
+}
+.shell-v3-tabs > button:hover {
+  border-color: var(--tab-line);
+  background: color-mix(in srgb, var(--tab-soft) 72%, #fff);
+  color: #172033;
+}
+.shell-v3-tabs > button.active {
+  border-color: var(--tab-line);
+  background: var(--tab-soft);
+  color: var(--tab-accent);
+  box-shadow: inset 0 3px 0 var(--tab-accent);
+}
+
+.shell-v3[data-active-module="muhasebe"] { --module-accent:#3568d4; --module-soft:#eef4ff; --module-line:#cfddfb; }
+.shell-v3[data-active-module="isnet"] { --module-accent:#0f8a73; --module-soft:#e9faf5; --module-line:#c8eee4; }
+.shell-v3[data-active-module="desen"] { --module-accent:#7a4bc4; --module-soft:#f4efff; --module-line:#dfd2f6; }
+.shell-v3[data-active-module="boyahane"] { --module-accent:#1686a7; --module-soft:#eaf9fd; --module-line:#c9ebf4; }
+.shell-v3[data-active-module="gunluk-operasyon"] { --module-accent:#c86b24; --module-soft:#fff3e8; --module-line:#f3d5bd; }
+.shell-v3[data-active-module="ik"] { --module-accent:#b04f79; --module-soft:#fff0f6; --module-line:#f1cfe0; }
+.shell-v3[data-active-module="pdks"] { --module-accent:#3f73a5; --module-soft:#edf6ff; --module-line:#d1e4f4; }
+.shell-v3[data-active-module="uretim"] { --module-accent:#2d8a63; --module-soft:#ebf8f1; --module-line:#cce9db; }
+.shell-v3[data-active-module="iletisim"] { --module-accent:#4f67c8; --module-soft:#eef1ff; --module-line:#d5dcfa; }
+.shell-v3[data-active-module="compliance"] { --module-accent:#a5612a; --module-soft:#fff6e9; --module-line:#f0d9bd; }
+.shell-v3[data-active-module="depolama"] { --module-accent:#63718a; --module-soft:#f1f4f8; --module-line:#d9e0e9; }
+.shell-v3[data-active-module="admin"] { --module-accent:#9a5b3e; --module-soft:#fff3ee; --module-line:#ecd6cb; }
+.shell-v3[data-active-module="asistan"] { --module-accent:#7252c7; --module-soft:#f4f0ff; --module-line:#ddd4f8; }
+
+.shell-v3-module[data-module="muhasebe"] { --mod:#3568d4; --mod-soft:#eef4ff; --mod-line:#cfddfb; }
+.shell-v3-module[data-module="isnet"] { --mod:#0f8a73; --mod-soft:#e9faf5; --mod-line:#c8eee4; }
+.shell-v3-module[data-module="desen"] { --mod:#7a4bc4; --mod-soft:#f4efff; --mod-line:#dfd2f6; }
+.shell-v3-module[data-module="boyahane"] { --mod:#1686a7; --mod-soft:#eaf9fd; --mod-line:#c9ebf4; }
+.shell-v3-module[data-module="gunluk-operasyon"] { --mod:#c86b24; --mod-soft:#fff3e8; --mod-line:#f3d5bd; }
+.shell-v3-module[data-module="ik"] { --mod:#b04f79; --mod-soft:#fff0f6; --mod-line:#f1cfe0; }
+.shell-v3-module[data-module="pdks"] { --mod:#3f73a5; --mod-soft:#edf6ff; --mod-line:#d1e4f4; }
+.shell-v3-module[data-module="uretim"] { --mod:#2d8a63; --mod-soft:#ebf8f1; --mod-line:#cce9db; }
+
+.shell-v3-module[data-module="iletisim"] { --mod:#4f67c8; --mod-soft:#eef1ff; --mod-line:#d5dcfa; }
+.shell-v3-module[data-module="compliance"] { --mod:#a5612a; --mod-soft:#fff6e9; --mod-line:#f0d9bd; }
+.shell-v3-module[data-module="depolama"] { --mod:#63718a; --mod-soft:#f1f4f8; --mod-line:#d9e0e9; }
+.shell-v3-module[data-module="admin"] { --mod:#9a5b3e; --mod-soft:#fff3ee; --mod-line:#ecd6cb; }
+.shell-v3-module[data-module="asistan"] { --mod:#7252c7; --mod-soft:#f4f0ff; --mod-line:#ddd4f8; }
+
+.shell-v3-crumb {
+  min-height: 34px;
+  border-bottom-color: var(--module-line);
+  background: color-mix(in srgb, var(--module-soft) 62%, #fff);
+  font-size: 10px;
+}
+.shell-v3-crumb-module { color: var(--module-accent); font-weight: 800; }
+.shell-v3-crumb strong { color: #172033; font-size: 10.5px; }
+.shell-v3-crumb-icon {
+  width: 24px;
+  height: 24px;
+  background: #fff;
+  color: var(--module-accent);
+}
+.shell-v3-workspace {
+  padding: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--module-soft) 70%, #f8fafc) 0, #f7f9fb 190px, #f5f7fa 100%);
+}
+.shell-v3-workspace .content-card,
+.shell-v3-workspace [class*="card"] {
+  border-color: color-mix(in srgb, var(--module-line) 72%, #e3e8ee);
+}
