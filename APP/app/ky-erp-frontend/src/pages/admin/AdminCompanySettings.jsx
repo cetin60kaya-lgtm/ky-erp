@@ -29,6 +29,9 @@ const ROLE_LABELS={COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe",
 const ROLE_ORDER={COMPANY_ADMIN:0,MUHASEBE:1,IK:2,DESEN:3,BOYAHANE:4,IMALAT:5,DENETIM:6,VIEWER:7,SUPER_ADMIN:8,ADMIN:8};
 function roleOf(value){return String(value||"VIEWER").toUpperCase().replace(/İ/g,"I")}
 function userCompanySlug(row){return String(row?.mainCompanySlug||row?.main_company_slug||"").trim()}
+const PDKS_DAYS=[[1,"Pzt"],[2,"Sal"],[3,"Çar"],[4,"Per"],[5,"Cum"],[6,"Cmt"],[0,"Paz"]];
+const PDKS_CREDIT_MODES=[["MONTHLY_DIV_30","Aylık hedef / 30 gün"],["MONTHLY_WORKDAYS","Aylık hedef / çalışma günleri"],["FIXED_DAILY","Sabit günlük NÇ"],["ACTUAL","Fiilî kart süresi"]];
+const PDKS_ATTENDANCE_MODES=[["STRICT_CARD","Kart zorunlu"],["CARD_CONTROL_ONLY","Kart kontrol amaçlı"],["SUMMARY_ONLY","Özet puantaj"],["NO_CARD_REQUIRED","Kart zorunlu değil"]];
 
 export default function AdminCompanySettings({ activeMainCompany }) {
   const [companies,setCompanies]=useState([]);
@@ -45,6 +48,8 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   const [companyBackups,setCompanyBackups]=useState([]);
   const [backupBusy,setBackupBusy]=useState(false);
   const [restore,setRestore]=useState({backup:null,password:"",confirmText:""});
+  const [pdksProfile,setPdksProfile]=useState(null);
+  const [pdksProfileBusy,setPdksProfileBusy]=useState(false);
 
   const load=useCallback(async()=>{
     setBusy(true);
@@ -105,6 +110,29 @@ export default function AdminCompanySettings({ activeMainCompany }) {
     }catch(error){
       setMessage(`Hata: ${error?.message||"Giriş onayı bildirimi kaydedilemedi."}`);
     }finally{setApprovalBusy(false);}
+  }
+
+  const loadPdksProfile=useCallback(async()=>{
+    if(!selected?.id){setPdksProfile(null);return;}
+    setPdksProfileBusy(true);
+    try{
+      const result=await apiGet(`/admin/main-companies/${encodeURIComponent(selected.id)}/pdks-profile`,{_ts:Date.now()});
+      const row=result?.data||result||{};
+      setPdksProfile({...row,workDays:Array.isArray(row.workDays)?row.workDays:[],restDays:Array.isArray(row.restDays)?row.restDays:[],annualCountDays:Array.isArray(row.annualCountDays)?row.annualCountDays:[]});
+    }catch(error){setPdksProfile(null);setMessage(`Hata: ${error?.message||"Firma PDKS profili alınamadı."}`);}finally{setPdksProfileBusy(false);}
+  },[selected?.id]);
+  useEffect(()=>{loadPdksProfile();},[loadPdksProfile]);
+
+  function togglePdksDay(field,day){setPdksProfile(old=>{if(!old)return old;const list=Array.isArray(old[field])?old[field]:[];return {...old,[field]:list.includes(day)?list.filter(x=>x!==day):[...list,day]}})}
+  async function savePdksProfile(){
+    if(!selected?.id||!pdksProfile||pdksProfileBusy)return;
+    setPdksProfileBusy(true);
+    try{
+      const payload={...pdksProfile,payrollMonthlyMinutes:pdksProfile.payrollMonthlyMinutes===null?null:Number(pdksProfile.payrollMonthlyMinutes),fixedDailyMinutes:pdksProfile.fixedDailyMinutes===null?null:Number(pdksProfile.fixedDailyMinutes),contractWeeklyMinutes:pdksProfile.contractWeeklyMinutes===null?null:Number(pdksProfile.contractWeeklyMinutes)};
+      const result=await apiPatch(`/admin/main-companies/${encodeURIComponent(selected.id)}/pdks-profile`,payload);
+      setPdksProfile(result?.data||result||payload);
+      setMessage(`${selected.name} PDKS firma profili kaydedildi.`);
+    }catch(error){setMessage(`Hata: ${error?.message||"PDKS firma profili kaydedilemedi."}`);}finally{setPdksProfileBusy(false);}
   }
 
   const loadSelectedBackups=useCallback(async()=>{
@@ -231,6 +259,29 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         </div>)}
         {!selectedPeople.length?<div className="admpro-empty">Bu firmaya bağlı kullanıcı bulunamadı.</div>:null}
       </div>
+    </section>:null}
+
+    {selected?<section className="admpro-card">
+      <div className="admpro-card-head"><div><h3>Firma PDKS Profili · {selected.name}</h3><p>Normal çalışma kredisi, takvim, kart, mesai ve vardiya davranışı firmaya özeldir. Uygulama geneli sabit saat kullanmaz.</p></div><span className={`admpro-badge ${pdksProfile?.configured?"ok":"warn"}`}>{pdksProfile?.configured?"Profil Aktif":"Kurulum Bekliyor"}</span></div>
+      {pdksProfile?<div className="admpro-form-grid">
+        <label>Profil Adı<input value={pdksProfile.profileName||""} onChange={e=>setPdksProfile(v=>({...v,profileName:e.target.value}))}/></label>
+        <label>Normal Çalışma Yöntemi<select value={pdksProfile.normalCreditMode||"UNCONFIGURED"} onChange={e=>setPdksProfile(v=>({...v,normalCreditMode:e.target.value}))}><option value="UNCONFIGURED">Seçilmedi</option>{PDKS_CREDIT_MODES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
+        <label>Aylık NÇ Hedefi (saat)<input type="number" step="0.5" min="0" value={pdksProfile.payrollMonthlyMinutes==null?"":pdksProfile.payrollMonthlyMinutes/60} onChange={e=>setPdksProfile(v=>({...v,payrollMonthlyMinutes:e.target.value===""?null:Math.round(Number(e.target.value)*60)}))}/></label>
+        <label>Sabit Günlük NÇ (saat)<input type="number" step="0.25" min="0" value={pdksProfile.fixedDailyMinutes==null?"":pdksProfile.fixedDailyMinutes/60} onChange={e=>setPdksProfile(v=>({...v,fixedDailyMinutes:e.target.value===""?null:Math.round(Number(e.target.value)*60)}))}/></label>
+        <label>Haftalık Sözleşme (saat)<input type="number" step="0.5" min="0" value={pdksProfile.contractWeeklyMinutes==null?"":pdksProfile.contractWeeklyMinutes/60} onChange={e=>setPdksProfile(v=>({...v,contractWeeklyMinutes:e.target.value===""?null:Math.round(Number(e.target.value)*60)}))}/></label>
+        <label>Kart Politikası<select value={pdksProfile.defaultAttendanceMode||"STRICT_CARD"} onChange={e=>setPdksProfile(v=>({...v,defaultAttendanceMode:e.target.value}))}>{PDKS_ATTENDANCE_MODES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
+        <label>Geç / Erken Etkisi<select value={pdksProfile.lateEarlyEffect||"TRACK_ONLY"} onChange={e=>setPdksProfile(v=>({...v,lateEarlyEffect:e.target.value}))}><option value="IGNORE">Yok say</option><option value="TRACK_ONLY">Sadece takip et</option><option value="DEDUCT_CREDIT">NÇ kredisine yansıt</option></select></label>
+        <label>Eksik Kart Politikası<select value={pdksProfile.missingPunchPolicy||"REQUIRE_MANUAL"} onChange={e=>setPdksProfile(v=>({...v,missingPunchPolicy:e.target.value}))}><option value="FLAG_ONLY">Sadece uyar</option><option value="REQUIRE_MANUAL">Elle düzeltme bekle</option><option value="ZERO_CREDIT">NÇ sıfırla</option><option value="ASSUME_SCHEDULE">Plan saatini kabul et</option></select></label>
+        <label className="admpro-check"><input type="checkbox" checked={Boolean(pdksProfile.overtimeEnabled)} onChange={e=>setPdksProfile(v=>({...v,overtimeEnabled:e.target.checked}))}/> Fazla mesai kullanılabilir</label>
+        <label className="admpro-check"><input type="checkbox" checked={Boolean(pdksProfile.nightShiftEnabled)} onChange={e=>setPdksProfile(v=>({...v,nightShiftEnabled:e.target.checked}))}/> Gece vardiyası kullanılabilir</label>
+        <label className="admpro-check"><input type="checkbox" checked={Boolean(pdksProfile.requirePunchDefault)} onChange={e=>setPdksProfile(v=>({...v,requirePunchDefault:e.target.checked}))}/> Varsayılan kart zorunlu</label>
+        <label className="admpro-check"><input type="checkbox" checked={Boolean(pdksProfile.showDailyPunchDetail)} onChange={e=>setPdksProfile(v=>({...v,showDailyPunchDetail:e.target.checked}))}/> Günlük kart detayı göster</label>
+        <div className="wide"><strong>Çalışma Günleri</strong><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:6}}>{PDKS_DAYS.map(([d,n])=><button type="button" key={d} className={(pdksProfile.workDays||[]).includes(d)?"primary":""} onClick={()=>togglePdksDay("workDays",d)}>{n}</button>)}</div></div>
+        <div className="wide"><strong>Hafta Tatili</strong><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:6}}>{PDKS_DAYS.map(([d,n])=><button type="button" key={d} className={(pdksProfile.restDays||[]).includes(d)?"primary":""} onClick={()=>togglePdksDay("restDays",d)}>{n}</button>)}</div></div>
+        <div className="wide"><strong>Yıllık İzin Sayım Günleri</strong><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:6}}>{PDKS_DAYS.map(([d,n])=><button type="button" key={d} className={(pdksProfile.annualCountDays||[]).includes(d)?"primary":""} onClick={()=>togglePdksDay("annualCountDays",d)}>{n}</button>)}</div></div>
+        <label className="admpro-check wide"><input type="checkbox" checked={Boolean(pdksProfile.configured)} onChange={e=>setPdksProfile(v=>({...v,configured:e.target.checked}))}/> Bu firma için PDKS puantaj profilini aktif et</label>
+        <div className="admpro-actions wide" style={{justifyContent:"flex-start"}}><button type="button" className="primary" disabled={pdksProfileBusy} onClick={savePdksProfile}>{pdksProfileBusy?"Kaydediliyor...":"PDKS Firma Profilini Kaydet"}</button><small>NÇ ve bordro değerleri terminalde geçirilen süreden ayrıdır; grup/personel istisnaları bu profilin üstüne uygulanır.</small></div>
+      </div>:<div className="admpro-empty">{pdksProfileBusy?"PDKS profili yükleniyor...":"PDKS profili alınamadı."}</div>}
     </section>:null}
 
     {selected?<section className="admpro-card">

@@ -9,7 +9,7 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_HOUR = 5;
 const RESEND_SECONDS = 60;
 const ADMIN_EMAIL_FROM = "KY ERP <admin@kyerp.net>";
-const MODULE_KEYS = ["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","GUNLUK_OPERASYON","ISNET","MAIL","STORAGE_ADMIN","COMPLIANCE","ASISTAN","ADMIN","RAPORLAR"];
+const MODULE_KEYS = ["DASHBOARD","MUHASEBE","FIRMA_CARI","BELGE_ISLEM","KDV","CEK_ODEME","DESEN","IMALAT","BOYAHANE","IK","PDKS","GUNLUK_OPERASYON","ISNET","MAIL","STORAGE_ADMIN","COMPLIANCE","ASISTAN","ADMIN","RAPORLAR"];
 const MANAGED_ROLES = ["COMPANY_ADMIN","MUHASEBE","DESEN","IMALAT","BOYAHANE","IK","DENETIM","VIEWER"];
 const LOGIN_POLICIES = ["PASSWORD_ONLY","GOOGLE","MICROSOFT","ANY_MFA","BOTH_MFA"];
 
@@ -99,21 +99,13 @@ async function targetUser(c: any, id: string) {
 }
 
 function canonicalPermissions(role: string, source: unknown) {
-  if (role === "DENETIM") {
-    return MODULE_KEYS.map((moduleKey) => ({ moduleKey, canView: moduleKey === "IK", canCreate: false, canUpdate: false, canDelete: false, canApprove: false }));
-  }
   const rows = Array.isArray(source) ? source : [];
   const byKey = new Map(rows.map((row: AnyRow) => [upper(row?.moduleKey || row?.module_key), row]));
   return MODULE_KEYS.map((moduleKey) => {
     const row: AnyRow = byKey.get(moduleKey) || {};
-    return {
-      moduleKey,
-      canView: boolValue(row.canView ?? row.can_view, false),
-      canCreate: boolValue(row.canCreate ?? row.can_create, false),
-      canUpdate: boolValue(row.canUpdate ?? row.can_update, false),
-      canDelete: boolValue(row.canDelete ?? row.can_delete, false),
-      canApprove: boolValue(row.canApprove ?? row.can_approve, false),
-    };
+    const canView = boolValue(row.canView ?? row.can_view, false);
+    if (role === "DENETIM") return { moduleKey, canView: moduleKey === "PDKS" && canView, canCreate: false, canUpdate: false, canDelete: false, canApprove: false };
+    return { moduleKey, canView, canCreate: boolValue(row.canCreate ?? row.can_create, false), canUpdate: boolValue(row.canUpdate ?? row.can_update, false), canDelete: boolValue(row.canDelete ?? row.can_delete, false), canApprove: boolValue(row.canApprove ?? row.can_approve, false) };
   });
 }
 

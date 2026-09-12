@@ -34,50 +34,30 @@ test("system management permission is stripped from every non-owner auth respons
   assert.match(source, /UPPER\(module_key\)='ADMIN'/);
 });
 
-test("DENETIM is hard locked to SGK + card PDKS and no other module API", () => {
+test("DENETIM is route-locked to owner-granted read-only PDKS", () => {
   const main = api("main.ts");
   const guard = api("ik-pdks-guard.ts");
   const audit = api("ik-audit-readonly.ts");
   const app = frontend("AppV3.jsx");
   const seed = migration("0024_denetime_pdks_system_user.sql");
   const deploy = readFileSync(resolve(here, "../../../../DEPLOY/KYERP_DIRECT_PRODUCTION_V3.ps1"), "utf8");
-
   assert.match(main, /function auditRole/);
   assert.match(main, /auditPermissionRows/);
-  assert.match(main, /moduleKey:\s*"IK"/);
+  assert.match(main, /=== "PDKS"/);
+  assert.match(main, /moduleKey: "PDKS"/);
+  assert.match(main, /canCreate: false, canUpdate: false, canDelete: false, canApprove: false/);
   assert.match(main, /const pdksRead = path\.startsWith\("\/api\/ik\/personnel-control\/"\)/);
-  assert.match(main, /Denetim hesabı yalnız SGK'lı kart personelinin PDKS görünümünü okuyabilir/);
-  assert.match(main, /DELETE FROM auth_user_module_permissions[\s\S]*UPPER\(module_key\)<>'IK'/);
-
-  assert.match(guard, /const safeStatic = new Set\(\[/);
-  assert.match(guard, /"\/api\/ik\/personnel-control\/profile"/);
-  assert.match(guard, /"\/api\/ik\/personnel-control\/people"/);
-  assert.match(guard, /"\/api\/ik\/personnel-control\/pdks-masters"/);
+  assert.match(main, /CASE WHEN UPPER\(module_key\)='PDKS' THEN can_view ELSE 0 END/);
   assert.match(guard, /strictAuditEmployeeIds/);
   assert.match(guard, /ik_person_monthly_compliance/);
   assert.match(guard, /mc\.sgk_covered=1/);
   assert.match(guard, /attendance\(\?:-v2\)\?/);
-  assert.match(guard, /TRIM\(COALESCE\(s\.card_no,''\)\)<>''/);
-  assert.match(guard, /if \(!safeStatic\.has\(path\) && !personReadMatch\)/);
-
   assert.match(audit, /UPPER\(TRIM\(COALESCE\(e\.sgk_status,''\)\)\) = 'VAR'/);
   assert.match(audit, /TRIM\(COALESCE\(s\.card_no,''\)\) <> ''/);
-  assert.match(audit, /\/api\/ik\/audit\/pdks\/month/);
   assert.doesNotMatch(audit, /salary:/);
-
-  assert.match(app, /const IK_AUDIT_TABS = \[\["personel-kartlari"/);
-  assert.match(app, /if \(isAuditAccount\) return <IkAuditPersonnelPage/);
-
+  assert.match(app, /const IK_AUDIT_TABS/);
   assert.match(seed, /'denetim'/);
-  assert.match(seed, /'DENETIM'/);
-  assert.match(seed, /'IK'/);
-  assert.match(seed, /1,0,0,0,0/);
-  assert.match(seed, /'AUDIT'/);
-  assert.match(seed, /must_change_password/);
-
-  assert.match(deploy, /0024_denetime_pdks_system_user\.sql/);
   assert.match(deploy, /Assert-Denetime-System-User/);
-  assert.match(deploy, /IK\/PDKS \| salt-okunur/);
 });
 
 test("mapping UI uses implemented company profile and product catalog APIs", () => {

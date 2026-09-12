@@ -60,6 +60,7 @@ sealed class ErpSyncWorker(
                     await store.TouchStateAsync("last_message", message, stoppingToken);
                     await fileLog.WriteAsync("SYNC", message, stoppingToken);
                     logger.LogInformation("{Message}", message);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(10, config.SyncIntervalSeconds)), stoppingToken);
                 }
                 catch (Exception error)
                 {

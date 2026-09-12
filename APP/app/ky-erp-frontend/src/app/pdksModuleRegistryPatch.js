@@ -2,7 +2,7 @@ import { MODULES, MODULE_ROUTE_ALIASES } from "./moduleRegistry";
 
 const PDKS_MODULE = {
   key: "pdks",
-  permissionKey: "IK",
+  permissionKey: "PDKS",
   label: "PDKS",
   icon: "pdks",
   sidebarGroups: [
