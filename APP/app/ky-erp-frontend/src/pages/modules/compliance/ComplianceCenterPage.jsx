@@ -29,15 +29,15 @@ export default function ComplianceCenterPage({ activeTab="denetim-genel" }){
   const loadAll=useCallback(async()=>{
     setLoading(true); setMessage("");
     try{
-      const [d,p,t,c]=await Promise.all([
-        apiGet("/compliance/dashboard",{}, {timeoutMs:30000}), apiGet("/compliance/profiles"),
-        apiGet("/compliance/tasks"), apiGet("/compliance/calendar"),
-      ]);
-      setDash(payloadData(d,EMPTY_DASH)); setProfiles(payloadData(p,[])); setTasks(payloadData(t,[])); setCalendar(payloadData(c,[]));
-      if(!selectedProfile && payloadData(p,[])[0]?.id) setSelectedProfile(payloadData(p,[])[0].id);
+      const extra=section==="OVERVIEW"?apiGet("/compliance/tasks",{}, {timeoutMs:10000}):section==="STANDARDS"?apiGet("/compliance/profiles",{}, {timeoutMs:15000}):section==="CALENDAR"?apiGet("/compliance/calendar",{}, {timeoutMs:10000}):Promise.resolve({data:[]});
+      const [d,x]=await Promise.all([apiGet("/compliance/dashboard",{}, {timeoutMs:15000}),extra]);
+      setDash(payloadData(d,EMPTY_DASH));
+      if(section==="OVERVIEW")setTasks(payloadData(x,[]));
+      if(section==="STANDARDS"){const rows=payloadData(x,[]);setProfiles(rows);setSelectedProfile(prev=>prev||rows[0]?.id||"");}
+      if(section==="CALENDAR")setCalendar(payloadData(x,[]));
     }catch(error){ setMessage(`Hata: ${error?.message||"Denetim verileri alınamadı."}`); }
     finally{ setLoading(false); }
-  },[selectedProfile]);
+  },[section]);
 
   useEffect(()=>{ loadAll(); },[loadAll]);
   const docs=useMemo(()=>dash.documents||[],[dash.documents]);
