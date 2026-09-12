@@ -6,6 +6,7 @@ type AnyRow = Record<string, any>;
 const GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
 const PREF_SCOPE = "AUTH_SECURITY_NOTIFICATION_PREF";
 const TRUST_SCOPE = "AUTH_SESSION_TRUST";
+const TRUSTED_DEVICE_SCOPE = "AUTH_TRUSTED_LOGIN_DEVICE";
 const ACTION_SCOPE = "AUTH_SECURITY_ACTION";
 const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
 const ACTION_SECONDS = 10 * 60;
@@ -13,7 +14,7 @@ const VAPID_SECRET_KEY = "VAPID_P256_KEYPAIR_V1";
 const VAPID_SUBJECT = "mailto:admin@kyerp.net";
 const CAPABILITIES = new Set(["LOGIN_APPROVE", "SESSION_VIEW", "SESSION_APPROVE", "SESSION_CLOSE", "AUDIT_VIEW"]);
 const CRITICAL_OPERATIONS = new Set([
-  "SESSION_TRUST_APPROVE", "SESSION_TRUST_REJECT", "SESSION_CLOSE", "SESSION_SUSPICIOUS",
+  "SESSION_TRUST_APPROVE", "SESSION_TRUST_REJECT", "SESSION_CLOSE", "SESSION_SUSPICIOUS", "TRUSTED_DEVICE_REVOKE",
   "SECURITY_CAPABILITY_SET", "SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME",
 ]);
 
@@ -102,6 +103,9 @@ async function scopeFor(c: any, current: AnyRow) {
   return { type: capabilities.length ? "COMPANY" : "SELF", companySlug, capabilities, delegated: capabilities.length > 0, canDelegateSecurity: false };
 }
 function hasCap(scope: AnyRow, capability: string) { return scope.type === "SYSTEM" || scope.capabilities?.includes(capability); }
+function browserDeviceId(label: unknown) { const value = text(label); return value.startsWith("BROWSER:") ? value.slice(8) : ""; }
+function trustedDeviceKey(userId: unknown, deviceId: unknown) { return `${text(userId)}:${text(deviceId)}`; }
+function activeTrustedDevice(row: AnyRow | null | undefined) { return Boolean(row && row.isTrusted !== false && !text(row.revokedAt)); }
 async function scopedSession(c: any, current: AnyRow, scope: AnyRow, sessionId: string) {
   const row = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override,us.main_company_slug AS user_company_slug FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.id=? LIMIT 1`).bind(sessionId).first<AnyRow>();
   if (!row) return null;
@@ -185,7 +189,7 @@ async function restoreAction(c: any, action: AnyRow) {
   await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=?").bind(JSON.stringify(next), timestamp, current.storeId, ACTION_SCOPE).run();
 }
 function actionTitle(operation: string) {
-  return ({ SESSION_TRUST_APPROVE: "Yeni oturumu güvenilir yap", SESSION_TRUST_REJECT: "Yeni oturumu reddet", SESSION_CLOSE: "Oturumu kapat", SESSION_SUSPICIOUS: "Şüpheli oturumu kapat", SECURITY_CAPABILITY_SET: "Güvenlik yetkilerini değiştir", SUPER_ADMIN_GRANT: "Süper Yönetici ekle", SUPER_ADMIN_REVOKE: "Süper Yönetici yetkisini kaldır", ONLY_ME: "Sadece Ben Kalayım" } as AnyRow)[operation] || "Kritik güvenlik işlemi";
+  return ({ SESSION_TRUST_APPROVE: "Cihazı güvenilir yap", SESSION_TRUST_REJECT: "Yeni oturumu reddet", SESSION_CLOSE: "Oturumu kapat", SESSION_SUSPICIOUS: "Şüpheli oturumu kapat", TRUSTED_DEVICE_REVOKE: "Onaylı cihaz güvenini kaldır", SECURITY_CAPABILITY_SET: "Güvenlik yetkilerini değiştir", SUPER_ADMIN_GRANT: "Süper Yönetici ekle", SUPER_ADMIN_REVOKE: "Süper Yönetici yetkisini kaldır", ONLY_ME: "Sadece Ben Kalayım" } as AnyRow)[operation] || "Kritik güvenlik işlemi";
 }
 
 async function authorizeOperation(c: any, current: AnyRow, scope: AnyRow, operation: string, payload: AnyRow) {
@@ -210,6 +214,20 @@ async function authorizeOperation(c: any, current: AnyRow, scope: AnyRow, operat
     if (operation === "SUPER_ADMIN_REVOKE" && !isSuper(effectiveRole(target))) return { error: jsonError("NOT_SUPER_ADMIN", "Hedef kullanıcı Süper Yönetici değil."), status: 409 };
     return { payload: { targetUserId: text(target.id), companySlug: text(target.main_company_slug) } };
   }
+  if (operation === "TRUSTED_DEVICE_REVOKE") {
+    const targetUserId = text(payload.targetUserId); const deviceId = text(payload.deviceId);
+    const trusted = await storeGet(c, TRUSTED_DEVICE_SCOPE, trustedDeviceKey(targetUserId, deviceId));
+    if (!activeTrustedDevice(trusted)) return { error: jsonError("TRUSTED_DEVICE_NOT_FOUND", "Onaylı cihaz bulunamadı."), status: 404 };
+    const target = await userById(c, targetUserId); if (!target) return { error: jsonError("TARGET_USER_NOT_FOUND", "Kullanıcı bulunamadı."), status: 404 };
+    if (scope.type === "SELF" && targetUserId !== text(current.id)) return { error: jsonError("FORBIDDEN", "Yalnız kendi onaylı cihazınızı yönetebilirsiniz."), status: 403 };
+    if (scope.type === "COMPANY") {
+      if (text(trusted.mainCompanySlug) !== text(scope.companySlug)) return { error: jsonError("CROSS_TENANT_FORBIDDEN", "Başka firmanın cihazı yönetilemez."), status: 403 };
+      const targetRole = effectiveRole(target);
+      if (isSuper(targetRole) || (isCompanyAdmin(targetRole) && targetUserId !== text(current.id))) return { error: jsonError("FORBIDDEN", "Bu kullanıcı cihazı firma kapsamından yönetilemez."), status: 403 };
+      if (targetUserId !== text(current.id) && !hasCap(scope, "SESSION_APPROVE")) return { error: jsonError("FORBIDDEN", "Onaylı cihaz yönetimi için Oturum Onayı yetkisi gerekir."), status: 403 };
+    }
+    return { payload: { targetUserId, deviceId, companySlug: text(trusted.mainCompanySlug), trustedDeviceKey: trustedDeviceKey(targetUserId, deviceId), deviceLabel: text(trusted.deviceLabel) } };
+  }
   if (operation === "ONLY_ME") {
     if (!text(current.session?.id)) return { error: jsonError("CURRENT_SESSION_REQUIRED", "Mevcut güvenli oturum bulunamadı."), status: 409 };
     return { payload: { keepSessionId: text(current.session.id) } };
@@ -222,7 +240,7 @@ async function authorizeOperation(c: any, current: AnyRow, scope: AnyRow, operat
     const own = text(session.user_id) === text(current.id);
     if (!own && !hasCap(scope, "SESSION_CLOSE")) return { error: jsonError("FORBIDDEN", "Bu oturumu kapatma yetkiniz yok."), status: 403 };
   } else if (!hasCap(scope, "SESSION_APPROVE")) return { error: jsonError("FORBIDDEN", "Oturum güven kararı yetkiniz yok."), status: 403 };
-  return { payload: { sessionId: text(session.id), targetUserId: text(session.user_id), companySlug: text(session.main_company_slug), deviceLabel: text(session.device_label), ipAddress: text(session.ip_address) } };
+  return { payload: { sessionId: text(session.id), targetUserId: text(session.user_id), companySlug: text(session.main_company_slug), deviceLabel: text(session.device_label), userAgent: text(session.user_agent), ipAddress: text(session.ip_address) } };
 }
 
 async function executeOperation(c: any, current: AnyRow, operation: string, payload: AnyRow) {
@@ -249,6 +267,12 @@ async function executeOperation(c: any, current: AnyRow, operation: string, payl
     await audit(c, "SUPER_ADMIN_REVOKED", current, payload.targetUserId, payload.companySlug, "", { oldRole, newRole: effectiveRole(updated || {}) });
     return { targetUserId: payload.targetUserId, role: effectiveRole(updated || {}) };
   }
+  if (operation === "TRUSTED_DEVICE_REVOKE") {
+    const existing = await storeGet(c, TRUSTED_DEVICE_SCOPE, payload.trustedDeviceKey);
+    await storePut(c, TRUSTED_DEVICE_SCOPE, payload.trustedDeviceKey, payload.companySlug, { ...existing, userId: payload.targetUserId, deviceId: payload.deviceId, deviceLabel: payload.deviceLabel, isTrusted: false, revokedAt: timestamp, revokedByUserId: current.id, revokeReason: "MANUAL" });
+    await audit(c, "TRUSTED_LOGIN_DEVICE_REVOKED", current, payload.targetUserId, payload.companySlug, "", { deviceId: payload.deviceId, deviceLabel: payload.deviceLabel });
+    return { targetUserId: payload.targetUserId, deviceId: payload.deviceId, trusted: false };
+  }
   if (operation === "ONLY_ME") {
     const result = await c.env.DB.prepare(`UPDATE auth_sessions
       SET revoked_at=?,revoked_by=?
@@ -266,11 +290,17 @@ async function executeOperation(c: any, current: AnyRow, operation: string, payl
   if (!session) throw new Error("SESSION_NOT_FOUND");
   if (operation === "SESSION_TRUST_APPROVE") {
     await storePut(c, TRUST_SCOPE, payload.sessionId, payload.companySlug, { sessionId: payload.sessionId, userId: payload.targetUserId, status: "TRUSTED", decidedByUserId: current.id, decidedAt: timestamp });
-    await audit(c, "SESSION_TRUSTED", current, payload.targetUserId, payload.companySlug, payload.sessionId, { deviceLabel: payload.deviceLabel });
-    return { sessionId: payload.sessionId, trustStatus: "TRUSTED" };
+    const deviceId = browserDeviceId(payload.deviceLabel);
+    if (deviceId) {
+      const key = trustedDeviceKey(payload.targetUserId, deviceId); const existing = await storeGet(c, TRUSTED_DEVICE_SCOPE, key);
+      await storePut(c, TRUSTED_DEVICE_SCOPE, key, payload.companySlug, { userId: payload.targetUserId, deviceId, deviceLabel: payload.deviceLabel, userAgent: payload.userAgent, ipAddress: payload.ipAddress, isTrusted: true, trustedByUserId: current.id, firstTrustedAt: text(existing?.firstTrustedAt || timestamp), lastTrustedAt: timestamp, revokedAt: "", revokedByUserId: "", revokeReason: "" });
+    }
+    await audit(c, "SESSION_TRUSTED", current, payload.targetUserId, payload.companySlug, payload.sessionId, { deviceId, deviceLabel: payload.deviceLabel });
+    return { sessionId: payload.sessionId, trustStatus: "TRUSTED", deviceId, deviceTrusted: Boolean(deviceId) };
   }
   if (operation === "SESSION_TRUST_REJECT" || operation === "SESSION_SUSPICIOUS") {
     const status = operation === "SESSION_SUSPICIOUS" ? "SUSPICIOUS" : "REJECTED";
+    if (operation === "SESSION_SUSPICIOUS") { const deviceId = browserDeviceId(payload.deviceLabel); if (deviceId) { const key = trustedDeviceKey(payload.targetUserId, deviceId); const existing = await storeGet(c, TRUSTED_DEVICE_SCOPE, key); if (activeTrustedDevice(existing)) await storePut(c, TRUSTED_DEVICE_SCOPE, key, payload.companySlug, { ...existing, isTrusted: false, revokedAt: timestamp, revokedByUserId: current.id, revokeReason: "SUSPICIOUS" }); } }
     await storePut(c, TRUST_SCOPE, payload.sessionId, payload.companySlug, { sessionId: payload.sessionId, userId: payload.targetUserId, status, decidedByUserId: current.id, decidedAt: timestamp });
     await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?),revoked_by=COALESCE(revoked_by,?) WHERE id=?").bind(timestamp, current.id, payload.sessionId).run();
     await audit(c, operation === "SESSION_SUSPICIOUS" ? "SESSION_MARKED_SUSPICIOUS" : "SESSION_TRUST_REJECTED", current, payload.targetUserId, payload.companySlug, payload.sessionId, { deviceLabel: payload.deviceLabel });
@@ -323,8 +353,27 @@ export function registerSecurityCenterRoutes(app: any) {
     }
     else result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT 100`).bind(current.id).all<AnyRow>();
     const trusts = new Map((await storeList(c, TRUST_SCOPE)).map((row: AnyRow) => [text(row.sessionId || row.fileName), row]));
-    const data = (result.results || []).map((row: AnyRow) => { const trust = trusts.get(text(row.id)); return { id: row.id, userId: row.user_id, username: row.username, fullName: row.full_name, role: effectiveRole(row), mainCompanySlug: row.main_company_slug, deviceLabel: row.device_label, userAgent: row.user_agent, ipAddress: row.ip_address, createdAt: row.created_at, approvedAt: row.approved_at, lastSeenAt: row.last_seen_at, expiresAt: row.expires_at, revokedAt: row.revoked_at, revokedBy: row.revoked_by, active: !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now(), trustStatus: upper(trust?.status || "PENDING"), trustDecidedAt: trust?.decidedAt || null, trustDecidedByUserId: trust?.decidedByUserId || null, own: text(row.user_id) === text(current.id) }; });
+    const trustedDevices = new Map((await storeList(c, TRUSTED_DEVICE_SCOPE)).map((row: AnyRow) => [trustedDeviceKey(row.userId, row.deviceId), row]));
+    const data = (result.results || []).map((row: AnyRow) => { const trust = trusts.get(text(row.id)); const deviceId = browserDeviceId(row.device_label); const persistent = deviceId ? trustedDevices.get(trustedDeviceKey(row.user_id, deviceId)) : null; const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || "PENDING"); return { id: row.id, userId: row.user_id, username: row.username, fullName: row.full_name, role: effectiveRole(row), mainCompanySlug: row.main_company_slug, deviceId, deviceLabel: row.device_label, userAgent: row.user_agent, ipAddress: row.ip_address, createdAt: row.created_at, approvedAt: row.approved_at, lastSeenAt: row.last_seen_at, expiresAt: row.expires_at, revokedAt: row.revoked_at, revokedBy: row.revoked_by, active: !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now(), trustStatus, trustSource: persistentTrusted ? "DEVICE" : (explicit ? "SESSION" : "PENDING"), trustDecidedAt: persistentTrusted ? persistent?.lastTrustedAt || persistent?.firstTrustedAt : trust?.decidedAt || null, trustDecidedByUserId: persistentTrusted ? persistent?.trustedByUserId || null : trust?.decidedByUserId || null, own: text(row.user_id) === text(current.id) }; });
     return c.json({ ok: true, data });
+  });
+
+  app.get("/api/security-center/trusted-devices", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
+    const trusted = (await storeList(c, TRUSTED_DEVICE_SCOPE)).filter(activeTrustedDevice); const data: AnyRow[] = [];
+    for (const row of trusted) {
+      const user = await userById(c, text(row.userId)); if (!user || !user.is_active) continue; const role = effectiveRole(user);
+      if (scope.type === "SELF" && text(row.userId) !== text(current.id)) continue;
+      if (scope.type === "COMPANY") { if (text(row.mainCompanySlug) !== text(scope.companySlug)) continue; if (isSuper(role)) continue; if (isCompanyAdmin(role) && text(row.userId) !== text(current.id)) continue; if (isCompanyAdmin(role) && !isCompanyAdmin(current.role)) continue; }
+      data.push({ id: text(row.id || row.fileName), deviceId: text(row.deviceId), userId: text(row.userId), username: text(user.username), fullName: text(user.full_name || user.username), role, mainCompanySlug: text(row.mainCompanySlug), deviceLabel: text(row.deviceLabel), userAgent: text(row.userAgent), ipAddress: text(row.ipAddress), firstTrustedAt: row.firstTrustedAt || row.createdAt || null, lastTrustedAt: row.lastTrustedAt || row.updatedAt || null, trustedByUserId: row.trustedByUserId || null, own: text(row.userId) === text(current.id) });
+    }
+    data.sort((a,b)=>String(b.lastTrustedAt||"").localeCompare(String(a.lastTrustedAt||""))); return c.json({ ok: true, data });
+  });
+
+  app.delete("/api/security-center/trusted-devices/:deviceId", async (c: any) => {
+    const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const deviceId = text(c.req.param("deviceId")); const key = trustedDeviceKey(current.id, deviceId); const row = await storeGet(c, TRUSTED_DEVICE_SCOPE, key);
+    if (!activeTrustedDevice(row)) return c.json(jsonError("TRUSTED_DEVICE_NOT_FOUND", "Onaylı cihaz bulunamadı."), 404); const timestamp = nowIso();
+    await storePut(c, TRUSTED_DEVICE_SCOPE, key, text(row.mainCompanySlug), { ...row, isTrusted: false, revokedAt: timestamp, revokedByUserId: current.id, revokeReason: "SELF" }); await audit(c, "TRUSTED_LOGIN_DEVICE_REVOKED_SELF", current, current.id, text(row.mainCompanySlug), "", { deviceId, deviceLabel: row.deviceLabel }); return c.json({ ok: true, data: { deviceId, trusted: false } });
   });
 
   app.get("/api/security-center/audit", async (c: any) => {

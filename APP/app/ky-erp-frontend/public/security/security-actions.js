@@ -21,6 +21,7 @@ function saActionCopy(item){
     SESSION_TRUST_REJECT:{title:"Yeni oturumu reddet",body:"Bir ERP oturumunun güven isteği reddedilecek ve oturum kapatılacak."},
     SESSION_CLOSE:{title:"Oturumu kapat",body:"Aktif bir ERP oturumunun sonlandırılması isteniyor."},
     SESSION_SUSPICIOUS:{title:"Şüpheli oturumu kapat",body:"Bir oturum şüpheli olarak işaretlenip kapatılacak."},
+    TRUSTED_DEVICE_REVOKE:{title:"Onaylı cihaz güvenini kaldır",body:"Bu kullanıcıya ait onaylı cihazın kalıcı güveni kaldırılacak. Sonraki girişte yeniden oturum onayı gerekecek."},
     SECURITY_CAPABILITY_SET:{title:"Güvenlik yetkilerini değiştir",body:"Bir kullanıcıya firma kapsamlı güvenlik yetkileri verilecek veya kaldırılacak. ERP rolü değişmez."},
     SUPER_ADMIN_GRANT:{title:"Süper Yönetici ekle",body:"Yeni bir Süper Yönetici atanması isteniyor. Bu kritik işlem yalnız asıl Süper Yönetici tarafından başlatılabilir."},
     SUPER_ADMIN_REVOKE:{title:"Süper Yönetici yetkisini kaldır",body:"İkincil bir Süper Yönetici yetkisinin kaldırılması isteniyor."},

@@ -7,6 +7,7 @@ const DISMISS_SCOPE = "SYSTEM_NOTIFICATIONS_DISMISSED_V1";
 const SECURITY_GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
 const SECURITY_PREF_SCOPE = "AUTH_SECURITY_NOTIFICATION_PREF";
 const SECURITY_TRUST_SCOPE = "AUTH_SESSION_TRUST";
+const SECURITY_TRUSTED_DEVICE_SCOPE = "AUTH_TRUSTED_LOGIN_DEVICE";
 const MAX_READ_IDS = NOTIFICATION_MAX_READ_IDS;
 
 type AnyRow = Record<string, any>;
@@ -26,6 +27,7 @@ function ownerRole(role: unknown) {
 function companyAdminRole(role: unknown) {
   return upper(role) === "COMPANY_ADMIN";
 }
+function browserDeviceId(label: unknown) { const value = text(label); return value.startsWith("BROWSER:") ? value.slice(8) : ""; }
 
 function objectOf(value: unknown): AnyRow {
   if (value && typeof value === "object" && !Array.isArray(value)) return value as AnyRow;
@@ -245,7 +247,7 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
          FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id ${trustJoin}
         WHERE s.revoked_at IS NULL AND s.expires_at>?
           AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
-        ORDER BY s.created_at DESC LIMIT 30`).bind(SECURITY_TRUST_SCOPE, now).all<AnyRow>()
+        ORDER BY s.created_at DESC LIMIT 150`).bind(SECURITY_TRUST_SCOPE, now).all<AnyRow>()
     : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
               COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
               UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
@@ -253,9 +255,12 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
         WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=?
           AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))
           AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
-        ORDER BY s.created_at DESC LIMIT 20`).bind(SECURITY_TRUST_SCOPE, now, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
+        ORDER BY s.created_at DESC LIMIT 100`).bind(SECURITY_TRUST_SCOPE, now, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
 
-  return (result.results || []).map((row: AnyRow) => ({
+  const trustedRows = await c.env.DB.prepare("SELECT file_name,data FROM json_store WHERE scope=?").bind(SECURITY_TRUSTED_DEVICE_SCOPE).all<AnyRow>();
+  const trustedKeys = new Set((trustedRows.results || []).map((item: AnyRow) => objectOf(item.data)).filter((item: AnyRow) => item.isTrusted !== false && !text(item.revokedAt)).map((item: AnyRow) => `${text(item.userId)}:${text(item.deviceId)}`));
+  const pendingRows = (result.results || []).filter((row: AnyRow) => { const deviceId = browserDeviceId(row.device_label); return !deviceId || !trustedKeys.has(`${text(row.user_id)}:${deviceId}`); }).slice(0, ownerRole(current?.role) ? 30 : 20);
+  return pendingRows.map((row: AnyRow) => ({
     id: `session-trust:${text(row.id)}`,
     category: "SECURITY",
     severity: "warning",

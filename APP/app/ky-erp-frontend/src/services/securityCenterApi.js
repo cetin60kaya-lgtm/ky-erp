@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "../utils/api";
+import { apiDelete, apiGet, apiPost, apiPut } from "../utils/api";
 
 function unwrap(payload) {
   return payload && typeof payload === "object" && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -8,6 +8,8 @@ function unwrap(payload) {
 
 export async function getSecurityCenterOverview() { return unwrap(await apiGet("/security-center/overview", { _ts: Date.now() })); }
 export async function listSecurityCenterSessions() { return unwrap(await apiGet("/security-center/sessions", { _ts: Date.now() })); }
+export async function listTrustedLoginDevices() { return unwrap(await apiGet("/security-center/trusted-devices", { _ts: Date.now() })); }
+export async function revokeOwnTrustedLoginDevice(deviceId) { return unwrap(await apiDelete(`/security-center/trusted-devices/${encodeURIComponent(deviceId)}`)); }
 export async function listSecurityCenterAudit(limit = 250) { return unwrap(await apiGet("/security-center/audit", { limit, _ts: Date.now() })); }
 export async function listSecurityCenterLoginApprovals() { return unwrap(await apiGet("/security-center/login-approvals", { _ts: Date.now() })); }
 export async function decideSecurityCenterLoginApproval(id, decision) {

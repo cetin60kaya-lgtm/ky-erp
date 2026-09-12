@@ -7,8 +7,10 @@ import {
   listSecurityCenterAudit,
   listSecurityCenterLoginApprovals,
   listSecurityCenterSessions,
+  listTrustedLoginDevices,
   listSecurityGrantUsers,
   runPhoneApprovedSecurityAction,
+  revokeOwnTrustedLoginDevice,
   saveSecurityNotificationPreferences,
 } from "../../services/securityCenterApi";
 import "./SecurityCenterPanel.css";
@@ -49,6 +51,7 @@ export default function SecurityCenterPanel() {
   const [tab, setTab] = useState("approvals");
   const [overview, setOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [trustedDevices, setTrustedDevices] = useState([]);
   const [audit, setAudit] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [preferences, setPreferences] = useState({});
@@ -98,8 +101,9 @@ export default function SecurityCenterPanel() {
       const allowSessionView = base?.scopeType === "SELF" || base?.scopeType === "SYSTEM" || base?.capabilities?.includes("SESSION_VIEW");
       const allowAudit = base?.scopeType === "SELF" || base?.scopeType === "SYSTEM" || base?.capabilities?.includes("AUDIT_VIEW");
       const allowManage = base?.canDelegateSecurity === true;
-      const [sessionResult, auditResult, approvalResult, prefResult, userResult, grantResult] = await Promise.allSettled([
+      const [sessionResult, trustedResult, auditResult, approvalResult, prefResult, userResult, grantResult] = await Promise.allSettled([
         allowSessionView ? listSecurityCenterSessions() : Promise.resolve([]),
+        allowSessionView ? listTrustedLoginDevices() : Promise.resolve([]),
         allowAudit ? listSecurityCenterAudit(300) : Promise.resolve([]),
         listSecurityCenterLoginApprovals(),
         getSecurityNotificationPreferences(),
@@ -107,6 +111,7 @@ export default function SecurityCenterPanel() {
         allowManage ? listSecurityCapabilityGrants() : Promise.resolve([]),
       ]);
       setSessions(sessionResult.status === "fulfilled" ? rows(sessionResult.value) : []);
+      setTrustedDevices(trustedResult.status === "fulfilled" ? rows(trustedResult.value) : []);
       setAudit(auditResult.status === "fulfilled" ? rows(auditResult.value) : []);
       setApprovals(approvalResult.status === "fulfilled" ? rows(approvalResult.value) : []);
       setPreferences(prefResult.status === "fulfilled" ? prefResult.value || {} : {});
@@ -139,6 +144,17 @@ export default function SecurityCenterPanel() {
       await loadAll();
     } catch (error) { setMessage(`Hata: ${messageOf(error, "Güvenlik işlemi tamamlanamadı.")}`); }
     finally { setBusy(false); }
+  }
+
+  async function revokeTrustedDevice(row) {
+    if (!row?.deviceId) return;
+    if (scopeType === "SELF" && row.own) {
+      setBusy(true);
+      try { await revokeOwnTrustedLoginDevice(row.deviceId); setMessage("Cihaz güveni kaldırıldı. Bu cihaz sonraki girişte yeniden onay isteyecek."); await loadAll(); }
+      catch (error) { setMessage(`Hata: ${messageOf(error, "Cihaz güveni kaldırılamadı.")}`); } finally { setBusy(false); }
+      return;
+    }
+    return critical({ operation: "TRUSTED_DEVICE_REVOKE", targetUserId: row.userId, deviceId: row.deviceId }, "Cihaz güveni KY Güvenlik onayıyla kaldırıldı. Sonraki girişte yeniden onay gerekecek.");
   }
 
   async function savePreferences() {
@@ -177,6 +193,7 @@ export default function SecurityCenterPanel() {
 
     <div className="sc-tabs">
       <button className={tab === "approvals" ? "active" : ""} onClick={() => setTab("approvals")}>Onaylar {approvals.length ? <b>{approvals.length}</b> : null}</button>
+      {canSessionView && <button className={tab === "devices" ? "active" : ""} onClick={() => setTab("devices")}>{scopeType === "SELF" ? "Onaylı Cihazlarım" : "Onaylı Cihazlar"}{trustedDevices.length ? <b>{trustedDevices.length}</b> : null}</button>}
       {canSessionView && <button className={tab === "sessions" ? "active" : ""} onClick={() => setTab("sessions")}>Oturumlar</button>}
       {canAudit && <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>Güvenlik Akışı</button>}
       <button className={tab === "notifications" ? "active" : ""} onClick={() => setTab("notifications")}>Bildirimler</button>
@@ -191,8 +208,22 @@ export default function SecurityCenterPanel() {
       </div>)}</div> : <div className="sc-empty">Bekleyen giriş onayı yok.</div>}
     </div>}
 
+    {tab === "devices" && canSessionView && <div className="sc-panel">
+      <div className="sc-panel-head"><div><h3>{scopeType === "SELF" ? "Onaylı Cihazlarım" : scopeType === "SYSTEM" ? "Tüm Kullanıcıların Onaylı Cihazları" : "Firma Kullanıcılarının Onaylı Cihazları"}</h3><p>Bir cihaz bir kez onaylandıktan sonra aynı kullanıcı ve aynı cihaz kimliğiyle açılan yeni oturumlar tekrar oturum onayı istemez. Cihaz güveni kaldırılırsa sonraki giriş yeniden onaya düşer.</p></div></div>
+      <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı</span><span>Cihaz</span><span>Firma</span><span>Onay</span><span>İşlem</span></div>
+        {trustedDevices.map((row) => <div className="sc-table-row" key={`${row.userId}:${row.deviceId}`}>
+          <span><strong>{row.fullName || row.username}</strong><small>{row.username || "-"} · {row.role || "-"}</small></span>
+          <span><strong>{row.deviceLabel?.startsWith("BROWSER:") ? "Güvenilir Tarayıcı / Bilgisayar" : (row.deviceLabel || "Güvenilir cihaz")}</strong><small>{row.userAgent || `Cihaz ${String(row.deviceId || "").slice(0, 8)}`}</small></span>
+          <span>{row.mainCompanySlug || "-"}<small>{row.ipAddress || "IP yok"}</small></span>
+          <span><em className="trust trusted">Onaylı</em><small>{dateText(row.lastTrustedAt || row.firstTrustedAt)}</small></span>
+          <span className="sc-actions compact"><button className="danger" disabled={busy} onClick={() => revokeTrustedDevice(row)}>Güveni Kaldır</button></span>
+        </div>)}
+      </div>
+      {!trustedDevices.length && <div className="sc-empty">Henüz onaylı cihaz yok. Bir oturum “Güven” ile onaylandığında cihaz burada kalıcı olarak görünür.</div>}
+    </div>}
+
     {tab === "sessions" && canSessionView && <div className="sc-panel">
-      <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile oturum güveni ayrıdır. Yeni oturumlar güven kararı verilene kadar “Onay Bekliyor” görünür.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Sadece Ben Kalayım tamamlandı; Süper Admin dışındaki aktif oturumlar kapatıldı.")}>Sadece Ben Kalayım</button>}</div>
+      <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile cihaz güveni ayrıdır. Onaylı cihazdan gelen yeni oturumlar otomatik “Güvenilir” görünür; yalnız yeni veya güveni kaldırılmış cihazlar onay bekler.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Sadece Ben Kalayım tamamlandı; Süper Admin dışındaki aktif oturumlar kapatıldı.")}>Sadece Ben Kalayım</button>}</div>
       <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı / Cihaz</span><span>Firma / IP</span><span>Güven</span><span>Durum</span><span>İşlem</span></div>
         {sessions.map((row) => <div className="sc-table-row" key={row.id}>
           <span><strong>{row.fullName || row.username}</strong><small>{row.deviceLabel || "Tarayıcı"}<br/>{dateText(row.createdAt)}</small></span>
@@ -200,7 +231,7 @@ export default function SecurityCenterPanel() {
           <span><em className={`trust ${String(row.trustStatus || "").toLowerCase()}`}>{trustLabel(row.trustStatus)}</em></span>
           <span><em className={row.active ? "active-session" : "closed-session"}>{row.active ? "Aktif" : "Kapalı"}</em><small>{dateText(row.lastSeenAt)}</small></span>
           <span className="sc-actions compact">
-            {row.active && canSessionApprove && row.trustStatus !== "TRUSTED" && <button className="ok" disabled={busy} onClick={() => critical({ operation: "SESSION_TRUST_APPROVE", sessionId: row.id }, "Oturum güvenilir olarak onaylandı.")}>Güven</button>}
+            {row.active && canSessionApprove && row.trustStatus !== "TRUSTED" && <button className="ok" disabled={busy} onClick={() => critical({ operation: "SESSION_TRUST_APPROVE", sessionId: row.id }, "Cihaz güvenilir olarak onaylandı; aynı kullanıcı bu cihazda tekrar oturum onayı istemeyecek.")}>Güven</button>}
             {row.active && canSessionApprove && row.trustStatus !== "TRUSTED" && <button className="danger" disabled={busy} onClick={() => critical({ operation: "SESSION_TRUST_REJECT", sessionId: row.id }, "Oturum güven isteği reddedildi ve oturum kapatıldı.")}>Reddet</button>}
             {row.active && canSessionApprove && <button disabled={busy} onClick={() => critical({ operation: "SESSION_SUSPICIOUS", sessionId: row.id }, "Şüpheli oturum kapatıldı ve loglandı.")}>Şüpheli</button>}
             {row.active && (row.own || canSessionClose) && <button className="danger" disabled={busy} onClick={() => critical({ operation: "SESSION_CLOSE", sessionId: row.id }, "Oturum KY Güvenlik onayıyla kapatıldı.")}>Kapat</button>}
