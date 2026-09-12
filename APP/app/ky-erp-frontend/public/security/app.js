@@ -124,6 +124,7 @@ function requestedInstall(){
     return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase()};
   }catch{return{requested:false,platform:""}}
 }
+function openAndroidBrowserInstaller(){const target="https://app.kyerp.net/security/?install=1&platform=android&browser=1";const fallback=encodeURIComponent(target);location.href="intent://app.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";}
 function renderInstall(){
   const request=requestedInstall();
   const ios=isIos()||request.platform==="ios";
@@ -135,7 +136,7 @@ function renderInstall(){
   els.installButton.classList.add("hidden");
   els.installButton.disabled=false;
 
-  if(standalone){
+  if(standalone&&!request.requested){
     if(request.requested){
       els.installPanel.classList.remove("hidden");
       els.installTitle.textContent="KY ERP Güvenlik zaten yüklü";
@@ -168,9 +169,9 @@ function renderInstall(){
       els.installButton.classList.remove("hidden");
     }else{
       els.installStateText.textContent="Kurulum desteği hazırlanıyor veya bu tarayıcı yüklemeyi desteklemiyor";
-      els.installButton.textContent="Android Yükleme Hazırlanıyor";
+      els.installButton.textContent=standalone&&request.requested?"Chrome'da KY Güvenlik Kurulumunu Aç":"Android Yükleme Hazırlanıyor";
       els.installButton.classList.remove("hidden");
-      els.installButton.disabled=true;
+      els.installButton.disabled=!(standalone&&request.requested);
     }
     return;
   }
@@ -361,6 +362,8 @@ window.addEventListener("appinstalled",()=>{
 });
 els.installButton.addEventListener("click",async()=>{
   if(!installPrompt){
+    const request=requestedInstall();
+    if(isStandalone()&&request.requested&&request.platform==="android"){openAndroidBrowserInstaller();return;}
     renderInstall();
     return;
   }

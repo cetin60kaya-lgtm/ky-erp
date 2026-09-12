@@ -91,6 +91,9 @@ test("security device health returns the verified bound account identity and per
   assert.match(push,/moduleKeys/);
   assert.match(push,/securityCapabilities/);
   assert.match(push,/const account = await securityAccountProfile\(c, actor\)/);
+  assert.match(push,/SELECT name FROM main_companies/);
+  assert.doesNotMatch(push,/SELECT name,title FROM main_companies/);
+  assert.match(push,/companyName = companySlug/);
 });
 
 

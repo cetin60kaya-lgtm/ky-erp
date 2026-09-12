@@ -608,20 +608,28 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
   const companySlug = text(actor.companySlug);
   let companyName = companySlug;
   if (companySlug && await tableExists(c, "main_companies")) {
-    const company = await c.env.DB.prepare(
-      "SELECT name,title FROM main_companies WHERE slug=? LIMIT 1",
-    ).bind(companySlug).first<AnyRow>();
-    companyName = text(company?.title || company?.name || companySlug);
+    try {
+      const company = await c.env.DB.prepare(
+        "SELECT name FROM main_companies WHERE slug=? LIMIT 1",
+      ).bind(companySlug).first<AnyRow>();
+      companyName = text(company?.name || companySlug);
+    } catch {
+      companyName = companySlug;
+    }
   }
 
   let moduleKeys: string[] = [];
   if (isSuper(role)) {
     moduleKeys = ["ALL"];
   } else if (await tableExists(c, "auth_user_module_permissions")) {
-    const result = await c.env.DB.prepare(
-      "SELECT module_key FROM auth_user_module_permissions WHERE user_id=? AND can_view=1 ORDER BY module_key",
-    ).bind(actor.userId).all<AnyRow>();
-    moduleKeys = [...new Set((result.results || []).map((row: AnyRow) => upper(row.module_key)).filter(Boolean))];
+    try {
+      const result = await c.env.DB.prepare(
+        "SELECT module_key FROM auth_user_module_permissions WHERE user_id=? AND can_view=1 ORDER BY module_key",
+      ).bind(actor.userId).all<AnyRow>();
+      moduleKeys = [...new Set((result.results || []).map((row: AnyRow) => upper(row.module_key)).filter(Boolean))];
+    } catch {
+      moduleKeys = [];
+    }
   }
   if (isCompanyAdmin(role)) {
     if (!moduleKeys.includes("ADMIN")) moduleKeys.push("ADMIN");
