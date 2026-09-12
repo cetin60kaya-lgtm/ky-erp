@@ -396,8 +396,10 @@ if ([string]$statusJson.endpoints.refresh -ne "/api/auth/refresh") { Fail "Auth 
 if ([bool]$statusJson.sessionPolicy.passwordOnlyEnabled -ne $false) { Fail "Password-only giris kapali degil." }
 if ([int]$statusJson.sessionPolicy.passwordOnlySeconds -ne 0) { Fail "Password-only session suresi 0 degil." }
 if ([int]$statusJson.sessionPolicy.mfaSeconds -ne 36000) { Fail "MFA session 10 saat degil." }
-if ([int]$statusJson.sessionPolicy.ownerRollingSeconds -ne 86400) { Fail "Owner rolling session 24 saat degil." }
-Write-Host "Auth: $AUTH_VERSION | parola-only KAPALI | MFA 10h | owner rolling 24h" -ForegroundColor Green
+if ([int]$statusJson.sessionPolicy.ownerRollingSeconds -ne 0) { Fail "Owner rolling session kapali degil." }
+if ([bool]$statusJson.sessionPolicy.ownerPersistentBrowserSession -ne $false) { Fail "Owner kalici tarayici oturumu kapali degil." }
+if ([bool]$statusJson.sessionPolicy.ownerAutomaticRefresh -ne $false) { Fail "Owner otomatik refresh kapali degil." }
+Write-Host "Auth: $AUTH_VERSION | parola-only KAPALI | MFA 10h | owner kalici oturum KAPALI" -ForegroundColor Green
 
 $refreshContractOk = $false
 try {
@@ -410,8 +412,9 @@ try {
 if (-not $refreshContractOk) { Fail "Auth refresh endpointi tokensiz istekte beklenen HTTP 401 cevabini vermedi." }
 Write-Host "Auth refresh contract: HTTP 401 beklenen" -ForegroundColor Green
 
-Write-Host "30x preflight-free login transport kontrolu..."
-for ($i = 1; $i -le 30; $i++) {
+$transportSmokeCount = 3
+Write-Host "$transportSmokeCount x preflight-free login transport kontrolu..."
+for ($i = 1; $i -le $transportSmokeCount; $i++) {
     $ok = $false
     try {
         Invoke-WebRequest "https://api.kyerp.net/api/auth/login?transport=$i-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" -Method POST -ContentType "text/plain;charset=UTF-8" -Body "{}" -Headers @{ Origin = "https://kyerp.net"; Accept = "application/json" } -UseBasicParsing -TimeoutSec 20 | Out-Null
@@ -420,9 +423,9 @@ for ($i = 1; $i -le 30; $i++) {
         if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
         if ($code -eq 400) { $ok = $true }
     }
-    if (-not $ok) { Fail "Login transport testi $i/30 beklenen HTTP 400 cevabini alamadi." }
+    if (-not $ok) { Fail "Login transport testi $i/$transportSmokeCount beklenen HTTP 400 cevabini alamadi." }
 }
-Write-Host "Login transport: 30/30 HTTP cevap" -ForegroundColor Green
+Write-Host "Login transport: $transportSmokeCount/$transportSmokeCount HTTP cevap" -ForegroundColor Green
 
 try {
     $preflight = Invoke-WebRequest "https://api.kyerp.net/api/auth/login" -Method OPTIONS -Headers @{

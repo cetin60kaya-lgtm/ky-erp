@@ -186,7 +186,9 @@ test("v3 deploy runs all code tests before any live D1 or Worker write", () => {
   assert.match(source, /Assert-Denetime-System-User/);
   assert.match(source, /function Remote-Column-Exists/);
   assert.match(source, /Table = "hr_monthly_employees"; Column = "sgk_status"/);
-  assert.match(source, /30x preflight-free login transport kontrolu/);
+  assert.match(source, /\$transportSmokeCount\s*=\s*3/);
+  assert.match(source, /preflight-free login transport kontrolu/);
+  assert.match(source, /for \(\$i = 1; \$i -le \$transportSmokeCount; \$i\+\+\)/);
   assert.doesNotMatch(source, /wrangler d1 migrations apply/);
   const workerPreflight = source.indexOf("=== 3/11 WORKER PREFLIGHT ===");
   const frontendPreflight = source.indexOf("=== 4/11 FRONTEND PREFLIGHT ===");
