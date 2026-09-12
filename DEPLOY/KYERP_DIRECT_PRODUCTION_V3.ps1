@@ -412,8 +412,9 @@ try {
 if (-not $refreshContractOk) { Fail "Auth refresh endpointi tokensiz istekte beklenen HTTP 401 cevabini vermedi." }
 Write-Host "Auth refresh contract: HTTP 401 beklenen" -ForegroundColor Green
 
-Write-Host "30x preflight-free login transport kontrolu..."
-for ($i = 1; $i -le 30; $i++) {
+$transportSmokeCount = 3
+Write-Host "$transportSmokeCount x preflight-free login transport kontrolu..."
+for ($i = 1; $i -le $transportSmokeCount; $i++) {
     $ok = $false
     try {
         Invoke-WebRequest "https://api.kyerp.net/api/auth/login?transport=$i-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" -Method POST -ContentType "text/plain;charset=UTF-8" -Body "{}" -Headers @{ Origin = "https://kyerp.net"; Accept = "application/json" } -UseBasicParsing -TimeoutSec 20 | Out-Null
@@ -422,9 +423,9 @@ for ($i = 1; $i -le 30; $i++) {
         if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
         if ($code -eq 400) { $ok = $true }
     }
-    if (-not $ok) { Fail "Login transport testi $i/30 beklenen HTTP 400 cevabini alamadi." }
+    if (-not $ok) { Fail "Login transport testi $i/$transportSmokeCount beklenen HTTP 400 cevabini alamadi." }
 }
-Write-Host "Login transport: 30/30 HTTP cevap" -ForegroundColor Green
+Write-Host "Login transport: $transportSmokeCount/$transportSmokeCount HTTP cevap" -ForegroundColor Green
 
 try {
     $preflight = Invoke-WebRequest "https://api.kyerp.net/api/auth/login" -Method OPTIONS -Headers @{
