@@ -176,7 +176,12 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   const [detailTab, setDetailTab] = useState("debts");
   const [search, setSearch] = useState("");
   const [firmSearch, setFirmSearch] = useState("");
+  const [firmBalanceFilter, setFirmBalanceFilter] = useState("ALL");
+  const [firmSort, setFirmSort] = useState("NAME");
   const [statusFilter, setStatusFilter] = useState("OPEN");
+  const [directionFilter, setDirectionFilter] = useState("ALL");
+  const [ownershipFilter, setOwnershipFilter] = useState("ALL");
+  const [workFilter, setWorkFilter] = useState("ALL");
   const [monthFilter, setMonthFilter] = useState("");
   const [modal, setModal] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -266,20 +271,37 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       if (statusFilter === "OVERDUE" && Number(row.daysRemaining) >= 0) return false;
       if (statusFilter === "PAID" && open) return false;
       if (monthFilter && String(row.monthKey || "") !== monthFilter) return false;
+      if (directionFilter !== "ALL" && String(row.checkDirection || "").toUpperCase() !== directionFilter) return false;
+      if (ownershipFilter !== "ALL" && String(row.checkOwnership || "").toUpperCase() !== ownershipFilter) return false;
+      if (workFilter !== "ALL" && String(row.workType || "OFFICIAL").toUpperCase() !== workFilter) return false;
       return true;
     });
-  }, [overview.rows, search, statusFilter, monthFilter]);
+  }, [directionFilter, monthFilter, overview.rows, ownershipFilter, search, statusFilter, workFilter]);
 
   const visibleFirms = useMemo(() => {
     const term = firmSearch.trim().toLocaleLowerCase("tr-TR");
-    return firms.filter((row) =>
-      [firmName(row), row.taxNo, row.vergiNo, row.shortName]
+    const rows = firms.filter((row) => {
+      const matches = [firmName(row), row.taxNo, row.vergiNo, row.shortName]
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase("tr-TR")
-        .includes(term),
-    );
-  }, [firms, firmSearch]);
+        .includes(term);
+      const balance = numberValue(row.bakiye ?? row.currentBalance);
+      if (!matches) return false;
+      if (firmBalanceFilter === "RECEIVABLE" && balance <= 0) return false;
+      if (firmBalanceFilter === "PAYABLE" && balance >= 0) return false;
+      if (firmBalanceFilter === "NONZERO" && balance === 0) return false;
+      if (firmBalanceFilter === "ZERO" && balance !== 0) return false;
+      return true;
+    });
+    return [...rows].sort((a, b) => {
+      const av = numberValue(a.bakiye ?? a.currentBalance);
+      const bv = numberValue(b.bakiye ?? b.currentBalance);
+      if (firmSort === "BALANCE_DESC") return bv - av;
+      if (firmSort === "BALANCE_ASC") return av - bv;
+      return firmName(a).localeCompare(firmName(b), "tr");
+    });
+  }, [firmBalanceFilter, firmSearch, firmSort, firms]);
 
   const refreshAll = async () => {
     await loadBase();
@@ -498,7 +520,21 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         </header>
         <div className="check-detail-grid">
           <aside className="check-firm-list">
-            <div className="check-firm-search"><input value={firmSearch} onChange={(event) => setFirmSearch(event.target.value)} placeholder="Firma / vergi no ara" /></div>
+            <div className="check-firm-search">
+              <input value={firmSearch} onChange={(event) => setFirmSearch(event.target.value)} placeholder="Firma / vergi no ara" />
+              <select value={firmBalanceFilter} onChange={(event) => setFirmBalanceFilter(event.target.value)}>
+                <option value="ALL">Tüm bakiyeler</option>
+                <option value="RECEIVABLE">Alacak bakiyesi</option>
+                <option value="PAYABLE">Borç bakiyesi</option>
+                <option value="NONZERO">Bakiyesi olanlar</option>
+                <option value="ZERO">Sıfır bakiye</option>
+              </select>
+              <select value={firmSort} onChange={(event) => setFirmSort(event.target.value)}>
+                <option value="NAME">Ada göre</option>
+                <option value="BALANCE_DESC">Bakiye azalan</option>
+                <option value="BALANCE_ASC">Bakiye artan</option>
+              </select>
+            </div>
             {visibleFirms.slice(0, 250).map((firm) => {
               const id = firm.id || firm.firmaId;
               return <button className={`check-firm-row ${String(id) === String(selectedFirmId) ? "active" : ""}`} type="button" key={id} onClick={() => setSelectedFirmId(id)}><strong>{firmName(firm)}</strong><span>{money(firm.bakiye || firm.currentBalance)} • {firm.openCheckCount || 0} açık çek</span></button>;

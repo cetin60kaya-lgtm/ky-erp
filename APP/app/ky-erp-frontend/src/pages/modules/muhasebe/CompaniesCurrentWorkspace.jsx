@@ -126,7 +126,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("ALL");
   const [balanceFilter, setBalanceFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ACTIVE");
+  const [recordFilter, setRecordFilter] = useState("ALL");
+  const [balanceSort, setBalanceSort] = useState("NAME");
   const [selected, setSelected] = useState(null);
+  const [detailTab, setDetailTab] = useState("MOVEMENTS");
   const [movements, setMovements] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);
@@ -205,21 +209,32 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     return () => window.clearTimeout(timer);
   }, [loadFirms, refreshKey]);
 
-  const visibleFirms = useMemo(
-    () =>
-      firms.filter((firm) => {
-        const firmRole = roleLabel(firm);
-        const balance = Number(firm.currentBalance || 0);
-        if (role === "CUSTOMER" && !/Müşteri/.test(firmRole)) return false;
-        if (role === "SUPPLIER" && !/tedarikçi/i.test(firmRole)) return false;
-        if (role === "CHEMICAL" && !firm.isChemicalSupplier) return false;
-        if (balanceFilter === "RECEIVABLE" && balance <= 0) return false;
-        if (balanceFilter === "PAYABLE" && balance >= 0) return false;
-        if (balanceFilter === "ZERO" && balance !== 0) return false;
-        return true;
-      }),
-    [balanceFilter, firms, role],
-  );
+  const visibleFirms = useMemo(() => {
+    const rows = firms.filter((firm) => {
+      const firmRole = roleLabel(firm);
+      const balance = Number(firm.currentBalance || 0);
+      const record = normalize(firm.defaultRecordType);
+      if (role === "CUSTOMER" && !/Müşteri/.test(firmRole)) return false;
+      if (role === "SUPPLIER" && !/tedarikçi/i.test(firmRole)) return false;
+      if (role === "CHEMICAL" && !firm.isChemicalSupplier) return false;
+      if (balanceFilter === "RECEIVABLE" && balance <= 0) return false;
+      if (balanceFilter === "PAYABLE" && balance >= 0) return false;
+      if (balanceFilter === "NONZERO" && balance === 0) return false;
+      if (balanceFilter === "ZERO" && balance !== 0) return false;
+      if (statusFilter === "ACTIVE" && firm.isActive === false) return false;
+      if (statusFilter === "PASSIVE" && firm.isActive !== false) return false;
+      if (recordFilter === "OFFICIAL" && record.includes("GAYRI")) return false;
+      if (recordFilter === "UNOFFICIAL" && !record.includes("GAYRI")) return false;
+      return true;
+    });
+    return [...rows].sort((a, b) => {
+      const av = Number(a.currentBalance || 0);
+      const bv = Number(b.currentBalance || 0);
+      if (balanceSort === "BALANCE_DESC") return bv - av;
+      if (balanceSort === "BALANCE_ASC") return av - bv;
+      return String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
+    });
+  }, [balanceFilter, balanceSort, firms, recordFilter, role, statusFilter]);
 
   const totals = useMemo(() => {
     const receivable = visibleFirms
@@ -283,6 +298,12 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     },
     [params],
   );
+
+  useEffect(() => {
+    if (!visibleFirms.length || detailLoading) return;
+    const stillVisible = selected && visibleFirms.some((firm) => String(firm.id) === String(selected.id));
+    if (!stillVisible) loadMovements(visibleFirms[0]);
+  }, [detailLoading, loadMovements, selected, visibleFirms]);
 
   const createCompany = async () => {
     if (!companyForm.companyName.trim()) {
@@ -496,7 +517,23 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="ALL">Tüm bakiyeler</option>
           <option value="RECEIVABLE">Alacak bakiyesi</option>
           <option value="PAYABLE">Borç bakiyesi</option>
+          <option value="NONZERO">Bakiyesi olanlar</option>
           <option value="ZERO">Sıfır bakiye</option>
+        </select>
+        <select value={recordFilter} onChange={(event) => setRecordFilter(event.target.value)}>
+          <option value="ALL">Resmî + Gayri resmî</option>
+          <option value="OFFICIAL">Yalnız resmî</option>
+          <option value="UNOFFICIAL">Yalnız gayri resmî</option>
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="ACTIVE">Aktif firmalar</option>
+          <option value="PASSIVE">Pasif firmalar</option>
+          <option value="ALL">Aktif + pasif</option>
+        </select>
+        <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)}>
+          <option value="NAME">Ada göre</option>
+          <option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option>
+          <option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option>
         </select>
         <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
@@ -549,7 +586,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               <thead><tr><th>Firma</th><th>Tür</th><th>Kayıt</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th></tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
-                  <tr key={firm.id} onClick={() => loadMovements(firm)} tabIndex={0}>
+                  <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => loadMovements(firm)} tabIndex={0}>
                     <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong>{firm.isChemicalSupplier ? <small>Boya / kimyasal</small> : null}</td>
                     <td>{roleLabel(firm)}</td>
                     <td>{recordLabel(firm)}</td>
