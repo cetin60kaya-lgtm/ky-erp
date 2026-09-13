@@ -224,6 +224,10 @@
   margin-bottom: 10px;
 }
 
+.ik-html .filters.ik-essential-filters {
+  grid-template-columns: 90px 120px minmax(320px, 1fr) auto;
+}
+
 .ik-html label,
 .modal-bg label {
   font-size: 11px;

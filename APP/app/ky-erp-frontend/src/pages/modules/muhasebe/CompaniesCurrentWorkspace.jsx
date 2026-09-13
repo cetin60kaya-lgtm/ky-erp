@@ -130,7 +130,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [recordFilter, setRecordFilter] = useState("ALL");
   const [balanceSort, setBalanceSort] = useState("NAME");
   const [selected, setSelected] = useState(null);
-  const [detailTab, setDetailTab] = useState("MOVEMENTS");
   const [movements, setMovements] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);

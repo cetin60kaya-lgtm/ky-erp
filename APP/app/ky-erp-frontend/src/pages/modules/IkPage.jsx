@@ -251,6 +251,7 @@ const TAB_MAP = {
   "ay-personel-kartlari": "monthly-cards",
   "personel-kartlari": "monthly-cards",
   "monthly-personnel": "monthly-cards",
+  "ucret-odeme-plani": "monthly-contract",
   "puantaj-izin": "monthly-leave",
   "ay-maas-sozlesme": "monthly-contract",
   "maas-sozlesme": "monthly-contract",
@@ -8515,7 +8516,7 @@ export default function IkPage({
     if (screen === "monthly-contract")
       return (
         <IkAdvancedMonthly
-          mode="personel"
+          mode="ucret"
           activeMainCompany={activeMainCompany}
         />
       );

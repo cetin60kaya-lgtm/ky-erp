@@ -130,7 +130,7 @@ export const MODULES = [
     icon: "ik",
     groups: [
       { label: "Personel", tabs: [["ozet", "İK Özet", "dashboard"], ["personel-kartlari", "Personel Kartları", "users"]] },
-      { label: "Ücret & Puantaj", tabs: [["ucret-odeme-plani", "Maaş / Yol / Banka / Elden", "odemeler"], ["mesai-avans", "Mesai / Avans / Kesinti", "takvim"], ["bordro-odeme", "Bordro & Ödeme", "odemeler"]] },
+      { label: "Ücret & İzin", tabs: [["ucret-odeme-plani", "Maaş / Yol / Banka / Elden", "odemeler"], ["mesai-avans", "Mesai / Avans / Kesinti", "takvim"], ["yillik-izin", "Yıllık İzin / İzin Sicili", "takvim"], ["bordro-odeme", "Bordro & Ödeme", "odemeler"]] },
       { label: "Evrak & Kapanış", tabs: [["sgk-evrak-kontrol", "SGK / Evrak / Ay Sonu", "file-check"]] },
     ],
     hiddenTabs: [
@@ -299,12 +299,12 @@ export const MODULE_ROUTE_ALIASES = {
     "evrak-belgeler": "sgk-evrak-kontrol",
 
     // Eski İK içi PDKS yolları ikinci puantaj ekranı açmaz.
-    "puantaj-izin": "personel-kartlari",
+    "puantaj-izin": "yillik-izin",
     "izin-mesai-kesinti": "mesai-avans",
-    "yillik-izin": "personel-kartlari",
-    "ay-izin-evrak": "personel-kartlari",
-    "izin-evrak": "personel-kartlari",
-    "monthly-leave-management": "personel-kartlari",
+    "yillik-izin": "yillik-izin",
+    "ay-izin-evrak": "yillik-izin",
+    "izin-evrak": "yillik-izin",
+    "monthly-leave-management": "yillik-izin",
     "puantaj-kart-takibi": "personel-kartlari",
     "gun-personel-kartlari": "personel-kartlari",
     "daily-personnel": "personel-kartlari",

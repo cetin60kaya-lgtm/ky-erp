@@ -179,9 +179,9 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   const [firmBalanceFilter, setFirmBalanceFilter] = useState("ALL");
   const [firmSort, setFirmSort] = useState("NAME");
   const [statusFilter, setStatusFilter] = useState("OPEN");
-  const [directionFilter, setDirectionFilter] = useState("ALL");
-  const [ownershipFilter, setOwnershipFilter] = useState("ALL");
-  const [workFilter, setWorkFilter] = useState("ALL");
+  const [directionFilter, _setDirectionFilter] = useState("ALL");
+  const [ownershipFilter, _setOwnershipFilter] = useState("ALL");
+  const [workFilter, _setWorkFilter] = useState("ALL");
   const [monthFilter, setMonthFilter] = useState("");
   const [modal, setModal] = useState(null);
   const [busy, setBusy] = useState(false);

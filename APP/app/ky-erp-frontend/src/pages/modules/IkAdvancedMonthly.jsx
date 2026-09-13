@@ -240,6 +240,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
   const companyId = activeMainCompany?.slug || activeMainCompany?.id || "mecit-hakan";
   const initial = readStoredIkPeriod(companyId);
   const initialPage = mode === "personel" ? "personel"
+    : mode === "ucret" ? "ucret"
     : mode === "mesai" ? "hareket"
       : mode === "izin" ? "izin"
         : mode === "bordro" ? "bordro"
@@ -640,6 +641,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     setModal(normalized === "Toplu avans" ? "topluAvans" : normalized === "Avans" ? "avans" : ["Ozel kesinti", "Icra", "Haciz", "Eksik gün", "Eksik saat"].includes(normalized) ? "kesinti" : "mesai");
   };
 
+  const openPayPlan = (employee) => {
+    if (!employee) return setNotice("Personel seçilmeden ücret planı düzenlenemez.");
+    setSelectedId(employee.id);
+    setModalDraft(draftPerson(employee));
+    setModal("ucret");
+  };
+
   const openLeave = (kind = "yillik", forced = "", employeeOverride = null) => {
     const targetEmployee = employeeOverride || selected;
     if (!targetEmployee) return setNotice("Personel secilmeden kayit yapilamaz.");
@@ -756,7 +764,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany }) 
     if (text.includes("MESAI")) return openFinance("Mesai");
     if (text.includes("BORDRO") || text.includes("ODEME")) return openPayroll();
     if (text.includes("YILLIK") || text.includes("IZIN") || text.includes("RAPOR") || text.includes("GUNLUK")) {
-      return setNotice("İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir. İK Personel Kartında hakediş / kullanılan / kalan bakiye görüntülenir.");
+      return setNotice("Yıllık izin ve resmi izin sicili İK bölümünden yönetilir. Giriş/çıkış, vardiya ve kart hareketleri PDKS bölümündedir.");
     }
     if (DOCUMENT_LOG_WORDS.some((word) => text.includes(word))) return openDocument(employee);
     setModalDraft({ ...log, forceDetail: true });
@@ -1506,6 +1514,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       {notice && <div className="note">{notice}<button className="btn" onClick={() => setNotice("")}>Kapat</button></div>}
       {page === "ozet" && renderOzet()}
       {page === "personel" && renderPersonel()}
+      {page === "ucret" && renderUcret()}
       {page === "hareket" && renderHareket()}
       {page === "izin" && renderIzin()}
       {page === "bordro" && renderBordro()}
@@ -1514,15 +1523,13 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     </div>
   );
 
-  function filters({ third = "Personel ara", fourth = "Durum", fifth = "SGK" } = {}) {
+  function filters({ third = "Personel ara" } = {}) {
     return (
-      <div className="filters">
-        <div><label>Yil</label><select value={year} onChange={(event) => changePeriod(Number(event.target.value), month)}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
+      <div className="filters ik-essential-filters">
+        <div><label>Yıl</label><select value={year} onChange={(event) => changePeriod(Number(event.target.value), month)}>{[2025, 2026, 2027, 2028].map((item) => <option key={item}>{item}</option>)}</select></div>
         <div><label>Ay</label><select value={month} onChange={(event) => changePeriod(year, Number(event.target.value))}>{MONTHS.map((item, index) => <option key={item} value={index + 1}>{item}</option>)}</select></div>
-        <div><label>{third}</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ad, kod, kart no" /></div>
-        <div><label>{fourth}</label><select><option>Tumu</option></select></div>
-        <div><label>{fifth}</label><select><option>Tumu</option></select></div>
-        <button className="btn" onClick={load}>{busy ? "Yukleniyor" : "Yenile"}</button>
+        <div className="ik-search-filter"><label>{third}</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ad, kod, kart no" /></div>
+        <button className="btn" onClick={load}>{busy ? "Yükleniyor" : "Yenile"}</button>
       </div>
     );
   }
@@ -1536,7 +1543,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return (
       <section>
         <div className="page-head">
-          <div><h1>İK İşlem Merkezi</h1><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir.</p></div>
+          <div><h1>İK İşlem Merkezi</h1><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya ve terminal hareketleri PDKS bölümündedir. Yıllık izin ve resmi izin sicili İK bölümünde yönetilir.</p></div>
           <div className="group"><span className={`badge ${periodPrepared ? "green" : "orange"}`}>{MONTHS[month - 1]} {year} · {payrollReadyText}</span><span className={`badge ${smartIssues.length ? "orange" : "green"}`}>{smartIssues.length ? `${smartIssues.length} kontrol` : "Kontroller temiz"}</span></div>
         </div>
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
@@ -1563,7 +1570,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
-            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik gün")}>Devamsızlık Kesintisi</button>
+            <button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button>
             <button className="btn green" onClick={() => go("bordro")}>Son Bordro Kontrolü</button>
             <button className="btn" disabled={!periodPrepared} onClick={() => setModal("fis")}>Tek Kişi Fişi</button>
           </div></div>
@@ -1601,12 +1608,27 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     );
   }
 
+  function renderUcret() {
+    const salaryTotal = filteredEmployees.reduce((sum, item) => sum + num(item.salary), 0);
+    const roadTotal = filteredEmployees.reduce((sum, item) => sum + num(item.roadAllowance), 0);
+    const bankTotal = filteredEmployees.reduce((sum, item) => sum + num(item.bankAmount), 0);
+    const cashTotal = filteredEmployees.reduce((sum, item) => sum + num(item.cashAmount), 0);
+    return (
+      <section>
+        <div className="page-head"><div><h1>Maaş - Yol - Banka - Elden</h1><p>Personelin aylık ücret ve ödeme planı. Mesai, avans ve kesinti hareketleri bu ekranda girilmez.</p></div></div>
+        {filters({ third: "Personel ara" })}
+        <div className="sumgrid short">{summaryBox("Personel", filteredEmployees.length)}{summaryBox("Maaş toplamı", money(salaryTotal))}{summaryBox("Yol toplamı", money(roadTotal))}{summaryBox("Banka planı", money(bankTotal), "green")}{summaryBox("Elden planı", money(cashTotal), "orange")}</div>
+        <div className="card"><div className="ch"><div><b>Ücret ve Ödeme Planı</b><span>Sabit ücret planı personel kartına bağlıdır; değişiklikler tek yerden kaydedilir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Maaş</th><th>Yol</th><th>EK</th><th>Banka</th><th>Elden</th><th>Ödeme Tipi</th><th>Mesai Böleni</th><th>Kesinti Böleni</th><th>İşlem</th></tr></thead><tbody>{filteredEmployees.map((employee) => <tr key={employee.id}><td><span className="person">{employee.fullName}</span><span className="code">{employee.code || "-"}</span></td><td>{sgkLabel(employee)}</td><td className="money">{money(employee.salary)}</td><td className="money">{money(employee.roadAllowance)}</td><td className="money">{money(employee.extraPaymentAmount)}</td><td className="money">{money(employee.bankAmount)}</td><td className="money">{money(employee.cashAmount)}</td><td>{paymentLabel(employee)}</td><td>{employee.overtimeHourlyBase || employee.overtimeBaseHours || 225}</td><td>{employee.deductionHourlyBase || 300}</td><td><button className="btn" onClick={() => openPayPlan(employee)}>Düzenle</button></td></tr>)}<EmptyRow show={!filteredEmployees.length} colSpan={11} text="Personel bulunamadı." /></tbody></table></div></div>
+      </section>
+    );
+  }
+
   function renderHareket() {
     return (
       <section>
         <div className="page-head"><div><h1>Mesai - Avans - Kesinti</h1><p>Tek hareket giris ekrani. Toplu avans sadece burada ve sihirbaz pencerede yapilir.</p></div></div>
         {filters({ third: "Personel ara", fourth: "Tip", fifth: "Bordro etkisi" })}
-        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button><button className="btn orange" onClick={() => openFinance("Eksik gün")}>Devamsızlık Kesintisi</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
+        <div className="workbar"><div className="group"><button className="btn primary" onClick={() => openFinance("Mesai")}>Mesai Ekle</button><button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button><button className="btn green" onClick={() => openFinance("Toplu avans")}>Toplu Avans</button><button className="btn red" onClick={() => openFinance("Ozel kesinti")}>Kesinti Ekle</button></div><button className="btn" onClick={() => exportRowsToExcelFile(`ik-hareket-${period}.xlsx`, movements)}>Excel Indir</button></div>
         <div className="sumgrid short">{summaryBox("Personel", employees.length)}{summaryBox("Mesai toplamı", money(summary.overtime))}{summaryBox("Avans toplamı", money(summary.advance), "orange")}{summaryBox("Özel kesinti", money(summary.deduction), "red")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}</div>
         <div className="card"><div className="ch"><div><b>Hareketler</b><span>Bordro sonucu gosterilmez; sadece hareket kaydi.</span></div></div><div className="tw"><table><thead><tr><th>Tarih</th><th>Personel</th><th>Tip</th><th>Saat/Gun</th><th>Tutar</th><th>Odeme Sekli</th><th>Bordro Etkisi</th><th>Aciklama</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{movements.map((item) => {
           const employee = employees.find((row) => row.id === item.employeeId);
@@ -1742,6 +1764,22 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       </Modal>
     );
 
+    if (modal === "ucret") return (
+      <Modal title="Ücret ve Ödeme Planı" sub="Maaş, yol, banka/elden dağılımı ve saat bazlarını düzenleyin" size="medium" onClose={() => setModal(null)}>
+        <div className="form">
+          <Field label="Personel" wide><input value={modalDraft.fullName || ""} readOnly /></Field>
+          <Field label="Gerçek Maaş"><input type="number" min="0" value={modalDraft.salary || ""} onChange={(event) => setModalDraft((old) => ({ ...old, salary: event.target.value }))} /></Field>
+          <Field label="Yol Yardımı"><input type="number" min="0" value={modalDraft.roadAllowance || ""} onChange={(event) => setModalDraft((old) => ({ ...old, roadAllowance: event.target.value }))} /></Field>
+          <Field label="Banka Planı"><input type="number" min="0" value={modalDraft.bankAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, bankAmount: event.target.value }))} /></Field>
+          <Field label="Elden Planı"><input type="number" min="0" value={modalDraft.cashAmount || ""} onChange={(event) => setModalDraft((old) => ({ ...old, cashAmount: event.target.value }))} /></Field>
+          <Field label="Ödeme Tipi"><select value={modalDraft.paymentType || "BANKA_ELDEN"} onChange={(event) => setModalDraft((old) => ({ ...old, paymentType: event.target.value }))}><option value="BANKA_ELDEN">Banka + Elden</option><option value="Banka">Sadece Banka</option><option value="Elden">Sadece Elden</option></select></Field>
+          <Field label="Mesai Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.overtimeHourlyBase || 225} onChange={(event) => setModalDraft((old) => ({ ...old, overtimeHourlyBase: event.target.value }))} /></Field>
+          <Field label="Kesinti Saat Böleni"><input type="number" min="1" step="1" value={modalDraft.deductionHourlyBase || 300} onChange={(event) => setModalDraft((old) => ({ ...old, deductionHourlyBase: event.target.value }))} /></Field>
+          <div className="wide warnline ok">Mesai ve kesinti hareketleri ayrı ekrandan girilir. Bu ekran yalnız personelin sabit ücret ve ödeme parametrelerini değiştirir.</div>
+        </div>
+        <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={savePerson}>{busy ? "Kaydediliyor" : "Planı Kaydet"}</button>} />
+      </Modal>
+    );
     if (["mesai", "avans", "kesinti"].includes(modal)) {
       const type = modal === "avans" ? "Avans" : modal === "kesinti" ? (modalDraft.adjustmentType || "Ozel kesinti") : "Mesai";
       return <Modal title={modal === "avans" ? "Avans Girisi" : modal === "kesinti" ? "Kesinti Girisi" : "Mesai Girisi"} sub="Hizli hareket kaydi" onClose={() => setModal(null)}>{financeForm(type)}<ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" onClick={saveFinance}>Kaydet</button>} /></Modal>;

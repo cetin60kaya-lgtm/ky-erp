@@ -441,7 +441,7 @@ export default function AppShellV3({
         const items = current.items.map((entry) => entry.id === item.id ? { ...entry, unread: false, title: resolvedTitle, detail: [entry.detail, approved ? "İşlem tamamlandı" : "İstek reddedildi"].filter(Boolean).join(" · "), meta: { ...(entry.meta || {}), actionable: false, resolution } } : entry);
         return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length };
       });
-      try { await dismissNotifications([item.id]); } catch {}
+      try { await dismissNotifications([item.id]); } catch { /* Bildirim zaten kapandiysa akisi kesme. */ }
       window.setTimeout(() => {
         setNotificationData((current) => { const items = current.items.filter((entry) => entry.id !== item.id); return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length }; });
         refreshNotifications(true);
