@@ -238,6 +238,7 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
   if (!(await securityNotificationEnabled(c, current, "newSession", true))) return [];
 
   const now = new Date().toISOString();
+  const notificationCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const companyOwner = companyAdminRole(current?.role);
   const trustJoin = `LEFT JOIN json_store t ON t.id=(SELECT js.id FROM json_store js WHERE js.scope=? AND js.file_name=s.id ORDER BY js.updated_at DESC,js.id DESC LIMIT 1)`;
   const result = ownerRole(current?.role)
@@ -245,17 +246,17 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
               COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
               UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
          FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id ${trustJoin}
-        WHERE s.revoked_at IS NULL AND s.expires_at>?
+        WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.created_at>?
           AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
-        ORDER BY s.created_at DESC LIMIT 150`).bind(SECURITY_TRUST_SCOPE, now).all<AnyRow>()
+        ORDER BY s.created_at DESC LIMIT 150`).bind(SECURITY_TRUST_SCOPE, now, notificationCutoff).all<AnyRow>()
     : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
               COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
               UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
          FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=s.user_id ${trustJoin}
-        WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=?
+        WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.created_at>? AND s.main_company_slug=?
           AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))
           AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
-        ORDER BY s.created_at DESC LIMIT 100`).bind(SECURITY_TRUST_SCOPE, now, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
+        ORDER BY s.created_at DESC LIMIT 100`).bind(SECURITY_TRUST_SCOPE, now, notificationCutoff, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
 
   const trustedRows = await c.env.DB.prepare("SELECT file_name,data FROM json_store WHERE scope=?").bind(SECURITY_TRUSTED_DEVICE_SCOPE).all<AnyRow>();
   const trustedKeys = new Set((trustedRows.results || []).map((item: AnyRow) => objectOf(item.data)).filter((item: AnyRow) => item.isTrusted !== false && !text(item.revokedAt)).map((item: AnyRow) => `${text(item.userId)}:${text(item.deviceId)}`));
@@ -443,12 +444,17 @@ export function registerNotificationRoutes(app: any) {
     const tenant = requestedTenant(c, current);
     if (!tenant) return c.json({ ok: false, error: { code: "TENANT_FORBIDDEN", message: "Bu firma bildirimlerine erişim yetkiniz yok." } }, 403);
 
-    const stateTenant = ownerRole(current?.role) ? "__SYSTEM__" : tenant;
-    const [{ items, sourceErrors }, readIds, dismissedIds] = await Promise.all([
+    const isOwner = ownerRole(current?.role);
+    const stateTenant = isOwner ? "__SYSTEM__" : tenant;
+    const [{ items, sourceErrors }, stateReadIds, stateDismissedIds, legacyReadIds, legacyDismissedIds] = await Promise.all([
       collectNotifications(c, current, tenant),
       readState(c, current, stateTenant),
       dismissedState(c, current, stateTenant),
+      isOwner ? readState(c, current, tenant) : Promise.resolve(new Set()),
+      isOwner ? dismissedState(c, current, tenant) : Promise.resolve(new Set()),
     ]);
+    const readIds = new Set([...stateReadIds, ...legacyReadIds]);
+    const dismissedIds = new Set([...stateDismissedIds, ...legacyDismissedIds]);
     const data = items
       .filter((item) => !dismissedIds.has(item.id))
       .map((item) => ({ ...item, unread: !readIds.has(item.id) }));

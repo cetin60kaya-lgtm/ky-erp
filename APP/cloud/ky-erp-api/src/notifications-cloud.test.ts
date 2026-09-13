@@ -54,3 +54,15 @@ test("application owner notification state is system scoped", () => {
   assert.match(cloudSource, /dismissedState\(c, current, stateTenant\)/);
   assert.match(cloudSource, /writeDismissedState\(c, current, stateTenant, merged\)/);
 });
+
+test("session trust notification center keeps only fresh pending sessions", () => {
+  assert.match(cloudSource, /notificationCutoff/);
+  assert.match(cloudSource, /60 \* 60 \* 1000/);
+  assert.match(cloudSource, /s\.created_at>\?/);
+});
+
+test("owner notification state remains system scoped while honoring legacy tenant dismissals", () => {
+  assert.match(cloudSource, /stateTenant = isOwner \? "__SYSTEM__" : tenant/);
+  assert.match(cloudSource, /legacyReadIds/);
+  assert.match(cloudSource, /legacyDismissedIds/);
+});
