@@ -3,6 +3,9 @@ import LegacyIsnetPage from "./LegacyIsnetPage";
 import "./eBelgeRoute.css";
 
 const TAB_TO_VIEW = {
+  "e-belge-ana-sayfa": "overview",
+  "e-belge-merkezi": "pool",
+  "e-belge-moduller": "modules",
   "e-belge-genel": "overview",
   "e-belge-gelen-faturalar": "invoices",
   "e-belge-giden-faturalar": "outgoing-invoices",

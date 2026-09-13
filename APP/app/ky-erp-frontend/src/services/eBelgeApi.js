@@ -50,6 +50,9 @@ async function buildPdfOcrPreview(file) {
   return new File([blob], file.name.replace(/\.pdf$/i, "") + "-ocr-preview.jpg", { type: "image/jpeg" });
 }
 
+export const getEBelgeDashboard = (params = {}) =>
+  apiGet("/e-belge/dashboard", params, { timeoutMs: 30_000 }).then(unwrap);
+
 export const getEBelgePool = (params = {}) =>
   apiGet("/e-belge/pool", params, { timeoutMs: 60_000 }).then(unwrap);
 

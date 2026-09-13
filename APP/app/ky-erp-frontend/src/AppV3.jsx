@@ -284,7 +284,13 @@ export default function AppV3() {
     if (activeModule?.key === "muhasebe" && activeTab === "envanter-urunleri") return <MuhasebeSmartMatchPage {...sharedProps} />;
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
 
-    if (activeModule?.key === "isnet" && activeTab === "e-belge-merkezi") return <EBelgeCenterPage {...sharedProps} />;
+    const eBelgeView = {
+      "e-belge-ana-sayfa": "overview",
+      "e-belge-yukleme": "upload",
+      "e-belge-merkezi": "pool",
+      "e-belge-moduller": "modules",
+    }[activeTab];
+    if (activeModule?.key === "isnet" && eBelgeView) return <EBelgeCenterPage {...sharedProps} initialView={eBelgeView} />;
     if (activeModule?.key === "isnet" && activeTab === "yonetim-merkezi") return <IsnetManagementCenterPage {...sharedProps} />;
     if (activeModule?.key === "isnet" && activeTab === "belge-akisi") return <IsnetDocumentCenterPage {...sharedProps} />;
     if (activeModule?.key === "isnet" && activeTab === "irsaliyeden-faturaya" && moduleActionContext?.targetModule === "isnet" && moduleActionContext?.targetTab === "irsaliyeden-faturaya" && moduleActionContext?.invoiceDraft && moduleActionContext?.sourceId) {

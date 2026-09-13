@@ -145,8 +145,13 @@ function withEBelgeNavigation(module) {
     label: "e-Belge Merkezi",
     icon: "e-belge",
     groups: [{
-      label: "Belge Yönetimi",
-      tabs: [["e-belge-merkezi", "Belge Havuzu", "dosya"]],
+      label: "e-Belge Çalışma Alanı",
+      tabs: [
+        ["e-belge-ana-sayfa", "Ana Sayfa", "dashboard"],
+        ["e-belge-yukleme", "Belge Yükle", "upload"],
+        ["e-belge-merkezi", "Belge Havuzu", "dosya"],
+        ["e-belge-moduller", "Modüller", "ayarlar"],
+      ],
     }],
     hiddenTabs: legacyTabs,
   };
@@ -185,19 +190,18 @@ export const MODULE_ROUTE_ALIASES = {
   },
   isnet: {
     ...(BASE_ROUTE_ALIASES.isnet || {}),
-    "e-belge": "e-belge-merkezi",
+    "e-belge": "e-belge-ana-sayfa",
     "belge-merkezi": "e-belge-merkezi",
     "e-fatura": "e-belge-merkezi",
     "e-irsaliye": "e-belge-merkezi",
-    "e-belge-genel": "e-belge-merkezi",
+    "e-belge-genel": "e-belge-ana-sayfa",
     "e-belge-gelen-faturalar": "e-belge-merkezi",
     "e-belge-giden-faturalar": "e-belge-merkezi",
     "e-belge-gelen-irsaliyeler": "e-belge-merkezi",
     "e-belge-giden-irsaliyeler": "e-belge-merkezi",
-    "e-belge-yukleme": "e-belge-merkezi",
     "e-belge-eslestirmeler": "e-belge-merkezi",
     "e-belge-onay-sorunlar": "e-belge-merkezi",
-    "e-belge-entegrasyonlar": "e-belge-merkezi",
+    "e-belge-entegrasyonlar": "e-belge-moduller",
     "e-belge-gecmis": "e-belge-merkezi",
   },
   iletisim: {
