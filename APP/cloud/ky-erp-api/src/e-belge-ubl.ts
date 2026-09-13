@@ -115,6 +115,10 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
     xmlBlocks(xml, "DeliveryCustomerParty")[0] ||
     "";
   const party = direction === "INCOMING" ? supplier : customer;
+  const supplierName = xmlTag(supplier, ["RegistrationName", "Name"]);
+  const supplierTaxNo = cleanTax(xmlTag(supplier, ["CompanyID", "ID"]));
+  const customerName = xmlTag(customer, ["RegistrationName", "Name"]);
+  const customerTaxNo = cleanTax(xmlTag(customer, ["CompanyID", "ID"]));
   const legal = xmlBlocks(xml, "LegalMonetaryTotal")[0] || "";
   const taxTotalBlock = xmlBlocks(xml, "TaxTotal")[0] || "";
   const lineName = invoice ? "InvoiceLine" : "DespatchLine";
@@ -166,8 +170,12 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
     issueDate: xmlTag(xml, ["IssueDate"]),
     dueDate: xmlTag(xml, ["DueDate"]),
     currency: xmlTag(xml, ["DocumentCurrencyCode"]) || "TRY",
-    partyName: xmlTag(party, ["RegistrationName", "Name"]),
-    partyTaxNo: cleanTax(xmlTag(party, ["CompanyID", "ID"])),
+    supplierName,
+    supplierTaxNo,
+    customerName,
+    customerTaxNo,
+    partyName: direction === "INCOMING" ? supplierName : customerName,
+    partyTaxNo: direction === "INCOMING" ? supplierTaxNo : customerTaxNo,
     subtotal:
       amount(legal, "TaxExclusiveAmount") ||
       amount(legal, "LineExtensionAmount"),
@@ -182,6 +190,10 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
       profileId: xmlTag(xml, ["ProfileID"]),
       invoiceTypeCode: xmlTag(xml, ["InvoiceTypeCode"]),
       dispatchReferences: [...new Set(dispatchReferences)],
+      supplierName,
+      supplierTaxNo,
+      customerName,
+      customerTaxNo,
     },
   };
 }

@@ -183,8 +183,12 @@ function canonicalFromAzure(result: Row, documentKind: string, requestedModel: s
   const fields = doc?.fields || {};
   const content=text(result?.analyzeResult?.content||result?.content);
   const items = Array.isArray(fields?.Items?.valueArray) ? fields.Items.valueArray : [];
-  const partyName = text(fieldValue(fields.VendorName) || fieldValue(fields.SupplierName) || fieldValue(fields.MerchantName) || labelValue(content,["SATICI","TEDAR[Iİ]KÇ[Iİ]","G[ÖO]NDEREN","F[Iİ]RMA","UNVAN"]));
-  const partyTaxNo = text(fieldValue(fields.VendorTaxId) || fieldValue(fields.SupplierTaxId) || fieldValue(fields.TaxId) || taxNoFromContent(content)).replace(/\s+/g, "");
+  const supplierName = text(fieldValue(fields.VendorName) || fieldValue(fields.SupplierName) || fieldValue(fields.MerchantName) || labelValue(content,["SATICI","TEDAR[Iİ]KÇ[Iİ]","G[ÖO]NDEREN","F[Iİ]RMA","UNVAN"]));
+  const supplierTaxNo = text(fieldValue(fields.VendorTaxId) || fieldValue(fields.SupplierTaxId) || fieldValue(fields.TaxId) || taxNoFromContent(content)).replace(/\s+/g, "");
+  const customerName = text(fieldValue(fields.CustomerName) || fieldValue(fields.BillToName) || fieldValue(fields.ReceiverName));
+  const customerTaxNo = text(fieldValue(fields.CustomerTaxId) || fieldValue(fields.BillToTaxId) || fieldValue(fields.ReceiverTaxId)).replace(/\s+/g, "");
+  const partyName = supplierName;
+  const partyTaxNo = supplierTaxNo;
   const documentNo = text(fieldValue(fields.InvoiceId) || fieldValue(fields.InvoiceNumber) || fieldValue(fields.DocumentId) || labelValue(content,["FATURA\\s*(?:NO|NUMARASI)","[İI]RSAL[Iİ]YE\\s*(?:NO|NUMARASI)","BELGE\\s*(?:NO|NUMARASI)"],"[A-Z0-9./_-]{2,60}"));
   const issueDate = text(fieldValue(fields.InvoiceDate) || fieldValue(fields.DocumentDate) || dateFromContent(content));
   const dueDate = text(fieldValue(fields.DueDate));
@@ -218,6 +222,8 @@ function canonicalFromAzure(result: Row, documentKind: string, requestedModel: s
     extractor: "AZURE_DOCUMENT_INTELLIGENCE",
     extractorModel: requestedModel || text(doc?.docType) || documentKind,
     extractionConfidence: documentConfidence,
+    supplierName,customerName,
+    customerTaxNo,
     partyName,partyTaxNo,partyTaxOffice:"",partyIban:"",documentNo,uuid:"",issueDate,dueDate,currency,
     subtotal,taxTotal,discountTotal:num(fieldValue(fields.TotalDiscount)),payableTotal,lines,
     rawText: content.slice(0,20000),

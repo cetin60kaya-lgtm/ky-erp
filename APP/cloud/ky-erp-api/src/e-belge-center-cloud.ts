@@ -8,6 +8,7 @@ import { resolveProductLotPolicy } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
 import { reconcileEBelgeInvoice } from "./e-belge-match-engine";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
+import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -23,7 +24,7 @@ const cleanTax=(v:unknown)=>text(v).replace(/\D/g,"");
 const safeJson=(v:unknown)=>{if(v&&typeof v==="object"&&!Array.isArray(v))return v as Row;if(typeof v!=="string"||!v.trim())return{};try{const p=JSON.parse(v);return p&&typeof p==="object"&&!Array.isArray(p)?p:{}}catch{return{}}};
 const safeArray=(v:unknown)=>{if(Array.isArray(v))return v;if(typeof v!=="string"||!v.trim())return[];try{const p=JSON.parse(v);return Array.isArray(p)?p:[]}catch{return[]}};
 const directionOf=(v:unknown)=>/OUT|GIDEN/i.test(upper(v))?"OUTGOING":"INCOMING";
-function documentTypeOf(v:unknown,direction:string){const x=upper(v);if(/IRSALIYE|DISPATCH|DESPATCH/.test(x))return direction==="OUTGOING"?"GIDEN_IRSALIYE":"GELEN_IRSALIYE";if(/IADE|RETURN/.test(x))return"IADE_FATURA";if(/ARSIV/.test(x))return"E_ARSIV";return direction==="OUTGOING"?"GIDEN_FATURA":"GELEN_FATURA"}
+function documentTypeOf(v:unknown,direction:string){const x=upper(v),d=upper(direction);if(/IRSALIYE|DISPATCH|DESPATCH/.test(x))return d==="OUTGOING"?"GIDEN_IRSALIYE":d==="INCOMING"?"GELEN_IRSALIYE":"IRSALIYE";if(/IADE|RETURN/.test(x))return d==="OUTGOING"?"GIDEN_IADE_FATURA":d==="INCOMING"?"GELEN_IADE_FATURA":"IADE_FATURA";if(/ARSIV/.test(x))return d==="OUTGOING"?"GIDEN_E_ARSIV":d==="INCOMING"?"GELEN_E_ARSIV":"E_ARSIV";return d==="OUTGOING"?"GIDEN_FATURA":d==="INCOMING"?"GELEN_FATURA":"FATURA"}
 const isInvoice=(v:unknown)=>/FATURA|INVOICE|ARSIV|IADE/.test(upper(v));
 const isDispatch=(v:unknown)=>/IRSALIYE|DISPATCH|DESPATCH/.test(upper(v));
 const allowedExt=new Set(["XML","PDF","JPG","JPEG","PNG","WEBP","BMP","TIFF","TIF"]);
@@ -33,6 +34,25 @@ const columnsCache=new Map<string,Set<string>>();
 async function columns(c:Context<AppEnv>,table:string){if(columnsCache.has(table))return columnsCache.get(table)!;try{const r=await c.env.DB.prepare(`PRAGMA table_info("${table.replace(/"/g,'""')}")`).all<Row>();const set=new Set((r.results||[]).map(x=>text(x.name)));columnsCache.set(table,set);return set}catch{return new Set<string>()}}
 async function tableExists(c:Context<AppEnv>,table:string){const r=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(table).first<Row>();return Boolean(r?.name)}
 async function insertDynamic(c:Context<AppEnv>,table:string,data:Row){if(!(await tableExists(c,table)))return false;const cols=await columns(c,table),entries=Object.entries(data).filter(([k,v])=>cols.has(k)&&v!==undefined);if(!entries.length)return false;await c.env.DB.prepare(`INSERT INTO "${table}" (${entries.map(([k])=>`"${k}"`).join(",")}) VALUES (${entries.map(()=>"?").join(",")})`).bind(...entries.map(([,v])=>typeof v==="object"&&v!==null?JSON.stringify(v):v)).run();return true}
+
+async function mainCompanyIdentity(c:Context<AppEnv>,slug:string){
+  const canonicalNames=slug==="mecit-hakan"?["Hakan Emprime","Mecit Hakan Gürsu","Mecit Hakan Gursu","Mecit Hakan"]:[];
+  const cols=await columns(c,"main_companies");
+  if(!cols.size)return{names:[...canonicalNames,slug],taxNos:[],address:""};
+  const wanted=["name","legal_name","title","tax_number","address"].filter(key=>cols.has(key));
+  const selected=wanted.length?wanted.map(key=>`"${key}"`).join(","):"slug";
+  const row=await c.env.DB.prepare(`SELECT ${selected} FROM main_companies WHERE slug=? LIMIT 1`).bind(slug).first<Row>().catch(()=>null);
+  const names=[...canonicalNames,text(row?.name),text(row?.legal_name),text(row?.title),slug.replace(/[-_]+/g," ")].filter(Boolean);
+  const taxNos=[cleanTax(row?.tax_number)].filter(Boolean);
+  return{names:[...new Set(names)],taxNos:[...new Set(taxNos)],address:text(row?.address)};
+}
+
+async function resolveManualDirection(c:Context<AppEnv>,slug:string,requested:unknown,parsed:Row,kind:string){
+  const owner=await mainCompanyIdentity(c,slug);
+  const result=resolveManualEBelgeDirection({requestedDirection:requested,owner,supplier:{name:parsed.supplierName||parsed.partyName,taxNo:parsed.supplierTaxNo||parsed.partyTaxNo},customer:{name:parsed.customerName,taxNo:parsed.customerTaxNo},documentNo:parsed.documentNo});
+  const direction=result.direction;
+  return{...parsed,direction,documentType:documentTypeOf(kind,direction),partyName:result.counterpartyName||text(parsed.partyName),partyTaxNo:result.counterpartyTaxNo||cleanTax(parsed.partyTaxNo),directionNeedsReview:!result.resolved,directionResolution:{basis:result.basis,confidence:result.confidence,supplierOwn:result.supplierOwn,customerOwn:result.customerOwn}};
+}
 
 async function addIssue(c:Context<AppEnv>,slug:string,documentId:string,code:string,message:string,severity="WARNING",field=""){const existing=await c.env.DB.prepare(`SELECT id FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? AND issue_code=? AND is_resolved=0 LIMIT 1`).bind(slug,documentId,code).first<Row>();if(existing)return;await c.env.DB.prepare(`INSERT INTO accounting_document_issues(id,main_company_slug,document_id,issue_code,severity,field_name,message,is_resolved,created_at) VALUES(?,?,?,?,?,?,?,0,?)`).bind(crypto.randomUUID(),slug,documentId,code,severity,field||null,message,now()).run()}
 async function resolveIssues(c:Context<AppEnv>,slug:string,documentId:string,codes:string[]){if(!codes.length)return;const placeholders=codes.map(()=>"?").join(",");await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND is_resolved=0 AND issue_code IN (${placeholders})`).bind(now(),slug,documentId,...codes).run()}
@@ -95,6 +115,7 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
   if(!lines.length)await addIssue(c,slug,id,"LINES_MISSING","Belge kalemleri bulunamadı veya okunamadı.","ERROR","lines");
   if(confidence>0&&confidence<.75)await addIssue(c,slug,id,"LOW_EXTRACTION_CONFIDENCE","Belge yapay zeka okuma güveni düşük; kritik alanları kontrol edin.","WARNING");
   if(p.needsManualReview===true)await addIssue(c,slug,id,"OCR_MANUAL_REVIEW_REQUIRED",`OCR sonuçları kritik alanlarda manuel kontrol gerektiriyor${Array.isArray(p.manualReviewReasons)&&p.manualReviewReasons.length?`: ${p.manualReviewReasons.join(", ")}`:"."}`,"ERROR","ocr");
+  if(p.directionNeedsReview)await addIssue(c,slug,id,"DIRECTION_UNRESOLVED","Belgenin Hakan Emprime tarafına gelen mi giden mi olduğu otomatik doğrulanamadı. Ana firma VKN/ünvan eşleşmesini kontrol edin.","ERROR","direction");
   if(p.outgoingCounterpartyReview)await addIssue(c,slug,id,"OUTGOING_COUNTERPARTY_REVIEW","Giden tarama/PDF belgesinde alıcı müşteri kullanıcı tarafından doğrulanmalıdır.","ERROR","party_company_id");
   await linkFile(c,slug,asset.id,id,asset.ext);await queueArchive(c,slug,id,asset.id,p.documentType);return{documentId:id,duplicate:false,status:"REVIEW_REQUIRED"};
 }
@@ -103,7 +124,7 @@ async function stageProviderR2Asset(c:Context<AppEnv>,slug:string,input:Row){con
 
 export async function ingestProviderEBelgeXml(c:Context<AppEnv>,slug:string,input:Row){const xmlText=text(input.xmlText);if(!xmlText)throw Object.assign(new Error("Provider XML içeriği olmadan canonical e-Belge oluşturulamaz."),{code:"PROVIDER_XML_REQUIRED"});const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo||input.uuid),direction=directionOf(input.direction),parsed=parseCanonicalEBelgeUbl(xmlText,direction),documentNo=text(parsed.documentNo)||text(input.documentNo),xmlKey=text(input.xmlKey),pdfKey=text(input.pdfKey),rawMetadata={...safeJson(parsed.rawMetadata),...safeJson(input.rawMetadata),providerType,providerDocumentId,providerSourceId:text(input.sourceId),providerAutomationKey:text(input.automationKey),providerStatus:text(input.statusText),providerSyncedAt:now()};const xmlAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:xmlKey,ext:"XML",fileName:`${documentNo||providerDocumentId||"belge"}.xml`,documentNo});const result=await createDocument(c,slug,{...parsed,direction,documentNo,providerType,providerDocumentId,sourceType:text(input.sourceType)||`${providerType}_DIRECT`,status:"REVIEW_REQUIRED",extractionConfidence:1,rawMetadata},xmlAsset);if(pdfKey){const pdfAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:pdfKey,ext:"PDF",fileName:`${documentNo||providerDocumentId||"belge"}.pdf`,documentNo});const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? LIMIT 1`).bind(result.documentId,slug).first<Row>();if(doc)await attachDuplicateFile(c,slug,doc,pdfAsset)}return{...result,providerType,providerDocumentId,documentNo}}
 
-async function uploadOne(c:Context<AppEnv>,slug:string,file:File,direction:string,kind:string,analysisFile:File|null=null){
+async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirection:string,kind:string,analysisFile:File|null=null){
   const ext=upper(file.name.split(".").pop());
   if(!allowedExt.has(ext))throw Object.assign(new Error(`${file.name}: desteklenmeyen dosya tipi.`),{code:"UNSUPPORTED_FILE"});
   if(file.size>MAX_FILE_BYTES)throw Object.assign(new Error(`${file.name}: dosya 20 MB sınırını aşıyor.`),{code:"FILE_TOO_LARGE"});
@@ -112,13 +133,19 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,direction:strin
   if(ext==="PDF"&&!readiness.azureConfigured&&!(analysisFile instanceof File))throw Object.assign(new Error("PDF için tarayıcı OCR önizlemesi hazırlanamadı. Dosyayı yeniden seçin veya görsel olarak yükleyin."),{code:"PDF_OCR_PREVIEW_REQUIRED"});
   const asset=await stageFile(c,slug,file);
   try{
-    if(ext==="XML"){const xml=await file.text(),parsed=parseCanonicalEBelgeUbl(xml,direction);return await createDocument(c,slug,{...parsed,extractionConfidence:1},asset)}
+    if(ext==="XML"){
+      const xml=await file.text(),raw=parseCanonicalEBelgeUbl(xml,"INCOMING"),resolvedKind=isDispatch(raw.documentType)?"IRSALIYE":"FATURA";
+      const parsed=await resolveManualDirection(c,slug,requestedDirection,raw,resolvedKind);
+      return await createDocument(c,slug,{...parsed,extractionConfidence:1,rawMetadata:{...safeJson(parsed.rawMetadata),directionResolution:parsed.directionResolution,originalFileName:file.name}},asset);
+    }
     const requestedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(kind)?"IRSALIYE":/FATURA|INVOICE/i.test(kind)?"FATURA":"AUTO";
     const analysisTarget=readiness.azureConfigured?file:(analysisFile instanceof File?analysisFile:file);
     const ai=await analyzeAccountingDocument(c,analysisTarget,requestedKind),canonical=ai?.canonical||ai?.data||ai||{};
-    const resolvedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(text(canonical.inferredDocumentKind))?"IRSALIYE":"FATURA",outgoing=direction==="OUTGOING";
-    const parsed={...canonical,direction,documentType:documentTypeOf(resolvedKind,direction),partyName:outgoing?"":text(canonical.partyName),partyTaxNo:outgoing?"":cleanTax(canonical.partyTaxNo),outgoingCounterpartyReview:outgoing,sourceType:"AI_SCAN",rawMetadata:{...safeJson(canonical.rawMetadata),aiProvider:canonical.extractor||"DOCUMENT_INTELLIGENCE",requestedDocumentKind:requestedKind,inferredDocumentKind:resolvedKind,autoDetected:canonical.autoDetected===true,analysisSource:analysisTarget===file?"ORIGINAL_FILE":"CLIENT_PDF_PREVIEW",originalFileName:file.name}};
-    return await createDocument(c,slug,parsed,asset);
+    const resolvedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(text(canonical.inferredDocumentKind))?"IRSALIYE":"FATURA";
+    const parsed=await resolveManualDirection(c,slug,requestedDirection,canonical,resolvedKind);
+    const outgoing=parsed.direction==="OUTGOING";
+    const hasCounterparty=Boolean(text(parsed.partyName)||cleanTax(parsed.partyTaxNo));
+    return await createDocument(c,slug,{...parsed,outgoingCounterpartyReview:outgoing&&!hasCounterparty,sourceType:"AI_SCAN",rawMetadata:{...safeJson(canonical.rawMetadata),aiProvider:canonical.extractor||"DOCUMENT_INTELLIGENCE",requestedDocumentKind:requestedKind,inferredDocumentKind:resolvedKind,autoDetected:canonical.autoDetected===true,directionResolution:parsed.directionResolution,analysisSource:analysisTarget===file?"ORIGINAL_FILE":"CLIENT_PDF_PREVIEW",originalFileName:file.name}},asset);
   }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
 }
 
@@ -129,6 +156,7 @@ async function reconcileOne(c:Context<AppEnv>,slug:string,id:string){
   const invoice=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
   if(!invoice)throw Object.assign(new Error("Belge bulunamadı."),{code:"NOT_FOUND"});
   if(!isInvoice(invoice.document_type))return{documentId:id,status:"NOT_INVOICE",confidence:0,notes:["İrsaliye eşleştirmesi yalnız faturalarda çalışır."]};
+  if(!["INCOMING","OUTGOING"].includes(upper(invoice.direction))){await addIssue(c,slug,id,"DIRECTION_UNRESOLVED","Fatura/irsaliye eşleştirmesi için belge yönü netleşmelidir.","ERROR","direction");return{documentId:id,status:"DIRECTION_UNRESOLVED",confidence:0,notes:["Belge yönü otomatik doğrulanamadı."]}}
   const invoiceLines=(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>()).results||[];
   const meta=safeJson(invoice.raw_metadata),refs=safeArray(meta.dispatchReferences).map(text).filter(Boolean);
   const start=text(invoice.issue_date)?new Date(new Date(invoice.issue_date).getTime()-90*86400000).toISOString().slice(0,10):"1900-01-01",end=text(invoice.issue_date)?new Date(new Date(invoice.issue_date).getTime()+90*86400000).toISOString().slice(0,10):"2999-12-31";
@@ -237,15 +265,23 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   app.get("/api/e-belge/documents/:id",async c=>{const slug=slugOf(c),id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);const [lines,issues,relations,files,archive]=await Promise.all([c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? ORDER BY is_resolved,severity DESC,created_at DESC`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT r.*,d.document_no related_document_no,d.document_type related_document_type FROM accounting_document_relations r LEFT JOIN accounting_documents d ON d.id=r.related_document_id AND d.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.document_id=? ORDER BY r.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.preview_status,a.source_type FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_archive_jobs WHERE main_company_slug=? AND document_id=? ORDER BY created_at DESC`).bind(slug,id).all<Row>()]);return c.json({ok:true,data:{...doc,raw_metadata:safeJson(doc.raw_metadata),lines:(lines.results||[]).map(x=>({...x,raw_metadata:safeJson(x.raw_metadata)})),issues:issues.results||[],relations:relations.results||[],files:files.results||[],archiveJobs:archive.results||[]}})});
   app.get("/api/e-belge/company-suggestions",async c=>{const slug=slugOf(c),q=text(c.req.query("q")),term=`%${q}%`;const rows=await c.env.DB.prepare(`SELECT id,name,tax_no,company_type,current_balance FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND is_active=1 AND (?='' OR UPPER(name) LIKE UPPER(?) OR COALESCE(tax_no,'') LIKE ?) ORDER BY name COLLATE NOCASE LIMIT 30`).bind(slug,q,term,term).all<Row>();return c.json({ok:true,data:rows.results||[]})});
   app.post("/api/e-belge/upload",async c=>{
-    const slug=slugOf(c),body=await c.req.parseBody({all:true}),direction=directionOf(body.direction),kind=upper(body.documentKind||"AUTO");
+    const slug=slugOf(c),body=await c.req.parseBody({all:true}),direction=explicitEBelgeDirection(body.direction),kind=upper(body.documentKind||"AUTO");
     let rawFiles:any=body.files||body.file||[];const files=(Array.isArray(rawFiles)?rawFiles:[rawFiles]).filter((x:any)=>x instanceof File) as File[];
     if(!files.length)return c.json(error("FILES_REQUIRED","Yüklenecek XML/PDF/görsel bulunamadı."),400);
     if(files.length>MAX_FILES)return c.json(error("TOO_MANY_FILES",`Tek seferde en fazla ${MAX_FILES} dosya yüklenebilir.`),413);
     const previews=files.map((_,index)=>{const raw=(body as any)[`preview_${index}`];return (Array.isArray(raw)?raw[0]:raw) instanceof File?(Array.isArray(raw)?raw[0]:raw) as File:null});
     const total=files.reduce((s,f)=>s+f.size,0)+previews.reduce((s,f)=>s+(f?.size||0),0);
     if(total>MAX_REQUEST_BYTES)return c.json(error("REQUEST_TOO_LARGE","Toplam yükleme ve OCR önizleme boyutu 80 MB sınırını aşıyor."),413);
-    const items=[],errors=[];for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index])})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
-    return c.json({ok:errors.length===0,data:{items,errors,total:files.length}},errors.length?207:201);
+    const items=[],errors=[];
+    for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index])})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
+    const autoReconcile=[];
+    for(const documentId of [...new Set(items.map((item:any)=>text(item.documentId)).filter(Boolean))]){
+      const doc=await c.env.DB.prepare("SELECT document_type,direction FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
+      if(!doc||!isInvoice(doc.document_type)||!["INCOMING","OUTGOING"].includes(upper(doc.direction)))continue;
+      try{autoReconcile.push(await reconcileOne(c,slug,documentId))}catch(e:any){autoReconcile.push({documentId,status:"ERROR",message:text(e?.message)||"Otomatik eşleştirme tamamlanamadı."})}
+    }
+    return c.json({ok:errors.length===0,data:{items,errors,total:files.length,autoReconcile}},errors.length?207:201);
+
   });
   app.patch("/api/e-belge/documents/:id",async c=>{const slug=slugOf(c),id=c.req.param("id"),b=await c.req.json<Row>().catch(()=>({})),doc=await c.env.DB.prepare(`SELECT id,party_name,party_tax_no FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL`).bind(id,slug).first<Row>();if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);if(text(b.partyCompanyId)){const company=await c.env.DB.prepare(`SELECT id,name,tax_no FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(text(b.partyCompanyId),slug).first<Row>();if(!company)return c.json(error("COMPANY_NOT_FOUND","Seçilen firma bulunamadı."),404);const originalPartyName=text(doc.party_name);if(b.saveAlias!==false&&originalPartyName&&normalize(originalPartyName)!==normalize(company.name))await saveCompanyAlias(c,slug,text(company.id),originalPartyName);await c.env.DB.prepare(`UPDATE accounting_documents SET party_company_id=?,party_name=?,party_tax_no=?,status='REVIEW_REQUIRED',updated_at=? WHERE id=? AND main_company_slug=?`).bind(company.id,company.name,company.tax_no||null,now(),id,slug).run();await rerouteDocumentLines(c,slug,id,text(company.id));await resolveIssues(c,slug,id,["PARTY_UNMATCHED","OUTGOING_COUNTERPARTY_REVIEW"])}return c.json({ok:true,data:{id}})});
   app.post("/api/e-belge/documents/:id/reconcile",async c=>{try{return c.json({ok:true,data:await reconcileOne(c,slugOf(c),c.req.param("id"))})}catch(e:any){return c.json(error(text(e.code)||"RECONCILE_FAILED",text(e.message)||"Eşleştirme tamamlanamadı."),text(e.code)==="NOT_FOUND"?404:409)}});
