@@ -90,3 +90,21 @@
 .ikpf-table.entitlement>div{grid-template-columns:.8fr 1.2fr .8fr .6fr}
 @media(max-width:1200px){.ikpf-leave-summary{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:700px){.ikpf-leave-summary{grid-template-columns:1fr 1fr}.ikpf-table.entitlement{overflow:auto}}
+
+/* İK ekran ayrımı: özlük ve ücret birbirinin kopyası değildir. */
+.ikpf-focus-personel .ikpf-stats,.ikpf-focus-personel .ikpf-finance-card,.ikpf-focus-personel .ikpf-leave-card,.ikpf-focus-personel .ikpf-two,.ikpf-focus-personel .ikpf-card.subtle{display:none}
+.ikpf-focus-ucret .ikpf-person-card,.ikpf-focus-ucret .ikpf-leave-card,.ikpf-focus-ucret .ikpf-two,.ikpf-focus-ucret .ikpf-card.subtle{display:none}
+.ikpf-focus-ucret .ikpf-main{background:linear-gradient(180deg,#fbfdff,#f7fbff)}
+.ikpf-focus-ucret .ikpf-finance-card{border-color:#acd8cf;background:#f8fffd}
+.ikpf-focus-personel:not(.ikpf-editing) .ikpf-person-card .ikpf-field,.ikpf-focus-ucret:not(.ikpf-editing) .ikpf-finance-card .ikpf-field{border:1px solid #e4ebf3;border-radius:8px;padding:9px;background:#f8fafc}
+.ikpf-focus-personel:not(.ikpf-editing) .ikpf-person-card input:disabled,.ikpf-focus-personel:not(.ikpf-editing) .ikpf-person-card select:disabled,.ikpf-focus-ucret:not(.ikpf-editing) .ikpf-finance-card input:disabled,.ikpf-focus-ucret:not(.ikpf-editing) .ikpf-finance-card select:disabled{border:0;background:transparent;padding:2px 0;font-weight:800;color:#18324f;opacity:1}
+.ikpf-editing::before,.ikpf-new-open::before{content:"";position:fixed;inset:0;background:rgba(15,32,55,.46);backdrop-filter:blur(2px);z-index:110}
+.ikpf-focus-personel.ikpf-editing .ikpf-person-card,.ikpf-focus-ucret.ikpf-editing .ikpf-finance-card{display:block;position:fixed;left:8vw;right:8vw;top:9vh;max-height:82vh;overflow:auto;z-index:120;padding:20px;border-radius:14px;box-shadow:0 28px 80px rgba(15,32,55,.32);background:#fff}
+.ikpf-editing .ikpf-actions{position:fixed;right:calc(8vw + 22px);top:calc(9vh + 16px);z-index:125}
+.ikpf-editing .ikpf-person-head{border:0}
+.ikpf-new-open .ikpf-new{position:fixed;left:10vw;right:10vw;top:8vh;max-height:84vh;overflow:auto;z-index:120;padding:20px;border-radius:14px;box-shadow:0 28px 80px rgba(15,32,55,.32)}
+.ikpf-focus-ucret .ikpf-stats{grid-template-columns:repeat(5,minmax(0,1fr))}
+.ikpf-focus-ucret .ikpf-stat{background:#fff;border-color:#cfe4df}
+.ikpf-focus-ucret .ikpf-stat strong{color:#0f6659}
+.ikpf-focus-personel .ikpf-person-head{background:#f8fbff;border:1px solid #e1e9f2;border-radius:10px;padding:10px}
+@media(max-width:900px){.ikpf-focus-personel.ikpf-editing .ikpf-person-card,.ikpf-focus-ucret.ikpf-editing .ikpf-finance-card,.ikpf-new-open .ikpf-new{left:3vw;right:3vw;top:5vh;max-height:90vh}.ikpf-editing .ikpf-actions{right:6vw;top:7vh}.ikpf-focus-ucret .ikpf-stats{grid-template-columns:repeat(2,1fr)}}

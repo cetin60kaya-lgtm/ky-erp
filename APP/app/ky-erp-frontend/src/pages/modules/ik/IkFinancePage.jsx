@@ -2,7 +2,9 @@ import IkAdvancedMonthly from "../IkAdvancedMonthly";
 
 const MODE_BY_TAB = {
   ozet: "ozet",
+  "ucret-odeme-plani": "ucret",
   "mesai-avans": "mesai",
+  "yillik-izin": "izin",
   "bordro-odeme": "bordro",
   "sgk-evrak-kontrol": "kapanis",
 };

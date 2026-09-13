@@ -265,14 +265,14 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
   const paymentPlan = num(person?.bankAmount) + num(person?.cashAmount);
   const paymentDifference = grossPlan - paymentPlan;
 
-  return <div className="ikpf-page">
+  return <div className={`ikpf-page ikpf-focus-${focus} ${editing ? "ikpf-editing" : ""} ${newOpen ? "ikpf-new-open" : ""}`}>
     <header className="ikpf-header">
       <div>
         <small>İK / PERSONEL & ÜCRET YÖNETİMİ</small>
         <h1>{focus === "ucret" ? "Maaş ve Ödeme Planı" : "Personel Kartları"}</h1>
-        <p>İK yalnız personel, ücret, yan hak, ödeme planı ve özlük verisini yönetir. Giriş/çıkış, puantaj, terminal ve vardiya işlemleri PDKS bölümündedir.</p>
+        <p>{focus === "ucret" ? "Aylık sabit ücret ve ödeme planını yönetin. Personel özlük bilgileri bu ekranda gösterilmez." : "Özlük, iletişim, SGK ve çalışma bilgilerini yönetin. Maaş planı ayrı ücret ekranındadır; PDKS işlemleri PDKS bölümündedir."}</p>
       </div>
-      {!audit ? <button type="button" className="ikpf-primary" onClick={() => setNewOpen((value) => !value)}><Plus size={16}/>{newOpen ? "Yeni Kartı Kapat" : "Yeni Personel"}</button> : null}
+      {!audit && focus === "personel" ? <button type="button" className="ikpf-primary" onClick={() => setNewOpen((value) => !value)}><Plus size={16}/>{newOpen ? "Yeni Kartı Kapat" : "Yeni Personel"}</button> : null}
     </header>
 
     {notice ? <div className="ikpf-notice"><BadgeCheck size={17}/>{notice}</div> : null}
@@ -295,8 +295,6 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
         <Field label="Bankaya"><input type="number" value={newDraft.bankAmount} onChange={(e)=>setNewDraft({...newDraft,bankAmount:Number(e.target.value||0)})}/></Field>
         <Field label="Elden"><input type="number" value={newDraft.cashAmount} onChange={(e)=>setNewDraft({...newDraft,cashAmount:Number(e.target.value||0)})}/></Field>
         <Field label="Mesai Saat Tabanı"><input type="number" value={newDraft.overtimeBaseHours} onChange={(e)=>setNewDraft({...newDraft,overtimeBaseHours:Number(e.target.value||0)})}/></Field>
-        <Field label="Yıllık İzin Hakedişi"><input type="number" value={newDraft.annualLeaveEntitlement} onChange={(e)=>setNewDraft({...newDraft,annualLeaveEntitlement:Number(e.target.value||0)})}/></Field>
-        <Field label="Devreden Yıllık İzin"><input type="number" value={newDraft.annualLeaveCarryover} onChange={(e)=>setNewDraft({...newDraft,annualLeaveCarryover:Number(e.target.value||0)})}/></Field>
       </div>
       <button type="button" className="ikpf-primary" disabled={busy || !newDraft.fullName.trim()} onClick={createPerson}><Save size={16}/>Personeli Kaydet</button>
     </section> : null}
@@ -336,8 +334,8 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
             <Stat label="Toplam Plan" value={money(paymentPlan)} sub={Math.abs(paymentDifference) < 0.01 ? "Maaş + yol ile dengeli" : `Fark: ${money(paymentDifference)}`}/>
           </section>
 
-          <section className="ikpf-card">
-            <div className="ikpf-section-title"><div><UserRound size={18}/><strong>Personel ve Özlük Bilgileri</strong></div><span>PDKS işlemi yok</span></div>
+          <section className="ikpf-card ikpf-person-card">
+            <div className="ikpf-section-title"><div><UserRound size={18}/><strong>Personel ve Özlük Bilgileri</strong></div><span>Düzenle ile açılır</span></div>
             <div className="ikpf-form-grid">
               <Field label="Ad Soyad"><input disabled={!editing} value={person?.fullName||""} onChange={(e)=>setDraft({...draft,fullName:e.target.value})}/></Field>
               <Field label="Personel Kodu"><input disabled value={selected.personnelCode||selected.code||""}/></Field>
@@ -354,8 +352,8 @@ export default function IkPersonnelFinancePage({ activeMainCompany, focus = "per
             </div>
           </section>
 
-          {!audit ? <section className="ikpf-card emphasis">
-            <div className="ikpf-section-title"><div><Banknote size={18}/><strong>Maaş, Yol ve Ödeme Planı</strong></div><span>İK ana kaynak</span></div>
+          {!audit ? <section className="ikpf-card emphasis ikpf-finance-card">
+            <div className="ikpf-section-title"><div><Banknote size={18}/><strong>Maaş, Yol ve Ödeme Planı</strong></div><span>Düzenle ile açılır</span></div>
             <div className="ikpf-form-grid">
               <Field label="Maaş"><input disabled={!editing} type="number" value={num(person?.salary)} onChange={(e)=>setDraft({...draft,salary:Number(e.target.value||0)})}/></Field>
               <Field label="Yol"><input disabled={!editing} type="number" value={num(person?.roadAllowance)} onChange={(e)=>setDraft({...draft,roadAllowance:Number(e.target.value||0)})}/></Field>
