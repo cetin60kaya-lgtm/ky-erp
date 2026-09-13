@@ -62,18 +62,21 @@ const COMPLIANCE_MODULE = {
   permissionKey: "COMPLIANCE",
   label: "Denetim & Uygunluk",
   icon: "file-check",
-  groups: [
-    { label: "Kontrol Merkezi", tabs: [
+  groups: [{
+    label: "Kontrol Merkezi",
+    tabs: [
       ["denetim-genel", "Genel Bakış", "dashboard"],
       ["denetim-evraklar", "Evrak Takip", "dosya"],
       ["denetim-takvim", "Süre & Takvim", "takvim"],
       ["denetim-capa", "Düzeltici Faaliyet / CAPA", "uyari"],
-    ]},
-    { label: "Standartlar", tabs: [
+    ],
+  }, {
+    label: "Standartlar",
+    tabs: [
       ["denetim-standartlar", "Denetim Standartları", "file-check"],
       ["denetim-ayarlar", "Ayarlar & Özelleştirme", "ayarlar"],
-    ]},
-  ],
+    ],
+  }],
 };
 
 const SYSTEM_SENTINEL_MODULE = {
@@ -118,39 +121,33 @@ function withCompanyBilling(module) {
 
 function withEBelgeNavigation(module) {
   if (module.key !== "isnet") return module;
-  const newKeys = new Set([
-    "e-belge-genel", "e-belge-gelen-faturalar", "e-belge-giden-faturalar",
-    "e-belge-gelen-irsaliyeler", "e-belge-giden-irsaliyeler", "e-belge-yukleme",
-    "e-belge-eslestirmeler", "e-belge-onay-sorunlar", "e-belge-entegrasyonlar", "e-belge-gecmis",
+  const eBelgeKeys = new Set([
+    "e-belge-merkezi",
+    "e-belge-genel",
+    "e-belge-gelen-faturalar",
+    "e-belge-giden-faturalar",
+    "e-belge-gelen-irsaliyeler",
+    "e-belge-giden-irsaliyeler",
+    "e-belge-yukleme",
+    "e-belge-eslestirmeler",
+    "e-belge-onay-sorunlar",
+    "e-belge-entegrasyonlar",
+    "e-belge-gecmis",
   ]);
   const legacyTabs = [
     ...(module.groups || []).flatMap((group) => group.tabs || []),
     ...(module.hiddenTabs || []),
   ]
-    .filter(([key]) => !newKeys.has(key))
+    .filter(([key]) => !eBelgeKeys.has(key))
     .filter(([key], index, rows) => rows.findIndex(([otherKey]) => otherKey === key) === index);
   return {
     ...module,
     label: "e-Belge Merkezi",
     icon: "e-belge",
-    groups: [
-      { label: "Belge Yönetimi", tabs: [
-        ["e-belge-genel", "Genel Bakış", "dashboard"],
-        ["e-belge-gelen-faturalar", "Gelen Faturalar", "dosya"],
-        ["e-belge-giden-faturalar", "Giden Faturalar", "dosya"],
-        ["e-belge-gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"],
-        ["e-belge-giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
-        ["e-belge-yukleme", "Belge Havuzu / Yükleme", "file-check"],
-      ]},
-      { label: "Kontrol", tabs: [
-        ["e-belge-eslestirmeler", "Eşleştirmeler", "baglanti"],
-        ["e-belge-onay-sorunlar", "Onay / Sorunlar", "uyari"],
-      ]},
-      { label: "Sistem", tabs: [
-        ["e-belge-entegrasyonlar", "Entegrasyonlar", "ayarlar"],
-        ["e-belge-gecmis", "Geçmiş / Arşiv", "raporlar"],
-      ]},
-    ],
+    groups: [{
+      label: "Belge Yönetimi",
+      tabs: [["e-belge-merkezi", "Belge Havuzu", "dosya"]],
+    }],
     hiddenTabs: legacyTabs,
   };
 }
@@ -188,11 +185,20 @@ export const MODULE_ROUTE_ALIASES = {
   },
   isnet: {
     ...(BASE_ROUTE_ALIASES.isnet || {}),
-    "e-belge": "e-belge-genel",
-    "e-belge-merkezi": "e-belge-genel",
-    "belge-merkezi": "e-belge-genel",
-    "e-fatura": "e-belge-gelen-faturalar",
-    "e-irsaliye": "e-belge-gelen-irsaliyeler",
+    "e-belge": "e-belge-merkezi",
+    "belge-merkezi": "e-belge-merkezi",
+    "e-fatura": "e-belge-merkezi",
+    "e-irsaliye": "e-belge-merkezi",
+    "e-belge-genel": "e-belge-merkezi",
+    "e-belge-gelen-faturalar": "e-belge-merkezi",
+    "e-belge-giden-faturalar": "e-belge-merkezi",
+    "e-belge-gelen-irsaliyeler": "e-belge-merkezi",
+    "e-belge-giden-irsaliyeler": "e-belge-merkezi",
+    "e-belge-yukleme": "e-belge-merkezi",
+    "e-belge-eslestirmeler": "e-belge-merkezi",
+    "e-belge-onay-sorunlar": "e-belge-merkezi",
+    "e-belge-entegrasyonlar": "e-belge-merkezi",
+    "e-belge-gecmis": "e-belge-merkezi",
   },
   iletisim: {
     mail: "mail-gelen",
