@@ -47,3 +47,10 @@ test("session trust approvals are surfaced as actionable security notifications"
 test("company login notifications keep privileged targets system-only", () => {
   assert.ok(cloudSource.includes("NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')"));
 });
+
+
+test("application owner notification state is system scoped", () => {
+  assert.match(cloudSource, /stateTenant = ownerRole\(current\?\.role\) \? "__SYSTEM__" : tenant/);
+  assert.match(cloudSource, /dismissedState\(c, current, stateTenant\)/);
+  assert.match(cloudSource, /writeDismissedState\(c, current, stateTenant, merged\)/);
+});

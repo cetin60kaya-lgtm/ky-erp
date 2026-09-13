@@ -186,6 +186,7 @@ export default function AppShellV3({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const profileMenuRef = useRef(null);
+  const resolvedNotificationIdsRef = useRef(new Map());
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("all");
   const [notificationLoading, setNotificationLoading] = useState(false);
@@ -245,10 +246,13 @@ export default function AppShellV3({
     setNotificationError("");
     try {
       const data = await getNotifications();
+      const now = Date.now();
+      for (const [id, expiresAt] of resolvedNotificationIdsRef.current) if (expiresAt <= now) resolvedNotificationIdsRef.current.delete(id);
+      const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => !resolvedNotificationIdsRef.current.has(item.id));
       setNotificationData({
-        items: Array.isArray(data?.items) ? data.items : [],
-        unreadCount: Number(data?.unreadCount || 0),
-        totalCount: Number(data?.totalCount || 0),
+        items,
+        unreadCount: items.filter((item) => item.unread).length,
+        totalCount: items.length,
         partial: Boolean(data?.partial),
         sourceErrors: Array.isArray(data?.sourceErrors) ? data.sourceErrors : [],
         generatedAt: data?.generatedAt || "",
@@ -429,8 +433,19 @@ export default function AppShellV3({
       } else {
         await decideSecurityCenterLoginApproval(approvalId, decision);
       }
-      await dismissNotificationIds([item.id]);
-      await refreshNotifications(true);
+      const approved = decision !== "DENY";
+      const resolution = approved ? "APPROVED" : "DENIED";
+      const resolvedTitle = sessionId ? (approved ? "Oturum onaylandı" : "Oturum reddedildi") : (approved ? "Giriş onaylandı" : "Giriş reddedildi");
+      resolvedNotificationIdsRef.current.set(item.id, Date.now() + 30_000);
+      setNotificationData((current) => {
+        const items = current.items.map((entry) => entry.id === item.id ? { ...entry, unread: false, title: resolvedTitle, detail: [entry.detail, approved ? "İşlem tamamlandı" : "İstek reddedildi"].filter(Boolean).join(" · "), meta: { ...(entry.meta || {}), actionable: false, resolution } } : entry);
+        return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length };
+      });
+      try { await dismissNotifications([item.id]); } catch {}
+      window.setTimeout(() => {
+        setNotificationData((current) => { const items = current.items.filter((entry) => entry.id !== item.id); return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length }; });
+        refreshNotifications(true);
+      }, 1600);
     } catch (error) {
       setNotificationError(error?.message || "Güvenlik onayı tamamlanamadı.");
     } finally {
@@ -614,12 +629,11 @@ export default function AppShellV3({
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç"><Menu size={19} /></button>
           <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onFocus={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><ErpIcon name="hizli" size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
-          <label className="shell-v3-company-context">
-            <small>{ownerUser ? "İşlem Firması" : "Firma"}</small>
-            <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
-              {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
-            </select>
-          </label>
+          {ownerUser ? (
+            <div className="shell-v3-owner-scope" aria-label="Uygulama Sahibi kapsamı"><small>Kapsam</small><strong>Uygulama Sahibi</strong><span>Tüm Sistem</span></div>
+          ) : (
+            <label className="shell-v3-company-context"><small>Firma</small><select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>{companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}</select></label>
+          )}
 
           <div className="shell-v3-notification-wrap">
             <button
@@ -818,7 +832,7 @@ export default function AppShellV3({
 
         <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}</div>
         <section className="shell-v3-workspace">{children}</section>
-        <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span>{ownerUser ? <span>İşlem Firması: {activeCompanyName}</span> : null}<span className="ok">Sistem hazır</span></footer>
+        <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span><span className="ok">Sistem hazır</span></footer>
       </main>
 
       {displaySettingsOpen && displayPreferences

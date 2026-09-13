@@ -443,10 +443,11 @@ export function registerNotificationRoutes(app: any) {
     const tenant = requestedTenant(c, current);
     if (!tenant) return c.json({ ok: false, error: { code: "TENANT_FORBIDDEN", message: "Bu firma bildirimlerine erişim yetkiniz yok." } }, 403);
 
+    const stateTenant = ownerRole(current?.role) ? "__SYSTEM__" : tenant;
     const [{ items, sourceErrors }, readIds, dismissedIds] = await Promise.all([
       collectNotifications(c, current, tenant),
-      readState(c, current, tenant),
-      dismissedState(c, current, tenant),
+      readState(c, current, stateTenant),
+      dismissedState(c, current, stateTenant),
     ]);
     const data = items
       .filter((item) => !dismissedIds.has(item.id))
@@ -475,10 +476,11 @@ export function registerNotificationRoutes(app: any) {
     const incoming = sanitizeNotificationReadIds(body.ids);
     if (!incoming.length) return c.json({ ok: true, data: { readCount: 0 } });
 
-    const existing = await readState(c, current, tenant);
+    const stateTenant = ownerRole(current?.role) ? "__SYSTEM__" : tenant;
+    const existing = await readState(c, current, stateTenant);
     for (const id of incoming) existing.add(id);
     const merged = [...existing].slice(-MAX_READ_IDS);
-    await writeState(c, current, tenant, merged);
+    await writeState(c, current, stateTenant, merged);
     return c.json({ ok: true, data: { readCount: incoming.length } });
   });
 
@@ -492,10 +494,11 @@ export function registerNotificationRoutes(app: any) {
     const incoming = sanitizeNotificationReadIds(body.ids);
     if (!incoming.length) return c.json({ ok: true, data: { dismissedCount: 0 } });
 
-    const existing = await dismissedState(c, current, tenant);
+    const stateTenant = ownerRole(current?.role) ? "__SYSTEM__" : tenant;
+    const existing = await dismissedState(c, current, stateTenant);
     for (const id of incoming) existing.add(id);
     const merged = [...existing].slice(-MAX_READ_IDS);
-    await writeDismissedState(c, current, tenant, merged);
+    await writeDismissedState(c, current, stateTenant, merged);
     return c.json({ ok: true, data: { dismissedCount: incoming.length } });
   });
 }

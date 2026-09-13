@@ -42,6 +42,15 @@ test("KY Security PWA labels every critical security action and refreshes cache"
   assert.match(sw, /kyerp-security-shell-v15/);
 });
 
+test("owner shell never renders a company as the application owner identity", async () => {
+  const shell = await read("layouts/AppShellV3.jsx");
+  assert.match(shell, /shell-v3-owner-scope/);
+  assert.match(shell, /Uygulama Sahibi/);
+  assert.match(shell, /Tüm Sistem/);
+  assert.doesNotMatch(shell, /ownerUser \? "İşlem Firması"/);
+  assert.doesNotMatch(shell, /İşlem Firması: \{activeCompanyName\}/);
+});
+
 test("notification center exposes direct scoped login and session approval actions", async () => {
   const shell = await read("layouts/AppShellV3.jsx");
   const notifications = await read("../../../cloud/ky-erp-api/src/notifications-cloud.ts");
