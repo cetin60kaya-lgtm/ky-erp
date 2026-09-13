@@ -202,6 +202,19 @@ function UploadPanel({ onUploaded }) {
 }
 
 function DetailDrawer({ id, onClose, onChanged }) {
+  const modalRef = useRef(null);
+  const dragRef = useRef(null);
+  const [modalGeometry, setModalGeometry] = useState(() => {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const fallback = { w: Math.min(1180, vw - 48), h: Math.min(820, vh - 48) };
+    let saved = {}; try { saved = JSON.parse(window.localStorage.getItem("kyerp:ebelge:document-window") || "{}"); } catch {}
+    const w = Math.max(720, Math.min(Number(saved.w) || fallback.w, vw - 20));
+    const h = Math.max(500, Math.min(Number(saved.h) || fallback.h, vh - 20));
+    const x = Math.max(8, Math.min(Number.isFinite(Number(saved.x)) ? Number(saved.x) : (vw - w) / 2, vw - w - 8));
+    const y = Math.max(8, Math.min(Number.isFinite(Number(saved.y)) ? Number(saved.y) : (vh - h) / 2, vh - h - 8));
+    return { x, y, w, h };
+  });
+  const persistGeometry = useCallback((next) => { try { window.localStorage.setItem("kyerp:ebelge:document-window", JSON.stringify(next)); } catch {} }, []);
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -232,6 +245,21 @@ function DetailDrawer({ id, onClose, onChanged }) {
   }, [id]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
+    const node = modalRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      const w = Math.round(entry.contentRect.width), h = Math.round(entry.contentRect.height);
+      setModalGeometry((current) => {
+        if (Math.abs(current.w - w) < 2 && Math.abs(current.h - h) < 2) return current;
+        const next = { ...current, w, h };
+        persistGeometry(next);
+        return next;
+      });
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [persistGeometry]);
+  useEffect(() => {
     if (!companyOpen || companyQuery.trim().length < 2) { setCompanies([]); return undefined; }
     const timer = window.setTimeout(() => {
       getEBelgeCompanySuggestions(companyQuery).then(setCompanies).catch(() => setCompanies([]));
@@ -259,9 +287,26 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
   const relationCount = detail?.relations?.length || 0;
   const fileCount = detail?.files?.length || 0;
+  const startDrag = (event) => {
+    if (event.button !== 0 || event.target.closest("button")) return;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: modalGeometry.x, y: modalGeometry.y };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const moveDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const maxX = Math.max(8, window.innerWidth - modalGeometry.w - 8), maxY = Math.max(8, window.innerHeight - modalGeometry.h - 8);
+    setModalGeometry((current) => ({ ...current, x: Math.max(8, Math.min(drag.x + event.clientX - drag.startX, maxX)), y: Math.max(8, Math.min(drag.y + event.clientY - drag.startY, maxY)) }));
+  };
+  const endDrag = (event) => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    setModalGeometry((current) => { persistGeometry(current); return current; });
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
   return <div className="eb-drawer-backdrop eb-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="eb-drawer eb-document-modal">
-      <header className="eb-document-modal-head">
+    <section ref={modalRef} className="eb-drawer eb-document-modal" style={{ left: modalGeometry.x, top: modalGeometry.y, width: modalGeometry.w, height: modalGeometry.h }}>
+      <header className="eb-document-modal-head" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
         <div><span>{detail ? typeLabel(detail.document_type) : "Belge"}</span><h2>{detail?.document_no || "Belge detayı"}</h2></div>
         <button type="button" onClick={onClose} aria-label="Kapat"><X /></button>
       </header>
@@ -290,7 +335,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
                 <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}</span>
                 <span>{lotLabel(line)}</span>
                 <span><strong>{routingLabel(line)}</strong><small>{line.raw_metadata?.expenseCategoryName ? `Gider: ${line.raw_metadata.expenseCategoryName}` : ""}</small></span>
-                <span><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={load} /></span>
+                <span><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={load} hasCounterDocument={relationCount > 0} /></span>
               </div>)}
             </div> : <Empty title="Kalem bulunamadı" text="Belge kalemleri kontrol gerektiriyor." />}
           </section>

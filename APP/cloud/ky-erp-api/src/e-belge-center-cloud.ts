@@ -88,7 +88,6 @@ async function rerouteDocumentLines(c:Context<AppEnv>,slug:string,documentId:str
     const raw={...previous,productMatchSource:match.source,routingType:routing.routing,chemical:routing.chemical,lotPolicy,lotRequired:lotPolicy==="REQUIRED",invoiceLotNo:isInvoice(doc?.document_type)?sourceLot:text(previous.invoiceLotNo),dispatchLotNo:isDispatch(doc?.document_type)?sourceLot:text(previous.dispatchLotNo),expenseCategoryId:expense?.categoryId||routing.expenseCategoryId||null,expenseCategoryName:expense?.categoryName||routing.expenseCategoryName||null,expenseCategorySource:expense?.source||null,expenseRuleId:expense?.ruleId||null,warehouse:routing.warehouse||null};
     await c.env.DB.prepare(`UPDATE accounting_document_lines SET product_id=?,match_status=?,match_confidence=?,unit_code=COALESCE(NULLIF(unit_code,''),?),raw_metadata=?,updated_at=? WHERE id=? AND main_company_slug=? AND document_id=?`).bind(match.productId||null,match.productId?(text(line.product_id)?"MANUAL":"AUTO_MATCHED"):"UNMATCHED",match.productId?1:0,routing.defaultUnit||null,JSON.stringify(raw),now(),line.id,slug,documentId).run();
     if(!match.productId&&routing.routing!=="EXPENSE")await addIssue(c,slug,documentId,"PRODUCT_UNMATCHED",`${text(line.description)||`Kalem ${i+1}`} stok/Boyahane kalemi; ürün kartıyla eşleşmeden LOT/stok akışına alınamaz.`,"ERROR","lines");
-    if(lotPolicy==="REQUIRED"&&!sourceLot)await addIssue(c,slug,documentId,"LOT_REQUIRED",`${text(line.description)||`Kalem ${i+1}`} için LOT zorunludur; fatura/irsaliye eşleştirmesi bekleniyor.`,"ERROR","lines");
   }
   return{lineCount:lines.length,supplierProfile};
 }
@@ -109,7 +108,6 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
     const l=lines[i],pm=await productMatch(c,slug,l,match.companyId),routing=productRouting(pm.product,l,supplierProfile),lotPolicy=resolveProductLotPolicy(pm.product,routing.routing),expense=await resolveEBelgeExpenseCategory(c,slug,{companyId:match.companyId,productId:pm.productId,description:text(l.description),fallbackId:routing.expenseCategoryId,fallbackName:routing.expenseCategoryName}),sourceLot=text(l.lotNo),raw={lotNo:sourceLot,invoiceLotNo:isInvoice(p.documentType)?sourceLot:"",dispatchLotNo:isDispatch(p.documentType)?sourceLot:"",productMatchSource:pm.source,routingType:routing.routing,chemical:routing.chemical,lotPolicy,lotRequired:lotPolicy==="REQUIRED",expenseCategoryId:expense?.categoryId||routing.expenseCategoryId||null,expenseCategoryName:expense?.categoryName||routing.expenseCategoryName||null,expenseCategorySource:expense?.source||null,expenseRuleId:expense?.ruleId||null,warehouse:routing.warehouse||null,extractionConfidence:l.extractionConfidence||null};
     await c.env.DB.prepare(`INSERT INTO accounting_document_lines(id,main_company_slug,document_id,line_no,product_id,product_code,supplier_product_code,description,quantity,unit_code,unit_price,discount_total,tax_rate,tax_amount,line_total,match_status,match_confidence,raw_metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),slug,id,Number(l.lineNo||i+1),pm.productId||null,text(l.productCode)||null,text(l.supplierProductCode)||null,text(l.description)||null,numberValue(l.quantity),text(l.unitCode)||routing.defaultUnit||null,numberValue(l.unitPrice),numberValue(l.discountTotal),numberValue(l.taxRate),numberValue(l.taxAmount),numberValue(l.lineTotal),pm.productId?"AUTO_MATCHED":"UNMATCHED",pm.productId?1:0,JSON.stringify(raw),ts,ts).run();
     if(!pm.productId&&routing.routing!=="EXPENSE")await addIssue(c,slug,id,"PRODUCT_UNMATCHED",`${text(l.description)||`Kalem ${i+1}`} stok/Boyahane kalemi; ürün kartıyla eşleşmeden LOT/stok akışına alınamaz.`,"ERROR","lines");
-    if(lotPolicy==="REQUIRED"&&!sourceLot)await addIssue(c,slug,id,"LOT_REQUIRED",`${text(l.description)||`Kalem ${i+1}`} için LOT zorunludur; diğer bağlı belge kontrol edilecek.`,"ERROR","lines");
   }
   if(!match.companyId)await addIssue(c,slug,id,"PARTY_UNMATCHED","Firma/cari otomatik eşleşmedi. Son onaydan önce cari seçin.","ERROR","party_company_id");
   if(!lines.length)await addIssue(c,slug,id,"LINES_MISSING","Belge kalemleri bulunamadı veya okunamadı.","ERROR","lines");
@@ -170,11 +168,12 @@ async function reconcileOne(c:Context<AppEnv>,slug:string,id:string){
   for(const line of result.lines){
     const current=invoiceLines.find(x=>text(x.id)===line.invoiceLineId);if(!current)continue;
     const currentRaw=safeJson(current.raw_metadata),product=text(current.product_id)?await getEBelgeProduct(c,slug,text(current.product_id)):null,lotPolicy=resolveProductLotPolicy(product,currentRaw.routingType),invoiceLotNo=text(currentRaw.invoiceLotNo||currentRaw.lotNo);
-    const lotResult=resolveAllocatedLotEvidence({policy:lotPolicy,invoiceLotNo,invoicedQuantity:current.quantity,allocations:line.allocations});
+    const waitingForCounterDocument=lotPolicy==="REQUIRED"&&!invoiceLotNo&&result.linkedDispatches.length===0;
+    const lotResult=waitingForCounterDocument?{policy:lotPolicy,status:"WAITING_COUNTER_DOCUMENT",resolvedLotNo:"",dispatchLotNo:"",invoiceLotNo,canPostStock:false,requiresReview:false,message:"Fatura/irsaliye eşleşmesi ve LOT kaynağı bekleniyor.",lotAllocations:[]}:resolveAllocatedLotEvidence({policy:lotPolicy,invoiceLotNo,invoicedQuantity:current.quantity,allocations:line.allocations});
     const raw={...currentRaw,lotPolicy,lotRequired:lotPolicy==="REQUIRED",invoiceLotNo,lotNo:lotResult.resolvedLotNo,lotAllocations:lotResult.lotAllocations,lotReconciliationStatus:lotResult.status,lotReconciliationMessage:lotResult.message,lotCanPostStock:lotResult.canPostStock,lotRequiresReview:lotResult.requiresReview,reconciliation:{status:line.status,allocations:lotResult.lotAllocations,difference:line.difference,updatedAt:now()}};
     await c.env.DB.prepare(`UPDATE accounting_document_lines SET match_status=?,match_confidence=?,raw_metadata=?,updated_at=? WHERE id=? AND main_company_slug=? AND document_id=?`).bind(line.status,result.confidence/100,JSON.stringify(raw),now(),current.id,slug,id).run();
     if(lotResult.status==="CONFLICT")await addIssue(c,slug,id,"LOT_CONFLICT",`${text(current.description)||"Ürün"}: ${lotResult.message}`,"ERROR","lines");
-    if(!requiredLotCoverageComplete({policy:lotPolicy,quantity:current.quantity,lotNo:lotResult.resolvedLotNo,lotAllocations:lotResult.lotAllocations}))await addIssue(c,slug,id,"LOT_REQUIRED",`${text(current.description)||"Ürün"} için LOT ve fiziksel miktar kapsamı tamamlanmadı.`,"ERROR","lines");
+    if(result.linkedDispatches.length>0&&!requiredLotCoverageComplete({policy:lotPolicy,quantity:current.quantity,lotNo:lotResult.resolvedLotNo,lotAllocations:lotResult.lotAllocations}))await addIssue(c,slug,id,"LOT_REQUIRED",`${text(current.description)||"Ürün"} için fatura ve bağlı irsaliyede LOT bulunamadı veya miktar kapsamı tamamlanmadı.`,"ERROR","lines");
   }
   if(result.status==="UNMATCHED")await addIssue(c,slug,id,"DISPATCH_UNMATCHED","Fatura için uygun irsaliye bulunamadı.","WARNING","relations");
   if(result.status==="MISMATCH"||result.status==="PARTIAL")await addIssue(c,slug,id,"DISPATCH_QUANTITY_MISMATCH",result.notes.join(" ")||"Fatura ve irsaliye miktarları kontrol gerektiriyor.","WARNING","lines");
@@ -303,12 +302,20 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(total>MAX_REQUEST_BYTES)return c.json(error("REQUEST_TOO_LARGE","Toplam yükleme ve OCR önizleme boyutu 80 MB sınırını aşıyor."),413);
     const items=[],errors=[];
     for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index])})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
-    const autoReconcile=[];
-    for(const documentId of [...new Set(items.map((item:any)=>text(item.documentId)).filter(Boolean))]){
-      const doc=await c.env.DB.prepare("SELECT document_type,direction FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
-      if(!doc||!isInvoice(doc.document_type)||!["INCOMING","OUTGOING"].includes(upper(doc.direction)))continue;
-      try{autoReconcile.push(await reconcileOne(c,slug,documentId))}catch(e:any){autoReconcile.push({documentId,status:"ERROR",message:text(e?.message)||"Otomatik eşleştirme tamamlanamadı."})}
+    const autoReconcile=[],reconcileIds=new Set<string>();
+    const uploadedIds=[...new Set(items.map((item:any)=>text(item.documentId)).filter(Boolean))];
+    for(const documentId of uploadedIds){
+      const doc=await c.env.DB.prepare("SELECT id,document_type,direction,party_company_id,party_tax_no,party_name,issue_date,created_at FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
+      if(!doc||!["INCOMING","OUTGOING"].includes(upper(doc.direction)))continue;
+      if(isInvoice(doc.document_type)){reconcileIds.add(documentId);continue}
+      if(!isDispatch(doc.document_type))continue;
+      const companyId=text(doc.party_company_id),taxNo=cleanTax(doc.party_tax_no),partyName=text(doc.party_name),base=text(doc.issue_date||doc.created_at);
+      if(!companyId&&!taxNo&&!partyName)continue;
+      const start=base?new Date(new Date(base).getTime()-90*86400000).toISOString().slice(0,10):"1900-01-01",end=base?new Date(new Date(base).getTime()+90*86400000).toISOString().slice(0,10):"2999-12-31";
+      const related=(await c.env.DB.prepare(`SELECT id FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL AND direction=? AND document_type LIKE '%FATURA%' AND COALESCE(issue_date,created_at) BETWEEN ? AND ? AND ((?<>'' AND party_company_id=?) OR (?<>'' AND COALESCE(party_tax_no,'')=?) OR (?<>'' AND UPPER(COALESCE(party_name,''))=UPPER(?))) LIMIT 200`).bind(slug,doc.direction,start,end,companyId,companyId,taxNo,taxNo,partyName,partyName).all<Row>()).results||[];
+      for(const row of related)reconcileIds.add(text(row.id));
     }
+    for(const documentId of reconcileIds){try{autoReconcile.push(await reconcileOne(c,slug,documentId))}catch(e:any){autoReconcile.push({documentId,status:"ERROR",message:text(e?.message)||"Otomatik eşleştirme tamamlanamadı."})}}
     return c.json({ok:errors.length===0,data:{items,errors,total:files.length,autoReconcile}},errors.length?207:201);
 
   });

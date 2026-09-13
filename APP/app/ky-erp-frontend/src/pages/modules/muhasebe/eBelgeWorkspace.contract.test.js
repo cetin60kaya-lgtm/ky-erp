@@ -33,3 +33,14 @@ test("Belge Havuzu filtreyi bos acip scroll, duzenle ve Tam Sil sunar",()=>{
   assert.match(page,/Tam Sil/);
   assert.match(api,/deleteEBelge/);
 });
+
+test("belge penceresi konum ve boyutunu hatirlar, LOT ikinci belgeyi bekler",()=>{
+  const page=read("./EBelgeCenterPage.jsx");
+  const line=read("./EBelgeLineReview.jsx");
+  const css=read("./eBelgeCenter.css");
+  assert.match(page,/kyerp:ebelge:document-window/);
+  assert.match(page,/onPointerDown=\{startDrag\}/);
+  assert.match(css,/resize:both/);
+  assert.match(line,/İrsaliye \/ LOT bekleniyor/);
+  assert.match(line,/hasCounterDocument/);
+});

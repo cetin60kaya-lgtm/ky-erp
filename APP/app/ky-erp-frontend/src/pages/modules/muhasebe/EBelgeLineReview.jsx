@@ -12,7 +12,7 @@ const upper = (value) => String(value || "").toUpperCase();
 const isInvoice = (value) => /FATURA|INVOICE|ARSIV|IADE/.test(upper(value));
 const isDispatch = (value) => /IRSALIYE|DISPATCH|DESPATCH/.test(upper(value));
 
-export default function EBelgeLineReview({ documentId, documentType, line, onChanged }) {
+export default function EBelgeLineReview({ documentId, documentType, line, onChanged, hasCounterDocument = false }) {
   const raw = line?.raw_metadata || {};
   const routingType = upper(raw.routingType || "EXPENSE");
   const initialLot = isInvoice(documentType) ? (raw.invoiceLotNo || raw.lotNo || "") : isDispatch(documentType) ? (raw.dispatchLotNo || raw.lotNo || "") : (raw.lotNo || "");
@@ -28,13 +28,18 @@ export default function EBelgeLineReview({ documentId, documentType, line, onCha
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const lotRequired = Boolean(raw.lotRequired || raw.lotPolicy === "REQUIRED" || routingType === "BOYAHANE");
+  const lotStatus = upper(raw.lotReconciliationStatus);
+  const lotResolved = Boolean(initialLot || raw.lotCanPostStock === true || ["FROM_DISPATCH", "FROM_DISPATCH_MULTI", "FROM_INVOICE", "VERIFIED"].includes(lotStatus));
+  const lotMissingConfirmed = lotRequired && lotStatus === "MISSING_REQUIRED" && hasCounterDocument;
+  const lotWaiting = lotRequired && !lotResolved && !lotMissingConfirmed;
   const productRequired = routingType !== "EXPENSE" || lotRequired;
-  const needsReview = (productRequired && !line?.product_id) || (lotRequired && !initialLot);
+  const needsReview = (productRequired && !line?.product_id) || lotMissingConfirmed;
   const label = useMemo(() => {
     if (!line?.product_id && productRequired) return "Ürünü eşleştir";
-    if (lotRequired && !initialLot) return "LOT gir";
+    if (lotMissingConfirmed) return "LOT gir";
+    if (lotWaiting) return isInvoice(documentType) ? "İrsaliye / LOT bekleniyor" : isDispatch(documentType) ? "Fatura / LOT bekleniyor" : "LOT bekleniyor";
     return "Düzenle";
-  }, [initialLot, line?.product_id, lotRequired, productRequired]);
+  }, [documentType, line?.product_id, lotMissingConfirmed, lotWaiting, productRequired]);
 
   useEffect(() => {
     if (!open) {
