@@ -82,3 +82,59 @@
     padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)) !important;
   }
 }
+/* 2026-09-13 final canvas: kirik beyaz zemin, modül tonu ve güvenli alt sınır */
+.shell-v3 {
+  --ky-app-canvas: #f5f7fa;
+}
+
+.shell-v3-main {
+  background: var(--ky-app-canvas) !important;
+}
+
+.shell-v3-workspace {
+  position: relative;
+  scrollbar-gutter: stable;
+  scroll-padding-bottom: 72px;
+  padding-bottom: max(42px, env(safe-area-inset-bottom, 0px)) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--active-tab-soft) 88%, var(--ky-app-canvas)) 0,
+    color-mix(in srgb, var(--active-tab-soft) 58%, var(--ky-app-canvas)) 190px,
+    color-mix(in srgb, var(--active-tab-soft) 24%, var(--ky-app-canvas)) 430px,
+    var(--ky-app-canvas) 760px,
+    var(--ky-app-canvas) 100%
+  ) !important;
+}
+
+.shell-v3-workspace::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: max(26px, env(safe-area-inset-bottom, 0px));
+  border-bottom: 1px solid color-mix(in srgb, var(--active-tab-line) 62%, #dfe5eb);
+  pointer-events: none;
+}
+
+/* Sistem Merkezi de diğer ana modüller gibi bağımsız renk kimliği taşır. */
+.shell-v3[data-active-module="sistem-merkezi"] {
+  --module-accent: #3f7280;
+  --module-soft: #edf7f8;
+  --module-line: #cde4e8;
+}
+.shell-v3-module[data-module="sistem-merkezi"] {
+  --mod: #3f7280;
+  --mod-soft: #edf7f8;
+  --mod-line: #cde4e8;
+}
+.shell-v3-tabs > button[data-module="sistem-merkezi"] {
+  --tab-accent: #3f7280;
+  --tab-soft: #edf7f8;
+  --tab-line: #cde4e8;
+}
+
+@media (max-width: 760px) {
+  .shell-v3-workspace {
+    scroll-padding-bottom: 56px;
+    padding-bottom: max(30px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

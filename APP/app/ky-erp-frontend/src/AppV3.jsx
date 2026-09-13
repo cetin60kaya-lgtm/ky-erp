@@ -36,6 +36,7 @@ const SystemSentinelPage = lazyWithRetry(() => import("./pages/modules/SystemSen
 const MODULE_LOADERS = {
   muhasebe: () => Promise.all([import("./pages/modules/muhasebe/MuhasebeSmartMatchPage")]),
   admin: () => import("./pages/modules/AdminPage"),
+  depolama: () => import("./pages/modules/AdminPage"),
   ik: () => Promise.all([
     import("./pages/modules/ik/IkPersonnelFinancePage"),
     import("./pages/modules/ik/IkFinancePage"),
@@ -313,7 +314,8 @@ export default function AppV3() {
     if (activeModule?.key === "asistan") return <AiAssistantPage {...sharedProps} />;
     if (activeModule?.key === "compliance") return <ComplianceCenterPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "sistem-merkezi") return <SystemSentinelPage {...sharedProps} />;
-    return <AdminPage activeTab={activeTab} {...sharedProps} />;
+    if (["depolama", "admin"].includes(activeModule?.key)) return <AdminPage activeTab={activeTab} {...sharedProps} />;
+    return <div className="content-card module-error-card"><h3>Ekran bulunamadı</h3><p>Bu modül için geçerli bir çalışma ekranı tanımlı değil.</p></div>;
   }
 
   if (authLoading) return <LoadingCard title="Oturum kontrol ediliyor" />;
