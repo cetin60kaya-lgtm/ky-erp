@@ -206,6 +206,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [companyOpen, setCompanyOpen] = useState(false);
   const [editForm, setEditForm] = useState({ documentNo: "", issueDate: "", dueDate: "", currency: "TRY", direction: "INCOMING", documentType: "FATURA", note: "" });
   const [companyQuery, setCompanyQuery] = useState("");
   const [companies, setCompanies] = useState([]);
@@ -229,127 +230,112 @@ function DetailDrawer({ id, onClose, onChanged }) {
       setError(e?.message || "Belge detayı alınamadı.");
     }
   }, [id]);
-
   useEffect(() => { void load(); }, [load]);
-
   useEffect(() => {
-    if (companyQuery.trim().length < 2) {
-      setCompanies([]);
-      return undefined;
-    }
+    if (!companyOpen || companyQuery.trim().length < 2) { setCompanies([]); return undefined; }
     const timer = window.setTimeout(() => {
       getEBelgeCompanySuggestions(companyQuery).then(setCompanies).catch(() => setCompanies([]));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [companyQuery]);
+  }, [companyOpen, companyQuery]);
 
   const action = async (key, fn) => {
-    setBusy(key);
-    setError("");
-    try {
-      await fn();
-      await load();
-      onChanged?.();
-    } catch (e) {
-      setError(e?.message || "İşlem tamamlanamadı.");
-    } finally {
-      setBusy("");
-    }
+    setBusy(key); setError("");
+    try { await fn(); await load(); await onChanged?.(); }
+    catch (e) { setError(e?.message || "İşlem tamamlanamadı."); }
+    finally { setBusy(""); }
   };
-
   const preview = async (file) => action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id)));
-  const saveDocument = async () => action("edit", async () => {
-    await updateEBelge(id, editForm);
-    setEditing(false);
-  });
+  const saveDocument = async () => action("edit", async () => { await updateEBelge(id, editForm); setEditing(false); });
   const removeDocument = async () => {
     if (!window.confirm(`${detail?.document_no || "Bu belge"} kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?`)) return;
     setBusy("delete"); setError("");
-    try {
-      await deleteEBelge(id);
-      onClose?.();
-      await onChanged?.();
-    } catch (e) { setError(e?.message || "Belge tamamen silinemedi."); }
+    try { await deleteEBelge(id); onClose?.(); await onChanged?.(); }
+    catch (e) { setError(e?.message || "Belge tamamen silinemedi."); }
     finally { setBusy(""); }
   };
 
   if (!id) return null;
-
-  return <div className="eb-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <aside className="eb-drawer">
-      <header>
+  const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
+  const relationCount = detail?.relations?.length || 0;
+  const fileCount = detail?.files?.length || 0;
+  return <div className="eb-drawer-backdrop eb-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="eb-drawer eb-document-modal">
+      <header className="eb-document-modal-head">
         <div><span>{detail ? typeLabel(detail.document_type) : "Belge"}</span><h2>{detail?.document_no || "Belge detayı"}</h2></div>
-        <button type="button" onClick={onClose}><X /></button>
+        <button type="button" onClick={onClose} aria-label="Kapat"><X /></button>
       </header>
       {error && <div className="eb-error"><AlertTriangle size={17} />{error}</div>}
-      {!detail ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belge yükleniyor</div> : <div className="eb-drawer-body">
-        <section className="eb-detail-grid">
-          <div><span>Firma / Cari</span><strong>{detail.party_name || "Eşleşmedi"}</strong><small>{detail.party_tax_no || "VKN yok"}</small></div>
+      {!detail ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belge yükleniyor</div> : <>
+        <section className="eb-document-summary">
+          <div className="wide"><span>Firma / Cari</span><strong>{detail.party_name || "Eşleşmedi"}</strong><small>{detail.party_tax_no || "VKN yok"}</small></div>
           <div><span>Tarih</span><strong>{dateText(detail.issue_date)}</strong><small>{sourceLabel(detail.source_type)}</small></div>
           <div><span>Toplam</span><strong>{money(detail.payable_total, detail.currency)}</strong><small>KDV {money(detail.tax_total, detail.currency)}</small></div>
-          <div><span>Durum</span><strong>{statusLabel(detail.status)}</strong><small>{detail.direction === "OUTGOING" ? "Giden" : detail.direction === "INCOMING" ? "Gelen" : "Otomatik kontrol"}</small></div>
+          <div><span>Durum</span><strong>{statusLabel(detail.status)}</strong><small>{detail.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></div>
         </section>
-
-        <section className="eb-doc-edit">
-          <div className="eb-section-title"><div><strong>Belge Bilgileri</strong><span>Belge no, tarih, yön ve türü gerektiğinde düzeltin.</span></div><button type="button" onClick={() => setEditing((value) => !value)}><Pencil size={15} /> {editing ? "Kapat" : "Düzenle"}</button></div>
-          {editing && <div className="eb-edit-grid">
-            <label>Belge No<input value={editForm.documentNo} onChange={(e) => setEditForm((v) => ({ ...v, documentNo: e.target.value }))} /></label>
-            <label>Belge Tarihi<input type="date" value={editForm.issueDate} onChange={(e) => setEditForm((v) => ({ ...v, issueDate: e.target.value }))} /></label>
-            <label>Vade Tarihi<input type="date" value={editForm.dueDate} onChange={(e) => setEditForm((v) => ({ ...v, dueDate: e.target.value }))} /></label>
-            <label>Para Birimi<input value={editForm.currency} maxLength={3} onChange={(e) => setEditForm((v) => ({ ...v, currency: e.target.value.toUpperCase() }))} /></label>
-            <label>Yön<select value={editForm.direction} onChange={(e) => setEditForm((v) => ({ ...v, direction: e.target.value }))}><option value="INCOMING">Gelen</option><option value="OUTGOING">Giden</option></select></label>
-            <label>Belge Türü<select value={editForm.documentType} onChange={(e) => setEditForm((v) => ({ ...v, documentType: e.target.value }))}><option value="FATURA">Fatura</option><option value="IRSALIYE">İrsaliye</option></select></label>
-            <label className="eb-edit-note">Not<textarea value={editForm.note} onChange={(e) => setEditForm((v) => ({ ...v, note: e.target.value }))} rows={2} /></label>
-            <button type="button" className="eb-primary" disabled={Boolean(busy)} onClick={saveDocument}>{busy === "edit" ? <LoaderCircle className="eb-spin" size={16} /> : <Save size={16} />} Değişiklikleri Kaydet</button>
-          </div>}
+        <section className="eb-document-toolbar">
+          <button type="button" onClick={() => setEditing(true)}><Pencil size={16} /> Belge Düzenle</button>
+          {!detail.party_company_id && <button type="button" onClick={() => setCompanyOpen(true)}>Cari Eşleştir</button>}
+          <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>{busy === "match" ? <LoaderCircle className="eb-spin" size={16} /> : <Link2 size={16} />} Yeniden Kontrol</button>
+          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => action("final", async () => { const result = await finalizeEBelge(id); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } })); return result; })}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} Son Onay / Muhasebeleştir</button>
+          <button type="button" className="eb-danger" disabled={Boolean(busy) || detail.status === "POSTED" || detail.status === "APPROVED"} onClick={removeDocument}>{busy === "delete" ? <LoaderCircle className="eb-spin" size={16} /> : <Trash2 size={16} />} Tam Sil</button>
         </section>
+        <div className="eb-document-body">
+          <section className="eb-document-lines-section">
+            <div className="eb-section-title"><div><strong>Belge Kalemleri</strong><span>Ürün, LOT ve gider bilgilerini satır bazında yönetin.</span></div><span>{detail.lines?.length || 0} satır</span></div>
+            {detail.lines?.length ? <div className="eb-lines">
+              <div className="eb-line head"><span>Ürün</span><span>Miktar</span><span>LOT</span><span>Yönlendirme</span><span>İşlem</span></div>
+              {detail.lines.map((line) => <div className="eb-line" key={line.id}>
+                <span><strong>{line.description || line.product_code || "Kalem"}</strong><small>{line.product_code || line.supplier_product_code || ""}</small></span>
+                <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}</span>
+                <span>{lotLabel(line)}</span>
+                <span><strong>{routingLabel(line)}</strong><small>{line.raw_metadata?.expenseCategoryName ? `Gider: ${line.raw_metadata.expenseCategoryName}` : ""}</small></span>
+                <span><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={load} /></span>
+              </div>)}
+            </div> : <Empty title="Kalem bulunamadı" text="Belge kalemleri kontrol gerektiriyor." />}
+          </section>
 
-        {!detail.party_company_id && <section className="eb-company-match">
-          <strong>Cari Eşleştir</strong>
-          <input value={companyQuery} onChange={(event) => setCompanyQuery(event.target.value)} placeholder="Firma adı veya VKN yazın" />
-          {companies.length > 0 && <div>{companies.map((row) => <button key={row.id} type="button" onClick={() => action("company", () => updateEBelge(id, { partyCompanyId: row.id }))}><span>{row.name}</span><small>{row.tax_no || "VKN yok"}</small></button>)}</div>}
-        </section>}
+          <div className="eb-document-folds">
+            <details className="eb-fold" open={openIssues.length > 0}>
+              <summary><strong>Kontroller</strong><span>{openIssues.length} açık</span></summary>
+              <div className="eb-fold-body">{openIssues.length ? <div className="eb-issues">{openIssues.map((issue) => <div key={issue.id}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}</div>
+            </details>
+            <details className="eb-fold">
+              <summary><strong>Fatura – İrsaliye Bağı</strong><span>{relationCount}</span></summary>
+              <div className="eb-fold-body">{relationCount ? <div className="eb-relations">{detail.relations.map((row) => <div key={row.id}><Link2 size={16} /><span>{row.related_document_no || row.related_document_id}</span><small>{row.relation_type}</small></div>)}</div> : <span className="eb-muted">Henüz bağlı irsaliye/fatura yok.</span>}</div>
+            </details>
+            <details className="eb-fold">
+              <summary><strong>Dosyalar</strong><span>{fileCount}</span></summary>
+              <div className="eb-fold-body"><div className="eb-files">{detail.files?.map((file) => <button type="button" key={file.id} disabled={busy === `file-${file.id}`} onClick={() => preview(file)}><FileText size={17} /><span>{file.file_name}</span><small>{file.source_type}</small></button>)}</div></div>
+            </details>
+          </div>
+        </div>
+      </>}
+    </section>
+    {editing && <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
+      <section className="eb-submodal eb-doc-edit-modal">
+        <header><div><small>BELGE İŞLEMİ</small><h3>Belge Bilgilerini Düzenle</h3></div><button type="button" onClick={() => setEditing(false)}><X size={18} /></button></header>
+        <div className="eb-edit-grid">
+          <label>Belge No<input value={editForm.documentNo} onChange={(e) => setEditForm((v) => ({ ...v, documentNo: e.target.value }))} /></label>
+          <label>Belge Tarihi<input type="date" value={editForm.issueDate} onChange={(e) => setEditForm((v) => ({ ...v, issueDate: e.target.value }))} /></label>
+          <label>Vade Tarihi<input type="date" value={editForm.dueDate} onChange={(e) => setEditForm((v) => ({ ...v, dueDate: e.target.value }))} /></label>
+          <label>Para Birimi<input value={editForm.currency} maxLength={3} onChange={(e) => setEditForm((v) => ({ ...v, currency: e.target.value.toUpperCase() }))} /></label>
+          <label>Yön<select value={editForm.direction} onChange={(e) => setEditForm((v) => ({ ...v, direction: e.target.value }))}><option value="INCOMING">Gelen</option><option value="OUTGOING">Giden</option></select></label>
+          <label>Belge Türü<select value={editForm.documentType} onChange={(e) => setEditForm((v) => ({ ...v, documentType: e.target.value }))}><option value="FATURA">Fatura</option><option value="IRSALIYE">İrsaliye</option></select></label>
+          <label className="eb-edit-note">Not<textarea value={editForm.note} onChange={(e) => setEditForm((v) => ({ ...v, note: e.target.value }))} rows={3} /></label>
+        </div>
+        <footer><button type="button" onClick={() => setEditing(false)}>Vazgeç</button><button type="button" className="eb-primary" disabled={Boolean(busy)} onClick={saveDocument}>{busy === "edit" ? <LoaderCircle className="eb-spin" size={16} /> : <Save size={16} />} Kaydet</button></footer>
+      </section>
+    </div>}
 
-        <section>
-          <div className="eb-section-title"><strong>Kalemler</strong><span>{detail.lines?.length || 0} satır</span></div>
-          {detail.lines?.length ? <div className="eb-lines">
-            <div className="eb-line head"><span>Ürün</span><span>Miktar</span><span>LOT</span><span>Yönlendirme</span><span>Eşleşme</span></div>
-            {detail.lines.map((line) => <div className="eb-line" key={line.id}>
-              <span><strong>{line.description || line.product_code || "Kalem"}</strong><small>{line.product_code || line.supplier_product_code || ""}</small><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={load} /></span>
-              <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}</span>
-              <span>{lotLabel(line)}</span>
-              <span><strong>{routingLabel(line)}</strong><small>{line.raw_metadata?.expenseCategoryName ? `Gider sınıfı: ${line.raw_metadata.expenseCategoryName}` : ""}</small></span>
-              <span className={`eb-chip ${String(line.match_status || "").toLowerCase()}`}>{line.raw_metadata?.lotRequired && !lotLabel(line).includes("Fatura") && !lotLabel(line).includes("İrsaliye") && lotLabel(line) === "-" ? "LOT BEKLİYOR" : line.product_id ? "ÜRÜN EŞLEŞTİ" : String(line.raw_metadata?.routingType || "EXPENSE").toUpperCase() === "EXPENSE" ? "GİDER" : (line.match_status || "UNMATCHED")}</span>
-            </div>)}
-          </div> : <Empty title="Kalem bulunamadı" text="Belge kalemleri kontrol gerektiriyor." />}
-        </section>
-
-        <section>
-          <div className="eb-section-title"><strong>Sorunlar / Kontroller</strong><span>{detail.issues?.filter((item) => !item.is_resolved).length || 0} açık</span></div>
-          {detail.issues?.length ? <div className="eb-issues">{detail.issues.map((issue) => <div key={issue.id} className={issue.is_resolved ? "resolved" : ""}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{!issue.is_resolved && issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}
-        </section>
-
-        <section>
-          <div className="eb-section-title"><strong>Fatura – İrsaliye Bağı</strong><span>{detail.relations?.length || 0}</span></div>
-          {detail.relations?.length ? <div className="eb-relations">{detail.relations.map((row) => <div key={row.id}><Link2 size={16} /><span>{row.related_document_no || row.related_document_id}</span><small>{row.relation_type}</small></div>)}</div> : <span className="eb-muted">Otomatik eşleşme bulunmadı. Gerekirse aşağıdaki eşleştirme kontrolünü çalıştırın.</span>}
-        </section>
-
-        <section>
-          <div className="eb-section-title"><strong>Dosyalar</strong><span>File Hub</span></div>
-          <div className="eb-files">{detail.files?.map((file) => <button type="button" key={file.id} disabled={busy === `file-${file.id}`} onClick={() => preview(file)}><FileText size={17} /><span>{file.file_name}</span><small>{file.source_type} · {file.preview_status}</small></button>)}</div>
-        </section>
-
-        <section className="eb-drawer-actions">
-          <button type="button" className="eb-danger" disabled={Boolean(busy) || detail.status === "POSTED" || detail.status === "APPROVED"} onClick={removeDocument}>{busy === "delete" ? <LoaderCircle className="eb-spin" size={17} /> : <Trash2 size={17} />} Tam Sil</button>
-          <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>
-            {busy === "match" ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleştir / Yeniden Kontrol Et
-          </button>
-          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => action("final", async () => { const result = await finalizeEBelge(id); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } })); return result; })}>
-            {busy === "final" ? <LoaderCircle className="eb-spin" size={17} /> : <FileCheck2 size={17} />} Son Onay / Muhasebeleştir
-          </button>
-        </section>
-      </div>}
-    </aside>
+    {companyOpen && <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompanyOpen(false); }}>
+      <section className="eb-submodal eb-company-modal">
+        <header><div><small>CARİ İŞLEMİ</small><h3>Cari Eşleştir</h3></div><button type="button" onClick={() => setCompanyOpen(false)}><X size={18} /></button></header>
+        <div className="eb-company-match eb-company-match-modal"><input autoFocus value={companyQuery} onChange={(event) => setCompanyQuery(event.target.value)} placeholder="Firma adı veya VKN yazın" />
+          {companies.length > 0 && <div>{companies.map((row) => <button key={row.id} type="button" onClick={async () => { await action("company", () => updateEBelge(id, { partyCompanyId: row.id })); setCompanyOpen(false); }}><span>{row.name}</span><small>{row.tax_no || "VKN yok"}</small></button>)}</div>}
+        </div>
+      </section>
+    </div>}
   </div>;
 }
 
@@ -467,24 +453,36 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
     {view === "overview" && <>
       <div className="eb-stats eb-dashboard-stats">
-        <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün işlenen belge" />
+        <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
         <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Hakan Emprime alıcı" />
         <StatCard label="Bugün Giden" value={summary.todayOutgoing} hint="Hakan Emprime düzenleyen" />
         <StatCard label="Kontrol Bekleyen" value={summary.attention} hint="Gerçek uyarı / hata" />
         <StatCard label="Eşleşme Bekleyen" value={summary.matchingWait} hint="Fatura – irsaliye" />
       </div>
-      <section className="eb-summary-panel">
-        <div className="eb-section-title"><div><strong>Bu Ay</strong><span>{dashboard.monthStart || monthStart()} tarihinden bugüne</span></div><span>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</span></div>
-        <div className="eb-month-grid">
-          <article><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></article>
-          <article><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></article>
-          <article><span>Toplam</span><strong>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")}</strong><small>Fatura + irsaliye</small></article>
-        </div>
+
+      <section className="eb-dashboard-periods">
+        <article className="eb-period-card current">
+          <header><div><span>DÖNEM ÖZETİ</span><strong>Bu Ay</strong></div><b>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</b></header>
+          <div className="eb-period-flow">
+            <div><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></div>
+            <div><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></div>
+          </div>
+          <footer>{dateText(dashboard.monthStart || monthStart())} – Bugün</footer>
+        </article>
+        <article className="eb-period-card previous">
+          <header><div><span>KARŞILAŞTIRMA</span><strong>Geçen Ay</strong></div><b>{Number(summary.previousMonthTotal || 0).toLocaleString("tr-TR")} belge</b></header>
+          <div className="eb-period-flow">
+            <div><span>Gelen</span><strong>{Number(summary.previousMonthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthIncomingAmount)}</small></div>
+            <div><span>Giden</span><strong>{Number(summary.previousMonthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthOutgoingAmount)}</small></div>
+          </div>
+          <footer>{dateText(dashboard.previousMonthStart)} – {dateText(dashboard.previousMonthEnd)}</footer>
+        </article>
       </section>
-      <section className="eb-pool eb-recent-pool">
-        <div className="eb-section-title"><div><strong>Son Belgeler</strong><span>En son havuza alınan 8 kayıt</span></div><button type="button" onClick={() => openEBelgeTab("e-belge-merkezi")}>Tümünü Aç</button></div>
-        {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-table">
-          <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Kontrol</span></div>
+
+      <section className="eb-pool eb-recent-pool eb-dashboard-recent">
+        <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("e-belge-merkezi")}>Belge Havuzunu Aç</button></div>
+        {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-pool-table-scroll eb-dashboard-table-scroll"><div className="eb-table">
+          <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Durum</span></div>
           {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}>
             <span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span>
             <span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span>
@@ -493,7 +491,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
             <span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span>
             <span className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span>
           </button>)}
-        </div> : <Empty title="Henüz belge yok" text="Belge Yükle ekranından ilk dosyaları havuza alın." />}
+        </div></div> : <Empty title="Henüz belge yok" text="Belge Yükle ekranından ilk dosyaları havuza alın." />}
       </section>
     </>}
 

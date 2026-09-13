@@ -27,7 +27,9 @@ test("Belge Havuzu filtreyi bos acip scroll, duzenle ve Tam Sil sunar",()=>{
   assert.match(page,/const \[to, setTo\] = useState\(""\)/);
   assert.match(page,/eb-pool-table-scroll/);
   assert.match(css,/\.eb-pool-table-scroll\{/);
-  assert.match(page,/Değişiklikleri Kaydet/);
+  assert.match(page,/Belge Bilgilerini Düzenle/);
+  assert.match(page,/eb-document-modal/);
+  assert.match(page,/eb-submodal-backdrop/);
   assert.match(page,/Tam Sil/);
   assert.match(api,/deleteEBelge/);
 });

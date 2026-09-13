@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, LoaderCircle, Search } from "lucide-react";
+import { Check, LoaderCircle, Search, X } from "lucide-react";
 import {
   getEBelgeProductSuggestions,
   saveEBelgeProductAlias,
@@ -74,21 +74,39 @@ export default function EBelgeLineReview({ documentId, documentType, line, onCha
   const lotLabel = isInvoice(documentType) ? "Fatura LOT No" : isDispatch(documentType) ? "İrsaliye LOT No" : "LOT No";
 
   return <div className={`eb-line-review ${needsReview ? "needs" : ""}`}>
-    <button type="button" className="eb-line-review-trigger" onClick={() => setOpen((value) => !value)}>{label}</button>
-    {open && <div className="eb-line-review-popover">
-      <strong>{line?.description || "Ürün kalemi"}</strong>
-      {!line?.product_id && <>
-        <label><span>Ürün kartı</span><div className="eb-line-review-search"><Search size={14} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ürün ara" /></div></label>
-        {products.length > 0 && <div className="eb-line-review-results">{products.map((product) => <button type="button" key={product.id} className={selected?.id === product.id ? "selected" : ""} onClick={() => setSelected(product)}><span>{product.name}</span><small>{product.legacy_id || product.unit || ""}</small></button>)}</div>}
-        <label className="eb-line-review-check"><input type="checkbox" checked={saveAlias} onChange={(e) => setSaveAlias(e.target.checked)} /><span>Bu açıklamayı ürün alias’ı olarak kaydet</span></label>
-      </>}
-      <label><span>Gider kategorisi</span><input list={`expense-categories-${line?.id}`} value={expenseCategoryName} onChange={(e) => { setExpenseCategoryName(e.target.value); setRememberExpenseRule(true); }} placeholder="Gider / rapor kategorisi" /><datalist id={`expense-categories-${line?.id}`}>{EXPENSE_CATEGORIES.map((category) => <option key={category} value={category} />)}</datalist></label>
-      <label className="eb-line-review-check"><input type="checkbox" checked={rememberExpenseRule} onChange={(e) => setRememberExpenseRule(e.target.checked)} /><span>Bu gider kategorisini bu firma/ürün için hatırla</span></label>
-      {raw.expenseCategorySource === "EXPENSE_RULE" && <small className="eb-line-review-memory">Akıllı gider hafızasından uygulandı</small>}
-      <label><span>{lotLabel}{lotRequired ? " · zorunlu" : " · varsa kaydet"}</span><input value={lotNo} onChange={(e) => setLotNo(e.target.value)} placeholder="LOT numarasını girin" required={lotRequired} /></label>
-      <small className="eb-line-review-memory">LOT bilgisi belge kaynağında tutulur; fatura LOT’u ve irsaliye LOT’u birbirini ezmez.</small>
-      {message && <small className="eb-line-review-message">{message}</small>}
-      <button type="button" className="eb-line-review-save" disabled={busy || (productRequired && !line?.product_id && !selected?.id) || (lotRequired && !lotNo.trim())} onClick={save}>{busy ? <LoaderCircle className="eb-spin" size={15} /> : <Check size={15} />} Kaydet</button>
+    <button type="button" className="eb-line-review-trigger" onClick={() => setOpen(true)}>{label}</button>
+    {open && <div className="eb-line-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+      <section className="eb-line-modal">
+        <header>
+          <div><small>KALEM İŞLEMİ</small><h3>{line?.description || "Ürün kalemi"}</h3></div>
+          <button type="button" onClick={() => setOpen(false)} aria-label="Kapat"><X size={18} /></button>
+        </header>
+        <div className="eb-line-modal-summary">
+          <span><small>Miktar</small><strong>{Number(line?.quantity || 0).toLocaleString("tr-TR")} {line?.unit_code || ""}</strong></span>
+          <span><small>Yönlendirme</small><strong>{routingType === "BOYAHANE" ? "Boyahane / LOT" : routingType === "STOCK" ? "Stok" : routingType === "CONSUMABLE" ? "Sarf" : "Gider"}</strong></span>
+          <span><small>LOT Durumu</small><strong>{initialLot || (lotRequired ? "Bekliyor" : "Yok")}</strong></span>
+        </div>
+        <div className="eb-line-modal-body">
+          {!line?.product_id && <section className="eb-line-modal-section">
+            <strong>Ürün Eşleştirme</strong>
+            <div className="eb-line-review-search"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ürün ara" /></div>
+            {products.length > 0 && <div className="eb-line-review-results">{products.map((product) => <button type="button" key={product.id} className={selected?.id === product.id ? "selected" : ""} onClick={() => setSelected(product)}><span>{product.name}</span><small>{product.legacy_id || product.unit || ""}</small></button>)}</div>}
+            <label className="eb-line-review-check"><input type="checkbox" checked={saveAlias} onChange={(e) => setSaveAlias(e.target.checked)} /><span>Bu açıklamayı ürün eşleştirmesi olarak hatırla</span></label>
+          </section>}
+          <section className="eb-line-modal-section two-col">
+            <label><span>Gider kategorisi</span><input list={`expense-categories-${line?.id}`} value={expenseCategoryName} onChange={(e) => { setExpenseCategoryName(e.target.value); setRememberExpenseRule(true); }} placeholder="Gider / rapor kategorisi" /><datalist id={`expense-categories-${line?.id}`}>{EXPENSE_CATEGORIES.map((category) => <option key={category} value={category} />)}</datalist></label>
+            <label><span>{lotLabel}{lotRequired ? " · zorunlu" : " · varsa kaydet"}</span><input value={lotNo} onChange={(e) => setLotNo(e.target.value)} placeholder="LOT numarası" required={lotRequired} /></label>
+          </section>
+          <label className="eb-line-review-check"><input type="checkbox" checked={rememberExpenseRule} onChange={(e) => setRememberExpenseRule(e.target.checked)} /><span>Bu gider kategorisini bu firma/ürün için hatırla</span></label>
+          {raw.expenseCategorySource === "EXPENSE_RULE" && <small className="eb-line-review-memory">Akıllı gider hafızasından uygulandı</small>}
+          <small className="eb-line-review-memory">LOT kaynağı ayrı tutulur; fatura LOT’u ve irsaliye LOT’u birbirini ezmez.</small>
+          {message && <small className="eb-line-review-message">{message}</small>}
+        </div>
+        <footer>
+          <button type="button" onClick={() => setOpen(false)}>Vazgeç</button>
+          <button type="button" className="eb-line-review-save" disabled={busy || (productRequired && !line?.product_id && !selected?.id) || (lotRequired && !lotNo.trim())} onClick={save}>{busy ? <LoaderCircle className="eb-spin" size={15} /> : <Check size={15} />} Kaydet</button>
+        </footer>
+      </section>
     </div>}
   </div>;
 }
