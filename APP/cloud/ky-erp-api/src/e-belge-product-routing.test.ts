@@ -70,3 +70,14 @@ test("başka firmanın özel gider kuralı uygulanmaz", () => {
   assert.equal(result?.id, "global-product");
   assert.equal(result?.categoryName, "Ambalaj");
 });
+
+test("kimyasal kalem LOT ve gider sinifini birlikte tasir", () => {
+  const result = eBelgeProductRouting(
+    { id: "p4", name: "Polyester Base", raw: {} },
+    { description: "Polyester Base" },
+    { isChemicalSupplier: true, requireLot: true, defaultWarehouse: "BOYAHANE", defaultUnit: "KG" },
+  );
+  assert.equal(result.routing, "BOYAHANE");
+  assert.equal(result.lotRequired, true);
+  assert.equal(result.expenseCategoryName, "Kimya / Boya");
+});

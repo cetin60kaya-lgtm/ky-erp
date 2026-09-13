@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, apiPatch, apiPost, apiUpload } from "../utils/api";
+import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, apiUpload } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -80,6 +80,9 @@ export const reconcileAllEBelge = () =>
 
 export const updateEBelge = (id, payload) =>
   apiPatch(`/e-belge/documents/${encodeURIComponent(id)}`, payload).then(unwrap);
+
+export const deleteEBelge = (id) =>
+  apiDelete(`/e-belge/documents/${encodeURIComponent(id)}`).then(unwrap);
 
 export const finalizeEBelge = (id, payload = {}) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/finalize`, payload, { timeoutMs: 120_000 }).then(unwrap);

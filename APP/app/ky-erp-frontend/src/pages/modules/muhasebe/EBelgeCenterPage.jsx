@@ -6,12 +6,16 @@ import {
   FileText,
   Link2,
   LoaderCircle,
+  Pencil,
   RefreshCw,
+  Save,
   Search,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
 import {
+  deleteEBelge,
   finalizeEBelge,
   getEBelgeCompanySuggestions,
   getEBelgeDashboard,
@@ -31,12 +35,6 @@ import "./eBelgeCenter.css";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => `${today().slice(0, 8)}01`;
-const sixtyDaysAgo = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 62);
-  return d.toISOString().slice(0, 10);
-};
-
 const FILTERS = [
   ["ALL", "Tüm Belgeler"],
   ["INCOMING_INVOICE", "Gelen Fatura"],
@@ -87,9 +85,21 @@ const statusLabel = (value) => ({
 const routingLabel = (line) => {
   const raw = line?.raw_metadata || {};
   const routing = String(raw.routingType || "EXPENSE").toUpperCase();
-  if (routing === "BOYAHANE") return raw.lotRequired ? "Boyahane · LOT" : "Boyahane";
-  if (routing === "STOCK") return "Stok";
-  return `Gider · ${raw.expenseCategoryName || "Mal ve Hizmet Alımı"}`;
+  const expense = raw.expenseCategoryName || (routing === "BOYAHANE" ? "Kimya / Boya" : routing === "STOCK" ? "Stok / Malzeme Alımı" : "Mal ve Hizmet Alımı");
+  if (routing === "BOYAHANE") return `Boyahane${raw.lotRequired ? " · LOT" : ""} · Gider: ${expense}`;
+  if (routing === "STOCK") return `Stok · Gider: ${expense}`;
+  if (routing === "CONSUMABLE") return `Sarf · Gider: ${expense}`;
+  return `Gider · ${expense}`;
+};
+
+const lotLabel = (line) => {
+  const raw = line?.raw_metadata || {};
+  const invoiceLot = raw.invoiceLotNo || "";
+  const dispatchLot = raw.dispatchLotNo || "";
+  if (invoiceLot && dispatchLot && invoiceLot !== dispatchLot) return `Fatura: ${invoiceLot} · İrsaliye: ${dispatchLot}`;
+  if (invoiceLot) return `${invoiceLot} · Fatura`;
+  if (dispatchLot) return `${dispatchLot} · İrsaliye`;
+  return raw.lotNo || "-";
 };
 
 function StatCard({ label, value, hint }) {
@@ -195,6 +205,8 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ documentNo: "", issueDate: "", dueDate: "", currency: "TRY", direction: "INCOMING", documentType: "FATURA", note: "" });
   const [companyQuery, setCompanyQuery] = useState("");
   const [companies, setCompanies] = useState([]);
 
@@ -202,7 +214,17 @@ function DetailDrawer({ id, onClose, onChanged }) {
     if (!id) return;
     setError("");
     try {
-      setDetail(await getEBelgeDetail(id));
+      const next = await getEBelgeDetail(id);
+      setDetail(next);
+      setEditForm({
+        documentNo: next?.document_no || "",
+        issueDate: String(next?.issue_date || "").slice(0, 10),
+        dueDate: String(next?.due_date || "").slice(0, 10),
+        currency: next?.currency || "TRY",
+        direction: String(next?.direction || "INCOMING").toUpperCase(),
+        documentType: /IRSALIYE|DISPATCH|DESPATCH/i.test(String(next?.document_type || "")) ? "IRSALIYE" : "FATURA",
+        note: next?.note || "",
+      });
     } catch (e) {
       setError(e?.message || "Belge detayı alınamadı.");
     }
@@ -236,6 +258,20 @@ function DetailDrawer({ id, onClose, onChanged }) {
   };
 
   const preview = async (file) => action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id)));
+  const saveDocument = async () => action("edit", async () => {
+    await updateEBelge(id, editForm);
+    setEditing(false);
+  });
+  const removeDocument = async () => {
+    if (!window.confirm(`${detail?.document_no || "Bu belge"} kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?`)) return;
+    setBusy("delete"); setError("");
+    try {
+      await deleteEBelge(id);
+      onClose?.();
+      await onChanged?.();
+    } catch (e) { setError(e?.message || "Belge tamamen silinemedi."); }
+    finally { setBusy(""); }
+  };
 
   if (!id) return null;
 
@@ -254,6 +290,20 @@ function DetailDrawer({ id, onClose, onChanged }) {
           <div><span>Durum</span><strong>{statusLabel(detail.status)}</strong><small>{detail.direction === "OUTGOING" ? "Giden" : detail.direction === "INCOMING" ? "Gelen" : "Otomatik kontrol"}</small></div>
         </section>
 
+        <section className="eb-doc-edit">
+          <div className="eb-section-title"><div><strong>Belge Bilgileri</strong><span>Belge no, tarih, yön ve türü gerektiğinde düzeltin.</span></div><button type="button" onClick={() => setEditing((value) => !value)}><Pencil size={15} /> {editing ? "Kapat" : "Düzenle"}</button></div>
+          {editing && <div className="eb-edit-grid">
+            <label>Belge No<input value={editForm.documentNo} onChange={(e) => setEditForm((v) => ({ ...v, documentNo: e.target.value }))} /></label>
+            <label>Belge Tarihi<input type="date" value={editForm.issueDate} onChange={(e) => setEditForm((v) => ({ ...v, issueDate: e.target.value }))} /></label>
+            <label>Vade Tarihi<input type="date" value={editForm.dueDate} onChange={(e) => setEditForm((v) => ({ ...v, dueDate: e.target.value }))} /></label>
+            <label>Para Birimi<input value={editForm.currency} maxLength={3} onChange={(e) => setEditForm((v) => ({ ...v, currency: e.target.value.toUpperCase() }))} /></label>
+            <label>Yön<select value={editForm.direction} onChange={(e) => setEditForm((v) => ({ ...v, direction: e.target.value }))}><option value="INCOMING">Gelen</option><option value="OUTGOING">Giden</option></select></label>
+            <label>Belge Türü<select value={editForm.documentType} onChange={(e) => setEditForm((v) => ({ ...v, documentType: e.target.value }))}><option value="FATURA">Fatura</option><option value="IRSALIYE">İrsaliye</option></select></label>
+            <label className="eb-edit-note">Not<textarea value={editForm.note} onChange={(e) => setEditForm((v) => ({ ...v, note: e.target.value }))} rows={2} /></label>
+            <button type="button" className="eb-primary" disabled={Boolean(busy)} onClick={saveDocument}>{busy === "edit" ? <LoaderCircle className="eb-spin" size={16} /> : <Save size={16} />} Değişiklikleri Kaydet</button>
+          </div>}
+        </section>
+
         {!detail.party_company_id && <section className="eb-company-match">
           <strong>Cari Eşleştir</strong>
           <input value={companyQuery} onChange={(event) => setCompanyQuery(event.target.value)} placeholder="Firma adı veya VKN yazın" />
@@ -265,11 +315,11 @@ function DetailDrawer({ id, onClose, onChanged }) {
           {detail.lines?.length ? <div className="eb-lines">
             <div className="eb-line head"><span>Ürün</span><span>Miktar</span><span>LOT</span><span>Yönlendirme</span><span>Eşleşme</span></div>
             {detail.lines.map((line) => <div className="eb-line" key={line.id}>
-              <span><strong>{line.description || line.product_code || "Kalem"}</strong><small>{line.product_code || line.supplier_product_code || ""}</small><EBelgeLineReview documentId={id} line={line} onChanged={load} /></span>
+              <span><strong>{line.description || line.product_code || "Kalem"}</strong><small>{line.product_code || line.supplier_product_code || ""}</small><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={load} /></span>
               <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}</span>
-              <span>{line.raw_metadata?.lotNo || "-"}</span>
-              <span><strong>{routingLabel(line)}</strong></span>
-              <span className={`eb-chip ${String(line.match_status || "").toLowerCase()}`}>{line.product_id ? (line.match_status || "MATCHED") : String(line.raw_metadata?.routingType || "EXPENSE").toUpperCase() === "EXPENSE" ? "GİDER" : (line.match_status || "UNMATCHED")}</span>
+              <span>{lotLabel(line)}</span>
+              <span><strong>{routingLabel(line)}</strong><small>{line.raw_metadata?.expenseCategoryName ? `Gider sınıfı: ${line.raw_metadata.expenseCategoryName}` : ""}</small></span>
+              <span className={`eb-chip ${String(line.match_status || "").toLowerCase()}`}>{line.raw_metadata?.lotRequired && !lotLabel(line).includes("Fatura") && !lotLabel(line).includes("İrsaliye") && lotLabel(line) === "-" ? "LOT BEKLİYOR" : line.product_id ? "ÜRÜN EŞLEŞTİ" : String(line.raw_metadata?.routingType || "EXPENSE").toUpperCase() === "EXPENSE" ? "GİDER" : (line.match_status || "UNMATCHED")}</span>
             </div>)}
           </div> : <Empty title="Kalem bulunamadı" text="Belge kalemleri kontrol gerektiriyor." />}
         </section>
@@ -290,6 +340,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
         </section>
 
         <section className="eb-drawer-actions">
+          <button type="button" className="eb-danger" disabled={Boolean(busy) || detail.status === "POSTED" || detail.status === "APPROVED"} onClick={removeDocument}>{busy === "delete" ? <LoaderCircle className="eb-spin" size={17} /> : <Trash2 size={17} />} Tam Sil</button>
           <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>
             {busy === "match" ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleştir / Yeniden Kontrol Et
           </button>
@@ -310,8 +361,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [lastUpload, setLastUpload] = useState(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
-  const [from, setFrom] = useState(sixtyDaysAgo());
-  const [to, setTo] = useState(today());
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [matching, setMatching] = useState(false);
   const [error, setError] = useState("");
@@ -467,7 +518,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           <label>Başlangıç<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
           <label>Bitiş<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
         </div>
-        {busy && !rows.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belgeler yükleniyor</div> : rows.length ? <div className="eb-table">
+        {busy && !rows.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belgeler yükleniyor</div> : rows.length ? <div className="eb-pool-table-scroll"><div className="eb-table">
           <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Kontrol</span></div>
           {rows.map((row) => {
             const hasIssue = Number(row.issue_count || 0) > 0;
@@ -481,7 +532,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
               <span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span>
             </button>;
           })}
-        </div> : <Empty title="Bu filtrede belge yok" text="Tarih / filtre alanlarını değiştirin veya Belge Yükle ekranından dosya ekleyin." />}
+        </div></div> : <Empty title="Bu filtrede belge yok" text="Tarih / filtre alanlarını değiştirin veya Belge Yükle ekranından dosya ekleyin." />}
       </section>
     </>}
 

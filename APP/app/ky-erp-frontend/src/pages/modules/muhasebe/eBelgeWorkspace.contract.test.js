@@ -19,3 +19,15 @@ test("yükleme havuzu bloke etmeden sonucu hemen gösterir",()=>{
   assert.match(page,/getEBelgeDashboard/);
   assert.match(page,/initialView = "overview"/);
 });
+test("Belge Havuzu filtreyi bos acip scroll, duzenle ve Tam Sil sunar",()=>{
+  const page=read("./EBelgeCenterPage.jsx");
+  const css=read("./eBelgeCenter.css");
+  const api=read("../../../services/eBelgeApi.js");
+  assert.match(page,/const \[from, setFrom\] = useState\(""\)/);
+  assert.match(page,/const \[to, setTo\] = useState\(""\)/);
+  assert.match(page,/eb-pool-table-scroll/);
+  assert.match(css,/\.eb-pool-table-scroll\{/);
+  assert.match(page,/Değişiklikleri Kaydet/);
+  assert.match(page,/Tam Sil/);
+  assert.match(api,/deleteEBelge/);
+});

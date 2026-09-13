@@ -65,7 +65,7 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
       raw.chemical=routing.chemical;
       raw.lotPolicy=lotPolicy;
       raw.lotRequired=lotPolicy==="REQUIRED";
-      const expense=routing.routing==="EXPENSE"?await resolveEBelgeExpenseCategory(c,slug,{companyId:text(doc?.party_company_id),productId:text(product.id),description:text(line.description),fallbackId:routing.expenseCategoryId,fallbackName:routing.expenseCategoryName}):null;
+      const expense=await resolveEBelgeExpenseCategory(c,slug,{companyId:text(doc?.party_company_id),productId:text(product.id),description:text(line.description),fallbackId:routing.expenseCategoryId,fallbackName:routing.expenseCategoryName});
       raw.expenseCategoryId=expense?.categoryId||routing.expenseCategoryId||null;
       raw.expenseCategoryName=expense?.categoryName||routing.expenseCategoryName||null;
       raw.expenseCategorySource=expense?.source||null;
@@ -86,7 +86,7 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
     if(body.productionDate!==undefined)raw.productionDate=text(body.productionDate);
     if(body.expiryDate!==undefined)raw.expiryDate=text(body.expiryDate);
     if(body.unitCode!==undefined)raw.correctedUnitCode=text(body.unitCode);
-    if(body.expenseCategoryName!==undefined&&text(raw.routingType||"EXPENSE").toUpperCase()==="EXPENSE"){
+    if(body.expenseCategoryName!==undefined){
       raw.expenseCategoryName=text(body.expenseCategoryName)||"Mal ve Hizmet Alımı";
       raw.expenseCategoryId=text(body.expenseCategoryId)||raw.expenseCategoryId||null;
       raw.expenseCategorySource="USER";
