@@ -281,11 +281,12 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
           <span><small>Hızlı Muhasebe</small><strong>{expanded ? "Günlük giriş ve haftalık kontrol" : "Hızlı İşlemler"}</strong></span>
           {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
         </button>
+        {expanded ? <>
         <div className="qab-shortcuts" aria-label="Hızlı muhasebe işlemleri">
-          <button type="button" className={expanded && mode === "WEEK" ? "active" : ""} onClick={() => openMode("WEEK")}><CalendarRange size={15} /> Hafta</button>
-          <button type="button" className={expanded && mode === "PAYMENT" ? "active" : ""} onClick={() => openMode("PAYMENT")}><Banknote size={15} /> Ödeme / Tahsilat</button>
-          <button type="button" className={expanded && mode === "CHECK" ? "active" : ""} onClick={() => openMode("CHECK")}><CheckSquare2 size={15} /> Çek</button>
-          <button type="button" className={expanded && mode === "FIBE" ? "active" : ""} onClick={() => openMode("FIBE")}><CircleDollarSign size={15} /> FİBE</button>
+          <button type="button" className={mode === "WEEK" ? "active" : ""} onClick={() => openMode("WEEK")}><CalendarRange size={15} /> Hafta</button>
+          <button type="button" className={mode === "PAYMENT" ? "active" : ""} onClick={() => openMode("PAYMENT")}><Banknote size={15} /> Ödeme / Tahsilat</button>
+          <button type="button" className={mode === "CHECK" ? "active" : ""} onClick={() => openMode("CHECK")}><CheckSquare2 size={15} /> Çek</button>
+          <button type="button" className={mode === "FIBE" ? "active" : ""} onClick={() => openMode("FIBE")}><CircleDollarSign size={15} /> FİBE</button>
         </div>
         <div className="qab-actions">
           <select aria-label="Cari / Firma seç" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
@@ -294,6 +295,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
           </select>
           <button type="button" onClick={refresh}><RefreshCw size={15} /> Yenile</button>
         </div>
+        </> : null}
       </header>
 
       {expanded && selected ? (

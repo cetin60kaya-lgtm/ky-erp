@@ -130,6 +130,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [recordFilter, setRecordFilter] = useState("ALL");
   const [balanceSort, setBalanceSort] = useState("NAME");
   const [selected, setSelected] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [movementFilter, setMovementFilter] = useState("ALL");
   const [movements, setMovements] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);
@@ -248,6 +250,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const loadMovements = useCallback(
     async (firm) => {
       setSelected(firm);
+      setSettingsOpen(false);
+      setMovementFilter("ALL");
       setDetailLoading(true);
       setMovements([]);
       setAliases([]);
@@ -498,6 +502,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   };
 
   const canUseCari = Boolean(selected?.supplierDebtTracking || selected?.customerReceivableTracking);
+  const filteredMovements = useMemo(() => {
+    if (movementFilter === "ALL") return movements;
+    return movements.filter((movement) => normalize(movement.movement_type || movement.type) === movementFilter);
+  }, [movementFilter, movements]);
 
   return (
     <section className="ccw-root">
@@ -618,34 +626,26 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.isActive === false ? "Pasif" : "Aktif"} · {selected.taxNo || "Vergi no yok"}</p>
               </div>
               <div className="ccw-drawer-actions">
-                {canUseCari ? (
-                  <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari İşlem</button>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={companyStatusSaving}
-                  onClick={toggleCompanyStatus}
-                  style={selected.isActive === false
-                    ? { color: "#067647", borderColor: "#75e0a7", background: "#ecfdf3" }
-                    : { color: "#b54708", borderColor: "#fec84b", background: "#fffaeb" }}
-                >
-                  {companyStatusSaving ? "Kaydediliyor…" : selected.isActive === false ? "Aktif Et" : "Pasife Al"}
-                </button>
-                <button
-                  type="button"
-                  disabled={companyDeleting}
-                  onClick={deleteCompany}
-                  title="Firma kartını uyarı sonrası kalıcı olarak sil"
-                  style={{ color: "#b42318", borderColor: "#fda29b", background: "#fff5f5" }}
-                >
-                  <Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kalıcı Sil"}
-                </button>
+                {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Ödeme / Tahsilat / Cari</button> : null}
+                <button type="button" onClick={() => setSettingsOpen(true)}>Firma Düzenle</button>
                 <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
             </header>
             <div className="ccw-drawer-body">
               {notice ? <div className="ccw-notice" role="status">{notice}</div> : null}
 
+              {settingsOpen ? (
+                <div className="ccw-settings-layer" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
+                  <aside className="ccw-settings-panel" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+                    <header className="ccw-settings-head">
+                      <div><h3>Firma Düzenle</h3><p>Ana firma kartı, eşleşme ve FİBE ayarları. Kaydet ve kapat; günlük işlem ekranında tekrar görünmez.</p></div>
+                      <div className="ccw-drawer-actions">
+                        <button type="button" disabled={companyStatusSaving} onClick={toggleCompanyStatus}>{companyStatusSaving ? "Kaydediliyor…" : selected.isActive === false ? "Aktif Et" : "Pasife Al"}</button>
+                        <button type="button" disabled={companyDeleting} onClick={deleteCompany} className="danger"><Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kalıcı Sil"}</button>
+                        <button type="button" className="icon" onClick={() => setSettingsOpen(false)} aria-label="Kapat"><X size={20} /></button>
+                      </div>
+                    </header>
+                    <div className="ccw-settings-body">
               <section className="ccw-profile-card">
                 <header>
                   <div><h3>Firma Kartı ve Muhasebe Tanımı</h3><p>İletişim bilgileri mail/ekstre akışında; borç, KDV ve gider ayarları muhasebe akışında kullanılır.</p></div>
@@ -735,17 +735,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   </div>
                 ) : <div className="ccw-mini-empty">Henüz alias yok. İşNet, fiş veya manuel kayıtta farklı yazılan firma adlarını buraya ekleyebilirsin.</div>}
               </section>
-
-              <section className="ccw-detail-summary">
-                <div><span>Bakiye</span><strong>{money(selected.currentBalance)}</strong></div>
-                <div><span>Durum</span><strong>{selected.isActive === false ? "Pasif" : "Aktif"}</strong></div>
-                <div><span>Kayıt türü</span><strong>{recordLabel(selected)}</strong></div>
-                <div><span>Cari durumu</span><strong>{cariLabel(selected)}</strong></div>
-                <div><span>KDV takibi</span><strong>{selected.vatTrackingEnabled === false ? "Kapalı" : "Aktif"}</strong></div>
-                <div><span>Telefon</span><strong>{selected.phone || "-"}</strong></div>
-                <div><span>Mail</span><strong>{selected.email || "-"}</strong></div>
-                <div><span>Adres</span><strong>{selected.address || "-"}</strong></div>
-              </section>
+                    </div>
+                  </aside>
+                </div>
+              ) : null}
 
               {transactionOpen && canUseCari ? (
                 <section className="ccw-transaction">
@@ -762,11 +755,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               ) : null}
 
               <section className="ccw-section">
-                <header><h3>Cari hareketler</h3><span>{movements.length} kayıt</span></header>
+                <header><div><h3>Cari hareketler</h3><span>{filteredMovements.length} / {movements.length} kayıt</span></div><select className="ccw-movement-filter" value={movementFilter} onChange={(event) => setMovementFilter(event.target.value)}><option value="ALL">Tüm hareketler</option><option value="PAYMENT">Ödemeler</option><option value="COLLECTION">Tahsilatlar</option><option value="DEBIT">Borç eklenen</option><option value="CREDIT">Alacak eklenen</option></select></header>
                 {!canUseCari ? (
                   <div className="ccw-mini-empty">Bu firma peşin/cari takipsiz. Gider ve KDV kayıtları muhasebe raporlarından takip edilir; borç bakiyesi oluşmaz.</div>
-                ) : detailLoading ? <div className="ccw-empty">Hareketler yükleniyor…</div> : movements.length ? (
-                  <div className="ccw-table-wrap compact"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Belge No</th><th>Açıklama</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Kayıt</th></tr></thead><tbody>{movements.map((movement) => <tr key={movement.id}><td>{dateText(movement.movement_date || movement.date)}</td><td>{movementTypeLabel(movement.movement_type || movement.type)}</td><td>{movement.document_no || "-"}</td><td>{movement.description || "-"}</td><td>{money(movement.debit)}</td><td>{money(movement.credit)}</td><td><strong>{money(movement.balance_after)}</strong></td><td>{normalize(movement.record_type).includes("GAYRI") ? "Gayri resmî" : "Resmî"}</td></tr>)}</tbody></table></div>
+                ) : detailLoading ? <div className="ccw-empty">Hareketler yükleniyor…</div> : filteredMovements.length ? (
+                  <div className="ccw-table-wrap compact"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Belge No</th><th>Açıklama</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Kayıt</th></tr></thead><tbody>{filteredMovements.map((movement) => <tr key={movement.id}><td>{dateText(movement.movement_date || movement.date)}</td><td>{movementTypeLabel(movement.movement_type || movement.type)}</td><td>{movement.document_no || "-"}</td><td>{movement.description || "-"}</td><td>{money(movement.debit)}</td><td>{money(movement.credit)}</td><td><strong>{money(movement.balance_after)}</strong></td><td>{normalize(movement.record_type).includes("GAYRI") ? "Gayri resmî" : "Resmî"}</td></tr>)}</tbody></table></div>
                 ) : <div className="ccw-mini-empty">Bu firma için cari hareket bulunamadı.</div>}
               </section>
             </div>

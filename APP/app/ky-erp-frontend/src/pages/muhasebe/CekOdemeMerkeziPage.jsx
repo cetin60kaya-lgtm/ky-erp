@@ -179,9 +179,10 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   const [firmBalanceFilter, setFirmBalanceFilter] = useState("ALL");
   const [firmSort, setFirmSort] = useState("NAME");
   const [statusFilter, setStatusFilter] = useState("OPEN");
-  const [directionFilter, _setDirectionFilter] = useState("ALL");
-  const [ownershipFilter, _setOwnershipFilter] = useState("ALL");
-  const [workFilter, _setWorkFilter] = useState("ALL");
+  const [periodFilter, setPeriodFilter] = useState("MONTH");
+  const [directionFilter, setDirectionFilter] = useState("ALL");
+  const [ownershipFilter, setOwnershipFilter] = useState("ALL");
+  const [workFilter, setWorkFilter] = useState("ALL");
   const [monthFilter, setMonthFilter] = useState("");
   const [modal, setModal] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -260,6 +261,14 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
 
   const visibleRows = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const mondayOffset = (todayStart.getDay() + 6) % 7;
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - mondayOffset);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
     return overview.rows.filter((row) => {
       const haystack = [row.firmaAdi, row.checkNo, row.bankName, row.accountNo, row.note]
         .filter(Boolean)
@@ -270,13 +279,22 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       if (statusFilter === "OPEN" && !open) return false;
       if (statusFilter === "OVERDUE" && Number(row.daysRemaining) >= 0) return false;
       if (statusFilter === "PAID" && open) return false;
+      const dueRaw = row.dueDate || row.vade || row.issueDate || row.createdAt;
+      const due = dueRaw ? new Date(String(dueRaw).slice(0, 10) + "T12:00:00") : null;
+      if (!monthFilter && periodFilter === "WEEK" && (!due || due < weekStart || due > weekEnd)) return false;
+      if (!monthFilter && periodFilter === "MONTH" && (!due || due.getFullYear() !== now.getFullYear() || due.getMonth() !== now.getMonth())) return false;
       if (monthFilter && String(row.monthKey || "") !== monthFilter) return false;
       if (directionFilter !== "ALL" && String(row.checkDirection || "").toUpperCase() !== directionFilter) return false;
       if (ownershipFilter !== "ALL" && String(row.checkOwnership || "").toUpperCase() !== ownershipFilter) return false;
       if (workFilter !== "ALL" && String(row.workType || "OFFICIAL").toUpperCase() !== workFilter) return false;
       return true;
     });
-  }, [directionFilter, monthFilter, overview.rows, ownershipFilter, search, statusFilter, workFilter]);
+  }, [directionFilter, monthFilter, overview.rows, ownershipFilter, periodFilter, search, statusFilter, workFilter]);
+
+  const visibleCheckSummary = useMemo(() => ({
+    count: visibleRows.length,
+    total: visibleRows.reduce((sum, row) => sum + numberValue(row.amount || row.tutar), 0),
+  }), [visibleRows]);
 
   const visibleFirms = useMemo(() => {
     const term = firmSearch.trim().toLocaleLowerCase("tr-TR");
@@ -457,11 +475,11 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       </section>
 
       <section className="check-month-strip" aria-label="Aylık çek toplamları">
-        <button className={`check-month-card ${!monthFilter ? "active" : ""}`} type="button" onClick={() => setMonthFilter("")}>
+        <button className={`check-month-card ${!monthFilter && periodFilter === "ALL" ? "active" : ""}`} type="button" onClick={() => { setMonthFilter(""); setPeriodFilter("ALL"); }}>
           <span>TÜM AYLAR</span><b>{money(summary.openTotal)}</b><small>{summary.openCount || 0} açık çek</small>
         </button>
         {overview.months.map((month) => (
-          <button key={month.monthKey} className={`check-month-card ${monthFilter === month.monthKey ? "active" : ""}`} type="button" onClick={() => setMonthFilter(month.monthKey)}>
+          <button key={month.monthKey} className={`check-month-card ${monthFilter === month.monthKey ? "active" : ""}`} type="button" onClick={() => { setMonthFilter(month.monthKey); setPeriodFilter("ALL"); }}>
             <span>{month.label}</span><b>{money(month.total)}</b><small>{month.count} çek</small>
           </button>
         ))}
@@ -469,15 +487,14 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
 
       <section className="check-panel">
         <header className="check-panel-head">
-          <div><h2>Çek Vade Takvimi</h2><p>Varsayılan görünüm yalnız açık çekleri gösterir.</p></div>
+          <div><h2>Çekleri Görüntüle</h2><p>{visibleCheckSummary.count} çek · {money(visibleCheckSummary.total)}</p></div>
           <div className="check-toolbar">
             <div style={{ position: "relative" }}><Search size={15} style={{ position: "absolute", left: 10, top: 11, color: "#8190a3" }} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Firma, çek no, banka veya hesap ara" style={{ paddingLeft: 32 }} /></div>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="OPEN">Açık Çekler</option>
-              <option value="OVERDUE">Vadesi Geçenler</option>
-              <option value="PAID">Kapananlar</option>
-              <option value="ALL">Tümü</option>
-            </select>
+            <select value={periodFilter} onChange={(event) => { setPeriodFilter(event.target.value); setMonthFilter(""); }}><option value="WEEK">Bu Hafta</option><option value="MONTH">Bu Ay</option><option value="ALL">Tüm Dönem</option></select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="OPEN">Açık Çekler</option><option value="OVERDUE">Vadesi Geçenler</option><option value="PAID">Kapananlar</option><option value="ALL">Tümü</option></select>
+            <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)}><option value="ALL">Alınan + Verilen</option><option value="RECEIVED">Alınan</option><option value="GIVEN">Verilen</option></select>
+            <select value={ownershipFilter} onChange={(event) => setOwnershipFilter(event.target.value)}><option value="ALL">Tüm Çek Türleri</option><option value="CUSTOMER_CHECK">Müşteri Çeki</option><option value="OWN_CHECK">Kendi Çekimiz</option></select>
+            <select value={workFilter} onChange={(event) => setWorkFilter(event.target.value)}><option value="ALL">Resmî + Gayri</option><option value="OFFICIAL">Resmî</option><option value="UNOFFICIAL">Gayri resmî</option></select>
           </div>
         </header>
         <div className="check-table-wrap">

@@ -124,7 +124,7 @@ export default function CompanyFibeSection({ activeMainCompany, company, onChang
       <header>
         <div>
           <h3><CircleDollarSign size={17} /> FİBE Takibi</h3>
-          <span>Normal cariden tamamen ayrı firma bazlı ek ödeme hesabı</span>
+          <span>Normal cariden tamamen ayrı firma bazlı ek ödeme hesabı; firmanın gelen KDV tutarı üzerinden belirlenen yüzdeyle takip edilir.</span>
         </div>
         <button type="button" disabled={busy} onClick={load}><RefreshCw size={15} /> Yenile</button>
       </header>
@@ -145,7 +145,7 @@ export default function CompanyFibeSection({ activeMainCompany, company, onChang
       {draft.fibeEnabled ? (
         <>
           <div className="ccw-profile-grid">
-            <label>FİBE oranı (%)
+            <label>Gelen KDV üzerinden FİBE oranı (%)
               <input type="number" min="0" max="100" step="0.01" value={draft.fibeRate} onChange={(event) => setDraft((current) => ({ ...current, fibeRate: event.target.value }))} />
             </label>
             <label>FİBE başlangıç tarihi
