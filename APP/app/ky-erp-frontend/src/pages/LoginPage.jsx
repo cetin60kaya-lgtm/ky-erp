@@ -562,6 +562,8 @@ export default function LoginPage() {
 
             <StepRail stage={stage} />
 
+            {stage === "CREDENTIALS" ? <div className="auth-login-intro"><span>KY</span><div><strong>Kurumsal hesabınızla devam edin</strong><small>Telefon onayı, güvenilir cihaz ve oturum kontrolleri hesabınıza göre otomatik uygulanır.</small></div></div> : null}
+
             {stage === "CREDENTIALS" ? (
               <form className="auth-form" onSubmit={handleLogin}>
                 <label>Kullanıcı adı veya e-posta
@@ -667,6 +669,7 @@ export default function LoginPage() {
                 <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
                 <h3>{flow.pushDelivered === false ? "KY ERP Güvenlik uygulamasını açın" : "Telefonunuza bildirim gönderildi"}</h3>
                 <p>{flow.pushDelivered === false ? "Bildirim kanalı yenileniyor. KY ERP Güvenlik uygulamasını açın; bekleyen giriş Onaylar bölümünde görünür." : <>Tek KY ERP bildirimini açıp <strong>Onayla</strong> seçin. Aynı giriş için ikinci bildirim üretilmez. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</>}</p>
+                {flow.matchNumber ? <div className="auth-match-number"><span>EŞLEŞTİRME NO</span><strong>{flow.matchNumber}</strong><small>Telefondaki KY Güvenlik ekranında da aynı numarayı görüyorsanız onaylayın.</small></div> : null}
                 <div className="auth-notice">
                   <strong>Güvenli bekleme</strong>
                   <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>

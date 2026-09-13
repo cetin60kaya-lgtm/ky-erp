@@ -14,7 +14,8 @@ test("Security Center exposes scoped operational tabs", async () => {
   assert.match(source, /runPhoneApprovedSecurityAction/);
   assert.match(source, /SESSION_TRUST_APPROVE/);
   assert.match(source, /SECURITY_CAPABILITY_SET/);
-  assert.match(source, /SUPER_ADMIN_GRANT/);
+  assert.match(source, /grantableUsers/);
+  assert.match(source, /SUPER_ADMIN/);
 });
 
 test("normal user profile Security opens self center before device setup", async () => {
@@ -38,7 +39,7 @@ test("KY Security PWA labels every critical security action and refreshes cache"
   for (const operation of ["SESSION_TRUST_APPROVE", "SESSION_CLOSE", "SESSION_SUSPICIOUS", "TRUSTED_DEVICE_REVOKE", "SECURITY_CAPABILITY_SET", "SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME"]) {
     assert.match(actions, new RegExp(operation));
   }
-  assert.match(sw, /kyerp-security-shell-v14/);
+  assert.match(sw, /kyerp-security-shell-v15/);
 });
 
 test("notification center exposes direct scoped login and session approval actions", async () => {

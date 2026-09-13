@@ -73,6 +73,8 @@ export default function SecurityCenterPanel() {
   const canSessionClose = scopeType === "SYSTEM" || capabilities.includes("SESSION_CLOSE");
   const canApproveLogin = scopeType === "SYSTEM" || capabilities.includes("LOGIN_APPROVE");
   const selectedUser = users.find((row) => String(row.id) === String(selectedUserId));
+  const grantableUsers = users.filter((row) => !["SUPER_ADMIN", "ADMIN"].includes(String(row.role || "").toUpperCase()));
+  const visibleSessions = sessions.filter((row) => row.active);
 
   const filteredAudit = useMemo(() => {
     const query = String(filter || "").trim().toLocaleLowerCase("tr-TR");
@@ -209,12 +211,12 @@ export default function SecurityCenterPanel() {
     </div>}
 
     {tab === "devices" && canSessionView && <div className="sc-panel">
-      <div className="sc-panel-head"><div><h3>{scopeType === "SELF" ? "Onaylı Cihazlarım" : scopeType === "SYSTEM" ? "Tüm Kullanıcıların Onaylı Cihazları" : "Firma Kullanıcılarının Onaylı Cihazları"}</h3><p>Bir cihaz bir kez onaylandıktan sonra aynı kullanıcı ve aynı cihaz kimliğiyle açılan yeni oturumlar tekrar oturum onayı istemez. Cihaz güveni kaldırılırsa sonraki giriş yeniden onaya düşer.</p></div></div>
-      <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı</span><span>Cihaz</span><span>Firma</span><span>Onay</span><span>İşlem</span></div>
+      <div className="sc-panel-head"><div><h3>{scopeType === "SELF" ? "Onaylı Cihazlarım" : scopeType === "SYSTEM" ? "Tüm Kullanıcıların Onaylı Cihazları" : "Firma Kullanıcılarının Onaylı Cihazları"}</h3><p>{scopeType === "SYSTEM" ? "Uygulama Sahibi tüm firmalardaki kullanıcı cihazlarını yönetir; bu hesap hiçbir firmaya bağlı değildir." : "Bir cihaz bir kez onaylandıktan sonra aynı kullanıcı ve aynı cihaz kimliğiyle açılan yeni oturumlar tekrar oturum onayı istemez. Cihaz güveni kaldırılırsa sonraki giriş yeniden onaya düşer."}</p></div></div>
+      <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı</span><span>Cihaz</span><span>{scopeType === "SYSTEM" ? "Kapsam / IP" : "Firma / IP"}</span><span>Onay</span><span>İşlem</span></div>
         {trustedDevices.map((row) => <div className="sc-table-row" key={`${row.userId}:${row.deviceId}`}>
           <span><strong>{row.fullName || row.username}</strong><small>{row.username || "-"} · {row.role || "-"}</small></span>
           <span><strong>{row.deviceLabel?.startsWith("BROWSER:") ? "Güvenilir Tarayıcı / Bilgisayar" : (row.deviceLabel || "Güvenilir cihaz")}</strong><small>{row.userAgent || `Cihaz ${String(row.deviceId || "").slice(0, 8)}`}</small></span>
-          <span>{row.mainCompanySlug || "-"}<small>{row.ipAddress || "IP yok"}</small></span>
+          <span>{["SUPER_ADMIN", "ADMIN"].includes(String(row.role || "").toUpperCase()) ? "Uygulama Sahibi · Tüm Sistem" : (row.mainCompanySlug || "-")}<small>{row.ipAddress || "IP yok"}</small></span>
           <span><em className="trust trusted">Onaylı</em><small>{dateText(row.lastTrustedAt || row.firstTrustedAt)}</small></span>
           <span className="sc-actions compact"><button className="danger" disabled={busy} onClick={() => revokeTrustedDevice(row)}>Güveni Kaldır</button></span>
         </div>)}
@@ -224,10 +226,10 @@ export default function SecurityCenterPanel() {
 
     {tab === "sessions" && canSessionView && <div className="sc-panel">
       <div className="sc-panel-head"><div><h3>Gerçek ERP Oturumları</h3><p>Login onayı ile cihaz güveni ayrıdır. Onaylı cihazdan gelen yeni oturumlar otomatik “Güvenilir” görünür; yalnız yeni veya güveni kaldırılmış cihazlar onay bekler.</p></div>{scopeType === "SYSTEM" && <button className="danger strong" disabled={busy} onClick={() => critical({ operation: "ONLY_ME" }, "Sadece Ben Kalayım tamamlandı; Süper Admin dışındaki aktif oturumlar kapatıldı.")}>Sadece Ben Kalayım</button>}</div>
-      <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı / Cihaz</span><span>Firma / IP</span><span>Güven</span><span>Durum</span><span>İşlem</span></div>
-        {sessions.map((row) => <div className="sc-table-row" key={row.id}>
+      <div className="sc-table"><div className="sc-table-head"><span>Kullanıcı / Cihaz</span><span>{scopeType === "SYSTEM" ? "Kapsam / IP" : "Firma / IP"}</span><span>Güven</span><span>Durum</span><span>İşlem</span></div>
+        {visibleSessions.map((row) => <div className="sc-table-row" key={row.id}>
           <span><strong>{row.fullName || row.username}</strong><small>{row.deviceLabel || "Tarayıcı"}<br/>{dateText(row.createdAt)}</small></span>
-          <span>{row.mainCompanySlug || "-"}<small>{row.ipAddress || "-"}</small></span>
+          <span>{["SUPER_ADMIN", "ADMIN"].includes(String(row.role || "").toUpperCase()) ? "Uygulama Sahibi · Tüm Sistem" : (row.mainCompanySlug || "-")}<small>{row.ipAddress || "-"}</small></span>
           <span><em className={`trust ${String(row.trustStatus || "").toLowerCase()}`}>{trustLabel(row.trustStatus)}</em></span>
           <span><em className={row.active ? "active-session" : "closed-session"}>{row.active ? "Aktif" : "Kapalı"}</em><small>{dateText(row.lastSeenAt)}</small></span>
           <span className="sc-actions compact">
@@ -238,7 +240,7 @@ export default function SecurityCenterPanel() {
           </span>
         </div>)}
       </div>
-      {!sessions.length && <div className="sc-empty">Görüntülenebilir oturum yok.</div>}
+      {!visibleSessions.length && <div className="sc-empty">Aktif oturum yok. Kapatılan oturumlar Güvenlik Akışı bölümünde kayıtlı kalır.</div>}
     </div>}
 
     {tab === "audit" && canAudit && <div className="sc-panel">
@@ -255,11 +257,11 @@ export default function SecurityCenterPanel() {
     {tab === "grants" && canManage && <div className="sc-panel">
       <div className="sc-panel-head"><div><h3>Firma Güvenlik Yetkilileri</h3><p>Bu kişi yalnız seçilen firmanın güvenlik işlemlerini yönetebilir; ERP rolü değişmez.</p></div></div>
       <div className="sc-grant-editor">
-        <label>Kullanıcı<select value={selectedUserId} onChange={(event) => chooseUser(event.target.value)}><option value="">Kullanıcı seçin</option>{users.map((row) => <option value={row.id} key={row.id}>{row.fullName || row.username} · {row.role} · {row.mainCompanySlug || "-"}</option>)}</select></label>
+        <label>Kullanıcı<select value={selectedUserId} onChange={(event) => chooseUser(event.target.value)}><option value="">Kullanıcı seçin</option>{grantableUsers.map((row) => <option value={row.id} key={row.id}>{row.fullName || row.username} · {row.role} · {row.mainCompanySlug || "-"}</option>)}</select></label>
         <div className="sc-cap-grid">{CAPABILITIES.map(([key, label]) => <label key={key}><input type="checkbox" disabled={!selectedUserId} checked={selectedCaps.includes(key)} onChange={() => toggleCap(key)}/><span>{label}</span></label>)}</div>
         <div className="sc-actions"><button className="primary" disabled={busy || !selectedUserId} onClick={saveGrant}>Telefondan Onayla ve Yetkiyi Kaydet</button></div>
       </div>
-      {scopeType === "SYSTEM" && selectedUser && <div className="sc-super-admin-box"><div><strong>Süper Yönetici sahiplik kilidi</strong><p>Normal kullanıcı ekranı bu rolü veremez. Asıl Süper Yönetici hesabı kaldırılamaz; ikincil Süper Yönetici değişiklikleri yalnız KY Güvenlik telefonu ile yapılır.</p></div><div className="sc-actions">{selectedUser.role === "SUPER_ADMIN" ? <button className="danger" disabled={busy} onClick={() => critical({ operation: "SUPER_ADMIN_REVOKE", targetUserId: selectedUser.id }, "İkincil Süper Yönetici yetkisi kaldırıldı.")}>Süper Yönetici Yetkisini Kaldır</button> : <button disabled={busy} onClick={() => critical({ operation: "SUPER_ADMIN_GRANT", targetUserId: selectedUser.id }, "Yeni Süper Yönetici KY Güvenlik onayıyla eklendi.")}>Süper Yönetici Yap</button>}</div></div>}
+      {scopeType === "SYSTEM" && <div className="sc-owner-scope-note"><strong>Uygulama Sahibi ayrı sistem kapsamındadır.</strong><span>Süper Yönetici hesapları firma yetkilisi listesine girmez; firma güvenlik yetkileri yalnız firma kullanıcılarına atanır.</span></div>}
       <div className="sc-list grants">{grants.map((row) => <div className="sc-row" key={row.id}><div className="sc-row-main"><strong>{row.fullName || row.username}</strong><span>{row.mainCompanySlug} · {row.role}</span><small>{(row.capabilities || []).join(" · ")}</small></div></div>)}</div>
     </div>}
   </section>;

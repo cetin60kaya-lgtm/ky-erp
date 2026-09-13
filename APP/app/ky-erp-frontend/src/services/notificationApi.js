@@ -6,7 +6,7 @@ const EMPTY = {
 };
 
 export async function getNotifications() {
-  const payload = await apiFetch("/notifications", { timeoutMs: 20000 });
+  const payload = await apiFetch(`/notifications?_ts=${Date.now()}`, { timeoutMs: 20000 });
   return payload?.data && typeof payload.data === "object" ? payload.data : EMPTY;
 }
 

@@ -55,7 +55,7 @@ test("access refresh reuses the same security device id instead of creating dupl
   assert.match(push,/const existing = replaceCandidate \|\| endpointCandidate/);
   assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
   assert.match(push,/relinkedDevice: Boolean\(replaceCandidate\)/);
-  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.1"/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.2"/);
 });
 
 

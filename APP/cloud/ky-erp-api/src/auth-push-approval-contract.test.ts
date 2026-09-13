@@ -60,6 +60,8 @@ test("VAPID signing key stays server-side and push uses standard VAPID authoriza
 test("phone approval is primary while Authenticator remains an explicit fallback", () => {
   assert.match(policy, /startPhoneApprovalChallenge/);
   assert.match(policy, /PHONE_APPROVAL_PENDING/);
+  assert.match(push, /matchNumber/);
+  assert.match(login, /auth-match-number/);
   assert.match(policy, /phone-approval\/:id\/fallback/);
   assert.match(policy, /skipPhone: true/);
   assert.match(login, /Telefonunuza bildirim gönderildi/);

@@ -15,7 +15,7 @@ const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
 const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
 const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.1";
+const SECURITY_APP_VERSION = "security-v2.2";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -115,6 +115,11 @@ function randomSixDigitCode() {
   const bytes = new Uint32Array(1);
   crypto.getRandomValues(bytes);
   return String(bytes[0] % 1_000_000).padStart(6, "0");
+}
+function randomMatchNumber() {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(10 + (bytes[0] % 90));
 }
 function encodeJson(value: unknown) {
   return base64Url(new TextEncoder().encode(JSON.stringify(value)));
@@ -678,6 +683,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
 
   const id = crypto.randomUUID();
   const token = randomToken(32);
+  const matchNumber = randomMatchNumber();
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
 
   // Aynı kullanıcı yeniden girişe basarsa eski bekleyen telefon isteğini "reddedildi"
@@ -693,6 +699,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     mainCompanySlug: companySlug,
     challengeTokenHash: await sha256(token),
     status: "PENDING",
+    matchNumber,
     deviceLabel: text(source.deviceLabel || source.device_label),
     userAgent: text(source.userAgent || source.user_agent || userAgent(c)),
     ipAddress: text(source.ipAddress || source.ip_address || clientIp(c)),
@@ -718,6 +725,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     phoneApprovalId: id,
     phoneApprovalToken: token,
     phoneApprovalExpiresAt: expiresAt,
+    matchNumber,
     notifiedDevices: sent,
     pushDelivered: sent > 0,
     message: sent
@@ -882,6 +890,7 @@ async function pendingItems(c: any, actor: AnyRow) {
       dedupeKey: `self:${actor.userId}`,
       title: "KY ERP · Giriş Onayı",
       body: `${friendlyDeviceLabel(current.deviceLabel, current.userAgent)} için giriş onayı bekleniyor.`,
+      matchNumber: text(current.matchNumber),
       requestedAt: current.requestedAt,
       expiresAt: current.expiresAt,
       mainCompanySlug: actor.companySlug,

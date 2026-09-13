@@ -56,3 +56,5 @@ button{cursor:pointer}
 .install-state>div{display:grid;gap:2px}.install-state strong{font-size:13px;color:#173a61}.install-state small{font-size:10px;color:#6a8096}
 .install-state.installed{border-color:#b8dfc7;background:#effaf3}.install-state.installed .install-state-mark{background:#22824d}
 #installButton:disabled{opacity:.55;cursor:wait}
+
+.approval-match{display:grid;grid-template-columns:auto 72px 1fr;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;border:1px solid #b8d4f3;border-radius:12px;background:#eef6ff}.approval-match span{font-size:9px;font-weight:900;letter-spacing:.12em;color:#4b6f95}.approval-match strong{display:grid;place-items:center;min-height:48px;border-radius:10px;background:#153d68;color:#fff;font-size:28px;line-height:1;letter-spacing:.06em}.approval-match small{font-size:10px;line-height:1.35;color:#58738f}

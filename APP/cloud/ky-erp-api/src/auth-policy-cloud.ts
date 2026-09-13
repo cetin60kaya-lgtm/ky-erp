@@ -829,6 +829,7 @@ export function registerAuthPolicyRoutes(app: any) {
         phoneApprovalId: approval.id,
         phoneApprovalToken: text(body.phoneApprovalToken),
         phoneApprovalExpiresAt: approval.expiresAt,
+        matchNumber: text(approval.matchNumber),
         message: "Telefonunuzdan onay bekleniyor.",
       });
     }
@@ -878,6 +879,7 @@ export function registerAuthPolicyRoutes(app: any) {
       phoneApprovalId: result.approval.id,
       phoneApprovalToken: text(body.phoneApprovalToken),
       phoneApprovalExpiresAt: result.approval.expiresAt,
+      matchNumber: text(result.approval.matchNumber),
       notifiedDevices: result.sent,
       pushDelivered: result.sent > 0,
       message: result.sent

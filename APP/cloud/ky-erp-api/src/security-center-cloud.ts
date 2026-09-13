@@ -76,7 +76,7 @@ async function storePut(c: any, scope: string, fileName: string, companySlug: st
 async function audit(c: any, action: string, current: AnyRow, targetUserId = "", companySlug = "", sessionId = "", detail: AnyRow = {}) {
   try {
     await c.env.DB.prepare(`INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(
-      crypto.randomUUID(), text(current?.id) || null, targetUserId || null, companySlug || text(current?.mainCompanySlug) || null, action, sessionId || null, clientIp(c) || null, JSON.stringify(detail || {}), nowIso(),
+      crypto.randomUUID(), text(current?.id) || null, targetUserId || null, companySlug || (isSuper(current?.role) ? null : text(current?.mainCompanySlug) || null), action, sessionId || null, clientIp(c) || null, JSON.stringify(detail || {}), nowIso(),
     ).run();
   } catch {}
 }
@@ -96,7 +96,7 @@ function sanitizeCapabilities(value: unknown) { return [...new Set((Array.isArra
 async function grantFor(c: any, userId: string, companySlug: string) { const row = await storeGet(c, GRANT_SCOPE, `${companySlug}:${userId}`); if (!row || row.isActive === false) return null; return row; }
 async function scopeFor(c: any, current: AnyRow) {
   const companySlug = text(current.mainCompanySlug || current.main_company_slug);
-  if (isSuper(current.role)) return { type: "SYSTEM", companySlug, capabilities: [...CAPABILITIES], delegated: false, canDelegateSecurity: true };
+  if (isSuper(current.role)) return { type: "SYSTEM", companySlug: "", capabilities: [...CAPABILITIES], delegated: false, canDelegateSecurity: true };
   if (isCompanyAdmin(current.role)) return { type: "COMPANY", companySlug, capabilities: [...CAPABILITIES], delegated: false, canDelegateSecurity: true };
   const grant = companySlug ? await grantFor(c, text(current.id), companySlug) : null;
   const capabilities = sanitizeCapabilities(grant?.capabilities);
@@ -283,7 +283,7 @@ async function executeOperation(c: any, current: AnyRow, operation: string, payl
           WHERE UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN')
         )`).bind(timestamp, current.id, timestamp, payload.keepSessionId).run();
     const count = Number(result?.meta?.changes || 0);
-    await audit(c, "SUPER_ADMIN_ONLY_ME_EXECUTED", current, current.id, text(current.mainCompanySlug), payload.keepSessionId, { revokedSessions: count, preservedRole: "SUPER_ADMIN" });
+    await audit(c, "SUPER_ADMIN_ONLY_ME_EXECUTED", current, current.id, "", payload.keepSessionId, { revokedSessions: count, preservedRole: "SUPER_ADMIN" });
     return { revokedSessions: count, keptSessionId: payload.keepSessionId };
   }
   const session = await c.env.DB.prepare("SELECT * FROM auth_sessions WHERE id=? LIMIT 1").bind(payload.sessionId).first<AnyRow>();
@@ -354,7 +354,7 @@ export function registerSecurityCenterRoutes(app: any) {
     else result = await c.env.DB.prepare(`SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT 100`).bind(current.id).all<AnyRow>();
     const trusts = new Map((await storeList(c, TRUST_SCOPE)).map((row: AnyRow) => [text(row.sessionId || row.fileName), row]));
     const trustedDevices = new Map((await storeList(c, TRUSTED_DEVICE_SCOPE)).map((row: AnyRow) => [trustedDeviceKey(row.userId, row.deviceId), row]));
-    const data = (result.results || []).map((row: AnyRow) => { const trust = trusts.get(text(row.id)); const deviceId = browserDeviceId(row.device_label); const persistent = deviceId ? trustedDevices.get(trustedDeviceKey(row.user_id, deviceId)) : null; const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || "PENDING"); return { id: row.id, userId: row.user_id, username: row.username, fullName: row.full_name, role: effectiveRole(row), mainCompanySlug: row.main_company_slug, deviceId, deviceLabel: row.device_label, userAgent: row.user_agent, ipAddress: row.ip_address, createdAt: row.created_at, approvedAt: row.approved_at, lastSeenAt: row.last_seen_at, expiresAt: row.expires_at, revokedAt: row.revoked_at, revokedBy: row.revoked_by, active: !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now(), trustStatus, trustSource: persistentTrusted ? "DEVICE" : (explicit ? "SESSION" : "PENDING"), trustDecidedAt: persistentTrusted ? persistent?.lastTrustedAt || persistent?.firstTrustedAt : trust?.decidedAt || null, trustDecidedByUserId: persistentTrusted ? persistent?.trustedByUserId || null : trust?.decidedByUserId || null, own: text(row.user_id) === text(current.id) }; });
+    const data = (result.results || []).map((row: AnyRow) => { const trust = trusts.get(text(row.id)); const deviceId = browserDeviceId(row.device_label); const persistent = deviceId ? trustedDevices.get(trustedDeviceKey(row.user_id, deviceId)) : null; const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || "PENDING"); const role = effectiveRole(row); return { id: row.id, userId: row.user_id, username: row.username, fullName: row.full_name, role, mainCompanySlug: isSuper(role) ? "" : row.main_company_slug, deviceId, deviceLabel: row.device_label, userAgent: row.user_agent, ipAddress: row.ip_address, createdAt: row.created_at, approvedAt: row.approved_at, lastSeenAt: row.last_seen_at, expiresAt: row.expires_at, revokedAt: row.revoked_at, revokedBy: row.revoked_by, active: !row.revoked_at && Date.parse(text(row.expires_at)) > Date.now(), trustStatus, trustSource: persistentTrusted ? "DEVICE" : (explicit ? "SESSION" : "PENDING"), trustDecidedAt: persistentTrusted ? persistent?.lastTrustedAt || persistent?.firstTrustedAt : trust?.decidedAt || null, trustDecidedByUserId: persistentTrusted ? persistent?.trustedByUserId || null : trust?.decidedByUserId || null, own: text(row.user_id) === text(current.id) }; });
     return c.json({ ok: true, data });
   });
 
@@ -365,7 +365,7 @@ export function registerSecurityCenterRoutes(app: any) {
       const user = await userById(c, text(row.userId)); if (!user || !user.is_active) continue; const role = effectiveRole(user);
       if (scope.type === "SELF" && text(row.userId) !== text(current.id)) continue;
       if (scope.type === "COMPANY") { if (text(row.mainCompanySlug) !== text(scope.companySlug)) continue; if (isSuper(role)) continue; if (isCompanyAdmin(role) && text(row.userId) !== text(current.id)) continue; if (isCompanyAdmin(role) && !isCompanyAdmin(current.role)) continue; }
-      data.push({ id: text(row.id || row.fileName), deviceId: text(row.deviceId), userId: text(row.userId), username: text(user.username), fullName: text(user.full_name || user.username), role, mainCompanySlug: text(row.mainCompanySlug), deviceLabel: text(row.deviceLabel), userAgent: text(row.userAgent), ipAddress: text(row.ipAddress), firstTrustedAt: row.firstTrustedAt || row.createdAt || null, lastTrustedAt: row.lastTrustedAt || row.updatedAt || null, trustedByUserId: row.trustedByUserId || null, own: text(row.userId) === text(current.id) });
+      data.push({ id: text(row.id || row.fileName), deviceId: text(row.deviceId), userId: text(row.userId), username: text(user.username), fullName: text(user.full_name || user.username), role, mainCompanySlug: isSuper(role) ? "" : text(row.mainCompanySlug), deviceLabel: text(row.deviceLabel), userAgent: text(row.userAgent), ipAddress: text(row.ipAddress), firstTrustedAt: row.firstTrustedAt || row.createdAt || null, lastTrustedAt: row.lastTrustedAt || row.updatedAt || null, trustedByUserId: row.trustedByUserId || null, own: text(row.userId) === text(current.id) });
     }
     data.sort((a,b)=>String(b.lastTrustedAt||"").localeCompare(String(a.lastTrustedAt||""))); return c.json({ ok: true, data });
   });

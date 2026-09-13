@@ -614,9 +614,12 @@ export default function AppShellV3({
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç"><Menu size={19} /></button>
           <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onFocus={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><ErpIcon name="hizli" size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
-          <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
-            {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
-          </select>
+          <label className="shell-v3-company-context">
+            <small>{ownerUser ? "İşlem Firması" : "Firma"}</small>
+            <select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>
+              {companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}
+            </select>
+          </label>
 
           <div className="shell-v3-notification-wrap">
             <button
@@ -730,7 +733,7 @@ export default function AppShellV3({
                   <span className="shell-v3-user-menu-identity">
                     <strong>{user?.fullName || user?.username || "Kullanıcı"}</strong>
                     <small>{user?.email || user?.username || ""}</small>
-                    <em>{roleLabel(user?.role)} · {activeCompanyName}</em>
+                    <em>{roleLabel(user?.role)} · {ownerUser ? "Uygulama Sahibi · Tüm Firmalar" : activeCompanyName}</em>
                   </span>
                 </header>
 
@@ -815,7 +818,7 @@ export default function AppShellV3({
 
         <div className="shell-v3-crumb"><span className="shell-v3-crumb-icon"><ErpIcon name={tabVisualIcon(activeTab, activeModuleVisual.icon)} size={15} /></span><span className="shell-v3-crumb-module">{activeModule?.label}</span><span>/</span>{activeTabLabel ? <strong>{activeTabLabel}</strong> : <strong>Genel Bakış</strong>}</div>
         <section className="shell-v3-workspace">{children}</section>
-        <footer className="shell-v3-status"><span>KY ERP</span><span>Firma: {companies.find((item) => item.slug === activeCompanySlug)?.name || "-"}</span><span className="ok">Sistem hazır</span></footer>
+        <footer className="shell-v3-status"><span>KY ERP</span><span>{ownerUser ? "Kapsam: Uygulama Sahibi · Tüm Sistem" : `Firma: ${activeCompanyName}`}</span>{ownerUser ? <span>İşlem Firması: {activeCompanyName}</span> : null}<span className="ok">Sistem hazır</span></footer>
       </main>
 
       {displaySettingsOpen && displayPreferences
