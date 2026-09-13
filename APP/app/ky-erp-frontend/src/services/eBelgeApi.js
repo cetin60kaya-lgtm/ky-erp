@@ -1,4 +1,4 @@
-﻿import { apiFetch, apiGet, apiPatch, apiPost, apiUpload } from "../utils/api";
+import { apiFetch, apiGet, apiPatch, apiPost, apiUpload } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -56,7 +56,7 @@ export const getEBelgePool = (params = {}) =>
 export const getEBelgeDetail = (id) =>
   apiGet(`/e-belge/documents/${encodeURIComponent(id)}`, undefined, { timeoutMs: 60_000 }).then(unwrap);
 
-export async function uploadEBelge(files, { direction = "INCOMING", documentKind = "AUTO" } = {}) {
+export async function uploadEBelge(files, { direction = "AUTO", documentKind = "AUTO" } = {}) {
   const selected = Array.from(files || []);
   const form = new FormData();
   selected.forEach((file) => form.append("files", file));
