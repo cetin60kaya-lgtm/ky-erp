@@ -138,3 +138,26 @@
     padding-bottom: max(30px, env(safe-area-inset-bottom, 0px)) !important;
   }
 }
+
+/* 2026-09-13 visual-only final polish: tint depth, softer borders, breathing room */
+.shell-v3-workspace {
+  padding-top: 18px !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--active-tab-soft) 92%, var(--ky-app-canvas)) 0,
+    color-mix(in srgb, var(--active-tab-soft) 70%, var(--ky-app-canvas)) 220px,
+    color-mix(in srgb, var(--active-tab-soft) 44%, var(--ky-app-canvas)) 520px,
+    color-mix(in srgb, var(--active-tab-soft) 26%, var(--ky-app-canvas)) 900px,
+    color-mix(in srgb, var(--active-tab-soft) 16%, var(--ky-app-canvas)) 100%
+  ) !important;
+}
+.shell-v3-workspace .content-card,
+.shell-v3-workspace [class*="card"] {
+  border-color: color-mix(in srgb, var(--active-tab-line) 38%, #e2e8f0) !important;
+}
+.shell-v3-workspace::after {
+  border-bottom-color: color-mix(in srgb, var(--active-tab-line) 72%, #d9e1e8);
+}
+@media (max-width: 760px) {
+  .shell-v3-workspace { padding-top: 12px !important; }
+}
