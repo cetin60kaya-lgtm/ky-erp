@@ -80,6 +80,10 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
     <section className="sdw-root">
       <DocumentPoolPanel activeMainCompany={activeMainCompany} />
 
+      <details className="sdw-secondary">
+        <summary>LOT / Stok ve tedarikçi alış detayları</summary>
+        <div className="sdw-secondary-body">
+
       <section className="sdw-flow">
         <div><Truck size={20} /><strong>Tedarikçi Alış Zinciri</strong></div>
         <p><b>Tedarikçiden Gelen İrsaliye</b><span>→</span><b>Tedarikçiden Gelen Fatura</b><span>→</span>Gider / KDV / Stok-Lot / Cari</p>
@@ -119,6 +123,8 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
         <small>İrsaliye fiziksel stok gerçeğidir; fatura maliyet/KDV/cari gerçeğidir. LOT zorunluluğu firma yerine ürün kartından gelir.</small>
       </section>
       <CanonicalSupplierInventoryWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey + localRefreshKey} />
+        </div>
+      </details>
     </section>
   );
 }

@@ -27,3 +27,21 @@
 .ccw-movement-filter{min-height:34px;padding:0 9px;border:1px solid #dfe4ea;border-radius:8px;background:#fff;color:#344054;font:inherit;font-size:12px}
 .ccw-section>header>div{display:grid;gap:2px}.ccw-section>header>div>span{color:#667085;font-size:11px}
 @media(max-width:680px){.ccw-settings-panel{width:100vw}.ccw-settings-head{align-items:stretch;flex-direction:column}.ccw-settings-head .ccw-drawer-actions{justify-content:flex-start;flex-wrap:wrap}.ccw-movement-filter{width:100%}}
+
+/* 2026-09-13 FINAL: compact master-detail + centered edit dialogs */
+.ccw-toolbar{display:grid;grid-template-columns:minmax(260px,1.5fr) repeat(4,minmax(125px,.7fr)) auto auto;gap:6px;padding:6px 8px}
+.ccw-search,.ccw-toolbar select,.ccw-toolbar button{min-height:32px;height:32px}
+.ccw-toolbar select{padding:0 26px 0 8px;font-size:11px}.ccw-toolbar button{padding:0 9px;font-size:11px}
+.ccw-summary>div{padding:7px 10px}.ccw-summary span{font-size:9px}.ccw-summary strong{font-size:14px}
+.ccw-root:has(.ccw-drawer-layer){grid-template-columns:minmax(390px,450px) minmax(0,1fr);gap:10px}
+.ccw-root:has(.ccw-drawer-layer)>.ccw-table-card{min-height:640px;max-height:calc(100vh - 260px)}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer{min-height:640px}
+.ccw-root:has(.ccw-drawer-layer) .ccw-drawer-body{max-height:calc(100vh - 330px)}
+.ccw-root:has(.ccw-drawer-layer) .ccw-table-wrap th:last-child,.ccw-root:has(.ccw-drawer-layer) .ccw-table-wrap td:last-child{display:table-cell!important;text-align:right}
+.ccw-row-actions button{display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0 8px;border:1px solid #fecaca;border-radius:7px;background:#fff7f7;color:#b42318;font-size:10px;font-weight:800;cursor:pointer}
+.ccw-row-actions button:hover{background:#fee2e2}.ccw-row-actions button:disabled{opacity:.45}
+.ccw-settings-layer{display:grid;place-items:center;padding:24px;background:rgba(15,23,42,.46)}
+.ccw-settings-panel{width:min(1080px,94vw);height:auto;max-height:90vh;border:1px solid var(--border-color,#dfe4ea);border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)}
+.ccw-root>.ccw-profile-card{position:fixed;z-index:2500;left:50%;top:50%;width:min(980px,94vw);max-height:88vh;overflow:auto;transform:translate(-50%,-50%);box-shadow:0 0 0 100vmax rgba(15,23,42,.46),0 28px 80px rgba(15,23,42,.30);border-radius:16px}
+@media(max-width:1180px){.ccw-toolbar{grid-template-columns:minmax(240px,1fr) repeat(2,minmax(130px,.6fr)) auto auto}.ccw-toolbar select:nth-of-type(3),.ccw-toolbar select:nth-of-type(4){display:none}.ccw-root:has(.ccw-drawer-layer){grid-template-columns:340px minmax(0,1fr)}}
+@media(max-width:820px){.ccw-toolbar{display:flex}.ccw-settings-layer{padding:0}.ccw-settings-panel,.ccw-root>.ccw-profile-card{width:100vw;max-height:100vh;border-radius:0}.ccw-root>.ccw-profile-card{top:0;left:0;height:100vh;transform:none}}

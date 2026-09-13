@@ -126,7 +126,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("ALL");
   const [balanceFilter, setBalanceFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ACTIVE");
   const [recordFilter, setRecordFilter] = useState("ALL");
   const [balanceSort, setBalanceSort] = useState("NAME");
   const [selected, setSelected] = useState(null);
@@ -142,7 +141,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [saving, setSaving] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [companyDeleting, setCompanyDeleting] = useState(false);
-  const [companyStatusSaving, setCompanyStatusSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
@@ -222,8 +220,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       if (balanceFilter === "PAYABLE" && balance >= 0) return false;
       if (balanceFilter === "NONZERO" && balance === 0) return false;
       if (balanceFilter === "ZERO" && balance !== 0) return false;
-      if (statusFilter === "ACTIVE" && firm.isActive === false) return false;
-      if (statusFilter === "PASSIVE" && firm.isActive !== false) return false;
       if (recordFilter === "OFFICIAL" && record.includes("GAYRI")) return false;
       if (recordFilter === "UNOFFICIAL" && !record.includes("GAYRI")) return false;
       return true;
@@ -235,7 +231,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       if (balanceSort === "BALANCE_ASC") return av - bv;
       return String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
     });
-  }, [balanceFilter, balanceSort, firms, recordFilter, role, statusFilter]);
+  }, [balanceFilter, balanceSort, firms, recordFilter, role]);
 
   const totals = useMemo(() => {
     const receivable = visibleFirms
@@ -421,34 +417,9 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     }
   };
 
-  const toggleCompanyStatus = async () => {
-    if (!selected?.id || companyStatusSaving) return;
-    const nextIsActive = selected.isActive === false;
-    setCompanyStatusSaving(true);
-    setNotice("");
-    try {
-      const payload = await apiPatch(`/muhasebe/firmalar/${selected.id}/status`, {
-        ...params,
-        isActive: nextIsActive,
-      });
-      const data = objectOf(payload);
-      setSelected((current) => ({ ...current, isActive: data.isActive !== false }));
-      setFirms((current) => current.map((firm) => (
-        String(firm.id) === String(selected.id)
-          ? { ...firm, isActive: data.isActive !== false }
-          : firm
-      )));
-      setNotice(data.isActive === false ? "Firma pasife alındı." : "Firma tekrar aktif edildi.");
-    } catch (requestError) {
-      setNotice(requestError?.message || "Firma durumu değiştirilemedi.");
-    } finally {
-      setCompanyStatusSaving(false);
-    }
-  };
-
-  const deleteCompany = async () => {
-    if (!selected?.id || companyDeleting) return;
-    const companyName = selected.firmaAdi || selected.companyName || selected.name || "Firma";
+  const deleteCompany = async (targetCompany = selected) => {
+    if (!targetCompany?.id || companyDeleting) return;
+    const companyName = targetCompany.firmaAdi || targetCompany.companyName || targetCompany.name || "Firma";
     const confirmed = window.confirm(
       `${companyName} firma kartı KALICI olarak silinecek.\n\nBu işlem geri alınamaz. Geçmiş belge veya cari bağlantısı olsa da firma kartı silinecek.\n\nDevam edilsin mi?`,
     );
@@ -456,7 +427,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     setCompanyDeleting(true);
     setNotice("");
     try {
-      await apiDelete(`/muhasebe/firmalar/${selected.id}`, params);
+      await apiDelete(`/muhasebe/firmalar/${targetCompany.id}`, params);
       setSelected(null);
       setMovements([]);
       setAliases([]);
@@ -532,11 +503,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="OFFICIAL">Yalnız resmî</option>
           <option value="UNOFFICIAL">Yalnız gayri resmî</option>
         </select>
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-          <option value="ACTIVE">Aktif firmalar</option>
-          <option value="PASSIVE">Pasif firmalar</option>
-          <option value="ALL">Aktif + pasif</option>
-        </select>
         <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)}>
           <option value="NAME">Ada göre</option>
           <option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option>
@@ -590,7 +556,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ) : visibleFirms.length ? (
           <div className="ccw-table-wrap">
             <table>
-              <thead><tr><th>Firma</th><th>Tür</th><th>Kayıt</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th></tr></thead>
+              <thead><tr><th>Firma</th><th>Tür</th><th>Kayıt</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th><th>İşlem</th></tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => loadMovements(firm)} tabIndex={0}>
@@ -604,6 +570,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
                     <td>{Number(firm.aliasCount || 0)}</td>
                     <td><strong>{firm.isActive === false ? "Pasif" : "Aktif"}</strong></td>
+                    <td className="ccw-row-actions"><button type="button" className="danger" disabled={companyDeleting} onClick={(event) => { event.stopPropagation(); void deleteCompany(firm); }}><Trash2 size={14} /> Sil</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -640,8 +607,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     <header className="ccw-settings-head">
                       <div><h3>Firma Düzenle</h3><p>Ana firma kartı, eşleşme ve FİBE ayarları. Kaydet ve kapat; günlük işlem ekranında tekrar görünmez.</p></div>
                       <div className="ccw-drawer-actions">
-                        <button type="button" disabled={companyStatusSaving} onClick={toggleCompanyStatus}>{companyStatusSaving ? "Kaydediliyor…" : selected.isActive === false ? "Aktif Et" : "Pasife Al"}</button>
-                        <button type="button" disabled={companyDeleting} onClick={deleteCompany} className="danger"><Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kalıcı Sil"}</button>
+                        <button type="button" disabled={companyDeleting} onClick={() => deleteCompany()} className="danger"><Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kalıcı Sil"}</button>
                         <button type="button" className="icon" onClick={() => setSettingsOpen(false)} aria-label="Kapat"><X size={20} /></button>
                       </div>
                     </header>

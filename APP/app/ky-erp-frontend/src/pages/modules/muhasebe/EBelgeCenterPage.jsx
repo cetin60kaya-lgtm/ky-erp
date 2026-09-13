@@ -207,14 +207,14 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [modalGeometry, setModalGeometry] = useState(() => {
     const vw = window.innerWidth, vh = window.innerHeight;
     const fallback = { w: Math.min(1180, vw - 48), h: Math.min(820, vh - 48) };
-    let saved = {}; try { saved = JSON.parse(window.localStorage.getItem("kyerp:ebelge:document-window") || "{}"); } catch {}
+    let saved = {}; try { saved = JSON.parse(window.localStorage.getItem("kyerp:ebelge:document-window") || "{}"); } catch { /* localStorage verisi okunamazsa varsayilan pencere kullanilir. */ }
     const w = Math.max(720, Math.min(Number(saved.w) || fallback.w, vw - 20));
     const h = Math.max(500, Math.min(Number(saved.h) || fallback.h, vh - 20));
     const x = Math.max(8, Math.min(Number.isFinite(Number(saved.x)) ? Number(saved.x) : (vw - w) / 2, vw - w - 8));
     const y = Math.max(8, Math.min(Number.isFinite(Number(saved.y)) ? Number(saved.y) : (vh - h) / 2, vh - h - 8));
     return { x, y, w, h };
   });
-  const persistGeometry = useCallback((next) => { try { window.localStorage.setItem("kyerp:ebelge:document-window", JSON.stringify(next)); } catch {} }, []);
+  const persistGeometry = useCallback((next) => { try { window.localStorage.setItem("kyerp:ebelge:document-window", JSON.stringify(next)); } catch { /* localStorage kullanilamiyorsa geometri kalici olmaz. */ } }, []);
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
