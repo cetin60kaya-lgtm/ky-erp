@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CekOdemeMerkeziPage from "../muhasebe/CekOdemeMerkeziPage";
 import MailTemplatesWorkspace from "./muhasebe/MailTemplatesWorkspace";
 import IrsaliyeFaturaKontrolTab from "./muhasebe/IrsaliyeFaturaKontrolTab";
@@ -40,6 +40,11 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   const current = useMemo(() => MUHASEBE_TABS.find((tab) => tab.key === normalizedTab), [normalizedTab]);
   const [refreshKey, setRefreshKey] = useState(0);
   const reloadAll = () => setRefreshKey((value) => value + 1);
+  useEffect(() => {
+    const refreshFromCanonicalDocument = () => setRefreshKey((value) => value + 1);
+    window.addEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
+    return () => window.removeEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
+  }, []);
 
   const goTab = (tabKey, query = "") => {
     const target = MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
@@ -53,7 +58,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
     }
   };
 
-  const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab };
+  const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab, openModule };
   let content = null;
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;

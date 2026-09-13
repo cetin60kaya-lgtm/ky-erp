@@ -9,8 +9,8 @@ const frontend = (name: string) => readFileSync(resolve(here, "../../../app/ky-e
 
 test("Hızlı Muhasebe exposes the already-implemented FIBE workspace", () => {
   const quick = frontend("pages/modules/muhasebe/QuickAccountingBar.jsx");
-  assert.match(quick, /onClick=\{\(\) => setMode\("FIBE"\)\}/);
-  assert.match(quick, /<CircleDollarSign size=\{16\} \/> FİBE/);
+  assert.match(quick, /onClick=\{\(\) => openMode\("FIBE"\)\}/);
+  assert.match(quick, /<CircleDollarSign size=\{15\} \/> FİBE/);
   assert.match(quick, /mode === "FIBE"/);
   assert.match(quick, /FİBE ödemesi ayrı FİBE hesabına işlendi; normal cari değişmedi\./);
 });
@@ -38,4 +38,19 @@ test("weekly current-account control keeps official, internal, cash and FIBE tot
   assert.match(backend, /fibeRemaining/);
   assert.match(backend, /source: "FIBE"/);
   assert.match(backend, /recordScope: "INTERNAL"/);
+});
+
+test("e-Belge final approval refreshes and exposes accounting integration status", () => {
+  const page = frontend("pages/modules/MuhasebePage.jsx");
+  const ebelge = frontend("pages/modules/muhasebe/EBelgeCenterPage.jsx");
+  const overview = frontend("pages/modules/muhasebe/ManagementOverviewWorkspace.jsx");
+  const center = readFileSync(resolve(here, "e-belge-center-cloud.ts"), "utf8");
+  const posting = readFileSync(resolve(here, "accounting-document-posting.ts"), "utf8");
+  assert.match(page, /kyerp:accounting-refresh/);
+  assert.match(ebelge, /CustomEvent\("kyerp:accounting-refresh"/);
+  assert.match(overview, /e-Belge → Muhasebe Entegrasyonu/);
+  assert.match(center, /idempotent:true/);
+  assert.match(posting, /current_account_movements/);
+  assert.match(posting, /accounting_ledger_entries/);
+  assert.match(posting, /vat_records/);
 });

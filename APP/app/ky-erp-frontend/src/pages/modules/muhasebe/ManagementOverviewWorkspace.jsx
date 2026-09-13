@@ -23,7 +23,7 @@ function CompactList({ title, columns, rows, renderRow, emptyText }) {
   );
 }
 
-export default function ManagementOverviewWorkspace({ activeMainCompany, refreshKey, goTab }) {
+export default function ManagementOverviewWorkspace({ activeMainCompany, refreshKey, goTab, openModule }) {
   const [state, setState] = useState({ loading: true, error: "", data: {} });
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: "" }));
@@ -52,6 +52,7 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
   const topSuppliers = rowsOf(data.enYuksekTedarikciler).slice(0, 10);
   const topCustomers = rowsOf(data.enYuksekMusteriler).slice(0, 10);
   const upcomingChecks = rowsOf(data.yaklasanCekler || data.yaklasanOdemeler).slice(0, 10);
+  const eBelge = data.eBelge || {};
   const missingDocuments = useMemo(() => rowsOf(data.eksikBelgeler).length
     ? rowsOf(data.eksikBelgeler).slice(0, 10)
     : rowsOf(data.gunlukIsListesi).filter((row) => /belge|eşleş|esles/i.test(`${row?.is || ""} ${row?.durum || ""}`)).slice(0, 10), [data]);
@@ -76,6 +77,18 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
         <Metric label="Vadesi geçen cari" value={money(data.vadesiGecenCari)} />
         <Metric label="İşNet son senkronizasyon" value={data.isnetSonSenkronizasyon ? date(data.isnetSonSenkronizasyon) : "Henüz yok"} />
         <Metric label="Kontrol bekleyen belge" value={String(data.kontrolBekleyenBelge ?? data.onayBekleyenBelge ?? 0)} />
+      </section>
+      <section className="management-ebelge-strip">
+        <div className="management-ebelge-title">
+          <div><span>CANONICAL AKIŞ</span><strong>e-Belge → Muhasebe Entegrasyonu</strong><small>Son onaylanan belge cari, muhasebe defteri, KDV ve uygun stok / LOT akışına tek belge kimliğiyle işlenir.</small></div>
+          <button type="button" onClick={() => openModule?.("isnet", { tabKey: "e-belge-merkezi" })}>Belge Havuzunu Aç</button>
+        </div>
+        <div className="management-ebelge-metrics">
+          <Metric label="e-Belge toplam" value={String(eBelge.total || 0)} />
+          <Metric label="Muhasebeleşen" value={String(eBelge.posted || 0)} />
+          <Metric label="Kontrol bekleyen" value={String(eBelge.attention || eBelge.pending || 0)} />
+          <Metric label="Fatura / irsaliye eşleşme" value={String(eBelge.matchingWait || 0)} />
+        </div>
       </section>
       <div className="management-lists-grid">
         <CompactList title="Son cari hareketler" columns={["Tarih", "Firma", "Açıklama", "Tutar"]} rows={recentMovements} emptyText="Henüz cari hareket yok." renderRow={(row, index) => <tr key={row.id || index}><td>{date(row.tarih || row.movementDate)}</td><td>{row.firma || row.companyName || "-"}</td><td>{row.aciklama || row.description || "-"}</td><td>{money(row.tutar || row.amount)}</td></tr>} />

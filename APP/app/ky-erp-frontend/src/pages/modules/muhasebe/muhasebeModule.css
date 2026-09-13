@@ -203,3 +203,15 @@
 @media (min-width: 761px) and (max-width: 1200px) {
   .management-secondary-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
 }
+
+.management-ebelge-strip{display:grid;gap:10px;padding:12px;border:1px solid #d7e3f8;border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff)}
+.management-ebelge-title{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.management-ebelge-title>div{display:grid;gap:3px;min-width:0}
+.management-ebelge-title span{color:#2563eb;font-size:.62rem;font-weight:900;letter-spacing:.08em}
+.management-ebelge-title strong{color:#172033;font-size:.9rem}
+.management-ebelge-title small{color:#667085;font-size:.69rem;line-height:1.45}
+.management-ebelge-title button{flex:0 0 auto;border:1px solid #b8cdf6;border-radius:8px;padding:7px 10px;color:#1d4ed8;background:#fff;font-weight:800;cursor:pointer}
+.management-ebelge-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.management-ebelge-metrics .management-metric{background:#fff}
+@media(max-width:900px){.management-ebelge-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.management-ebelge-title{align-items:flex-start}}
+@media(max-width:720px){.management-ebelge-title{flex-direction:column}.management-ebelge-title button{width:100%}.management-ebelge-metrics{grid-template-columns:1fr}}

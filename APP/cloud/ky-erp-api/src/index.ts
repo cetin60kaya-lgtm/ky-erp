@@ -745,6 +745,14 @@ async function accountingSummary(c: Context<AppEnv>) {
     .sort((a, b) => a.dueMs - b.dueMs)
     .slice(0, 10);
 
+  let eBelge = { total: 0, posted: 0, pending: 0, attention: 0, matchingWait: 0 };
+  try {
+    const statusRow = await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN status='POSTED' THEN 1 ELSE 0 END) posted,SUM(CASE WHEN status<>'POSTED' THEN 1 ELSE 0 END) pending FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`).bind(slug).first<DatabaseRow>();
+    const attentionRow = await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR','CRITICAL')`).bind(slug).first<DatabaseRow>();
+    const matchingRow = await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%'`).bind(slug).first<DatabaseRow>();
+    eBelge = { total: databaseNumber(statusRow?.total), posted: databaseNumber(statusRow?.posted), pending: databaseNumber(statusRow?.pending), attention: databaseNumber(attentionRow?.n), matchingWait: databaseNumber(matchingRow?.n) };
+  } catch { }
+
   const data = {
     generatedAt: new Date().toISOString(),
     companyCount: companies.length,
@@ -769,6 +777,7 @@ async function accountingSummary(c: Context<AppEnv>) {
     devredenKdv: vatSummary.carryForwardVat,
     kontrolBekleyenBelge: pendingDocuments.length,
     onayBekleyenBelge: pendingDocuments.length,
+    eBelge,
     isnetSonSenkronizasyon:
       documents
         .filter((item) => /ISNET/.test(normalizeText(item.sourceType)))

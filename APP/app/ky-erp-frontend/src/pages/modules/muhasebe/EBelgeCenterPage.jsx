@@ -293,7 +293,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
           <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>
             {busy === "match" ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleştir / Yeniden Kontrol Et
           </button>
-          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => action("final", () => finalizeEBelge(id))}>
+          <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => action("final", async () => { const result = await finalizeEBelge(id); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } })); return result; })}>
             {busy === "final" ? <LoaderCircle className="eb-spin" size={17} /> : <FileCheck2 size={17} />} Son Onay / Muhasebeleştir
           </button>
         </section>
