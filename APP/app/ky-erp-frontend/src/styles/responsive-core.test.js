@@ -71,3 +71,14 @@ test("mobil tam ekran islemlerde dinamik viewport ve sabit alt aksiyon korunur",
   assert.match(responsiveCss, /position: sticky !important/);
   assert.match(responsiveCss, /padding-bottom: max\(12px,var\(--ky-safe-bottom\)\)/);
 });
+
+test("mobil touch hotfix portal ve safe-area kurallarini korur", () => {
+  assert.match(shellV3, /dataset\.kyLayoutMode = effectiveMode/);
+  assert.match(responsiveCss, /data-ky-layout-mode="phone"/);
+  assert.match(responsiveCss, /ppd-person-list > button/);
+  assert.match(responsiveCss, /eb-line-review-trigger/);
+  assert.match(responsiveCss, /min-height: 44px !important/);
+  assert.match(responsiveCss, /min-width: 0 !important/);
+  assert.match(responsiveCss, /padding-top: max\(14px, var\(--ky-safe-top\)\)/);
+  assert.match(responsiveCss, /ppd-modal-actions:last-child/);
+});

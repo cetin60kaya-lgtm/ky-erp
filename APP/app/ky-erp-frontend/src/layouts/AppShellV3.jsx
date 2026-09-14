@@ -519,6 +519,10 @@ export default function AppShellV3({
   }
 
   const effectiveMode = displayPreferences?.effectiveMode || "pc";
+  useEffect(() => {
+    document.documentElement.dataset.kyLayoutMode = effectiveMode;
+    return () => { delete document.documentElement.dataset.kyLayoutMode; };
+  }, [effectiveMode]);
   const effectiveScale = Number(displayPreferences?.effectiveScale || 100);
   const scaleFactor = effectiveScale / 100;
   const activeTabTheme = useMemo(() => tabTheme(activeTab || activeModule?.key || "tab"), [activeTab, activeModule?.key]);
