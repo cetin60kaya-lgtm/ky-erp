@@ -52,3 +52,22 @@ test("Android viewport klavye ve safe-area davranisi tanimlidir", () => {
   assert.match(indexHtml, /interactive-widget=resizes-content/);
   assert.match(indexHtml, /mobile-web-app-capable/);
 });
+
+
+test("telefon profili PDKS e-Belge ve IK islemlerini mobil akisa cevirir", () => {
+  assert.match(responsiveCss, /\.ppd-workspace/);
+  assert.match(responsiveCss, /\.ppd-modal-layer/);
+  assert.match(responsiveCss, /\.ppd-center-footer/);
+  assert.match(responsiveCss, /\.eb-document-modal/);
+  assert.match(responsiveCss, /\.eb-document-lines-section \.eb-line:not\(\.head\)/);
+  assert.match(responsiveCss, /\.eb-table > \.eb-tr:not\(\.eb-th\)/);
+  assert.match(responsiveCss, /\.hr-modal-overlay/);
+  assert.match(responsiveCss, /\.invoice-review-modal/);
+  assert.match(responsiveCss, /resize: none !important/);
+});
+
+test("mobil tam ekran islemlerde dinamik viewport ve sabit alt aksiyon korunur", () => {
+  assert.match(responsiveCss, /height: 100dvh !important/);
+  assert.match(responsiveCss, /position: sticky !important/);
+  assert.match(responsiveCss, /padding-bottom: max\(12px,var\(--ky-safe-bottom\)\)/);
+});
