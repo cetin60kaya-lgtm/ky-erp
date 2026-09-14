@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
-import { getAuthenticatedUser } from "./auth-cloud";
+import { getAuthenticatedUser } from "./auth-cloud.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };

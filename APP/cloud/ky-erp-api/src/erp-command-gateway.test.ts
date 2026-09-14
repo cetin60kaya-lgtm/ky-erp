@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveCommandPolicy } from "./erp-command-gateway";
+import { resolveCommandPolicy } from "./erp-command-gateway.ts";
 
 const owner = {
   id: "owner-1",

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
-import { getAuthenticatedUser } from "./auth-cloud";
+import { getAuthenticatedUser } from "./auth-cloud.ts";
+import { canUseAiPlatform } from "./ai-platform-access.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -198,7 +199,13 @@ export function registerErpCommandGatewayRoutes(app: Hono<AppEnv>) {
     if (!message) return c.json({ ok: false, error: { code: "MESSAGE_REQUIRED", message: "Komut boş olamaz." } }, 400);
     const policy = await accessPolicy(c, user);
     const resolved = resolveCommandPolicy(user, message, policy);
-    await audit(c, user, "COMMAND_PREVIEW", { message, resolved });
+    const platform = upper(c.req.header("X-KYERP-AI-Platform"));
+    if (platform) {
+      const capability = resolved.mode === "READ" ? "read" : resolved.requiresStrongConfirmation ? "approve" : "write";
+      const platformGate = await canUseAiPlatform(c, user, platform, capability);
+      if (!platformGate.allowed) return c.json({ ok: false, error: { code: platformGate.code, message: "Bu AI platformu için gerekli KY ERP yetkisi açık değil." }, command: resolved }, 403);
+    }
+    await audit(c, user, "COMMAND_PREVIEW", { message, platform: platform || "KY_ERP", resolved });
     if (!resolved.allowed) {
       return c.json({ ok: false, error: { code: resolved.reason || "COMMAND_FORBIDDEN", message: "Bu komut için KY ERP yetkiniz bulunmuyor." }, command: resolved }, 403);
     }
