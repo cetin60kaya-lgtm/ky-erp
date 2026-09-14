@@ -57,6 +57,8 @@ export async function activateUser(id) { return unwrap(await apiPost(`/admin/use
 export async function deactivateUser(id) { return unwrap(await apiPost(`/admin/users/${encodeURIComponent(id)}/deactivate`, {})); }
 export async function getUserPermissions(id) { return unwrap(await apiGet(`/admin/users/${encodeURIComponent(id)}/permissions`)); }
 export async function updateUserPermissions(id, permissions) { return unwrap(await apiPut(`/admin/users/${encodeURIComponent(id)}/permissions`, { permissions })); }
+export async function getAiPlatformAccess(id) { return unwrap(await apiGet(`/ai/platform-access/${encodeURIComponent(id)}`, { _ts: Date.now() })); }
+export async function updateAiPlatformAccess(id, payload = {}) { return unwrap(await apiPut(`/ai/platform-access/${encodeURIComponent(id)}`, payload)); }
 
 export async function listActiveSessions() { return unwrap(await apiGet("/admin/security/sessions", { _ts: Date.now() })); }
 export async function listSessionHistory(limit = 250) { return unwrap(await apiGet("/admin/security/session-history", { limit, _ts: Date.now() })); }

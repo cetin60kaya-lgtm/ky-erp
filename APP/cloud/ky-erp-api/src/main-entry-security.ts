@@ -6,6 +6,8 @@ import { getAuthenticatedUser } from "./auth-cloud";
 import { registerSecurityCenterRoutes } from "./security-center-cloud";
 import { registerSecurityCenterLoginRoutes } from "./security-center-login-cloud";
 import { requireOwnerSecurityApp } from "./owner-security-device-guard";
+import { registerErpCommandGatewayRoutes } from "./erp-command-gateway";
+import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -14,6 +16,18 @@ const LOCAL = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
 const PREVIEW = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 const allowedOrigin = (origin: string) => LIVE_ORIGINS.has(origin) || LOCAL.test(origin) || PREVIEW.test(origin) ? origin : undefined;
 const roleCode = (value: unknown) => String(value || "").trim().toUpperCase().replace(/İ/g, "I");
+
+const command = new Hono<Env>();
+command.use("/api/ai/*", cors({
+  origin: allowedOrigin,
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+  allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-AI-Platform"],
+  exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
+  maxAge: 86400,
+  credentials: true,
+}));
+registerErpCommandGatewayRoutes(command);
+registerAiPlatformAccessRoutes(command);
 
 const security = new Hono<Env>();
 security.use("/api/security-center/*", cors({
@@ -61,6 +75,7 @@ security.onError((error, c) => {
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
+    if (path === "/api/ai/command" || path.startsWith("/api/ai/command/") || path === "/api/ai/platform-access" || path.startsWith("/api/ai/platform-access/")) return command.fetch(request, env, ctx);
     if (path === "/api/security-center" || path.startsWith("/api/security-center/")) {
       return security.fetch(request, env, ctx);
     }
