@@ -26,6 +26,14 @@ command.use("/api/ai/*", cors({
   maxAge: 86400,
   credentials: true,
 }));
+command.use("/api/admin/users/*", cors({
+  origin: allowedOrigin,
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+  allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-AI-Platform"],
+  exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
+  maxAge: 86400,
+  credentials: true,
+}));
 registerErpCommandGatewayRoutes(command);
 registerAiPlatformAccessRoutes(command);
 
@@ -75,7 +83,7 @@ security.onError((error, c) => {
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
-    if (path === "/api/ai/command" || path.startsWith("/api/ai/command/") || path === "/api/ai/platform-access" || path.startsWith("/api/ai/platform-access/")) return command.fetch(request, env, ctx);
+    if (path === "/api/ai/command" || path.startsWith("/api/ai/command/") || path === "/api/ai/platform-access" || path.startsWith("/api/ai/platform-access/") || /^\/api\/admin\/users\/[^/]+\/ai-platform-access$/.test(path)) return command.fetch(request, env, ctx);
     if (path === "/api/security-center" || path.startsWith("/api/security-center/")) {
       return security.fetch(request, env, ctx);
     }
