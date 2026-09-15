@@ -267,8 +267,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       return Array.from(new Set([...current, ...visibleFirmIds]));
     });
   };
-
-  const clearCompanySelection = () => setSelectedCompanyIds([]);
   const loadMovements = useCallback(
     async (firm) => {
       setSelected(firm);
@@ -502,6 +500,31 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setCompanyDeleting(false);
     }
   };
+  const deleteAllCompanies = async () => {
+    const ids = firms.map((firm) => String(firm.id)).filter(Boolean);
+    if (!ids.length || companyDeleting) return;
+    const confirmed = window.confirm(
+      `TÜM ${ids.length} firma kartı KALICI olarak silinecek.\n\nBu işlem geri alınamaz. Gerçekten tüm firmaları silmek istiyor musunuz?`,
+    );
+    if (!confirmed) return;
+    setCompanyDeleting(true);
+    setNotice("");
+    try {
+      for (const id of ids) await apiDelete(`/muhasebe/firmalar/${id}`, params);
+      setSelected(null);
+      setMovements([]);
+      setAliases([]);
+      setSettingsOpen(false);
+      setTransactionOpen(false);
+      setSelectedCompanyIds([]);
+      setNotice(`${ids.length} firma kartı kalıcı olarak silindi.`);
+      await loadFirms();
+    } catch (requestError) {
+      setNotice(requestError?.message || "Tüm firma kartları silinemedi.");
+    } finally {
+      setCompanyDeleting(false);
+    }
+  };
   const saveTransaction = async () => {
     if (!selected?.id || Number(transaction.amount || 0) <= 0) {
       setNotice("Sıfırdan büyük işlem tutarı zorunludur.");
@@ -572,6 +595,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="LAST_MOVEMENT_DESC">Son işleme göre</option>
         </select>
         <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
+        <span className="ccw-selection-count">Seçili: {selectedCompanyIds.length}</span>
+        <button type="button" onClick={toggleAllVisible}>{allVisibleSelected ? "Seçimi Kaldır" : "Tümünü Seç"}</button>
+        <button type="button" className="danger" disabled={!selectedCompanyIds.length || companyDeleting} onClick={deleteSelectedCompanies}><Trash2 size={15} /> Seçileni Sil</button>
+        <button type="button" className="danger" disabled={!firms.length || companyDeleting} onClick={deleteAllCompanies}><Trash2 size={15} /> Tümünü Sil</button>
         <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Çek / Ödeme</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
       </header>
@@ -613,16 +640,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       </section>
 
       {error ? <div className="ccw-error"><CircleAlert size={18} /> {error}</div> : null}
-
-      {selectedCompanyIds.length ? (
-        <div className="ccw-bulk-actions">
-          <strong>{selectedCompanyIds.length} firma seçili</strong>
-          <button type="button" onClick={clearCompanySelection}>Seçimi Temizle</button>
-          <button type="button" className="danger" disabled={companyDeleting} onClick={deleteSelectedCompanies}>
-            <Trash2 size={15} /> Seçilenleri Kalıcı Sil
-          </button>
-        </div>
-      ) : null}
       <section className="ccw-table-card">
         {loading ? (
           <div className="ccw-empty">Firmalar yükleniyor…</div>

@@ -14287,3 +14287,28 @@ body.ik-personel-clean-header .topbar>.primary-btn {
     display: none;
   }
 }
+
+
+/* Evrensel açılır pencere çalışma düzeni: taşı + boyutlandır + son konumu hatırla */
+@media (min-width: 701px) and (pointer: fine) {
+  .ky-persistent-modal {
+    width: var(--ky-modal-width, auto) !important;
+    height: var(--ky-modal-height, auto) !important;
+  }
+  .ky-persistent-modal.ky-modal-positioned {
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--ky-modal-left) !important;
+    top: var(--ky-modal-top) !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
+  .ky-modal-drag-handle {
+    cursor: move !important;
+    user-select: none;
+    touch-action: none;
+  }
+  .ky-modal-dragging {
+    transition: none !important;
+  }
+}
