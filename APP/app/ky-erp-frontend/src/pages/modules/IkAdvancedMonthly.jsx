@@ -1543,7 +1543,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
     return (
       <section>
         <div className="page-head">
-          <div><h1>İK İşlem Merkezi</h1><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya ve terminal hareketleri PDKS bölümündedir. Yıllık izin ve resmi izin sicili İK bölümünde yönetilir.</p></div>
+          <div><h1>İK İşlem Merkezi</h1><p>Personel özlük, ücret, bordro, ödeme ve SGK/evrak işlemlerini tek merkezden yönetin. Giriş/çıkış, puantaj, vardiya, terminal ve izin hareketleri PDKS bölümündedir. Yıllık izin hakediş ve resmi izin sicili İK bölümünde yönetilir.</p></div>
           <div className="group"><span className={`badge ${periodPrepared ? "green" : "orange"}`}>{MONTHS[month - 1]} {year} · {payrollReadyText}</span><span className={`badge ${smartIssues.length ? "orange" : "green"}`}>{smartIssues.length ? `${smartIssues.length} kontrol` : "Kontroller temiz"}</span></div>
         </div>
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
@@ -1566,7 +1566,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         </div>
 
         <div className="card">
-          <div className="ch"><div><b>Hızlı Finans İşlemleri</b><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları.</span></div></div>
+          <div className="ch"><div><b>Hızlı Finans İşlemleri</b><span>PDKS işlemi içermez; yalnız İK finans ve bordro aksiyonları. İzin, rapor ve günlük devam hareketleri PDKS bölümünden yönetilir.</span></div></div>
           <div className="workbar"><div className="group">
             <button className="btn" onClick={() => openFinance("Mesai")}>Mesai Ekle</button>
             <button className="btn orange" onClick={() => openFinance("Avans")}>Avans Ekle</button>
