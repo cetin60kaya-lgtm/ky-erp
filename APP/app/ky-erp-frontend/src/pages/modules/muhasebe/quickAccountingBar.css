@@ -24,3 +24,16 @@
 .qab-root.is-expanded::before{content:"";position:fixed;inset:0;z-index:-1;background:rgba(15,23,42,.34);backdrop-filter:blur(2px)}
 .qab-root.is-expanded .qab-head{position:sticky;top:0;z-index:5;background:#fff}
 @media(max-width:720px){.qab-root.is-expanded{inset:8px;width:auto;max-height:none;transform:none;left:8px;top:8px}.qab-root.is-collapsed{width:100%}.qab-root.is-collapsed .qab-toggle{width:100%}}
+/* 2026-09-15 FINAL: hizli islemler yatay, firma secimi ustte ve tek bakista */
+.qab-root.is-expanded .qab-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,1.2fr);gap:8px 12px;align-items:center;padding:11px 14px}
+.qab-root.is-expanded .qab-toggle{grid-column:1/-1;width:100%;min-width:0;padding-bottom:2px}
+.qab-root.is-expanded .qab-shortcuts{grid-column:1;justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;min-width:0}
+.qab-root.is-expanded .qab-shortcuts button{flex:0 0 auto;white-space:nowrap}
+.qab-root.is-expanded .qab-actions{grid-column:2;display:grid;grid-template-columns:minmax(300px,1fr) auto;gap:7px;min-width:0}
+.qab-root.is-expanded .qab-actions select{width:100%;min-width:0}
+.qab-root.is-expanded .qab-company-line{padding:8px 14px;gap:14px}
+.qab-root.is-expanded .qab-panel{padding:10px 14px 14px}
+.qab-root.is-expanded .qab-summary{grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}
+.qab-root.is-expanded .qab-summary>div{padding:9px 10px}
+@media(max-width:980px){.qab-root.is-expanded .qab-head{grid-template-columns:1fr}.qab-root.is-expanded .qab-shortcuts,.qab-root.is-expanded .qab-actions{grid-column:1}.qab-root.is-expanded .qab-actions{grid-template-columns:1fr auto}.qab-root.is-expanded .qab-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.qab-root.is-expanded .qab-actions{grid-template-columns:1fr}.qab-root.is-expanded .qab-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}

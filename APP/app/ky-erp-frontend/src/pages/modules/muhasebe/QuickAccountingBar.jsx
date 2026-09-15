@@ -158,6 +158,10 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
     loadFibe(selectedId).catch(() => {});
   }, [loadFibe, selected, selectedId]);
 
+  useEffect(() => {
+    if (mode === "FIBE" && !selected?.fibeEnabled) setMode("WEEK");
+  }, [mode, selected?.fibeEnabled]);
+
   const savePayment = async () => {
     if (!selectedId || numberValue(payment.amount) <= 0) return setNotice("Firma ve tutar zorunludur.");
     setBusy(true);
@@ -286,7 +290,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
           <button type="button" className={mode === "WEEK" ? "active" : ""} onClick={() => openMode("WEEK")}><CalendarRange size={15} /> Hafta</button>
           <button type="button" className={mode === "PAYMENT" ? "active" : ""} onClick={() => openMode("PAYMENT")}><Banknote size={15} /> Ödeme / Tahsilat</button>
           <button type="button" className={mode === "CHECK" ? "active" : ""} onClick={() => openMode("CHECK")}><CheckSquare2 size={15} /> Çek</button>
-          <button type="button" className={mode === "FIBE" ? "active" : ""} onClick={() => openMode("FIBE")}><CircleDollarSign size={15} /> FİBE</button>
+          {selected?.fibeEnabled ? <button type="button" className={mode === "FIBE" ? "active" : ""} onClick={() => openMode("FIBE")}><CircleDollarSign size={15} /> FİBE</button> : null}
         </div>
         <div className="qab-actions">
           <select aria-label="Cari / Firma seç" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
@@ -302,7 +306,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
         <div className="qab-company-line">
           <strong>{selected.companyName || selected.firmaAdi || selected.name}</strong>
           <span>Normal cari: <b className={Number(selected.currentBalance || 0) < 0 ? "negative" : "positive"}>{money(selected.currentBalance)}</b></span>
-          <span>{selected.fibeEnabled ? `FİBE açık · %${Number(selected.fibeRate || 0)}` : "FİBE kapalı"}</span>
+          {selected.fibeEnabled ? <span>FİBE · %{Number(selected.fibeRate || 0)}</span> : null}
         </div>
       ) : null}
 
@@ -356,7 +360,7 @@ export default function QuickAccountingBar({ activeMainCompany, refreshKey = 0, 
         </div>
       ) : null}
 
-      {expanded && mode === "FIBE" ? (
+      {expanded && mode === "FIBE" && selected?.fibeEnabled ? (
         <div className="qab-panel">
           {!selected ? <div className="qab-empty">FİBE için firma seçin.</div> : (
             <>

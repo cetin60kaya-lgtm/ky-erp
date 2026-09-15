@@ -229,6 +229,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       const bv = Number(b.currentBalance || 0);
       if (balanceSort === "BALANCE_DESC") return bv - av;
       if (balanceSort === "BALANCE_ASC") return av - bv;
+      if (balanceSort === "LAST_MOVEMENT_DESC") {
+        const at = Date.parse(a.lastMovementAt || "") || 0;
+        const bt = Date.parse(b.lastMovementAt || "") || 0;
+        if (at !== bt) return bt - at;
+      }
       return String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
     });
   }, [balanceFilter, balanceSort, firms, recordFilter, role]);
@@ -428,10 +433,14 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     setNotice("");
     try {
       await apiDelete(`/muhasebe/firmalar/${targetCompany.id}`, params);
-      setSelected(null);
-      setMovements([]);
-      setAliases([]);
-      setTransactionOpen(false);
+      const deletedSelected = String(selected?.id || "") === String(targetCompany.id);
+      if (deletedSelected) {
+        setSelected(null);
+        setMovements([]);
+        setAliases([]);
+        setTransactionOpen(false);
+        setSettingsOpen(false);
+      }
       await loadFirms();
     } catch (requestError) {
       setNotice(requestError?.message || "Firma kartı kalıcı olarak silinemedi.");
@@ -507,6 +516,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="NAME">Ada göre</option>
           <option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option>
           <option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option>
+          <option value="LAST_MOVEMENT_DESC">Son işleme göre</option>
         </select>
         <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
@@ -556,20 +566,16 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ) : visibleFirms.length ? (
           <div className="ccw-table-wrap">
             <table>
-              <thead><tr><th>Firma</th><th>Tür</th><th>Kayıt</th><th>Cari tipi</th><th>KDV</th><th>Gider kategorisi</th><th>Vergi No</th><th>Bakiye</th><th>Alias</th><th>Durum</th><th>İşlem</th></tr></thead>
+              <thead><tr><th>Firma</th><th>Bakiye</th><th>Son işlem</th><th>İşlem</th></tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => loadMovements(firm)} tabIndex={0}>
-                    <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong>{firm.isChemicalSupplier ? <small>Boya / kimyasal</small> : null}</td>
-                    <td>{roleLabel(firm)}</td>
-                    <td>{recordLabel(firm)}</td>
-                    <td><span className={firm.supplierDebtTracking || firm.customerReceivableTracking ? "ccw-badge active" : "ccw-badge cash"}>{cariLabel(firm)}</span></td>
-                    <td>{firm.vatTrackingEnabled === false ? "Kapalı" : "Takip"}</td>
-                    <td>{firm.expenseCategory || "-"}</td>
-                    <td>{firm.taxNo || "-"}</td>
+                    <td>
+                      <strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong>
+                      <small>{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small>
+                    </td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
-                    <td>{Number(firm.aliasCount || 0)}</td>
-                    <td><strong>{firm.isActive === false ? "Pasif" : "Aktif"}</strong></td>
+                    <td><span className="ccw-last-movement">{firm.lastMovementAt ? dateText(firm.lastMovementAt) : "-"}</span>{Number(firm.movementCount || 0) ? <small>{Number(firm.movementCount)} hareket</small> : null}</td>
                     <td className="ccw-row-actions"><button type="button" className="danger" disabled={companyDeleting} onClick={(event) => { event.stopPropagation(); void deleteCompany(firm); }}><Trash2 size={14} /> Sil</button></td>
                   </tr>
                 ))}
@@ -590,7 +596,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <header>
               <div>
                 <h2>{selected.firmaAdi || selected.companyName || selected.name}</h2>
-                <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.isActive === false ? "Pasif" : "Aktif"} · {selected.taxNo || "Vergi no yok"}</p>
+                <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p>
               </div>
               <div className="ccw-drawer-actions">
                 {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Ödeme / Tahsilat / Cari</button> : null}
@@ -668,9 +674,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     : "Firma e-postası boşsa mail/ekstre ekranında alıcı eksik olarak işaretlenir."}
                 </div>
                 <div className="ccw-rule-note">
-                  {selected.isActive === false
-                    ? "Firma pasif. İstersen tekrar Aktif Et ile kullanıma açabilirsin."
-                    : profileDraft.companyType !== "CUSTOMER" && profileDraft.paymentMode === "CASH"
+                  {profileDraft.companyType !== "CUSTOMER" && profileDraft.paymentMode === "CASH"
                       ? "Peşin alış: gider ve resmîyse KDV kaydı oluşur; firmaya cari borç yazılmaz."
                       : profileDraft.companyType !== "CUSTOMER"
                         ? "Cari tedarikçi: onaylanan tedarikçi faturası firma borcuna eklenir."

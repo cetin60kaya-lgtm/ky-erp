@@ -1279,14 +1279,30 @@ app.get("/api/muhasebe/reports/management-summary", accountingSummary);
 
 app.get("/api/muhasebe/firmalar", async (c) => {
   const search = c.req.query("search")?.trim() || "";
+  const slug = slugOf(c);
   const rows = await scopedRows(c, "companies", {
     search: { value: search, columns: ["name", "normalized_name", "tax_no"] },
     orderBy: "name COLLATE NOCASE ASC",
     limit: 10000,
   });
+  const movementResult = await c.env.DB.prepare(
+    `SELECT company_id,
+            MAX(COALESCE(movement_date, created_at)) AS last_movement_at,
+            COUNT(*) AS movement_count
+       FROM current_account_movements
+      WHERE main_company_slug = ?
+      GROUP BY company_id`,
+  )
+    .bind(slug)
+    .all<DatabaseRow>();
+  const movementByCompany = new Map(
+    (movementResult.results || []).map((row) => [databaseText(row.company_id), row]),
+  );
   const data = await Promise.all(
     rows.map(async (row) => {
-      const profile = await chemicalProfile(c, databaseText(row.id));
+      const companyId = databaseText(row.id);
+      const profile = await chemicalProfile(c, companyId);
+      const movement = movementByCompany.get(companyId);
       return {
         id: row.id,
         firmaAdi: row.name,
@@ -1303,6 +1319,8 @@ app.get("/api/muhasebe/firmalar", async (c) => {
         isActive: row.is_active !== 0 && row.is_active !== false,
         note: row.note,
         isChemicalSupplier: Boolean(profile.isChemicalSupplier),
+        lastMovementAt: movement ? databaseText(movement.last_movement_at) : "",
+        movementCount: movement ? databaseNumber(movement.movement_count) : 0,
         updatedAt: row.updated_at,
       };
     }),
