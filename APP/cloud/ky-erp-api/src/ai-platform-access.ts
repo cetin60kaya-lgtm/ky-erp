@@ -119,4 +119,24 @@ export function registerAiPlatformAccessRoutes(app: Hono<AppEnv>) {
     await audit(c,manager,"AI_PLATFORM_ACCESS_UPDATED",{targetUserId:target.id,targetEmail:target.email,platforms:data.platforms});
     return c.json({ok:true,success:true,data});
   });
+  app.get("/api/admin/users/:userId/ai-platform-access", async c => {
+    const manager = await getAuthenticatedUser(c) as Row|null;
+    if (!manager) return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gerekli."}},401);
+    const target = await targetUser(c,manager,c.req.param("userId"));
+    if (!target) return c.json({ok:false,error:{code:"FORBIDDEN",message:"Bu kullanicinin AI platform yetkisini yonetemezsiniz."}},403);
+    return c.json({ok:true,success:true,data:await readPolicy(c,target),platforms:AI_PLATFORM_KEYS});
+  });
+  app.put("/api/admin/users/:userId/ai-platform-access", async c => {
+    const manager = await getAuthenticatedUser(c) as Row|null;
+    if (!manager) return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"Oturum gerekli."}},401);
+    const target = await targetUser(c,manager,c.req.param("userId"));
+    if (!target) return c.json({ok:false,error:{code:"FORBIDDEN",message:"Bu kullanicinin AI platform yetkisini yonetemezsiniz."}},403);
+    let body: Row={}; try{body=await c.req.json();}catch{}
+    const wantsEnabled = Object.values(body?.platforms||{}).some((row:any)=>Boolean(row?.enabled));
+    if (wantsEnabled && (!target.email || !target.emailVerified)) return c.json({ok:false,error:{code:"VERIFIED_EMAIL_REQUIRED",message:"GPT, Gemini veya Copilot erisimi icin ERP e-postasi dogrulanmis olmalidir."}},409);
+    const data=await savePolicy(c,target,body);
+    await audit(c,manager,"AI_PLATFORM_ACCESS_UPDATED",{targetUserId:target.id,targetEmail:target.email,platforms:data.platforms});
+    return c.json({ok:true,success:true,data});
+  });
+
 }
