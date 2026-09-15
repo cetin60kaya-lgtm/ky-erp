@@ -1,12 +1,10 @@
 import { installIsnetSourceIntakeBridge } from "./installIsnetSourceIntakeBridge";
 import { installIsnetSourceWorkbench } from "./installIsnetSourceWorkbench";
 
-const SIZE_STORAGE_PREFIX = "ky-erp:modal-size:v3:";
-const GEOMETRY_STORAGE_PREFIX = "ky-erp:modal-geometry:v3:";
+const GEOMETRY_STORAGE_PREFIX = "ky-erp:modal-geometry:v4:";
 const MIN_WIDTH = 360;
 const MIN_HEIGHT = 240;
 const VIEWPORT_GAP = 12;
-const RESIZE_EDGE = 14;
 
 const PANEL_SELECTOR = [
   ".kyik-modal", ".ik-modal", ".modal-bg > .modal", ".hr-modal-overlay > .hr-modal",
@@ -18,7 +16,7 @@ const PANEL_SELECTOR = [
   ".bh-modal > .bh-modal-card", ".dw-region-modal", ".ik-fast-modal-shell",
   ".mfm-modal-card", ".ky-isnet-source-modal", ".ky-isnet-pool-modal",
   ".ccw-settings-panel", ".ccw-finance-modal", ".accounting-center-modal",
-  ".ccw-root > .ccw-profile-card", "dialog", "[aria-modal='true']",
+  "dialog", "[aria-modal='true']",
   "[class~='modal']", "[class$='-modal']", "[class*='modal-card']", "[class*='modal-box']",
   "[class*='modal-panel']", "[class$='-drawer']", "[class*='drawer-panel']", "[class*='drawer-card']",
 ].join(",");
@@ -59,7 +57,7 @@ function modalKeySuffix(panel) {
 
 function storageKeys(panel) {
   const suffix = modalKeySuffix(panel);
-  return { size: `${SIZE_STORAGE_PREFIX}${suffix}`, geometry: `${GEOMETRY_STORAGE_PREFIX}${suffix}` };
+  return { geometry: `${GEOMETRY_STORAGE_PREFIX}${suffix}` };
 }
 
 function viewportBounds() {
@@ -192,49 +190,26 @@ function attachDrag(panel, key) {
   };
 }
 
-function resizeModeFromPoint(panel, event) {
+function isBottomLeftResizePoint(panel, event) {
   const rect = panel.getBoundingClientRect();
-  const nearLeft = event.clientX - rect.left <= RESIZE_EDGE;
-  const nearRight = rect.right - event.clientX <= RESIZE_EDGE;
-  const nearTop = event.clientY - rect.top <= RESIZE_EDGE;
-  const nearBottom = rect.bottom - event.clientY <= RESIZE_EDGE;
-  if (nearBottom && nearRight) return "se";
-  if (nearBottom && nearLeft) return "sw";
-  if (nearTop && nearRight) return "ne";
-  if (nearTop && nearLeft) return "nw";
-  if (nearRight) return "e";
-  if (nearLeft) return "w";
-  if (nearBottom) return "s";
-  if (nearTop) return "n";
-  return "";
-}
-
-function resizeCursor(mode) {
-  if (mode === "e" || mode === "w") return "ew-resize";
-  if (mode === "n" || mode === "s") return "ns-resize";
-  if (mode === "ne" || mode === "sw") return "nesw-resize";
-  if (mode === "nw" || mode === "se") return "nwse-resize";
-  return "";
+  return event.clientX - rect.left <= 20 && rect.bottom - event.clientY <= 20;
 }
 
 function attachResize(panel, key) {
   let pointerId = null;
-  let mode = "";
   let startX = 0;
   let startY = 0;
   let start = null;
 
   const onPointerDown = (event) => {
-    if (event.button !== 0) return;
-    mode = resizeModeFromPoint(panel, event);
-    if (!mode) return;
+    if (event.button !== 0 || !isBottomLeftResizePoint(panel, event)) return;
     const rect = panel.getBoundingClientRect();
     pointerId = event.pointerId;
     startX = event.clientX;
     startY = event.clientY;
     start = geometryFromRect(rect);
     panel.classList.add("ky-modal-resizing");
-    panel.style.cursor = resizeCursor(mode);
+    panel.style.cursor = "nesw-resize";
     try { panel.setPointerCapture(pointerId); } catch { /* desteklemeyen tarayıcı */ }
     event.preventDefault();
     event.stopPropagation();
@@ -244,14 +219,15 @@ function attachResize(panel, key) {
     if (pointerId === null || event.pointerId !== pointerId || !start) return;
     const dx = event.clientX - startX;
     const dy = event.clientY - startY;
-    let { left, top, width, height } = start;
-    if (mode.includes("e")) width += dx;
-    if (mode.includes("s")) height += dy;
-    if (mode.includes("w")) { width -= dx; left += dx; }
-    if (mode.includes("n")) { height -= dy; top += dy; }
-    if (width < MIN_WIDTH) { if (mode.includes("w")) left -= MIN_WIDTH - width; width = MIN_WIDTH; }
-    if (height < MIN_HEIGHT) { if (mode.includes("n")) top -= MIN_HEIGHT - height; height = MIN_HEIGHT; }
-    applyGeometry(panel, { left, top, width, height });
+    let width = start.width - dx;
+    let height = start.height + dy;
+    let left = start.left + dx;
+    if (width < MIN_WIDTH) {
+      left -= MIN_WIDTH - width;
+      width = MIN_WIDTH;
+    }
+    if (height < MIN_HEIGHT) height = MIN_HEIGHT;
+    applyGeometry(panel, { left, top: start.top, width, height });
     event.preventDefault();
   };
 
@@ -260,7 +236,6 @@ function attachResize(panel, key) {
     const activeId = pointerId;
     pointerId = null;
     start = null;
-    mode = "";
     panel.classList.remove("ky-modal-resizing");
     panel.style.removeProperty("cursor");
     try { panel.releasePointerCapture(activeId); } catch { /* capture yoksa sorun değil */ }
@@ -269,7 +244,7 @@ function attachResize(panel, key) {
 
   const onHoverMove = (event) => {
     if (pointerId !== null) return;
-    panel.style.cursor = resizeCursor(resizeModeFromPoint(panel, event));
+    panel.style.cursor = isBottomLeftResizePoint(panel, event) ? "nesw-resize" : "";
   };
   const onLeave = () => { if (pointerId === null) panel.style.removeProperty("cursor"); };
 
@@ -291,12 +266,13 @@ function attachResize(panel, key) {
     panel.style.removeProperty("cursor");
   };
 }
+
 function makePersistent(panel) {
   if (!(panel instanceof HTMLElement) || panel.dataset.kyModalResizable === "true") return;
 
   panel.dataset.kyModalResizable = "true";
   panel.classList.add("ky-persistent-modal");
-  panel.title ||= "Başlıktan taşıyın; kenarlardan veya köşelerden boyutlandırın. Konum ve boyut kaydedilir.";
+  panel.title ||= "Başlıktan taşıyın; yalnız sol alt köşeden boyutlandırın. Son konum ve ölçü kaydedilir.";
 
   const keys = storageKeys(panel);
   const savedGeometry = readGeometry(keys.geometry);
@@ -307,9 +283,7 @@ function makePersistent(panel) {
 
   const freezeAndWire = () => {
     if (!panel.isConnected) return;
-    const current = savedGeometry || geometryFromRect(panel.getBoundingClientRect());
-    applyGeometry(panel, current);
-    if (!savedGeometry) writeGeometry(keys.geometry, current);
+    if (savedGeometry) applyGeometry(panel, savedGeometry);
     dragCleanup = attachDrag(panel, keys.geometry);
     resizeCleanup = attachResize(panel, keys.geometry);
   };

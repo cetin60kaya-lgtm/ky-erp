@@ -14244,7 +14244,7 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   min-height: min(240px, calc(100vh - 20px)) !important;
   max-width: calc(100vw - 20px) !important;
   max-height: calc(100vh - 20px) !important;
-  resize: both !important;
+  resize: none !important;
   overflow: auto !important;
   box-sizing: border-box !important;
   scrollbar-gutter: stable;
@@ -14291,11 +14291,7 @@ body.ik-personel-clean-header .topbar>.primary-btn {
 
 /* Evrensel açılır pencere çalışma düzeni: taşı + boyutlandır + son konumu hatırla */
 @media (min-width: 701px) and (pointer: fine) {
-  .ky-persistent-modal {
-    width: var(--ky-modal-width, auto) !important;
-    height: var(--ky-modal-height, auto) !important;
-  }
-  .ky-persistent-modal.ky-modal-positioned {
+.ky-persistent-modal.ky-modal-positioned {
     position: fixed !important;
     inset: auto !important;
     left: var(--ky-modal-left) !important;
@@ -14326,11 +14322,7 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   user-select: none !important;
 }
 @media (min-width: 701px) {
-  .ky-persistent-modal {
-    width: var(--ky-modal-width, auto) !important;
-    height: var(--ky-modal-height, auto) !important;
-  }
-  .ky-persistent-modal.ky-modal-positioned {
+.ky-persistent-modal.ky-modal-positioned {
     position: fixed !important;
     inset: auto !important;
     left: var(--ky-modal-left) !important;
@@ -14341,10 +14333,6 @@ body.ik-personel-clean-header .topbar>.primary-btn {
 }
 
 /* Tüm cihazlarda aynı modal geometrisi; hiçbir açılır hariç değil */
-.ky-persistent-modal {
-  width: var(--ky-modal-width, auto) !important;
-  height: var(--ky-modal-height, auto) !important;
-}
 .ky-persistent-modal.ky-modal-positioned {
   position: fixed !important;
   inset: auto !important;
@@ -14352,4 +14340,13 @@ body.ik-personel-clean-header .topbar>.primary-btn {
   top: var(--ky-modal-top) !important;
   margin: 0 !important;
   transform: none !important;
+}
+
+/* Evrensel modal v4: doğal açılış, başlıktan taşıma, yalnız sol alttan boyutlandırma */
+.ky-persistent-modal.ky-modal-positioned {
+  width: var(--ky-modal-width) !important;
+  height: var(--ky-modal-height) !important;
+}
+.ky-persistent-modal {
+  resize: none !important;
 }
