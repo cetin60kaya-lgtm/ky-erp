@@ -6,6 +6,7 @@ const GEOMETRY_STORAGE_PREFIX = "ky-erp:modal-geometry:v2:";
 const MIN_WIDTH = 360;
 const MIN_HEIGHT = 240;
 const VIEWPORT_GAP = 12;
+const RESIZE_EDGE = 14;
 
 const PANEL_SELECTOR = [
   ".kyik-modal", ".ik-modal", ".modal-bg > .modal", ".hr-modal-overlay > .hr-modal",
@@ -17,7 +18,9 @@ const PANEL_SELECTOR = [
   ".bh-modal > .bh-modal-card", ".dw-region-modal", ".ik-fast-modal-shell",
   ".mfm-modal-card", ".ky-isnet-source-modal", ".ky-isnet-pool-modal",
   ".ccw-settings-panel", ".ccw-finance-modal", ".accounting-center-modal",
-  ".ccw-root > .ccw-profile-card",
+  ".ccw-root > .ccw-profile-card", "dialog", "[aria-modal='true']",
+  "[class~='modal']", "[class$='-modal']", "[class*='modal-card']", "[class*='modal-box']",
+  "[class*='modal-panel']", "[class$='-drawer']", "[class*='drawer-panel']", "[class*='drawer-card']",
 ].join(",");
 
 const DRAG_HANDLE_SELECTOR = [
@@ -29,7 +32,7 @@ const DRAG_HANDLE_SELECTOR = [
 
 const TRANSIENT_CLASSES = new Set([
   "active", "day", "night", "open", "show", "visible",
-  "ky-persistent-modal", "ky-modal-positioned", "ky-modal-dragging",
+  "ky-persistent-modal", "ky-modal-positioned", "ky-modal-dragging", "ky-modal-resizing",
 ]);
 const INTERACTIVE_SELECTOR = "button,input,select,textarea,a,label,[contenteditable='true'],[role='button']";
 
@@ -61,16 +64,18 @@ function storageKeys(panel) {
 
 function viewportBounds() {
   return {
-    width: Math.max(MIN_WIDTH, window.innerWidth - VIEWPORT_GAP * 2),
-    height: Math.max(MIN_HEIGHT, window.innerHeight - VIEWPORT_GAP * 2),
+    width: Math.max(220, window.innerWidth - VIEWPORT_GAP * 2),
+    height: Math.max(180, window.innerHeight - VIEWPORT_GAP * 2),
   };
 }
 
 function clampSize(width, height) {
   const bounds = viewportBounds();
+  const minWidth = Math.min(MIN_WIDTH, bounds.width);
+  const minHeight = Math.min(MIN_HEIGHT, bounds.height);
   return {
-    width: Math.min(bounds.width, Math.max(MIN_WIDTH, Number(width) || MIN_WIDTH)),
-    height: Math.min(bounds.height, Math.max(MIN_HEIGHT, Number(height) || MIN_HEIGHT)),
+    width: Math.min(bounds.width, Math.max(minWidth, Number(width) || minWidth)),
+    height: Math.min(bounds.height, Math.max(minHeight, Number(height) || minHeight)),
   };
 }
 
@@ -193,14 +198,111 @@ function attachDrag(panel, key) {
   };
 }
 
+function resizeModeFromPoint(panel, event) {
+  const rect = panel.getBoundingClientRect();
+  const nearLeft = event.clientX - rect.left <= RESIZE_EDGE;
+  const nearRight = rect.right - event.clientX <= RESIZE_EDGE;
+  const nearTop = event.clientY - rect.top <= RESIZE_EDGE;
+  const nearBottom = rect.bottom - event.clientY <= RESIZE_EDGE;
+  if (nearBottom && nearRight) return "se";
+  if (nearBottom && nearLeft) return "sw";
+  if (nearTop && nearRight) return "ne";
+  if (nearTop && nearLeft) return "nw";
+  if (nearRight) return "e";
+  if (nearLeft) return "w";
+  if (nearBottom) return "s";
+  if (nearTop) return "n";
+  return "";
+}
+
+function resizeCursor(mode) {
+  if (mode === "e" || mode === "w") return "ew-resize";
+  if (mode === "n" || mode === "s") return "ns-resize";
+  if (mode === "ne" || mode === "sw") return "nesw-resize";
+  if (mode === "nw" || mode === "se") return "nwse-resize";
+  return "";
+}
+
+function attachResize(panel, key) {
+  let pointerId = null;
+  let mode = "";
+  let startX = 0;
+  let startY = 0;
+  let start = null;
+
+  const onPointerDown = (event) => {
+    if (event.button !== 0) return;
+    mode = resizeModeFromPoint(panel, event);
+    if (!mode) return;
+    const rect = panel.getBoundingClientRect();
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    start = geometryFromRect(rect);
+    panel.classList.add("ky-modal-resizing");
+    panel.style.cursor = resizeCursor(mode);
+    try { panel.setPointerCapture(pointerId); } catch { /* desteklemeyen tarayıcı */ }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const onPointerMove = (event) => {
+    if (pointerId === null || event.pointerId !== pointerId || !start) return;
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    let { left, top, width, height } = start;
+    if (mode.includes("e")) width += dx;
+    if (mode.includes("s")) height += dy;
+    if (mode.includes("w")) { width -= dx; left += dx; }
+    if (mode.includes("n")) { height -= dy; top += dy; }
+    if (width < MIN_WIDTH) { if (mode.includes("w")) left -= MIN_WIDTH - width; width = MIN_WIDTH; }
+    if (height < MIN_HEIGHT) { if (mode.includes("n")) top -= MIN_HEIGHT - height; height = MIN_HEIGHT; }
+    applyGeometry(panel, { left, top, width, height });
+    event.preventDefault();
+  };
+
+  const stopResize = (event) => {
+    if (pointerId === null || (event && event.pointerId !== pointerId)) return;
+    const activeId = pointerId;
+    pointerId = null;
+    start = null;
+    mode = "";
+    panel.classList.remove("ky-modal-resizing");
+    panel.style.removeProperty("cursor");
+    try { panel.releasePointerCapture(activeId); } catch { /* capture yoksa sorun değil */ }
+    writeGeometry(key, geometryFromRect(panel.getBoundingClientRect()));
+  };
+
+  const onHoverMove = (event) => {
+    if (pointerId !== null) return;
+    panel.style.cursor = resizeCursor(resizeModeFromPoint(panel, event));
+  };
+  const onLeave = () => { if (pointerId === null) panel.style.removeProperty("cursor"); };
+
+  panel.addEventListener("pointerdown", onPointerDown, true);
+  panel.addEventListener("pointermove", onPointerMove, true);
+  panel.addEventListener("pointerup", stopResize, true);
+  panel.addEventListener("pointercancel", stopResize, true);
+  panel.addEventListener("pointermove", onHoverMove);
+  panel.addEventListener("pointerleave", onLeave);
+
+  return () => {
+    panel.removeEventListener("pointerdown", onPointerDown, true);
+    panel.removeEventListener("pointermove", onPointerMove, true);
+    panel.removeEventListener("pointerup", stopResize, true);
+    panel.removeEventListener("pointercancel", stopResize, true);
+    panel.removeEventListener("pointermove", onHoverMove);
+    panel.removeEventListener("pointerleave", onLeave);
+    panel.classList.remove("ky-modal-resizing");
+    panel.style.removeProperty("cursor");
+  };
+}
 function makePersistent(panel) {
   if (!(panel instanceof HTMLElement) || panel.dataset.kyModalResizable === "true") return;
-  if (panel.matches(".ccw-drawer")) return; // Firma ana detay alanı açılır pencere değil, çalışma alanıdır.
-  if (window.matchMedia("(max-width: 700px), (pointer: coarse)").matches) return;
 
   panel.dataset.kyModalResizable = "true";
   panel.classList.add("ky-persistent-modal");
-  panel.title ||= "Başlıktan taşıyın; sağ alt köşeden boyutlandırın. Konum ve boyut kaydedilir.";
+  panel.title ||= "Başlıktan taşıyın; kenarlardan veya köşelerden boyutlandırın. Konum ve boyut kaydedilir.";
 
   const keys = storageKeys(panel);
   const savedGeometry = readGeometry(keys.geometry);
@@ -213,6 +315,7 @@ function makePersistent(panel) {
 
   let resizeTimer = 0;
   let dragCleanup = () => {};
+  let resizeCleanup = () => {};
 
   const freezeAndWire = () => {
     if (!panel.isConnected) return;
@@ -220,11 +323,12 @@ function makePersistent(panel) {
     applyGeometry(panel, current);
     if (!savedGeometry) writeGeometry(keys.geometry, current);
     dragCleanup = attachDrag(panel, keys.geometry);
+    resizeCleanup = attachResize(panel, keys.geometry);
   };
   window.requestAnimationFrame(freezeAndWire);
 
   const resizeObserver = new ResizeObserver(() => {
-    if (!panel.isConnected || panel.classList.contains("ky-modal-dragging")) return;
+    if (!panel.isConnected || panel.classList.contains("ky-modal-dragging") || panel.classList.contains("ky-modal-resizing")) return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(() => {
       const rect = panel.getBoundingClientRect();
@@ -239,6 +343,7 @@ function makePersistent(panel) {
     window.clearTimeout(resizeTimer);
     resizeObserver.disconnect();
     dragCleanup();
+    resizeCleanup();
   };
 }
 
@@ -256,6 +361,10 @@ function collectPanels(root) {
     const childPanel = dialog.querySelector(PANEL_SELECTOR) || (layerLike ? dialog.firstElementChild : null);
     if (childPanel) panels.delete(dialog);
     panels.add(childPanel || dialog);
+  });
+  [...panels].forEach((candidate) => {
+    const nested = [...panels].some((other) => other !== candidate && candidate.contains(other));
+    if (nested) panels.delete(candidate);
   });
   return panels;
 }

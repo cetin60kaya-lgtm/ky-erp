@@ -14312,3 +14312,44 @@ body.ik-personel-clean-header .topbar>.primary-btn {
     transition: none !important;
   }
 }
+
+/* Evrensel modal v3: tüm açılırlar 8 yönden taşınabilir/boyutlanabilir */
+.ky-persistent-modal {
+  resize: none !important;
+  box-sizing: border-box !important;
+  overflow: auto !important;
+  scrollbar-gutter: stable;
+}
+.ky-persistent-modal.ky-modal-resizing,
+.ky-persistent-modal.ky-modal-dragging {
+  transition: none !important;
+  user-select: none !important;
+}
+@media (min-width: 701px) {
+  .ky-persistent-modal {
+    width: var(--ky-modal-width, auto) !important;
+    height: var(--ky-modal-height, auto) !important;
+  }
+  .ky-persistent-modal.ky-modal-positioned {
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--ky-modal-left) !important;
+    top: var(--ky-modal-top) !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
+}
+
+/* Tüm cihazlarda aynı modal geometrisi; hiçbir açılır hariç değil */
+.ky-persistent-modal {
+  width: var(--ky-modal-width, auto) !important;
+  height: var(--ky-modal-height, auto) !important;
+}
+.ky-persistent-modal.ky-modal-positioned {
+  position: fixed !important;
+  inset: auto !important;
+  left: var(--ky-modal-left) !important;
+  top: var(--ky-modal-top) !important;
+  margin: 0 !important;
+  transform: none !important;
+}
