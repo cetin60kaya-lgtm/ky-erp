@@ -20,10 +20,13 @@ test("tum uygulama acilirlari tasinabilir ve sekiz yonden boyutlanabilir", () =>
 });
 
 test("modal konumu ve boyutu kalici saklanir ve css native resize yerine ortak motoru kullanir", () => {
-  assert.match(runtime, /modal-geometry:v2/);
+  assert.match(runtime, /modal-geometry:v3/);
   assert.match(runtime, /localStorage\.setItem/);
   assert.match(css, /\.ky-persistent-modal[\s\S]*resize:\s*none !important/);
   assert.match(css, /width:\s*var\(--ky-modal-width/);
   assert.match(css, /height:\s*var\(--ky-modal-height/);
   assert.doesNotMatch(runtime, /panel\.matches\("\.ccw-drawer"\)/);
+  assert.match(runtime, /function looksLikeBackdrop/);
+  assert.match(runtime, /resolveDialogPanel/);
+  assert.doesNotMatch(runtime, /new ResizeObserver/);
 });

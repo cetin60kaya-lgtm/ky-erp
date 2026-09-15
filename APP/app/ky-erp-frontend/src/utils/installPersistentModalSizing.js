@@ -1,8 +1,8 @@
 import { installIsnetSourceIntakeBridge } from "./installIsnetSourceIntakeBridge";
 import { installIsnetSourceWorkbench } from "./installIsnetSourceWorkbench";
 
-const SIZE_STORAGE_PREFIX = "ky-erp:modal-size:v1:";
-const GEOMETRY_STORAGE_PREFIX = "ky-erp:modal-geometry:v2:";
+const SIZE_STORAGE_PREFIX = "ky-erp:modal-size:v3:";
+const GEOMETRY_STORAGE_PREFIX = "ky-erp:modal-geometry:v3:";
 const MIN_WIDTH = 360;
 const MIN_HEIGHT = 240;
 const VIEWPORT_GAP = 12;
@@ -93,12 +93,6 @@ function clampGeometry(value) {
 
 function readJson(key) {
   try { return JSON.parse(window.localStorage.getItem(key) || "null"); } catch { return null; }
-}
-
-function readLegacySize(key) {
-  const parsed = readJson(key);
-  if (!parsed?.width || !parsed?.height) return null;
-  return clampSize(parsed.width, parsed.height);
 }
 
 function readGeometry(key) {
@@ -306,14 +300,8 @@ function makePersistent(panel) {
 
   const keys = storageKeys(panel);
   const savedGeometry = readGeometry(keys.geometry);
-  const legacySize = readLegacySize(keys.size);
   if (savedGeometry) applyGeometry(panel, savedGeometry);
-  else if (legacySize) {
-    panel.style.setProperty("--ky-modal-width", `${legacySize.width}px`);
-    panel.style.setProperty("--ky-modal-height", `${legacySize.height}px`);
-  }
 
-  let resizeTimer = 0;
   let dragCleanup = () => {};
   let resizeCleanup = () => {};
 
@@ -327,26 +315,31 @@ function makePersistent(panel) {
   };
   window.requestAnimationFrame(freezeAndWire);
 
-  const resizeObserver = new ResizeObserver(() => {
-    if (!panel.isConnected || panel.classList.contains("ky-modal-dragging") || panel.classList.contains("ky-modal-resizing")) return;
-    window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(() => {
-      const rect = panel.getBoundingClientRect();
-      const next = applyGeometry(panel, geometryFromRect(rect));
-      writeGeometry(keys.geometry, next);
-      try { window.localStorage.setItem(keys.size, JSON.stringify({ width: next.width, height: next.height })); } catch { /* noop */ }
-    }, 180);
-  });
-  resizeObserver.observe(panel);
-
   panel.__kyModalResizeCleanup = () => {
-    window.clearTimeout(resizeTimer);
-    resizeObserver.disconnect();
     dragCleanup();
     resizeCleanup();
   };
 }
 
+function looksLikeBackdrop(dialog) {
+  if (!(dialog instanceof HTMLElement) || !dialog.firstElementChild) return false;
+  const classHint = [...dialog.classList].some((name) => /(backdrop|overlay|layer|scrim|modal-bg|dialog-bg)/i.test(name));
+  if (classHint) return true;
+  const rect = dialog.getBoundingClientRect();
+  const childRect = dialog.firstElementChild.getBoundingClientRect();
+  const viewportLike = rect.width >= window.innerWidth * 0.94 && rect.height >= window.innerHeight * 0.94;
+  const childIsSmaller = childRect.width <= rect.width * 0.94 || childRect.height <= rect.height * 0.94;
+  const style = window.getComputedStyle(dialog);
+  const positionedLayer = ["fixed", "absolute"].includes(style.position) && ["flex", "grid"].includes(style.display);
+  return childIsSmaller && (viewportLike || positionedLayer);
+}
+
+function resolveDialogPanel(dialog) {
+  const explicit = dialog.querySelector(PANEL_SELECTOR);
+  if (explicit && explicit !== dialog) return explicit;
+  if (looksLikeBackdrop(dialog)) return dialog.firstElementChild;
+  return dialog;
+}
 function collectPanels(root) {
   const panels = new Set();
   if (!(root instanceof Element || root instanceof Document)) return panels;
@@ -357,10 +350,9 @@ function collectPanels(root) {
   if (root instanceof Element && root.matches("[role='dialog']")) dialogs.push(root);
   root.querySelectorAll?.("[role='dialog']").forEach((dialog) => dialogs.push(dialog));
   dialogs.forEach((dialog) => {
-    const layerLike = [...dialog.classList].some((name) => /(backdrop|overlay|layer|modal-bg)/i.test(name));
-    const childPanel = dialog.querySelector(PANEL_SELECTOR) || (layerLike ? dialog.firstElementChild : null);
-    if (childPanel) panels.delete(dialog);
-    panels.add(childPanel || dialog);
+    const target = resolveDialogPanel(dialog);
+    if (target !== dialog) panels.delete(dialog);
+    if (target) panels.add(target);
   });
   [...panels].forEach((candidate) => {
     const nested = [...panels].some((other) => other !== candidate && candidate.contains(other));
@@ -397,8 +389,8 @@ export function installPersistentModalSizing() {
   window.addEventListener("resize", () => {
     document.querySelectorAll(".ky-persistent-modal").forEach((panel) => {
       const keys = storageKeys(panel);
-      const next = applyGeometry(panel, geometryFromRect(panel.getBoundingClientRect()));
-      writeGeometry(keys.geometry, next);
+      const saved = readGeometry(keys.geometry);
+      if (saved) applyGeometry(panel, saved);
     });
   });
 }
