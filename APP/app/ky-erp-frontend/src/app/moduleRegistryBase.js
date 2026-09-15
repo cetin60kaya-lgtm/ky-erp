@@ -299,7 +299,7 @@ export const MODULE_ROUTE_ALIASES = {
     "evrak-belgeler": "sgk-evrak-kontrol",
 
     // Eski İK içi PDKS yolları ikinci puantaj ekranı açmaz.
-    "puantaj-izin": "yillik-izin",
+    "puantaj-izin": "personel-kartlari",
     "izin-mesai-kesinti": "mesai-avans",
     "yillik-izin": "yillik-izin",
     "ay-izin-evrak": "yillik-izin",
