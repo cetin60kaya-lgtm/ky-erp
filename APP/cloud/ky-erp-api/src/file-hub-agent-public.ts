@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
+import { handleOutgoingDesignMailEvent } from "./outgoing-design-mail";
 import { verifyFileHubAgentCredential } from "./file-hub-agent-auth";
 
 // Public transport contract stays X-KYERP-Agent-Key. Validation is now tenant-scoped.
@@ -90,8 +91,12 @@ async function ingest(c:Context<AppEnv>){
   if(binding?.logical && ["DESEN","DTF","IMALAT"].includes(binding.moduleCode) && ["MODEL_IMAGE","MODEL_SOURCE","PLACEMENT","RIP_PDF","OUTGOING_DESIGN"].includes(binding.purposeCode)){
     designModel=await syncFileHubDesignModel(c,{slug,fileAssetId:assetId,modelName:binding.logical,purposeCode:binding.purposeCode,fileName,extension:upper(b.extension||fileName.split(".").pop()),mimeType:text(b.mimeType),sizeBytes:Number(b.sizeBytes||0),sha256:text(b.sha256),relativePath,providerType:upper(conn.provider_type),storageConnectionId:connectionId});
   }
+  let outgoingMail=null;
+  if(binding?.purposeCode==="OUTGOING_DESIGN"){
+    outgoingMail=await handleOutgoingDesignMailEvent(c,{slug,fileAssetId:assetId,fileName,relativePath,sha256:text(b.sha256),revisionChanged,modelName:binding.logical,sourceEvent:text(b.sourceEvent||b.metadata?.sourceEvent||"SCAN"),storageConnectionId:connectionId,deviceName:text(b.deviceName)});
+  }
   await c.env.DB.prepare(`UPDATE file_hub_connections SET connection_status='CONNECTED',last_sync_at=?,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?`).bind(ts,ts,connectionId,slug).run();
-  return c.json({ok:true,data:{fileAssetId:assetId,revisionChanged,binding,designModel,previewRequired:["JPG","JPEG","PNG","WEBP","PDF"].includes(upper(b.extension||fileName.split(".").pop()))}});
+  return c.json({ok:true,data:{fileAssetId:assetId,revisionChanged,binding,designModel,outgoingMail,previewRequired:["JPG","JPEG","PNG","WEBP","PDF"].includes(upper(b.extension||fileName.split(".").pop()))}});
 }
 
 async function previewUpload(c:Context<AppEnv>){
