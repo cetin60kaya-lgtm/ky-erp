@@ -118,9 +118,9 @@ function emptyFirmForm() {
   };
 }
 
-function emptyTransactionForm() {
+function emptyTransactionForm(firmId = "") {
   return {
-    firmId: "",
+    firmId,
     transactionDirection: "PAYMENT_OUT",
     paymentMethod: "TRANSFER",
     paymentDate: today,
@@ -166,11 +166,11 @@ function Modal({ title, size = "", children, onClose, actions }) {
   );
 }
 
-export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, reloadAll }) {
+export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, reloadAll, embedded = false, selectedCompanyId = "", hideFirmDirectory = false }) {
   const baseParams = useMemo(() => companyParams(activeMainCompany), [activeMainCompany]);
   const [firms, setFirms] = useState([]);
   const [overview, setOverview] = useState({ summary: {}, months: [], rows: [] });
-  const [selectedFirmId, setSelectedFirmId] = useState("");
+  const [selectedFirmId, setSelectedFirmId] = useState(selectedCompanyId || "");
   const [firmSummary, setFirmSummary] = useState(null);
   const [detailRows, setDetailRows] = useState({ debts: [], cards: [], cash: [], movements: [] });
   const [detailTab, setDetailTab] = useState("debts");
@@ -246,6 +246,9 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       setNotice({ tone: "error", text: error?.message || "Çek merkezi yüklenemedi." }),
     );
   }, [loadBase, refreshKey]);
+  useEffect(() => {
+    if (selectedCompanyId) setSelectedFirmId(selectedCompanyId);
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     loadFirm(selectedFirmId).catch((error) =>
@@ -276,6 +279,10 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         .toLocaleLowerCase("tr-TR");
       const open = row.open !== false && !["PAID", "CANCELLED"].includes(String(row.status || "").toUpperCase());
       if (term && !haystack.includes(term)) return false;
+      if (selectedCompanyId) {
+        const rowFirmId = row.firmId || row.firmaId || row.companyId || row.company_id || "";
+        if (String(rowFirmId) !== String(selectedCompanyId)) return false;
+      }
       if (statusFilter === "OPEN" && !open) return false;
       if (statusFilter === "OVERDUE" && Number(row.daysRemaining) >= 0) return false;
       if (statusFilter === "PAID" && open) return false;
@@ -289,7 +296,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
       if (workFilter !== "ALL" && String(row.workType || "OFFICIAL").toUpperCase() !== workFilter) return false;
       return true;
     });
-  }, [directionFilter, monthFilter, overview.rows, ownershipFilter, periodFilter, search, statusFilter, workFilter]);
+  }, [directionFilter, monthFilter, overview.rows, ownershipFilter, periodFilter, search, selectedCompanyId, statusFilter, workFilter]);
 
   const visibleCheckSummary = useMemo(() => ({
     count: visibleRows.length,
@@ -439,7 +446,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   const activeDetailRows = detailRows[detailTab] || [];
 
   return (
-    <div className="check-hub">
+    <div className={`check-hub ${embedded ? "embedded" : ""} ${hideFirmDirectory ? "hide-firm-directory" : ""}`}>
       <section className="check-hero">
         <div>
           <span className="check-kicker">ÇEK • ÖDEME • TAHSİLAT DENETİMİ</span>
@@ -452,10 +459,10 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
           <button className="check-btn ghost" type="button" onClick={refreshAll}>
             <RefreshCw size={16} /> Yenile
           </button>
-          <button className="check-btn ghost" type="button" onClick={() => setModal({ type: "firm", form: emptyFirmForm() })}>
+          <button className="check-btn ghost quick-firm" type="button" onClick={() => setModal({ type: "firm", form: emptyFirmForm() })}>
             <Building2 size={16} /> Hızlı Cari Aç
           </button>
-          <button className="check-btn orange" type="button" onClick={() => setModal({ type: "transaction", form: emptyTransactionForm() })}>
+          <button className="check-btn orange" type="button" onClick={() => setModal({ type: "transaction", form: emptyTransactionForm(selectedCompanyId || selectedFirmId) })}>
             <WalletCards size={16} /> Ödeme / Tahsilat
           </button>
           <button className="check-btn primary" type="button" onClick={() => setModal({ type: "check", form: emptyCheckForm(selectedFirmId) })}>
@@ -530,7 +537,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
         </div>
       </section>
 
-      <section className="check-panel">
+      <section className="check-panel check-firm-directory-panel">
         <header className="check-panel-head">
           <div><h2>Firma / Cari ve Diğer Ödemeler</h2><p>Firma yoksa hızlı cari aç; açık borç, kart ve hareketleri aynı yerden izle.</p></div>
           <button className="check-btn" type="button" onClick={() => setModal({ type: "card", form: emptyCardForm() })}><CreditCard size={16} /> Kart Kaydı</button>

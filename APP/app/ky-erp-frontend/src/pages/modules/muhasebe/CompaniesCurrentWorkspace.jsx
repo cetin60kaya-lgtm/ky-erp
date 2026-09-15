@@ -10,6 +10,8 @@ import {
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import CompanyFibeSection from "./CompanyFibeSection";
+import CekOdemeMerkeziPage from "../../muhasebe/CekOdemeMerkeziPage";
+import PaymentPlannerPanel from "./PaymentPlannerPanel";
 import "./companiesCurrentWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -119,7 +121,7 @@ function profileDraftOf(firm = {}) {
   };
 }
 
-export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKey = 0 }) {
+export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKey = 0, reloadAll }) {
   const [firms, setFirms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -145,6 +147,9 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
   const [companySaving, setCompanySaving] = useState(false);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [financeOpen, setFinanceOpen] = useState(false);
+  const [financeView, setFinanceView] = useState("checks");
 
   const params = useMemo(
     () => ({
@@ -248,6 +253,22 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     return { receivable, payable, balance: receivable - payable };
   }, [visibleFirms]);
 
+  const visibleFirmIds = useMemo(() => visibleFirms.map((firm) => String(firm.id)), [visibleFirms]);
+  const allVisibleSelected = visibleFirmIds.length > 0 && visibleFirmIds.every((id) => selectedCompanyIds.includes(id));
+
+  const toggleCompanySelection = (firmId) => {
+    const id = String(firmId);
+    setSelectedCompanyIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedCompanyIds((current) => {
+      if (allVisibleSelected) return current.filter((id) => !visibleFirmIds.includes(id));
+      return Array.from(new Set([...current, ...visibleFirmIds]));
+    });
+  };
+
+  const clearCompanySelection = () => setSelectedCompanyIds([]);
   const loadMovements = useCallback(
     async (firm) => {
       setSelected(firm);
@@ -449,6 +470,38 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     }
   };
 
+  const deleteSelectedCompanies = async () => {
+    if (!selectedCompanyIds.length || companyDeleting) return;
+    const selectedNames = firms
+      .filter((firm) => selectedCompanyIds.includes(String(firm.id)))
+      .map((firm) => firm.firmaAdi || firm.companyName || firm.name)
+      .filter(Boolean);
+    const confirmed = window.confirm(
+      `${selectedCompanyIds.length} firma kartı KALICI olarak silinecek.\n\n${selectedNames.slice(0, 8).join("\n")}${selectedNames.length > 8 ? "\n…" : ""}\n\nBu işlem geri alınamaz. Devam edilsin mi?`,
+    );
+    if (!confirmed) return;
+    setCompanyDeleting(true);
+    setNotice("");
+    try {
+      for (const id of selectedCompanyIds) {
+        await apiDelete(`/muhasebe/firmalar/${id}`, params);
+      }
+      if (selected && selectedCompanyIds.includes(String(selected.id))) {
+        setSelected(null);
+        setMovements([]);
+        setAliases([]);
+        setSettingsOpen(false);
+        setTransactionOpen(false);
+      }
+      setSelectedCompanyIds([]);
+      setNotice(`${selectedCompanyIds.length} firma kartı kalıcı olarak silindi.`);
+      await loadFirms();
+    } catch (requestError) {
+      setNotice(requestError?.message || "Seçili firmalar silinemedi.");
+    } finally {
+      setCompanyDeleting(false);
+    }
+  };
   const saveTransaction = async () => {
     if (!selected?.id || Number(transaction.amount || 0) <= 0) {
       setNotice("Sıfırdan büyük işlem tutarı zorunludur.");
@@ -519,6 +572,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="LAST_MOVEMENT_DESC">Son işleme göre</option>
         </select>
         <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
+        <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Çek / Ödeme</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
       </header>
 
@@ -560,23 +614,36 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
       {error ? <div className="ccw-error"><CircleAlert size={18} /> {error}</div> : null}
 
+      {selectedCompanyIds.length ? (
+        <div className="ccw-bulk-actions">
+          <strong>{selectedCompanyIds.length} firma seçili</strong>
+          <button type="button" onClick={clearCompanySelection}>Seçimi Temizle</button>
+          <button type="button" className="danger" disabled={companyDeleting} onClick={deleteSelectedCompanies}>
+            <Trash2 size={15} /> Seçilenleri Kalıcı Sil
+          </button>
+        </div>
+      ) : null}
       <section className="ccw-table-card">
         {loading ? (
           <div className="ccw-empty">Firmalar yükleniyor…</div>
         ) : visibleFirms.length ? (
           <div className="ccw-table-wrap">
             <table>
-              <thead><tr><th>Firma</th><th>Bakiye</th><th>Son işlem</th><th>İşlem</th></tr></thead>
+              <thead><tr>
+                <th><label className="ccw-select-label"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} /> Firma</label></th>
+                <th>Bakiye</th><th>Son işlem</th>
+              </tr></thead>
               <tbody>
                 {visibleFirms.map((firm) => (
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => loadMovements(firm)} tabIndex={0}>
                     <td>
-                      <strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong>
-                      <small>{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small>
+                      <div className="ccw-firm-row-main">
+                        <input type="checkbox" checked={selectedCompanyIds.includes(String(firm.id))} onClick={(event) => event.stopPropagation()} onChange={() => toggleCompanySelection(firm.id)} />
+                        <div><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></div>
+                      </div>
                     </td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
                     <td><span className="ccw-last-movement">{firm.lastMovementAt ? dateText(firm.lastMovementAt) : "-"}</span>{Number(firm.movementCount || 0) ? <small>{Number(firm.movementCount)} hareket</small> : null}</td>
-                    <td className="ccw-row-actions"><button type="button" className="danger" disabled={companyDeleting} onClick={(event) => { event.stopPropagation(); void deleteCompany(firm); }}><Trash2 size={14} /> Sil</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -600,6 +667,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               </div>
               <div className="ccw-drawer-actions">
                 {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Ödeme / Tahsilat / Cari</button> : null}
+                <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Çek / Ödeme</button>
                 <button type="button" onClick={() => setSettingsOpen(true)}>Firma Düzenle</button>
                 <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
@@ -734,6 +802,30 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               </section>
             </div>
           </aside>
+        </div>
+      ) : null}
+      {financeOpen ? (
+        <div className="ccw-finance-modal-backdrop" role="presentation" onMouseDown={() => setFinanceOpen(false)}>
+          <section className="ccw-finance-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="ccw-finance-modal-head">
+              <div>
+                <strong>{selected ? `${selected.firmaAdi || selected.companyName || selected.name} · Çek / Ödeme` : "Tüm Firmalar · Çek / Ödeme"}</strong>
+                <small>Çek, ödeme ve vade işlemleri ana firma ekranını kalabalıklaştırmadan burada yönetilir.</small>
+              </div>
+              <div className="ccw-finance-switch">
+                <button type="button" className={financeView === "checks" ? "active" : ""} onClick={() => setFinanceView("checks")}>Çekler / Tahsilat</button>
+                <button type="button" className={financeView === "plan" ? "active" : ""} onClick={() => setFinanceView("plan")}>Ödeme Planı</button>
+                <button type="button" className="icon" onClick={() => setFinanceOpen(false)} aria-label="Kapat"><X size={18} /></button>
+              </div>
+            </header>
+            <div className="ccw-finance-modal-body">
+              {financeView === "checks" ? (
+                <CekOdemeMerkeziPage activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} embedded selectedCompanyId={selected?.id || ""} hideFirmDirectory />
+              ) : (
+                <PaymentPlannerPanel activeMainCompany={activeMainCompany} />
+              )}
+            </div>
+          </section>
         </div>
       ) : null}
     </section>

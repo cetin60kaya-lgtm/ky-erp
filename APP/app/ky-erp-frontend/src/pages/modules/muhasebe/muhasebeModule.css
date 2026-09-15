@@ -231,3 +231,24 @@
 .idc-drawer,.sif-drawer,.mtpl-drawer,.mtw-drawer,.plw-drawer,.vcw-drawer{width:min(1180px,94vw)!important;height:auto!important;max-height:90vh!important;min-height:0!important;border:1px solid #dfe4ea;border-radius:16px!important;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)!important;animation:none!important}
 .idc-drawer-body,.sif-drawer-body,.mtpl-drawer-body,.mtw-drawer-body,.plw-drawer-body,.vcw-drawer-body{overflow:auto!important;max-height:calc(90vh - 130px)!important}
 @media(max-width:760px){.idc-drawer-layer,.sif-drawer-layer,.mtpl-drawer-layer,.mtw-drawer-layer,.plw-drawer-layer,.vcw-drawer-layer{padding:0!important}.idc-drawer,.sif-drawer,.mtpl-drawer,.mtw-drawer,.plw-drawer,.vcw-drawer{width:100vw!important;max-height:100vh!important;border-radius:0!important}}
+
+/* 2026-09-15 Muhasebe sade birleşik bilgi mimarisi */
+.accounting-page-header.compact{padding:8px 10px;min-height:0}
+.accounting-page-header.compact .accounting-eyebrow{display:none}
+.accounting-page-header.compact h1{font-size:17px;margin:0}
+.accounting-page-header.compact p{margin:2px 0 0;font-size:11px;color:#667085}
+.accounting-composite-workspace{display:grid;gap:8px;min-width:0}
+.accounting-subbar{display:flex;align-items:center;gap:6px;padding:6px;border:1px solid #dfe4ea;border-radius:10px;background:#f8f9fb}
+.accounting-subbar button,.accounting-inline-actions button{min-height:32px;padding:0 11px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#344054;font-weight:750;cursor:pointer}
+.accounting-subbar button.active{background:#344054;color:#fff;border-color:#344054}
+.accounting-composite-body{min-width:0}
+.accounting-inline-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border:1px solid #dfe4ea;border-radius:10px;background:#f8f9fb;color:#667085;font-size:11px}
+.accounting-inline-actions button{display:inline-flex;align-items:center;gap:6px}
+.accounting-modal-backdrop{position:fixed;inset:0;z-index:2800;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.46);backdrop-filter:blur(2px)}
+.accounting-center-modal{width:min(980px,95vw);max-height:92vh;overflow:hidden;border:1px solid #d0d5dd;border-radius:16px;background:#f6f8fb;box-shadow:0 28px 80px rgba(15,23,42,.30)}
+.accounting-center-modal.large{width:min(1280px,96vw)}
+.accounting-center-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #dfe4ea;background:#fff}
+.accounting-center-modal-head>div{display:grid;gap:3px}.accounting-center-modal-head small{color:#667085;font-size:11px}
+.accounting-center-modal-head button{display:grid;place-items:center;width:32px;height:32px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;cursor:pointer}
+.accounting-center-modal-body{max-height:calc(92vh - 58px);overflow:auto;padding:12px}
+@media(max-width:820px){.accounting-modal-backdrop{padding:0}.accounting-center-modal,.accounting-center-modal.large{width:100vw;height:100vh;max-height:100vh;border-radius:0}.accounting-center-modal-body{max-height:calc(100vh - 58px)}.accounting-subbar,.accounting-inline-actions{overflow-x:auto;white-space:nowrap}}
