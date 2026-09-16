@@ -2,7 +2,7 @@
 import { getAuthenticatedUser } from "./auth-cloud";
 import {
   AUTH_SECURITY_SCOPES, securityStoreGet as storeGet, securityStoreList as storeList, securityStorePut as storePut,
-  securityDevicesForUser, sendSecurityWakeMany as sendWakeMany, tableExists,
+  securityDevicesForUser, sendSecurityWakeMany as sendWakeMany, tableExists, randomToken,
 } from "./auth-security-core";
 
 type AnyRow = Record<string, any>;
@@ -34,7 +34,6 @@ function objectOf(value: unknown): AnyRow {
   try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
 }
 async function bodyOf(c: any) { try { const body = await c.req.json(); return body && typeof body === "object" && !Array.isArray(body) ? body as AnyRow : {}; } catch { return {}; } }
-function randomToken(bytes = 32) { const value = new Uint8Array(bytes); crypto.getRandomValues(value); return base64Url(value); }
 async function sha256(value: string) { const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)); return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
 function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let diff = 0; for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index); return diff === 0; }
 

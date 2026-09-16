@@ -39,6 +39,9 @@ test("critical Security Center writes require KY Security action approval", asyn
   assert.match(source, /expiresAt/);
   assert.match(core, /securityDevicesForUser/);
   assert.match(core, /trustedDeviceIsRetired/);
+  assert.match(source, /randomToken,/);
+  assert.doesNotMatch(source, /function randomToken/);
+  assert.match(core, /export function randomToken/);
 });
 
 test("owner lock and only-me behavior are fail closed", async () => {
