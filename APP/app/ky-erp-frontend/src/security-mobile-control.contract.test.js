@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const here=dirname(fileURLToPath(import.meta.url));
+const root=resolve(here,"..");
+const html=readFileSync(resolve(root,"public/security/index.html"),"utf8");
+const app=readFileSync(resolve(root,"public/security/app.js"),"utf8");
+const control=readFileSync(resolve(root,"public/security/security-control-center.js"),"utf8");
+const actions=readFileSync(resolve(root,"public/security/security-actions.js"),"utf8");
+const sw=readFileSync(resolve(root,"public/security/sw.js"),"utf8");
+test("KY Security shows its canonical version and stores version state",()=>{
+  assert.match(html,/id="appVersionBadge">v2\.4/);
+  assert.match(html,/id="accountVersion">v2\.4/);
+  assert.match(app,/CLIENT_VERSION="security-v2\.4"/);
+  assert.match(app,/lastKnownServerVersion/);
+  assert.match(app,/versionCheckedAt/);
+  assert.match(app,/X-KYERP-Security-App-Version/);
+});
+
+test("system manager mobile center exposes sessions computers logs and company filter",()=>{
+  assert.match(html,/data-tab="sessions"/);
+  assert.match(html,/data-tab="computers"/);
+  assert.match(html,/data-tab="logs"/);
+  assert.match(html,/id="controlCompanyFilter"/);
+  assert.match(control,/auth\/push\/device\/control-center/);
+  assert.match(control,/companySlug=/);
+});
+test("mobile session close requires local unlock and signed control proof",()=>{
+  assert.match(control,/confirmLocalUnlock/);
+  assert.match(control,/KYERP-MOBILE-CONTROL-V1/);
+  assert.match(control,/SESSION_CLOSE/);
+  assert.match(control,/Oturumu Kapat/);
+});
+
+test("mobile security refresh is event driven without short interval polling",()=>{
+  assert.doesNotMatch(actions,/setInterval/);
+  assert.doesNotMatch(control,/setInterval/);
+  assert.match(control,/visibilitychange/);
+  assert.match(control,/KYERP_SECURITY_PUSH_WAKE/);
+  assert.match(sw,/security-control-center\.js/);
+  assert.match(sw,/security-shell-v18/);
+});
+
+test("mobile control runtime files stay JavaScript syntax valid",()=>{
+  assert.doesNotThrow(()=>new Function(control));
+  assert.doesNotThrow(()=>new Function(actions));
+});

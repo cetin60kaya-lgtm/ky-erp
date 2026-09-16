@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerSecurityMobileControlRoutes } from "./auth-security-mobile-control";
 import {
   AUTH_SECURITY_SCOPES, SECURITY_APPROVAL_KINDS,
   atomicSecurityStatusUpdate, securityStoreGet as storeGet, securityStoreList as storeList, securityStorePut as storePut,
@@ -363,7 +364,9 @@ async function actorFromDevice(c: any) {
   if (!appAccess.eligible) return null;
 
   const companySlug = text(user.main_company_slug || device.mainCompanySlug);
-  c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, lastSeenAt: nowIso(), trustedAt: device.trustedAt || device.createdAt || nowIso(), identityVersion: text(device.identityVersion || "TRUSTED_DEVICE_V1") }));
+  const reportedAppVersion = text(c.req.header("X-KYERP-Security-App-Version"));
+  const acceptedAppVersion = /^security-v\d+\.\d+$/i.test(reportedAppVersion) ? reportedAppVersion : text(device.securityAppVersion);
+  c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, securityAppVersion: acceptedAppVersion || SECURITY_APP_VERSION, lastSeenAt: nowIso(), trustedAt: device.trustedAt || device.createdAt || nowIso(), identityVersion: text(device.identityVersion || "TRUSTED_DEVICE_V1") }));
 
   return {
     device,
@@ -373,6 +376,7 @@ async function actorFromDevice(c: any) {
     username: text(user.username),
     email: text(user.email),
     fullName: text(user.full_name || user.username),
+    securityCapabilities: appAccess.capabilities || [],
   };
 }
 
@@ -733,6 +737,7 @@ export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
 }
 
 export function registerAuthPushRoutes(app: any) {
+  registerSecurityMobileControlRoutes(app, actorFromDevice, SECURITY_APP_VERSION);
   app.get("/api/auth/push/security-config", async (c: any) => {
     const applicationServerKey = await securityPushPublicKey(c);
     return c.json({

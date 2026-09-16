@@ -2,6 +2,7 @@ const KY_SECURITY_ACTION_API="https://api.kyerp.net/api";
 const KY_SECURITY_DB="kyerp-security-app-v1";
 const KY_SECURITY_STORE="device";
 const KY_SECURITY_KEY="active";
+const KY_SECURITY_CLIENT_VERSION="security-v2.4";
 
 function saBase64Url(bytes){let binary="";for(const byte of new Uint8Array(bytes))binary+=String.fromCharCode(byte);return btoa(binary).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_")}
 function saBase64UrlToBytes(value){const normalized=String(value||"").replace(/-/g,"+").replace(/_/g,"/");const padded=normalized+"=".repeat((4-normalized.length%4)%4);const raw=atob(padded);return Uint8Array.from(raw,(char)=>char.charCodeAt(0))}
@@ -9,7 +10,7 @@ function saOpenDb(){return new Promise((resolve,reject)=>{const request=indexedD
 async function saReadDevice(){const db=await saOpenDb();return new Promise((resolve,reject)=>{const tx=db.transaction(KY_SECURITY_STORE,"readonly");const request=tx.objectStore(KY_SECURITY_STORE).get(KY_SECURITY_KEY);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error)})}
 async function saSignDeviceAuth(device,method,path){if(!device?.signingPrivateKey)return{};const timestamp=String(Date.now());const pathname=`/api${path}`;const message=new TextEncoder().encode(`KYERP-DEVICE-AUTH-V1|${device.deviceId}|${String(method||"GET").toUpperCase()}|${pathname}|${timestamp}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return{"X-KYERP-Security-Timestamp":timestamp,"X-KYERP-Security-Signature":saBase64Url(signature)}}
 async function saJsonFetch(path,options={}){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);let response;try{response=await fetch(`${KY_SECURITY_ACTION_API}${path}`,{method:options.method||"GET",headers:{Accept:"application/json",...(options.body!==undefined?{"Content-Type":"text/plain;charset=UTF-8"}:{}),...(options.headers||{})},body:options.body===undefined?undefined:JSON.stringify(options.body),cache:"no-store",mode:"cors",signal:controller.signal})}finally{clearTimeout(timer)}const payload=await response.json().catch(()=>null);if(!response.ok||payload?.ok===false){const error=new Error(payload?.error?.message||`İşlem tamamlanamadı (HTTP ${response.status}).`);error.code=payload?.error?.code||"";error.status=response.status;throw error}return payload}
-async function saDeviceFetch(path,options={}){const device=await saReadDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("KY Güvenlik cihaz bağlantısı bulunamadı.");const method=String(options.method||"GET").toUpperCase();const signed=await saSignDeviceAuth(device,method,path);return saJsonFetch(path,{...options,headers:{"X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken,...signed,...(options.headers||{})}})}
+async function saDeviceFetch(path,options={}){const device=await saReadDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("KY Güvenlik cihaz bağlantısı bulunamadı.");const method=String(options.method||"GET").toUpperCase();const signed=await saSignDeviceAuth(device,method,path);return saJsonFetch(path,{...options,headers:{"X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken,"X-KYERP-Security-App-Version":KY_SECURITY_CLIENT_VERSION,...signed,...(options.headers||{})}})}
 async function saConfirmLocalUnlock(device){if(!device?.localUnlockCredentialId)return true;if(!navigator.credentials?.get)throw new Error("Telefon kilidi doğrulaması kullanılamıyor.");const result=await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rpId:location.hostname,allowCredentials:[{type:"public-key",id:saBase64UrlToBytes(device.localUnlockCredentialId)}],userVerification:"required",timeout:60000}});if(!result)throw new Error("Telefon kilidi doğrulanamadı.");return true}
 async function saSignDecision(device,id,decision){if(!device?.signingPrivateKey)throw new Error("Güvenlik cihazı imza anahtarı bulunamadı. Cihazı yeniden bağlayın.");const message=new TextEncoder().encode(`KYERP-DECISION-V1|${device.deviceId}|SECURITY_ACTION|${id}|${decision}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return saBase64Url(signature)}
 function saDate(value){if(!value)return"-";const date=new Date(value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString("tr-TR")}
@@ -38,7 +39,6 @@ async function saDecide(item,decision,card){const buttons=card.querySelectorAll(
 
 saEnsurePanel();
 saRefresh();
-setInterval(()=>{if(document.visibilityState==="visible")saRefresh()},4000);
 window.addEventListener("focus",saRefresh);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")saRefresh()});
 navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")saRefresh()});

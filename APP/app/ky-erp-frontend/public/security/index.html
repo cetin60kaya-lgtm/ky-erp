@@ -20,7 +20,7 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet</small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.4</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -80,6 +80,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.4</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -94,9 +95,18 @@
 
       <nav class="security-tabs" aria-label="KY ERP Güvenlik bölümleri">
         <button type="button" data-tab="approvals" class="active">Onaylar <span id="tabCount">0</span></button>
+        <button type="button" data-tab="sessions">Oturumlar <span id="sessionTabCount">0</span></button>
+        <button type="button" data-tab="computers">Bilgisayarlar <span id="computerTabCount">0</span></button>
+        <button type="button" data-tab="logs">Loglar</button>
         <button type="button" data-tab="code">Giriş Kodu</button>
-        <button type="button" data-tab="device">Cihaz</button>
+        <button type="button" data-tab="device">Bu Telefon</button>
       </nav>
+
+      <section id="controlToolbar" class="security-control-toolbar hidden">
+        <label>Firma / Kapsam<select id="controlCompanyFilter"><option value="">Tüm firmalar</option></select></label>
+        <button id="controlRefreshButton" type="button">Yenile</button>
+        <small id="controlCheckedAt">Son kontrol: -</small>
+      </section>
 
       <section id="approvalsTab" class="security-tab-panel">
         <section id="pendingPanel" class="security-card hidden">
@@ -112,6 +122,22 @@
           <h2 id="emptyTitle">Bekleyen giriş yok</h2>
           <p id="emptyCopy" class="muted">Bağlantı hazır. Yeni KY ERP giriş veya kritik güvenlik isteği geldiğinde burada görünür.</p>
         </section>
+      </section>
+
+      <section id="sessionsTab" class="security-tab-panel hidden">
+        <section class="security-card">
+          <div class="pending-title"><div><span class="eyebrow">AKTİF ERİŞİM</span><h2>ERP Oturumları</h2></div></div>
+          <div class="control-summary-grid"><div><span>Aktif oturum</span><b id="summaryActiveSessions">0</b></div><div><span>Bağlı bilgisayar</span><b id="summaryComputers">0</b></div><div><span>Güvenilir cihaz</span><b id="summaryTrustedDevices">0</b></div><div><span>Son olay</span><b id="summaryEvents">0</b></div></div>
+          <div id="sessionList" class="control-list"></div>
+        </section>
+      </section>
+
+      <section id="computersTab" class="security-tab-panel hidden">
+        <section class="security-card"><span class="eyebrow">BAĞLI BİLGİSAYARLAR</span><h2>Aktif bilgisayarlar ve güvenilir cihazlar</h2><div id="computerList" class="control-list"></div></section>
+      </section>
+
+      <section id="logsTab" class="security-tab-panel hidden">
+        <section class="security-card"><span class="eyebrow">GÜVENLİK GEÇMİŞİ</span><h2>Giriş ve işlem logları</h2><div id="securityLogList" class="control-list"></div></section>
       </section>
 
       <section id="codeTab" class="security-tab-panel hidden">
@@ -169,5 +195,6 @@
   <script src="/security/ios-safari.js?v=security-v2.4"></script>
   <script type="module" src="/security/app.js?v=security-v2.4"></script>
   <script type="module" src="/security/security-actions.js?v=security-v2.4"></script>
+  <script type="module" src="/security/security-control-center.js?v=security-v2.4"></script>
 </body>
 </html>

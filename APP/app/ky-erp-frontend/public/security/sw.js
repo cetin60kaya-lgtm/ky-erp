@@ -1,5 +1,5 @@
 const APP_URL="/security/?open=1";
-const CACHE_NAME="kyerp-security-shell-v17";
+const CACHE_NAME="kyerp-security-shell-v18";
 const ICON="/security/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -45,6 +45,7 @@ self.addEventListener("install",(event)=>event.waitUntil((async()=>{
     "/security/",
     "/security/app.js",
     "/security/security-actions.js",
+    "/security/security-control-center.js",
     "/security/ios-safari.js",
     "/security/app.css",
     "/security/manifest.webmanifest",

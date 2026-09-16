@@ -2,6 +2,7 @@ const API_BASE="https://api.kyerp.net/api";
 const DB_NAME="kyerp-security-app-v1";
 const STORE="device";
 const KEY="active";
+const CLIENT_VERSION="security-v2.4";
 
 const qs=(selector)=>document.querySelector(selector);
 const els={
@@ -12,7 +13,7 @@ const els={
   refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
   readyTitle:qs("#readyTitle"),readyMark:qs("#readyMark"),apiHealth:qs("#apiHealth"),pushHealth:qs("#pushHealth"),keyHealth:qs("#keyHealth"),unlockHealth:qs("#unlockHealth"),lastSync:qs("#lastSync"),
   setupTitle:qs("#setupTitle"),setupCopy:qs("#setupCopy"),deviceSummary:qs("#deviceSummary"),pendingCount:qs("#pendingCount"),pendingList:qs("#pendingList"),tabCount:qs("#tabCount"),
-  accountPanel:qs("#accountPanel"),accountFullName:qs("#accountFullName"),accountIdentity:qs("#accountIdentity"),accountRoleBadge:qs("#accountRoleBadge"),accountEmail:qs("#accountEmail"),accountUsername:qs("#accountUsername"),accountScope:qs("#accountScope"),accountDevice:qs("#accountDevice"),accountModules:qs("#accountModules"),accountSecurityCaps:qs("#accountSecurityCaps"),accountNote:qs("#accountNote"),
+  accountPanel:qs("#accountPanel"),accountFullName:qs("#accountFullName"),accountIdentity:qs("#accountIdentity"),accountRoleBadge:qs("#accountRoleBadge"),accountEmail:qs("#accountEmail"),accountUsername:qs("#accountUsername"),accountScope:qs("#accountScope"),accountDevice:qs("#accountDevice"),accountModules:qs("#accountModules"),accountSecurityCaps:qs("#accountSecurityCaps"),accountNote:qs("#accountNote"),appVersionBadge:qs("#appVersionBadge"),accountVersion:qs("#accountVersion"),
   loginCodeBox:qs("#loginCodeBox"),loginCodeValue:qs("#loginCodeValue"),loginCodeCountdown:qs("#loginCodeCountdown"),generateCodeButton:qs("#generateCodeButton"),toast:qs("#toast")
 };
 
@@ -23,6 +24,7 @@ let busy=false;
 let relinkMode=false;
 let loginCodeTimer=null;
 let lastAutoRepairAt=0;
+renderVersion();
 
 function isIos(){const ua=String(navigator.userAgent||"");return /iPhone|iPad|iPod/i.test(ua)||(String(navigator.platform||"")==="MacIntel"&&Number(navigator.maxTouchPoints||0)>1)}
 function isStandalone(){return Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true)}
@@ -71,7 +73,7 @@ async function jsonFetch(path,options={}){
   return payload;
 }
 async function signDeviceAuth(device,method,path){if(!device?.signingPrivateKey)return{};const timestamp=String(Date.now());const pathname=`/api${path}`;const message=new TextEncoder().encode(`KYERP-DEVICE-AUTH-V1|${device.deviceId}|${String(method||"GET").toUpperCase()}|${pathname}|${timestamp}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return{"X-KYERP-Security-Timestamp":timestamp,"X-KYERP-Security-Signature":base64Url(signature)}}
-async function deviceFetch(path,options={}){const device=await readDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("Bu cihaz henüz KY ERP Güvenlik cihazı olarak kayıtlı değil.");const method=String(options.method||"GET").toUpperCase();const signedHeaders=await signDeviceAuth(device,method,path);return jsonFetch(path,{...options,headers:{"X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken,...signedHeaders,...(options.headers||{})}})}
+async function deviceFetch(path,options={}){const device=await readDevice();if(!device?.deviceId||!device?.deviceToken)throw new Error("Bu cihaz henüz KY ERP Güvenlik cihazı olarak kayıtlı değil.");const method=String(options.method||"GET").toUpperCase();const signedHeaders=await signDeviceAuth(device,method,path);return jsonFetch(path,{...options,headers:{"X-KYERP-Push-Device":device.deviceId,"X-KYERP-Push-Token":device.deviceToken,"X-KYERP-Security-App-Version":CLIENT_VERSION,...signedHeaders,...(options.headers||{})}})}
 async function retireLegacyApprovalWorker(){
   if(!("serviceWorker" in navigator))return;
   try{
@@ -104,6 +106,8 @@ async function ensurePushSubscription(forceNew=false){
   if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationServerKey(config.applicationServerKey)});
   return{worker,subscription};
 }
+function versionLabel(value){const raw=String(value||"").trim();return raw.replace(/^security-/i,"")||"v2.4"}
+function renderVersion(serverVersion=""){const client=versionLabel(CLIENT_VERSION),server=versionLabel(serverVersion);if(els.appVersionBadge){els.appVersionBadge.textContent=client;els.appVersionBadge.title=serverVersion&&server!==client?`Telefon ${client} · Sunucu ${server}`:`Aktif sürüm ${client}`;els.appVersionBadge.classList.toggle("version-mismatch",Boolean(serverVersion&&server!==client))}if(els.accountVersion)els.accountVersion.textContent=serverVersion&&server!==client?`${client} · Sunucu ${server}`:client}
 function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}
 function setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
 const ROLE_LABELS={SUPER_ADMIN:"Süper Yönetici",ADMIN:"Süper Yönetici",COMPANY_ADMIN:"Firma Sahibi",MANAGER:"Yönetici",ACCOUNTING:"Muhasebe",MUHASEBE:"Muhasebe",USER:"Kullanıcı",VIEWER:"Kullanıcı"};
@@ -111,7 +115,7 @@ const MODULE_LABELS={ALL:"Tüm ERP",DASHBOARD:"Ana Panel",MUHASEBE:"Muhasebe",FI
 const SECURITY_CAP_LABELS={LOGIN_APPROVE:"Giriş Onayı",SESSION_APPROVE:"Oturum Onayı",SESSION_VIEW:"Oturumları Gör",SESSION_CLOSE:"Oturum Kapat",AUDIT_VIEW:"Güvenlik Geçmişi"};
 function accountRoleLabel(account){const role=String(account?.role||"").toUpperCase();if(["SUPER_ADMIN","ADMIN"].includes(role))return"Süper Yönetici";if(role==="COMPANY_ADMIN")return"Firma Sahibi";if((account?.moduleKeys||[]).includes("MUHASEBE"))return"Muhasebe";return ROLE_LABELS[role]||role.replaceAll("_"," ")||"Kullanıcı"}
 function setChipList(container,values,labelMap,emptyLabel){if(!container)return;container.innerHTML="";const list=Array.isArray(values)?values.filter(Boolean):[];if(!list.length){const chip=document.createElement("span");chip.className="account-chip muted-chip";chip.textContent=emptyLabel;container.appendChild(chip);return}for(const value of list){const chip=document.createElement("span");chip.className="account-chip";chip.textContent=labelMap[value]||String(value).replaceAll("_"," ");container.appendChild(chip)}}
-function renderAccount(account,device){if(!els.accountPanel)return;const data=account&&typeof account==="object"?account:null;const label=data?accountRoleLabel(data):"Kontrol";els.accountFullName.textContent=data?.fullName||"Hesap doğrulanıyor";els.accountIdentity.textContent=data?`${label} · ERP rolü: ${String(data.role||"-").replaceAll("_"," ")}`:"Hesap bilgisi güvenli bağlantıdan alınacak.";els.accountRoleBadge.textContent=label;els.accountRoleBadge.classList.toggle("owner",String(data?.role||"").toUpperCase()==="SUPER_ADMIN");els.accountEmail.textContent=data?.email||"Tanımlı değil";els.accountUsername.textContent=data?.username||"-";els.accountScope.textContent=data?.scopeType==="SYSTEM"?"Tüm Sistem":(data?.companyName||data?.companySlug||"Kendi hesabı");els.accountDevice.textContent=device?.deviceLabel||"KY Güvenlik cihazı";setChipList(els.accountModules,data?.moduleKeys||[],MODULE_LABELS,data?.scopeType==="SYSTEM"?"Tüm ERP":"Standart erişim");setChipList(els.accountSecurityCaps,data?.securityCapabilities||[],SECURITY_CAP_LABELS,"Kendi giriş güvenliği");els.accountNote.textContent=data?.username?`Bu cihaz yalnız ${data.username} hesabına bağlıdır. Onaylar bu hesabın yetkileriyle verilir.`:"Onaylar yalnız doğrulanmış bağlı hesabın yetkileriyle verilir."}
+function renderAccount(account,device){if(!els.accountPanel)return;renderVersion(device?.lastKnownServerVersion||device?.serverVersion||"");const data=account&&typeof account==="object"?account:null;const label=data?accountRoleLabel(data):"Kontrol";els.accountFullName.textContent=data?.fullName||"Hesap doğrulanıyor";els.accountIdentity.textContent=data?`${label} · ERP rolü: ${String(data.role||"-").replaceAll("_"," ")}`:"Hesap bilgisi güvenli bağlantıdan alınacak.";els.accountRoleBadge.textContent=label;els.accountRoleBadge.classList.toggle("owner",String(data?.role||"").toUpperCase()==="SUPER_ADMIN");els.accountEmail.textContent=data?.email||"Tanımlı değil";els.accountUsername.textContent=data?.username||"-";els.accountScope.textContent=data?.scopeType==="SYSTEM"?"Tüm Sistem":(data?.companyName||data?.companySlug||"Kendi hesabı");els.accountDevice.textContent=device?.deviceLabel||"KY Güvenlik cihazı";setChipList(els.accountModules,data?.moduleKeys||[],MODULE_LABELS,data?.scopeType==="SYSTEM"?"Tüm ERP":"Standart erişim");setChipList(els.accountSecurityCaps,data?.securityCapabilities||[],SECURITY_CAP_LABELS,"Kendi giriş güvenliği");els.accountNote.textContent=data?.username?`Bu cihaz yalnız ${data.username} hesabına bağlıdır. Onaylar bu hesabın yetkileriyle verilir.`:"Onaylar yalnız doğrulanmış bağlı hesabın yetkileriyle verilir."}
 function showRelink(){relinkMode=true;els.setupPanel.classList.remove("hidden");els.setupTitle.textContent="Erişimi yeniden bağla";els.setupCopy.textContent="Ana KY ERP → Profil → Telefon Onayı → Erişim Yenileme Kodu Oluştur. Kodu ve mevcut KY ERP şifreni gir.";els.cancelRelinkButton.classList.remove("hidden")}
 function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden")}
 async function createSigningKey(){const generated=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);const publicJwk=await crypto.subtle.exportKey("jwk",generated.publicKey);const privateJwk=await crypto.subtle.exportKey("jwk",generated.privateKey);const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);return{publicJwk,privateKey}}
@@ -183,7 +187,8 @@ function renderInstall(){
 }
 function showTab(name){
   document.querySelectorAll(".security-tabs button").forEach((button)=>button.classList.toggle("active",button.dataset.tab===name));
-  ["approvals","code","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
+  ["approvals","sessions","computers","logs","code","device"].forEach((tab)=>document.querySelector("#"+tab+"Tab")?.classList.toggle("hidden",tab!==name));
+  window.dispatchEvent(new CustomEvent("kysecurity:tab",{detail:{tab:name}}));
 }
 async function connectDevice(){
   if(busy)return;
@@ -316,7 +321,11 @@ async function refreshState(options={}){
   try{
     await ensureWorker();
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
-    renderAccount(health.account,health.device||device);
+    const versionCheckedAt=new Date().toISOString();
+    const versionRecord={...device,securityAppVersion:CLIENT_VERSION,clientVersion:CLIENT_VERSION,lastKnownServerVersion:health.serverVersion||"",versionCheckedAt};
+    await writeDevice(versionRecord).catch(()=>{});
+    renderVersion(health.serverVersion||"");
+    renderAccount(health.account,{...(health.device||device),lastKnownServerVersion:health.serverVersion||""});
     els.readyTitle.textContent="Onaylı cihaz · Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
     setHealth(els.pushHealth,health?.device?.lastError?"Sessizce yenileniyor":"Hazır",health?.device?.lastError?"warn":"ok");
@@ -395,6 +404,8 @@ window.addEventListener("focus",refreshState);
 window.addEventListener("online",()=>{toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState()});
 window.addEventListener("offline",()=>{setBadge("Çevrimdışı","bad");if(els.readyTitle)els.readyTitle.textContent="Telefon çevrimdışı"});
 navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
+window.KYSecurityRuntime={deviceFetch,readDevice,writeDevice,confirmLocalUnlock,base64Url,toast,refreshState,CLIENT_VERSION};
+window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
 (async function boot(){
   document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
   const url=new URL(location.href);enrollmentQuery={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
