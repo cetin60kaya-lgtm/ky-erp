@@ -39,7 +39,7 @@ test("KY Security PWA labels every critical security action and refreshes cache"
   for (const operation of ["SESSION_TRUST_APPROVE", "SESSION_CLOSE", "SESSION_SUSPICIOUS", "TRUSTED_DEVICE_REVOKE", "SECURITY_CAPABILITY_SET", "SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME"]) {
     assert.match(actions, new RegExp(operation));
   }
-  assert.match(sw, /kyerp-security-shell-v18/);
+  assert.match(sw, /kyerp-security-shell-v19/);
 });
 
 test("owner shell never renders a company as the application owner identity", async () => {

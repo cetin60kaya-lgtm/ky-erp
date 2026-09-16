@@ -1,5 +1,5 @@
 const APP_URL="/security/?open=1";
-const CACHE_NAME="kyerp-security-shell-v18";
+const CACHE_NAME="kyerp-security-shell-v19";
 const ICON="/security/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -9,8 +9,8 @@ async function broadcast(type){
 }
 async function closeApprovalNotifications(){
   try{
-    const list=await self.registration.getNotifications({tag:TAG});
-    for(const item of list)item.close();
+    const list=await self.registration.getNotifications();
+    for(const item of list){if(item?.tag===TAG||item?.data?.openApproval===true||String(item?.title||"").includes("KY ERP"))item.close()}
   }catch{}
 }
 async function showWakeNotification(){

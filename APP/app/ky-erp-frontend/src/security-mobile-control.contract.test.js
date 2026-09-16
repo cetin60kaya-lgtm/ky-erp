@@ -41,7 +41,7 @@ test("mobile security refresh is event driven without short interval polling",()
   assert.match(control,/visibilitychange/);
   assert.match(control,/KYERP_SECURITY_PUSH_WAKE/);
   assert.match(sw,/security-control-center\.js/);
-  assert.match(sw,/security-shell-v18/);
+  assert.match(sw,/security-shell-v19/);
 });
 
 test("mobile control runtime files stay JavaScript syntax valid",()=>{

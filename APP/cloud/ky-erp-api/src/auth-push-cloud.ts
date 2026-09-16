@@ -1273,7 +1273,7 @@ export function registerAuthPushRoutes(app: any) {
 
       const currentStatus = upper(row.status);
       if (
-        (decision === "APPROVE" && currentStatus === "APPROVED" && !text(row.consumedAt)) ||
+        (decision === "APPROVE" && currentStatus === "APPROVED") ||
         (decision === "DENY" && currentStatus === "DENIED")
       ) {
         return c.json({ ok: true, data: { kind, id, status: currentStatus, applied: false, idempotent: true } });

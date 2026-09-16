@@ -95,7 +95,7 @@ async function ensureWorker(){
   await navigator.serviceWorker.ready;
   return registration;
 }
-async function closeApprovalNotifications(){try{const reg=registration||await navigator.serviceWorker?.ready;if(!reg)return;try{const notes=await reg.getNotifications({tag:"kyerp-security-approval"});for(const note of notes||[])note.close()}catch{}try{reg.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"})}catch{}}catch{}}
+async function closeApprovalNotifications(){try{const regs=await navigator.serviceWorker?.getRegistrations?.()||[];const ready=registration||await navigator.serviceWorker?.ready.catch?.(()=>null);if(ready&&!regs.includes(ready))regs.push(ready);for(const reg of regs){try{const notes=await reg.getNotifications();for(const note of notes||[]){if(note?.tag==="kyerp-security-approval"||note?.data?.openApproval===true||String(note?.title||"").includes("KY ERP"))note.close()}}catch{}try{reg.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"})}catch{}}}catch{}}
 async function ensurePushSubscription(forceNew=false){
   const worker=await ensureWorker();
   const permission=Notification.permission==="granted"?"granted":await Notification.requestPermission();

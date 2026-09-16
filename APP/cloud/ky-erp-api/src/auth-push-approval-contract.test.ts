@@ -229,6 +229,8 @@ test("phone-approved sessions are verified without permanently trusting the brow
 
 test("approved phone decision clears the Android notification immediately",()=>{
   assert.match(securityApp,/async function closeApprovalNotifications/);
-  assert.match(securityApp,/getNotifications\(\{tag:"kyerp-security-approval"\}\)/);
+  assert.match(securityApp,/getRegistrations/);
+  assert.match(securityApp,/getNotifications\(\)/);
+  assert.match(securityApp,/openApproval/);
   assert.match(securityApp,/await closeApprovalNotifications\(\);const critical=/);
 });
