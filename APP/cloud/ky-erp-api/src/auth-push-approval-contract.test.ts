@@ -193,6 +193,13 @@ test("trusted Security device keeps phone approval pending when push delivery is
   assert.match(push, /Bildirim kanalı geçici olarak yanıt vermedi/);
 });
 
+
+test("approved Security phone never re-enrolls just because Web Push rotates",()=>{
+  assert.match(securityApp,/Onaylı cihaz · Telefon onayı hazır/);
+  assert.match(securityApp,/Sessizce yenileniyor/);
+  assert.match(securityApp,/repairConnection\(\{automatic:true\}\)/);
+  assert.match(securityApp,/if\(repaired\)await refreshState\(\{skipAutoRepair:true\}\)/);
+});
 test("phone approval is attempted before legacy Authenticator migration",()=>{
   const phoneIndex=policy.indexOf("startPhoneApprovalChallenge(c, refreshed || user, source)");
   const legacyIndex=policy.indexOf("POLICY_MFA_LEGACY_REQUIRED");

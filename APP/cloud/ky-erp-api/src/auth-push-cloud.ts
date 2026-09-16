@@ -919,6 +919,8 @@ export function registerAuthPushRoutes(app: any) {
       managerApprovalEnabled: isSuper(role) || isCompanyAdmin(role),
       isActive: true,
       createdAt: existing?.createdAt || nowIso(),
+      trustedAt: existing?.trustedAt || existing?.createdAt || nowIso(),
+      identityVersion: "TRUSTED_DEVICE_V1",
       lastSeenAt: nowIso(),
       lastError: "",
       retiredAt: "",
@@ -1114,8 +1116,8 @@ export function registerAuthPushRoutes(app: any) {
   app.get("/api/auth/push/device/health", async (c: any) => {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "KY ERP Güvenlik cihaz bağlantısı doğrulanamadı. Bağlantıyı Yenile işlemini kullanın."), 401);
-    const items = await pendingItems(c, actor);
-    const account = await securityAccountProfile(c, actor);
+    const items = await safePendingItems(c, actor);
+    const account = await safeSecurityAccountProfile(c, actor);
     return c.json({ ok: true, data: {
       ready: true,
       account,
@@ -1132,6 +1134,8 @@ export function registerAuthPushRoutes(app: any) {
         lastPushAt: actor.device.lastPushAt || null,
         lastRefreshAt: actor.device.lastRefreshAt || null,
         tokenRepairedAt: actor.device.tokenRepairedAt || null,
+        trustedAt: actor.device.trustedAt || actor.device.createdAt || null,
+        identityVersion: text(actor.device.identityVersion || "TRUSTED_DEVICE_V1"),
         lastError: text(actor.device.lastError),
       },
     }});

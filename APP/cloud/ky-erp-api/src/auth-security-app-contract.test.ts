@@ -61,6 +61,15 @@ test("access refresh reuses the same security device id instead of creating dupl
 });
 
 
+
+test("trusted phone card keeps one server identity while push transport refreshes silently",()=>{
+  assert.match(push,/identityVersion: "TRUSTED_DEVICE_V1"/);
+  assert.match(push,/trustedAt: existing\?\.trustedAt \|\| existing\?\.createdAt \|\| nowIso\(\)/);
+  assert.match(push,/deviceId: saved\.id/);
+  assert.match(push,/deviceTokenHash: await sha256\(deviceToken\)/);
+  assert.match(push,/SECURITY_APP_CONNECTION_REFRESHED/);
+  assert.match(push,/pushEndpointChanged/);
+});
 test("security app creates a one-minute challenge-bound login code with attempt limiting",()=>{
   assert.match(push,/SECURITY_LOGIN_CODE_SECONDS = 60/);
   assert.match(push,/SECURITY_LOGIN_CODE_MAX_ATTEMPTS = 5/);
@@ -92,7 +101,7 @@ test("security device health returns the verified bound account identity and per
   assert.match(push,/scopeType: isSuper\(role\) \? "SYSTEM"/);
   assert.match(push,/moduleKeys/);
   assert.match(push,/securityCapabilities/);
-  assert.match(push,/const account = await securityAccountProfile\(c, actor\)/);
+  assert.match(push,/const account = await safeSecurityAccountProfile\(c, actor\)/);
   assert.match(push,/SELECT name FROM main_companies/);
   assert.doesNotMatch(push,/SELECT name,title FROM main_companies/);
   assert.match(push,/companyName = companySlug/);

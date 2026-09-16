@@ -316,9 +316,10 @@ async function refreshState(options={}){
     await ensureWorker();
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
     renderAccount(health.account,health.device||device);
-    els.readyTitle.textContent="Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
+    els.readyTitle.textContent="Onaylı cihaz · Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
-    setHealth(els.pushHealth,health?.device?.lastError?"Otomatik yenilenecek":"Hazır",health?.device?.lastError?"warn":"ok");
+    setHealth(els.pushHealth,health?.device?.lastError?"Sessizce yenileniyor":"Hazır",health?.device?.lastError?"warn":"ok");
+    if(health?.device?.lastError&&!options?.skipAutoRepair&&Date.now()-lastAutoRepairAt>120000){lastAutoRepairAt=Date.now();const repaired=await repairConnection({automatic:true});if(repaired)return refreshState({skipAutoRepair:true})}
     els.lastSync.textContent="Son kontrol: "+new Date(health.checkedAt||Date.now()).toLocaleString("tr-TR");
     await refreshPending(health.items);
   }catch(error){
@@ -385,7 +386,7 @@ els.connectButton.addEventListener("click",connectDevice);
 els.generateCodeButton.addEventListener("click",generateLoginCode);
 document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
 els.refreshButton.addEventListener("click",refreshState);
-els.repairButton.addEventListener("click",repairConnection);
+els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
 els.relinkButton.addEventListener("click",showRelink);
 els.cancelRelinkButton.addEventListener("click",()=>{hideRelink();refreshState()});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshState()});
