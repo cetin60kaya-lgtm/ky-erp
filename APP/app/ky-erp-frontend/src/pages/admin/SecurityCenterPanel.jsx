@@ -44,7 +44,7 @@ const AUDIT_MODES = [
 const rows = (value) => Array.isArray(value) ? value : [];
 const dateText = (value) => { if (!value) return "-"; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("tr-TR"); };
 const scopeLabel = (value) => value === "SYSTEM" ? "Tüm Sistem" : value === "COMPANY" ? "Firma Kapsamı" : "Kendi Hesabım";
-const trustLabel = (value) => ({ TRUSTED: "Güvenilir", PENDING: "Onay Bekliyor", REJECTED: "Reddedildi", SUSPICIOUS: "Şüpheli", UNREVIEWED: "İncelenmedi" }[String(value || "").toUpperCase()] || value || "-");
+const trustLabel = (value) => ({ TRUSTED: "Güvenilir", VERIFIED: "Telefonla Doğrulandı", PENDING: "Onay Bekliyor", REJECTED: "Reddedildi", SUSPICIOUS: "Şüpheli", UNREVIEWED: "İncelenmedi" }[String(value || "").toUpperCase()] || value || "-");
 const messageOf = (error, fallback) => error?.message || error?.response?.data?.error?.message || fallback;
 
 export default function SecurityCenterPanel() {

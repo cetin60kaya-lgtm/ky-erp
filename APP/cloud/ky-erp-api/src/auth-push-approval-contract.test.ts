@@ -217,3 +217,18 @@ test("Security PWA is push/foreground driven and critical actions share the sign
   assert.match(push, /SECURITY_ACTION_APPROVED/);
   assert.match(push, /SECURITY_ACTION_DENIED/);
 });
+
+
+test("phone-approved sessions are verified without permanently trusting the browser",()=>{
+  assert.match(policy,/SESSION_VERIFIED_BY_PHONE_LOGIN/);
+  assert.match(policy,/status: "VERIFIED"/);
+  assert.match(policy,/phoneApprovalId: approval\.id/);
+  assert.match(policy,/securityDeviceId: approval\.decidedByDeviceId/);
+});
+
+
+test("approved phone decision clears the Android notification immediately",()=>{
+  assert.match(securityApp,/async function closeApprovalNotifications/);
+  assert.match(securityApp,/getNotifications\(\{tag:"kyerp-security-approval"\}\)/);
+  assert.match(securityApp,/await closeApprovalNotifications\(\);const critical=/);
+});

@@ -46,7 +46,7 @@ test("security app owns signed API calls while the service worker is notificatio
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
   assert.match(sw,/showWakeNotification/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v16"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v17"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -80,7 +80,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/approval-match/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Telefon Bağlantısını Yenile/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v16"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v17"/);
 });
 
 test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
@@ -98,7 +98,7 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(app,/openAndroidBrowserInstaller/);
   assert.match(app,/Chrome'da KY Güvenlik Kurulumunu Aç/);
   assert.match(html,/id="iosInstallNote"/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v16"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-shell-v17"/);
 });
 
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
@@ -136,7 +136,7 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
   assert.match(manifest,/\/security\/kyerp-security-icon\.svg/);
-  assert.match(sw,/kyerp-security-shell-v16/);
+  assert.match(sw,/kyerp-security-shell-v17/);
 });
 
 test("security app never renders a blank approvals screen on connection failure",()=>{

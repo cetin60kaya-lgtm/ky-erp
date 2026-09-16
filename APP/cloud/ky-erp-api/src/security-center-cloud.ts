@@ -259,7 +259,7 @@ async function executeOperation(c: any, current: AnyRow, operation: string, payl
 
 function friendlyEvent(action: string) {
   const map: AnyRow = {
-    LOGIN_SUCCESS: ["🟢", "Giriş yapıldı"], PHONE_APPROVAL_APPROVED: ["📲", "Telefon onayladı"], SESSION_CREATED_POLICY: ["💻", "Oturum açıldı"],
+    LOGIN_SUCCESS: ["🟢", "Giriş yapıldı"], PHONE_APPROVAL_APPROVED: ["📲", "Telefon onayladı"], SESSION_CREATED_POLICY: ["💻", "Oturum açıldı"], SESSION_VERIFIED_BY_PHONE_LOGIN: ["📲", "Oturum telefonla doğrulandı"],
     SESSION_TRUSTED: ["🔐", "Güvenilir oturum onaylandı"], SESSION_TRUST_REJECTED: ["🚫", "Oturum reddedildi"], SESSION_MARKED_SUSPICIOUS: ["🚫", "Şüpheli oturum kapatıldı"],
     SESSION_REVOKED_SECURITY_CENTER: ["🔴", "Oturum kapatıldı"], SECURITY_CAPABILITY_GRANTED: ["🛡️", "Güvenlik yetkisi verildi"], SECURITY_CAPABILITY_REVOKED: ["🛡️", "Güvenlik yetkisi kaldırıldı"],
     SUPER_ADMIN_GRANTED: ["⚠️", "Süper Yönetici eklendi"], SUPER_ADMIN_REVOKED: ["⚠️", "Süper Yönetici yetkisi kaldırıldı"], SUPER_ADMIN_ONLY_ME_EXECUTED: ["⚠️", "Sadece Ben Kalayım çalıştırıldı"],

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { AUTH_SECURITY_SCOPES, securityStorePut as securityStorePut } from "./auth-security-core";
 import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
 import {
   cancelPhoneApproval,
@@ -13,6 +14,7 @@ import {
 } from "./auth-push-cloud";
 
 const DEFAULT_COMPANY_SLUG = "mecit-hakan";
+const SESSION_TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
 const CHALLENGE_SECONDS = 10 * 60;
 const APPROVAL_SECONDS = 15 * 60;
 const OWNER_RECOVERY_SECONDS = 10 * 60;
@@ -502,6 +504,12 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
     logAuthError(c, "AUTH_LAST_LOGIN_WRITE", error, { userId: user.id, sessionId: sid });
   }
   await audit(c, "SESSION_CREATED_POLICY", user.id, user.id, text(security.main_company_slug), sid, { policy, ttl, expiresAt });
+  if (text(source.phoneApprovalId)) {
+    try {
+      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "VERIFIED", decidedByUserId: text(user.id), decidedByDeviceId: text(source.securityDeviceId), decidedAt: timestamp, source: "PHONE_LOGIN", phoneApprovalId: text(source.phoneApprovalId) });
+      await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", user.id, user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
+    } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
+  }
   return { ok: true, stage: "AUTHENTICATED", token, expiresIn: ttl, expiresAt, user: await publicUser(c, security) };
 }
 
@@ -842,6 +850,8 @@ export function registerAuthPolicyRoutes(app: any) {
       deviceLabel: approval.deviceLabel,
       userAgent: approval.userAgent,
       ipAddress: approval.ipAddress,
+      phoneApprovalId: approval.id,
+      securityDeviceId: approval.decidedByDeviceId,
     }));
   });
 

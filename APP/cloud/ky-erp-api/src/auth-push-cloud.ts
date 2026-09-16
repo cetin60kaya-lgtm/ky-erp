@@ -19,7 +19,7 @@ const COMPANY_SETTING_SCOPE = AUTH_SECURITY_SCOPES.COMPANY_LOGIN;
 const SECURITY_ENROLL_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ENROLLMENT;
 const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.3";
+const SECURITY_APP_VERSION = "security-v2.4";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
