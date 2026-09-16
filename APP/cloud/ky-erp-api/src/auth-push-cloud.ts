@@ -19,7 +19,7 @@ const COMPANY_SETTING_SCOPE = AUTH_SECURITY_SCOPES.COMPANY_LOGIN;
 const SECURITY_ENROLL_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ENROLLMENT;
 const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.2";
+const SECURITY_APP_VERSION = "security-v2.3";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -363,7 +363,7 @@ async function actorFromDevice(c: any) {
   if (!appAccess.eligible) return null;
 
   const companySlug = text(user.main_company_slug || device.mainCompanySlug);
-  c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, lastSeenAt: nowIso() }));
+  c.executionCtx?.waitUntil?.(saveDevice(c, { ...device, mainCompanySlug: companySlug, lastSeenAt: nowIso(), trustedAt: device.trustedAt || device.createdAt || nowIso(), identityVersion: text(device.identityVersion || "TRUSTED_DEVICE_V1") }));
 
   return {
     device,
@@ -1160,6 +1160,8 @@ export function registerAuthPushRoutes(app: any) {
       userAgent: userAgent(c),
       securityApp: true,
       securityAppVersion: SECURITY_APP_VERSION,
+      trustedAt: actor.device.trustedAt || actor.device.createdAt || timestamp,
+      identityVersion: text(actor.device.identityVersion || "TRUSTED_DEVICE_V1"),
       selfLoginEnabled: true,
       managerApprovalEnabled: isSuper(actor.role) || isCompanyAdmin(actor.role),
       isActive: true,
