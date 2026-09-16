@@ -190,27 +190,32 @@ function attachDrag(panel, key) {
   };
 }
 
-function isBottomLeftResizePoint(panel, event) {
-  const rect = panel.getBoundingClientRect();
-  return event.clientX - rect.left <= 20 && rect.bottom - event.clientY <= 20;
-}
-
 function attachResize(panel, key) {
+  const handle = document.createElement("div");
+  handle.className = "ky-modal-resize-handle";
+  handle.dataset.kyModalResizeHandle = "true";
+  handle.setAttribute("aria-label", "Pencere boyutunu sol alt köşeden değiştir");
+  handle.title = "Sol alt köşeden sürükleyerek en / boy değiştir";
+
+  const computedPosition = window.getComputedStyle(panel).position;
+  const originalInlinePosition = panel.style.position;
+  if (computedPosition === "static") panel.style.position = "relative";
+  panel.appendChild(handle);
+
   let pointerId = null;
   let startX = 0;
   let startY = 0;
   let start = null;
 
   const onPointerDown = (event) => {
-    if (event.button !== 0 || !isBottomLeftResizePoint(panel, event)) return;
+    if (event.button !== 0) return;
     const rect = panel.getBoundingClientRect();
     pointerId = event.pointerId;
     startX = event.clientX;
     startY = event.clientY;
     start = geometryFromRect(rect);
     panel.classList.add("ky-modal-resizing");
-    panel.style.cursor = "nesw-resize";
-    try { panel.setPointerCapture(pointerId); } catch { /* desteklemeyen tarayıcı */ }
+    try { handle.setPointerCapture(pointerId); } catch { /* desteklemeyen tarayıcı */ }
     event.preventDefault();
     event.stopPropagation();
   };
@@ -237,33 +242,25 @@ function attachResize(panel, key) {
     pointerId = null;
     start = null;
     panel.classList.remove("ky-modal-resizing");
-    panel.style.removeProperty("cursor");
-    try { panel.releasePointerCapture(activeId); } catch { /* capture yoksa sorun değil */ }
+    try { handle.releasePointerCapture(activeId); } catch { /* capture yoksa sorun değil */ }
     writeGeometry(key, geometryFromRect(panel.getBoundingClientRect()));
   };
 
-  const onHoverMove = (event) => {
-    if (pointerId !== null) return;
-    panel.style.cursor = isBottomLeftResizePoint(panel, event) ? "nesw-resize" : "";
-  };
-  const onLeave = () => { if (pointerId === null) panel.style.removeProperty("cursor"); };
-
-  panel.addEventListener("pointerdown", onPointerDown, true);
-  panel.addEventListener("pointermove", onPointerMove, true);
-  panel.addEventListener("pointerup", stopResize, true);
-  panel.addEventListener("pointercancel", stopResize, true);
-  panel.addEventListener("pointermove", onHoverMove);
-  panel.addEventListener("pointerleave", onLeave);
+  handle.addEventListener("pointerdown", onPointerDown);
+  handle.addEventListener("pointermove", onPointerMove);
+  handle.addEventListener("pointerup", stopResize);
+  handle.addEventListener("pointercancel", stopResize);
 
   return () => {
-    panel.removeEventListener("pointerdown", onPointerDown, true);
-    panel.removeEventListener("pointermove", onPointerMove, true);
-    panel.removeEventListener("pointerup", stopResize, true);
-    panel.removeEventListener("pointercancel", stopResize, true);
-    panel.removeEventListener("pointermove", onHoverMove);
-    panel.removeEventListener("pointerleave", onLeave);
+    handle.removeEventListener("pointerdown", onPointerDown);
+    handle.removeEventListener("pointermove", onPointerMove);
+    handle.removeEventListener("pointerup", stopResize);
+    handle.removeEventListener("pointercancel", stopResize);
+    handle.remove();
     panel.classList.remove("ky-modal-resizing");
-    panel.style.removeProperty("cursor");
+    if (computedPosition === "static" && !panel.classList.contains("ky-modal-positioned")) {
+      panel.style.position = originalInlinePosition;
+    }
   };
 }
 
