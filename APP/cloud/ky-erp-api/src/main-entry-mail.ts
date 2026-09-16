@@ -20,7 +20,7 @@ const PREVIEW=/^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 const allowedOrigin=(origin:string)=>LIVE_ORIGINS.has(origin)||LOCAL.test(origin)||PREVIEW.test(origin)?origin:undefined;
 
 const overlay=new Hono<Env>();
-overlay.use("/api/*",cors({origin:allowedOrigin,allowMethods:["GET","POST","PATCH","PUT","DELETE","HEAD","OPTIONS"],allowHeaders:["Accept","Authorization","Content-Type","X-KYERP-Tenant-Slug","X-KYERP-Device","X-KYERP-Push-Device","X-KYERP-Push-Token","X-KYERP-Security-Timestamp","X-KYERP-Security-Signature"],exposeHeaders:["Content-Length","Content-Type","ETag","X-Request-Id"],maxAge:86400,credentials:true}));
+overlay.use("/api/*",cors({origin:allowedOrigin,allowMethods:["GET","POST","PATCH","PUT","DELETE","HEAD","OPTIONS"],allowHeaders:["Accept","Authorization","Content-Type","X-KYERP-Tenant-Slug","X-KYERP-Device","X-KYERP-Push-Device","X-KYERP-Push-Token","X-KYERP-Security-Timestamp","X-KYERP-Security-Signature","X-KYERP-Security-App-Version"],exposeHeaders:["Content-Length","Content-Type","ETag","X-Request-Id"],maxAge:86400,credentials:true}));
 registerMailProviderOverlayRoutes(overlay);
 registerGoogleMailRoutes(overlay);
 
@@ -112,7 +112,7 @@ async function dispatch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext)
 // Preflight must complete without a database query; authenticate before looking
 // up a mailbox provider so anonymous requests cannot inspect schema or accounts.
 const gateway = new Hono<Env>();
-gateway.use("/api/*", cors({origin:allowedOrigin,allowMethods:["GET","POST","PATCH","PUT","DELETE","HEAD","OPTIONS"],allowHeaders:["Accept","Authorization","Content-Type","X-KYERP-Tenant-Slug","X-KYERP-Device","X-KYERP-Push-Device","X-KYERP-Push-Token","X-KYERP-Security-Timestamp","X-KYERP-Security-Signature"],exposeHeaders:["Content-Length","Content-Type","ETag","X-Request-Id"],maxAge:86400,credentials:true}));
+gateway.use("/api/*", cors({origin:allowedOrigin,allowMethods:["GET","POST","PATCH","PUT","DELETE","HEAD","OPTIONS"],allowHeaders:["Accept","Authorization","Content-Type","X-KYERP-Tenant-Slug","X-KYERP-Device","X-KYERP-Push-Device","X-KYERP-Push-Token","X-KYERP-Security-Timestamp","X-KYERP-Security-Signature","X-KYERP-Security-App-Version"],exposeHeaders:["Content-Length","Content-Type","ETag","X-Request-Id"],maxAge:86400,credentials:true}));
 gateway.use("/api/*", async (c, next) => {
   const guarded = canonicalAccountingRouteGuard(new URL(c.req.url).pathname, c.req.method);
   if (!guarded) return next();

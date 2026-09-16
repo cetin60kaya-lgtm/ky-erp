@@ -46,6 +46,8 @@ test("mobile active session status uses D1 UTC time and expires stale pending ca
 test("security app version request header is allowed by worker CORS",async()=>{
   const main=await readFile(new URL("./main.ts",import.meta.url),"utf8");
   const entry=await readFile(new URL("./main-entry-security.ts",import.meta.url),"utf8");
+  const mailEntry=await readFile(new URL("./main-entry-mail.ts",import.meta.url),"utf8");
   assert.match(main,/X-KYERP-Security-App-Version/);
   assert.match(entry,/X-KYERP-Security-App-Version/);
+  assert.match(mailEntry,/X-KYERP-Security-App-Version/);
 });
