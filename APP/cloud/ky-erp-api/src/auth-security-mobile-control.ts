@@ -65,7 +65,7 @@ function normalizeCompanyFilter(actor: AnyRow, requested: unknown, companies: An
   return text(actor.companySlug);
 }
 async function sessionRows(c: any, actor: AnyRow, companySlug: string, limit: number) {
-  const select = `SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id`;
+  const select = `SELECT s.*,u.username,u.full_name,u.role,u.platform_role,us.role_override,CASE WHEN s.revoked_at IS NULL AND julianday(s.expires_at)>julianday('now') THEN 1 ELSE 0 END AS active_sql FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id`;
   if (isSuper(actor.role)) {
     return companySlug
       ? c.env.DB.prepare(`${select} WHERE s.main_company_slug=? ORDER BY s.created_at DESC LIMIT ?`).bind(companySlug, limit).all()
@@ -85,8 +85,8 @@ async function buildSessions(c: any, actor: AnyRow, companySlug: string, limit: 
   const trustedDevices = new Map<string, AnyRow>((await storeList(c, TRUSTED_DEVICE_SCOPE)).map((row: AnyRow) => [trustedDeviceKey(row.userId, row.deviceId), row] as [string, AnyRow]));
   return (result.results || []).map((row: AnyRow) => {
     const role = effectiveRole(row); const trust = trusts.get(text(row.id)); const deviceId = browserDeviceId(row.device_label); const persistent = deviceId ? trustedDevices.get(trustedDeviceKey(row.user_id, deviceId)) : undefined;
-    const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || "PENDING");
-    const active = !text(row.revoked_at) && Date.parse(text(row.expires_at)) > Date.now(); const own = text(row.user_id) === text(actor.userId);
+    const explicit = upper(trust?.status || ""); const persistentTrusted = activeTrustedDevice(persistent) && !["REJECTED","SUSPICIOUS"].includes(explicit); const trustStatus = persistentTrusted ? "TRUSTED" : (explicit || (Number(row.active_sql || 0) === 1 ? "PENDING" : "EXPIRED"));
+    const active = Number(row.active_sql || 0) === 1; const own = text(row.user_id) === text(actor.userId);
     return { id:text(row.id),userId:text(row.user_id),username:text(row.username),fullName:text(row.full_name||row.username),role,mainCompanySlug:isSuper(role)?"":text(row.main_company_slug),deviceId,deviceLabel:text(row.device_label||"Tarayıcı"),userAgent:text(row.user_agent),ipAddress:text(row.ip_address),createdAt:row.created_at,approvedAt:row.approved_at,lastSeenAt:row.last_seen_at,expiresAt:row.expires_at,revokedAt:row.revoked_at||null,active,trustStatus,own,canClose:active&&canCloseSession(actor,row,role)};
   });
 }

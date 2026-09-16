@@ -34,3 +34,10 @@ test("phone reports the running KY Security version into its durable device reco
   assert.match(push,/securityAppVersion: acceptedAppVersion/);
   assert.match(push,/SECURITY_APP_VERSION = "security-v2\.4"/);
 });
+
+test("mobile active session status uses D1 UTC time and expires stale pending cards",async()=>{
+  const mobile=await readFile(mobileUrl,"utf8");
+  assert.match(mobile,/julianday\(s\.expires_at\)>julianday\('now'\)/);
+  assert.match(mobile,/active_sql/);
+  assert.match(mobile,/"EXPIRED"/);
+});
