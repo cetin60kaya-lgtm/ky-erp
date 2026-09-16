@@ -207,6 +207,33 @@ function attachResize(panel, key) {
   let startY = 0;
   let start = null;
 
+  const unbindTracking = () => {
+    window.removeEventListener("pointermove", onPointerMove, true);
+    window.removeEventListener("pointerup", stopResize, true);
+    window.removeEventListener("pointercancel", stopResize, true);
+  };
+
+  const stopResize = (event) => {
+    if (pointerId === null || (event && event.pointerId !== pointerId)) return;
+    const activeId = pointerId;
+    pointerId = null;
+    start = null;
+    unbindTracking();
+    panel.classList.remove("ky-modal-resizing");
+    try { handle.releasePointerCapture(activeId); } catch { /* capture yoksa sorun değil */ }
+    writeGeometry(key, geometryFromRect(panel.getBoundingClientRect()));
+  };
+
+  const onPointerMove = (event) => {
+    if (pointerId === null || event.pointerId !== pointerId || !start) return;
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    const width = Math.max(MIN_WIDTH, start.width + dx);
+    const height = Math.max(MIN_HEIGHT, start.height + dy);
+    applyGeometry(panel, { left: start.left, top: start.top, width, height });
+    event.preventDefault();
+  };
+
   const onPointerDown = (event) => {
     if (event.button !== 0) return;
     const rect = panel.getBoundingClientRect();
@@ -215,44 +242,19 @@ function attachResize(panel, key) {
     startY = event.clientY;
     start = geometryFromRect(rect);
     panel.classList.add("ky-modal-resizing");
-    try { handle.setPointerCapture(pointerId); } catch { /* desteklemeyen tarayıcı */ }
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", stopResize, true);
+    window.addEventListener("pointercancel", stopResize, true);
+    try { handle.setPointerCapture(pointerId); } catch { /* document takibi yedek */ }
     event.preventDefault();
     event.stopPropagation();
   };
 
-  const onPointerMove = (event) => {
-    if (pointerId === null || event.pointerId !== pointerId || !start) return;
-    const dx = event.clientX - startX;
-    const dy = event.clientY - startY;
-    let width = start.width + dx;
-    let height = start.height + dy;
-    let left = start.left;
-    if (width < MIN_WIDTH) width = MIN_WIDTH;
-    if (height < MIN_HEIGHT) height = MIN_HEIGHT;
-    applyGeometry(panel, { left, top: start.top, width, height });
-    event.preventDefault();
-  };
-
-  const stopResize = (event) => {
-    if (pointerId === null || (event && event.pointerId !== pointerId)) return;
-    const activeId = pointerId;
-    pointerId = null;
-    start = null;
-    panel.classList.remove("ky-modal-resizing");
-    try { handle.releasePointerCapture(activeId); } catch { /* capture yoksa sorun değil */ }
-    writeGeometry(key, geometryFromRect(panel.getBoundingClientRect()));
-  };
-
   handle.addEventListener("pointerdown", onPointerDown);
-  handle.addEventListener("pointermove", onPointerMove);
-  handle.addEventListener("pointerup", stopResize);
-  handle.addEventListener("pointercancel", stopResize);
 
   return () => {
     handle.removeEventListener("pointerdown", onPointerDown);
-    handle.removeEventListener("pointermove", onPointerMove);
-    handle.removeEventListener("pointerup", stopResize);
-    handle.removeEventListener("pointercancel", stopResize);
+    unbindTracking();
     handle.remove();
     panel.classList.remove("ky-modal-resizing");
     if (computedPosition === "static" && !panel.classList.contains("ky-modal-positioned")) {
@@ -260,7 +262,6 @@ function attachResize(panel, key) {
     }
   };
 }
-
 function makePersistent(panel) {
   if (!(panel instanceof HTMLElement) || panel.dataset.kyModalResizable === "true") return;
 
