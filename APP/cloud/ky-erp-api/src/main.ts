@@ -239,7 +239,7 @@ shell.use(
   cors({
     origin: allowedOrigin,
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"],
-    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device", "X-KYERP-Push-Device", "X-KYERP-Push-Token", "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature", "X-KYERP-Build-Agent-Token", "X-KYERP-Build-Agent-Id", "X-KYERP-Build-Agent", "X-KYERP-Agent-Id", "X-KYERP-Agent-Token"],
+    allowHeaders: ["Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device", "X-KYERP-Push-Device", "X-KYERP-Push-Token", "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature", "X-KYERP-Security-App-Version", "X-KYERP-Build-Agent-Token", "X-KYERP-Build-Agent-Id", "X-KYERP-Build-Agent", "X-KYERP-Agent-Id", "X-KYERP-Agent-Token"],
     exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id", "X-KYERP-Auth-Version"],
     maxAge: 86400,
     credentials: true,

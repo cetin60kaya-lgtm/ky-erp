@@ -44,7 +44,7 @@ security.use("/api/security-center/*", cors({
   allowHeaders: [
     "Accept", "Authorization", "Content-Type", "X-KYERP-Tenant-Slug", "X-KYERP-Device",
     "X-KYERP-Owner-App", "X-KYERP-Push-Device", "X-KYERP-Push-Token",
-    "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature",
+    "X-KYERP-Security-Timestamp", "X-KYERP-Security-Signature", "X-KYERP-Security-App-Version",
   ],
   exposeHeaders: ["Content-Length", "Content-Type", "ETag", "X-Request-Id"],
   maxAge: 86400,
