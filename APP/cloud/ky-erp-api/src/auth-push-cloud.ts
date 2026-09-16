@@ -711,6 +711,18 @@ async function pendingItems(c: any, actor: AnyRow) {
   return items;
 }
 
+async function fallbackSelfPendingItems(c: any, actor: AnyRow) {
+  const rows=(await storeList(c, PHONE_SCOPE)).filter((row: AnyRow)=>text(row.userId)===actor.userId&&upper(row.status)==="PENDING"&&!text(row.consumedAt)&&Date.parse(text(row.expiresAt))>Date.now()).sort((a: AnyRow,b: AnyRow)=>String(b.requestedAt||b.createdAt||"").localeCompare(String(a.requestedAt||a.createdAt||"")));
+  const row=rows[0];
+  return row?[{kind:"SELF_LOGIN",id:row.id,dedupeKey:`self:${actor.userId}`,title:"KY ERP · Giriş Onayı",body:`${friendlyDeviceLabel(row.deviceLabel,row.userAgent)} için giriş onayı bekleniyor.`,matchNumber:text(row.matchNumber),requestedAt:row.requestedAt,expiresAt:row.expiresAt,mainCompanySlug:actor.companySlug}]:[];
+}
+async function safePendingItems(c: any, actor: AnyRow) {
+  try { return await pendingItems(c, actor); } catch (error) { console.error(JSON.stringify({level:"error",area:"KY_SECURITY_PENDING",message:error instanceof Error?error.message:String(error)})); return fallbackSelfPendingItems(c, actor); }
+}
+async function safeSecurityAccountProfile(c: any, actor: AnyRow) {
+  try { return await securityAccountProfile(c, actor); } catch (error) { console.error(JSON.stringify({level:"error",area:"KY_SECURITY_ACCOUNT",message:error instanceof Error?error.message:String(error)})); const role=upper(actor.role); return {userId:text(actor.userId),fullName:text(actor.fullName||actor.username||"Kullanıcı"),username:text(actor.username),email:text(actor.email),role,companySlug:text(actor.companySlug),companyName:text(actor.companySlug),scopeType:isSuper(role)?"SYSTEM":(isCompanyAdmin(role)?"COMPANY":"USER"),moduleKeys:isSuper(role)?["ALL"]:[],securityCapabilities:(isSuper(role)||isCompanyAdmin(role))?[...SECURITY_CAPABILITIES]:[]}; }
+}
+
 export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
   const rows = (await storeList(c, PHONE_SCOPE))
     .filter((row: AnyRow) => text(row.userId) === text(userId) && !text(row.consumedAt) && ["PENDING", "APPROVED"].includes(upper(row.status)));
@@ -1216,7 +1228,7 @@ export function registerAuthPushRoutes(app: any) {
   app.get("/api/auth/push/device/pending", async (c: any) => {
     const actor = await actorFromDevice(c);
     if (!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED", "Telefon onayı cihazı doğrulanamadı."), 401);
-    return c.json({ ok: true, data: { items: await pendingItems(c, actor), checkedAt: nowIso() } });
+    return c.json({ ok: true, data: { items: await safePendingItems(c, actor), checkedAt: nowIso() } });
   });
 
   app.post("/api/auth/push/device/decision", async (c: any) => {
