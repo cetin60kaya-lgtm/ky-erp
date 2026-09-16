@@ -6,7 +6,7 @@ const runtime = readFileSync(new URL("./installPersistentModalSizing.js", import
 const css = readFileSync(new URL("../App.css", import.meta.url), "utf8");
 const main = readFileSync(new URL("../main.jsx", import.meta.url), "utf8");
 
-test("tum uygulama acilirlari basliktan tasinir ve gorunur sol-alt tutamactan boyutlanir", () => {
+test("tum uygulama acilirlari basliktan tasinir ve gorunur sag-alt tutamactan boyutlanir", () => {
   assert.match(main, /installPersistentModalSizing/);
   assert.match(runtime, /\[role='dialog'\]/);
   assert.match(runtime, /\[aria-modal='true'\]/);
@@ -14,9 +14,9 @@ test("tum uygulama acilirlari basliktan tasinir ve gorunur sol-alt tutamactan bo
   assert.match(runtime, /function attachResize/);
   assert.match(runtime, /document\.createElement\("div"\)/);
   assert.match(runtime, /ky-modal-resize-handle/);
-  assert.match(runtime, /start\.width - dx/);
+  assert.match(runtime, /start\.width \+ dx/);
   assert.match(runtime, /start\.height \+ dy/);
-  assert.match(css, /\.ky-modal-resize-handle[\s\S]*cursor:\s*nesw-resize/);
+  assert.match(css, /\.ky-modal-resize-handle[\s\S]*cursor:\s*nwse-resize/);
   assert.match(runtime, /writeGeometry\(key/);
 });
 

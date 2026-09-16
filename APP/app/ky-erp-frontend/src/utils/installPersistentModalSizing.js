@@ -194,8 +194,8 @@ function attachResize(panel, key) {
   const handle = document.createElement("div");
   handle.className = "ky-modal-resize-handle";
   handle.dataset.kyModalResizeHandle = "true";
-  handle.setAttribute("aria-label", "Pencere boyutunu sol alt köşeden değiştir");
-  handle.title = "Sol alt köşeden sürükleyerek en / boy değiştir";
+  handle.setAttribute("aria-label", "Pencere boyutunu sağ alt köşeden değiştir");
+  handle.title = "Sağ alt köşeden sürükleyerek en / boy değiştir";
 
   const computedPosition = window.getComputedStyle(panel).position;
   const originalInlinePosition = panel.style.position;
@@ -224,13 +224,10 @@ function attachResize(panel, key) {
     if (pointerId === null || event.pointerId !== pointerId || !start) return;
     const dx = event.clientX - startX;
     const dy = event.clientY - startY;
-    let width = start.width - dx;
+    let width = start.width + dx;
     let height = start.height + dy;
-    let left = start.left + dx;
-    if (width < MIN_WIDTH) {
-      left -= MIN_WIDTH - width;
-      width = MIN_WIDTH;
-    }
+    let left = start.left;
+    if (width < MIN_WIDTH) width = MIN_WIDTH;
     if (height < MIN_HEIGHT) height = MIN_HEIGHT;
     applyGeometry(panel, { left, top: start.top, width, height });
     event.preventDefault();
