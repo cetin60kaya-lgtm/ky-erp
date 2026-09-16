@@ -708,28 +708,6 @@ async function pendingItems(c: any, actor: AnyRow) {
     });
   }
 
-  const actionRows = (await storeList(c, ACTION_SCOPE))
-    .filter((row: AnyRow) => text(row.userId) === actor.userId && !text(row.consumedAt))
-    .sort((a: AnyRow, b: AnyRow) => String(a.requestedAt || a.createdAt || "").localeCompare(String(b.requestedAt || b.createdAt || "")));
-  for (let row of actionRows) {
-    if (upper(row.status) === "PENDING" && Date.parse(text(row.expiresAt)) <= Date.now()) {
-      const update = await atomicSecurityStatusUpdate(c, ACTION_SCOPE, row, "PENDING", { status: "EXPIRED", consumedAt: timestamp });
-      row = update.row || row;
-    }
-    if (upper(row.status) !== "PENDING" || text(row.consumedAt)) continue;
-    items.push({
-      kind: SECURITY_APPROVAL_KINDS.CRITICAL_ACTION,
-      id: row.id,
-      dedupeKey: `action:${text(row.actionType)}:${text(row.id)}`,
-      actionType: text(row.actionType),
-      title: text(row.title) || "KY ERP · Kritik Güvenlik İşlemi",
-      body: text(row.title) ? `${text(row.title)} için telefon onayı bekleniyor.` : "Kritik güvenlik işlemi için telefon onayı bekleniyor.",
-      requestedAt: row.requestedAt,
-      expiresAt: row.expiresAt,
-      mainCompanySlug: text(row.mainCompanySlug || actor.companySlug),
-    });
-  }
-
   return items;
 }
 
@@ -1132,6 +1110,7 @@ export function registerAuthPushRoutes(app: any) {
       checkedAt: nowIso(),
       serverVersion: SECURITY_APP_VERSION,
       pendingCount: items.length,
+      items,
       device: {
         id: actor.device.id,
         deviceLabel: text(actor.device.deviceLabel),
