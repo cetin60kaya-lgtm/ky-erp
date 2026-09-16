@@ -14350,3 +14350,23 @@ body.ik-personel-clean-header .topbar>.primary-btn {
 .ky-persistent-modal {
   resize: none !important;
 }
+
+/* Modal v4.2: görünür ve gerçek sağ-alt boyutlandırma tutamacı */
+.ky-modal-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  z-index: 2147483000;
+  cursor: nwse-resize !important;
+  touch-action: none;
+  user-select: none;
+  pointer-events: auto;
+  border-bottom-right-radius: 8px;
+  background:
+    linear-gradient(135deg, transparent 0 48%, rgba(71,84,103,.82) 49% 54%, transparent 55% 65%, rgba(71,84,103,.60) 66% 71%, transparent 72%);
+}
+.ky-modal-resize-handle:hover {
+  background-color: rgba(37,99,235,.07);
+}
