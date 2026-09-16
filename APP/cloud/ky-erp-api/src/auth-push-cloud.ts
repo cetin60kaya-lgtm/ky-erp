@@ -1,19 +1,23 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
 import { getAuthenticatedUser } from "./auth-cloud";
+import {
+  AUTH_SECURITY_SCOPES, SECURITY_APPROVAL_KINDS,
+  atomicSecurityStatusUpdate, securityStoreGet as storeGet, securityStoreList as storeList, securityStorePut as storePut,
+  saveSecurityDevice as saveDevice, securityDevicesForUser, securityPushPublicKey, sendSecurityWakeMany as sendWakeMany,
+  pushEndpointOf, trustedDeviceIsRetired,
+} from "./auth-security-core";
 
 type AnyRow = Record<string, any>;
 
 const PHONE_APPROVAL_SECONDS = 10 * 60;
-const VAPID_SECRET_KEY = "VAPID_P256_KEYPAIR_V1";
-const VAPID_SUBJECT = "mailto:admin@kyerp.net";
-
-const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
-const SECURITY_GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
+const DEVICE_SCOPE = AUTH_SECURITY_SCOPES.DEVICE;
+const SECURITY_GRANT_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_GRANT;
 const SECURITY_CAPABILITIES = ["LOGIN_APPROVE", "SESSION_VIEW", "SESSION_APPROVE", "SESSION_CLOSE", "AUDIT_VIEW"];
-const PHONE_SCOPE = "AUTH_PHONE_LOGIN";
-const COMPANY_SETTING_SCOPE = "AUTH_COMPANY_LOGIN_APPROVAL";
-const SECURITY_ENROLL_SCOPE = "AUTH_PUSH_SECURITY_ENROLLMENT";
+const PHONE_SCOPE = AUTH_SECURITY_SCOPES.PHONE_LOGIN;
+const COMPANY_SETTING_SCOPE = AUTH_SECURITY_SCOPES.COMPANY_LOGIN;
+const SECURITY_ENROLL_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ENROLLMENT;
+const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
 const SECURITY_APP_VERSION = "security-v2.2";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
@@ -140,105 +144,8 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
-async function tableExists(c: any, tableName: string) {
-  const row = await c.env.DB.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-  ).bind(tableName).first<AnyRow>();
-  return Boolean(row?.name);
-}
-
-async function storeGet(c: any, scope: string, fileName: string) {
-  if (!(await tableExists(c, "json_store"))) return null;
-  const row = await c.env.DB.prepare(
-    `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
-       FROM json_store
-      WHERE scope=? AND file_name=?
-      ORDER BY updated_at DESC,id DESC LIMIT 1`,
-  ).bind(scope, fileName).first<AnyRow>();
-  if (!row) return null;
-  return {
-    ...objectOf(row.data),
-    storeId: text(row.id),
-    storeScope: text(row.scope),
-    storeCompanySlug: text(row.main_company_slug),
-    fileName: text(row.file_name),
-    createdAt: text(objectOf(row.data).createdAt || row.created_at),
-    updatedAt: text(objectOf(row.data).updatedAt || row.updated_at),
-  };
-}
-
-async function storeList(c: any, scope: string, companySlug = "") {
-  if (!(await tableExists(c, "json_store"))) return [];
-  const result = companySlug
-    ? await c.env.DB.prepare(
-        `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
-           FROM json_store
-          WHERE scope=? AND main_company_slug=?
-          ORDER BY updated_at DESC,id DESC`,
-      ).bind(scope, companySlug).all<AnyRow>()
-    : await c.env.DB.prepare(
-        `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at
-           FROM json_store
-          WHERE scope=?
-          ORDER BY updated_at DESC,id DESC`,
-      ).bind(scope).all<AnyRow>();
-
-  return (result.results || []).map((row: AnyRow) => ({
-    ...objectOf(row.data),
-    storeId: text(row.id),
-    storeScope: text(row.scope),
-    storeCompanySlug: text(row.main_company_slug),
-    fileName: text(row.file_name),
-    createdAt: text(objectOf(row.data).createdAt || row.created_at),
-    updatedAt: text(objectOf(row.data).updatedAt || row.updated_at),
-  }));
-}
-
-async function storePut(c: any, scope: string, fileName: string, companySlug: string, data: AnyRow) {
-  if (!(await tableExists(c, "json_store"))) throw new Error("Telefon onayı depolama katmanı hazır değil.");
-  const current = await storeGet(c, scope, fileName);
-  const timestamp = nowIso();
-  const payload = {
-    ...data,
-    id: text(data.id || fileName),
-    mainCompanySlug: text(data.mainCompanySlug || companySlug),
-    createdAt: text(data.createdAt || current?.createdAt || timestamp),
-    updatedAt: timestamp,
-  };
-  if (current?.storeId) {
-    await c.env.DB.prepare(
-      `UPDATE json_store
-          SET main_company_slug=?,data=?,updated_at=?
-        WHERE id=? AND scope=?`,
-    ).bind(companySlug || null, JSON.stringify(payload), timestamp, current.storeId, scope).run();
-    return { ...payload, storeId: current.storeId, fileName };
-  }
-  const storeId = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO json_store
-      (id,scope,main_company_slug,file_name,data,created_at,updated_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).bind(storeId, scope, companySlug || null, fileName, JSON.stringify(payload), timestamp, timestamp).run();
-  return { ...payload, storeId, fileName };
-}
-
 async function atomicPhoneUpdate(c: any, current: AnyRow, expectedStatus: string, patch: AnyRow) {
-  if (!current?.storeId) return { changed: false, row: current || null };
-  const timestamp = nowIso();
-  const next = { ...current, ...patch, updatedAt: timestamp };
-  delete next.storeId;
-  delete next.storeScope;
-  delete next.storeCompanySlug;
-  delete next.fileName;
-  const result = await c.env.DB.prepare(
-    `UPDATE json_store
-        SET data=?,updated_at=?
-      WHERE id=? AND scope=?
-        AND UPPER(COALESCE(json_extract(data,'$.status'),''))=?
-        AND COALESCE(json_extract(data,'$.consumedAt'),'')=''`,
-  ).bind(JSON.stringify(next), timestamp, current.storeId, PHONE_SCOPE, upper(expectedStatus)).run();
-  const changed = Number(result?.meta?.changes || 0) > 0;
-  return { changed, row: changed ? { ...next, storeId: current.storeId, fileName: current.id } : await storeGet(c, PHONE_SCOPE, text(current.id)) };
+  return atomicSecurityStatusUpdate(c, PHONE_SCOPE, current, expectedStatus, patch);
 }
 
 async function audit(c: any, action: string, actorId = "", targetId = "", companySlug = "", detail: AnyRow = {}) {
@@ -254,147 +161,8 @@ async function audit(c: any, action: string, actorId = "", targetId = "", compan
   } catch {}
 }
 
-async function ensureVapidKeyPair(c: any) {
-  let row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key=? LIMIT 1")
-    .bind(VAPID_SECRET_KEY).first<AnyRow>();
-  if (row?.secret_value) {
-    try {
-      const parsed = JSON.parse(text(row.secret_value));
-      if (parsed?.privateJwk && parsed?.publicKey) return parsed;
-    } catch {}
-  }
-
-  const generated = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign", "verify"],
-  );
-  const privateJwk = await crypto.subtle.exportKey("jwk", generated.privateKey);
-  const publicRaw = new Uint8Array(await crypto.subtle.exportKey("raw", generated.publicKey));
-  const pair = { privateJwk, publicKey: base64Url(publicRaw), createdAt: nowIso() };
-  const timestamp = nowIso();
-  await c.env.DB.prepare(
-    `INSERT OR IGNORE INTO auth_system_secrets(secret_key,secret_value,created_at,updated_at)
-     VALUES (?,?,?,?)`,
-  ).bind(VAPID_SECRET_KEY, JSON.stringify(pair), timestamp, timestamp).run();
-
-  row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key=? LIMIT 1")
-    .bind(VAPID_SECRET_KEY).first<AnyRow>();
-  const stored = JSON.parse(text(row?.secret_value) || "{}");
-  if (!stored?.privateJwk || !stored?.publicKey) throw new Error("VAPID anahtarı hazırlanamadı.");
-  return stored;
-}
-
-async function vapidAuthorization(c: any, endpoint: string) {
-  const pair = await ensureVapidKeyPair(c);
-  const audience = new URL(endpoint).origin;
-  const header = encodeJson({ typ: "JWT", alg: "ES256" });
-  const payload = encodeJson({
-    aud: audience,
-    exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
-    sub: VAPID_SUBJECT,
-  });
-  const input = `${header}.${payload}`;
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    pair.privateJwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
-  );
-  const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    key,
-    new TextEncoder().encode(input),
-  ));
-  return {
-    value: `vapid t=${input}.${base64Url(signature)}, k=${pair.publicKey}`,
-    publicKey: pair.publicKey,
-  };
-}
-
-async function saveDevice(c: any, device: AnyRow) {
-  return storePut(c, DEVICE_SCOPE, text(device.id), text(device.mainCompanySlug), device);
-}
-
-async function sendWake(c: any, device: AnyRow) {
-  const endpoint = text(device.pushEndpoint);
-  if (!endpoint) return false;
-  try {
-    const auth = await vapidAuthorization(c, endpoint);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        TTL: "60",
-        Urgency: "high",
-        Authorization: auth.value,
-      },
-    });
-    if (!response.ok) {
-      const gone = response.status === 404 || response.status === 410;
-      const trustedSecurityDevice = device.securityApp === true;
-      await saveDevice(c, {
-        ...device,
-        // Push aboneliğinin 404/410 dönmesi güvenilir cihaz kimliğini iptal etmez.
-        // Kimlik ve bildirim kanalı ayrı tutulur; uygulama açıldığında abonelik yenilenebilir.
-        isActive: trustedSecurityDevice ? true : (gone ? false : device.isActive !== false),
-        pushReachable: false,
-        pushInvalidAt: gone ? nowIso() : text(device.pushInvalidAt),
-        lastError: `HTTP ${response.status}`,
-      });
-      return false;
-    }
-    await saveDevice(c, {
-      ...device,
-      pushReachable: true,
-      pushInvalidAt: "",
-      lastPushAt: nowIso(),
-      lastError: "",
-    });
-    return true;
-  } catch (error) {
-    await saveDevice(c, {
-      ...device,
-      lastError: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
-    });
-    return false;
-  }
-}
-
-async function sendWakeMany(c: any, devices: AnyRow[]) {
-  const unique = new Map<string, AnyRow>();
-  for (const row of devices || []) {
-    const endpoint = text(row?.pushEndpoint);
-    if (endpoint && !unique.has(endpoint)) unique.set(endpoint, row);
-  }
-  let success = 0;
-  for (const row of unique.values()) if (await sendWake(c, row)) success += 1;
-  return success;
-}
-
 async function activeDevicesForUser(c: any, userId: string, purpose: "SELF" | "MANAGER") {
-  const rows = await storeList(c, DEVICE_SCOPE);
-  const eligible = rows.filter((row: AnyRow) => {
-    if (text(row.userId) !== userId || row.securityApp !== true) return false;
-    if (purpose === "MANAGER" && row.managerApprovalEnabled === false) return false;
-    if (purpose === "SELF" && row.selfLoginEnabled === false) return false;
-
-    const explicitlyRetired =
-      row.isActive === false &&
-      Boolean(text(row.retiredAt) || text(row.retiredReason));
-    if (explicitlyRetired) return false;
-
-    // Güvenilir cihaz kimliği ile Web Push aboneliği farklı şeylerdir.
-    // Güvenlik uygulaması yeniden kurulduğunda/yenilendiğinde isActive=true otoritedir;
-    // eski retiredAt/retiredReason kalıntısı telefon girişini Authenticator'a düşürmez.
-    // Eski bir sürüm push 404/410 yüzünden isActive=false bırakmış ama gerçekten
-    // emekli edilmemiş cihazı da SELF girişinde kaybetmeyiz.
-    if (purpose === "SELF") return row.isActive !== false || !Boolean(text(row.retiredAt) || text(row.retiredReason));
-    return row.isActive !== false;
-  });
-
-  // Telefon onayı yalnız ayrı KY ERP Güvenlik uygulamasına aittir.
-  return eligible;
+  return securityDevicesForUser(c, userId, purpose);
 }
 
 async function supersedeOlderSelfChallenges(c: any, userId: string, replacementId: string) {
@@ -940,6 +708,28 @@ async function pendingItems(c: any, actor: AnyRow) {
     });
   }
 
+  const actionRows = (await storeList(c, ACTION_SCOPE))
+    .filter((row: AnyRow) => text(row.userId) === actor.userId && !text(row.consumedAt))
+    .sort((a: AnyRow, b: AnyRow) => String(a.requestedAt || a.createdAt || "").localeCompare(String(b.requestedAt || b.createdAt || "")));
+  for (let row of actionRows) {
+    if (upper(row.status) === "PENDING" && Date.parse(text(row.expiresAt)) <= Date.now()) {
+      const update = await atomicSecurityStatusUpdate(c, ACTION_SCOPE, row, "PENDING", { status: "EXPIRED", consumedAt: timestamp });
+      row = update.row || row;
+    }
+    if (upper(row.status) !== "PENDING" || text(row.consumedAt)) continue;
+    items.push({
+      kind: SECURITY_APPROVAL_KINDS.CRITICAL_ACTION,
+      id: row.id,
+      dedupeKey: `action:${text(row.actionType)}:${text(row.id)}`,
+      actionType: text(row.actionType),
+      title: text(row.title) || "KY ERP · Kritik Güvenlik İşlemi",
+      body: text(row.title) ? `${text(row.title)} için telefon onayı bekleniyor.` : "Kritik güvenlik işlemi için telefon onayı bekleniyor.",
+      requestedAt: row.requestedAt,
+      expiresAt: row.expiresAt,
+      mainCompanySlug: text(row.mainCompanySlug || actor.companySlug),
+    });
+  }
+
   return items;
 }
 
@@ -954,13 +744,13 @@ export async function invalidatePhoneLoginChallenges(c: any, userId: string) {
 
 export function registerAuthPushRoutes(app: any) {
   app.get("/api/auth/push/security-config", async (c: any) => {
-    const pair = await ensureVapidKeyPair(c);
+    const applicationServerKey = await securityPushPublicKey(c);
     return c.json({
       ok: true,
       data: {
         app: "KY ERP Güvenlik",
         version: SECURITY_APP_VERSION,
-        applicationServerKey: pair.publicKey,
+        applicationServerKey,
         approvalUrl: "https://app.kyerp.net/security/",
       },
     });
@@ -972,12 +762,29 @@ export function registerAuthPushRoutes(app: any) {
     const appAccess = await securityAppAccess(c, current);
     if (!appAccess.eligible) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesaba KY Güvenlik uygulaması yetkisi verilmemiş."), 403);
 
-    const pair = await ensureVapidKeyPair(c);
+    const body = await bodyOf(c);
+    const requestedTargetDeviceId = text(body.targetDeviceId);
+    const existingSecurityDevices = await securityDevicesForUser(c, text(current.id), "CONTROL");
+    let targetDevice = requestedTargetDeviceId
+      ? existingSecurityDevices.find((row: AnyRow) => text(row.id) === requestedTargetDeviceId) || null
+      : null;
+    if (requestedTargetDeviceId && !targetDevice) {
+      return c.json(jsonError("SECURITY_DEVICE_RELINK_INVALID", "Yenilenecek güvenilir cihaz bu hesaba ait değil veya emekliye ayrılmış."), 409);
+    }
+    // Eski istemciler hedef cihaz göndermese bile hesapta tek güvenilir telefon varsa
+    // yeni cihaz üretmek yerine aynı kalıcı kimliğe bağlanır.
+    if (!targetDevice && !requestedTargetDeviceId && existingSecurityDevices.length === 1) {
+      targetDevice = existingSecurityDevices[0];
+    }
+
+    const applicationServerKey = await securityPushPublicKey(c);
     const enrollmentId = crypto.randomUUID();
     const enrollmentToken = randomToken(32);
     const enrollmentCode = randomEnrollmentCode(8);
     const companySlug = text(current.mainCompanySlug || "mecit-hakan");
     const expiresAt = addSeconds(SECURITY_ENROLL_SECONDS);
+    const reservedDeviceId = text(targetDevice?.id) || crypto.randomUUID();
+    const enrollmentMode = targetDevice ? "RELINK" : "NEW";
 
     await storePut(c, SECURITY_ENROLL_SCOPE, enrollmentId, companySlug, {
       id: enrollmentId,
@@ -988,11 +795,16 @@ export function registerAuthPushRoutes(app: any) {
       status: "PENDING",
       expiresAt,
       consumedAt: "",
+      enrollmentMode,
+      targetDeviceId: text(targetDevice?.id),
+      reservedDeviceId,
       createdFromIp: clientIp(c),
       createdFromUserAgent: userAgent(c),
     });
 
-    await audit(c, "SECURITY_APP_ENROLLMENT_STARTED", current.id, current.id, companySlug, { enrollmentId });
+    await audit(c, "SECURITY_APP_ENROLLMENT_STARTED", current.id, current.id, companySlug, {
+      enrollmentId, enrollmentMode, targetDeviceId: text(targetDevice?.id), reservedDeviceId,
+    });
     return c.json({
       ok: true,
       data: {
@@ -1000,7 +812,10 @@ export function registerAuthPushRoutes(app: any) {
         enrollmentToken,
         enrollmentCode,
         expiresAt,
-        applicationServerKey: pair.publicKey,
+        applicationServerKey,
+        enrollmentMode,
+        targetDeviceId: text(targetDevice?.id),
+        deviceIdHint: reservedDeviceId,
         appUrl: `https://app.kyerp.net/security/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
       },
     });
@@ -1065,21 +880,31 @@ export function registerAuthPushRoutes(app: any) {
     }
 
     const allDevices = await storeList(c, DEVICE_SCOPE);
-    const replaceDeviceId = text(body.replaceDeviceId);
-    const replaceCandidate = replaceDeviceId
-      ? allDevices.find((row: AnyRow) => text(row.id) === replaceDeviceId) || null
+    const serverBoundDeviceId = text(enrollment.targetDeviceId || enrollment.reservedDeviceId);
+    const serverBoundCandidate = serverBoundDeviceId
+      ? allDevices.find((row: AnyRow) => text(row.id) === serverBoundDeviceId) || null
       : null;
-    if (replaceCandidate && (text(replaceCandidate.userId) !== text(user.id) || replaceCandidate.securityApp !== true)) {
+    if (text(enrollment.targetDeviceId) && (!serverBoundCandidate || text(serverBoundCandidate.userId) !== text(user.id) || serverBoundCandidate.securityApp !== true || trustedDeviceIsRetired(serverBoundCandidate))) {
+      return c.json(jsonError("SECURITY_DEVICE_RELINK_INVALID", "Sunucuya bağlı güvenilir cihaz artık bu hesaba ait değil."), 409);
+    }
+
+    // replaceDeviceId yalnız eski PWA sürümleri için geriye dönük ipucudur. Yeni akışta
+    // cihaz kimliği enrollment başlatılırken sunucu tarafından sabitlenir.
+    const legacyReplaceDeviceId = text(body.replaceDeviceId);
+    const legacyReplaceCandidate = !serverBoundDeviceId && legacyReplaceDeviceId
+      ? allDevices.find((row: AnyRow) => text(row.id) === legacyReplaceDeviceId) || null
+      : null;
+    if (legacyReplaceCandidate && (text(legacyReplaceCandidate.userId) !== text(user.id) || legacyReplaceCandidate.securityApp !== true)) {
       return c.json(jsonError("SECURITY_DEVICE_RELINK_INVALID", "Erişim yenileme cihazı bu hesaba ait değil."), 409);
     }
 
-    const endpointCandidate = allDevices.find((row: AnyRow) => text(row.pushEndpoint) === endpoint) || null;
+    const endpointCandidate = allDevices.find((row: AnyRow) => pushEndpointOf(row) === endpoint) || null;
     if (endpointCandidate && text(endpointCandidate.userId) !== text(user.id)) {
       return c.json(jsonError("PUSH_ENDPOINT_ALREADY_BOUND", "Bu telefon başka bir KY ERP hesabına bağlı."), 409);
     }
 
-    const existing = replaceCandidate || endpointCandidate;
-    const deviceId = text(existing?.id) || crypto.randomUUID();
+    const existing = serverBoundCandidate || legacyReplaceCandidate || (!serverBoundDeviceId ? endpointCandidate : null);
+    const deviceId = serverBoundDeviceId || text(existing?.id) || crypto.randomUUID();
     const deviceToken = randomToken(36);
     const companySlug = text(user.main_company_slug || enrollment.mainCompanySlug || "mecit-hakan");
     const role = roleOf(user);
@@ -1091,6 +916,9 @@ export function registerAuthPushRoutes(app: any) {
       userId: text(user.id),
       mainCompanySlug: companySlug,
       pushEndpoint: endpoint,
+      pushChannel: {
+        type: "WEB_PUSH", endpoint, reachable: true, lastRefreshAt: nowIso(), invalidAt: "", lastError: "",
+      },
       deviceTokenHash: await sha256(deviceToken),
       decisionPublicKeyJwk,
       deviceLabel: label,
@@ -1106,6 +934,20 @@ export function registerAuthPushRoutes(app: any) {
       retiredAt: "",
       retiredReason: "",
     });
+
+    // Aynı push kanalını daha önce kullanan başka bir güvenlik cihazı satırı varsa
+    // güvenilir kimlik olarak çoğaltmayız; sunucunun sabitlediği cihaz kimliği kalır.
+    for (const row of allDevices) {
+      if (
+        text(row.userId) === text(user.id) &&
+        text(row.id) !== text(saved.id) &&
+        row.securityApp === true &&
+        pushEndpointOf(row) === endpoint &&
+        !trustedDeviceIsRetired(row)
+      ) {
+        await saveDevice(c, { ...row, isActive: false, retiredAt: nowIso(), retiredReason: "Aynı telefon kanalı kalıcı cihaz kimliğine birleştirildi" });
+      }
+    }
 
     // Yeni güvenlik uygulaması aktif olduğunda aynı hesaptaki eski web-onay cihazlarını kapat.
     for (const row of allDevices) {
@@ -1134,7 +976,9 @@ export function registerAuthPushRoutes(app: any) {
     await audit(c, "SECURITY_APP_DEVICE_REGISTERED", user.id, user.id, companySlug, {
       deviceId: saved.id,
       deviceLabel: label,
-      relinkedDevice: Boolean(replaceCandidate),
+      relinkedDevice: Boolean(serverBoundCandidate || legacyReplaceCandidate),
+      serverBoundDevice: Boolean(serverBoundDeviceId),
+      enrollmentMode: text(enrollment.enrollmentMode || (serverBoundCandidate ? "RELINK" : "NEW")),
       legacyDevicesRetired: true,
     });
 
@@ -1154,7 +998,7 @@ export function registerAuthPushRoutes(app: any) {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı ayarları için oturum gereklidir."), 401);
 
-    const pair = await ensureVapidKeyPair(c);
+    const applicationServerKey = await securityPushPublicKey(c);
     const appAccess = await securityAppAccess(c, current);
     const devices = (await storeList(c, DEVICE_SCOPE))
       .filter((row: AnyRow) => text(row.userId) === text(current.id))
@@ -1166,7 +1010,7 @@ export function registerAuthPushRoutes(app: any) {
         supported: true,
         securityAppEligible: appAccess.eligible,
         securityCapabilities: appAccess.capabilities,
-        applicationServerKey: pair.publicKey,
+        applicationServerKey,
         storage: "json_store",
         devices: devices.map((row: AnyRow) => ({
           id: row.id,
@@ -1477,6 +1321,27 @@ export function registerAuthPushRoutes(app: any) {
       const finalStatus = upper(current?.status || status);
       await audit(c, decision === "APPROVE" ? "LOGIN_APPROVED_PUSH" : "LOGIN_DENIED_PUSH", actor.userId, text(approval.user_id), text(approval.main_company_slug), { approvalId: id, deviceId: actor.device.id, applied });
       return c.json({ ok: true, data: { kind, id, status: finalStatus, applied } });
+    }
+
+    if (kind === SECURITY_APPROVAL_KINDS.CRITICAL_ACTION) {
+      const action = await storeGet(c, ACTION_SCOPE, id);
+      if (!action || text(action.userId) !== actor.userId) {
+        return c.json(jsonError("SECURITY_ACTION_NOT_FOUND", "Kritik güvenlik onayı bulunamadı."), 404);
+      }
+      const currentStatus = upper(action.status);
+      if (currentStatus !== "PENDING" || text(action.consumedAt) || Date.parse(text(action.expiresAt)) <= Date.now()) {
+        return c.json(jsonError("SECURITY_ACTION_NOT_PENDING", "Kritik güvenlik onayı artık beklemede değil veya süresi doldu."), 409);
+      }
+      const status = decision === "APPROVE" ? "APPROVED" : "DENIED";
+      const update = await atomicSecurityStatusUpdate(c, ACTION_SCOPE, action, "PENDING", {
+        status,
+        decidedAt: nowIso(),
+        decidedByDeviceId: actor.device.id,
+        ...(status === "DENIED" ? { consumedAt: nowIso() } : {}),
+      });
+      if (!update.changed) return c.json(jsonError("SECURITY_ACTION_ALREADY_DECIDED", "Kritik güvenlik onayı aynı anda başka bir karar ile sonuçlandırıldı."), 409);
+      await audit(c, decision === "APPROVE" ? "SECURITY_ACTION_APPROVED" : "SECURITY_ACTION_DENIED", actor.userId, actor.userId, actor.companySlug, { actionId: id, actionType: action.actionType, deviceId: actor.device.id });
+      return c.json({ ok: true, data: { kind, id, status, applied: true } });
     }
 
     return c.json(jsonError("PUSH_KIND_INVALID", "Telefon onayı türü geçersiz."), 400);

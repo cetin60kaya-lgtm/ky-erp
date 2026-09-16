@@ -62,7 +62,7 @@ export default function PhoneApprovalSetup({ onClose }) {
     setBusy(true);
     setCopied(false);
     try {
-      const response = await apiPost("/auth/push/security-enrollment/start", {});
+      const response = await apiPost("/auth/push/security-enrollment/start", { targetDeviceId: securityDevices[0]?.id || "" });
       const data = response?.data || response;
       setEnrollment(data);
       setMessage(securityDevices.length

@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const security = await readFile(new URL("./security-center-cloud.ts", import.meta.url), "utf8");
+const core = await readFile(new URL("./auth-security-core.ts", import.meta.url), "utf8");
 const notifications = await readFile(new URL("./notifications-cloud.ts", import.meta.url), "utf8");
 
 test("trusted login device is persistent per user and browser id", () => {
-  assert.match(security, /AUTH_TRUSTED_LOGIN_DEVICE/);
+  assert.match(core, /AUTH_TRUSTED_LOGIN_DEVICE/);
   assert.match(security, /trustedDeviceKey\(row\.user_id, deviceId\)/);
   assert.match(security, /deviceTrusted: Boolean\(deviceId\)/);
   assert.match(security, /trustSource: persistentTrusted \? "DEVICE"/);

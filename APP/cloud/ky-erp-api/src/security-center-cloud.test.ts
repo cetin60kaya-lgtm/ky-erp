@@ -3,16 +3,19 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const sourceUrl = new URL("./security-center-cloud.ts", import.meta.url);
+const coreUrl = new URL("./auth-security-core.ts", import.meta.url);
 const loginUrl = new URL("./security-center-login-cloud.ts", import.meta.url);
 const entryUrl = new URL("./main-entry-security.ts", import.meta.url);
 const guardUrl = new URL("./auth-policy-owner-guard.ts", import.meta.url);
 
 test("Security Center scopes real sessions and audit data", async () => {
   const source = await readFile(sourceUrl, "utf8");
+  const core = await readFile(coreUrl, "utf8");
+  const runtime = source + "\n" + core;
   assert.match(source, /auth_sessions/);
   assert.match(source, /auth_security_audit/);
-  assert.match(source, /AUTH_SECURITY_CAPABILITY_GRANT/);
-  assert.match(source, /AUTH_SESSION_TRUST/);
+  assert.match(runtime, /AUTH_SECURITY_CAPABILITY_GRANT/);
+  assert.match(runtime, /AUTH_SESSION_TRUST/);
   assert.match(source, /scopeType/);
   assert.match(source, /SELF/);
   assert.match(source, /COMPANY/);
@@ -23,15 +26,10 @@ test("Security Center scopes real sessions and audit data", async () => {
 
 test("critical Security Center writes require KY Security action approval", async () => {
   const source = await readFile(sourceUrl, "utf8");
+  const core = await readFile(coreUrl, "utf8");
   for (const operation of [
-    "SESSION_TRUST_APPROVE",
-    "SESSION_TRUST_REJECT",
-    "SESSION_CLOSE",
-    "SESSION_SUSPICIOUS",
-    "SECURITY_CAPABILITY_SET",
-    "SUPER_ADMIN_GRANT",
-    "SUPER_ADMIN_REVOKE",
-    "ONLY_ME",
+    "SESSION_TRUST_APPROVE", "SESSION_TRUST_REJECT", "SESSION_CLOSE", "SESSION_SUSPICIOUS",
+    "SECURITY_CAPABILITY_SET", "SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME",
   ]) assert.match(source, new RegExp(operation));
   assert.match(source, /SECURITY_DEVICE_REQUIRED/);
   assert.match(source, /claimAction/);
@@ -39,7 +37,8 @@ test("critical Security Center writes require KY Security action approval", asyn
   assert.match(source, /SECURITY_ACTION_EXPIRED/);
   assert.match(source, /expireAction/);
   assert.match(source, /expiresAt/);
-  assert.match(source, /row\.isActive !== false/);
+  assert.match(core, /securityDevicesForUser/);
+  assert.match(core, /trustedDeviceIsRetired/);
 });
 
 test("owner lock and only-me behavior are fail closed", async () => {

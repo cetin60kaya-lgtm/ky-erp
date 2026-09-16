@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 
 const here=dirname(fileURLToPath(import.meta.url));
 const push=readFileSync(resolve(here,"auth-push-cloud.ts"),"utf8");
+const core=readFileSync(resolve(here,"auth-security-core.ts"),"utf8");
+const runtime=`${push}\n${core}`;
 
 test("security app enrollment is one-time, password stepped-up and migration retires legacy devices",()=>{
-  assert.match(push,/AUTH_PUSH_SECURITY_ENROLLMENT/);
+  assert.match(runtime,/AUTH_PUSH_SECURITY_ENROLLMENT/);
   assert.match(push,/security-enrollment\/start/);
   assert.match(push,/security-enrollment\/complete/);
   assert.match(push,/compare\(password, text\(user\.password_hash\)\)/);
@@ -19,8 +21,8 @@ test("security app enrollment is one-time, password stepped-up and migration ret
 
 test("security app devices are preferred and every decision is signed with device key",()=>{
   assert.match(push,/row\.securityApp !== true/);
-  assert.match(push,/explicitlyRetired/);
-  assert.match(push,/purpose === "SELF"/);
+  assert.match(core,/trustedDeviceIsRetired/);
+  assert.match(core,/purpose === "SELF"/);
   assert.match(push,/LEGACY_PHONE_APPROVAL_RETIRED/);
   assert.match(push,/verifySecurityAppDecision/);
   assert.match(push,/SECURITY_DEVICE_SIGNATURE_INVALID/);
@@ -50,11 +52,11 @@ test("security app health and signed connection refresh can recover an inactive 
 
 
 test("access refresh reuses the same security device id instead of creating duplicate push devices",()=>{
-  assert.match(push,/replaceDeviceId/);
-  assert.match(push,/replaceCandidate = replaceDeviceId/);
-  assert.match(push,/const existing = replaceCandidate \|\| endpointCandidate/);
+  assert.match(push,/targetDeviceId/);
+  assert.match(push,/reservedDeviceId/);
+  assert.match(push,/const existing = serverBoundCandidate \|\| legacyReplaceCandidate/);
   assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
-  assert.match(push,/relinkedDevice: Boolean\(replaceCandidate\)/);
+  assert.match(push,/relinkedDevice: Boolean\(serverBoundCandidate \|\| legacyReplaceCandidate\)/);
   assert.match(push,/SECURITY_APP_VERSION = "security-v2\.2"/);
 });
 
@@ -69,8 +71,8 @@ test("security app creates a one-minute challenge-bound login code with attempt 
 });
 
 test("push transport expiry never revokes the trusted security device and phone approval stays primary",()=>{
-  assert.match(push,/trustedSecurityDevice/);
-  assert.match(push,/pushReachable: false/);
+  assert.match(core,/device\.securityApp === true \? true/);
+  assert.match(core,/pushReachable: false/);
   assert.match(push,/SECURITY_DEVICE_REACTIVATED_AFTER_PUSH_EXPIRY/);
   assert.match(push,/PHONE_LOGIN_APPROVAL_PUSH_DEFERRED/);
   assert.match(push,/pushDelivered: sent > 0/);
@@ -78,10 +80,10 @@ test("push transport expiry never revokes the trusted security device and phone 
 
 
 test("reactivated Security device clears stale retirement markers so phone login stays primary",()=>{
-  assert.match(push,/row\.isActive === false/);
+  assert.match(core,/trustedDeviceIsRetired/);
   assert.match(push,/retiredAt: ""/);
   assert.match(push,/retiredReason: ""/);
-  assert.match(push,/if \(purpose === "SELF"\) return row\.isActive !== false \|\|/);
+  assert.match(core,/row\.securityApp !== true \|\| trustedDeviceIsRetired\(row\)/);
 });
 
 test("security device health returns the verified bound account identity and permission scope",()=>{

@@ -1,14 +1,16 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
+import {
+  AUTH_SECURITY_SCOPES, atomicSecurityStatusUpdate, securityStoreGet as storeGet, securityStoreList as storeList, securityStorePut as storePut,
+  securityDevicesForUser, verifySecurityDeviceAuth, verifySecurityDeviceDecision, sendSecurityWakeMany as sendWakeMany, tableExists, trustedDeviceIsRetired,
+} from "./auth-security-core";
 
 type AnyRow = Record<string, any>;
 
-const ACTION_SCOPE = "AUTH_SECURITY_ACTION";
-const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
+const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
+const DEVICE_SCOPE = AUTH_SECURITY_SCOPES.DEVICE;
 const ACTION_SECONDS = 10 * 60;
 const QUESTION_ITERATIONS = 180000;
-const VAPID_SECRET_KEY = "VAPID_P256_KEYPAIR_V1";
-const VAPID_SUBJECT = "mailto:admin@kyerp.net";
 const ALLOWED_ACTIONS = new Set(["OWNER_RECOVERY_QUESTIONS_UPDATE"]);
 
 function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
@@ -40,13 +42,6 @@ function base64Url(bytes: Uint8Array) {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
-function base64UrlToBytes(value: unknown) {
-  const normalized = text(value).replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
-function encodeJson(value: unknown) { return base64Url(new TextEncoder().encode(JSON.stringify(value))); }
 function randomToken(bytes = 32) {
   const value = new Uint8Array(bytes);
   crypto.getRandomValues(value);
@@ -76,60 +71,13 @@ async function hashQuestionAnswer(answer: unknown) {
   return { hash: await pbkdf2Hash(normalized, salt), salt, iterations: QUESTION_ITERATIONS };
 }
 
-async function tableExists(c: any, tableName: string) {
-  const row = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(tableName).first<AnyRow>();
-  return Boolean(row?.name);
-}
 async function requireSecurityStorage(c: any) {
   const required = ["json_store", "auth_users", "auth_user_security", "auth_owner_recovery_questions", "auth_security_audit"];
   for (const tableName of required) if (!(await tableExists(c, tableName))) return false;
   return true;
 }
-async function storeGet(c: any, scope: string, fileName: string) {
-  const row = await c.env.DB.prepare(
-    `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at FROM json_store
-      WHERE scope=? AND file_name=? ORDER BY updated_at DESC,id DESC LIMIT 1`,
-  ).bind(scope, fileName).first<AnyRow>();
-  if (!row) return null;
-  const data = objectOf(row.data);
-  return { ...data, storeId: text(row.id), fileName: text(row.file_name), createdAt: text(data.createdAt || row.created_at), updatedAt: text(data.updatedAt || row.updated_at) };
-}
-async function storeList(c: any, scope: string) {
-  const result = await c.env.DB.prepare(
-    `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at FROM json_store
-      WHERE scope=? ORDER BY updated_at DESC,id DESC`,
-  ).bind(scope).all<AnyRow>();
-  return (result.results || []).map((row: AnyRow) => {
-    const data = objectOf(row.data);
-    return { ...data, storeId: text(row.id), fileName: text(row.file_name), createdAt: text(data.createdAt || row.created_at), updatedAt: text(data.updatedAt || row.updated_at) };
-  });
-}
-async function storePut(c: any, scope: string, fileName: string, companySlug: string, data: AnyRow) {
-  const current = await storeGet(c, scope, fileName);
-  const timestamp = nowIso();
-  const payload = { ...data, id: text(data.id || fileName), mainCompanySlug: text(data.mainCompanySlug || companySlug), createdAt: text(data.createdAt || current?.createdAt || timestamp), updatedAt: timestamp };
-  if (current?.storeId) {
-    await c.env.DB.prepare("UPDATE json_store SET main_company_slug=?,data=?,updated_at=? WHERE id=? AND scope=?")
-      .bind(companySlug || null, JSON.stringify(payload), timestamp, current.storeId, scope).run();
-    return { ...payload, storeId: current.storeId, fileName };
-  }
-  const storeId = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?)")
-    .bind(storeId, scope, companySlug || null, fileName, JSON.stringify(payload), timestamp, timestamp).run();
-  return { ...payload, storeId, fileName };
-}
 async function atomicActionUpdate(c: any, current: AnyRow, expectedStatus: string, patch: AnyRow) {
-  if (!current?.storeId) return { changed: false, row: current || null };
-  const timestamp = nowIso();
-  const next = { ...current, ...patch, updatedAt: timestamp };
-  delete next.storeId; delete next.fileName;
-  const result = await c.env.DB.prepare(
-    `UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=?
-      AND UPPER(COALESCE(json_extract(data,'$.status'),''))=?
-      AND COALESCE(json_extract(data,'$.consumedAt'),'')=''`,
-  ).bind(JSON.stringify(next), timestamp, current.storeId, ACTION_SCOPE, upper(expectedStatus)).run();
-  const changed = Number(result?.meta?.changes || 0) > 0;
-  return { changed, row: changed ? { ...next, storeId: current.storeId, fileName: current.id } : await storeGet(c, ACTION_SCOPE, text(current.id)) };
+  return atomicSecurityStatusUpdate(c, ACTION_SCOPE, current, expectedStatus, patch);
 }
 async function audit(c: any, action: string, actorUserId = "", targetUserId = "", companySlug = "", detail: AnyRow = {}) {
   try {
@@ -145,101 +93,18 @@ async function requireOwner(c: any) {
   return { current };
 }
 
-async function verifyDeviceAuth(c: any, device: AnyRow) {
-  if (device?.securityApp !== true) return false;
-  const jwk = objectOf(device?.decisionPublicKeyJwk);
-  const timestamp = text(c.req.header("X-KYERP-Security-Timestamp"));
-  const signature = text(c.req.header("X-KYERP-Security-Signature"));
-  const timestampMs = Number(timestamp);
-  if (!jwk?.kty || !jwk?.crv || !jwk?.x || !jwk?.y || !timestamp || !signature || !Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > 120000) return false;
-  try {
-    const key = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-    const method = upper(c.req.method || "GET");
-    const pathname = new URL(c.req.url).pathname;
-    const message = new TextEncoder().encode(`KYERP-DEVICE-AUTH-V1|${text(device.id)}|${method}|${pathname}|${timestamp}`);
-    return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, base64UrlToBytes(signature), message);
-  } catch { return false; }
-}
-async function verifyDecision(device: AnyRow, id: string, decision: string, signatureValue: unknown) {
-  const jwk = objectOf(device?.decisionPublicKeyJwk);
-  const signature = text(signatureValue);
-  if (device?.securityApp !== true || !jwk?.kty || !jwk?.crv || !jwk?.x || !jwk?.y || !signature) return false;
-  try {
-    const key = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-    const message = new TextEncoder().encode(`KYERP-DECISION-V1|${text(device.id)}|SECURITY_ACTION|${id}|${decision}`);
-    return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, base64UrlToBytes(signature), message);
-  } catch { return false; }
-}
 async function deviceActor(c: any) {
   const deviceId = text(c.req.header("X-KYERP-Push-Device"));
   const token = text(c.req.header("X-KYERP-Push-Token"));
   if (!deviceId || !token) return null;
   const device = await storeGet(c, DEVICE_SCOPE, deviceId);
-  if (!device || device.securityApp !== true) return null;
-  const explicitlyRetired = device.isActive === false && Boolean(text(device.retiredAt) || text(device.retiredReason));
-  if (explicitlyRetired) return null;
+  if (!device || device.securityApp !== true || trustedDeviceIsRetired(device)) return null;
   if (!safeEqual(text(device.deviceTokenHash), await sha256(token))) return null;
-  if (!(await verifyDeviceAuth(c, device))) return null;
-  const user = await c.env.DB.prepare(
-    `SELECT u.id,u.username,u.full_name,u.role,u.is_active,s.role_override,s.main_company_slug
-       FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1`,
-  ).bind(text(device.userId)).first<AnyRow>();
+  if (!(await verifySecurityDeviceAuth(c, device))) return null;
+  const user = await c.env.DB.prepare(`SELECT u.id,u.username,u.full_name,u.role,u.is_active,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.id=? LIMIT 1`).bind(text(device.userId)).first<AnyRow>();
   if (!user || !Boolean(user.is_active)) return null;
   const role = upper(user.role_override || user.role);
   return { device, userId: text(user.id), role: role === "ADMIN" ? "SUPER_ADMIN" : role, companySlug: text(user.main_company_slug || device.mainCompanySlug), fullName: text(user.full_name || user.username) };
-}
-async function activeSecurityDevices(c: any, userId: string) {
-  const rows = await storeList(c, DEVICE_SCOPE);
-  return rows.filter((row: AnyRow) => {
-    if (text(row.userId) !== userId || row.securityApp !== true) return false;
-    const explicitlyRetired = row.isActive === false && Boolean(text(row.retiredAt) || text(row.retiredReason));
-    if (explicitlyRetired) return false;
-    return row.isActive !== false || !Boolean(text(row.retiredAt) || text(row.retiredReason));
-  });
-}
-
-async function ensureVapidKeyPair(c: any) {
-  let row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key=? LIMIT 1").bind(VAPID_SECRET_KEY).first<AnyRow>();
-  if (row?.secret_value) {
-    try { const parsed = JSON.parse(text(row.secret_value)); if (parsed?.privateJwk && parsed?.publicKey) return parsed; } catch {}
-  }
-  const generated = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-  const privateJwk = await crypto.subtle.exportKey("jwk", generated.privateKey);
-  const publicRaw = new Uint8Array(await crypto.subtle.exportKey("raw", generated.publicKey));
-  const pair = { privateJwk, publicKey: base64Url(publicRaw), createdAt: nowIso() };
-  const timestamp = nowIso();
-  await c.env.DB.prepare("INSERT OR IGNORE INTO auth_system_secrets(secret_key,secret_value,created_at,updated_at) VALUES (?,?,?,?)")
-    .bind(VAPID_SECRET_KEY, JSON.stringify(pair), timestamp, timestamp).run();
-  row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key=? LIMIT 1").bind(VAPID_SECRET_KEY).first<AnyRow>();
-  const stored = JSON.parse(text(row?.secret_value) || "{}");
-  if (!stored?.privateJwk || !stored?.publicKey) throw new Error("VAPID anahtarı hazırlanamadı.");
-  return stored;
-}
-async function sendWake(c: any, device: AnyRow) {
-  const endpoint = text(device.pushEndpoint);
-  if (!endpoint) return false;
-  try {
-    const pair = await ensureVapidKeyPair(c);
-    const audience = new URL(endpoint).origin;
-    const header = encodeJson({ typ: "JWT", alg: "ES256" });
-    const payload = encodeJson({ aud: audience, exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60, sub: VAPID_SUBJECT });
-    const input = `${header}.${payload}`;
-    const key = await crypto.subtle.importKey("jwk", pair.privateJwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
-    const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(input)));
-    const response = await fetch(endpoint, { method: "POST", headers: { TTL: "60", Urgency: "high", Authorization: `vapid t=${input}.${base64Url(signature)}, k=${pair.publicKey}` } });
-    return response.ok;
-  } catch { return false; }
-}
-async function sendWakeMany(c: any, devices: AnyRow[]) {
-  let sent = 0;
-  const seen = new Set<string>();
-  for (const device of devices) {
-    const endpoint = text(device.pushEndpoint);
-    if (!endpoint || seen.has(endpoint)) continue;
-    seen.add(endpoint);
-    if (await sendWake(c, device)) sent += 1;
-  }
-  return sent;
 }
 
 async function actionFromToken(c: any, idValue: unknown, tokenValue: unknown) {
@@ -275,7 +140,7 @@ export function registerSecurityActionRoutes(app: any) {
     const body = await bodyOf(c);
     const actionType = upper(body.actionType);
     if (!ALLOWED_ACTIONS.has(actionType)) return c.json(jsonError("SECURITY_ACTION_UNSUPPORTED", "Bu kritik güvenlik işlemi desteklenmiyor."), 400);
-    const devices = await activeSecurityDevices(c, text(auth.current.id));
+    const devices = await securityDevicesForUser(c, text(auth.current.id), "CRITICAL");
     if (!devices.length) return c.json(jsonError("SECURITY_DEVICE_REQUIRED", "Aktif KY ERP Güvenlik telefonu bulunamadı. Önce güvenilir telefonu bağlayın."), 409);
 
     const id = crypto.randomUUID();
@@ -333,7 +198,7 @@ export function registerSecurityActionRoutes(app: any) {
       await atomicActionUpdate(c, action, "PENDING", { status: "EXPIRED", consumedAt: nowIso() });
       return c.json(jsonError("SECURITY_ACTION_EXPIRED", "Güvenlik onayının süresi doldu."), 409);
     }
-    if (!(await verifyDecision(actor.device, id, decision, body.signature))) return c.json(jsonError("SECURITY_ACTION_SIGNATURE_INVALID", "Cihaz karar imzası doğrulanamadı."), 401);
+    if (!(await verifySecurityDeviceDecision(actor.device, "SECURITY_ACTION", id, decision, body.signature))) return c.json(jsonError("SECURITY_ACTION_SIGNATURE_INVALID", "Cihaz karar imzası doğrulanamadı."), 401);
     const update = await atomicActionUpdate(c, action, "PENDING", { status: decision, decidedAt: nowIso(), decidedByDeviceId: actor.device.id, consumedAt: decision === "DENIED" ? nowIso() : "" });
     if (!update.changed) return c.json(jsonError("SECURITY_ACTION_ALREADY_DECIDED", "Bu güvenlik işlemi aynı anda başka bir karar ile sonuçlandırıldı."), 409);
     await audit(c, decision === "APPROVED" ? "SECURITY_ACTION_APPROVED" : "SECURITY_ACTION_DENIED", actor.userId, actor.userId, actor.companySlug, { actionId: id, actionType: action.actionType, deviceId: actor.device.id });

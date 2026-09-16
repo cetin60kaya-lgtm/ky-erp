@@ -10,6 +10,8 @@ const worker = (name: string) => readFileSync(resolve(here, name), "utf8");
 const repoFile = (name: string) => readFileSync(resolve(root, name), "utf8");
 
 const push = worker("auth-push-cloud.ts");
+const securityCore = worker("auth-security-core.ts");
+const securityRuntime = `${push}\n${securityCore}`;
 const policy = worker("auth-policy-cloud.ts");
 const main = worker("main.ts");
 const mailEntry = worker("main-entry-mail.ts");
@@ -27,14 +29,14 @@ const securityWorker = repoFile("APP/app/ky-erp-frontend/public/security/sw.js")
 const securityManifest = repoFile("APP/app/ky-erp-frontend/public/security/manifest.webmanifest");
 
 test("phone approval uses existing tenant json_store and needs no new production migration", () => {
-  assert.match(push, /AUTH_PUSH_DEVICE/);
-  assert.match(push, /AUTH_PHONE_LOGIN/);
-  assert.match(push, /AUTH_COMPANY_LOGIN_APPROVAL/);
-  assert.match(push, /FROM json_store/);
-  assert.match(push, /INSERT INTO json_store/);
-  assert.match(push, /tableExists\(c, "json_store"\)/);
-  assert.match(push, /if \(!\(await tableExists\(c, "json_store"\)\)\) return \[\]/);
-  assert.doesNotMatch(push, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
+  assert.match(securityRuntime, /AUTH_PUSH_DEVICE/);
+  assert.match(securityRuntime, /AUTH_PHONE_LOGIN/);
+  assert.match(securityRuntime, /AUTH_COMPANY_LOGIN_APPROVAL/);
+  assert.match(securityCore, /FROM json_store/);
+  assert.match(securityCore, /INSERT INTO json_store/);
+  assert.match(securityCore, /tableExists\(c, "json_store"\)/);
+  assert.match(securityCore, /if \(!\(await tableExists\(c, "json_store"\)\)\) return \[\]/);
+  assert.doesNotMatch(securityRuntime, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
 });
 
 test("security-app enrollment requires password step-up, stores token hash and retires legacy browser enrollment", () => {
@@ -49,12 +51,12 @@ test("security-app enrollment requires password step-up, stores token hash and r
 });
 
 test("VAPID signing key stays server-side and push uses standard VAPID authorization", () => {
-  assert.match(push, /VAPID_P256_KEYPAIR_V1/);
-  assert.match(push, /auth_system_secrets/);
-  assert.match(push, /ECDSA/);
-  assert.match(push, /namedCurve: "P-256"/);
-  assert.match(push, /Authorization: auth\.value/);
-  assert.match(push, /vapid t=/);
+  assert.match(securityCore, /VAPID_P256_KEYPAIR_V1/);
+  assert.match(securityCore, /auth_system_secrets/);
+  assert.match(securityCore, /ECDSA/);
+  assert.match(securityCore, /namedCurve: "P-256"/);
+  assert.match(securityCore, /Authorization: `vapid t=/);
+  assert.match(securityCore, /vapid t=/);
 });
 
 test("phone approval is primary while Authenticator remains an explicit fallback", () => {
@@ -107,7 +109,7 @@ test("authenticated shell creates one-time security-app enrollment while passwor
   assert.match(phoneDeviceSetup, /app\.kyerp\.net\/security/);
   assert.match(push, /security-enrollment\/complete/);
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
-  assert.match(push, /AUTH_PUSH_SECURITY_ENROLLMENT/);
+  assert.match(securityRuntime, /AUTH_PUSH_SECURITY_ENROLLMENT/);
   assert.match(securityApp, /security-enrollment\/complete/);
   assert.match(securityHtml, /autocomplete="current-password"/);
 });
@@ -197,4 +199,14 @@ test("phone approval is attempted before legacy Authenticator migration",()=>{
   assert.ok(phoneIndex >= 0);
   assert.ok(legacyIndex >= 0);
   assert.ok(phoneIndex < legacyIndex);
+});
+
+
+test("Security PWA is push/foreground driven and critical actions share the signed approval queue", () => {
+  assert.doesNotMatch(securityApp, /setInterval\(\(\)=>\{if\(document\.visibilityState===?"visible".*15000/);
+  assert.match(securityApp, /refreshPending\(health\.items\)/);
+  assert.match(push, /SECURITY_APPROVAL_KINDS\.CRITICAL_ACTION/);
+  assert.match(push, /ACTION_SCOPE/);
+  assert.match(push, /SECURITY_ACTION_APPROVED/);
+  assert.match(push, /SECURITY_ACTION_DENIED/);
 });

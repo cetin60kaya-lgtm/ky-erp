@@ -1,17 +1,18 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
+import {
+  AUTH_SECURITY_SCOPES, securityStoreGet as storeGet, securityStoreList as storeList, securityStorePut as storePut,
+  securityDevicesForUser, sendSecurityWakeMany as sendWakeMany, tableExists,
+} from "./auth-security-core";
 
 type AnyRow = Record<string, any>;
 
-const GRANT_SCOPE = "AUTH_SECURITY_CAPABILITY_GRANT";
-const PREF_SCOPE = "AUTH_SECURITY_NOTIFICATION_PREF";
-const TRUST_SCOPE = "AUTH_SESSION_TRUST";
-const TRUSTED_DEVICE_SCOPE = "AUTH_TRUSTED_LOGIN_DEVICE";
-const ACTION_SCOPE = "AUTH_SECURITY_ACTION";
-const DEVICE_SCOPE = "AUTH_PUSH_DEVICE";
+const GRANT_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_GRANT;
+const PREF_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_NOTIFICATION_PREF;
+const TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
+const TRUSTED_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
+const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const ACTION_SECONDS = 10 * 60;
-const VAPID_SECRET_KEY = "VAPID_P256_KEYPAIR_V1";
-const VAPID_SUBJECT = "mailto:admin@kyerp.net";
 const CAPABILITIES = new Set(["LOGIN_APPROVE", "SESSION_VIEW", "SESSION_APPROVE", "SESSION_CLOSE", "AUDIT_VIEW"]);
 const CRITICAL_OPERATIONS = new Set([
   "SESSION_TRUST_APPROVE", "SESSION_TRUST_REJECT", "SESSION_CLOSE", "SESSION_SUSPICIOUS", "TRUSTED_DEVICE_REVOKE",
@@ -33,45 +34,15 @@ function objectOf(value: unknown): AnyRow {
   try { const parsed = JSON.parse(value); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
 }
 async function bodyOf(c: any) { try { const body = await c.req.json(); return body && typeof body === "object" && !Array.isArray(body) ? body as AnyRow : {}; } catch { return {}; } }
-function base64Url(bytes: Uint8Array) { let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_"); }
-function encodeJson(value: unknown) { return base64Url(new TextEncoder().encode(JSON.stringify(value))); }
 function randomToken(bytes = 32) { const value = new Uint8Array(bytes); crypto.getRandomValues(value); return base64Url(value); }
 async function sha256(value: string) { const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)); return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
 function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let diff = 0; for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index); return diff === 0; }
 
-async function tableExists(c: any, tableName: string) {
-  const row = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(tableName).first<AnyRow>();
-  return Boolean(row?.name);
-}
 async function requireStorage(c: any) {
   for (const tableName of ["json_store", "auth_users", "auth_user_security", "auth_sessions", "auth_security_audit", "auth_system_secrets"]) {
     if (!(await tableExists(c, tableName))) return false;
   }
   return true;
-}
-async function storeGet(c: any, scope: string, fileName: string) {
-  const row = await c.env.DB.prepare(`SELECT id,main_company_slug,file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND file_name=? ORDER BY updated_at DESC,id DESC LIMIT 1`).bind(scope, fileName).first<AnyRow>();
-  if (!row) return null;
-  const data = objectOf(row.data);
-  return { ...data, storeId: text(row.id), fileName: text(row.file_name), mainCompanySlug: text(data.mainCompanySlug || row.main_company_slug), createdAt: text(data.createdAt || row.created_at), updatedAt: text(data.updatedAt || row.updated_at) };
-}
-async function storeList(c: any, scope: string, companySlug = "") {
-  const result = companySlug
-    ? await c.env.DB.prepare(`SELECT id,main_company_slug,file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND main_company_slug=? ORDER BY updated_at DESC,id DESC`).bind(scope, companySlug).all<AnyRow>()
-    : await c.env.DB.prepare(`SELECT id,main_company_slug,file_name,data,created_at,updated_at FROM json_store WHERE scope=? ORDER BY updated_at DESC,id DESC`).bind(scope).all<AnyRow>();
-  return (result.results || []).map((row: AnyRow) => { const data = objectOf(row.data); return { ...data, storeId: text(row.id), fileName: text(row.file_name), mainCompanySlug: text(data.mainCompanySlug || row.main_company_slug), createdAt: text(data.createdAt || row.created_at), updatedAt: text(data.updatedAt || row.updated_at) }; });
-}
-async function storePut(c: any, scope: string, fileName: string, companySlug: string, data: AnyRow) {
-  const current = await storeGet(c, scope, fileName);
-  const timestamp = nowIso();
-  const payload = { ...data, id: text(data.id || fileName), mainCompanySlug: text(data.mainCompanySlug || companySlug), createdAt: text(data.createdAt || current?.createdAt || timestamp), updatedAt: timestamp };
-  if (current?.storeId) {
-    await c.env.DB.prepare("UPDATE json_store SET main_company_slug=?,data=?,updated_at=? WHERE id=? AND scope=?").bind(companySlug || null, JSON.stringify(payload), timestamp, current.storeId, scope).run();
-    return { ...payload, storeId: current.storeId, fileName };
-  }
-  const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(id, scope, companySlug || null, fileName, JSON.stringify(payload), timestamp, timestamp).run();
-  return { ...payload, storeId: id, fileName };
 }
 async function audit(c: any, action: string, current: AnyRow, targetUserId = "", companySlug = "", sessionId = "", detail: AnyRow = {}) {
   try {
@@ -121,37 +92,9 @@ async function scopedSession(c: any, current: AnyRow, scope: AnyRow, sessionId: 
   return null;
 }
 
-async function activeSecurityDevices(c: any, userId: string) {
-  const rows = await storeList(c, DEVICE_SCOPE);
-  return rows.filter((row: AnyRow) => text(row.userId) === userId && row.securityApp === true && row.isActive !== false && !text(row.retiredAt));
+async function notifyDevices(c: any, userId: string) {
+  return sendWakeMany(c, await securityDevicesForUser(c, userId, "CRITICAL"));
 }
-async function ensureVapidKeyPair(c: any) {
-  let row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key=? LIMIT 1").bind(VAPID_SECRET_KEY).first<AnyRow>();
-  if (row?.secret_value) { try { const parsed = JSON.parse(text(row.secret_value)); if (parsed?.privateJwk && parsed?.publicKey) return parsed; } catch {} }
-  const generated = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-  const privateJwk = await crypto.subtle.exportKey("jwk", generated.privateKey);
-  const publicRaw = new Uint8Array(await crypto.subtle.exportKey("raw", generated.publicKey));
-  const pair = { privateJwk, publicKey: base64Url(publicRaw), createdAt: nowIso() };
-  const timestamp = nowIso();
-  await c.env.DB.prepare("INSERT OR IGNORE INTO auth_system_secrets(secret_key,secret_value,created_at,updated_at) VALUES (?,?,?,?)").bind(VAPID_SECRET_KEY, JSON.stringify(pair), timestamp, timestamp).run();
-  row = await c.env.DB.prepare("SELECT secret_value FROM auth_system_secrets WHERE secret_key=? LIMIT 1").bind(VAPID_SECRET_KEY).first<AnyRow>();
-  return JSON.parse(text(row?.secret_value) || "{}");
-}
-async function sendWake(c: any, device: AnyRow) {
-  const endpoint = text(device.pushEndpoint); if (!endpoint) return false;
-  try {
-    const pair = await ensureVapidKeyPair(c); if (!pair?.privateJwk || !pair?.publicKey) return false;
-    const audience = new URL(endpoint).origin;
-    const header = encodeJson({ typ: "JWT", alg: "ES256" });
-    const payload = encodeJson({ aud: audience, exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60, sub: VAPID_SUBJECT });
-    const input = `${header}.${payload}`;
-    const key = await crypto.subtle.importKey("jwk", pair.privateJwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
-    const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(input)));
-    const response = await fetch(endpoint, { method: "POST", headers: { TTL: "60", Urgency: "high", Authorization: `vapid t=${input}.${base64Url(signature)}, k=${pair.publicKey}` } });
-    return response.ok;
-  } catch { return false; }
-}
-async function notifyDevices(c: any, userId: string) { let sent = 0; for (const device of await activeSecurityDevices(c, userId)) if (await sendWake(c, device)) sent += 1; return sent; }
 
 async function expireAction(c: any, action: AnyRow) {
   if (!action?.storeId) return action;
@@ -331,7 +274,7 @@ export function registerSecurityCenterRoutes(app: any) {
   app.get("/api/security-center/overview", async (c: any) => {
     if (!(await requireStorage(c))) return c.json(jsonError("SECURITY_SCHEMA_UNAVAILABLE", "Güvenlik veri katmanı hazır değil."), 503);
     const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current);
-    const ownDevices = (await activeSecurityDevices(c, text(current.id))).map((row: AnyRow) => ({ id: row.id, label: row.deviceLabel || row.label || "KY Güvenlik", platform: row.platform || "", lastSeenAt: row.lastSeenAt || row.updatedAt, pushReady: Boolean(row.pushEndpoint), securityApp: true }));
+    const ownDevices = (await securityDevicesForUser(c, text(current.id), "CONTROL")).map((row: AnyRow) => ({ id: row.id, label: row.deviceLabel || row.label || "KY Güvenlik", platform: row.platform || "", lastSeenAt: row.lastSeenAt || row.updatedAt, pushReady: Boolean(row.pushEndpoint), securityApp: true }));
     let sessionCountRow: AnyRow | null = null;
     if (scope.type === "SYSTEM") sessionCountRow = await c.env.DB.prepare("SELECT COUNT(*) AS total FROM auth_sessions WHERE revoked_at IS NULL AND expires_at>?").bind(nowIso()).first<AnyRow>();
     else if (scope.type === "COMPANY" && hasCap(scope, "SESSION_VIEW")) {
@@ -424,7 +367,7 @@ export function registerSecurityCenterRoutes(app: any) {
     const auth = await currentAuth(c); if (auth.error) return auth.error; const current = auth.current; const scope = await scopeFor(c, current); const body = await bodyOf(c); const operation = upper(body.operation);
     const authorization = await authorizeOperation(c, current, scope, operation, body);
     if (authorization.error) return c.json(authorization.error, authorization.status);
-    const devices = await activeSecurityDevices(c, text(current.id)); if (!devices.length) return c.json(jsonError("SECURITY_DEVICE_REQUIRED", "Bu kritik işlem için aktif KY Güvenlik telefonu gereklidir."), 409);
+    const devices = await securityDevicesForUser(c, text(current.id), "CRITICAL"); if (!devices.length) return c.json(jsonError("SECURITY_DEVICE_REQUIRED", "Bu kritik işlem için aktif KY Güvenlik telefonu gereklidir."), 409);
     const id = crypto.randomUUID(); const token = randomToken(); const requestedAt = nowIso(); const expiresAt = addSeconds(ACTION_SECONDS); const payload = authorization.payload || {};
     await storePut(c, ACTION_SCOPE, id, text(payload.companySlug || scope.companySlug), { id, userId: current.id, mainCompanySlug: text(payload.companySlug || scope.companySlug), actionType: operation, actionTokenHash: await sha256(token), status: "PENDING", requestedAt, expiresAt, decidedAt: "", decidedByDeviceId: "", claimedAt: "", consumedAt: "", sourceIp: clientIp(c), sourceUserAgent: userAgent(c), operationPayload: payload, title: actionTitle(operation) });
     const notifiedDevices = await notifyDevices(c, text(current.id));

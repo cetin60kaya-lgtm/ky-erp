@@ -225,10 +225,10 @@ async function connectDevice(){
 }
 function approvalCard(item){const article=document.createElement("article");article.className="approval-item";const when=item.requestedAt?new Date(item.requestedAt).toLocaleString("tr-TR"):"";const match=String(item.matchNumber||"").trim();article.innerHTML=`<div><h3>${escapeHtml(item.title||"KY ERP giriş isteği")}</h3><p>${escapeHtml(item.body||"Yeni giriş isteği.")}</p>${match?`<div class="approval-match"><span>EŞLEŞTİRME NO</span><strong>${escapeHtml(match)}</strong><small>Bilgisayarda görünen numarayla aynıysa onaylayın.</small></div>`:""}<small>${escapeHtml(when)}</small></div><div class="approval-actions"><button class="approve" type="button">Onayla</button><button class="deny" type="button">Reddet</button></div>`;article.querySelector(".approve").addEventListener("click",()=>decide(item,"APPROVE"));article.querySelector(".deny").addEventListener("click",()=>decide(item,"DENY"));return article}
 function escapeHtml(value){return String(value||"").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[ch]))}
-async function decide(item,decision){if(busy)return;busy=true;try{const device=await readDevice();if(decision==="APPROVE"){toast("Telefon kilidi doğrulanıyor...");await confirmLocalUnlock(device)}const signature=await signDecision(device,item.kind,item.id,decision);await deviceFetch("/auth/push/device/decision",{method:"POST",body:{kind:item.kind,id:item.id,decision,signature}});toast(decision==="APPROVE"?"Giriş onaylandı. Bilgisayarda KY ERP açılıyor.":"Giriş isteği reddedildi.");await refreshPending()}catch(error){toast(error?.message||"Karar gönderilemedi.")}finally{busy=false}}
-async function refreshPending(){
-  const payload=await deviceFetch("/auth/push/device/pending");
-  const items=Array.isArray(payload?.data?.items)?payload.data.items:[];
+async function decide(item,decision){if(busy)return;busy=true;try{const device=await readDevice();if(decision==="APPROVE"){toast("Telefon kilidi doğrulanıyor...");await confirmLocalUnlock(device)}const signature=await signDecision(device,item.kind,item.id,decision);await deviceFetch("/auth/push/device/decision",{method:"POST",body:{kind:item.kind,id:item.id,decision,signature}});const critical=String(item.kind||"")==="SECURITY_ACTION";toast(decision==="APPROVE"?(critical?"Güvenlik işlemi onaylandı.":"Giriş onaylandı. Bilgisayarda KY ERP açılıyor."):(critical?"Güvenlik işlemi reddedildi.":"Giriş isteği reddedildi."));await refreshPending()}catch(error){toast(error?.message||"Karar gönderilemedi.")}finally{busy=false}}
+async function refreshPending(preloadedItems=null){
+  let items=preloadedItems;
+  if(!Array.isArray(items)){const payload=await deviceFetch("/auth/push/device/pending");items=Array.isArray(payload?.data?.items)?payload.data.items:[]}
   els.pendingList.innerHTML="";els.pendingCount.textContent=String(items.length);if(els.tabCount)els.tabCount.textContent=String(items.length);
   if(items.length){
     els.pendingPanel.classList.remove("hidden");els.emptyPanel.classList.add("hidden");
@@ -320,7 +320,7 @@ async function refreshState(options={}){
     setHealth(els.apiHealth,"Bağlı","ok");
     setHealth(els.pushHealth,health?.device?.lastError?"Otomatik yenilenecek":"Hazır",health?.device?.lastError?"warn":"ok");
     els.lastSync.textContent="Son kontrol: "+new Date(health.checkedAt||Date.now()).toLocaleString("tr-TR");
-    await refreshPending();
+    await refreshPending(health.items);
   }catch(error){
     const code=String(error?.code||"");
     const canAutoRepair=!options?.skipAutoRepair&&["PUSH_DEVICE_UNAUTHORIZED","DEVICE_NOT_READY"].includes(code)&&Date.now()-lastAutoRepairAt>120000;
@@ -398,5 +398,4 @@ navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECUR
   const url=new URL(location.href);enrollmentQuery={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
   if(enrollmentQuery.id&&enrollmentQuery.token){showRelink();toast("Erişim bağlantısı alındı. Mevcut KY ERP şifreni gir.")}
   renderInstall();showTab("approvals");try{await ensureWorker()}catch{}renderInstall();await refreshState();
-  setInterval(()=>{if(document.visibilityState==="visible"&&navigator.onLine)refreshState()},15000);
 })();
