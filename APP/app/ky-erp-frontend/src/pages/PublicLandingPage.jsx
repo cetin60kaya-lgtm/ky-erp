@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import PublicCorporateFooter from "../components/public/PublicCorporateFooter";
 import PublicReferencesSection from "../components/public/PublicReferencesSection";
+import PublicModuleShowcase from "../components/public/PublicModuleShowcase";
 import "../styles/public-landing.css";
 import "../styles/public-landing-v2.css";
 
@@ -187,7 +188,7 @@ export default function PublicLandingPage() {
             </p>
             <div className="ky-public-hero__actions">
               <a className="ky-public-primary" href={APP_URL}>KY ERP'ye Giriş <ArrowRight size={18} /></a>
-              <a className="ky-public-secondary" href="#moduller">Sistemi İncele</a>
+              <a className="ky-public-secondary" href="#canli-demo">Sistemi İncele</a>
             </div>
             <div className="ky-public-trust">
               <span><CheckCircle2 size={17} /> Rol bazlı yetkilendirme</span>
@@ -204,6 +205,8 @@ export default function PublicLandingPage() {
           <div><ShieldCheck size={22} /><span><b>Yetkili erişim</b><small>Kullanıcı ve modül bazlı kontrol</small></span></div>
           <div><Sparkles size={22} /><span><b>Akıllı yardımcı</b><small>ERP içinde arama, analiz ve işlem desteği</small></span></div>
         </section>
+
+        <PublicModuleShowcase />
 
         <section className="ky-public-section ky-public-modules" id="moduller">
           <div className="ky-public-section__head">
