@@ -2,6 +2,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from "reac
 import { useActiveCompany } from "./context/ActiveCompanyContext";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
+import "./styles/secure-launch.css";
 import MuhasebePage from "./pages/modules/MuhasebePage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 import { MODULES, findModule, findTab, getInitialRoute, getModuleTabs } from "./app/moduleRegistry";
@@ -99,6 +100,25 @@ function updateBrowserPath(route, replace = false) {
 
 function LoadingCard({ title = "Ekran yükleniyor" }) {
   return <div className="content-card module-loading-card"><h3>{title}</h3><p>Lütfen bekleyin...</p></div>;
+}
+
+function SecureLaunchScreen() {
+  return (
+    <main className="ky-secure-launch" aria-live="polite">
+      <section className="ky-secure-launch-card">
+        <div className="ky-secure-launch-logo">KY</div>
+        <span className="ky-secure-launch-kicker">KY ERP SECURE LAUNCH</span>
+        <h1>Güvenli çalışma alanı hazırlanıyor</h1>
+        <p>Oturum, güvenlik politikası ve çalışma alanı kontrolleri tamamlanıyor.</p>
+        <div className="ky-secure-launch-checks">
+          <div><span>1</span><b>Oturum kontrolü</b><em>Kontrol</em></div>
+          <div><span>2</span><b>Güvenlik politikası</b><em>Kontrol</em></div>
+          <div><span>3</span><b>Çalışma alanı</b><em>Hazırlanıyor</em></div>
+        </div>
+        <div className="ky-secure-launch-scan" aria-hidden="true" />
+      </section>
+    </main>
+  );
 }
 
 class ModuleErrorBoundary extends React.Component {
@@ -324,7 +344,7 @@ export default function AppV3() {
     return <div className="content-card module-error-card"><h3>Ekran bulunamadı</h3><p>Bu modül için geçerli bir çalışma ekranı tanımlı değil.</p></div>;
   }
 
-  if (authLoading) return <LoadingCard title="Oturum kontrol ediliyor" />;
+  if (authLoading) return <SecureLaunchScreen />;
   if (!isAuthenticated) return <LoginPage />;
 
   if (!visibleModules.length) {

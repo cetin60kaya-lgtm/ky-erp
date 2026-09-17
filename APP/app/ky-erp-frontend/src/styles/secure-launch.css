@@ -1,0 +1,110 @@
+.ky-secure-launch {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: #0f172a;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(37, 99, 235, 0.16), transparent 34%),
+    radial-gradient(circle at 88% 84%, rgba(14, 165, 233, 0.13), transparent 36%),
+    linear-gradient(135deg, #e9eff9 0%, #f8fafc 46%, #edf4ff 100%);
+}
+.ky-secure-launch-card {
+  width: min(620px, 100%);
+  padding: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.14);
+  text-align: center;
+}
+.ky-secure-launch-logo {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 22px;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.24);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.ky-secure-launch-kicker {
+  display: block;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+.ky-secure-launch-card h1 {
+  margin: 9px 0 10px;
+  font-size: clamp(27px, 4vw, 34px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+.ky-secure-launch-card > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ky-secure-launch-checks {
+  display: grid;
+  gap: 10px;
+  margin: 30px auto 0;
+  max-width: 450px;
+  text-align: left;
+}
+.ky-secure-launch-checks > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid #dfe8f2;
+  border-radius: 13px;
+  background: #fbfdff;
+}
+.ky-secure-launch-checks span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #245ccc;
+  background: #eef4ff;
+  font-size: 10px;
+  font-weight: 900;
+}
+.ky-secure-launch-checks b {
+  font-size: 12px;
+}
+.ky-secure-launch-checks em {
+  color: #16a34a;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+}
+.ky-secure-launch-scan {
+  height: 3px;
+  margin-top: 22px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #2563eb, transparent);
+  background-size: 40% 100%;
+  animation: ky-secure-launch-scan 1.5s linear infinite;
+}
+@keyframes ky-secure-launch-scan {
+  from { background-position: -40% 0; }
+  to { background-position: 140% 0; }
+}
+@media (max-width: 560px) {
+  .ky-secure-launch { padding: 18px; }
+  .ky-secure-launch-card { padding: 28px 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ky-secure-launch-scan { animation: none; background-position: center; }
+}
