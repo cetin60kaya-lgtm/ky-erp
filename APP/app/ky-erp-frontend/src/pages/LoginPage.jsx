@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./LoginPage.css";
+import "./LoginPageV2.css";
 
 const PROVIDER_LABELS = {
   GOOGLE: "Google Authenticator",
@@ -547,8 +548,8 @@ export default function LoginPage() {
           </div>
           <div className="auth-brand-copy">
             <span className="auth-eyebrow">KURUMSAL VE GÜVENLİ ERİŞİM</span>
-            <h1>Tek giriş.<br /><span>Güvenli erişim.</span></h1>
-            <p>Tüm iş süreçlerinize tek ve güvenli bir kapıdan erişin. KY ERP oturum, bot koruması ve çok faktörlü doğrulamayı birlikte uygular.</p>
+            <h1>Tek giriş.<br /><span>Canlı sistem.</span></h1>
+            <p>Muhasebe, üretim, PDKS, desen ve güvenlik süreçlerine tek kurumsal erişim üzerinden bağlanın.</p>
           </div>
           <div className="auth-security-points">
             <div><span className="auth-point-icon">S</span><p><strong>Güvenli oturum</strong><small>Sunucu kontrollü JWT, session süresi ve otomatik zaman aşımı.</small></p></div>

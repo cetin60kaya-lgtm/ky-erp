@@ -20,6 +20,7 @@ import {
 import PublicCorporateFooter from "../components/public/PublicCorporateFooter";
 import PublicReferencesSection from "../components/public/PublicReferencesSection";
 import "../styles/public-landing.css";
+import "../styles/public-landing-v2.css";
 
 const APP_URL = "https://app.kyerp.net/";
 
