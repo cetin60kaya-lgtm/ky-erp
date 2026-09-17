@@ -21,3 +21,11 @@ test("login UI does not expose connection-state wording or admin-only copy", () 
   assert.doesNotMatch(source, /Güvenli bağlantı kuruluyor/);
   assert.doesNotMatch(source, /Admin hesaplarında MFA zorunludur/);
 });
+
+test("phone approval stays primary before authenticator fallback is offered", () => {
+  assert.match(source, /AUTHENTICATOR_FALLBACK_DELAY_MS = 20000/);
+  assert.match(source, /setAuthenticatorFallbackReady\(true\)/);
+  assert.match(source, /authenticatorFallbackReady \? \(/);
+  assert.match(source, /Telefonla onaylayamıyorum/);
+  assert.match(source, /Google \/ Microsoft Authenticator yedeğine geç/);
+});

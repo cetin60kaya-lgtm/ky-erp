@@ -1430,3 +1430,31 @@
 .auth-card-panel{background:radial-gradient(circle at 70% 12%,rgba(59,130,246,.06),transparent 36%),rgba(248,250,252,.9)}
 .auth-form input{transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}.auth-form input:focus{border-color:#75a8f4;box-shadow:0 0 0 4px rgba(59,130,246,.10);background:#fff}
 @media(max-width:640px){.auth-login-intro{grid-template-columns:36px 1fr}.auth-login-intro>span{width:36px;height:36px}.auth-match-number{grid-template-columns:1fr 74px}.auth-match-number strong{min-height:56px;font-size:31px}}
+
+.auth-fallback-late {
+  margin-top: 2px;
+  padding: 12px;
+  border: 1px dashed #cbd8e8;
+  border-radius: 12px;
+  background: #f8fbff;
+  animation: auth-fallback-enter .22s ease-out both;
+}
+.auth-fallback-late summary {
+  cursor: pointer;
+  color: #52677f;
+  font-size: 10px;
+  font-weight: 800;
+}
+.auth-fallback-late-copy {
+  margin: 10px 0;
+  color: #6b7d91;
+  font-size: 10px;
+  line-height: 1.5;
+}
+@keyframes auth-fallback-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-fallback-late { animation: none; }
+}
