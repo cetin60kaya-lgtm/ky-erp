@@ -7,6 +7,7 @@ import {
   cancelPhoneApproval,
   consumePhoneApproval,
   notifyManagerApproval,
+  notifySessionApproval,
   phoneApprovalFromRequest,
   resendPhoneApprovalChallenge,
   startPhoneApprovalChallenge,
@@ -509,6 +510,19 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
       await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "VERIFIED", decidedByUserId: text(user.id), decidedByDeviceId: text(source.securityDeviceId), decidedAt: timestamp, source: "PHONE_LOGIN", phoneApprovalId: text(source.phoneApprovalId) });
       await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", user.id, user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
     } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
+  }
+  if (!text(source.phoneApprovalId)) {
+    let reviewReady = false;
+    try {
+      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "PENDING", createdAt: timestamp, source: "SESSION_REVIEW" });
+      reviewReady = true;
+    } catch (error) {
+      if (String(error instanceof Error ? error.message : error) !== "AUTH_SECURITY_STORAGE_UNAVAILABLE") logAuthError(c, "SESSION_TRUST_PENDING_WRITE", error, { userId: user.id, sessionId: sid });
+    }
+    if (reviewReady) {
+      const reviewDispatch=notifySessionApproval(c,{ id:sid, userId:text(user.id), mainCompanySlug:text(security.main_company_slug)||DEFAULT_COMPANY_SLUG, deviceLabel:text(source.deviceLabel || source.device_label || deviceLabel(c,source)), createdAt:timestamp, role, platform_role:security.platform_role, role_override:security.role_override }).catch((error)=>{ logAuthError(c, "SESSION_APPROVAL_PUSH", error, { userId:user.id, sessionId:sid }); return { sent:0, recipients:0 }; });
+      if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(reviewDispatch); else await reviewDispatch;
+    }
   }
   return { ok: true, stage: "AUTHENTICATED", token, expiresIn: ttl, expiresAt, user: await publicUser(c, security) };
 }

@@ -19,8 +19,10 @@ const PHONE_SCOPE = AUTH_SECURITY_SCOPES.PHONE_LOGIN;
 const COMPANY_SETTING_SCOPE = AUTH_SECURITY_SCOPES.COMPANY_LOGIN;
 const SECURITY_ENROLL_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ENROLLMENT;
 const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
+const SESSION_TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
+const TRUSTED_LOGIN_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.4";
+const SECURITY_APP_VERSION = "security-v2.5";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -84,7 +86,7 @@ function isCompanyAdmin(role: unknown) {
   return upper(role) === "COMPANY_ADMIN";
 }
 function roleOf(row: AnyRow) {
-  const role = upper(row?.role_override || row?.role || "VIEWER");
+  const role = upper(row?.role_override || row?.platform_role || row?.role || "VIEWER");
   return role === "ADMIN" ? "SUPER_ADMIN" : role;
 }
 async function securityAppAccess(c: any, row: AnyRow) {
@@ -201,14 +203,32 @@ async function companyApprovalSettings(c: any, companySlug: string) {
   const row = await storeGet(c, COMPANY_SETTING_SCOPE, slug);
   return {
     mainCompanySlug: slug,
-    notifyCompanyOwner: row ? row.notifyCompanyOwner !== false : true,
-    notifyApplicationOwner: row ? Boolean(row.notifyApplicationOwner) : false,
+    // Firma giriş ve oturum onayları güvenlik politikası gereği iki yönetim katmanına da gider.
+    notifyCompanyOwner: true,
+    notifyApplicationOwner: true,
     createdAt: row?.createdAt || null,
     updatedAt: row?.updatedAt || null,
     updatedBy: row?.updatedBy || null,
   };
 }
 
+function browserDeviceId(label: unknown) { const value=text(label); return value.startsWith("BROWSER:") ? value.slice(8) : ""; }
+function trustedLoginDeviceKey(userId: unknown, deviceId: unknown) { return `${text(userId)}:${text(deviceId)}`; }
+async function managerApproverUserIds(c: any, companySlug: string) {
+  const result=await c.env.DB.prepare(`SELECT u.id,u.role,u.platform_role,s.role_override,s.main_company_slug FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id WHERE u.is_active=1`).all<AnyRow>();
+  const ids=new Set<string>();
+  for(const row of result.results || []) { const role=roleOf(row); if(isSuper(role) || (isCompanyAdmin(role) && text(row.main_company_slug)===text(companySlug))) ids.add(text(row.id)); }
+  return ids;
+}
+function canApproveSessionTarget(actor: AnyRow, session: AnyRow) { const targetRole=roleOf({ role:session.target_role, platform_role:session.target_platform_role, role_override:session.target_role_override }); if(["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole)) return false; if(isSuper(actor.role)) return true; return isCompanyAdmin(actor.role) && text(actor.companySlug)===text(session.main_company_slug); }
+async function sessionNeedsManagerReview(c: any, session: AnyRow) {
+  let trust=await storeGet(c, SESSION_TRUST_SCOPE, text(session.id));
+  if (!trust && text(session.id)) trust=await storePut(c, SESSION_TRUST_SCOPE, text(session.id), text(session.mainCompanySlug || session.main_company_slug), { sessionId:text(session.id), userId:text(session.userId || session.user_id), status:"PENDING", requestedAt:text(session.createdAt || session.created_at || nowIso()), source:"MANAGER_REVIEW" });
+  if (["TRUSTED","VERIFIED","REJECTED","SUSPICIOUS"].includes(upper(trust?.status))) return false;
+  const deviceId=browserDeviceId(session.deviceLabel || session.device_label);
+  if(deviceId){ const trusted=await storeGet(c,TRUSTED_LOGIN_DEVICE_SCOPE,trustedLoginDeviceKey(session.userId || session.user_id,deviceId)); if(trusted && trusted.isTrusted!==false && !text(trusted.revokedAt)) return false; }
+  return true;
+}
 async function verifySecurityAppDecision(device: AnyRow, kind: string, id: string, decision: string, signatureValue: unknown) {
   if (device?.securityApp !== true) return true;
   const jwk = objectOf(device?.decisionPublicKeyJwk);
@@ -440,12 +460,9 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
 }
 
 function canApproveTarget(actor: AnyRow, approval: AnyRow, settings: AnyRow) {
-  const targetRole = roleOf({ role: approval.target_role, role_override: approval.target_role_override });
-  if (isCompanyAdmin(actor.role)) {
-    return actor.companySlug === text(approval.main_company_slug) &&
-      !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
-  }
-  if (isSuper(actor.role)) return Boolean(settings.notifyApplicationOwner);
+  const targetRole = roleOf({ role: approval.target_role, platform_role: approval.target_platform_role, role_override: approval.target_role_override });
+  if (isCompanyAdmin(actor.role)) return actor.companySlug === text(approval.main_company_slug) && !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(targetRole);
+  if (isSuper(actor.role)) return true;
   return false;
 }
 
@@ -598,32 +615,20 @@ export async function cancelPhoneApproval(c: any, idValue: unknown) {
 }
 
 export async function notifyManagerApproval(c: any, approvalId: string, companySlug: string) {
-  const settings = await companyApprovalSettings(c, companySlug);
-  const userIds = new Set<string>();
-
-  if (settings.notifyCompanyOwner) {
-    const owners = await c.env.DB.prepare(
-      `SELECT u.id,u.role,s.role_override
-         FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id
-        WHERE u.is_active=1 AND COALESCE(s.main_company_slug,'')=?`,
-    ).bind(companySlug).all<AnyRow>();
-    for (const row of owners.results || []) if (isCompanyAdmin(roleOf(row))) userIds.add(text(row.id));
-  }
-
-  if (settings.notifyApplicationOwner) {
-    const owners = await c.env.DB.prepare(
-      `SELECT u.id,u.role,s.role_override
-         FROM auth_users u LEFT JOIN auth_user_security s ON s.user_id=u.id
-        WHERE u.is_active=1`,
-    ).all<AnyRow>();
-    for (const row of owners.results || []) if (isSuper(roleOf(row))) userIds.add(text(row.id));
-  }
-
+  const userIds = await managerApproverUserIds(c, companySlug);
   const devices: AnyRow[] = [];
   for (const userId of userIds) devices.push(...await activeDevicesForUser(c, userId, "MANAGER"));
   const sent = await sendWakeMany(c, devices);
   await audit(c, "LOGIN_MANAGER_PUSH_DISPATCHED", "", "", companySlug, { approvalId, recipients: userIds.size, notifiedDevices: sent });
-  return { sent };
+  return { sent, recipients: userIds.size };
+}
+
+export async function notifySessionApproval(c: any, session: AnyRow) {
+  const companySlug=text(session.mainCompanySlug || session.main_company_slug); const targetRole=roleOf({ role:session.role, platform_role:session.platform_role, role_override:session.role_override });
+  if (["SUPER_ADMIN","ADMIN","COMPANY_ADMIN"].includes(targetRole) || !(await sessionNeedsManagerReview(c, session))) return { sent:0, recipients:0 };
+  const userIds=await managerApproverUserIds(c, companySlug); const devices: AnyRow[]=[]; for(const userId of userIds) devices.push(...await activeDevicesForUser(c,userId,"MANAGER"));
+  const sent=await sendWakeMany(c,devices); await audit(c,"SESSION_MANAGER_PUSH_DISPATCHED","",text(session.userId || session.user_id),companySlug,{ sessionId:text(session.id), recipients:userIds.size, notifiedDevices:sent });
+  return { sent, recipients:userIds.size };
 }
 
 async function pendingItems(c: any, actor: AnyRow) {
@@ -710,6 +715,16 @@ async function pendingItems(c: any, actor: AnyRow) {
       expiresAt: row.expires_at,
       mainCompanySlug: row.main_company_slug,
     });
+  }
+
+  if (isSuper(actor.role) || isCompanyAdmin(actor.role)) {
+    const sessionResult = isCompanyAdmin(actor.role)
+      ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.main_company_slug=? ORDER BY s.created_at DESC LIMIT 150`).bind(timestamp,actor.companySlug).all<AnyRow>()
+      : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.user_agent,s.ip_address,s.created_at,s.expires_at,u.full_name,u.username,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.revoked_at IS NULL AND s.expires_at>? ORDER BY s.created_at DESC LIMIT 250`).bind(timestamp).all<AnyRow>();
+    for (const row of sessionResult.results || []) {
+      if (!canApproveSessionTarget(actor,row) || !(await sessionNeedsManagerReview(c,row))) continue;
+      items.push({ kind: SECURITY_APPROVAL_KINDS.SESSION, id: row.id, dedupeKey: `session:${text(row.id)}`, title: "KY ERP · Oturum Onayı", body: `${text(row.full_name || row.username)} · ${friendlyDeviceLabel(row.device_label,row.user_agent)} için oturum onayı bekleniyor.`, requestedAt: row.created_at, expiresAt: row.expires_at, mainCompanySlug: row.main_company_slug });
+    }
   }
 
   return items;
@@ -1323,6 +1338,20 @@ export function registerAuthPushRoutes(app: any) {
       const finalStatus = upper(current?.status || status);
       await audit(c, decision === "APPROVE" ? "LOGIN_APPROVED_PUSH" : "LOGIN_DENIED_PUSH", actor.userId, text(approval.user_id), text(approval.main_company_slug), { approvalId: id, deviceId: actor.device.id, applied });
       return c.json({ ok: true, data: { kind, id, status: finalStatus, applied } });
+    }
+
+    if (kind === SECURITY_APPROVAL_KINDS.SESSION) {
+      const session=await c.env.DB.prepare(`SELECT s.*,u.role AS target_role,u.platform_role AS target_platform_role,us.role_override AS target_role_override FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=u.id WHERE s.id=? LIMIT 1`).bind(id).first<AnyRow>();
+      if(!session || !canApproveSessionTarget(actor,session)) return c.json(jsonError("SESSION_APPROVAL_NOT_FOUND","Bu oturum onayı bulunamadı veya yetkiniz dışında."),404);
+      let trust=await storeGet(c,SESSION_TRUST_SCOPE,id); if(!trust) await sessionNeedsManagerReview(c,session), trust=await storeGet(c,SESSION_TRUST_SCOPE,id);
+      const currentStatus=upper(trust?.status); const wanted=decision==="APPROVE"?"TRUSTED":"REJECTED";
+      if((decision==="APPROVE"&&["TRUSTED","VERIFIED"].includes(currentStatus))||(decision==="DENY"&&["REJECTED","SUSPICIOUS"].includes(currentStatus))) return c.json({ok:true,data:{kind,id,status:currentStatus,applied:false,idempotent:true}});
+      if(session.revoked_at || Date.parse(text(session.expires_at))<=Date.now() || currentStatus!=="PENDING") return c.json(jsonError("SESSION_APPROVAL_NOT_PENDING","Oturum artık onay beklemiyor."),409);
+      const update=await atomicSecurityStatusUpdate(c,SESSION_TRUST_SCOPE,trust,"PENDING",{status:wanted,decidedAt:nowIso(),decidedByUserId:actor.userId,decidedByDeviceId:actor.device.id,source:"MANAGER_PHONE"});
+      if(!update.changed) return c.json({ok:true,data:{kind,id,status:upper(update.row?.status||wanted),applied:false,idempotent:true}});
+      if(wanted==="REJECTED") await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,?),revoked_by=COALESCE(revoked_by,?) WHERE id=?").bind(nowIso(),actor.userId,id).run();
+      await audit(c,decision==="APPROVE"?"SESSION_TRUSTED_PUSH":"SESSION_TRUST_REJECTED_PUSH",actor.userId,text(session.user_id),text(session.main_company_slug),{sessionId:id,deviceId:actor.device.id});
+      return c.json({ok:true,data:{kind,id,status:wanted,applied:true}});
     }
 
     if (kind === SECURITY_APPROVAL_KINDS.CRITICAL_ACTION) {

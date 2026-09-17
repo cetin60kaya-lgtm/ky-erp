@@ -72,15 +72,17 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
-test("company owner is default approver and application owner notifications are optional", () => {
-  assert.match(push, /notifyCompanyOwner: row \? row\.notifyCompanyOwner !== false : true/);
-  assert.match(push, /notifyApplicationOwner: row \? Boolean\(row\.notifyApplicationOwner\) : false/);
-  assert.match(push, /isCompanyAdmin\(actor\.role\)/);
-  assert.match(push, /isSuper\(actor\.role\)/);
-  assert.match(companySettings, /Firma Sahibi \/ İşveren telefonuna onay bildirimi gönder/);
-  assert.match(companySettings, /Süper Yöneticiye de onay bildirimi gönder/);
+test("company owner and application owner are mandatory phone approvers", () => {
+  assert.match(push, /notifyCompanyOwner: true/);
+  assert.match(push, /notifyApplicationOwner: true/);
+  assert.match(push, /managerApproverUserIds/);
+  assert.match(push, /if \(isSuper\(actor\.role\)\) return true/);
+  assert.match(push, /SESSION_MANAGER_PUSH_DISPATCHED/);
+  assert.match(push, /SECURITY_APPROVAL_KINDS\.SESSION/);
+  assert.match(policy, /notifySessionApproval/);
+  assert.match(policy, /SESSION_TRUST_PENDING_WRITE/);
+  assert.match(policy, /status: "PENDING"/);
 });
-
 test("dedicated Security worker owns phone approval while the legacy main worker retires itself", () => {
   assert.match(main, /X-KYERP-Push-Device/);
   assert.match(main, /X-KYERP-Push-Token/);
@@ -232,5 +234,5 @@ test("approved phone decision clears the Android notification immediately",()=>{
   assert.match(securityApp,/getRegistrations/);
   assert.match(securityApp,/getNotifications\(\)/);
   assert.match(securityApp,/openApproval/);
-  assert.match(securityApp,/await closeApprovalNotifications\(\);const critical=/);
+  assert.match(securityApp,/await closeApprovalNotifications\(\);const kind=/);
 });

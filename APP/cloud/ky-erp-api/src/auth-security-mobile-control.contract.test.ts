@@ -32,7 +32,7 @@ test("phone reports the running KY Security version into its durable device reco
   assert.match(push,/X-KYERP-Security-App-Version/);
   assert.match(push,/reportedAppVersion/);
   assert.match(push,/securityAppVersion: acceptedAppVersion/);
-  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.4"/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.5"/);
 });
 
 test("mobile active session status uses D1 UTC time and expires stale pending cards",async()=>{

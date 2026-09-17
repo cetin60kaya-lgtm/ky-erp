@@ -2,7 +2,7 @@ const KY_SECURITY_ACTION_API="https://api.kyerp.net/api";
 const KY_SECURITY_DB="kyerp-security-app-v1";
 const KY_SECURITY_STORE="device";
 const KY_SECURITY_KEY="active";
-const KY_SECURITY_CLIENT_VERSION="security-v2.4";
+const KY_SECURITY_CLIENT_VERSION="security-v2.5";
 
 function saBase64Url(bytes){let binary="";for(const byte of new Uint8Array(bytes))binary+=String.fromCharCode(byte);return btoa(binary).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_")}
 function saBase64UrlToBytes(value){const normalized=String(value||"").replace(/-/g,"+").replace(/_/g,"/");const padded=normalized+"=".repeat((4-normalized.length%4)%4);const raw=atob(padded);return Uint8Array.from(raw,(char)=>char.charCodeAt(0))}

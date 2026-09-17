@@ -12,9 +12,9 @@ const control=readFileSync(resolve(root,"public/security/security-control-center
 const actions=readFileSync(resolve(root,"public/security/security-actions.js"),"utf8");
 const sw=readFileSync(resolve(root,"public/security/sw.js"),"utf8");
 test("KY Security shows its canonical version and stores version state",()=>{
-  assert.match(html,/id="appVersionBadge">v2\.4/);
-  assert.match(html,/id="accountVersion">v2\.4/);
-  assert.match(app,/CLIENT_VERSION="security-v2\.4"/);
+  assert.match(html,/id="appVersionBadge">v2\.5/);
+  assert.match(html,/id="accountVersion">v2\.5/);
+  assert.match(app,/CLIENT_VERSION="security-v2\.5"/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);
   assert.match(app,/X-KYERP-Security-App-Version/);
@@ -41,7 +41,7 @@ test("mobile security refresh is event driven without short interval polling",()
   assert.match(control,/visibilitychange/);
   assert.match(control,/KYERP_SECURITY_PUSH_WAKE/);
   assert.match(sw,/security-control-center\.js/);
-  assert.match(sw,/security-shell-v19/);
+  assert.match(sw,/security-shell-v20/);
 });
 
 test("mobile control runtime files stay JavaScript syntax valid",()=>{
