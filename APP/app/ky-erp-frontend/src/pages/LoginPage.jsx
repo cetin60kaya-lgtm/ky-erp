@@ -668,8 +668,8 @@ export default function LoginPage() {
                 <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
                 <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
                 <h3>{flow.pushDelivered === false ? "KY ERP Güvenlik uygulamasını açın" : "Telefonunuza bildirim gönderildi"}</h3>
-                <p>{flow.pushDelivered === false ? "Bildirim kanalı yenileniyor. KY ERP Güvenlik uygulamasını açın; bekleyen giriş Onaylar bölümünde görünür." : <>Tek KY ERP bildirimini açıp <strong>Onayla</strong> seçin. Aynı giriş için ikinci bildirim üretilmez. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</>}</p>
-                {flow.matchNumber ? <div className="auth-match-number"><span>EŞLEŞTİRME NO</span><strong>{flow.matchNumber}</strong><small>Telefondaki KY Güvenlik ekranında da aynı numarayı görüyorsanız onaylayın.</small></div> : null}
+                <p>{flow.pushDelivered === false ? "Bildirim kanalı yenileniyor. KY ERP Güvenlik uygulamasını açın; bekleyen giriş Onaylar bölümünde görünür." : <>Tek KY ERP bildirimini açın ve telefonda bilgisayarda gördüğünüz <strong>2 haneli eşleştirme numarasını</strong> seçin. Doğru sayı seçimi giriş onayıdır. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</>}</p>
+                {flow.matchNumber ? <div className="auth-match-number"><span>EŞLEŞTİRME NO</span><strong>{flow.matchNumber}</strong><small>Telefonda çıkan seçeneklerden bu numarayı seçin. Farklı numarayı seçerseniz giriş onaylanmaz.</small></div> : null}
                 <div className="auth-notice">
                   <strong>Güvenli bekleme</strong>
                   <span>Bu giriş yalnız kayıtlı güvenilir telefonunuzdan onaylanabilir. İstek kısa süre içinde otomatik olarak geçersiz olur.</span>

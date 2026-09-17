@@ -12,9 +12,9 @@ const control=readFileSync(resolve(root,"public/security/security-control-center
 const actions=readFileSync(resolve(root,"public/security/security-actions.js"),"utf8");
 const sw=readFileSync(resolve(root,"public/security/sw.js"),"utf8");
 test("KY Security shows its canonical version and stores version state",()=>{
-  assert.match(html,/id="appVersionBadge">v2\.5/);
-  assert.match(html,/id="accountVersion">v2\.5/);
-  assert.match(app,/CLIENT_VERSION="security-v2\.5"/);
+  assert.match(html,/id="appVersionBadge">v2\.6/);
+  assert.match(html,/id="accountVersion">v2\.6/);
+  assert.match(app,/CLIENT_VERSION="security-v2\.6"/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);
   assert.match(app,/X-KYERP-Security-App-Version/);
@@ -25,6 +25,11 @@ test("system manager mobile center exposes sessions computers logs and company f
   assert.match(html,/data-tab="computers"/);
   assert.match(html,/data-tab="logs"/);
   assert.match(html,/id="controlCompanyFilter"/);
+  assert.match(html,/superAdminConsole/);
+  assert.match(html,/UYGULAMA YÖNETİMİ/);
+  assert.match(app,/super-admin-security/);
+  assert.match(app,/scopeType==="SYSTEM"/);
+  assert.match(html,/data-system-only/);
   assert.match(control,/auth\/push\/device\/control-center/);
   assert.match(control,/companySlug=/);
 });
@@ -41,7 +46,7 @@ test("mobile security refresh is event driven without short interval polling",()
   assert.match(control,/visibilitychange/);
   assert.match(control,/KYERP_SECURITY_PUSH_WAKE/);
   assert.match(sw,/security-control-center\.js/);
-  assert.match(sw,/security-shell-v21/);
+  assert.match(sw,/security-shell-v22/);
 });
 
 test("mobile control runtime files stay JavaScript syntax valid",()=>{

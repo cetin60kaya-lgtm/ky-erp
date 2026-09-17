@@ -28,6 +28,9 @@ test("security app devices are preferred and every decision is signed with devic
   assert.match(push,/SECURITY_DEVICE_SIGNATURE_INVALID/);
   assert.match(push,/KYERP-DECISION-V1/);
   assert.match(push,/decisionPublicKeyJwk/);
+  assert.match(push,/requiresLoginNumberMatch/);
+  assert.match(push,/KYERP-DECISION-V2/);
+  assert.match(push,/PHONE_MATCH_NUMBER_INVALID/);
 });
 
 test("security device token drift self-heals only with a fresh signed device-auth proof",()=>{
@@ -58,7 +61,7 @@ test("access refresh reuses the same security device id instead of creating dupl
   assert.match(push,/const existing = serverBoundCandidate \|\| legacyReplaceCandidate/);
   assert.match(push,/SECURITY_DEVICE_RELINK_INVALID/);
   assert.match(push,/relinkedDevice: Boolean\(serverBoundCandidate \|\| legacyReplaceCandidate\)/);
-  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.5"/);
+  assert.match(push,/SECURITY_APP_VERSION = "security-v2\.6"/);
 });
 
 

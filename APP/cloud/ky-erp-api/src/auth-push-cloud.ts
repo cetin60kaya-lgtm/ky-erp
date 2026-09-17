@@ -22,7 +22,7 @@ const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const SESSION_TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
 const TRUSTED_LOGIN_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.5";
+const SECURITY_APP_VERSION = "security-v2.6";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;
@@ -229,7 +229,9 @@ async function sessionNeedsManagerReview(c: any, session: AnyRow) {
   if(deviceId){ const trusted=await storeGet(c,TRUSTED_LOGIN_DEVICE_SCOPE,trustedLoginDeviceKey(session.userId || session.user_id,deviceId)); if(trusted && trusted.isTrusted!==false && !text(trusted.revokedAt)) return false; }
   return true;
 }
-async function verifySecurityAppDecision(device: AnyRow, kind: string, id: string, decision: string, signatureValue: unknown) {
+function securityAppVersionCode(value: unknown) { const match=/security-v(\d+)\.(\d+)/i.exec(text(value)); return match ? Number(match[1])*100+Number(match[2]) : 0; }
+function requiresLoginNumberMatch(device: AnyRow) { return securityAppVersionCode(device?.securityAppVersion) >= 206; }
+async function verifySecurityAppDecision(device: AnyRow, kind: string, id: string, decision: string, signatureValue: unknown, matchNumberValue: unknown = "") {
   if (device?.securityApp !== true) return true;
   const jwk = objectOf(device?.decisionPublicKeyJwk);
   const signature = text(signatureValue);
@@ -242,8 +244,10 @@ async function verifySecurityAppDecision(device: AnyRow, kind: string, id: strin
       false,
       ["verify"],
     );
+    const matchNumber=text(matchNumberValue);
+    const version=kind === "SELF_LOGIN" && decision === "APPROVE" && matchNumber ? "KYERP-DECISION-V2" : "KYERP-DECISION-V1";
     const message = new TextEncoder().encode(
-      `KYERP-DECISION-V1|${text(device.id)}|${kind}|${id}|${decision}`,
+      matchNumber ? `${version}|${text(device.id)}|${kind}|${id}|${decision}|${matchNumber}` : `${version}|${text(device.id)}|${kind}|${id}|${decision}`,
     );
     return crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
@@ -1266,10 +1270,11 @@ export function registerAuthPushRoutes(app: any) {
     const kind = upper(body.kind);
     const id = text(body.id);
     const decision = upper(body.decision);
+    const matchNumber = text(body.matchNumber);
     if (!["APPROVE", "DENY"].includes(decision) || !id) return c.json(jsonError("PUSH_DECISION_INVALID", "Onay veya ret seçilmelidir."), 400);
 
     if (actor.device?.securityApp === true) {
-      const verified = await verifySecurityAppDecision(actor.device, kind, id, decision, body.signature);
+      const verified = await verifySecurityAppDecision(actor.device, kind, id, decision, body.signature, matchNumber);
       if (!verified) {
         await audit(c, "SECURITY_APP_DECISION_SIGNATURE_FAILED", actor.userId, actor.userId, actor.companySlug, {
           deviceId: actor.device.id,
@@ -1285,6 +1290,13 @@ export function registerAuthPushRoutes(app: any) {
       const row = await storeGet(c, PHONE_SCOPE, id);
       if (!row || text(row.userId) !== actor.userId) {
         return c.json(jsonError("PHONE_APPROVAL_NOT_FOUND", "Giriş onayı bulunamadı."), 404);
+      }
+
+      if (decision === "APPROVE" && requiresLoginNumberMatch(actor.device)) {
+        if (!matchNumber || matchNumber !== text(row.matchNumber)) {
+          await audit(c, "PHONE_LOGIN_MATCH_NUMBER_FAILED", actor.userId, actor.userId, actor.companySlug, { challengeId: id, deviceId: actor.device.id });
+          return c.json(jsonError("PHONE_MATCH_NUMBER_INVALID", "Bilgisayardaki eşleştirme numarası doğrulanamadı."), 400);
+        }
       }
 
       const currentStatus = upper(row.status);

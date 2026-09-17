@@ -20,7 +20,7 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.5</span></small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.6</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -80,7 +80,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.5</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.6</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -93,11 +93,16 @@
         <small id="accountNote" class="account-note">Onaylar yalnız bu hesabın yetkileriyle verilir.</small>
       </section>
 
+      <section id="superAdminConsole" class="security-card super-admin-console hidden">
+        <div class="super-admin-console-head"><div><span class="eyebrow">UYGULAMA YÖNETİMİ</span><h2>Sistem Güvenlik Merkezi</h2><p class="muted">KY ERP genelindeki girişler, aktif oturumlar, bağlı cihazlar ve güvenlik olayları bu Süper Yönetici telefonundan yönetilir.</p></div><span class="super-admin-crown">SA</span></div>
+        <div class="super-admin-actions"><button type="button" data-owner-open="approvals"><b>Sistem Onayları</b><span>Giriş, oturum ve kritik işlemler</span></button><button type="button" data-owner-open="sessions"><b>Aktif Oturumlar</b><span>Tüm firmalar ve kullanıcılar</span></button><button type="button" data-owner-open="computers"><b>Sistem Cihazları</b><span>Bilgisayar ve güvenilir cihazlar</span></button><button type="button" data-owner-open="logs"><b>Denetim Logları</b><span>Güvenlik hareketleri ve geçmiş</span></button></div>
+      </section>
+
       <nav class="security-tabs" aria-label="KY ERP Güvenlik bölümleri">
         <button type="button" data-tab="approvals" class="active">Onaylar <span id="tabCount">0</span></button>
-        <button type="button" data-tab="sessions">Oturumlar <span id="sessionTabCount">0</span></button>
-        <button type="button" data-tab="computers">Bilgisayarlar <span id="computerTabCount">0</span></button>
-        <button type="button" data-tab="logs">Loglar</button>
+        <button type="button" data-tab="sessions" data-system-only>Oturumlar <span id="sessionTabCount">0</span></button>
+        <button type="button" data-tab="computers" data-system-only>Bilgisayarlar <span id="computerTabCount">0</span></button>
+        <button type="button" data-tab="logs" data-system-only>Loglar</button>
         <button type="button" data-tab="code">Giriş Kodu</button>
         <button type="button" data-tab="device">Bu Telefon</button>
       </nav>
@@ -192,9 +197,9 @@
       <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
     </footer>
   </main>
-  <script src="/security/ios-safari.js?v=security-v2.5"></script>
-  <script type="module" src="/security/app.js?v=security-v2.5"></script>
-  <script type="module" src="/security/security-actions.js?v=security-v2.5"></script>
-  <script type="module" src="/security/security-control-center.js?v=security-v2.5"></script>
+  <script src="/security/ios-safari.js?v=security-v2.6"></script>
+  <script type="module" src="/security/app.js?v=security-v2.6"></script>
+  <script type="module" src="/security/security-actions.js?v=security-v2.6"></script>
+  <script type="module" src="/security/security-control-center.js?v=security-v2.6"></script>
 </body>
 </html>
