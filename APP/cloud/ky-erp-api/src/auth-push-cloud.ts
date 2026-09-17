@@ -1150,6 +1150,7 @@ export function registerAuthPushRoutes(app: any) {
         deviceLabel: text(actor.device.deviceLabel),
         securityAppVersion: text(actor.device.securityAppVersion),
         isActive: actor.device.isActive !== false,
+        pushReachable: actor.device.pushReachable !== false,
         lastSeenAt: actor.device.lastSeenAt || null,
         lastPushAt: actor.device.lastPushAt || null,
         lastRefreshAt: actor.device.lastRefreshAt || null,

@@ -328,8 +328,9 @@ async function refreshState(options={}){
     renderAccount(health.account,{...(health.device||device),lastKnownServerVersion:health.serverVersion||""});
     els.readyTitle.textContent="Onaylı cihaz · Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
-    setHealth(els.pushHealth,health?.device?.lastError?"Sessizce yenileniyor":"Hazır",health?.device?.lastError?"warn":"ok");
-    if(health?.device?.lastError&&!options?.skipAutoRepair&&Date.now()-lastAutoRepairAt>120000){lastAutoRepairAt=Date.now();const repaired=await repairConnection({automatic:true});if(repaired)return refreshState({skipAutoRepair:true})}
+    const pushNeedsRepair=health?.device?.pushReachable===false||Boolean(health?.device?.lastError);
+    setHealth(els.pushHealth,pushNeedsRepair?"Sessizce yenileniyor":"Hazır",pushNeedsRepair?"warn":"ok");
+    if(pushNeedsRepair&&!options?.skipAutoRepair&&Date.now()-lastAutoRepairAt>120000){lastAutoRepairAt=Date.now();const repaired=await repairConnection({automatic:true});if(repaired)return refreshState({skipAutoRepair:true})}
     els.lastSync.textContent="Son kontrol: "+new Date(health.checkedAt||Date.now()).toLocaleString("tr-TR");
     await refreshPending(health.items);
   }catch(error){

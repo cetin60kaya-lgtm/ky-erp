@@ -48,6 +48,7 @@ test("security app health and signed connection refresh can recover an inactive 
   assert.match(push,/SECURITY_APP_CONNECTION_REFRESHED/);
   assert.match(push,/PUSH_DEVICE_RECOVERY_UNAUTHORIZED/);
   assert.match(push,/lastRefreshAt/);
+  assert.match(push,/pushReachable: actor\.device\.pushReachable !== false/);
 });
 
 
