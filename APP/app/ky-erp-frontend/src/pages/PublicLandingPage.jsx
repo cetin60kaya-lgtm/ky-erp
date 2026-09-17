@@ -20,6 +20,7 @@ import PublicCorporateFooter from "../components/public/PublicCorporateFooter";
 import PublicReferencesSection from "../components/public/PublicReferencesSection";
 import PublicModuleShowcase from "../components/public/PublicModuleShowcase";
 import PublicPresentationStories from "../components/public/PublicPresentationStories";
+import PublicDeviceExperience from "../components/public/PublicDeviceExperience";
 import "../styles/public-landing.css";
 import "../styles/public-landing-v2.css";
 
@@ -155,16 +156,15 @@ export default function PublicLandingPage() {
         </a>
 
         <nav className={menuOpen ? "is-open" : ""} aria-label="Ana menü">
-          <a href="#ozellikler" onClick={() => setMenuOpen(false)}>Özellikler</a>
           <a href="#canli-demo" onClick={() => setMenuOpen(false)}>Canlı Demo</a>
-          <a href="#moduller" onClick={() => setMenuOpen(false)}>Modüller</a>
-          <a href="#surec" onClick={() => setMenuOpen(false)}>İş Akışı</a>
           <a href="#guvenlik" onClick={() => setMenuOpen(false)}>Güvenlik</a>
-          <a href="#iletisim" onClick={() => setMenuOpen(false)}>İletişim</a>
+          <a href="#muhasebe-demo" onClick={() => setMenuOpen(false)}>Muhasebe</a>
+          <a href="#cihazlar" onClick={() => setMenuOpen(false)}>Cihazlar</a>
+          <a href="#moduller" onClick={() => setMenuOpen(false)}>Modüller</a>
         </nav>
 
         <div className="ky-public-header__actions">
-          <a className="ky-public-login" href={APP_URL}>Uygulamaya Giriş <ArrowRight size={17} /></a>
+          <a className="ky-public-login" href={APP_URL}>Sisteme Gir <ArrowRight size={17} /></a>
           <button
             className="ky-public-menu"
             type="button"
@@ -187,13 +187,13 @@ export default function PublicLandingPage() {
               tekstil işletmesinin günlük operasyonlarını aynı sistemde birleştirir.
             </p>
             <div className="ky-public-hero__actions">
-              <a className="ky-public-primary" href={APP_URL}>KY ERP'ye Giriş <ArrowRight size={18} /></a>
+              <a className="ky-public-primary" href={APP_URL}>Doğrudan Sisteme Gir <ArrowRight size={18} /></a>
               <a className="ky-public-secondary" href="#canli-demo">Sistemi İncele</a>
             </div>
             <div className="ky-public-trust">
-              <span><CheckCircle2 size={17} /> Rol bazlı yetkilendirme</span>
               <span><CheckCircle2 size={17} /> Telefon + MFA güvenliği</span>
-              <span><CheckCircle2 size={17} /> İşlem kayıtları</span>
+              <span><CheckCircle2 size={17} /> Firma ve modül yetkileri</span>
+              <span><CheckCircle2 size={17} /> PC · Android · iPhone/iPad</span>
             </div>
           </div>
           <div className="ky-public-hero__visual"><AppPreview /></div>
@@ -203,11 +203,12 @@ export default function PublicLandingPage() {
           <div><Boxes size={22} /><span><b>Tek sistem</b><small>Dağınık operasyon yerine ortak iş akışı</small></span></div>
           <div><Workflow size={22} /><span><b>Bağlantılı süreçler</b><small>Belgeden üretime, üretimden rapora</small></span></div>
           <div><ShieldCheck size={22} /><span><b>Yetkili erişim</b><small>Firma, kullanıcı ve modül bazlı kontrol</small></span></div>
-          <div><Sparkles size={22} /><span><b>Akıllı yardımcı</b><small>ERP içinde arama, analiz ve işlem desteği</small></span></div>
+          <div><Sparkles size={22} /><span><b>Her cihazda düzen</b><small>Masaüstü, tablet ve telefonda uyumlu çalışma</small></span></div>
         </section>
 
         <PublicModuleShowcase />
         <PublicPresentationStories />
+        <PublicDeviceExperience />
 
         <section className="ky-public-section ky-public-modules" id="moduller">
           <div className="ky-public-section__head">
@@ -258,9 +259,9 @@ export default function PublicLandingPage() {
           <div>
             <span>KY ERP</span>
             <h2>İşletmenizin çalışma merkezine geçin.</h2>
-            <p>Yetkili kullanıcılar güvenli giriş ekranından KY ERP uygulamasına devam edebilir.</p>
+            <p>Hesabınızla giriş yapın, güvenliği doğrulayın ve yetkiniz olan çalışma alanına doğrudan devam edin.</p>
           </div>
-          <a href={APP_URL}>Uygulamaya Giriş <ArrowRight size={19} /></a>
+          <a href={APP_URL}>Sisteme Gir <ArrowRight size={19} /></a>
         </section>
       </main>
 
