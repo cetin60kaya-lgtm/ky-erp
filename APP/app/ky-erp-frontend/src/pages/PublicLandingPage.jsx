@@ -8,7 +8,6 @@ import {
   FileText,
   FlaskConical,
   Gauge,
-  LockKeyhole,
   Menu,
   Palette,
   ShieldCheck,
@@ -20,6 +19,7 @@ import {
 import PublicCorporateFooter from "../components/public/PublicCorporateFooter";
 import PublicReferencesSection from "../components/public/PublicReferencesSection";
 import PublicModuleShowcase from "../components/public/PublicModuleShowcase";
+import PublicPresentationStories from "../components/public/PublicPresentationStories";
 import "../styles/public-landing.css";
 import "../styles/public-landing-v2.css";
 
@@ -156,9 +156,9 @@ export default function PublicLandingPage() {
 
         <nav className={menuOpen ? "is-open" : ""} aria-label="Ana menü">
           <a href="#ozellikler" onClick={() => setMenuOpen(false)}>Özellikler</a>
+          <a href="#canli-demo" onClick={() => setMenuOpen(false)}>Canlı Demo</a>
           <a href="#moduller" onClick={() => setMenuOpen(false)}>Modüller</a>
           <a href="#surec" onClick={() => setMenuOpen(false)}>İş Akışı</a>
-          <a href="#referanslar" onClick={() => setMenuOpen(false)}>Referanslar</a>
           <a href="#guvenlik" onClick={() => setMenuOpen(false)}>Güvenlik</a>
           <a href="#iletisim" onClick={() => setMenuOpen(false)}>İletişim</a>
         </nav>
@@ -192,7 +192,7 @@ export default function PublicLandingPage() {
             </div>
             <div className="ky-public-trust">
               <span><CheckCircle2 size={17} /> Rol bazlı yetkilendirme</span>
-              <span><CheckCircle2 size={17} /> MFA desteği</span>
+              <span><CheckCircle2 size={17} /> Telefon + MFA güvenliği</span>
               <span><CheckCircle2 size={17} /> İşlem kayıtları</span>
             </div>
           </div>
@@ -202,11 +202,12 @@ export default function PublicLandingPage() {
         <section className="ky-public-strip" id="ozellikler">
           <div><Boxes size={22} /><span><b>Tek sistem</b><small>Dağınık operasyon yerine ortak iş akışı</small></span></div>
           <div><Workflow size={22} /><span><b>Bağlantılı süreçler</b><small>Belgeden üretime, üretimden rapora</small></span></div>
-          <div><ShieldCheck size={22} /><span><b>Yetkili erişim</b><small>Kullanıcı ve modül bazlı kontrol</small></span></div>
+          <div><ShieldCheck size={22} /><span><b>Yetkili erişim</b><small>Firma, kullanıcı ve modül bazlı kontrol</small></span></div>
           <div><Sparkles size={22} /><span><b>Akıllı yardımcı</b><small>ERP içinde arama, analiz ve işlem desteği</small></span></div>
         </section>
 
         <PublicModuleShowcase />
+        <PublicPresentationStories />
 
         <section className="ky-public-section ky-public-modules" id="moduller">
           <div className="ky-public-section__head">
@@ -252,23 +253,6 @@ export default function PublicLandingPage() {
         </section>
 
         <PublicReferencesSection />
-
-        <section className="ky-public-section ky-public-security" id="guvenlik">
-          <div className="ky-public-security__panel">
-            <div className="ky-public-security__icon"><LockKeyhole size={32} /></div>
-            <span className="ky-public-kicker">GÜVENLİK & YETKİ</span>
-            <h2>Herkes yalnızca işi için gereken alanı görür.</h2>
-            <p>
-              KY ERP; kullanıcı, rol ve modül izinlerini ayrı yönetir. MFA doğrulaması, oturum yönetimi ve işlem kayıtları kritik iş akışlarının denetlenebilir kalmasına yardımcı olur.
-            </p>
-          </div>
-          <div className="ky-public-security__list">
-            <div><ShieldCheck size={21} /><span><strong>Rol bazlı erişim</strong><small>Modül ve işlem seviyesinde yetki kontrolü</small></span></div>
-            <div><LockKeyhole size={21} /><span><strong>MFA doğrulaması</strong><small>Desteklenen doğrulayıcı uygulamalarla ek güvenlik</small></span></div>
-            <div><FileText size={21} /><span><strong>İşlem geçmişi</strong><small>Kritik hareketlerde izlenebilir kayıt yapısı</small></span></div>
-            <div><Boxes size={21} /><span><strong>Özel işletme verisi</strong><small>ERP içeriği tanıtım sitesinde yayınlanmaz</small></span></div>
-          </div>
-        </section>
 
         <section className="ky-public-cta">
           <div>
