@@ -6128,7 +6128,7 @@ function SafeDailyEntry({
 
       {quickModalOpen ? (
         <div className="kyik-modal-backdrop kyik-quick-day-backdrop" role="dialog" aria-modal="true" aria-label="Tek gün hızlı personel girişi">
-          <div className={`kyik-modal kyik-quick-day-modal ${shiftMode}`} data-modal-size-key="ik-gunluk-personel-hizli-giris">
+          <div className="kyik-modal kyik-quick-day-modal" data-shift-mode={shiftMode} data-modal-position-key="ik-gunluk-personel-hizli-giris-v2" data-modal-size-key="ik-gunluk-personel-hizli-giris-v2">
             <div className="kyik-modal-head kyik-quick-day-head">
               <div>
                 <span>TEK GÜN GÜVENLİ HIZLI GİRİŞ</span>

@@ -1862,7 +1862,7 @@
 /* Günlük personel - tek gün güvenli hızlı giriş penceresi */
 .kyik-quick-day-backdrop{padding:18px;background:rgba(10,25,48,.62);backdrop-filter:blur(2px)}
 .kyik-quick-day-modal{--quick-accent:#f97316;--quick-soft:#fff4e9;width:calc(100vw - 48px);height:calc(100vh - 48px);padding:0!important;overflow:hidden;display:grid;grid-template-rows:auto auto auto auto auto minmax(0,1fr) auto;border-radius:14px!important;border-color:#cbd9e9!important;container-type:inline-size;container-name:quick-day-modal}
-.kyik-quick-day-modal.night{--quick-accent:#3730a3;--quick-soft:#f1f0ff}
+.kyik-quick-day-modal[data-shift-mode="night"]{--quick-accent:#3730a3;--quick-soft:#f1f0ff}
 .kyik-quick-day-head{margin:0!important;padding:14px 18px!important;background:linear-gradient(110deg,var(--quick-soft),#fff)}
 .kyik-quick-day-head>div>span{display:block;color:var(--quick-accent);font-size:10px;font-weight:950;letter-spacing:.08em}
 .kyik-quick-day-head h3{margin:2px 0!important;color:#102a4c;font-size:20px}.kyik-quick-day-head p{margin:3px 0 0;color:#64748b;font-size:11px}
