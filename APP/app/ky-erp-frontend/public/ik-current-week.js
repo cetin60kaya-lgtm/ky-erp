@@ -2,6 +2,9 @@
   const RANGE_KEY = "ikDailyDateRange.v2";
   const SELECTED_DATE_KEY = "ikDailySelectedDate.v2";
   const BUTTON_ID = "kyerp-current-work-week";
+  const AUTO_PRINT_KEY = "kyerp.weeklyPrint.autoprint.v1";
+  const RETURN_URL_KEY = "kyerp.weeklyPrint.returnUrl.v1";
+  const WEEKLY_ROUTE = "/ik/ik-raporlari";
 
   function pad(value) {
     return String(value).padStart(2, "0");
@@ -46,7 +49,7 @@
         window.localStorage.setItem(SELECTED_DATE_KEY, week.selected);
       }
     } catch {
-      // localStorage opsiyoneldir; React state ana kaynaktır.
+      // localStorage opsiyoneldir; React state ana kaynaktir.
     }
   }
 
@@ -83,8 +86,6 @@
     if (inputs.length < 2) return;
     const week = currentWorkWeek();
     writeRange(week);
-    // Tam sayfa yenileme YOK. React'in mevcut controlled input akışını tetikler;
-    // auth provider, token ve açık uygulama oturumu yeniden başlatılmaz.
     setReactInputValue(inputs[0], week.start);
     setReactInputValue(inputs[1], week.end);
     window.setTimeout(() => syncButtonFromInputs(actions, button), 0);
@@ -100,7 +101,7 @@
       button.id = BUTTON_ID;
       button.type = "button";
       button.textContent = "Bu Hafta";
-      button.title = "Güncel Pazartesi-Cuma aralığına uygulamadan çıkmadan geç";
+      button.title = "Guncel Pazartesi-Cuma araligina uygulamadan cikmadan gec";
       button.style.height = "34px";
       button.style.padding = "0 12px";
       button.style.border = "1px solid #cbd5e1";
@@ -126,39 +127,26 @@
     return String(node?.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  function findButtonByText(text) {
-    return [...document.querySelectorAll("button")].find(
-      (button) => normalizedText(button) === text,
-    );
+  function showNotice(message, tone = "warn") {
+    if (document.getElementById("kyerp-weekly-print-notice")) return;
+    const notice = document.createElement("div");
+    notice.id = "kyerp-weekly-print-notice";
+    notice.style.cssText = tone === "ok"
+      ? "position:fixed;z-index:99999;right:18px;top:76px;background:#ecfdf5;color:#166534;border:1px solid #86efac;border-radius:8px;padding:12px 14px;font:700 13px Segoe UI,Arial,sans-serif;box-shadow:0 8px 24px rgba(15,23,42,.16)"
+      : "position:fixed;z-index:99999;right:18px;top:76px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;font:700 13px Segoe UI,Arial,sans-serif;box-shadow:0 8px 24px rgba(15,23,42,.16)";
+    notice.textContent = message;
+    document.body.appendChild(notice);
+    window.setTimeout(() => notice.remove(), 5000);
   }
 
-  function waitForWeeklyPrint(attempt = 0) {
-    const printable = document.querySelector(".printable.weekly-print");
-    const rows = printable?.querySelectorAll?.("tbody tr")?.length || 0;
-    if (printable && rows > 0) {
-      window.setTimeout(() => {
-        window.print();
-        window.setTimeout(() => {
-          const back = findButtonByText("Günlük Giriş");
-          back?.click?.();
-        }, 100);
-      }, 80);
-      return;
+  function startWeeklyPrintRoute() {
+    try {
+      sessionStorage.setItem(AUTO_PRINT_KEY, "1");
+      sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search + window.location.hash);
+    } catch {
+      // sessionStorage yoksa da haftalik ekrana git.
     }
-
-    if (attempt >= 60) {
-      const weeklyScreen = document.querySelector(".kyik-screen");
-      if (weeklyScreen) {
-        const notice = document.createElement("div");
-        notice.style.cssText = "position:fixed;z-index:99999;right:18px;top:76px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;font:600 13px Segoe UI,Arial,sans-serif;box-shadow:0 8px 24px rgba(15,23,42,.16)";
-        notice.textContent = "Haftalık yazdırma listesi hazırlanamadı. Haftalık Özet ekranındaki kayıtları kontrol edin.";
-        document.body.appendChild(notice);
-        window.setTimeout(() => notice.remove(), 5000);
-      }
-      return;
-    }
-
-    window.setTimeout(() => waitForWeeklyPrint(attempt + 1), 100);
+    window.location.assign(WEEKLY_ROUTE);
   }
 
   function interceptSafeWeeklyPrint(event) {
@@ -170,23 +158,70 @@
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-
-    const weeklyButton = findButtonByText("Haftalık Özet");
-    if (!weeklyButton) {
-      return;
-    }
-    weeklyButton.click();
-    window.setTimeout(() => waitForWeeklyPrint(0), 50);
+    startWeeklyPrintRoute();
   }
 
-  // SafeDailyEntry içindeki eski window.print() boş sayfa üretiyordu.
-  // Capture listener React onClick'ten önce devreye girer; ortak tarih aralığını kullanan
-  // gerçek Haftalık Özet çıktısını açıp yazdırır ve işlem bitince Günlük Giriş'e geri döner.
+  let autoPrintStarted = false;
+  function maybeAutoPrintWeekly(attempt = 0) {
+    if (autoPrintStarted) return;
+    if (window.location.pathname !== WEEKLY_ROUTE) return;
+
+    let requested = false;
+    try {
+      requested = sessionStorage.getItem(AUTO_PRINT_KEY) === "1";
+    } catch {
+      requested = false;
+    }
+    if (!requested) return;
+
+    const printable = document.querySelector(".printable.weekly-print");
+    const rows = printable?.querySelectorAll?.("tbody tr")?.length || 0;
+
+    if (printable && rows > 0) {
+      autoPrintStarted = true;
+      try { sessionStorage.removeItem(AUTO_PRINT_KEY); } catch {}
+      showNotice("Haftalik liste hazir. Yazdirma aciliyor...", "ok");
+
+      const returnAfterPrint = () => {
+        let returnUrl = "/gunluk-operasyon/gunluk-giris";
+        try {
+          returnUrl = sessionStorage.getItem(RETURN_URL_KEY) || returnUrl;
+          sessionStorage.removeItem(RETURN_URL_KEY);
+        } catch {}
+        window.setTimeout(() => window.location.assign(returnUrl), 150);
+      };
+
+      window.addEventListener("afterprint", returnAfterPrint, { once: true });
+      window.setTimeout(() => window.print(), 250);
+      return;
+    }
+
+    if (attempt >= 100) {
+      try { sessionStorage.removeItem(AUTO_PRINT_KEY); } catch {}
+      showNotice("Haftalik liste kayitlari yuklenemedi. Sayfayi yenileyip tekrar deneyin.");
+      return;
+    }
+
+    window.setTimeout(() => maybeAutoPrintWeekly(attempt + 1), 100);
+  }
+
   document.addEventListener("click", interceptSafeWeeklyPrint, true);
 
-  const observer = new MutationObserver(ensureButton);
+  const observer = new MutationObserver(() => {
+    ensureButton();
+    maybeAutoPrintWeekly(0);
+  });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener("popstate", ensureButton);
-  window.addEventListener("pageshow", ensureButton);
+
+  window.addEventListener("popstate", () => {
+    ensureButton();
+    maybeAutoPrintWeekly(0);
+  });
+  window.addEventListener("pageshow", () => {
+    ensureButton();
+    maybeAutoPrintWeekly(0);
+  });
+
   ensureButton();
+  maybeAutoPrintWeekly(0);
 })();
