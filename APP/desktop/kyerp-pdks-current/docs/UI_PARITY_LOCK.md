@@ -4,71 +4,47 @@ Bu belge ürün kararıdır.
 
 ## Ana karar
 
-KYERP PDKS masaüstü uygulaması mevcut KY PDKS/Hedef tabanlı masaüstü düzeninin **yeniden tasarlanmış versiyonu olmayacaktır**. Mevcut masaüstü görünümü, menü yapısı, form mantığı ve kullanıcı akışı bire bir ürün referansıdır.
+**Kalıcı ürün referansı KYERP'dir. Hedef değildir.**
 
-Kod altyapısı yeniden düzenlenebilir; kullanıcıya görünen masaüstü yeniden icat edilmez.
+Mevcut KYERP masaüstü düzeni yeniden yapılmayacak, Hedef görünümüne çevrilmeyecek ve başka bir UX ile değiştirilmeyecektir.
 
-## Ana ekran referansı
+Hedef uygulaması yalnızca şu alanlarda fonksiyonel referanstır:
+- menü/işlev envanteri,
+- işlem sıraları ve iş kuralları,
+- raporlar,
+- Firebird veri alanları ve veri davranışı,
+- terminal/PDKS süreçleri,
+- KYERP'de unutulmaması gereken eski fonksiyonlar.
 
-Korunacak ana yapı:
+Hedef'te olup KYERP'de bulunmayan bir işlev tespit edilirse, Hedef ekranı bire bir kopyalanmaz. İşlev **mevcut KYERP masaüstü düzenine** ve ilgili KYERP.NET tasarım/işleyiş kurallarına uyarlanarak eklenir.
 
-- klasik Windows masaüstü ana pencere,
-- üst menü: Ayarlar / Tanımlar / İşlemler / Raporlar / Araçlar / Transfer ve mevcut diğer girişler,
-- ikonlu toolbar,
-- mevcut toolbar sırası ve modül geçişleri,
-- geniş çalışma alanı,
-- alt durum çubuğu,
-- klasik child/modal pencere davranışı.
+## Masaüstü referansı
 
-Toolbar işlevleri mevcut üründeki sıra ve işlevleriyle korunur. Örnek mevcut girişler:
+Korunacak ana yapı mevcut KYERP masaüstüdür:
 
-1. Bilgi Aktar
-2. Gruplar
-3. Dönemler
-4. Bölümler
-5. Giriş-Çıkışlar
-6. Per. Bilgileri
-7. Avanslar
-8. Puantaj
-9. Puantaj Son.
-10. Bordro
-11. Çalışma Tarihi
+- mevcut ana pencere yapısı,
+- mevcut üst menü ve toolbar yerleşimi,
+- mevcut ikon/komut sırası,
+- mevcut çalışma alanı,
+- mevcut durum/alt alan yapısı,
+- mevcut child/modal pencere davranışı,
+- mevcut Personel ve diğer modül ekranlarının yerleşimi.
 
-Kaynak/legacy uygulamada bulunan başka menü/toolbar işlemleri de envanterlenip parity checklist'e eklenir; atlanmaz.
+Mevcut KYERP Personel ekranı ve diğer aktif KYERP ekranları ürün referansıdır. Bu ekranlar Hedef'e benzetilmez ve yeniden tasarlanmaz.
 
-## Personel Bilgileri referansı
+## Hedef → KYERP işlev paritesi
 
-Personel ekranı mevcut klasik yerleşimiyle korunur:
+Her Hedef özelliği için aşağıdaki karşılık izlenir:
 
-- sol tarafta personel listesi/grid,
-- üst/sağ tarafta seçili personel temel bilgileri ve foto alanı,
-- ana sekmeler:
-  - Personel Bilgileri
-  - Giriş ve Çıkışları
-  - İzinler
-  - Ek Kazanç ve Kesintiler
-  - Bilgi
-  - Ödemeler
-- Personel Bilgileri içindeki Kimlik Bilgileri / Kişisel Bilgileri gibi alt sekmeler,
-- alt bölümde Yeni Ekle / Değiştir / Sil / Per. Bilgisi ve mevcut diğer işlemler,
-- arama ve sıralama alanları,
-- aktif/ayrılan/toplam/listelenen personel sayaçları.
+| Hedef işlevi | KYERP Desktop | KYERP.NET | Durum |
+|---|---|---|---|
+| Menü/toolbar işlevi | mevcut KYERP düzenine eklenmiş karşılık | web karşılığı | eksik/tamam |
+| Form/dialog işlevi | KYERP masaüstü akışında karşılık | web eşdeğeri | eksik/tamam |
+| DB işlemi | service/repository | API/domain | eksik/tamam |
+| Rapor | desktop çıktı | web rapor/çıktı | eksik/tamam |
+| Yetki | KYERP oturumu | KYERP oturumu | eksik/tamam |
 
-Bu ekran dashboard, kart, sidebar veya yeni bir master-detail UX tasarımına dönüştürülmez.
-
-## İşlevsel parite
-
-Her legacy özellik için üç karşılık izlenir:
-
-| Legacy işlev | Desktop KYERP PDKS | KYERP.NET PDKS |
-|---|---|---|
-| Menü/toolbar | bire bir görünür karşılık | web karşılığı |
-| Form/dialog | aynı masaüstü akışı | web eşdeğeri |
-| DB işlemi | service/repository | API/domain |
-| Rapor | desktop çıktı | web rapor/çıktı |
-| Yetki | KYERP oturumu | KYERP oturumu |
-
-Bir legacy işlevin karşılığı tamamlanmadan parity tamamlandı sayılmaz.
+Bir Hedef işlevinin karşılığı tamamlanmadan fonksiyonel parity tamamlandı sayılmaz.
 
 ## Serbest olan değişiklikler
 
@@ -88,31 +64,31 @@ yeniden düzenlenebilir.
 
 ## Yasaklar
 
-- masaüstünü yeniden tasarlamak,
-- modern dashboard yapmak,
-- sidebar navigasyona geçirmek,
-- formları birleştirmek veya sadeleştirmek,
-- alan, sekme, buton veya menü kaldırmak,
-- mevcut işlem sırasını değiştirmek,
+- KYERP masaüstünü yeniden tasarlamak,
+- KYERP'yi Hedef görünümüne çevirmek,
+- Hedef ekranını doğrudan kopyalamak,
+- yeni dashboard/sidebar/card düzeni üretmek,
+- mevcut KYERP ekranlarını birleştirmek veya sadeleştirmek,
+- mevcut KYERP alan, sekme, buton veya menülerini kullanıcı onayı olmadan kaldırmak,
 - web tasarımını masaüstüne kopyalamak,
-- 'daha modern' gerekçesiyle görünümü değiştirmek.
+- Hedef'i ürün tasarım kaynağı kabul etmek.
 
 ## Multi-company kuralı
 
-Görünüm aynı kalırken altyapı tek firmaya bağlı olmayacaktır. Aktif oturum bir `tenant/company/workplace` bağlamı taşır. Firma bilgisi, cihaz, DB yolu, çalışma kuralları veya kullanıcı kod içinde sabitlenmez.
+Görünüm mevcut KYERP olarak kalırken altyapı tek firmaya bağlı olmayacaktır. Aktif oturum bir `tenant/company/workplace` bağlamı taşır. Firma bilgisi, cihaz, DB yolu, çalışma kuralları veya kullanıcı kod içinde sabitlenmez.
 
 ## Desktop / Web senkron kuralı
 
-Masaüstü ve KYERP.NET aynı PDKS domain sözleşmelerini kullanır. Masaüstü terminal ve offline/cache görevlerini yürütür; KYERP.NET merkezi yönetim ve web kullanımını sağlar. İki taraf aynı işlev haritasını paylaşır fakat **masaüstü görünümü web'e dönüştürülmez**.
+Masaüstü ve KYERP.NET aynı PDKS domain sözleşmelerini ve işlev haritasını kullanır. Masaüstü terminal ve offline/cache görevlerini yürütür; KYERP.NET merkezi yönetim ve web kullanımını sağlar. Her istemci kendi mevcut KYERP tasarım dilini korur.
 
 ## Kabul kriteri
 
-Bir refactor sonrası kullanıcı mevcut masaüstünü açtığında:
+Bir refactor sonrası:
 
-- aynı menüyü aynı yerde bulmalı,
-- aynı toolbar işlemine aynı yerden ulaşmalı,
-- aynı formu aynı düzende görmeli,
-- aynı alt ekran/dialog/sekme sırasını kullanmalı,
-- aynı işlev sonucunu almalıdır.
+- mevcut KYERP masaüstü görünümü ve akışı bozulmamalı,
+- mevcut KYERP işlevleri kaybolmamalı,
+- Hedef'te bulunan eksik işlevler liste halinde izlenmeli,
+- eklenen Hedef işlevleri KYERP düzenine uyarlanmalı,
+- kullanıcı yeni bir masaüstü uygulaması öğrenmek zorunda kalmamalıdır.
 
-Bunlardan biri değişirse değişiklik açık kullanıcı onayı olmadan kabul edilmez.
+Bunlardan biri ihlal edilirse değişiklik açık kullanıcı onayı olmadan kabul edilmez.
