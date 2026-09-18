@@ -4,6 +4,8 @@
 **/PUBLISH*/
 **/BACKUP/
 **/Temp/
+artifacts/
+**/artifacts/
 *.gdb
 *.GDB
 *.gbk
