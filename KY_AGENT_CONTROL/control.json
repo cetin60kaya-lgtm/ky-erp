@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "enabled": false,
+  "target": "desen-pc-01",
+  "commandId": "bootstrap-0000",
+  "expiresAt": "2099-12-31T23:59:59Z",
+  "note": "KY Agent control channel. enabled=false means no action.",
+  "actions": []
+}
