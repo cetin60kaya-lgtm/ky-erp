@@ -2,9 +2,9 @@
   const RANGE_KEY = "ikDailyDateRange.v2";
   const SELECTED_DATE_KEY = "ikDailySelectedDate.v2";
   const BUTTON_ID = "kyerp-current-work-week";
-  const AUTO_PRINT_KEY = "kyerp.weeklyPrint.autoprint.v1";
-  const RETURN_URL_KEY = "kyerp.weeklyPrint.returnUrl.v1";
-  const WEEKLY_ROUTE = "/ik/ik-raporlari";
+  const AUTO_PRINT_KEY = "kyerp.weeklyPrint.autoprint.v2";
+  const RETURN_URL_KEY = "kyerp.weeklyPrint.returnUrl.v2";
+  const WEEKLY_LANDING_ROUTE = "/gunluk-operasyon/ana-ekran";
 
   function pad(value) {
     return String(value).padStart(2, "0");
@@ -48,9 +48,7 @@
       if (selected < week.start || selected > week.end) {
         window.localStorage.setItem(SELECTED_DATE_KEY, week.selected);
       }
-    } catch {
-      // localStorage opsiyoneldir; React state ana kaynaktir.
-    }
+    } catch {}
   }
 
   function setReactInputValue(input, value) {
@@ -61,9 +59,7 @@
   }
 
   const storedAtBoot = readRange();
-  if (!storedAtBoot.start || !storedAtBoot.end) {
-    writeRange(currentWorkWeek());
-  }
+  if (!storedAtBoot.start || !storedAtBoot.end) writeRange(currentWorkWeek());
 
   function updateButtonState(button, active) {
     button.dataset.active = active ? "1" : "0";
@@ -94,26 +90,23 @@
   function ensureButton() {
     const actions = document.querySelector(".kyik-safe-actions");
     if (!actions) return;
-
     let button = document.getElementById(BUTTON_ID);
     if (!button) {
       button = document.createElement("button");
       button.id = BUTTON_ID;
       button.type = "button";
       button.textContent = "Bu Hafta";
-      button.title = "Guncel Pazartesi-Cuma araligina uygulamadan cikmadan gec";
+      button.title = "Guncel Pazartesi-Cuma araligina gec";
       button.style.height = "34px";
       button.style.padding = "0 12px";
       button.style.border = "1px solid #cbd5e1";
       button.style.borderRadius = "7px";
       button.style.cursor = "pointer";
       button.style.whiteSpace = "nowrap";
-
       const dateBlocks = [...actions.children].filter((child) => child?.querySelector?.('input[type="date"]'));
       const anchor = dateBlocks[dateBlocks.length - 1];
       if (anchor?.nextSibling) actions.insertBefore(button, anchor.nextSibling);
       else actions.appendChild(button);
-
       button.addEventListener("click", () => applyCurrentWeek(actions, button));
       actions.addEventListener("change", (event) => {
         if (!(event.target instanceof HTMLInputElement) || event.target.type !== "date") return;
@@ -128,7 +121,7 @@
   }
 
   function showNotice(message, tone = "warn") {
-    if (document.getElementById("kyerp-weekly-print-notice")) return;
+    document.getElementById("kyerp-weekly-print-notice")?.remove();
     const notice = document.createElement("div");
     notice.id = "kyerp-weekly-print-notice";
     notice.style.cssText = tone === "ok"
@@ -143,18 +136,16 @@
     try {
       sessionStorage.setItem(AUTO_PRINT_KEY, "1");
       sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search + window.location.hash);
-    } catch {
-      // sessionStorage yoksa da haftalik ekrana git.
-    }
-    window.location.assign(WEEKLY_ROUTE);
+    } catch {}
+    window.location.assign(WEEKLY_LANDING_ROUTE);
   }
 
   function interceptSafeWeeklyPrint(event) {
     const button = event.target?.closest?.("button");
     if (!button) return;
+    if (!window.location.pathname.startsWith("/gunluk-operasyon/")) return;
     if (!button.closest(".kyik-safe-daily")) return;
     if (normalizedText(button) !== "Haftalık Liste Yazdır") return;
-
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -162,26 +153,26 @@
   }
 
   let autoPrintStarted = false;
+  let weeklyOpenClicked = false;
+
+  function findDailyOperationWeeklyButton() {
+    return [...document.querySelectorAll(".gop-quick button")].find((button) =>
+      normalizedText(button).includes("Haftalık Özet"),
+    );
+  }
+
   function maybeAutoPrintWeekly(attempt = 0) {
     if (autoPrintStarted) return;
-    if (window.location.pathname !== WEEKLY_ROUTE) return;
-
     let requested = false;
-    try {
-      requested = sessionStorage.getItem(AUTO_PRINT_KEY) === "1";
-    } catch {
-      requested = false;
-    }
+    try { requested = sessionStorage.getItem(AUTO_PRINT_KEY) === "1"; } catch {}
     if (!requested) return;
 
     const printable = document.querySelector(".printable.weekly-print");
     const rows = printable?.querySelectorAll?.("tbody tr")?.length || 0;
-
     if (printable && rows > 0) {
       autoPrintStarted = true;
       try { sessionStorage.removeItem(AUTO_PRINT_KEY); } catch {}
-      showNotice("Haftalik liste hazir. Yazdirma aciliyor...", "ok");
-
+      showNotice("Günlük Operasyon haftalık listesi hazır. Yazdırma açılıyor...", "ok");
       const returnAfterPrint = () => {
         let returnUrl = "/gunluk-operasyon/gunluk-giris";
         try {
@@ -190,18 +181,24 @@
         } catch {}
         window.setTimeout(() => window.location.assign(returnUrl), 150);
       };
-
       window.addEventListener("afterprint", returnAfterPrint, { once: true });
       window.setTimeout(() => window.print(), 250);
       return;
     }
 
-    if (attempt >= 100) {
-      try { sessionStorage.removeItem(AUTO_PRINT_KEY); } catch {}
-      showNotice("Haftalik liste kayitlari yuklenemedi. Sayfayi yenileyip tekrar deneyin.");
-      return;
+    if (!weeklyOpenClicked) {
+      const dailyWeeklyButton = findDailyOperationWeeklyButton();
+      if (dailyWeeklyButton) {
+        weeklyOpenClicked = true;
+        dailyWeeklyButton.click();
+      }
     }
 
+    if (attempt >= 120) {
+      try { sessionStorage.removeItem(AUTO_PRINT_KEY); } catch {}
+      showNotice("Günlük Operasyon haftalık listesi yüklenemedi. Tekrar deneyin.");
+      return;
+    }
     window.setTimeout(() => maybeAutoPrintWeekly(attempt + 1), 100);
   }
 
@@ -212,7 +209,6 @@
     maybeAutoPrintWeekly(0);
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-
   window.addEventListener("popstate", () => {
     ensureButton();
     maybeAutoPrintWeekly(0);
