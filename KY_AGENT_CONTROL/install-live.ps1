@@ -1,4 +1,4 @@
-# KY Agent Live installer v2.0.1
+# KY Agent Live installer v2.0.2
 $ErrorActionPreference='Stop'
 
 $AgentId=[string]$env:KY_AGENT_ID
@@ -45,6 +45,14 @@ $DeviceDir=(Resolve-Path -LiteralPath $DeviceDir).Path
 $Outbox=Join-Path $DeviceDir 'OUTBOX'
 New-Item -ItemType Directory -Path $Outbox -Force|Out-Null
 $ControlFile=Join-Path $DeviceDir 'control.json'
+
+# Buluttaki control.json yeni olusturulduysa Drive'in indirmesine zaman ver.
+if(-not(Test-Path -LiteralPath $ControlFile)){
+  Write-Host 'Drive control.json bekleniyor...' -ForegroundColor Cyan
+  for($i=0;$i -lt 40 -and -not(Test-Path -LiteralPath $ControlFile);$i++){
+    Start-Sleep -Milliseconds 500
+  }
+}
 if(-not(Test-Path -LiteralPath $ControlFile)){
   [ordered]@{version=1;enabled=$false;target=$AgentId;commandId='idle-local';expiresAt='2099-12-31T23:59:59Z';liveMode=$false;liveUntil=$null;actions=@()} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ControlFile -Encoding UTF8
 }
@@ -72,17 +80,14 @@ $config=[ordered]@{
 }
 $config|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $ConfigPath -Encoding UTF8
 
-# Eski KY Agent sureclerini kapat.
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue | Where-Object {$_.CommandLine -like '*KY-Agent-Live.ps1*'} | ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
 Start-Sleep -Milliseconds 400
 
-# Kullanici oturumunda otomatik baslat; GUI/mouse kontrolu icin servis kullanma.
 $runKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $runCmd='powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "'+$AgentPath+'" -ConfigPath "'+$ConfigPath+'"'
 New-Item -Path $runKey -Force|Out-Null
 Set-ItemProperty -Path $runKey -Name 'KYAgentLive' -Value $runCmd
 
-# Acil durdur / devam dosyalari.
 $desktop=[Environment]::GetFolderPath('Desktop')
 $stopCmd=Join-Path $desktop 'KY_AGENT_DURDUR.cmd'
 $resumeCmd=Join-Path $desktop 'KY_AGENT_DEVAM.cmd'
