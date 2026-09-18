@@ -1,32 +1,38 @@
 # KYERP PDKS
 
-Bu alan, DESEN bilgisayarinda halen calisan mevcut PDKS uygulamasinin **bizim tarafimizdan gelistirilen kaynaklarini ve entegrasyon katmanini** GitHub uzerinden yonetmek icindir.
+DESEN bilgisayarinda halen kullanilan mevcut PDKS calismasinin bizim kaynak kodu bu klasorde toplanir.
 
-## Canli sistem kaynaklari
+## Kaynak yapisi
 
-- Hedef ana uygulama: `D:\Hedef500\Hedef500\Hedef.exe`
-- HKN Personel Native: `D:\Hedef500\Hedef500\HKN.Personel.Native.exe`
-- HKN Personel Bridge: `D:\Hedef500\Hedef500\HKN.Personel.Bridge.exe`
-- Bizim kaynak kokumuz: `D:\Hedef500\HKN_NATIVE_PERSONEL`
+- `src/HKN.Personel.Native`: Personel modulu, Firebird veri islemleri ve klasik PDKS arayuzu.
+- `src/HKN.Personel.Bridge`: mevcut Hedef ana penceresi ile KYERP PDKS Personel modulunun entegrasyon katmani.
+- `tools/SmokeTest`: transaction/rollback ile veri yazma-dogrulama araci.
+- `tools/SchemaDump`: Firebird tablo/sema kontrol araci.
+- `docs`: canli durum ve kaynak secim notlari.
 
-## Bu projeye alinacaklar
+## Canli yollar
 
-- HKN.Personel.Native kaynaklari
-- HKN.Personel.Bridge kaynaklari
-- build/publish scriptleri
-- entegrasyon ve test scriptleri
-- lisans/kisisel veri icermeyen referans ve notlar
+- Ana uygulama: `D:\Hedef500\Hedef500\Hedef.exe`
+- Personel: `D:\Hedef500\Hedef500\HKN.Personel.Native.exe`
+- Bridge: `D:\Hedef500\Hedef500\HKN.Personel.Bridge.exe`
+- Veritabani: `D:\Hedef500\Hedef500\Data\DATABASE.GDB`
 
-## Bu projeye alinmayacaklar
+## Guvenlik
 
-- canli `DATABASE.GDB`, `*.gbk`, personel verileri
-- lisans/anahtar/parola dosyalari
-- ucuncu taraf Hedef/Delphi binary'leri
-- Firebird kurulum paketleri
-- bin/obj/publish/yedek/gecici dosyalar
+Canli veritabani, yedek, personel verisi, lisans ve parola GitHub'a alinmaz.
+Kaynakta DB parolasi hard-code edilmez. Gelistirme/test ortaminda `KY_PDKS_DB_PASSWORD` ortam degiskeni kullanilir.
 
-## Calisma dali
+## Derleme
 
-`codex/kyerp-pdks-current-app`
+Windows + .NET 8 SDK:
 
-Canli veriye dokunmadan mevcut uygulamanin bizim kaynaklari bu alana snapshot olarak aktarilir.
+```powershell
+cd APP\desktop\kyerp-pdks-current
+.\BUILD.ps1
+```
+
+Ciktilar `artifacts\` altinda olusur ve Git'e alinmaz.
+
+## Kaynak snapshot
+
+17.09.2026 tarihinde Google Drive'a tasinan `HKN_NATIVE_PERSONEL` klasorunden asil kaynak dosyalari ayiklanarak GitHub'a aktarildi. `bin`, `obj`, `PUBLISH_*`, yedekler ve gecici patch/deneme ciktilari kaynak kabul edilmedi.
