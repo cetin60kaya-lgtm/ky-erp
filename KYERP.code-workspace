@@ -1,0 +1,34 @@
+{
+  "folders": [
+    {
+      "name": "KYERP - TUM PROJE",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "git.autoRepositoryDetection": "openEditors",
+    "git.repositoryScanMaxDepth": 1,
+    "files.exclude": {
+      "**/.git": true,
+      "**/node_modules": true,
+      "**/bin": true,
+      "**/obj": true,
+      "**/dist": true,
+      "**/.runtime": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/bin": true,
+      "**/obj": true,
+      "**/dist": true,
+      "**/.runtime": true,
+      "RELEASES/**": true
+    },
+    "explorer.compactFolders": false,
+    "explorer.sortOrder": "type",
+    "workbench.editor.enablePreview": false,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1200
+  }
+}
