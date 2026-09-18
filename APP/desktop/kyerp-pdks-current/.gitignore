@@ -6,6 +6,8 @@
 **/Temp/
 artifacts/
 **/artifacts/
+.runtime/
+**/.runtime/
 *.gdb
 *.GDB
 *.gbk
