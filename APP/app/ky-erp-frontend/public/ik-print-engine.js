@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260918-1420-one-engine';
+  const VERSION = '20260918-1428-single-print-button';
   const ROOT_ID = 'kyerp-ik-print-root';
   const STYLE_ID = 'kyerp-ik-print-style';
   let busy = false;
@@ -71,18 +71,43 @@
     }catch(e){busy=false; alert(e?.message||'Ödeme fişleri hazırlanamadı.');}
   }
 
-  function isPaymentScreen(button){ const s=button.closest('.kyik-screen'); if(!s) return null; const u=txt(s).toLocaleUpperCase('tr-TR'); return u.includes('GÜNLÜK ÖDEME FİŞLERİ')?s:null; }
+  function paymentScreenFor(button){
+    const screen=button.closest('.kyik-screen'); if(!screen) return null;
+    return txt(screen).toLocaleUpperCase('tr-TR').includes('GÜNLÜK ÖDEME FİŞLERİ')?screen:null;
+  }
+
   document.addEventListener('click',(e)=>{
     const b=e.target?.closest?.('button'); if(!b) return; const label=txt(b);
-    if(label==='Haftalık Liste Yazdır' && b.closest('.kyik-safe-daily')){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();weekly(b.closest('.kyik-safe-daily'));return;}
-    if(label==='PDF İndir'){const s=isPaymentScreen(b); if(!s) return; e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();payment(s);}
+    if(label==='Haftalık Liste Yazdır' && b.closest('.kyik-safe-daily')){
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();weekly(b.closest('.kyik-safe-daily'));return;
+    }
+    const paymentScreen=paymentScreenFor(b);
+    if(paymentScreen && ['A4 Önizle','Yazdır','PDF İndir','Ödeme Fişlerini Yazdır'].includes(label)){
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();payment(paymentScreen);return;
+    }
   },true);
 
   function simplifyPaymentUi(){
-    document.querySelectorAll('.kyik-slip-select').forEach(x=>x.style.display='none');
-    document.querySelectorAll('button').forEach(b=>{const t=txt(b); if(t==='Görünenleri Seç'||t==='Görünen Seçimi Kaldır'||t==='Çıktı Seçimini Temizle') b.style.display='none';});
-    document.querySelectorAll('.kyik-print-pick-info').forEach(x=>{x.textContent='PDF: bu tarih aralığındaki tüm kişiler basılır';});
+    document.querySelectorAll('.kyik-screen').forEach(screen=>{
+      if(!txt(screen).toLocaleUpperCase('tr-TR').includes('GÜNLÜK ÖDEME FİŞLERİ')) return;
+      const buttons=[...screen.querySelectorAll('button')];
+      const preview=buttons.find(b=>txt(b)==='A4 Önizle');
+      const printButton=buttons.find(b=>txt(b)==='Yazdır');
+      const pdfButton=buttons.find(b=>['PDF İndir','Ödeme Fişlerini Yazdır'].includes(txt(b)));
+      if(preview) preview.style.display='none';
+      if(printButton) printButton.style.display='none';
+      if(pdfButton){
+        if(txt(pdfButton)!=='Ödeme Fişlerini Yazdır') pdfButton.textContent='Ödeme Fişlerini Yazdır';
+        pdfButton.style.display='inline-flex';
+        pdfButton.title='Bu tarih aralığındaki tüm ödeme fişlerini 10 kişi / A4 düzeninde yazdır';
+      }
+      screen.querySelectorAll('.kyik-slip-select').forEach(x=>x.style.display='none');
+      buttons.forEach(b=>{const t=txt(b); if(t==='Görünenleri Seç'||t==='Görünen Seçimi Kaldır'||t==='Çıktı Seçimini Temizle') b.style.display='none';});
+      screen.querySelectorAll('.kyik-print-pick-info').forEach(x=>{x.textContent='Tüm kişiler otomatik basılır · A4 başına 10 kişi';});
+    });
   }
-  const mo=new MutationObserver(()=>requestAnimationFrame(simplifyPaymentUi)); mo.observe(document.documentElement,{subtree:true,childList:true}); simplifyPaymentUi();
+  let uiQueued=false;
+  const queueUi=()=>{if(uiQueued)return;uiQueued=true;requestAnimationFrame(()=>{uiQueued=false;simplifyPaymentUi();});};
+  const mo=new MutationObserver(queueUi); mo.observe(document.documentElement,{subtree:true,childList:true}); simplifyPaymentUi();
   window.__KYERP_IK_PRINT_ENGINE__={version:VERSION};
 })();
