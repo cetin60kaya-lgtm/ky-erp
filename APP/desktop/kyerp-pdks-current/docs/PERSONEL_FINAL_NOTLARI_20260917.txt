@@ -1,0 +1,26 @@
+KY PDKS - Personel Modulu Final Notu
+Tarih: 17.09.2026
+
+Canli EXE: D:\Hedef500\Hedef500\HKN.Personel.Native.exe
+Kaynak: D:\Hedef500\HKN_NATIVE_PERSONEL\HKN.Personel.Native
+Veritabani: D:\Hedef500\Hedef500\Data\DATABASE.GDB
+
+Tamamlananlar:
+- 6 ana sekme ve Personel Bilgileri icindeki Kimlik/Kisisel alt sekmeleri.
+- Orijinal Hedef gorunumune yakin klasik yerlesim, personel listesi, arama/siralama, sayaclar.
+- Giris/Cikis, Izin, Ek Kazanc/Kesinti, Bilgi ve Odemeler gercek Firebird verisine bagli.
+- Personel Yeni Ekle / Degistir penceresi; Grup/Bolum/Durum/Servis/Gorev/Firma acilir listeleri.
+- Izin ve Ek Kazanc/Kesinti ekleme/degistirme pencereleri.
+- Giris-Cikis toplu ekleme ekrani ve kayit islemleri.
+- Raporlar ve Islemler menuleri, F2/F3/F4/F5 kisayollari.
+- Foto alani ve DB RESIM alani yukleme destegi.
+
+Test:
+- Release build: 0 hata / 0 uyari.
+- DB smoke test: PASS.
+- Test islemleri transaction rollback ile calisti; production DB kayit sayisi degismedi.
+
+Geri donus:
+D:\Hedef500\BACKUP altindaki en son PERSONEL_YYYYMMDD_HHMMSS klasorunde DATABASE.GDB ve onceki EXE yedegi bulunur.
+Canli EXE sorununda once mevcut EXE kapatilir, yedekteki HKN.Personel.Native.exe geri kopyalanir.
+Veritabani geri donusunde Firebird/Hedef kapaliyken yedek DATABASE.GDB canli Data klasorune geri kopyalanir.
