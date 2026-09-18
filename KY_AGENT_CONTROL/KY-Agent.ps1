@@ -1,10 +1,10 @@
-# KY_AGENT_VERSION=1.0.0
+# KY_AGENT_VERSION=1.0.1
 param(
   [string]$ConfigPath = "$env:ProgramData\KY-Agent\config.json"
 )
 
 $ErrorActionPreference = 'Stop'
-$script:Version = '1.0.0'
+$script:Version = '1.0.1'
 $script:Loop = 0
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -26,7 +26,9 @@ namespace KYAgent {
 }
 
 function Ensure-Directory([string]$Path) {
-  if (-not (Test-Path -LiteralPath $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
+  if ($Path -and -not (Test-Path -LiteralPath $Path)) {
+    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+  }
 }
 
 $InstallRoot = Split-Path -Parent $ConfigPath
@@ -52,8 +54,10 @@ $AgentUrl = [string]$Config.agentUrl
 $ResultRoot = [string]$Config.resultRoot
 $PollSeconds = if ($Config.pollSeconds) { [int]$Config.pollSeconds } else { 2 }
 Ensure-Directory $ResultRoot
-$DriveStopFile = Join-Path (Split-Path -Parent $ResultRoot) 'DURDUR.txt'
-$StatusFile = Join-Path (Split-Path -Parent $ResultRoot) 'status.json'
+$DriveRoot = Split-Path -Parent $ResultRoot
+Ensure-Directory $DriveRoot
+$DriveStopFile = Join-Path $DriveRoot 'DURDUR.txt'
+$StatusFile = Join-Path $DriveRoot 'status.json'
 
 function Get-LastCommandId {
   try {
@@ -92,7 +96,8 @@ function Save-Screenshot([string]$Path) {
     $g.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bounds.Size)
     $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Jpeg)
   } finally {
-    $g.Dispose(); $bmp.Dispose()
+    $g.Dispose()
+    $bmp.Dispose()
   }
   return $Path
 }
@@ -101,8 +106,8 @@ function Invoke-MouseClick([int]$X, [int]$Y, [string]$Button = 'left', [int]$Cou
   [KYAgent.Native]::SetCursorPos($X, $Y) | Out-Null
   Start-Sleep -Milliseconds 80
   $down = if ($Button -eq 'right') { 0x0008 } elseif ($Button -eq 'middle') { 0x0020 } else { 0x0002 }
-  $up   = if ($Button -eq 'right') { 0x0010 } elseif ($Button -eq 'middle') { 0x0040 } else { 0x0004 }
-  for ($i=0; $i -lt [Math]::Max(1,$Count); $i++) {
+  $up = if ($Button -eq 'right') { 0x0010 } elseif ($Button -eq 'middle') { 0x0040 } else { 0x0004 }
+  for ($i = 0; $i -lt [Math]::Max(1, $Count); $i++) {
     [KYAgent.Native]::mouse_event($down,0,0,0,[UIntPtr]::Zero)
     [KYAgent.Native]::mouse_event($up,0,0,0,[UIntPtr]::Zero)
     if ($Count -gt 1) { Start-Sleep -Milliseconds 120 }
@@ -119,8 +124,13 @@ function Invoke-Scroll([int]$Delta) {
 
 function Invoke-TypeText([string]$Text) {
   $ok = $false
-  for ($i=0; $i -lt 5 -and -not $ok; $i++) {
-    try { [System.Windows.Forms.Clipboard]::SetText($Text); $ok = $true } catch { Start-Sleep -Milliseconds 150 }
+  for ($i = 0; $i -lt 5 -and -not $ok; $i++) {
+    try {
+      [System.Windows.Forms.Clipboard]::SetText($Text)
+      $ok = $true
+    } catch {
+      Start-Sleep -Milliseconds 150
+    }
   }
   if (-not $ok) { throw 'Clipboard kullanılamadı.' }
   [System.Windows.Forms.SendKeys]::SendWait('^v')
@@ -131,7 +141,7 @@ function Invoke-Hotkey([string]$Keys) {
 }
 
 function Focus-Window([string]$ProcessName, [string]$Title, [int]$TimeoutSeconds = 10) {
-  $until = (Get-Date).AddSeconds($TimeoutSeconds)
+  $until = (Get-Date).AddSeconds([Math]::Max(1,$TimeoutSeconds))
   do {
     $p = Get-Process -ErrorAction SilentlyContinue | Where-Object {
       $_.MainWindowHandle -ne 0 -and
@@ -171,11 +181,15 @@ function Get-RemoteControl {
 
 function Test-Expired($Command) {
   if (-not $Command.expiresAt) { return $false }
-  try { return ((Get-Date).ToUniversalTime() -gt ([datetime]$Command.expiresAt).ToUniversalTime()) } catch { return $true }
+  try {
+    return ((Get-Date).ToUniversalTime() -gt ([datetime]$Command.expiresAt).ToUniversalTime())
+  } catch {
+    return $true
+  }
 }
 
 function Try-SelfUpdate {
-  if (-not $AgentUrl) { return }
+  if (-not $AgentUrl -or -not $PSCommandPath) { return }
   try {
     $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     $sep = if ($AgentUrl.Contains('?')) { '&' } else { '?' }
@@ -183,17 +197,17 @@ function Try-SelfUpdate {
     if ($remote -match 'KY_AGENT_VERSION=([0-9\.]+)') {
       $remoteVersion = $Matches[1]
       if ($remoteVersion -ne $script:Version) {
-        $current = $MyInvocation.ScriptName
-        if (-not $current) { $current = $PSCommandPath }
-        $tmp = $current + '.new'
+        $tmp = $PSCommandPath + '.new'
         Set-Content -LiteralPath $tmp -Value $remote -Encoding UTF8
-        Move-Item -LiteralPath $tmp -Destination $current -Force
+        Move-Item -LiteralPath $tmp -Destination $PSCommandPath -Force
         Write-Log "Self update $script:Version -> $remoteVersion"
-        Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-WindowStyle','Hidden','-File',('"'+$current+'"'),'-ConfigPath',('"'+$ConfigPath+'"'))
+        Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-WindowStyle','Hidden','-File',('"'+$PSCommandPath+'"'),'-ConfigPath',('"'+$ConfigPath+'"'))
         exit 0
       }
     }
-  } catch { Write-Log ('Self update error: ' + $_.Exception.Message) }
+  } catch {
+    Write-Log ('Self update error: ' + $_.Exception.Message)
+  }
 }
 
 function Invoke-Action($Action, [string]$ResultDir, [int]$Index) {
@@ -201,33 +215,68 @@ function Invoke-Action($Action, [string]$ResultDir, [int]$Index) {
   $started = (Get-Date).ToUniversalTime().ToString('o')
   $data = $null
   switch ($type) {
-    'wait' { Start-Sleep -Milliseconds ([int]($Action.ms)); $data = 'ok' }
+    'wait' {
+      Start-Sleep -Milliseconds ([int]$Action.ms)
+      $data = 'ok'
+    }
     'screenshot' {
       $name = if ($Action.name) { [string]$Action.name } else { ('shot-' + $Index) }
       $safe = $name -replace '[^a-zA-Z0-9_-]','_'
       $data = Save-Screenshot (Join-Path $ResultDir ($safe + '.jpg'))
     }
-    'move' { Invoke-MouseMove ([int]$Action.x) ([int]$Action.y); $data = 'ok' }
-    'click' { Invoke-MouseClick ([int]$Action.x) ([int]$Action.y) ([string]$Action.button) ([int]([Math]::Max(1,[int]$Action.count))); $data = 'ok' }
-    'scroll' { Invoke-Scroll ([int]$Action.delta); $data = 'ok' }
-    'type' { Invoke-TypeText ([string]$Action.text); $data = 'ok' }
-    'hotkey' { Invoke-Hotkey ([string]$Action.keys); $data = 'ok' }
-    'focus' { $p = Focus-Window ([string]$Action.process) ([string]$Action.title) ([int]([Math]::Max(1,[int]$Action.timeoutSeconds))); $data = @{ process=$p.ProcessName; title=$p.MainWindowTitle; pid=$p.Id } }
+    'move' {
+      Invoke-MouseMove ([int]$Action.x) ([int]$Action.y)
+      $data = 'ok'
+    }
+    'click' {
+      $count = if ($Action.count) { [int]$Action.count } else { 1 }
+      $button = if ($Action.button) { [string]$Action.button } else { 'left' }
+      Invoke-MouseClick ([int]$Action.x) ([int]$Action.y) $button $count
+      $data = 'ok'
+    }
+    'scroll' {
+      Invoke-Scroll ([int]$Action.delta)
+      $data = 'ok'
+    }
+    'type' {
+      Invoke-TypeText ([string]$Action.text)
+      $data = 'ok'
+    }
+    'hotkey' {
+      Invoke-Hotkey ([string]$Action.keys)
+      $data = 'ok'
+    }
+    'focus' {
+      $timeout = if ($Action.timeoutSeconds) { [int]$Action.timeoutSeconds } else { 10 }
+      $p = Focus-Window ([string]$Action.process) ([string]$Action.title) $timeout
+      $data = @{ process=$p.ProcessName; title=$p.MainWindowTitle; pid=$p.Id }
+    }
     'launch' {
       $args = if ($Action.args) { [string]$Action.args } else { '' }
       $p = Start-Process -FilePath ([string]$Action.path) -ArgumentList $args -PassThru
       $data = @{ pid=$p.Id; path=[string]$Action.path }
     }
-    'powershell' { $data = Invoke-PowerShellAction ([string]$Action.script) }
+    'powershell' {
+      $data = Invoke-PowerShellAction ([string]$Action.script)
+    }
     'writeFile' {
       $path = [string]$Action.path
       Ensure-Directory (Split-Path -Parent $path)
       Set-Content -LiteralPath $path -Value ([string]$Action.content) -Encoding UTF8
       $data = $path
     }
-    default { throw "Bilinmeyen action type: $type" }
+    default {
+      throw "Bilinmeyen action type: $type"
+    }
   }
-  return [ordered]@{ index=$Index; type=$type; startedAt=$started; finishedAt=(Get-Date).ToUniversalTime().ToString('o'); ok=$true; data=$data }
+  return [ordered]@{
+    index=$Index
+    type=$type
+    startedAt=$started
+    finishedAt=(Get-Date).ToUniversalTime().ToString('o')
+    ok=$true
+    data=$data
+  }
 }
 
 Write-Log "KY Agent $script:Version started. AgentId=$AgentId ResultRoot=$ResultRoot"
@@ -239,7 +288,7 @@ while ($true) {
     $script:Loop++
     if (($script:Loop % 30) -eq 0) { Try-SelfUpdate }
 
-    if (Test-Path -LiteralPath $StopFile -or Test-Path -LiteralPath $DriveStopFile) {
+    if ((Test-Path -LiteralPath $StopFile) -or (Test-Path -LiteralPath $DriveStopFile)) {
       if (((Get-Date) - $lastHeartbeat).TotalSeconds -ge 15) {
         Write-Status 'paused' 'DURDUR anahtarı aktif.'
         $lastHeartbeat = Get-Date
@@ -266,8 +315,9 @@ while ($true) {
         $index = 0
         foreach ($action in @($cmd.actions)) {
           $index++
-          try { $results += (Invoke-Action $action $resultDir $index) }
-          catch {
+          try {
+            $results += (Invoke-Action $action $resultDir $index)
+          } catch {
             $results += [ordered]@{ index=$index; type=[string]$action.type; ok=$false; error=$_.Exception.Message }
             throw
           }
@@ -290,7 +340,8 @@ while ($true) {
           results=$results
         }
         $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $resultDir 'result.json') -Encoding UTF8
-        Write-Status $status (if ($status -eq 'ok') { 'Komut tamamlandı.' } else { 'Komut hata ile tamamlandı: ' + $errorText }) $cmdId
+        $statusMessage = if ($status -eq 'ok') { 'Komut tamamlandı.' } else { 'Komut hata ile tamamlandı: ' + $errorText }
+        Write-Status $status $statusMessage $cmdId
         Write-Log "Command finish: $cmdId status=$status"
       }
     } elseif (((Get-Date) - $lastHeartbeat).TotalSeconds -ge 15) {
