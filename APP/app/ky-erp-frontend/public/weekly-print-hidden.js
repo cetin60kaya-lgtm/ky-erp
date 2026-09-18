@@ -112,10 +112,10 @@
         body *{visibility:hidden!important}
         #${PRINT_ROOT_ID},#${PRINT_ROOT_ID} *{visibility:visible!important}
         #${PRINT_ROOT_ID}{display:block!important;position:absolute!important;left:0!important;top:0!important;width:100%!important;margin:0!important;padding:0!important;background:#fff!important;color:#111!important;font-family:Arial,Helvetica,sans-serif!important}
-        #${PRINT_ROOT_ID} .sheet{width:270mm!important;max-width:100%!important;margin:0 auto!important;padding:0!important}
+        #${PRINT_ROOT_ID} .sheet{width:270mm!important;max-width:100%!important;margin-left:auto!important;margin-right:auto!important;padding:0!important}
         #${PRINT_ROOT_ID} .title{text-align:center;font-size:16px;font-weight:900;margin:0 0 2mm}
         #${PRINT_ROOT_ID} .sub{text-align:center;font-size:9px;font-weight:700;margin:0 0 4mm}
-        #${PRINT_ROOT_ID} table{width:100%!important;margin:0 auto!important;border-collapse:collapse;table-layout:fixed;font-size:10px}
+        #${PRINT_ROOT_ID} table{width:100%!important;margin-left:auto!important;margin-right:auto!important;border-collapse:collapse;table-layout:fixed;font-size:10px}
         #${PRINT_ROOT_ID} th,#${PRINT_ROOT_ID} td{border:1px solid #111;padding:4px 5px;text-align:center;line-height:1.2}
         #${PRINT_ROOT_ID} th{background:#eef2f7!important;font-weight:900}
         #${PRINT_ROOT_ID} .left{text-align:left!important}
@@ -151,18 +151,10 @@
     const originalMode = modeButton(root, "night")?.classList.contains("active") ? "night" : "day";
     const people = new Map();
 
-    scrapeAllRows(root).forEach((person) => {
-      people.set(person.key, { ...person, dayCount: 0, nightCount: 0 });
-    });
-
     try {
       for (let dayIndex = 0; dayIndex < dayButtons.length; dayIndex += 1) {
         const dayOk = await selectDay(root, dayIndex);
         if (!dayOk) throw new Error("Gün değiştirilemedi. Kaydedilmemiş kayıt varsa önce kaydedin.");
-
-        scrapeAllRows(root).forEach((person) => {
-          if (!people.has(person.key)) people.set(person.key, { ...person, dayCount: 0, nightCount: 0 });
-        });
 
         for (const mode of ["day", "night"]) {
           const modeOk = await selectMode(root, mode);
@@ -190,14 +182,16 @@
     await selectDay(root, originalDay);
     await selectMode(root, originalMode);
 
-    const list = [...people.values()].sort((a, b) =>
-      String(a.role || "").localeCompare(String(b.role || ""), "tr") ||
-      String(a.name || "").localeCompare(String(b.name || ""), "tr"),
-    );
+    const list = [...people.values()]
+      .filter((person) => Number(person.dayCount || 0) + Number(person.nightCount || 0) > 0)
+      .sort((a, b) =>
+        String(a.role || "").localeCompare(String(b.role || ""), "tr") ||
+        String(a.name || "").localeCompare(String(b.name || ""), "tr"),
+      );
 
     if (!list.length) {
       busy = false;
-      window.alert("Haftalık listede yazdırılacak personel bulunamadı.");
+      window.alert("Seçili tarih aralığında vardiya kaydı bulunan personel yok.");
       return;
     }
 
@@ -220,7 +214,7 @@
     const rangeInputs = [...root.querySelectorAll('.kyik-safe-actions input[type="date"]')];
     const start = rangeInputs[0]?.value || "";
     const end = rangeInputs[1]?.value || "";
-    const html = `<div class="sheet"><div class="title">HAFTALIK PERSONEL ÖZETİ</div><div class="sub">${esc(start)} — ${esc(end)} · ${list.length} personel</div><table><thead><tr><th class="c-no">#</th><th class="c-code">No</th><th class="c-name left">Personel</th><th class="c-role left">Vasıf</th><th class="c-count">Gündüz Adet</th><th class="c-amount">Gündüz Tutar</th><th class="c-count">Gece Adet</th><th class="c-amount">Gece Tutar</th><th class="c-amount">Toplam</th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="4" class="left">GENEL TOPLAM</td><td>${dayCount}</td><td class="money">${esc(money(dayAmount))}</td><td>${nightCount}</td><td class="money">${esc(money(nightAmount))}</td><td class="money">${esc(money(dayAmount + nightAmount))}</td></tr></tfoot></table></div>`;
+    const html = `<div class="sheet"><div class="title">HAFTALIK PERSONEL ÖZETİ</div><div class="sub">${esc(start)} — ${esc(end)} · Bu aralıkta vardiya kaydı olan ${list.length} personel</div><table><thead><tr><th class="c-no">#</th><th class="c-code">No</th><th class="c-name left">Personel</th><th class="c-role left">Vasıf</th><th class="c-count">Gündüz Adet</th><th class="c-amount">Gündüz Tutar</th><th class="c-count">Gece Adet</th><th class="c-amount">Gece Tutar</th><th class="c-amount">Toplam</th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="4" class="left">GENEL TOPLAM</td><td>${dayCount}</td><td class="money">${esc(money(dayAmount))}</td><td>${nightCount}</td><td class="money">${esc(money(nightAmount))}</td><td class="money">${esc(money(dayAmount + nightAmount))}</td></tr></tfoot></table></div>`;
     printHtml(html);
   }
 
