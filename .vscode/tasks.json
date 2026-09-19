@@ -1,0 +1,74 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "KYERP: Git Durum",
+      "type": "shell",
+      "command": "git status -sb",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP Frontend: Dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/APP/app/ky-erp-frontend" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP Frontend: Build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/APP/app/ky-erp-frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP API: Typecheck",
+      "type": "shell",
+      "command": "npm run typecheck",
+      "options": { "cwd": "${workspaceFolder}/APP/cloud/ky-erp-api" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP API: Build Dry Run",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/APP/cloud/ky-erp-api" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP PDKS: Build",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File BUILD.ps1",
+      "options": { "cwd": "${workspaceFolder}/APP/desktop/kyerp-pdks-current" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP PDKS: Contract Tests",
+      "type": "shell",
+      "command": "dotnet run --project ./tools/ContractTests/ContractTests.csproj -c Release",
+      "options": { "cwd": "${workspaceFolder}/APP/desktop/kyerp-pdks-current" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP PDKS: Tam Kontrol",
+      "dependsOrder": "sequence",
+      "dependsOn": ["KYERP PDKS: Build", "KYERP PDKS: Contract Tests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP: Temel Kontrol",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "KYERP: Git Durum",
+        "KYERP Frontend: Build",
+        "KYERP API: Typecheck",
+        "KYERP API: Build Dry Run",
+        "KYERP PDKS: Build",
+        "KYERP PDKS: Contract Tests"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

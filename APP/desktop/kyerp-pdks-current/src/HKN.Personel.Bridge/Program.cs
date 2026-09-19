@@ -1,34 +1,25 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using KYERP.PDKS.Core;
 
 internal static class Program
 {
-    const string PersonelExe=@"D:\Hedef500\Hedef500\HKN.Personel.Native.exe";
-    const int WH_MOUSE_LL=14, WM_LBUTTONDOWN=0x0201;
+    static readonly string PersonelExe=PdksOptions.FromEnvironment().PersonelExecutable;
+    static readonly string HedefExe=Path.Combine(Path.GetDirectoryName(PersonelExe) ?? AppContext.BaseDirectory,"Hedef.exe");
     const uint WM_CLOSE=0x0010, WS_CHILD=0x40000000, WS_VISIBLE=0x10000000;
     const uint WS_CAPTION=0x00C00000, WS_THICKFRAME=0x00040000, WS_SYSMENU=0x00080000;
     const uint WS_MINIMIZEBOX=0x00020000, WS_MAXIMIZEBOX=0x00010000, WS_POPUP=0x80000000;
     const int GWL_STYLE=-16, SW_SHOW=5;
     const uint SWP_NOACTIVATE=0x0010, SWP_SHOWWINDOW=0x0040;
     static readonly IntPtr HWND_BOTTOM=new(1);
-    static IntPtr hook, brandPanel, brandLabel, statusLabel, toolbarPersonel, toolbarIcon, toolbarText, toolbarFont, toolbarHIcon, embedded;
-    static HookProc? hookProc;
+    static IntPtr brandPanel, statusLabel, toolbarPersonel, toolbarIcon, toolbarText, toolbarFont, toolbarHIcon, embedded;
     static int opening;
 
-    delegate IntPtr HookProc(int nCode,IntPtr wParam,IntPtr lParam);
     delegate bool EnumWindowsProc(IntPtr hWnd,IntPtr lParam);
     [StructLayout(LayoutKind.Sequential)] struct POINT{public int X,Y;}
     [StructLayout(LayoutKind.Sequential)] struct RECT{public int Left,Top,Right,Bottom;}
-    [StructLayout(LayoutKind.Sequential)] struct MSLLHOOKSTRUCT{public POINT pt;public uint mouseData,flags,time;public UIntPtr dwExtraInfo;}
-    [StructLayout(LayoutKind.Sequential)] struct MSG{public IntPtr hwnd;public uint message;public UIntPtr wParam;public IntPtr lParam;public uint time;public POINT pt;}
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct SHSTOCKICONINFO{public uint cbSize;public IntPtr hIcon;public int iSysImageIndex;public int iIcon;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=260)]public string szPath;}
-    [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int idHook,HookProc lpfn,IntPtr hMod,uint threadId);
-    [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hhk);
-    [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr hhk,int nCode,IntPtr wParam,IntPtr lParam);
-    [DllImport("user32.dll")] static extern int GetMessage(out MSG msg,IntPtr hWnd,uint min,uint max);
-    [DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG msg);
-    [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG msg);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc lpEnumFunc,IntPtr lParam);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd,out uint processId);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd,StringBuilder lpClassName,int nMaxCount);
@@ -61,30 +52,21 @@ internal static class Program
     {
         using var mutex=new Mutex(true,@"Local\HKN.Hedef500.Personel.Bridge",out bool first);
         if(!first)return;
+        EnsureHedefRunning();
         new Thread(NativeWatcher){IsBackground=true}.Start();
         new Thread(BrandLoop){IsBackground=true}.Start();
-        hookProc=MouseHook;
-        hook=SetWindowsHookEx(WH_MOUSE_LL,hookProc,GetModuleHandle(null),0);
-        if(hook==IntPtr.Zero)return;
-        while(GetMessage(out MSG msg,IntPtr.Zero,0,0)>0){TranslateMessage(ref msg);DispatchMessage(ref msg);}
-        UnhookWindowsHookEx(hook);
+        while(true)Thread.Sleep(1000);
     }
 
-    static IntPtr MouseHook(int nCode,IntPtr wParam,IntPtr lParam)
+    static void EnsureHedefRunning()
     {
-        if(nCode>=0&&wParam.ToInt64()==WM_LBUTTONDOWN)
+        try
         {
-            var info=Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-            if(IsPersonelToolbarPoint(info.pt)){ThreadPool.QueueUserWorkItem(_=>OpenPersonel());return (IntPtr)1;}
+            if(Process.GetProcessesByName("Hedef").Length>0)return;
+            if(!File.Exists(HedefExe))return;
+            Process.Start(new ProcessStartInfo(HedefExe){UseShellExecute=true,WorkingDirectory=Path.GetDirectoryName(HedefExe)!});
         }
-        return CallNextHookEx(hook,nCode,wParam,lParam);
-    }
-
-    static bool IsPersonelToolbarPoint(POINT pt)
-    {
-        if(toolbarPersonel!=IntPtr.Zero&&IsWindow(toolbarPersonel)&&GetWindowRect(toolbarPersonel,out RECT br))
-            return pt.X>=br.Left&&pt.X<=br.Right&&pt.Y>=br.Top&&pt.Y<=br.Bottom;
-        return false;
+        catch{}
     }
 
     static void NativeWatcher()
@@ -114,7 +96,7 @@ internal static class Program
                 foreach(var h in Process.GetProcessesByName("Hedef"))
                 {
                     var main=FindWindowForProcess(h.Id,"TAnaf"); if(main==IntPtr.Zero)continue;
-                    SetWindowText(main,"KY PDKS"); HideLegacyBrand(main); HideAboutMenu(main); EnsureBrandBackground(main); EnsurePersonelToolbar(main); ResizeEmbedded(main);
+                    SetWindowText(main,"KY PDKS"); HideLegacyBrand(main); HideAboutMenu(main); EnsureBrandBackground(main); ResizeEmbedded(main);
                 }
             }
             catch{}
@@ -149,7 +131,6 @@ internal static class Program
         if(!GetClientRect(main,out RECT c))return; int w=Math.Max(100,c.Right), h=Math.Max(100,c.Bottom);
         if(brandPanel==IntPtr.Zero||!IsWindow(brandPanel))
             brandPanel=CreateWindowEx(0,"STATIC","",WS_CHILD|WS_VISIBLE|0x00000006,0,82,w,Math.Max(50,h-104),main,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
-        if(brandLabel!=IntPtr.Zero&&IsWindow(brandLabel))ShowWindow(brandLabel,0);
     }
 
     static void EnsurePersonelToolbar(IntPtr main)

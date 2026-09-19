@@ -9,6 +9,7 @@ static class Program
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         ApplicationConfiguration.Initialize();
+        if (!StartupConfiguration.EnsureReady()) return;
         Application.Run(new PersonelForm());
     }
 }

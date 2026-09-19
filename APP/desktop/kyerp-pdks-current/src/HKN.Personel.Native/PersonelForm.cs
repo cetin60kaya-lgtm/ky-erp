@@ -2,13 +2,15 @@ using FirebirdSql.Data.FirebirdClient;
 using System.Data;
 using System.Drawing;
 using System.Globalization;
+using KYERP.PDKS.Core;
+using KYERP.PDKS.Core.Personnel;
 
 namespace HKN.Personel.Native;
 
 public partial class PersonelForm : Form
 {
-    const string Db = @"D:\Hedef500\Hedef500\Data\DATABASE.GDB";
-    readonly string Cs = new FbConnectionStringBuilder { Database=Db, UserID="SYSDBA", Password=Environment.GetEnvironmentVariable("KY_PDKS_DB_PASSWORD") ?? "", DataSource="127.0.0.1", Port=3050, Dialect=3, Charset="WIN1254", Pooling=false }.ToString();
+    readonly PdksOptions options = PdksOptions.FromEnvironment();
+    readonly FirebirdDatabase db;
     readonly DataGridView list = new() { Dock=DockStyle.Fill, ReadOnly=true, AllowUserToAddRows=false, SelectionMode=DataGridViewSelectionMode.FullRowSelect, MultiSelect=false, AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill };
     readonly Dictionary<string,TextBox> f = new();
     readonly TabControl tabs = new() { Dock=DockStyle.Fill };
@@ -18,6 +20,7 @@ public partial class PersonelForm : Form
 
     public PersonelForm()
     {
+        db = new FirebirdDatabase(options);
         Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(961,572); MinimumSize=new Size(961,572);
         Font=new Font("Microsoft Sans Serif",8.25f); BackColor=SystemColors.Control;
         BuildMenuFull(); BuildUiClassic(); list.SelectionChanged += (_,_) => { SyncPeriodsToPerson(); RefreshFullTabs(); }; Shown += (_,_) => { Reload(); LoadPeriods(); SyncPeriodsToPerson(); RefreshFullTabs(); ApplyClassicGridStyles(); };
@@ -98,12 +101,12 @@ public partial class PersonelForm : Form
 
     DataTable Q(string sql, params FbParameter[] pars)
     {
-        using var c=new FbConnection(Cs); c.Open(); using var cmd=new FbCommand(sql,c); if(pars.Length>0) cmd.Parameters.AddRange(pars); using var da=new FbDataAdapter(cmd); var dt=new DataTable(); da.Fill(dt); return dt;
+        return db.Query(sql, pars);
     }
 
     object? S(string sql)
     {
-        using var c=new FbConnection(Cs); c.Open(); using var cmd=new FbCommand(sql,c); return cmd.ExecuteScalar();
+        return db.Scalar(sql);
     }
     void Reload()
     {
@@ -121,7 +124,7 @@ public partial class PersonelForm : Form
 
     void Filter(string s)
     {
-        if(list.DataSource is not DataTable dt) return; s=s.Replace("'","''").Trim(); dt.DefaultView.RowFilter=string.IsNullOrWhiteSpace(s)?"":$"PKNO LIKE '%{s}%' OR AD LIKE '%{s}%' OR SOYAD LIKE '%{s}%'";
+        if(list.DataSource is not DataTable dt) return; dt.DefaultView.RowFilter=PersonnelListFilter.Build(s);
     }
 
     string Fmt(object v)
@@ -143,7 +146,7 @@ public partial class PersonelForm : Form
                 from KIMLIK K where K.PKNO=@PK";
             var dt=Q(sql,new FbParameter("@PK",pk)); if(dt.Rows.Count==0) return; var r=dt.Rows[0];
             foreach(var kv in f) if(dt.Columns.Contains(kv.Key)) kv.Value.Text=Fmt(r[kv.Key]);
-            if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]); if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]);
+            if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]);
             LoadChild("GIRCIK", "select GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA from GIRCIK where PKNO=@PK order by coalesce(GTARIH,CTARIH) desc rows 100", pk);
             LoadChild("IZIN", "select TARIH,TIP,MAZERET,BASSAAT,BITSAAT,SURESAAT from OZELIZIN where PKNO=@PK order by TARIH desc rows 100", pk);
             LoadChild("AVANS", "select TARIH,MIKTAR,VTARIH,TURKOD,ACIKLAMA from AVANS where PKNO=@PK order by TARIH desc rows 100", pk);
@@ -158,7 +161,7 @@ public partial class PersonelForm : Form
     }
     int Exec(string sql, params FbParameter[] pars)
     {
-        using var c=new FbConnection(Cs); c.Open(); using var cmd=new FbCommand(sql,c); if(pars.Length>0) cmd.Parameters.AddRange(pars); return cmd.ExecuteNonQuery();
+        return db.Execute(sql, pars);
     }
 
     object DbVal(string key)
@@ -193,9 +196,12 @@ public partial class PersonelForm : Form
         if(d.ShowDialog(this)!=DialogResult.OK) return;
         try
         {
-            if(pk.Text.Trim().Length!=5) throw new Exception("Kart No 5 haneli olmalı.");
+            var employeeCode=PdksValidation.EmployeeCode(pk.Text);
+            var firstName=PdksValidation.RequiredText(ad.Text,"Adı");
+            var lastName=PdksValidation.RequiredText(soy.Text,"Soyadı");
+            var employmentStart=DateTime.Parse(gir.Text,new CultureInfo("tr-TR"));
             int ps=Convert.ToInt32(S("select coalesce(max(PS),0)+1 from KIMLIK"));
-            Exec("insert into KIMLIK (PS,PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,DURUM,GOREV,MAAS,KULIZIN,CCKSAY) values (@PS,@PK,@AD,@SOY,@G,1,1,2,1,0,0,0)", new FbParameter("@PS",ps),new FbParameter("@PK",pk.Text.Trim()),new FbParameter("@AD",ad.Text.Trim().ToUpperInvariant()),new FbParameter("@SOY",soy.Text.Trim().ToUpperInvariant()),new FbParameter("@G",DateTime.Parse(gir.Text,new CultureInfo("tr-TR")))); Reload();
+            Exec("insert into KIMLIK (PS,PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,DURUM,GOREV,MAAS,KULIZIN,CCKSAY) values (@PS,@PK,@AD,@SOY,@G,1,1,2,1,0,0,0)", new FbParameter("@PS",ps),new FbParameter("@PK",employeeCode),new FbParameter("@AD",firstName.ToUpperInvariant()),new FbParameter("@SOY",lastName.ToUpperInvariant()),new FbParameter("@G",employmentStart)); Reload();
         }
         catch(Exception ex){MessageBox.Show(ex.Message,"Yeni Personel",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }

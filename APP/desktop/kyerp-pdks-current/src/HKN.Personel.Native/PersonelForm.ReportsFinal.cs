@@ -1,17 +1,31 @@
 using System.Drawing.Printing;
+using KYERP.PDKS.Core.Reports;
 
 namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
+    void ExportActiveGrid(bool excel)
+    {
+        var page=tabs.SelectedTab??throw new InvalidOperationException("Aktarılacak sekme seçili değil.");
+        var grid=All(page).OfType<DataGridView>().FirstOrDefault()??throw new InvalidOperationException("Bu sekmede aktarılacak tablo yok.");
+        var columns=grid.Columns.Cast<DataGridViewColumn>().Where(column=>column.Visible).OrderBy(column=>column.DisplayIndex).ToArray();
+        var rows=grid.Rows.Cast<DataGridViewRow>().Where(row=>!row.IsNewRow).Select(row=>(IReadOnlyList<string>)columns.Select(column=>Convert.ToString(row.Cells[column.Index].FormattedValue)??"").ToArray()).ToArray();
+        var report=new ReportTable(page.Text,columns.Select(column=>column.HeaderText).ToArray(),rows);
+        using var save=new SaveFileDialog{Filter=excel?"Excel (*.xlsx)|*.xlsx":"PDF (*.pdf)|*.pdf",DefaultExt=excel?"xlsx":"pdf",FileName=$"{SafeFileName(page.Text)}-{DateTime.Now:yyyyMMdd-HHmm}"};
+        if(save.ShowDialog(this)!=DialogResult.OK)return;
+        if(excel)ReportExporter.ExportExcel(save.FileName,report);else ReportExporter.ExportPdf(save.FileName,report);
+        MessageBox.Show("Rapor oluşturuldu:\n"+save.FileName,"Raporlar",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
     string ReportTemplate(string title)=>title switch
     {
-        "Ayrıntılı Kişisel Bordro"=>@"D:\Hedef500\Hedef500\Report\Kisisel_Bordro.fr3",
-        "Personel Bilgi Formu"=>@"D:\Hedef500\Hedef500\Report\PerBilgi.fr3",
-        "Personel Bilgi Formu (Boş)"=>@"D:\Hedef500\Hedef500\Report\PerBilgiBos.fr3",
-        "Kişisel Giriş Çıkış Raporu"=>@"D:\Hedef500\Hedef500\Report\KisiselGirisCikis.fr3",
-        "Kişisel İzin Kartı"=>@"D:\Hedef500\Hedef500\Report\KisiselIzinKarti.fr3",
-        "Kişisel Ek Kazanç ve Kesinti Kartı"=>@"D:\Hedef500\Hedef500\Report\KisiselEKKKarti.fr3",
+        "Ayrıntılı Kişisel Bordro"=>options.ReportPath("Kisisel_Bordro.fr3"),
+        "Personel Bilgi Formu"=>options.ReportPath("PerBilgi.fr3"),
+        "Personel Bilgi Formu (Boş)"=>options.ReportPath("PerBilgiBos.fr3"),
+        "Kişisel Giriş Çıkış Raporu"=>options.ReportPath("KisiselGirisCikis.fr3"),
+        "Kişisel İzin Kartı"=>options.ReportPath("KisiselIzinKarti.fr3"),
+        "Kişisel Ek Kazanç ve Kesinti Kartı"=>options.ReportPath("KisiselEKKKarti.fr3"),
         _=>""
     };
 
@@ -20,7 +34,6 @@ public partial class PersonelForm
     void PrintReportFinal(string title)
     {
         if(currentPk==""&&title!="Personel Bilgi Formu (Boş)")return;
-        string template=ReportTemplate(title);if(template.Length>0&&!File.Exists(template)){MessageBox.Show("Rapor şablonu bulunamadı:\n"+template,"Rapor",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
         var grid=ReportGrid(title);int rowIndex=0;var doc=new PrintDocument{DocumentName=title};
         doc.BeginPrint+=(_,_)=>rowIndex=0;
         doc.PrintPage+=(s,e)=>

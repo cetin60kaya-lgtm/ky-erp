@@ -1,2 +1,14 @@
-# Ornek - gercek parolayi GitHub'a yazmayin.
-$env:KY_PDKS_DB_PASSWORD = "LOCAL_FIREBIRD_PASSWORD"
+$env:KY_PDKS_RUNTIME_ROOT = 'D:\Hedef500\Hedef500'
+$env:KY_PDKS_DB_PATH = 'D:\Hedef500\Hedef500\Data\DATABASE.GDB'
+$env:KY_PDKS_DB_HOST = '127.0.0.1'
+$env:KY_PDKS_DB_PORT = '3050'
+$env:KY_PDKS_DB_USER = 'SYSDBA'
+$env:KY_PDKS_DB_PASSWORD = '' # Secret değerini bu dosyaya veya Git'e yazmayın.
+$env:KY_PDKS_DB_CHARSET = 'WIN1254'
+$env:KY_PDKS_REPORT_ROOT = 'D:\Hedef500\Hedef500\Report'
+$env:KY_PDKS_PERSONEL_EXE = 'D:\Hedef500\Hedef500\HKN.Personel.Native.exe'
+$env:KY_PDKS_API_BASE_URL = 'https://api.kyerp.net/'
+$env:KY_PDKS_API_TOKEN = '' # Aktif session/token; Git'e yazmayın.
+$env:KY_PDKS_TENANT_ID = ''
+$env:KY_PDKS_COMPANY_ID = ''
+$env:KY_PDKS_WORKPLACE_ID = ''
