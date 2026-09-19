@@ -1,6 +1,7 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAuthEmailEmergencyRoutes } from "./auth-email-emergency";
+import { registerAuthExternalRecoveryRoutes } from "./auth-external-recovery";
 
 const CHALLENGE_SECONDS = 10 * 60;
 const PASSWORD_SESSION_SECONDS = 28_800;
@@ -11,7 +12,7 @@ const MFA_PROVIDERS = ["GOOGLE", "MICROSOFT"];
 type AnyRow = Record<string, any>;
 
 function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
-function upper(value: unknown) { return text(value).toUpperCase().replace(/İ/g, "I"); }
+function upper(value: unknown) { return text(value).toUpperCase().replace(/Ä°/g, "I"); }
 function nowIso() { return new Date().toISOString(); }
 function addSeconds(seconds: number) { return new Date(Date.now() + seconds * 1000).toISOString(); }
 function jsonError(code: string, message: string) { return { ok: false, error: { code, message } }; }
@@ -110,12 +111,13 @@ async function beginSetup(c: any, user: AnyRow, provider: string, recoveryMode: 
     otpauthUri: otpauthUri(secret, text(user.email || user.username), provider),
     recoveryReenroll: recoveryMode,
     message: recoveryMode
-      ? "Acil kurtarma kodu doğrulandı. Uygulama sahibi Google ve Microsoft Authenticator'ı yeniden kurmalıdır."
+      ? "Acil kurtarma kodu doÄŸrulandÄ±. Uygulama sahibi Google ve Microsoft Authenticator'Ä± yeniden kurmalÄ±dÄ±r."
       : `${providerLabel(provider)} yeniden kuruluyor.`,
   };
 }
 
 export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
+  registerAuthExternalRecoveryRoutes(app);
   registerAuthEmailEmergencyRoutes(app);
 
   // Enrich the canonical login challenge with emergency-code availability without exposing account data.
@@ -137,19 +139,19 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
   app.post("/api/auth/recovery-code", async (c: any) => {
     const body = await bodyOf(c);
     const challenge = await challengeById(c, text(body.challengeId));
-    if (!challenge || !(await challengeValid(challenge, body.challengeToken))) return c.json(jsonError("RECOVERY_CHALLENGE_INVALID", "Kurtarma isteği geçersiz veya süresi dolmuş."), 401);
-    if (!["POLICY_MFA_REQUIRED", "POLICY_MFA_LEGACY_REQUIRED"].includes(text(challenge.challenge_type))) return c.json(jsonError("RECOVERY_CHALLENGE_TYPE", "Bu giriş isteğinde kurtarma kodu kullanılamaz."), 400);
+    if (!challenge || !(await challengeValid(challenge, body.challengeToken))) return c.json(jsonError("RECOVERY_CHALLENGE_INVALID", "Kurtarma isteÄŸi geÃ§ersiz veya sÃ¼resi dolmuÅŸ."), 401);
+    if (!["POLICY_MFA_REQUIRED", "POLICY_MFA_LEGACY_REQUIRED"].includes(text(challenge.challenge_type))) return c.json(jsonError("RECOVERY_CHALLENGE_TYPE", "Bu giriÅŸ isteÄŸinde kurtarma kodu kullanÄ±lamaz."), 400);
     const user = await userById(c, text(challenge.user_id));
-    if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
+    if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "KullanÄ±cÄ± hesabÄ± aktif deÄŸil."), 403);
     if (isOwner(roleOf(user))) {
       await audit(c, "OWNER_RECOVERY_CODE_BLOCKED", user.id, { ownerQuestionAnswerRequired: true });
-      return c.json(jsonError("OWNER_RECOVERY_QUESTIONS_REQUIRED", "Uygulama sahibi için tek kullanımlık kurtarma kodu devre dışıdır. Özel soru-cevap ve doğrulanmış iletişim kanalı ile güvenli kurtarma kullanın."), 403);
+      return c.json(jsonError("OWNER_RECOVERY_QUESTIONS_REQUIRED", "Uygulama sahibi iÃ§in tek kullanÄ±mlÄ±k kurtarma kodu devre dÄ±ÅŸÄ±dÄ±r. Ã–zel soru-cevap ve doÄŸrulanmÄ±ÅŸ iletiÅŸim kanalÄ± ile gÃ¼venli kurtarma kullanÄ±n."), 403);
     }
     const candidateHash = await sha256(normalizeRecoveryCode(body.recoveryCode));
     const row = await c.env.DB.prepare("SELECT id FROM auth_recovery_codes WHERE user_id=? AND code_hash=? AND used_at IS NULL LIMIT 1").bind(user.id, candidateHash).first<AnyRow>();
     if (!row?.id) {
       await audit(c, "RECOVERY_CODE_REJECTED", user.id, {});
-      return c.json(jsonError("RECOVERY_CODE_INVALID", "Kurtarma kodu geçersiz veya daha önce kullanılmış."), 401);
+      return c.json(jsonError("RECOVERY_CODE_INVALID", "Kurtarma kodu geÃ§ersiz veya daha Ã¶nce kullanÄ±lmÄ±ÅŸ."), 401);
     }
 
     const timestamp = nowIso();
@@ -164,11 +166,12 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     return c.json(await beginSetup(c, user, provider, false));
   });
 
-  // Uygulama sahibi için legacy acil kod bilinçli olarak devre dışıdır.
-  // Endpoint yalnız durum bilgisidir ve hiçbir kodu açığa çıkarmaz.
+  // Uygulama sahibi iÃ§in legacy acil kod bilinÃ§li olarak devre dÄ±ÅŸÄ±dÄ±r.
+  // Endpoint yalnÄ±z durum bilgisidir ve hiÃ§bir kodu aÃ§Ä±ÄŸa Ã§Ä±karmaz.
   app.get("/api/admin/security/recovery-code-fallback/status", async (c: any) => {
     const current = await getAuthenticatedUser(c);
-    if (!current || !isOwner(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnız uygulama sahibine açıktır."), current ? 403 : 401);
-    return c.json({ ok: true, data: { available: false, note: "Uygulama sahibi için tek kullanımlık acil kurtarma kodu devre dışıdır; özel soru-cevap + doğrulanmış iletişim kanalı kullanılır." } });
+    if (!current || !isOwner(current.role)) return c.json(jsonError("OWNER_ONLY", "Bu alan yalnÄ±z uygulama sahibine aÃ§Ä±ktÄ±r."), current ? 403 : 401);
+    return c.json({ ok: true, data: { available: false, note: "Uygulama sahibi iÃ§in tek kullanÄ±mlÄ±k acil kurtarma kodu devre dÄ±ÅŸÄ±dÄ±r; Ã¶zel soru-cevap + doÄŸrulanmÄ±ÅŸ iletiÅŸim kanalÄ± kullanÄ±lÄ±r." } });
   });
 }
+
