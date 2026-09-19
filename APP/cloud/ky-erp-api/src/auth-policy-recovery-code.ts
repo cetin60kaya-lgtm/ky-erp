@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerAuthEmailEmergencyRoutes } from "./auth-email-emergency";
 
 const CHALLENGE_SECONDS = 10 * 60;
 const PASSWORD_SESSION_SECONDS = 28_800;
@@ -115,6 +116,8 @@ async function beginSetup(c: any, user: AnyRow, provider: string, recoveryMode: 
 }
 
 export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
+  registerAuthEmailEmergencyRoutes(app);
+
   // Enrich the canonical login challenge with emergency-code availability without exposing account data.
   app.use("/api/auth/login", async (c: any, next: any) => {
     await next();
