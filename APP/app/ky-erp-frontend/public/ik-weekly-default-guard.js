@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260919-0920-weekly-defaults';
+  const VERSION = '20260919-0952-weekly-defaults-mon-fri';
   const nativeFetch = window.fetch.bind(window);
   const pad = (value) => String(value).padStart(2, '0');
   const iso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -7,8 +7,8 @@
     const now = new Date();
     const weekday = now.getDay() || 7;
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday + 1);
-    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
-    return { startDate: iso(monday), endDate: iso(sunday) };
+    const friday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 4);
+    return { startDate: iso(monday), endDate: iso(friday) };
   };
   window.fetch = function kyWeeklyDefaultGuard(input, init) {
     const rawUrl = input instanceof Request ? input.url : String(input || '');
