@@ -44,16 +44,16 @@ Source: "{#Artifacts}\Personel\*"; DestDir: "{app}"; Flags: ignoreversion recurs
 Source: "{#Artifacts}\Bridge\*"; DestDir: "{app}\Bridge"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\KY ERP\KYERP PDKS"; Filename: "{app}\HKN.Personel.Native.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\KYERP PDKS"; Filename: "{app}\HKN.Personel.Native.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{autoprograms}\KY ERP\KYERP PDKS Legacy Bridge"; Filename: "{app}\Bridge\HKN.Personel.Bridge.exe"; WorkingDir: "{app}"; Tasks: legacybridge
+Name: "{autoprograms}\KY ERP\KYERP PDKS"; Filename: "{app}\Bridge\HKN.Personel.Bridge.exe"; WorkingDir: "{app}"; IconFilename: "{app}\HKN.Personel.Native.exe"
+Name: "{autodesktop}\KYERP PDKS"; Filename: "{app}\Bridge\HKN.Personel.Bridge.exe"; WorkingDir: "{app}"; IconFilename: "{app}\HKN.Personel.Native.exe"; Tasks: desktopicon
+Name: "{autoprograms}\KY ERP\KYERP PDKS Personel"; Filename: "{app}\HKN.Personel.Native.exe"; WorkingDir: "{app}"; Tasks: standaloneicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Masaustunde KYERP PDKS kisayolu olustur"; GroupDescription: "Kisayollar:"; Flags: checkedonce
-Name: "legacybridge"; Description: "Legacy Hedef entegrasyon kisayolunu da olustur"; GroupDescription: "Uyumluluk:"; Flags: unchecked
+Name: "standaloneicon"; Description: "Ayrica yalniz Personel modulu kisayolu olustur"; GroupDescription: "Kisayollar:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\HKN.Personel.Native.exe"; Description: "KYERP PDKS uygulamasini ac"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Bridge\HKN.Personel.Bridge.exe"; Description: "KYERP PDKS uygulamasini ac"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\Logs"
