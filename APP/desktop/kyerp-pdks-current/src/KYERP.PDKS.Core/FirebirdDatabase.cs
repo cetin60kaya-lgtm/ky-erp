@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text;
 using FirebirdSql.Data.FirebirdClient;
 
 namespace KYERP.PDKS.Core;
@@ -6,6 +7,11 @@ namespace KYERP.PDKS.Core;
 public sealed class FirebirdDatabase
 {
     private readonly string connectionString;
+
+    static FirebirdDatabase()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
 
     public FirebirdDatabase(PdksOptions options)
     {

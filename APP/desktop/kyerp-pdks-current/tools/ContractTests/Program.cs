@@ -8,6 +8,7 @@ using KYERP.PDKS.Core.Definitions;
 using KYERP.PDKS.Core.Personnel;
 using KYERP.PDKS.Core.Leave;
 using System.Data;
+using System.Text;
 
 var failures = new List<string>();
 Run("environment overrides", () =>
@@ -41,6 +42,13 @@ Run("missing password fails closed", () =>
     try { PdksOptions.FromEnvironment().ValidateDatabase(); }
     catch (InvalidOperationException) { return; }
     throw new Exception("Eksik parola kabul edildi.");
+});
+
+Run("legacy Turkish codepage registration", () =>
+{
+    var options = new PdksOptions("test.gdb", "127.0.0.1", 3050, "SYSDBA", "test-only", "WIN1254", ".", ".", "personel.exe", null, null, null, null);
+    _ = new FirebirdDatabase(options);
+    Equal(1254, Encoding.GetEncoding(1254).CodePage);
 });
 
 Run("employee validation", () =>
