@@ -36,7 +36,7 @@ internal static class Program
     };
 
     // İlk 5 butonun toplamı 264 px; eski Hedef çubuğundaki Personel konumu bire bir korunur.
-    static readonly int[] Widths = { 50, 50, 50, 50, 64, 84, 55, 55, 65, 55, 70 };
+    static readonly int[] Widths = { 53, 53, 53, 53, 53, 53, 53, 53, 53, 53, 58 };
 
     static IntPtr shellWindow, shellMain, capturedBar, shellFont, statusLabel, embedded;
     static int capturedWidth, opening;
@@ -195,7 +195,7 @@ internal static class Program
     {
         var menu = GetMenu(main);
         if (menu == IntPtr.Zero) return;
-        string[] labels = { "Ayarlar", "Personel Tanımları", "Personel İşlemleri", "Raporlar", "Araçlar", "Terminal / Veri Aktarımı" };
+        string[] labels = { "Ayarlar", "Tanımlar", "İşlemler", "Raporlar", "Araçlar", "Transfer" };
         int count = GetMenuItemCount(menu);
         for (int i = 0; i < Math.Min(labels.Length, count); i++)
         {
