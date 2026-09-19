@@ -1,7 +1,9 @@
 (() => {
-  const VERSION = '20260919-0912-daily-concurrency';
+  const VERSION = '20260919-1215-daily-cross-device-v3';
   const nativeFetch = window.fetch.bind(window);
   const revisions = new Map();
+  let lastServerSyncAt = 0;
+  let refreshQueued = false;
 
   const text = (value) => value == null ? '' : String(value).trim();
   const company = () => {
@@ -23,6 +25,7 @@
       const updatedAt = text(row?.updatedAt || row?.updated_at);
       if (employeeId && date && updatedAt) revisions.set(keyFor(companyId, employeeId, date), updatedAt);
     });
+    lastServerSyncAt = Date.now();
   }
 
   function targetPath(url) {
@@ -48,22 +51,57 @@
     return [input, { ...(init || {}), headers, body }];
   }
 
+  async function primeExcelRevisions(rawUrl, input, init, payload) {
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    if (!rows.length) return;
+    const dates = rows.map((row) => text(row?.workDate).slice(0, 10)).filter(Boolean).sort();
+    const startDate = text(payload?.startDate || payload?.start) || dates[0] || '';
+    const endDate = text(payload?.endDate || payload?.end) || dates.at(-1) || startDate;
+    if (!startDate || !endDate) return;
+    let sourceUrl;
+    try { sourceUrl = new URL(rawUrl, location.href); } catch { return; }
+    const readUrl = new URL('/api/ik/daily-attendance', sourceUrl.origin);
+    readUrl.searchParams.set('mainCompanyId', text(payload?.mainCompanyId || payload?.mainCompanySlug) || company());
+    readUrl.searchParams.set('startDate', startDate);
+    readUrl.searchParams.set('endDate', endDate);
+    const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : {}));
+    const response = await nativeFetch(readUrl.toString(), { method: 'GET', headers, cache: 'no-store', credentials: 'include', mode: 'cors' });
+    if (!response.ok) return;
+    try { rememberRows(await response.clone().json(), text(payload?.mainCompanyId || payload?.mainCompanySlug) || company()); } catch {}
+  }
+
+  function refreshVisibleDailyUi() {
+    if (refreshQueued || Date.now() - lastServerSyncAt < 10000) return;
+    refreshQueued = true;
+    requestAnimationFrame(() => {
+      refreshQueued = false;
+      const roots = [...document.querySelectorAll('.gop-page,.kyik-safe-daily,.kyik-screen')];
+      for (const root of roots) {
+        const buttons = [...root.querySelectorAll('button')];
+        const refresh = buttons.find((button) => ['Yenile', 'Kayıtları Yenile'].includes(text(button.textContent)));
+        if (refresh && !refresh.disabled) { refresh.click(); return; }
+      }
+    });
+  }
+
   window.fetch = async function kyDailyGuardFetch(input, init) {
-    const url = input instanceof Request ? input.url : input;
-    const path = targetPath(url);
+    const rawUrl = input instanceof Request ? input.url : input;
+    const path = targetPath(rawUrl);
     const method = text(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase() || 'GET';
     const isFocused = path.endsWith('/api/ik/gunluk-personel/gun-kayitlari') || path.endsWith('/ik/gunluk-personel/gun-kayitlari');
     const isRange = path.endsWith('/api/ik/daily-attendance/save-range') || path.endsWith('/ik/daily-attendance/save-range');
+    const isExcelApply = path.endsWith('/api/ik/gunluk-personel/excel-apply') || path.endsWith('/ik/gunluk-personel/excel-apply');
     const isAttendanceRead = (path.endsWith('/api/ik/daily-attendance') || path.endsWith('/ik/daily-attendance') || isFocused) && method === 'GET';
 
     let nextInput = input;
     let nextInit = init;
-    if (method === 'POST' && (isFocused || isRange)) {
+    if (method === 'POST' && (isFocused || isRange || isExcelApply)) {
       const raw = await bodyText(input, init);
       if (raw) {
         try {
           const payload = JSON.parse(raw);
           const companyId = text(payload?.mainCompanyId || payload?.main_company_id || payload?.mainCompanySlug) || company();
+          if (isExcelApply) await primeExcelRevisions(rawUrl, input, init, payload);
           if (isFocused && Array.isArray(payload?.personnelEntries)) {
             const date = text(payload.date || payload.selectedDate).slice(0, 10);
             payload.personnelEntries = payload.personnelEntries.map((entry) => {
@@ -73,7 +111,7 @@
               return expected ? { ...entry, expectedUpdatedAt: expected } : entry;
             });
           }
-          if (isRange && Array.isArray(payload?.rows)) {
+          if ((isRange || isExcelApply) && Array.isArray(payload?.rows)) {
             payload.rows = payload.rows.map((row) => {
               if (row?.expectedUpdatedAt) return row;
               const employeeId = text(row?.employeeId || row?.personId);
@@ -89,13 +127,16 @@
 
     const response = await nativeFetch(nextInput, nextInit);
     if (response.ok && isAttendanceRead) {
-      try {
-        const payload = await response.clone().json();
-        rememberRows(payload);
-      } catch {}
+      try { rememberRows(await response.clone().json()); } catch {}
+    }
+    if (response.status === 409 && method === 'POST' && (isFocused || isRange || isExcelApply)) {
+      setTimeout(refreshVisibleDailyUi, 0);
     }
     return response;
   };
 
+  window.addEventListener('focus', refreshVisibleDailyUi);
+  window.addEventListener('pageshow', refreshVisibleDailyUi);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshVisibleDailyUi(); });
   document.documentElement.dataset.kyerpDailyConcurrency = VERSION;
 })();
