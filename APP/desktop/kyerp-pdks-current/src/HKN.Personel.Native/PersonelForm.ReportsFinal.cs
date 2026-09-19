@@ -34,7 +34,6 @@ public partial class PersonelForm
     void PrintReportFinal(string title)
     {
         if(currentPk==""&&title!="Personel Bilgi Formu (Boş)")return;
-        string template=ReportTemplate(title);if(template.Length>0&&!File.Exists(template)){MessageBox.Show("Rapor şablonu bulunamadı:\n"+template,"Rapor",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
         var grid=ReportGrid(title);int rowIndex=0;var doc=new PrintDocument{DocumentName=title};
         doc.BeginPrint+=(_,_)=>rowIndex=0;
         doc.PrintPage+=(s,e)=>

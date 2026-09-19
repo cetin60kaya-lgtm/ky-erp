@@ -11,6 +11,7 @@ public partial class PersonelForm
     readonly DateTimePicker gFrom=new(){Width=105,Format=DateTimePickerFormat.Short}, gTo=new(){Width=105,Format=DateTimePickerFormat.Short}, iFrom=new(){Width=105,Format=DateTimePickerFormat.Short}, iTo=new(){Width=105,Format=DateTimePickerFormat.Short}, eFrom=new(){Width=105,Format=DateTimePickerFormat.Short}, eTo=new(){Width=105,Format=DateTimePickerFormat.Short};
     readonly DataGridView gGiris=Grid("GIRCIK"), gIzin=Grid("IZIN"), gEkk=Grid("AVANS"), gBilgi=Grid("BILGI"), gOdeme=Grid("ODEME");
     readonly Label payNormal=new(){AutoSize=true}, payEk=new(){AutoSize=true}, payKes=new(){AutoSize=true}, payNet=new(){AutoSize=true};
+    readonly ComboBox bilgiType=new(){Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};
     readonly System.Windows.Forms.Timer slider=new(){Interval=3000};
 
     static DataGridView Grid(string name)=>new(){Name=name,Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
@@ -134,7 +135,7 @@ public partial class PersonelForm
     }
 
     void ToggleSlider(){slider.Enabled=!slider.Enabled;MessageBox.Show(slider.Enabled?"Süreli personel kaydırma başladı.":"Süreli personel kaydırma durdu.","Personel");}
-    void SalaryHistory(){if(currentPk=="")return;string cur=f.GetValueOrDefault("MAAS")?.Text??"";string old=f.GetValueOrDefault("EMAAS")?.Text??"";MessageBox.Show($"Kart No: {currentPk}\nMevcut Maaş: {cur}\nEski Maaş: {old}","Maaş Geçmişi");}
+    void SalaryHistory(){if(currentPk=="")return;using var dialog=new Form{Text="Maaş Geçmişi",StartPosition=FormStartPosition.CenterParent,Size=new Size(720,430),MinimumSize=new Size(580,340),Font=Font};var grid=Grid("SALARY_HISTORY");grid.DataSource=Q("select BASTAR as DONEM_BASLANGIC,BITTAR as DONEM_BITIS,NODENEN as ODENEN_MAAS,NOTARIH as MAAS_ODEME_TARIHI,FMODENEN as ODENEN_MESAI,FMOTARIH as MESAI_ODEME_TARIHI from ODEME where PKNO=@PK order by BASTAR desc,BITTAR desc",new FbParameter("@PK",currentPk));var info=new Label{Text=$"Kart No: {currentPk}   Personel: {(f.GetValueOrDefault("AD")?.Text+" "+f.GetValueOrDefault("SOYAD")?.Text).Trim()}",Dock=DockStyle.Top,Height=38,Padding=new Padding(8),Font=new Font(Font,FontStyle.Bold)};dialog.Controls.Add(grid);dialog.Controls.Add(info);dialog.ShowDialog(this);}
     bool wired;
     IEnumerable<Control> All(Control c){foreach(Control x in c.Controls){yield return x;foreach(var y in All(x))yield return y;}}
     void WireAllButtons()

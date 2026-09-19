@@ -180,6 +180,16 @@ Run("personnel list searches employment dates", () =>
     Equal(true,PersonnelListFilter.Build("O'NEIL").Contains("O''NEIL"));
 });
 
+Run("timesheet view filters", () =>
+{
+    Equal(string.Empty,TimesheetViewFilter.Build(0));
+    Equal("NC <> 0",TimesheetViewFilter.Build(1));
+    Equal("M50 <> 0 OR M100 <> 0",TimesheetViewFilter.Build(2));
+    Equal("DEVAMSIZLIK <> 0",TimesheetViewFilter.Build(3));
+    Equal("GEC_KALMA <> 0",TimesheetViewFilter.Build(4));
+    Equal("EKSIK_SURE <> 0",TimesheetViewFilter.Build(5));
+});
+
 Run("payroll calculation", () =>
 {
     var result=PayrollCalculator.Calculate(new PayrollInput(30000m,30m,600,60,1000m,500m,250m));
