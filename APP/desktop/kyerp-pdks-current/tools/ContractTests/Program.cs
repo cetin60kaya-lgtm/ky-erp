@@ -138,6 +138,15 @@ Run("profile store protects canonical preset", () =>
     finally { if(Directory.Exists(root))Directory.Delete(root,true); }
 });
 
+Run("terminal code mapping text", () =>
+{
+    var mapping=TerminalCodeMappingText.Parse("01=ENTRY; 02=TURNSTILE\n03=MANUAL","Giriş kodları");
+    Equal(3,mapping.Count);Equal("TURNSTILE",mapping["02"]);
+    Equal("01=ENTRY; 02=TURNSTILE; 03=MANUAL",TerminalCodeMappingText.Format(mapping));
+    Throws(()=>TerminalCodeMappingText.Parse("01", "Giriş kodları"));
+    Throws(()=>TerminalCodeMappingText.Parse("01=A;01=B", "Giriş kodları"));
+});
+
 Run("payroll calculation", () =>
 {
     var result=PayrollCalculator.Calculate(new PayrollInput(30000m,30m,600,60,1000m,500m,250m));

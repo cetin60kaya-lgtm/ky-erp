@@ -48,6 +48,8 @@ public partial class PersonelForm
 
     bool EditTerminalProfile(TerminalTransferProfile profile,out TerminalTransferProfile edited)
     {
+        return TerminalProfileEditor.Edit(this, Font, profile, out edited);
+#if false
         var optionsJson=new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true};
         using var dialog=new Form{Text="Terminal Profili Düzenle",StartPosition=FormStartPosition.CenterParent,Size=new Size(720,650),MinimumSize=new Size(620,520),Font=Font};
         var info=new Label{Dock=DockStyle.Top,Height=44,Padding=new Padding(8),Text="Profil JSON alanlarını düzenleyin. Delimited profilde Start değeri kolon indeksidir; FixedWidth profilde Start/Length karakter konumudur."};
@@ -55,6 +57,7 @@ public partial class PersonelForm
         var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=48,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(6)};var cancel=new Button{Text="İptal",Width=90,DialogResult=DialogResult.Cancel};var save=new Button{Text="Doğrula ve Kaydet",Width=140};bar.Controls.Add(cancel);bar.Controls.Add(save);dialog.Controls.Add(editor);dialog.Controls.Add(info);dialog.Controls.Add(bar);dialog.CancelButton=cancel;
         TerminalTransferProfile? result=null;save.Click+=(_,_)=>{try{result=JsonSerializer.Deserialize<TerminalTransferProfile>(editor.Text,optionsJson)??throw new FormatException("Profil JSON okunamadı.");if(profile.IsCanonical)throw new InvalidOperationException("Canonical preset değiştirilemez.");result.Validate();dialog.DialogResult=DialogResult.OK;dialog.Close();}catch(Exception ex){MessageBox.Show(ex.Message,"Profil Validation",MessageBoxButtons.OK,MessageBoxIcon.Warning);}};
         var accepted=dialog.ShowDialog(this)==DialogResult.OK&&result is not null;edited=result??profile;return accepted;
+#endif
     }
 
     static string SafeFileName(string value)=>string.Concat(value.Select(c=>Path.GetInvalidFileNameChars().Contains(c)?'_':c));
