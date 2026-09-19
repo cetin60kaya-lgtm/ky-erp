@@ -9,19 +9,19 @@ Hedef yalnız işlev/veri davranışı referansıdır. Aşağıdaki karşılıkl
 | Manuel giriş/çıkış | Giriş ve Çıkışları sekmesi/dialogu | VAR | Giriş-Çıkış | `GIRCIK` | CRUD + geceye taşan vardiya |
 | İzin girişi | İzinler sekmesi/dialogu | VAR | İzin | `OZELIZIN` | Tekli/toplu CRUD, süre doğrulama |
 | Kazanç/kesinti/avans | Ek Kazanç ve Kesintiler | YARIM | Finans | `AVANS` | Tür ve taksit semantiği ayrı doğrulanır |
-| Puantaj hesaplama | Bilgi sekmesi | YARIM | Puantaj | `PUANTAJ`, `DONEM` | Dönem hesapla ve toplamları doğrula |
-| Bordro | Ödemeler + Kişisel Bordro | YARIM | Bordro | `PUANTAJ`, `ODEME`, `KIMLIK` | Net/mesai/kesinti hesapları |
-| Maaş/mesai ödemesi | Maaş ve Mesai Ödemesi dialogu | VAR | Ödeme | `ODEME` | Dönemsel upsert ve geri okuma |
-| Organizasyon tanımları | Personel filtreleri/alanları | YARIM | Tanımlar | `GRUP/BOLUM/SERVIS/GOREV/DURUM/FIRMA` | CRUD ve kullanımda referans bütünlüğü |
-| Dönem oluşturma/kapatma | Dönem seçimleri | YARIM | Dönem | `DONEM` | Oluştur/kapat, kapalı döneme kontrollü yazma |
-| Terminal yönetimi | Terminal Aktarım Profilleri | VAR | Terminal | KYERP config JSON store; canonical TNF preset | CRUD/kopyala/default/preview/import/export |
-| Terminal kayıt aktarımı | Desktop agent/import | YARIM | Terminal | Profile-driven File adapter + transaction `GIRCIK` import tamam; fiziksel cihaz adapterı bekliyor | İdempotent aktarım ve tekrar koruması |
+| Puantaj hesaplama | Bilgi sekmesi + hesap çekirdeği | YARIM | Puantaj | `PUANTAJ`, `DONEM` | Canlı iş kurallarıyla dönem hesapla ve toplamları doğrula |
+| Bordro | Ödemeler + Kişisel Bordro | YARIM | Bordro | `PUANTAJ`, `ODEME`, `KIMLIK` | Net/mesai/kesinti hesapları + batch/kapanış |
+| Maaş/mesai ödemesi | Maaş ve Mesai Ödemesi dialogu | VAR | Ödeme | `ODEME` | Transaction tabanlı dönemsel upsert ve geri okuma |
+| Organizasyon tanımları | Organizasyon Tanımları ekranı | YARIM | Tanımlar | `GRUP/BOLUM/SERVIS/GOREV/DURUM/FIRMA` | CRUD var; tüm çapraz tablo referanslarında güvenli silme doğrulanmalı |
+| Dönem oluşturma/kapatma | Dönem Tanımları | YARIM | Dönem | `DONEM` | Oluştur/düzenle var; kapatma kuralı/kolonu doğrulanmalı |
+| Terminal yönetimi | Terminal Aktarım Profilleri | VAR | Terminal | KYERP config JSON store; canonical TNF preset | Alan bazlı düzenle/kopyala/default/preview/import/export |
+| Terminal kayıt aktarımı | Desktop File/TNF import | YARIM | Terminal | Profile-driven File/TNF adapter + transaction `GIRCIK` import tamam; fiziksel cihaz adapterı bekliyor | İdempotent aktarım ve tekrar koruması |
 | TNF import/export | KYERP içe/dışa aktar | VAR | Terminal | Strict canonical TNF v1 ve korumalı preset | Geçerli/geçersiz dosya ve duplicate testi |
 | Günlük gelen/gelmeyen | Günlük Operasyon | VAR | Günlük Operasyon | personel + `GIRCIK` roster karşılaştırması | Bugün gelen/kayıp/açık kayıt listeleri |
-| Gece/gündüz vardiya | Vardiya operasyonu | YARIM | Günlük Operasyon | `GIRCIK` + vardiya tanımı | Gece yarısı sınır testi |
+| Gece/gündüz vardiya | Vardiya operasyonu | YARIM | Günlük Operasyon | `GIRCIK` + vardiya tanımı | Gece yarısı sınır testi + vardiya masterı |
 | Kişisel raporlar | Raporlar menüsü | YARIM | Raporlar | mevcut tablolar | Print preview ve veri kapsamı |
 | PDF/Excel çıktısı | KYERP çıktı komutları | VAR | Raporlar | ortak `ReportTable` exporter | PDF/XLSX dosyası ve Türkçe karakter |
-| Çoklu firma/yetki | Session context | YARIM | Yönetim | tenant/company/workplace | Firma dışı erişim reddi |
+| Çoklu firma/yetki | Session context | YARIM | Yönetim | tenant/company/workplace | Uygulama genelinde firma dışı erişim reddi |
 | Web senkron | Desktop sync/outbox | YARIM | Senkron | Bearer push/pull client + retry outbox + auth-enjeksiyonlu Worker contract; canonical auth bağlantısı bekliyor | offline enqueue, idempotent push/pull |
 
 Bu matris uygulama ilerledikçe `VAR` durumuna çevrilmeden önce ilgili build ve smoke kanıtı alınır.
