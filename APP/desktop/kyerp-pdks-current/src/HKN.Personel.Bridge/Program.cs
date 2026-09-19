@@ -28,6 +28,7 @@ internal static class Program
     static int opening;
 
     delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -41,6 +42,9 @@ internal static class Program
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child, IntPtr parent);
     [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr child);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
@@ -68,6 +72,7 @@ internal static class Program
         EnsureHedefRunning();
         new Thread(NativeWatcher) { IsBackground = true }.Start();
         new Thread(ShellLoop) { IsBackground = true }.Start();
+        new Thread(ClickLoop) { IsBackground = true }.Start();
         while (true) Thread.Sleep(1000);
     }
 
@@ -126,6 +131,39 @@ internal static class Program
             }
             catch { }
             Thread.Sleep(350);
+        }
+    }
+
+    static void ClickLoop()
+    {
+        bool wasDown = false;
+        while (true)
+        {
+            try
+            {
+                bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0;
+                if (down && !wasDown)
+                {
+                    var toolbar = lastToolbar;
+                    if (toolbar != IntPtr.Zero && IsWindow(toolbar)
+                        && GetWindowRect(toolbar, out var rect) && GetCursorPos(out var point))
+                    {
+                        uint dpi = GetDpiForWindow(toolbar);
+                        if (dpi == 0) dpi = 96;
+                        int buttonWidth = Math.Max(50, (int)Math.Round(64 * (dpi / 96.0)));
+                        int buttonHeight = Math.Max(45, (int)Math.Round(60 * (dpi / 96.0)));
+                        int left = rect.Left + PersonelButtonIndex * buttonWidth;
+                        int right = left + buttonWidth;
+                        int bottom = Math.Min(rect.Bottom, rect.Top + buttonHeight);
+
+                        if (point.X >= left && point.X < right && point.Y >= rect.Top && point.Y < bottom)
+                            OpenPersonel();
+                    }
+                }
+                wasDown = down;
+            }
+            catch { }
+            Thread.Sleep(40);
         }
     }
 
