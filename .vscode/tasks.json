@@ -45,6 +45,19 @@
       "problemMatcher": []
     },
     {
+      "label": "KYERP PDKS: Contract Tests",
+      "type": "shell",
+      "command": "dotnet run --project ./tools/ContractTests/ContractTests.csproj -c Release",
+      "options": { "cwd": "${workspaceFolder}/APP/desktop/kyerp-pdks-current" },
+      "problemMatcher": []
+    },
+    {
+      "label": "KYERP PDKS: Tam Kontrol",
+      "dependsOrder": "sequence",
+      "dependsOn": ["KYERP PDKS: Build", "KYERP PDKS: Contract Tests"],
+      "problemMatcher": []
+    },
+    {
       "label": "KYERP: Temel Kontrol",
       "dependsOrder": "sequence",
       "dependsOn": [
@@ -52,7 +65,8 @@
         "KYERP Frontend: Build",
         "KYERP API: Typecheck",
         "KYERP API: Build Dry Run",
-        "KYERP PDKS: Build"
+        "KYERP PDKS: Build",
+        "KYERP PDKS: Contract Tests"
       ],
       "problemMatcher": []
     }
