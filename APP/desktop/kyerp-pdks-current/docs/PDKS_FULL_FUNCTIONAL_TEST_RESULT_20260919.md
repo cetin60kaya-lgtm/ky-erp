@@ -13,7 +13,7 @@ Branch: `codex/kyerp-pdks-full-app-prep`
 | 4 | B — Personel ekle/değiştir/işten çıkış ve yeniden okuma | BLOCKED | Canlı DB yazma yetkisi/secret yok; güvenli test DB kopyası sağlanmadı. Kalıcı yazma yapılmadı. | — |
 | 5 | C — Giriş/çıkış tarih-saat validation, gece yarısı ve CRUD wiring | PASS | `PdksValidation.AttendanceRange` contract testi geçti; klasik ekleme akışı bunu kullanıyor. Listeleme ve tekli CRUD parametreli SQL ile bağlı. | — |
 | 6 | C — GIRCIK rollback CRUD, duplicate ve filtreyi gerçek DB'de doğrulama | BLOCKED | SmokeTest rollback yolu mevcut fakat DB secret olmadığı için çalıştırılmadı. | — |
-| 7 | D — İzin başlangıç/bitiş/süre validation | FAIL | `ShowIzinEditorClassic` bitiş tarihini kaydetmiyor; geçersiz/sıfır saatlik süreyi hata yerine 450 dakikaya çeviriyor. Çok-gün izin şeması/iş kuralı doğrulanmadan güvenli düzeltme yapılamadı. | — |
+| 7 | D — İzin başlangıç/bitiş/süre validation | PASS | Saatlik izin aynı gün ve pozitif süre zorunluluğuyla doğrulanıyor. Yıllık izin başlangıç dahil/işbaşı hariç ve pazar hariç; ücretsiz tam gün aralığı iki uç dahil açılıyor. EBALAN yalnız 4/5 olabilir. Çoklu ekleme transaction ve PKNO+tarih+EBALAN duplicate koruması kullanıyor; çok-gün edit güvenli biçimde reddediliyor. Contract testleri geçti. | `fdbe54a7` |
 | 8 | D — İzin CRUD ve yeniden okuma | BLOCKED | Gerçek Firebird bağlantısı yok; rollback smoke çalıştırılamadı. | — |
 | 9 | E — Ek kazanç/kesinti wiring ve tutar validation | PASS | İşlem/veriliş tarihi, tür, miktar, taksit ve açıklama parametreli SQL'e bağlı; bozuk/negatif tutar contract validation ile reddediliyor. | — |
 | 10 | E — AVANS CRUD ve dönem toplamını gerçek DB'de doğrulama | BLOCKED | Firebird secret/test DB yok. | — |
@@ -44,21 +44,21 @@ Branch: `codex/kyerp-pdks-full-app-prep`
 
 ## Toplam
 
-- PASS: 16
-- FAIL: 1
+- PASS: 17
+- FAIL: 0
 - BLOCKED: 17
 
 ## Bug düzeltmeleri
 
 - `6b8b9b1c`: Personel tarih araması ve yinelenen fotoğraf yenilemesi.
 - `42ee84e2`: Puantaj tür filtresi, gerçek maaş geçmişi grid'i ve rapor preview engeli.
+- `fdbe54a7`: Doğrulanmış saatlik, tam günlük ve yıllık izin kuralları; atomik çok-gün kayıt ve duplicate koruması.
 
 ## Gerçek blockerlar
 
 - Native Windows GUI otomasyon yüzeyi bu oturumda sunulmadı.
 - Firebird bağlantı secret'ları/test DB kopyası yok; rollback smoke ve veri-yeniden-okuma testleri çalıştırılamadı.
-- İzin bitiş tarihi/çok-gün davranışı için doğrulanmış veri şeması ve iş kuralı yok.
 - Fiziksel terminal üretici protokolü bilinmiyor.
 - Worker canonical auth mimarisi kararı bekliyor; sync route inactive bırakıldı.
 
-Canlı kullanıcı testine hazır: **Hayır**. FAIL olan izin validation davranışı ve GUI/Firebird BLOCKED maddeleri kapanmadan tam kabul verilmedi.
+Canlı kullanıcı testine hazır: **Hayır**. GUI/Firebird BLOCKED maddeleri kapanmadan tam kabul verilmedi.
