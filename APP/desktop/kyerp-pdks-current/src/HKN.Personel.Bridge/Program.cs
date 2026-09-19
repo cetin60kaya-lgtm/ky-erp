@@ -5,221 +5,469 @@ using KYERP.PDKS.Core;
 
 internal static class Program
 {
-    static readonly string PersonelExe=PdksOptions.FromEnvironment().PersonelExecutable;
-    static readonly string HedefExe=Path.Combine(Path.GetDirectoryName(PersonelExe) ?? AppContext.BaseDirectory,"Hedef.exe");
-    const uint WM_CLOSE=0x0010, WS_CHILD=0x40000000, WS_VISIBLE=0x10000000;
-    const uint WS_CAPTION=0x00C00000, WS_THICKFRAME=0x00040000, WS_SYSMENU=0x00080000;
-    const uint WS_MINIMIZEBOX=0x00020000, WS_MAXIMIZEBOX=0x00010000, WS_POPUP=0x80000000;
-    const int GWL_STYLE=-16, SW_SHOW=5;
-    const uint SWP_NOACTIVATE=0x0010, SWP_SHOWWINDOW=0x0040;
-    static readonly IntPtr HWND_BOTTOM=new(1);
-    static IntPtr brandPanel, statusLabel, toolbarPersonel, toolbarIcon, toolbarText, toolbarFont, toolbarHIcon, embedded;
+    static readonly string PersonelExe = PdksOptions.FromEnvironment().PersonelExecutable;
+    static readonly string HedefExe = Path.Combine(Path.GetDirectoryName(PersonelExe) ?? AppContext.BaseDirectory, "Hedef.exe");
+
+    const uint WM_CLOSE = 0x0010, WM_COMMAND = 0x0111, WM_SETFONT = 0x0030;
+    const uint WS_CHILD = 0x40000000, WS_VISIBLE = 0x10000000, WS_POPUP = 0x80000000;
+    const uint WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000, WS_SYSMENU = 0x00080000;
+    const uint WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000;
+    const uint BS_FLAT = 0x00008000, SS_CENTER = 0x00000001, SS_WHITERECT = 0x00000006;
+    const uint MF_BYPOSITION = 0x00000400, MF_POPUP = 0x00000010, MF_STRING = 0x00000000;
+    const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
+    const int GWL_STYLE = -16, SW_HIDE = 0, SW_SHOW = 5;
+
+    static IntPtr shellBar, shellTitle, shellFont, statusLabel, embedded;
+    static readonly Dictionary<IntPtr, string> shellButtons = new();
     static int opening;
 
-    delegate bool EnumWindowsProc(IntPtr hWnd,IntPtr lParam);
-    [StructLayout(LayoutKind.Sequential)] struct POINT{public int X,Y;}
-    [StructLayout(LayoutKind.Sequential)] struct RECT{public int Left,Top,Right,Bottom;}
-    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct SHSTOCKICONINFO{public uint cbSize;public IntPtr hIcon;public int iSysImageIndex;public int iIcon;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=260)]public string szPath;}
-    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc lpEnumFunc,IntPtr lParam);
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd,out uint processId);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd,StringBuilder lpClassName,int nMaxCount);
+    delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct POINT { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+    [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr lParam);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder text, int maxCount);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd,uint msg,IntPtr wParam,IntPtr lParam);
-    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd,int nCmdShow);
+    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int command);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd,out RECT rect);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
-    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vKey);
-    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd,out RECT rect);
-    [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child,IntPtr parent);
-    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd,IntPtr after,int x,int y,int cx,int cy,uint flags);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern bool SetWindowText(IntPtr hWnd,string text);
-    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr hWnd,int index);
-    [DllImport("user32.dll")] static extern IntPtr SetWindowLongPtr(IntPtr hWnd,int index,IntPtr value);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string cls,string? title);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr hWnd,uint msg,IntPtr wParam,IntPtr lParam);
-    [DllImport("gdi32.dll",CharSet=CharSet.Unicode)] static extern IntPtr CreateFont(int h,int w,int esc,int ori,int weight,uint italic,uint underline,uint strike,uint charset,uint outPrecision,uint clipPrecision,uint quality,uint pitchAndFamily,string face);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr CreateWindowEx(uint ex,string cls,string text,uint style,int x,int y,int w,int h,IntPtr parent,IntPtr menu,IntPtr inst,IntPtr param);
-    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] static extern IntPtr GetModuleHandle(string? name);
-    [DllImport("shell32.dll",CharSet=CharSet.Unicode)] static extern int SHGetStockIconInfo(uint siid,uint flags,ref SHSTOCKICONINFO psii);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child, IntPtr parent);
+    [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr child);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool SetWindowText(IntPtr hWnd, string text);
+    [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+    [DllImport("user32.dll")] static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateFont(int h, int w, int esc, int ori, int weight, uint italic, uint underline, uint strike, uint charset, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, string face);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateWindowEx(uint ex, string cls, string text, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string? name);
     [DllImport("user32.dll")] static extern IntPtr GetMenu(IntPtr hWnd);
-    [DllImport("user32.dll")] static extern int GetMenuItemCount(IntPtr hMenu);
-    [DllImport("user32.dll")] static extern bool RemoveMenu(IntPtr hMenu,uint uPosition,uint uFlags);
+    [DllImport("user32.dll")] static extern int GetMenuItemCount(IntPtr menu);
+    [DllImport("user32.dll")] static extern IntPtr GetSubMenu(IntPtr menu, int position);
+    [DllImport("user32.dll")] static extern uint GetMenuItemID(IntPtr menu, int position);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetMenuString(IntPtr menu, uint item, StringBuilder text, int maxCount, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool ModifyMenu(IntPtr menu, uint position, uint flags, UIntPtr idNewItem, string newText);
+    [DllImport("user32.dll")] static extern bool RemoveMenu(IntPtr menu, uint position, uint flags);
     [DllImport("user32.dll")] static extern bool DrawMenuBar(IntPtr hWnd);
 
     [STAThread]
     static void Main()
     {
-        using var mutex=new Mutex(true,@"Local\HKN.Hedef500.Personel.Bridge",out bool first);
-        if(!first)return;
+        using var mutex = new Mutex(true, @"Local\HKN.Hedef500.Personel.Bridge", out bool first);
+        if (!first) return;
+
         EnsureHedefRunning();
-        new Thread(NativeWatcher){IsBackground=true}.Start();
-        new Thread(BrandLoop){IsBackground=true}.Start();
-        new Thread(ToolbarClickLoop){IsBackground=true}.Start();
-        while(true)Thread.Sleep(1000);
+        new Thread(NativeWatcher) { IsBackground = true }.Start();
+        new Thread(ShellLoop) { IsBackground = true }.Start();
+        new Thread(ClickLoop) { IsBackground = true }.Start();
+
+        while (true) Thread.Sleep(1000);
     }
 
     static void EnsureHedefRunning()
     {
         try
         {
-            if(Process.GetProcessesByName("Hedef").Length>0)return;
-            if(!File.Exists(HedefExe))return;
-            Process.Start(new ProcessStartInfo(HedefExe){UseShellExecute=true,WorkingDirectory=Path.GetDirectoryName(HedefExe)!});
+            if (Process.GetProcessesByName("Hedef").Length > 0) return;
+            if (!File.Exists(HedefExe)) return;
+            Process.Start(new ProcessStartInfo(HedefExe)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(HedefExe)!
+            });
         }
-        catch{}
+        catch { }
     }
 
     static void NativeWatcher()
     {
-        while(true)
+        while (true)
         {
             try
             {
-                foreach(var h in Process.GetProcessesByName("Hedef"))
+                foreach (var process in Process.GetProcessesByName("Hedef"))
                 {
-                    var personel=FindWindowForProcess(h.Id,"TPersonelF");
-                    if(personel==IntPtr.Zero||!IsWindowVisible(personel))continue;
-                    PostMessage(personel,WM_CLOSE,IntPtr.Zero,IntPtr.Zero); Thread.Sleep(100); OpenPersonel(); break;
+                    var legacyPersonel = FindWindowForProcess(process.Id, "TPersonelF");
+                    if (legacyPersonel == IntPtr.Zero || !IsWindowVisible(legacyPersonel)) continue;
+                    PostMessage(legacyPersonel, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                    Thread.Sleep(100);
+                    OpenPersonel();
+                    break;
                 }
             }
-            catch{}
+            catch { }
             Thread.Sleep(250);
         }
     }
 
-    static void BrandLoop()
+    static void ShellLoop()
     {
-        while(true)
+        while (true)
         {
             try
             {
-                foreach(var h in Process.GetProcessesByName("Hedef"))
+                foreach (var process in Process.GetProcessesByName("Hedef"))
                 {
-                    var main=FindWindowForProcess(h.Id,"TAnaf"); if(main==IntPtr.Zero)continue;
-                    SetWindowText(main,"KY PDKS"); HideLegacyBrand(main); HideAboutMenu(main); EnsureBrandBackground(main); EnsurePersonelToolbar(main); ResizeEmbedded(main);
+                    var main = FindWindowForProcess(process.Id, "TAnaf");
+                    if (main == IntPtr.Zero) continue;
+
+                    SetWindowText(main, "KYERP PDKS");
+                    RewriteTopMenu(main);
+                    HideLegacyHeader(main);
+                    EnsureShell(main);
+                    EnsureStatusBrand(main);
+                    ResizeEmbedded(main);
                 }
             }
-            catch{}
-            Thread.Sleep(400);
+            catch { }
+            Thread.Sleep(300);
         }
     }
 
-    static void HideAboutMenu(IntPtr main)
+    static void RewriteTopMenu(IntPtr main)
     {
-        const uint MF_BYPOSITION=0x00000400;
-        var menu=GetMenu(main); if(menu==IntPtr.Zero)return;
-        int n=GetMenuItemCount(menu);
-        if(n==7){RemoveMenu(menu,6,MF_BYPOSITION);DrawMenuBar(main);}
-    }
+        var menu = GetMenu(main);
+        if (menu == IntPtr.Zero) return;
 
-    static void HideLegacyBrand(IntPtr main)
-    {
-        var panel=FindWindowEx(main,IntPtr.Zero,"TPanel",null);
-        if(panel!=IntPtr.Zero)ShowWindow(panel,0);
-        var status=FindWindowEx(main,IntPtr.Zero,"TStatusBar",null);
-        if(status!=IntPtr.Zero)
+        string[] labels =
         {
-            GetClientRect(status,out RECT sr);
-            if(statusLabel==IntPtr.Zero||!IsWindow(statusLabel))
-                statusLabel=CreateWindowEx(0,"STATIC","www.kyerp.net",WS_CHILD|WS_VISIBLE|0x00000001,Math.Max(0,(sr.Right-180)/2),2,180,17,status,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
-            SetWindowPos(statusLabel,IntPtr.Zero,Math.Max(0,(sr.Right-180)/2),2,180,17,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+            "Ayarlar",
+            "Personel Tanımları",
+            "Personel İşlemleri",
+            "Raporlar",
+            "Araçlar",
+            "Terminal / Veri Aktarımı"
+        };
+
+        int count = GetMenuItemCount(menu);
+        int renameCount = Math.Min(labels.Length, count);
+        for (int i = 0; i < renameCount; i++)
+        {
+            var sub = GetSubMenu(menu, i);
+            if (sub != IntPtr.Zero)
+            {
+                ModifyMenu(menu, (uint)i, MF_BYPOSITION | MF_POPUP, ToUIntPtr(sub), labels[i]);
+            }
+            else
+            {
+                uint id = GetMenuItemID(menu, i);
+                ModifyMenu(menu, (uint)i, MF_BYPOSITION | MF_STRING, new UIntPtr(id), labels[i]);
+            }
         }
+
+        for (int i = count - 1; i >= labels.Length; i--)
+            RemoveMenu(menu, (uint)i, MF_BYPOSITION);
+
+        DrawMenuBar(main);
     }
 
-    static void EnsureBrandBackground(IntPtr main)
+    static void HideLegacyHeader(IntPtr main)
     {
-        if(!GetClientRect(main,out RECT c))return; int w=Math.Max(100,c.Right), h=Math.Max(100,c.Bottom);
-        if(brandPanel==IntPtr.Zero||!IsWindow(brandPanel))
-            brandPanel=CreateWindowEx(0,"STATIC","",WS_CHILD|WS_VISIBLE|0x00000006,0,82,w,Math.Max(50,h-104),main,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
+        if (!GetWindowRect(main, out var mainRect)) return;
+
+        EnumChildWindows(main, (child, _) =>
+        {
+            if (GetParent(child) != main) return true;
+            if (child == shellBar) return true;
+
+            var className = ClassName(child);
+            if (className == "TStatusBar") return true;
+            if (!GetWindowRect(child, out var rect)) return true;
+
+            int top = rect.Top - mainRect.Top;
+            int height = Math.Max(0, rect.Bottom - rect.Top);
+
+            bool headerControl = top < 145 && height > 8 && height <= 125;
+            bool knownToolbar = className.Contains("ToolBar", StringComparison.OrdinalIgnoreCase)
+                                || className.Contains("CoolBar", StringComparison.OrdinalIgnoreCase)
+                                || className.Contains("ControlBar", StringComparison.OrdinalIgnoreCase);
+
+            if (headerControl || knownToolbar) ShowWindow(child, SW_HIDE);
+            return true;
+        }, IntPtr.Zero);
     }
 
-    static void ToolbarClickLoop()
+    static void EnsureShell(IntPtr main)
     {
-        bool wasDown=false;
-        while(true)
+        if (!GetClientRect(main, out var client)) return;
+        int width = Math.Max(900, client.Right - client.Left);
+
+        if (shellBar == IntPtr.Zero || !IsWindow(shellBar))
+        {
+            shellBar = CreateWindowEx(
+                0, "STATIC", "", WS_CHILD | WS_VISIBLE | SS_WHITERECT,
+                0, 0, width, 78, main, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+
+            shellFont = CreateFont(16, 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
+
+            shellTitle = CreateWindowEx(
+                0, "STATIC", "KYERP PDKS", WS_CHILD | WS_VISIBLE,
+                18, 12, 138, 22, shellBar, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+            ApplyFont(shellTitle);
+
+            CreateShellButton("Personel", "PERSONEL", 170, 12, 112);
+            CreateShellButton("Giriş / Çıkış", "GIRISCIKIS", 288, 12, 124);
+            CreateShellButton("Puantaj", "PUANTAJ", 418, 12, 104);
+            CreateShellButton("Bordro", "BORDRO", 528, 12, 98);
+            CreateShellButton("Terminal", "TERMINAL", 632, 12, 104);
+            CreateShellButton("Kullanıcılar", "KULLANICI", 742, 12, 116);
+        }
+
+        SetWindowPos(shellBar, IntPtr.Zero, 0, 0, width, 78, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+
+    static void CreateShellButton(string text, string action, int x, int y, int width)
+    {
+        var button = CreateWindowEx(
+            0, "BUTTON", text, WS_CHILD | WS_VISIBLE | BS_FLAT,
+            x, y, width, 42, shellBar, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+        if (button == IntPtr.Zero) return;
+        shellButtons[button] = action;
+        ApplyFont(button);
+    }
+
+    static void ApplyFont(IntPtr handle)
+    {
+        if (handle != IntPtr.Zero && shellFont != IntPtr.Zero)
+            SendMessage(handle, WM_SETFONT, shellFont, new IntPtr(1));
+    }
+
+    static void EnsureStatusBrand(IntPtr main)
+    {
+        IntPtr status = IntPtr.Zero;
+        EnumChildWindows(main, (child, _) =>
+        {
+            if (GetParent(child) != main) return true;
+            if (ClassName(child) == "TStatusBar")
+            {
+                status = child;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        if (status == IntPtr.Zero) return;
+        if (!GetClientRect(status, out var rect)) return;
+
+        if (statusLabel == IntPtr.Zero || !IsWindow(statusLabel))
+        {
+            statusLabel = CreateWindowEx(
+                0, "STATIC", "www.kyerp.net", WS_CHILD | WS_VISIBLE | SS_CENTER,
+                Math.Max(0, (rect.Right - 180) / 2), 2, 180, 17,
+                status, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+            ApplyFont(statusLabel);
+        }
+
+        SetWindowPos(statusLabel, IntPtr.Zero, Math.Max(0, (rect.Right - 180) / 2), 2, 180, 17, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+
+    static void ClickLoop()
+    {
+        bool wasDown = false;
+        while (true)
         {
             try
             {
-                bool down=(GetAsyncKeyState(0x01)&0x8000)!=0;
-                if(down&&!wasDown&&toolbarPersonel!=IntPtr.Zero&&IsWindow(toolbarPersonel)&&GetCursorPos(out POINT pt)&&GetWindowRect(toolbarPersonel,out RECT r))
+                bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0;
+                if (down && !wasDown && GetCursorPos(out var point))
                 {
-                    if(pt.X>=r.Left&&pt.X<r.Right&&pt.Y>=r.Top&&pt.Y<r.Bottom) OpenPersonel();
+                    foreach (var pair in shellButtons.ToArray())
+                    {
+                        if (!IsWindow(pair.Key) || !GetWindowRect(pair.Key, out var rect)) continue;
+                        if (point.X < rect.Left || point.X >= rect.Right || point.Y < rect.Top || point.Y >= rect.Bottom) continue;
+                        ExecuteShellAction(pair.Value);
+                        break;
+                    }
                 }
-                wasDown=down;
+                wasDown = down;
             }
-            catch{}
-            Thread.Sleep(50);
-        }
-    }
-    static void EnsurePersonelToolbar(IntPtr main)
-    {
-        const uint SS_ICON=0x00000003, SS_CENTER=0x00000001;
-        if(toolbarPersonel==IntPtr.Zero||!IsWindow(toolbarPersonel))
-        {
-            toolbarPersonel=CreateWindowEx(0,"BUTTON","",WS_VISIBLE,0,0,84,79,IntPtr.Zero,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
-            if(toolbarPersonel!=IntPtr.Zero){SetParent(toolbarPersonel,main);long st=GetWindowLongPtr(toolbarPersonel,GWL_STYLE).ToInt64();st&=~((long)WS_POPUP);st|=WS_CHILD|WS_VISIBLE;SetWindowLongPtr(toolbarPersonel,GWL_STYLE,new IntPtr(st));}
-        }
-        if(toolbarPersonel!=IntPtr.Zero)
-        {
-            if(toolbarIcon==IntPtr.Zero||!IsWindow(toolbarIcon))toolbarIcon=CreateWindowEx(0,"STATIC","",WS_CHILD|WS_VISIBLE|SS_ICON,30,5,24,24,toolbarPersonel,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
-            if(toolbarHIcon==IntPtr.Zero){var si=new SHSTOCKICONINFO{cbSize=(uint)Marshal.SizeOf<SHSTOCKICONINFO>(),szPath=""};if(SHGetStockIconInfo(96,0x101,ref si)==0)toolbarHIcon=si.hIcon;}
-            if(toolbarIcon!=IntPtr.Zero&&toolbarHIcon!=IntPtr.Zero)SendMessage(toolbarIcon,0x0170,toolbarHIcon,IntPtr.Zero);
-            if(toolbarText==IntPtr.Zero||!IsWindow(toolbarText))toolbarText=CreateWindowEx(0,"STATIC","Personel",WS_CHILD|WS_VISIBLE|SS_CENTER,2,34,80,35,toolbarPersonel,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
-            if(toolbarFont==IntPtr.Zero)toolbarFont=CreateFont(12,0,0,0,700,0,0,0,1,0,0,5,0,"Segoe UI");
-            if(toolbarFont!=IntPtr.Zero&&toolbarText!=IntPtr.Zero)SendMessage(toolbarText,0x0030,toolbarFont,(IntPtr)1);
-            SetWindowPos(toolbarPersonel,IntPtr.Zero,264,0,84,79,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+            catch { }
+            Thread.Sleep(40);
         }
     }
 
-    static void ResizeEmbedded(IntPtr main)
+    static void ExecuteShellAction(string action)
     {
-        if(embedded==IntPtr.Zero||!IsWindow(embedded))return;
-        if(!GetClientRect(main,out RECT c))return;
-        int w=Math.Min(2050,Math.Max(1200,c.Right-300));
-        int h=Math.Min(950,Math.Max(650,c.Bottom-260));
-        int x=Math.Max(30,(c.Right-w)/2), y=120;
-        SetWindowPos(embedded,IntPtr.Zero,x,y,w,h,SWP_NOACTIVATE|SWP_SHOWWINDOW|0x0020);
+        var process = Process.GetProcessesByName("Hedef").FirstOrDefault();
+        if (process is null) return;
+        var main = FindWindowForProcess(process.Id, "TAnaf");
+        if (main == IntPtr.Zero) return;
+
+        if (action == "PERSONEL")
+        {
+            OpenPersonel();
+            return;
+        }
+
+        HideEmbedded();
+
+        string[] targets = action switch
+        {
+            "GIRISCIKIS" => new[] { "giriş ve çıkış", "giriş-çıkış", "giriş çıkış" },
+            "PUANTAJ" => new[] { "puantaj" },
+            "BORDRO" => new[] { "bordro" },
+            "TERMINAL" => new[] { "terminal veri transfer", "terminal", "veri aktar" },
+            "KULLANICI" => new[] { "kullanıcı", "kullanici" },
+            _ => Array.Empty<string>()
+        };
+
+        if (TryFindMenuCommand(GetMenu(main), targets, out uint commandId))
+            PostMessage(main, WM_COMMAND, new IntPtr(unchecked((int)commandId)), IntPtr.Zero);
+    }
+
+    static bool TryFindMenuCommand(IntPtr menu, string[] targets, out uint commandId)
+    {
+        commandId = uint.MaxValue;
+        if (menu == IntPtr.Zero || targets.Length == 0) return false;
+
+        int count = GetMenuItemCount(menu);
+        for (int i = 0; i < count; i++)
+        {
+            string text = MenuText(menu, i);
+            string normalized = Normalize(text);
+
+            var sub = GetSubMenu(menu, i);
+            if (sub != IntPtr.Zero && TryFindMenuCommand(sub, targets, out commandId)) return true;
+
+            uint id = GetMenuItemID(menu, i);
+            if (id == uint.MaxValue) continue;
+
+            foreach (var target in targets)
+            {
+                string candidate = Normalize(target);
+                if (normalized.Contains(candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    commandId = id;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    static string MenuText(IntPtr menu, int position)
+    {
+        var text = new StringBuilder(256);
+        GetMenuString(menu, (uint)position, text, text.Capacity, MF_BYPOSITION);
+        return text.ToString();
+    }
+
+    static string Normalize(string value)
+    {
+        return value.Trim().ToLowerInvariant()
+            .Replace("&", "")
+            .Replace('ı', 'i').Replace('İ', 'i')
+            .Replace('ş', 's').Replace('Ş', 's')
+            .Replace('ğ', 'g').Replace('Ğ', 'g')
+            .Replace('ü', 'u').Replace('Ü', 'u')
+            .Replace('ö', 'o').Replace('Ö', 'o')
+            .Replace('ç', 'c').Replace('Ç', 'c');
     }
 
     static void OpenPersonel()
     {
-        if(Interlocked.Exchange(ref opening,1)!=0)return;
+        if (Interlocked.Exchange(ref opening, 1) != 0) return;
         try
         {
-            var hedef=Process.GetProcessesByName("Hedef").FirstOrDefault(); if(hedef is null)return;
-            var main=FindWindowForProcess(hedef.Id,"TAnaf"); if(main==IntPtr.Zero)return;
-            var p=Process.GetProcessesByName("HKN.Personel.Native").FirstOrDefault();
-            if(p is null)
+            var hedef = Process.GetProcessesByName("Hedef").FirstOrDefault();
+            if (hedef is null) return;
+            var main = FindWindowForProcess(hedef.Id, "TAnaf");
+            if (main == IntPtr.Zero) return;
+
+            var process = Process.GetProcessesByName("HKN.Personel.Native").FirstOrDefault();
+            if (process is null)
             {
-                if(!File.Exists(PersonelExe))return;
-                p=Process.Start(new ProcessStartInfo(PersonelExe){UseShellExecute=true,WorkingDirectory=Path.GetDirectoryName(PersonelExe)!});
-                if(p is null)return;
-                for(int i=0;i<50&&p.MainWindowHandle==IntPtr.Zero;i++){Thread.Sleep(100);p.Refresh();}
+                if (!File.Exists(PersonelExe)) return;
+                process = Process.Start(new ProcessStartInfo(PersonelExe)
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(PersonelExe)!
+                });
+                if (process is null) return;
+
+                for (int i = 0; i < 60 && process.MainWindowHandle == IntPtr.Zero; i++)
+                {
+                    Thread.Sleep(100);
+                    process.Refresh();
+                }
             }
-            p.Refresh(); var ph=p.MainWindowHandle; if(ph==IntPtr.Zero)return;
-            embedded=ph; SetParent(ph,main);
-            long style=GetWindowLongPtr(ph,GWL_STYLE).ToInt64();
-            style&=~((long)WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_POPUP);
-            style|=WS_CHILD|WS_VISIBLE|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME; SetWindowLongPtr(ph,GWL_STYLE,new IntPtr(style));
-            ShowWindow(ph,SW_SHOW); ResizeEmbedded(main); SetForegroundWindow(ph);
+
+            process.Refresh();
+            var form = process.MainWindowHandle;
+            if (form == IntPtr.Zero) return;
+
+            embedded = form;
+            SetParent(form, main);
+
+            long style = GetWindowLongPtr(form, GWL_STYLE).ToInt64();
+            style &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+            style |= WS_CHILD | WS_VISIBLE;
+            SetWindowLongPtr(form, GWL_STYLE, new IntPtr(style));
+
+            ShowWindow(form, SW_SHOW);
+            ResizeEmbedded(main);
+            SetForegroundWindow(main);
         }
-        catch{}
-        finally{Thread.Sleep(200);Interlocked.Exchange(ref opening,0);}
+        catch { }
+        finally
+        {
+            Thread.Sleep(150);
+            Interlocked.Exchange(ref opening, 0);
+        }
     }
 
-    static IntPtr FindWindowForProcess(int pid,string className)
+    static void HideEmbedded()
     {
-        IntPtr found=IntPtr.Zero;
-        EnumWindows((hwnd,_)=>
+        if (embedded != IntPtr.Zero && IsWindow(embedded)) ShowWindow(embedded, SW_HIDE);
+    }
+
+    static void ResizeEmbedded(IntPtr main)
+    {
+        if (embedded == IntPtr.Zero || !IsWindow(embedded)) return;
+        if (!GetClientRect(main, out var client)) return;
+
+        int width = Math.Max(700, client.Right - client.Left);
+        int height = Math.Max(450, client.Bottom - client.Top - 102);
+        SetWindowPos(embedded, IntPtr.Zero, 0, 78, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+
+    static IntPtr FindWindowForProcess(int processId, string className)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((window, _) =>
         {
-            GetWindowThreadProcessId(hwnd,out uint p); if(p!=(uint)pid)return true;
-            var b=new StringBuilder(128);GetClassName(hwnd,b,b.Capacity);
-            if(string.Equals(b.ToString(),className,StringComparison.Ordinal)){found=hwnd;return false;}
-            return true;
-        },IntPtr.Zero);
+            GetWindowThreadProcessId(window, out uint owner);
+            if (owner != (uint)processId) return true;
+            if (!string.Equals(ClassName(window), className, StringComparison.Ordinal)) return true;
+            found = window;
+            return false;
+        }, IntPtr.Zero);
         return found;
+    }
+
+    static string ClassName(IntPtr window)
+    {
+        var text = new StringBuilder(128);
+        GetClassName(window, text, text.Capacity);
+        return text.ToString();
+    }
+
+    static UIntPtr ToUIntPtr(IntPtr value)
+    {
+        return IntPtr.Size == 8
+            ? new UIntPtr(unchecked((ulong)value.ToInt64()))
+            : new UIntPtr(unchecked((uint)value.ToInt32()));
     }
 }
