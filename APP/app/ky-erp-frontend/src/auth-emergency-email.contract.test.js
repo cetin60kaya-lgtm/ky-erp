@@ -5,8 +5,8 @@ import test from "node:test";
 const script = readFileSync(new URL("../public/auth-emergency-email.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
-test("emergency email bridge loads before the React login bundle", () => {
-  const bridge = html.indexOf("/auth-emergency-email.js");
+test("email recovery bridge loads before the React login bundle", () => {
+  const bridge = html.indexOf("/auth-emergency-email.js?v=20260919-recovery-v2");
   const app = html.indexOf("/src/main.jsx");
   assert.ok(bridge >= 0);
   assert.ok(app > bridge);
@@ -19,13 +19,18 @@ test("bridge observes only already verified auth challenges and never reads pass
   assert.doesNotMatch(script, /localStorage\.setItem\([^\n]*password/i);
 });
 
-test("email emergency UI is visibly marked as last resort", () => {
-  assert.match(script, /E-posta ile son çare giriş/);
-  assert.match(script, /Telefon ve Authenticator erişilemiyor mu/);
-  assert.match(script, /Kod 10 dakika ve tek kullanım içindir/);
+test("recovery UI uses corporate wording and inline one-time-code input", () => {
+  assert.match(script, /Kurtarma Seçenekleri/);
+  assert.match(script, /E-posta Doğrulama/);
+  assert.match(script, /autocomplete=\"one-time-code\"/);
+  assert.match(script, /Doğrula ve Giriş Yap/);
+  assert.match(script, /Yeni Kod Gönder/);
+  assert.doesNotMatch(script, /son çare/i);
+  assert.doesNotMatch(script, /acil giriş/i);
+  assert.doesNotMatch(script, /window\.prompt/);
 });
 
-test("verified emergency flow uses canonical approval status then stores only the issued session", () => {
+test("verified email recovery uses canonical approval status then stores only issued session", () => {
   assert.match(script, /\/auth\/email-emergency\/start/);
   assert.match(script, /\/auth\/email-emergency\/verify/);
   assert.match(script, /\/auth\/approval\//);
