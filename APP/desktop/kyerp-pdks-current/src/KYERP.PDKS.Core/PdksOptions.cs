@@ -18,7 +18,7 @@ public sealed record PdksOptions(
     public string? ApiAccessToken { get; init; }
     public static PdksOptions FromEnvironment()
     {
-        var runtimeRoot = Value("KY_PDKS_RUNTIME_ROOT", @"D:\Hedef500\Hedef500");
+        var runtimeRoot = Value("KY_PDKS_RUNTIME_ROOT", AppContext.BaseDirectory);
         var databasePath = Value("KY_PDKS_DB_PATH", Path.Combine(runtimeRoot, "Data", "DATABASE.GDB"));
         var reportRoot = Value("KY_PDKS_REPORT_ROOT", Path.Combine(runtimeRoot, "Report"));
         var personelExecutable = Value("KY_PDKS_PERSONEL_EXE", Path.Combine(runtimeRoot, "HKN.Personel.Native.exe"));

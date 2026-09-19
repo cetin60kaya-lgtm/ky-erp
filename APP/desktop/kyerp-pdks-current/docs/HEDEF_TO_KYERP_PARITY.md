@@ -14,7 +14,7 @@ Hedef yalnız işlev/veri davranışı referansıdır. Aşağıdaki karşılıkl
 | Maaş/mesai ödemesi | Maaş ve Mesai Ödemesi dialogu | VAR | Ödeme | `ODEME` | Dönemsel upsert ve geri okuma |
 | Organizasyon tanımları | Personel filtreleri/alanları | YARIM | Tanımlar | `GRUP/BOLUM/SERVIS/GOREV/DURUM/FIRMA` | CRUD ve kullanımda referans bütünlüğü |
 | Dönem oluşturma/kapatma | Dönem seçimleri | YARIM | Dönem | `DONEM` | Oluştur/kapat, kapalı döneme kontrollü yazma |
-| Terminal yönetimi | KYERP terminal ekranı | YOK | Terminal | terminal/device sözleşmesi | Cihaz ekle, bağlan, son durum |
+| Terminal yönetimi | Terminal Aktarım Profilleri | VAR | Terminal | KYERP config JSON store; canonical TNF preset | CRUD/kopyala/default/preview/import/export |
 | Terminal kayıt aktarımı | Desktop agent/import | YARIM | Terminal | Profile-driven File adapter + transaction `GIRCIK` import tamam; fiziksel cihaz adapterı bekliyor | İdempotent aktarım ve tekrar koruması |
 | TNF import/export | KYERP içe/dışa aktar | VAR | Terminal | Strict canonical TNF v1 ve korumalı preset | Geçerli/geçersiz dosya ve duplicate testi |
 | Günlük gelen/gelmeyen | Günlük Operasyon | VAR | Günlük Operasyon | personel + `GIRCIK` roster karşılaştırması | Bugün gelen/kayıp/açık kayıt listeleri |
@@ -22,6 +22,6 @@ Hedef yalnız işlev/veri davranışı referansıdır. Aşağıdaki karşılıkl
 | Kişisel raporlar | Raporlar menüsü | YARIM | Raporlar | mevcut tablolar | Print preview ve veri kapsamı |
 | PDF/Excel çıktısı | KYERP çıktı komutları | VAR | Raporlar | ortak `ReportTable` exporter | PDF/XLSX dosyası ve Türkçe karakter |
 | Çoklu firma/yetki | Session context | YARIM | Yönetim | tenant/company/workplace | Firma dışı erişim reddi |
-| Web senkron | Desktop sync/outbox | YARIM | Senkron | Tenant kapsamlı envelope + dosya outbox hazır; HTTP contract bekliyor | offline enqueue, idempotent push/pull |
+| Web senkron | Desktop sync/outbox | YARIM | Senkron | Bearer push/pull client + retry outbox + auth-enjeksiyonlu Worker contract; canonical auth bağlantısı bekliyor | offline enqueue, idempotent push/pull |
 
 Bu matris uygulama ilerledikçe `VAR` durumuna çevrilmeden önce ilgili build ve smoke kanıtı alınır.

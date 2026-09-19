@@ -28,8 +28,8 @@ Durumlar aktif kaynak kodu üzerinden doğrulanmıştır. `legacy/` yalnız refe
 | Raporlar | YARIM | Altı kişisel rapor önizlemesi var; toplu/operasyon/terminal raporları yok. |
 | Yazdırma / PDF / Excel | VAR | Windows print preview ile aktif tablo için gerçek PDF ve XLSX dışa aktarma mevcut. |
 | Yetki / firma / tenant bağlamı | YARIM | Firma alanı okunuyor; merkezi config kimlikleri eklendi, enforcement henüz yok. |
-| Desktop ↔ KYERP.NET senkronu | YARIM | Tenant/company/workplace kapsamlı event envelope ve idempotency anahtarı var; HTTP push/pull adapterı henüz yok. |
-| Offline/queue davranışı | YARIM | Atomik dosya outbox ve tamamlandı taşıması var; retry/backoff ve conflict çözümü henüz yok. |
+| Desktop ↔ KYERP.NET senkronu | YARIM | Bearer kullanan push/pull client, kapsamlı event sözleşmesi ve additive Worker route modülü hazır; canonical Worker auth authorizer bağlantısı bekliyor. |
+| Offline/queue davranışı | VAR | Atomik dosya outbox, idempotency, tamamlandı arşivi ve exponential retry/backoff mevcut. |
 
 ## Baseline
 

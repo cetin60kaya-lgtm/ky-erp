@@ -29,6 +29,19 @@ Kaynakta DB parolasi hard-code edilmez. Gelistirme/test ortaminda `KY_PDKS_DB_PA
 - `KY_PDKS_DB_PATH`, `KY_PDKS_DB_HOST`, `KY_PDKS_DB_PORT`, `KY_PDKS_DB_USER`, `KY_PDKS_DB_PASSWORD`
 - `KY_PDKS_RUNTIME_ROOT`, `KY_PDKS_REPORT_ROOT`, `KY_PDKS_PERSONEL_EXE`
 - `KY_PDKS_API_BASE_URL`, `KY_PDKS_TENANT_ID`, `KY_PDKS_COMPANY_ID`, `KY_PDKS_WORKPLACE_ID`
+- `KY_PDKS_API_TOKEN`: Desktop sync için aktif KYERP session; dosyaya veya Git'e yazılmaz.
+
+Runtime yolu verilmezse executable klasörü temel alınır; aktif kaynakta sabit sürücü yolu kullanılmaz.
+
+## Terminal ve TNF
+
+`İşlemler > Terminal Aktarım Profilleri` ekranı FixedWidth, Delimited ve strict `KYERP TNF v1` profillerini yönetir. Canonical TNF preset korumalıdır; özelleştirmek için kopyalanır. Dosyadan aktarım kullanıcı onayıyla transaction tabanlı `GIRCIK` servisini kullanır ve duplicate kayıtları atlar.
+
+Canonical TNF satırı: `KartNo,HH:mm,ddMMyy,1,001`.
+
+## Rapor çıktıları
+
+Raporlar menüsünden aktif tablo PDF veya gerçek XLSX olarak dışa aktarılabilir.
 
 ## Derleme ve secretsiz test
 
