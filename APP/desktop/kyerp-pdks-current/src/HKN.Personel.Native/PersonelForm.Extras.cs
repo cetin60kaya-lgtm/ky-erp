@@ -1,6 +1,7 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Data;
 using System.Drawing.Printing;
+using KYERP.PDKS.Core.Payroll;
 
 namespace HKN.Personel.Native;
 
@@ -24,11 +25,15 @@ public partial class PersonelForm
         rap.DropDownItems.Add(Item("Kişisel Giriş Çıkış Raporu",Keys.None,()=>PrintReportFinal("Kişisel Giriş Çıkış Raporu")));
         rap.DropDownItems.Add(Item("Kişisel İzin Kartı",Keys.None,()=>PrintReportFinal("Kişisel İzin Kartı")));
         rap.DropDownItems.Add(Item("Kişisel Ek Kazanç ve Kesinti Kartı",Keys.None,()=>PrintReportFinal("Kişisel Ek Kazanç ve Kesinti Kartı")));
+        rap.DropDownItems.Add(new ToolStripSeparator());
+        rap.DropDownItems.Add(Item("Aktif Tabloyu PDF Aktar",Keys.None,()=>ExportActiveGrid(false)));
+        rap.DropDownItems.Add(Item("Aktif Tabloyu Excel Aktar",Keys.None,()=>ExportActiveGrid(true)));
         var isl=new ToolStripMenuItem("İşlemler");
         isl.DropDownItems.Add(Item("Personel Listesi Filtreleme",Keys.F3,FilterDialog));
         isl.DropDownItems.Add(Item("Süreli Personel Kaydırma",Keys.F4,ToggleSlider));
         isl.DropDownItems.Add(Item("Hesapla",Keys.F5,RefreshFullTabs));
         isl.DropDownItems.Add(Item("Maaş Geçmişi",Keys.None,SalaryHistory));
+        isl.DropDownItems.Add(Item("Günlük Operasyon",Keys.None,ShowDailyOperations));
         isl.DropDownItems.Add(new ToolStripSeparator());
         isl.DropDownItems.Add(Item("Terminal Aktarım Profilleri",Keys.None,ShowTerminalProfiles));
         m.Items.Add(rap); m.Items.Add(isl); MainMenuStrip=m; Controls.Add(m);
@@ -105,10 +110,12 @@ public partial class PersonelForm
         gBilgi.DataSource=Q("select TARIH,GIRIS as NC,SAAT2 as M50,SAAT3 as M100,SAAT4 as UIZIN,SAAT5,SAAT6,SAAT7,SAAT8,SAAT9,DEVAMSIZLIKS as DEVAMSIZLIK,GECS as GEC_KALMA,EKSIKS as EKSIK_SURE from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b));
         gBilgi.DefaultCellStyle.BackColor=Color.Black;gBilgi.DefaultCellStyle.ForeColor=Color.White;gBilgi.ColumnHeadersDefaultCellStyle.BackColor=SystemColors.Control;gBilgi.ColumnHeadersDefaultCellStyle.ForeColor=Color.Black;gBilgi.EnableHeadersVisualStyles=false;
         d=PeriodDates(periodO);b=d.B.AddDays(1);var pu=Q("select coalesce(sum(GUN1),0) NG,coalesce(sum(DAKIKA1),0) ND,coalesce(sum(DEVAMSIZLIKG),0) DG,coalesce(sum(GECG),0) GG,coalesce(sum(ERKENG),0) EG,coalesce(sum(EKSIKG),0) XG from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b));
-        var kr=Q("select MAAS from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));decimal maas=kr.Rows.Count==0||kr.Rows[0][0]==DBNull.Value?0:Convert.ToDecimal(kr.Rows[0][0]);var r=pu.Rows[0];decimal ng=Convert.ToDecimal(r["NG"]),dg=Convert.ToDecimal(r["DG"]),normal=Math.Round(maas/30m*ng,2),kes=Math.Round(maas/30m*dg,2),net=normal-kes;
+        var kr=Q("select MAAS from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));decimal maas=kr.Rows.Count==0||kr.Rows[0][0]==DBNull.Value?0:Convert.ToDecimal(kr.Rows[0][0]);var r=pu.Rows[0];decimal ng=Convert.ToDecimal(r["NG"]),dg=Convert.ToDecimal(r["DG"]);
+        var finance=Q("select coalesce(sum(case when TURKOD=1 then MIKTAR else 0 end),0) EK,coalesce(sum(case when TURKOD=2 then MIKTAR else 0 end),0) KES from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b)).Rows[0];
+        decimal ek=Convert.ToDecimal(finance["EK"]),kesinti=Convert.ToDecimal(finance["KES"]);var payroll=PayrollCalculator.Calculate(new PayrollInput(maas,ng,0,0,ek,kesinti,0));decimal normal=payroll.NormalPay,kes=payroll.TotalDeductions,net=payroll.NetPay;
         var t=new DataTable();t.Columns.Add("Bordro Alanları");t.Columns.Add("Gün");t.Columns.Add("Saat");t.Columns.Add("Ücret");void Add(string n,object gun,object saat,decimal u)=>t.Rows.Add(n,gun,saat,u.ToString("N2"));
         Add("Normal Çalışma",ng,Minutes(Convert.ToDecimal(r["ND"])),normal);Add("% 50 Mesai",0,"",0);Add("% 100 Mesai",0,"",0);Add("Ücretsiz İzin",0,"",0);for(int i=5;i<=9;i++)Add(i.ToString(),0,"",0);Add("Devamsızlık",dg,"",-kes);Add("Geç Kalma",r["GG"],"",0);Add("Eksik Süre",r["XG"],"",0);Add("Erken Çıkma",r["EG"],"",0);gOdeme.DataSource=t;
-        payNormal.Text=$"{Minutes(Convert.ToDecimal(r["ND"]))}   {ng}   {normal:N2}";payKes.Text=kes.ToString("N2");payEk.Text="0,00";payNet.Text=net.ToString("N2");
+        payNormal.Text=$"{Minutes(Convert.ToDecimal(r["ND"]))}   {ng}   {normal:N2}";payKes.Text=kes.ToString("N2");payEk.Text=ek.ToString("N2");payNet.Text=net.ToString("N2");
     }
 
     string Minutes(decimal m)=>$"{(int)(m/60):00}:{(int)(m%60):00}";

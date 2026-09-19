@@ -17,10 +17,10 @@ Hedef yalnız işlev/veri davranışı referansıdır. Aşağıdaki karşılıkl
 | Terminal yönetimi | KYERP terminal ekranı | YOK | Terminal | terminal/device sözleşmesi | Cihaz ekle, bağlan, son durum |
 | Terminal kayıt aktarımı | Desktop agent/import | YARIM | Terminal | Profile-driven File adapter + transaction `GIRCIK` import tamam; fiziksel cihaz adapterı bekliyor | İdempotent aktarım ve tekrar koruması |
 | TNF import/export | KYERP içe/dışa aktar | VAR | Terminal | Strict canonical TNF v1 ve korumalı preset | Geçerli/geçersiz dosya ve duplicate testi |
-| Günlük gelen/gelmeyen | Günlük Operasyon | YOK | Günlük Operasyon | personel + vardiya + attendance | Bugün gelen/geç/kayıp listeleri |
+| Günlük gelen/gelmeyen | Günlük Operasyon | VAR | Günlük Operasyon | personel + `GIRCIK` roster karşılaştırması | Bugün gelen/kayıp/açık kayıt listeleri |
 | Gece/gündüz vardiya | Vardiya operasyonu | YARIM | Günlük Operasyon | `GIRCIK` + vardiya tanımı | Gece yarısı sınır testi |
 | Kişisel raporlar | Raporlar menüsü | YARIM | Raporlar | mevcut tablolar | Print preview ve veri kapsamı |
-| PDF/Excel çıktısı | KYERP çıktı komutları | YOK | Raporlar | rapor DTO | PDF/Excel dosyası ve Türkçe karakter |
+| PDF/Excel çıktısı | KYERP çıktı komutları | VAR | Raporlar | ortak `ReportTable` exporter | PDF/XLSX dosyası ve Türkçe karakter |
 | Çoklu firma/yetki | Session context | YARIM | Yönetim | tenant/company/workplace | Firma dışı erişim reddi |
 | Web senkron | Desktop sync/outbox | YARIM | Senkron | Tenant kapsamlı envelope + dosya outbox hazır; HTTP contract bekliyor | offline enqueue, idempotent push/pull |
 

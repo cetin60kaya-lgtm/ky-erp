@@ -1,9 +1,23 @@
 using System.Drawing.Printing;
+using KYERP.PDKS.Core.Reports;
 
 namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
+    void ExportActiveGrid(bool excel)
+    {
+        var page=tabs.SelectedTab??throw new InvalidOperationException("Aktarılacak sekme seçili değil.");
+        var grid=All(page).OfType<DataGridView>().FirstOrDefault()??throw new InvalidOperationException("Bu sekmede aktarılacak tablo yok.");
+        var columns=grid.Columns.Cast<DataGridViewColumn>().Where(column=>column.Visible).OrderBy(column=>column.DisplayIndex).ToArray();
+        var rows=grid.Rows.Cast<DataGridViewRow>().Where(row=>!row.IsNewRow).Select(row=>(IReadOnlyList<string>)columns.Select(column=>Convert.ToString(row.Cells[column.Index].FormattedValue)??"").ToArray()).ToArray();
+        var report=new ReportTable(page.Text,columns.Select(column=>column.HeaderText).ToArray(),rows);
+        using var save=new SaveFileDialog{Filter=excel?"Excel (*.xlsx)|*.xlsx":"PDF (*.pdf)|*.pdf",DefaultExt=excel?"xlsx":"pdf",FileName=$"{SafeFileName(page.Text)}-{DateTime.Now:yyyyMMdd-HHmm}"};
+        if(save.ShowDialog(this)!=DialogResult.OK)return;
+        if(excel)ReportExporter.ExportExcel(save.FileName,report);else ReportExporter.ExportPdf(save.FileName,report);
+        MessageBox.Show("Rapor oluşturuldu:\n"+save.FileName,"Raporlar",MessageBoxButtons.OK,MessageBoxIcon.Information);
+    }
+
     string ReportTemplate(string title)=>title switch
     {
         "Ayrıntılı Kişisel Bordro"=>options.ReportPath("Kisisel_Bordro.fr3"),

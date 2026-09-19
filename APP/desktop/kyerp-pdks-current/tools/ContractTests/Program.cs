@@ -1,6 +1,9 @@
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Sync;
 using KYERP.PDKS.Core.Terminal;
+using KYERP.PDKS.Core.Payroll;
+using KYERP.PDKS.Core.Operations;
+using KYERP.PDKS.Core.Reports;
 
 var failures = new List<string>();
 Run("environment overrides", () =>
@@ -131,6 +134,35 @@ Run("profile store protects canonical preset", () =>
         Equal(false,imported.IsCanonical);
     }
     finally { if(Directory.Exists(root))Directory.Delete(root,true); }
+});
+
+Run("payroll calculation", () =>
+{
+    var result=PayrollCalculator.Calculate(new PayrollInput(30000m,30m,600,60,1000m,500m,250m));
+    Equal(1000m,result.DailyRate);Equal(133.33m,result.HourlyRate);Equal(2000m,result.Overtime50Pay);
+    Equal(266.67m,result.Overtime100Pay);Equal(32516.67m,result.NetPay);
+    Throws(()=>PayrollCalculator.Calculate(new PayrollInput(-1,0,0,0,0,0,0)));
+});
+
+Run("daily operation summary", () =>
+{
+    var summary=DailyOperationCalculator.Calculate([
+        new("00001",DateTime.Today.AddHours(8),DateTime.Today.AddHours(17),true,"GÜNDÜZ"),
+        new("00002",DateTime.Today.AddHours(20),null,true,"GECE"),new("00003",null,null,true,"GÜNDÜZ")]);
+    Equal(3,summary.Expected);Equal(2,summary.Arrived);Equal(1,summary.Missing);Equal(1,summary.OpenRecords);Equal(1,summary.NightShift);
+});
+
+Run("PDF and Excel report export", () =>
+{
+    var root=Path.Combine(Path.GetTempPath(),"kyerp-report-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+    try
+    {
+        var report=new ReportTable("Puantaj Özet",["Kart No","Ad Soyad","Tutar"],[["00003","Çağrı Şen","1.250,50"]]);
+        var xlsx=Path.Combine(root,"report.xlsx");var pdf=Path.Combine(root,"report.pdf");ReportExporter.ExportExcel(xlsx,report);ReportExporter.ExportPdf(pdf,report);
+        Equal("PK",System.Text.Encoding.ASCII.GetString(File.ReadAllBytes(xlsx),0,2));
+        Equal("%PDF",System.Text.Encoding.ASCII.GetString(File.ReadAllBytes(pdf),0,4));
+    }
+    finally {if(Directory.Exists(root))Directory.Delete(root,true);}
 });
 
 if (failures.Count > 0)
