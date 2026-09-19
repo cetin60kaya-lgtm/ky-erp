@@ -490,3 +490,48 @@ export function registerGoogleMailRoutes(app:any){
     }
   });
 }
+
+export async function sendGmailSystemMessage(c:any,input:any){
+  const tenant=text(input?.tenant),senderEmail=text(input?.senderEmail).toLowerCase();
+  const recipients=recipientEmails(input?.to),subject=headerSafe(input?.subject),bodyText=text(input?.bodyText);
+  const logicalEventId=text(input?.logicalEventId);
+  if(!tenant||!senderEmail||!recipients.length||!logicalEventId){
+    throw Object.assign(new Error("Otomatik mail için firma, gönderen, alıcı ve olay kimliği zorunludur."),{code:"SYSTEM_GMAIL_REQUIRED"});
+  }
+  const account=await c.env.DB.prepare("SELECT * FROM mail_accounts WHERE main_company_slug=? AND LOWER(email_address)=LOWER(?) AND UPPER(provider_type)='GMAIL' LIMIT 1")
+    .bind(tenant,senderEmail).first<AnyRow>();
+  if(!account)throw Object.assign(new Error("Sistem Gmail hesabı KY ERP Mail Merkezi'nde kayıtlı değil."),{code:"SYSTEM_GMAIL_ACCOUNT_NOT_FOUND",status:409});
+  if(upper(account.status)!=="ACTIVE"||upper(account.approval_status)!=="APPROVED"||!account.provider_connected){
+    throw Object.assign(new Error("Sistem Gmail hesabı aktif, onaylı ve bağlı değil."),{code:"SYSTEM_GMAIL_ACCOUNT_NOT_READY",status:409});
+  }
+  const existing=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1")
+    .bind(tenant,logicalEventId).first<AnyRow>();
+  if(existing&&upper(existing.status)==="ACCEPTED")return{ok:true,idempotent:true,status:"ACCEPTED",providerMessageId:text(existing.provider_message_id),sendJobId:text(existing.id)};
+  if(existing&&["SENDING","UNKNOWN_REVIEW_REQUIRED"].includes(upper(existing.status)))return{ok:false,idempotent:true,status:upper(existing.status),sendJobId:text(existing.id)};
+  const jobId=text(existing?.id)||crypto.randomUUID(),ts=nowIso();
+  if(existing){
+    await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=? AND status='FAILED'")
+      .bind(ts,jobId,tenant).run();
+  }else{
+    await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(jobId,tenant,account.id,null,logicalEventId,"SENDING",null,null,1,null,"SYSTEM:OUTGOING_DESIGN",null,ts,ts).run();
+  }
+  const token=(await usableToken(c,tenant,account)).text;
+  const draft={recipients_json:JSON.stringify({to:recipients}),subject,body_text:bodyText,body_html:""};
+  try{
+    const raw=mimeMessage(account,draft,[],[]);
+    const sent=(await googleJson(GMAIL+"/messages/send",token,{method:"POST",body:JSON.stringify({raw})})).payload;
+    const done=nowIso(),providerMessageId=text(sent.id),acceptance=text(sent.threadId||sent.historyId);
+    if(!providerMessageId)throw new Error("Gmail gönderim kimliği doğrulanamadı.");
+    await c.env.DB.prepare("UPDATE mail_send_jobs SET status='ACCEPTED',provider_message_id=?,provider_acceptance_id=?,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=?")
+      .bind(providerMessageId,acceptance||null,done,jobId,tenant).run();
+    await audit(c,tenant,"SYSTEM:OUTGOING_DESIGN",text(account.id),"MAIL_PROVIDER_ACCEPTED",{provider:"GMAIL",sendJobId:jobId,logicalEventId,providerMessageId,automatic:true});
+    return{ok:true,status:"ACCEPTED",providerMessageId,providerAcceptanceId:acceptance||null,sendJobId:jobId};
+  }catch(error:any){
+    const detail=text(error?.message)||"Gmail otomatik gönderim sonucu doğrulanamadı.",failedAt=nowIso();
+    const hard=Number(error?.status)>=400&&Number(error?.status)<500;
+    await c.env.DB.prepare("UPDATE mail_send_jobs SET status=?,last_error=?,updated_at=? WHERE id=? AND main_company_slug=?")
+      .bind(hard?"FAILED":"UNKNOWN_REVIEW_REQUIRED",detail,failedAt,jobId,tenant).run();
+    throw Object.assign(new Error(detail),{code:hard?"GOOGLE_SEND_FAILED":"UNKNOWN_REVIEW_REQUIRED",status:hard?502:409,sendJobId:jobId});
+  }
+}
