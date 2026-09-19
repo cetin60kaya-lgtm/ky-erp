@@ -5,14 +5,24 @@ DESEN bilgisayarinda halen kullanilan mevcut PDKS calismasinin bizim kaynak kodu
 ## Kaynak yapisi
 
 - `src/HKN.Personel.Native`: Personel modulu, Firebird veri islemleri ve klasik PDKS arayuzu.
-- `src/HKN.Personel.Bridge`: mevcut Hedef ana penceresi ile KYERP PDKS Personel modulunun entegrasyon katmani.
+- `src/HKN.Personel.Bridge`: mevcut Hedef ana penceresi ile KYERP PDKS Personel modulunun entegrasyon ve ana acilis katmani.
 - `tools/SmokeTest`: transaction/rollback ile veri yazma-dogrulama araci.
 - `tools/SchemaDump`: Firebird tablo/sema kontrol araci.
 - `docs`: canli durum ve kaynak secim notlari.
 
+## Calisma modeli
+
+Ana masaustu kisayolu `HKN.Personel.Bridge.exe` uzerinden acilir.
+
+- Makinede mevcut Hedef PDKS bulunursa Bridge Hedef'i acar ve Personel modulunu mevcut ana pencereye entegre eder.
+- Personel dugmesi ayri bir yama/overlay menusu olarak cizilmez. Mevcut `TToolBar` icindeki pasif Personel dugmesinin kendi state/text bilgisi aktif hale getirilir; ikon, renk, olcu ve diger dugmeler Hedef'in kendi gorunumunu kullanir.
+- Personel dugmesine basildiginda eski `TPersonelF` yerine `HKN.Personel.Native` ana Hedef penceresinin calisma alanina gomulur.
+- Hedef bulunmayan firmalarda ayni Bridge, `HKN.Personel.Native` uygulamasini standalone modda acar. Boylece KYERP almadan yalniz masaustu PDKS kullanan firma da desteklenir.
+- `KY_PDKS_HEDEF_EXE` ile farkli bir legacy Hedef.exe yolu acikca verilebilir.
+
 ## Canli yollar
 
-- Ana uygulama: `D:\Hedef500\Hedef500\Hedef.exe`
+- Ana legacy uygulama: `D:\Hedef500\Hedef500\Hedef.exe`
 - Personel: `D:\Hedef500\Hedef500\HKN.Personel.Native.exe`
 - Bridge: `D:\Hedef500\Hedef500\HKN.Personel.Bridge.exe`
 - Veritabani: `D:\Hedef500\Hedef500\Data\DATABASE.GDB`
@@ -22,26 +32,31 @@ DESEN bilgisayarinda halen kullanilan mevcut PDKS calismasinin bizim kaynak kodu
 Canli veritabani, yedek, personel verisi, lisans ve parola GitHub'a alinmaz.
 Kaynakta DB parolasi hard-code edilmez. Gelistirme/test ortaminda `KY_PDKS_DB_PASSWORD` ortam degiskeni kullanilir.
 
-## Yapılandırma
+Masaustu urunu iki hesap modelini destekleyecek sekilde tutulur:
 
-`ENVIRONMENT.example.ps1` örnek değişkenleri içerir. Parola veya canlı secret dosyaya yazılmaz. Temel değişkenler:
+- Firma isterse mevcut masaustu Kullanici Yonetimi ile yerel hesap/yetki kullanir.
+- KYERP kullanan firma icin KYERP oturum/yetki entegrasyonu ayrica baglanabilir; masaustu urun KYERP'ye mecbur degildir.
+
+## Yapilandirma
+
+`ENVIRONMENT.example.ps1` ornek degiskenleri icerir. Parola veya canli secret dosyaya yazilmaz. Temel degiskenler:
 
 - `KY_PDKS_DB_PATH`, `KY_PDKS_DB_HOST`, `KY_PDKS_DB_PORT`, `KY_PDKS_DB_USER`, `KY_PDKS_DB_PASSWORD`
-- `KY_PDKS_RUNTIME_ROOT`, `KY_PDKS_REPORT_ROOT`, `KY_PDKS_PERSONEL_EXE`
+- `KY_PDKS_RUNTIME_ROOT`, `KY_PDKS_REPORT_ROOT`, `KY_PDKS_PERSONEL_EXE`, `KY_PDKS_HEDEF_EXE`
 - `KY_PDKS_API_BASE_URL`, `KY_PDKS_TENANT_ID`, `KY_PDKS_COMPANY_ID`, `KY_PDKS_WORKPLACE_ID`
-- `KY_PDKS_API_TOKEN`: Desktop sync için aktif KYERP session; dosyaya veya Git'e yazılmaz.
+- `KY_PDKS_API_TOKEN`: Desktop sync icin aktif KYERP session; dosyaya veya Git'e yazilmaz.
 
-Runtime yolu verilmezse executable klasörü temel alınır; aktif kaynakta sabit sürücü yolu kullanılmaz.
+Runtime yolu verilmezse executable klasoru temel alinir. Bridge ayrica kendi klasorunu, bir ust klasoru ve standart `D:\Hedef500\Hedef500` / `C:\Hedef500\Hedef500` yollarini kontrol eder.
 
 ## Terminal ve TNF
 
-`İşlemler > Terminal Aktarım Profilleri` ekranı FixedWidth, Delimited ve strict `KYERP TNF v1` profillerini yönetir. Canonical TNF preset korumalıdır; özelleştirmek için kopyalanır. Dosyadan aktarım kullanıcı onayıyla transaction tabanlı `GIRCIK` servisini kullanır ve duplicate kayıtları atlar.
+`Islemler > Terminal Aktarim Profilleri` ekrani FixedWidth, Delimited ve strict `KYERP TNF v1` profillerini yonetir. Canonical TNF preset korumalidir; ozellestirmek icin kopyalanir. Dosyadan aktarim kullanici onayiyla transaction tabanli `GIRCIK` servisini kullanir ve duplicate kayitlari atlar.
 
-Canonical TNF satırı: `KartNo,HH:mm,ddMMyy,1,001`.
+Canonical TNF satiri: `KartNo,HH:mm,ddMMyy,1,001`.
 
-## Rapor çıktıları
+## Rapor ciktilari
 
-Raporlar menüsünden aktif tablo PDF veya gerçek XLSX olarak dışa aktarılabilir.
+Raporlar menusunden aktif tablo PDF veya gercek XLSX olarak disa aktarilabilir.
 
 ## Derleme ve secretsiz test
 
@@ -52,9 +67,17 @@ cd APP\desktop\kyerp-pdks-current
 .\BUILD.ps1
 ```
 
-Komut `KYERP.PDKS.sln` içindeki aktif projeleri Release modunda derler, secretsiz kontrat testlerini çalıştırır ve Native/Bridge çıktılarını `artifacts\` altına publish eder. Çıktılar Git'e alınmaz.
+Komut `KYERP.PDKS.sln` icindeki aktif projeleri Release modunda derler, secretsiz kontrat testlerini calistirir ve Native/Bridge ciktilarini `artifacts\` altina publish eder. Ciktilar Git'e alinmaz.
 
-Canlı veritabanı smoke testi yalnız açıkça hazırlanmış bağlantı değişkenleriyle çalıştırılır ve bütün yazmaları transaction içinde rollback eder:
+Kurulum paketi:
+
+```powershell
+.\BUILD_SETUP.ps1
+```
+
+Setup'in ana kisayolu artik Bridge'i acar. Native Personel icin ayrica standalone kisayol istenirse kurulum gorevlerinden secilebilir.
+
+Canli veritabani smoke testi yalniz acikca hazirlanmis baglanti degiskenleriyle calistirilir ve butun yazmalari transaction icinde rollback eder:
 
 ```powershell
 dotnet run --project .\tools\SmokeTest\SmokeTest.csproj -c Release
@@ -64,13 +87,13 @@ dotnet run --project .\tools\SmokeTest\SmokeTest.csproj -c Release
 
 17.09.2026 tarihinde Google Drive'a tasinan `HKN_NATIVE_PERSONEL` klasorunden asil kaynak dosyalari ayiklanarak GitHub'a aktarildi. `bin`, `obj`, `PUBLISH_*`, yedekler ve gecici patch/deneme ciktilari kaynak kabul edilmedi.
 
-## Tek komutla geliştirme makinesini güncelle
+## Tek komutla gelistirme makinesini guncelle
 
-DESEN gibi Windows geliştirme makinesinde temiz branch'i güncellemek, Drive'daki legacy referans runtime'ını hazırlamak, PDKS'yi derlemek ve yeni artifact'leri Google Drive runtime alanına almak için:
+DESEN gibi Windows gelistirme makinesinde temiz branch'i guncellemek, Drive'daki legacy referans runtime'ini hazirlamak, PDKS'yi derlemek ve yeni artifact'leri Google Drive runtime alanina almak icin:
 
 ```powershell
 cd APP\desktop\kyerp-pdks-current
 .\DEV_SYNC.ps1 -OpenVsCode
 ```
 
-Script çalışma alanı kirliyse durur; mevcut değişiklikleri silmez. Secret, lisans ve canlı veritabanını Git'e kopyalamaz. Üretilen Native/Bridge çıktıları `D:\GoogleDrive\KYERP-MERKEZ\01_RUNTIME\KYERP-PDKS\current` altında tutulur ve `BUILD-INFO.txt` ile branch/commit bilgisi kaydedilir.
+Script calisma alani kirliyse durur; mevcut degisiklikleri silmez. Secret, lisans ve canli veritabanini Git'e kopyalamaz. Uretilen Native/Bridge ciktilari `D:\GoogleDrive\KYERP-MERKEZ\01_RUNTIME\KYERP-PDKS\current` altinda tutulur ve `BUILD-INFO.txt` ile branch/commit bilgisi kaydedilir.
