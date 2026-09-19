@@ -137,9 +137,11 @@
 
     const observer=new MutationObserver(()=>{
       if(manualMode&&!standalone()&&!deferredPrompt){
+        const state=qs("#installStateText");
         if(button.disabled)button.disabled=false;
         if(button.classList.contains("hidden"))button.classList.remove("hidden");
-        if(button.textContent==="Android Yükleme Hazırlanıyor")button.textContent="KY Güvenlik'i Yükle";
+        if(button.textContent!=="KY Güvenlik'i Yükle")button.textContent="KY Güvenlik'i Yükle";
+        if(state&&state.textContent!=="Kurulum düğmesi hazır")state.textContent="Kurulum düğmesi hazır";
       }
     });
     observer.observe(button,{attributes:true,childList:true,characterData:true,subtree:true});
