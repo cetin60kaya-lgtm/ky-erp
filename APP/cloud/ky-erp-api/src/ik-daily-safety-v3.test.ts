@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dailyMoneyCents, dailyRevisionConflict, periodContains } from "./ik-daily-safety-v3-core";
+import { dailyMoneyCents, dailyRevisionConflict, periodContains } from "./ik-daily-safety-v3-core.ts";
 
 test("new record does not require revision", () => {
   assert.equal(dailyRevisionConflict("", ""), "");
