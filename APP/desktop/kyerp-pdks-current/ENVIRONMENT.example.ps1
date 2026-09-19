@@ -7,6 +7,7 @@ $env:KY_PDKS_DB_PASSWORD = '' # Secret değerini bu dosyaya veya Git'e yazmayın
 $env:KY_PDKS_DB_CHARSET = 'WIN1254'
 $env:KY_PDKS_REPORT_ROOT = 'D:\Hedef500\Hedef500\Report'
 $env:KY_PDKS_PERSONEL_EXE = 'D:\Hedef500\Hedef500\HKN.Personel.Native.exe'
+$env:KY_PDKS_HEDEF_EXE = 'D:\Hedef500\Hedef500\Hedef.exe' # Legacy Hedef farkli konumdaysa kullanilir.
 $env:KY_PDKS_API_BASE_URL = 'https://api.kyerp.net/'
 $env:KY_PDKS_API_TOKEN = '' # Aktif session/token; Git'e yazmayın.
 $env:KY_PDKS_TENANT_ID = ''
