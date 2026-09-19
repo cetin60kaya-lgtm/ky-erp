@@ -69,6 +69,8 @@ Run("tenant scoped durable outbox", () =>
         var pending = outbox.ReadPending();
         Equal(1, pending.Count);
         Equal(envelope.IdempotencyKey, pending[0].IdempotencyKey);
+        outbox.MarkFailed(envelope.Id,"temporary",DateTimeOffset.UtcNow.AddHours(-2));
+        pending=outbox.ReadPending();Equal(1,pending[0].AttemptCount);Equal("temporary",pending[0].LastError);
         outbox.MarkCompleted(envelope.Id);
         Equal(0, outbox.ReadPending().Count);
     }

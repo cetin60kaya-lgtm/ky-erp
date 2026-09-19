@@ -15,6 +15,7 @@ public sealed record PdksOptions(
     string? WorkplaceId,
     Uri? ApiBaseUri)
 {
+    public string? ApiAccessToken { get; init; }
     public static PdksOptions FromEnvironment()
     {
         var runtimeRoot = Value("KY_PDKS_RUNTIME_ROOT", @"D:\Hedef500\Hedef500");
@@ -36,7 +37,8 @@ public sealed record PdksOptions(
             NullIfBlank(Environment.GetEnvironmentVariable("KY_PDKS_TENANT_ID")),
             NullIfBlank(Environment.GetEnvironmentVariable("KY_PDKS_COMPANY_ID")),
             NullIfBlank(Environment.GetEnvironmentVariable("KY_PDKS_WORKPLACE_ID")),
-            Uri.TryCreate(api, UriKind.Absolute, out var apiUri) ? apiUri : null);
+            Uri.TryCreate(api, UriKind.Absolute, out var apiUri) ? apiUri : null)
+        { ApiAccessToken = NullIfBlank(Environment.GetEnvironmentVariable("KY_PDKS_API_TOKEN")) };
     }
 
     public string RequireDatabasePassword()

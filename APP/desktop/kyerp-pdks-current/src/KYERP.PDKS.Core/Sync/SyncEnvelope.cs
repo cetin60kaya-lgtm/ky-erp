@@ -13,7 +13,8 @@ public sealed record SyncEnvelope(
     DateTimeOffset OccurredAtUtc,
     string PayloadJson,
     int AttemptCount = 0,
-    DateTimeOffset? NextAttemptAtUtc = null)
+    DateTimeOffset? NextAttemptAtUtc = null,
+    string? LastError = null)
 {
     public static SyncEnvelope Create(
         PdksOptions options,

@@ -31,9 +31,10 @@ public sealed class FileOutbox
         if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         return Directory.EnumerateFiles(pendingDirectory, "*.json")
             .OrderBy(path => path, StringComparer.Ordinal)
-            .Take(limit)
             .Select(path => JsonSerializer.Deserialize<SyncEnvelope>(File.ReadAllText(path), JsonOptions)
                 ?? throw new InvalidDataException($"Outbox kaydı okunamadı: {Path.GetFileName(path)}"))
+            .Where(item => item.NextAttemptAtUtc is null || item.NextAttemptAtUtc <= DateTimeOffset.UtcNow)
+            .Take(limit)
             .ToArray();
     }
 
@@ -42,6 +43,15 @@ public sealed class FileOutbox
         var source = PendingPath(id);
         if (!File.Exists(source)) return;
         File.Move(source, CompletedPath(id), true);
+    }
+
+    public void MarkFailed(Guid id, string error, DateTimeOffset? now = null)
+    {
+        var path=PendingPath(id);if(!File.Exists(path))return;
+        var item=JsonSerializer.Deserialize<SyncEnvelope>(File.ReadAllText(path),JsonOptions)??throw new InvalidDataException("Outbox kaydı okunamadı.");
+        var attempts=item.AttemptCount+1;var delay=TimeSpan.FromSeconds(Math.Min(3600,Math.Pow(2,Math.Min(attempts,11))));
+        var updated=item with {AttemptCount=attempts,NextAttemptAtUtc=(now??DateTimeOffset.UtcNow)+delay,LastError=error.Length>500?error[..500]:error};
+        var temporary=path+".tmp-"+Guid.NewGuid().ToString("N");File.WriteAllText(temporary,JsonSerializer.Serialize(updated,JsonOptions));File.Move(temporary,path,true);
     }
 
     private string PendingPath(Guid id) => Path.Combine(pendingDirectory, $"{id:N}.json");
