@@ -48,7 +48,7 @@ async function lockedPeriod(c: Context<AppEnv>, companyId:string, workDate:strin
 
 async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: string) {
   await ensureSchema(c); const companyId=companyIdOf(c,body);
-  const rows=rawRows.map(r=>({...r,employeeId:text(r.employeeId||r.personId||r.personelId),workDate:dateOnly(r.workDate||r.date)}));
+  const rows:Row[]=rawRows.map((r:Row):Row=>({...r,employeeId:text(r.employeeId||r.personId||r.personelId),workDate:dateOnly(r.workDate||r.date)}));
   if(!rows.length)return fail(c,400,"ROWS_REQUIRED","Kaydedilecek devam satırı bulunamadı.");
   if(rows.some(r=>!r.employeeId||!validDate(r.workDate)))return fail(c,400,"DAILY_ROW_INVALID","Her günlük kayıtta personel ve geçerli tarih zorunludur.");
   const seen=new Set<string>(); for(const r of rows){const k=`${r.employeeId}|${r.workDate}`;if(seen.has(k))return fail(c,400,"DUPLICATE_DAILY_ROW",`${r.employeeId} / ${r.workDate} aynı istekte birden fazla kez gönderildi.`);seen.add(k);}
