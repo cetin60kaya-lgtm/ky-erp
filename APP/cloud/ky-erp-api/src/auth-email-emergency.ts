@@ -4,7 +4,7 @@ import { cancelPhoneApproval, phoneApprovalFromRequest } from "./auth-push-cloud
 
 type AnyRow = Record<string, any>;
 
-const EMAIL_PURPOSE = "EMAIL_EMERGENCY_LOGIN";
+const EMAIL_PURPOSE = "EMAIL_LOGIN_RECOVERY";
 const EMAIL_SECONDS = 10 * 60;
 const EMAIL_LOCK_SECONDS = 30 * 60;
 const EMAIL_MAX_ATTEMPTS = 5;
@@ -19,17 +19,14 @@ function nowIso() { return new Date().toISOString(); }
 function addSeconds(seconds: number) { return new Date(Date.now() + seconds * 1000).toISOString(); }
 function jsonError(code: string, message: string) { return { ok: false, error: { code, message } }; }
 function clientIp(c: any) { return text(c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For")?.split(",")[0]); }
+function validEmail(value: unknown) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(value)); }
+function normalizedEmail(value: unknown) { return text(value).toLowerCase(); }
 async function bodyOf(c: any) {
   try {
     const body = await c.req.json();
     return body && typeof body === "object" && !Array.isArray(body) ? body : {};
   } catch { return {}; }
 }
-function roleOf(row: AnyRow) {
-  const role = upper(row?.role_override || row?.platform_role || row?.role || "VIEWER");
-  return role === "ADMIN" ? "SUPER_ADMIN" : role;
-}
-function isOwner(role: unknown) { return ["SUPER_ADMIN", "ADMIN"].includes(upper(role)); }
 function maskEmail(value: unknown) {
   const email = text(value);
   const [local, domain] = email.split("@");
@@ -58,6 +55,16 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
+class RecoveryError extends Error {
+  code: string;
+  status: number;
+  constructor(code: string, message: string, status = 400) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+
 async function tableExists(c: any, table: string) {
   const row = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").bind(table).first<AnyRow>();
   return Boolean(row?.name);
@@ -80,10 +87,10 @@ async function audit(c: any, action: string, user: AnyRow, detail: AnyRow = {}) 
        (id,actor_user_id,target_user_id,main_company_slug,action,ip_address,detail,created_at)
        VALUES (?,?,?,?,?,?,?,?)`,
     ).bind(
-      crypto.randomUUID(), user.id, user.id, text(user.main_company_slug),
+      crypto.randomUUID(), user?.id || null, user?.id || null, text(user?.main_company_slug) || null,
       action, clientIp(c) || null, JSON.stringify(detail), nowIso(),
     ).run();
-  } catch { /* audit must not block emergency verification */ }
+  } catch { /* audit failure must not block recovery */ }
 }
 
 function emailDeliveryConfigured(c: any) {
@@ -99,25 +106,28 @@ async function sendEmailCode(c: any, destination: string, code: string) {
         "Content-Type": "application/json",
         ...(env.RECOVERY_EMAIL_WEBHOOK_TOKEN ? { Authorization: `Bearer ${text(env.RECOVERY_EMAIL_WEBHOOK_TOKEN)}` } : {}),
       },
-      body: JSON.stringify({ channel: "email", to: destination, code, purpose: "KY ERP acil giriş doğrulaması" }),
+      body: JSON.stringify({ channel: "email", to: destination, code, purpose: "KY ERP e-posta doğrulaması" }),
     });
-    if (!response.ok) throw new Error("E-posta doğrulama servisi yanıt vermedi.");
+    if (!response.ok) throw new RecoveryError("EMAIL_RECOVERY_DELIVERY_FAILED", "E-posta doğrulama servisi yanıt vermedi.", 503);
     return;
   }
-  if (!env.RESEND_API_KEY) throw new Error("E-posta doğrulama servisi bağlı değil.");
+  if (!env.RESEND_API_KEY) throw new RecoveryError("EMAIL_RECOVERY_DELIVERY_UNAVAILABLE", "E-posta doğrulama servisi bağlı değil.", 503);
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${text(env.RESEND_API_KEY)}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from: text(env.RECOVERY_EMAIL_FROM || ADMIN_EMAIL_FROM),
       to: [destination],
-      subject: "KY ERP acil giriş doğrulama kodu",
-      text: `KY ERP acil giriş doğrulama kodunuz: ${code}\n\nKod 10 dakika geçerlidir ve tek kullanımlıktır. Bu işlemi siz başlatmadıysanız kodu paylaşmayın.`,
+      subject: "KY ERP e-posta doğrulama kodu",
+      text: `KY ERP giriş doğrulama kodunuz: ${code}\n\nKod 10 dakika geçerlidir ve tek kullanımlıktır. Bu işlemi siz başlatmadıysanız kodu paylaşmayın.`,
     }),
   });
-  if (!response.ok) throw new Error("E-posta doğrulama kodu gönderilemedi.");
+  if (!response.ok) throw new RecoveryError("EMAIL_RECOVERY_DELIVERY_FAILED", "E-posta doğrulama kodu gönderilemedi.", 503);
 }
 
+// Recovery proof is created only after the canonical login endpoint has already
+// verified password + Turnstile. We accept either an open KY Security phone
+// approval or an unconsumed MFA challenge created by that verified login.
 async function challengeProof(c: any, body: AnyRow) {
   const phoneId = text(body.phoneApprovalId);
   const phoneToken = text(body.phoneApprovalToken);
@@ -166,15 +176,21 @@ async function markSourceConsumed(c: any, metadata: AnyRow) {
 }
 
 async function createEmailChallenge(c: any, user: AnyRow, proof: AnyRow) {
-  if (!(await tableExists(c, "auth_owner_recovery_challenges"))) throw new Error("E-posta acil giriş şeması hazır değil.");
+  if (!(await tableExists(c, "auth_owner_recovery_challenges"))) {
+    throw new RecoveryError("EMAIL_RECOVERY_SCHEMA_UNAVAILABLE", "E-posta doğrulama altyapısı hazır değil.", 503);
+  }
   const recent = await c.env.DB.prepare(
     `SELECT COUNT(*) AS total,MAX(created_at) AS latest
        FROM auth_owner_recovery_challenges
       WHERE user_id=? AND purpose=? AND created_at>?`,
   ).bind(user.id, EMAIL_PURPOSE, addSeconds(-3600)).first<AnyRow>();
-  if (Number(recent?.total || 0) >= EMAIL_MAX_SENDS_HOUR) throw new Error("Bir saatlik e-posta kodu gönderim sınırına ulaşıldı.");
+  if (Number(recent?.total || 0) >= EMAIL_MAX_SENDS_HOUR) {
+    await audit(c, "EMAIL_RECOVERY_RATE_LIMITED", user, { reason: "HOURLY_SEND_LIMIT" });
+    throw new RecoveryError("EMAIL_RECOVERY_RATE_LIMITED", "Bir saatlik e-posta kodu gönderim sınırına ulaşıldı.", 429);
+  }
   if (recent?.latest && Date.now() - Date.parse(text(recent.latest)) < EMAIL_RESEND_SECONDS * 1000) {
-    throw new Error("Yeni e-posta kodu istemeden önce 60 saniye bekleyin.");
+    await audit(c, "EMAIL_RECOVERY_RATE_LIMITED", user, { reason: "RESEND_COOLDOWN" });
+    throw new RecoveryError("EMAIL_RECOVERY_RESEND_COOLDOWN", "Yeni doğrulama kodu istemeden önce 60 saniye bekleyin.", 429);
   }
 
   await c.env.DB.prepare(
@@ -186,12 +202,14 @@ async function createEmailChallenge(c: any, user: AnyRow, proof: AnyRow) {
   const otp = sixDigitCode();
   const salt = randomToken(12);
   const timestamp = nowIso();
+  const emailHash = await sha256(normalizedEmail(user.email));
   const metadata = JSON.stringify({
     sourceType: proof.sourceType,
     sourceId: proof.sourceId,
     deviceLabel: proof.deviceLabel,
     userAgent: proof.userAgent,
     ipAddress: proof.ipAddress,
+    emailHash,
   });
   await c.env.DB.prepare(
     `INSERT INTO auth_owner_recovery_challenges
@@ -209,52 +227,58 @@ async function createEmailChallenge(c: any, user: AnyRow, proof: AnyRow) {
     await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET consumed_at=? WHERE id=?").bind(nowIso(), id).run();
     throw error;
   }
-  await audit(c, "EMAIL_EMERGENCY_LOGIN_OTP_SENT", user, { maskedEmail: maskEmail(user.email), sourceType: proof.sourceType });
+  await audit(c, "EMAIL_RECOVERY_CODE_SENT", user, { maskedEmail: maskEmail(user.email), sourceType: proof.sourceType });
   return { id, token, expiresAt: addSeconds(EMAIL_SECONDS) };
 }
 
 async function emailChallenge(c: any, body: AnyRow) {
   const row = await c.env.DB.prepare(
-    `SELECT * FROM auth_owner_recovery_challenges
-      WHERE id=? AND purpose=? AND consumed_at IS NULL AND expires_at>? LIMIT 1`,
-  ).bind(text(body.emailEmergencyId), EMAIL_PURPOSE, nowIso()).first<AnyRow>();
-  if (!row || !safeEqual(text(row.challenge_token_hash), await sha256(text(body.emailEmergencyToken)))) return null;
-  return row;
+    "SELECT * FROM auth_owner_recovery_challenges WHERE id=? AND purpose=? AND consumed_at IS NULL LIMIT 1",
+  ).bind(text(body.emailEmergencyId), EMAIL_PURPOSE).first<AnyRow>();
+  if (!row || !safeEqual(text(row.challenge_token_hash), await sha256(text(body.emailEmergencyToken)))) return { row: null, expired: false };
+  return { row, expired: Date.parse(text(row.expires_at)) <= Date.now() };
 }
 
 export function registerAuthEmailEmergencyRoutes(app: any) {
   app.post("/api/auth/email-emergency/start", async (c: any) => {
     const body = await bodyOf(c);
     const proof = await challengeProof(c, body);
-    if (!proof) return c.json(jsonError("EMAIL_EMERGENCY_PROOF_INVALID", "Önce kullanıcı adı, şifre ve normal güvenlik adımını başlatın."), 401);
+    if (!proof) return c.json(jsonError("EMAIL_RECOVERY_PROOF_INVALID", "Önce kullanıcı adı, şifre ve güvenlik doğrulamasını başlatın."), 401);
     const user = await userById(c, proof.userId);
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
-    if (!isOwner(roleOf(user))) return c.json(jsonError("EMAIL_EMERGENCY_OWNER_ONLY", "Acil e-posta girişi yalnız Süper Yönetici hesabında son çare olarak kullanılır."), 403);
-    if (!Boolean(user.email_verified)) return c.json(jsonError("EMAIL_EMERGENCY_EMAIL_NOT_VERIFIED", "Acil giriş için e-posta adresinin önceden doğrulanmış olması gerekir."), 409);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(user.email))) return c.json(jsonError("EMAIL_EMERGENCY_EMAIL_MISSING", "Süper Yönetici hesabında kullanılabilir bir e-posta adresi bulunmuyor."), 409);
-    if (!emailDeliveryConfigured(c)) return c.json(jsonError("EMAIL_EMERGENCY_DELIVERY_UNAVAILABLE", "E-posta doğrulama servisi Worker'a bağlı değil."), 503);
+    if (!Boolean(user.email_verified)) return c.json(jsonError("EMAIL_RECOVERY_EMAIL_NOT_VERIFIED", "Hesaba kayıtlı e-posta adresi önceden doğrulanmış olmalıdır."), 409);
+    if (!validEmail(user.email)) return c.json(jsonError("EMAIL_RECOVERY_EMAIL_MISSING", "Hesapta kullanılabilir bir doğrulanmış e-posta adresi bulunmuyor."), 409);
+    if (!emailDeliveryConfigured(c)) return c.json(jsonError("EMAIL_RECOVERY_DELIVERY_UNAVAILABLE", "E-posta doğrulama servisi bağlı değil."), 503);
     try {
       const challenge = await createEmailChallenge(c, user, proof);
       return c.json({
         ok: true,
-        stage: "EMAIL_EMERGENCY_VERIFY",
+        stage: "EMAIL_RECOVERY_VERIFY",
         emailEmergencyId: challenge.id,
         emailEmergencyToken: challenge.token,
         emailEmergencyExpiresAt: challenge.expiresAt,
+        resendAfterSeconds: EMAIL_RESEND_SECONDS,
         maskedDestination: maskEmail(user.email),
-        message: `${maskEmail(user.email)} adresine 6 haneli acil giriş kodu gönderildi.`,
+        message: `${maskEmail(user.email)} adresine 6 haneli doğrulama kodu gönderildi.`,
       });
     } catch (error) {
-      return c.json(jsonError("EMAIL_EMERGENCY_SEND_FAILED", error instanceof Error ? error.message : "E-posta kodu gönderilemedi."), 503);
+      const recoveryError = error instanceof RecoveryError ? error : new RecoveryError("EMAIL_RECOVERY_SEND_FAILED", error instanceof Error ? error.message : "E-posta kodu gönderilemedi.", 503);
+      return c.json(jsonError(recoveryError.code, recoveryError.message), recoveryError.status);
     }
   });
 
   app.post("/api/auth/email-emergency/verify", async (c: any) => {
     const body = await bodyOf(c);
-    const row = await emailChallenge(c, body);
-    if (!row) return c.json(jsonError("EMAIL_EMERGENCY_INVALID", "E-posta doğrulama isteği geçersiz veya süresi dolmuş."), 401);
+    const lookup = await emailChallenge(c, body);
+    if (!lookup.row) return c.json(jsonError("EMAIL_RECOVERY_INVALID", "E-posta doğrulama isteği geçersiz."), 401);
+    const row = lookup.row;
+    const user = await userById(c, text(row.user_id));
+    if (lookup.expired) {
+      if (user) await audit(c, "EMAIL_RECOVERY_CODE_EXPIRED", user, {});
+      return c.json(jsonError("EMAIL_RECOVERY_EXPIRED", "E-posta doğrulama kodunun süresi doldu. Yeni kod isteyin."), 401);
+    }
     if (row.locked_until && Date.parse(text(row.locked_until)) > Date.now()) {
-      return c.json(jsonError("EMAIL_EMERGENCY_LOCKED", "Çok fazla hatalı deneme yapıldı. 30 dakika sonra tekrar deneyin."), 429);
+      return c.json(jsonError("EMAIL_RECOVERY_LOCKED", "Çok fazla hatalı deneme yapıldı. 30 dakika sonra tekrar deneyin."), 429);
     }
 
     const code = text(body.otp).replace(/\D/g, "");
@@ -264,25 +288,30 @@ export function registerAuthEmailEmergencyRoutes(app: any) {
       const lockedUntil = attempts >= EMAIL_MAX_ATTEMPTS ? addSeconds(EMAIL_LOCK_SECONDS) : null;
       await c.env.DB.prepare("UPDATE auth_owner_recovery_challenges SET attempt_count=?,locked_until=COALESCE(?,locked_until) WHERE id=?")
         .bind(attempts, lockedUntil, row.id).run();
+      if (user) await audit(c, "EMAIL_RECOVERY_CODE_FAILED", user, { attempts, locked: Boolean(lockedUntil) });
       return c.json(
-        jsonError("EMAIL_EMERGENCY_CODE_INVALID", lockedUntil ? "Çok fazla hatalı kod girildi. E-posta girişi 30 dakika kilitlendi." : "E-posta doğrulama kodu hatalı."),
+        jsonError("EMAIL_RECOVERY_CODE_INVALID", lockedUntil ? "Çok fazla hatalı kod girildi. E-posta doğrulaması 30 dakika kilitlendi." : "E-posta doğrulama kodu hatalı."),
         lockedUntil ? 429 : 401,
       );
     }
 
-    const user = await userById(c, text(row.user_id));
-    if (!user || !Boolean(user.is_active) || !isOwner(roleOf(user))) return c.json(jsonError("USER_UNAVAILABLE", "Süper Yönetici hesabı kullanılamıyor."), 403);
-    if (!Boolean(user.email_verified)) return c.json(jsonError("EMAIL_EMERGENCY_EMAIL_NOT_VERIFIED", "Doğrulanmış e-posta durumu değişti. Giriş ekranından yeniden başlayın."), 409);
+    if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
+    if (!Boolean(user.email_verified) || !validEmail(user.email)) return c.json(jsonError("EMAIL_RECOVERY_EMAIL_NOT_VERIFIED", "Doğrulanmış e-posta durumu değişti. Giriş ekranından yeniden başlayın."), 409);
 
     let metadata: AnyRow = {};
     try { metadata = JSON.parse(text(row.question_ids) || "{}"); } catch { metadata = {}; }
-    if (!(await sourceStillPending(c, metadata))) return c.json(jsonError("EMAIL_EMERGENCY_SOURCE_FINISHED", "İlk giriş isteği artık beklemiyor. Giriş ekranından yeniden başlayın."), 409);
+    const currentEmailHash = await sha256(normalizedEmail(user.email));
+    if (!text(metadata.emailHash) || !safeEqual(text(metadata.emailHash), currentEmailHash)) {
+      await audit(c, "EMAIL_RECOVERY_EMAIL_CHANGED", user, {});
+      return c.json(jsonError("EMAIL_RECOVERY_EMAIL_CHANGED", "Hesabın doğrulanmış e-posta adresi değişti. Giriş ekranından yeniden başlayın."), 409);
+    }
+    if (!(await sourceStillPending(c, metadata))) return c.json(jsonError("EMAIL_RECOVERY_SOURCE_FINISHED", "İlk giriş isteği artık beklemiyor. Giriş ekranından yeniden başlayın."), 409);
 
     const timestamp = nowIso();
     const claim = await c.env.DB.prepare(
       "UPDATE auth_owner_recovery_challenges SET verified_at=?,consumed_at=? WHERE id=? AND consumed_at IS NULL",
     ).bind(timestamp, timestamp, row.id).run();
-    if (!Number(claim?.meta?.changes || 0)) return c.json(jsonError("EMAIL_EMERGENCY_CONSUMED", "Bu e-posta kodu daha önce kullanıldı."), 409);
+    if (!Number(claim?.meta?.changes || 0)) return c.json(jsonError("EMAIL_RECOVERY_CONSUMED", "Bu e-posta kodu daha önce kullanıldı."), 409);
 
     await markSourceConsumed(c, metadata);
 
@@ -295,14 +324,14 @@ export function registerAuthEmailEmergencyRoutes(app: any) {
        VALUES (?,?,?,?, 'APPROVED',?,?,?,?,?,?,?)`,
     ).bind(
       approvalId, user.id, companySlug, await sha256(approvalToken),
-      text(metadata.deviceLabel || "E-posta acil giriş"), text(metadata.userAgent), text(metadata.ipAddress || clientIp(c)),
+      text(metadata.deviceLabel || "E-posta doğrulama"), text(metadata.userAgent), text(metadata.ipAddress || clientIp(c)),
       timestamp, addSeconds(10 * 60), timestamp, user.id,
     ).run();
-    await audit(c, "EMAIL_EMERGENCY_LOGIN_VERIFIED", user, {
+    await audit(c, "EMAIL_RECOVERY_CODE_VERIFIED", user, {
       approvalId,
       maskedEmail: maskEmail(user.email),
       sourceType: metadata.sourceType,
-      emergencyFallback: true,
+      recoveryMethod: "VERIFIED_EMAIL",
     });
 
     return c.json({
@@ -311,8 +340,8 @@ export function registerAuthEmailEmergencyRoutes(app: any) {
       approvalId,
       approvalToken,
       approvalExpiresAt: addSeconds(10 * 60),
-      emailEmergency: true,
-      message: "E-posta doğrulandı. Acil giriş oturumu güvenli şekilde hazırlanıyor.",
+      emailRecovery: true,
+      message: "E-posta doğrulandı. Güvenli oturum hazırlanıyor.",
     });
   });
 }
