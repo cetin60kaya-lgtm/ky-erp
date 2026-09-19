@@ -6,14 +6,14 @@ const AUTHENTICATOR_FALLBACK_DELAY_MS = 20000;
 export default function LoginPageImmediateFallback() {
   useLayoutEffect(() => {
     const originalSetTimeout = window.setTimeout;
-    const originalClearTimeout = window.clearTimeout;
 
     // LoginPage.jsx telefon onayını birincil yöntem olarak tutar; yalnızca
     // Authenticator yedeğinin 20 saniyelik UI gecikmesini kaldırıyoruz.
-    window.setTimeout = function kyerpLoginSetTimeout(callback, delay, ...args) {
+    const immediateLoginTimeout = (callback, delay, ...args) => {
       const effectiveDelay = Number(delay) === AUTHENTICATOR_FALLBACK_DELAY_MS ? 0 : delay;
       return originalSetTimeout.call(window, callback, effectiveDelay, ...args);
     };
+    window.setTimeout = immediateLoginTimeout;
 
     const openAuthenticatorFallback = () => {
       const details = document.querySelector("details.auth-fallback-details.auth-fallback-late");
@@ -26,12 +26,7 @@ export default function LoginPageImmediateFallback() {
 
     return () => {
       observer.disconnect();
-      if (window.setTimeout === kyerpLoginSetTimeout) {
-        window.setTimeout = originalSetTimeout;
-      } else {
-        window.setTimeout = originalSetTimeout;
-      }
-      window.clearTimeout = originalClearTimeout;
+      if (window.setTimeout === immediateLoginTimeout) window.setTimeout = originalSetTimeout;
     };
   }, []);
 
