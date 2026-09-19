@@ -29,6 +29,8 @@ internal static class Program
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd,int nCmdShow);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd,out RECT rect);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd,out RECT rect);
     [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child,IntPtr parent);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd,IntPtr after,int x,int y,int cx,int cy,uint flags);
@@ -55,6 +57,7 @@ internal static class Program
         EnsureHedefRunning();
         new Thread(NativeWatcher){IsBackground=true}.Start();
         new Thread(BrandLoop){IsBackground=true}.Start();
+        new Thread(ToolbarClickLoop){IsBackground=true}.Start();
         while(true)Thread.Sleep(1000);
     }
 
@@ -96,7 +99,7 @@ internal static class Program
                 foreach(var h in Process.GetProcessesByName("Hedef"))
                 {
                     var main=FindWindowForProcess(h.Id,"TAnaf"); if(main==IntPtr.Zero)continue;
-                    SetWindowText(main,"KY PDKS"); HideLegacyBrand(main); HideAboutMenu(main); EnsureBrandBackground(main); ResizeEmbedded(main);
+                    SetWindowText(main,"KY PDKS"); HideLegacyBrand(main); HideAboutMenu(main); EnsureBrandBackground(main); EnsurePersonelToolbar(main); ResizeEmbedded(main);
                 }
             }
             catch{}
@@ -133,6 +136,24 @@ internal static class Program
             brandPanel=CreateWindowEx(0,"STATIC","",WS_CHILD|WS_VISIBLE|0x00000006,0,82,w,Math.Max(50,h-104),main,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
     }
 
+    static void ToolbarClickLoop()
+    {
+        bool wasDown=false;
+        while(true)
+        {
+            try
+            {
+                bool down=(GetAsyncKeyState(0x01)&0x8000)!=0;
+                if(down&&!wasDown&&toolbarPersonel!=IntPtr.Zero&&IsWindow(toolbarPersonel)&&GetCursorPos(out POINT pt)&&GetWindowRect(toolbarPersonel,out RECT r))
+                {
+                    if(pt.X>=r.Left&&pt.X<r.Right&&pt.Y>=r.Top&&pt.Y<r.Bottom) OpenPersonel();
+                }
+                wasDown=down;
+            }
+            catch{}
+            Thread.Sleep(50);
+        }
+    }
     static void EnsurePersonelToolbar(IntPtr main)
     {
         const uint SS_ICON=0x00000003, SS_CENTER=0x00000001;
@@ -146,7 +167,7 @@ internal static class Program
             if(toolbarIcon==IntPtr.Zero||!IsWindow(toolbarIcon))toolbarIcon=CreateWindowEx(0,"STATIC","",WS_CHILD|WS_VISIBLE|SS_ICON,30,5,24,24,toolbarPersonel,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
             if(toolbarHIcon==IntPtr.Zero){var si=new SHSTOCKICONINFO{cbSize=(uint)Marshal.SizeOf<SHSTOCKICONINFO>(),szPath=""};if(SHGetStockIconInfo(96,0x101,ref si)==0)toolbarHIcon=si.hIcon;}
             if(toolbarIcon!=IntPtr.Zero&&toolbarHIcon!=IntPtr.Zero)SendMessage(toolbarIcon,0x0170,toolbarHIcon,IntPtr.Zero);
-            if(toolbarText==IntPtr.Zero||!IsWindow(toolbarText))toolbarText=CreateWindowEx(0,"STATIC","Per. Bilgileri",WS_CHILD|WS_VISIBLE|SS_CENTER,2,34,80,35,toolbarPersonel,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
+            if(toolbarText==IntPtr.Zero||!IsWindow(toolbarText))toolbarText=CreateWindowEx(0,"STATIC","Personel",WS_CHILD|WS_VISIBLE|SS_CENTER,2,34,80,35,toolbarPersonel,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
             if(toolbarFont==IntPtr.Zero)toolbarFont=CreateFont(12,0,0,0,700,0,0,0,1,0,0,5,0,"Segoe UI");
             if(toolbarFont!=IntPtr.Zero&&toolbarText!=IntPtr.Zero)SendMessage(toolbarText,0x0030,toolbarFont,(IntPtr)1);
             SetWindowPos(toolbarPersonel,IntPtr.Zero,264,0,84,79,SWP_NOACTIVATE|SWP_SHOWWINDOW);
