@@ -1,0 +1,54 @@
+# KYERP PDKS — Session Handoff 2026-09-19
+
+## Canonical çalışma noktası
+- Repo: `cetin60kaya-lgtm/ky-erp`
+- Aktif geliştirme dalı: `codex/kyerp-pdks-full-app-prep`
+- Açık PR: `#281`
+- Ürün yolu: `APP/desktop/kyerp-pdks-current`
+- Ürün adı: **KYERP PDKS**
+- `main` şu anda bu büyük PDKS revizyonunu içermiyor; PR doğrulanmadan merge edilmeyecek.
+
+## Bu oturumda yapılan son işlemler
+1. Windows kurulum paketi üretmek için `installer/KYERP-PDKS.iss` eklendi.
+2. Tek komut setup üretimi için `BUILD_SETUP.ps1` eklendi.
+3. `appveyor.yml` canonical `kyerp-pdks-current` kaynağını build/test/publish edip `KYERP-PDKS-Setup-2.0.0.exe` artifact üretmek üzere güncellendi.
+4. Uygulama ilk açılışında Firebird bağlantısı yoksa güvenli kurulum ekranı göstermek için `StartupConfiguration.cs` eklendi.
+5. `Program.cs`, ana form açılmadan önce bu bağlantı doğrulamasını çalıştıracak şekilde güncellendi.
+6. Parola GitHub kaynaklarına yazılmıyor; bağlantı doğrulandıktan sonra Windows kullanıcı ortam değişkeninde saklanıyor.
+
+## Güncel commit
+- `02298ab32a1c36aa1c2f383a90eceee6505792f5`
+- Mesaj: `fix(pdks): make first-run setup compile safely`
+
+## CI durumu
+- AppVeyor branch build: `54751745`
+- AppVeyor PR build: `54751746`
+- Son kontrol: **pending / queued**.
+- Build yeşil olmadan setup hazır kabul edilmeyecek.
+- Beklenen artifact: `KYERP-PDKS-Setup-2.0.0.exe`
+
+## Uzak masaüstü kullanım kuralı
+Remote Desktop Commander yalnızca son aşamada gerçekten Windows GUI / çalışan EXE / fiziksel terminal / canlı Firebird doğrulaması gerektiğinde kullanılacak. Kaynak kod, PR, CI, installer ve doküman işleri GitHub üzerinden yürütülecek. Gereksiz remote çağrısı yapılmayacak.
+
+## Sonraki işlem sırası
+1. AppVeyor sonucunu kontrol et.
+2. CI kırmızıysa logdaki ilk gerçek hatayı düzelt, tekrar build al.
+3. CI yeşil olunca `KYERP-PDKS-Setup-2.0.0.exe` artifactını doğrula.
+4. Setup oluşmadan `main` merge etme.
+5. Setup hazır olduğunda DESEN bilgisayarında yalnız bir kurulum + açılış smoke testi yap.
+6. İlk açılış Firebird bağlantı ekranını, personel ekranını, giriş/çıkış, izin, ödeme, günlük operasyon ve terminal profil ekranını görsel olarak kontrol et.
+7. Canlı DB yazma testi gerekiyorsa kalıcı test verisi bırakma; rollback güvenliği kullan.
+8. GUI smoke sonrası kalan küçük hataları aynı branchte düzelt, CI tekrar yeşil olunca PR #281'i main'e al.
+
+## Bilinen kalan teknik noktalar
+- Fiziksel terminal üretici protokolü kesin kaynak olmadan tahmin edilmeyecek.
+- Worker PDKS sync route'ları canonical KYERP auth/session authorizer'a bağlanmadan canlıya açılmayacak.
+- Remote D1 migration yapılmadı.
+- Canlı Firebird smoke testi secret/bağlantı olmadan CI'da yapılmıyor.
+- Legacy Bridge uyumluluk katmanıdır; standalone KYERP PDKS ana ürün olarak Native uygulama üzerinden kurulabilir.
+
+## Kesin ürün kuralları
+- Hedef yalnız işlev/veri davranışı referansıdır; ürün KYERP'dir.
+- Hedef.exe reverse engineering / lisans patch yok.
+- Canlı DB, lisans, parola, anahtar ve üçüncü taraf büyük binary Git'e konmaz.
+- Yeni ayrı PDKS ürünü açılmaz; `APP/desktop/kyerp-pdks-current` geliştirilir.
