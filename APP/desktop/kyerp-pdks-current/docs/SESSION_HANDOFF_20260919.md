@@ -68,3 +68,13 @@ Remote Desktop Commander yalnızca son aşamada gerçekten Windows GUI / çalı�
 - Masaüstü ilk kurulumdaki SYSDBA/parola ekranı nihai kullanıcı akışından kaldırılacak; cihaz KYERP üzerinden yetkilendirilecek.
 - Web oturum parolası ile Firebird teknik bağlantı parolası ayrı tutulacak.
 - Bu iş sonraki entegrasyon fazına bırakıldı; şimdi öncelik doğrudan PDKS uygulamasının işlevsel ve görsel kontrolüdür.
+
+## 2026-09-19 final canlı paket notu
+- Kullanıcının isteğiyle yeniden ürün inşası yapılmadan mevcut çalışan `D:\Hedef500\Hedef500\HKN.Personel.Native.exe` stabil canlı binary olarak paketlendi.
+- Teslim klasörü: `%USERPROFILE%\Desktop\KYERP-PDKS-FINAL-2026-09-19`.
+- Paket: stabil Native EXE, Bridge, `HKN_MASTER.ini`, 58 rapor şablonu, 2.0.0 setup adayı, SHA256 listesi ve tek tık `KYERP_PDKS_AC.cmd`.
+- Paket içinden Native EXE gerçek canlı Firebird'e açıldı: `Personel Bilgileri` GUI PASS.
+- Canlı sayaç doğrulaması: aktif 14, işten ayrılan 43, toplam 57, listelenen 14.
+- Erişilebilir sekmeler: Kimlik, Kişisel Bilgiler, Giriş/Çıkış, İzinler, Ek Kazanç/Kesinti, Bilgi, Ödemeler.
+- Derlenmiş contract test paketi yeniden çalıştırılmadan doğrudan koşuldu ve tüm testler PASS verdi.
+- Firebird teknik kullanıcı/parola yönetimi KYERP.NET Sistem Yönetimi entegrasyonuna bırakıldı; canlı DB dosyası pakete kopyalanmadı.
