@@ -9,6 +9,7 @@ Bu dosya, `codex/kyerp-pdks-full-app-prep` dalındaki PDKS revizyonunu plan yazm
 - Hedef arayüzü KYERP'ye kopyalanmaz.
 - Mevcut KYERP masaüstü ve KYERP.NET tasarım dili korunur.
 - Mevcut çalışan KYERP işlevi sebepsiz değiştirilmez veya kaldırılmaz.
+- Yeni ayrı PDKS uygulaması yazılmaz. Mevcut KYERP PDKS kaynakları geliştirilir.
 
 Önce şunları oku:
 1. `CODEX_PROMPT.md`
@@ -17,6 +18,17 @@ Bu dosya, `codex/kyerp-pdks-full-app-prep` dalındaki PDKS revizyonunu plan yazm
 4. `docs/ARCHITECTURE_TARGET.md`
 5. `README.md`
 6. `legacy-runtime/MANIFEST.md`
+
+## Görev paylaşımı
+
+Codex yalnız yerel repo üzerinde gerçek kodlama, refactor, build, test, masaüstü UI entegrasyonu ve birbirine bağlı çok dosyalı değişiklikleri yapar.
+
+ChatGPT tarafı GitHub üzerinden branch/commit/PR kontrolü, doküman/kural güncellemesi, canonical kararlar, kod diff denetimi ve Codex'e verilecek sonraki talimatları yönetir. Codex bu işleri tekrar üretmek veya uzun raporlarla token harcamak zorunda değildir.
+
+Codex:
+- kullanıcıdan rutin teknik karar istemez,
+- yalnız destructive canlı veri işlemi, gerçek secret/lisans, geri dönüşü zor dış sistem değişikliği veya ürün davranışında gerçek belirsizlik varsa durur,
+- bir blocker diğer modülleri engellemiyorsa blocker'ı izole eder ve diğer fazlara devam eder.
 
 ## Çalışma şekli
 
@@ -32,10 +44,10 @@ Bu repo büyüktür. Gereksiz context tüketme.
 - Uzun plan, uzun özet ve tekrar eden açıklama üretme; kod + kısa kanıt + test sonucu yeterlidir.
 - Bir faz için önce ilgili modülü bul, sonra yalnız o modülün bağımlılıklarını aç.
 - Büyük mimari değişiklikleri tek seferde bütün projeye yayma; küçük, build alınabilir adımlar halinde uygula.
-- Rutin teknik kararlar için kullanıcıdan onay bekleme. Yalnız destructive canlı veri işlemi, gerçek secret/lisans, geri dönüşü zor dış sistem değişikliği veya ürün davranışında belirsiz karar varsa dur.
 - Her faz sonunda en fazla kısa bir kontrol özeti bırak: `değişen dosyalar / build-test / kalan engel`.
-- Bir engel 15-20 dakikada çözülemiyorsa tüm sistemi yeniden yazmaya kalkma; engeli izole et, güvenli workaround veya sonraki faza geçiş kararı ver.
-- Her büyük faz sonunda küçük ve anlamlı commit oluştur; çalışma ağacını gereksiz büyütme.
+- Bir engel kısa sürede çözülemiyorsa tüm sistemi yeniden yazmaya kalkma; engeli izole et, güvenli workaround veya sonraki faza geçiş kararı ver.
+- Her büyük faz sonunda küçük ve anlamlı commit oluştur ve yalnız `codex/kyerp-pdks-full-app-prep` dalına push et.
+- `main` dalına merge etme, PR'ı kapatma.
 - Öncelik sırası: çalışan build > veri güvenliği > temel PDKS işlevleri > Hedef parity > web sync > temizlik/kozmetik.
 
 ## Faz 0 — Baseline doğrulama
@@ -97,7 +109,7 @@ Her Hedef işlevi için:
 
 ## Faz 3 — Kaynak/mimari temizlik
 
-- Tek `KYERP.PDKS.sln` veya `.slnx` oluştur.
+- Tek `KYERP.PDKS.sln` veya `.slnx` kullan.
 - Aktif `src/` ile `legacy/` ayrımını netleştir.
 - Büyük form/partial dosyalarını UI, domain, service, data, reports, dialogs sorumluluklarına ayır.
 - Hard-coded DB yolu/parola/ortam bağımlılıklarını merkezi configuration'a taşı.
@@ -116,7 +128,7 @@ Aşağıdaki sırayla eksikleri gerçek kodla kapat:
 5. Puantaj
 6. Bordro / Maaş / Mesai
 7. Günlük Operasyon
-8. Terminal / cihaz / veri aktarım
+8. Terminal / cihaz / veri aktarım / TNF
 9. Raporlar ve çıktılar
 10. Firma/tenant ve yetki bağlamı
 
@@ -126,17 +138,97 @@ Her modülde:
 - validation eklenecek,
 - veri erişimi servis/repository üzerinden olacak,
 - build alınacak,
-- smoke test yapılacak.
+- smoke/contract test yapılacak.
+
+## Terminal / TNF — kesin çalışma kuralı
+
+### Canonical KYERP TNF v1
+
+TNF sözleşmesi kesin ve blocker değildir:
+
+`KartNo,Saat,GGAAYY,1,001`
+
+Örnek:
+
+`00003,08:28,250526,1,001`
+
+Kurallar:
+- tam 5 alan,
+- KartNo tam 5 rakam,
+- saat `HH:mm`,
+- tarih `ddMMyy / GGAAYY`,
+- 4. alan kesin `1`,
+- 5. alan kesin `001`,
+- başlık, isim, açıklama ve boş satır yok,
+- duplicate satır kabul edilmez,
+- eski `KartNo,Tarih,Saat` formatı TNF olarak kullanılmaz.
+
+TNF için ayrı strict `TnfRecord` / `TnfFile` importer-exporter ve contract testleri oluştur. Generic terminal parser ile TNF sözleşmesini birbirine karıştırma.
+
+### Terminal aktarım profilleri
+
+Terminal formatları kod içine hard-code bırakılmayacak. KYERP tasarım dili içinde `Terminal Aktarım Profilleri` işlevi ekle. Hedef ekranını kopyalama; yalnız işlev mantığını kullan.
+
+`TerminalTransferProfile` en az şu alanları desteklesin:
+- `Id`, `Name`
+- `TenantId`, `CompanyId`, `WorkplaceId`, `DeviceId`
+- `FormatType`: `FixedWidth`, `Delimited`, `Tnf`
+- `Separator`
+- `Encoding`
+- EmployeeCode start/length
+- Year start/length
+- Month start/length
+- Day start/length
+- Hour start/length
+- Minute start/length
+- EventCode start/length
+- TerminalCode start/length
+- `DateFormat`
+- `TimeFormat`
+- EntryCode mapping
+- ExitCode mapping
+- `ProgramPath`
+- `TransferFilePath`
+- `IsDefault`
+
+İşlevler:
+- yeni profil,
+- profili kopyala,
+- düzenle,
+- sil,
+- varsayılan yap,
+- örnek satır yapıştır → parse önizleme/test,
+- validation,
+- profile JSON import/export.
+
+`KYERP TNF v1` hazır ve korumalı canonical preset olarak gelsin. Kullanıcı canonical preset'i doğrudan bozmasın; kopyasını oluşturup değiştirebilsin.
+
+Parser profile-driven strategy ile çalışsın. Fixed-width cihazlarda başlangıç/uzunluk alanları profile göre uygulansın. Delimited formatlarda separator ve tarih/saat formatı profile göre uygulansın.
+
+Ayarlar legacy Hedef DB şemasına destructive alan ekleyerek saklanmasın. KYERP'nin kendi config/profile store yapısında, ileride cloud sync'e uygun şekilde saklansın.
+
+### Fiziksel terminal protokolü
+
+Fiziksel cihaz protokolü kesin kaynak yoksa tahmin edilmez ve reverse engineering yapılmaz.
+
+- `ITerminalDeviceAdapter` sınırı oluştur.
+- File/TNF adapterını tamamla.
+- Parse edilmiş kayıtları güvenli Firebird `GIRCIK` aktarım katmanına bağla.
+- İdempotent/duplicate guard ekle.
+- Fiziksel cihaz adapterını yalnız gerçekten eksik protokol blocker'ı olarak işaretle.
+- Bu blocker yüzünden puantaj, bordro, günlük operasyon, rapor veya sync geliştirmesini durdurma.
 
 ## Faz 5 — KYERP.NET ve API eşlemesi
 
 PDKS desktop ile web birbirinden kopuk iki ürün olmayacak.
 
 - Ortak domain isimlerini belirle.
+- Mevcut Cloudflare API auth/session/tenant düzenini incele ve ona uyumlu, non-breaking PDKS sync contract oluştur.
 - Desktop olaylarını cloud API'ye gönderecek sync sınırlarını tanımla.
 - Web'deki personel/izin/puantaj gibi değişikliklerin desktop'a dönüş modelini tanımla.
-- Offline kullanım için local queue/outbox yaklaşımı hazırla.
+- Offline kullanım için mevcut outbox'a retry/backoff ekle.
 - Tenant/company/workplace/device/employee kimliklerini sabit firma varsayımından çıkar.
+- Gerekirse yalnız additive migration dosyası hazırla; remote/canlı migration çalıştırma ve canlıya deploy etme.
 - Mevcut web tasarımını masaüstüne, masaüstü tasarımını web'e kopyalama.
 
 ## Faz 6 — Test ve kabul
@@ -150,8 +242,10 @@ Aşağıdaki senaryolar en az smoke/integration seviyesinde doğrulanmalı:
 - puantaj hesaplama
 - bordro/ödeme hesaplama
 - rapor üretme
+- terminal profil parsing
 - terminal kayıt aktarımı
-- TNF import
+- strict TNF import/export
+- duplicate koruması
 - firma/tenant ayrımı
 - desktop ↔ API sync sözleşmesi
 
@@ -169,7 +263,7 @@ Bitmeden önce:
 - `docs/PDKS_REMAINING_DEBT.md` yalnız gerçekten kalan teknik borçları içermeli,
 - README build/run adımlarını içermeli.
 
-Final raporda açıkça yaz:
+Final raporda yalnız kısa ve doğrulanabilir bilgi yaz:
 - tamamlanan modüller,
 - halen yarım olanlar,
 - build/test sonuçları,
