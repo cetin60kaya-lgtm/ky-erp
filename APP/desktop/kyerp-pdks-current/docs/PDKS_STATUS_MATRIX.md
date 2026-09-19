@@ -20,7 +20,7 @@ Durumlar aktif kaynak kodu üzerinden doğrulanmıştır. `legacy/` yalnız refe
 | Departman / grup / servis / görev / durum | YARIM | Masterlar okunuyor ve filtreleniyor; yönetim CRUD ekranları yok. |
 | Dönem işlemleri | YARIM | `DONEM` okunuyor; dönem oluşturma/kapatma servisleri aktif kaynakta yok. |
 | Terminal tanımı | YOK | Aktif kaynakta terminal masterı yok. |
-| Terminalden veri alma / aktarım | YOK | Agent/terminal adapterı bu solution içinde yok. |
+| Terminalden veri alma / aktarım | YARIM | Gerçek cihaz yedek formatı için doğrulamalı parser, hash tabanlı duplicate koruması var; cihaz adapterı ve DB aktarımı yok. |
 | TNF import/export | YOK | Aktif kaynakta TNF ayrıştırıcı/yazıcı yok. |
 | Günlük operasyon | YARIM | Giriş-çıkış kişi bazında var; canlı operasyon merkezi yok. |
 | Canlı gelen-gelmeyen personel | YOK | Günlük roster karşılaştırması yok. |

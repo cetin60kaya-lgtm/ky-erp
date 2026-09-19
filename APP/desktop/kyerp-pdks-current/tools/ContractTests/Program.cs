@@ -1,5 +1,6 @@
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Sync;
+using KYERP.PDKS.Core.Terminal;
 
 var failures = new List<string>();
 Run("environment overrides", () =>
@@ -69,6 +70,19 @@ Run("tenant scoped durable outbox", () =>
         Equal(0, outbox.ReadPending().Count);
     }
     finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+});
+
+Run("terminal record parsing and duplicate guard", () =>
+{
+    var result = TerminalRecordFile.Parse([
+        "01234,08:30,190926,1,001",
+        "01234,08:30,190926,1,001",
+        "abc,08:30,190926,1,001"
+    ]);
+    Equal(1, result.Records.Count);
+    Equal(new DateTime(2026, 9, 19, 8, 30, 0), result.Records[0].OccurredAt);
+    Equal(1, result.DuplicateCount);
+    Equal(1, result.Errors.Count);
 });
 
 if (failures.Count > 0)
