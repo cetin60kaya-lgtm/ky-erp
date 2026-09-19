@@ -12,20 +12,22 @@ internal static class Program
     const uint WS_CHILD = 0x40000000, WS_VISIBLE = 0x10000000, WS_POPUP = 0x80000000;
     const uint WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000, WS_SYSMENU = 0x00080000;
     const uint WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000;
-    const uint SS_BITMAP = 0x0000000E, STM_SETIMAGE = 0x0172, IMAGE_BITMAP = 0;
     const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
-    const uint SRCCOPY = 0x00CC0020;
-    const int SW_HIDE = 0, SW_SHOW = 5, GWL_STYLE = -16;
-    const int COLOR_BTNFACE = 15, TRANSPARENT = 1;
-    const uint DT_CENTER = 0x00000001, DT_VCENTER = 0x00000004, DT_SINGLELINE = 0x00000020, DT_NOPREFIX = 0x00000800;
+    const int SW_SHOW = 5, GWL_STYLE = -16;
 
-    const int PersonelIndex = 5;
+    const uint TB_SETBUTTONINFOW = 0x0440;
+    const uint TBIF_TEXT = 0x00000002, TBIF_STATE = 0x00000004, TBIF_BYINDEX = 0x80000000;
+    const byte TBSTATE_ENABLED = 0x04;
+    const int PersonelButtonIndex = 5;
 
-    static IntPtr personelOverlay, personelBitmap, toolbarHandle, overlayFont, statusLabel, embedded;
-    static int overlayX, overlayWidth, overlayHeight, opening;
+    const uint PROCESS_VM_OPERATION = 0x0008, PROCESS_VM_READ = 0x0010, PROCESS_VM_WRITE = 0x0020, PROCESS_QUERY_INFORMATION = 0x0400;
+    const uint MEM_COMMIT_RESERVE = 0x3000, MEM_RELEASE = 0x8000, PAGE_READWRITE = 0x04;
+
+    static IntPtr statusLabel, embedded, lastToolbar;
+    static DateTime lastToolbarPatch = DateTime.MinValue;
+    static int opening;
 
     delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-    [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -36,36 +38,26 @@ internal static class Program
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int command);
-    [DllImport("user32.dll")] static extern bool DestroyWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
-    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
-    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child, IntPtr parent);
     [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr child);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool SetWindowText(IntPtr hWnd, string text);
     [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
     [DllImport("user32.dll")] static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateWindowEx(uint ex, string cls, string text, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
-    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool InvalidateRect(IntPtr hWnd, IntPtr rect, bool erase);
+    [DllImport("user32.dll")] static extern bool UpdateWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string? name);
-    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
-    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
-    [DllImport("user32.dll")] static extern bool FillRect(IntPtr hdc, ref RECT rect, IntPtr brush);
-    [DllImport("user32.dll")] static extern IntPtr GetSysColorBrush(int index);
-    [DllImport("user32.dll")] static extern int DrawText(IntPtr hdc, string text, int count, ref RECT rect, uint format);
-    [DllImport("user32.dll")] static extern int SetBkMode(IntPtr hdc, int mode);
-    [DllImport("user32.dll")] static extern uint SetTextColor(IntPtr hdc, uint color);
-    [DllImport("user32.dll")] static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
-    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr hdc);
-    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int cx, int cy);
-    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr hdc);
-    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
-    [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dest, int x, int y, int cx, int cy, IntPtr src, int sx, int sy, uint rop);
-    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateFont(int h, int w, int esc, int ori, int weight, uint italic, uint underline, uint strike, uint charset, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, string face);
+
+    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inheritHandle, uint processId);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern IntPtr VirtualAllocEx(IntPtr process, IntPtr address, UIntPtr size, uint allocationType, uint protect);
+    [DllImport("kernel32.dll")] static extern bool VirtualFreeEx(IntPtr process, IntPtr address, UIntPtr size, uint freeType);
+    [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr process, IntPtr address, byte[] buffer, UIntPtr size, out UIntPtr written);
 
     [STAThread]
     static void Main()
@@ -76,7 +68,6 @@ internal static class Program
         EnsureHedefRunning();
         new Thread(NativeWatcher) { IsBackground = true }.Start();
         new Thread(ShellLoop) { IsBackground = true }.Start();
-        new Thread(ClickLoop) { IsBackground = true }.Start();
         while (true) Thread.Sleep(1000);
     }
 
@@ -126,8 +117,9 @@ internal static class Program
                 {
                     var main = FindWindowForProcess(process.Id, "TAnaf");
                     if (main == IntPtr.Zero) continue;
+
                     SetWindowText(main, "KYERP PDKS");
-                    EnsurePersonelInNativeToolbar(main);
+                    EnsureNativePersonelButton(main);
                     EnsureStatusBrand(main);
                     ResizeEmbedded(main);
                 }
@@ -137,102 +129,58 @@ internal static class Program
         }
     }
 
-    static void EnsurePersonelInNativeToolbar(IntPtr main)
+    static void EnsureNativePersonelButton(IntPtr main)
     {
         var toolbar = FindDescendant(main, "TToolBar");
-        if (toolbar == IntPtr.Zero || !GetClientRect(toolbar, out var client)) return;
+        if (toolbar == IntPtr.Zero) return;
 
-        uint dpi = GetDpiForWindow(toolbar);
-        if (dpi == 0) dpi = 96;
-        double scale = dpi / 96.0;
+        var now = DateTime.UtcNow;
+        if (toolbar == lastToolbar && (now - lastToolbarPatch).TotalSeconds < 1.5) return;
 
-        int width = Math.Max(50, (int)Math.Round(64 * scale));
-        int x = PersonelIndex * width;
-        int height = Math.Max(45, Math.Min(client.Bottom, (int)Math.Round(60 * scale)));
-
-        bool recreate = personelOverlay == IntPtr.Zero || !IsWindow(personelOverlay)
-                        || toolbarHandle != toolbar || overlayX != x
-                        || overlayWidth != width || overlayHeight != height;
-
-        if (recreate)
+        if (PatchToolbarButton(toolbar, PersonelButtonIndex, "Personel"))
         {
-            if (personelOverlay != IntPtr.Zero && IsWindow(personelOverlay)) DestroyWindow(personelOverlay);
-            if (personelBitmap != IntPtr.Zero) { DeleteObject(personelBitmap); personelBitmap = IntPtr.Zero; }
-
-            toolbarHandle = toolbar;
-            overlayX = x;
-            overlayWidth = width;
-            overlayHeight = height;
-
-            BuildPersonelBitmap(toolbar, x, width, height, dpi);
-            personelOverlay = CreateWindowEx(
-                0, "STATIC", "", WS_CHILD | WS_VISIBLE | SS_BITMAP,
-                x, 0, width, height, toolbar, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
-
-            if (personelOverlay != IntPtr.Zero && personelBitmap != IntPtr.Zero)
-                SendMessage(personelOverlay, STM_SETIMAGE, new IntPtr(IMAGE_BITMAP), personelBitmap);
+            lastToolbar = toolbar;
+            lastToolbarPatch = now;
+            InvalidateRect(toolbar, IntPtr.Zero, true);
+            UpdateWindow(toolbar);
         }
-
-        if (personelOverlay != IntPtr.Zero)
-            SetWindowPos(personelOverlay, IntPtr.Zero, x, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 
-    static void BuildPersonelBitmap(IntPtr toolbar, int x, int width, int height, uint dpi)
+    static bool PatchToolbarButton(IntPtr toolbar, int index, string text)
     {
-        var source = GetDC(toolbar);
-        if (source == IntPtr.Zero) return;
-        var memory = CreateCompatibleDC(source);
-        var bitmap = CreateCompatibleBitmap(source, width, height);
+        GetWindowThreadProcessId(toolbar, out uint targetPid);
+        if (targetPid == 0) return false;
 
-        if (memory != IntPtr.Zero && bitmap != IntPtr.Zero)
+        uint access = PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE;
+        var process = OpenProcess(access, false, targetPid);
+        if (process == IntPtr.Zero) return false;
+
+        IntPtr remote = IntPtr.Zero;
+        try
         {
-            var old = SelectObject(memory, bitmap);
-            BitBlt(memory, 0, 0, width, height, source, x, 0, SRCCOPY);
+            remote = VirtualAllocEx(process, IntPtr.Zero, new UIntPtr(256), MEM_COMMIT_RESERVE, PAGE_READWRITE);
+            if (remote == IntPtr.Zero) return false;
 
-            int textTop = Math.Max(24, (int)Math.Round(34 * (dpi / 96.0)));
-            var textRect = new RECT { Left = 1, Top = textTop, Right = width - 1, Bottom = height - 1 };
-            FillRect(memory, ref textRect, GetSysColorBrush(COLOR_BTNFACE));
+            var remoteText = new IntPtr(remote.ToInt64() + 64);
+            var textBytes = Encoding.Unicode.GetBytes(text + "\0");
+            if (!WriteProcessMemory(process, remoteText, textBytes, new UIntPtr((uint)textBytes.Length), out _)) return false;
 
-            int fontHeight = -Math.Max(9, (int)Math.Round(9 * (dpi / 96.0)));
-            if (overlayFont != IntPtr.Zero) DeleteObject(overlayFont);
-            overlayFont = CreateFont(fontHeight, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, "Tahoma");
-            var oldFont = overlayFont != IntPtr.Zero ? SelectObject(memory, overlayFont) : IntPtr.Zero;
-            SetBkMode(memory, TRANSPARENT);
-            SetTextColor(memory, Rgb(0, 0, 180));
-            DrawText(memory, "Personel", -1, ref textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            if (oldFont != IntPtr.Zero) SelectObject(memory, oldFont);
+            // Hedef.exe 32-bit Delphi uygulamasıdır; 32-bit TBBUTTONINFO yapısı 32 byte'tır.
+            var info = new byte[32];
+            BitConverter.GetBytes((uint)32).CopyTo(info, 0);
+            BitConverter.GetBytes(TBIF_BYINDEX | TBIF_TEXT | TBIF_STATE).CopyTo(info, 4);
+            info[16] = TBSTATE_ENABLED;
+            BitConverter.GetBytes(unchecked((int)remoteText.ToInt64())).CopyTo(info, 24);
+            BitConverter.GetBytes(text.Length).CopyTo(info, 28);
 
-            SelectObject(memory, old);
-            personelBitmap = bitmap;
+            if (!WriteProcessMemory(process, remote, info, new UIntPtr((uint)info.Length), out _)) return false;
+            var result = SendMessage(toolbar, TB_SETBUTTONINFOW, new IntPtr(index), remote);
+            return result != IntPtr.Zero;
         }
-        else if (bitmap != IntPtr.Zero)
+        finally
         {
-            DeleteObject(bitmap);
-        }
-
-        if (memory != IntPtr.Zero) DeleteDC(memory);
-        ReleaseDC(toolbar, source);
-    }
-
-    static void ClickLoop()
-    {
-        bool wasDown = false;
-        while (true)
-        {
-            try
-            {
-                bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-                if (down && !wasDown && personelOverlay != IntPtr.Zero && IsWindow(personelOverlay)
-                    && GetCursorPos(out var point) && GetWindowRect(personelOverlay, out var rect)
-                    && point.X >= rect.Left && point.X < rect.Right
-                    && point.Y >= rect.Top && point.Y < rect.Bottom)
-                {
-                    OpenPersonel();
-                }
-                wasDown = down;
-            }
-            catch { }
-            Thread.Sleep(40);
+            if (remote != IntPtr.Zero) VirtualFreeEx(process, remote, UIntPtr.Zero, MEM_RELEASE);
+            CloseHandle(process);
         }
     }
 
@@ -307,7 +255,7 @@ internal static class Program
         var coolBar = FindDescendant(main, "TCoolBar");
         if (coolBar != IntPtr.Zero && GetWindowRect(coolBar, out var barRect) && GetWindowRect(main, out var mainRect))
             top = Math.Max(0, barRect.Bottom - mainRect.Top);
-        if (top <= 0) top = 80;
+        if (top <= 0) top = 130;
 
         int statusHeight = 22;
         int width = Math.Max(600, client.Right);
@@ -353,6 +301,4 @@ internal static class Program
         }, IntPtr.Zero);
         return found;
     }
-
-    static uint Rgb(byte r, byte g, byte b) => (uint)(r | (g << 8) | (b << 16));
 }
