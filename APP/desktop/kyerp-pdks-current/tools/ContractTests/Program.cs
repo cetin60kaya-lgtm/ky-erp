@@ -4,6 +4,7 @@ using KYERP.PDKS.Core.Terminal;
 using KYERP.PDKS.Core.Payroll;
 using KYERP.PDKS.Core.Operations;
 using KYERP.PDKS.Core.Reports;
+using KYERP.PDKS.Core.Definitions;
 
 var failures = new List<string>();
 Run("environment overrides", () =>
@@ -145,6 +146,26 @@ Run("terminal code mapping text", () =>
     Equal("01=ENTRY; 02=TURNSTILE; 03=MANUAL",TerminalCodeMappingText.Format(mapping));
     Throws(()=>TerminalCodeMappingText.Parse("01", "Giriş kodları"));
     Throws(()=>TerminalCodeMappingText.Parse("01=A;01=B", "Giriş kodları"));
+});
+
+Run("organization definition reference whitelist", () =>
+{
+    Equal("KIMLIK.GRUP",DefinitionUsageGuard.ReferenceFields(OrganizationDefinitionKind.Group)[0]);
+    Equal("DONEM.GRUP",DefinitionUsageGuard.ReferenceFields(OrganizationDefinitionKind.Group)[1]);
+    Equal(1,DefinitionUsageGuard.ReferenceFields(OrganizationDefinitionKind.Department).Count);
+    var message=DefinitionUsageGuard.BlockMessage([new("KIMLIK.GRUP",2),new("DONEM.GRUP",3)]);
+    Equal(true,message.Contains("KIMLIK.GRUP: 2 kayıt"));Equal(true,message.Contains("DONEM.GRUP: 3 kayıt"));
+});
+
+Run("period definition validation", () =>
+{
+    PeriodDefinitionGuard.Validate(new DateTime(2026,9,1),new DateTime(2026,9,30),1);
+    PeriodDefinitionGuard.Validate(new DateTime(2026,9,1),new DateTime(2026,9,1),1);
+    Equal(true,PeriodDefinitionGuard.IsExactDuplicate(1,new DateTime(2026,9,1),new DateTime(2026,9,30,23,0,0),1,new DateTime(2026,9,1,12,0,0),new DateTime(2026,9,30)));
+    Equal(false,PeriodDefinitionGuard.IsExactDuplicate(1,new DateTime(2026,9,1),new DateTime(2026,9,30),2,new DateTime(2026,9,1),new DateTime(2026,9,30)));
+    Equal(false,PeriodDefinitionGuard.IsExactDuplicate(1,new DateTime(2026,9,1),new DateTime(2026,9,30),1,new DateTime(2026,9,15),new DateTime(2026,10,15)));
+    Throws(()=>PeriodDefinitionGuard.Validate(new DateTime(2026,9,2),new DateTime(2026,9,1),1));
+    Throws(()=>PeriodDefinitionGuard.Validate(new DateTime(2026,9,1),new DateTime(2026,9,2),0));
 });
 
 Run("payroll calculation", () =>
