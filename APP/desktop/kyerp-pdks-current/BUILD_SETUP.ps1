@@ -3,16 +3,15 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $setupOut = Join-Path $root "artifacts\Setup"
 $artifacts = Join-Path $root "artifacts"
-$isccCandidates = @(
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
-    (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
-) | Where-Object { $_ -and (Test-Path $_) }
 
 & (Join-Path $root "BUILD.ps1")
 if ($LASTEXITCODE -ne 0) { throw "KYERP PDKS build basarisiz." }
 
-$iscc = $isccCandidates | Select-Object -First 1
+$candidates = New-Object System.Collections.Generic.List[string]
+if (${env:ProgramFiles(x86)}) { $candidates.Add((Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe")) }
+if ($env:ProgramFiles) { $candidates.Add((Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")) }
+if ($env:LOCALAPPDATA) { $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")) }
+$iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup 6 bulunamadi. Kurulum paketi icin Inno Setup 6 gereklidir." }
 
 New-Item -ItemType Directory -Force -Path $setupOut | Out-Null
