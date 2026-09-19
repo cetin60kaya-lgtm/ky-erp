@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerAuthEmailEmergencyRoutes } from "./auth-email-emergency";
 import { registerAuthExternalRecoveryRoutes } from "./auth-external-recovery";
@@ -174,4 +174,3 @@ export function registerAuthRecoveryCodeFallbackRoutes(app: any) {
     return c.json({ ok: true, data: { available: false, note: "Uygulama sahibi iÃ§in tek kullanÄ±mlÄ±k acil kurtarma kodu devre dÄ±ÅŸÄ±dÄ±r; Ã¶zel soru-cevap + doÄŸrulanmÄ±ÅŸ iletiÅŸim kanalÄ± kullanÄ±lÄ±r." } });
   });
 }
-
