@@ -19,9 +19,9 @@ Durumlar aktif kaynak kodu üzerinden doğrulanmıştır. `legacy/` yalnız refe
 | Maaş / mesai ödemesi | VAR | `ODEME` üzerinden dönemsel maaş/mesai ödeme düzenleme. |
 | Departman / grup / servis / görev / durum | YARIM | Masterlar okunuyor ve filtreleniyor; yönetim CRUD ekranları yok. |
 | Dönem işlemleri | YARIM | `DONEM` okunuyor; dönem oluşturma/kapatma servisleri aktif kaynakta yok. |
-| Terminal tanımı | YOK | Aktif kaynakta terminal masterı yok. |
-| Terminalden veri alma / aktarım | YARIM | Gerçek cihaz yedek formatı için doğrulamalı parser, hash tabanlı duplicate koruması var; cihaz adapterı ve DB aktarımı yok. |
-| TNF import/export | YOK | Aktif kaynakta TNF ayrıştırıcı/yazıcı yok. |
+| Terminal tanımı | VAR | KYERP UI içinde profile store; yeni/kopyala/düzenle/sil/varsayılan/önizleme ve JSON import/export mevcut. |
+| Terminalden veri alma / aktarım | YARIM | Profile-driven File adapterı ve idempotent `GIRCIK` import servisi tamam; fiziksel cihaz protokol adapterı eksik. |
+| TNF import/export | VAR | Strict KYERP TNF v1 parser/exporter; alan, tarih/saat, sabit kod, boş satır ve duplicate kontrolleri mevcut. |
 | Günlük operasyon | YARIM | Giriş-çıkış kişi bazında var; canlı operasyon merkezi yok. |
 | Canlı gelen-gelmeyen personel | YOK | Günlük roster karşılaştırması yok. |
 | Gece/gündüz vardiya akışı | YARIM | Geceye taşan kayıt ekleme mantığı var; vardiya plan/master akışı yok. |

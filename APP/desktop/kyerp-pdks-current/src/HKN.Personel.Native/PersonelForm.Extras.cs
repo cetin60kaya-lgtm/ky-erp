@@ -29,6 +29,8 @@ public partial class PersonelForm
         isl.DropDownItems.Add(Item("Süreli Personel Kaydırma",Keys.F4,ToggleSlider));
         isl.DropDownItems.Add(Item("Hesapla",Keys.F5,RefreshFullTabs));
         isl.DropDownItems.Add(Item("Maaş Geçmişi",Keys.None,SalaryHistory));
+        isl.DropDownItems.Add(new ToolStripSeparator());
+        isl.DropDownItems.Add(Item("Terminal Aktarım Profilleri",Keys.None,ShowTerminalProfiles));
         m.Items.Add(rap); m.Items.Add(isl); MainMenuStrip=m; Controls.Add(m);
         slider.Tick += (_,_)=>{ if(list.Rows.Count==0)return; int i=list.CurrentRow?.Index??-1; i=(i+1)%list.Rows.Count; list.CurrentCell=list.Rows[i].Cells[0]; };
     }

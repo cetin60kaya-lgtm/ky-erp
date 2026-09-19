@@ -62,6 +62,23 @@ public sealed class FirebirdDatabase
         finally { transaction.Rollback(); }
     }
 
+    public T InTransaction<T>(Func<FbConnection, FbTransaction, T> action, bool rollbackOnly = false)
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            var result = action(connection, transaction);
+            if (rollbackOnly) transaction.Rollback(); else transaction.Commit();
+            return result;
+        }
+        catch
+        {
+            try { transaction.Rollback(); } catch { }
+            throw;
+        }
+    }
+
     public static FbCommand CreateCommand(FbConnection connection, FbTransaction? transaction, string sql, params FbParameter[] parameters)
     {
         var command = new FbCommand(sql, connection, transaction);

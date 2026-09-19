@@ -15,8 +15,8 @@ Hedef yalnız işlev/veri davranışı referansıdır. Aşağıdaki karşılıkl
 | Organizasyon tanımları | Personel filtreleri/alanları | YARIM | Tanımlar | `GRUP/BOLUM/SERVIS/GOREV/DURUM/FIRMA` | CRUD ve kullanımda referans bütünlüğü |
 | Dönem oluşturma/kapatma | Dönem seçimleri | YARIM | Dönem | `DONEM` | Oluştur/kapat, kapalı döneme kontrollü yazma |
 | Terminal yönetimi | KYERP terminal ekranı | YOK | Terminal | terminal/device sözleşmesi | Cihaz ekle, bağlan, son durum |
-| Terminal kayıt aktarımı | Desktop agent/import | YARIM | Terminal | doğrulamalı kayıt parserı ve hash duplicate koruması; DB adapterı bekliyor | İdempotent aktarım ve tekrar koruması |
-| TNF import/export | KYERP içe/dışa aktar | YOK | Terminal | TNF dosya sözleşmesi | Geçerli/geçersiz dosya ve duplicate testi |
+| Terminal kayıt aktarımı | Desktop agent/import | YARIM | Terminal | Profile-driven File adapter + transaction `GIRCIK` import tamam; fiziksel cihaz adapterı bekliyor | İdempotent aktarım ve tekrar koruması |
+| TNF import/export | KYERP içe/dışa aktar | VAR | Terminal | Strict canonical TNF v1 ve korumalı preset | Geçerli/geçersiz dosya ve duplicate testi |
 | Günlük gelen/gelmeyen | Günlük Operasyon | YOK | Günlük Operasyon | personel + vardiya + attendance | Bugün gelen/geç/kayıp listeleri |
 | Gece/gündüz vardiya | Vardiya operasyonu | YARIM | Günlük Operasyon | `GIRCIK` + vardiya tanımı | Gece yarısı sınır testi |
 | Kişisel raporlar | Raporlar menüsü | YARIM | Raporlar | mevcut tablolar | Print preview ve veri kapsamı |

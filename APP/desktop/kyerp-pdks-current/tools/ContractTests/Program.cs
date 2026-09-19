@@ -85,6 +85,54 @@ Run("terminal record parsing and duplicate guard", () =>
     Equal(1, result.Errors.Count);
 });
 
+Run("strict TNF v1 import export", () =>
+{
+    var records = TnfFile.Parse(["00003,08:28,250526,1,001"]);
+    Equal("00003,08:28,250526,1,001", TnfFile.Export(records));
+    ThrowsFormat(() => TnfFile.Parse(["KartNo,Saat,GGAAYY,1,001"]));
+    ThrowsFormat(() => TnfFile.Parse(["00003,250526,08:28,1,001"]));
+    ThrowsFormat(() => TnfFile.Parse(["00003,08:28,250526,2,001"]));
+    ThrowsFormat(() => TnfFile.Parse(["00003,08:28,250526,1,002"]));
+    ThrowsFormat(() => TnfFile.Parse(["00003,08:28,250526,1,001", ""]));
+    ThrowsFormat(() => TnfFile.Parse(["00003,08:28,250526,1,001", "00003,08:28,250526,1,001"]));
+});
+
+Run("profile driven fixed and delimited parsing", () =>
+{
+    var baseProfile = new TerminalTransferProfile
+    {
+        Id=Guid.NewGuid(), Name="Fixed", TenantId="t", CompanyId="c", WorkplaceId="w", DeviceId="d",
+        FormatType=TerminalFormatType.FixedWidth, EmployeeCode=new(0,5), Day=new(5,2), Month=new(7,2), Year=new(9,2),
+        Hour=new(11,2), Minute=new(13,2), EventCode=new(15,1), TerminalCode=new(16,3), DateFormat="ddMMyy", TimeFormat="HH:mm",
+        EntryCodeMapping=new(){{"1","ENTRY"}}, ExitCodeMapping=new(){{"2","EXIT"}}
+    };
+    var fixedRecord=ProfiledTerminalParser.Parse(baseProfile,"0000325052608281001");
+    Equal(new DateTime(2026,5,25,8,28,0),fixedRecord.OccurredAt);
+    Equal(TerminalDirection.Entry,fixedRecord.Direction);
+    var delimited=baseProfile with { Id=Guid.NewGuid(), Name="Delimited", FormatType=TerminalFormatType.Delimited, Separator=";", EmployeeCode=new(0,1), Day=new(1,1), Hour=new(2,1), EventCode=new(3,1), TerminalCode=new(4,1) };
+    var delimitedRecord=ProfiledTerminalParser.Parse(delimited,"00003;250526;08:28;2;009");
+    Equal(TerminalDirection.Exit,delimitedRecord.Direction);
+});
+
+Run("profile store protects canonical preset", () =>
+{
+    var root=Path.Combine(Path.GetTempPath(),"kyerp-profile-"+Guid.NewGuid().ToString("N"));
+    try
+    {
+        var options=new PdksOptions("db","host",3050,"u","p","WIN1254",".",".","p.exe","t","c","w",null);
+        var store=new TerminalProfileStore(Path.Combine(root,"profiles.json"),options);
+        var canonical=store.Load().Single();
+        Equal(true,canonical.IsCanonical);
+        var copy=canonical.Copy("Özel TNF") with { IsDefault=true };
+        store.Save([canonical with { IsDefault=false },copy]);
+        var loaded=store.Load();
+        Equal(2,loaded.Count); Equal(1,loaded.Count(item=>item.IsDefault));
+        var imported=store.Import(store.Export(canonical));
+        Equal(false,imported.IsCanonical);
+    }
+    finally { if(Directory.Exists(root))Directory.Delete(root,true); }
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, failures));
@@ -111,6 +159,13 @@ static void Throws(Action action)
     try { action(); }
     catch (ArgumentException) { return; }
     throw new Exception("Beklenen validation hatası oluşmadı.");
+}
+
+static void ThrowsFormat(Action action)
+{
+    try { action(); }
+    catch (FormatException) { return; }
+    throw new Exception("Beklenen format hatası oluşmadı.");
 }
 
 sealed class EnvironmentScope : IDisposable
