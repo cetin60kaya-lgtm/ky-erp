@@ -52,3 +52,12 @@ Remote Desktop Commander yalnızca son aşamada gerçekten Windows GUI / çalı�
 - Hedef.exe reverse engineering / lisans patch yok.
 - Canlı DB, lisans, parola, anahtar ve üçüncü taraf büyük binary Git'e konmaz.
 - Yeni ayrı PDKS ürünü açılmaz; `APP/desktop/kyerp-pdks-current` geliştirilir.
+
+## Final smoke güncellemesi — 2026-09-19
+- `BUILD_SETUP.ps1` Desen cihazında 0 hata / 0 uyarı, tüm contract testleri PASS olacak şekilde çalıştırıldı.
+- Final kullanıcı dosyası `artifacts/Setup/KYERP-PDKS-Setup.exe` ve sürümlü `KYERP-PDKS-Setup-2.0.0.exe` birlikte üretiliyor.
+- Son doğrulanan setup SHA256: `e4094601d78c04af6eeca13a3af002f35b27608d72d5dd356c1ef66559f0fb55`.
+- Setup `/CURRENTUSER` ile temiz klasöre kuruldu; Native EXE, Bridge ve uninstaller doğrulandı.
+- Kurulu EXE gerçek Windows GUI olarak açıldı; `KYERP PDKS İlk Kurulum` penceresi ve bağlantı alanları UI Automation ile doğrulandı.
+- Sessiz kaldırma testi exit code 0 ile geçti; kurulum klasörü ve uninstall kaydı temizlendi.
+- Canlı Firebird bağlantısının son doğrulaması yalnız gerçek DB parolası kullanıcı tarafından ilk kurulum ekranına girildiğinde tamamlanacak.
