@@ -96,7 +96,7 @@ public partial class PersonelForm
         {
             var p=new FbParameter("@PK",currentPk);DateTime a=gFrom.Value.Date,b=gTo.Value.Date.AddDays(1);
             gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",p,new FbParameter("@A",a),new FbParameter("@B",b));
-            a=iFrom.Value.Date;b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
+            a=iFrom.Value.Date;b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
             a=eFrom.Value.Date;b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
             LoadBilgiOdemeClassic();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Personel Sekmeleri");}

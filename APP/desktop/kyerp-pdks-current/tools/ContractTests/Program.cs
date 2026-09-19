@@ -6,6 +6,7 @@ using KYERP.PDKS.Core.Operations;
 using KYERP.PDKS.Core.Reports;
 using KYERP.PDKS.Core.Definitions;
 using KYERP.PDKS.Core.Personnel;
+using KYERP.PDKS.Core.Leave;
 using System.Data;
 
 var failures = new List<string>();
@@ -188,6 +189,27 @@ Run("timesheet view filters", () =>
     Equal("DEVAMSIZLIK <> 0",TimesheetViewFilter.Build(3));
     Equal("GEC_KALMA <> 0",TimesheetViewFilter.Build(4));
     Equal("EKSIK_SURE <> 0",TimesheetViewFilter.Build(5));
+});
+
+Run("hourly leave validation", () =>
+{
+    var duration=LeaveEntryValidator.ValidateHourly(new DateTime(2026,8,14),"08:30",new DateTime(2026,8,14),"10:30");
+    Equal(120,duration.Minutes);Equal("08:30",duration.StartTime);Equal("10:30",duration.EndTime);
+    Throws(()=>LeaveEntryValidator.ValidateHourly(new DateTime(2026,8,14),"08:30",new DateTime(2026,8,14),"08:30"));
+    Throws(()=>LeaveEntryValidator.ValidateHourly(new DateTime(2026,8,14),"10:30",new DateTime(2026,8,14),"08:30"));
+    Throws(()=>LeaveEntryValidator.ValidateHourly(new DateTime(2026,8,14),"08:30",new DateTime(2026,8,15),"10:30"));
+});
+
+Run("annual and full-day leave expansion", () =>
+{
+    var annual=AnnualLeaveDateExpander.Expand(new DateTime(2026,8,14),new DateTime(2026,8,24));
+    Equal(8,annual.Count);Equal(new DateTime(2026,8,14),annual[0]);Equal(new DateTime(2026,8,15),annual[1]);
+    Equal(false,annual.Any(date=>date.DayOfWeek==DayOfWeek.Sunday));Equal(false,annual.Contains(new DateTime(2026,8,24)));Equal(annual.Count,annual.Distinct().Count());
+    var unpaid=FullDayLeaveDateExpander.Expand(new DateTime(2026,8,14),new DateTime(2026,8,17));
+    Equal(4,unpaid.Count);Equal(true,unpaid.Contains(new DateTime(2026,8,16)));Equal(unpaid.Count,unpaid.Distinct().Count());
+    Equal(LeavePayrollArea.Unpaid,LeavePayrollArea.Validate(4));Equal(LeavePayrollArea.Paid,LeavePayrollArea.Validate(5));Throws(()=>LeavePayrollArea.Validate(3));
+    Throws(()=>AnnualLeaveDateExpander.Expand(new DateTime(2026,8,14),new DateTime(2026,8,14)));
+    Throws(()=>FullDayLeaveDateExpander.Expand(new DateTime(2026,8,15),new DateTime(2026,8,14)));
 });
 
 Run("payroll calculation", () =>
