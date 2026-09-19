@@ -22,6 +22,22 @@ Bu dosya, `codex/kyerp-pdks-full-app-prep` dalındaki PDKS revizyonunu plan yazm
 
 Sadece rapor yazıp durma. Her fazda gerçek kaynak kod değişikliği yap, build/test al, hatayı kapat ve sonra sonraki faza geç. Canlı veriyi bozacak destructive DB migration yapma. `Hedef.exe` veya lisans üzerinde reverse engineering/patch yapma.
 
+### Token / context disiplini
+
+Bu repo büyüktür. Gereksiz context tüketme.
+
+- Tüm repoyu tekrar tekrar okuma; önce `git grep`, `rg`, proje/solution dosyaları ve hedefli dosya okumaları kullan.
+- `node_modules`, `bin`, `obj`, `dist`, `build`, `.git`, büyük backup/archive/runtime klasörlerini kaynak analizi için tarama.
+- Aynı dosyayı değişiklik yoksa tekrar tekrar okuma.
+- Uzun plan, uzun özet ve tekrar eden açıklama üretme; kod + kısa kanıt + test sonucu yeterlidir.
+- Bir faz için önce ilgili modülü bul, sonra yalnız o modülün bağımlılıklarını aç.
+- Büyük mimari değişiklikleri tek seferde bütün projeye yayma; küçük, build alınabilir adımlar halinde uygula.
+- Rutin teknik kararlar için kullanıcıdan onay bekleme. Yalnız destructive canlı veri işlemi, gerçek secret/lisans, geri dönüşü zor dış sistem değişikliği veya ürün davranışında belirsiz karar varsa dur.
+- Her faz sonunda en fazla kısa bir kontrol özeti bırak: `değişen dosyalar / build-test / kalan engel`.
+- Bir engel 15-20 dakikada çözülemiyorsa tüm sistemi yeniden yazmaya kalkma; engeli izole et, güvenli workaround veya sonraki faza geçiş kararı ver.
+- Her büyük faz sonunda küçük ve anlamlı commit oluştur; çalışma ağacını gereksiz büyütme.
+- Öncelik sırası: çalışan build > veri güvenliği > temel PDKS işlevleri > Hedef parity > web sync > temizlik/kozmetik.
+
 ## Faz 0 — Baseline doğrulama
 
 - Repo/branch durumunu doğrula.
