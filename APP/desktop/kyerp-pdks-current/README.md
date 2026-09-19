@@ -22,7 +22,15 @@ DESEN bilgisayarinda halen kullanilan mevcut PDKS calismasinin bizim kaynak kodu
 Canli veritabani, yedek, personel verisi, lisans ve parola GitHub'a alinmaz.
 Kaynakta DB parolasi hard-code edilmez. Gelistirme/test ortaminda `KY_PDKS_DB_PASSWORD` ortam degiskeni kullanilir.
 
-## Derleme
+## Yapılandırma
+
+`ENVIRONMENT.example.ps1` örnek değişkenleri içerir. Parola veya canlı secret dosyaya yazılmaz. Temel değişkenler:
+
+- `KY_PDKS_DB_PATH`, `KY_PDKS_DB_HOST`, `KY_PDKS_DB_PORT`, `KY_PDKS_DB_USER`, `KY_PDKS_DB_PASSWORD`
+- `KY_PDKS_RUNTIME_ROOT`, `KY_PDKS_REPORT_ROOT`, `KY_PDKS_PERSONEL_EXE`
+- `KY_PDKS_API_BASE_URL`, `KY_PDKS_TENANT_ID`, `KY_PDKS_COMPANY_ID`, `KY_PDKS_WORKPLACE_ID`
+
+## Derleme ve secretsiz test
 
 Windows + .NET 8 SDK:
 
@@ -31,7 +39,13 @@ cd APP\desktop\kyerp-pdks-current
 .\BUILD.ps1
 ```
 
-Ciktilar `artifacts\` altinda olusur ve Git'e alinmaz.
+Komut `KYERP.PDKS.sln` içindeki aktif projeleri Release modunda derler, secretsiz kontrat testlerini çalıştırır ve Native/Bridge çıktılarını `artifacts\` altına publish eder. Çıktılar Git'e alınmaz.
+
+Canlı veritabanı smoke testi yalnız açıkça hazırlanmış bağlantı değişkenleriyle çalıştırılır ve bütün yazmaları transaction içinde rollback eder:
+
+```powershell
+dotnet run --project .\tools\SmokeTest\SmokeTest.csproj -c Release
+```
 
 ## Kaynak snapshot
 

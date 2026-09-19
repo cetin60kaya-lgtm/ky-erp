@@ -1,20 +1,17 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Text;
+using KYERP.PDKS.Core;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-const string Db = @"D:\Hedef500\Hedef500\Data\DATABASE.GDB";
-const string LogPath = @"D:\Hedef500\HKN_NATIVE_PERSONEL\FINAL_TEST_LOG.txt";
-var cs = new FbConnectionStringBuilder
-{
-    Database=Db, UserID="SYSDBA", Password=Environment.GetEnvironmentVariable("KY_PDKS_DB_PASSWORD") ?? "", DataSource="127.0.0.1",
-    Port=3050, Dialect=3, Charset="WIN1254", Pooling=false
-}.ToString();
+var options = PdksOptions.FromEnvironment();
+var database = new FirebirdDatabase(options);
+var logPath = Environment.GetEnvironmentVariable("KY_PDKS_SMOKE_LOG")
+    ?? Path.Combine(AppContext.BaseDirectory, "PDKS_SMOKE_TEST.log");
 var log = new StringBuilder();
 log.AppendLine($"HKN Personel final smoke test: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 
-using var c = new FbConnection(cs);
-c.Open();
+using var c = database.OpenConnection();
 int activeBefore = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK where ICTARIH is null"));
 int totalBefore = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK"));
 log.AppendLine($"BEFORE active={activeBefore} left={totalBefore-activeBefore} total={totalBefore}");
@@ -63,7 +60,7 @@ catch(Exception ex)
 {
     try{tx.Rollback();}catch{}
     log.AppendLine("FAILED: "+ex);
-    File.WriteAllText(LogPath,log.ToString(),Encoding.UTF8);
+    File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);
     throw;
 }
 
@@ -74,7 +71,7 @@ log.AppendLine($"AFTER active={activeAfter} left={totalAfter-activeAfter} total=
 if(activeBefore!=activeAfter || totalBefore!=totalAfter || residue!=0) throw new Exception("Rollback sonrası üretim DB sayıları değişti");
 log.AppendLine("PRODUCTION_DB_UNCHANGED OK");
 log.AppendLine("FINAL_RESULT=PASS");
-File.WriteAllText(LogPath,log.ToString(),Encoding.UTF8);
+File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);
 Console.WriteLine(log.ToString());
 
 static object? Scalar(FbConnection c,FbTransaction? tx,string sql,params FbParameter[] ps)

@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using KYERP.PDKS.Core;
 
 internal static class Program
 {
-    const string PersonelExe=@"D:\Hedef500\Hedef500\HKN.Personel.Native.exe";
+    static readonly string PersonelExe=PdksOptions.FromEnvironment().PersonelExecutable;
     const int WH_MOUSE_LL=14, WM_LBUTTONDOWN=0x0201;
     const uint WM_CLOSE=0x0010, WS_CHILD=0x40000000, WS_VISIBLE=0x10000000;
     const uint WS_CAPTION=0x00C00000, WS_THICKFRAME=0x00040000, WS_SYSMENU=0x00080000;
@@ -12,7 +13,7 @@ internal static class Program
     const int GWL_STYLE=-16, SW_SHOW=5;
     const uint SWP_NOACTIVATE=0x0010, SWP_SHOWWINDOW=0x0040;
     static readonly IntPtr HWND_BOTTOM=new(1);
-    static IntPtr hook, brandPanel, brandLabel, statusLabel, toolbarPersonel, toolbarIcon, toolbarText, toolbarFont, toolbarHIcon, embedded;
+    static IntPtr hook, brandPanel, statusLabel, toolbarPersonel, toolbarIcon, toolbarText, toolbarFont, toolbarHIcon, embedded;
     static HookProc? hookProc;
     static int opening;
 
@@ -149,7 +150,6 @@ internal static class Program
         if(!GetClientRect(main,out RECT c))return; int w=Math.Max(100,c.Right), h=Math.Max(100,c.Bottom);
         if(brandPanel==IntPtr.Zero||!IsWindow(brandPanel))
             brandPanel=CreateWindowEx(0,"STATIC","",WS_CHILD|WS_VISIBLE|0x00000006,0,82,w,Math.Max(50,h-104),main,IntPtr.Zero,GetModuleHandle(null),IntPtr.Zero);
-        if(brandLabel!=IntPtr.Zero&&IsWindow(brandLabel))ShowWindow(brandLabel,0);
     }
 
     static void EnsurePersonelToolbar(IntPtr main)

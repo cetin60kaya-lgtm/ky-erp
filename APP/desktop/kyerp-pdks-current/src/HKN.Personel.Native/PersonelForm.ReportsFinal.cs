@@ -6,12 +6,12 @@ public partial class PersonelForm
 {
     string ReportTemplate(string title)=>title switch
     {
-        "Ayrıntılı Kişisel Bordro"=>@"D:\Hedef500\Hedef500\Report\Kisisel_Bordro.fr3",
-        "Personel Bilgi Formu"=>@"D:\Hedef500\Hedef500\Report\PerBilgi.fr3",
-        "Personel Bilgi Formu (Boş)"=>@"D:\Hedef500\Hedef500\Report\PerBilgiBos.fr3",
-        "Kişisel Giriş Çıkış Raporu"=>@"D:\Hedef500\Hedef500\Report\KisiselGirisCikis.fr3",
-        "Kişisel İzin Kartı"=>@"D:\Hedef500\Hedef500\Report\KisiselIzinKarti.fr3",
-        "Kişisel Ek Kazanç ve Kesinti Kartı"=>@"D:\Hedef500\Hedef500\Report\KisiselEKKKarti.fr3",
+        "Ayrıntılı Kişisel Bordro"=>options.ReportPath("Kisisel_Bordro.fr3"),
+        "Personel Bilgi Formu"=>options.ReportPath("PerBilgi.fr3"),
+        "Personel Bilgi Formu (Boş)"=>options.ReportPath("PerBilgiBos.fr3"),
+        "Kişisel Giriş Çıkış Raporu"=>options.ReportPath("KisiselGirisCikis.fr3"),
+        "Kişisel İzin Kartı"=>options.ReportPath("KisiselIzinKarti.fr3"),
+        "Kişisel Ek Kazanç ve Kesinti Kartı"=>options.ReportPath("KisiselEKKKarti.fr3"),
         _=>""
     };
 

@@ -8,4 +8,7 @@
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
+  </ItemGroup>
 </Project>

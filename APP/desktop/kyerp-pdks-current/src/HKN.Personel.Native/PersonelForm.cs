@@ -2,13 +2,14 @@ using FirebirdSql.Data.FirebirdClient;
 using System.Data;
 using System.Drawing;
 using System.Globalization;
+using KYERP.PDKS.Core;
 
 namespace HKN.Personel.Native;
 
 public partial class PersonelForm : Form
 {
-    const string Db = @"D:\Hedef500\Hedef500\Data\DATABASE.GDB";
-    readonly string Cs = new FbConnectionStringBuilder { Database=Db, UserID="SYSDBA", Password=Environment.GetEnvironmentVariable("KY_PDKS_DB_PASSWORD") ?? "", DataSource="127.0.0.1", Port=3050, Dialect=3, Charset="WIN1254", Pooling=false }.ToString();
+    readonly PdksOptions options = PdksOptions.FromEnvironment();
+    readonly FirebirdDatabase db;
     readonly DataGridView list = new() { Dock=DockStyle.Fill, ReadOnly=true, AllowUserToAddRows=false, SelectionMode=DataGridViewSelectionMode.FullRowSelect, MultiSelect=false, AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill };
     readonly Dictionary<string,TextBox> f = new();
     readonly TabControl tabs = new() { Dock=DockStyle.Fill };
@@ -18,6 +19,7 @@ public partial class PersonelForm : Form
 
     public PersonelForm()
     {
+        db = new FirebirdDatabase(options);
         Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(961,572); MinimumSize=new Size(961,572);
         Font=new Font("Microsoft Sans Serif",8.25f); BackColor=SystemColors.Control;
         BuildMenuFull(); BuildUiClassic(); list.SelectionChanged += (_,_) => { SyncPeriodsToPerson(); RefreshFullTabs(); }; Shown += (_,_) => { Reload(); LoadPeriods(); SyncPeriodsToPerson(); RefreshFullTabs(); ApplyClassicGridStyles(); };
@@ -98,12 +100,12 @@ public partial class PersonelForm : Form
 
     DataTable Q(string sql, params FbParameter[] pars)
     {
-        using var c=new FbConnection(Cs); c.Open(); using var cmd=new FbCommand(sql,c); if(pars.Length>0) cmd.Parameters.AddRange(pars); using var da=new FbDataAdapter(cmd); var dt=new DataTable(); da.Fill(dt); return dt;
+        return db.Query(sql, pars);
     }
 
     object? S(string sql)
     {
-        using var c=new FbConnection(Cs); c.Open(); using var cmd=new FbCommand(sql,c); return cmd.ExecuteScalar();
+        return db.Scalar(sql);
     }
     void Reload()
     {
@@ -158,7 +160,7 @@ public partial class PersonelForm : Form
     }
     int Exec(string sql, params FbParameter[] pars)
     {
-        using var c=new FbConnection(Cs); c.Open(); using var cmd=new FbCommand(sql,c); if(pars.Length>0) cmd.Parameters.AddRange(pars); return cmd.ExecuteNonQuery();
+        return db.Execute(sql, pars);
     }
 
     object DbVal(string key)
