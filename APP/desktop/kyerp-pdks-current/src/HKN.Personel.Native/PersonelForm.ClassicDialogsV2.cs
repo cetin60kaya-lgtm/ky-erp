@@ -1,6 +1,7 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Data;
 using System.Globalization;
+using KYERP.PDKS.Core;
 
 namespace HKN.Personel.Native;
 
@@ -27,7 +28,7 @@ public partial class PersonelForm
         var rbar=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(55,8,0,0)};var backAll=new Button{Text="<<",Width=38,Height=30};var back=new Button{Text="<",Width=38,Height=30};rbar.Controls.Add(backAll);rbar.Controls.Add(back);root.Controls.Add(rbar,2,1);
         var acts=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(15,5,0,0)};var add=new Button{Text="Ekle",Width=105,Height=34,Font=new Font(Font,FontStyle.Bold),ForeColor=Color.Navy,Image=ClassicGlyph("Yeni"),ImageAlign=ContentAlignment.MiddleLeft};var close=new Button{Text="Kapat",Width=105,Height=34,DialogResult=DialogResult.Cancel,Font=new Font(Font,FontStyle.Bold),ForeColor=Color.Navy,Image=ClassicGlyph("Sil"),ImageAlign=ContentAlignment.MiddleLeft};acts.Controls.Add(add);acts.Controls.Add(close);root.Controls.Add(acts,1,1);
         one.Click+=(_,_)=>MoveSelected(left,chosen);allb.Click+=(_,_)=>MoveAll(left,chosen);back.Click+=(_,_)=>RemoveSelected(right,chosen);backAll.Click+=(_,_)=>chosen.Clear();
-        add.Click+=(_,_)=>{try{if(chosen.Rows.Count==0)throw new Exception("En az bir personel seçin.");var gi=ClassicDateTime(gd.Value,gt.Text);var ci=ClassicDateTime(cd.Value,ct.Text);if(ci<=gi)throw new Exception("Çıkış zamanı girişten sonra olmalıdır.");int n=InsertGirisCikis(chosen,gi,ci,(int)tol.Value);MessageBox.Show($"{n} personel için kayıt eklendi.","Giriş Çıkış Ekleme");RefreshFullTabs();d.DialogResult=DialogResult.OK;d.Close();}catch(Exception ex){MessageBox.Show(ex.Message,"Giriş Çıkış Ekleme");}};
+        add.Click+=(_,_)=>{try{if(chosen.Rows.Count==0)throw new Exception("En az bir personel seçin.");var gi=ClassicDateTime(gd.Value,gt.Text);var ci=ClassicDateTime(cd.Value,ct.Text);PdksValidation.AttendanceRange(gi,ci);int n=InsertGirisCikis(chosen,gi,ci,(int)tol.Value);MessageBox.Show($"{n} personel için kayıt eklendi.","Giriş Çıkış Ekleme");RefreshFullTabs();d.DialogResult=DialogResult.OK;d.Close();}catch(Exception ex){MessageBox.Show(ex.Message,"Giriş Çıkış Ekleme");}};
         d.Controls.Add(root);d.CancelButton=close;d.ShowDialog(this);
     }
 

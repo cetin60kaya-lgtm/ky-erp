@@ -1,5 +1,6 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Data;
+using KYERP.PDKS.Core;
 
 namespace HKN.Personel.Native;
 
@@ -36,7 +37,7 @@ public partial class PersonelForm
         bottom.Controls.Add(new Label{Text="Çıkış Tarih/Saat",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},2,0);bottom.Controls.Add(cik,3,0);
         var tp=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};tp.Controls.Add(new Label{Text="Tolerans (dk)",AutoSize=true,Padding=new Padding(0,6,4,0)});tp.Controls.Add(tol);bottom.Controls.Add(tp,4,0);
         var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false};var close=new Button{Text="Kapat",Width=76,Height=30,DialogResult=DialogResult.Cancel};var add=new Button{Text="Ekle",Width=86,Height=30,Font=new Font(Font,FontStyle.Bold)};actions.Controls.Add(close);actions.Controls.Add(add);bottom.Controls.Add(actions,5,0);
-        add.Click+=(_,_)=>{if(chosen.Rows.Count==0){MessageBox.Show("En az bir personel seçin.","Giriş Çıkış Ekleme");return;}if(cik.Value<=gir.Value){MessageBox.Show("Çıkış tarihi girişten sonra olmalıdır.","Giriş Çıkış Ekleme");return;}int n=InsertGirisCikis(chosen,gir.Value,cik.Value,(int)tol.Value);MessageBox.Show($"{n} personel için giriş/çıkış kaydı eklendi.","Giriş Çıkış Ekleme");RefreshFullTabs();d.DialogResult=DialogResult.OK;d.Close();};
+        add.Click+=(_,_)=>{try{if(chosen.Rows.Count==0)throw new ArgumentException("En az bir personel seçin.");PdksValidation.AttendanceRange(gir.Value,cik.Value);int n=InsertGirisCikis(chosen,gir.Value,cik.Value,(int)tol.Value);MessageBox.Show($"{n} personel için giriş/çıkış kaydı eklendi.","Giriş Çıkış Ekleme");RefreshFullTabs();d.DialogResult=DialogResult.OK;d.Close();}catch(Exception ex){MessageBox.Show(ex.Message,"Giriş Çıkış Ekleme");}};
         root.Controls.Add(bottom,0,2);d.Controls.Add(root);d.CancelButton=close;d.ShowDialog(this);
     }
 

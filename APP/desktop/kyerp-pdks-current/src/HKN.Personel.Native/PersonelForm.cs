@@ -195,9 +195,12 @@ public partial class PersonelForm : Form
         if(d.ShowDialog(this)!=DialogResult.OK) return;
         try
         {
-            if(pk.Text.Trim().Length!=5) throw new Exception("Kart No 5 haneli olmalı.");
+            var employeeCode=PdksValidation.EmployeeCode(pk.Text);
+            var firstName=PdksValidation.RequiredText(ad.Text,"Adı");
+            var lastName=PdksValidation.RequiredText(soy.Text,"Soyadı");
+            var employmentStart=DateTime.Parse(gir.Text,new CultureInfo("tr-TR"));
             int ps=Convert.ToInt32(S("select coalesce(max(PS),0)+1 from KIMLIK"));
-            Exec("insert into KIMLIK (PS,PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,DURUM,GOREV,MAAS,KULIZIN,CCKSAY) values (@PS,@PK,@AD,@SOY,@G,1,1,2,1,0,0,0)", new FbParameter("@PS",ps),new FbParameter("@PK",pk.Text.Trim()),new FbParameter("@AD",ad.Text.Trim().ToUpperInvariant()),new FbParameter("@SOY",soy.Text.Trim().ToUpperInvariant()),new FbParameter("@G",DateTime.Parse(gir.Text,new CultureInfo("tr-TR")))); Reload();
+            Exec("insert into KIMLIK (PS,PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,DURUM,GOREV,MAAS,KULIZIN,CCKSAY) values (@PS,@PK,@AD,@SOY,@G,1,1,2,1,0,0,0)", new FbParameter("@PS",ps),new FbParameter("@PK",employeeCode),new FbParameter("@AD",firstName.ToUpperInvariant()),new FbParameter("@SOY",lastName.ToUpperInvariant()),new FbParameter("@G",employmentStart)); Reload();
         }
         catch(Exception ex){MessageBox.Show(ex.Message,"Yeni Personel",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }

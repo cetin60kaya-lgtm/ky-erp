@@ -1,4 +1,5 @@
 using KYERP.PDKS.Core;
+using KYERP.PDKS.Core.Sync;
 
 var failures = new List<string>();
 Run("environment overrides", () =>
@@ -34,6 +35,42 @@ Run("missing password fails closed", () =>
     throw new Exception("Eksik parola kabul edildi.");
 });
 
+Run("employee validation", () =>
+{
+    Equal("01234", PdksValidation.EmployeeCode(" 01234 "));
+    Throws(() => PdksValidation.EmployeeCode("12A34"));
+    Throws(() => PdksValidation.RequiredText(" ", "Adı"));
+    PdksValidation.EmploymentDates(new DateTime(2026, 1, 1), new DateTime(2026, 1, 2));
+    Throws(() => PdksValidation.EmploymentDates(new DateTime(2026, 1, 2), new DateTime(2026, 1, 1)));
+});
+
+Run("attendance and money validation", () =>
+{
+    PdksValidation.AttendanceRange(new DateTime(2026, 1, 1, 23, 0, 0), new DateTime(2026, 1, 2, 7, 0, 0));
+    Throws(() => PdksValidation.AttendanceRange(DateTime.Today, DateTime.Today));
+    Equal(125.50m, PdksValidation.ParseMoney("125,50", "Miktar"));
+    Throws(() => PdksValidation.ParseMoney("0", "Miktar"));
+});
+
+Run("tenant scoped durable outbox", () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "kyerp-pdks-contract-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        var options = new PdksOptions("test.gdb", "localhost", 3050, "test", "test", "WIN1254", ".", ".", "personel.exe", "tenant-a", "company-a", "workplace-a", new Uri("https://api.example.test"));
+        var envelope = SyncEnvelope.Create(options, "attendance", "upsert", "row-1", new { employeeId = "01234" }, new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.Zero));
+        var outbox = new FileOutbox(root);
+        outbox.EnqueueAsync(envelope).GetAwaiter().GetResult();
+        outbox.EnqueueAsync(envelope).GetAwaiter().GetResult();
+        var pending = outbox.ReadPending();
+        Equal(1, pending.Count);
+        Equal(envelope.IdempotencyKey, pending[0].IdempotencyKey);
+        outbox.MarkCompleted(envelope.Id);
+        Equal(0, outbox.ReadPending().Count);
+    }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+});
+
 if (failures.Count > 0)
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, failures));
@@ -53,6 +90,13 @@ static void Equal<T>(T expected, T actual)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
         throw new Exception($"Beklenen '{expected}', gelen '{actual}'.");
+}
+
+static void Throws(Action action)
+{
+    try { action(); }
+    catch (ArgumentException) { return; }
+    throw new Exception("Beklenen validation hatası oluşmadı.");
 }
 
 sealed class EnvironmentScope : IDisposable

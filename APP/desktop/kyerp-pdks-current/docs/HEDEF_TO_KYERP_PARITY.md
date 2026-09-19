@@ -22,6 +22,6 @@ Hedef yalnız işlev/veri davranışı referansıdır. Aşağıdaki karşılıkl
 | Kişisel raporlar | Raporlar menüsü | YARIM | Raporlar | mevcut tablolar | Print preview ve veri kapsamı |
 | PDF/Excel çıktısı | KYERP çıktı komutları | YOK | Raporlar | rapor DTO | PDF/Excel dosyası ve Türkçe karakter |
 | Çoklu firma/yetki | Session context | YARIM | Yönetim | tenant/company/workplace | Firma dışı erişim reddi |
-| Web senkron | Desktop sync/outbox | YOK | Senkron | KYERP API PDKS contract | offline enqueue, idempotent push/pull |
+| Web senkron | Desktop sync/outbox | YARIM | Senkron | Tenant kapsamlı envelope + dosya outbox hazır; HTTP contract bekliyor | offline enqueue, idempotent push/pull |
 
 Bu matris uygulama ilerledikçe `VAR` durumuna çevrilmeden önce ilgili build ve smoke kanıtı alınır.
