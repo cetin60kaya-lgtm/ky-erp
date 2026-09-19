@@ -3,6 +3,7 @@ using System.Data;
 using System.Drawing;
 using System.Globalization;
 using KYERP.PDKS.Core;
+using KYERP.PDKS.Core.Personnel;
 
 namespace HKN.Personel.Native;
 
@@ -123,7 +124,7 @@ public partial class PersonelForm : Form
 
     void Filter(string s)
     {
-        if(list.DataSource is not DataTable dt) return; s=s.Replace("'","''").Trim(); dt.DefaultView.RowFilter=string.IsNullOrWhiteSpace(s)?"":$"PKNO LIKE '%{s}%' OR AD LIKE '%{s}%' OR SOYAD LIKE '%{s}%'";
+        if(list.DataSource is not DataTable dt) return; dt.DefaultView.RowFilter=PersonnelListFilter.Build(s);
     }
 
     string Fmt(object v)
@@ -145,7 +146,7 @@ public partial class PersonelForm : Form
                 from KIMLIK K where K.PKNO=@PK";
             var dt=Q(sql,new FbParameter("@PK",pk)); if(dt.Rows.Count==0) return; var r=dt.Rows[0];
             foreach(var kv in f) if(dt.Columns.Contains(kv.Key)) kv.Value.Text=Fmt(r[kv.Key]);
-            if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]); if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]);
+            if(dt.Columns.Contains("RESIM"))LoadPersonPhoto(r["RESIM"]);
             LoadChild("GIRCIK", "select GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA from GIRCIK where PKNO=@PK order by coalesce(GTARIH,CTARIH) desc rows 100", pk);
             LoadChild("IZIN", "select TARIH,TIP,MAZERET,BASSAAT,BITSAAT,SURESAAT from OZELIZIN where PKNO=@PK order by TARIH desc rows 100", pk);
             LoadChild("AVANS", "select TARIH,MIKTAR,VTARIH,TURKOD,ACIKLAMA from AVANS where PKNO=@PK order by TARIH desc rows 100", pk);

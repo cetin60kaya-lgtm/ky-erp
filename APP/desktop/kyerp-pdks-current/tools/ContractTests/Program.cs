@@ -5,6 +5,8 @@ using KYERP.PDKS.Core.Payroll;
 using KYERP.PDKS.Core.Operations;
 using KYERP.PDKS.Core.Reports;
 using KYERP.PDKS.Core.Definitions;
+using KYERP.PDKS.Core.Personnel;
+using System.Data;
 
 var failures = new List<string>();
 Run("environment overrides", () =>
@@ -166,6 +168,16 @@ Run("period definition validation", () =>
     Equal(false,PeriodDefinitionGuard.IsExactDuplicate(1,new DateTime(2026,9,1),new DateTime(2026,9,30),1,new DateTime(2026,9,15),new DateTime(2026,10,15)));
     Throws(()=>PeriodDefinitionGuard.Validate(new DateTime(2026,9,2),new DateTime(2026,9,1),1));
     Throws(()=>PeriodDefinitionGuard.Validate(new DateTime(2026,9,1),new DateTime(2026,9,2),0));
+});
+
+Run("personnel list searches employment dates", () =>
+{
+    var table=new DataTable();table.Columns.Add("PKNO");table.Columns.Add("AD");table.Columns.Add("SOYAD");table.Columns.Add("IGTARIH",typeof(DateTime));table.Columns.Add("ICTARIH",typeof(DateTime));
+    table.Rows.Add("00001","ALİ","YILMAZ",new DateTime(2026,9,19),DBNull.Value);
+    table.DefaultView.RowFilter=PersonnelListFilter.Build("2026");
+    Equal(1,table.DefaultView.Count);
+    Equal(string.Empty,PersonnelListFilter.Build("  "));
+    Equal(true,PersonnelListFilter.Build("O'NEIL").Contains("O''NEIL"));
 });
 
 Run("payroll calculation", () =>
