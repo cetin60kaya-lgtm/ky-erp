@@ -5,8 +5,8 @@ using KYERP.PDKS.Core;
 
 internal static class Program
 {
-    static readonly string PersonelExe = PdksOptions.FromEnvironment().PersonelExecutable;
-    static readonly string HedefExe = Path.Combine(Path.GetDirectoryName(PersonelExe) ?? AppContext.BaseDirectory, "Hedef.exe");
+    static readonly string PersonelExe = ResolvePersonelExecutable();
+    static readonly string HedefExe = ResolveHedefExecutable();
 
     const uint WM_CLOSE = 0x0010;
     const uint WS_CHILD = 0x40000000, WS_VISIBLE = 0x10000000, WS_POPUP = 0x80000000;
@@ -69,24 +69,68 @@ internal static class Program
         using var mutex = new Mutex(true, @"Local\HKN.Hedef500.Personel.Bridge", out bool first);
         if (!first) return;
 
-        EnsureHedefRunning();
+        EnsurePrimaryApplicationRunning();
         new Thread(NativeWatcher) { IsBackground = true }.Start();
         new Thread(ShellLoop) { IsBackground = true }.Start();
         new Thread(ClickLoop) { IsBackground = true }.Start();
         while (true) Thread.Sleep(1000);
     }
 
-    static void EnsureHedefRunning()
+    static string ResolvePersonelExecutable()
+    {
+        var configured = PdksOptions.FromEnvironment().PersonelExecutable;
+        var parent = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName;
+        string?[] candidates =
+        [
+            configured,
+            Path.Combine(AppContext.BaseDirectory, "HKN.Personel.Native.exe"),
+            parent is null ? null : Path.Combine(parent, "HKN.Personel.Native.exe"),
+            @"D:\Hedef500\Hedef500\HKN.Personel.Native.exe",
+            @"C:\Hedef500\Hedef500\HKN.Personel.Native.exe"
+        ];
+        return candidates.FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)) ?? configured;
+    }
+
+    static string ResolveHedefExecutable()
+    {
+        var configured = Environment.GetEnvironmentVariable("KY_PDKS_HEDEF_EXE");
+        var personelDir = Path.GetDirectoryName(PersonelExe);
+        var parent = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName;
+        string?[] candidates =
+        [
+            configured,
+            personelDir is null ? null : Path.Combine(personelDir, "Hedef.exe"),
+            Path.Combine(AppContext.BaseDirectory, "Hedef.exe"),
+            parent is null ? null : Path.Combine(parent, "Hedef.exe"),
+            @"D:\Hedef500\Hedef500\Hedef.exe",
+            @"C:\Hedef500\Hedef500\Hedef.exe"
+        ];
+        return candidates.FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)) ?? string.Empty;
+    }
+
+    static void EnsurePrimaryApplicationRunning()
     {
         try
         {
             if (Process.GetProcessesByName("Hedef").Length > 0) return;
-            if (!File.Exists(HedefExe)) return;
-            Process.Start(new ProcessStartInfo(HedefExe)
+            if (!string.IsNullOrWhiteSpace(HedefExe) && File.Exists(HedefExe))
             {
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(HedefExe)!
-            });
+                Process.Start(new ProcessStartInfo(HedefExe)
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(HedefExe)!
+                });
+                return;
+            }
+
+            if (Process.GetProcessesByName("HKN.Personel.Native").Length == 0 && File.Exists(PersonelExe))
+            {
+                Process.Start(new ProcessStartInfo(PersonelExe)
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(PersonelExe)!
+                });
+            }
         }
         catch { }
     }
@@ -122,7 +166,6 @@ internal static class Program
                 {
                     var main = FindWindowForProcess(process.Id, "TAnaf");
                     if (main == IntPtr.Zero) continue;
-
                     SetWindowText(main, "KYERP PDKS");
                     EnsureNativePersonelButton(main);
                     EnsureStatusBrand(main);
@@ -155,7 +198,6 @@ internal static class Program
                         int left = rect.Left + PersonelButtonIndex * buttonWidth;
                         int right = left + buttonWidth;
                         int bottom = Math.Min(rect.Bottom, rect.Top + buttonHeight);
-
                         if (point.X >= left && point.X < right && point.Y >= rect.Top && point.Y < bottom)
                             OpenPersonel();
                     }
@@ -171,7 +213,6 @@ internal static class Program
     {
         var toolbar = FindDescendant(main, "TToolBar");
         if (toolbar == IntPtr.Zero) return;
-
         var now = DateTime.UtcNow;
         if (toolbar == lastToolbar && (now - lastToolbarPatch).TotalSeconds < 1.5) return;
 
@@ -203,7 +244,6 @@ internal static class Program
             var textBytes = Encoding.Unicode.GetBytes(text + "\0");
             if (!WriteProcessMemory(process, remoteText, textBytes, new UIntPtr((uint)textBytes.Length), out _)) return false;
 
-            // Hedef.exe 32-bit Delphi uygulamasıdır; 32-bit TBBUTTONINFO yapısı 32 byte'tır.
             var info = new byte[32];
             BitConverter.GetBytes((uint)32).CopyTo(info, 0);
             BitConverter.GetBytes(TBIF_BYINDEX | TBIF_TEXT | TBIF_STATE).CopyTo(info, 4);
@@ -212,8 +252,7 @@ internal static class Program
             BitConverter.GetBytes(text.Length).CopyTo(info, 28);
 
             if (!WriteProcessMemory(process, remote, info, new UIntPtr((uint)info.Length), out _)) return false;
-            var result = SendMessage(toolbar, TB_SETBUTTONINFOW, new IntPtr(index), remote);
-            return result != IntPtr.Zero;
+            return SendMessage(toolbar, TB_SETBUTTONINFOW, new IntPtr(index), remote) != IntPtr.Zero;
         }
         finally
         {
@@ -242,7 +281,13 @@ internal static class Program
         try
         {
             var hedef = Process.GetProcessesByName("Hedef").FirstOrDefault();
-            if (hedef is null) return;
+            if (hedef is null)
+            {
+                if (Process.GetProcessesByName("HKN.Personel.Native").Length == 0 && File.Exists(PersonelExe))
+                    Process.Start(new ProcessStartInfo(PersonelExe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(PersonelExe)! });
+                return;
+            }
+
             var main = FindWindowForProcess(hedef.Id, "TAnaf");
             if (main == IntPtr.Zero) return;
 
