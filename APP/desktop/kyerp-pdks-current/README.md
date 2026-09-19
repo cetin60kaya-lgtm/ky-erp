@@ -63,3 +63,14 @@ dotnet run --project .\tools\SmokeTest\SmokeTest.csproj -c Release
 ## Kaynak snapshot
 
 17.09.2026 tarihinde Google Drive'a tasinan `HKN_NATIVE_PERSONEL` klasorunden asil kaynak dosyalari ayiklanarak GitHub'a aktarildi. `bin`, `obj`, `PUBLISH_*`, yedekler ve gecici patch/deneme ciktilari kaynak kabul edilmedi.
+
+## Tek komutla geliştirme makinesini güncelle
+
+DESEN gibi Windows geliştirme makinesinde temiz branch'i güncellemek, Drive'daki legacy referans runtime'ını hazırlamak, PDKS'yi derlemek ve yeni artifact'leri Google Drive runtime alanına almak için:
+
+```powershell
+cd APP\desktop\kyerp-pdks-current
+.\DEV_SYNC.ps1 -OpenVsCode
+```
+
+Script çalışma alanı kirliyse durur; mevcut değişiklikleri silmez. Secret, lisans ve canlı veritabanını Git'e kopyalamaz. Üretilen Native/Bridge çıktıları `D:\GoogleDrive\KYERP-MERKEZ\01_RUNTIME\KYERP-PDKS\current` altında tutulur ve `BUILD-INFO.txt` ile branch/commit bilgisi kaydedilir.
