@@ -18,10 +18,13 @@ test("emergency email requires a password-verified phone or MFA challenge proof"
   assert.doesNotMatch(source, /body\.password/);
 });
 
-test("emergency email is owner-only and uses stored account email", () => {
-  assert.match(source, /isOwner\(roleOf\(user\)\)/);
-  assert.match(source, /EMAIL_EMERGENCY_OWNER_ONLY/);
+test("email recovery is available to active users only through their stored verified account email", () => {
+  assert.match(source, /Boolean\(user\.is_active\)/);
+  assert.match(source, /Boolean\(user\.email_verified\)/);
   assert.match(source, /text\(user\.email\)/);
+  assert.doesNotMatch(source, /EMAIL_EMERGENCY_OWNER_ONLY/);
+  assert.doesNotMatch(source, /isOwner\(roleOf\(user\)\)/);
+  assert.doesNotMatch(source, /text\(body\.email\)/);
 });
 
 test("OTP is hashed, rate-limited, short lived and locks after repeated failures", () => {
@@ -33,12 +36,21 @@ test("OTP is hashed, rate-limited, short lived and locks after repeated failures
   assert.doesNotMatch(source, /otp\s*:/);
 });
 
-test("verified email proof creates only a canonical approved login claim", () => {
+test("verified email proof creates only a canonical approved login claim and preserves phone trust", () => {
   assert.match(source, /auth_login_approvals/);
   assert.match(source, /'APPROVED'/);
-  assert.match(source, /EMAIL_EMERGENCY_LOGIN_VERIFIED/);
+  assert.match(source, /EMAIL_RECOVERY_CODE_VERIFIED/);
+  assert.match(source, /securityCenterRequired: false/);
+  assert.match(source, /phoneTrustPreserved: true/);
   assert.match(source, /stage: "APPROVAL_PENDING"/);
   assert.doesNotMatch(source, /INSERT INTO auth_sessions/);
+});
+
+test("email recovery emits canonical security audit events", () => {
+  assert.match(source, /EMAIL_RECOVERY_CODE_SENT/);
+  assert.match(source, /EMAIL_RECOVERY_CODE_FAILED/);
+  assert.match(source, /EMAIL_RECOVERY_CODE_EXPIRED/);
+  assert.match(source, /EMAIL_RECOVERY_RATE_LIMITED/);
 });
 
 test("original phone or MFA proof must still be pending at final verification", () => {

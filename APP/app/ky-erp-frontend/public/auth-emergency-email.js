@@ -95,7 +95,8 @@
       .ky-email-emergency-modal input{width:100%;box-sizing:border-box;border:1px solid #cbd7e4;border-radius:12px;padding:14px 16px;font-size:24px;letter-spacing:.18em;text-align:center;font-weight:800;margin-bottom:12px}
       .ky-email-emergency-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
       .ky-email-emergency-actions button{border:0;border-radius:11px;padding:12px 10px;font-weight:800;cursor:pointer}
-      .ky-email-emergency-verify{background:#1769e0;color:#fff}.ky-email-emergency-cancel{background:#edf2f7;color:#34495e}
+      .ky-email-emergency-verify{background:#1769e0;color:#fff}.ky-email-emergency-resend{background:#edf2f7;color:#34495e}
+      .ky-email-emergency-close{width:100%;border:0;background:transparent;color:#65768a;padding:10px 0 0;font-weight:700;cursor:pointer}
       .ky-email-emergency-error{color:#b42318;background:#fff0ee;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:13px}
       .ky-email-emergency-note{font-size:11px;color:#7b8796;margin-top:12px;line-height:1.45}
     `;
@@ -118,7 +119,7 @@
     ensureStyles();
     const panel = document.createElement("div");
     panel.className = "ky-email-emergency-panel";
-    panel.innerHTML = `<strong>Telefon ve Authenticator erişilemiyor mu?</strong><span>Süper Yönetici için son çare: parola doğrulamasından sonra hesap e-postasına tek kullanımlık 6 haneli kod gönderilir.</span><button type="button" class="ky-email-emergency-btn">E-posta ile son çare giriş</button>`;
+    panel.innerHTML = `<strong>Telefon kullanılamıyor mu?</strong><span>Hesabınıza kayıtlı doğrulanmış e-posta adresine tek kullanımlık doğrulama kodu gönderilir.</span><button type="button" class="ky-email-emergency-btn">E-posta ile Kurtarma</button>`;
     panel.querySelector("button")?.addEventListener("click", startEmergencyEmail);
     const backButton = [...flow.querySelectorAll("button")].find((button) => /Giriş ekranına dön|İptal ve geri dön/i.test(String(button.textContent || "")));
     if (backButton) flow.insertBefore(panel, backButton);
@@ -135,12 +136,13 @@
     ensureStyles();
     modal = document.createElement("div");
     modal.className = "ky-email-emergency-overlay";
-    modal.innerHTML = `<div class="ky-email-emergency-modal" role="dialog" aria-modal="true"><h2>E-posta ile acil giriş</h2><p><b>${String(payload.maskedDestination || "Hesap e-postası")}</b> adresine gönderilen 6 haneli kodu girin.</p><div class="ky-email-emergency-error" hidden></div><input inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="E-posta doğrulama kodu"><div class="ky-email-emergency-actions"><button type="button" class="ky-email-emergency-cancel">İptal</button><button type="button" class="ky-email-emergency-verify">Doğrula ve Gir</button></div><div class="ky-email-emergency-note">Kod 10 dakika ve tek kullanım içindir. 5 hatalı denemede 30 dakika kilitlenir. Bu giriş güvenlik logunda acil e-posta girişi olarak kaydedilir.</div></div>`;
+    modal.innerHTML = `<div class="ky-email-emergency-modal" role="dialog" aria-modal="true"><h2>E-posta Doğrulama</h2><p><b>${String(payload.maskedDestination || "Hesap e-postası")}</b> adresine gönderilen 6 haneli doğrulama kodunu girin.</p><div class="ky-email-emergency-error" hidden></div><input inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="6 haneli doğrulama kodu"><div class="ky-email-emergency-actions"><button type="button" class="ky-email-emergency-resend">Yeni Kod Gönder</button><button type="button" class="ky-email-emergency-verify">Doğrula ve Giriş Yap</button></div><button type="button" class="ky-email-emergency-close">İptal</button><div class="ky-email-emergency-note">Kod 10 dakika ve tek kullanım içindir. 5 hatalı denemede 30 dakika kilitlenir. E-posta kurtarması yalnız bu giriş için kullanılır; mevcut güvenilir telefon kaydınız değiştirilmez.</div></div>`;
     document.body.appendChild(modal);
     const input = modal.querySelector("input");
     input?.focus();
     input?.addEventListener("input", () => { input.value = input.value.replace(/\D/g, "").slice(0, 6); });
-    modal.querySelector(".ky-email-emergency-cancel")?.addEventListener("click", closeModal);
+    modal.querySelector(".ky-email-emergency-close")?.addEventListener("click", closeModal);
+    modal.querySelector(".ky-email-emergency-resend")?.addEventListener("click", startEmergencyEmail);
     modal.querySelector(".ky-email-emergency-verify")?.addEventListener("click", () => verifyEmergencyEmail(payload));
   }
 
@@ -162,10 +164,10 @@
       const payload = await jsonRequest("/auth/email-emergency/start", body);
       showOtpModal(payload);
     } catch (error) {
-      alert(error?.message || "E-posta ile acil giriş başlatılamadı.");
+      alert(error?.message || "E-posta ile kurtarma başlatılamadı.");
     } finally {
       busy = false;
-      if (button?.isConnected) { button.disabled = false; button.textContent = "E-posta ile son çare giriş"; }
+      if (button?.isConnected) { button.disabled = false; button.textContent = button.classList.contains("ky-email-emergency-resend") ? "Yeni Kod Gönder" : "E-posta ile Kurtarma"; }
     }
   }
 
@@ -195,7 +197,7 @@
       window.setTimeout(() => window.location.reload(), 250);
     } catch (error) {
       setModalError(error?.message || "E-posta doğrulaması tamamlanamadı.");
-      if (button) { button.disabled = false; button.textContent = "Doğrula ve Gir"; }
+      if (button) { button.disabled = false; button.textContent = "Doğrula ve Giriş Yap"; }
     } finally {
       busy = false;
     }

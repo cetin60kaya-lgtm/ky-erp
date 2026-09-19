@@ -19,10 +19,16 @@ test("bridge observes only already verified auth challenges and never reads pass
   assert.doesNotMatch(script, /localStorage\.setItem\([^\n]*password/i);
 });
 
-test("email emergency UI is visibly marked as last resort", () => {
-  assert.match(script, /E-posta ile son çare giriş/);
-  assert.match(script, /Telefon ve Authenticator erişilemiyor mu/);
-  assert.match(script, /Kod 10 dakika ve tek kullanım içindir/);
+test("email recovery UI is generic, verified-email based and not owner-only", () => {
+  assert.match(script, /E-posta ile Kurtarma/);
+  assert.match(script, /Telefon kullanılamıyor mu/);
+  assert.match(script, /Hesabınıza kayıtlı doğrulanmış e-posta adresine tek kullanımlık doğrulama kodu gönderilir/);
+  assert.match(script, /E-posta Doğrulama/);
+  assert.match(script, /6 haneli doğrulama kodu/);
+  assert.match(script, /Doğrula ve Giriş Yap/);
+  assert.match(script, /Yeni Kod Gönder/);
+  assert.match(script, /mevcut güvenilir telefon kaydınız değiştirilmez/);
+  assert.doesNotMatch(script, /Süper Yönetici için son çare/);
 });
 
 test("verified emergency flow uses canonical approval status then stores only the issued session", () => {
