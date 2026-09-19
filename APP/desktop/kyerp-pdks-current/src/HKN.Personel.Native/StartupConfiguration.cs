@@ -100,18 +100,19 @@ internal static class StartupConfiguration
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,90));
 
-        dbPath = new TextBox { Dock = DockStyle.Fill, Text = GuessDatabasePath(current.DatabasePath) };
+        var dbPathControl = new TextBox { Dock = DockStyle.Fill, Text = GuessDatabasePath(current.DatabasePath) };
+        dbPath = dbPathControl;
         host = new TextBox { Dock = DockStyle.Fill, Text = current.DatabaseHost };
         port = new TextBox { Dock = DockStyle.Fill, Text = current.DatabasePort.ToString() };
         user = new TextBox { Dock = DockStyle.Fill, Text = current.DatabaseUser };
         password = new TextBox { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
 
-        AddRow(grid, 0, "Veritabanı", dbPath);
+        AddRow(grid, 0, "Veritabanı", dbPathControl);
         var browse = new Button { Text = "Gözat...", Dock = DockStyle.Fill };
         browse.Click += (_, _) =>
         {
-            using var picker = new OpenFileDialog { Filter = "Firebird veritabanı (*.gdb;*.fdb)|*.gdb;*.fdb|Tüm dosyalar (*.*)|*.*", FileName = dbPath.Text };
-            if (picker.ShowDialog(form) == DialogResult.OK) dbPath.Text = picker.FileName;
+            using var picker = new OpenFileDialog { Filter = "Firebird veritabanı (*.gdb;*.fdb)|*.gdb;*.fdb|Tüm dosyalar (*.*)|*.*", FileName = dbPathControl.Text };
+            if (picker.ShowDialog(form) == DialogResult.OK) dbPathControl.Text = picker.FileName;
         };
         grid.Controls.Add(browse, 2, 0);
         AddRow(grid, 1, "Sunucu", host);
@@ -154,8 +155,8 @@ internal static class StartupConfiguration
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
         string[] candidates =
         [
-            @"D:\Hedef500\Hedef500\Data\DATABASE.GDB",
-            @"C:\Hedef500\Hedef500\Data\DATABASE.GDB",
+            @"D:\Hedef500\Hedef500\Data\DATABASE.GDB".Replace("\\", "\\"),
+            @"C:\Hedef500\Hedef500\Data\DATABASE.GDB".Replace("\\", "\\"),
             Path.Combine(AppContext.BaseDirectory, "Data", "DATABASE.GDB")
         ];
         return candidates.FirstOrDefault(File.Exists) ?? configured;
