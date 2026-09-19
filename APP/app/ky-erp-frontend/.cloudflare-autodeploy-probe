@@ -1,3 +1,4 @@
 KY ERP Cloudflare Git auto-deploy probe
 Purpose: verify production-branch Pages Git deployment without GitHub Actions.
 Safe to keep; no runtime effect.
+Trigger: 2026-09-19 security email fallback deploy
