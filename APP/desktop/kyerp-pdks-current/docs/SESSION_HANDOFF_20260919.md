@@ -61,3 +61,10 @@ Remote Desktop Commander yalnızca son aşamada gerçekten Windows GUI / çalı�
 - Kurulu EXE gerçek Windows GUI olarak açıldı; `KYERP PDKS İlk Kurulum` penceresi ve bağlantı alanları UI Automation ile doğrulandı.
 - Sessiz kaldırma testi exit code 0 ile geçti; kurulum klasörü ve uninstall kaydı temizlendi.
 - Canlı Firebird bağlantısının son doğrulaması yalnız gerçek DB parolası kullanıcı tarafından ilk kurulum ekranına girildiğinde tamamlanacak.
+## PDKS veritabanı bağlantı kararı — 2026-09-19
+- Firebird kullanıcı/parola yönetimi son kullanıcıya bırakılmayacak.
+- KYERP.NET tarafında Yönetim > Sistem Yönetimi altında `PDKS Bağlantıları` alanı açılacak.
+- Standart teknik Firebird kullanıcısı `KYERP` olacak; parola yönetici tarafından belirlenip/değiştirilecek, sonradan açık gösterilmeyecek.
+- Masaüstü ilk kurulumdaki SYSDBA/parola ekranı nihai kullanıcı akışından kaldırılacak; cihaz KYERP üzerinden yetkilendirilecek.
+- Web oturum parolası ile Firebird teknik bağlantı parolası ayrı tutulacak.
+- Bu iş sonraki entegrasyon fazına bırakıldı; şimdi öncelik doğrudan PDKS uygulamasının işlevsel ve görsel kontrolüdür.
