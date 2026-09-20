@@ -187,6 +187,14 @@ export default function AppShellV3({
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const profileMenuRef = useRef(null);
   const resolvedNotificationIdsRef = useRef(new Map());
+  function notificationResolutionKey(item) {
+  const sessionId = String(item?.meta?.sessionId || "").trim();
+  if (sessionId) return `session:${sessionId}`;
+  const approvalId = String(item?.meta?.approvalId || "").trim();
+  if (approvalId) return `approval:${approvalId}`;
+  return `notification:${String(item?.id || "")}`;
+}
+
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("all");
   const [notificationLoading, setNotificationLoading] = useState(false);
@@ -248,7 +256,7 @@ export default function AppShellV3({
       const data = await getNotifications();
       const now = Date.now();
       for (const [id, expiresAt] of resolvedNotificationIdsRef.current) if (expiresAt <= now) resolvedNotificationIdsRef.current.delete(id);
-      const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => !resolvedNotificationIdsRef.current.has(item.id));
+      const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => !resolvedNotificationIdsRef.current.has(notificationResolutionKey(item)));
       setNotificationData({
         items,
         unreadCount: items.filter((item) => item.unread).length,
@@ -436,7 +444,7 @@ export default function AppShellV3({
       const approved = decision !== "DENY";
       const resolution = approved ? "APPROVED" : "DENIED";
       const resolvedTitle = sessionId ? (approved ? "Oturum onaylandı" : "Oturum reddedildi") : (approved ? "Giriş onaylandı" : "Giriş reddedildi");
-      resolvedNotificationIdsRef.current.set(item.id, Date.now() + 30_000);
+      resolvedNotificationIdsRef.current.set(notificationResolutionKey(item), Date.now() + 5 * 60_000);
       setNotificationData((current) => {
         const items = current.items.map((entry) => entry.id === item.id ? { ...entry, unread: false, title: resolvedTitle, detail: [entry.detail, approved ? "İşlem tamamlandı" : "İstek reddedildi"].filter(Boolean).join(" · "), meta: { ...(entry.meta || {}), actionable: false, resolution } } : entry);
         return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length };
