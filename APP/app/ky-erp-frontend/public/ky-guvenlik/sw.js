@@ -1,5 +1,5 @@
-const APP_URL="/ky-guvenlik/?open=1&release=2.7";
-const CACHE_NAME="kyerp-ky-guvenlik-shell-v1";
+const APP_URL="/ky-guvenlik/?open=1&release=2.8";
+const CACHE_NAME="kyerp-ky-guvenlik-shell-v2";
 const ICON="/ky-guvenlik/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -27,6 +27,24 @@ async function showWakeNotification(){
   });
   await broadcast("KYERP_SECURITY_PUSH_WAKE");
 }
+async function showDecisionResult(decision){
+  await closeApprovalNotifications();
+  const approved=String(decision||"").toUpperCase()==="APPROVE";
+  await self.registration.showNotification(approved?"KY ERP · Onaylandı":"KY ERP · Reddedildi",{
+    body:approved?"Giriş / güvenlik isteği onaylandı.":"Giriş / güvenlik isteği reddedildi.",
+    tag:TAG,
+    renotify:false,
+    requireInteraction:false,
+    silent:true,
+    badge:ICON,
+    icon:ICON,
+    timestamp:Date.now(),
+    data:{decisionResult:true}
+  });
+  await new Promise((resolve)=>setTimeout(resolve,1600));
+  const list=await self.registration.getNotifications({tag:TAG});
+  for(const item of list)item.close();
+}
 async function focusOrOpen(){
   const windows=await clients.matchAll({type:"window",includeUncontrolled:true});
   const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/ky-guvenlik/")}catch{return false}});
@@ -50,7 +68,7 @@ self.addEventListener("install",(event)=>event.waitUntil((async()=>{
     "/ky-guvenlik/security-foreground-sync.js",
     "/ky-guvenlik/ios-safari.js",
     "/ky-guvenlik/app.css",
-    "/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v1",
+    "/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v2",
     "/ky-guvenlik/kyerp-security-apple-touch.png",
     "/ky-guvenlik/kyerp-security-192.png",
     "/ky-guvenlik/kyerp-security-512.png",
@@ -60,7 +78,7 @@ self.addEventListener("install",(event)=>event.waitUntil((async()=>{
 
 self.addEventListener("activate",(event)=>event.waitUntil((async()=>{
   const keys=await caches.keys();
-  await Promise.all(keys.filter((key)=>key.startsWith("kyerp-security-shell-")&&key!==CACHE_NAME).map((key)=>caches.delete(key)));
+  await Promise.all(keys.filter((key)=>(key.startsWith("kyerp-security-shell-")||key.startsWith("kyerp-ky-guvenlik-shell-"))&&key!==CACHE_NAME).map((key)=>caches.delete(key)));
   await self.clients.claim();
 })()));
 
@@ -71,6 +89,7 @@ self.addEventListener("notificationclick",(event)=>{
 });
 self.addEventListener("message",(event)=>{
   if(event.data?.type==="KYERP_SECURITY_CLEAR_NOTIFICATION")event.waitUntil(closeApprovalNotifications());
+  if(event.data?.type==="KYERP_SECURITY_DECISION_DONE")event.waitUntil(showDecisionResult(event.data?.decision));
 });
 self.addEventListener("fetch",(event)=>{
   const url=new URL(event.request.url);
