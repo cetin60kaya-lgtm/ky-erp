@@ -13,19 +13,47 @@ public partial class PersonelForm
 
     void ShowOrganizationDefinitions(string? presetLabel=null)
     {
-        using var dialog=Dialog("Organizasyon Tanımları",680,520);var root=Root(3);root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
-        var type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=220,DisplayMember=nameof(DefinitionType.Label),DataSource=OrganizationTypes};
-        if(!string.IsNullOrWhiteSpace(presetLabel))
+        var fixedType = string.IsNullOrWhiteSpace(presetLabel)
+            ? null
+            : OrganizationTypes.FirstOrDefault(x => x.Label.Equals(presetLabel, StringComparison.OrdinalIgnoreCase)
+                || x.Table.Equals(presetLabel, StringComparison.OrdinalIgnoreCase));
+
+        using var dialog=Dialog(fixedType is null ? "Organizasyon Tanımları" : fixedType.Label+" Tanımları",680,520);
+        var root=Root(fixedType is null ? 3 : 2);
+        DataGridView grid;
+        ComboBox? type=null;
+
+        if(fixedType is null)
         {
-            var index=Array.FindIndex(OrganizationTypes,x=>x.Label.Equals(presetLabel,StringComparison.OrdinalIgnoreCase));
-            if(index>=0) type.SelectedIndex=index;
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+            type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=220,DisplayMember=nameof(DefinitionType.Label)};
+            type.DataSource=OrganizationTypes.ToList();
+            var top=new FlowLayoutPanel{Dock=DockStyle.Fill};
+            top.Controls.Add(new Label{Text="Tanım türü",AutoSize=true,Padding=new Padding(0,7,8,0)});
+            top.Controls.Add(type);
+            root.Controls.Add(top,0,0);
+            grid=Grid();
+            root.Controls.Add(grid,0,1);
         }
-        var top=new FlowLayoutPanel{Dock=DockStyle.Fill};top.Controls.Add(new Label{Text="Tanım türü",AutoSize=true,Padding=new Padding(0,7,8,0)});top.Controls.Add(type);root.Controls.Add(top,0,0);
-        var grid=Grid();root.Controls.Add(grid,0,1);var bar=Bar(out var close,out var edit,out var add,out var delete);root.Controls.Add(bar,0,2);dialog.Controls.Add(root);dialog.AcceptButton=close;
-        DefinitionType Selected()=>type.SelectedItem as DefinitionType??throw new InvalidOperationException("Tanım türü seçin.");
+        else
+        {
+            root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+            grid=Grid();
+            root.Controls.Add(grid,0,0);
+        }
+
+        var bar=Bar(out var close,out var edit,out var add,out var delete);
+        root.Controls.Add(bar,0,fixedType is null ? 2 : 1);
+        dialog.Controls.Add(root);
+        dialog.AcceptButton=close;
+
+        DefinitionType Selected()=>fixedType ?? type?.SelectedItem as DefinitionType ?? OrganizationTypes[0];
         void RefreshGrid(){var value=Selected();grid.DataSource=Q($"select KOD,AD from {value.Table} order by KOD");dialog.Text=value.Label+" Tanımları";}
         void Run(Action action){try{action();RefreshGrid();}catch(Exception ex){MessageBox.Show(ex.Message,"Organizasyon Tanımları",MessageBoxButtons.OK,MessageBoxIcon.Warning);}}
-        type.SelectedValueChanged+=(_,_)=>Run(()=>{});
+        if(type is not null) type.SelectedValueChanged+=(_,_)=>Run(()=>{});
         add.Click+=(_,_)=>Run(()=>{var value=Selected();if(!NameDialog("Yeni "+value.Label,"",out var name))return;Exec($"insert into {value.Table} (KOD,AD) values (@K,@A)",new FbParameter("@K",Next(value.Table,"KOD")),new FbParameter("@A",RequiredName(name)));});
         edit.Click+=(_,_)=>Run(()=>{var value=Selected();var row=SelectedRow(grid);if(!NameDialog(value.Label+" Düzenle",Convert.ToString(row.Cells["AD"].Value)??"",out var name))return;Exec($"update {value.Table} set AD=@A where KOD=@K",new FbParameter("@A",RequiredName(name)),new FbParameter("@K",row.Cells["KOD"].Value));});
         delete.Click+=(_,_)=>Run(()=>{var value=Selected();var row=SelectedRow(grid);var code=row.Cells["KOD"].Value;var usage=DefinitionUsageGuard.FindUsage(db,value.Kind,code);if(usage.Count>0)throw new InvalidOperationException(DefinitionUsageGuard.BlockMessage(usage));if(MessageBox.Show("Seçili tanım silinsin mi?","Organizasyon Tanımları",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes)Exec($"delete from {value.Table} where KOD=@K",new FbParameter("@K",code));});
