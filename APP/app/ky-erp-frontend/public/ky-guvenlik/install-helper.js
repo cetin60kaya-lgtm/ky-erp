@@ -6,7 +6,7 @@
   let deferredPrompt=null;
   let waitTimer=null;
   let waitStartedAt=Date.now();
-  const reloadKey="kyerp-security-install-reload-v6";
+  const reloadKey="kyerp-ky-guvenlik-install-reload-v1";
   const qs=(selector)=>document.querySelector(selector);
   const isStandalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   const chromiumAndroid=()=>/Chrome\//i.test(ua)||/EdgA\//i.test(ua);
@@ -26,7 +26,7 @@
     const url=new URL(location.href);
     url.protocol="https:";
     url.host="kyerp.net";
-    url.pathname="/security/";
+    url.pathname="/ky-guvenlik/";
     url.searchParams.set("install","1");
     url.searchParams.set("platform","android");
     url.searchParams.set("browser","1");
@@ -125,14 +125,14 @@
   function isSecurityController(){
     try{
       const script=String(navigator.serviceWorker?.controller?.scriptURL||"");
-      return new URL(script,location.href).pathname.endsWith("/security/sw.js");
+      return new URL(script,location.href).pathname.endsWith("/ky-guvenlik/sw.js");
     }catch{return false}
   }
 
   async function ensureSecurityWorker(){
     if(!("serviceWorker" in navigator))return null;
     try{
-      const registration=await navigator.serviceWorker.register("/security/sw.js",{scope:"/security/"});
+      const registration=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/"});
       try{await registration.update()}catch{}
       await Promise.race([
         navigator.serviceWorker.ready,

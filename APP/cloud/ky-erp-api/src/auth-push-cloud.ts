@@ -765,7 +765,7 @@ export function registerAuthPushRoutes(app: any) {
         app: "KY ERP Güvenlik",
         version: SECURITY_APP_VERSION,
         applicationServerKey,
-        approvalUrl: "https://app.kyerp.net/security/",
+        approvalUrl: "https://kyerp.net/ky-guvenlik/",
       },
     });
   });
@@ -830,7 +830,7 @@ export function registerAuthPushRoutes(app: any) {
         enrollmentMode,
         targetDeviceId: text(targetDevice?.id),
         deviceIdHint: reservedDeviceId,
-        appUrl: `https://app.kyerp.net/security/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
+        appUrl: `https://kyerp.net/ky-guvenlik/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
       },
     });
   });
@@ -1055,7 +1055,7 @@ export function registerAuthPushRoutes(app: any) {
     return c.json(jsonError(
       "LEGACY_PHONE_APPROVAL_RETIRED",
       "Eski tarayıcı telefon onayı kapatıldı. Profil > Telefon Onayı bölümünden KY ERP Güvenlik uygulamasını kurun.",
-      { securityAppUrl: "https://app.kyerp.net/security/" },
+      { securityAppUrl: "https://kyerp.net/ky-guvenlik/" },
     ), 410);
   });
 
