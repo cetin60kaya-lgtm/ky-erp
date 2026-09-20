@@ -2,7 +2,7 @@
   const ua=String(navigator.userAgent||"");
   if(!/Android/i.test(ua))return;
 
-  const CANONICAL_SECURITY_ORIGIN="https://kyerp.net";
+  const CANONICAL_SECURITY_ORIGIN="https://security.kyerp.net";
   let deferredPrompt=null;
   let waitTimer=null;
   let waitStartedAt=Date.now();
@@ -25,7 +25,7 @@
   function canonicalBrowserUrl(){
     const url=new URL(location.href);
     url.protocol="https:";
-    url.host="kyerp.net";
+    url.host="security.kyerp.net";
     url.pathname="/security/";
     url.searchParams.set("install","1");
     url.searchParams.set("platform","android");
@@ -157,9 +157,9 @@
   }
 
   function openInChrome(){
-    const target="https://kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1";
+    const target="https://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1";
     const fallback=encodeURIComponent(target);
-    location.href="intent://kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
+    location.href="intent://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
   }
 
   async function installFromButton(){
