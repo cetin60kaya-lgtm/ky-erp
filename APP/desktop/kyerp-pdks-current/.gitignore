@@ -8,6 +8,8 @@ artifacts/
 **/artifacts/
 .runtime/
 **/.runtime/
+private-runtime/
+**/private-runtime/
 *.gdb
 *.GDB
 *.gbk
