@@ -29,7 +29,13 @@ public partial class PersonelForm
         }
     }
 
-    public void OpenOrganizationDefinition(string label) => ShowOrganizationDefinitions(label);
+    public void OpenOrganizationDefinition(string labelOrTable)
+    {
+        var label = labelOrTable.Equals("GRUP", StringComparison.OrdinalIgnoreCase) ? "Grup"
+            : labelOrTable.Equals("BOLUM", StringComparison.OrdinalIgnoreCase) ? "Bölüm"
+            : labelOrTable;
+        ShowOrganizationDefinitions(label);
+    }
 
     public void OpenStandaloneDialog(PdksModule module)
     {
