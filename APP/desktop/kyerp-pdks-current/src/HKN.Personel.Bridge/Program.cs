@@ -175,6 +175,14 @@ internal static class Program
                     var main = FindWindowForProcess(process.Id, "TAnaf");
                     if (main == IntPtr.Zero) continue;
                     SetWindowText(main, "KYERP PDKS");
+                    var appWindow = FindWindowForProcess(process.Id, "TApplication");
+                    if (appWindow != IntPtr.Zero) SetWindowText(appWindow, "KYERP PDKS");
+                    var activation = FindWindowForProcess(process.Id, "TfRegisterF");
+                    if (activation != IntPtr.Zero)
+                    {
+                        ShowWindow(activation, SW_HIDE);
+                        PostMessage(activation, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                    }
                     CleanLegacyMenu(main);
                     HideLegacyHome(main);
                     EnsureNativePersonelButton(main);
