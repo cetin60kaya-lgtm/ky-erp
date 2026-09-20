@@ -4,9 +4,7 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KYERP.PDKS.Core", "src\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj", "{C909EB48-A2C1-4EAC-A8CA-072EEFA4BE90}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HKN.Personel.Native", "src\HKN.Personel.Native\HKN.Personel.Native.csproj", "{640734E6-1B40-48AE-AF36-C390DD292C04}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HKN.Personel.Bridge", "src\HKN.Personel.Bridge\HKN.Personel.Bridge.csproj", "{430127C2-B4D1-497D-AF1B-FDFDF1F7F7D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KYERP.PDKS", "src\HKN.Personel.Native\HKN.Personel.Native.csproj", "{640734E6-1B40-48AE-AF36-C390DD292C04}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmokeTest", "tools\SmokeTest\SmokeTest.csproj", "{17B06031-0662-4F5B-A8E4-C873C646A825}"
 EndProject
@@ -28,10 +26,6 @@ Global
 		{640734E6-1B40-48AE-AF36-C390DD292C04}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{640734E6-1B40-48AE-AF36-C390DD292C04}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{640734E6-1B40-48AE-AF36-C390DD292C04}.Release|Any CPU.Build.0 = Release|Any CPU
-		{430127C2-B4D1-497D-AF1B-FDFDF1F7F7D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{430127C2-B4D1-497D-AF1B-FDFDF1F7F7D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{430127C2-B4D1-497D-AF1B-FDFDF1F7F7D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{430127C2-B4D1-497D-AF1B-FDFDF1F7F7D7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{17B06031-0662-4F5B-A8E4-C873C646A825}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{17B06031-0662-4F5B-A8E4-C873C646A825}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{17B06031-0662-4F5B-A8E4-C873C646A825}.Release|Any CPU.ActiveCfg = Release|Any CPU
