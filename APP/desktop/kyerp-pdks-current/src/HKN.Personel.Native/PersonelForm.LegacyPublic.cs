@@ -4,7 +4,12 @@ public partial class PersonelForm
 {
     public void ShowLegacyGirisCikisEntry() => ShowGirisCikisEklemeClassic();
     public void ShowLegacyIzinEntry() => ShowIzinEditorClassic(false);
-    public void ShowLegacyKazancKesintiEntry() => ShowEkkEditorClassic(false);
+    public void ShowLegacyKazancKesintiEntry()
+    {
+        using var f = new LegacyAvansEntryForm();
+        f.ShowDialog(DialogOwner());
+        RefreshFullTabs();
+    }
 
     public void ShowLegacyModule(PdksModule module)
     {
@@ -17,7 +22,7 @@ public partial class PersonelForm
                 ShowIzinEditorClassic(false);
                 break;
             case PdksModule.EkKazancKesinti:
-                ShowEkkEditorClassic(false);
+                ShowLegacyKazancKesintiEntry();
                 break;
             default:
                 OpenStandaloneDialog(module);
