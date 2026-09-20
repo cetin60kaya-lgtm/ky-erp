@@ -201,6 +201,7 @@ async function connectDevice(){
   const password=String(els.password.value||"");
   if(!password)return toast("Mevcut KY ERP şifreni gir.");
   const selfRelink=!code&&!enrollmentQuery.id;
+  if(selfRelink)return toast("Bu telefon bağlantısı KY ERP içinden güvenli bağlantı ile başlatılmalı. KY ERP → Profil → Telefon Onayı → Bu Telefonda Bağlantıyı Tamamla düğmesini kullan.");
   if(isIos()&&!isStandalone())return toast("iPhone/iPad’de önce Ana Ekrana Ekle, sonra KY ERP Güvenlik ikonundan aç.");
   busy=true;els.connectButton.disabled=true;els.connectButton.textContent="Güvenlik bağlantısı kuruluyor...";
   try{

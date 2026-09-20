@@ -111,7 +111,7 @@ export default function PhoneApprovalSetup({ onClose }) {
     const target = securityAppUrl({ open: 1, autoRelink: 1, browser: clientPlatform === "android" ? 1 : undefined }, data);
     if (clientPlatform === "android") {
       const url = new URL(target);
-      window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`;
+      window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${encodeURIComponent(target)};end`;
     } else {
       window.open(target, "_blank", "noopener,noreferrer");
     }
