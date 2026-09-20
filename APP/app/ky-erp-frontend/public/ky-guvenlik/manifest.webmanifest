@@ -1,11 +1,11 @@
 {
-  "name": "KY ERP Güvenlik 2.8",
-  "short_name": "KY Güvenlik 2.8",
+  "name": "KY ERP Güvenlik",
+  "short_name": "KY Güvenlik",
   "id": "/ky-guvenlik/app-v28",
   "description": "KY ERP telefon ve tablet giriş onayı uygulaması",
   "lang": "tr",
   "dir": "ltr",
-  "start_url": "/ky-guvenlik/?pwa=1&release=2.8",
+  "start_url": "/ky-guvenlik/?pwa=1&release=2.9",
   "scope": "/ky-guvenlik/",
   "display": "standalone",
   "display_override": [
