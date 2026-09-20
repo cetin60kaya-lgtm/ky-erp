@@ -1,5 +1,5 @@
 const APP_URL="/security/?open=1&release=2.7";
-const CACHE_NAME="kyerp-security-shell-v28";
+const CACHE_NAME="kyerp-security-shell-v29";
 const ICON="/security/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -50,7 +50,7 @@ self.addEventListener("install",(event)=>event.waitUntil((async()=>{
     "/security/security-foreground-sync.js",
     "/security/ios-safari.js",
     "/security/app.css",
-    "/security/manifest.webmanifest?v=security-install-v4",
+    "/security/manifest.webmanifest?v=security-install-v5",
     "/security/kyerp-security-apple-touch.png",
     "/security/kyerp-security-192.png",
     "/security/kyerp-security-512.png",
