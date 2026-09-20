@@ -59,6 +59,14 @@ using (var personnel = new PersonelForm())
         throw new InvalidOperationException("Personel Bilgileri üst tab düzeninden sapmış.");
     if (!labels.Contains("Saat Ücreti") || !labels.Contains("Banka Hesap No") || !labels.Contains("SGK İşe Giriş Tarihi"))
         throw new InvalidOperationException("Personel Bilgileri kişisel alanları eksik.");
+    using var terminalTransfer = personnel.CreateTerminalTransferDialog();
+    var transferButtons = Descendants(terminalTransfer).OfType<Button>().Select(x => x.Text).ToArray();
+    var transferTolerance = Descendants(terminalTransfer).OfType<TextBox>().Single(x => x.Name == "TransferTolerance");
+    var transferLog = Descendants(terminalTransfer).OfType<TextBox>().Single(x => x.Name == "TransferLog");
+    if (terminalTransfer.Size != new Size(409, 553) || terminalTransfer.StartPosition != FormStartPosition.CenterScreen)
+        throw new InvalidOperationException("Terminal Veri Transferi legacy geometrisinden sapmış.");
+    if (transferLog.Size != new Size(393, 361) || transferTolerance.Text != "5" || !transferButtons.SequenceEqual(["Cihaz Okut", "&Aktar"]))
+        throw new InvalidOperationException("Terminal Veri Transferi kontrol düzeninden sapmış.");
 }
 
 using (var attendance = new LegacyGirisCikisForm())

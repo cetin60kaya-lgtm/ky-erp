@@ -13,44 +13,41 @@ public partial class PersonelForm
 
     void ShowTerminalProfiles()
     {
+        using var dialog=CreateTerminalTransferDialog();
+        dialog.ShowDialog(DialogOwner());
+    }
+
+    public Form CreateTerminalTransferDialog()
+    {
         var store=new TerminalProfileStore(TerminalProfilePath,options);
         var profiles=store.Load().ToList();
         if(profiles.Count==0) profiles.Add(TerminalTransferProfile.CreateCanonicalTnf(options));
 
-        using var dialog=new Form
+        var dialog=new Form
         {
-            Text="Terminal Veri Transferi",StartPosition=FormStartPosition.CenterParent,
-            ClientSize=new Size(305,420),FormBorderStyle=FormBorderStyle.FixedDialog,
+            Text="Terminal Veri Transferi",StartPosition=FormStartPosition.CenterScreen,
+            Size=new Size(409,553),FormBorderStyle=FormBorderStyle.FixedDialog,
             MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,Font=Font
         };
 
-        var fileLabel=new Label{Text="Dosya Adı",AutoSize=true,Location=new Point(8,11)};
-        var fileBox=new TextBox{Location=new Point(62,7),Width=234,Text=ResolveLegacyTransferPath()};
-        var terminalLabel=new Label{Text="Terminal",AutoSize=true,Location=new Point(8,39)};
-        var terminalBox=new ComboBox{Location=new Point(62,35),Width=120,DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember=nameof(TerminalTransferProfile.Name)};
+        var fileLabel=new Label{Text="Dosya Adı",AutoSize=true,Location=new Point(4,7)};
+        var fileBox=new TextBox{Location=new Point(64,0),Size=new Size(324,20),Text=ResolveLegacyTransferPath(),ReadOnly=true};
+        var terminalLabel=new Label{Text="Terminal",AutoSize=true,Location=new Point(4,39)};
+        var terminalBox=new ComboBox{Location=new Point(64,31),Width=153,DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember=nameof(TerminalTransferProfile.Name)};
         terminalBox.DataSource=profiles;
-        var toleranceLabel=new Label{Text="Tolerans",AutoSize=true,Location=new Point(208,39)};
-        var tolerance=new NumericUpDown{Location=new Point(258,35),Width=38,Minimum=0,Maximum=60,Value=10,TextAlign=HorizontalAlignment.Right};
+        var toleranceLabel=new Label{Text="Tolerans",AutoSize=true,Location=new Point(304,39)};
+        var tolerance=new TextBox{Name="TransferTolerance",Location=new Point(365,31),Width=23,Text="5",MaxLength=2,TextAlign=HorizontalAlignment.Right};
 
-        var grid=new DataGridView
-        {
-            Location=new Point(8,65),Size=new Size(288,245),ReadOnly=true,AllowUserToAddRows=false,
-            AllowUserToDeleteRows=false,RowHeadersVisible=false,BackgroundColor=Color.White,
-            SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill
-        };
-        grid.Columns.Add("KartNo","Kart No");
-        grid.Columns.Add("TarihSaat","Tarih / Saat");
-        grid.Columns.Add("Yon","Yön");
-        grid.Columns[0].FillWeight=28;grid.Columns[1].FillWeight=48;grid.Columns[2].FillWeight=24;
+        var log=new TextBox{Name="TransferLog",Location=new Point(0,55),Size=new Size(393,361),Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false};
 
-        var countCaption=new Label{Text="Aktarılan Kayıt Sayısı",Location=new Point(8,318),Width=150,TextAlign=ContentAlignment.MiddleCenter,BorderStyle=BorderStyle.FixedSingle};
-        var countValue=new Label{Text="0",Location=new Point(158,318),Width=138,TextAlign=ContentAlignment.MiddleCenter,BorderStyle=BorderStyle.FixedSingle,BackColor=Color.White};
-        var progress=new ProgressBar{Location=new Point(8,340),Size=new Size(288,20),Minimum=0,Maximum=100};
-        var progressText=new Label{Text="0%",Location=new Point(8,340),Size=new Size(288,20),TextAlign=ContentAlignment.MiddleCenter,BackColor=Color.Transparent};
+        var countCaption=new Label{Text="Aktarılan Kayıt Sayısı",Location=new Point(56,423),Size=new Size(97,17),TextAlign=ContentAlignment.MiddleLeft};
+        var countValue=new Label{Text="0",Location=new Point(168,423),Size=new Size(40,17),TextAlign=ContentAlignment.MiddleCenter,BorderStyle=BorderStyle.FixedSingle,BackColor=Color.White};
+        var progress=new ProgressBar{Location=new Point(0,449),Size=new Size(393,25),Minimum=0,Maximum=100};
+        var progressText=new Label{Text="0%",Location=new Point(0,449),Size=new Size(393,25),TextAlign=ContentAlignment.MiddleCenter,BackColor=Color.Transparent};
         progressText.Parent=dialog;
 
-        var read=new Button{Text="Cihaz Oku",Location=new Point(8,371),Size=new Size(135,33),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold)};
-        var transfer=new Button{Text="Aktar",Location=new Point(161,371),Size=new Size(135,33),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold)};
+        var read=new Button{Text="Cihaz Okut",Location=new Point(0,481),Size=new Size(175,33),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold)};
+        var transfer=new Button{Text="&Aktar",Location=new Point(216,481),Size=new Size(175,33),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold)};
 
         IReadOnlyList<ProfiledTerminalRecord> ReadRecords(bool launchDevice)
         {
@@ -71,9 +68,7 @@ public partial class PersonelForm
         }
         void Preview(IReadOnlyList<ProfiledTerminalRecord> records)
         {
-            grid.Rows.Clear();
-            foreach(var r in records)
-                grid.Rows.Add(r.EmployeeCode,r.OccurredAt.ToString("dd.MM.yyyy HH:mm"),r.Direction==TerminalDirection.Entry?"Giriş":r.Direction==TerminalDirection.Exit?"Çıkış":"-");
+            log.Lines=records.Select(r=>$"{r.EmployeeCode,-5}  {r.OccurredAt:dd.MM.yyyy HH:mm}  {(r.Direction==TerminalDirection.Entry?"Giriş":r.Direction==TerminalDirection.Exit?"Çıkış":"-")}").ToArray();
             countValue.Text=records.Count.ToString();
             progress.Value=records.Count==0?0:100;progressText.Text=progress.Value+"%";
         }
@@ -89,18 +84,19 @@ public partial class PersonelForm
             var records=ReadRecords(false);
             Preview(records);
             if(records.Count==0){MessageBox.Show("Aktarılacak kayıt bulunamadı.","Terminal Veri Transferi",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-            var result=new AttendanceImportService(db).Import(records);
+            if(!int.TryParse(tolerance.Text,out var toleranceMinutes)||toleranceMinutes is < 0 or > 60)throw new InvalidOperationException("Tolerans 0-60 dakika arasında olmalıdır.");
+            var result=new AttendanceImportService(db).Import(records,toleranceMinutes);
             var path=fileBox.Text.Trim();
             if(File.Exists(path)) File.WriteAllText(path,string.Empty);
-            grid.Rows.Clear();countValue.Text="0";progress.Value=0;progressText.Text="0%";
+            log.Clear();countValue.Text="0";progress.Value=0;progressText.Text="0%";
             RefreshFullTabs();
             MessageBox.Show($"Yeni giriş: {result.Inserted}\nÇıkış eşleşmesi: {result.Updated}\nMükerrer: {result.Duplicates}\nAtlanan: {result.Skipped}\n\nAktarım dosyası işlendi ve 0 KB olarak hazır bırakıldı.","Terminal Veri Transferi",MessageBoxButtons.OK,MessageBoxIcon.Information);
         });
 
         dialog.Controls.Add(fileLabel);dialog.Controls.Add(fileBox);dialog.Controls.Add(terminalLabel);dialog.Controls.Add(terminalBox);dialog.Controls.Add(toleranceLabel);dialog.Controls.Add(tolerance);
-        dialog.Controls.Add(grid);dialog.Controls.Add(countCaption);dialog.Controls.Add(countValue);dialog.Controls.Add(progress);dialog.Controls.Add(progressText);dialog.Controls.Add(read);dialog.Controls.Add(transfer);
+        dialog.Controls.Add(log);dialog.Controls.Add(countCaption);dialog.Controls.Add(countValue);dialog.Controls.Add(progress);dialog.Controls.Add(progressText);dialog.Controls.Add(read);dialog.Controls.Add(transfer);
         progressText.BringToFront();
-        dialog.ShowDialog(DialogOwner());
+        return dialog;
     }
 
     string ResolveLegacyTransferPath()

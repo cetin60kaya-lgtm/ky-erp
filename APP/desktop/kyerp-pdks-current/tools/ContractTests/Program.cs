@@ -7,6 +7,7 @@ using KYERP.PDKS.Core.Reports;
 using KYERP.PDKS.Core.Definitions;
 using KYERP.PDKS.Core.Personnel;
 using KYERP.PDKS.Core.Leave;
+using KYERP.PDKS.Core.Attendance;
 using System.Data;
 using System.Text;
 
@@ -157,6 +158,14 @@ Run("terminal code mapping text", () =>
     Equal("01=ENTRY; 02=TURNSTILE; 03=MANUAL",TerminalCodeMappingText.Format(mapping));
     Throws(()=>TerminalCodeMappingText.Parse("01", "Giriş kodları"));
     Throws(()=>TerminalCodeMappingText.Parse("01=A;01=B", "Giriş kodları"));
+});
+
+Run("terminal duplicate tolerance window", () =>
+{
+    Equal((505,515),AttendanceImportService.DuplicateMinuteRange(510,5));
+    Equal((0,4),AttendanceImportService.DuplicateMinuteRange(1,3));
+    Equal((1435,1439),AttendanceImportService.DuplicateMinuteRange(1438,3));
+    Throws(()=>AttendanceImportService.DuplicateMinuteRange(510,61));
 });
 
 Run("organization definition reference whitelist", () =>

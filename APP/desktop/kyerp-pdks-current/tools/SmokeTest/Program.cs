@@ -2,6 +2,8 @@ using FirebirdSql.Data.FirebirdClient;
 using System.Text;
 using KYERP.PDKS.Core;
 using KYERP.PDKS.Core.Payroll;
+using KYERP.PDKS.Core.Attendance;
+using KYERP.PDKS.Core.Terminal;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -82,6 +84,12 @@ int residue = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK where P
 log.AppendLine($"AFTER active={activeAfter} left={totalAfter-activeAfter} total={totalAfter} residue={residue}");
 if(activeBefore!=activeAfter || totalBefore!=totalAfter || residue!=0) throw new Exception("Rollback sonrası üretim DB sayıları değişti");
 log.AppendLine("PRODUCTION_DB_UNCHANGED OK");
+var terminalPk=Convert.ToString(Scalar(c,null,"select first 1 PKNO from KIMLIK where PKNO is not null order by PKNO"))??throw new Exception("Terminal smoke testi için personel bulunamadı");
+var terminalDate=new DateTime(2099,12,30);var terminalBefore=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
+var terminalResult=new AttendanceImportService(database).Import([new(terminalPk,terminalDate.AddHours(8),"1","SMOKE",TerminalDirection.Entry,"smoke-a"),new(terminalPk,terminalDate.AddHours(8).AddMinutes(4),"1","SMOKE",TerminalDirection.Entry,"smoke-b")],5,rollbackOnly:true);
+var terminalAfter=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
+if(terminalResult.Inserted!=1||terminalResult.Duplicates!=1||terminalBefore!=terminalAfter)throw new Exception("Terminal tolerans rollback testi başarısız");
+log.AppendLine("TERMINAL TOLERANCE ROLLBACK OK");
 log.AppendLine("FINAL_RESULT=PASS");
 File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);
 Console.WriteLine(log.ToString());
