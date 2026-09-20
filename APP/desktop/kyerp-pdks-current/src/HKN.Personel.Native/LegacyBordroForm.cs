@@ -39,18 +39,18 @@ public sealed class LegacyBordroForm : Form
         var sortBox=new GroupBox{Text="Sıralama Şekli",Location=new Point(336,0),Size=new Size(233,89)};sortBox.Controls.AddRange([byCard,byName,bySurname,byHire,byRegistry]);f.Controls.Add(sortBox);
         var opt=new TabPage("Rapor Seçenekleri");opt.Controls.AddRange([L("Rapor Tipi",8,8),L("Sabit Alanlar",232,24),L("Ekstra Ücretler",232,126),L("Ödemeler",392,24),reportType,fixedFields,extras,payments]);var fieldGrid=new DataGridView{Location=new Point(0,32),Size=new Size(225,257),ReadOnly=true,AllowUserToAddRows=false,RowHeadersVisible=false,ColumnHeadersVisible=false};fieldGrid.Columns.Add("F","Alan");foreach(var x in new[]{"Kart No","Sicil No","Ad Soyad","Çalışılan Gün","Maaş","Kazanç","Kesinti","Net Ödeme"})fieldGrid.Rows.Add(x);opt.Controls.Add(fieldGrid);
         var paper=new TabPage("Kağıt Ayarları");var sizes=new GroupBox{Text="Alan Genişlikleri",Location=new Point(0,200),Size=new Size(561,89)};var labels=new[]{("Kart No",8,24),("Sicil Numarası",8,48),("Ad Soyad",8,72),("Gün",152,24),("Saat",152,48),("Ücret",152,72),("İmza",264,24),("SSK No",264,48),("Banka Hesp No",264,72),("Tarih",416,24)};foreach(var z in labels)sizes.Controls.Add(L(z.Item1,z.Item2,z.Item3));paper.Controls.Add(sizes);tabs.TabPages.AddRange([f,opt,paper]);Controls.Add(tabs);
-        var save=B("Ayarları Kaydet",0,424),preview=B("Önizleme",121,424),print=B("Yazdır",242,424),close=B("Kapat",485,424);save.Click+=(_,_)=>SaveSettings();preview.Click+=(_,_)=>Preview();print.Click+=(_,_)=>Print();close.Click+=(_,_)=>Close();Controls.AddRange([save,preview,print,close]);
+        var save=B("Ayarları Kaydet",0,424);var preview=B("Önizleme",121,424);var print=B("Yazdır",242,424);var close=B("Kapat",485,424);save.Click+=(_,_)=>SaveSettings();preview.Click+=(_,_)=>Preview();print.Click+=(_,_)=>Print();close.Click+=(_,_)=>Close();Controls.AddRange([save,preview,print,close]);
     }
 
     void Init()
     {
         start.Value=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);end.Value=DateTime.Today;byCard.Checked=true;
-        Load(group,"GRUP");Load(department,"BOLUM");Load(service,"SERVIS");Load(duty,"GOREV");Load(status,"DURUM");Load(company,"FIRMA");
+        LoadLookup(group,"GRUP");LoadLookup(department,"BOLUM");LoadLookup(service,"SERVIS");LoadLookup(duty,"GOREV");LoadLookup(status,"DURUM");LoadLookup(company,"FIRMA");
         reportType.Items.AddRange(["GenelBordro.fr3","MaasBordro.fr3","MesaiBordro.fr3"]);reportType.SelectedIndex=0;
         foreach(var x in new[]{"Kart No","Sicil No","Ad Soyad","Çalışılan Gün","Maaş"})fixedFields.Items.Add(x,true);foreach(var x in new[]{"Ek Kazanç","Mesai","Önceki Bakiye"})extras.Items.Add(x,true);foreach(var x in new[]{"Kesinti","Avans","Net Ödeme"})payments.Items.Add(x,true);
     }
 
-    void Load(ComboBox c,string table){var dt=db.Query($"select KOD,AD from {table} order by KOD");var r=dt.NewRow();r["KOD"]=-1;r["AD"]="Tümü";dt.Rows.InsertAt(r,0);dt.Columns.Add("TEXT",typeof(string),"AD");c.DataSource=dt;c.SelectedValue=-1;}
+    void LoadLookup(ComboBox c,string table){var dt=db.Query($"select KOD,AD from {table} order by KOD");var r=dt.NewRow();r["KOD"]=-1;r["AD"]="Tümü";dt.Rows.InsertAt(r,0);dt.Columns.Add("TEXT",typeof(string),"AD");c.DataSource=dt;c.SelectedValue=-1;}
     static void AddFilter(List<string>w,List<FbParameter>p,string field,ComboBox c,string key){if(c.SelectedValue is int v&&v>=0){w.Add($"{field}=@{key}");p.Add(new FbParameter("@"+key,v));}}
 
     DataTable CalculatePreview()
