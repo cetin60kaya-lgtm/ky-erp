@@ -268,9 +268,8 @@ public sealed class MainShellForm : Form
     void OpenData(LegacyDataView view, PdksModule module)
     {
         if (!Ready(module)) return;
-        var form = new LegacyDataModuleForm(view);
-        form.PrepareForEmbedding();
-        ShowEmbedded(form);
+        using var form = new LegacyDataModuleForm(view);
+        form.ShowDialog(this);
     }
 
     void ShowEmbedded(Form form)
