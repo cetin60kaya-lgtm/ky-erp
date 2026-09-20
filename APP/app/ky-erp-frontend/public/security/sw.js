@@ -1,5 +1,5 @@
-const APP_URL="/security/?source=security-app&open=1";
-const CACHE_NAME="kyerp-security-shell-v26";
+const APP_URL="/security/?open=1";
+const CACHE_NAME="kyerp-security-shell-v27";
 const ICON="/security/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
