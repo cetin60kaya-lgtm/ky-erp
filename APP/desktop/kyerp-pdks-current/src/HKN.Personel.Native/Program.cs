@@ -18,7 +18,6 @@ static class Program
 
         using var login = new LoginForm();
         if (login.ShowDialog() != DialogResult.OK || login.AuthenticatedUser is null) return;
-        if (!StartupConfiguration.EnsureReady()) return;
 
         Application.Run(new MainShellForm(login.AuthenticatedUser));
     }
