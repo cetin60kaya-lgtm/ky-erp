@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using KYERP.PDKS.Core;
@@ -267,7 +267,7 @@ internal static class Program
         if (toolbarSkin == IntPtr.Zero || !IsWindow(toolbarSkin))
         {
             toolbarSkin = CreateWindowEx(0, "STATIC", string.Empty, WS_POPUP | WS_VISIBLE,
-                0, 0, width, height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+                0, 0, width, height, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             if (toolbarSkin != IntPtr.Zero)
             {
                 SetParent(toolbarSkin, main);
@@ -357,7 +357,7 @@ internal static class Program
     static void CleanLegacyMenu(IntPtr main)
     {
         var menu = GetMenu(main); if (menu == IntPtr.Zero) return;
-        string[] labels = ["Ayarlar", "Personel Tanımları", "Personel İşlemleri", "Raporlar", "Araçlar", "Terminal / Veri Aktarımı"];
+        string[] labels = ["Ayarlar", "Personel TanÄ±mlarÄ±", "Personel Ä°ÅŸlemleri", "Raporlar", "AraÃ§lar", "Terminal / Veri AktarÄ±mÄ±"];
         int count = GetMenuItemCount(menu);
         for (int i = 0; i < labels.Length && i < count; i++)
         {
@@ -377,7 +377,7 @@ internal static class Program
             if (text.Contains("Aktivasyon", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("Lisans", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("Hedef", StringComparison.OrdinalIgnoreCase) ||
-                text.Contains("Hakkında", StringComparison.OrdinalIgnoreCase))
+                text.Contains("HakkÄ±nda", StringComparison.OrdinalIgnoreCase))
             {
                 DeleteMenu(menu, (uint)i, MF_BYPOSITION);
                 continue;
@@ -563,3 +563,4 @@ internal static class Program
         return found;
     }
 }
+
