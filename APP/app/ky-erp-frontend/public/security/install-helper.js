@@ -5,7 +5,7 @@
   let deferredPrompt=null;
   let waitTimer=null;
   let waitStartedAt=Date.now();
-  const reloadKey="kyerp-security-install-reload-v3";
+  const reloadKey="kyerp-security-install-reload-v4";
   const qs=(selector)=>document.querySelector(selector);
   const isStandalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   const chromiumAndroid=()=>/Chrome\//i.test(ua)||/EdgA\//i.test(ua);
@@ -15,10 +15,9 @@
       const params=new URL(location.href).searchParams;
       return {
         requested:params.get("install")==="1",
-        browser:params.get("browser")==="1",
-        securityLaunch:params.get("source")==="security-app"
+        browser:params.get("browser")==="1"
       };
-    }catch{return{requested:false,browser:false,securityLaunch:false}}
+    }catch{return{requested:false,browser:false}}
   }
 
   function notify(message){
@@ -34,6 +33,23 @@
     qs("#androidInstallNote")?.classList.remove("hidden");
   }
 
+  function startWaitClock(){
+    if(waitTimer)return;
+    waitStartedAt=Date.now();
+    waitTimer=setInterval(()=>{
+      if(deferredPrompt){stopWaitClock();return;}
+      const elapsed=Math.max(0,Math.floor((Date.now()-waitStartedAt)/1000));
+      const state=qs("#installStateText");
+      if(!state)return;
+      if(elapsed<15)state.textContent=`Android uygulama kurulumu hazırlanıyor · ${15-elapsed} sn`;
+      else state.textContent="Android uygulama kurulum penceresi bekleniyor";
+    },1000);
+  }
+
+  function stopWaitClock(){
+    if(waitTimer){clearInterval(waitTimer);waitTimer=null;}
+  }
+
   function setWaitingState(){
     showInstallPanel();
     const button=qs("#installButton");
@@ -44,30 +60,12 @@
       button.classList.remove("hidden");
       button.textContent="Android kurulumu hazırlanıyor…";
     }
+    if(state)state.textContent="Gerçek KY Güvenlik uygulaması hazırlanıyor";
     if(note){
       const text=note.querySelector("span");
-      if(text)text.textContent="Kısayol oluşturulmayacak. Chrome gerçek KY Güvenlik uygulama kurulumunu hazırladığında Yükle düğmesi aktif olur. İlk kurulumda bu hazırlık 30 saniye kadar sürebilir.";
+      if(text)text.textContent="KY Güvenlik ayrı Android uygulaması olarak kurulacak. Kısayol oluşturulmaz; sistem Yükle penceresi hazır olduğunda düğme açılır.";
     }
-    if(state)state.textContent="Gerçek uygulama kurulumu hazırlanıyor";
     startWaitClock();
-  }
-
-  function startWaitClock(){
-    if(waitTimer)return;
-    waitStartedAt=Date.now();
-    waitTimer=setInterval(()=>{
-      if(deferredPrompt){stopWaitClock();return;}
-      const elapsed=Math.max(0,Math.floor((Date.now()-waitStartedAt)/1000));
-      const state=qs("#installStateText");
-      if(!state)return;
-      if(elapsed<30)state.textContent=`Chrome uygulama kurulumunu hazırlıyor · ${30-elapsed} sn`;
-      else if(elapsed<45)state.textContent="Chrome kurulum uygunluğunu tamamlıyor…";
-      else state.textContent="Kurulum penceresi bekleniyor · Bu sekmeyi açık tut";
-    },1000);
-  }
-
-  function stopWaitClock(){
-    if(waitTimer){clearInterval(waitTimer);waitTimer=null;}
   }
 
   function setPromptReady(){
@@ -79,12 +77,12 @@
     if(button){
       button.disabled=false;
       button.classList.remove("hidden");
-      button.textContent="KY Güvenlik'i Uygulama Olarak Yükle";
+      button.textContent="KY Güvenlik'i Yükle";
     }
-    if(state)state.textContent="Gerçek Android uygulama kurulumu hazır";
+    if(state)state.textContent="Android uygulama kurulumu hazır";
     if(note){
       const text=note.querySelector("span");
-      if(text)text.textContent="Bu düğme yalnız Android'in gerçek uygulama yükleme penceresini açar. Chrome kısayolu kullanılmaz.";
+      if(text)text.textContent="Dokunduğunda Android'in gerçek Yükle penceresi açılır. KY ERP ve KY Güvenlik telefonda iki ayrı uygulama olarak kalır.";
     }
   }
 
@@ -99,7 +97,7 @@
     const copy=qs("#installCopy");
     panel?.classList.remove("hidden");
     if(title)title.textContent="KY ERP Güvenlik yüklendi";
-    if(copy)copy.textContent="Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan açabilirsin.";
+    if(copy)copy.textContent="Kurulum tamamlandı. KY ERP Güvenlik artık telefonda ayrı uygulamadır.";
     if(state)state.textContent="Yüklendi · Hazır";
     button?.classList.add("hidden");
   }
@@ -145,17 +143,8 @@
   }
 
   async function installFromButton(){
-    const request=requestState();
-
-    if(isStandalone()&&request.requested&&!request.securityLaunch){
-      notify("KY Güvenlik ayrı uygulama kurulumu için Chrome'da açılıyor.");
-      openInChrome();
-      return;
-    }
-
-    if(isStandalone()&&request.securityLaunch){
+    if(isStandalone()){
       markInstalled();
-      notify("KY ERP Güvenlik uygulama olarak açık.");
       return;
     }
 
@@ -168,12 +157,12 @@
         if(choice?.outcome==="accepted"){
           const state=qs("#installStateText");
           if(state)state.textContent="Kurulum onaylandı · Android tamamlıyor";
-          notify("KY Güvenlik gerçek uygulama kurulumu Android'e gönderildi.");
+          notify("KY Güvenlik uygulaması Android'e kuruluyor.");
           return;
         }
-        notify("Kurulum iptal edildi. Hazır olduğunda tekrar deneyebilirsin.");
+        notify("Kurulum iptal edildi. İstersen tekrar Yükle'ye dokunabilirsin.");
       }catch{
-        notify("Android uygulama kurulum penceresi açılamadı. Yeniden hazırlanıyor.");
+        notify("Android Yükle penceresi açılamadı. Kurulum yeniden hazırlanıyor.");
       }
       setWaitingState();
       return;
@@ -185,9 +174,7 @@
     }
 
     if(await retryWithSecurityWorker())return;
-
     setWaitingState();
-    notify("Kısayol kullanılmayacak. Chrome gerçek uygulama kurulumunu hazırlıyor; bu sekmeyi açık tut.");
   }
 
   window.addEventListener("beforeinstallprompt",(event)=>{
@@ -204,8 +191,12 @@
 
   async function stabilize(){
     const request=requestState();
-    if(isStandalone()&&request.securityLaunch){
+    if(isStandalone()&&!request.requested){
       markInstalled();
+      return;
+    }
+    if(isStandalone()&&request.requested){
+      openInChrome();
       return;
     }
     if(deferredPrompt){setPromptReady();return;}
@@ -222,16 +213,16 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if(button.disabled&&!deferredPrompt){
-        notify("Chrome gerçek uygulama kurulumunu hazırlıyor. Kısayol oluşturma kullanılmayacak.");
+        notify("Android uygulama kurulumu hazırlanıyor.");
         return;
       }
       void installFromButton();
     },true);
 
     void stabilize();
-    setTimeout(()=>void stabilize(),1500);
-    setTimeout(()=>void stabilize(),5000);
-    setTimeout(()=>void stabilize(),15000);
+    setTimeout(()=>void stabilize(),1200);
+    setTimeout(()=>void stabilize(),4000);
+    setTimeout(()=>void stabilize(),10000);
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});
