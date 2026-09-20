@@ -29,6 +29,8 @@ public partial class PersonelForm
         }
     }
 
+    public void OpenOrganizationDefinition(string label) => ShowOrganizationDefinitions(label);
+
     public void OpenStandaloneDialog(PdksModule module)
     {
         switch (module)
