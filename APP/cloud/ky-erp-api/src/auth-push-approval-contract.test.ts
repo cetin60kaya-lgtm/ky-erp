@@ -47,7 +47,7 @@ test("security-app enrollment requires password step-up, stores token hash and r
   assert.doesNotMatch(push, /p256dhKey|authKey/);
   assert.match(push, /PUSH_ENDPOINT_ALREADY_BOUND/);
   assert.match(push, /LEGACY_PHONE_APPROVAL_RETIRED/);
-  assert.match(push, /securityAppUrl: "https:\/\/app\.kyerp\.net\/security\/"/);
+  assert.match(push, /securityAppUrl: "https:\/\/security\.kyerp\.net\/ky-guvenlik\/"/);
 });
 
 test("VAPID signing key stays server-side and push uses standard VAPID authorization", () => {
@@ -67,8 +67,8 @@ test("phone approval is primary while Authenticator remains an explicit fallback
   assert.match(policy, /phone-approval\/:id\/fallback/);
   assert.match(policy, /skipPhone: true/);
   assert.match(login, /Telefonunuza bildirim gönderildi/);
-  assert.match(login, /Yedek giriş yöntemi/);
-  assert.match(login, /Authenticator yedeğini aç/);
+  assert.match(login, /Authenticator yalnız isteğe bağlı yedek yöntemdir/);
+  assert.match(login, /Google \/ Microsoft Authenticator yedeğine geç/);
   assert.match(authContext, /useAuthenticatorFallback/);
 });
 
@@ -107,8 +107,8 @@ test("dedicated Security worker owns phone approval while the legacy main worker
 test("authenticated shell creates one-time security-app enrollment while password step-up happens on the phone", () => {
   assert.match(phoneSetup, /PhoneApprovalDeviceSetup/);
   assert.match(phoneDeviceSetup, /security-enrollment\/start/);
-  assert.match(phoneDeviceSetup, /Yeni Kurulum Kodu Oluştur/);
-  assert.match(phoneDeviceSetup, /app\.kyerp\.net\/security/);
+  assert.match(phoneDeviceSetup, /Bu Telefonda Bağlantıyı Tamamla/);
+  assert.match(phoneDeviceSetup, /security\.kyerp\.net\/ky-guvenlik/);
   assert.match(push, /security-enrollment\/complete/);
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
   assert.match(securityRuntime, /AUTH_PUSH_SECURITY_ENROLLMENT/);
