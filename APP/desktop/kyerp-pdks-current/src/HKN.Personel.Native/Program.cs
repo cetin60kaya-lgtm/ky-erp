@@ -9,7 +9,17 @@ static class Program
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         ApplicationConfiguration.Initialize();
+
+        if (!LocalAuthStore.HasUsers)
+        {
+            using var bootstrap = new BootstrapAdminForm();
+            if (bootstrap.ShowDialog() != DialogResult.OK) return;
+        }
+
+        using var login = new LoginForm();
+        if (login.ShowDialog() != DialogResult.OK || login.AuthenticatedUser is null) return;
         if (!StartupConfiguration.EnsureReady()) return;
-        Application.Run(new PersonelForm());
+
+        Application.Run(new MainShellForm(login.AuthenticatedUser));
     }
 }
