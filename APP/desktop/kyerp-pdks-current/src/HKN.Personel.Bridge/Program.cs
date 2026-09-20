@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using KYERP.PDKS.Core;
@@ -13,7 +13,8 @@ internal static class Program
     const uint WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000, WS_SYSMENU = 0x00080000;
     const uint WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000;
     const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
-    const int SW_SHOW = 5, GWL_STYLE = -16;
+    const int SW_HIDE = 0, SW_SHOW = 5, GWL_STYLE = -16;
+    const uint MF_BYPOSITION = 0x00000400, MF_STRING = 0x00000000, MF_POPUP = 0x00000010;
 
     const uint TB_SETBUTTONINFOA = 0x0442;
     const uint TBIF_TEXT = 0x00000002, TBIF_STATE = 0x00000004, TBIF_BYINDEX = 0x80000000;
@@ -54,6 +55,13 @@ internal static class Program
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateWindowEx(uint ex, string cls, string text, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
     [DllImport("user32.dll")] static extern bool InvalidateRect(IntPtr hWnd, IntPtr rect, bool erase);
     [DllImport("user32.dll")] static extern bool UpdateWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern IntPtr GetMenu(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern int GetMenuItemCount(IntPtr hMenu);
+    [DllImport("user32.dll")] static extern IntPtr GetSubMenu(IntPtr hMenu, int nPos);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetMenuString(IntPtr hMenu, uint uIDItem, StringBuilder lpString, int cchMax, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool ModifyMenu(IntPtr hMenu, uint uPosition, uint uFlags, UIntPtr uIDNewItem, string lpNewItem);
+    [DllImport("user32.dll")] static extern bool DeleteMenu(IntPtr hMenu, uint uPosition, uint uFlags);
+    [DllImport("user32.dll")] static extern bool DrawMenuBar(IntPtr hWnd);
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string? name);
 
@@ -167,6 +175,8 @@ internal static class Program
                     var main = FindWindowForProcess(process.Id, "TAnaf");
                     if (main == IntPtr.Zero) continue;
                     SetWindowText(main, "KYERP PDKS");
+                    CleanLegacyMenu(main);
+                    HideLegacyHome(main);
                     EnsureNativePersonelButton(main);
                     EnsureStatusBrand(main);
                     ResizeEmbedded(main);
@@ -206,6 +216,65 @@ internal static class Program
             }
             catch { }
             Thread.Sleep(40);
+        }
+    }
+
+    static void HideLegacyHome(IntPtr main)
+    {
+        var browserHost = FindDescendant(main, "Shell Embedding");
+        if (browserHost != IntPtr.Zero && IsWindowVisible(browserHost)) ShowWindow(browserHost, SW_HIDE);
+    }
+
+    static string MenuText(IntPtr menu, int position)
+    {
+        var buffer = new StringBuilder(256);
+        GetMenuString(menu, (uint)position, buffer, buffer.Capacity, MF_BYPOSITION);
+        return buffer.ToString();
+    }
+
+    static void CleanLegacyMenu(IntPtr main)
+    {
+        var menu = GetMenu(main);
+        if (menu == IntPtr.Zero) return;
+        for (int i = GetMenuItemCount(menu) - 1; i >= 0; i--)
+        {
+            var text = MenuText(menu, i);
+            var clean = text.Replace("&", string.Empty).Trim();
+            if (clean.Contains("Hakkında", StringComparison.OrdinalIgnoreCase))
+            {
+                DeleteMenu(menu, (uint)i, MF_BYPOSITION);
+                continue;
+            }
+            var sub = GetSubMenu(menu, i);
+            if (sub != IntPtr.Zero) CleanLegacySubMenu(sub);
+            string? replacement = clean switch
+            {
+                "Tanımlar" => "Personel Tanımları",
+                "İşlemler" => "Personel İşlemleri",
+                "Transfer" => "Terminal / Veri Aktarımı",
+                _ => null
+            };
+            if (replacement is not null && sub != IntPtr.Zero)
+                ModifyMenu(menu, (uint)i, MF_BYPOSITION | MF_POPUP | MF_STRING, (UIntPtr)(ulong)sub.ToInt64(), replacement);
+        }
+        DrawMenuBar(main);
+    }
+
+    static void CleanLegacySubMenu(IntPtr menu)
+    {
+        for (int i = GetMenuItemCount(menu) - 1; i >= 0; i--)
+        {
+            var text = MenuText(menu, i).Replace("&", string.Empty).Trim();
+            if (text.Contains("Aktivasyon", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Lisans", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Hedef", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Hakkında", StringComparison.OrdinalIgnoreCase))
+            {
+                DeleteMenu(menu, (uint)i, MF_BYPOSITION);
+                continue;
+            }
+            var sub = GetSubMenu(menu, i);
+            if (sub != IntPtr.Zero) CleanLegacySubMenu(sub);
         }
     }
 
