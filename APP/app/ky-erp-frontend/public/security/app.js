@@ -2,7 +2,7 @@ const API_BASE="https://api.kyerp.net/api";
 const DB_NAME="kyerp-security-app-v1";
 const STORE="device";
 const KEY="active";
-const CLIENT_VERSION="security-v2.6";
+const CLIENT_VERSION="security-v2.7";
 
 const qs=(selector)=>document.querySelector(selector);
 const els={
@@ -106,7 +106,7 @@ async function ensurePushSubscription(forceNew=false){
   if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationServerKey(config.applicationServerKey)});
   return{worker,subscription};
 }
-function versionLabel(value){const raw=String(value||"").trim();return raw.replace(/^security-/i,"")||"v2.6"}
+function versionLabel(value){const raw=String(value||"").trim();return raw.replace(/^security-/i,"")||"v2.7"}
 function renderVersion(serverVersion=""){const client=versionLabel(CLIENT_VERSION),server=versionLabel(serverVersion);if(els.appVersionBadge){els.appVersionBadge.textContent=client;els.appVersionBadge.title=serverVersion&&server!==client?`Telefon ${client} · Sunucu ${server}`:`Aktif sürüm ${client}`;els.appVersionBadge.classList.toggle("version-mismatch",Boolean(serverVersion&&server!==client))}if(els.accountVersion)els.accountVersion.textContent=serverVersion&&server!==client?`${client} · Sunucu ${server}`:client}
 function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}
 function setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
@@ -219,7 +219,7 @@ async function connectDevice(){
       throw error;
     }
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.6",savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.7",savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast(localUnlockCredentialId?"Erişim hazır. Face ID / parmak izi / PIN ile güvenli onay aktif.":"Erişim hazır. Güvenli cihaz imzası aktif.");
@@ -293,7 +293,7 @@ async function repairConnection(options={}){
     const bundle=await ensurePushSubscription(true);
     const response=await deviceFetch("/auth/push/device/refresh",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
     const data=response?.data||{};
-    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v2.6",refreshedAt:data.refreshedAt||new Date().toISOString()});
+    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v2.7",refreshedAt:data.refreshedAt||new Date().toISOString()});
     bundle.worker.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"});
     if(!automatic)toast("Bağlantı yenilendi. Bildirim ve giriş onayı yeniden hazır.");
     return true;
