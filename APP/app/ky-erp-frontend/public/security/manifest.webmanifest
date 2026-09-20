@@ -5,7 +5,7 @@
   "description": "KY ERP telefon ve tablet giriş onayı uygulaması",
   "lang": "tr",
   "dir": "ltr",
-  "start_url": "/security/?source=security-app",
+  "start_url": "/security/",
   "scope": "/security/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
