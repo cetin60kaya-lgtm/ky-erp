@@ -47,8 +47,50 @@ using (var definitions = new LegacyDefinitionsForm())
         throw new InvalidOperationException("Dönem Tanımlamaları legacy geometrisinden sapmış.");
     }
 
+using (var personnel = new PersonelForm())
+{
+    var personnelTabs = Descendants(personnel).OfType<TabControl>().First(x => x.TabPages.Count == 6);
+    string[] expectedPersonnelTabs = ["Personel Bilgileri", "Giriş ve Çıkışları", "İzinler", "Ek Kazanç Ve Kesintiler", "Bilgi", "Ödemeler"];
+    var actualPersonnelTabs = personnelTabs.TabPages.Cast<TabPage>().Select(x => x.Text).ToArray();
+    var labels = Descendants(personnel).OfType<Label>().Select(x => x.Text).ToHashSet();
+    if (personnel.Size != new Size(940, 731) || personnel.FormBorderStyle != FormBorderStyle.FixedDialog)
+        throw new InvalidOperationException("Personel Bilgileri legacy geometrisinden sapmış.");
+    if (!actualPersonnelTabs.SequenceEqual(expectedPersonnelTabs))
+        throw new InvalidOperationException("Personel Bilgileri üst tab düzeninden sapmış.");
+    if (!labels.Contains("Saat Ücreti") || !labels.Contains("Banka Hesap No") || !labels.Contains("SGK İşe Giriş Tarihi"))
+        throw new InvalidOperationException("Personel Bilgileri kişisel alanları eksik.");
+}
+
+using (var attendance = new LegacyGirisCikisForm())
+{
+    var attendanceTabs = attendance.Controls.OfType<TabControl>().Single();
+    string[] expectedAttendanceTabs = ["Giriş Çıkış Paremetreleri", "Filtreleme", "Sıralama"];
+    if (attendance.Size != new Size(777, 609) || attendance.StartPosition != FormStartPosition.CenterScreen)
+        throw new InvalidOperationException("Giriş ve Çıkışlar legacy geometrisinden sapmış.");
+    if (!attendanceTabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expectedAttendanceTabs))
+        throw new InvalidOperationException("Giriş ve Çıkışlar tab düzeninden sapmış.");
+}
+
+using (var advances = new LegacyAvansEntryForm())
+{
+    var advanceTabs = advances.Controls.OfType<TabControl>().Single();
+    if (advances.Size != new Size(764, 508) || advances.StartPosition != FormStartPosition.CenterScreen)
+        throw new InvalidOperationException("Ek Kesinti ve Kazanç Girişleri legacy geometrisinden sapmış.");
+    if (advanceTabs.SelectedTab?.Text != "Seçili Kişi Girişi")
+        throw new InvalidOperationException("Ek Kesinti ve Kazanç Girişleri varsayılan tabından sapmış.");
+}
+
 var timer = new System.Windows.Forms.Timer { Interval = 400 };
 timer.Tick += (_, _) => { timer.Stop(); form.Close(); };
 form.Shown += (_, _) => timer.Start();
 Application.Run(form);
 Console.WriteLine("KYERP PDKS LEGACY SHELL PARITY OK");
+
+static IEnumerable<Control> Descendants(Control root)
+{
+    foreach (Control child in root.Controls)
+    {
+        yield return child;
+        foreach (var descendant in Descendants(child)) yield return descendant;
+    }
+}

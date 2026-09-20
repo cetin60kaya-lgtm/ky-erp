@@ -15,7 +15,7 @@ public sealed class LegacyGirisCikisForm : Form
     readonly DateTimePicker dateStart = D(272,8,176);
     readonly DateTimePicker dateEnd = D(272,32,176);
     readonly TextBox inFirst = T(480,8), inLast = T(600,8), outFirst = T(480,32), outLast = T(600,32);
-    readonly CheckBox manual = new(){Text="Elle Girilen Kayıtlar",Location=new Point(552,72),AutoSize=true};
+    readonly CheckBox manual = new(){Text="Elle Girlilen Kayıtlar",Location=new Point(552,72),AutoSize=true};
     readonly ComboBox group = C(72,8,209), department=C(72,32,209), company=C(72,56,319), service=C(464,8,209), status=C(464,32,209), duty=C(464,56,209), sort=C(56,16,185);
     readonly StatusStrip statusBar = new(){Location=new Point(0,527),Size=new Size(761,23),SizingGrip=false};
     readonly ToolStripStatusLabel statusText = new(){Spring=true,TextAlign=ContentAlignment.MiddleLeft};
@@ -24,7 +24,7 @@ public sealed class LegacyGirisCikisForm : Form
 
     public LegacyGirisCikisForm()
     {
-        Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterParent;ClientSize=new Size(761,550);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;Font=new Font("Microsoft Sans Serif",8.25f);KeyPreview=true;
+        Text="Giriş ve Çıkışlar";StartPosition=FormStartPosition.CenterScreen;Size=new Size(777,609);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;Font=new Font("Microsoft Sans Serif",8.25f);KeyPreview=true;
         Build(); Shown+=(_,_)=>Init(); KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
     }
 
@@ -42,7 +42,7 @@ public sealed class LegacyGirisCikisForm : Form
         f.Controls.AddRange([L("Firma",8,64),L("Grubu",8,16),L("Bölümü",8,40),L("Servis",408,16),L("Durum",408,40),L("Görev",408,64),company,group,department,service,status,duty]);
         var s=new TabPage("Sıralama");s.Controls.AddRange([L("Sıralama",8,24),sort]); tabs.TabPages.AddRange([p,f,s]); Controls.Add(tabs);
 
-        AddCol("PKNO","Kart No",55);AddCol("AD","Adı",90);AddCol("SOYAD","Soyadı",95);AddCol("GTARIH","Giriş Tarihi",85);AddCol("GSAAT","Giriş Saati",70);AddCol("GTUR","G.Tür",45);AddCol("CTARIH","Çıkış Tarihi",85);AddCol("CSAAT","Çıkış Saati",70);AddCol("CTUR","Ç.Tür",45);AddCol("BOLUMAD","Bölüm",95);
+        AddCol("PKNO","Kart No",55);AddCol("AD","Adı",90);AddCol("SOYAD","Soyadı",95);AddCol("GTARIH","Giriş Tarihi",85);AddCol("GSAAT","Giriş Saati",70);AddCol("GTUR","Giriş",45);AddCol("CTARIH","Çıkış Tarihi",85);AddCol("CSAAT","Çıkış Saati",70);AddCol("CTUR","Çıkış",45);AddCol("GRUPAD","Grubu",95);AddCol("BOLUMAD","Bölümü",95);
         grid.CellDoubleClick+=(_,_)=>EditSelected();Controls.Add(grid);Controls.Add(show);show.Click+=(_,_)=>Reload();
         statusBar.Items.Add(statusText);Controls.Add(statusBar);
         var menu=new MenuStrip{Dock=DockStyle.None,Location=new Point(690,0),Size=new Size(1,1),Visible=false};
@@ -77,14 +77,21 @@ public sealed class LegacyGirisCikisForm : Form
             if(!string.IsNullOrWhiteSpace(name.Text)){where.Add("(upper(k.AD) containing upper(@N) or upper(k.SOYAD) containing upper(@N))");ps.Add(new("@N",name.Text.Trim()));}
             AddFilter(where,ps,"k.GRUP",group,"G");AddFilter(where,ps,"k.BOLUM",department,"D");AddFilter(where,ps,"k.SERVIS",service,"S");AddFilter(where,ps,"k.DURUM",status,"U");AddFilter(where,ps,"k.GOREV",duty,"R");AddFilter(where,ps,"k.SIRKET",company,"F");
             if(punch.SelectedIndex==1)where.Add("g.GSAAT is not null");if(punch.SelectedIndex==2)where.Add("g.CSAAT is not null");if(manual.Checked)where.Add("(coalesce(g.GTUR,'')<>'T' or coalesce(g.CTUR,'')<>'T')");
+            AddTimeFilter(where,ps,"g.GDAKIKA",inFirst,true,"GIF");AddTimeFilter(where,ps,"g.GDAKIKA",inLast,false,"GIL");AddTimeFilter(where,ps,"g.CDAKIKA",outFirst,true,"GOF");AddTimeFilter(where,ps,"g.CDAKIKA",outLast,false,"GOL");
             var order=sort.SelectedIndex switch{1=>"k.AD,k.SOYAD,g.GTARIH",2=>"g.GTARIH,g.PKNO",3=>"g.CTARIH,g.PKNO",_=>"g.PKNO,g.GTARIH"};
-            var sql=$"select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR,g.MKOD,g.BOLUM,b.AD BOLUMAD from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join BOLUM b on b.KOD=g.BOLUM where {string.Join(" and ",where)} order by {order}";
+            var sql=$"select g.SIRA,g.PKNO,k.AD,k.SOYAD,g.GTARIH,g.GSAAT,g.GTUR,g.CTARIH,g.CSAAT,g.CTUR,g.MKOD,g.BOLUM,gr.AD GRUPAD,b.AD BOLUMAD from GIRCIK g left join KIMLIK k on k.PKNO=g.PKNO left join GRUP gr on gr.KOD=k.GRUP left join BOLUM b on b.KOD=g.BOLUM where {string.Join(" and ",where)} order by {order}";
             current=db.Query(sql,ps.ToArray());grid.DataSource=current;statusText.Text=$"Kayıt Sayısı : {current.Rows.Count}";
         }
         catch(Exception ex){MessageBox.Show(ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     }
 
     static void AddFilter(List<string>w,List<FbParameter>p,string field,ComboBox c,string key){if(c.SelectedValue is int v&&v>=0){w.Add($"{field}=@{key}");p.Add(new FbParameter("@"+key,v));}}
+    static void AddTimeFilter(List<string> where,List<FbParameter> parameters,string field,TextBox input,bool lowerBound,string key)
+    {
+        if(!TimeSpan.TryParse(input.Text.Trim(),out var time))return;
+        where.Add($"{field}{(lowerBound?">=":"<=")}@{key}");
+        parameters.Add(new FbParameter("@"+key,(int)time.TotalMinutes));
+    }
     DataRow? Row()=>grid.CurrentRow?.DataBoundItem is DataRowView v?v.Row:null;
     void EditSelected(){var r=Row();if(r is null)return;EditRecord(r);}
 

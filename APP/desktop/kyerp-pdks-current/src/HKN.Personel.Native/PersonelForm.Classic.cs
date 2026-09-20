@@ -17,7 +17,6 @@ public partial class PersonelForm
     void BuildUiClassic()
     {
         AutoScaleMode=AutoScaleMode.None;
-        MinimumSize=new Size(961,572); Size=new Size(961,572);
         Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Regular,GraphicsUnit.Point);
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(6,25,6,0),Margin=Padding.Empty};
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,390)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
@@ -92,9 +91,9 @@ public partial class PersonelForm
     }
     TabPage BuildKisiselClassic()
     {
-        var page=new TabPage("Kişisel Bilgiler");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=12,Padding=new Padding(4)};
+        var page=new TabPage("Kişisel Bilgileri");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=14,Padding=new Padding(4)};
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
-        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","","","Adres","ADRES"};
+        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","Saat Ücreti","NSUCRET","Adres","ADRES","Banka Hesap No","BHNO","SGK İşe Giriş Tarihi","SGKGIRTAR"};
         FillPairs(t,z);page.Controls.Add(t);return page;
     }
 

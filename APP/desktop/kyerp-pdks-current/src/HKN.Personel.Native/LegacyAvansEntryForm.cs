@@ -37,9 +37,9 @@ public sealed class LegacyAvansEntryForm : Form
 
     public LegacyAvansEntryForm()
     {
-        Text="Ek Kesinti  ve Kazanç Girişleri";StartPosition=FormStartPosition.CenterParent;ClientSize=new Size(764,508);
+        Text="Ek Kesinti  ve Kazanç Girişleri";StartPosition=FormStartPosition.CenterScreen;Size=new Size(764,508);
         FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;
-        Font=new Font("Microsoft Sans Serif",8.25f);Build();Shown+=(_,_)=>LoadAll();
+        Font=new Font("Microsoft Sans Serif",8.25f);Build();tabs.SelectedIndex=1;Shown+=(_,_)=>LoadAll();
     }
 
     static DateTimePicker Picker(int x,int y)=>new(){Location=new Point(x,y),Size=new Size(169,21),Format=DateTimePickerFormat.Short,Value=DateTime.Today};
@@ -66,7 +66,7 @@ public sealed class LegacyAvansEntryForm : Form
         bulkPeople.Location=new Point(4,24);bulkPeople.Size=new Size(247,372);page.Controls.Add(bulkPeople);
         page.Controls.AddRange(new Control[]{L("İşlem Tarihi",260,216),bulkDate,L("Veriliş Tarihi",264,240),bulkIssueDate,L("Türü",260,264),bulkType,L("Verilecek Oran",260,288),ratio,ratioCheck,L("Verilecek Miktar",260,312),amount,L("Açıklama",260,336),bulkDescription});
         ratioCheck.CheckedChanged+=(_,_)=>{ratio.Enabled=ratioCheck.Checked;amount.Enabled=!ratioCheck.Checked;};
-        var add=B("Ekle",260,371);var close=B("Kapat",404,371);close.Click+=(_,_)=>Close();add.Click+=(_,_)=>InsertBulk();page.Controls.Add(add);page.Controls.Add(close);
+        var add=B("&Ekle",260,371);var close=B("Kapa&t",404,371);close.Click+=(_,_)=>Close();add.Click+=(_,_)=>InsertBulk();page.Controls.Add(add);page.Controls.Add(close);
         page.Controls.Add(selectedCodes);page.Controls.Add(selectedNames);
         var one=B(">",76,403,33);var all=B(">>",124,403,33);var backAll=B("<<",620,403,33);var back=B("<",668,403,33);
         one.Click+=(_,_)=>MoveSelected();all.Click+=(_,_)=>MoveAll();back.Click+=(_,_)=>RemoveSelected();backAll.Click+=(_,_)=>ClearSelected();page.Controls.AddRange([one,all,backAll,back]);
@@ -77,7 +77,7 @@ public sealed class LegacyAvansEntryForm : Form
     {
         var page=new TabPage("Seçili Kişi Girişi");singlePeople.Location=new Point(8,8);singlePeople.Size=new Size(489,377);singlePeople.MultiSelect=false;page.Controls.Add(singlePeople);
         page.Controls.AddRange(new Control[]{L("İşlem Tarihi",504,32),singleDate,L("Veriliş Tarihi",504,64),singleIssueDate,L("Türü",504,96),singleType,L("Açıklama",508,128),singleDescription,L("Miktar",508,155),singleAmount});
-        var add=B("Ekle",564,190,141);var clear=B("Temizle",564,235,141);var close=B("Kapat",556,363,141);add.Click+=(_,_)=>InsertSingle();clear.Click+=(_,_)=>{singleDescription.Clear();singleAmount.Value=0;};close.Click+=(_,_)=>Close();page.Controls.AddRange([add,clear,close]);
+        var add=B("&Ekle",564,190,141);var clear=B("Temi&zle",564,235,141);var close=B("Kapa&t",556,363,141);add.Click+=(_,_)=>InsertSingle();clear.Click+=(_,_)=>{singleDescription.Clear();singleAmount.Value=0;};close.Click+=(_,_)=>Close();page.Controls.AddRange([add,clear,close]);
         var work=new GroupBox{Text="Çalışma Durumu",Location=new Point(8,392),Size=new Size(257,49)};work.Controls.AddRange([allPeople,activePeople,leftPeople]);page.Controls.Add(work);
         var sort=new GroupBox{Text="Sıralama Şekli",Location=new Point(272,392),Size=new Size(225,49)};sort.Controls.AddRange([sortCard,sortName,sortSurname]);page.Controls.Add(sort);
         allPeople.CheckedChanged+=(_,_)=>LoadSinglePeople();activePeople.CheckedChanged+=(_,_)=>LoadSinglePeople();leftPeople.CheckedChanged+=(_,_)=>LoadSinglePeople();sortCard.CheckedChanged+=(_,_)=>LoadSinglePeople();sortName.CheckedChanged+=(_,_)=>LoadSinglePeople();sortSurname.CheckedChanged+=(_,_)=>LoadSinglePeople();return page;
@@ -105,7 +105,7 @@ public sealed class LegacyAvansEntryForm : Form
     {
         try
         {
-            bulkSource=db.Query("select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,SIRKET,MAAS from KIMLIK where ICTARIH is null and IGTARIH<=@D order by PKNO",new FbParameter("@D",hiredAfter.Value.Date));bulkPeople.DataSource=bulkSource.DefaultView;ConfigurePeople(bulkPeople);ApplyBulkFilter();
+            bulkSource=db.Query("select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,SIRKET,MAAS from KIMLIK where ICTARIH is null and IGTARIH>=@D order by PKNO",new FbParameter("@D",hiredAfter.Value.Date));bulkPeople.DataSource=bulkSource.DefaultView;ConfigurePeople(bulkPeople);ApplyBulkFilter();
         }
         catch(Exception ex){MessageBox.Show(ex.Message,Text);}
     }

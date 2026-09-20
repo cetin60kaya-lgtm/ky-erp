@@ -89,17 +89,22 @@ public partial class PersonelForm
     void AddChosen(DataTable chosen,string pk){if(pk.Length==0||chosen.Select("PKNO='"+pk.Replace("'","''")+"'").Length>0)return;var src=LoadGirisPeople().Select("PKNO='"+pk.Replace("'","''")+"'");if(src.Length>0)chosen.ImportRow(src[0]);}
     void RemoveSelected(DataGridView right,DataTable chosen){foreach(DataGridViewRow r in right.SelectedRows){string pk=Convert.ToString(r.Cells["PKNO"].Value)??"";var rows=chosen.Select("PKNO='"+pk.Replace("'","''")+"'");foreach(var x in rows)x.Delete();}chosen.AcceptChanges();}
 
-    int InsertGirisCikis(DataTable chosen,DateTime gir,DateTime cik,int tolerance)
+    int InsertGirisCikis(DataTable chosen,DateTime gir,DateTime cik,int tolerance)=>InsertGirisCikis(chosen,gir,cik,tolerance,tolerance);
+
+    int InsertGirisCikis(DataTable chosen,DateTime gir,DateTime cik,int inTolerance,int outTolerance)
     {
         int added=0;
         foreach(DataRow r in chosen.Rows)
         {
             string pk=Convert.ToString(r["PKNO"])??"";if(pk.Length==0)continue;
-            var chk=Q("select count(*) N from GIRCIK where PKNO=@PK and GTARIH=@D",new FbParameter("@PK",pk),new FbParameter("@D",gir.Date));
+            var adjustedIn=gir.AddMinutes(Random.Shared.Next(-inTolerance,inTolerance+1));
+            var adjustedOut=cik.AddMinutes(Random.Shared.Next(-outTolerance,outTolerance+1));
+            PdksValidation.AttendanceRange(adjustedIn,adjustedOut);
+            var chk=Q("select count(*) N from GIRCIK where PKNO=@PK and GTARIH=@D",new FbParameter("@PK",pk),new FbParameter("@D",adjustedIn.Date));
             if(Convert.ToInt32(chk.Rows[0][0])>0)continue;
-            string gs=gir.ToString("HH:mm"),cs=cik.ToString("HH:mm");
+            string gs=adjustedIn.ToString("HH:mm"),cs=adjustedOut.ToString("HH:mm");
             Exec("insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,CTARIH,CSAAT,CDAKIKA,MKOD) values (@S,@PK,@GD,@GS,@GM,@CD,@CS,@CM,'000')",
-                new FbParameter("@S",Next("GIRCIK","SIRA")),new FbParameter("@PK",pk),new FbParameter("@GD",gir.Date),new FbParameter("@GS",gs),new FbParameter("@GM",gir.Hour*60+gir.Minute),new FbParameter("@CD",cik.Date),new FbParameter("@CS",cs),new FbParameter("@CM",cik.Hour*60+cik.Minute));
+                new FbParameter("@S",Next("GIRCIK","SIRA")),new FbParameter("@PK",pk),new FbParameter("@GD",adjustedIn.Date),new FbParameter("@GS",gs),new FbParameter("@GM",adjustedIn.Hour*60+adjustedIn.Minute),new FbParameter("@CD",adjustedOut.Date),new FbParameter("@CS",cs),new FbParameter("@CM",adjustedOut.Hour*60+adjustedOut.Minute));
             added++;
         }
         return added;

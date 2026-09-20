@@ -8,7 +8,7 @@ public partial class PersonelForm
         if (TopLevel)
         {
             Size = new Size(940, 731);
-            MinimumSize = new Size(800, 600);
+            MinimumSize = new Size(940, 731);
         }
         Text = "Personel Bilgileri";
 

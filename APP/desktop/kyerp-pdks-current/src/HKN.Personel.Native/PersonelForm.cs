@@ -21,7 +21,8 @@ public partial class PersonelForm : Form
     public PersonelForm()
     {
         db = new FirebirdDatabase(options);
-        Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(961,572); MinimumSize=new Size(961,572);
+        Text="Personel Bilgileri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(940,731); MinimumSize=new Size(940,731);
+        FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false;
         Font=new Font("Microsoft Sans Serif",8.25f); BackColor=SystemColors.Control;
         BuildMenuFull(); BuildUiClassic(); list.SelectionChanged += (_,_) => { SyncPeriodsToPerson(); RefreshFullTabs(); }; Shown += (_,_) => { Reload(); LoadPeriods(); SyncPeriodsToPerson(); RefreshFullTabs(); ApplyClassicGridStyles(); };
     }
