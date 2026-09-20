@@ -93,6 +93,23 @@ using (var timesheet = new LegacyPuantajForm())
         throw new InvalidOperationException("Günlük ve Aylık Puantaj mnemonic düzeninden sapmış.");
 }
 
+using (var payroll = new LegacyBordroForm())
+{
+    var payrollTabs = payroll.Controls.OfType<TabControl>().Single();
+    string[] expectedPayrollTabs = ["Filitreler", "Rapor Seçenekleri", "Kağıt Ayarları"];
+    var paper = payrollTabs.TabPages.Cast<TabPage>().Single(x => x.Text == "Kağıt Ayarları");
+    var paperGroups = paper.Controls.OfType<GroupBox>().Select(x => x.Text).ToArray();
+    var buttons = payroll.Controls.OfType<Button>().Select(x => x.Text).ToArray();
+    if (payroll.Size != new Size(616, 496) || payroll.StartPosition != FormStartPosition.CenterScreen)
+        throw new InvalidOperationException("Genel Maaş Bordrosu legacy geometrisinden sapmış.");
+    if (!payrollTabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expectedPayrollTabs))
+        throw new InvalidOperationException("Genel Maaş Bordrosu tab düzeninden sapmış.");
+    if (!paperGroups.SequenceEqual(["Sayfa Ayarları", "Kağıt Ayarları", "Alan Genişlikleri"]) || Descendants(paper).OfType<TextBox>().Count(x => Equals(x.Tag, "FieldWidth")) != 10)
+        throw new InvalidOperationException("Genel Maaş Bordrosu kağıt ayarlarından sapmış.");
+    if (!buttons.Contains("A&ktar") || !buttons.Contains("Ö&nizleme") || !buttons.Contains("Kapa&t"))
+        throw new InvalidOperationException("Genel Maaş Bordrosu komutlarından sapmış.");
+}
+
 var timer = new System.Windows.Forms.Timer { Interval = 400 };
 timer.Tick += (_, _) => { timer.Stop(); form.Close(); };
 form.Shown += (_, _) => timer.Start();
