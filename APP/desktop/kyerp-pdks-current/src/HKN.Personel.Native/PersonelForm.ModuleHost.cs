@@ -10,6 +10,14 @@ public partial class PersonelForm
         if (MainMenuStrip is not null) MainMenuStrip.Visible = false;
     }
 
+    IWin32Window DialogOwner()
+    {
+        foreach (Form form in Application.OpenForms)
+            if (form is MainShellForm && !form.IsDisposed) return form;
+        var host = Parent?.FindForm();
+        return host is not null && !host.IsDisposed ? host : this;
+    }
+
     public void ActivateModule(PdksModule module)
     {
         if (!Visible) Show();
@@ -77,6 +85,6 @@ public partial class PersonelForm
         pdf.Click += (_, _) => ExportActiveGrid(false);
         var xls = new Button { Text = "Aktif tabloyu Excel aktar", Width = 440, Height = 38, TextAlign = ContentAlignment.MiddleLeft };
         xls.Click += (_, _) => ExportActiveGrid(true);
-        body.Controls.Add(pdf); body.Controls.Add(xls); f.Controls.Add(body); f.ShowDialog(this);
+        body.Controls.Add(pdf); body.Controls.Add(xls); f.Controls.Add(body); f.ShowDialog(DialogOwner());
     }
 }
