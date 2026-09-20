@@ -31,7 +31,7 @@ public partial class PersonelForm
             case PdksModule.Bordro: tabs.SelectedIndex = 5; break;
             case PdksModule.GunlukOperasyon: ShowDailyOperations(); break;
             case PdksModule.Tanimlar: ShowOrganizationDefinitions(); break;
-            case PdksModule.Donemler: ShowPeriodDefinitions(); break;
+            case PdksModule.Donemler: ShowLegacyPeriods(); break;
             case PdksModule.Terminal: ShowTerminalProfiles(); break;
             case PdksModule.Raporlar: ShowReportCenter(); break;
         }
@@ -51,11 +51,18 @@ public partial class PersonelForm
         {
             case PdksModule.GunlukOperasyon: ShowDailyOperations(); break;
             case PdksModule.Tanimlar: ShowOrganizationDefinitions(); break;
-            case PdksModule.Donemler: ShowPeriodDefinitions(); break;
+            case PdksModule.Donemler: ShowLegacyPeriods(); break;
             case PdksModule.Terminal: ShowTerminalProfiles(); break;
             case PdksModule.Raporlar: ShowReportCenter(); break;
             default: ActivateModule(module); break;
         }
+    }
+
+    void ShowLegacyPeriods()
+    {
+        using var f=new LegacyPeriodForm();
+        f.ShowDialog(DialogOwner());
+        LoadPeriods();
     }
 
     void ShowReportCenter()
