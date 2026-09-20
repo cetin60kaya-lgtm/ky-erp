@@ -269,9 +269,17 @@ internal static class Program
             toolbarSkinBitmap = CaptureClassicToolbar(coolBar, width, height, dpi);
             if (toolbarSkinBitmap != IntPtr.Zero)
             {
-                toolbarSkin = CreateWindowEx(0, "STATIC", string.Empty, WS_CHILD | WS_VISIBLE | SS_BITMAP,
-                    0, 0, width, height, main, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
-                SendMessage(toolbarSkin, STM_SETIMAGE, new IntPtr(IMAGE_BITMAP), toolbarSkinBitmap);
+                toolbarSkin = CreateWindowEx(0, "STATIC", string.Empty, WS_POPUP | WS_VISIBLE | SS_BITMAP,
+                    0, 0, width, height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+                if (toolbarSkin != IntPtr.Zero)
+                {
+                    SetParent(toolbarSkin, main);
+                    long skinStyle = GetWindowLongPtr(toolbarSkin, GWL_STYLE).ToInt64();
+                    skinStyle &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
+                    skinStyle |= WS_CHILD | WS_VISIBLE;
+                    SetWindowLongPtr(toolbarSkin, GWL_STYLE, new IntPtr(skinStyle));
+                    SendMessage(toolbarSkin, STM_SETIMAGE, new IntPtr(IMAGE_BITMAP), toolbarSkinBitmap);
+                }
             }
         }
         if (toolbarSkin != IntPtr.Zero)
