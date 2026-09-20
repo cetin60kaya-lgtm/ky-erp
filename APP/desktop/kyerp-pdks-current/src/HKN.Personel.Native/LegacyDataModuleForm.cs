@@ -175,7 +175,7 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
     void GirisGridFormat(object? sender,DataGridViewCellFormattingEventArgs e)
     {
         if(e.RowIndex<0||e.ColumnIndex<0)return;var col=grid.Columns[e.ColumnIndex];if(col is null)return;var n=col.Name;
-        if(n is "GSAAT" or "CSAAT"){e.CellStyle.BackColor=Color.Black;e.CellStyle.ForeColor=Color.Lime;e.CellStyle.SelectionBackColor=Color.Black;e.CellStyle.SelectionForeColor=Color.Lime;e.CellStyle.Font=new Font(Font,FontStyle.Bold);}
+        if(n is "GSAAT" or "CSAAT"){var style=e.CellStyle;if(style is null)return;style.BackColor=Color.Black;style.ForeColor=Color.Lime;style.SelectionBackColor=Color.Black;style.SelectionForeColor=Color.Lime;style.Font=new Font(Font,FontStyle.Bold);}
         if(n is "GTARIH" or "CTARIH"&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new System.Globalization.CultureInfo("tr-TR"));e.FormattingApplied=true;}
     }
     void UpdateGirisStatus(){if(Tag is GirisFilterState s&&s.Status.Items["COUNT"] is ToolStripStatusLabel l)l.Text=$"Listelenen Kayıt Sayısı : {grid.Rows.Count}";}
