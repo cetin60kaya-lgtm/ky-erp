@@ -11,13 +11,19 @@ public partial class PersonelForm
         new("Servis","SERVIS",OrganizationDefinitionKind.Service),new("Görev","GOREV",OrganizationDefinitionKind.Duty),new("Firma","FIRMA",OrganizationDefinitionKind.Company)
     ];
 
-    void ShowOrganizationDefinitions()
+    void ShowOrganizationDefinitions(string? presetLabel=null)
     {
         using var dialog=Dialog("Organizasyon Tanımları",680,520);var root=Root(3);root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
-        var type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=220,DisplayMember=nameof(DefinitionType.Label),DataSource=OrganizationTypes};var top=new FlowLayoutPanel{Dock=DockStyle.Fill};top.Controls.Add(new Label{Text="Tanım türü",AutoSize=true,Padding=new Padding(0,7,8,0)});top.Controls.Add(type);root.Controls.Add(top,0,0);
+        var type=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,Width=220,DisplayMember=nameof(DefinitionType.Label),DataSource=OrganizationTypes};
+        if(!string.IsNullOrWhiteSpace(presetLabel))
+        {
+            var index=Array.FindIndex(OrganizationTypes,x=>x.Label.Equals(presetLabel,StringComparison.OrdinalIgnoreCase));
+            if(index>=0) type.SelectedIndex=index;
+        }
+        var top=new FlowLayoutPanel{Dock=DockStyle.Fill};top.Controls.Add(new Label{Text="Tanım türü",AutoSize=true,Padding=new Padding(0,7,8,0)});top.Controls.Add(type);root.Controls.Add(top,0,0);
         var grid=Grid();root.Controls.Add(grid,0,1);var bar=Bar(out var close,out var edit,out var add,out var delete);root.Controls.Add(bar,0,2);dialog.Controls.Add(root);dialog.AcceptButton=close;
         DefinitionType Selected()=>type.SelectedItem as DefinitionType??throw new InvalidOperationException("Tanım türü seçin.");
-        void RefreshGrid(){var value=Selected();grid.DataSource=Q($"select KOD,AD from {value.Table} order by AD");}
+        void RefreshGrid(){var value=Selected();grid.DataSource=Q($"select KOD,AD from {value.Table} order by AD");dialog.Text=value.Label+" Tanımları";}
         void Run(Action action){try{action();RefreshGrid();}catch(Exception ex){MessageBox.Show(ex.Message,"Organizasyon Tanımları",MessageBoxButtons.OK,MessageBoxIcon.Warning);}}
         type.SelectedValueChanged+=(_,_)=>RefreshGrid();
         add.Click+=(_,_)=>Run(()=>{var value=Selected();if(!NameDialog("Yeni "+value.Label,"",out var name))return;Exec($"insert into {value.Table} (KOD,AD) values (@K,@A)",new FbParameter("@K",Next(value.Table,"KOD")),new FbParameter("@A",RequiredName(name)));});
