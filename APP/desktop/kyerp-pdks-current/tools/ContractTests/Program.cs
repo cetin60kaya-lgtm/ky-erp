@@ -228,6 +228,27 @@ Run("payroll calculation", () =>
     Throws(()=>PayrollCalculator.Calculate(new PayrollInput(-1,0,0,0,0,0,0)));
 });
 
+Run("daily attendance calculation", () =>
+{
+    var day=new DateTime(2026,9,21);
+    var worked=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,day.AddHours(8.5),day.AddHours(17.5)));
+    Equal("ÇALIŞTI",worked.Status);Equal(450,worked.NormalMinutes);Equal(30,worked.Overtime50Minutes);Equal(0,worked.ShortfallMinutes);
+    var early=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,day.AddHours(8.5),day.AddHours(16.5)));
+    Equal(30,early.EarlyExitMinutes);Equal(30,early.ShortfallMinutes);Equal(0,early.Overtime50Minutes);
+    var paid=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,null,null,450));
+    Equal("ÜCRETLİ İZİN",paid.Status);Equal((short)1,paid.NormalDay);Equal(0,paid.AbsenceMinutes);
+    var unpaid=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,null,null,0,450));
+    Equal("ÜCRETSİZ İZİN",unpaid.Status);Equal((short)1,unpaid.UnpaidLeaveDay);Equal(0,unpaid.AbsenceMinutes);
+    var absent=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,null,null));
+    Equal("DEVAMSIZ",absent.Status);Equal(450,absent.AbsenceMinutes);Equal((short)1,absent.AbsenceDay);
+    var open=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,day.AddHours(9),null));
+    Equal("AÇIK KAYIT",open.Status);Equal("09:00",open.Entry);Equal(30,open.LateMinutes);Equal(450,open.ShortfallMinutes);
+    var holiday=DailyAttendanceCalculator.Calculate(new(day,510,1020,450,day.AddHours(9),day.AddHours(12),IsHoliday:true));
+    Equal("TATİL ÇALIŞMASI",holiday.Status);Equal(180,holiday.Overtime100Minutes);
+    var restDay=DailyAttendanceCalculator.Calculate(new(day,0,0,0,null,null));
+    Equal("TATİL",restDay.Status);Equal(0,restDay.AbsenceMinutes);
+});
+
 Run("daily operation summary", () =>
 {
     var summary=DailyOperationCalculator.Calculate([

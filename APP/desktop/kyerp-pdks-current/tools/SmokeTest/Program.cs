@@ -1,6 +1,7 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Text;
 using KYERP.PDKS.Core;
+using KYERP.PDKS.Core.Payroll;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -37,6 +38,15 @@ try
     Exec(c,tx,"update GIRCIK set GSAAT='08:31',GDAKIKA=511 where SIRA=@S and PKNO=@PK",new FbParameter("@S",gs),new FbParameter("@PK",testPk));
     Exec(c,tx,"delete from GIRCIK where SIRA=@S and PKNO=@PK",new FbParameter("@S",gs),new FbParameter("@PK",testPk));
     log.AppendLine("GIRCIK insert/update/delete OK");
+
+    var puantajDate=new DateTime(2099,1,2);var puantaj=DailyAttendanceCalculator.Calculate(new(puantajDate,510,1020,450,puantajDate.AddMinutes(520),puantajDate.AddMinutes(1030)));
+    Exec(c,tx,"insert into PUANTAJ (PKNO,TARIH,GIRIS,CIKIS,STATUS,BOLUM,SSKD,SAAT1,DAKIKA1,GUN1,SAAT2,DAKIKA2,GUN2,SAAT3,DAKIKA3,GUN3,SAAT4,DAKIKA4,GUN4,DEVAMSIZLIKS,DEVAMSIZLIKD,DEVAMSIZLIKG,GECS,GECD,GECG,ERKENS,ERKEND,ERKENG,EKSIKS,EKSIKD,EKSIKG,DEVCEZAS,DEVCEZAD,GECCEZAS,GECCEZAD,ERCEZAS,ERCEZAD,EKCEZAS,EKCEZAD) values (@P,@T,@GI,@CI,@ST,1,@SSK,@S1,@D1,@G1,@S2,@D2,@G2,'00:00',0,0,'00:00',0,0,@DS,@DD,@DG,@GS,@GD,@GG,@ES,@ED,@EG,@XS,@XD,@XG,'00:00',0,'00:00',0,'00:00',0,'00:00',0)",
+        new FbParameter("@P",testPk),new FbParameter("@T",puantajDate),new FbParameter("@GI",puantaj.Entry),new FbParameter("@CI",puantaj.Exit),new FbParameter("@ST",puantaj.Status),new FbParameter("@SSK",puantaj.NormalDay),new FbParameter("@S1",DailyAttendanceResult.AsTime(puantaj.NormalMinutes)),new FbParameter("@D1",puantaj.NormalMinutes),new FbParameter("@G1",puantaj.NormalDay),new FbParameter("@S2",DailyAttendanceResult.AsTime(puantaj.Overtime50Minutes)),new FbParameter("@D2",puantaj.Overtime50Minutes),new FbParameter("@G2",puantaj.Overtime50Day),new FbParameter("@DS",DailyAttendanceResult.AsTime(puantaj.AbsenceMinutes)),new FbParameter("@DD",puantaj.AbsenceMinutes),new FbParameter("@DG",puantaj.AbsenceDay),new FbParameter("@GS",DailyAttendanceResult.AsTime(puantaj.LateMinutes)),new FbParameter("@GD",puantaj.LateMinutes),new FbParameter("@GG",puantaj.LateDay),new FbParameter("@ES",DailyAttendanceResult.AsTime(puantaj.EarlyExitMinutes)),new FbParameter("@ED",puantaj.EarlyExitMinutes),new FbParameter("@EG",puantaj.EarlyExitDay),new FbParameter("@XS",DailyAttendanceResult.AsTime(puantaj.ShortfallMinutes)),new FbParameter("@XD",puantaj.ShortfallMinutes),new FbParameter("@XG",puantaj.ShortfallDay));
+    Exec(c,tx,"update PUANTAJ set STATUS='SMOKE2' where PKNO=@P and TARIH=@T",new FbParameter("@P",testPk),new FbParameter("@T",puantajDate));
+    if(Convert.ToString(Scalar(c,tx,"select STATUS from PUANTAJ where PKNO=@P and TARIH=@T",new FbParameter("@P",testPk),new FbParameter("@T",puantajDate)))!="SMOKE2")throw new Exception("PUANTAJ update doğrulanamadı");
+    Exec(c,tx,"delete from PUANTAJ where PKNO=@P and TARIH=@T",new FbParameter("@P",testPk),new FbParameter("@T",puantajDate));
+    log.AppendLine("PUANTAJ insert/update/delete OK");
+
     int iz=Convert.ToInt32(Scalar(c,tx,"select coalesce(max(SIRA),0)+1 from OZELIZIN"));
     Exec(c,tx,"insert into OZELIZIN (PKNO,SURESAAT,SUREDAKIKA,EBALAN,TARIH,TIP,MAZERET,SIRA,OTOCIK) values (@PK,'07:30',450,4,@D,'TEST','SMOKE',@S,'0')",
         new FbParameter("@PK",testPk),new FbParameter("@D",new DateTime(2099,1,3)),new FbParameter("@S",iz));

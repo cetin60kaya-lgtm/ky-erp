@@ -80,6 +80,19 @@ using (var advances = new LegacyAvansEntryForm())
         throw new InvalidOperationException("Ek Kesinti ve Kazanç Girişleri varsayılan tabından sapmış.");
 }
 
+using (var timesheet = new LegacyPuantajForm())
+{
+    var timesheetTabs = timesheet.Controls.OfType<TabControl>().Single();
+    string[] expectedTimesheetTabs = ["Günlük Puantaj", "Aylık Puantaj"];
+    var buttons = Descendants(timesheet).OfType<Button>().Select(x => x.Text).ToArray();
+    if (timesheet.Size != new Size(689, 504) || timesheet.StartPosition != FormStartPosition.CenterScreen)
+        throw new InvalidOperationException("Günlük ve Aylık Puantaj legacy geometrisinden sapmış.");
+    if (!timesheetTabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expectedTimesheetTabs))
+        throw new InvalidOperationException("Günlük ve Aylık Puantaj tab düzeninden sapmış.");
+    if (buttons.Count(x => x == "&Hesapla") != 2 || !buttons.Contains("&Puantaj Sonuçları"))
+        throw new InvalidOperationException("Günlük ve Aylık Puantaj mnemonic düzeninden sapmış.");
+}
+
 var timer = new System.Windows.Forms.Timer { Interval = 400 };
 timer.Tick += (_, _) => { timer.Stop(); form.Close(); };
 form.Shown += (_, _) => timer.Start();
