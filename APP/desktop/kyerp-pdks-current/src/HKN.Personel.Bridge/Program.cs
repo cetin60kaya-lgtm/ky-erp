@@ -47,6 +47,7 @@ internal static class Program
     [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int command);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
@@ -208,6 +209,15 @@ internal static class Program
         }
     }
 
+    sealed class OverlayForm : Form
+    {
+        protected override bool ShowWithoutActivation => true;
+        protected override CreateParams CreateParams
+        {
+            get { var cp = base.CreateParams; cp.ExStyle |= 0x08000000 | 0x00000080; return cp; }
+        }
+    }
+
     static void OverlayUiLoop()
     {
         while (true)
@@ -219,53 +229,17 @@ internal static class Program
                 var main = FindWindowForProcess(hedef.Id, "TAnaf");
                 var coolBar = main == IntPtr.Zero ? IntPtr.Zero : FindDescendant(main, "TCoolBar");
                 var toolbar = main == IntPtr.Zero ? IntPtr.Zero : FindDescendant(main, "TToolBar");
-                if (main == IntPtr.Zero || coolBar == IntPtr.Zero || toolbar == IntPtr.Zero ||
-                    !GetWindowRect(coolBar, out var cr) || !GetWindowRect(toolbar, out var tr))
-                { Thread.Sleep(500); continue; }
-
+                if (main == IntPtr.Zero || coolBar == IntPtr.Zero || toolbar == IntPtr.Zero || !GetWindowRect(coolBar, out var cr) || !GetWindowRect(toolbar, out var tr)) { Thread.Sleep(500); continue; }
                 int width = Math.Max(1, cr.Right - cr.Left), height = Math.Max(1, cr.Bottom - cr.Top);
                 uint dpi = GetDpiForWindow(toolbar); if (dpi == 0) dpi = 96;
                 toolbarButtonWidth = Math.Max(50, (int)Math.Round(64 * (dpi / 96.0)));
-                toolbarButtonHeight = Math.Max(1, tr.Bottom - tr.Top);
-                toolbarOffsetX = Math.Max(0, tr.Left - cr.Left);
-                toolbarOffsetY = Math.Max(0, tr.Top - cr.Top);
-                lastToolbar = toolbar;
-
+                toolbarButtonHeight = Math.Max(1, tr.Bottom - tr.Top); toolbarOffsetX = Math.Max(0, tr.Left - cr.Left); toolbarOffsetY = Math.Max(0, tr.Top - cr.Top); lastToolbar = toolbar;
                 using var image = BuildToolbarImage(cr, width, height, dpi);
-                using var form = new Form
-                {
-                    FormBorderStyle = FormBorderStyle.None,
-                    ShowInTaskbar = false,
-                    StartPosition = FormStartPosition.Manual,
-                    ClientSize = new Size(width, height),
-                    BackgroundImage = (Bitmap)image.Clone(),
-                    BackgroundImageLayout = ImageLayout.None
-                };
-                form.MouseDown += (_, e) =>
-                {
-                    int relX = e.X - toolbarOffsetX, relY = e.Y - toolbarOffsetY;
-                    if (toolbarButtonWidth <= 0 || relX < 0 || relY < 0 || relY >= toolbarButtonHeight) return;
-                    int index = relX / toolbarButtonWidth;
-                    if (index < 0 || index > 10) return;
-                    if (index == PersonelButtonIndex) OpenPersonel(); else ForwardLegacyToolbarClick(index);
-                };
-                form.Shown += (_, _) =>
-                {
-                    SetParent(form.Handle, main);
-                    long style = GetWindowLongPtr(form.Handle, GWL_STYLE).ToInt64();
-                    style &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
-                    style |= WS_CHILD | WS_VISIBLE;
-                    SetWindowLongPtr(form.Handle, GWL_STYLE, new IntPtr(style));
-                    SetWindowPos(form.Handle, IntPtr.Zero, 0, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                };
-                using var timer = new System.Windows.Forms.Timer { Interval = 400 };
-                timer.Tick += (_, _) =>
-                {
-                    if (!IsWindow(main)) { form.Close(); return; }
-                    SetWindowPos(form.Handle, IntPtr.Zero, 0, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                };
-                timer.Start();
-                System.Windows.Forms.Application.Run(form);
+                using var form = new OverlayForm { FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(cr.Left, cr.Top), ClientSize = new Size(width, height), BackgroundImage = (Bitmap)image.Clone(), BackgroundImageLayout = ImageLayout.None };
+                form.MouseDown += (_, e) => { int relX=e.X-toolbarOffsetX, relY=e.Y-toolbarOffsetY; if(toolbarButtonWidth<=0 || relX<0 || relY<0 || relY>=toolbarButtonHeight) return; int index=relX/toolbarButtonWidth; if(index<0 || index>10) return; if(index==PersonelButtonIndex) OpenPersonel(); else ForwardLegacyToolbarClick(index); };
+                using var timer = new System.Windows.Forms.Timer { Interval = 250 };
+                timer.Tick += (_, _) => { if(!IsWindow(main)){ form.Close(); return; } if(!GetWindowRect(coolBar,out var nr)) return; var fg=GetForegroundWindow(); GetWindowThreadProcessId(fg,out uint fpid); bool active=fpid==(uint)hedef.Id || fg==form.Handle; if(!active || !IsWindowVisible(main)){ if(form.Visible) form.Hide(); return; } int w=Math.Max(1,nr.Right-nr.Left), h=Math.Max(1,nr.Bottom-nr.Top); if(!form.Visible) form.Show(); SetWindowPos(form.Handle, main, nr.Left, nr.Top, w, h, SWP_NOACTIVATE|SWP_SHOWWINDOW); };
+                timer.Start(); form.Show(); System.Windows.Forms.Application.Run(form);
             }
             catch { }
             Thread.Sleep(500);
