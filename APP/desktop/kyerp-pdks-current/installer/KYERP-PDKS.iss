@@ -1,5 +1,5 @@
 #define MyAppName "KYERP PDKS"
-#define MyAppVersion "2.1.0"
+#define MyAppVersion "2.2.0"
 #define MyPublisher "KY ERP"
 #define Artifacts GetEnv("KY_PDKS_ARTIFACTS")
 #define SetupOut GetEnv("KY_PDKS_SETUP_OUT")
@@ -9,7 +9,7 @@ AppId={{B9EA8127-51A2-4D9D-89FB-2B7E28421602}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
-VersionInfoVersion=2.1.0.0
+VersionInfoVersion=2.2.0.0
 VersionInfoCompany={#MyPublisher}
 VersionInfoDescription=KYERP PDKS masaustu personel ve PDKS uygulamasi
 AppPublisher={#MyPublisher}
