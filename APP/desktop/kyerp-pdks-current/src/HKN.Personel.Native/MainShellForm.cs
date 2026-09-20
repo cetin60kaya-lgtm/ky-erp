@@ -9,29 +9,33 @@ public sealed class MainShellForm : Form
         Dock = DockStyle.Top,
         GripStyle = ToolStripGripStyle.Hidden,
         AutoSize = false,
-        Height = 58,
-        ImageScalingSize = new Size(16,16),
-        BackColor = SystemColors.Control,
-        RenderMode = ToolStripRenderMode.System,
-        Padding = Padding.Empty
+        Height = 77,
+        ImageScalingSize = new Size(20,20),
+        BackColor = Color.White,
+        RenderMode = ToolStripRenderMode.ManagerRenderMode,
+        Padding = Padding.Empty,
+        CanOverflow = false
     };
-    readonly StatusStrip status = new() { SizingGrip = false };
-    readonly ToolStripStatusLabel todayStatus = new();
-    readonly ToolStripStatusLabel firmStatus = new() { Text = "Firma :" };
-    readonly ToolStripStatusLabel userStatus = new();
-    readonly ToolStripStatusLabel brandStatus = new() { Spring = true, Text = "www.kyerp.net", TextAlign = ContentAlignment.MiddleCenter };
-    readonly ToolStripStatusLabel dbStatus = new() { TextAlign = ContentAlignment.MiddleRight };
+    readonly StatusStrip status = new() { SizingGrip = false, AutoSize = false, Height = 22, BackColor = SystemColors.Control };
+    readonly ToolStripStatusLabel leadStatus = new() { AutoSize = false, Width = 200 };
+    readonly ToolStripStatusLabel todayStatus = new() { AutoSize = false, Width = 155, TextAlign = ContentAlignment.MiddleCenter };
+    readonly ToolStripStatusLabel firmStatus = new() { AutoSize = false, Width = 195, Text = "Firma :", TextAlign = ContentAlignment.MiddleLeft };
+    readonly ToolStripStatusLabel userStatus = new() { AutoSize = false, Width = 150, TextAlign = ContentAlignment.MiddleLeft };
+    readonly ToolStripStatusLabel brandStatus = new() { Spring = true, Text = "www.kyerp.net", TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Blue };
+    readonly ToolStripStatusLabel dbStatus = new() { AutoSize = false, Width = 360, TextAlign = ContentAlignment.MiddleLeft };
     PersonelForm? personel;
     Form? activeChild;
 
     public MainShellForm(LocalUser user)
     {
         currentUser = user;
-        Text = "KYERP PDKS";
+        var v = typeof(MainShellForm).Assembly.GetName().Version;
+        Text = $"KYERP PDKS [Versiyon: {v?.Major ?? 2}.{v?.Minor ?? 2}.{v?.Build ?? 0}]";
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1100,700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Microsoft Sans Serif",8.25f);
+        ToolStripManager.Renderer = new LegacyShellRenderer();
         BuildMenu();
         BuildToolbar();
         BuildStatus();
@@ -44,7 +48,16 @@ public sealed class MainShellForm : Form
 
     void BuildMenu()
     {
-        var menu = new MenuStrip { Dock = DockStyle.Top, Font = Font, BackColor = SystemColors.Control };
+        var menu = new MenuStrip
+        {
+            Dock = DockStyle.Top,
+            Font = new Font("Microsoft Sans Serif",8.25f),
+            BackColor = SystemColors.Control,
+            AutoSize = false,
+            Height = 20,
+            Padding = new Padding(2,1,0,0),
+            RenderMode = ToolStripRenderMode.System
+        };
 
         var ayarlar = new ToolStripMenuItem("Ayarlar");
         var db = new ToolStripMenuItem("Veritabanı Bağlantısı");
@@ -80,7 +93,7 @@ public sealed class MainShellForm : Form
         transfer.DropDownItems.Add(MenuItem("Bilgi Aktar", PdksModule.Terminal, () => OpenDialogModule(PdksModule.Terminal)));
         var hakkinda = new ToolStripMenuItem("Hakkında");
         var about = new ToolStripMenuItem("KYERP PDKS");
-        about.Click += (_,_) => MessageBox.Show("KYERP PDKS", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        about.Click += (_,_) => MessageBox.Show(Text, "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
         hakkinda.DropDownItems.Add(about);
 
         menu.Items.AddRange([ayarlar,tanimlar,islemler,raporlar,araclar,transfer,hakkinda]);
@@ -96,17 +109,17 @@ public sealed class MainShellForm : Form
 
     void BuildToolbar()
     {
-        AddLegacyTool("Bilgi Aktar", PdksModule.Terminal, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Terminal), 70);
-        AddLegacyTool("Gruplar", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => OpenDefinition("GRUP"), 62);
-        AddLegacyTool("Dönemler", PdksModule.Donemler, SystemIcons.Question.ToBitmap(), () => OpenDialogModule(PdksModule.Donemler), 68);
-        AddLegacyTool("Bölümler", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => OpenDefinition("BOLUM"), 68);
-        AddLegacyTool("Giriş-Çıkışlar", PdksModule.GirisCikis, SystemIcons.Shield.ToBitmap(), () => OpenData(LegacyDataView.GirisCikis, PdksModule.GirisCikis), 82);
-        AddLegacyTool("Per. Bilgileri", PdksModule.Personel, SystemIcons.Information.ToBitmap(), OpenPersonel, 76);
-        AddLegacyTool("Avanslar", PdksModule.EkKazancKesinti, SystemIcons.Warning.ToBitmap(), () => OpenData(LegacyDataView.Avanslar, PdksModule.EkKazancKesinti), 66);
-        AddLegacyTool("Puantaj", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.Puantaj, PdksModule.Puantaj), 62);
-        AddLegacyTool("Puantaj Son.", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj), 78);
-        AddLegacyTool("Bordro", PdksModule.Bordro, SystemIcons.Information.ToBitmap(), () => OpenData(LegacyDataView.Bordro, PdksModule.Bordro), 60);
-        AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Donemler), 82);
+        AddLegacyTool("Bilgi Aktar", PdksModule.Terminal, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Terminal), 81);
+        AddLegacyTool("Gruplar", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => OpenDefinition("GRUP"), 72);
+        AddLegacyTool("Dönemler", PdksModule.Donemler, SystemIcons.Question.ToBitmap(), () => OpenDialogModule(PdksModule.Donemler), 79);
+        AddLegacyTool("Bölümler", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => OpenDefinition("BOLUM"), 79);
+        AddLegacyTool("Giriş-Çıkışlar", PdksModule.GirisCikis, SystemIcons.Shield.ToBitmap(), () => OpenData(LegacyDataView.GirisCikis, PdksModule.GirisCikis), 95);
+        AddLegacyTool("Per. Bilgileri", PdksModule.Personel, SystemIcons.Information.ToBitmap(), OpenPersonel, 88);
+        AddLegacyTool("Avanslar", PdksModule.EkKazancKesinti, SystemIcons.Warning.ToBitmap(), () => OpenData(LegacyDataView.Avanslar, PdksModule.EkKazancKesinti), 77);
+        AddLegacyTool("Puantaj", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.Puantaj, PdksModule.Puantaj), 72);
+        AddLegacyTool("Puantaj Son.", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj), 90);
+        AddLegacyTool("Bordro", PdksModule.Bordro, SystemIcons.Information.ToBitmap(), () => OpenData(LegacyDataView.Bordro, PdksModule.Bordro), 70);
+        AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Donemler), 95);
     }
 
     void AddLegacyTool(string text, PdksModule module, Image image, Action action, int width)
@@ -115,14 +128,14 @@ public sealed class MainShellForm : Form
         {
             AutoSize = false,
             Width = width,
-            Height = 54,
+            Height = 73,
             TextImageRelation = TextImageRelation.ImageAboveText,
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
             Enabled = currentUser.Can(module),
-            Font = new Font("Microsoft Sans Serif",7.25f,FontStyle.Bold),
+            Font = new Font("Microsoft Sans Serif",8.0f,FontStyle.Bold),
             ForeColor = Color.Blue,
             Margin = Padding.Empty,
-            Padding = new Padding(1,2,1,1),
+            Padding = new Padding(1,7,1,4),
             AutoToolTip = false
         };
         b.Click += (_,_) => action();
@@ -131,13 +144,13 @@ public sealed class MainShellForm : Form
 
     void BuildStatus()
     {
+        status.Font = new Font("Microsoft Sans Serif",7.25f);
         todayStatus.Text = "Bugün : " + DateTime.Today.ToString("dd MMMM yyyy dddd", new System.Globalization.CultureInfo("tr-TR"));
         userStatus.Text = $"Kullanıcı : {currentUser.UserName}";
         UpdateDbStatus();
+        status.Items.Add(leadStatus);
         status.Items.Add(todayStatus);
-        status.Items.Add(new ToolStripSeparator());
         status.Items.Add(firmStatus);
-        status.Items.Add(new ToolStripSeparator());
         status.Items.Add(userStatus);
         status.Items.Add(brandStatus);
         status.Items.Add(dbStatus);
@@ -155,15 +168,50 @@ public sealed class MainShellForm : Form
     {
         DisposeActiveChild();
         workspace.Controls.Clear();
-        workspace.Controls.Add(new Label
+        var center = new TableLayoutPanel
         {
-            Text = "KYERP PDKS",
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI",30,FontStyle.Bold),
-            ForeColor = Color.FromArgb(35,64,110),
-            BackColor = Color.White
-        });
+            ColumnCount = 1,
+            RowCount = 5,
+            BackColor = Color.White,
+            Padding = Padding.Empty
+        };
+        center.RowStyles.Add(new RowStyle(SizeType.Percent,35));
+        center.RowStyles.Add(new RowStyle(SizeType.Absolute,150));
+        center.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
+        center.RowStyles.Add(new RowStyle(SizeType.Absolute,52));
+        center.RowStyles.Add(new RowStyle(SizeType.Percent,65));
+        center.Controls.Add(new Label
+        {
+            Text = "KYERP",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomCenter,
+            Font = new Font("Arial",92,FontStyle.Bold),
+            ForeColor = Color.Black,
+            BackColor = Color.White,
+            Margin = Padding.Empty
+        },0,1);
+        center.Controls.Add(new Label
+        {
+            Text = "P   D   K   S",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopCenter,
+            Font = new Font("Arial",36,FontStyle.Bold),
+            ForeColor = Color.DimGray,
+            BackColor = Color.White,
+            Margin = Padding.Empty
+        },0,2);
+        center.Controls.Add(new Label
+        {
+            Text = "www.kyerp.net",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopCenter,
+            Font = new Font("Arial",17,FontStyle.Bold),
+            ForeColor = Color.Black,
+            BackColor = Color.White,
+            Margin = Padding.Empty
+        },0,3);
+        workspace.Controls.Add(center);
     }
 
     bool Ready(PdksModule module)
@@ -247,5 +295,37 @@ public sealed class MainShellForm : Form
         if (!currentUser.IsAdmin) return;
         using var f = new UserManagementForm();
         f.ShowDialog(this);
+    }
+
+    sealed class LegacyShellRenderer : ToolStripSystemRenderer
+    {
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            e.Graphics.Clear(e.ToolStrip is MenuStrip ? SystemColors.Control : Color.White);
+        }
+
+        protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (e.Item is not ToolStripButton b) { base.OnRenderButtonBackground(e); return; }
+            var r = new Rectangle(0,0,b.Width-1,b.Height-1);
+            var light = b.Pressed || b.Selected ? SystemColors.ControlDark : SystemColors.ControlLightLight;
+            var dark = b.Pressed || b.Selected ? SystemColors.ControlLightLight : SystemColors.ControlDark;
+            using var p1 = new Pen(light);
+            using var p2 = new Pen(dark);
+            e.Graphics.DrawLine(p1,r.Left,r.Top,r.Right,r.Top);
+            e.Graphics.DrawLine(p1,r.Left,r.Top,r.Left,r.Bottom);
+            e.Graphics.DrawLine(p2,r.Right,r.Top,r.Right,r.Bottom);
+            e.Graphics.DrawLine(p2,r.Left,r.Bottom,r.Right,r.Bottom);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            if (e.ToolStrip is MenuStrip) return;
+            using var dark = new Pen(SystemColors.ControlDark);
+            using var light = new Pen(SystemColors.ControlLightLight);
+            var y = e.ToolStrip.Height - 3;
+            e.Graphics.DrawLine(dark,0,y,e.ToolStrip.Width,y);
+            e.Graphics.DrawLine(light,0,y+1,e.ToolStrip.Width,y+1);
+        }
     }
 }
