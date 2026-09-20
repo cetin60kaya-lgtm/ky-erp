@@ -17,6 +17,11 @@ public sealed class FileTerminalDeviceAdapter : ITerminalDeviceAdapter
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         var encoding = System.Text.Encoding.GetEncoding(profile.Encoding);
         var lines = await File.ReadAllLinesAsync(profile.TransferFilePath, encoding, cancellationToken);
+
+        // Hedef PDKS terminal akışında timerecords.txt dosyasının 0 KB olması normaldir.
+        // Cihaz yeni kayıt yazdığında aktarılır; başarılı aktarım sonunda dosya tekrar boş bırakılır.
+        if (lines.Length == 0) return Array.Empty<ProfiledTerminalRecord>();
+
         if (profile.FormatType == TerminalFormatType.Tnf) _ = TnfFile.Parse(lines);
         var records = new List<ProfiledTerminalRecord>();
         var fingerprints = new HashSet<string>(StringComparer.Ordinal);
