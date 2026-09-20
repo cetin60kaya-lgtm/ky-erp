@@ -1,33 +1,42 @@
 # Legacy runtime manifest
 
-Bu klasör üçüncü taraf/eski Hedef runtime dosyalarını Git içine kopyalamaz; çalışan ortamın nasıl yeniden kurulacağını tarif eder.
+Bu klasör, eski Hedef runtime'ın tam kopyasını public GitHub deposuna koymaz. Amaç; çalışan referans paketin nerede tutulduğunu, hangi parçaların kritik olduğunu ve KYERP PDKS geliştirmesinde neyin korunacağını açıkça sabitlemektir.
 
-## Yerel kaynak
+## Private tam referans
 
-Google Drive senkron klasörü: `D:\GoogleDrive\Hedef500`
+Aktif çalışma klasörü: `D:\Hedef500\Hedef500`
 
-Beklenen runtime öğeleri:
+Google Drive private kopyası: `D:\GoogleDrive\Hakan Emp\KYERP-PDKS\PRIVATE_RUNTIME\Hedef500_2026-09-20`
 
-- `Hedef.exe`
-- `Hedef.Lic`
-- `HKN.Personel.Native.exe`
-- `HKN.Personel.Bridge.exe`
-- `Library\`
-- `Report\`
-- `Terminal Bilgi Aktar\`
-- `donemolustur.exe`
-- gerektiğinde Firebird kurulum paketi
+20.09.2026 kontrolü: 118 dosya, yaklaşık 142.88 MB. Bu private kopya canlı referans olarak korunacaktır.
 
-## Git'e alınmayan özel/veri dosyaları
+## Kritik runtime yapısı
 
-- `Data\DATABASE.GDB`
-- `*.gbk`, `*.bak`
+- `Hedef.exe`: eski uygulama işlev/davranış referansı.
+- `Data\`: canlı Firebird verisi ve bağlantı ayarları. Public Git'e alınmaz.
+- `Library\`: Hedef runtime bağımlılıkları.
+- `Report\`: FR3 rapor şablonları; puantaj, bordro, giriş-çıkış vb. parity için referanstır.
+- `Temp\`: SİLİNMEYECEK. Denetim/backup/ara çalışma akışları bu klasöre bakar.
+- `Terminal Bilgi Aktar\`: terminal/kart okuyucu aktarım dosyaları ve yardımcı runtime.
+- `Terminal Bilgi Aktar\timerecords.txt`: 0 KB olması normaldir. Kart okuyucu bu dosyaya veri bırakır; uygulama okuduktan sonra içeriği tüketip temizleyebilir. Dosya/yol korunacaktır.
+- `Yedek\Yedekle.exe` ve `Yedek\Yukle.exe`: legacy yedekleme/geri yükleme referansı.
+- `donemolustur.exe`: dönem işlemleri referansı.
+- `Hedef.Lic`: lisans dosyası; yalnız private/local runtime'da tutulur.
+
+## Public GitHub'a alınmayacaklar
+
+`ky-erp` deposu PUBLIC durumdadır. Bu nedenle aşağıdakiler public Git'e kesinlikle yüklenmez:
+
+- `Data\DATABASE.GDB` ve diğer canlı/veri dosyaları
+- `Temp\` altındaki GBK/GDB/backup dosyaları
 - lisans/anahtar dosyaları
 - kullanıcı/personel verisi içeren exportlar
-- eski setup/backup klasörleri
+- üçüncü taraf Hedef binary/setup paketleri
 
-## Neden binary'ler Git'te değil?
+## Ürün kararı
 
-`ky-erp` deposu public durumdadır. Ayrıca bazı runtime dosyaları GitHub'ın normal Git dosya sınırını aşmaktadır (ör. Personel self-contained EXE >100 MB). Bu nedenle çalışan legacy runtime Drive'da tutulur; kaynak kod GitHub'da tutulur.
+Final ürün `KYERP PDKS` olacaktır. `Hedef.exe` kullanıcıya gösterilen ana uygulama olmayacaktır. Bridge/overlay/yama yaklaşımı kalıcı mimari değildir.
 
-Tam binary arşivi ileride GitHub'a taşınacaksa iki şart vardır: repo private olmalı ve büyük dosyalar Git LFS veya GitHub Release asset olarak yönetilmelidir.
+Final hedef: tek solution -> tek KYERP PDKS uygulaması -> tek setup -> tek kısayol. Hedef runtime yalnız işlev, veri davranışı, rapor ve terminal akışı referansıdır.
+
+Yerel geliştirmede tam private runtime gerektiğinde `SYNC_PRIVATE_RUNTIME.ps1` kullanılır. Böylece VS Code/Codex kaynak kodu GitHub'dan, özel runtime/veriyi ise private Drive kopyasından birlikte kullanabilir.
