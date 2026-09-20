@@ -3,8 +3,9 @@
   if(!/Android/i.test(ua))return;
 
   let deferredPrompt=null;
-  let manualMode=false;
-  const reloadKey="kyerp-security-install-reload-v2";
+  let waitTimer=null;
+  let waitStartedAt=Date.now();
+  const reloadKey="kyerp-security-install-reload-v3";
   const qs=(selector)=>document.querySelector(selector);
   const isStandalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   const chromiumAndroid=()=>/Chrome\//i.test(ua)||/EdgA\//i.test(ua);
@@ -28,39 +29,68 @@
     if(state)state.textContent=message;
   }
 
-  function setManualHelp(message="Kurulum düğmesi hazır"){
-    manualMode=true;
+  function showInstallPanel(){
+    qs("#installPanel")?.classList.remove("hidden");
+    qs("#androidInstallNote")?.classList.remove("hidden");
+  }
+
+  function setWaitingState(){
+    showInstallPanel();
+    const button=qs("#installButton");
+    const state=qs("#installStateText");
+    const note=qs("#androidInstallNote");
+    if(button){
+      button.disabled=true;
+      button.classList.remove("hidden");
+      button.textContent="Android kurulumu hazırlanıyor…";
+    }
+    if(note){
+      const text=note.querySelector("span");
+      if(text)text.textContent="Kısayol oluşturulmayacak. Chrome gerçek KY Güvenlik uygulama kurulumunu hazırladığında Yükle düğmesi aktif olur. İlk kurulumda bu hazırlık 30 saniye kadar sürebilir.";
+    }
+    if(state)state.textContent="Gerçek uygulama kurulumu hazırlanıyor";
+    startWaitClock();
+  }
+
+  function startWaitClock(){
+    if(waitTimer)return;
+    waitStartedAt=Date.now();
+    waitTimer=setInterval(()=>{
+      if(deferredPrompt){stopWaitClock();return;}
+      const elapsed=Math.max(0,Math.floor((Date.now()-waitStartedAt)/1000));
+      const state=qs("#installStateText");
+      if(!state)return;
+      if(elapsed<30)state.textContent=`Chrome uygulama kurulumunu hazırlıyor · ${30-elapsed} sn`;
+      else if(elapsed<45)state.textContent="Chrome kurulum uygunluğunu tamamlıyor…";
+      else state.textContent="Kurulum penceresi bekleniyor · Bu sekmeyi açık tut";
+    },1000);
+  }
+
+  function stopWaitClock(){
+    if(waitTimer){clearInterval(waitTimer);waitTimer=null;}
+  }
+
+  function setPromptReady(){
+    stopWaitClock();
+    showInstallPanel();
     const button=qs("#installButton");
     const state=qs("#installStateText");
     const note=qs("#androidInstallNote");
     if(button){
       button.disabled=false;
       button.classList.remove("hidden");
-      button.textContent="KY Güvenlik'i Yükle";
+      button.textContent="KY Güvenlik'i Uygulama Olarak Yükle";
     }
-    if(state)state.textContent=message;
+    if(state)state.textContent="Gerçek Android uygulama kurulumu hazır";
     if(note){
-      note.classList.remove("hidden");
       const text=note.querySelector("span");
-      if(text)text.textContent="Düğmeye dokun. Android kurulum penceresi açılırsa Yükle'yi seç. Açılmazsa Chrome sağ üst ⋮ → Uygulamayı yükle / Ana ekrana ekle → Yükle yolunu kullan.";
+      if(text)text.textContent="Bu düğme yalnız Android'in gerçek uygulama yükleme penceresini açar. Chrome kısayolu kullanılmaz.";
     }
-  }
-
-  function setPromptReady(){
-    manualMode=false;
-    const button=qs("#installButton");
-    const state=qs("#installStateText");
-    if(button){
-      button.disabled=false;
-      button.classList.remove("hidden");
-      button.textContent="KY Güvenlik'i Yükle";
-    }
-    if(state)state.textContent="Kuruluma hazır · Dokun ve Yükle";
   }
 
   function markInstalled(){
     deferredPrompt=null;
-    manualMode=false;
+    stopWaitClock();
     sessionStorage.removeItem(reloadKey);
     const panel=qs("#installPanel");
     const button=qs("#installButton");
@@ -88,7 +118,7 @@
       try{await registration.update()}catch{}
       await Promise.race([
         navigator.serviceWorker.ready,
-        new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),2500))
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),3500))
       ]);
       return registration;
     }catch{return null}
@@ -117,17 +147,15 @@
   async function installFromButton(){
     const request=requestState();
 
-    // Ana KY ERP uygulaması da standalone çalışır. Kurulum isteği oradan geldiyse
-    // "zaten yüklü" saymak yerine gerçek Chrome sekmesine çıkıp ayrı KY Güvenlik PWA'sını kur.
     if(isStandalone()&&request.requested&&!request.securityLaunch){
-      notify("KY Güvenlik ayrı uygulama olarak Chrome'da açılıyor.");
+      notify("KY Güvenlik ayrı uygulama kurulumu için Chrome'da açılıyor.");
       openInChrome();
       return;
     }
 
     if(isStandalone()&&request.securityLaunch){
       markInstalled();
-      notify("KY ERP Güvenlik zaten uygulama olarak açık.");
+      notify("KY ERP Güvenlik uygulama olarak açık.");
       return;
     }
 
@@ -140,14 +168,14 @@
         if(choice?.outcome==="accepted"){
           const state=qs("#installStateText");
           if(state)state.textContent="Kurulum onaylandı · Android tamamlıyor";
-          notify("KY Güvenlik kurulumu Android'e gönderildi.");
+          notify("KY Güvenlik gerçek uygulama kurulumu Android'e gönderildi.");
           return;
         }
-        notify("Kurulum iptal edildi. Düğmeye tekrar dokunabilirsin.");
+        notify("Kurulum iptal edildi. Hazır olduğunda tekrar deneyebilirsin.");
       }catch{
-        notify("Android kurulum penceresi açılamadı. Kurulum yeniden hazırlanıyor.");
+        notify("Android uygulama kurulum penceresi açılamadı. Yeniden hazırlanıyor.");
       }
-      setManualHelp();
+      setWaitingState();
       return;
     }
 
@@ -158,8 +186,8 @@
 
     if(await retryWithSecurityWorker())return;
 
-    setManualHelp("Chrome kurulum seçeneği hazır");
-    notify("Kurulum penceresi otomatik açılmazsa Chrome sağ üst ⋮ → Uygulamayı yükle / Ana ekrana ekle → Yükle seçeneğini kullan.");
+    setWaitingState();
+    notify("Kısayol kullanılmayacak. Chrome gerçek uygulama kurulumunu hazırlıyor; bu sekmeyi açık tut.");
   }
 
   window.addEventListener("beforeinstallprompt",(event)=>{
@@ -180,16 +208,10 @@
       markInstalled();
       return;
     }
-    if(deferredPrompt){
-      setPromptReady();
-      return;
-    }
+    if(deferredPrompt){setPromptReady();return;}
     await ensureSecurityWorker();
-    if(deferredPrompt){
-      setPromptReady();
-      return;
-    }
-    setManualHelp(isSecurityController()?"Chrome kurulum seçeneği hazır":"Kurulum hazırlanıyor · Düğmeye dokun");
+    if(deferredPrompt){setPromptReady();return;}
+    setWaitingState();
   }
 
   function attach(){
@@ -199,26 +221,17 @@
     button.addEventListener("click",(event)=>{
       event.preventDefault();
       event.stopImmediatePropagation();
+      if(button.disabled&&!deferredPrompt){
+        notify("Chrome gerçek uygulama kurulumunu hazırlıyor. Kısayol oluşturma kullanılmayacak.");
+        return;
+      }
       void installFromButton();
     },true);
 
-    const observer=new MutationObserver(()=>{
-      if(manualMode&&!deferredPrompt){
-        const request=requestState();
-        if(isStandalone()&&request.securityLaunch)return;
-        const state=qs("#installStateText");
-        if(button.disabled)button.disabled=false;
-        if(button.classList.contains("hidden"))button.classList.remove("hidden");
-        if(button.textContent!=="KY Güvenlik'i Yükle")button.textContent="KY Güvenlik'i Yükle";
-        if(state&&/hazırlanıyor|desteklemiyor/i.test(String(state.textContent||"")))state.textContent="Kurulum düğmesi hazır";
-      }
-    });
-    observer.observe(button,{attributes:true,childList:true,characterData:true,subtree:true});
-
     void stabilize();
-    setTimeout(()=>void stabilize(),800);
-    setTimeout(()=>void stabilize(),2200);
-    setTimeout(()=>void stabilize(),4500);
+    setTimeout(()=>void stabilize(),1500);
+    setTimeout(()=>void stabilize(),5000);
+    setTimeout(()=>void stabilize(),15000);
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});
