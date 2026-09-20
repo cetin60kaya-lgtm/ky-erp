@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using KYERP.PDKS.Core;
@@ -15,7 +15,7 @@ internal static class Program
     const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
     const int SW_SHOW = 5, GWL_STYLE = -16;
 
-    const uint TB_SETBUTTONINFOW = 0x0440;
+    const uint TB_SETBUTTONINFOA = 0x0442;
     const uint TBIF_TEXT = 0x00000002, TBIF_STATE = 0x00000004, TBIF_BYINDEX = 0x80000000;
     const byte TBSTATE_ENABLED = 0x04;
     const int PersonelButtonIndex = 5;
@@ -241,7 +241,7 @@ internal static class Program
             if (remote == IntPtr.Zero) return false;
 
             var remoteText = new IntPtr(remote.ToInt64() + 64);
-            var textBytes = Encoding.Unicode.GetBytes(text + "\0");
+            var textBytes = Encoding.ASCII.GetBytes(text + "\0");
             if (!WriteProcessMemory(process, remoteText, textBytes, new UIntPtr((uint)textBytes.Length), out _)) return false;
 
             var info = new byte[32];
@@ -252,7 +252,7 @@ internal static class Program
             BitConverter.GetBytes(text.Length).CopyTo(info, 28);
 
             if (!WriteProcessMemory(process, remote, info, new UIntPtr((uint)info.Length), out _)) return false;
-            return SendMessage(toolbar, TB_SETBUTTONINFOW, new IntPtr(index), remote) != IntPtr.Zero;
+            return SendMessage(toolbar, TB_SETBUTTONINFOA, new IntPtr(index), remote) != IntPtr.Zero;
         }
         finally
         {
