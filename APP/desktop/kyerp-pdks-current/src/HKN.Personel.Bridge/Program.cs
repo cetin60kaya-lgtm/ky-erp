@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Drawing;
+using System.Windows.Forms;
 using KYERP.PDKS.Core;
 
 internal static class Program
@@ -27,7 +29,7 @@ internal static class Program
     const uint PROCESS_VM_OPERATION = 0x0008, PROCESS_VM_READ = 0x0010, PROCESS_VM_WRITE = 0x0020, PROCESS_QUERY_INFORMATION = 0x0400;
     const uint MEM_COMMIT_RESERVE = 0x3000, MEM_RELEASE = 0x8000, PAGE_READWRITE = 0x04;
 
-    static IntPtr statusLabel, embedded, lastToolbar, toolbarSkin, toolbarSkinBitmap;
+    static IntPtr statusLabel, embedded, lastToolbar;
     static int toolbarOffsetX, toolbarOffsetY, toolbarButtonWidth, toolbarButtonHeight;
     static DateTime lastToolbarPatch = DateTime.MinValue;
     static int opening;
@@ -96,7 +98,9 @@ internal static class Program
         EnsurePrimaryApplicationRunning();
         new Thread(NativeWatcher) { IsBackground = true }.Start();
         new Thread(ShellLoop) { IsBackground = true }.Start();
-        new Thread(ClickLoop) { IsBackground = true }.Start();
+        var overlayThread = new Thread(OverlayUiLoop) { IsBackground = true };
+        overlayThread.SetApartmentState(ApartmentState.STA);
+        overlayThread.Start();
         while (true) Thread.Sleep(1000);
     }
 
@@ -194,7 +198,6 @@ internal static class Program
                     var appWindow = FindWindowForProcess(process.Id, "TApplication");
                     if (appWindow != IntPtr.Zero) SetWindowText(appWindow, "KYERP PDKS");
                     CleanLegacyMenu(main);
-                    EnsureClassicToolbar(main);
                     HideLegacyHome(main);
                     EnsureStatusBrand(main);
                     ResizeEmbedded(main);
@@ -205,34 +208,95 @@ internal static class Program
         }
     }
 
-    static void ClickLoop()
+    static void OverlayUiLoop()
     {
-        bool wasDown = false;
         while (true)
         {
             try
             {
-                bool down = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-                if (down && !wasDown && toolbarSkin != IntPtr.Zero && IsWindow(toolbarSkin)
-                    && GetWindowRect(toolbarSkin, out var rect) && GetCursorPos(out var point))
+                var hedef = Process.GetProcessesByName("Hedef").FirstOrDefault();
+                if (hedef is null) { Thread.Sleep(500); continue; }
+                var main = FindWindowForProcess(hedef.Id, "TAnaf");
+                var coolBar = main == IntPtr.Zero ? IntPtr.Zero : FindDescendant(main, "TCoolBar");
+                var toolbar = main == IntPtr.Zero ? IntPtr.Zero : FindDescendant(main, "TToolBar");
+                if (main == IntPtr.Zero || coolBar == IntPtr.Zero || toolbar == IntPtr.Zero ||
+                    !GetWindowRect(coolBar, out var cr) || !GetWindowRect(toolbar, out var tr))
+                { Thread.Sleep(500); continue; }
+
+                int width = Math.Max(1, cr.Right - cr.Left), height = Math.Max(1, cr.Bottom - cr.Top);
+                uint dpi = GetDpiForWindow(toolbar); if (dpi == 0) dpi = 96;
+                toolbarButtonWidth = Math.Max(50, (int)Math.Round(64 * (dpi / 96.0)));
+                toolbarButtonHeight = Math.Max(1, tr.Bottom - tr.Top);
+                toolbarOffsetX = Math.Max(0, tr.Left - cr.Left);
+                toolbarOffsetY = Math.Max(0, tr.Top - cr.Top);
+                lastToolbar = toolbar;
+
+                using var image = BuildToolbarImage(cr, width, height, dpi);
+                using var form = new Form
                 {
-                    int relX = point.X - rect.Left - toolbarOffsetX;
-                    int relY = point.Y - rect.Top - toolbarOffsetY;
-                    if (toolbarButtonWidth > 0 && relX >= 0 && relY >= 0 && relY < toolbarButtonHeight)
-                    {
-                        int index = relX / toolbarButtonWidth;
-                        if (index >= 0 && index <= 10)
-                        {
-                            if (index == PersonelButtonIndex) OpenPersonel();
-                            else ForwardLegacyToolbarClick(index);
-                        }
-                    }
-                }
-                wasDown = down;
+                    FormBorderStyle = FormBorderStyle.None,
+                    ShowInTaskbar = false,
+                    StartPosition = FormStartPosition.Manual,
+                    ClientSize = new Size(width, height),
+                    BackgroundImage = (Bitmap)image.Clone(),
+                    BackgroundImageLayout = ImageLayout.None
+                };
+                form.MouseDown += (_, e) =>
+                {
+                    int relX = e.X - toolbarOffsetX, relY = e.Y - toolbarOffsetY;
+                    if (toolbarButtonWidth <= 0 || relX < 0 || relY < 0 || relY >= toolbarButtonHeight) return;
+                    int index = relX / toolbarButtonWidth;
+                    if (index < 0 || index > 10) return;
+                    if (index == PersonelButtonIndex) OpenPersonel(); else ForwardLegacyToolbarClick(index);
+                };
+                form.Shown += (_, _) =>
+                {
+                    SetParent(form.Handle, main);
+                    long style = GetWindowLongPtr(form.Handle, GWL_STYLE).ToInt64();
+                    style &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
+                    style |= WS_CHILD | WS_VISIBLE;
+                    SetWindowLongPtr(form.Handle, GWL_STYLE, new IntPtr(style));
+                    SetWindowPos(form.Handle, IntPtr.Zero, 0, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                };
+                using var timer = new System.Windows.Forms.Timer { Interval = 400 };
+                timer.Tick += (_, _) =>
+                {
+                    if (!IsWindow(main)) { form.Close(); return; }
+                    SetWindowPos(form.Handle, IntPtr.Zero, 0, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                };
+                timer.Start();
+                System.Windows.Forms.Application.Run(form);
             }
             catch { }
-            Thread.Sleep(40);
+            Thread.Sleep(500);
         }
+    }
+
+    static Bitmap BuildToolbarImage(RECT coolRect, int width, int height, uint dpi)
+    {
+        var bmp = new Bitmap(width, height);
+        using var g = Graphics.FromImage(bmp);
+        g.CopyFromScreen(coolRect.Left, coolRect.Top, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
+        int bw = toolbarButtonWidth, bh = toolbarButtonHeight;
+        int sourceX = toolbarOffsetX + bw, destX = toolbarOffsetX + PersonelButtonIndex * bw;
+        if (sourceX >= 0 && sourceX + bw <= width && destX >= 0 && destX + bw <= width)
+        {
+            var srcRect = new Rectangle(sourceX, toolbarOffsetY, bw, Math.Min(bh, height - toolbarOffsetY));
+            using var buttonCopy = bmp.Clone(srcRect, bmp.PixelFormat);
+            g.DrawImageUnscaled(buttonCopy, destX, toolbarOffsetY);
+            int textH = Math.Max(18, (int)Math.Round(20 * (dpi / 96.0)));
+            int textTop = Math.Max(toolbarOffsetY, toolbarOffsetY + bh - textH);
+            int sampleX = Math.Min(width - 1, toolbarOffsetX + 11 * bw + 12);
+            int sampleY = Math.Min(height - 1, textTop + Math.Max(1, textH / 2));
+            Color bg = bmp.GetPixel(Math.Max(0, sampleX), Math.Max(0, sampleY));
+            using var brush = new SolidBrush(bg);
+            g.FillRectangle(brush, destX, textTop, bw, Math.Min(textH, height - textTop));
+            using var font = new Font("Tahoma", 8.25f, FontStyle.Regular, GraphicsUnit.Point);
+            using var textBrush = new SolidBrush(Color.FromArgb(0, 0, 204));
+            using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            g.DrawString("Personel", font, textBrush, new RectangleF(destX, textTop, bw, Math.Min(textH, height - textTop)), sf);
+        }
+        return bmp;
     }
 
     static void HideLegacyHome(IntPtr main)
@@ -249,92 +313,6 @@ internal static class Program
             return true;
         }, IntPtr.Zero);
         if (largestPanel != IntPtr.Zero) ShowWindow(largestPanel, SW_HIDE);
-    }
-
-    static void EnsureClassicToolbar(IntPtr main)
-    {
-        var coolBar = FindDescendant(main, "TCoolBar");
-        var toolbar = FindDescendant(main, "TToolBar");
-        if (coolBar == IntPtr.Zero || toolbar == IntPtr.Zero) return;
-        lastToolbar = toolbar;
-        if (!GetWindowRect(coolBar, out var cr) || !GetWindowRect(toolbar, out var tr)) return;
-        int width = Math.Max(1, cr.Right - cr.Left), height = Math.Max(1, cr.Bottom - cr.Top);
-        uint dpi = GetDpiForWindow(toolbar); if (dpi == 0) dpi = 96;
-        toolbarButtonWidth = Math.Max(50, (int)Math.Round(64 * (dpi / 96.0)));
-        toolbarButtonHeight = Math.Max(1, tr.Bottom - tr.Top);
-        toolbarOffsetX = Math.Max(0, tr.Left - cr.Left);
-        toolbarOffsetY = Math.Max(0, tr.Top - cr.Top);
-        if (toolbarSkin == IntPtr.Zero || !IsWindow(toolbarSkin))
-        {
-            toolbarSkin = CreateWindowEx(0, "STATIC", string.Empty, WS_POPUP | WS_VISIBLE,
-                0, 0, width, height, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-            if (toolbarSkin != IntPtr.Zero)
-            {
-                SetParent(toolbarSkin, main);
-                long skinStyle = GetWindowLongPtr(toolbarSkin, GWL_STYLE).ToInt64();
-                skinStyle &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
-                skinStyle |= WS_CHILD | WS_VISIBLE;
-                SetWindowLongPtr(toolbarSkin, GWL_STYLE, new IntPtr(skinStyle));
-            }
-        }
-        if (toolbarSkin != IntPtr.Zero)
-        {
-            SetWindowPos(toolbarSkin, IntPtr.Zero, 0, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-            PaintClassicToolbar(coolBar, toolbarSkin, width, height, dpi);
-        }
-    }
-
-    static void PaintClassicToolbar(IntPtr coolBar, IntPtr skin, int width, int height, uint dpi)
-    {
-        IntPtr src = GetDC(coolBar), dst = GetDC(skin);
-        if (src == IntPtr.Zero || dst == IntPtr.Zero)
-        {
-            if (src != IntPtr.Zero) ReleaseDC(coolBar, src);
-            if (dst != IntPtr.Zero) ReleaseDC(skin, dst);
-            return;
-        }
-        BitBlt(dst, 0, 0, width, height, src, 0, 0, SRCCOPY);
-        int bw = toolbarButtonWidth, bh = toolbarButtonHeight;
-        int sourceX = toolbarOffsetX + bw, destX = toolbarOffsetX + PersonelButtonIndex * bw;
-        if (sourceX + bw <= width && destX + bw <= width)
-        {
-            BitBlt(dst, destX, toolbarOffsetY, bw, bh, src, sourceX, toolbarOffsetY, SRCCOPY);
-            int textH = Math.Max(18, (int)Math.Round(20 * (dpi / 96.0)));
-            int blankX = Math.Min(width - bw, toolbarOffsetX + 11 * bw + 8);
-            if (blankX >= 0)
-                BitBlt(dst, destX, toolbarOffsetY + bh - textH, bw, textH, src, blankX, toolbarOffsetY + bh - textH, SRCCOPY);
-            IntPtr font = GetStockObject(DEFAULT_GUI_FONT), priorFont = SelectObject(dst, font);
-            SetBkMode(dst, TRANSPARENT); SetTextColor(dst, 0x00CC3300);
-            var rr = new RECT { Left = destX, Top = toolbarOffsetY + bh - textH, Right = destX + bw, Bottom = toolbarOffsetY + bh };
-            DrawText(dst, "Personel", -1, ref rr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            SelectObject(dst, priorFont);
-        }
-        ReleaseDC(coolBar, src); ReleaseDC(skin, dst);
-    }
-
-    static IntPtr CaptureClassicToolbar(IntPtr coolBar, int width, int height, uint dpi)
-    {
-        IntPtr src = GetDC(coolBar); if (src == IntPtr.Zero) return IntPtr.Zero;
-        IntPtr mem = CreateCompatibleDC(src); if (mem == IntPtr.Zero) { ReleaseDC(coolBar, src); return IntPtr.Zero; }
-        IntPtr bmp = CreateCompatibleBitmap(src, width, height); if (bmp == IntPtr.Zero) { DeleteDC(mem); ReleaseDC(coolBar, src); return IntPtr.Zero; }
-        IntPtr old = SelectObject(mem, bmp);
-        BitBlt(mem, 0, 0, width, height, src, 0, 0, SRCCOPY);
-        int bw = toolbarButtonWidth, bh = toolbarButtonHeight;
-        int sourceX = toolbarOffsetX + bw, destX = toolbarOffsetX + PersonelButtonIndex * bw;
-        if (sourceX + bw <= width && destX + bw <= width)
-        {
-            BitBlt(mem, destX, toolbarOffsetY, bw, bh, mem, sourceX, toolbarOffsetY, SRCCOPY);
-            int textH = Math.Max(18, (int)Math.Round(20 * (dpi / 96.0)));
-            int blankX = Math.Min(width - bw, toolbarOffsetX + 11 * bw + 8);
-            if (blankX >= 0)
-                BitBlt(mem, destX, toolbarOffsetY + bh - textH, bw, textH, mem, blankX, toolbarOffsetY + bh - textH, SRCCOPY);
-            IntPtr font = GetStockObject(DEFAULT_GUI_FONT), priorFont = SelectObject(mem, font);
-            SetBkMode(mem, TRANSPARENT); SetTextColor(mem, 0x00CC3300);
-            var rr = new RECT { Left = destX, Top = toolbarOffsetY + bh - textH, Right = destX + bw, Bottom = toolbarOffsetY + bh };
-            DrawText(mem, "Personel", -1, ref rr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            SelectObject(mem, priorFont);
-        }
-        SelectObject(mem, old); DeleteDC(mem); ReleaseDC(coolBar, src); return bmp;
     }
 
     static void ForwardLegacyToolbarClick(int index)
