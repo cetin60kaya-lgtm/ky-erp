@@ -3,7 +3,10 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $setupOut = Join-Path $root "artifacts\Setup"
 $artifacts = Join-Path $root "artifacts"
-$version = "2.1.0"
+$projectFile = Join-Path $root "src\HKN.Personel.Native\HKN.Personel.Native.csproj"
+[xml]$projectXml = Get-Content $projectFile
+$version = [string]($projectXml.Project.PropertyGroup.Version | Select-Object -First 1)
+if ([string]::IsNullOrWhiteSpace($version)) { throw "Uygulama versiyonu csproj icinden okunamadi." }
 
 & (Join-Path $root "BUILD.ps1")
 if ($LASTEXITCODE -ne 0) { throw "KYERP PDKS build basarisiz." }
