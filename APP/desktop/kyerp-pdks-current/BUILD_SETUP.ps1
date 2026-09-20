@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $setupOut = Join-Path $root "artifacts\Setup"
 $artifacts = Join-Path $root "artifacts"
+$version = "2.1.0"
 
 & (Join-Path $root "BUILD.ps1")
 if ($LASTEXITCODE -ne 0) { throw "KYERP PDKS build basarisiz." }
@@ -22,12 +23,12 @@ $env:KY_PDKS_SETUP_OUT = $setupOut
 & $iscc (Join-Path $root "installer\KYERP-PDKS.iss")
 if ($LASTEXITCODE -ne 0) { throw "KYERP PDKS setup derlemesi basarisiz." }
 
-$versionedSetup = Join-Path $setupOut "KYERP-PDKS-Setup-2.0.0.exe"
+$versionedSetup = Join-Path $setupOut "KYERP-PDKS-Setup-$version.exe"
 if (-not (Test-Path $versionedSetup)) { throw "Setup olusmadi: $versionedSetup" }
 if ((Get-Item $versionedSetup).Length -lt 5MB) { throw "Setup beklenenden kucuk; paket kontrol edilmeli." }
 
 $hash = (Get-FileHash $versionedSetup -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  KYERP-PDKS-Setup-2.0.0.exe" | Set-Content "$versionedSetup.sha256.txt" -Encoding ascii
+"$hash  KYERP-PDKS-Setup-$version.exe" | Set-Content "$versionedSetup.sha256.txt" -Encoding ascii
 
 $finalSetup = Join-Path $setupOut "KYERP-PDKS-Setup.exe"
 Copy-Item $versionedSetup $finalSetup -Force
