@@ -29,6 +29,19 @@ public partial class PersonelForm
         }
     }
 
+    public void OpenStandaloneDialog(PdksModule module)
+    {
+        switch (module)
+        {
+            case PdksModule.GunlukOperasyon: ShowDailyOperations(); break;
+            case PdksModule.Tanimlar: ShowOrganizationDefinitions(); break;
+            case PdksModule.Donemler: ShowPeriodDefinitions(); break;
+            case PdksModule.Terminal: ShowTerminalProfiles(); break;
+            case PdksModule.Raporlar: ShowReportCenter(); break;
+            default: ActivateModule(module); break;
+        }
+    }
+
     void ShowReportCenter()
     {
         using var f = new Form
