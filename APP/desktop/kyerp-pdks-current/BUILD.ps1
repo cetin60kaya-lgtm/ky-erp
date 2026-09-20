@@ -15,6 +15,9 @@ if ($LASTEXITCODE -ne 0) { throw "Solution build basarisiz." }
 dotnet run --project (Join-Path $root "tools\ContractTests\ContractTests.csproj") -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw "Contract testleri basarisiz." }
 
+dotnet run --project (Join-Path $root "tools\ShellSmokeTest\ShellSmokeTest.csproj") -c Release --no-build
+if ($LASTEXITCODE -ne 0) { throw "Native shell smoke testi basarisiz." }
+
 $personelOut = Join-Path $artifacts "Personel"
 if (Test-Path $personelOut) { Remove-Item $personelOut -Recurse -Force }
 dotnet publish $native -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $personelOut
