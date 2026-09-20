@@ -9,12 +9,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
   <meta name="format-detection" content="telephone=no" />
-  <script>/* KYERP_SECURITY_CANONICAL_REDIRECT_V28 */(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone){const u=new URL(location.href);u.protocol="https:";u.host="kyerp.net";u.pathname="/ky-guvenlik/";u.searchParams.set("release","2.8");location.replace(u.href)}}catch{}})();</script>
-  <script src="/security/install-helper.js?v=security-install-v4"></script>
-  <link rel="manifest" href="/security/manifest.webmanifest?v=security-install-v5" />
-  <link rel="icon" href="/security/kyerp-security-icon.svg" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/security/kyerp-security-apple-touch.png" />
-  <link rel="stylesheet" href="/security/app.css" />
+  <script>/* KYERP_SECURITY_CANONICAL_REDIRECT_V28 */(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname==="app.kyerp.net"){const u=new URL(location.href);u.hostname="kyerp.net";u.searchParams.set("release","2.8");location.replace(u.href)}}catch{}})();</script>
+  <script src="/ky-guvenlik/install-helper.js?v=security-install-v4"></script>
+  <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v1" />
+  <link rel="icon" href="/ky-guvenlik/kyerp-security-icon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/ky-guvenlik/kyerp-security-apple-touch.png" />
+  <link rel="stylesheet" href="/ky-guvenlik/app.css" />
   <title>KY ERP Güvenlik</title>
 </head>
 <body>
@@ -22,7 +22,7 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.7</span></small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.8</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -82,7 +82,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.7</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.8</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -199,10 +199,10 @@
       <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
     </footer>
   </main>
-  <script src="/security/ios-safari.js?v=security-v2.7"></script>
-  <script type="module" src="/security/app.js?v=security-v2.7"></script>
-  <script type="module" src="/security/security-actions.js?v=security-v2.7"></script>
-  <script type="module" src="/security/security-control-center.js?v=security-v2.7"></script>
-  <script type="module" src="/security/security-foreground-sync.js?v=security-v2.7"></script>
+  <script src="/ky-guvenlik/ios-safari.js?v=security-v2.8"></script>
+  <script type="module" src="/ky-guvenlik/app.js?v=security-v2.8"></script>
+  <script type="module" src="/ky-guvenlik/security-actions.js?v=security-v2.8"></script>
+  <script type="module" src="/ky-guvenlik/security-control-center.js?v=security-v2.8"></script>
+  <script type="module" src="/ky-guvenlik/security-foreground-sync.js?v=security-v2.8"></script>
 </body>
 </html>

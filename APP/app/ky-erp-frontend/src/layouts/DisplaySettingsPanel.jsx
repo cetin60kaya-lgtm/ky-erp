@@ -72,7 +72,7 @@ export default function DisplaySettingsPanel({
   const standalone = isStandaloneApp();
 
   function openSecurityInstaller(target) {
-    const url = new URL("https://app.kyerp.net/security/");
+    const url = new URL("https://kyerp.net/ky-guvenlik/");
     url.searchParams.set("install", "1");
     url.searchParams.set("platform", target);
     window.open(url.toString(), "_blank", "noopener,noreferrer");
