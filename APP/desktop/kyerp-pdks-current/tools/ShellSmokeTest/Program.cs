@@ -118,6 +118,20 @@ using (var payroll = new LegacyBordroForm())
         throw new InvalidOperationException("Genel Maaş Bordrosu komutlarından sapmış.");
 }
 
+var reportKinds = Enum.GetValues<LegacyOperationalReport>();
+var reportTitles = reportKinds.Select(LegacyOperationalReportForm.Title).ToArray();
+if (reportTitles.Distinct().Count() != 5)
+    throw new InvalidOperationException("Operasyon raporları ayrı komutlara eşlenmemiş.");
+foreach (var reportKind in reportKinds)
+{
+    using var report = new LegacyOperationalReportForm(reportKind);
+    if (report.Report != reportKind || report.Text != LegacyOperationalReportForm.Title(reportKind))
+        throw new InvalidOperationException("Operasyon raporu tür/başlık eşlemesi hatalı.");
+    var commands = report.Controls.OfType<Panel>().Single().Controls.OfType<Button>().Select(x => x.Text).ToArray();
+    if (!commands.SequenceEqual(["&Göster", "Ö&nizleme", "PDF", "Excel", "Kapa&t"]))
+        throw new InvalidOperationException("Operasyon raporu komutları eksik.");
+}
+
 var timer = new System.Windows.Forms.Timer { Interval = 400 };
 timer.Tick += (_, _) => { timer.Stop(); form.Close(); };
 form.Shown += (_, _) => timer.Start();

@@ -90,6 +90,13 @@ var terminalResult=new AttendanceImportService(database).Import([new(terminalPk,
 var terminalAfter=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
 if(terminalResult.Inserted!=1||terminalResult.Duplicates!=1||terminalBefore!=terminalAfter)throw new Exception("Terminal tolerans rollback testi başarısız");
 log.AppendLine("TERMINAL TOLERANCE ROLLBACK OK");
+var reportFrom=new DateTime(2000,1,1);var reportTo=new DateTime(2100,1,1);
+ValidateQuery(c,"select a.TARIH,a.PKNO,k.AD,k.SOYAD,v.TUR,v.ISARET,a.MIKTAR,a.ACIKLAMA from AVANS a left join KIMLIK k on k.PKNO=a.PKNO left join AVTUR v on v.KOD=a.TURKOD where a.TARIH>=@A and a.TARIH<@B",new FbParameter("@A",reportFrom),new FbParameter("@B",reportTo));
+ValidateQuery(c,"select o.TARIH,o.PKNO,k.AD,k.SOYAD,o.MAZERET,o.TIP,o.SURESAAT,o.BASSAAT,o.BITSAAT from OZELIZIN o left join KIMLIK k on k.PKNO=o.PKNO where o.TARIH>=@A and o.TARIH<@B",new FbParameter("@A",reportFrom),new FbParameter("@B",reportTo));
+ValidateQuery(c,"select k.PKNO,k.SICILNO,k.AD,k.SOYAD,k.IGTARIH,g.AD,b.AD,s.AD,d.AD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM");
+ValidateQuery(c,"select coalesce(g.AD,'Tanımsız'),count(*) from KIMLIK k left join GRUP g on g.KOD=k.GRUP where k.ICTARIH is null group by g.AD");
+ValidateQuery(c,"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH,coalesce(k.KULIZIN,0) from KIMLIK k where k.ICTARIH is null");
+log.AppendLine("OPERATIONAL REPORT QUERIES OK");
 log.AppendLine("FINAL_RESULT=PASS");
 File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);
 Console.WriteLine(log.ToString());
@@ -106,4 +113,9 @@ static int Exec(FbConnection c,FbTransaction tx,string sql,params FbParameter[] 
     using var cmd=new FbCommand(sql,c,tx);
     if(ps.Length>0) cmd.Parameters.AddRange(ps);
     return cmd.ExecuteNonQuery();
+}
+
+static void ValidateQuery(FbConnection c,string sql,params FbParameter[] ps)
+{
+    using var cmd=new FbCommand(sql,c);if(ps.Length>0)cmd.Parameters.AddRange(ps);using var reader=cmd.ExecuteReader();
 }

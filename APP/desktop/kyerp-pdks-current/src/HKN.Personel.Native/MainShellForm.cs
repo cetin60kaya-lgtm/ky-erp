@@ -106,12 +106,12 @@ public sealed class MainShellForm : Form
         raporlar.DropDownItems.Add(MenuItem("Puantaj Sonuçları", PdksModule.Puantaj, () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj)));
         raporlar.DropDownItems.Add(MenuItem("Detaylı Puantaj Sonuçları", PdksModule.Puantaj, () => OpenPersonelTab(PdksModule.Puantaj)));
         raporlar.DropDownItems.Add(new ToolStripSeparator());
-        raporlar.DropDownItems.Add(MenuItem("Ek Kazanç ve Kesinti Raporu", PdksModule.Raporlar, () => OpenDialogModule(PdksModule.Raporlar)));
-        raporlar.DropDownItems.Add(MenuItem("İzinli Personel Raporu", PdksModule.Raporlar, () => OpenDialogModule(PdksModule.Raporlar)));
+        raporlar.DropDownItems.Add(MenuItem("Ek Kazanç ve Kesinti Raporu", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.EarningsDeductions)));
+        raporlar.DropDownItems.Add(MenuItem("İzinli Personel Raporu", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.LeavePersonnel)));
         raporlar.DropDownItems.Add(new ToolStripSeparator());
-        raporlar.DropDownItems.Add(MenuItem("Personel Listesi", PdksModule.Raporlar, () => OpenDialogModule(PdksModule.Raporlar)));
-        raporlar.DropDownItems.Add(MenuItem("Çalışma Sistemine Göre Personel Sayısı", PdksModule.Raporlar, () => OpenDialogModule(PdksModule.Raporlar)));
-        raporlar.DropDownItems.Add(MenuItem("Personel Yıllık İzin Hakedişleri", PdksModule.Raporlar, () => OpenDialogModule(PdksModule.Raporlar)));
+        raporlar.DropDownItems.Add(MenuItem("Personel Listesi", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelList)));
+        raporlar.DropDownItems.Add(MenuItem("Çalışma Sistemine Göre Personel Sayısı", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.PersonnelCountByWorkSystem)));
+        raporlar.DropDownItems.Add(MenuItem("Personel Yıllık İzin Hakedişleri", PdksModule.Raporlar, () => OpenOperationalReport(LegacyOperationalReport.AnnualLeaveEntitlements)));
 
         var araclar = new ToolStripMenuItem("Araçlar");
         araclar.DropDownItems.Add(PlainItem("Hesap Makinası", () => Launch("calc.exe")));
@@ -297,6 +297,12 @@ public sealed class MainShellForm : Form
     {
         if (!Ready(PdksModule.Bordro)) return;
         using var form = new LegacyBordroForm();
+        form.ShowDialog(this);
+    }
+    void OpenOperationalReport(LegacyOperationalReport report)
+    {
+        if (!Ready(PdksModule.Raporlar)) return;
+        using var form = new LegacyOperationalReportForm(report);
         form.ShowDialog(this);
     }
     void OpenData(LegacyDataView view, PdksModule module)
