@@ -24,6 +24,7 @@ public sealed class LegacyDataModuleForm : Form
     readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
     readonly Dictionary<string,ComboBox> dailyLookups = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string,ComboBox> monthlyLookups = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string,ComboBox> bordroLookups = new(StringComparer.OrdinalIgnoreCase);
     TextBox? dailyKartBas;
     TextBox? dailyKartBit;
     DateTimePicker? dailyFrom;
@@ -187,10 +188,10 @@ public sealed class LegacyDataModuleForm : Form
 
     void AddLookupRows(TableLayoutPanel table,Dictionary<string,ComboBox> target,int startRow)
     {
-        var names=new[]{("Grup","GRUP","GRUP"),("Bölüm","BOLUM","BOLUM"),("Servis","SERVIS","SERVIS"),("Durum","DURUM","DURUM"),("Görev","GOREV","GOREV"),("Firma","FIRMA","FIRMA")};
+        var names=new[]{("Grup","GRUP","GRUP"),("Bölüm","BOLUM","BOLUM"),("Servis","SERVIS","SERVIS"),("Durum","DURUM","DURUM"),("Görev","GOREV","GOREV"),("Firma","SIRKET","FIRMA")};
         for(int i=0;i<names.Length;i++)
         {
-            var box=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember=nameof(LookupItem.Name),ValueMember=nameof(LookupItem.Code)};
+            var box=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember=nameof(LookupItem.Name),ValueMember=nameof(LookupItem.Code),Tag=names[i].Item3};
             target[names[i].Item2]=box;AddFilterRow(table,names[i].Item1,box,startRow+i);
             box.SelectedIndexChanged+=(_,_)=>ApplyPeopleFilter();
         }
@@ -200,7 +201,8 @@ public sealed class LegacyDataModuleForm : Form
     {
         foreach(var pair in target)
         {
-            var rows=db.Query($"select KOD,AD from {pair.Key} order by KOD");
+            var table=Convert.ToString(pair.Value.Tag)??pair.Key;
+            var rows=db.Query($"select KOD,AD from {table} order by KOD");
             var items=new List<LookupItem>{new("","Tümü")};
             foreach(DataRow row in rows.Rows) items.Add(new(Convert.ToString(row["KOD"])??"",Convert.ToString(row["AD"])??""));
             pair.Value.DataSource=items;
@@ -212,9 +214,9 @@ public sealed class LegacyDataModuleForm : Form
         try
         {
             LoadLookups(dailyLookups);LoadLookups(monthlyLookups);
-            people=db.Query(@"select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,FIRMA from KIMLIK where ICTARIH is null order by PKNO");
+            people=db.Query(@"select PKNO,AD,SOYAD,IGTARIH,GRUP,BOLUM,SERVIS,DURUM,GOREV,SIRKET from KIMLIK where ICTARIH is null order by PKNO");
             grid.DataSource=people.DefaultView;
-            foreach(var col in new[]{"GRUP","BOLUM","SERVIS","DURUM","GOREV","FIRMA"}) if(grid.Columns.Contains(col)) grid.Columns[col].Visible=false;
+            foreach(var col in new[]{"GRUP","BOLUM","SERVIS","DURUM","GOREV","SIRKET"}) if(grid.Columns.Contains(col)) grid.Columns[col].Visible=false;
             Rename("PKNO","Kart No");Rename("AD","Adı");Rename("SOYAD","Soyadı");Rename("IGTARIH","Tarih");
             ApplyPeopleFilter();
         }
@@ -244,14 +246,8 @@ public sealed class LegacyDataModuleForm : Form
             if(b<a)throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
             from.Value=a;to.Value=b;
             var count=Convert.ToInt32(db.Scalar("select count(*) from PUANTAJ where TARIH>=@A and TARIH<@B",new FbParameter("@A",a),new FbParameter("@B",b.AddDays(1)))??0);
-            if(monthly)
-            {
-                if(monthlyProgress is not null) monthlyProgress.Value=100;
-            }
-            else
-            {
-                if(dailyProgress1 is not null) dailyProgress1.Value=100;if(dailyProgress2 is not null) dailyProgress2.Value=100;
-            }
+            if(monthly){if(monthlyProgress is not null) monthlyProgress.Value=100;}
+            else{if(dailyProgress1 is not null) dailyProgress1.Value=100;if(dailyProgress2 is not null) dailyProgress2.Value=100;}
             MessageBox.Show($"{a:dd.MM.yyyy} - {b:dd.MM.yyyy} döneminde {count} puantaj kaydı bulundu.","Puantaj",MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
         catch(Exception ex){MessageBox.Show(ex.Message,"Puantaj",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
@@ -268,8 +264,7 @@ public sealed class LegacyDataModuleForm : Form
         foreach(var text in new[]{"Kart No","İşe Giriş Tarihi","Ad - Soyad","Soyad - Ad","Sicil No"})sortFlow.Controls.Add(new RadioButton{Text=text,AutoSize=true,Checked=text=="Kart No",Margin=new Padding(3,3,8,0)});sortBox.Controls.Add(sortFlow);root.Controls.Add(sortBox,0,1);
 
         var filterBox = new GroupBox { Text="Filtreler", Dock=DockStyle.Fill };var filters = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Padding=new Padding(5) };filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,95));filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        var kartBas = new TextBox { Dock=DockStyle.Fill, Text="00000" };var kartBit = new TextBox { Dock=DockStyle.Fill, Text="00000" };AddFilterRow(filters,"Kart No Başlangıç",kartBas,0);AddFilterRow(filters,"Kart No Bitiş",kartBit,1);
-        string[] names = ["Grubu","Bölümü","Servisi","Görevi","Durumu","Firma"];for(var i=0;i<names.Length;i++)AddFilterRow(filters,names[i],new ComboBox { Dock=DockStyle.Fill, DropDownStyle=ComboBoxStyle.DropDownList },2+i);filterBox.Controls.Add(filters);root.Controls.Add(filterBox,0,2);
+        var kartBas = new TextBox { Dock=DockStyle.Fill, Text="00000" };var kartBit = new TextBox { Dock=DockStyle.Fill, Text="00000" };AddFilterRow(filters,"Kart No Başlangıç",kartBas,0);AddFilterRow(filters,"Kart No Bitiş",kartBit,1);AddLookupRows(filters,bordroLookups,2);filterBox.Controls.Add(filters);root.Controls.Add(filterBox,0,2);
         var bar = new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Padding=new Padding(5,4,5,0) };bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));var preview = LegacyButton("Önizleme",105,28);preview.Anchor=AnchorStyles.Left;var close = LegacyButton("Kapat",85,28);close.Anchor=AnchorStyles.Right;close.DialogResult=DialogResult.Cancel;preview.Click += (_,_) => ShowBordroPreview();bar.Controls.Add(preview,0,0);bar.Controls.Add(close,1,0);root.Controls.Add(bar,0,3);Controls.Add(root);CancelButton = close;
     }
 
@@ -286,11 +281,7 @@ public sealed class LegacyDataModuleForm : Form
     void ShowBordroPreview()
     {
         ReloadData();
-        using var preview = new Form
-        {
-            Text="Genel Maaş Bordrosu - Önizleme",StartPosition=FormStartPosition.CenterParent,
-            FormBorderStyle=FormBorderStyle.SizableToolWindow,Size=new Size(920,600),ShowInTaskbar=false,Font=Font
-        };
+        using var preview = new Form{Text="Genel Maaş Bordrosu - Önizleme",StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.SizableToolWindow,Size=new Size(920,600),ShowInTaskbar=false,Font=Font};
         var resultGrid = new DataGridView{Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.DisplayedCells,DataSource=data?.DefaultView,BackgroundColor=Color.White};
         preview.Controls.Add(resultGrid);preview.ShowDialog(this);
     }
@@ -300,6 +291,7 @@ public sealed class LegacyDataModuleForm : Form
         if(view==LegacyDataView.Puantaj){LoadPuantajPeople();return;}
         try
         {
+            if(view==LegacyDataView.Bordro && bordroLookups.Count>0) LoadLookups(bordroLookups);
             var a = from.Value.Date;var b = to.Value.Date.AddDays(1);
             data = view switch
             {
