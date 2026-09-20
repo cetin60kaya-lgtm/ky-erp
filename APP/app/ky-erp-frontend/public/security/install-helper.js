@@ -143,6 +143,11 @@
   }
 
   async function installFromButton(){
+    const request=requestState();
+    if(isStandalone()&&request.requested){
+      openInChrome();
+      return;
+    }
     if(isStandalone()){
       markInstalled();
       return;
