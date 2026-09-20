@@ -23,17 +23,17 @@ public sealed class LegacyPeriodForm : Form
     readonly TextBox plusDay = TimeBox(382,216,25);
     readonly ComboBox plusArea = new(){Location=new Point(542,144),Size=new Size(180,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
     readonly ComboBox minusArea = new(){Location=new Point(542,192),Size=new Size(180,21),DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="AD",ValueMember="KOD"};
-    readonly Label total = new(){Location=new Point(670,92),Size=new Size(40,20),BorderStyle=BorderStyle.Fixed3D,TextAlign=ContentAlignment.MiddleCenter};
+    readonly Label total = new(){Location=new Point(670,92),Size=new Size(25,20),BorderStyle=BorderStyle.Fixed3D,TextAlign=ContentAlignment.MiddleCenter};
     readonly DateTimePicker filterStart = new(){Location=new Point(38,20),Size=new Size(171,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
     readonly DateTimePicker filterEnd = new(){Location=new Point(276,20),Size=new Size(171,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};
-    readonly Button save = Cmd("Kaydet",6,350,106);
+    readonly Button save = Cmd("K&aydet",6,350,106);
     int? code;
     bool adding;
     bool editing;
 
     public LegacyPeriodForm()
     {
-        Text="Dönem Tanımlamaları";StartPosition=FormStartPosition.CenterParent;ClientSize=new Size(738,422);
+        Text="Dönem Tanımlamaları";StartPosition=FormStartPosition.CenterScreen;Size=new Size(738,422);
         FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;
         Font=new Font("Microsoft Sans Serif",8.25f);KeyPreview=true;
         Build();Shown+=(_,_)=>ReloadAll();KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
@@ -55,7 +55,7 @@ public sealed class LegacyPeriodForm : Form
         var between=Cmd("Arasındaki Dönemler",46,56,160);between.Height=30;var all=Cmd("Tüm Dönemleri Listele",284,56,160);all.Height=30;
         between.Click+=(_,_)=>ReloadGrid(true);all.Click+=(_,_)=>ReloadGrid(false);filters.Controls.Add(between);filters.Controls.Add(all);Controls.Add(filters);
 
-        var add=Cmd("Yeni Ekle",126,350,106);var edit=Cmd("Değiştir",246,350,106);var del=Cmd("Sil",366,350,106);var delAll=Cmd("Tümünü Sil",486,350,106);var close=Cmd("Kapat",606,350,106);
+        var add=Cmd("&Yeni Ekle",126,350,106);var edit=Cmd("&Değiştir",246,350,106);var del=Cmd("&Sil",366,350,106);var delAll=Cmd("Tü&münü Sil",486,350,106);var close=Cmd("Kapa&t",606,350,106);
         Controls.AddRange([save,add,edit,del,delAll,close]);save.Enabled=false;
         add.Click+=(_,_)=>BeginNew();edit.Click+=(_,_)=>BeginEdit();save.Click+=(_,_)=>SaveCurrent();del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();close.Click+=(_,_)=>Close();
         start.ValueChanged+=(_,_)=>UpdateTotal();end.ValueChanged+=(_,_)=>UpdateTotal();SetEdit(false);

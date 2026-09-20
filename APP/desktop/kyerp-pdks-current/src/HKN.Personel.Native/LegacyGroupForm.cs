@@ -22,7 +22,7 @@ public sealed class LegacyGroupForm : Form
 
     public LegacyGroupForm()
     {
-        Text="Çalışma Grupları"; StartPosition=FormStartPosition.CenterParent; ClientSize=new Size(543,448);
+        Text="Çalışma Grupları"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(543,448);
         FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false; ShowInTaskbar=false;
         Font=new Font("Microsoft Sans Serif",8.25f); KeyPreview=true;
         Build(); Shown+=(_,_)=>Reload(); KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
@@ -51,7 +51,7 @@ public sealed class LegacyGroupForm : Form
         }
         Controls.Add(group);
 
-        var save=Cmd("Kaydet",56);var add=Cmd("Yeni Ekle",104);var edit=Cmd("Değiştir",152);var del=Cmd("Sil",200);var delAll=Cmd("Tümünü Sil",248);var close=Cmd("Kapat",328);
+        var save=Cmd("K&aydet",56);var add=Cmd("&Yeni Ekle",104);var edit=Cmd("&Değiştir",152);var del=Cmd("&Sil",200);var delAll=Cmd("Tü&münü Sil",248);var close=Cmd("Kapa&t",328);
         save.Enabled=false; save.Click+=(_,_)=>Save(); add.Click+=(_,_)=>BeginNew(save);edit.Click+=(_,_)=>BeginEdit(save);del.Click+=(_,_)=>DeleteOne();delAll.Click+=(_,_)=>DeleteAll();close.Click+=(_,_)=>Close();
         Controls.AddRange([save,add,edit,del,delAll,close]);
         SetEditors(false);

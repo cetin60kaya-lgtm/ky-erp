@@ -156,16 +156,17 @@ public sealed class MainShellForm : Form
         AddLegacyTool("Puantaj Son.", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj), 80);
         AddLegacyTool("Bordro", PdksModule.Bordro, SystemIcons.Application.ToBitmap(), OpenLegacyBordro, 80);
         AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, SystemIcons.Application.ToBitmap(), OpenWorkingDate, 85);
+        AddLegacyTool("WC", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => { }, 80, false);
     }
 
-    void AddLegacyTool(string text, PdksModule module, Image image, Action action, int width)
+    void AddLegacyTool(string text, PdksModule module, Image image, Action action, int width, bool visible = true)
     {
         var b = new ToolStripButton(text,image)
         {
             AutoSize=false, Width=width, Height=75, TextImageRelation=TextImageRelation.ImageAboveText,
             DisplayStyle=ToolStripItemDisplayStyle.ImageAndText, Enabled=currentUser.Can(module),
             Font=new Font("Microsoft Sans Serif",8.0f,FontStyle.Bold), ForeColor=Color.Blue,
-            Margin=Padding.Empty, Padding=new Padding(1,7,1,4), AutoToolTip=false
+            Margin=Padding.Empty, Padding=new Padding(1,7,1,4), AutoToolTip=false, Visible=visible
         };
         b.Click += (_,_) => action(); tool.Items.Add(b);
     }
@@ -206,19 +207,18 @@ public sealed class MainShellForm : Form
     void EnsurePersonel()
     {
         if (personel is not null && !personel.IsDisposed) return;
-        personel = new PersonelForm(); personel.PrepareForEmbedding();
+        personel = new PersonelForm();
     }
 
-    void OpenPersonel()
-    {
-        if (!Ready(PdksModule.Personel)) return; EnsurePersonel(); if (personel is null) return;
-        ShowEmbedded(personel); personel.ActivateModule(PdksModule.Personel);
-    }
+    void OpenPersonel() => OpenPersonelTab(PdksModule.Personel);
 
     void OpenPersonelTab(PdksModule module)
     {
         if (!Ready(module)) return; EnsurePersonel(); if (personel is null) return;
-        ShowEmbedded(personel); personel.ActivateModule(module);
+        personel.ActivateModule(module);
+        personel.ShowDialog(this);
+        personel.Dispose();
+        personel = null;
     }
 
     void OpenGroups()

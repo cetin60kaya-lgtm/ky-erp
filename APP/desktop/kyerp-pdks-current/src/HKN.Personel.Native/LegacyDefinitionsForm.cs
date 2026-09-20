@@ -16,11 +16,11 @@ public sealed class LegacyDefinitionsForm : Form
 
     public LegacyDefinitionsForm(string? initialTab=null)
     {
-        Text="Çalışma Sistemleri"; StartPosition=FormStartPosition.CenterParent; ClientSize=new Size(609,450);
+        Text="Çalışma Sistemleri"; StartPosition=FormStartPosition.CenterScreen; Size=new Size(609,450);
         FormBorderStyle=FormBorderStyle.FixedDialog; MaximizeBox=false; MinimizeBox=false; ShowInTaskbar=false;
         Font=new Font("Microsoft Sans Serif",8.25f); KeyPreview=true;
         Build();
-        if(!string.IsNullOrWhiteSpace(initialTab)) SelectTab(initialTab);
+        if(string.IsNullOrWhiteSpace(initialTab)) tabs.SelectedIndex=5; else SelectTab(initialTab);
         Shown+=(_,_)=>RefreshAll();
         KeyPress+=(_,e)=>{if(e.KeyChar==(char)Keys.Escape)Close();};
     }
@@ -34,7 +34,7 @@ public sealed class LegacyDefinitionsForm : Form
         tabs.TabPages.Add(BuildFirma());
         tabs.TabPages.Add(BuildBordro());
         Controls.Add(tabs);
-        var close=new Button{Text="Kapat",Location=new Point(208,376),Size=new Size(185,35),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),UseVisualStyleBackColor=true};
+        var close=new Button{Text="Kapa&t",Location=new Point(208,376),Size=new Size(185,35),ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),UseVisualStyleBackColor=true};
         close.Click+=(_,_)=>Close(); Controls.Add(close);
     }
 
@@ -69,7 +69,7 @@ public sealed class LegacyDefinitionsForm : Form
         AddFirmaField(page,"SSK Numarası",48,152,"SSK",120,144,217);
         var def=new CheckBox{Text="İşlemlerde Bu Firmayı Varsayılan Olarak Göster",Location=new Point(48,176),Size=new Size(297,17)}; firma["AKTIF"]=def; page.Controls.Add(def);
 
-        var save=Command("Kaydet",16,264); var add=Command("Yeni Ekle",128,264); var edit=Command("Değiştir",240,264); var del=Command("Sil",352,264); var all=Command("Tümünü Sil",464,264);
+        var save=Command("K&aydet",16,264); var add=Command("&Yeni Ekle",128,264); var edit=Command("&Değiştir",240,264); var del=Command("&Sil",352,264); var all=Command("Tü&münü Sil",464,264);
         page.Controls.AddRange([save,add,edit,del,all]); save.Enabled=false; SetFirmaEdit(false);
         combo.SelectedIndexChanged+=(_,_)=>{if(!save.Enabled)LoadFirma();};
         add.Click+=(_,_)=>BeginNewFirma(save);
@@ -110,7 +110,7 @@ public sealed class LegacyDefinitionsForm : Form
         field.Items.AddRange(["Normal Çalışma","Fazla Mesai"]); bordro["CALAN"]=field; page.Controls.Add(field);
         var bcode=new TextBox{Visible=false}; bordro["BKOD"]=bcode; page.Controls.Add(bcode);
 
-        var save=Command("Kaydet",32,280); var add=Command("Yeni Ekle",176,280); var edit=Command("Değiştir",312,280); var del=Command("Sil",448,280);
+        var save=Command("K&aydet",32,280); var add=Command("&Yeni Ekle",176,280); var edit=Command("&Değiştir",312,280); var del=Command("&Sil",448,280);
         page.Controls.AddRange([save,add,edit,del]); save.Enabled=false; SetBordroEdit(false);
         grid.SelectionChanged+=(_,_)=>{if(!save.Enabled)LoadBordro();};
         add.Click+=(_,_)=>{bordroCode=null;ClearBordro();SetBordroEdit(true);save.Enabled=true;((TextBox)bordro["AD"]).Focus();};
@@ -125,7 +125,7 @@ public sealed class LegacyDefinitionsForm : Form
         var box=new TextBox{Location=new Point(x,y),Size=new Size(w,21),ReadOnly=true}; bordro[key]=box; page.Controls.Add(box);
     }
 
-    static Button Command(string text,int x,int y)=>new(){Text=text,Location=new Point(x,y),Size=new Size(105,33),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold),UseVisualStyleBackColor=true};
+    static Button Command(string text,int x,int y,int width=105)=>new(){Text=text,Location=new Point(x,y),Size=new Size(width,33),ForeColor=Color.Navy,Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Bold),UseVisualStyleBackColor=true};
 
     public void SelectTab(string name)
     {
@@ -305,13 +305,13 @@ public sealed class LegacyDefinitionsForm : Form
             this.db=db;this.table=table;this.kimlikColumn=kimlikColumn;this.edit=edit;this.grid=grid;this.owner=owner;
             grid.SelectionChanged+=(_,_)=>{if(!editing)LoadSelection();};
         }
-        Button B(string text,int x,int y)=>Command(text,x,y);
-        public Button SaveButton(int x,int y){var b=B("Kaydet",x,y);b.Enabled=false;b.Click+=(_,_)=>Save(b);return b;}
-        public Button AddButton(int x,int y){var b=B("Yeni Ekle",x,y);b.Click+=(_,_)=>{code=null;edit.Clear();editing=true;edit.ReadOnly=false;FindSave()?.Let(s=>s.Enabled=true);edit.Focus();};return b;}
-        public Button EditButton(int x,int y){var b=B("Değiştir",x,y);b.Click+=(_,_)=>{if(code is null)return;editing=true;edit.ReadOnly=false;FindSave()?.Let(s=>s.Enabled=true);edit.Focus();};return b;}
-        public Button DeleteButton(int x,int y){var b=B("Sil",x,y);b.Click+=(_,_)=>Delete();return b;}
-        public Button DeleteAllButton(int x,int y){var b=B("Tümünü Sil",x,y);b.Click+=(_,_)=>DeleteAll();return b;}
-        Button? FindSave()=>edit.Parent?.Controls.OfType<Button>().FirstOrDefault(x=>x.Text=="Kaydet");
+        Button B(string text,int x,int y)=>Command(text,x,y,121);
+        public Button SaveButton(int x,int y){var b=B("K&aydet",x,y);b.Enabled=false;b.Click+=(_,_)=>Save(b);return b;}
+        public Button AddButton(int x,int y){var b=B("&Yeni Ekle",x,y);b.Click+=(_,_)=>{code=null;edit.Clear();editing=true;edit.ReadOnly=false;FindSave()?.Let(s=>s.Enabled=true);edit.Focus();};return b;}
+        public Button EditButton(int x,int y){var b=B("&Değiştir",x,y);b.Click+=(_,_)=>{if(code is null)return;editing=true;edit.ReadOnly=false;FindSave()?.Let(s=>s.Enabled=true);edit.Focus();};return b;}
+        public Button DeleteButton(int x,int y){var b=B("&Sil",x,y);b.Click+=(_,_)=>Delete();return b;}
+        public Button DeleteAllButton(int x,int y){var b=B("Tü&münü Sil",x,y);b.Click+=(_,_)=>DeleteAll();return b;}
+        Button? FindSave()=>edit.Parent?.Controls.OfType<Button>().FirstOrDefault(x=>x.Text.Replace("&","")=="Kaydet");
         public void Reload(){try{grid.DataSource=db.Query($"select KOD,AD from {table} order by KOD");if(grid.Rows.Count>0)grid.CurrentCell=grid.Rows[0].Cells[0];else{code=null;edit.Clear();}}catch(Exception ex){MessageBox.Show(ex.Message,owner);}}
         void LoadSelection(){if(grid.CurrentRow?.DataBoundItem is not DataRowView v)return;code=Convert.ToInt32(v.Row["KOD"]);edit.Text=Convert.ToString(v.Row["AD"])??"";}
         void Save(Button save)

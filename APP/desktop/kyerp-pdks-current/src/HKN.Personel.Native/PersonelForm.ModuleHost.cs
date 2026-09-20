@@ -20,7 +20,7 @@ public partial class PersonelForm
 
     public void ActivateModule(PdksModule module)
     {
-        if (!Visible) Show();
+        if (!TopLevel && !Visible) Show();
         switch (module)
         {
             case PdksModule.Personel: tabs.SelectedIndex = 0; break;
