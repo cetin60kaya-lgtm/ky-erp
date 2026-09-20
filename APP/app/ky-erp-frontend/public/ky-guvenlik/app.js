@@ -200,7 +200,7 @@ async function connectDevice(){
   const code=String(els.enrollmentCode.value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   const password=String(els.password.value||"");
   if(!password)return toast("Mevcut KY ERP şifreni gir.");
-  if(!code&&!enrollmentQuery.id)return toast("Kurulum / erişim yenileme kodunu gir.");
+  const selfRelink=!code&&!enrollmentQuery.id;
   if(isIos()&&!isStandalone())return toast("iPhone/iPad’de önce Ana Ekrana Ekle, sonra KY ERP Güvenlik ikonundan aç.");
   busy=true;els.connectButton.disabled=true;els.connectButton.textContent="Güvenlik bağlantısı kuruluyor...";
   try{
@@ -211,12 +211,13 @@ async function connectDevice(){
     await writeDevice({pendingEnrollment:true,signingPrivateKey:keys.privateKey,localUnlockCredentialId,savedAt:new Date().toISOString()});
     let response;
     try{
-      response=await jsonFetch("/auth/push/security-enrollment/complete",{method:"POST",body:{
+      const body={
         enrollmentId:enrollmentQuery.id,enrollmentToken:enrollmentQuery.token,enrollmentCode:code,password,
         replaceDeviceId:previousDevice?.deviceId||"",
         deviceLabel:String(els.deviceLabel.value||previousDevice?.deviceLabel||defaultDeviceLabel()).trim(),
         subscription:subscription.toJSON(),decisionPublicKeyJwk:keys.publicJwk
-      }});
+      };
+      response=await jsonFetch(selfRelink?"/auth/push/security-relink/by-subscription":"/auth/push/security-enrollment/complete",{method:"POST",body});
     }catch(error){
       await clearDevice().catch(()=>{});
       if(previousDevice)await writeDevice(previousDevice).catch(()=>{});
@@ -407,11 +408,11 @@ els.refreshButton.addEventListener("click",refreshState);
 els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
 els.relinkButton.addEventListener("click",showRelink);
 els.cancelRelinkButton.addEventListener("click",()=>{hideRelink();refreshState()});
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshState()});
-window.addEventListener("focus",refreshState);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden"))refreshState()});
+window.addEventListener("focus",()=>{if(els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||"")))refreshState()});
 window.addEventListener("online",()=>{toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState()});
 window.addEventListener("offline",()=>{setBadge("Çevrimdışı","bad");if(els.readyTitle)els.readyTitle.textContent="Telefon çevrimdışı"});
-navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
+navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(els.setupPanel.classList.contains("hidden")&&["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
 window.KYSecurityRuntime={deviceFetch,readDevice,writeDevice,confirmLocalUnlock,base64Url,toast,refreshState,CLIENT_VERSION};
 window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
 (async function boot(){

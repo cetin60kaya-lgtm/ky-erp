@@ -1010,6 +1010,52 @@ export function registerAuthPushRoutes(app: any) {
     });
   });
 
+  app.post("/api/auth/push/security-relink/by-subscription", async (c: any) => {
+    const body = await bodyOf(c);
+    const subscription = objectOf(body.subscription);
+    const endpoint = text(subscription.endpoint);
+    if (!/^https:\/\//i.test(endpoint)) return c.json(jsonError("PUSH_SUBSCRIPTION_INVALID", "Güvenlik uygulaması bildirim aboneliği geçersiz."), 400);
+    const decisionPublicKeyJwk = objectOf(body.decisionPublicKeyJwk);
+    if (upper(decisionPublicKeyJwk.kty) !== "EC" || upper(decisionPublicKeyJwk.crv) !== "P-256" || !text(decisionPublicKeyJwk.x) || !text(decisionPublicKeyJwk.y)) {
+      return c.json(jsonError("SECURITY_DEVICE_KEY_INVALID", "Güvenlik uygulaması cihaz anahtarı geçersiz."), 400);
+    }
+    const allDevices = await storeList(c, DEVICE_SCOPE);
+    const candidates = allDevices.filter((row: AnyRow) => row.securityApp === true && row.isActive !== false && !trustedDeviceIsRetired(row) && pushEndpointOf(row) === endpoint);
+    if (!candidates.length) return c.json(jsonError("SECURITY_RELINK_CHANNEL_NOT_FOUND", "Bu telefondaki KY Güvenlik kanalı sunucudaki aktif cihaz kaydıyla eşleşmedi. KY ERP > Profil > Telefon Onayı içinden bir kez 'Bu Telefonda Bağlantıyı Tamamla' kullanın."), 404);
+    const userIds = Array.from(new Set(candidates.map((row: AnyRow) => text(row.userId)).filter(Boolean)));
+    if (userIds.length !== 1) return c.json(jsonError("SECURITY_RELINK_CHANNEL_CONFLICT", "Bu bildirim kanalı birden fazla hesapla eşleşiyor. Cihaz bağlantısı yeniden kurulmalıdır."), 409);
+    const existing = candidates.sort((a: AnyRow,b: AnyRow)=>String(b.lastSeenAt||b.updatedAt||"").localeCompare(String(a.lastSeenAt||a.updatedAt||"")))[0];
+    const user = await userRow(c, userIds[0]);
+    if (!user || !Boolean(user.is_active)) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesap KY Güvenlik uygulamasını kullanamaz."), 403);
+    const appAccess = await securityAppAccess(c, user);
+    if (!appAccess.eligible) return c.json(jsonError("SECURITY_APP_NOT_ALLOWED", "Bu hesaba KY Güvenlik uygulaması yetkisi verilmemiş."), 403);
+    const password = String(body.password || "");
+    if (!password || !(await compare(password, text(user.password_hash)))) return c.json(jsonError("STEP_UP_FAILED", "Mevcut KY ERP şifresi doğrulanamadı."), 401);
+    const deviceToken = randomToken(36);
+    const label = text(body.deviceLabel || existing.deviceLabel || friendlyDeviceLabel("", userAgent(c))).slice(0, 180);
+    const saved = await saveDevice(c, {
+      ...existing,
+      deviceTokenHash: await sha256(deviceToken),
+      decisionPublicKeyJwk,
+      deviceLabel: label,
+      userAgent: userAgent(c),
+      pushEndpoint: endpoint,
+      pushChannel: { type: "WEB_PUSH", endpoint, reachable: true, lastRefreshAt: nowIso(), invalidAt: "", lastError: "" },
+      securityApp: true,
+      securityAppVersion: SECURITY_APP_VERSION,
+      isActive: true,
+      lastSeenAt: nowIso(),
+      lastError: "",
+      retiredAt: "",
+      retiredReason: "",
+    });
+    for (const row of candidates) {
+      if (text(row.id) !== text(saved.id)) await saveDevice(c, { ...row, isActive: false, retiredAt: nowIso(), retiredReason: "Aynı telefon kanalı kalıcı cihaz kimliğine birleştirildi" });
+    }
+    await audit(c, "SECURITY_APP_DEVICE_SELF_RELINKED", user.id, user.id, text(user.main_company_slug || existing.mainCompanySlug || "mecit-hakan"), { deviceId: saved.id, deviceLabel: label });
+    return c.json({ ok: true, data: { deviceId: saved.id, deviceToken, deviceLabel: label, securityApp: true, securityAppVersion: SECURITY_APP_VERSION } });
+  });
+
   app.get("/api/auth/push/config", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return c.json(jsonError("UNAUTHORIZED", "Telefon onayı ayarları için oturum gereklidir."), 401);

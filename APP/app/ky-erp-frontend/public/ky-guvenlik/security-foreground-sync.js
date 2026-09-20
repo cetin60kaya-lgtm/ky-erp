@@ -17,6 +17,7 @@ function pendingSignature(items){
 async function runForegroundSync(){
   if(foregroundSyncBusy){scheduleForegroundSync();return}
   if(document.visibilityState!=="visible"){scheduleForegroundSync();return}
+  if(!document.querySelector("#setupPanel")?.classList.contains("hidden")){scheduleForegroundSync();return}
   const runtime=securityRuntime();
   if(!runtime){scheduleForegroundSync(1000);return}
   foregroundSyncBusy=true;
