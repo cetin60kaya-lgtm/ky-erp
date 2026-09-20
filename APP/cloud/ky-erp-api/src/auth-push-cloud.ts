@@ -22,7 +22,7 @@ const ACTION_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ACTION;
 const SESSION_TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
 const TRUSTED_LOGIN_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
 const SECURITY_ENROLL_SECONDS = 10 * 60;
-const SECURITY_APP_VERSION = "security-v2.6";
+const SECURITY_APP_VERSION = "security-v2.9";
 // Güvenilir cihaz kimliği ile push teslim kanalı ayrı yaşam döngüleridir; push hatası cihazı iptal etmez.
 // Telefon onayı birincil faktör olarak beklemede tutulur.
 const SECURITY_LOGIN_CODE_SECONDS = 60;

@@ -1,5 +1,5 @@
-const APP_URL="/ky-guvenlik/?open=1&release=2.8";
-const CACHE_NAME="kyerp-ky-guvenlik-shell-v5";
+const APP_URL="/ky-guvenlik/?open=1&release=2.9";
+const CACHE_NAME="kyerp-ky-guvenlik-shell-v6";
 const ICON="/ky-guvenlik/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -62,13 +62,13 @@ self.addEventListener("install",(event)=>event.waitUntil((async()=>{
   await cache.addAll([
     "/ky-guvenlik/",
     "/ky-guvenlik/app.js",
-    "/ky-guvenlik/install-helper.js?v=security-install-v5",
+    "/ky-guvenlik/install-helper.js?v=security-install-v6",
     "/ky-guvenlik/security-actions.js",
     "/ky-guvenlik/security-control-center.js",
     "/ky-guvenlik/security-foreground-sync.js",
     "/ky-guvenlik/ios-safari.js",
     "/ky-guvenlik/app.css",
-    "/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v5",
+    "/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v6",
     "/ky-guvenlik/kyerp-security-apple-touch.png",
     "/ky-guvenlik/kyerp-security-192.png",
     "/ky-guvenlik/kyerp-security-512.png",

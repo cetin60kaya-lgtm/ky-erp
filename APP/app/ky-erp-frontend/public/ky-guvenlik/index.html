@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
   <meta name="format-detection" content="telephone=no" />
-  <script>/* KYERP_SECURITY_CANONICAL_REDIRECT_V28 */(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname==="app.kyerp.net"){const u=new URL(location.href);u.hostname="security.kyerp.net";u.searchParams.set("release","2.8");location.replace(u.href)}}catch{}})();</script>
-  <script src="/ky-guvenlik/install-helper.js?v=security-install-v5"></script>
-  <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v5" />
+  <script>/* KYERP_SECURITY_CANONICAL_REDIRECT_V29 */(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname==="app.kyerp.net"){const u=new URL(location.href);u.hostname="security.kyerp.net";u.searchParams.set("release","2.9");location.replace(u.href)}}catch{}})();</script>
+  <script src="/ky-guvenlik/install-helper.js?v=security-install-v6"></script>
+  <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v6" />
   <link rel="icon" href="/ky-guvenlik/kyerp-security-icon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="/ky-guvenlik/kyerp-security-apple-touch.png" />
   <link rel="stylesheet" href="/ky-guvenlik/app.css" />
@@ -22,7 +22,7 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.8</span></small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.9</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -46,7 +46,7 @@
       </div>
     </section>
 
-    <section id="setupPanel" class="security-card">
+    <section id="setupPanel" class="security-card hidden">
       <span class="eyebrow">GÜVENİLİR CİHAZ KURULUMU</span>
       <h2 id="setupTitle">KY Güvenlik bağlantısını tamamla</h2>
       <p id="setupCopy" class="muted">Bu telefonun kayıtlı KY Güvenlik kanalını bulup yeniden doğrular. Normalde yalnız mevcut KY ERP şifren yeterlidir.</p>
@@ -56,10 +56,10 @@
           <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
         </label>
       </details>
-      <label>Mevcut KY ERP şifren
+      <label id="passwordLabel">Mevcut KY ERP şifren
         <input id="password" type="password" autocomplete="current-password" placeholder="Şifren" />
       </label>
-      <label>Cihaz adı
+      <label id="deviceLabelWrap">Cihaz adı
         <input id="deviceLabel" maxlength="80" />
       </label>
       <button id="connectButton" class="primary" type="button">Bağlantıyı Tamamla</button>
@@ -85,7 +85,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.8</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.9</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -202,10 +202,10 @@
       <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
     </footer>
   </main>
-  <script src="/ky-guvenlik/ios-safari.js?v=security-flow-v5"></script>
-  <script type="module" src="/ky-guvenlik/app.js?v=security-flow-v5"></script>
-  <script type="module" src="/ky-guvenlik/security-actions.js?v=security-flow-v5"></script>
-  <script type="module" src="/ky-guvenlik/security-control-center.js?v=security-flow-v5"></script>
-  <script type="module" src="/ky-guvenlik/security-foreground-sync.js?v=security-flow-v5"></script>
+  <script src="/ky-guvenlik/ios-safari.js?v=security-flow-v6"></script>
+  <script type="module" src="/ky-guvenlik/app.js?v=security-flow-v6"></script>
+  <script type="module" src="/ky-guvenlik/security-actions.js?v=security-flow-v6"></script>
+  <script type="module" src="/ky-guvenlik/security-control-center.js?v=security-flow-v6"></script>
+  <script type="module" src="/ky-guvenlik/security-foreground-sync.js?v=security-flow-v6"></script>
 </body>
 </html>
