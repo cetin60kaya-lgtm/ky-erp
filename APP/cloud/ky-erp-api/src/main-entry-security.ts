@@ -11,7 +11,7 @@ import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 
 type Env = { Bindings: Cloudflare.Env };
 
-const LIVE_ORIGINS = new Set(["https://kyerp.net", "https://www.kyerp.net", "https://app.kyerp.net"]);
+const LIVE_ORIGINS = new Set(["https://kyerp.net", "https://www.kyerp.net", "https://app.kyerp.net", "https://security.kyerp.net"]);
 const LOCAL = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;
 const PREVIEW = /^https:\/\/[a-z0-9-]+\.ky-erp-frontend\.pages\.dev$/i;
 const allowedOrigin = (origin: string) => LIVE_ORIGINS.has(origin) || LOCAL.test(origin) || PREVIEW.test(origin) ? origin : undefined;
