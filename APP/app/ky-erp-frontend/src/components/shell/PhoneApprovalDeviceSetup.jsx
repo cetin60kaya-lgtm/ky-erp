@@ -57,22 +57,27 @@ export default function PhoneApprovalSetup({ onClose }) {
 
   useEffect(() => { load(); }, [load]);
 
-  async function createEnrollment() {
-    if (busy) return;
+  async function issueEnrollment({ exposeCode = false } = {}) {
+    if (busy) return null;
     setBusy(true);
     setCopied(false);
     try {
       const response = await apiPost("/auth/push/security-enrollment/start", { targetDeviceId: securityDevices[0]?.id || "" });
       const data = response?.data || response;
-      setEnrollment(data);
-      setMessage(securityDevices.length
-        ? "10 dakika geçerli Erişim Yenileme Kodu oluşturuldu. Telefonda KY ERP Güvenlik → Erişimi Yeniden Bağla bölümüne girin."
-        : "10 dakika geçerli kurulum kodu oluşturuldu. Telefon veya tablette KY ERP Güvenlik uygulamasını açıp bu kodu girin.");
+      if (exposeCode) setEnrollment(data);
+      return data;
     } catch (error) {
-      setMessage(`Hata: ${error?.message || "Kurulum kodu oluşturulamadı."}`);
+      setMessage(`Hata: ${error?.message || "Güvenlik bağlantısı hazırlanamadı."}`);
+      return null;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function createEnrollment() {
+    const data = await issueEnrollment({ exposeCode: true });
+    if (!data) return;
+    setMessage("Yedek bağlantı kodu hazır. Normal akışta bu kodu girmeniz gerekmez.");
   }
 
   async function copyEnrollment() {
@@ -91,8 +96,8 @@ export default function PhoneApprovalSetup({ onClose }) {
     }
   }
 
-  function securityAppUrl(extra = {}) {
-    const raw = enrollment?.appUrl || "https://security.kyerp.net/ky-guvenlik/";
+  function securityAppUrl(extra = {}, sourceEnrollment = enrollment) {
+    const raw = sourceEnrollment?.appUrl || "https://security.kyerp.net/ky-guvenlik/";
     const url = new URL(raw, window.location.origin);
     Object.entries(extra).forEach(([key, value]) => {
       if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(key, String(value));
@@ -100,22 +105,27 @@ export default function PhoneApprovalSetup({ onClose }) {
     return url.toString();
   }
 
-  function openSecurityApp() {
-    window.open(securityAppUrl({ open: 1 }), "_blank", "noopener,noreferrer");
+  async function openSecurityApp() {
+    const popup = window.open("about:blank", "_blank");
+    const data = await issueEnrollment();
+    if (!data) { try { popup?.close(); } catch {} return; }
+    const target = securityAppUrl({ open: 1, autoRelink: 1 }, data);
+    if (popup) popup.location.href = target; else window.location.href = target;
+    setMessage(securityDevices.length ? "KY Güvenlik açılıyor. Bu telefonda yerel anahtar eksikse yalnız mevcut ERP şifreniz bir kez istenir." : "KY Güvenlik açılıyor. Bağlantıyı tamamlamak için mevcut ERP şifrenizi bir kez girin.");
   }
 
-  function openSecurityInstaller(platform) {
+  async function openSecurityInstaller(platform) {
+    const data = await issueEnrollment();
+    if (!data) return;
+    const target = securityAppUrl({ install: 1, platform, browser: platform === "android" ? 1 : undefined, autoRelink: 1 }, data);
     if (platform === "android" && clientPlatform === "android") {
-      const target = securityAppUrl({ install: 1, platform: "android", browser: 1 });
       const url = new URL(target);
       window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`;
-      setMessage("Chrome açılıyor. KY Güvenlik kurulum ekranında Android’e Yükle düğmesine dokunun.");
+      setMessage("Chrome açılıyor. Kurulumdan sonra KY Güvenlik ilk açılış bağlantısını otomatik hatırlar.");
       return;
     }
-    window.open(securityAppUrl({ install: 1, platform }), "_blank", "noopener,noreferrer");
-    setMessage(platform === "android"
-      ? "KY Güvenlik Android kurulum ekranı açıldı. Oradaki Android'e Yükle düğmesi sistem kurulum penceresini açar."
-      : "KY Güvenlik iPhone/iPad kurulum ekranı açıldı. iOS'ta Safari → Paylaş → Ana Ekrana Ekle adımı Apple tarafından zorunludur.");
+    window.open(target, "_blank", "noopener,noreferrer");
+    setMessage(platform === "ios" ? "Safari kurulum ekranı açıldı. Ana Ekrana Ekle sonrası bağlantı otomatik devam eder." : "KY Güvenlik kurulum ekranı açıldı.");
   }
 
   async function refreshSecurityConnection() {
@@ -168,129 +178,26 @@ export default function PhoneApprovalSetup({ onClose }) {
 
         <div className={`phone-approval-notice ${message.startsWith("Hata:") ? "bad" : ""}`}>{message}</div>
 
-        <div className="phone-approval-grid">
+        <div className="phone-approval-grid phone-approval-grid-clean">
           <section className="phone-approval-card phone-approval-app-hero">
             <div className="phone-approval-card-head">
-              <div>
-                <h3>{securityDevices.length ? "Güvenlik uygulaması erişimi" : "Güvenlik uygulamasını kur"}</h3>
-                <p>{securityDevices.length ? "Bağlantı koparsa erişim yenileme koduyla aynı telefonu güvenli şekilde yeniden bağlayabilirsiniz." : "Telefon onayı artık ana ERP ekranından değil bu ayrı uygulamadan verilir."}</p>
-              </div>
-              <Smartphone size={24}/>
+              <div><span className="phone-approval-install-kicker">KY GÜVENLİK</span><h3>{securityDevices.length ? "Telefon onayı hazır" : "Güvenlik uygulamasını kur"}</h3><p>{securityDevices.length ? "Sunucu kaydı aktif. Uygulamayı açtığınızda yerel cihaz anahtarı eksikse bağlantı otomatik hazırlanır." : "KY ERP ve KY Güvenlik telefonda iki ayrı uygulama olarak çalışır."}</p></div>
+              {securityDevices.length && !securityHasError ? <CheckCircle2 size={26}/> : <Smartphone size={26}/>}
             </div>
-
-            <div className="phone-approval-install-box">
-              <div>
-                <span className="phone-approval-install-kicker">KY GÜVENLİK UYGULAMASI</span>
-                <strong>Önce güvenlik uygulamasını telefona kur</strong>
-                <small>Tarayıcı adresi ezberlemek yok; buradan doğrudan cihaz kurulum ekranına geç.</small>
-              </div>
-              <div className="phone-approval-install-actions">
-                <button
-                  type="button"
-                  className={clientPlatform === "android" ? "phone-approval-install-primary is-device" : "phone-approval-install-primary"}
-                  onClick={() => openSecurityInstaller("android")}
-                >
-                  <Download size={18}/> Android için KY Güvenlik'i İndir / Kur
-                </button>
-                <button
-                  type="button"
-                  className={clientPlatform === "ios" ? "phone-approval-install-secondary is-device" : "phone-approval-install-secondary"}
-                  onClick={() => openSecurityInstaller("ios")}
-                >
-                  <Smartphone size={18}/> iPhone / iPad için KY Güvenlik'i Kur
-                </button>
-              </div>
-              <small className="phone-approval-install-note">
-                Android'de KY Güvenlik ekranındaki yükleme düğmesi sistem kurulum penceresini açar. iPhone/iPad'de Apple, web uygulamalarının sessiz kurulmasına izin vermediği için Safari → Paylaş → Ana Ekrana Ekle adımı gösterilir.
-              </small>
-            </div>
-
-            <div className="phone-approval-flow">
-              <div><b>1</b><span>KY Güvenlik uygulamasını telefona kur.</span></div>
-              <div><b>2</b><span>Kurulum kodu oluştur.</span></div>
-              <div><b>3</b><span>Kodu ve mevcut KY ERP şifreni gir; güvenilir cihaz bağlantısı tamamlansın.</span></div>
-              <div><b>4</b><span>Sonraki girişlerde tek bildirim → Onayla veya Giriş Kodu → Face ID/parmak izi/PIN.</span></div>
-            </div>
-
-            {!enrollment ? (
-              <button type="button" className="phone-approval-primary" onClick={createEnrollment} disabled={busy}>
-                <ShieldCheck size={17}/>{busy ? "Hazırlanıyor..." : securityDevices.length ? "Erişim Yenileme Kodu Oluştur" : "Yeni Kurulum Kodu Oluştur"}
-              </button>
-            ) : (
-              <div className="phone-approval-enrollment">
-                <span>10 DAKİKALIK KURULUM KODU</span>
-                <strong>{enrollment.enrollmentCode}</strong>
-                <small>{enrollment.expiresAt ? `Geçerlilik: ${new Date(enrollment.expiresAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : ""}</small>
-                <div className="phone-approval-app-actions">
-                  <button type="button" className="phone-approval-primary" onClick={openSecurityApp}>
-                    <ExternalLink size={17}/> Güvenlik Uygulamasını Aç
-                  </button>
-                  <button type="button" onClick={copyEnrollment}>
-                    {copied ? <CheckCircle2 size={17}/> : <Copy size={17}/>} {copied ? "Kopyalandı" : "Kodu Kopyala"}
-                  </button>
-                  <button type="button" onClick={createEnrollment} disabled={busy}>Yeni Kod</button>
-                </div>
-              </div>
-            )}
-
-            <small className="phone-approval-help">
-              Kurulum tamamlandıktan sonra KY Güvenlik telefonda ayrı uygulama gibi açılır. Güvenilir cihaz kaydı uygulamayı yeniden açtığınızda korunur.
-            </small>
+            {securityDevices.length ? <>
+              <div className="phone-approval-status-card ok"><div><b>Bağlantı kayıtlı</b><span>{securityDevices[0]?.deviceLabel || "KY ERP Güvenlik"}</span></div><small>Son bağlantı: {securityDevices[0]?.lastSeenAt ? new Date(securityDevices[0].lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small><small>Son bildirim: {securityDevices[0]?.lastPushAt ? new Date(securityDevices[0].lastPushAt).toLocaleString("tr-TR") : "Henüz yok"}</small></div>
+              <div className="phone-approval-main-actions"><button type="button" className="phone-approval-primary" onClick={openSecurityApp} disabled={busy}><ExternalLink size={17}/>{busy ? "Hazırlanıyor..." : "KY Güvenlik Aç / Bu Telefonda Bağla"}</button><button type="button" onClick={refreshSecurityConnection} disabled={busy}><RefreshCw size={16}/> Bağlantıyı Kontrol Et</button></div>
+              <small className="phone-approval-help">Yeni kurulum veya origin değişiminde güvenli bağlantı otomatik hazırlanır. 8 karakter kod normal akışta kullanılmaz.</small>
+            </> : <>
+              <div className="phone-approval-install-box compact"><strong>Telefonuna KY ERP Güvenlik uygulamasını kur</strong><small>Kurulum bağlantısı ve cihaz eşleştirmesi otomatik hazırlanır.</small><div className="phone-approval-install-actions"><button type="button" className="phone-approval-install-primary" onClick={() => openSecurityInstaller(clientPlatform === "ios" ? "ios" : "android")} disabled={busy}><Download size={18}/>{busy ? "Hazırlanıyor..." : clientPlatform === "ios" ? "iPhone / iPad’e Kur" : "Android’e Kur"}</button></div></div>
+              <small className="phone-approval-help">Kurulum tamamlandıktan sonra uygulamada yalnız mevcut KY ERP şifrenizi bir kez girmeniz yeterlidir.</small>
+            </>}
+            {enrollment ? <div className="phone-approval-enrollment compact-code"><span>YEDEK BAĞLANTI KODU</span><strong>{enrollment.enrollmentCode}</strong><div className="phone-approval-app-actions"><button type="button" onClick={copyEnrollment}>{copied ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copied ? "Kopyalandı" : "Kopyala"}</button></div></div> : <button type="button" className="phone-approval-link-button" onClick={createEnrollment} disabled={busy}>Sorun olursa yedek bağlantı kodu oluştur</button>}
           </section>
-
           <section className="phone-approval-card">
-            <div className="phone-approval-healthbar">
-              <span className={securityDevices.length && !securityHasError ? "ok" : securityDevices.length ? "warn" : "off"}>
-                {securityDevices.length && !securityHasError ? <CheckCircle2 size={16}/> : <AlertTriangle size={16}/>}
-                {securityDevices.length && !securityHasError ? "Bağlantı kayıtlı" : securityDevices.length ? "Bağlantı kontrolü gerekli" : "Cihaz bağlı değil"}
-              </span>
-              <div>
-                <button type="button" onClick={load} disabled={busy}><RefreshCw size={15}/> Durumu Yenile</button>
-                {inactiveDevices.length ? <button type="button" onClick={() => setShowInactive((value) => !value)}>{showInactive ? "Pasifleri Gizle" : `Pasifleri Göster (${inactiveDevices.length})`}</button> : null}
-                <button type="button" onClick={openSecurityApp}><ExternalLink size={15}/> KY Güvenlik Aç</button>
-              </div>
-            </div>
-            <div className="phone-approval-card-head">
-              <div>
-                <h3>Güvenilir telefon ve tabletler</h3>
-                <p>{securityDevices.length} yeni güvenlik uygulaması aktif · {devices.filter((row) => row.isActive).length} toplam aktif kayıt</p>
-              </div>
-              <ShieldCheck size={22}/>
-            </div>
-
-            <div className="phone-approval-connection-actions">
-              <button type="button" className="phone-approval-primary" onClick={refreshSecurityConnection} disabled={busy || !securityDevices.length}>
-                <RefreshCw size={16}/>{busy ? "Kontrol ediliyor..." : "Telefon Bağlantısını Yenile"}
-              </button>
-              <button type="button" onClick={load} disabled={busy}>Durumu Yenile</button>
-            </div>
-            <small className="phone-approval-help">Güvenilir cihaz kaydı silinmeden KY ERP ↔ Güvenlik uygulaması push yolu tekrar kontrol edilir.</small>
-
-            <div className="phone-approval-device-list">
-              {visibleDevices.map((row) => (
-                <div className={`phone-approval-device ${row.isActive ? "" : "disabled"}`} key={row.id}>
-                  <div>
-                    <strong>{row.deviceLabel || "KY ERP cihazı"}</strong>
-                    <span>
-                      {row.securityApp ? "KY ERP Güvenlik" : "Eski web onayı"} · {row.isActive ? "Aktif" : "Pasif"}
-                      {row.securityAppVersion ? ` · ${row.securityAppVersion}` : ""}
-                    </span>
-                    <small>Son bağlantı: {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small>
-                    <small>Son bildirim: {row.lastPushAt ? new Date(row.lastPushAt).toLocaleString("tr-TR") : "Henüz yok"}</small>
-                    {row.lastRefreshAt ? <small>Son erişim yenileme: {new Date(row.lastRefreshAt).toLocaleString("tr-TR")}</small> : null}
-                    {row.retiredReason ? <small>{row.retiredReason}</small> : null}
-                    {row.lastError ? <small className="phone-approval-device-error">{row.lastError}</small> : null}
-                  </div>
-                  {row.isActive ? (
-                    <button type="button" className="danger" onClick={() => disableDevice(row)} disabled={busy} title="Cihazı kaldır">
-                      <Trash2 size={16}/>
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-              {!devices.length ? <div className="phone-approval-empty">Henüz güvenilir telefon/tablet kaydı yok.</div> : null}
-              {devices.length && !visibleDevices.length ? <div className="phone-approval-empty">Aktif cihaz yok. Pasif kayıtları görmek için “Pasifleri Göster” kullanın.</div> : null}
-            </div>
+            <div className="phone-approval-card-head"><div><h3>Güvenilir cihazlar</h3><p>{securityDevices.length} KY Güvenlik cihazı aktif</p></div><ShieldCheck size={22}/></div>
+            <div className="phone-approval-healthbar"><span className={securityDevices.length && !securityHasError ? "ok" : securityDevices.length ? "warn" : "off"}>{securityDevices.length && !securityHasError ? <CheckCircle2 size={16}/> : <AlertTriangle size={16}/>} {securityDevices.length && !securityHasError ? "Hazır" : securityDevices.length ? "Kontrol gerekli" : "Bağlı cihaz yok"}</span><div><button type="button" onClick={load} disabled={busy}><RefreshCw size={15}/> Yenile</button>{inactiveDevices.length ? <button type="button" onClick={() => setShowInactive((value) => !value)}>{showInactive ? "Pasifleri Gizle" : "Pasifler (" + inactiveDevices.length + ")"}</button> : null}</div></div>
+            <div className="phone-approval-device-list">{visibleDevices.map((row) => <div className={"phone-approval-device " + (row.isActive ? "" : "disabled")} key={row.id}><div><strong>{row.deviceLabel || "KY ERP cihazı"}</strong><span>{row.securityApp ? "KY ERP Güvenlik" : "Eski web onayı"} · {row.isActive ? "Aktif" : "Pasif"}{row.securityAppVersion ? " · " + row.securityAppVersion : ""}</span><small>Son bağlantı: {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small>{row.lastError ? <small className="phone-approval-device-error">{row.lastError}</small> : null}</div>{row.isActive ? <button type="button" className="danger" onClick={() => disableDevice(row)} disabled={busy} title="Cihazı kaldır"><Trash2 size={16}/></button> : null}</div>)}{!devices.length ? <div className="phone-approval-empty">Henüz güvenilir telefon/tablet kaydı yok.</div> : null}</div>
           </section>
         </div>
 

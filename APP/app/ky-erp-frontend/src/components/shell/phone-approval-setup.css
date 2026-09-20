@@ -99,3 +99,15 @@
   .phone-approval-install-actions{grid-template-columns:1fr}
   .phone-approval-install-actions button{min-height:52px;font-size:13px}
 }
+
+/* KY Güvenlik final sade bağlantı yüzeyi */
+.phone-approval-grid-clean{align-items:start}
+.phone-approval-status-card{display:grid;gap:4px;padding:14px;border:1px solid #cfe7d8;border-radius:12px;background:#f2fbf5}
+.phone-approval-status-card>div{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.phone-approval-status-card b{color:#20623b;font-size:13px}.phone-approval-status-card span,.phone-approval-status-card small{color:#668174;font-size:11px}
+.phone-approval-main-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
+.phone-approval-main-actions>button{display:flex;align-items:center;justify-content:center;gap:7px}
+.phone-approval-install-box.compact{padding:16px}.phone-approval-enrollment.compact-code{padding:12px}
+.phone-approval-enrollment.compact-code>strong{font-size:24px}.phone-approval-enrollment.compact-code .phone-approval-app-actions{grid-template-columns:1fr}
+.phone-approval-link-button{min-height:34px!important;border-style:dashed!important;background:#f9fbfd!important;color:#607a92!important;font-size:11px!important}
+@media(max-width:760px){.phone-approval-main-actions{grid-template-columns:1fr}.phone-approval-status-card{padding:13px}.phone-approval-link-button{min-height:42px!important}}
