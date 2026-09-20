@@ -2,13 +2,15 @@
   const ua=String(navigator.userAgent||"");
   if(!/Android/i.test(ua))return;
 
+  const CANONICAL_SECURITY_ORIGIN="https://kyerp.net";
   let deferredPrompt=null;
   let waitTimer=null;
   let waitStartedAt=Date.now();
-  const reloadKey="kyerp-security-install-reload-v4";
+  const reloadKey="kyerp-security-install-reload-v5";
   const qs=(selector)=>document.querySelector(selector);
   const isStandalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   const chromiumAndroid=()=>/Chrome\//i.test(ua)||/EdgA\//i.test(ua);
+  const isCanonicalOrigin=()=>location.origin===CANONICAL_SECURITY_ORIGIN;
 
   function requestState(){
     try{
@@ -18,6 +20,24 @@
         browser:params.get("browser")==="1"
       };
     }catch{return{requested:false,browser:false}}
+  }
+
+  function canonicalBrowserUrl(){
+    const url=new URL(location.href);
+    url.protocol="https:";
+    url.host="kyerp.net";
+    url.pathname="/security/";
+    url.searchParams.set("install","1");
+    url.searchParams.set("platform","android");
+    url.searchParams.set("browser","1");
+    return url;
+  }
+
+  function moveBrowserToCanonicalOrigin(){
+    const url=canonicalBrowserUrl();
+    if(url.href===location.href)return false;
+    location.replace(url.href);
+    return true;
   }
 
   function notify(message){
@@ -137,13 +157,21 @@
   }
 
   function openInChrome(){
-    const target="https://app.kyerp.net/security/?install=1&platform=android&browser=1";
+    const target="https://kyerp.net/security/?install=1&platform=android&browser=1";
     const fallback=encodeURIComponent(target);
-    location.href="intent://app.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
+    location.href="intent://kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
   }
 
   async function installFromButton(){
     const request=requestState();
+
+    // Ana KY ERP app.kyerp.net origin'inde kurulu. KY Güvenlik farklı origin'de
+    // kurulmalıdır; aksi halde Chrome dış PWA'nın / scope'u nedeniyle ikinci
+    // uygulamaya gerçek install prompt vermeyebilir.
+    if(!isCanonicalOrigin()&&!isStandalone()){
+      moveBrowserToCanonicalOrigin();
+      return;
+    }
     if(isStandalone()&&request.requested){
       openInChrome();
       return;
@@ -196,7 +224,14 @@
 
   async function stabilize(){
     const request=requestState();
+
+    if(!isCanonicalOrigin()&&!isStandalone()){
+      moveBrowserToCanonicalOrigin();
+      return;
+    }
     if(isStandalone()&&!request.requested){
+      // Eski app.kyerp.net origin'inde önceden kurulmuş KY Güvenlik PWA'sını
+      // zorla taşımıyoruz; mevcut güvenilir cihaz bağlantısı çalışmaya devam eder.
       markInstalled();
       return;
     }
