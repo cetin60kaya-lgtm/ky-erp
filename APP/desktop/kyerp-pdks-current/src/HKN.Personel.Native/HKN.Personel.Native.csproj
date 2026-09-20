@@ -1,15 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>KYERP.PDKS</AssemblyName>
+    <Product>KYERP PDKS</Product>
+    <Company>KY ERP</Company>
+    <Description>KYERP PDKS masaüstü personel devam kontrol sistemi</Description>
+    <Version>2.1.0</Version>
+    <FileVersion>2.1.0.0</FileVersion>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
   </ItemGroup>
-
 </Project>
