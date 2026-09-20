@@ -84,11 +84,12 @@ public sealed class MainShellForm : Form
         islemler.DropDownItems.Add(MenuItem("Puantaj", PdksModule.Puantaj, () => OpenData(LegacyDataView.Puantaj, PdksModule.Puantaj)));
         islemler.DropDownItems.Add(MenuItem("Puantaj Sonuçları", PdksModule.Puantaj, () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj)));
         islemler.DropDownItems.Add(MenuItem("Bordro", PdksModule.Bordro, () => OpenData(LegacyDataView.Bordro, PdksModule.Bordro)));
-        islemler.DropDownItems.Add(MenuItem("Çalışma Tarihi", PdksModule.Donemler, () => OpenDialogModule(PdksModule.Donemler)));
+        islemler.DropDownItems.Add(MenuItem("Çalışma Tarihi", PdksModule.Donemler, OpenWorkingDate));
 
         var raporlar = new ToolStripMenuItem("Raporlar");
         raporlar.DropDownItems.Add(MenuItem("Rapor Merkezi", PdksModule.Raporlar, () => OpenDialogModule(PdksModule.Raporlar)));
         var araclar = new ToolStripMenuItem("Araçlar");
+        araclar.DropDownItems.Add(MenuItem("Terminal Profilleri", PdksModule.Terminal, OpenTerminalProfilesAdvanced));
         var transfer = new ToolStripMenuItem("Transfer");
         transfer.DropDownItems.Add(MenuItem("Bilgi Aktar", PdksModule.Terminal, () => OpenDialogModule(PdksModule.Terminal)));
         var hakkinda = new ToolStripMenuItem("Hakkında");
@@ -119,7 +120,7 @@ public sealed class MainShellForm : Form
         AddLegacyTool("Puantaj", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.Puantaj, PdksModule.Puantaj), 72);
         AddLegacyTool("Puantaj Son.", PdksModule.Puantaj, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.PuantajSonuclari, PdksModule.Puantaj), 90);
         AddLegacyTool("Bordro", PdksModule.Bordro, SystemIcons.Information.ToBitmap(), () => OpenData(LegacyDataView.Bordro, PdksModule.Bordro), 70);
-        AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Donemler), 95);
+        AddLegacyTool("Çalışma Tarihi", PdksModule.Donemler, SystemIcons.Application.ToBitmap(), OpenWorkingDate, 95);
     }
 
     void AddLegacyTool(string text, PdksModule module, Image image, Action action, int width)
@@ -263,6 +264,20 @@ public sealed class MainShellForm : Form
         if (!Ready(module)) return;
         EnsurePersonel();
         personel?.OpenStandaloneDialog(module);
+    }
+
+    void OpenWorkingDate()
+    {
+        if (!Ready(PdksModule.Donemler)) return;
+        EnsurePersonel();
+        personel?.ShowWorkingDateDialog();
+    }
+
+    void OpenTerminalProfilesAdvanced()
+    {
+        if (!Ready(PdksModule.Terminal)) return;
+        EnsurePersonel();
+        personel?.ShowTerminalProfileManager();
     }
 
     void OpenData(LegacyDataView view, PdksModule module)
