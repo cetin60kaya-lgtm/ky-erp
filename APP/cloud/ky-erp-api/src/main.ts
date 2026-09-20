@@ -83,6 +83,7 @@ const LIVE_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
   "https://app.kyerp.net",
+  "https://security.kyerp.net",
 ]);
 
 const LOCAL_DEV_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{2,5})?$/i;

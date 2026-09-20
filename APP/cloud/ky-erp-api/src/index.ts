@@ -25,6 +25,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
   "https://app.kyerp.net",
+  "https://security.kyerp.net",
 ]);
 
 const jsonError = (code: string, message: string, details?: unknown) => ({

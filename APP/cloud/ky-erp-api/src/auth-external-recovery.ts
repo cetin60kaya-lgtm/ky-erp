@@ -9,7 +9,8 @@ const PHONE_SCOPE = AUTH_SECURITY_SCOPES.PHONE_LOGIN;
 const STATE_SECONDS = 10 * 60;
 const MAX_STARTS_HOUR = 5;
 const ALLOWED_APP_ORIGINS = new Set([
-  "https://app.kyerp.net", "https://kyerp.net", "https://www.kyerp.net",
+  "https://app.kyerp.net",
+  "https://security.kyerp.net", "https://kyerp.net", "https://www.kyerp.net",
   "http://localhost:5173", "http://127.0.0.1:5173",
 ]);
 

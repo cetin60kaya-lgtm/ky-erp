@@ -4,12 +4,14 @@ const LIVE_WEB_ORIGINS = new Set([
   "https://kyerp.net",
   "https://www.kyerp.net",
   "https://app.kyerp.net",
+  "https://security.kyerp.net",
 ]);
 
 const ALLOWED_TURNSTILE_HOSTNAMES = new Set([
   "kyerp.net",
   "www.kyerp.net",
   "app.kyerp.net",
+  "security.kyerp.net",
 ]);
 
 function text(value: unknown) {
