@@ -266,24 +266,50 @@ internal static class Program
         toolbarOffsetY = Math.Max(0, tr.Top - cr.Top);
         if (toolbarSkin == IntPtr.Zero || !IsWindow(toolbarSkin))
         {
-            toolbarSkinBitmap = CaptureClassicToolbar(coolBar, width, height, dpi);
-            if (toolbarSkinBitmap != IntPtr.Zero)
+            toolbarSkin = CreateWindowEx(0, "STATIC", string.Empty, WS_POPUP | WS_VISIBLE,
+                0, 0, width, height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
+            if (toolbarSkin != IntPtr.Zero)
             {
-                toolbarSkin = CreateWindowEx(0, "STATIC", string.Empty, WS_POPUP | WS_VISIBLE | SS_BITMAP,
-                    0, 0, width, height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
-                if (toolbarSkin != IntPtr.Zero)
-                {
-                    SetParent(toolbarSkin, main);
-                    long skinStyle = GetWindowLongPtr(toolbarSkin, GWL_STYLE).ToInt64();
-                    skinStyle &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
-                    skinStyle |= WS_CHILD | WS_VISIBLE;
-                    SetWindowLongPtr(toolbarSkin, GWL_STYLE, new IntPtr(skinStyle));
-                    SendMessage(toolbarSkin, STM_SETIMAGE, new IntPtr(IMAGE_BITMAP), toolbarSkinBitmap);
-                }
+                SetParent(toolbarSkin, main);
+                long skinStyle = GetWindowLongPtr(toolbarSkin, GWL_STYLE).ToInt64();
+                skinStyle &= ~((long)WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
+                skinStyle |= WS_CHILD | WS_VISIBLE;
+                SetWindowLongPtr(toolbarSkin, GWL_STYLE, new IntPtr(skinStyle));
             }
         }
         if (toolbarSkin != IntPtr.Zero)
+        {
             SetWindowPos(toolbarSkin, IntPtr.Zero, 0, 0, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            PaintClassicToolbar(coolBar, toolbarSkin, width, height, dpi);
+        }
+    }
+
+    static void PaintClassicToolbar(IntPtr coolBar, IntPtr skin, int width, int height, uint dpi)
+    {
+        IntPtr src = GetDC(coolBar), dst = GetDC(skin);
+        if (src == IntPtr.Zero || dst == IntPtr.Zero)
+        {
+            if (src != IntPtr.Zero) ReleaseDC(coolBar, src);
+            if (dst != IntPtr.Zero) ReleaseDC(skin, dst);
+            return;
+        }
+        BitBlt(dst, 0, 0, width, height, src, 0, 0, SRCCOPY);
+        int bw = toolbarButtonWidth, bh = toolbarButtonHeight;
+        int sourceX = toolbarOffsetX + bw, destX = toolbarOffsetX + PersonelButtonIndex * bw;
+        if (sourceX + bw <= width && destX + bw <= width)
+        {
+            BitBlt(dst, destX, toolbarOffsetY, bw, bh, src, sourceX, toolbarOffsetY, SRCCOPY);
+            int textH = Math.Max(18, (int)Math.Round(20 * (dpi / 96.0)));
+            int blankX = Math.Min(width - bw, toolbarOffsetX + 11 * bw + 8);
+            if (blankX >= 0)
+                BitBlt(dst, destX, toolbarOffsetY + bh - textH, bw, textH, src, blankX, toolbarOffsetY + bh - textH, SRCCOPY);
+            IntPtr font = GetStockObject(DEFAULT_GUI_FONT), priorFont = SelectObject(dst, font);
+            SetBkMode(dst, TRANSPARENT); SetTextColor(dst, 0x00CC3300);
+            var rr = new RECT { Left = destX, Top = toolbarOffsetY + bh - textH, Right = destX + bw, Bottom = toolbarOffsetY + bh };
+            DrawText(dst, "Personel", -1, ref rr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(dst, priorFont);
+        }
+        ReleaseDC(coolBar, src); ReleaseDC(skin, dst);
     }
 
     static IntPtr CaptureClassicToolbar(IntPtr coolBar, int width, int height, uint dpi)
