@@ -27,6 +27,7 @@ public sealed class MainShellForm : Form
     {
         var menu = new MenuStrip { Dock = DockStyle.Top };
         var settings = new ToolStripMenuItem("Ayarlar");
+        var db = new ToolStripMenuItem("Veritabanı Bağlantısı"); db.Click += (_,_) => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }; settings.DropDownItems.Add(db);
         var users = new ToolStripMenuItem("Kullanıcı Yönetimi"); users.Enabled = currentUser.IsAdmin; users.Click += (_,_) => OpenUserManagement(); settings.DropDownItems.Add(users);
         var personelMenu = new ToolStripMenuItem("Personel Tanımları");
         personelMenu.DropDownItems.Add(MenuItem("Personel", PdksModule.Personel));
@@ -74,8 +75,17 @@ public sealed class MainShellForm : Form
     void BuildStatus()
     {
         userStatus.Text = $"Kullanıcı: {currentUser.UserName}";
-        dbStatus.Text = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH") ?? "Veritabanı: bağlantı hazır";
+        UpdateDbStatus();
         status.Items.Add(userStatus); status.Items.Add(dbStatus); status.Dock = DockStyle.Bottom;
+    }
+
+    void UpdateDbStatus()
+    {
+        var path = Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH", EnvironmentVariableTarget.User)
+            ?? Environment.GetEnvironmentVariable("KY_PDKS_DB_PATH");
+        dbStatus.Text = StartupConfiguration.IsReady()
+            ? $"Veritabanı: {path}"
+            : "Veritabanı: bağlantı bekliyor";
     }
 
     void ShowHome()
@@ -94,6 +104,8 @@ public sealed class MainShellForm : Form
     void OpenModule(PdksModule module)
     {
         if (!currentUser.Can(module)) { MessageBox.Show("Bu işlem için yetkiniz yok.","KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
+        if (!StartupConfiguration.IsReady() && !StartupConfiguration.EnsureReady()) return;
+        UpdateDbStatus();
         EnsurePersonel();
         if (personel is null) return;
         if (personel.Parent != workspace)
