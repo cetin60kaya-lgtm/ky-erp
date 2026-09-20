@@ -49,7 +49,7 @@ public sealed class MainShellForm : Form
         };
 
         var ayarlar = new ToolStripMenuItem("Ayarlar");
-        ayarlar.DropDownItems.Add(MenuItem("Terminal Ayarları", PdksModule.Terminal, OpenTerminalProfilesAdvanced));
+        ayarlar.DropDownItems.Add(MenuItem("Terminal Ayarları", PdksModule.Terminal, OpenLegacyTerminalSettings));
         ayarlar.DropDownItems.Add(MenuItem("Yuvarlatmalar", PdksModule.Tanimlar, () => OpenLegacyTable("Yuvarlatmalar","YUVARLA",true,new Size(481,272))));
         ayarlar.DropDownItems.Add(MenuItem("Çıkışta Yedek Al", PdksModule.Tanimlar, BackupDatabase));
         ayarlar.DropDownItems.Add(new ToolStripSeparator());
@@ -63,22 +63,22 @@ public sealed class MainShellForm : Form
         var tanimlar = new ToolStripMenuItem("Tanımlar");
         tanimlar.DropDownItems.Add(MenuItem("Çalışma Grupları", PdksModule.Tanimlar, OpenGroups));
         tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Bölüm Tanımları", PdksModule.Tanimlar, () => OpenLegacyTable("Bölüm Tanımları","BOLUM",true,new Size(500,430))));
-        tanimlar.DropDownItems.Add(MenuItem("Servis Tanımları", PdksModule.Tanimlar, () => OpenLegacyTable("Servis Tanımları","SERVIS",true,new Size(500,430))));
-        tanimlar.DropDownItems.Add(MenuItem("Görev Tanımları", PdksModule.Tanimlar, () => OpenLegacyTable("Görev Tanımları","GOREV",true,new Size(500,430))));
-        tanimlar.DropDownItems.Add(MenuItem("Durum Tanımları", PdksModule.Tanimlar, () => OpenLegacyTable("Durum Tanımları","DURUM",true,new Size(500,430))));
+        tanimlar.DropDownItems.Add(MenuItem("Bölüm Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Bölümler")));
+        tanimlar.DropDownItems.Add(MenuItem("Servis Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Servisler")));
+        tanimlar.DropDownItems.Add(MenuItem("Görev Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Görevler")));
+        tanimlar.DropDownItems.Add(MenuItem("Durum Tanımları", PdksModule.Tanimlar, () => OpenDefinitions("Durum")));
         tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Firma Bilgileri", PdksModule.Tanimlar, () => OpenLegacyTable("Firma Bilgileri","FIRMA",true,new Size(560,430))));
-        tanimlar.DropDownItems.Add(MenuItem("Bordro Alanları", PdksModule.Tanimlar, () => OpenLegacyTable("Bordro Alanları","BORDRO",true,new Size(650,470))));
+        tanimlar.DropDownItems.Add(MenuItem("Firma Bilgileri", PdksModule.Tanimlar, () => OpenDefinitions("Firma")));
+        tanimlar.DropDownItems.Add(MenuItem("Bordro Alanları", PdksModule.Tanimlar, () => OpenDefinitions("Bordro")));
         tanimlar.DropDownItems.Add(new ToolStripSeparator());
         tanimlar.DropDownItems.Add(MenuItem("Dönemler", PdksModule.Donemler, () => OpenDialogModule(PdksModule.Donemler)));
         tanimlar.DropDownItems.Add(MenuItem("Kesinti ve Kazanç Türleri", PdksModule.Tanimlar, () => OpenLegacyTable("Kesinti ve Kazanç Türleri","AVTUR",true,new Size(520,410))));
         tanimlar.DropDownItems.Add(MenuItem("Genel Tatilller", PdksModule.Tanimlar, () => OpenLegacyTable("Genel Tatiller","TATIL",true,new Size(570,430))));
-        tanimlar.DropDownItems.Add(MenuItem("Günlük Çalışma Saatleri", PdksModule.Tanimlar, () => OpenLegacyTable("Günlük Çalışma Saatleri","CALISMASAAT",true,new Size(650,470))));
-        tanimlar.DropDownItems.Add(MenuItem("Yıllık Çalışma Planı", PdksModule.Tanimlar, () => OpenLegacyTable("Yıllık Çalışma Planı","PLAN",true,new Size(760,520))));
-        tanimlar.DropDownItems.Add(MenuItem("Ceza Kesintileri", PdksModule.Tanimlar, () => OpenLegacyTable("Ceza Kesintileri","DEVCEZA",true,new Size(620,450))));
+        tanimlar.DropDownItems.Add(MenuItem("Günlük Çalışma Saatleri", PdksModule.Tanimlar, () => OpenLegacyTable("Günlük Çalışma Saatleri","PUANBILGI",true,new Size(650,470))));
+        tanimlar.DropDownItems.Add(MenuItem("Yıllık Çalışma Planı", PdksModule.Tanimlar, () => OpenLegacyTable("Yıllık Çalışma Planı","PLANA",true,new Size(760,520))));
+        tanimlar.DropDownItems.Add(MenuItem("Ceza Kesintileri", PdksModule.Tanimlar, () => OpenLegacyTable("Ceza Kesintileri","GCEZA",true,new Size(620,450))));
         tanimlar.DropDownItems.Add(new ToolStripSeparator());
-        tanimlar.DropDownItems.Add(MenuItem("Özel Geçiş Kartları", PdksModule.Tanimlar, () => OpenLegacyTable("Özel Geçiş Kartları","OZELKART",true,new Size(600,440))));
+        tanimlar.DropDownItems.Add(MenuItem("Özel Geçiş Kartları", PdksModule.Tanimlar, () => OpenLegacyTable("Özel Geçiş Kartları","MKART",true,new Size(600,440))));
 
         var islemler = new ToolStripMenuItem("İşlemler");
         islemler.DropDownItems.Add(MenuItem("Terminalden Gelen Bilgileri Aktar", PdksModule.Terminal, () => OpenDialogModule(PdksModule.Terminal)));
@@ -148,7 +148,7 @@ public sealed class MainShellForm : Form
         AddLegacyTool("Bilgi Aktar", PdksModule.Terminal, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Terminal), 80);
         AddLegacyTool("Gruplar", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), OpenGroups, 80);
         AddLegacyTool("Dönemler", PdksModule.Donemler, SystemIcons.Application.ToBitmap(), () => OpenDialogModule(PdksModule.Donemler), 80);
-        AddLegacyTool("Bölümler", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => OpenLegacyTable("Bölüm Tanımları","BOLUM",true,new Size(500,430)), 80);
+        AddLegacyTool("Bölümler", PdksModule.Tanimlar, SystemIcons.Application.ToBitmap(), () => OpenDefinitions("Bölümler"), 80);
         AddLegacyTool("Giriş-Çıkışlar", PdksModule.GirisCikis, SystemIcons.Application.ToBitmap(), () => OpenData(LegacyDataView.GirisCikis, PdksModule.GirisCikis), 80);
         AddLegacyTool("Per. Bilgileri", PdksModule.Personel, SystemIcons.Application.ToBitmap(), OpenPersonel, 80);
         AddLegacyTool("Avanslar", PdksModule.EkKazancKesinti, SystemIcons.Application.ToBitmap(), OpenLegacyKazancKesinti, 80);
@@ -221,7 +221,26 @@ public sealed class MainShellForm : Form
         ShowEmbedded(personel); personel.ActivateModule(module);
     }
 
-    void OpenGroups() => OpenLegacyTable("Çalışma Grupları","GRUP",true,new Size(543,448),PdksModule.Tanimlar);
+    void OpenGroups()
+    {
+        if (!Ready(PdksModule.Tanimlar)) return;
+        try { using var f = new LegacyGroupForm(); f.ShowDialog(this); }
+        catch (Exception ex) { MessageBox.Show(ex.Message,"Çalışma Grupları",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+    }
+
+    void OpenDefinitions(string initialTab)
+    {
+        if (!Ready(PdksModule.Tanimlar)) return;
+        try { using var f = new LegacyDefinitionsForm(initialTab); f.ShowDialog(this); }
+        catch (Exception ex) { MessageBox.Show(ex.Message,"Çalışma Sistemleri",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+    }
+
+    void OpenLegacyTerminalSettings()
+    {
+        if (!Ready(PdksModule.Terminal)) return;
+        try { using var f = new LegacyTerminalSettingsForm(); f.ShowDialog(this); }
+        catch (Exception ex) { MessageBox.Show(ex.Message,"Terminal Aktarım Ayarları",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+    }
 
     void OpenLegacyTable(string title,string table,bool edit,Size size,PdksModule module=PdksModule.Tanimlar)
     {
