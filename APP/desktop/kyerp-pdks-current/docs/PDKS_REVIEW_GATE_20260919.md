@@ -2,6 +2,14 @@
 
 Bu not ChatGPT kod denetimi sonrası kalan işleri netleştirir. Ürün referansı KYERP'dir; Hedef yalnız işlev/veri davranışı referansıdır.
 
+## 2026-09-20 kapanış güncellemesi
+
+- Terminal profil UI alan bazlıdır; canonical profil koruması sürer. Legacy Terminal Veri Transferi formu ve 5 dakika mükerrer toleransı ayrıca tamamlandı.
+- Organizasyon ve dönem ekranlarının geometry/tab sözleşmeleri shell testine, doğrulanabilen referans kuralları contract testine alındı. Belirsiz dönem kapatma semantiği tahmin edilmedi.
+- Canlı Firebird smoke transaction + rollback ile geçti; üretim öncesi/sonrası kayıt sayıları aynı, test kalıntısı sıfırdır.
+- Desktop solution build 0 warning/0 error, ContractTests 22/22 ve ShellSmokeTest başarılıdır.
+- Worker authorizer, remote migration ve deploy bu çalışma kapsamında yapılmadı; aşağıdaki güvenlik sınırları geçerliliğini korur.
+
 ## Doğrulanan paketler
 
 - `bb0731fd`: strict KYERP TNF v1, terminal transfer profilleri, file/TNF adapter, transaction tabanlı GIRCIK import.
