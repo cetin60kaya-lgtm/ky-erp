@@ -5,6 +5,8 @@ namespace HKN.Personel.Native;
 
 public partial class PersonelForm
 {
+    static string SafeFileName(string value)=>string.Concat(value.Select(c=>Path.GetInvalidFileNameChars().Contains(c)?'_':c));
+
     void ExportActiveGrid(bool excel)
     {
         var page=tabs.SelectedTab??throw new InvalidOperationException("Aktarılacak sekme seçili değil.");
