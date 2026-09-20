@@ -106,12 +106,16 @@ export default function PhoneApprovalSetup({ onClose }) {
   }
 
   async function openSecurityApp() {
-    const popup = window.open("about:blank", "_blank");
     const data = await issueEnrollment();
-    if (!data) { try { popup?.close(); } catch {} return; }
-    const target = securityAppUrl({ open: 1, autoRelink: 1 }, data);
-    if (popup) popup.location.href = target; else window.location.href = target;
-    setMessage(securityDevices.length ? "KY Güvenlik açılıyor. Bu telefonda yerel anahtar eksikse yalnız mevcut ERP şifreniz bir kez istenir." : "KY Güvenlik açılıyor. Bağlantıyı tamamlamak için mevcut ERP şifrenizi bir kez girin.");
+    if (!data) return;
+    const target = securityAppUrl({ open: 1, autoRelink: 1, browser: clientPlatform === "android" ? 1 : undefined }, data);
+    if (clientPlatform === "android") {
+      const url = new URL(target);
+      window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`;
+    } else {
+      window.open(target, "_blank", "noopener,noreferrer");
+    }
+    setMessage("Güvenli bağlantı hazırlanıyor. Açılan KY Güvenlik ekranında yalnız mevcut ERP şifrenizi bir kez girin.");
   }
 
   async function openSecurityInstaller(platform) {
@@ -186,7 +190,7 @@ export default function PhoneApprovalSetup({ onClose }) {
             </div>
             {securityDevices.length ? <>
               <div className="phone-approval-status-card ok"><div><b>Bağlantı kayıtlı</b><span>{securityDevices[0]?.deviceLabel || "KY ERP Güvenlik"}</span></div><small>Son bağlantı: {securityDevices[0]?.lastSeenAt ? new Date(securityDevices[0].lastSeenAt).toLocaleString("tr-TR") : "Henüz yok"}</small><small>Son bildirim: {securityDevices[0]?.lastPushAt ? new Date(securityDevices[0].lastPushAt).toLocaleString("tr-TR") : "Henüz yok"}</small></div>
-              <div className="phone-approval-main-actions"><button type="button" className="phone-approval-primary" onClick={openSecurityApp} disabled={busy}><ExternalLink size={17}/>{busy ? "Hazırlanıyor..." : "KY Güvenlik Aç / Bu Telefonda Bağla"}</button><button type="button" onClick={refreshSecurityConnection} disabled={busy}><RefreshCw size={16}/> Bağlantıyı Kontrol Et</button></div>
+              <div className="phone-approval-main-actions"><button type="button" className="phone-approval-primary" onClick={openSecurityApp} disabled={busy}><ExternalLink size={17}/>{busy ? "Hazırlanıyor..." : "Bu Telefonda Bağlantıyı Tamamla"}</button><button type="button" onClick={refreshSecurityConnection} disabled={busy}><RefreshCw size={16}/> Bağlantıyı Kontrol Et</button></div>
               <small className="phone-approval-help">Yeni kurulum veya origin değişiminde güvenli bağlantı otomatik hazırlanır. 8 karakter kod normal akışta kullanılmaz.</small>
             </> : <>
               <div className="phone-approval-install-box compact"><strong>Telefonuna KY ERP Güvenlik uygulamasını kur</strong><small>Kurulum bağlantısı ve cihaz eşleştirmesi otomatik hazırlanır.</small><div className="phone-approval-install-actions"><button type="button" className="phone-approval-install-primary" onClick={() => openSecurityInstaller(clientPlatform === "ios" ? "ios" : "android")} disabled={busy}><Download size={18}/>{busy ? "Hazırlanıyor..." : clientPlatform === "ios" ? "iPhone / iPad’e Kur" : "Android’e Kur"}</button></div></div>
