@@ -9,8 +9,8 @@
     <Product>KYERP PDKS</Product>
     <Company>KY ERP</Company>
     <Description>KYERP PDKS masaüstü personel devam kontrol sistemi</Description>
-    <Version>2.1.0</Version>
-    <FileVersion>2.1.0.0</FileVersion>
+    <Version>2.2.0</Version>
+    <FileVersion>2.2.0.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
