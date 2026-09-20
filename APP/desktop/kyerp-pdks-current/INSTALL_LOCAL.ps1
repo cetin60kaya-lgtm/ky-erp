@@ -10,10 +10,9 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw 'PDKS build basarisiz.' }
 }
 
-$personelSource = Join-Path $root 'artifacts\Personel'
-$bridgeSource = Join-Path $root 'artifacts\Bridge'
-if (-not (Test-Path (Join-Path $personelSource 'HKN.Personel.Native.exe'))) { throw 'Personel publish ciktilari bulunamadi.' }
-if (-not (Test-Path (Join-Path $bridgeSource 'HKN.Personel.Bridge.exe'))) { throw 'Bridge publish ciktilari bulunamadi.' }
+$appSource = Join-Path $root 'artifacts\Personel'
+$appExe = Join-Path $appSource 'KYERP.PDKS.exe'
+if (-not (Test-Path $appExe)) { throw 'KYERP.PDKS.exe publish ciktilari bulunamadi.' }
 
 if (Test-Path $InstallRoot) {
     $backup = $InstallRoot + '_ESKI_' + (Get-Date -Format 'yyyyMMdd_HHmmss')
@@ -21,23 +20,19 @@ if (Test-Path $InstallRoot) {
 }
 
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-$bridgeRoot = Join-Path $InstallRoot 'Bridge'
-New-Item -ItemType Directory -Force -Path $bridgeRoot | Out-Null
-Copy-Item (Join-Path $personelSource '*') $InstallRoot -Recurse -Force
-Copy-Item (Join-Path $bridgeSource '*') $bridgeRoot -Recurse -Force
+Copy-Item (Join-Path $appSource '*') $InstallRoot -Recurse -Force
 
-$bridgeExe = Join-Path $bridgeRoot 'HKN.Personel.Bridge.exe'
-$personelExe = Join-Path $InstallRoot 'HKN.Personel.Native.exe'
+$installedExe = Join-Path $InstallRoot 'KYERP.PDKS.exe'
 $desktop = [Environment]::GetFolderPath('Desktop')
 $linkPath = Join-Path $desktop 'KYERP PDKS.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut($linkPath)
-$link.TargetPath = $bridgeExe
+$link.TargetPath = $installedExe
 $link.WorkingDirectory = $InstallRoot
-$link.IconLocation = $personelExe + ',0'
+$link.IconLocation = $installedExe + ',0'
 $link.Description = 'KYERP PDKS'
 $link.Save()
 
 Write-Host "KYERP PDKS kuruldu: $InstallRoot" -ForegroundColor Green
-Write-Host "Ana masaustu kisayolu: $linkPath" -ForegroundColor Green
-Write-Host 'Hedef mevcutsa entegre mod; Hedef yoksa Personel uygulamasi tek basina acilir.' -ForegroundColor Green
+Write-Host "Masaustu kisayolu: $linkPath" -ForegroundColor Green
+Write-Host 'Tek uygulama: Bridge/Hedef overlay kullanilmaz.' -ForegroundColor Green
