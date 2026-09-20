@@ -6,7 +6,7 @@
   let deferredPrompt=null;
   let waitTimer=null;
   let waitStartedAt=Date.now();
-  const reloadKey="kyerp-security-install-reload-v5";
+  const reloadKey="kyerp-security-install-reload-v6";
   const qs=(selector)=>document.querySelector(selector);
   const isStandalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   const chromiumAndroid=()=>/Chrome\//i.test(ua)||/EdgA\//i.test(ua);
