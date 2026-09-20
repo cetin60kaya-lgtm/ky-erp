@@ -171,10 +171,10 @@ from GIRCIK G left join KIMLIK K on K.PKNO=G.PKNO where 1=1";
         foreach(DataGridViewColumn c in grid.Columns)c.Visible=false;
         ShowCol("PKNO","Kart No",58);ShowCol("AD","Adı",82);ShowCol("SOYAD","Soyadı",92);ShowCol("GTARIH","Giriş Tarihi",105);ShowCol("GSAAT","Giriş Saati",72);ShowCol("GTUR","Tür",35);ShowCol("CTARIH","Çıkış Tarihi",105);ShowCol("CSAAT","Çıkış Saati",72);ShowCol("CTUR","Tür",35);
     }
-    void ShowCol(string n,string h,int w){if(!grid.Columns.Contains(n))return;var c=grid.Columns[n];c.Visible=true;c.HeaderText=h;c.Width=w;}
+    void ShowCol(string n,string h,int w){if(!grid.Columns.Contains(n))return;var c=grid.Columns[n];if(c is null)return;c.Visible=true;c.HeaderText=h;c.Width=w;}
     void GirisGridFormat(object? sender,DataGridViewCellFormattingEventArgs e)
     {
-        if(e.RowIndex<0||e.ColumnIndex<0)return;var n=grid.Columns[e.ColumnIndex].Name;
+        if(e.RowIndex<0||e.ColumnIndex<0)return;var col=grid.Columns[e.ColumnIndex];if(col is null)return;var n=col.Name;
         if(n is "GSAAT" or "CSAAT"){e.CellStyle.BackColor=Color.Black;e.CellStyle.ForeColor=Color.Lime;e.CellStyle.SelectionBackColor=Color.Black;e.CellStyle.SelectionForeColor=Color.Lime;e.CellStyle.Font=new Font(Font,FontStyle.Bold);}
         if(n is "GTARIH" or "CTARIH"&&e.Value is DateTime d){e.Value=d.ToString("dd MMM yyyy ddd",new System.Globalization.CultureInfo("tr-TR"));e.FormattingApplied=true;}
     }
