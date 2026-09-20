@@ -16,6 +16,8 @@ internal static class StartupConfiguration
         ("KY_PDKS_PERSONEL_EXE", EnvironmentVariableTarget.User)
     ];
 
+    public static bool IsReady() => CanOpen(PdksOptions.FromEnvironment());
+
     public static bool EnsureReady()
     {
         var current = PdksOptions.FromEnvironment();
@@ -41,7 +43,7 @@ internal static class StartupConfiguration
                 ["KY_PDKS_DB_PASSWORD"] = password.Text,
                 ["KY_PDKS_RUNTIME_ROOT"] = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),
                 ["KY_PDKS_REPORT_ROOT"] = Path.Combine(AppContext.BaseDirectory, "Report"),
-                ["KY_PDKS_PERSONEL_EXE"] = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "HKN.Personel.Native.exe")
+                ["KY_PDKS_PERSONEL_EXE"] = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "KYERP.PDKS.exe")
             };
 
             foreach (var item in values) Environment.SetEnvironmentVariable(item.Key, item.Value, EnvironmentVariableTarget.Process);
@@ -155,8 +157,8 @@ internal static class StartupConfiguration
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
         string[] candidates =
         [
-            @"D:\Hedef500\Hedef500\Data\DATABASE.GDB".Replace("\\", "\\"),
-            @"C:\Hedef500\Hedef500\Data\DATABASE.GDB".Replace("\\", "\\"),
+            @"D:\Hedef500\Hedef500\Data\DATABASE.GDB",
+            @"C:\Hedef500\Hedef500\Data\DATABASE.GDB",
             Path.Combine(AppContext.BaseDirectory, "Data", "DATABASE.GDB")
         ];
         return candidates.FirstOrDefault(File.Exists) ?? configured;
