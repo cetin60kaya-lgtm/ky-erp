@@ -75,9 +75,12 @@ test("install, API and service-worker waits are bounded and always leave actiona
   assert.match(app,/setTimeout\(\(\)=>\{if\(isStandalone\(\)&&els\.setupPanel/);
 });
 
-test("canonical worker uses network-fresh runtime and one stable static cache",()=>{
+test("canonical worker opens from cached shell with bounded network refresh",()=>{
   assert.match(sw,/CACHE_NAME="kyerp-security-static"/);
-  assert.match(sw,/runtime=event\.request\.mode==="navigate"/);
-  assert.match(sw,/fetch\(event\.request,\{cache:"no-store"\}\)/);
+  assert.match(sw,/NAVIGATION_TIMEOUT_MS=1500/);
+  assert.match(sw,/const SHELL=\[APP_URL/);
+  assert.match(sw,/cache\.match\(cacheKey\(event\.request\)\)/);
+  assert.match(sw,/event\.waitUntil\(refreshRuntime\(event\.request\)/);
+  assert.match(sw,/withTimeout\(refreshRuntime\(event\.request\),NAVIGATION_TIMEOUT_MS\)/);
   assert.match(sw,/kyerp-ky-guvenlik-shell-/);
 });
