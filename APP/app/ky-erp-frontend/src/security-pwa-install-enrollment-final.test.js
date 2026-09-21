@@ -27,6 +27,11 @@ test("Security PWA keeps one immutable install identity and version-free launch 
   assert.doesNotMatch(host,/searchParams\.set\(["']boot/);
 });
 
+test("install helper runs immediately after parse without waiting for app runtime",()=>{
+  assert.match(html,/<script defer src="\/ky-guvenlik\/install-helper\.js"><\/script>/);
+  assert.match(html,/Kurulum ekranı hazırlanıyor/);
+  assert.ok(html.indexOf("install-helper.js") < html.indexOf("app.js"));
+});
 test("Android browser is install-only and enrollment starts only in standalone",()=>{
   assert.match(installer,/isBrowserInstall:\(\)=>ANDROID&&!standalone\(\)/);
   assert.match(installer,/installOnly\(\)/);

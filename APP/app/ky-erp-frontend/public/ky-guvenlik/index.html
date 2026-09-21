@@ -13,7 +13,7 @@
   <script>/* KYERP_SECURITY_PENDING_CAPTURE_V2 */(()=>{try{const u=new URL(location.href);const id=String(u.searchParams.get("enrollmentId")||"");const token=String(u.searchParams.get("enrollmentToken")||"");const mode=String(u.searchParams.get("mode")||"");if(id&&token)localStorage.setItem("kyerp-security-pending-enrollment-v2",JSON.stringify({id,token,mode,savedAt:Date.now()}))}catch{}})();</script>
   <script>(()=>{try{const android=/Android/i.test(String(navigator.userAgent||""));const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(android&&!standalone)document.documentElement.classList.add("ky-install-only")}catch{}})();</script>
   <style id="kyInstallHardGateStyle">html.ky-install-only #setupPanel,html.ky-install-only #appPanel{display:none!important}html.ky-install-only #installPanel{display:grid!important}</style>
-  <script src="/ky-guvenlik/install-helper.js"></script>
+  <script defer src="/ky-guvenlik/install-helper.js"></script>
   <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest" />
   <link rel="icon" href="/ky-guvenlik/kyerp-security-icon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="/ky-guvenlik/kyerp-security-apple-touch.png" />
@@ -36,7 +36,7 @@
       <p id="installCopy">Giriş onayları, kısa süreli giriş kodu ve güvenilir cihaz bağlantısı tek uygulamada.</p>
       <div id="installState" class="install-state">
         <span class="install-state-mark">KY</span>
-        <div><strong>KY ERP Güvenlik</strong><small id="installStateText">Cihaz uyumluluğu kontrol ediliyor.</small></div>
+        <div><strong>KY ERP Güvenlik</strong><small id="installStateText">Kurulum ekranı hazırlanıyor…</small></div>
       </div>
       <button id="installButton" class="primary hidden" type="button">Android'e KY Güvenlik'i Yükle</button>
       <div id="androidInstallNote" class="note hidden">
