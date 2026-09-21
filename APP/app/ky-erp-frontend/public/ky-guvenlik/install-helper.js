@@ -140,6 +140,14 @@
 
   window.KYSecurityInstaller={isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
   capturePendingEnrollment();
+  if(standalone()){
+    try{
+      const url=new URL(location.href);
+      for(const key of ["install","platform","browser","chrome"])url.searchParams.delete(key);
+      history.replaceState({},"",url.pathname+url.search+url.hash);
+    }catch{}
+    return;
+  }
   if(!ANDROID)return;
 
   window.addEventListener("beforeinstallprompt",(event)=>{

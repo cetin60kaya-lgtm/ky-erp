@@ -42,6 +42,11 @@ test("Android browser is install-only and enrollment starts only in standalone",
   assert.match(phoneSetup,/KY G\u00fcvenlik A\u00e7/);
 });
 
+test("installed standalone app clears install handoff params and never reopens installer UI",()=>{
+  assert.match(installer,/if\(standalone\(\)\)\{[\s\S]{0,500}\["install","platform","browser","chrome"\][\s\S]{0,300}history\.replaceState[\s\S]{0,160}return/);
+  assert.match(app,/if\(standalone\)\{[\s\S]{0,500}\["install","platform","browser","chrome"\][\s\S]{0,300}els\.installPanel\.classList\.add\("hidden"\);[\s\S]{0,100}return/);
+});
+
 test("enrollment handoff survives install without leaving its token in browser history",()=>{
   assert.match(installer,/localStorage\.setItem\(PENDING_KEY/);
   assert.match(installer,/url\.searchParams\.delete\("enrollmentToken"\)/);
