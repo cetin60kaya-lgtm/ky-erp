@@ -1,0 +1,63 @@
+.muhasebe-module-page .ccw-toolbar > button.danger,
+.muhasebe-module-page .ccw-settings-head button.danger {
+  display: none !important;
+}
+
+.accounting-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.accounting-quick-wrap {
+  position: relative;
+}
+
+.accounting-quick-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 80;
+  width: min(360px, 88vw);
+  padding: 10px;
+  border: 1px solid var(--border-color, #dbe3ec);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.accounting-quick-menu button {
+  min-height: 48px;
+  border: 1px solid var(--border-color, #dbe3ec);
+  border-radius: 10px;
+  background: var(--surface-soft, #f8fafc);
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.accounting-quick-menu button:hover {
+  background: var(--surface-hover, #eef4fa);
+}
+
+@media (max-width: 760px) {
+  .accounting-page-header.compact {
+    align-items: flex-start;
+  }
+
+  .accounting-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .accounting-quick-menu {
+    left: 0;
+    right: auto;
+    grid-template-columns: 1fr;
+  }
+}
