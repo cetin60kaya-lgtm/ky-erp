@@ -1,5 +1,5 @@
-const APP_URL="/ky-guvenlik/?open=1&release=2.9&boot=8";
-const CACHE_NAME="kyerp-ky-guvenlik-shell-v8";
+const APP_URL="/ky-guvenlik/?open=1&release=2.9&boot=9";
+const CACHE_NAME="kyerp-ky-guvenlik-shell-v9";
 const ICON="/ky-guvenlik/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 
@@ -10,7 +10,7 @@ async function showDecisionResult(decision){await closeApprovalNotifications();c
 async function focusOrOpen(){const windows=await clients.matchAll({type:"window",includeUncontrolled:true});const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/ky-guvenlik/")}catch{return false}});if(existing){await existing.focus();try{await existing.navigate(APP_URL)}catch{};return}await clients.openWindow(APP_URL)}
 
 self.addEventListener("install",(event)=>event.waitUntil((async()=>{await self.skipWaiting();const cache=await caches.open(CACHE_NAME);await cache.addAll(["/ky-guvenlik/app.css","/ky-guvenlik/kyerp-security-apple-touch.png","/ky-guvenlik/kyerp-security-192.png","/ky-guvenlik/kyerp-security-512.png",ICON])})()));
-self.addEventListener("activate",(event)=>event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter((key)=>(key.startsWith("kyerp-security-shell-")||key.startsWith("kyerp-ky-guvenlik-shell-"))&&key!==CACHE_NAME).map((key)=>caches.delete(key)));await self.clients.claim();const windows=await clients.matchAll({type:"window",includeUncontrolled:true});for(const client of windows){try{const url=new URL(client.url);if(url.pathname.startsWith("/ky-guvenlik/")&&url.searchParams.get("boot")!=="8"){url.searchParams.set("boot","8");await client.navigate(url.href)}}catch{}}})()));
+self.addEventListener("activate",(event)=>event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter((key)=>(key.startsWith("kyerp-security-shell-")||key.startsWith("kyerp-ky-guvenlik-shell-"))&&key!==CACHE_NAME).map((key)=>caches.delete(key)));await self.clients.claim()})()));
 self.addEventListener("push",(event)=>event.waitUntil(showWakeNotification()));
 self.addEventListener("notificationclick",(event)=>{event.notification?.close();event.waitUntil(focusOrOpen())});
 self.addEventListener("message",(event)=>{if(event.data?.type==="KYERP_SECURITY_CLEAR_NOTIFICATION")event.waitUntil(closeApprovalNotifications());if(event.data?.type==="KYERP_SECURITY_DECISION_DONE")event.waitUntil(showDecisionResult(event.data?.decision))});
