@@ -1,4 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
+
+## 21.09.2026 — Android KY ERP Güvenlik PWA final feature paketi
+
+- Branch: `codex/security-pwa-enrollment-final-20260921`.
+- Kurulum ve güvenilir cihaz bağlama ayrıldı: Android browser yalnız gerçek PWA kurulumunu, standalone uygulama yalnız enrollment/relink akışını yürütür.
+- Canonical origin/path `security.kyerp.net/ky-guvenlik/`; manifest id sabit, start URL ve scope sürüm parametresizdir.
+- Enrollment token kurulum boyunca aynı origin localStorage'da kısa süreli korunur ve URL'den temizlenir; bağlı cihaz IndexedDB kaydı, signing key ve push kimliği migration sırasında silinmez.
+- Eski `/security/` worker/cache akışı kontrollü göç ile emekliye ayrılır. Sürümlü boot/flow/shell workaroundları kaldırılmıştır.
+- Frontend lint + 173 test + production build; Worker typecheck + 458 unit test + local auth integration + dry-run build başarılıdır.
+- D1/production write veya deploy yapılmadı. Sonraki adım: temiz PR incelemesi, kullanıcı onayı, production merge, Git Integration yayını ve gerçek Android cihaz smoke testi.
 ## 06.09.2026
 
 **Amaç:** Yeni sohbetlerin/ajanların son yapılan işleri tekrar araştırmadan, eski notlara dönmeden ve iş sırasını bozmadan devam etmesi için güncel özet kaynak.

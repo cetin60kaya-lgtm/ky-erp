@@ -108,7 +108,7 @@ export default function PhoneApprovalSetup({ onClose }) {
   async function openSecurityApp() {
     const data = await issueEnrollment();
     if (!data) return;
-    const target = securityAppUrl({ open: 1, autoRelink: 1, browser: clientPlatform === "android" ? 1 : undefined }, data);
+    const target = securityAppUrl({ mode: "relink" }, data);
     if (clientPlatform === "android") {
       const url = new URL(target);
       window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${encodeURIComponent(target)};end`;
@@ -121,7 +121,7 @@ export default function PhoneApprovalSetup({ onClose }) {
   async function openSecurityInstaller(platform) {
     const data = await issueEnrollment();
     if (!data) return;
-    const target = securityAppUrl({ install: 1, platform, browser: platform === "android" ? 1 : undefined, autoRelink: 1 }, data);
+    const target = securityAppUrl({ install: 1, platform, chrome: platform === "android" ? 1 : undefined }, data);
     if (platform === "android" && clientPlatform === "android") {
       const url = new URL(target);
       window.location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(target)};end`;

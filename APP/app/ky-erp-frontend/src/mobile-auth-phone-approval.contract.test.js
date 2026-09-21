@@ -42,14 +42,14 @@ test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", (
 
 test("phone approval is handed off to the dedicated KY ERP Security PWA", () => {
   const setup = read("./components/shell/PhoneApprovalDeviceSetup.jsx");
-  const securityApp = read("../public/security/app.js");
-  const securityWorker = read("../public/security/sw.js");
-  const securityManifest = read("../public/security/manifest.webmanifest");
+  const securityApp = read("../public/ky-guvenlik/app.js");
+  const securityWorker = read("../public/ky-guvenlik/sw.js");
+  const securityManifest = read("../public/ky-guvenlik/manifest.webmanifest");
 
   assert.match(setup, /security-enrollment\/start/);
-  assert.match(setup, /Yeni Kurulum Kodu Oluştur/);
-  assert.match(setup, /app\.kyerp\.net\/security/);
-  assert.match(securityManifest, /"id": "\/security\/"/);
+  assert.match(setup, /Sorun olursa yedek bağlantı kodu oluştur/);
+  assert.match(setup, /security\.kyerp\.net\/ky-guvenlik/);
+  assert.match(securityManifest, /"id": "\/ky-guvenlik\/app-v28"/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
   assert.match(securityWorker, /notificationclick/);
@@ -63,20 +63,20 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   const responsive = read("./styles/responsive-core.css");
   const setup = read("./components/shell/PhoneApprovalDeviceSetup.jsx");
   const manifest = read("../public/manifest.webmanifest");
-  const securityManifest = read("../public/security/manifest.webmanifest");
-  const securityApp = read("../public/security/app.js");
+  const securityManifest = read("../public/ky-guvenlik/manifest.webmanifest");
+  const securityApp = read("../public/ky-guvenlik/app.js");
 
   assert.match(shell, /beforeinstallprompt/);
   assert.match(shell, /KY ERP'yi Bu Cihaza Yükle/);
   assert.match(shell, /appinstalled/);
   assert.match(responsive, /data-layout-mode="phone"[\s\S]*shell-v3-icon\.notification/);
   assert.match(responsive, /shell-v3-install-button/);
-  assert.match(setup, /openSecurityInstaller\("android"\)/);
-  assert.match(setup, /iPhone\/iPad/);
+  assert.match(setup, /openSecurityInstaller\(clientPlatform === "ios" \? "ios" : "android"\)/);
+  assert.match(setup, /iPhone \/ iPad’e Kur/);
   assert.match(securityApp, /Android Telefon/);
   assert.match(securityApp, /Android Tablet/);
   assert.match(securityManifest, /"display": "standalone"/);
-  assert.match(securityManifest, /"scope": "\/security\/"/);
+  assert.match(securityManifest, /"scope": "\/ky-guvenlik\/"/);
   assert.match(securityManifest, /kyerp-security-icon\.svg/);
   assert.match(manifest, /"id": "\/"/);
   assert.match(manifest, /"display": "standalone"/);

@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 21.09.2026 — KY ERP Güvenlik Android PWA akışı tek canonical yapıya alındı
+
+- Feature branch: `codex/security-pwa-enrollment-final-20260921`.
+- Canonical güvenlik PWA yolu `https://security.kyerp.net/ky-guvenlik/`; `/security/` yalnız eski kurulumları yönlendiren ve eski service worker/cache kayıtlarını emekliye ayıran göç katmanıdır.
+- Manifest kimliği uyumluluk için `/ky-guvenlik/app-v28` olarak sabitlendi; `start_url=/ky-guvenlik/`, `scope=/ky-guvenlik/`. Manifest kimliği ve başlangıç URL'si artık release/boot numarasıyla değiştirilmeyecek.
+- Android tarayıcı akışı yalnız kurulum ekranıdır. Cihaz bağlama yalnız standalone KY ERP Güvenlik uygulamasının ilk açılışında çalışır; enrollment bilgisi kurulum öncesi yerel bekleme kaydına alınır ve token tarayıcı URL/geçmişinden temizlenir.
+- `boot`, `release`, `flow-v`, `shell-v` URL/cache yamaları kaldırıldı. Tek kararlı static cache kullanılır; runtime JS/manifest/navigation network-fresh çalışır, eski sürümlü cache'ler activate/migration sırasında temizlenir.
+- Kurulum, API ve service worker beklemeleri zaman aşımıyla sınırlıdır; hata durumunda dokunmayı kilitleyen sonsuz overlay yerine anlaşılır durum ve tekrar deneme yolu gösterilir.
+- 8 karakter kod normal akışta görünmez; yalnız açık yedek/kurtarma seçeneğidir. Mevcut password step-up, P-256 cihaz imzası, push subscription, tenant/rol/yetki ve relink güvenliği korunmuştur.
+- D1 migration/reset/drop yoktur. Production deploy yapılmadı; kullanıcı onayı sonrası production branch merge ve Cloudflare Git Integration yayını beklenir.
+
 ## 06.09.2026 — Mail Merkezi production onarım kaydı
 
 - Kullanıcı yerel production eşitlemesi, yeni feature branch, temiz PR/merge ve Cloudflare Git Integration yayını için açık talimat verdi.

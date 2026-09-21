@@ -23,10 +23,10 @@ const companySettings = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminC
 const phoneSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalSetup.jsx");
 const phoneDeviceSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalDeviceSetup.jsx");
 const phoneInbox = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalInboxBridge.jsx");
-const securityApp = repoFile("APP/app/ky-erp-frontend/public/security/app.js");
-const securityHtml = repoFile("APP/app/ky-erp-frontend/public/security/index.html");
-const securityWorker = repoFile("APP/app/ky-erp-frontend/public/security/sw.js");
-const securityManifest = repoFile("APP/app/ky-erp-frontend/public/security/manifest.webmanifest");
+const securityApp = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/app.js");
+const securityHtml = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/index.html");
+const securityWorker = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/sw.js");
+const securityManifest = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/manifest.webmanifest");
 
 test("phone approval uses existing tenant json_store and needs no new production migration", () => {
   assert.match(securityRuntime, /AUTH_PUSH_DEVICE/);
@@ -118,7 +118,7 @@ test("authenticated shell creates one-time security-app enrollment while passwor
 
 test("dedicated iPhone and Android security app opens the app for approval instead of relying on notification action buttons", () => {
   assert.match(securityManifest, /"name": "KY ERP Güvenlik"/);
-  assert.match(securityManifest, /"scope": "\/security\/"/);
+  assert.match(securityManifest, /"scope": "\/ky-guvenlik\/"/);
   assert.match(securityWorker, /notificationclick/);
   assert.match(securityWorker, /focusOrOpen/);
   assert.doesNotMatch(securityWorker, /action:"approve"/);
@@ -234,5 +234,5 @@ test("approved phone decision clears the Android notification immediately",()=>{
   assert.match(securityApp,/getRegistrations/);
   assert.match(securityApp,/getNotifications\(\)/);
   assert.match(securityApp,/openApproval/);
-  assert.match(securityApp,/await closeApprovalNotifications\(\);const kind=/);
+  assert.match(securityApp,/await finalizeApprovalNotification\(decision\);const kind=/);
 });

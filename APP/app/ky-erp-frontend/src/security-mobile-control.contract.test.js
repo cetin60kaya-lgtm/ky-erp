@@ -6,15 +6,15 @@ import { fileURLToPath } from "node:url";
 
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,"..");
-const html=readFileSync(resolve(root,"public/security/index.html"),"utf8");
-const app=readFileSync(resolve(root,"public/security/app.js"),"utf8");
-const control=readFileSync(resolve(root,"public/security/security-control-center.js"),"utf8");
-const actions=readFileSync(resolve(root,"public/security/security-actions.js"),"utf8");
-const sw=readFileSync(resolve(root,"public/security/sw.js"),"utf8");
+const html=readFileSync(resolve(root,"public/ky-guvenlik/index.html"),"utf8");
+const app=readFileSync(resolve(root,"public/ky-guvenlik/app.js"),"utf8");
+const control=readFileSync(resolve(root,"public/ky-guvenlik/security-control-center.js"),"utf8");
+const actions=readFileSync(resolve(root,"public/ky-guvenlik/security-actions.js"),"utf8");
+const sw=readFileSync(resolve(root,"public/ky-guvenlik/sw.js"),"utf8");
 test("KY Security shows its canonical version and stores version state",()=>{
-  assert.match(html,/id="appVersionBadge">v2\.6/);
-  assert.match(html,/id="accountVersion">v2\.6/);
-  assert.match(app,/CLIENT_VERSION="security-v2\.6"/);
+  assert.match(html,/id="appVersionBadge">v2\.9/);
+  assert.match(html,/id="accountVersion">v2\.9/);
+  assert.match(app,/CLIENT_VERSION="security-v2\.9"/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);
   assert.match(app,/X-KYERP-Security-App-Version/);
@@ -45,8 +45,8 @@ test("mobile security refresh is event driven without short interval polling",()
   assert.doesNotMatch(control,/setInterval/);
   assert.match(control,/visibilitychange/);
   assert.match(control,/KYERP_SECURITY_PUSH_WAKE/);
-  assert.match(sw,/security-control-center\.js/);
-  assert.match(sw,/security-shell-v22/);
+  assert.match(sw,/KYERP_SECURITY_PUSH_WAKE/);
+  assert.match(sw,/kyerp-security-static/);
 });
 
 test("mobile control runtime files stay JavaScript syntax valid",()=>{

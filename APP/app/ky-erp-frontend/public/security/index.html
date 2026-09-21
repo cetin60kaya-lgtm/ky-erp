@@ -2,207 +2,22 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#10284d" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
-  <meta name="format-detection" content="telephone=no" />
-  <script>/* KYERP_SECURITY_CANONICAL_REDIRECT_V28 */(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone){const u=new URL(location.href);u.protocol="https:";u.host="kyerp.net";u.pathname="/ky-guvenlik/";u.searchParams.set("release","2.8");location.replace(u.href)}}catch{}})();</script>
-  <script src="/security/install-helper.js?v=security-install-v4"></script>
-  <link rel="manifest" href="/security/manifest.webmanifest?v=security-install-v5" />
-  <link rel="icon" href="/security/kyerp-security-icon.svg" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/security/kyerp-security-apple-touch.png" />
-  <link rel="stylesheet" href="/security/app.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
   <title>KY ERP Güvenlik</title>
+  <script>
+    (()=>{
+      try{
+        const target=new URL("/ky-guvenlik/",location.origin);
+        const source=new URL(location.href);
+        for(const key of ["enrollmentId","enrollmentToken","mode","install","platform","chrome"]){
+          const value=source.searchParams.get(key);
+          if(value)target.searchParams.set(key,value);
+        }
+        location.replace(target.href);
+      }catch{location.replace("/ky-guvenlik/")}
+    })();
+  </script>
 </head>
-<body>
-  <main class="security-shell">
-    <header class="security-header">
-      <div class="security-brand">
-        <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.7</span></small></div>
-      </div>
-      <span id="connectionBadge" class="security-badge">Kontrol</span>
-    </header>
-
-    <section id="installPanel" class="security-card hidden">
-      <span class="eyebrow">KY GÜVENLİK UYGULAMASI</span>
-      <h1 id="installTitle">KY ERP Güvenlik'i Kur</h1>
-      <p id="installCopy">Giriş onayları, kısa süreli giriş kodu ve güvenilir cihaz bağlantısı tek uygulamada.</p>
-      <div id="installState" class="install-state">
-        <span class="install-state-mark">KY</span>
-        <div><strong>KY ERP Güvenlik</strong><small id="installStateText">Cihaz uyumluluğu kontrol ediliyor.</small></div>
-      </div>
-      <button id="installButton" class="primary hidden" type="button">Android'e KY Güvenlik'i Yükle</button>
-      <div id="androidInstallNote" class="note hidden">
-        <b>Android kurulumu</b>
-        <span>Chrome veya Edge bu cihazda uygulama kurulumunu destekliyorsa yukarıdaki düğme Android'in kendi yükleme penceresini açar.</span>
-      </div>
-      <div id="iosInstallNote" class="note hidden">
-        <b>iPhone / iPad · Safari kurulumu</b>
-        <span>Safari ile açın → Paylaş → Ana Ekrana Ekle → Ekle. Ardından ana ekrandaki KY Güvenlik ikonundan açın. Bildirim izni uygulama içindeki Kur / Yenile düğmesine dokunduğunuzda iPhone tarafından istenir.</span>
-      </div>
-    </section>
-
-    <section id="setupPanel" class="security-card">
-      <span class="eyebrow">GÜVENİLİR CİHAZ KURULUMU</span>
-      <h2 id="setupTitle">Bu cihazı KY ERP'ye bağla</h2>
-      <p id="setupCopy" class="muted">Ana KY ERP → Profil → Telefon Onayı bölümündeki 8 karakterli kurulum / erişim yenileme kodunu kullan.</p>
-      <label>Kurulum / erişim yenileme kodu
-        <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
-      </label>
-      <label>Mevcut KY ERP şifren
-        <input id="password" type="password" autocomplete="current-password" placeholder="Şifren" />
-      </label>
-      <label>Cihaz adı
-        <input id="deviceLabel" maxlength="80" />
-      </label>
-      <button id="connectButton" class="primary" type="button">Güvenilir Cihazı Kur / Yenile</button>
-      <button id="cancelRelinkButton" class="hidden" type="button">Yenilemeyi İptal Et</button>
-      <div class="note">
-        <b>Güvenilir cihaz korunur</b>
-        <span>Kararlar bu telefonun cihaz imzasıyla verilir. Destekleyen cihazlarda Face ID / Touch ID / parmak izi / PIN ek doğrulama olarak kullanılır.</span>
-      </div>
-    </section>
-
-    <section id="appPanel" class="hidden">
-      <section id="accountPanel" class="security-card account-card">
-        <div class="account-card-head">
-          <div>
-            <span class="eyebrow">BAĞLI HESAP</span>
-            <h2 id="accountFullName">Hesap doğrulanıyor</h2>
-            <p id="accountIdentity" class="muted">Bu cihazın hangi KY ERP hesabına bağlı olduğu sunucudan doğrulanır.</p>
-          </div>
-          <span id="accountRoleBadge" class="account-role-badge">Kontrol</span>
-        </div>
-        <div class="account-meta-grid">
-          <div><span>E-posta</span><b id="accountEmail">-</b></div>
-          <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
-          <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
-          <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.7</b></div>
-        </div>
-        <div class="account-access-block">
-          <span>ERP erişimi</span>
-          <div id="accountModules" class="account-chip-list"><span class="account-chip muted-chip">Kontrol ediliyor</span></div>
-        </div>
-        <div class="account-access-block">
-          <span>Güvenlik yetkileri</span>
-          <div id="accountSecurityCaps" class="account-chip-list"><span class="account-chip muted-chip">Kontrol ediliyor</span></div>
-        </div>
-        <small id="accountNote" class="account-note">Onaylar yalnız bu hesabın yetkileriyle verilir.</small>
-      </section>
-
-      <section id="superAdminConsole" class="security-card super-admin-console hidden">
-        <div class="super-admin-console-head"><div><span class="eyebrow">UYGULAMA YÖNETİMİ</span><h2>Sistem Güvenlik Merkezi</h2><p class="muted">KY ERP genelindeki girişler, aktif oturumlar, bağlı cihazlar ve güvenlik olayları bu Süper Yönetici telefonundan yönetilir.</p></div><span class="super-admin-crown">SA</span></div>
-        <div class="super-admin-actions"><button type="button" data-owner-open="approvals"><b>Sistem Onayları</b><span>Giriş, oturum ve kritik işlemler</span></button><button type="button" data-owner-open="sessions"><b>Aktif Oturumlar</b><span>Tüm firmalar ve kullanıcılar</span></button><button type="button" data-owner-open="computers"><b>Sistem Cihazları</b><span>Bilgisayar ve güvenilir cihazlar</span></button><button type="button" data-owner-open="logs"><b>Denetim Logları</b><span>Güvenlik hareketleri ve geçmiş</span></button></div>
-      </section>
-
-      <nav class="security-tabs" aria-label="KY ERP Güvenlik bölümleri">
-        <button type="button" data-tab="approvals" class="active">Onaylar <span id="tabCount">0</span></button>
-        <button type="button" data-tab="sessions" data-system-only>Oturumlar <span id="sessionTabCount">0</span></button>
-        <button type="button" data-tab="computers" data-system-only>Bilgisayarlar <span id="computerTabCount">0</span></button>
-        <button type="button" data-tab="logs" data-system-only>Loglar</button>
-        <button type="button" data-tab="code">Giriş Kodu</button>
-        <button type="button" data-tab="device">Bu Telefon</button>
-      </nav>
-
-      <section id="controlToolbar" class="security-control-toolbar hidden">
-        <label>Firma / Kapsam<select id="controlCompanyFilter"><option value="">Tüm firmalar</option></select></label>
-        <button id="controlRefreshButton" type="button">Yenile</button>
-        <small id="controlCheckedAt">Son kontrol: -</small>
-      </section>
-
-      <section id="approvalsTab" class="security-tab-panel">
-        <section id="pendingPanel" class="security-card hidden">
-          <div class="pending-title">
-            <div><span class="eyebrow">GİRİŞ İSTEĞİ</span><h2>Onay bekliyor</h2></div>
-            <span id="pendingCount" class="count">0</span>
-          </div>
-          <div id="pendingList" class="pending-list"></div>
-        </section>
-
-        <section id="emptyPanel" class="security-card">
-          <div id="emptyMark" class="empty-mark">✓</div>
-          <h2 id="emptyTitle">Bekleyen giriş yok</h2>
-          <p id="emptyCopy" class="muted">Bağlantı hazır. Yeni KY ERP giriş veya kritik güvenlik isteği geldiğinde burada görünür.</p>
-        </section>
-      </section>
-
-      <section id="sessionsTab" class="security-tab-panel hidden">
-        <section class="security-card">
-          <div class="pending-title"><div><span class="eyebrow">AKTİF ERİŞİM</span><h2>ERP Oturumları</h2></div></div>
-          <div class="control-summary-grid"><div><span>Aktif oturum</span><b id="summaryActiveSessions">0</b></div><div><span>Bağlı bilgisayar</span><b id="summaryComputers">0</b></div><div><span>Güvenilir cihaz</span><b id="summaryTrustedDevices">0</b></div><div><span>Son olay</span><b id="summaryEvents">0</b></div></div>
-          <div id="sessionList" class="control-list"></div>
-        </section>
-      </section>
-
-      <section id="computersTab" class="security-tab-panel hidden">
-        <section class="security-card"><span class="eyebrow">BAĞLI BİLGİSAYARLAR</span><h2>Aktif bilgisayarlar ve güvenilir cihazlar</h2><div id="computerList" class="control-list"></div></section>
-      </section>
-
-      <section id="logsTab" class="security-tab-panel hidden">
-        <section class="security-card"><span class="eyebrow">GÜVENLİK GEÇMİŞİ</span><h2>Giriş ve işlem logları</h2><div id="securityLogList" class="control-list"></div></section>
-      </section>
-
-      <section id="codeTab" class="security-tab-panel hidden">
-        <section class="security-card code-card">
-          <span class="eyebrow">KY GÜVENLİK GİRİŞ KODU</span>
-          <h2>6 haneli kısa süreli kod</h2>
-          <p class="muted">Bilgisayarda giriş başlatıldıysa bildirime alternatif olarak bu kodu kullanabilirsin.</p>
-          <div id="loginCodeBox" class="login-code-box idle">
-            <strong id="loginCodeValue">— — — — — —</strong>
-            <span id="loginCodeCountdown">Kod üretilmedi</span>
-          </div>
-          <button id="generateCodeButton" class="primary" type="button">Giriş Kodu Üret</button>
-          <div class="note">
-            <b>Tek kullanımlık güvenlik</b>
-            <span>Kod yalnız en son bekleyen kendi giriş isteğine bağlıdır. 60 saniye geçerlidir; 5 hatalı denemede kullanılamaz.</span>
-          </div>
-        </section>
-      </section>
-
-      <section id="deviceTab" class="security-tab-panel hidden">
-        <section id="readyPanel" class="security-card">
-          <div class="ready-head">
-            <div>
-              <span class="eyebrow">GÜVENİLİR CİHAZ</span>
-              <h2 id="readyTitle">Bağlantı doğrulanıyor</h2>
-              <p id="deviceSummary" class="muted"></p>
-            </div>
-            <span id="readyMark" class="ready-mark">↻</span>
-          </div>
-          <div class="security-health-grid">
-            <div><span>Sunucu</span><b id="apiHealth">Kontrol</b></div>
-            <div><span>Bildirim</span><b id="pushHealth">Kontrol</b></div>
-            <div><span>Cihaz imzası</span><b id="keyHealth">Kontrol</b></div>
-            <div><span>Telefon kilidi</span><b id="unlockHealth">Kontrol</b></div>
-          </div>
-          <small id="lastSync" class="security-last-sync">Son kontrol: -</small>
-          <div class="security-repair-actions">
-            <button id="repairButton" class="primary" type="button">Bildirim Bağlantısını Yenile</button>
-            <button id="refreshButton" type="button">Durumu Yenile</button>
-            <button id="relinkButton" type="button">Erişimi Yeniden Bağla</button>
-          </div>
-          <div class="note">
-            <b>Bağlantı sorunu olursa</b>
-            <span>Önce Bildirim Bağlantısını Yenile kullanılır. Onaylı cihaz kartı ve cihaz kimliği değişmez; yalnız bildirim aboneliği tazelenir.</span>
-          </div>
-        </section>
-      </section>
-    </section>
-
-    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <footer class="security-footer">
-      <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
-    </footer>
-  </main>
-  <script src="/security/ios-safari.js?v=security-v2.7"></script>
-  <script type="module" src="/security/app.js?v=security-v2.7"></script>
-  <script type="module" src="/security/security-actions.js?v=security-v2.7"></script>
-  <script type="module" src="/security/security-control-center.js?v=security-v2.7"></script>
-  <script type="module" src="/security/security-foreground-sync.js?v=security-v2.7"></script>
-</body>
+<body><p>KY ERP Güvenlik açılıyor…</p></body>
 </html>

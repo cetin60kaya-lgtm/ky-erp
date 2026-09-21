@@ -1,127 +1,113 @@
 (()=>{
-  const ua=String(navigator.userAgent||"");
-  if(!/Android/i.test(ua))return;
-
+  const ANDROID=/Android/i.test(String(navigator.userAgent||""));
   const ORIGIN="https://security.kyerp.net";
   const PATH="/ky-guvenlik/";
   const PENDING_KEY="kyerp-security-pending-enrollment-v2";
-  let installPrompt=null;
-  const qs=(s)=>document.querySelector(s);
+  const INSTALL_TIMEOUT_MS=8000;
+  let deferredPrompt=null;
+  const qs=(selector)=>document.querySelector(selector);
   const standalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
-  const state=()=>{try{const p=new URL(location.href).searchParams;return{chrome:p.get("chrome")==="1"}}catch{return{chrome:false}}};
+  const withTimeout=(promise,ms,message)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error(message)),ms))]);
 
-  function captureEnrollment(){
+  function capturePendingEnrollment(){
     try{
-      const u=new URL(location.href);
-      const id=String(u.searchParams.get("enrollmentId")||"").trim();
-      const token=String(u.searchParams.get("enrollmentToken")||"").trim();
-      const mode=String(u.searchParams.get("mode")||"").trim();
-      if(id&&token)localStorage.setItem(PENDING_KEY,JSON.stringify({id,token,mode,savedAt:Date.now()}));
+      const url=new URL(location.href);
+      const id=String(url.searchParams.get("enrollmentId")||"").trim();
+      const token=String(url.searchParams.get("enrollmentToken")||"").trim();
+      const mode=String(url.searchParams.get("mode")||"").trim();
+      if(id&&token){
+        localStorage.setItem(PENDING_KEY,JSON.stringify({id,token,mode,savedAt:Date.now()}));
+        url.searchParams.delete("enrollmentId");
+        url.searchParams.delete("enrollmentToken");
+        url.searchParams.delete("mode");
+        history.replaceState({},"",url.pathname+url.search+url.hash);
+      }
     }catch{}
   }
 
-  function installUrl(){
-    const u=new URL(location.href);
-    u.protocol="https:";u.host="security.kyerp.net";u.pathname=PATH;
-    u.searchParams.set("install","1");
-    u.searchParams.set("platform","android");
-    u.searchParams.set("chrome","1");
-    u.searchParams.set("release","2.9");
-    u.searchParams.set("boot","9");
-    return u;
+  function canonicalInstallUrl(){
+    const url=new URL(PATH,ORIGIN);
+    url.searchParams.set("install","1");
+    url.searchParams.set("platform","android");
+    url.searchParams.set("chrome","1");
+    return url;
   }
 
   function installOnly(){
     document.documentElement.classList.add("ky-install-only");
-    if(!document.querySelector("#kyInstallOnlyStyle")){
-      const style=document.createElement("style");
-      style.id="kyInstallOnlyStyle";
-      style.textContent="html.ky-install-only #setupPanel,html.ky-install-only #appPanel{display:none!important}html.ky-install-only #installPanel{display:grid!important}";
-      document.head.appendChild(style);
-    }
     qs("#setupPanel")?.classList.add("hidden");
     qs("#appPanel")?.classList.add("hidden");
     qs("#installPanel")?.classList.remove("hidden");
     qs("#androidInstallNote")?.classList.remove("hidden");
   }
 
-  function setUi(text,buttonText,disabled=false){
+  function setUi(text,buttonText="",disabled=false){
     installOnly();
-    const t=qs("#installStateText"),b=qs("#installButton");
-    if(t)t.textContent=text;
-    if(b){b.classList.remove("hidden");b.textContent=buttonText;b.disabled=disabled;}
+    const state=qs("#installStateText");
+    const button=qs("#installButton");
+    if(state)state.textContent=text;
+    if(button){button.classList.toggle("hidden",!buttonText);if(buttonText)button.textContent=buttonText;button.disabled=disabled;}
   }
 
-  function openChrome(){
-    const u=installUrl();
-    const fallback=encodeURIComponent(u.href);
-    location.href=`intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
+  function openFullChrome(){
+    const url=canonicalInstallUrl();
+    const fallback=encodeURIComponent(url.href);
+    location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${fallback};end`;
   }
 
-  async function ensureWorker(){
-    if(!("serviceWorker" in navigator))return null;
+  async function migrateLegacyWorkers(){
+    if(!("serviceWorker" in navigator))return;
+    const registrations=await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(async(registration)=>{
+      if(new URL(registration.scope).pathname!=="/security/")return;
+      try{(await registration.getNotifications()).forEach((notification)=>notification.close())}catch{}
+      try{await registration.unregister()}catch{}
+    }));
+    const keys=await caches.keys().catch(()=>[]);
+    await Promise.all(keys.filter((key)=>key.startsWith("kyerp-security-shell-")||key.startsWith("kyerp-ky-guvenlik-shell-")).map((key)=>caches.delete(key)));
+  }
+
+  async function prepareInstall(){
+    setUi("Android uygulama kurulumu hazırlanıyor…","Hazırlanıyor…",true);
     try{
-      const r=await navigator.serviceWorker.register("/ky-guvenlik/sw.js?boot=9",{scope:"/ky-guvenlik/",updateViaCache:"none"});
-      try{await r.update()}catch{}
-      return r;
-    }catch{return null}
+      await withTimeout(migrateLegacyWorkers(),INSTALL_TIMEOUT_MS,"Eski güvenlik sürümü temizlenemedi.");
+      if(!("serviceWorker" in navigator))throw new Error("Bu Chrome sürümü uygulama kurulumunu desteklemiyor.");
+      const registration=await withTimeout(navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:PATH,updateViaCache:"none"}),INSTALL_TIMEOUT_MS,"Güvenlik servisi zamanında hazırlanamadı.");
+      try{await withTimeout(registration.update(),INSTALL_TIMEOUT_MS,"Güncelleme zaman aşımına uğradı.")}catch{}
+      if(deferredPrompt)setUi("KY ERP Güvenlik kuruluma hazır.","KY Güvenlik'i Yükle");
+      else setUi("Chrome kurulum seçeneğini hazırlıyor. Düğme açılmazsa Chrome menüsünden ‘Uygulamayı yükle’yi seçin.","Kurulumu Tekrar Kontrol Et");
+    }catch(error){setUi(error?.message||"Kurulum hazırlanamadı. İnternet bağlantısını kontrol edip tekrar deneyin.","Tekrar Dene");}
   }
 
-  async function prepareFullChrome(){
-    setUi("Android uygulama kurulumu hazırlanıyor…","Kurulumu Kontrol Et",false);
-    const r=await ensureWorker();
-    if(installPrompt)return;
-    if(!r){setUi("Chrome güvenlik servisini hazırlayamadı.","Tekrar Dene",false);return;}
-    setUi("Android yükleme penceresi bekleniyor.","Kurulumu Kontrol Et",false);
-  }
-
-  async function clickInstall(){
+  async function requestInstall(){
     if(standalone())return;
-    if(!state().chrome){openChrome();return;}
-    if(installPrompt){
-      const p=installPrompt;installPrompt=null;
-      try{
-        await p.prompt();
-        const choice=await p.userChoice.catch(()=>null);
-        if(choice?.outcome==="accepted")setUi("Kurulum onaylandı. Android tamamlıyor…","Kurulum Tamamlanıyor",true);
-        else setUi("Kurulum iptal edildi.","KY Güvenlik'i Yükle",false);
-      }catch{setUi("Yükleme penceresi açılamadı.","Tekrar Dene",false)}
-      return;
-    }
-    await prepareFullChrome();
+    if(!deferredPrompt){await prepareInstall();return;}
+    const prompt=deferredPrompt;deferredPrompt=null;
+    try{
+      await prompt.prompt();
+      const choice=await withTimeout(prompt.userChoice,INSTALL_TIMEOUT_MS,"Kurulum yanıtı alınamadı.").catch(()=>null);
+      if(choice?.outcome==="accepted")setUi("Kurulum onaylandı. Android tamamladığında ana ekrandaki KY Güvenlik ikonunu açın.","Kurulum Tamamlanıyor",true);
+      else setUi("Kurulum tamamlanmadı. Hazır olduğunuzda yeniden deneyebilirsiniz.","Tekrar Dene");
+    }catch(error){setUi(error?.message||"Android kurulum ekranı açılamadı.","Tekrar Dene");}
   }
 
-  window.addEventListener("beforeinstallprompt",(e)=>{
-    e.preventDefault();
-    installPrompt=e;
-    setUi("Android uygulama kurulumu hazır","KY Güvenlik'i Yükle",false);
-  });
+  window.KYSecurityInstaller={isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
+  capturePendingEnrollment();
+  if(!ANDROID)return;
 
-  window.addEventListener("appinstalled",()=>{
-    installPrompt=null;
-    setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik uygulamasını aç.","Kurulum Tamamlandı",true);
-  });
+  window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();deferredPrompt=event;if(!standalone())setUi("KY ERP Güvenlik kuruluma hazır.","KY Güvenlik'i Yükle");});
+  window.addEventListener("appinstalled",()=>{deferredPrompt=null;setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan açın.","Kurulum Tamamlandı",true);});
 
   function attach(){
-    captureEnrollment();
     if(standalone())return;
-
-    // Android tarayıcıda bağlama ekranı hiçbir koşulda gösterilmez.
-    // Önce gerçek PWA kurulumu tamamlanır; bağlama yalnız standalone uygulamada yapılır.
     installOnly();
-    const b=qs("#installButton");
-    if(b)b.addEventListener("click",(e)=>{e.preventDefault();e.stopImmediatePropagation();void clickInstall();},true);
-
-    if(location.origin!==ORIGIN){location.replace(installUrl().href);return;}
-    if(!state().chrome){
-      setUi("KY Güvenlik normal Chrome'da kurulacak.","Chrome'da Kuruluma Devam Et",false);
-      openChrome();
-      return;
-    }
-    void prepareFullChrome();
+    const button=qs("#installButton");
+    if(button)button.addEventListener("click",(event)=>{event.preventDefault();event.stopImmediatePropagation();void requestInstall()},{capture:true});
+    const chromeRequested=new URL(location.href).searchParams.get("chrome")==="1";
+    if(location.origin!==ORIGIN||!chromeRequested){setUi("Kurulum normal Chrome'da açılacak.","Chrome'da Devam Et");openFullChrome();return;}
+    void prepareInstall();
   }
 
-  captureEnrollment();
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});
   else attach();
 })();

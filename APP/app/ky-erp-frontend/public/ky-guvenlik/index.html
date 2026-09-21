@@ -9,12 +9,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
   <meta name="format-detection" content="telephone=no" />
-  <script>/* KYERP_SECURITY_CANONICAL_REDIRECT_V29 */(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname==="app.kyerp.net"){const u=new URL(location.href);u.hostname="security.kyerp.net";u.searchParams.set("release","2.9");location.replace(u.href)}}catch{}})();</script>
+  <script>(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname!=="security.kyerp.net"){const u=new URL(location.href);u.protocol="https:";u.host="security.kyerp.net";u.pathname="/ky-guvenlik/";location.replace(u.href)}}catch{}})();</script>
   <script>/* KYERP_SECURITY_PENDING_CAPTURE_V2 */(()=>{try{const u=new URL(location.href);const id=String(u.searchParams.get("enrollmentId")||"");const token=String(u.searchParams.get("enrollmentToken")||"");const mode=String(u.searchParams.get("mode")||"");if(id&&token)localStorage.setItem("kyerp-security-pending-enrollment-v2",JSON.stringify({id,token,mode,savedAt:Date.now()}))}catch{}})();</script>
-  <script>/* KYERP_SECURITY_ANDROID_INSTALL_HARD_GATE_V9 */(()=>{try{const android=/Android/i.test(String(navigator.userAgent||""));const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(android&&!standalone)document.documentElement.classList.add("ky-install-only")}catch{}})();</script>
+  <script>(()=>{try{const android=/Android/i.test(String(navigator.userAgent||""));const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(android&&!standalone)document.documentElement.classList.add("ky-install-only")}catch{}})();</script>
   <style id="kyInstallHardGateStyle">html.ky-install-only #setupPanel,html.ky-install-only #appPanel{display:none!important}html.ky-install-only #installPanel{display:grid!important}</style>
-  <script src="/ky-guvenlik/install-helper.js?v=security-install-v9"></script>
-  <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest?v=ky-guvenlik-install-v9" />
+  <script src="/ky-guvenlik/install-helper.js"></script>
+  <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest" />
   <link rel="icon" href="/ky-guvenlik/kyerp-security-icon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="/ky-guvenlik/kyerp-security-apple-touch.png" />
   <link rel="stylesheet" href="/ky-guvenlik/app.css" />
@@ -205,10 +205,10 @@
       <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
     </footer>
   </main>
-  <script defer src="/ky-guvenlik/ios-safari.js?v=security-flow-v9"></script>
-  <script defer src="/ky-guvenlik/app.js?v=security-flow-v9"></script>
-  <script defer src="/ky-guvenlik/security-actions.js?v=security-flow-v9"></script>
-  <script defer src="/ky-guvenlik/security-control-center.js?v=security-flow-v9"></script>
-  <script defer src="/ky-guvenlik/security-foreground-sync.js?v=security-flow-v9"></script>
+  <script defer src="/ky-guvenlik/ios-safari.js"></script>
+  <script defer src="/ky-guvenlik/app.js"></script>
+  <script defer src="/ky-guvenlik/security-actions.js"></script>
+  <script defer src="/ky-guvenlik/security-control-center.js"></script>
+  <script defer src="/ky-guvenlik/security-foreground-sync.js"></script>
 </body>
 </html>
