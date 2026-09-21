@@ -48,8 +48,8 @@ test("security app owns signed API calls while the service worker is notificatio
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
   assert.match(sw,/showWakeNotification/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
-  assert.match(sw,/caches\.delete/);
+  assert.match(sw,/clearLegacyCaches/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("main ERP exposes connection diagnostics and a one-time access refresh path",()=>{
@@ -82,7 +82,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/approval-match/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Bağlantıyı Kontrol Et/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
@@ -100,7 +100,7 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(installer,/openFullChrome/);
   assert.match(installer,/Chrome'da Devam Et/);
   assert.match(html,/id="iosInstallNote"/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
@@ -117,12 +117,12 @@ test("iPhone Safari permission is requested directly from a user gesture before 
   assert.match(manifest,/kyerp-security-512\.png/);
 });
 
-test("security shell keeps critical icons offline and runtime scripts network fresh",()=>{
-  assert.match(sw,/navigation=event\.request\.mode==="navigate"/);
-  assert.match(sw,/fetch\(event\.request,\{cache:"no-store"\}\)/);
-  assert.match(sw,/kyerp-security-apple-touch\.png/);
-  assert.match(sw,/kyerp-security-192\.png/);
-  assert.match(sw,/kyerp-security-512\.png/);
+test("security service worker is push-only and never intercepts app shell requests",()=>{
+  assert.match(sw,/self\.addEventListener\("push"/);
+  assert.match(sw,/self\.addEventListener\("notificationclick"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.doesNotMatch(sw,/respondWith|cache\.match|cache\.put/);
+  assert.match(sw,/kyerp-security-icon\.svg/);
 });
 
 test("appearance center centralizes KY ERP and KY Security install entry points",()=>{
@@ -139,7 +139,7 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
   assert.match(manifest,/\/ky-guvenlik\/kyerp-security-icon\.svg/);
-  assert.match(sw,/kyerp-security-static/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
 
 test("security app never renders a blank approvals screen on connection failure",()=>{
@@ -190,7 +190,6 @@ test("security runtime files stay JavaScript-syntax valid",()=>{
   assert.doesNotThrow(()=>new Function(sw));
 });
 
-
 test("manager session approvals are visible and have dedicated result copy",()=>{
   assert.match(app,/SESSION_APPROVAL/);
   assert.match(app,/Oturum onaylandı/);
@@ -200,6 +199,6 @@ test("manager session approvals are visible and have dedicated result copy",()=>
 test("approved login clears every stale KY Security notification and duplicate decisions stay quiet",()=>{
   assert.match(app,/getRegistrations/);
   assert.match(app,/getNotifications\(\)/);
-  assert.match(sw,/kyerp-security-static/);
   assert.match(sw,/getNotifications\(\)/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
