@@ -135,7 +135,7 @@ function requestedInstall(){
     return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase(),browser:params.get("browser")==="1"};
   }catch{return{requested:false,platform:""}}
 }
-function openAndroidBrowserInstaller(){const target="https://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1";const fallback=encodeURIComponent(target);location.href="intent://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";}
+function openAndroidBrowserInstaller(){const url=new URL(location.href);url.protocol="https:";url.host="security.kyerp.net";url.pathname="/ky-guvenlik/";url.searchParams.set("install","1");url.searchParams.set("platform","android");url.searchParams.set("browser","1");const target=url.href;const fallback=encodeURIComponent(target);location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;}
 function renderInstall(){
   const request=requestedInstall();
   const ios=isIos()||request.platform==="ios";
