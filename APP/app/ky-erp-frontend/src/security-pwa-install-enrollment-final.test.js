@@ -30,9 +30,11 @@ test("Security PWA keeps one immutable install identity and version-free launch 
 test("Android browser is install-only and enrollment starts only in standalone",()=>{
   assert.match(installer,/isBrowserInstall:\(\)=>ANDROID&&!standalone\(\)/);
   assert.match(installer,/installOnly\(\)/);
-  assert.match(app,/if\(window\.KYSecurityInstaller\?\.isBrowserInstall\?\.\(\)\)[\s\S]*renderInstall\(\);setBadge\("Kurulum"\);return/);
+  assert.match(app,/if\(!isStandalone\(\)\)[\s\S]*renderInstall\(\);setBadge\("Kurulum"\);return/);
   assert.match(phoneSetup,/\{ install: 1, platform, chrome:/);
   assert.doesNotMatch(phoneSetup,/install: 1[^\n]+autoRelink/);
+  assert.doesNotMatch(phoneSetup,/async function openSecurityApp\(\)[\s\S]{0,160}issueEnrollment\(\)/);
+  assert.match(phoneSetup,/KY G\u00fcvenlik A\u00e7/);
 });
 
 test("enrollment handoff survives install without leaving its token in browser history",()=>{
@@ -60,7 +62,7 @@ test("install, API and service-worker waits are bounded and always leave actiona
   assert.match(app,/AbortController/);
   assert.match(app,/REQUEST_TIMEOUT/);
   assert.match(app,/SW_READY_TIMEOUT/);
-  assert.match(app,/setTimeout\(\(\)=>\{if\(els\.setupPanel/);
+  assert.match(app,/setTimeout\(\(\)=>\{if\(isStandalone\(\)&&els\.setupPanel/);
 });
 
 test("canonical worker uses network-fresh runtime and one stable static cache",()=>{
