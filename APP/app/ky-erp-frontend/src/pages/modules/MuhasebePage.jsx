@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import CompaniesCurrentWorkspace from "./muhasebe/CompaniesCurrentWorkspace";
 import CustomerDocumentsWorkspace from "./muhasebe/CustomerDocumentsWorkspace";
+import FinanceOperationsWorkspace from "./muhasebe/FinanceOperationsWorkspace";
 import FinancialControlWorkspace from "./muhasebe/FinancialControlWorkspace";
 import MailAccountingWorkspace from "./muhasebe/MailAccountingWorkspace";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
@@ -8,12 +9,14 @@ import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
 import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
 import "./muhasebe/muhasebeModule.css";
 import "./muhasebe/supplierInventoryWorkspace.css";
+import "./muhasebe/accountingSafetyOverrides.css";
 
 export const MUHASEBE_TABS = [
   { key: "yonetim-ozeti", title: "Yönetim Özeti", description: "Nakit, cari, KDV, belge ve yaklaşan işlemleri tek ekranda izleyin." },
-  { key: "firma-kartlari", title: "Firmalar / Cari / Çek", description: "Firma, cari, ödeme, tahsilat, çek ve FİBE işlemlerini tek çalışma alanında yönetin." },
-  { key: "tedarikci-faturalar", title: "Tedarikçi Belgeleri", description: "Gelen irsaliye ve faturaları gider, KDV, stok, LOT ve cari akışıyla birlikte yönetin." },
-  { key: "musteri-belgeleri", title: "Müşteri Belgeleri", description: "Müşteri irsaliyesinden bizim irsaliye ve kesilen faturaya kadar belge zincirini izleyin." },
+  { key: "firma-kartlari", title: "Firmalar & Cari", description: "Müşteri ve tedarikçi kartlarını, cari bakiyeyi ve firma muhasebe tanımlarını yönetin." },
+  { key: "tedarikci-faturalar", title: "Tedarikçi / Alış Belgeleri", description: "Gelen irsaliye ve faturaları gider, KDV, stok, LOT ve cari akışıyla birlikte yönetin." },
+  { key: "musteri-belgeleri", title: "Müşteri / Satış Belgeleri", description: "Müşteri irsaliyesinden bizim irsaliye ve kesilen faturaya kadar belge zincirini izleyin." },
+  { key: "finans-islemleri", title: "Finans İşlemleri", description: "Ödeme, tahsilat, çek, ödeme planı, banka, kasa ve defter hareketlerini günlük akışta yönetin." },
   { key: "mail-ekstre", title: "Ekstre ve Mail", description: "Ekstre, alıcı, hatırlatma, gönderim ve şablon işlemlerini tek alanda yönetin." },
   { key: "mali-kontrol", title: "Mali Kontrol & Raporlar", description: "Gelir-gider, kâr-zarar, KDV ve muhasebe raporlarını tek alanda inceleyin." },
 ];
@@ -21,10 +24,12 @@ export const MUHASEBE_TABS = [
 function ControlledEmptyState({ requestedTab, goTab }) {
   return <section className="accounting-empty" role="status"><strong>Bu muhasebe görünümü bulunamadı.</strong><span>{requestedTab ? `“${requestedTab}” bağlantısı artık kullanılmıyor.` : "Geçerli bir ekran seçin."}</span><button type="button" className="accounting-primary" onClick={() => goTab("yonetim-ozeti")}>Yönetim özetine dön</button></section>;
 }
+
 export default function MuhasebePage({ activeTab, activeMainCompany, openModule }) {
   const normalizedTab = MUHASEBE_ROUTE_ALIASES[activeTab] || activeTab || "yonetim-ozeti";
   const current = useMemo(() => MUHASEBE_TABS.find((tab) => tab.key === normalizedTab), [normalizedTab]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [quickOpen, setQuickOpen] = useState(false);
   const reloadAll = () => setRefreshKey((value) => value + 1);
 
   useEffect(() => {
@@ -32,6 +37,10 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
     window.addEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
     return () => window.removeEventListener("kyerp:accounting-refresh", refreshFromCanonicalDocument);
   }, []);
+
+  useEffect(() => {
+    setQuickOpen(false);
+  }, [normalizedTab]);
 
   const goTab = (tabKey, query = "") => {
     const target = MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
@@ -45,6 +54,16 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
     }
   };
 
+  const goFinance = (query = "") => {
+    setQuickOpen(false);
+    goTab("finans-islemleri", query);
+  };
+
+  const openEBelgeUpload = () => {
+    setQuickOpen(false);
+    openModule?.("isnet", { tabKey: "e-belge-yukleme" });
+  };
+
   const pageProps = { activeMainCompany, refreshKey, reloadAll, goTab, openModule };
   let content = null;
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
@@ -52,6 +71,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   else if (current.key === "firma-kartlari") content = <CompaniesCurrentWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />;
   else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
   else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} />;
+  else if (current.key === "finans-islemleri") content = <FinanceOperationsWorkspace {...pageProps} />;
   else if (current.key === "mail-ekstre") content = <MailAccountingWorkspace {...pageProps} />;
   else if (current.key === "mali-kontrol") content = <FinancialControlWorkspace {...pageProps} />;
 
@@ -60,7 +80,22 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
       {current ? (
         <header className="accounting-page-header compact">
           <div><span className="accounting-eyebrow">Muhasebe</span><h1>{current.title}</h1><p>{current.description}</p></div>
-          <button type="button" className="accounting-refresh" onClick={reloadAll}>Güncelle</button>
+          <div className="accounting-header-actions">
+            <div className="accounting-quick-wrap">
+              <button type="button" className="accounting-primary" aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)}>+ Hızlı İşlem</button>
+              {quickOpen ? (
+                <div className="accounting-quick-menu" role="menu">
+                  <button type="button" onClick={() => goFinance("quick=cari&financeView=daily")}>Yeni Cari / Firma</button>
+                  <button type="button" onClick={() => goFinance("financeView=daily")}>Ödeme / Tahsilat</button>
+                  <button type="button" onClick={() => goFinance("quick=cek&financeView=daily")}>Çek / Senet</button>
+                  <button type="button" onClick={() => goFinance("financeView=planner")}>Ödeme Planı</button>
+                  <button type="button" onClick={() => goFinance("financeView=ledger")}>Banka / Kasa / Defter</button>
+                  <button type="button" onClick={openEBelgeUpload}>Belge Yükle</button>
+                </div>
+              ) : null}
+            </div>
+            <button type="button" className="accounting-refresh" onClick={reloadAll}>Güncelle</button>
+          </div>
         </header>
       ) : null}
       <div className="muhasebe-workbench">{content}</div>
