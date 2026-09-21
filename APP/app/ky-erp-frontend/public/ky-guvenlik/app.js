@@ -91,9 +91,10 @@ async function retireLegacyApprovalWorker(){
 async function ensureWorker(){
   if(!("serviceWorker" in navigator))throw new Error("Bu tarayıcı güvenlik bildirimlerini desteklemiyor.");
   await retireLegacyApprovalWorker();
-  registration=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/"});
+  registration=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/",updateViaCache:"none"});
   try{await registration.update()}catch{}
-  await navigator.serviceWorker.ready;
+  const ready=await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Güvenlik servisi hazırlanamadı."),{code:"SW_READY_TIMEOUT"})),4500))]);
+  registration=ready||registration;
   return registration;
 }
 async function closeApprovalNotifications(){try{const regs=await navigator.serviceWorker?.getRegistrations?.()||[];const ready=registration||await navigator.serviceWorker?.ready.catch?.(()=>null);if(ready&&!regs.includes(ready))regs.push(ready);for(const reg of regs){try{const notes=await reg.getNotifications();for(const note of notes||[]){if(note?.tag==="kyerp-security-approval"||note?.data?.openApproval===true||String(note?.title||"").includes("KY ERP"))note.close()}}catch{}try{reg.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"})}catch{}}}catch{}}
@@ -120,7 +121,7 @@ function setChipList(container,values,labelMap,emptyLabel){if(!container)return;
 function renderAccount(account,device){if(!els.accountPanel)return;renderVersion(device?.lastKnownServerVersion||device?.serverVersion||"");const data=account&&typeof account==="object"?account:null;const label=data?accountRoleLabel(data):"Kontrol";els.accountFullName.textContent=data?.fullName||"Hesap doğrulanıyor";els.accountIdentity.textContent=data?`${label} · ERP rolü: ${String(data.role||"-").replaceAll("_"," ")}`:"Hesap bilgisi güvenli bağlantıdan alınacak.";els.accountRoleBadge.textContent=label;els.accountRoleBadge.classList.toggle("owner",String(data?.role||"").toUpperCase()==="SUPER_ADMIN");els.accountEmail.textContent=data?.email||"Tanımlı değil";els.accountUsername.textContent=data?.username||"-";els.accountScope.textContent=data?.scopeType==="SYSTEM"?"Tüm Sistem":(data?.companyName||data?.companySlug||"Kendi hesabı");els.accountDevice.textContent=device?.deviceLabel||"KY Güvenlik cihazı";setChipList(els.accountModules,data?.moduleKeys||[],MODULE_LABELS,data?.scopeType==="SYSTEM"?"Tüm ERP":"Standart erişim");setChipList(els.accountSecurityCaps,data?.securityCapabilities||[],SECURITY_CAP_LABELS,"Kendi giriş güvenliği");const superAdmin=Boolean(data?.userId)&&data?.scopeType==="SYSTEM";document.body.classList.toggle("super-admin-security",superAdmin);document.querySelector("#superAdminConsole")?.classList.toggle("hidden",!superAdmin);document.querySelectorAll("[data-system-only]").forEach((el)=>el.classList.toggle("hidden",!superAdmin));if(!superAdmin&&["sessions","computers","logs"].some((tab)=>document.querySelector(`#${tab}Tab`)?.classList.contains("hidden")===false))showTab("approvals");const labels={approvals:superAdmin?"Sistem Onayları ":"Onaylar ",sessions:superAdmin?"Tüm Oturumlar ":"Oturumlar ",computers:superAdmin?"Sistem Cihazları ":"Bilgisayarlar ",logs:superAdmin?"Denetim Logları":"Loglar"};for(const [tab,textValue] of Object.entries(labels)){const btn=document.querySelector(`.security-tabs button[data-tab="${tab}"]`);if(btn&&btn.firstChild)btn.firstChild.nodeValue=textValue}els.accountNote.textContent=superAdmin?"Bu telefon Süper Yönetici uygulama güvenlik merkezidir. Sistem genelindeki onay, oturum ve cihaz işlemleri bu kimlikle yönetilir.":(data?.username?`Bu cihaz yalnız ${data.username} hesabına bağlıdır. Onaylar bu hesabın yetkileriyle verilir.`:"Onaylar yalnız doğrulanmış bağlı hesabın yetkileriyle verilir.")}
 function showRelink(){const linked=Boolean(enrollmentQuery.id&&enrollmentQuery.token);relinkMode=true;els.setupPanel.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.classList.toggle("hidden",linked);els.passwordLabel?.classList.remove("hidden");els.deviceLabelWrap?.classList.toggle("hidden",linked);els.connectButton.classList.remove("hidden");els.setupTitle.textContent=linked?"Bu telefonu yeniden doğrula":"Yedek kod ile bağla";els.setupCopy.textContent=linked?"KY ERP bağlantısı hazır. Mevcut KY ERP şifreni bir kez gir; cihaz anahtarı bu uygulamaya güvenli şekilde yazılsın.":"Yedek erişim kodunu ve mevcut KY ERP şifreni gir.";els.connectButton.textContent=linked?"Bağlantıyı Tamamla":"Yedek Kodla Bağla";els.cancelRelinkButton.classList.toggle("hidden",!linked)}
 function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden")}
-function showSetupStart(){relinkMode=false;els.setupPanel.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.removeAttribute("open");els.passwordLabel?.classList.add("hidden");els.deviceLabelWrap?.classList.add("hidden");els.connectButton.classList.add("hidden");els.cancelRelinkButton.classList.add("hidden");els.setupTitle.textContent="Telefon bağlantısını KY ERP’den başlat";els.setupCopy.textContent="KY ERP → Profil → Telefon Onayı bölümünde ‘Bu Telefonda Bağlantıyı Tamamla’ düğmesine dokun. Uygulama güvenli bağlantıyla yeniden açıldığında yalnız mevcut KY ERP şifren bir kez istenir."}
+function showSetupStart(){relinkMode=true;els.setupPanel.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.removeAttribute("open");els.passwordLabel?.classList.remove("hidden");els.deviceLabelWrap?.classList.add("hidden");els.connectButton.classList.remove("hidden");els.cancelRelinkButton.classList.add("hidden");els.setupTitle.textContent="Bu telefonu KY ERP’ye bağla";els.setupCopy.textContent="Mevcut KY ERP şifreni gir. Uygulama önce bu telefonun kayıtlı bildirim kanalını bulur; gerekirse aşağıdaki yedek kod kullanılabilir.";els.connectButton.textContent="Bağlantıyı Tamamla"}
 async function createSigningKey(){const generated=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);const publicJwk=await crypto.subtle.exportKey("jwk",generated.publicKey);const privateJwk=await crypto.subtle.exportKey("jwk",generated.privateKey);const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);return{publicJwk,privateKey}}
 async function createLocalUnlock(){if(!window.PublicKeyCredential||!navigator.credentials?.create)return"";const available=await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.();if(!available)return"";const rawUserId=crypto.getRandomValues(new Uint8Array(32));const credential=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:"KY ERP Güvenlik",id:location.hostname},user:{id:rawUserId,name:"kyerp-security-device",displayName:"KY ERP Güvenlik Cihazı"},pubKeyCredParams:[{type:"public-key",alg:-7}],timeout:60000,authenticatorSelection:{authenticatorAttachment:"platform",residentKey:"preferred",userVerification:"required"},attestation:"none"}});return credential?.rawId?base64Url(credential.rawId):""}
 async function confirmLocalUnlock(device){if(!device?.localUnlockCredentialId)return true;if(!navigator.credentials?.get)throw new Error("Cihaz kilidi doğrulaması kullanılamıyor.");const result=await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rpId:location.hostname,allowCredentials:[{type:"public-key",id:base64UrlToBytes(device.localUnlockCredentialId)}],userVerification:"required",timeout:60000}});if(!result)throw new Error("Cihaz kilidi doğrulanamadı.");return true}
@@ -202,7 +203,6 @@ async function connectDevice(){
   const password=String(els.password.value||"");
   if(!password)return toast("Mevcut KY ERP şifreni gir.");
   const selfRelink=!code&&!enrollmentQuery.id;
-  if(selfRelink)return toast("Bu telefon bağlantısı KY ERP içinden güvenli bağlantı ile başlatılmalı. KY ERP → Profil → Telefon Onayı → Bu Telefonda Bağlantıyı Tamamla düğmesini kullan.");
   if(isIos()&&!isStandalone())return toast("iPhone/iPad’de önce Ana Ekrana Ekle, sonra KY ERP Güvenlik ikonundan aç.");
   busy=true;els.connectButton.disabled=true;els.connectButton.textContent="Güvenlik bağlantısı kuruluyor...";
   try{
@@ -419,10 +419,18 @@ navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(els.setupPane
 window.KYSecurityRuntime={deviceFetch,readDevice,writeDevice,confirmLocalUnlock,base64Url,toast,refreshState,CLIENT_VERSION};
 window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
 (async function boot(){
-  document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
-  const url=new URL(location.href);const direct={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
-  if(direct.id&&direct.token){persistEnrollmentLink(direct);enrollmentQuery=direct}else enrollmentQuery=restoreEnrollmentLink();
-  const localDevice=await readDevice().catch(()=>null);
-  if(enrollmentQuery.id&&enrollmentQuery.token&&!localDevice?.deviceId){showRelink();toast("KY ERP bağlantısı hazır. Mevcut KY ERP şifreni bir kez gir.")}
-  renderInstall();showTab("approvals");try{await ensureWorker()}catch{}renderInstall();await refreshState();
+  try{
+    document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
+    const url=new URL(location.href);const direct={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
+    if(direct.id&&direct.token){persistEnrollmentLink(direct);enrollmentQuery=direct}else enrollmentQuery=restoreEnrollmentLink();
+    const localDevice=await readDevice().catch(()=>null);
+    renderInstall();showTab("approvals");
+    if(enrollmentQuery.id&&enrollmentQuery.token&&!localDevice?.deviceId){showRelink();toast("KY ERP bağlantısı hazır. Mevcut KY ERP şifreni bir kez gir.")}
+    else if(!localDevice?.deviceId){showSetupStart();setBadge("Bağlantı gerekli");}
+    await refreshState();
+    void ensureWorker().then(()=>renderInstall()).catch(()=>{});
+  }catch(error){
+    showSetupStart();setBadge("Bağlantı gerekli","bad");toast(error?.message||"KY Güvenlik açılışı tamamlanamadı. Şifreni girip bağlantıyı tamamla.");
+  }
 })();
+setTimeout(()=>{if(els.setupPanel?.classList.contains("hidden")&&els.appPanel?.classList.contains("hidden")){showSetupStart();setBadge("Bağlantı gerekli");}},2500);
