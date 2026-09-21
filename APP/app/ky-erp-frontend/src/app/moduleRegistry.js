@@ -119,6 +119,25 @@ function withCompanyBilling(module) {
   return { ...module, groups };
 }
 
+function withAccountingNavigation(module) {
+  if (module.key !== "muhasebe") return module;
+  const tabs = [
+    ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
+    ["firma-kartlari", "Firmalar & Cari", "firma-kartlari"],
+    ["tedarikci-faturalar", "Tedarikçi / Alış Belgeleri", "tedarikci-fatura"],
+    ["musteri-belgeleri", "Müşteri / Satış Belgeleri", "file-check"],
+    ["finans-islemleri", "Finans İşlemleri", "odemeler"],
+    ["mail-ekstre", "Ekstre ve Mail", "eposta"],
+    ["mali-kontrol", "Mali Kontrol & Raporlar", "raporlar"],
+  ];
+  const visibleKeys = new Set(tabs.map(([key]) => key));
+  const hiddenTabs = [
+    ...(module.groups || []).flatMap((group) => group.tabs || []),
+    ...(module.hiddenTabs || []),
+  ].filter(([key], index, rows) => !visibleKeys.has(key) && rows.findIndex(([otherKey]) => otherKey === key) === index);
+  return { ...module, groups: [{ label: "Muhasebe", tabs }], hiddenTabs };
+}
+
 function withEBelgeNavigation(module) {
   if (module.key !== "isnet") return module;
   const eBelgeKeys = new Set([
@@ -158,6 +177,7 @@ function withEBelgeNavigation(module) {
 }
 
 const baseModules = BASE_MODULES
+  .map(withAccountingNavigation)
   .map(withoutStorageDuplicates)
   .map(withCompanyBilling)
   .map(withEBelgeNavigation);
@@ -180,6 +200,15 @@ export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
   muhasebe: {
     ...(BASE_ROUTE_ALIASES.muhasebe || {}),
+    "cek-odeme": "finans-islemleri",
+    "cek-kart": "finans-islemleri",
+    "odeme-tahsilat": "finans-islemleri",
+    odemeler: "finans-islemleri",
+    "odeme-nakit-akisi": "finans-islemleri",
+    "odeme-plani": "finans-islemleri",
+    defter: "finans-islemleri",
+    banka: "finans-islemleri",
+    kasa: "finans-islemleri",
   },
   admin: {
     ...(BASE_ROUTE_ALIASES.admin || {}),
