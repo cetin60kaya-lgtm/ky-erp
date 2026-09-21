@@ -33,6 +33,7 @@ test("install helper runs immediately after parse without waiting for app runtim
   assert.match(html,/Kurulum ekranı hazırlanıyor/);
   assert.ok(html.indexOf("install-helper.js") < html.indexOf("app.js"));
 });
+
 test("Android browser is install-only and enrollment starts only in standalone",()=>{
   assert.match(installer,/isBrowserInstall:\(\)=>ANDROID&&!standalone\(\)/);
   assert.match(installer,/installOnly\(\)/);
@@ -76,24 +77,21 @@ test("install, API and service-worker waits are bounded and always leave actiona
   assert.match(app,/setTimeout\(\(\)=>\{if\(isStandalone\(\)&&els\.setupPanel/);
 });
 
-test("canonical worker opens from a fresh cache and never serves HTML to JavaScript",()=>{
-  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
-  assert.match(sw,/LEGACY_CACHE_NAMES=\["kyerp-security-static","kyerp-security-static-v2"\]/);
-  assert.match(sw,/NAVIGATION_TIMEOUT_MS=1500/);
-  assert.match(sw,/const SHELL=\[APP_URL/);
-  assert.match(sw,/runtimeAsset=\/\\\.\(\?:js\|webmanifest\)/);
-  assert.match(sw,/LEGACY_CACHE_NAMES\.includes\(key\)/);
-  assert.match(sw,/cache\.match\(APP_URL\)/);
-  assert.match(sw,/cache\.match\(cacheKey\(event\.request\)\)/);
-  assert.match(sw,/withTimeout\(refreshRuntime\(event\.request\),NAVIGATION_TIMEOUT_MS\)/);
-  assert.doesNotMatch(sw,/if\(runtimeAsset\)\{[\s\S]{0,700}cache\.match\(APP_URL\)/);
-  assert.match(sw,/kyerp-ky-guvenlik-shell-/);
+test("canonical worker is push-only and never intercepts app shell requests",()=>{
+  assert.match(sw,/LEGACY_CACHE_NAMES=\["kyerp-security-static","kyerp-security-static-v2","kyerp-security-static-v3"\]/);
+  assert.match(sw,/clearLegacyCaches/);
+  assert.match(sw,/self\.addEventListener\("push"/);
+  assert.match(sw,/self\.addEventListener\("notificationclick"/);
+  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.doesNotMatch(sw,/respondWith|cache\.match|cache\.put/);
 });
-test("recovery page updates the existing worker without deleting trusted device state",()=>{
+
+test("recovery page refreshes the push-only worker without deleting trusted-device state",()=>{
   assert.match(recovery,/getRegistrations\(\)/);
   assert.match(recovery,/reg\.update\(\)/);
+  assert.match(recovery,/serviceWorker\.register\('\/ky-guvenlik\/sw\.js'/);
+  assert.match(recovery,/updateViaCache:'none'/);
   assert.match(recovery,/kyerp-security-static-v3/);
-  assert.match(recovery,/kyerp-security-static-v2/);
   assert.doesNotMatch(recovery,/\.unregister\(\)|indexedDB\.deleteDatabase|localStorage\.clear/);
   assert.match(recovery,/location\.replace\('\/ky-guvenlik\/\?recovered=1'\)/);
 });
