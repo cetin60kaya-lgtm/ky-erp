@@ -126,7 +126,7 @@ async function createSigningKey(){const generated=await crypto.subtle.generateKe
 async function createLocalUnlock(){if(!window.PublicKeyCredential||!navigator.credentials?.create)return"";const available=await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.();if(!available)return"";const rawUserId=crypto.getRandomValues(new Uint8Array(32));const credential=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:"KY ERP Güvenlik",id:location.hostname},user:{id:rawUserId,name:"kyerp-security-device",displayName:"KY ERP Güvenlik Cihazı"},pubKeyCredParams:[{type:"public-key",alg:-7}],timeout:60000,authenticatorSelection:{authenticatorAttachment:"platform",residentKey:"preferred",userVerification:"required"},attestation:"none"}});return credential?.rawId?base64Url(credential.rawId):""}
 async function confirmLocalUnlock(device){if(!device?.localUnlockCredentialId)return true;if(!navigator.credentials?.get)throw new Error("Cihaz kilidi doğrulaması kullanılamıyor.");const result=await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rpId:location.hostname,allowCredentials:[{type:"public-key",id:base64UrlToBytes(device.localUnlockCredentialId)}],userVerification:"required",timeout:60000}});if(!result)throw new Error("Cihaz kilidi doğrulanamadı.");return true}
 async function signDecision(device,kind,id,decision,matchNumber=""){if(!device?.signingPrivateKey)throw new Error("Güvenlik cihazı imza anahtarı bulunamadı. Cihazı yeniden kurun.");const match=String(matchNumber||"").trim();const version=kind==="SELF_LOGIN"&&decision==="APPROVE"&&match?"KYERP-DECISION-V2":"KYERP-DECISION-V1";const message=new TextEncoder().encode(match?`${version}|${device.deviceId}|${kind}|${id}|${decision}|${match}`:`${version}|${device.deviceId}|${kind}|${id}|${decision}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return base64Url(signature)}
-function cleanEnrollmentQuery(){try{localStorage.removeItem(PENDING_ENROLL_KEY)}catch{}try{const url=new URL(location.href);url.searchParams.delete("enrollmentId");url.searchParams.delete("enrollmentToken");url.searchParams.delete("autoRelink");history.replaceState({},"",url.pathname+url.search+url.hash)}catch{}}
+function cleanEnrollmentQuery(){try{localStorage.removeItem(PENDING_ENROLL_KEY)}catch{}try{const url=new URL(location.href);url.searchParams.delete("enrollmentId");url.searchParams.delete("enrollmentToken");url.searchParams.delete("mode");history.replaceState({},"",url.pathname+url.search+url.hash)}catch{}}
 function persistEnrollmentLink(value){try{if(value?.id&&value?.token)localStorage.setItem(PENDING_ENROLL_KEY,JSON.stringify({id:value.id,token:value.token,savedAt:Date.now()}))}catch{}}
 function restoreEnrollmentLink(){try{const parsed=JSON.parse(localStorage.getItem(PENDING_ENROLL_KEY)||"null");if(!parsed?.id||!parsed?.token)return{id:"",token:""};if(Date.now()-Number(parsed.savedAt||0)>15*60*1000){localStorage.removeItem(PENDING_ENROLL_KEY);return{id:"",token:""}}return{id:String(parsed.id),token:String(parsed.token)}}catch{return{id:"",token:""}}}
 function requestedInstall(){
@@ -137,6 +137,12 @@ function requestedInstall(){
 }
 function openAndroidBrowserInstaller(){const url=new URL(location.href);url.protocol="https:";url.host="security.kyerp.net";url.pathname="/ky-guvenlik/";url.searchParams.set("install","1");url.searchParams.set("platform","android");url.searchParams.set("browser","1");const target=url.href;const fallback=encodeURIComponent(target);location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;}
 function renderInstall(){
+  if(window.KYSecurityInstaller?.isBrowserInstall?.()){
+    els.installPanel.classList.remove("hidden");
+    els.setupPanel.classList.add("hidden");
+    els.appPanel.classList.add("hidden");
+    return;
+  }
   const request=requestedInstall();
   const ios=isIos()||request.platform==="ios";
   const android=/Android/i.test(String(navigator.userAgent||""))||request.platform==="android";
@@ -186,6 +192,14 @@ function renderInstall(){
       els.installButton.classList.remove("hidden");
       els.installButton.disabled=!(standalone&&request.requested);
     }
+    return;
+  }
+
+  if(!standalone){
+    els.installPanel.classList.remove("hidden");
+    els.installTitle.textContent="KY ERP Güvenlik mobil uygulaması";
+    els.installCopy.textContent="Güvenlik cihazı kurulumu Android Chrome veya iPhone/iPad Safari üzerinden yapılır.";
+    els.installStateText.textContent="Bu tarayıcı yalnız kurulum / yönlendirme ekranıdır.";
     return;
   }
 
@@ -372,8 +386,8 @@ async function refreshState(options={}){
     if(code!=="NETWORK_ERROR"&&code!=="REQUEST_TIMEOUT")toast(error?.message||"Telefon bağlantısı doğrulanamadı.");
   }
 }
-window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();installPrompt=event;renderInstall()});
-window.addEventListener("appinstalled",()=>{
+if(!window.KYSecurityInstaller)window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();installPrompt=event;renderInstall()});
+if(!window.KYSecurityInstaller)window.addEventListener("appinstalled",()=>{
   installPrompt=null;
   els.installPanel.classList.remove("hidden");
   els.installTitle.textContent="KY ERP Güvenlik yüklendi";
@@ -385,6 +399,7 @@ window.addEventListener("appinstalled",()=>{
   toast("KY ERP Güvenlik uygulaması yüklendi.");
 });
 els.installButton.addEventListener("click",async()=>{
+  if(window.KYSecurityInstaller?.isBrowserInstall?.()){await window.KYSecurityInstaller.requestInstall();return;}
   if(!installPrompt){
     const request=requestedInstall();
     if(request.requested&&request.platform==="android"&&!request.browser){openAndroidBrowserInstaller();return;}
@@ -411,16 +426,19 @@ els.refreshButton.addEventListener("click",refreshState);
 els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
 els.relinkButton.addEventListener("click",showRelink);
 els.cancelRelinkButton.addEventListener("click",()=>{hideRelink();refreshState()});
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden"))refreshState()});
-window.addEventListener("focus",()=>{if(els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||"")))refreshState()});
-window.addEventListener("online",()=>{toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState()});
+document.addEventListener("visibilitychange",()=>{if(isStandalone()&&document.visibilityState==="visible"&&els.setupPanel.classList.contains("hidden"))refreshState()});
+window.addEventListener("focus",()=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&!(["INPUT","TEXTAREA"].includes(document.activeElement?.tagName||"")))refreshState()});
+window.addEventListener("online",()=>{if(!isStandalone())return;toast("İnternet bağlantısı geri geldi. Bağlantı kontrol ediliyor.");refreshState()});
 window.addEventListener("offline",()=>{setBadge("Çevrimdışı","bad");if(els.readyTitle)els.readyTitle.textContent="Telefon çevrimdışı"});
-navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(els.setupPanel.classList.contains("hidden")&&["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
+navigator.serviceWorker?.addEventListener?.("message",(event)=>{if(isStandalone()&&els.setupPanel.classList.contains("hidden")&&["KYERP_SECURITY_PUSH_WAKE","KYERP_SECURITY_PENDING_WAKE","KYERP_SECURITY_CONNECTION_WAKE"].includes(event.data?.type))refreshState()});
 window.KYSecurityRuntime={deviceFetch,readDevice,writeDevice,confirmLocalUnlock,base64Url,toast,refreshState,CLIENT_VERSION};
 window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
 (async function boot(){
   try{
     document.title="KY ERP Güvenlik";els.deviceLabel.value=defaultDeviceLabel();
+    if(!isStandalone()){
+      renderInstall();setBadge("Kurulum");return;
+    }
     const url=new URL(location.href);const direct={id:String(url.searchParams.get("enrollmentId")||""),token:String(url.searchParams.get("enrollmentToken")||"")};
     if(direct.id&&direct.token){persistEnrollmentLink(direct);enrollmentQuery=direct}else enrollmentQuery=restoreEnrollmentLink();
     const localDevice=await readDevice().catch(()=>null);
@@ -433,4 +451,4 @@ window.dispatchEvent(new CustomEvent("kysecurity:runtime-ready"));
     showSetupStart();setBadge("Bağlantı gerekli","bad");toast(error?.message||"KY Güvenlik açılışı tamamlanamadı. Şifreni girip bağlantıyı tamamla.");
   }
 })();
-setTimeout(()=>{if(els.setupPanel?.classList.contains("hidden")&&els.appPanel?.classList.contains("hidden")){showSetupStart();setBadge("Bağlantı gerekli");}},2500);
+setTimeout(()=>{if(isStandalone()&&els.setupPanel?.classList.contains("hidden")&&els.appPanel?.classList.contains("hidden")){showSetupStart();setBadge("Bağlantı gerekli");}},2500);

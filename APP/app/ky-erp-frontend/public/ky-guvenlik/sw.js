@@ -1,5 +1,5 @@
-const APP_URL="/ky-guvenlik/?open=1&release=2.9&boot=9";
-const CACHE_NAME="kyerp-ky-guvenlik-shell-v9";
+const APP_URL="/ky-guvenlik/";
+const CACHE_NAME="kyerp-security-static";
 const ICON="/ky-guvenlik/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 

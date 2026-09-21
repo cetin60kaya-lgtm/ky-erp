@@ -4,7 +4,7 @@ import test from "node:test";
 
 const panel = await readFile(new URL("./pages/admin/SecurityCenterPanel.jsx", import.meta.url), "utf8");
 const api = await readFile(new URL("./services/securityCenterApi.js", import.meta.url), "utf8");
-const actions = await readFile(new URL("../public/security/security-actions.js", import.meta.url), "utf8");
+const actions = await readFile(new URL("../public/ky-guvenlik/security-actions.js", import.meta.url), "utf8");
 
 test("users see persistent approved devices and can revoke their own trust", () => {
   assert.match(panel, /Onaylı Cihazlarım/);

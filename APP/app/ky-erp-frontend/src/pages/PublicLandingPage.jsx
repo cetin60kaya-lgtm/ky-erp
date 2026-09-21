@@ -161,6 +161,7 @@ export default function PublicLandingPage() {
           <a href="#muhasebe-demo" onClick={() => setMenuOpen(false)}>Muhasebe</a>
           <a href="#cihazlar" onClick={() => setMenuOpen(false)}>Cihazlar</a>
           <a href="#moduller" onClick={() => setMenuOpen(false)}>Modüller</a>
+          <a href="#iletisim" onClick={() => setMenuOpen(false)}>İletişim</a>
         </nav>
 
         <div className="ky-public-header__actions">
