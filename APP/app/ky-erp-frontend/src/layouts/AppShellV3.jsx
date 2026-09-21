@@ -256,7 +256,13 @@ export default function AppShellV3({
       const data = await getNotifications();
       const now = Date.now();
       for (const [id, expiresAt] of resolvedNotificationIdsRef.current) if (expiresAt <= now) resolvedNotificationIdsRef.current.delete(id);
-      const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => !resolvedNotificationIdsRef.current.has(notificationResolutionKey(item)));
+      const seenNotificationKeys = new Set();
+      const items = (Array.isArray(data?.items) ? data.items : []).filter((item) => {
+        const key = notificationResolutionKey(item);
+        if (resolvedNotificationIdsRef.current.has(key) || seenNotificationKeys.has(key)) return false;
+        seenNotificationKeys.add(key);
+        return true;
+      });
       setNotificationData({
         items,
         unreadCount: items.filter((item) => item.unread).length,
@@ -441,19 +447,15 @@ export default function AppShellV3({
       } else {
         await decideSecurityCenterLoginApproval(approvalId, decision);
       }
-      const approved = decision !== "DENY";
-      const resolution = approved ? "APPROVED" : "DENIED";
-      const resolvedTitle = sessionId ? (approved ? "Oturum onaylandı" : "Oturum reddedildi") : (approved ? "Giriş onaylandı" : "Giriş reddedildi");
-      resolvedNotificationIdsRef.current.set(notificationResolutionKey(item), Date.now() + 5 * 60_000);
+      const resolutionKey = notificationResolutionKey(item);
+      resolvedNotificationIdsRef.current.set(resolutionKey, Date.now() + 5 * 60_000);
+      const duplicateIds = [...new Set((notificationData.items || []).filter((entry) => notificationResolutionKey(entry) === resolutionKey).map((entry) => entry.id).filter(Boolean))];
       setNotificationData((current) => {
-        const items = current.items.map((entry) => entry.id === item.id ? { ...entry, unread: false, title: resolvedTitle, detail: [entry.detail, approved ? "İşlem tamamlandı" : "İstek reddedildi"].filter(Boolean).join(" · "), meta: { ...(entry.meta || {}), actionable: false, resolution } } : entry);
+        const items = current.items.filter((entry) => notificationResolutionKey(entry) !== resolutionKey);
         return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length };
       });
-      try { await dismissNotifications([item.id]); } catch { /* Bildirim zaten kapandiysa akisi kesme. */ }
-      window.setTimeout(() => {
-        setNotificationData((current) => { const items = current.items.filter((entry) => entry.id !== item.id); return { ...current, items, unreadCount: items.filter((entry) => entry.unread).length, totalCount: items.length }; });
-        refreshNotifications(true);
-      }, 1600);
+      try { await dismissNotifications(duplicateIds.length ? duplicateIds : [item.id]); } catch { /* Bildirim zaten kapandiysa akisi kesme. */ }
+      refreshNotifications(true);
     } catch (error) {
       setNotificationError(error?.message || "Güvenlik onayı tamamlanamadı.");
     } finally {
