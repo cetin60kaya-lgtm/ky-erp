@@ -4,10 +4,11 @@
   const PATH="/ky-guvenlik/";
   const PENDING_KEY="kyerp-security-pending-enrollment-v2";
   const INSTALL_TIMEOUT_MS=8000;
-  const PROMPT_WAIT_MS=1800;
+  const PROMPT_WAIT_MS=1200;
   let deferredPrompt=null;
   let preparePromise=null;
   let installRequestInFlight=false;
+  let promptFallbackTimer=null;
   const promptWaiters=new Set();
   const qs=(selector)=>document.querySelector(selector);
   const standalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
@@ -53,16 +54,31 @@
     if(button){button.classList.toggle("hidden",!buttonText);if(buttonText)button.textContent=buttonText;button.disabled=disabled;}
   }
 
+  function clearPromptFallback(){
+    if(promptFallbackTimer!==null){clearTimeout(promptFallbackTimer);promptFallbackTimer=null;}
+  }
+
   function showReadyUi(){
+    clearPromptFallback();
     if(deferredPrompt){
       setUi("Hazır. KY ERP Güvenlik'i bu telefona kurmak için düğmeye dokun.","KY Güvenlik'i Yükle");
       return;
     }
-    setUi("KY ERP Güvenlik'i kurmak için düğmeye dokun.","KY Güvenlik'i Yükle");
+    setUi("KY ERP Güvenlik'i kurmak için düğmeye dokun. Android penceresi açılmazsa Chrome menüsü ⋮ → Uygulamayı yükle / Ana ekrana ekle yolunu kullan.","KY Güvenlik'i Yükle");
   }
 
   function showChromeMenuFallback(){
-    setUi("Chrome otomatik kurulum penceresini göstermedi. Sağ üstteki ⋮ menüsüne dokunup ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç.","Tekrar Dene");
+    clearPromptFallback();
+    setUi("Bekleme yok: Chrome otomatik kurulum penceresini göstermediyse sağ üstteki ⋮ menüsüne dokunup ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç.","Tekrar Dene");
+  }
+
+  function schedulePromptFallback(){
+    clearPromptFallback();
+    if(deferredPrompt||standalone())return;
+    promptFallbackTimer=setTimeout(()=>{
+      promptFallbackTimer=null;
+      if(!deferredPrompt&&!standalone()&&!installRequestInFlight)showChromeMenuFallback();
+    },PROMPT_WAIT_MS);
   }
 
   function openFullChrome(){
@@ -116,12 +132,10 @@
     if(standalone())return;
     if(installRequestInFlight)return;
     installRequestInFlight=true;
+    clearPromptFallback();
     try{
       void prepareInstall();
-      if(!deferredPrompt){
-        setUi("Android kurulum penceresi açılıyor…","KY Güvenlik'i Yükle",true);
-        await waitForPrompt();
-      }
+      if(!deferredPrompt)await waitForPrompt();
       if(!deferredPrompt){showChromeMenuFallback();return;}
 
       const prompt=deferredPrompt;
@@ -129,7 +143,7 @@
       await prompt.prompt();
       const choice=await withTimeout(prompt.userChoice,INSTALL_TIMEOUT_MS,"Kurulum yanıtı alınamadı.").catch(()=>null);
       if(choice?.outcome==="accepted")setUi("Kurulum onaylandı. Android tamamladığında ana ekrandaki KY Güvenlik ikonunu aç.","Kurulum Tamamlanıyor",true);
-      else setUi("Kurulum tamamlanmadı. Yeniden denemek için düğmeye dokun.","Tekrar Dene");
+      else {setUi("Kurulum tamamlanmadı. Yeniden denemek için düğmeye dokun.","Tekrar Dene");schedulePromptFallback();}
     }catch(error){
       console.warn("KY Security install prompt:",error);
       showChromeMenuFallback();
@@ -138,7 +152,7 @@
     }
   }
 
-  window.KYSecurityInstaller={isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
+  window.KYSecurityInstaller={revision:"install-no-stuck-20260921",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
   capturePendingEnrollment();
   if(standalone()){
     try{
@@ -153,11 +167,13 @@
   window.addEventListener("beforeinstallprompt",(event)=>{
     event.preventDefault();
     deferredPrompt=event;
+    clearPromptFallback();
     signalPromptReady();
     if(!standalone())showReadyUi();
   });
   window.addEventListener("appinstalled",()=>{
     deferredPrompt=null;
+    clearPromptFallback();
     setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan aç.","Kurulum Tamamlandı",true);
   });
 
@@ -174,6 +190,7 @@
       return;
     }
     void prepareInstall();
+    schedulePromptFallback();
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});

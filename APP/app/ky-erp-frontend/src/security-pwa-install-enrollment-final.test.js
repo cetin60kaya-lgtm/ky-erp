@@ -28,10 +28,15 @@ test("Security PWA keeps one immutable install identity and version-free launch 
   assert.doesNotMatch(host,/searchParams\.set\(["']boot/);
 });
 
-test("install helper runs immediately after parse without waiting for app runtime",()=>{
+test("install helper runs immediately after parse and never leaves a preparing-only screen",()=>{
   assert.match(html,/<script defer src="\/ky-guvenlik\/install-helper\.js"><\/script>/);
-  assert.match(html,/Kurulum ekranı hazırlanıyor/);
+  assert.doesNotMatch(html,/Kurulum ekranı hazırlanıyor/);
+  assert.match(html,/Uygulamayı yükle/);
   assert.ok(html.indexOf("install-helper.js") < html.indexOf("app.js"));
+  assert.match(installer,/PROMPT_WAIT_MS=1200/);
+  assert.match(installer,/schedulePromptFallback/);
+  assert.match(installer,/Bekleme yok:/);
+  assert.match(installer,/revision:"install-no-stuck-20260921"/);
 });
 
 test("Android browser is install-only and enrollment starts only in standalone",()=>{
