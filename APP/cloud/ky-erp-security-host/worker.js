@@ -40,14 +40,19 @@ const ROOT_MANIFEST = JSON.stringify({
 
 const RETIRE_LEGACY_SW = `self.addEventListener("install",event=>event.waitUntil(self.skipWaiting()));self.addEventListener("activate",event=>event.waitUntil((async()=>{try{for(const key of await caches.keys())if(key.startsWith("kyerp-security-")||key.startsWith("kyerp-ky-guvenlik-"))await caches.delete(key)}catch{}try{await self.registration.unregister()}catch{}try{for(const client of await self.clients.matchAll({type:"window",includeUncontrolled:true}))client.postMessage({type:"KYERP_SECURITY_LEGACY_RETIRED"})}catch{}})()));`;
 
+const LEGACY_PWA_BROWSER_REDIRECT = `<script data-kyerp-legacy-pwa-compat>(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone){const target=new URL(location.href);target.pathname="/";location.replace(target.href)}}catch{}})();</script>`;
+
 function isNavigation(request) {
   return request.mode === "navigate" || String(request.headers.get("accept") || "").includes("text/html");
 }
 
-function isLegacyAppPath(pathname) {
+function isRedirectOnlyLegacyPath(pathname) {
   return pathname === "/security" || pathname.startsWith("/security/") ||
-    pathname === "/ky-guvenlik" || pathname.startsWith("/ky-guvenlik/") ||
     pathname === "/ky-guvenlik-recover" || pathname.startsWith("/ky-guvenlik-recover/");
+}
+
+function isLegacyPwaNavigation(pathname) {
+  return pathname === "/ky-guvenlik" || pathname === "/ky-guvenlik/";
 }
 
 function publicRootSourcePath(pathname) {
@@ -61,6 +66,13 @@ function transformRootText(text) {
     .replaceAll("/ky-guvenlik/", "/")
     .replaceAll("security-v2.9", "security-v3.0-root")
     .replaceAll("v2.9", "v3.0");
+}
+
+function injectLegacyPwaCompatibility(text) {
+  const source = String(text || "");
+  if (source.includes("data-kyerp-legacy-pwa-compat")) return source;
+  if (source.includes("<head>")) return source.replace("<head>", `<head>${LEGACY_PWA_BROWSER_REDIRECT}`);
+  return `${LEGACY_PWA_BROWSER_REDIRECT}${source}`;
 }
 
 function noStoreHeaders(sourceHeaders = new Headers()) {
@@ -77,14 +89,16 @@ export default {
     const incoming = new URL(request.url);
     const method = String(request.method || "GET").toUpperCase();
     const readable = method === "GET" || method === "HEAD";
+    const navigation = readable && isNavigation(request);
+    const legacyPwaNavigation = navigation && isLegacyPwaNavigation(incoming.pathname);
 
-    if (readable && isLegacyAppPath(incoming.pathname) && isNavigation(request)) {
+    if (navigation && isRedirectOnlyLegacyPath(incoming.pathname)) {
       const target = new URL(request.url);
       target.pathname = "/";
       return Response.redirect(target.toString(), 308);
     }
 
-    if (readable && (incoming.pathname === "/ky-guvenlik/sw.js" || incoming.pathname === "/security/sw.js")) {
+    if (readable && incoming.pathname === "/security/sw.js") {
       return new Response(method === "HEAD" ? null : RETIRE_LEGACY_SW, {
         status: 200,
         headers: noStoreHeaders(new Headers({
@@ -114,6 +128,26 @@ export default {
 
     const response = await fetch(new Request(upstream, init), { cache: "no-store" });
     const outHeaders = noStoreHeaders(response.headers);
+
+    if (incoming.pathname === "/ky-guvenlik/sw.js") {
+      outHeaders.set("Service-Worker-Allowed", "/ky-guvenlik/");
+      outHeaders.set("X-KYERP-Security-Compat", "legacy-pwa-live");
+    }
+
+    if (legacyPwaNavigation && method !== "HEAD" && response.ok) {
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (contentType.includes("text/html")) {
+        const compatible = injectLegacyPwaCompatibility(await response.text());
+        outHeaders.delete("content-length");
+        outHeaders.delete("content-encoding");
+        outHeaders.set("X-KYERP-Security-Compat", "legacy-pwa-live");
+        return new Response(compatible, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: outHeaders,
+        });
+      }
+    }
 
     if (!rootSourcePath || !readable || method === "HEAD" || !response.ok) {
       return new Response(method === "HEAD" ? null : response.body, {
