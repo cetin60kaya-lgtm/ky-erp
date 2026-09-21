@@ -154,18 +154,13 @@ function renderInstall(){
   els.installButton.disabled=false;
 
   if(standalone){
-    if(!request.requested){els.installPanel.classList.add("hidden");return;}
-    if(android){
-      els.installPanel.classList.remove("hidden");
-      els.installTitle.textContent="KY Güvenlik’i ayrı uygulama olarak kur";
-      els.installCopy.textContent="Ana KY ERP uygulamasından çıktık. Kurulumu Chrome üzerinden ayrı KY Güvenlik uygulaması olarak tamamla.";
-      els.installStateText.textContent="Chrome kurulum ekranı hazır";
-      els.androidInstallNote.classList.remove("hidden");
-      els.installButton.textContent="Chrome’da KY Güvenlik Kurulumunu Aç";
-      els.installButton.classList.remove("hidden");
-      els.installButton.disabled=false;
-      return;
-    }
+    try{
+      const url=new URL(location.href);
+      for(const key of ["install","platform","browser","chrome"])url.searchParams.delete(key);
+      history.replaceState({},"",url.pathname+url.search+url.hash);
+    }catch{}
+    els.installPanel.classList.add("hidden");
+    return;
   }
 
   if(ios){
