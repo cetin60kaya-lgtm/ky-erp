@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = resolve(here, "../../..");
+const repo = resolve(here, "../../../..");
 const host = readFileSync(resolve(repo, "APP/cloud/ky-erp-security-host/worker.js"), "utf8");
 
 test("KY Security host exposes one root PWA identity", () => {
