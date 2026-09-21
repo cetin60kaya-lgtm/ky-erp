@@ -158,8 +158,9 @@
 
   function openInChrome(){
     const target=canonicalBrowserUrl().href;
+    const url=new URL(target);
     const fallback=encodeURIComponent(target);
-    location.href="intent://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
+    location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
   }
 
   async function installFromButton(){
