@@ -132,7 +132,7 @@
   async function ensureSecurityWorker(){
     if(!("serviceWorker" in navigator))return null;
     try{
-      const registration=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/"});
+      const registration=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/",updateViaCache:"none"});
       try{await registration.update()}catch{}
       await Promise.race([
         navigator.serviceWorker.ready,
@@ -157,7 +157,7 @@
   }
 
   function openInChrome(){
-    const target="https://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1";
+    const target=canonicalBrowserUrl().href;
     const fallback=encodeURIComponent(target);
     location.href="intent://security.kyerp.net/ky-guvenlik/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
   }
