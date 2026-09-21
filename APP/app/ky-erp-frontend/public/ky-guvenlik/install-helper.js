@@ -4,11 +4,21 @@
 
   const ORIGIN="https://security.kyerp.net";
   const PATH="/ky-guvenlik/";
-  const RELOAD_KEY="kyerp-security-install-once-v8";
+  const PENDING_KEY="kyerp-security-pending-enrollment-v2";
   let installPrompt=null;
   const qs=(s)=>document.querySelector(s);
   const standalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   const state=()=>{try{const p=new URL(location.href).searchParams;return{chrome:p.get("chrome")==="1"}}catch{return{chrome:false}}};
+
+  function captureEnrollment(){
+    try{
+      const u=new URL(location.href);
+      const id=String(u.searchParams.get("enrollmentId")||"").trim();
+      const token=String(u.searchParams.get("enrollmentToken")||"").trim();
+      const mode=String(u.searchParams.get("mode")||"").trim();
+      if(id&&token)localStorage.setItem(PENDING_KEY,JSON.stringify({id,token,mode,savedAt:Date.now()}));
+    }catch{}
+  }
 
   function installUrl(){
     const u=new URL(location.href);
@@ -16,6 +26,8 @@
     u.searchParams.set("install","1");
     u.searchParams.set("platform","android");
     u.searchParams.set("chrome","1");
+    u.searchParams.set("release","2.9");
+    u.searchParams.set("boot","9");
     return u;
   }
 
@@ -49,23 +61,18 @@
   async function ensureWorker(){
     if(!("serviceWorker" in navigator))return null;
     try{
-      const r=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/",updateViaCache:"none"});
+      const r=await navigator.serviceWorker.register("/ky-guvenlik/sw.js?boot=9",{scope:"/ky-guvenlik/",updateViaCache:"none"});
       try{await r.update()}catch{}
       return r;
     }catch{return null}
   }
 
   async function prepareFullChrome(){
-    setUi("Android uygulama kurulumu hazırlanıyor…","Kurulumu Hazırla",false);
+    setUi("Android uygulama kurulumu hazırlanıyor…","Kurulumu Kontrol Et",false);
     const r=await ensureWorker();
     if(installPrompt)return;
     if(!r){setUi("Chrome güvenlik servisini hazırlayamadı.","Tekrar Dene",false);return;}
-    if(!navigator.serviceWorker.controller&&sessionStorage.getItem(RELOAD_KEY)!=="1"){
-      sessionStorage.setItem(RELOAD_KEY,"1");
-      location.reload();
-      return;
-    }
-    setUi("Chrome'un gerçek Yükle penceresi bekleniyor.","Kurulumu Kontrol Et",false);
+    setUi("Android yükleme penceresi bekleniyor.","Kurulumu Kontrol Et",false);
   }
 
   async function clickInstall(){
@@ -87,18 +94,20 @@
   window.addEventListener("beforeinstallprompt",(e)=>{
     e.preventDefault();
     installPrompt=e;
-    sessionStorage.removeItem(RELOAD_KEY);
     setUi("Android uygulama kurulumu hazır","KY Güvenlik'i Yükle",false);
   });
 
   window.addEventListener("appinstalled",()=>{
     installPrompt=null;
-    sessionStorage.removeItem(RELOAD_KEY);
-    setUi("Kurulum tamamlandı. KY Güvenlik'i ana ekrandan aç.","Kurulum Tamamlandı",true);
+    setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik uygulamasını aç.","Kurulum Tamamlandı",true);
   });
 
   function attach(){
+    captureEnrollment();
     if(standalone())return;
+
+    // Android tarayıcıda bağlama ekranı hiçbir koşulda gösterilmez.
+    // Önce gerçek PWA kurulumu tamamlanır; bağlama yalnız standalone uygulamada yapılır.
     installOnly();
     const b=qs("#installButton");
     if(b)b.addEventListener("click",(e)=>{e.preventDefault();e.stopImmediatePropagation();void clickInstall();},true);
@@ -112,6 +121,7 @@
     void prepareFullChrome();
   }
 
+  captureEnrollment();
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});
   else attach();
 })();
