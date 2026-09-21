@@ -1,0 +1,90 @@
+name: KY Security Final Live Deploy
+
+on:
+  push:
+    branches:
+      - codex/security-live-deploy-20260921
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-security-final-live-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      VITE_API_URL: https://api.kyerp.net
+    steps:
+      - name: Checkout production snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: bf3be9eb948271cf0ef3c8234b302466702a4c27
+          fetch-depth: 1
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Verify Cloudflare credentials
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          npx --yes wrangler@4.118.0 whoami
+
+      - name: Frontend lint test build
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Security host syntax
+        run: node --check APP/cloud/ky-erp-security-host/worker.js
+
+      - name: Deploy frontend Pages production
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 pages deploy dist \
+            --project-name ky-erp-frontend \
+            --branch codex/model-uretim-kontrol-merkezi-final \
+            --commit-hash bf3be9eb948271cf0ef3c8234b302466702a4c27 \
+            --commit-message "Security Android install no-stuck final"
+
+      - name: Deploy security host Worker only
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 deploy --config APP/cloud/ky-erp-security-host/wrangler.jsonc
+
+      - name: Verify live security root and installer
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 24); do
+            headers="$(curl -fsS -D - -o /tmp/security-root.html 'https://security.kyerp.net/?install=1&platform=android&chrome=1' || true)"
+            curl -fsS 'https://security.kyerp.net/install-helper.js' -o /tmp/install-helper.js || true
+            if grep -qi 'X-KYERP-Security-App: root-v3' <<<"$headers" \
+              && grep -q 'Chrome kurulum penceresi açılmazsa' /tmp/security-root.html \
+              && grep -q 'install-no-stuck-20260921' /tmp/install-helper.js \
+              && grep -q 'Bekleme yok:' /tmp/install-helper.js; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = "1"
+          curl -fsS 'https://security.kyerp.net/manifest.webmanifest' | grep -q '"id":"/"'
+          code="$(curl -sS -o /dev/null -w '%{http_code}' 'https://security.kyerp.net/ky-guvenlik/')"
+          test "$code" = "308"
+          echo 'LIVE_SECURITY_OK=1'
