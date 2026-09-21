@@ -107,7 +107,7 @@ test("dedicated Security worker owns phone approval while the legacy main worker
 test("authenticated shell creates one-time security-app enrollment while password step-up happens on the phone", () => {
   assert.match(phoneSetup, /PhoneApprovalDeviceSetup/);
   assert.match(phoneDeviceSetup, /security-enrollment\/start/);
-  assert.match(phoneDeviceSetup, /Bu Telefonda Bağlantıyı Tamamla/);
+  assert.match(phoneDeviceSetup, /KY G\u00fcvenlik A\u00e7/);
   assert.match(phoneDeviceSetup, /security\.kyerp\.net\/ky-guvenlik/);
   assert.match(push, /security-enrollment\/complete/);
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
