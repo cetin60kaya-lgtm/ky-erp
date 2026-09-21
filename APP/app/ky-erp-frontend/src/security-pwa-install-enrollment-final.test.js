@@ -15,6 +15,7 @@ const app=readFrontend("public/ky-guvenlik/app.js");
 const sw=readFrontend("public/ky-guvenlik/sw.js");
 const legacyHtml=readFrontend("public/security/index.html");
 const legacySw=readFrontend("public/security/sw.js");
+const recovery=readFrontend("public/ky-guvenlik-recover/index.html");
 const phoneSetup=readFrontend("src/components/shell/PhoneApprovalDeviceSetup.jsx");
 const host=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
 
@@ -87,4 +88,12 @@ test("canonical worker opens from a fresh cache and never serves HTML to JavaScr
   assert.match(sw,/withTimeout\(refreshRuntime\(event\.request\),NAVIGATION_TIMEOUT_MS\)/);
   assert.doesNotMatch(sw,/if\(runtimeAsset\)\{[\s\S]{0,700}cache\.match\(APP_URL\)/);
   assert.match(sw,/kyerp-ky-guvenlik-shell-/);
+});
+test("recovery page updates the existing worker without deleting trusted device state",()=>{
+  assert.match(recovery,/getRegistrations\(\)/);
+  assert.match(recovery,/reg\.update\(\)/);
+  assert.match(recovery,/kyerp-security-static-v3/);
+  assert.match(recovery,/kyerp-security-static-v2/);
+  assert.doesNotMatch(recovery,/\.unregister\(\)|indexedDB\.deleteDatabase|localStorage\.clear/);
+  assert.match(recovery,/location\.replace\('\/ky-guvenlik\/\?recovered=1'\)/);
 });
