@@ -55,6 +55,13 @@ function isLegacyPwaNavigation(pathname) {
   return pathname === "/ky-guvenlik" || pathname === "/ky-guvenlik/";
 }
 
+function isFreshInstallHandoff(incoming) {
+  if (!isLegacyPwaNavigation(incoming.pathname)) return false;
+  return incoming.searchParams.get("install") === "1" ||
+    incoming.searchParams.has("enrollmentId") ||
+    incoming.searchParams.has("enrollmentToken");
+}
+
 function publicRootSourcePath(pathname) {
   if (pathname === "/") return `${SOURCE_PREFIX}/`;
   if (ROOT_ASSETS.has(pathname)) return `${SOURCE_PREFIX}${pathname}`;
@@ -92,7 +99,7 @@ export default {
     const navigation = readable && isNavigation(request);
     const legacyPwaNavigation = navigation && isLegacyPwaNavigation(incoming.pathname);
 
-    if (navigation && isRedirectOnlyLegacyPath(incoming.pathname)) {
+    if (navigation && (isRedirectOnlyLegacyPath(incoming.pathname) || isFreshInstallHandoff(incoming))) {
       const target = new URL(request.url);
       target.pathname = "/";
       return Response.redirect(target.toString(), 308);
