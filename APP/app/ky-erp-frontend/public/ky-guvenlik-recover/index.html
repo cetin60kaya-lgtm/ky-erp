@@ -12,20 +12,24 @@
 (async()=>{
   const status=document.querySelector('#status');
   const title=document.querySelector('#title');
-  const legacy=['kyerp-security-static','kyerp-security-static-v2'];
+  const legacy=['kyerp-security-static','kyerp-security-static-v2','kyerp-security-static-v3'];
   try{
     if('serviceWorker' in navigator){
       const regs=await navigator.serviceWorker.getRegistrations();
-      const reg=regs.find((item)=>{try{return new URL(item.scope).pathname.startsWith('/ky-guvenlik/')}catch{return false}});
-      if(reg){status.textContent='Güvenlik uygulaması güncelleniyor…';await reg.update().catch(()=>{});}
+      let reg=regs.find((item)=>{try{return new URL(item.scope).pathname.startsWith('/ky-guvenlik/')}catch{return false}});
+      if(!reg){reg=await navigator.serviceWorker.register('/ky-guvenlik/sw.js',{scope:'/ky-guvenlik/',updateViaCache:'none'});}
+      status.textContent='Güvenlik uygulaması güncelleniyor…';
+      await reg.update().catch(()=>{});
+      const worker=reg.installing||reg.waiting;
+      if(worker&&worker.state!=='activated'){
+        await Promise.race([new Promise((resolve)=>{const done=()=>{if(worker.state==='activated'||worker.state==='redundant')resolve()};worker.addEventListener('statechange',done);done()}),new Promise((resolve)=>setTimeout(resolve,4000))]);
+      }
     }
-    const deadline=Date.now()+7000;
-    while(Date.now()<deadline){const keys=await caches.keys();if(keys.includes('kyerp-security-static-v3'))break;await new Promise((r)=>setTimeout(r,250));}
     const keys=await caches.keys();
     await Promise.all(keys.filter((key)=>legacy.includes(key)||key.startsWith('kyerp-security-shell-')||key.startsWith('kyerp-ky-guvenlik-shell-')).map((key)=>caches.delete(key)));
     title.textContent='KY ERP Güvenlik hazır';
     status.textContent='Güncelleme tamamlandı. Güvenlik uygulaması yeniden açılıyor…';
-    setTimeout(()=>location.replace('/ky-guvenlik/?recovered=1'),500);
+    setTimeout(()=>location.replace('/ky-guvenlik/?recovered=1'),400);
   }catch{
     title.textContent='KY ERP Güvenlik hazır';
     status.textContent='Güvenli yenileme tamamlandı. Uygulama yeniden açılıyor…';
