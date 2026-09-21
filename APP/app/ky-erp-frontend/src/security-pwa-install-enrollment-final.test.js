@@ -72,6 +72,18 @@ test("legacy workers and caches migrate without deleting IndexedDB trusted-devic
   assert.match(legacySw,/self\.registration\.unregister\(\)/);
 });
 
+test("security host keeps an already-installed /ky-guvenlik Android PWA launch inside its original scope",()=>{
+  assert.match(host,/function isLegacyPwaNavigation\(pathname\)/);
+  assert.match(host,/pathname === "\/ky-guvenlik" \|\| pathname === "\/ky-guvenlik\/"/);
+  assert.match(host,/LEGACY_PWA_BROWSER_REDIRECT/);
+  assert.match(host,/display-mode: standalone/);
+  assert.match(host,/X-KYERP-Security-Compat", "legacy-pwa-live"/);
+  assert.match(host,/incoming\.pathname === "\/ky-guvenlik\/sw\.js"/);
+  assert.match(host,/Service-Worker-Allowed", "\/ky-guvenlik\/"/);
+  assert.match(host,/incoming\.pathname === "\/security\/sw\.js"/);
+  assert.doesNotMatch(host,/incoming\.pathname === "\/ky-guvenlik\/sw\.js" \|\| incoming\.pathname === "\/security\/sw\.js"/);
+});
+
 test("install, API and service-worker waits are bounded and always leave actionable UI",()=>{
   assert.match(installer,/INSTALL_TIMEOUT_MS=8000/);
   assert.match(installer,/withTimeout/);
