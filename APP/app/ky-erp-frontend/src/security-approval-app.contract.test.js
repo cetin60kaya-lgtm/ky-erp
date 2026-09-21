@@ -48,7 +48,7 @@ test("security app owns signed API calls while the service worker is notificatio
   assert.match(app,/X-KYERP-Security-Signature/);
   assert.doesNotMatch(sw,/API_BASE|deviceFetch|signDeviceAuth|X-KYERP-Push-Device|X-KYERP-Push-Token/);
   assert.match(sw,/showWakeNotification/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-static"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
   assert.match(sw,/caches\.delete/);
 });
 
@@ -82,7 +82,7 @@ test("professional security app exposes approvals, short login code and trusted-
   assert.match(app,/approval-match/);
   assert.match(app,/repairConnection/);
   assert.match(setup,/Bağlantıyı Kontrol Et/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-static"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
 });
 
 test("phone approval has explicit Android and iPhone installation entry points and installer mode",()=>{
@@ -100,7 +100,7 @@ test("phone approval has explicit Android and iPhone installation entry points a
   assert.match(installer,/openFullChrome/);
   assert.match(installer,/Chrome'da Devam Et/);
   assert.match(html,/id="iosInstallNote"/);
-  assert.match(sw,/CACHE_NAME="kyerp-security-static"/);
+  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
 });
 
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
@@ -118,7 +118,7 @@ test("iPhone Safari permission is requested directly from a user gesture before 
 });
 
 test("security shell keeps critical icons offline and runtime scripts network fresh",()=>{
-  assert.match(sw,/runtime=event\.request\.mode==="navigate"/);
+  assert.match(sw,/navigation=event\.request\.mode==="navigate"/);
   assert.match(sw,/fetch\(event\.request,\{cache:"no-store"\}\)/);
   assert.match(sw,/kyerp-security-apple-touch\.png/);
   assert.match(sw,/kyerp-security-192\.png/);

@@ -75,12 +75,16 @@ test("install, API and service-worker waits are bounded and always leave actiona
   assert.match(app,/setTimeout\(\(\)=>\{if\(isStandalone\(\)&&els\.setupPanel/);
 });
 
-test("canonical worker opens from cached shell with bounded network refresh",()=>{
-  assert.match(sw,/CACHE_NAME="kyerp-security-static"/);
+test("canonical worker opens from a fresh cache and never serves HTML to JavaScript",()=>{
+  assert.match(sw,/CACHE_NAME="kyerp-security-static-v3"/);
+  assert.match(sw,/LEGACY_CACHE_NAMES=\["kyerp-security-static","kyerp-security-static-v2"\]/);
   assert.match(sw,/NAVIGATION_TIMEOUT_MS=1500/);
   assert.match(sw,/const SHELL=\[APP_URL/);
+  assert.match(sw,/runtimeAsset=\/\\\.\(\?:js\|webmanifest\)/);
+  assert.match(sw,/LEGACY_CACHE_NAMES\.includes\(key\)/);
+  assert.match(sw,/cache\.match\(APP_URL\)/);
   assert.match(sw,/cache\.match\(cacheKey\(event\.request\)\)/);
-  assert.match(sw,/event\.waitUntil\(refreshRuntime\(event\.request\)/);
   assert.match(sw,/withTimeout\(refreshRuntime\(event\.request\),NAVIGATION_TIMEOUT_MS\)/);
+  assert.doesNotMatch(sw,/if\(runtimeAsset\)\{[\s\S]{0,700}cache\.match\(APP_URL\)/);
   assert.match(sw,/kyerp-ky-guvenlik-shell-/);
 });
