@@ -6,15 +6,15 @@ import { fileURLToPath } from "node:url";
 
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,"..");
-const html=readFileSync(resolve(root,"public/ky-guvenlik/index.html"),"utf8");
-const app=readFileSync(resolve(root,"public/ky-guvenlik/app.js"),"utf8");
-const control=readFileSync(resolve(root,"public/ky-guvenlik/security-control-center.js"),"utf8");
-const actions=readFileSync(resolve(root,"public/ky-guvenlik/security-actions.js"),"utf8");
-const sw=readFileSync(resolve(root,"public/ky-guvenlik/sw.js"),"utf8");
+const html=readFileSync(resolve(root,"public/guvenlik/index.html"),"utf8");
+const app=readFileSync(resolve(root,"public/guvenlik/app.js"),"utf8");
+const control=readFileSync(resolve(root,"public/guvenlik/security-control-center.js"),"utf8");
+const actions=readFileSync(resolve(root,"public/guvenlik/security-actions.js"),"utf8");
+const sw=readFileSync(resolve(root,"public/guvenlik/sw.js"),"utf8");
 test("KY Security shows its canonical version and stores version state",()=>{
-  assert.match(html,/id="appVersionBadge">v2\.9/);
-  assert.match(html,/id="accountVersion">v2\.9/);
-  assert.match(app,/CLIENT_VERSION="security-v2\.9"/);
+  assert.match(html,/id="appVersionBadge">v3\.0/);
+  assert.match(html,/id="accountVersion">v3\.0/);
+  assert.match(app,/CLIENT_VERSION="security-v3\.0"/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);
   assert.match(app,/X-KYERP-Security-App-Version/);

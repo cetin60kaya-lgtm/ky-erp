@@ -6,19 +6,19 @@ import { fileURLToPath } from "node:url";
 
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,"..");
-const app=readFileSync(resolve(root,"public/ky-guvenlik/app.js"),"utf8");
-const ios=readFileSync(resolve(root,"public/ky-guvenlik/ios-safari.js"),"utf8");
-const sw=readFileSync(resolve(root,"public/ky-guvenlik/sw.js"),"utf8");
-const manifest=readFileSync(resolve(root,"public/ky-guvenlik/manifest.webmanifest"),"utf8");
-const html=readFileSync(resolve(root,"public/ky-guvenlik/index.html"),"utf8");
-const installer=readFileSync(resolve(root,"public/ky-guvenlik/install-helper.js"),"utf8");
+const app=readFileSync(resolve(root,"public/guvenlik/app.js"),"utf8");
+const ios=readFileSync(resolve(root,"public/guvenlik/ios-safari.js"),"utf8");
+const sw=readFileSync(resolve(root,"public/guvenlik/sw.js"),"utf8");
+const manifest=readFileSync(resolve(root,"public/guvenlik/manifest.webmanifest"),"utf8");
+const html=readFileSync(resolve(root,"public/guvenlik/index.html"),"utf8");
+const installer=readFileSync(resolve(root,"public/guvenlik/install-helper.js"),"utf8");
 const setup=readFileSync(resolve(here,"components/shell/PhoneApprovalDeviceSetup.jsx"),"utf8");
 
 test("KY ERP Security is a separate installable phone tablet PWA",()=>{
   assert.match(manifest,/"name": "KY ERP Güvenlik"/);
-  assert.match(manifest,/"id": "\/ky-guvenlik\/app-v28"/);
-  assert.match(manifest,/"scope": "\/ky-guvenlik\/"/);
-  assert.match(manifest,/"start_url": "\/ky-guvenlik\/"/);
+  assert.match(manifest,/"id": "\/guvenlik\/"/);
+  assert.match(manifest,/"scope": "\/guvenlik\/"/);
+  assert.match(manifest,/"start_url": "\/guvenlik\/"/);
   assert.match(setup,/Microsoft Authenticator mantığında ayrı telefon\/tablet onay uygulaması/);
   assert.match(setup,/Sorun olursa yedek bağlantı kodu oluştur/);
 });
@@ -106,7 +106,7 @@ test("phone approval has explicit Android and iPhone installation entry points a
 test("iPhone Safari permission is requested directly from a user gesture before async enrollment",()=>{
   assert.match(html,/apple-mobile-web-app-capable/);
   assert.match(html,/apple-touch-icon/);
-  assert.match(html,/\/ky-guvenlik\/ios-safari\.js/);
+  assert.match(html,/\/guvenlik\/ios-safari\.js/);
   assert.match(html,/Safari ile açın → Paylaş → Ana Ekrana Ekle → Ekle/);
   assert.match(app,/if\(isIos\(\)&&!isStandalone\(\)\)/);
   assert.match(ios,/display-mode: standalone/);
@@ -138,7 +138,7 @@ test("main ERP and KY Security have separate install and service-worker ownershi
   assert.doesNotMatch(main,/serviceWorker\.register\("\/kyerp-push-sw\.js"/);
   assert.match(legacy,/registration\.unregister/);
   assert.doesNotMatch(legacy,/auth\/push\/device\/decision/);
-  assert.match(manifest,/\/ky-guvenlik\/kyerp-security-icon\.svg/);
+  assert.match(manifest,/\/guvenlik\/kyerp-security-icon\.svg/);
   assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
 
@@ -169,9 +169,9 @@ test("security app shows the verified bound ERP account identity and access scop
 });
 
 test("security app exposes one visible canonical version and persists it on the device record",()=>{
-  assert.match(html,/id="appVersionBadge">v2\.9/);
-  assert.match(html,/id="accountVersion">v2\.9/);
-  assert.match(app,/CLIENT_VERSION="security-v2\.9"/);
+  assert.match(html,/id="appVersionBadge">v3\.0/);
+  assert.match(html,/id="accountVersion">v3\.0/);
+  assert.match(app,/CLIENT_VERSION="security-v3\.0"/);
   assert.match(app,/X-KYERP-Security-App-Version/);
   assert.match(app,/lastKnownServerVersion/);
   assert.match(app,/versionCheckedAt/);

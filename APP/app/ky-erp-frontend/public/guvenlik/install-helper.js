@@ -1,8 +1,8 @@
 (()=>{
   const ANDROID=/Android/i.test(String(navigator.userAgent||""));
   const ORIGIN="https://security.kyerp.net";
-  const PATH="/ky-guvenlik/";
-  const PENDING_KEY="kyerp-security-pending-enrollment-v2";
+  const PATH="/guvenlik/";
+  const PENDING_KEY="kyerp-security-fresh-enrollment-v3";
   const INSTALL_TIMEOUT_MS=8000;
   const PROMPT_WAIT_MS=1200;
   let deferredPrompt=null;
@@ -113,7 +113,7 @@
       try{await withTimeout(migrateLegacyWorkers(),INSTALL_TIMEOUT_MS,"Eski güvenlik sürümü temizlenemedi.")}catch(error){console.warn("KY Security legacy cleanup:",error)}
       if(!("serviceWorker" in navigator))return null;
       try{
-        const registration=await withTimeout(navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:PATH,updateViaCache:"none"}),INSTALL_TIMEOUT_MS,"Güvenlik servisi zamanında hazırlanamadı.");
+        const registration=await withTimeout(navigator.serviceWorker.register("/guvenlik/sw.js",{scope:PATH,updateViaCache:"none"}),INSTALL_TIMEOUT_MS,"Güvenlik servisi zamanında hazırlanamadı.");
         try{await withTimeout(registration.update(),INSTALL_TIMEOUT_MS,"Güncelleme zaman aşımına uğradı.")}catch{}
         return registration;
       }catch(error){console.warn("KY Security service worker:",error);return null;}
@@ -160,7 +160,7 @@
     }
   }
 
-  window.KYSecurityInstaller={revision:"canonical-reset-20260922",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
+  window.KYSecurityInstaller={revision:"fresh-v3-20260922",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
   capturePendingEnrollment();
   void migrateLegacyWorkers().catch((error)=>console.warn("KY Security legacy cleanup:",error));
   if(standalone()){

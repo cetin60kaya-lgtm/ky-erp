@@ -42,14 +42,14 @@ test("live AppV3 shell exposes Telefon Onayi and mobile setup is full screen", (
 
 test("phone approval is handed off to the dedicated KY ERP Security PWA", () => {
   const setup = read("./components/shell/PhoneApprovalDeviceSetup.jsx");
-  const securityApp = read("../public/ky-guvenlik/app.js");
-  const securityWorker = read("../public/ky-guvenlik/sw.js");
-  const securityManifest = read("../public/ky-guvenlik/manifest.webmanifest");
+  const securityApp = read("../public/guvenlik/app.js");
+  const securityWorker = read("../public/guvenlik/sw.js");
+  const securityManifest = read("../public/guvenlik/manifest.webmanifest");
 
   assert.match(setup, /security-enrollment\/start/);
   assert.match(setup, /Sorun olursa yedek bağlantı kodu oluştur/);
-  assert.match(setup, /security\.kyerp\.net\/ky-guvenlik/);
-  assert.match(securityManifest, /"id": "\/ky-guvenlik\/app-v28"/);
+  assert.match(setup, /security\.kyerp\.net\/guvenlik/);
+  assert.match(securityManifest, /"id": "\/guvenlik\/"/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
   assert.match(securityWorker, /notificationclick/);
@@ -63,8 +63,8 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   const responsive = read("./styles/responsive-core.css");
   const setup = read("./components/shell/PhoneApprovalDeviceSetup.jsx");
   const manifest = read("../public/manifest.webmanifest");
-  const securityManifest = read("../public/ky-guvenlik/manifest.webmanifest");
-  const securityApp = read("../public/ky-guvenlik/app.js");
+  const securityManifest = read("../public/guvenlik/manifest.webmanifest");
+  const securityApp = read("../public/guvenlik/app.js");
 
   assert.match(shell, /beforeinstallprompt/);
   assert.match(shell, /KY ERP'yi Bu Cihaza Yükle/);
@@ -76,7 +76,7 @@ test("Android PWA install, phone notifications and tablet naming stay usable", (
   assert.match(securityApp, /Android Telefon/);
   assert.match(securityApp, /Android Tablet/);
   assert.match(securityManifest, /"display": "standalone"/);
-  assert.match(securityManifest, /"scope": "\/ky-guvenlik\/"/);
+  assert.match(securityManifest, /"scope": "\/guvenlik\/"/);
   assert.match(securityManifest, /kyerp-security-icon\.svg/);
   assert.match(manifest, /"id": "\/"/);
   assert.match(manifest, /"display": "standalone"/);

@@ -34,8 +34,8 @@ test("owner and company owner receive Security Center without a new left-menu se
 });
 
 test("KY Security PWA labels every critical security action and refreshes cache", async () => {
-  const actions = await read("../public/ky-guvenlik/security-actions.js");
-  const sw = await read("../public/ky-guvenlik/sw.js");
+  const actions = await read("../public/guvenlik/security-actions.js");
+  const sw = await read("../public/guvenlik/sw.js");
   for (const operation of ["SESSION_TRUST_APPROVE", "SESSION_CLOSE", "SESSION_SUSPICIOUS", "TRUSTED_DEVICE_REVOKE", "SECURITY_CAPABILITY_SET", "SUPER_ADMIN_GRANT", "SUPER_ADMIN_REVOKE", "ONLY_ME"]) {
     assert.match(actions, new RegExp(operation));
   }

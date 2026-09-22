@@ -9,15 +9,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="KY Güvenlik" />
   <meta name="format-detection" content="telephone=no" />
-  <script>(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname!=="security.kyerp.net"){const u=new URL(location.href);u.protocol="https:";u.host="security.kyerp.net";u.pathname="/ky-guvenlik/";location.replace(u.href)}}catch{}})();</script>
-  <script>/* KYERP_SECURITY_PENDING_CAPTURE_V2 */(()=>{try{const u=new URL(location.href);const id=String(u.searchParams.get("enrollmentId")||"");const token=String(u.searchParams.get("enrollmentToken")||"");const mode=String(u.searchParams.get("mode")||"");if(id&&token)localStorage.setItem("kyerp-security-pending-enrollment-v2",JSON.stringify({id,token,mode,savedAt:Date.now()}))}catch{}})();</script>
+  <script>(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname!=="security.kyerp.net"){const u=new URL(location.href);u.protocol="https:";u.host="security.kyerp.net";u.pathname="/guvenlik/";location.replace(u.href)}}catch{}})();</script>
+  <script>/* KYERP_SECURITY_PENDING_CAPTURE_V3 */(()=>{try{const u=new URL(location.href);const id=String(u.searchParams.get("enrollmentId")||"");const token=String(u.searchParams.get("enrollmentToken")||"");const mode=String(u.searchParams.get("mode")||"");if(id&&token)localStorage.setItem("kyerp-security-fresh-enrollment-v3",JSON.stringify({id,token,mode,savedAt:Date.now()}))}catch{}})();</script>
   <script>(()=>{try{const android=/Android/i.test(String(navigator.userAgent||""));const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(android&&!standalone)document.documentElement.classList.add("ky-install-only")}catch{}})();</script>
   <style id="kyInstallHardGateStyle">html.ky-install-only #setupPanel,html.ky-install-only #appPanel{display:none!important}html.ky-install-only #installPanel{display:grid!important}</style>
-  <script defer src="/ky-guvenlik/install-helper.js"></script>
-  <link rel="manifest" href="/ky-guvenlik/manifest.webmanifest" />
-  <link rel="icon" href="/ky-guvenlik/kyerp-security-icon.svg" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/ky-guvenlik/kyerp-security-apple-touch.png" />
-  <link rel="stylesheet" href="/ky-guvenlik/app.css" />
+  <script defer src="/guvenlik/install-helper.js"></script>
+  <link rel="manifest" href="/guvenlik/manifest.webmanifest" />
+  <link rel="icon" href="/guvenlik/kyerp-security-icon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/guvenlik/kyerp-security-apple-touch.png" />
+  <link rel="stylesheet" href="/guvenlik/app.css" />
   <title>KY ERP Güvenlik</title>
 </head>
 <body>
@@ -25,7 +25,7 @@
     <header class="security-header">
       <div class="security-brand">
         <span class="security-logo">KY</span>
-        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v2.9</span></small></div>
+        <div><b>KY ERP Güvenlik</b><small>Güvenilir Telefon / Tablet · <span id="appVersionBadge">v3.0</span></small></div>
       </div>
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
@@ -88,7 +88,7 @@
           <div><span>Kullanıcı adı</span><b id="accountUsername">-</b></div>
           <div><span>Firma / Kapsam</span><b id="accountScope">-</b></div>
           <div><span>Bağlı cihaz</span><b id="accountDevice">-</b></div>
-          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v2.9</b></div>
+          <div><span>KY Güvenlik sürümü</span><b id="accountVersion">v3.0</b></div>
         </div>
         <div class="account-access-block">
           <span>ERP erişimi</span>
@@ -190,6 +190,7 @@
           <div class="security-repair-actions">
             <button id="repairButton" class="primary" type="button">Bildirim Bağlantısını Yenile</button>
             <button id="refreshButton" type="button">Durumu Yenile</button>
+            <button id="enableUnlockButton" type="button">Parmak izi / PIN etkinleştir</button>
             <button id="relinkButton" type="button">Erişimi Yeniden Bağla</button>
           </div>
           <div class="note">
@@ -205,10 +206,10 @@
       <span>KY Güvenlik · Android · iPhone Safari · Giriş + kritik işlem onayı</span>
     </footer>
   </main>
-  <script defer src="/ky-guvenlik/ios-safari.js"></script>
-  <script defer src="/ky-guvenlik/app.js"></script>
-  <script defer src="/ky-guvenlik/security-actions.js"></script>
-  <script defer src="/ky-guvenlik/security-control-center.js"></script>
-  <script defer src="/ky-guvenlik/security-foreground-sync.js"></script>
+  <script defer src="/guvenlik/ios-safari.js"></script>
+  <script defer src="/guvenlik/app.js"></script>
+  <script defer src="/guvenlik/security-actions.js"></script>
+  <script defer src="/guvenlik/security-control-center.js"></script>
+  <script defer src="/guvenlik/security-foreground-sync.js"></script>
 </body>
 </html>

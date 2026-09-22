@@ -1,5 +1,5 @@
-const APP_URL="/ky-guvenlik/";
-const ICON="/ky-guvenlik/kyerp-security-icon.svg";
+const APP_URL="/guvenlik/";
+const ICON="/guvenlik/kyerp-security-icon.svg";
 const TAG="kyerp-security-approval";
 const LEGACY_CACHE_NAMES=["kyerp-security-static","kyerp-security-static-v2","kyerp-security-static-v3"];
 async function clearLegacyCaches(){const keys=await caches.keys();await Promise.all(keys.filter((key)=>LEGACY_CACHE_NAMES.includes(key)||key.startsWith("kyerp-security-shell-")||key.startsWith("kyerp-ky-guvenlik-shell-")).map((key)=>caches.delete(key)))}
@@ -7,7 +7,7 @@ async function broadcast(type){const windows=await clients.matchAll({type:"windo
 async function closeApprovalNotifications(){try{const list=await self.registration.getNotifications();for(const item of list){if(item?.tag===TAG||item?.data?.openApproval===true||String(item?.title||"").includes("KY ERP"))item.close()}}catch{}}
 async function showWakeNotification(){await self.registration.showNotification("KY ERP · Güvenlik Onayı",{body:"Yeni bir KY ERP güvenlik isteği var. KY ERP Güvenlik uygulamasını açıp kontrol edin.",tag:TAG,renotify:false,requireInteraction:true,badge:ICON,icon:ICON,timestamp:Date.now(),vibrate:[180,80,180],data:{openApproval:true}});await broadcast("KYERP_SECURITY_PUSH_WAKE")}
 async function showDecisionResult(decision){await closeApprovalNotifications();const approved=String(decision||"").toUpperCase()==="APPROVE";await self.registration.showNotification(approved?"KY ERP · Onaylandı":"KY ERP · Reddedildi",{body:approved?"Giriş / güvenlik isteği onaylandı.":"Giriş / güvenlik isteği reddedildi.",tag:TAG,renotify:false,requireInteraction:false,silent:true,badge:ICON,icon:ICON,timestamp:Date.now(),data:{decisionResult:true}});await new Promise((resolve)=>setTimeout(resolve,1600));const list=await self.registration.getNotifications({tag:TAG});for(const item of list)item.close()}
-async function focusOrOpen(){const windows=await clients.matchAll({type:"window",includeUncontrolled:true});const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/ky-guvenlik/")}catch{return false}});if(existing){await existing.focus();try{await existing.navigate(APP_URL)}catch{};return}await clients.openWindow(APP_URL)}
+async function focusOrOpen(){const windows=await clients.matchAll({type:"window",includeUncontrolled:true});const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/guvenlik/")}catch{return false}});if(existing){await existing.focus();try{await existing.navigate(APP_URL)}catch{};return}await clients.openWindow(APP_URL)}
 self.addEventListener("install",(event)=>event.waitUntil(self.skipWaiting()));
 self.addEventListener("activate",(event)=>event.waitUntil((async()=>{await clearLegacyCaches().catch(()=>{});await self.clients.claim()})()));
 self.addEventListener("push",(event)=>event.waitUntil(showWakeNotification()));

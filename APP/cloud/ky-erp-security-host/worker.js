@@ -1,104 +1,57 @@
-const SOURCE_ORIGIN = "https://kyerp.net";
-const CANONICAL_PREFIX = "/ky-guvenlik";
-const CANONICAL_URL = `${CANONICAL_PREFIX}/`;
-const LEGACY_ROOT_ASSETS = new Set([
-  "/app.css",
-  "/app.js",
-  "/install-helper.js",
-  "/ios-safari.js",
-  "/security-actions.js",
-  "/security-control-center.js",
-  "/security-foreground-sync.js",
-  "/kyerp-security-192.png",
-  "/kyerp-security-512.png",
-  "/kyerp-security-apple-touch.png",
-  "/kyerp-security-icon.svg",
-]);
+const SOURCE_ORIGIN="https://kyerp.net";
+const APP_PREFIX="/guvenlik";
+const APP_URL="/guvenlik/";
+const LEGACY_PREFIXES=["/security","/ky-guvenlik","/ky-guvenlik-recover"];
 
-const RETIRE_LEGACY_SW = `const TARGET="/ky-guvenlik/";self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const key of await caches.keys())if(key.startsWith("kyerp-security-")||key.startsWith("kyerp-ky-guvenlik-"))await caches.delete(key)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))if(new URL(c.url).pathname!==TARGET)await c.navigate(TARGET)}catch{}})()));`;
+const RETIRE_SW=`self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate("/guvenlik/")}catch{}})()));`;
 
-function noStoreHeaders(sourceHeaders = new Headers()) {
-  const headers = new Headers(sourceHeaders);
-  headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
-  headers.set("CDN-Cache-Control", "no-store");
-  headers.set("Pragma", "no-cache");
-  headers.set("X-KYERP-Security-App", "canonical-ky-guvenlik");
-  return headers;
+function headers(base=new Headers()){
+  const h=new Headers(base);
+  h.set("Cache-Control","no-store, max-age=0, must-revalidate");
+  h.set("CDN-Cache-Control","no-store");
+  h.set("Pragma","no-cache");
+  h.set("X-KYERP-Security-App","fresh-v3");
+  return h;
 }
 
-function isNavigation(request) {
-  return request.mode === "navigate" || String(request.headers.get("accept") || "").includes("text/html");
+function isNav(req){
+  return req.mode==="navigate"||String(req.headers.get("accept")||"").includes("text/html");
 }
 
-function redirectToCanonical(incoming, pathname = CANONICAL_URL) {
-  const target = new URL(incoming.toString());
-  target.pathname = pathname;
-  return Response.redirect(target.toString(), 308);
+function redirect(url){
+  const target=new URL(url);
+  target.pathname=APP_URL;
+  target.search="";
+  return Response.redirect(target.toString(),308);
+}
+async function proxy(req,url){
+  const method=String(req.method||"GET").toUpperCase();
+  const upstream=new URL(url.pathname,SOURCE_ORIGIN);
+  upstream.search=url.search;
+  const h=new Headers(req.headers);h.delete("host");
+  const init={method,headers:h,redirect:"manual"};
+  if(method!=="GET"&&method!=="HEAD")init.body=req.body;
+  const res=await fetch(new Request(upstream,init),{cache:"no-store"});
+  const out=headers(res.headers);
+  if(url.pathname===`${APP_PREFIX}/sw.js`)out.set("Service-Worker-Allowed",APP_URL);
+  return new Response(method==="HEAD"?null:res.body,{status:res.status,statusText:res.statusText,headers:out});
 }
 
-function isLegacyNavigation(pathname) {
-  return pathname === "/" ||
-    pathname === "/security" || pathname.startsWith("/security/") ||
-    pathname === "/ky-guvenlik-recover" || pathname.startsWith("/ky-guvenlik-recover/");
-}
+export default{
+  async fetch(request){
+    const url=new URL(request.url);
+    const method=String(request.method||"GET").toUpperCase();
+    const readable=method==="GET"||method==="HEAD";
+    const legacy=LEGACY_PREFIXES.some((p)=>url.pathname===p||url.pathname.startsWith(`${p}/`));
 
-async function proxyCanonical(request, incoming) {
-  const method = String(request.method || "GET").toUpperCase();
-  const readable = method === "GET" || method === "HEAD";
-  const upstream = new URL(incoming.pathname, SOURCE_ORIGIN);
-  upstream.search = incoming.search;
-
-  const headers = new Headers(request.headers);
-  headers.delete("host");
-  const init = { method, headers, redirect: "manual" };
-  if (!readable) init.body = request.body;
-
-  const response = await fetch(new Request(upstream, init), { cache: "no-store" });
-  const outHeaders = noStoreHeaders(response.headers);
-  if (incoming.pathname === `${CANONICAL_PREFIX}/sw.js`) {
-    outHeaders.set("Service-Worker-Allowed", CANONICAL_URL);
+    if(readable&&["/sw.js","/security/sw.js","/ky-guvenlik/sw.js"].includes(url.pathname)){
+      return new Response(method==="HEAD"?null:RETIRE_SW,{status:200,headers:headers(new Headers({"Content-Type":"application/javascript; charset=UTF-8","Service-Worker-Allowed":"/"}))});
+    }
+    if(legacy&&isNav(request))return redirect(url);
+    if(legacy)return new Response("Gone",{status:410,headers:headers()});
+    if(url.pathname===APP_PREFIX&&isNav(request))return redirect(url);
+    if(url.pathname===APP_URL||url.pathname.startsWith(`${APP_PREFIX}/`))return proxy(request,url);
+    if(isNav(request))return redirect(url);
+    return new Response("Not Found",{status:404,headers:headers()});
   }
-  return new Response(method === "HEAD" ? null : response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: outHeaders,
-  });
-}
-
-export default {
-  async fetch(request) {
-    const incoming = new URL(request.url);
-    const method = String(request.method || "GET").toUpperCase();
-    const readable = method === "GET" || method === "HEAD";
-    const navigation = readable && isNavigation(request);
-
-    if (readable && (incoming.pathname === "/sw.js" || incoming.pathname === "/security/sw.js")) {
-      return new Response(method === "HEAD" ? null : RETIRE_LEGACY_SW, {
-        status: 200,
-        headers: noStoreHeaders(new Headers({
-          "Content-Type": "application/javascript; charset=UTF-8",
-          "Service-Worker-Allowed": "/",
-        })),
-      });
-    }
-
-    if (navigation && (isLegacyNavigation(incoming.pathname) || incoming.pathname === CANONICAL_PREFIX)) {
-      return redirectToCanonical(incoming);
-    }
-
-    if (readable && incoming.pathname === "/manifest.webmanifest") {
-      return redirectToCanonical(incoming, `${CANONICAL_PREFIX}/manifest.webmanifest`);
-    }
-
-    if (readable && LEGACY_ROOT_ASSETS.has(incoming.pathname)) {
-      return redirectToCanonical(incoming, `${CANONICAL_PREFIX}${incoming.pathname}`);
-    }
-
-    if (incoming.pathname === CANONICAL_URL || incoming.pathname.startsWith(`${CANONICAL_PREFIX}/`)) {
-      return proxyCanonical(request, incoming);
-    }
-
-    if (navigation) return redirectToCanonical(incoming);
-    return new Response("Not Found", { status: 404, headers: noStoreHeaders() });
-  },
 };

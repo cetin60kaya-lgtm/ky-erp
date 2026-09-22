@@ -1,10 +1,10 @@
 const API_BASE="https://api.kyerp.net/api";
-const DB_NAME="kyerp-security-app-v1";
+const DB_NAME="kyerp-security-fresh-v3";
 const STORE="device";
 const KEY="active";
-const CLIENT_VERSION="security-v2.9";
-const PENDING_ENROLL_KEY="kyerp-security-pending-enrollment-v2";
-const CANONICAL_DEVICE_REVISION="canonical-account-bind-20260922";
+const CLIENT_VERSION="security-v3.0";
+const PENDING_ENROLL_KEY="kyerp-security-fresh-enrollment-v3";
+const CANONICAL_DEVICE_REVISION="fresh-v3-20260922";
 
 const qs=(selector)=>document.querySelector(selector);
 const els={
@@ -12,7 +12,7 @@ const els={
   installTitle:qs("#installTitle"),installCopy:qs("#installCopy"),installState:qs("#installState"),installStateText:qs("#installStateText"),
   setupPanel:qs("#setupPanel"),appPanel:qs("#appPanel"),readyPanel:qs("#readyPanel"),pendingPanel:qs("#pendingPanel"),emptyPanel:qs("#emptyPanel"),emptyTitle:qs("#emptyTitle"),emptyCopy:qs("#emptyCopy"),emptyMark:qs("#emptyMark"),
   enrollmentCode:qs("#enrollmentCode"),password:qs("#password"),deviceLabel:qs("#deviceLabel"),connectButton:qs("#connectButton"),
-  refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
+  refreshButton:qs("#refreshButton"),repairButton:qs("#repairButton"),enableUnlockButton:qs("#enableUnlockButton"),relinkButton:qs("#relinkButton"),cancelRelinkButton:qs("#cancelRelinkButton"),
   readyTitle:qs("#readyTitle"),readyMark:qs("#readyMark"),apiHealth:qs("#apiHealth"),pushHealth:qs("#pushHealth"),keyHealth:qs("#keyHealth"),unlockHealth:qs("#unlockHealth"),lastSync:qs("#lastSync"),
   setupTitle:qs("#setupTitle"),setupCopy:qs("#setupCopy"),passwordLabel:qs("#passwordLabel"),deviceLabelWrap:qs("#deviceLabelWrap"),deviceSummary:qs("#deviceSummary"),pendingCount:qs("#pendingCount"),pendingList:qs("#pendingList"),tabCount:qs("#tabCount"),
   accountPanel:qs("#accountPanel"),accountFullName:qs("#accountFullName"),accountIdentity:qs("#accountIdentity"),accountRoleBadge:qs("#accountRoleBadge"),accountEmail:qs("#accountEmail"),accountUsername:qs("#accountUsername"),accountScope:qs("#accountScope"),accountDevice:qs("#accountDevice"),accountModules:qs("#accountModules"),accountSecurityCaps:qs("#accountSecurityCaps"),accountNote:qs("#accountNote"),appVersionBadge:qs("#appVersionBadge"),accountVersion:qs("#accountVersion"),
@@ -92,7 +92,7 @@ async function retireLegacyApprovalWorker(){
 async function ensureWorker(){
   if(!("serviceWorker" in navigator))throw new Error("Bu tarayıcı güvenlik bildirimlerini desteklemiyor.");
   await retireLegacyApprovalWorker();
-  registration=await navigator.serviceWorker.register("/ky-guvenlik/sw.js",{scope:"/ky-guvenlik/",updateViaCache:"none"});
+  registration=await navigator.serviceWorker.register("/guvenlik/sw.js",{scope:"/guvenlik/",updateViaCache:"none"});
   try{await registration.update()}catch{}
   const ready=await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Güvenlik servisi hazırlanamadı."),{code:"SW_READY_TIMEOUT"})),4500))]);
   registration=ready||registration;
@@ -110,7 +110,7 @@ async function ensurePushSubscription(forceNew=false){
   if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:applicationServerKey(config.applicationServerKey)});
   return{worker,subscription};
 }
-function versionLabel(value){const raw=String(value||"").trim();return raw.replace(/^security-/i,"")||"v2.9"}
+function versionLabel(value){const raw=String(value||"").trim();return raw.replace(/^security-/i,"")||"v3.0"}
 function renderVersion(serverVersion=""){const client=versionLabel(CLIENT_VERSION),server=versionLabel(serverVersion);if(els.appVersionBadge){els.appVersionBadge.textContent=client;els.appVersionBadge.title=serverVersion&&server!==client?`Telefon ${client} · Sunucu ${server}`:`Aktif sürüm ${client}`;els.appVersionBadge.classList.toggle("version-mismatch",Boolean(serverVersion&&server!==client))}if(els.accountVersion)els.accountVersion.textContent=serverVersion&&server!==client?`${client} · Sunucu ${server}`:client}
 function setHealth(el,text,kind=""){if(!el)return;el.textContent=text;el.className=kind}
 function setEmptyState(title,copy,mark="✓"){if(els.emptyTitle)els.emptyTitle.textContent=title;if(els.emptyCopy)els.emptyCopy.textContent=copy;if(els.emptyMark)els.emptyMark.textContent=mark}
@@ -125,6 +125,7 @@ function hideRelink(){relinkMode=false;els.setupPanel.classList.add("hidden");el
 function showSetupStart(){relinkMode=true;els.setupPanel.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.classList.remove("hidden");document.querySelector("#manualLinkDetails")?.removeAttribute("open");els.passwordLabel?.classList.remove("hidden");els.deviceLabelWrap?.classList.add("hidden");els.connectButton.classList.remove("hidden");els.cancelRelinkButton.classList.add("hidden");els.setupTitle.textContent="Bu telefonu KY ERP’ye bağla";els.setupCopy.textContent="Mevcut KY ERP şifreni gir. Uygulama önce bu telefonun kayıtlı bildirim kanalını bulur; gerekirse aşağıdaki yedek kod kullanılabilir.";els.connectButton.textContent="Bağlantıyı Tamamla"}
 async function createSigningKey(){const generated=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);const publicJwk=await crypto.subtle.exportKey("jwk",generated.publicKey);const privateJwk=await crypto.subtle.exportKey("jwk",generated.privateKey);const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);return{publicJwk,privateKey}}
 async function createLocalUnlock(){if(!window.PublicKeyCredential||!navigator.credentials?.create)return"";const available=await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.();if(!available)return"";const rawUserId=crypto.getRandomValues(new Uint8Array(32));const credential=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:"KY ERP Güvenlik",id:location.hostname},user:{id:rawUserId,name:"kyerp-security-device",displayName:"KY ERP Güvenlik Cihazı"},pubKeyCredParams:[{type:"public-key",alg:-7}],timeout:60000,authenticatorSelection:{authenticatorAttachment:"platform",residentKey:"preferred",userVerification:"required"},attestation:"none"}});return credential?.rawId?base64Url(credential.rawId):""}
+async function enableLocalUnlock(){if(busy)return;const device=await readDevice().catch(()=>null);if(!device?.deviceId)return toast("Önce KY ERP hesabını bağla.");if(device.localUnlockCredentialId)return toast("Parmak izi / PIN zaten aktif.");busy=true;if(els.enableUnlockButton){els.enableUnlockButton.disabled=true;els.enableUnlockButton.textContent="Telefon kilidi hazırlanıyor..."}try{const id=await createLocalUnlock();if(!id)throw new Error("Bu cihazda parmak izi / PIN doğrulaması kullanılamıyor.");await writeDevice({...device,localUnlockCredentialId:id,localUnlockEnabledAt:new Date().toISOString()});setHealth(els.unlockHealth,"Aktif","ok");toast("Parmak izi / PIN güvenliği etkinleştirildi.")}catch(error){toast(error?.message||"Telefon kilidi etkinleştirilemedi.")}finally{busy=false;if(els.enableUnlockButton){els.enableUnlockButton.disabled=false;els.enableUnlockButton.textContent="Parmak izi / PIN etkinleştir"}}}
 async function confirmLocalUnlock(device){if(!device?.localUnlockCredentialId)return true;if(!navigator.credentials?.get)throw new Error("Cihaz kilidi doğrulaması kullanılamıyor.");const result=await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rpId:location.hostname,allowCredentials:[{type:"public-key",id:base64UrlToBytes(device.localUnlockCredentialId)}],userVerification:"required",timeout:60000}});if(!result)throw new Error("Cihaz kilidi doğrulanamadı.");return true}
 async function signDecision(device,kind,id,decision,matchNumber=""){if(!device?.signingPrivateKey)throw new Error("Güvenlik cihazı imza anahtarı bulunamadı. Cihazı yeniden kurun.");const match=String(matchNumber||"").trim();const version=kind==="SELF_LOGIN"&&decision==="APPROVE"&&match?"KYERP-DECISION-V2":"KYERP-DECISION-V1";const message=new TextEncoder().encode(match?`${version}|${device.deviceId}|${kind}|${id}|${decision}|${match}`:`${version}|${device.deviceId}|${kind}|${id}|${decision}`);const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message);return base64Url(signature)}
 function cleanEnrollmentQuery(){try{localStorage.removeItem(PENDING_ENROLL_KEY)}catch{}try{const url=new URL(location.href);url.searchParams.delete("enrollmentId");url.searchParams.delete("enrollmentToken");url.searchParams.delete("mode");history.replaceState({},"",url.pathname+url.search+url.hash)}catch{}}
@@ -136,7 +137,7 @@ function requestedInstall(){
     return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase(),browser:params.get("browser")==="1"};
   }catch{return{requested:false,platform:""}}
 }
-function openAndroidBrowserInstaller(){const url=new URL(location.href);url.protocol="https:";url.host="security.kyerp.net";url.pathname="/ky-guvenlik/";url.searchParams.set("install","1");url.searchParams.set("platform","android");url.searchParams.set("browser","1");const target=url.href;const fallback=encodeURIComponent(target);location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;}
+function openAndroidBrowserInstaller(){const url=new URL(location.href);url.protocol="https:";url.host="security.kyerp.net";url.pathname="/guvenlik/";url.searchParams.set("install","1");url.searchParams.set("platform","android");url.searchParams.set("browser","1");const target=url.href;const fallback=encodeURIComponent(target);location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;}
 function renderInstall(){
   if(window.KYSecurityInstaller?.isBrowserInstall?.()){
     els.installPanel.classList.remove("hidden");
@@ -219,7 +220,7 @@ async function connectDevice(){
     const bundle=await ensurePushSubscription(false);
     const worker=bundle.worker,subscription=bundle.subscription;
     const keys=await createSigningKey();
-    let localUnlockCredentialId="";try{localUnlockCredentialId=await createLocalUnlock()}catch{}
+    let localUnlockCredentialId="";
     await writeDevice({pendingEnrollment:true,signingPrivateKey:keys.privateKey,localUnlockCredentialId,savedAt:new Date().toISOString()});
     let response;
     try{
@@ -236,7 +237,7 @@ async function connectDevice(){
       throw error;
     }
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.9",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v3.0",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast("Cihaz kaydedildi. KY ERP hesabi dogrulaniyor...");
@@ -310,7 +311,7 @@ async function repairConnection(options={}){
     const bundle=await ensurePushSubscription(true);
     const response=await deviceFetch("/auth/push/device/refresh",{method:"POST",body:{deviceLabel:device.deviceLabel||defaultDeviceLabel(),subscription:bundle.subscription.toJSON()}});
     const data=response?.data||{};
-    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v2.9",refreshedAt:data.refreshedAt||new Date().toISOString()});
+    await writeDevice({...device,deviceId:data.deviceId||device.deviceId,deviceToken:data.deviceToken||device.deviceToken,deviceLabel:data.deviceLabel||device.deviceLabel,securityAppVersion:data.securityAppVersion||device.securityAppVersion||"security-v3.0",refreshedAt:data.refreshedAt||new Date().toISOString()});
     bundle.worker.active?.postMessage({type:"KYERP_SECURITY_CLEAR_NOTIFICATION"});
     if(!automatic)toast("Bağlantı yenilendi. Bildirim ve giriş onayı yeniden hazır.");
     return true;
@@ -445,6 +446,7 @@ els.generateCodeButton.addEventListener("click",generateLoginCode);
 document.querySelectorAll(".security-tabs button").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
 document.querySelectorAll("[data-owner-open]").forEach((button)=>button.addEventListener("click",()=>showTab(button.dataset.ownerOpen)));
 els.refreshButton.addEventListener("click",refreshState);
+els.enableUnlockButton?.addEventListener("click",enableLocalUnlock);
 els.repairButton.addEventListener("click",async()=>{const repaired=await repairConnection();if(repaired)await refreshState({skipAutoRepair:true})});
 els.relinkButton.addEventListener("click",showRelink);
 els.cancelRelinkButton.addEventListener("click",()=>{hideRelink();refreshState()});

@@ -1,5 +1,5 @@
 const KY_SECURITY_ACTION_API="https://api.kyerp.net/api";
-const KY_SECURITY_DB="kyerp-security-app-v1";
+const KY_SECURITY_DB="kyerp-security-fresh-v3";
 const KY_SECURITY_STORE="device";
 const KY_SECURITY_KEY="active";
 const KY_SECURITY_CLIENT_VERSION="security-v2.5";

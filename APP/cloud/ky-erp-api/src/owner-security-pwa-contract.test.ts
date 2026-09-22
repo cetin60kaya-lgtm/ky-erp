@@ -29,7 +29,7 @@ test("owner app requests are protected by canonical owner and signed KY security
 });
 
 test("owner PWA reuses existing security device and ERP owner session", () => {
-  assert.match(app, /kyerp-security-app-v1/);
+  assert.match(app, /kyerp-security-fresh-v3/);
   assert.match(app, /kyerp_auth_token/);
   assert.match(app, /X-KYERP-Owner-App/);
   assert.match(app, /X-KYERP-Push-Token/);

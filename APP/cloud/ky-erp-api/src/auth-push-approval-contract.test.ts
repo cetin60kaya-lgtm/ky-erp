@@ -23,10 +23,10 @@ const companySettings = repoFile("APP/app/ky-erp-frontend/src/pages/admin/AdminC
 const phoneSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalSetup.jsx");
 const phoneDeviceSetup = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalDeviceSetup.jsx");
 const phoneInbox = repoFile("APP/app/ky-erp-frontend/src/components/shell/PhoneApprovalInboxBridge.jsx");
-const securityApp = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/app.js");
-const securityHtml = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/index.html");
-const securityWorker = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/sw.js");
-const securityManifest = repoFile("APP/app/ky-erp-frontend/public/ky-guvenlik/manifest.webmanifest");
+const securityApp = repoFile("APP/app/ky-erp-frontend/public/guvenlik/app.js");
+const securityHtml = repoFile("APP/app/ky-erp-frontend/public/guvenlik/index.html");
+const securityWorker = repoFile("APP/app/ky-erp-frontend/public/guvenlik/sw.js");
+const securityManifest = repoFile("APP/app/ky-erp-frontend/public/guvenlik/manifest.webmanifest");
 
 test("phone approval uses existing tenant json_store and needs no new production migration", () => {
   assert.match(securityRuntime, /AUTH_PUSH_DEVICE/);
@@ -47,7 +47,7 @@ test("security-app enrollment requires password step-up, stores token hash and r
   assert.doesNotMatch(push, /p256dhKey|authKey/);
   assert.match(push, /PUSH_ENDPOINT_ALREADY_BOUND/);
   assert.match(push, /LEGACY_PHONE_APPROVAL_RETIRED/);
-  assert.match(push, /securityAppUrl: "https:\/\/security\.kyerp\.net\/ky-guvenlik\/"/);
+  assert.match(push, /securityAppUrl: "https:\/\/security\.kyerp\.net\/guvenlik\/"/);
 });
 
 test("VAPID signing key stays server-side and push uses standard VAPID authorization", () => {
@@ -108,7 +108,7 @@ test("authenticated shell creates one-time security-app enrollment while passwor
   assert.match(phoneSetup, /PhoneApprovalDeviceSetup/);
   assert.match(phoneDeviceSetup, /security-enrollment\/start/);
   assert.match(phoneDeviceSetup, /KY G\u00fcvenlik A\u00e7/);
-  assert.match(phoneDeviceSetup, /security\.kyerp\.net\/ky-guvenlik/);
+  assert.match(phoneDeviceSetup, /security\.kyerp\.net\/guvenlik/);
   assert.match(push, /security-enrollment\/complete/);
   assert.match(push, /compare\(password, text\(user\.password_hash\)\)/);
   assert.match(securityRuntime, /AUTH_PUSH_SECURITY_ENROLLMENT/);
@@ -118,7 +118,7 @@ test("authenticated shell creates one-time security-app enrollment while passwor
 
 test("dedicated iPhone and Android security app opens the app for approval instead of relying on notification action buttons", () => {
   assert.match(securityManifest, /"name": "KY ERP Güvenlik"/);
-  assert.match(securityManifest, /"scope": "\/ky-guvenlik\/"/);
+  assert.match(securityManifest, /"scope": "\/guvenlik\/"/);
   assert.match(securityWorker, /notificationclick/);
   assert.match(securityWorker, /focusOrOpen/);
   assert.doesNotMatch(securityWorker, /action:"approve"/);

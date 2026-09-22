@@ -85,7 +85,7 @@ export default function PhoneApprovalSetup({ onClose }) {
     const text = [
       "KY ERP Güvenlik",
       `Kurulum kodu: ${enrollment.enrollmentCode || ""}`,
-      "Uygulama: https://security.kyerp.net/ky-guvenlik/",
+      "Uygulama: https://security.kyerp.net/guvenlik/",
     ].join("\n");
     try {
       await navigator.clipboard.writeText(text);
@@ -97,7 +97,7 @@ export default function PhoneApprovalSetup({ onClose }) {
   }
 
   function securityAppUrl(extra = {}, sourceEnrollment = enrollment) {
-    const raw = sourceEnrollment?.appUrl || "https://security.kyerp.net/ky-guvenlik/";
+    const raw = sourceEnrollment?.appUrl || "https://security.kyerp.net/guvenlik/";
     const url = new URL(raw, window.location.origin);
     Object.entries(extra).forEach(([key, value]) => {
       if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(key, String(value));
