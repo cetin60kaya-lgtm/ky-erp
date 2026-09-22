@@ -80,6 +80,8 @@ test("security host exposes only the canonical /ky-guvenlik PWA and retires root
   assert.match(host,/incoming\.pathname === "\/manifest\.webmanifest"/);
   assert.match(host,/redirectToCanonical\(incoming, `\$\{CANONICAL_PREFIX\}\/manifest\.webmanifest`\)/);
   assert.match(host,/Service-Worker-Allowed", CANONICAL_URL/);
+  const retired=host.match(/const RETIRE_LEGACY_SW = `([\s\S]*?)`;/)?.[1]||"";
+  assert.doesNotMatch(retired,/addEventListener\("fetch"/);
   assert.doesNotMatch(host,/ROOT_MANIFEST|transformRootText|LEGACY_PWA_BROWSER_REDIRECT|root-v3/);
 });
 
