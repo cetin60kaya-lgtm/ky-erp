@@ -1,29 +1,67 @@
 (() => {
-  const VERSION = '20260919-1215-daily-cross-device-v3';
+  const VERSION = '20260922-1835-daily-cross-device-v4';
   const nativeFetch = window.fetch.bind(window);
   const revisions = new Map();
   let lastServerSyncAt = 0;
   let refreshQueued = false;
 
   const text = (value) => value == null ? '' : String(value).trim();
+  const COMPANY_ALIASES = new Set([
+    '',
+    'mecit-hakan',
+    'main-mecit-hakan',
+    'mecit-hakan-gursu',
+    'hakan-baski',
+    'main-hakan',
+    'main-hakan-baski',
+    'hkn-baski',
+  ]);
+  const canonicalCompany = (value) => {
+    const normalized = text(value)
+      .toLocaleLowerCase('tr-TR')
+      .replace(/_/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return COMPANY_ALIASES.has(normalized) ? 'mecit-hakan' : normalized;
+  };
   const company = () => {
     const raw = text(localStorage.getItem('kyerp.activeCompany'));
     if (!raw) return 'mecit-hakan';
     try {
       const parsed = JSON.parse(raw);
-      return text(parsed?.slug || parsed?.mainCompanySlug || parsed?.id) || 'mecit-hakan';
-    } catch { return raw || 'mecit-hakan'; }
+      return canonicalCompany(parsed?.slug || parsed?.mainCompanySlug || parsed?.id || 'mecit-hakan');
+    } catch {
+      return canonicalCompany(raw || 'mecit-hakan');
+    }
   };
-  const keyFor = (companyId, employeeId, date) => `${companyId || company()}|${employeeId}|${text(date).slice(0, 10)}`;
+  const companyFromUrl = (url) => {
+    try {
+      const parsed = new URL(url, location.href);
+      return canonicalCompany(
+        parsed.searchParams.get('mainCompanyId') ||
+        parsed.searchParams.get('mainCompanySlug') ||
+        parsed.searchParams.get('main_company_id') ||
+        parsed.searchParams.get('main_company_slug') ||
+        company(),
+      );
+    } catch {
+      return company();
+    }
+  };
+  const keyFor = (companyId, employeeId, date) =>
+    `${canonicalCompany(companyId || company())}|${text(employeeId)}|${text(date).slice(0, 10)}`;
 
   function rememberRows(payload, companyId = company()) {
     const source = payload?.data ?? payload?.items ?? payload;
     const rows = Array.isArray(source) ? source : Array.isArray(source?.rows) ? source.rows : [];
+    const canonicalId = canonicalCompany(companyId || company());
     rows.forEach((row) => {
       const employeeId = text(row?.employeeId || row?.personId || row?.personelId);
       const date = text(row?.workDate || row?.date || row?.selectedDate).slice(0, 10);
       const updatedAt = text(row?.updatedAt || row?.updated_at);
-      if (employeeId && date && updatedAt) revisions.set(keyFor(companyId, employeeId, date), updatedAt);
+      if (employeeId && date && updatedAt) {
+        revisions.set(keyFor(canonicalId, employeeId, date), updatedAt);
+      }
     });
     lastServerSyncAt = Date.now();
   }
@@ -60,14 +98,23 @@
     if (!startDate || !endDate) return;
     let sourceUrl;
     try { sourceUrl = new URL(rawUrl, location.href); } catch { return; }
+    const companyId = canonicalCompany(
+      payload?.mainCompanyId || payload?.mainCompanySlug || companyFromUrl(rawUrl),
+    );
     const readUrl = new URL('/api/ik/daily-attendance', sourceUrl.origin);
-    readUrl.searchParams.set('mainCompanyId', text(payload?.mainCompanyId || payload?.mainCompanySlug) || company());
+    readUrl.searchParams.set('mainCompanyId', companyId);
     readUrl.searchParams.set('startDate', startDate);
     readUrl.searchParams.set('endDate', endDate);
     const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : {}));
-    const response = await nativeFetch(readUrl.toString(), { method: 'GET', headers, cache: 'no-store', credentials: 'include', mode: 'cors' });
+    const response = await nativeFetch(readUrl.toString(), {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+      credentials: 'include',
+      mode: 'cors',
+    });
     if (!response.ok) return;
-    try { rememberRows(await response.clone().json(), text(payload?.mainCompanyId || payload?.mainCompanySlug) || company()); } catch {}
+    try { rememberRows(await response.clone().json(), companyId); } catch {}
   }
 
   function refreshVisibleDailyUi() {
@@ -78,8 +125,13 @@
       const roots = [...document.querySelectorAll('.gop-page,.kyik-safe-daily,.kyik-screen')];
       for (const root of roots) {
         const buttons = [...root.querySelectorAll('button')];
-        const refresh = buttons.find((button) => ['Yenile', 'Kayıtları Yenile'].includes(text(button.textContent)));
-        if (refresh && !refresh.disabled) { refresh.click(); return; }
+        const refresh = buttons.find((button) =>
+          ['Yenile', 'Kayıtları Yenile'].includes(text(button.textContent)),
+        );
+        if (refresh && !refresh.disabled) {
+          refresh.click();
+          return;
+        }
       }
     });
   }
@@ -91,7 +143,10 @@
     const isFocused = path.endsWith('/api/ik/gunluk-personel/gun-kayitlari') || path.endsWith('/ik/gunluk-personel/gun-kayitlari');
     const isRange = path.endsWith('/api/ik/daily-attendance/save-range') || path.endsWith('/ik/daily-attendance/save-range');
     const isExcelApply = path.endsWith('/api/ik/gunluk-personel/excel-apply') || path.endsWith('/ik/gunluk-personel/excel-apply');
-    const isAttendanceRead = (path.endsWith('/api/ik/daily-attendance') || path.endsWith('/ik/daily-attendance') || isFocused) && method === 'GET';
+    const isAttendanceRead =
+      (path.endsWith('/api/ik/daily-attendance') ||
+        path.endsWith('/ik/daily-attendance') ||
+        isFocused) && method === 'GET';
 
     let nextInput = input;
     let nextInit = init;
@@ -100,12 +155,18 @@
       if (raw) {
         try {
           const payload = JSON.parse(raw);
-          const companyId = text(payload?.mainCompanyId || payload?.main_company_id || payload?.mainCompanySlug) || company();
+          const companyId = canonicalCompany(
+            payload?.mainCompanyId ||
+              payload?.main_company_id ||
+              payload?.mainCompanySlug ||
+              payload?.main_company_slug ||
+              companyFromUrl(rawUrl),
+          );
           if (isExcelApply) await primeExcelRevisions(rawUrl, input, init, payload);
           if (isFocused && Array.isArray(payload?.personnelEntries)) {
             const date = text(payload.date || payload.selectedDate).slice(0, 10);
             payload.personnelEntries = payload.personnelEntries.map((entry) => {
-              if (entry?.expectedUpdatedAt) return entry;
+              if (entry?.expectedUpdatedAt || entry?.expected_updated_at) return entry;
               const employeeId = text(entry?.personelId || entry?.employeeId);
               const expected = revisions.get(keyFor(companyId, employeeId, date));
               return expected ? { ...entry, expectedUpdatedAt: expected } : entry;
@@ -113,8 +174,8 @@
           }
           if ((isRange || isExcelApply) && Array.isArray(payload?.rows)) {
             payload.rows = payload.rows.map((row) => {
-              if (row?.expectedUpdatedAt) return row;
-              const employeeId = text(row?.employeeId || row?.personId);
+              if (row?.expectedUpdatedAt || row?.expected_updated_at) return row;
+              const employeeId = text(row?.employeeId || row?.personId || row?.personelId);
               const date = text(row?.workDate || row?.date || payload?.startDate).slice(0, 10);
               const expected = revisions.get(keyFor(companyId, employeeId, date));
               return expected ? { ...row, expectedUpdatedAt: expected } : row;
@@ -127,7 +188,14 @@
 
     const response = await nativeFetch(nextInput, nextInit);
     if (response.ok && isAttendanceRead) {
-      try { rememberRows(await response.clone().json()); } catch {}
+      try {
+        rememberRows(await response.clone().json(), companyFromUrl(rawUrl));
+      } catch {}
+    }
+    if (response.ok && method === 'POST' && (isFocused || isRange || isExcelApply)) {
+      try {
+        rememberRows(await response.clone().json(), companyFromUrl(rawUrl));
+      } catch {}
     }
     if (response.status === 409 && method === 'POST' && (isFocused || isRange || isExcelApply)) {
       setTimeout(refreshVisibleDailyUi, 0);
@@ -137,6 +205,8 @@
 
   window.addEventListener('focus', refreshVisibleDailyUi);
   window.addEventListener('pageshow', refreshVisibleDailyUi);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshVisibleDailyUi(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshVisibleDailyUi();
+  });
   document.documentElement.dataset.kyerpDailyConcurrency = VERSION;
 })();
