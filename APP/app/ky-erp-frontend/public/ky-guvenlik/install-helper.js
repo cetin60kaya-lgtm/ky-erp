@@ -91,12 +91,20 @@
     if(!("serviceWorker" in navigator))return;
     const registrations=await navigator.serviceWorker.getRegistrations();
     await Promise.all(registrations.map(async(registration)=>{
-      if(new URL(registration.scope).pathname!=="/security/")return;
+      let scopePath="";
+      let scriptPath="";
+      try{scopePath=new URL(registration.scope).pathname}catch{}
+      try{scriptPath=new URL((registration.active||registration.waiting||registration.installing)?.scriptURL||"",location.origin).pathname}catch{}
+      if(scopePath!=="/security/"&&!scriptPath.startsWith("/security/"))return;
       try{(await registration.getNotifications()).forEach((notification)=>notification.close())}catch{}
       try{await registration.unregister()}catch{}
     }));
     const keys=await caches.keys().catch(()=>[]);
-    await Promise.all(keys.filter((key)=>key.startsWith("kyerp-security-shell-")||key.startsWith("kyerp-ky-guvenlik-shell-")).map((key)=>caches.delete(key)));
+    await Promise.all(keys.filter((key)=>
+      ["kyerp-security-static","kyerp-security-static-v2","kyerp-security-static-v3"].includes(key)||
+      key.startsWith("kyerp-security-shell-")||
+      key.startsWith("kyerp-ky-guvenlik-shell-")
+    ).map((key)=>caches.delete(key)));
   }
 
   function prepareInstall(){
@@ -152,8 +160,9 @@
     }
   }
 
-  window.KYSecurityInstaller={revision:"install-no-stuck-20260921",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
+  window.KYSecurityInstaller={revision:"canonical-reset-20260922",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
   capturePendingEnrollment();
+  void migrateLegacyWorkers().catch((error)=>console.warn("KY Security legacy cleanup:",error));
   if(standalone()){
     try{
       const url=new URL(location.href);
