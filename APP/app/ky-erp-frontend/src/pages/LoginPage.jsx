@@ -666,8 +666,8 @@ export default function LoginPage() {
             ) : null}
 
             {stage === "PHONE_APPROVAL_PENDING" ? (
-              <div className="auth-flow-block auth-centered">
-                <div className="auth-phone-approval-icon" aria-hidden="true">✓</div>
+              <div className="auth-flow-block auth-centered auth-security-choice">
+                <div className="auth-security-method-row"><span className="auth-phone-approval-icon" aria-hidden="true">✓</span><div><b>KY ERP Güvenlik</b><small>Birincil doğrulama yöntemi</small></div></div>
                 <span className="auth-section-label">KY ERP TELEFON ONAYI</span>
                 <h3>{flow.pushDelivered === false ? "KY ERP Güvenlik uygulamasını açın" : "Telefonunuza bildirim gönderildi"}</h3>
                 <p>{flow.pushDelivered === false ? "Bildirim kanalı yenileniyor. KY ERP Güvenlik uygulamasını açın; bekleyen giriş Onaylar bölümünde görünür." : <>Tek KY ERP bildirimini açın ve telefonda bilgisayarda gördüğünüz <strong>2 haneli eşleştirme numarasını</strong> seçin. Doğru sayı seçimi giriş onayıdır. Cihaz kilidi kurulmuşsa Face ID / parmak izi / PIN doğrulaması da açılır.</>}</p>
@@ -696,17 +696,16 @@ export default function LoginPage() {
                 <ErrorBox message={error} />
                 <button className="auth-primary" type="button" onClick={refreshPhoneApproval} disabled={loading}>Onayı Şimdi Kontrol Et</button>
                 <button className="auth-secondary" type="button" onClick={resendPhoneApprovalNotification} disabled={loading}>Bildirimi Yeniden Gönder</button>
-                <details className="auth-fallback-details auth-fallback-late">
-                  <summary>Telefonla onaylayamıyorum</summary>
-                  <div className="auth-fallback-late-copy">Telefon onayı birincil yöntemdir. Telefon kullanılamıyorsa beklemeden Google veya Microsoft Authenticator koduna geçebilirsiniz.</div>
-                  <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>Google / Microsoft Authenticator yedeğine geç</button>
-                </details>
+                <div className="auth-method-switch">
+                  <span>KY ERP Güvenlik'e ulaşamıyor musunuz?</span>
+                  <button className="auth-secondary" type="button" onClick={switchToAuthenticator} disabled={loading}>Google / Microsoft Authenticator ile devam et</button>
+                </div>
                 <button type="button" className="auth-ghost" onClick={() => resetToCredentials()} disabled={loading}>Giriş ekranına dön</button>
               </div>
             ) : null}
 
             {stage === "MFA_REQUIRED" ? (
-              <div className="auth-flow-block">
+              <div className="auth-flow-block auth-security-choice">
                 <div className="auth-policy-row">
                   <div><span className="auth-section-label">GÜVENLİK POLİTİKASI</span><strong>{flow.policyLabel || (flow.requireBoth ? "Google + Microsoft" : "Authenticator doğrulaması")}</strong></div>
                   {flow.requireBoth ? <span className="auth-policy-badge">2/2 MFA gerekli</span> : <span className="auth-policy-badge">1 MFA doğrulaması gerekli</span>}

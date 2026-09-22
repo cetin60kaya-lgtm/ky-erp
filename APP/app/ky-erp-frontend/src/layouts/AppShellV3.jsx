@@ -215,7 +215,7 @@ export default function AppShellV3({
   const canOpenPlatformManagement = modules.some((item) => item.key === "admin");
   const ownerUser = isOwnerUser(user);
   const securityRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
-  const builtInSecurityAppAccess = ownerUser || securityRole === "COMPANY_ADMIN";
+  const builtInSecurityAppAccess = Boolean(user?.id);
   const activeModuleVisual = moduleVisual(activeModule);
   const notificationView = useMemo(() => {
     const items = notificationData.items || [];

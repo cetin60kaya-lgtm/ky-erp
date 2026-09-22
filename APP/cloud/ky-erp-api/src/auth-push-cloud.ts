@@ -93,13 +93,16 @@ async function securityAppAccess(c: any, row: AnyRow) {
   const userId = text(row?.id || row?.userId);
   const role = roleOf({ role: row?.role, role_override: row?.role_override || row?.roleOverride });
   const companySlug = text(row?.main_company_slug || row?.mainCompanySlug || row?.companySlug);
+  const explicitlyInactive = row?.is_active === 0 || row?.is_active === false || row?.isActive === false;
+  if (!userId || explicitlyInactive) return { eligible: false, capabilities: [], source: "NONE" };
   if (isSuper(role) || isCompanyAdmin(role)) return { eligible: true, capabilities: [...SECURITY_CAPABILITIES], source: "ROLE" };
-  if (!userId || !companySlug) return { eligible: false, capabilities: [], source: "NONE" };
-  const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${userId}`);
-  const capabilities = grant?.isActive === false || !Array.isArray(grant?.capabilities)
-    ? []
-    : [...new Set(grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)))];
-  return { eligible: capabilities.length > 0, capabilities, source: capabilities.length ? "GRANT" : "NONE" };
+  let delegated: string[] = [];
+  if (companySlug) {
+    const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${userId}`);
+    if (grant?.isActive !== false && Array.isArray(grant?.capabilities)) delegated = grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value));
+  }
+  const capabilities = [...new Set(["LOGIN_APPROVE", ...delegated])];
+  return { eligible: true, capabilities, source: delegated.length ? "SELF+GRANT" : "SELF" };
 }
 function base64Url(bytes: Uint8Array) {
   let binary = "";
@@ -437,15 +440,16 @@ async function securityAccountProfile(c: any, actor: AnyRow) {
     if (!moduleKeys.includes("STORAGE_ADMIN")) moduleKeys.push("STORAGE_ADMIN");
   }
 
-  let securityCapabilities: string[] = [];
+  let securityCapabilities: string[] = ["LOGIN_APPROVE"];
   if (isSuper(role) || isCompanyAdmin(role)) {
     securityCapabilities = [...SECURITY_CAPABILITIES];
   } else if (companySlug) {
     const grant = await storeGet(c, SECURITY_GRANT_SCOPE, `${companySlug}:${actor.userId}`);
     if (grant?.isActive !== false && Array.isArray(grant?.capabilities)) {
-      securityCapabilities = [...new Set(
-        grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)),
-      )];
+      securityCapabilities = [...new Set([
+        "LOGIN_APPROVE",
+        ...grant.capabilities.map(upper).filter((value: string) => SECURITY_CAPABILITIES.includes(value)),
+      ])];
     }
   }
 
@@ -830,7 +834,7 @@ export function registerAuthPushRoutes(app: any) {
         enrollmentMode,
         targetDeviceId: text(targetDevice?.id),
         deviceIdHint: reservedDeviceId,
-        appUrl: `https://app.kyerp.net/security/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
+        appUrl: `https://security.kyerp.net/security/?enrollmentId=${encodeURIComponent(enrollmentId)}&enrollmentToken=${encodeURIComponent(enrollmentToken)}`,
       },
     });
   });

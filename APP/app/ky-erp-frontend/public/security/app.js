@@ -129,7 +129,7 @@ function requestedInstall(){
     return {requested:params.get("install")==="1",platform:String(params.get("platform")||"").toLowerCase(),browser:params.get("browser")==="1"};
   }catch{return{requested:false,platform:""}}
 }
-function openAndroidBrowserInstaller(){const target="https://app.kyerp.net/security/?install=1&platform=android&browser=1";const fallback=encodeURIComponent(target);location.href="intent://app.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";}
+function openAndroidBrowserInstaller(){const target="https://security.kyerp.net/security/?install=1&platform=android&browser=1";const fallback=encodeURIComponent(target);location.href="intent://security.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";}
 function renderInstall(){
   const request=requestedInstall();
   const ios=isIos()||request.platform==="ios";

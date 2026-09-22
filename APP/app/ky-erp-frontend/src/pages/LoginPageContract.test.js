@@ -26,7 +26,8 @@ test("phone approval stays primary while authenticator fallback is immediately a
   assert.doesNotMatch(source, /AUTHENTICATOR_FALLBACK_DELAY_MS/);
   assert.doesNotMatch(source, /authenticatorFallbackReady/);
   assert.doesNotMatch(source, /setAuthenticatorFallbackReady/);
-  assert.match(source, /Telefon onayı birincil yöntemdir/);
-  assert.match(source, /Telefonla onaylayamıyorum/);
-  assert.match(source, /Google \/ Microsoft Authenticator yedeğine geç/);
+  assert.match(source, /KY ERP Güvenlik/);
+  assert.match(source, /KY ERP Güvenlik.e ulaşamıyor musunuz/);
+  assert.match(source, /Google \/ Microsoft Authenticator ile devam et/);
+  assert.match(source, /auth-security-choice/);
 });

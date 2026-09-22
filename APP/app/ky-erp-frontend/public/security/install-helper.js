@@ -139,9 +139,9 @@
   }
 
   function openInChrome(){
-    const target="https://app.kyerp.net/security/?install=1&platform=android&browser=1";
+    const target="https://security.kyerp.net/security/?install=1&platform=android&browser=1";
     const fallback=encodeURIComponent(target);
-    location.href="intent://app.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
+    location.href="intent://security.kyerp.net/security/?install=1&platform=android&browser=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+fallback+";end";
   }
 
   async function installFromButton(){

@@ -20,6 +20,7 @@ test("worker accepts canonical V6 browser origins through the explicit CORS allo
   assert.match(main, /"https:\/\/kyerp\.net"/);
   assert.match(main, /"https:\/\/www\.kyerp\.net"/);
   assert.match(main, /"https:\/\/app\.kyerp\.net"/);
+  assert.match(main, /"https:\/\/security\.kyerp\.net"/);
   assert.match(main, /origin: allowedOrigin/);
   assert.doesNotMatch(entry, /LEGACY_FRONTEND_ORIGIN_BLOCKED/);
   assert.doesNotMatch(entry, /BLOCKED_LEGACY_ORIGINS/);

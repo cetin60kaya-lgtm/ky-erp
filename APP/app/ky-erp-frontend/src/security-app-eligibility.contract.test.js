@@ -5,7 +5,8 @@ import test from "node:test";
 const shell = readFileSync(new URL("./layouts/AppShellV3.jsx", import.meta.url), "utf8");
 const display = readFileSync(new URL("./layouts/DisplaySettingsPanel.jsx", import.meta.url), "utf8");
 
-test("KY Security install controls are shown only to security-eligible accounts", () => {
+test("KY Security install controls are available to authenticated accounts and still follow server eligibility", () => {
+  assert.match(shell, /const builtInSecurityAppAccess = Boolean\(user\?\.id\)/);
   assert.match(shell, /apiGet\("\/auth\/push\/config"/);
   assert.match(shell, /phoneApprovalOpen && securityAppEligible/);
   assert.match(display, /securityAppEligible \? \(/);

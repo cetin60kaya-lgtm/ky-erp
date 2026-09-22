@@ -112,10 +112,11 @@ test("security device health returns the verified bound account identity and per
 });
 
 
-test("security app install and runtime are limited to owners or delegated security users",()=>{
-  assert.match(push,/securityAppAccess/);
-  assert.match(push,/SECURITY_APP_NOT_ALLOWED/);
+test("security app is available to every active account while privileged capabilities stay role or grant scoped",()=>{
+  assert.match(push,/const capabilities = \[\.\.\.new Set\(\["LOGIN_APPROVE", \.\.\.delegated\]\)\]/);
+  assert.match(push,/delegated\.length \? "SELF\+GRANT" : "SELF"/);
+  assert.match(push,/isSuper\(role\) \|\| isCompanyAdmin\(role\)/);
   assert.match(push,/securityAppEligible: appAccess.eligible/);
-  assert.match(push,/capabilities.length > 0/);
   assert.match(push,/if \(!appAccess\.eligible\) return null/);
+  assert.match(push,/https:\/\/security\.kyerp\.net\/security\/\?enrollmentId=/);
 });

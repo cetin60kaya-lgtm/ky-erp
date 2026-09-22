@@ -56,7 +56,8 @@ async function listCompanies(c: any, actor: AnyRow) {
 }
 function scopeType(actor: AnyRow) {
   if (isSuper(actor.role)) return "SYSTEM";
-  if (isCompanyAdmin(actor.role) || (actor.securityCapabilities || []).length) return "COMPANY";
+  const companyCaps = new Set(["SESSION_VIEW", "SESSION_APPROVE", "SESSION_CLOSE", "AUDIT_VIEW"]);
+  if (isCompanyAdmin(actor.role) || (actor.securityCapabilities || []).some((cap: string) => companyCaps.has(cap))) return "COMPANY";
   return "SELF";
 }
 function normalizeCompanyFilter(actor: AnyRow, requested: unknown, companies: AnyRow[]) {
