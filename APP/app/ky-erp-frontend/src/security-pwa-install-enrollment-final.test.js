@@ -11,6 +11,7 @@ const read=(p)=>readFileSync(resolve(frontend,p),"utf8");
 const manifest=JSON.parse(read("public/guvenlik/manifest.webmanifest"));
 const html=read("public/guvenlik/index.html");
 const app=read("public/guvenlik/app.js");
+const installer=read("public/guvenlik/install-helper.js");
 const sw=read("public/guvenlik/sw.js");
 const host=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
 
@@ -45,4 +46,11 @@ test("enrollment no longer waits for platform biometric creation",()=>{
   assert.doesNotMatch(app,/localUnlockCredentialId=await createLocalUnlock/);
   assert.match(app,/let localUnlockCredentialId="";/);
   assert.match(app,/security-v3\.0/);
+});
+
+test("installer clears every legacy worker before Android install",()=>{
+  assert.match(installer,/legacyScope=\["\/","\/security\/","\/ky-guvenlik\/","\/ky-guvenlik-recover\/"\]/);
+  assert.match(installer,/legacyScript=\["\/sw\.js","\/security\/sw\.js","\/ky-guvenlik\/sw\.js","\/ky-guvenlik-recover\/sw\.js"\]/);
+  assert.match(installer,/await prepareInstall\(\);\r?\n      if\(!deferredPrompt\)await waitForPrompt\(\);/);
+  assert.match(installer,/candidate=registration\.installing\|\|registration\.waiting/);
 });

@@ -95,7 +95,9 @@
       let scriptPath="";
       try{scopePath=new URL(registration.scope).pathname}catch{}
       try{scriptPath=new URL((registration.active||registration.waiting||registration.installing)?.scriptURL||"",location.origin).pathname}catch{}
-      if(scopePath!=="/security/"&&!scriptPath.startsWith("/security/"))return;
+      const legacyScope=["/","/security/","/ky-guvenlik/","/ky-guvenlik-recover/"].includes(scopePath);
+      const legacyScript=["/sw.js","/security/sw.js","/ky-guvenlik/sw.js","/ky-guvenlik-recover/sw.js"].includes(scriptPath);
+      if(!legacyScope&&!legacyScript)return;
       try{(await registration.getNotifications()).forEach((notification)=>notification.close())}catch{}
       try{await registration.unregister()}catch{}
     }));
@@ -115,6 +117,10 @@
       try{
         const registration=await withTimeout(navigator.serviceWorker.register("/guvenlik/sw.js",{scope:PATH,updateViaCache:"none"}),INSTALL_TIMEOUT_MS,"Güvenlik servisi zamanında hazırlanamadı.");
         try{await withTimeout(registration.update(),INSTALL_TIMEOUT_MS,"Güncelleme zaman aşımına uğradı.")}catch{}
+        const candidate=registration.installing||registration.waiting;
+        if(candidate&&candidate.state!=="activated"){
+          await withTimeout(new Promise((resolve)=>{const done=()=>{if(["activated","redundant"].includes(candidate.state)){candidate.removeEventListener("statechange",done);resolve(true)}};candidate.addEventListener("statechange",done);done()}),INSTALL_TIMEOUT_MS,"Yeni güvenlik servisi etkinleşemedi.").catch(()=>false);
+        }
         return registration;
       }catch(error){console.warn("KY Security service worker:",error);return null;}
     })();
@@ -142,7 +148,7 @@
     installRequestInFlight=true;
     clearPromptFallback();
     try{
-      void prepareInstall();
+      await prepareInstall();
       if(!deferredPrompt)await waitForPrompt();
       if(!deferredPrompt){showChromeMenuFallback();return;}
 
