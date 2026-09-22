@@ -4,6 +4,7 @@ const STORE="device";
 const KEY="active";
 const CLIENT_VERSION="security-v2.9";
 const PENDING_ENROLL_KEY="kyerp-security-pending-enrollment-v2";
+const CANONICAL_DEVICE_REVISION="canonical-account-bind-20260922";
 
 const qs=(selector)=>document.querySelector(selector);
 const els={
@@ -235,7 +236,7 @@ async function connectDevice(){
       throw error;
     }
     const data=response.data;
-    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.9",savedAt:new Date().toISOString()};
+    const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.9",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
     toast(localUnlockCredentialId?"Erişim hazır. Face ID / parmak izi / PIN ile güvenli onay aktif.":"Erişim hazır. Güvenli cihaz imzası aktif.");
@@ -327,11 +328,19 @@ async function repairConnection(options={}){
 
 async function refreshState(options={}){
   const device=await readDevice().catch(()=>null);
+  if(device?.deviceId&&device?.canonicalRevision!==CANONICAL_DEVICE_REVISION&&!enrollmentQuery.id){
+    showSetupStart();
+    els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");
+    els.setupTitle.textContent="KY ERP hesabını doğrula";
+    els.setupCopy.textContent="Yeni tek KY Güvenlik kurulumu hazır. Mevcut KY ERP şifreni bir kez gir; telefon bu hesaba yeniden ve kalıcı olarak bağlansın.";
+    setBadge("Hesabı doğrula","warn");
+    return;
+  }
   if(!device?.deviceId||!device?.deviceToken||!device?.signingPrivateKey){
     if(enrollmentQuery.id&&enrollmentQuery.token)showRelink();else showSetupStart();
     els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");setBadge(enrollmentQuery.id&&enrollmentQuery.token?"Bağlantı hazır":"ERP’den başlat");return;
   }
-  els.appPanel.classList.remove("hidden");els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
+  els.appPanel.classList.add("hidden");els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
   renderAccount(null,device);
   els.deviceSummary.textContent=(device.deviceLabel||"KY ERP Güvenlik cihazı")+" · Güvenli cihaz imzası aktif"+(device.localUnlockCredentialId?" · Cihaz kilidi aktif":"");
   setHealth(els.keyHealth,"Hazır","ok");setHealth(els.unlockHealth,device.localUnlockCredentialId?"Aktif":"Opsiyonel",device.localUnlockCredentialId?"ok":"");
@@ -339,12 +348,14 @@ async function refreshState(options={}){
   try{
     await ensureWorker();
     const health=(await deviceFetch("/auth/push/device/health"))?.data||{};
+    if(!health?.account?.userId)throw Object.assign(new Error("KY ERP hesabı doğrulanamadı. Mevcut KY ERP şifrenle bağlantıyı bir kez yenile."),{code:"ACCOUNT_PROFILE_MISSING"});
     if(enrollmentQuery.id&&enrollmentQuery.token){cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};relinkMode=false;}
     const versionCheckedAt=new Date().toISOString();
     const versionRecord={...device,securityAppVersion:CLIENT_VERSION,clientVersion:CLIENT_VERSION,lastKnownServerVersion:health.serverVersion||"",versionCheckedAt};
     await writeDevice(versionRecord).catch(()=>{});
     renderVersion(health.serverVersion||"");
     renderAccount(health.account,{...(health.device||device),lastKnownServerVersion:health.serverVersion||""});
+    els.appPanel.classList.remove("hidden");
     els.readyTitle.textContent="Onaylı cihaz · Telefon onayı hazır";els.readyMark.textContent="✓";setBadge("Bağlı","ok");
     setHealth(els.apiHealth,"Bağlı","ok");
     const pushNeedsRepair=health?.device?.pushReachable===false||Boolean(health?.device?.lastError);
@@ -354,6 +365,13 @@ async function refreshState(options={}){
     await refreshPending(health.items);
   }catch(error){
     const code=String(error?.code||"");
+    if(code==="ACCOUNT_PROFILE_MISSING"){
+      await writeDevice({...device,canonicalRevision:""}).catch(()=>{});
+      showSetupStart();els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");
+      els.setupTitle.textContent="KY ERP hesabını yeniden doğrula";
+      els.setupCopy.textContent="Cihaz anahtarı mevcut ancak hesap profili doğrulanamadı. Mevcut KY ERP şifreni bir kez gir.";
+      setBadge("Hesabı doğrula","bad");toast(error.message);return;
+    }
     const canAutoRepair=!options?.skipAutoRepair&&["PUSH_DEVICE_UNAUTHORIZED","DEVICE_NOT_READY"].includes(code)&&Date.now()-lastAutoRepairAt>120000;
     if(canAutoRepair){
       lastAutoRepairAt=Date.now();

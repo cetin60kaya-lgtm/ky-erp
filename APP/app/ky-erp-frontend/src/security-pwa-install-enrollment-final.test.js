@@ -111,3 +111,12 @@ test("recovery page refreshes the push-only worker without deleting trusted-devi
   assert.doesNotMatch(recovery,/\.unregister\(\)|indexedDB\.deleteDatabase|localStorage\.clear/);
   assert.match(recovery,/location\.replace\('\/ky-guvenlik\/\?recovered=1'\)/);
 });
+
+
+test("canonical security install requires one-time verified account binding",()=>{
+  assert.match(app,/CANONICAL_DEVICE_REVISION="canonical-account-bind-20260922"/);
+  assert.match(app,/canonicalRevision:CANONICAL_DEVICE_REVISION/);
+  assert.match(app,/device\?\.canonicalRevision!==CANONICAL_DEVICE_REVISION/);
+  assert.match(app,/ACCOUNT_PROFILE_MISSING/);
+  assert.match(app,/els\.appPanel\.classList\.remove\("hidden"\)/);
+});
