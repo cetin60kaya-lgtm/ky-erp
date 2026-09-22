@@ -29,7 +29,7 @@ function redirect(url){
   }
   target.search=preserved.toString();
   target.hash="";
-  return Response.redirect(target.toString(),308);
+  return new Response(null,{status:308,headers:headers(new Headers({Location:target.toString()}))});
 }
 async function proxy(req,url){
   const method=String(req.method||"GET").toUpperCase();
