@@ -2,6 +2,7 @@ const SOURCE_ORIGIN="https://kyerp.net";
 const APP_PREFIX="/guvenlik";
 const APP_URL="/guvenlik/";
 const LEGACY_PREFIXES=["/security","/ky-guvenlik","/ky-guvenlik-recover"];
+const REDIRECT_QUERY_KEYS=["enrollmentId","enrollmentToken","mode","install","platform","browser","chrome"];
 
 const RETIRE_SW=`self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate("/guvenlik/")}catch{}})()));`;
 
@@ -21,7 +22,13 @@ function isNav(req){
 function redirect(url){
   const target=new URL(url);
   target.pathname=APP_URL;
-  target.search="";
+  const preserved=new URLSearchParams();
+  for(const key of REDIRECT_QUERY_KEYS){
+    const value=url.searchParams.get(key);
+    if(value!==null)preserved.set(key,value);
+  }
+  target.search=preserved.toString();
+  target.hash="";
   return Response.redirect(target.toString(),308);
 }
 async function proxy(req,url){
