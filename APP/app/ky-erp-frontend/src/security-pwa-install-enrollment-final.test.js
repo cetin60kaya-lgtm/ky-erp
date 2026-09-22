@@ -13,6 +13,7 @@ const html=read("public/guvenlik/index.html");
 const app=read("public/guvenlik/app.js");
 const installer=read("public/guvenlik/install-helper.js");
 const sw=read("public/guvenlik/sw.js");
+const control=read("public/guvenlik/security-control-center.js");
 const host=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
 
 test("fresh security app has a new immutable identity",()=>{
@@ -29,6 +30,7 @@ test("old PWA packages are physically removed",()=>{
   assert.equal(existsSync(resolve(frontend,"public/security")),false);
   assert.equal(existsSync(resolve(frontend,"public/ky-guvenlik-recover")),false);
 });
+
 test("fresh worker is push-only",()=>{
   assert.match(sw,/self\.addEventListener\("push"/);
   assert.match(sw,/self\.addEventListener\("notificationclick"/);
@@ -42,6 +44,14 @@ test("legacy host paths only retire or redirect",()=>{
   assert.match(host,/return new Response\("Gone",\{status:410/);
 });
 
+test("legacy redirects preserve only canonical enrollment and install handoff parameters",()=>{
+  assert.match(host,/const REDIRECT_QUERY_KEYS=\["enrollmentId","enrollmentToken","mode","install","platform","browser","chrome"\]/);
+  assert.match(host,/const preserved=new URLSearchParams\(\)/);
+  assert.match(host,/if\(value!==null\)preserved\.set\(key,value\)/);
+  assert.match(host,/target\.search=preserved\.toString\(\)/);
+  assert.doesNotMatch(host,/target\.search=""/);
+});
+
 test("enrollment no longer waits for platform biometric creation",()=>{
   assert.doesNotMatch(app,/localUnlockCredentialId=await createLocalUnlock/);
   assert.match(app,/let localUnlockCredentialId="";/);
@@ -53,4 +63,12 @@ test("installer clears every legacy worker before Android install",()=>{
   assert.match(installer,/legacyScript=\["\/sw\.js","\/security\/sw\.js","\/ky-guvenlik\/sw\.js","\/ky-guvenlik-recover\/sw\.js"\]/);
   assert.match(installer,/await prepareInstall\(\);\r?\n      if\(!deferredPrompt\)await waitForPrompt\(\);/);
   assert.match(installer,/candidate=registration\.installing\|\|registration\.waiting/);
+});
+
+test("security UI has one canonical refresh owner and no DOM rewrite observer",()=>{
+  assert.doesNotMatch(html,/security-foreground-sync\.js/);
+  assert.equal(existsSync(resolve(frontend,"public/guvenlik/security-foreground-sync.js")),false);
+  assert.doesNotMatch(control,/MutationObserver/);
+  assert.doesNotMatch(control,/stableSystemAccountSnapshot/);
+  assert.doesNotMatch(control,/installSecurityUiStability/);
 });
