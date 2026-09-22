@@ -15,7 +15,7 @@ const LEGACY_ROOT_ASSETS = new Set([
   "/kyerp-security-icon.svg",
 ]);
 
-const RETIRE_LEGACY_SW = `const TARGET="/ky-guvenlik/";self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const key of await caches.keys())if(key.startsWith("kyerp-security-")||key.startsWith("kyerp-ky-guvenlik-"))await caches.delete(key)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate(TARGET)}catch{}})()));self.addEventListener("fetch",e=>{if(e.request.mode==="navigate")e.respondWith(Response.redirect(new URL(TARGET,self.location.origin),308))});`;
+const RETIRE_LEGACY_SW = `const TARGET="/ky-guvenlik/";self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const key of await caches.keys())if(key.startsWith("kyerp-security-")||key.startsWith("kyerp-ky-guvenlik-"))await caches.delete(key)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))if(new URL(c.url).pathname!==TARGET)await c.navigate(TARGET)}catch{}})()));`;
 
 function noStoreHeaders(sourceHeaders = new Headers()) {
   const headers = new Headers(sourceHeaders);
