@@ -239,9 +239,9 @@ async function connectDevice(){
     const record={deviceId:data.deviceId,deviceToken:data.deviceToken,deviceLabel:data.deviceLabel,signingPrivateKey:keys.privateKey,localUnlockCredentialId,securityAppVersion:data.securityAppVersion||"security-v2.9",canonicalRevision:CANONICAL_DEVICE_REVISION,savedAt:new Date().toISOString()};
     await writeDevice(record);
     cleanEnrollmentQuery();enrollmentQuery={id:"",token:""};els.password.value="";els.enrollmentCode.value="";relinkMode=false;
-    toast(localUnlockCredentialId?"Erişim hazır. Face ID / parmak izi / PIN ile güvenli onay aktif.":"Erişim hazır. Güvenli cihaz imzası aktif.");
+    toast("Cihaz kaydedildi. KY ERP hesabi dogrulaniyor...");
     worker.active?.postMessage({type:"KYERP_SECURITY_REFRESH"});
-    await refreshState();
+    await refreshState({afterConnect:true});
   }catch(error){
     toast(error?.message||"Güvenlik uygulaması bağlanamadı.");setBadge("Kurulum hatası","bad");
   }finally{busy=false;els.connectButton.disabled=false;els.connectButton.textContent=(enrollmentQuery.id&&enrollmentQuery.token)?"Bağlantıyı Tamamla":"Güvenilir Cihazı Bağla"}
@@ -378,6 +378,15 @@ async function refreshState(options={}){
       const repaired=await repairConnection({automatic:true});
       if(repaired)return refreshState({skipAutoRepair:true});
     }
+
+    const mustRelink=["PUSH_DEVICE_UNAUTHORIZED","PUSH_DEVICE_RECOVERY_UNAUTHORIZED","DEVICE_NOT_READY"].includes(code);
+    if(mustRelink){
+      showRelink();els.appPanel.classList.add("hidden");els.pendingPanel.classList.add("hidden");els.emptyPanel.classList.add("hidden");
+      els.setupTitle.textContent="KY ERP baglantisini yeniden dogrula";
+      els.setupCopy.textContent=`Cihaz sunucuda kayitli ancak telefon dogrulamasi tamamlanamadi (${code||"BAGLANTI"}). Mevcut KY ERP sifreni gir.`;
+      setBadge("Baglantiyi dogrula","bad");toast(error?.message||"Telefon baglantisi yeniden dogrulanmali.");return;
+    }
+    els.appPanel.classList.remove("hidden");els.readyPanel.classList.remove("hidden");if(!relinkMode)els.setupPanel.classList.add("hidden");
 
     const offline=!navigator.onLine;
     els.readyTitle.textContent=offline?"Telefon çevrimdışı":"Bağlantı kontrolü gerekli";

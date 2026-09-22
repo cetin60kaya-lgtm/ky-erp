@@ -120,3 +120,11 @@ test("canonical security install requires one-time verified account binding",()=
   assert.match(app,/ACCOUNT_PROFILE_MISSING/);
   assert.match(app,/els\.appPanel\.classList\.remove\("hidden"\)/);
 });
+
+
+test("security health errors always render a visible state",()=>{
+  assert.match(app,/mustRelink/);
+  assert.match(app,/PUSH_DEVICE_UNAUTHORIZED/);
+  assert.match(app,/els\.appPanel\.classList\.remove\("hidden"\);els\.readyPanel\.classList\.remove\("hidden"\)/);
+  assert.match(app,/refreshState\(\{afterConnect:true\}\)/);
+});
