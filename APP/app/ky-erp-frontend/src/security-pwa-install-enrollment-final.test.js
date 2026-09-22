@@ -20,7 +20,7 @@ const phoneSetup=readFrontend("src/components/shell/PhoneApprovalDeviceSetup.jsx
 const host=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
 
 test("Security PWA keeps one immutable install identity and version-free launch URL",()=>{
-  assert.equal(manifest.id,"/ky-guvenlik/app-v28");
+  assert.equal(manifest.id,"/ky-guvenlik/");
   assert.equal(manifest.scope,"/ky-guvenlik/");
   assert.equal(manifest.start_url,"/ky-guvenlik/");
   assert.doesNotMatch(html,/boot=|release=|flow-v|shell-v/);
@@ -36,7 +36,7 @@ test("install helper runs immediately after parse and never leaves a preparing-o
   assert.match(installer,/PROMPT_WAIT_MS=1200/);
   assert.match(installer,/schedulePromptFallback/);
   assert.match(installer,/Bekleme yok:/);
-  assert.match(installer,/revision:"install-no-stuck-20260921"/);
+  assert.match(installer,/revision:"canonical-reset-20260922"/);
 });
 
 test("Android browser is install-only and enrollment starts only in standalone",()=>{
@@ -64,7 +64,8 @@ test("enrollment handoff survives install without leaving its token in browser h
 });
 
 test("legacy workers and caches migrate without deleting IndexedDB trusted-device state",()=>{
-  assert.match(installer,/pathname!=="\/security\/"/);
+  assert.match(installer,/scopePath!=="\/security\/"/);
+  assert.match(installer,/scriptPath\.startsWith\("\/security\/"\)/);
   assert.match(installer,/registration\.unregister\(\)/);
   assert.match(installer,/kyerp-security-shell-/);
   assert.doesNotMatch(installer,/indexedDB\.deleteDatabase|clearDevice/);
@@ -72,16 +73,14 @@ test("legacy workers and caches migrate without deleting IndexedDB trusted-devic
   assert.match(legacySw,/self\.registration\.unregister\(\)/);
 });
 
-test("security host keeps an already-installed /ky-guvenlik Android PWA launch inside its original scope",()=>{
-  assert.match(host,/function isLegacyPwaNavigation\(pathname\)/);
-  assert.match(host,/pathname === "\/ky-guvenlik" \|\| pathname === "\/ky-guvenlik\/"/);
-  assert.match(host,/LEGACY_PWA_BROWSER_REDIRECT/);
-  assert.match(host,/display-mode: standalone/);
-  assert.match(host,/X-KYERP-Security-Compat", "legacy-pwa-live"/);
-  assert.match(host,/incoming\.pathname === "\/ky-guvenlik\/sw\.js"/);
-  assert.match(host,/Service-Worker-Allowed", "\/ky-guvenlik\/"/);
-  assert.match(host,/incoming\.pathname === "\/security\/sw\.js"/);
-  assert.doesNotMatch(host,/incoming\.pathname === "\/ky-guvenlik\/sw\.js" \|\| incoming\.pathname === "\/security\/sw\.js"/);
+test("security host exposes only the canonical /ky-guvenlik PWA and retires root/security identities",()=>{
+  assert.match(host,/const CANONICAL_PREFIX = "\/ky-guvenlik"/);
+  assert.match(host,/const CANONICAL_URL = `\$\{CANONICAL_PREFIX\}\/`/);
+  assert.match(host,/incoming\.pathname === "\/sw\.js" \|\| incoming\.pathname === "\/security\/sw\.js"/);
+  assert.match(host,/incoming\.pathname === "\/manifest\.webmanifest"/);
+  assert.match(host,/redirectToCanonical\(incoming, `\$\{CANONICAL_PREFIX\}\/manifest\.webmanifest`\)/);
+  assert.match(host,/Service-Worker-Allowed", CANONICAL_URL/);
+  assert.doesNotMatch(host,/ROOT_MANIFEST|transformRootText|LEGACY_PWA_BROWSER_REDIRECT|root-v3/);
 });
 
 test("install, API and service-worker waits are bounded and always leave actionable UI",()=>{
