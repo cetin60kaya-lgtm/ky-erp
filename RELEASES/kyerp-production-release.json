@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-23T17:36:00+03:00",
-  "attempt": 99,
+  "requestedAt": "2026-09-23T17:40:00+03:00",
+  "attempt": 100,
   "scope": [
     "storage-file-hub-direct-cloud-services",
     "google-drive-oauth",
@@ -56,6 +56,6 @@
     "daily-period-lock-role-limit-removed"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "fafeadbdf7654c08eaab313dcad2a126275977c1",
-  "note": "23.09.2026 attempt 99. Muhasebe rolünde izin satırı eksik olsa bile Muhasebe görüntüle/ekle/düzenle yetkisi korunur; aynı tenant içindeki oturumlu kullanıcıların operasyon kayıtları role takılmaz. Günlük Operasyon değişiklikleri actor bilgisiyle audit loga yazılır; dönem kilidi işleminde rol sınırı kaldırıldı ve işlem logu korunur. Worker + Pages production yayını, D1 yedek ve mevcut preflight kontrolleri zorunludur."
+  "sourceCommit": "5f64fc941575475194f5ac4de2f9404f55043c9b",
+  "note": "23.09.2026 attempt 100. Tek canonical production yayini: onayli release degisikligi ayni commit zincirinden Worker + Pages olarak otomatik canliya cikar. Muhasebe rolu icin goruntule/ekle/duzenle yazma yetkisi failsafe; Gunluk Operasyon ekle/duzenle/kaydet ve donem kilidi rol sinirsiz, tenant sinirli ve actor audit loglu. Worker typecheck bloklayan security store tipleri duzeltildi. D1 yedek, preflight, Worker ve Pages kontrolu zorunlu."
 }
