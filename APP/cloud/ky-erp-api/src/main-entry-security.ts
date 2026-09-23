@@ -8,6 +8,7 @@ import { registerSecurityCenterLoginRoutes } from "./security-center-login-cloud
 import { requireOwnerSecurityApp } from "./owner-security-device-guard";
 import { registerErpCommandGatewayRoutes } from "./erp-command-gateway";
 import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
+import { guardSecurityDeviceEnrollment } from "./security-device-enrollment-gate";
 
 type Env = { Bindings: Cloudflare.Env };
 
@@ -82,6 +83,9 @@ security.onError((error, c) => {
 
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
+    const enrollmentGate = await guardSecurityDeviceEnrollment(request, env);
+    if (enrollmentGate) return enrollmentGate;
+
     const path = new URL(request.url).pathname;
     if (path === "/api/ai/command" || path.startsWith("/api/ai/command/") || path === "/api/ai/platform-access" || path.startsWith("/api/ai/platform-access/") || /^\/api\/admin\/users\/[^/]+\/ai-platform-access$/.test(path)) return command.fetch(request, env, ctx);
     if (path === "/api/security-center" || path.startsWith("/api/security-center/")) {
