@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   deploy-security-host:
-    name: Deploy and verify single canonical security host
+    name: Deploy and verify KY Security launch compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Validate canonical security source
+      - name: Validate security source
         shell: bash
         run: |
           set -euo pipefail
@@ -44,8 +44,9 @@ jobs:
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
           node --test APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
-          grep -q 'const APP_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
-          grep -q 'REDIRECT_QUERY_KEYS' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'const SOURCE_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'const PRIMARY_PREFIX="/ky-guvenlik"' APP/cloud/ky-erp-security-host/worker.js
+          grep -q 'COMPAT_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
           ! grep -q 'security-foreground-sync.js' APP/app/ky-erp-frontend/public/guvenlik/index.html
           ! grep -q 'MutationObserver' APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
 
@@ -56,7 +57,7 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc
 
-      - name: Verify canonical live redirect and assets
+      - name: Verify installed-PWA launch compatibility
         shell: bash
         run: |
           set -euo pipefail
@@ -74,8 +75,8 @@ jobs:
             echo "Attempt ${attempt}: status=${status:-none} release=${release:-none} location=${location:-none}"
 
             if [ "$status" = "308" ] \
-              && [ "$release" = "fresh-v3" ] \
-              && printf '%s' "$location" | grep -Fq 'https://security.kyerp.net/guvenlik/' \
+              && [ "$release" = "fresh-v3-compat" ] \
+              && printf '%s' "$location" | grep -Fq 'https://security.kyerp.net/ky-guvenlik/' \
               && printf '%s' "$location" | grep -Fq "enrollmentId=${enrollment_id}" \
               && printf '%s' "$location" | grep -Fq "enrollmentToken=${enrollment_token}" \
               && printf '%s' "$location" | grep -Fq 'mode=link' \
@@ -87,18 +88,25 @@ jobs:
           done
           test "$ok" -eq 1
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/ -o /tmp/security.html
-          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security.html
-          grep -q 'v3.0' /tmp/security.html
-          ! grep -q 'security-foreground-sync.js' /tmp/security.html
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/ -o /tmp/security-primary.html
+          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-primary.html
+          grep -q '/ky-guvenlik/app.js' /tmp/security-primary.html
+          grep -q 'v3.0' /tmp/security-primary.html
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/security-control-center.js -o /tmp/control.js
-          ! grep -q 'MutationObserver' /tmp/control.js
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/ -o /tmp/security-compat.html
+          grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-compat.html
+          grep -q '/guvenlik/app.js' /tmp/security-compat.html
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest.json
-          jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest.json >/dev/null
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/manifest.webmanifest -o /tmp/manifest-primary.json
+          jq -e '.id == "/ky-guvenlik/" and .start_url == "/ky-guvenlik/" and .scope == "/ky-guvenlik/"' /tmp/manifest-primary.json >/dev/null
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/manifest.webmanifest -o /tmp/manifest-compat.json
+          jq -e '.id == "/guvenlik/" and .start_url == "/guvenlik/" and .scope == "/guvenlik/"' /tmp/manifest-compat.json >/dev/null
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/sw.js -o /tmp/sw-primary.js
+          grep -q 'const APP_URL="/ky-guvenlik/"' /tmp/sw-primary.js
 
           legacy_asset_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H 'Accept: application/javascript' https://security.kyerp.net/security/obsolete.js)"
           test "$legacy_asset_status" = "410"
 
-          echo "KY Security canonical live verification passed."
+          echo "KY Security installed-PWA launch compatibility verification passed."
