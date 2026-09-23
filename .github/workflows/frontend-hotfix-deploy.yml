@@ -1,0 +1,76 @@
+name: KY ERP Frontend Hotfix Deploy
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - ".github/workflows/frontend-hotfix-deploy.yml"
+      - "APP/app/ky-erp-frontend/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-frontend-hotfix-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      VITE_API_URL: https://api.kyerp.net
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Install and build frontend
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test
+          npm run build
+
+      - name: Verify Cloudflare credentials
+        working-directory: APP/app/ky-erp-frontend
+        run: npx --yes wrangler@4.118.0 whoami
+
+      - name: Deploy Pages production
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 pages deploy dist \
+            --project-name ky-erp-frontend \
+            --branch codex/model-uretim-kontrol-merkezi-final \
+            --commit-hash "${GITHUB_SHA}"
+
+      - name: Verify live app
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..12}; do
+            code="$(curl -sS -o /tmp/kyerp.html -w '%{http_code}' https://app.kyerp.net/ || true)"
+            if [ "$code" = "200" ] && grep -q "KY ERP" /tmp/kyerp.html; then
+              echo "app.kyerp.net live: OK"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "app.kyerp.net live verification failed" >&2
+          exit 1
