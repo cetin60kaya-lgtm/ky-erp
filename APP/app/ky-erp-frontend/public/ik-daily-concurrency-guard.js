@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260922-1835-daily-cross-device-v4';
+  const VERSION = '20260923-1218-daily-cross-device-v5';
   const nativeFetch = window.fetch.bind(window);
   const revisions = new Map();
   let lastServerSyncAt = 0;
@@ -56,8 +56,8 @@
     const rows = Array.isArray(source) ? source : Array.isArray(source?.rows) ? source.rows : [];
     const canonicalId = canonicalCompany(companyId || company());
     rows.forEach((row) => {
-      const employeeId = text(row?.employeeId || row?.personId || row?.personelId);
-      const date = text(row?.workDate || row?.date || row?.selectedDate).slice(0, 10);
+      const employeeId = text(row?.employeeId || row?.personId || row?.personelId || row?.employee_id);
+      const date = text(row?.workDate || row?.date || row?.selectedDate || row?.work_date).slice(0, 10);
       const updatedAt = text(row?.updatedAt || row?.updated_at);
       if (employeeId && date && updatedAt) {
         revisions.set(keyFor(canonicalId, employeeId, date), updatedAt);
@@ -89,23 +89,40 @@
     return [input, { ...(init || {}), headers, body }];
   }
 
-  async function primeExcelRevisions(rawUrl, input, init, payload) {
+  function saveRange(payload, isFocused) {
+    if (isFocused) {
+      const date = text(payload?.date || payload?.selectedDate).slice(0, 10);
+      return { startDate: date, endDate: date };
+    }
     const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-    if (!rows.length) return;
-    const dates = rows.map((row) => text(row?.workDate).slice(0, 10)).filter(Boolean).sort();
-    const startDate = text(payload?.startDate || payload?.start) || dates[0] || '';
-    const endDate = text(payload?.endDate || payload?.end) || dates.at(-1) || startDate;
+    const dates = rows
+      .map((row) => text(row?.workDate || row?.date).slice(0, 10))
+      .filter(Boolean)
+      .sort();
+    const startDate = text(payload?.startDate || payload?.start).slice(0, 10) || dates[0] || '';
+    const endDate = text(payload?.endDate || payload?.end).slice(0, 10) || dates.at(-1) || startDate;
+    return { startDate, endDate };
+  }
+
+  async function primeSaveRevisions(rawUrl, input, init, payload, isFocused) {
+    const { startDate, endDate } = saveRange(payload, isFocused);
     if (!startDate || !endDate) return;
     let sourceUrl;
     try { sourceUrl = new URL(rawUrl, location.href); } catch { return; }
     const companyId = canonicalCompany(
-      payload?.mainCompanyId || payload?.mainCompanySlug || companyFromUrl(rawUrl),
+      payload?.mainCompanyId ||
+      payload?.main_company_id ||
+      payload?.mainCompanySlug ||
+      payload?.main_company_slug ||
+      companyFromUrl(rawUrl),
     );
     const readUrl = new URL('/api/ik/daily-attendance', sourceUrl.origin);
     readUrl.searchParams.set('mainCompanyId', companyId);
     readUrl.searchParams.set('startDate', startDate);
     readUrl.searchParams.set('endDate', endDate);
+    readUrl.searchParams.set('_revisionCheck', String(Date.now()));
     const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : {}));
+    headers.delete('Content-Type');
     const response = await nativeFetch(readUrl.toString(), {
       method: 'GET',
       headers,
@@ -162,7 +179,12 @@
               payload?.main_company_slug ||
               companyFromUrl(rawUrl),
           );
-          if (isExcelApply) await primeExcelRevisions(rawUrl, input, init, payload);
+
+          // Every save gets a fresh, uncached server revision read first.
+          // This keeps admin/accountant/other PCs on the same D1 truth without
+          // weakening stale-write protection.
+          await primeSaveRevisions(rawUrl, input, init, payload, isFocused);
+
           if (isFocused && Array.isArray(payload?.personnelEntries)) {
             const date = text(payload.date || payload.selectedDate).slice(0, 10);
             payload.personnelEntries = payload.personnelEntries.map((entry) => {
@@ -188,14 +210,10 @@
 
     const response = await nativeFetch(nextInput, nextInit);
     if (response.ok && isAttendanceRead) {
-      try {
-        rememberRows(await response.clone().json(), companyFromUrl(rawUrl));
-      } catch {}
+      try { rememberRows(await response.clone().json(), companyFromUrl(rawUrl)); } catch {}
     }
     if (response.ok && method === 'POST' && (isFocused || isRange || isExcelApply)) {
-      try {
-        rememberRows(await response.clone().json(), companyFromUrl(rawUrl));
-      } catch {}
+      try { rememberRows(await response.clone().json(), companyFromUrl(rawUrl)); } catch {}
     }
     if (response.status === 409 && method === 'POST' && (isFocused || isRange || isExcelApply)) {
       setTimeout(refreshVisibleDailyUi, 0);
