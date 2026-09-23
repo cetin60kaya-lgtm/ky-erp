@@ -48,15 +48,19 @@ test("cloud management is registered behind File Hub tenant-owner guard", () => 
   assert.doesNotMatch(main, /registerFileHubPreviewRoutes/);
 });
 
-test("production deploy contract uses Cloudflare Git Integration and keeps GitHub Actions manual-only", () => {
-  assert.match(deployContract, /Cloudflare Git Integration/);
-  assert.match(deployContract, /GitHub Actions production deploy yolu değildir|Production deploy için GitHub Actions kullanılmaz/);
+test("production deploy contract uses one canonical GitHub Actions release path", () => {
+  assert.match(deployContract, /GitHub Actions/);
+  assert.match(deployContract, /tek canonical production|tek production/i);
   assert.match(deployContract, /npm run typecheck && npm test && npm run build/);
   assert.match(deployContract, /remote production D1 full backup/);
   assert.match(deployContract, /yalnız hedefli ve additive migration/);
 
   assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /^\s{2}(?:push|pull_request|schedule|workflow_run):/m);
+  assert.match(workflow, /^  push:/m);
+  assert.match(workflow, /RELEASES\/kyerp-production-release\.json/);
+  assert.match(workflow, /Worker paketleri ve tam test/);
+  assert.match(workflow, /Worker.i api\.kyerp\.net production.a dagit/);
+  assert.match(workflow, /Frontendi Cloudflare Pages production.a dagit/);
 });
 
 test("direct cloud archive writer uses idempotent provider paths", () => {
