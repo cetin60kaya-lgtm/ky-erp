@@ -88,7 +88,7 @@ export async function tableExists(c: any, tableName: string) {
   return Boolean(row?.name);
 }
 
-export async function securityStoreGet(c: any, scope: string, fileName: string) {
+export async function securityStoreGet(c: any, scope: string, fileName: string): Promise<AnyRow | null> {
   if (!(await tableExists(c, "json_store"))) return null;
   const row = await c.env.DB.prepare(
     `SELECT id,scope,main_company_slug,file_name,data,created_at,updated_at

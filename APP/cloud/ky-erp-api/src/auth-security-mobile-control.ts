@@ -48,7 +48,7 @@ async function enrollmentBody(c: any) {
     return {};
   }
 }
-async function verifyRequiredEnrollmentCode(c: any, body: AnyRow) {
+async function verifyRequiredEnrollmentCode(c: any, body: AnyRow): Promise<{ ok: true } | { ok: false; status: 400 | 401; code: string; message: string }> {
   const code = upper(body.enrollmentCode).replace(/[^A-Z0-9]/g, "");
   if (!/^[A-Z0-9]{8}$/.test(code)) {
     return { ok: false, status: 400, code: "SECURITY_ENROLLMENT_CODE_REQUIRED", message: "8 karakter KY Güvenlik yedek bağlantı kodu zorunludur." };
