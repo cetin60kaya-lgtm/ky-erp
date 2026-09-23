@@ -129,6 +129,16 @@ async function permissionRows(c: any, userId: string, role: string) {
     canDelete: Boolean(row.can_delete),
     canApprove: Boolean(row.can_approve),
   }));
+  if (["MUHASEBE", "ACCOUNTING"].includes(upper(role))) {
+    const accounting = mapped.find((row: AnyRow) => row.moduleKey === "MUHASEBE");
+    if (accounting) {
+      accounting.canView = true;
+      accounting.canCreate = true;
+      accounting.canUpdate = true;
+    } else {
+      mapped.push({ moduleKey: "MUHASEBE", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: false });
+    }
+  }
   if (isCompanyAdmin(role)) {
     if (!mapped.some((row: AnyRow) => row.moduleKey === "ADMIN")) {
       mapped.push({ moduleKey: "ADMIN", canView: true, canCreate: true, canUpdate: true, canDelete: false, canApprove: true });
