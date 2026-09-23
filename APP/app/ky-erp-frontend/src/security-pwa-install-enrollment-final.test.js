@@ -31,10 +31,12 @@ test("old PWA packages are physically removed",()=>{
   assert.equal(existsSync(resolve(frontend,"public/ky-guvenlik-recover")),false);
 });
 
-test("fresh worker is push-only",()=>{
+test("fresh worker supports installability without shell caching",()=>{
+  assert.match(sw,/self\.addEventListener\("fetch"/);
+  assert.match(sw,/event\.respondWith\(fetch\(event\.request\)\)/);
   assert.match(sw,/self\.addEventListener\("push"/);
   assert.match(sw,/self\.addEventListener\("notificationclick"/);
-  assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
+  assert.doesNotMatch(sw,/cache\.put|cache\.add|cache\.addAll/);
 });
 
 test("security host keeps both installed PWA launch scopes alive",()=>{
@@ -61,11 +63,15 @@ test("enrollment no longer waits for platform biometric creation",()=>{
   assert.match(app,/security-v3\.0/);
 });
 
-test("installer clears every legacy worker before Android install",()=>{
+test("installer still clears every legacy worker before Android install",()=>{
   assert.match(installer,/legacyScope=\["\/","\/security\/","\/ky-guvenlik\/","\/ky-guvenlik-recover\/"\]/);
   assert.match(installer,/legacyScript=\["\/sw\.js","\/security\/sw\.js","\/ky-guvenlik\/sw\.js","\/ky-guvenlik-recover\/sw\.js"\]/);
-  assert.match(installer,/await prepareInstall\(\);\r?\n      if\(!deferredPrompt\)await waitForPrompt\(\);/);
   assert.match(installer,/candidate=registration\.installing\|\|registration\.waiting/);
+});
+
+test("live host contains install handoff override",()=>{
+  assert.match(host,/INSTALL_HELPER_HOTFIX/);
+  assert.match(host,/beforeinstallprompt/);
 });
 
 test("security UI has one canonical refresh owner and no DOM rewrite observer",()=>{
