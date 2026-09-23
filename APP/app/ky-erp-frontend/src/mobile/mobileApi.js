@@ -14,6 +14,24 @@ function getToken() {
   return localStorage.getItem("kyerp_auth_token");
 }
 
+function getMobileCompanySlug() {
+  for (const key of ["kyerp.activeCompany", "activeCompany", "companySlug"]) {
+    const raw = String(localStorage.getItem(key) || "").trim();
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      const slug = String(parsed?.slug || parsed?.mainCompanySlug || parsed?.id || "").trim();
+      if (slug) return slug;
+    } catch {
+      if (raw) return raw;
+    }
+  }
+  try {
+    const user = JSON.parse(localStorage.getItem("kyerp_mobile_user") || "{}");
+    return String(user?.mainCompanySlug || user?.main_company_slug || "").trim();
+  } catch { return ""; }
+}
+
 export function getMobileToken() {
   return getToken();
 }
@@ -32,9 +50,11 @@ export function mobileLogout() {
 
 function authHeaders(extra = {}) {
   const token = getToken();
+  const companySlug = getMobileCompanySlug();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(companySlug ? { "X-KYERP-Tenant-Slug": companySlug } : {}),
     ...extra,
   };
 }
