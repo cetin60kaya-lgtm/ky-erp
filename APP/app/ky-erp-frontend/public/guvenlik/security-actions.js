@@ -2,7 +2,7 @@ const KY_SECURITY_ACTION_API="https://api.kyerp.net/api";
 const KY_SECURITY_DB="kyerp-security-fresh-v3";
 const KY_SECURITY_STORE="device";
 const KY_SECURITY_KEY="active";
-const KY_SECURITY_CLIENT_VERSION="security-v2.5";
+const KY_SECURITY_CLIENT_VERSION="security-v3.0";
 
 function saBase64Url(bytes){let binary="";for(const byte of new Uint8Array(bytes))binary+=String.fromCharCode(byte);return btoa(binary).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_")}
 function saBase64UrlToBytes(value){const normalized=String(value||"").replace(/-/g,"+").replace(/_/g,"/");const padded=normalized+"=".repeat((4-normalized.length%4)%4);const raw=atob(padded);return Uint8Array.from(raw,(char)=>char.charCodeAt(0))}
@@ -31,12 +31,38 @@ function saActionCopy(item){
   return map[type]||{title:item?.title||"Kritik güvenlik işlemi",body:"KY ERP hesabında kritik bir güvenlik değişikliği isteniyor."};
 }
 function saToast(message){let toast=document.querySelector("#toast");if(!toast)return;toast.textContent=message;toast.classList.remove("hidden");clearTimeout(saToast.timer);saToast.timer=setTimeout(()=>toast.classList.add("hidden"),3800)}
+function saNormalizeEnrollmentCode(value){return String(value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,8)}
+function saApplyEnrollmentGuard(){
+  const details=document.querySelector("#manualLinkDetails");
+  const code=document.querySelector("#enrollmentCode");
+  const setupCopy=document.querySelector("#setupCopy");
+  const passwordLabel=document.querySelector("#passwordLabel");
+  if(details){details.open=true;const summary=details.querySelector("summary");if(summary)summary.textContent="8 karakter yedek bağlantı kodu · zorunlu"}
+  if(code){code.placeholder="ABCD2345";code.setAttribute("required","");code.addEventListener("input",()=>{code.value=saNormalizeEnrollmentCode(code.value)})}
+  if(setupCopy)setupCopy.textContent="Bu telefonu bağlamak veya yeniden bağlamak için KY ERP ekranında üretilen 8 karakter yedek bağlantı kodu ile mevcut ADMIN / KY ERP şifresi birlikte doğrulanır.";
+  if(passwordLabel&&passwordLabel.firstChild?.nodeType===Node.TEXT_NODE)passwordLabel.firstChild.nodeValue="Mevcut ADMIN / KY ERP şifresi ";
+}
+document.addEventListener("click",(event)=>{
+  const button=event.target?.closest?.("#connectButton");
+  if(!button)return;
+  const input=document.querySelector("#enrollmentCode");
+  const code=saNormalizeEnrollmentCode(input?.value);
+  if(input)input.value=code;
+  if(/^[A-Z0-9]{8}$/.test(code))return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const details=document.querySelector("#manualLinkDetails");if(details)details.open=true;
+  input?.focus?.();
+  saToast("Önce KY ERP ekranında üretilen 8 karakter yedek bağlantı kodunu gir.");
+},true);
 function saEnsurePanel(){const tab=document.querySelector("#approvalsTab");if(!tab)return null;let panel=document.querySelector("#securityActionPanel");if(panel)return panel;panel=document.createElement("section");panel.id="securityActionPanel";panel.className="security-card hidden";panel.innerHTML='<div class="pending-title"><div><span class="eyebrow">KRİTİK GÜVENLİK İŞLEMİ</span><h2>Güvenlik onayı</h2></div><span id="securityActionCount" class="count">0</span></div><div id="securityActionList" class="pending-list"></div>';tab.prepend(panel);return panel}
 function saRender(items=[]){const panel=saEnsurePanel();if(!panel)return;const list=panel.querySelector("#securityActionList");const count=panel.querySelector("#securityActionCount");count.textContent=String(items.length);panel.classList.toggle("hidden",items.length===0);list.replaceChildren();for(const item of items){const copy=saActionCopy(item);const card=document.createElement("article");card.className="approval-item";card.innerHTML=`<div><h3></h3><p></p><small></small></div><div class="approval-actions"><button class="approve" type="button">Onayla</button><button class="deny" type="button">Reddet</button></div>`;card.querySelector("h3").textContent=copy.title;card.querySelector("p").textContent=copy.body;card.querySelector("small").textContent=`İstek: ${saDate(item.requestedAt)}${item.sourceIp?` · IP ${item.sourceIp}`:""}`;const buttons=card.querySelectorAll("button");buttons[0].addEventListener("click",()=>saDecide(item,"APPROVED",card));buttons[1].addEventListener("click",()=>saDecide(item,"DENIED",card));list.appendChild(card)}}
 let saLoading=false;
 async function saRefresh(){if(saLoading)return;saLoading=true;try{const device=await saReadDevice();if(!device?.deviceId||!device?.deviceToken){saRender([]);return}const result=await saDeviceFetch("/auth/security-actions/device/pending");saRender(Array.isArray(result?.data?.items)?result.data.items:[])}catch(error){if(![401,404].includes(Number(error?.status||0)))console.warn("KY Security action refresh:",error)}finally{saLoading=false}}
 async function saDecide(item,decision,card){const buttons=card.querySelectorAll("button");buttons.forEach((button)=>button.disabled=true);try{const device=await saReadDevice();if(!device)throw new Error("Güvenilir cihaz bağlantısı bulunamadı.");await saConfirmLocalUnlock(device);const signature=await saSignDecision(device,item.id,decision);await saDeviceFetch("/auth/security-actions/device/decision",{method:"POST",body:{id:item.id,decision,signature}});saToast(decision==="APPROVED"?"Kritik güvenlik işlemi onaylandı.":"Kritik güvenlik işlemi reddedildi.");await saRefresh()}catch(error){saToast(error?.message||"Güvenlik kararı verilemedi.");buttons.forEach((button)=>button.disabled=false)}}
 
+saApplyEnrollmentGuard();
+window.addEventListener("kysecurity:runtime-ready",saApplyEnrollmentGuard);
 saEnsurePanel();
 saRefresh();
 window.addEventListener("focus",saRefresh);
