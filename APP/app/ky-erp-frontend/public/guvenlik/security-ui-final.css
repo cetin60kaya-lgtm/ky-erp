@@ -1,0 +1,66 @@
+html[data-ky-security-ui-revision]{background:#eef4fb}
+html[data-ky-security-ui-revision] body{background:linear-gradient(180deg,#f7fbff 0,#eef4fb 100%)}
+html[data-ky-security-ui-revision] .security-shell{width:min(720px,100%);padding:12px 14px 24px}
+html[data-ky-security-ui-revision] .security-header{min-height:72px;margin:-12px -14px 14px;padding:12px 14px;border-bottom:1px solid #d8e4ef;background:rgba(247,251,255,.97)}
+html[data-ky-security-ui-revision] .security-brand{gap:11px}
+html[data-ky-security-ui-revision] .security-logo{width:46px;height:46px;border-radius:15px;font-size:14px}
+html[data-ky-security-ui-revision] .security-brand b{font-size:17px;line-height:1.15}
+html[data-ky-security-ui-revision] .security-brand small{font-size:11px}
+html[data-ky-security-ui-revision] .security-badge{padding:8px 12px;font-size:10px}
+html[data-ky-security-ui-revision] .security-card{gap:12px;margin-bottom:12px;padding:16px;border-radius:20px;box-shadow:0 10px 30px rgba(27,52,82,.06)}
+html[data-ky-security-ui-revision] .security-card h1{font-size:30px;line-height:1.08}
+html[data-ky-security-ui-revision] .security-card h2{font-size:22px;line-height:1.12}
+html[data-ky-security-ui-revision] #installPanel,html[data-ky-security-ui-revision] #setupPanel{padding:20px}
+html[data-ky-security-ui-revision] #installPanel .primary,html[data-ky-security-ui-revision] #setupPanel .primary{min-height:58px;border-radius:14px;font-size:16px}
+html[data-ky-security-ui-revision] .install-state{padding:13px;border-radius:14px}
+html[data-ky-security-ui-revision] .account-card{padding:16px;background:#fff}
+html[data-ky-security-ui-revision] .account-card-head{align-items:center}
+html[data-ky-security-ui-revision] .account-card-head h2{font-size:28px}
+html[data-ky-security-ui-revision] .account-role-badge{padding:8px 11px;font-size:10px}
+html[data-ky-security-ui-revision] .account-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+html[data-ky-security-ui-revision] .account-meta-grid>div{min-height:68px;padding:10px 12px;justify-content:center}
+html[data-ky-security-ui-revision] .account-meta-grid>div:nth-child(1){grid-column:1/-1}
+html[data-ky-security-ui-revision] .account-meta-grid span{font-size:9px}
+html[data-ky-security-ui-revision] .account-meta-grid b{font-size:12px}
+html[data-ky-security-ui-revision] .account-access-block{gap:6px}
+html[data-ky-security-ui-revision] .account-chip-list{gap:5px}
+html[data-ky-security-ui-revision] .account-chip{padding:5px 8px;font-size:9px}
+html[data-ky-security-ui-revision] .account-note{padding-top:10px;border-top:1px solid #e1e9f1}
+html[data-ky-security-ui-revision] .super-admin-console{padding:16px;border-radius:20px}
+html[data-ky-security-ui-revision] .super-admin-console-head h2{font-size:24px}
+html[data-ky-security-ui-revision] .super-admin-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+html[data-ky-security-ui-revision] .super-admin-actions button{min-height:66px;padding:10px;border-radius:12px}
+html[data-ky-security-ui-revision] .security-tabs{top:72px;gap:4px;margin-bottom:12px;padding:5px;border-radius:13px}
+html[data-ky-security-ui-revision] .security-tabs button{min-width:auto;min-height:42px;padding:0 11px;font-size:10px}
+html[data-ky-security-ui-revision] .approval-item{padding:14px;border-radius:16px}
+html[data-ky-security-ui-revision] .approval-number-check{gap:10px;padding:12px;border-radius:14px}
+html[data-ky-security-ui-revision] .approval-number-options{gap:8px}
+html[data-ky-security-ui-revision] .approval-number-options button{min-height:58px!important;border-radius:13px!important;font-size:26px!important}
+html[data-ky-security-ui-revision] .approval-number-options button.selected{border-color:#153d68!important;background:#153d68!important;color:#fff!important;box-shadow:0 0 0 3px rgba(21,61,104,.12)}
+html[data-ky-security-ui-revision] .approval-number-options button.wrong{border-color:#d99595!important;background:#fff0f0!important;color:#9f3737!important}
+html[data-ky-security-ui-revision] .approval-actions{grid-template-columns:1fr 1fr;gap:8px}
+html[data-ky-security-ui-revision] .approval-actions .number-confirm{border-color:#16814d;background:#16814d;color:#fff}
+html[data-ky-security-ui-revision] .approval-actions .number-confirm:disabled{opacity:.55;cursor:wait}
+html[data-ky-security-ui-revision] .security-control-toolbar{border-radius:13px}
+html[data-ky-security-ui-revision] .control-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:520px){
+  html[data-ky-security-ui-revision] .security-shell{padding:10px 12px 22px}
+  html[data-ky-security-ui-revision] .security-header{min-height:68px;margin:-10px -12px 12px;padding:10px 12px}
+  html[data-ky-security-ui-revision] .security-logo{width:44px;height:44px}
+  html[data-ky-security-ui-revision] .security-brand b{font-size:16px}
+  html[data-ky-security-ui-revision] .security-card{padding:14px;border-radius:18px}
+  html[data-ky-security-ui-revision] #installPanel,html[data-ky-security-ui-revision] #setupPanel{padding:18px}
+  html[data-ky-security-ui-revision] .security-card h1{font-size:27px}
+  html[data-ky-security-ui-revision] .account-card-head{align-items:flex-start}
+  html[data-ky-security-ui-revision] .account-card-head h2{font-size:25px}
+  html[data-ky-security-ui-revision] .account-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  html[data-ky-security-ui-revision] .account-meta-grid>div{min-height:64px;padding:9px 10px}
+  html[data-ky-security-ui-revision] .account-meta-grid>div:nth-child(1){grid-column:1/-1}
+  html[data-ky-security-ui-revision] .super-admin-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  html[data-ky-security-ui-revision] .security-tabs{top:68px}
+}
+@media(max-width:390px){
+  html[data-ky-security-ui-revision] .security-brand small{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html[data-ky-security-ui-revision] .account-meta-grid{grid-template-columns:1fr 1fr}
+  html[data-ky-security-ui-revision] .super-admin-actions{grid-template-columns:1fr}
+}
