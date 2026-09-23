@@ -13,7 +13,7 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
   const ORIGIN="https://security.kyerp.net";
   const PATH="/guvenlik/";
   const PENDING_KEY="kyerp-security-fresh-enrollment-v3";
-  const REVISION="fresh-v3-20260923-install-handoff";
+  const REVISION="fresh-v3-20260923-anchor-handoff";
   const qs=(s)=>document.querySelector(s);
   const standalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
   let deferredPrompt=null;
@@ -37,7 +37,7 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
       const id=String(u.searchParams.get("enrollmentId")||"").trim();
       const token=String(u.searchParams.get("enrollmentToken")||"").trim();
       const mode=String(u.searchParams.get("mode")||"").trim();
-      if(id&&token){localStorage.setItem(PENDING_KEY,JSON.stringify({id,token,mode,savedAt:Date.now()}));}
+      if(id&&token)localStorage.setItem(PENDING_KEY,JSON.stringify({id,token,mode,savedAt:Date.now()}));
     }catch{}
   }
 
@@ -49,11 +49,26 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
     return u;
   }
 
-  function openFullChrome(){
+  function chromeIntentUrl(){
     const u=canonicalInstallUrl();
     const fallback=encodeURIComponent(u.href);
-    const intent="intent://"+u.host+u.pathname+u.search+"#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url="+fallback+";end";
-    location.href=intent;
+    return "intent://"+u.host+u.pathname+u.search+"#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url="+fallback+";end";
+  }
+
+  function installChromeAnchor(){
+    const button=qs("#installButton");
+    if(!button)return;
+    const link=document.createElement("a");
+    link.id="installButton";
+    link.className="primary";
+    link.href=chromeIntentUrl();
+    link.textContent="Chrome'da Aç";
+    link.setAttribute("role","button");
+    link.setAttribute("aria-label","KY Güvenlik kurulumunu Google Chrome'da aç");
+    link.style.display="block";
+    link.style.textAlign="center";
+    link.style.textDecoration="none";
+    button.replaceWith(link);
   }
 
   async function prepare(){
@@ -75,9 +90,7 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
     installing=true;
     try{
       await prepare();
-      if(!deferredPrompt){
-        await new Promise((resolve)=>setTimeout(resolve,1000));
-      }
+      if(!deferredPrompt)await new Promise((resolve)=>setTimeout(resolve,1000));
       if(!deferredPrompt){
         setUi("Android kurulum penceresi otomatik açılmadı. Chrome sağ üst ⋮ menüsünden ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç.","Tekrar Dene");
         return;
@@ -90,7 +103,7 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
     }finally{installing=false;}
   }
 
-  window.KYSecurityInstaller={revision:REVISION,isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall:prepare,openFullChrome};
+  window.KYSecurityInstaller={revision:REVISION,isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall:prepare,openFullChrome:()=>{location.href=chromeIntentUrl()}};
   capturePendingEnrollment();
   if(standalone()||!ANDROID)return;
 
@@ -102,14 +115,14 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
   window.addEventListener("appinstalled",()=>setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan aç.","Kurulum Tamamlandı",true));
 
   function attach(){
-    const button=qs("#installButton");
-    if(!button)return;
     const chromeRequested=new URL(location.href).searchParams.get("chrome")==="1";
     if(!chromeRequested){
-      setUi("Önce KY Güvenlik'i tam Google Chrome'da aç.","Chrome'da Aç");
-      button.onclick=(event)=>{event.preventDefault();event.stopPropagation();openFullChrome();};
+      setUi("Önce KY Güvenlik'i tam Google Chrome'da aç. Düğme Android'in doğrudan Chrome bağlantısıdır.","Chrome'da Aç");
+      installChromeAnchor();
       return;
     }
+    const button=qs("#installButton");
+    if(!button)return;
     setUi("Chrome kurulum için hazır. Aşağıdaki düğmeye dokun.","KY Güvenlik'i Yükle");
     button.onclick=(event)=>{event.preventDefault();event.stopPropagation();void requestInstall();};
     void prepare();
