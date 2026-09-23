@@ -3,85 +3,6 @@ import { apiDelete } from "../utils/api";
 
 export { fetchErpModuleData, runErpApprovedAction } from "./erpApi";
 
-const dailyRevisionCache = new Map();
-const DAILY_COMPANY_ALIASES = new Set([
-  "",
-  "mecit-hakan",
-  "main-mecit-hakan",
-  "mecit-hakan-gursu",
-  "hakan-baski",
-  "main-hakan",
-  "main-hakan-baski",
-  "hkn-baski",
-]);
-
-function dailyText(value) {
-  return value === undefined || value === null ? "" : String(value).trim();
-}
-
-function canonicalDailyCompany(value) {
-  const normalized = dailyText(value)
-    .toLocaleLowerCase("tr-TR")
-    .replace(/_/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return DAILY_COMPANY_ALIASES.has(normalized) ? "mecit-hakan" : normalized;
-}
-
-function dailyRevisionKey(companyId, employeeId, workDate) {
-  return `${canonicalDailyCompany(companyId)}|${dailyText(employeeId)}|${dailyText(workDate).slice(0, 10)}`;
-}
-
-function dailyCompanyFrom(value = {}) {
-  return canonicalDailyCompany(
-    value?.mainCompanyId ||
-      value?.mainCompanySlug ||
-      value?.main_company_id ||
-      value?.main_company_slug ||
-      "mecit-hakan",
-  );
-}
-
-function rememberDailyRevisions(payload, companyId) {
-  const source = payload?.data ?? payload?.items ?? payload;
-  const rows = Array.isArray(source)
-    ? source
-    : Array.isArray(source?.rows)
-      ? source.rows
-      : [];
-  const company = canonicalDailyCompany(companyId || "mecit-hakan");
-  rows.forEach((row) => {
-    const employeeId = dailyText(
-      row?.employeeId || row?.personId || row?.personelId || row?.employee_id,
-    );
-    const workDate = dailyText(
-      row?.workDate || row?.date || row?.selectedDate || row?.work_date,
-    ).slice(0, 10);
-    const updatedAt = dailyText(row?.updatedAt || row?.updated_at);
-    if (employeeId && workDate && updatedAt) {
-      dailyRevisionCache.set(
-        dailyRevisionKey(company, employeeId, workDate),
-        updatedAt,
-      );
-    }
-  });
-}
-
-function withDailyRowRevision(row = {}, companyId = "mecit-hakan") {
-  if (row?.expectedUpdatedAt || row?.expected_updated_at) return row;
-  const employeeId = dailyText(
-    row?.employeeId || row?.personId || row?.personelId || row?.employee_id,
-  );
-  const workDate = dailyText(
-    row?.workDate || row?.date || row?.selectedDate || row?.work_date,
-  ).slice(0, 10);
-  if (!employeeId || !workDate) return row;
-  const expectedUpdatedAt = dailyRevisionCache.get(
-    dailyRevisionKey(companyId, employeeId, workDate),
-  );
-  return expectedUpdatedAt ? { ...row, expectedUpdatedAt } : row;
-}
-
 function unwrap(payload) {
   return payload &&
     typeof payload === "object" &&
@@ -89,39 +10,6 @@ function unwrap(payload) {
     Object.prototype.hasOwnProperty.call(payload, "data")
     ? payload?.data
     : payload;
-}
-
-async function primeDailyRevisions({ companyId, startDate, endDate }) {
-  const start = dailyText(startDate).slice(0, 10);
-  const end = dailyText(endDate || startDate).slice(0, 10) || start;
-  if (!start) return [];
-  const canonicalCompanyId = canonicalDailyCompany(companyId || "mecit-hakan");
-  const result = unwrap(
-    await apiGet("/ik/daily-attendance", {
-      mainCompanyId: canonicalCompanyId,
-      startDate: start,
-      endDate: end,
-      revisionCheck: Date.now(),
-    }),
-  );
-  rememberDailyRevisions(result, canonicalCompanyId);
-  return result;
-}
-
-function dailyRangeFromRows(rows = [], fallback = {}) {
-  const dates = rows
-    .map((row) => dailyText(row?.workDate || row?.date).slice(0, 10))
-    .filter(Boolean)
-    .sort();
-  const startDate =
-    dailyText(fallback?.startDate || fallback?.start).slice(0, 10) ||
-    dates[0] ||
-    "";
-  const endDate =
-    dailyText(fallback?.endDate || fallback?.end).slice(0, 10) ||
-    dates.at(-1) ||
-    startDate;
-  return { startDate, endDate };
 }
 
 export async function getIkPersonel(params = {}) {
@@ -133,9 +21,7 @@ export async function createIkPersonel(payload = {}) {
 }
 
 export async function updateIkPersonel(id, payload = {}) {
-  return unwrap(
-    await apiPatch(`/ik/personel/${encodeURIComponent(id)}`, payload),
-  );
+  return unwrap(await apiPatch(`/ik/personel/${encodeURIComponent(id)}`, payload));
 }
 
 export async function getGunlukGiris(params = {}) {
@@ -179,9 +65,7 @@ export async function saveResmiTatil(payload = {}) {
 }
 
 export async function updateResmiTatil(id, payload = {}) {
-  return unwrap(
-    await apiPatch(`/ik/official-holidays/${encodeURIComponent(id)}`, payload),
-  );
+  return unwrap(await apiPatch(`/ik/official-holidays/${encodeURIComponent(id)}`, payload));
 }
 
 export async function getAylikEvraklar(params = {}) {
@@ -201,9 +85,7 @@ export async function createAylikPersonel(payload = {}) {
 }
 
 export async function updateAylikPersonel(id, payload = {}) {
-  return unwrap(
-    await apiPatch(`/ik/monthly-employees/${encodeURIComponent(id)}`, payload),
-  );
+  return unwrap(await apiPatch(`/ik/monthly-employees/${encodeURIComponent(id)}`, payload));
 }
 
 export async function updateAylikIzinBakiyeleri(payload = {}) {
@@ -215,20 +97,11 @@ export async function deleteAylikPersonel(id) {
 }
 
 export async function saveAylikSozlesme(employeeId, payload = {}) {
-  return unwrap(
-    await apiPost(
-      `/ik/monthly-employees/${encodeURIComponent(employeeId)}/salary-contracts`,
-      payload,
-    ),
-  );
+  return unwrap(await apiPost(`/ik/monthly-employees/${encodeURIComponent(employeeId)}/salary-contracts`, payload));
 }
 
 export async function getAylikSozlesmeler(employeeId) {
-  return unwrap(
-    await apiGet(
-      `/ik/monthly-employees/${encodeURIComponent(employeeId)}/salary-contracts`,
-    ),
-  );
+  return unwrap(await apiGet(`/ik/monthly-employees/${encodeURIComponent(employeeId)}/salary-contracts`));
 }
 
 export async function saveAylikMesai(payload = {}) {
@@ -236,9 +109,7 @@ export async function saveAylikMesai(payload = {}) {
 }
 
 export async function updateAylikMesai(id, payload = {}) {
-  return unwrap(
-    await apiPatch(`/ik/monthly-adjustments/${encodeURIComponent(id)}`, payload),
-  );
+  return unwrap(await apiPatch(`/ik/monthly-adjustments/${encodeURIComponent(id)}`, payload));
 }
 
 export async function deleteAylikMesai(id) {
@@ -266,15 +137,11 @@ export async function createGunlukPersonel(payload = {}) {
 }
 
 export async function updateGunlukPersonel(id, payload = {}) {
-  return unwrap(
-    await apiPatch(`/ik/daily-employees/${encodeURIComponent(id)}`, payload),
-  );
+  return unwrap(await apiPatch(`/ik/daily-employees/${encodeURIComponent(id)}`, payload));
 }
 
 export async function deleteGunlukPersonel(id, payload = {}) {
-  return unwrap(
-    await apiDelete(`/ik/daily-employees/${encodeURIComponent(id)}`, payload),
-  );
+  return unwrap(await apiDelete(`/ik/daily-employees/${encodeURIComponent(id)}`, payload));
 }
 
 export async function uploadGunlukPersonelExcel(file, params = {}) {
@@ -307,27 +174,11 @@ export async function mergeIkSkills(payload = {}) {
 }
 
 export async function getGunlukPuantaj(params = {}) {
-  const result = unwrap(await apiGet("/ik/daily-attendance", params));
-  rememberDailyRevisions(result, dailyCompanyFrom(params));
-  return result;
+  return unwrap(await apiGet("/ik/daily-attendance", params));
 }
 
 export async function saveGunlukPuantaj(payload = {}) {
-  const companyId = dailyCompanyFrom(payload);
-  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-  const range = dailyRangeFromRows(rows, payload);
-  if (range.startDate) {
-    await primeDailyRevisions({ companyId, ...range });
-  }
-  const nextPayload = rows.length
-    ? {
-        ...payload,
-        rows: rows.map((row) => withDailyRowRevision(row, companyId)),
-      }
-    : payload;
-  const result = unwrap(await apiPost("/ik/daily-attendance/save-range", nextPayload));
-  rememberDailyRevisions(result, companyId);
-  return result;
+  return unwrap(await apiPost("/ik/daily-attendance/save-range", payload));
 }
 
 export async function getGunlukDurum(params = {}) {
@@ -339,9 +190,7 @@ export async function saveGunlukDurum(payload = {}) {
 }
 
 export async function getGunlukPersonelGunKayitlari(params = {}) {
-  const result = unwrap(await apiGet("/ik/gunluk-personel/gun-kayitlari", params));
-  rememberDailyRevisions(result, dailyCompanyFrom(params));
-  return result;
+  return unwrap(await apiGet("/ik/gunluk-personel/gun-kayitlari", params));
 }
 
 export async function getGunlukPersonelOzet(params = {}) {
@@ -349,33 +198,7 @@ export async function getGunlukPersonelOzet(params = {}) {
 }
 
 export async function saveGunlukPersonelGunKayitlari(payload = {}) {
-  const companyId = dailyCompanyFrom(payload);
-  const workDate = dailyText(payload?.date || payload?.selectedDate).slice(0, 10);
-  if (workDate) {
-    await primeDailyRevisions({
-      companyId,
-      startDate: workDate,
-      endDate: workDate,
-    });
-  }
-  const nextPayload = Array.isArray(payload?.personnelEntries)
-    ? {
-        ...payload,
-        personnelEntries: payload.personnelEntries.map((entry) =>
-          withDailyRowRevision(
-            {
-              ...entry,
-              employeeId: entry?.employeeId || entry?.personelId,
-              workDate,
-            },
-            companyId,
-          ),
-        ),
-      }
-    : payload;
-  const result = unwrap(await apiPost("/ik/gunluk-personel/gun-kayitlari", nextPayload));
-  rememberDailyRevisions(result, companyId);
-  return result;
+  return unwrap(await apiPost("/ik/gunluk-personel/gun-kayitlari", payload));
 }
 
 export async function getGunlukPersonelListe(params = {}) {
@@ -396,21 +219,7 @@ export async function uploadGunlukPersonelGirisExcel(file, params = {}) {
 }
 
 export async function applyGunlukPersonelGirisExcel(payload = {}) {
-  const companyId = dailyCompanyFrom(payload);
-  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-  const range = dailyRangeFromRows(rows, payload);
-  if (range.startDate) {
-    await primeDailyRevisions({ companyId, ...range });
-  }
-  const nextPayload = rows.length
-    ? {
-        ...payload,
-        rows: rows.map((row) => withDailyRowRevision(row, companyId)),
-      }
-    : payload;
-  const result = unwrap(await apiPost("/ik/gunluk-personel/excel-apply", nextPayload));
-  rememberDailyRevisions(result, companyId);
-  return result;
+  return unwrap(await apiPost("/ik/gunluk-personel/excel-apply", payload));
 }
 
 export async function saveAylikDevamsizlik(payload = {}) {
@@ -427,4 +236,151 @@ export async function olusturBordro(payload = {}) {
 
 export async function getIkRaporlar(params = {}) {
   return unwrap(await apiGet("/ik/raporlar", params));
+}
+
+export async function getIkAdvancedMonth(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/month", params));
+}
+
+export async function getIkAdvancedQuickList(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/quick-list", params));
+}
+
+export async function getIkAdvancedPersonCalendar(employeeId, params = {}) {
+  return unwrap(await apiGet(`/ik/advanced/person-calendar/${encodeURIComponent(employeeId)}`, params));
+}
+
+export async function getIkAdvancedControlMatrix(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/control-matrix", params));
+}
+
+export async function getIkAdvancedExceptionHistory(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/exception-history", params));
+}
+
+export async function getIkAdvancedAuditLogs(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/audit-logs", params));
+}
+
+export async function getIkAdvancedPayroll(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/payroll", params));
+}
+
+export async function getIkAdvancedPeriodState(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/period-state", params));
+}
+
+export async function prepareIkAdvancedPeriod(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/period-prepare", payload));
+}
+
+export async function saveIkAdvancedPersonCard(employeeId, payload = {}) {
+  return unwrap(await apiPost(`/ik/advanced/person-card/${encodeURIComponent(employeeId)}`, payload));
+}
+
+export async function saveIkAdvancedAttendance(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/attendance", payload));
+}
+
+export async function saveIkAdvancedException(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/exception", payload));
+}
+
+export async function saveIkAdvancedLeave(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave", payload));
+}
+
+export async function getIkAdvancedLeaveCenter(params = {}) {
+  return unwrap(await apiGet("/ik/advanced/leave-center", params));
+}
+
+export async function previewIkAdvancedLeave(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave/preview", payload));
+}
+
+export async function saveIkAdvancedLeavePolicy(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave/policy", payload));
+}
+
+export async function cancelIkAdvancedLeave(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/leave/cancel", payload));
+}
+
+export async function deleteIkAdvancedException(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/exception/delete", payload));
+}
+
+export async function previewIkAdvancedBulk(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/bulk-preview", payload));
+}
+
+export async function confirmIkAdvancedBulk(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/bulk-confirm", payload));
+}
+
+export async function saveIkAdvancedFinanceMovement(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/finance-movement", payload));
+}
+
+export async function updateIkAdvancedFinanceMovement(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/finance-movement/update", payload));
+}
+
+export async function deleteIkAdvancedFinanceMovement(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/finance-movement/delete", payload));
+}
+
+export async function saveIkAdvancedPayrollOverride(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/payroll/override", payload));
+}
+
+export async function saveIkAdvancedFinalPayrollControl(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/payroll/final-control", payload));
+}
+
+export async function saveIkAdvancedPayrollLines(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/payroll/save", payload));
+}
+
+export async function saveIkAdvancedSettlementDraft(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/settlement-draft", payload));
+}
+
+export async function uploadIkAdvancedDocument(file, params = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") form.append(key, value);
+  });
+  return unwrap(await apiUpload("/ik/advanced/documents/upload", form));
+}
+
+export async function previewIkAdvancedSgk(file, params = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") form.append(key, value);
+  });
+  return unwrap(await apiUpload("/ik/advanced/sgk/preview", form));
+}
+
+export async function confirmIkAdvancedSgk(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/sgk/confirm", payload));
+}
+
+export async function previewIkAdvancedCard(file, params = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") form.append(key, value);
+  });
+  return unwrap(await apiUpload("/ik/advanced/card/preview", form));
+}
+
+export async function confirmIkAdvancedCard(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/card/confirm", payload));
+}
+
+export async function runIkAdvancedCloseCheck(payload = {}) {
+  return unwrap(await apiPost("/ik/advanced/close-check", payload));
 }
