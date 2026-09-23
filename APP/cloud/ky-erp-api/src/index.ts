@@ -1099,7 +1099,7 @@ async function buildDispatchControl(c: Context<AppEnv>) {
 }
 
 app.get("/api/health", (c) =>
-  c.json({ ok: true, service: "ky-erp-api", database: "d1" }),
+  c.json({ ok: true, service: "ky-erp-api", database: "d1", release: "accounting-write-hotfix-20260923" }),
 );
 
 app.get("/api/health/db", async (c) => {
