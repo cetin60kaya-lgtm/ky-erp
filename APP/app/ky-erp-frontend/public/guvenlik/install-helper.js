@@ -4,7 +4,7 @@
   const PATH="/guvenlik/";
   const PENDING_KEY="kyerp-security-fresh-enrollment-v3";
   const INSTALL_TIMEOUT_MS=8000;
-  const PROMPT_WAIT_MS=1200;
+  const PROMPT_WAIT_MS=1500;
   let deferredPrompt=null;
   let preparePromise=null;
   let installRequestInFlight=false;
@@ -58,18 +58,23 @@
     if(promptFallbackTimer!==null){clearTimeout(promptFallbackTimer);promptFallbackTimer=null;}
   }
 
+  function showChromeHandoff(){
+    clearPromptFallback();
+    setUi("Kuruluma devam etmek için aşağıdaki düğmeye dokun. KY Güvenlik tam Google Chrome'da açılacak.","Chrome'da Aç");
+  }
+
   function showReadyUi(){
     clearPromptFallback();
     if(deferredPrompt){
-      setUi("Hazır. KY ERP Güvenlik'i bu telefona kurmak için düğmeye dokun.","KY Güvenlik'i Yükle");
+      setUi("Hazır. Android'in kendi kurulum penceresini açmak için düğmeye dokun.","KY Güvenlik'i Yükle");
       return;
     }
-    setUi("KY ERP Güvenlik'i kurmak için düğmeye dokun. Android penceresi açılmazsa Chrome menüsü ⋮ → Uygulamayı yükle / Ana ekrana ekle yolunu kullan.","KY Güvenlik'i Yükle");
+    setUi("Chrome kurulum hazırlığını tamamlıyor. Düğmeye dokun; Android penceresi açılmazsa Chrome menüsü ⋮ → Uygulamayı yükle / Ana ekrana ekle yolunu kullan.","KY Güvenlik'i Yükle");
   }
 
   function showChromeMenuFallback(){
     clearPromptFallback();
-    setUi("Bekleme yok: Chrome otomatik kurulum penceresini göstermediyse sağ üstteki ⋮ menüsüne dokunup ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç.","Tekrar Dene");
+    setUi("Android kurulum penceresi açılmadı. Chrome sağ üst ⋮ menüsünden ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç. İstersen tekrar deneyebilirsin.","Tekrar Dene");
   }
 
   function schedulePromptFallback(){
@@ -84,7 +89,8 @@
   function openFullChrome(){
     const url=canonicalInstallUrl();
     const fallback=encodeURIComponent(url.href);
-    location.href=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${fallback};end`;
+    const intent=`intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${fallback};end`;
+    try{location.href=intent}catch{location.href=url.href}
   }
 
   async function migrateLegacyWorkers(){
@@ -127,11 +133,7 @@
     return preparePromise;
   }
 
-  function signalPromptReady(){
-    for(const resolve of Array.from(promptWaiters)){try{resolve(true)}catch{}}
-    promptWaiters.clear();
-  }
-
+  function signalPromptReady(){for(const resolve of Array.from(promptWaiters)){try{resolve(true)}catch{}}promptWaiters.clear();}
   function waitForPrompt(){
     if(deferredPrompt)return Promise.resolve(true);
     return new Promise((resolve)=>{
@@ -143,38 +145,27 @@
   }
 
   async function requestInstall(){
-    if(standalone())return;
-    if(installRequestInFlight)return;
+    if(standalone()||installRequestInFlight)return;
     installRequestInFlight=true;
     clearPromptFallback();
     try{
       await prepareInstall();
       if(!deferredPrompt)await waitForPrompt();
       if(!deferredPrompt){showChromeMenuFallback();return;}
-
       const prompt=deferredPrompt;
       deferredPrompt=null;
       await prompt.prompt();
       const choice=await withTimeout(prompt.userChoice,INSTALL_TIMEOUT_MS,"Kurulum yanıtı alınamadı.").catch(()=>null);
       if(choice?.outcome==="accepted")setUi("Kurulum onaylandı. Android tamamladığında ana ekrandaki KY Güvenlik ikonunu aç.","Kurulum Tamamlanıyor",true);
       else {setUi("Kurulum tamamlanmadı. Yeniden denemek için düğmeye dokun.","Tekrar Dene");schedulePromptFallback();}
-    }catch(error){
-      console.warn("KY Security install prompt:",error);
-      showChromeMenuFallback();
-    }finally{
-      installRequestInFlight=false;
-    }
+    }catch(error){console.warn("KY Security install prompt:",error);showChromeMenuFallback();}
+    finally{installRequestInFlight=false;}
   }
 
-  window.KYSecurityInstaller={revision:"fresh-v3-20260922",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
+  window.KYSecurityInstaller={revision:"fresh-v3-20260923-install-handoff",isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall,openFullChrome};
   capturePendingEnrollment();
-  void migrateLegacyWorkers().catch((error)=>console.warn("KY Security legacy cleanup:",error));
   if(standalone()){
-    try{
-      const url=new URL(location.href);
-      for(const key of ["install","platform","browser","chrome"])url.searchParams.delete(key);
-      history.replaceState({},"",url.pathname+url.search+url.hash);
-    }catch{}
+    try{const url=new URL(location.href);for(const key of ["install","platform","browser","chrome"])url.searchParams.delete(key);history.replaceState({},"",url.pathname+url.search+url.hash)}catch{}
     return;
   }
   if(!ANDROID)return;
@@ -195,15 +186,15 @@
   function attach(){
     if(standalone())return;
     installOnly();
-    showReadyUi();
-    const button=qs("#installButton");
-    if(button)button.addEventListener("click",(event)=>{event.preventDefault();event.stopImmediatePropagation();void requestInstall()},{capture:true});
     const chromeRequested=new URL(location.href).searchParams.get("chrome")==="1";
-    if(location.origin!==ORIGIN||!chromeRequested){
-      setUi("Kurulum tam Chrome'da açılıyor.","Chrome'da Devam Et");
-      openFullChrome();
+    const button=qs("#installButton");
+    if(!chromeRequested){
+      showChromeHandoff();
+      if(button)button.addEventListener("click",(event)=>{event.preventDefault();event.stopImmediatePropagation();openFullChrome()},{capture:true});
       return;
     }
+    showReadyUi();
+    if(button)button.addEventListener("click",(event)=>{event.preventDefault();event.stopImmediatePropagation();void requestInstall()},{capture:true});
     void prepareInstall();
     schedulePromptFallback();
   }
