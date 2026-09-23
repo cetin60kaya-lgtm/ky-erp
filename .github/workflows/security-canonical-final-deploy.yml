@@ -119,12 +119,14 @@ jobs:
           done
           test "$ok" -eq 1
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/ -o /tmp/security-primary.html
+          primary_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-primary.html -w '%{http_code}' https://security.kyerp.net/ky-guvenlik/)"
+          test "$primary_status" = "200"
           grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-primary.html
           grep -q '/ky-guvenlik/app.js' /tmp/security-primary.html
           grep -q 'v3.0' /tmp/security-primary.html
 
-          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/guvenlik/ -o /tmp/security-compat.html
+          compat_status="$(curl --silent --show-error --max-time 20 -o /tmp/security-compat.html -w '%{http_code}' https://security.kyerp.net/guvenlik/)"
+          test "$compat_status" = "200"
           grep -q '<title>KY ERP Güvenlik</title>' /tmp/security-compat.html
           grep -q '/guvenlik/app.js' /tmp/security-compat.html
 

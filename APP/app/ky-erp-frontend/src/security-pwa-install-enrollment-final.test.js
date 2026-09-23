@@ -50,6 +50,7 @@ test("security host keeps both installed PWA launch scopes alive",()=>{
   assert.match(host,/proxyScoped/);
   assert.match(host,/Service-Worker-Allowed/);
   assert.match(host,/env\.ASSETS/);
+  assert.match(host,/return suffix&&suffix!=="\/"\?suffix:"\/"/);
   assert.match(host,/return new Response\("Gone",\{status:410/);
 });
 

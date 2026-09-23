@@ -196,7 +196,7 @@ function redirect(url,prefix=PRIMARY_PREFIX){
   target.search=preserved.toString();target.hash="";
   return new Response(null,{status:308,headers:headers(new Headers({Location:target.toString()}))});
 }
-function sourcePath(pathname,prefix){const suffix=pathname.slice(prefix.length);return suffix&&suffix!=="/"?suffix:"/index.html"}
+function sourcePath(pathname,prefix){const suffix=pathname.slice(prefix.length);return suffix&&suffix!=="/"?suffix:"/"}
 function shouldRewrite(pathname,contentType){
   const type=String(contentType||"").toLowerCase();
   return type.includes("text/")||type.includes("javascript")||type.includes("json")||/\.(?:html|css|js|webmanifest)$/i.test(pathname);
