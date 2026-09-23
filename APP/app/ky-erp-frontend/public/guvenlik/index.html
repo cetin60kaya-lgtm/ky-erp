@@ -52,20 +52,20 @@
     <section id="setupPanel" class="security-card hidden">
       <span class="eyebrow">GÜVENİLİR CİHAZ KURULUMU</span>
       <h2 id="setupTitle">KY Güvenlik bağlantısını tamamla</h2>
-      <p id="setupCopy" class="muted">Bu telefonun kayıtlı KY Güvenlik kanalını bulup yeniden doğrular. Normalde yalnız mevcut KY ERP şifren yeterlidir.</p>
-      <details id="manualLinkDetails" class="manual-link-details">
-        <summary>Yedek kod ile bağla</summary>
-        <label>Kurulum / erişim yenileme kodu
+      <p id="setupCopy" class="muted">Yeni cihaz kaydı ve yeniden bağlama yalnız Yedek Kod + Admin Şifresi birlikte doğrulandığında tamamlanır.</p>
+      <details id="manualLinkDetails" class="manual-link-details" open>
+        <summary>Yedek Kod</summary>
+        <label>Yedek Kod
           <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
         </label>
       </details>
-      <label id="passwordLabel">Mevcut KY ERP şifren
+      <label id="passwordLabel">Admin Şifresi
         <input id="password" type="password" autocomplete="current-password" placeholder="Şifren" />
       </label>
       <label id="deviceLabelWrap">Cihaz adı
         <input id="deviceLabel" maxlength="80" />
       </label>
-      <button id="connectButton" class="primary" type="button">Bağlantıyı Tamamla</button>
+      <button id="connectButton" class="primary" type="button">Yedek Kod + Admin Şifresi ile Bağla</button>
       <button id="cancelRelinkButton" class="hidden" type="button">Yenilemeyi İptal Et</button>
       <div class="note">
         <b>Güvenilir cihaz korunur</b>
@@ -208,6 +208,7 @@
   </main>
   <script defer src="/guvenlik/ios-safari.js"></script>
   <script defer src="/guvenlik/app.js"></script>
+  <script defer src="/guvenlik/security-enrollment-pair.js"></script>
   <script defer src="/guvenlik/security-actions.js"></script>
   <script defer src="/guvenlik/security-control-center.js"></script>
 </body>
