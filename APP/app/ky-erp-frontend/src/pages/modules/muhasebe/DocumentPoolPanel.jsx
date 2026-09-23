@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrainCircuit, CheckCircle2, FileCheck2, FileUp, RefreshCcw, Save, ShieldCheck, X } from "lucide-react";
 import { apiGet, apiPatch, apiPost, apiUpload } from "../../../utils/api";
+import QuickCompanyCreateDialog from "./QuickCompanyCreateDialog";
 import "./documentPoolPanel.css";
 
 const TYPE_OPTIONS = [
@@ -28,6 +29,7 @@ export default function DocumentPoolPanel({ activeMainCompany }) {
   const [headerDraft, setHeaderDraft] = useState({});
   const [lineDrafts, setLineDrafts] = useState({});
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [quickCompanyOpen, setQuickCompanyOpen] = useState(false);
 
   const companyParams = useCallback(() => ({ mainCompanySlug: activeMainCompany?.slug, mainCompanyId: activeMainCompany?.id }), [activeMainCompany?.id, activeMainCompany?.slug]);
 
@@ -145,7 +147,7 @@ export default function DocumentPoolPanel({ activeMainCompany }) {
         <label>Belge No<input value={headerDraft.documentNo||""} onChange={(e)=>setHeaderDraft({...headerDraft,documentNo:e.target.value})}/></label>
         <label>Tarih<input type="date" value={headerDraft.issueDate||""} onChange={(e)=>setHeaderDraft({...headerDraft,issueDate:e.target.value})}/></label>
         <label>Vade<input type="date" value={headerDraft.dueDate||""} onChange={(e)=>setHeaderDraft({...headerDraft,dueDate:e.target.value})}/></label>
-        <label className="wide">Firma / Cari<select value={headerDraft.partyCompanyId||""} onChange={(e)=>setHeaderDraft({...headerDraft,partyCompanyId:e.target.value})}><option value="">Eşleşme seçin</option>{firms.map((firm)=><option key={firm.id} value={firm.id}>{firm.companyName||firm.firmaAdi||firm.name}</option>)}</select></label>
+        <div className="wide doc-company-picker"><label>Firma / Cari<select value={headerDraft.partyCompanyId||""} onChange={(e)=>setHeaderDraft({...headerDraft,partyCompanyId:e.target.value})}><option value="">Eşleşme seçin</option>{firms.map((firm)=><option key={firm.id} value={firm.id}>{firm.companyName||firm.firmaAdi||firm.name}</option>)}</select></label><button type="button" onClick={()=>setQuickCompanyOpen(true)}>+ Yeni Cari</button></div>
         <label>Kayıt<select value={headerDraft.recordScope||"OFFICIAL"} onChange={(e)=>setHeaderDraft({...headerDraft,recordScope:e.target.value})}><option value="OFFICIAL">Resmî</option><option value="INTERNAL">İç / Operasyon</option></select></label>
         <label>Para Birimi<input value={headerDraft.currency||"TRY"} onChange={(e)=>setHeaderDraft({...headerDraft,currency:e.target.value.toUpperCase()})}/></label>
         <label className="wide">Not<input value={headerDraft.note||""} onChange={(e)=>setHeaderDraft({...headerDraft,note:e.target.value})}/></label>
@@ -155,5 +157,6 @@ export default function DocumentPoolPanel({ activeMainCompany }) {
       <div className="doc-review-lines"><table><thead><tr><th>#</th><th>Ürün Kodu</th><th>Açıklama</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İskonto</th><th>KDV %</th><th>Toplam</th><th></th></tr></thead><tbody>{(detail.lines||[]).map((line)=>{const d=lineDrafts[line.id]||{};return <tr key={line.id}><td>{line.line_no}</td><td><input value={d.productCode||""} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,productCode:e.target.value}})}/></td><td><input value={d.description||""} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,description:e.target.value}})}/></td><td><input type="number" step="0.001" value={d.quantity??0} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,quantity:e.target.value}})}/></td><td><input value={d.unitCode||""} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,unitCode:e.target.value}})}/></td><td><input type="number" step="0.01" value={d.unitPrice??0} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,unitPrice:e.target.value}})}/></td><td><input type="number" step="0.01" value={d.discountTotal??0} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,discountTotal:e.target.value}})}/></td><td><input type="number" step="0.01" value={d.taxRate??0} onChange={(e)=>setLineDrafts({...lineDrafts,[line.id]:{...d,taxRate:e.target.value}})}/></td><td>{money(line.line_total,detail.currency)}</td><td><button type="button" onClick={()=>saveLine(line.id)} disabled={reviewBusy}><Save size={14}/></button></td></tr>})}</tbody></table></div>
       <div className="doc-review-issues"><strong>Kontrol / Sorunlar</strong>{(detail.issues||[]).length?(detail.issues||[]).map((issue)=><div key={issue.id} className={issue.is_resolved?"resolved":""}><b>{issue.issue_code}</b><span>{issue.message}</span><em>{issue.is_resolved?"Çözüldü":issue.severity}</em></div>):<span>Aktif sorun yok.</span>}</div>
     </section> : null}
+    <QuickCompanyCreateDialog open={quickCompanyOpen} onClose={()=>setQuickCompanyOpen(false)} activeMainCompany={activeMainCompany} initialName={headerDraft.partyName||detail?.party_name||""} initialTaxNo={headerDraft.partyTaxNo||detail?.party_tax_no||""} initialType={String(detail?.direction||"INCOMING").toUpperCase()==="OUTGOING"?"CUSTOMER":"SUPPLIER"} onCreated={(created)=>{const id=created?.id;const name=created?.companyName||created?.firmaAdi||created?.name||headerDraft.partyName||"";setFirms((current)=>id?[...current.filter((row)=>String(row.id)!==String(id)),created]:current);setHeaderDraft((current)=>({...current,partyCompanyId:id||"",partyName:name,partyTaxNo:created?.taxNo||created?.tax_no||current.partyTaxNo||""}));setMessage("Yeni cari açıldı ve belgeye seçildi.");}} />
   </section>;
 }

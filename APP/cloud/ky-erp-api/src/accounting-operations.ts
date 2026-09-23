@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { registerAccountingDocumentReviewRoutes } from "./accounting-document-review";
 import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-archive";
+import { registerAccountingWorkspaceCoreRoutes } from "./accounting-workspace-core";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -21,6 +22,7 @@ function normalize(v:unknown){return upper(v).replace(/İ/g,"I").normalize("NFD"
 async function matchCompany(c:Context<AppEnv>,slug:string,name:string,iban:string){if(iban){const clean=iban.replace(/\s/g,"");const rows=await c.env.DB.prepare(`SELECT id,name FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND UPPER(COALESCE(note,'')) LIKE UPPER(?) LIMIT 1`).bind(slug,`%${clean}%`).first<Row>();if(rows)return{id:rows.id,name:rows.name,confidence:.9}}const n=normalize(name);if(n){const r=await c.env.DB.prepare(`SELECT c.id,c.name FROM company_aliases a JOIN companies c ON c.id=a.company_id AND c.main_company_slug=a.main_company_slug WHERE a.main_company_slug=? AND a.deleted_at IS NULL AND a.is_active=1 AND a.normalized_name=? LIMIT 1`).bind(slug,n).first<Row>();if(r)return{id:r.id,name:r.name,confidence:.96}}return{id:"",name,confidence:0}}
 
 export function registerAccountingOperationRoutes(app:Hono<AppEnv>){
+ registerAccountingWorkspaceCoreRoutes(app);
  registerAccountingDocumentReviewRoutes(app);
  registerAccountingDocumentArchiveRoutes(app);
  app.get("/api/muhasebe/odeme-plani/hafta",async c=>{const slug=slugOf(c),range=mondayRange(Number(c.req.query("offset")||0)),r=await c.env.DB.prepare(`SELECT * FROM accounting_payment_plans WHERE main_company_slug=? AND status NOT IN ('PAID','CANCELLED') AND COALESCE(planned_date,due_date) BETWEEN ? AND ? ORDER BY COALESCE(planned_date,due_date),CASE priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 ELSE 2 END,amount DESC`).bind(slug,range.from,range.to).all<Row>();return c.json({ok:true,data:{...range,rows:r.results||[]}})});

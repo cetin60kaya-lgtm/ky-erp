@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import CekOdemeMerkeziPage from "../../muhasebe/CekOdemeMerkeziPage";
 import AccountingLedgerPanel from "./AccountingLedgerPanel";
+import FinancialAccountsPanel from "./FinancialAccountsPanel";
 import PaymentPlannerPanel from "./PaymentPlannerPanel";
 
 const VIEWS = new Set(["daily", "planner", "ledger"]);
@@ -22,7 +23,7 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
           Ödeme Planı
         </button>
         <button type="button" className={view === "ledger" ? "active" : ""} onClick={() => setView("ledger")}>
-          Defter / Banka / Kasa
+          Banka / Kasa / Defter
         </button>
       </div>
       <div className="accounting-composite-body">
@@ -35,7 +36,12 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
           />
         ) : null}
         {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} /> : null}
-        {view === "ledger" ? <AccountingLedgerPanel activeMainCompany={activeMainCompany} /> : null}
+        {view === "ledger" ? (
+          <>
+            <FinancialAccountsPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
+            <AccountingLedgerPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
+          </>
+        ) : null}
       </div>
     </section>
   );
