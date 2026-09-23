@@ -10,6 +10,8 @@ async function showDecisionResult(decision){await closeApprovalNotifications();c
 async function focusOrOpen(){const windows=await clients.matchAll({type:"window",includeUncontrolled:true});const existing=windows.find((client)=>{try{return new URL(client.url).pathname.startsWith("/guvenlik/")}catch{return false}});if(existing){await existing.focus();try{await existing.navigate(APP_URL)}catch{};return}await clients.openWindow(APP_URL)}
 self.addEventListener("install",(event)=>event.waitUntil(self.skipWaiting()));
 self.addEventListener("activate",(event)=>event.waitUntil((async()=>{await clearLegacyCaches().catch(()=>{});await self.clients.claim()})()));
+// Network-only fetch handler: makes the PWA installable without reintroducing stale shell/cache behavior.
+self.addEventListener("fetch",(event)=>{if(event.request.method==="GET")event.respondWith(fetch(event.request))});
 self.addEventListener("push",(event)=>event.waitUntil(showWakeNotification()));
 self.addEventListener("notificationclick",(event)=>{event.notification?.close();event.waitUntil(focusOrOpen())});
 self.addEventListener("message",(event)=>{if(event.data?.type==="KYERP_SECURITY_CLEAR_NOTIFICATION")event.waitUntil(closeApprovalNotifications());if(event.data?.type==="KYERP_SECURITY_DECISION_DONE")event.waitUntil(showDecisionResult(event.data?.decision))});
