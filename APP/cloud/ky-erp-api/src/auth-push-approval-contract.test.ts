@@ -94,12 +94,16 @@ test("dedicated Security worker owns phone approval while the legacy main worker
   assert.doesNotMatch(frontendMain, /PhoneApprovalInboxBridge/);
   assert.match(serviceWorker, /registration\.unregister/);
   assert.doesNotMatch(serviceWorker, /auth\/push\/device\/decision/);
-  assert.doesNotMatch(securityWorker, /API_BASE|X-KYERP-Push-Device|X-KYERP-Push-Token|signDeviceAuth|deviceFetch/);
+  assert.match(securityWorker, /API_BASE/);
+  assert.match(securityWorker, /X-KYERP-Push-Device/);
+  assert.match(securityWorker, /X-KYERP-Push-Token/);
+  assert.match(securityWorker, /signDeviceAuth/);
+  assert.match(securityWorker, /deviceFetch\("\/auth\/push\/device\/pending"\)/);
   assert.match(securityApp, /X-KYERP-Push-Device/);
   assert.match(securityApp, /X-KYERP-Push-Token/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
-  assert.match(securityWorker, /renotify:false/);
+  assert.match(securityWorker, /renotify:true/);
   assert.doesNotMatch(securityWorker, /action:"approve"/);
   assert.doesNotMatch(securityWorker, /action:"deny"/);
 });
@@ -166,7 +170,7 @@ test("phone approval keeps one latest self request, one visible notification and
   assert.match(serviceWorker, /registration\.unregister/);
   assert.match(securityWorker, /const TAG="kyerp-security-approval"/);
   assert.match(securityWorker, /tag:TAG/);
-  assert.match(securityWorker, /renotify:false/);
+  assert.match(securityWorker, /renotify:true/);
   assert.doesNotMatch(securityWorker, /kyerp-result-/);
   assert.match(securityApp, /createSigningKey/);
   assert.match(securityApp, /signDecision/);
