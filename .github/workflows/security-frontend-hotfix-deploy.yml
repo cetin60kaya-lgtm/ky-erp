@@ -35,13 +35,15 @@ jobs:
           cache: npm
           cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
 
-      - name: Validate security installer source
+      - name: Validate security source
         shell: bash
         run: |
           set -euo pipefail
           node --check APP/app/ky-erp-frontend/public/guvenlik/install-helper.js
-          grep -q 'fresh-v3-20260923-install-handoff' APP/app/ky-erp-frontend/public/guvenlik/install-helper.js
-          grep -q 'Chrome.da Aç' APP/app/ky-erp-frontend/public/guvenlik/install-helper.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
+          grep -q 'saApplyEnrollmentGuard' APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
+          grep -q 'security-v3.0' APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
+          grep -q 'enrollmentCode' APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
           test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN missing" >&2; exit 1; }
 
       - name: Build frontend
@@ -61,19 +63,24 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@4.118.0 pages deploy dist --project-name ky-erp-frontend --branch codex/model-uretim-kontrol-merkezi-final
 
-      - name: Verify live installer revision
+      - name: Verify live enrollment UI and installer host
         shell: bash
         run: |
           set -euo pipefail
           ok=0
           for attempt in 1 2 3 4 5 6 7 8; do
-            body="$(curl --fail --silent --show-error --max-time 20 'https://security.kyerp.net/guvenlik/install-helper.js' || true)"
-            if printf '%s' "$body" | grep -q 'fresh-v3-20260923-install-handoff' \
-              && printf '%s' "$body" | grep -q "Chrome'da Aç"; then
+            actions="$(curl --fail --silent --show-error --max-time 20 'https://security.kyerp.net/guvenlik/security-actions.js' || true)"
+            installer="$(curl --fail --silent --show-error --max-time 20 'https://security.kyerp.net/guvenlik/install-helper.js' || true)"
+            if printf '%s' "$actions" | grep -q 'saApplyEnrollmentGuard' \
+              && printf '%s' "$actions" | grep -q 'security-v3.0' \
+              && printf '%s' "$actions" | grep -q 'enrollmentCode' \
+              && printf '%s' "$installer" | grep -q 'fresh-v3-20260923-installability-fix' \
+              && printf '%s' "$installer" | grep -q "Chrome'da Aç"; then
               ok=1
-              echo "Live installer hotfix verified on attempt ${attempt}."
+              echo "Live KY Security enrollment UI + installer host verified on attempt ${attempt}."
               break
             fi
+            echo "Waiting for security frontend propagation (attempt ${attempt})"
             sleep 3
           done
           test "$ok" -eq 1
