@@ -12,7 +12,7 @@
   <script>(()=>{try{const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(!standalone&&location.hostname!=="security.kyerp.net"){const u=new URL(location.href);u.protocol="https:";u.host="security.kyerp.net";u.pathname="/guvenlik/";location.replace(u.href)}}catch{}})();</script>
   <script>/* KYERP_SECURITY_PENDING_CAPTURE_V3 */(()=>{try{const u=new URL(location.href);const id=String(u.searchParams.get("enrollmentId")||"");const token=String(u.searchParams.get("enrollmentToken")||"");const mode=String(u.searchParams.get("mode")||"");if(id&&token)localStorage.setItem("kyerp-security-fresh-enrollment-v3",JSON.stringify({id,token,mode,savedAt:Date.now()}))}catch{}})();</script>
   <script>(()=>{try{const android=/Android/i.test(String(navigator.userAgent||""));const standalone=Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);if(android&&!standalone)document.documentElement.classList.add("ky-install-only")}catch{}})();</script>
-  <style id="kyInstallHardGateStyle">html.ky-install-only #setupPanel,html.ky-install-only #appPanel{display:none!important}html.ky-install-only #installPanel{display:grid!important}</style>
+  <style id="kyInstallHardGateStyle">html.ky-install-only #bootPanel,html.ky-install-only #setupPanel,html.ky-install-only #appPanel{display:none!important}html.ky-install-only #installPanel{display:grid!important}</style>
   <script defer src="/guvenlik/install-helper.js"></script>
   <link rel="manifest" href="/guvenlik/manifest.webmanifest" />
   <link rel="icon" href="/guvenlik/kyerp-security-icon.svg" />
@@ -30,7 +30,14 @@
       <span id="connectionBadge" class="security-badge">Kontrol</span>
     </header>
 
-    <section id="installPanel" class="security-card">
+    <section id="bootPanel" class="security-card boot-card" aria-live="polite">
+      <div class="boot-state">
+        <span class="boot-spinner" aria-hidden="true"></span>
+        <div><span class="eyebrow">KY ERP GÜVENLİK</span><h2>Güvenli bağlantı hazırlanıyor</h2><p class="muted">Hesap, cihaz imzası ve bildirim kanalı tek ekranda doğrulanıyor.</p></div>
+      </div>
+    </section>
+
+    <section id="installPanel" class="security-card hidden">
       <span class="eyebrow">KY GÜVENLİK UYGULAMASI</span>
       <h1 id="installTitle">KY ERP Güvenlik'i Kur</h1>
       <p id="installCopy">Giriş onayları, kısa süreli giriş kodu ve güvenilir cihaz bağlantısı tek uygulamada.</p>
@@ -52,14 +59,14 @@
     <section id="setupPanel" class="security-card hidden">
       <span class="eyebrow">GÜVENİLİR CİHAZ KURULUMU</span>
       <h2 id="setupTitle">KY Güvenlik bağlantısını tamamla</h2>
-      <p id="setupCopy" class="muted">Bu telefonun kayıtlı KY Güvenlik kanalını bulup yeniden doğrular. Normalde yalnız mevcut KY ERP şifren yeterlidir.</p>
-      <details id="manualLinkDetails" class="manual-link-details">
-        <summary>Yedek kod ile bağla</summary>
-        <label>Kurulum / erişim yenileme kodu
+      <p id="setupCopy" class="muted">Bu telefon yalnız Yedek Bağlantı Kodu + Admin şifresi birlikte doğrulanınca güvenilir cihaz olarak kaydedilir.</p>
+      <div id="manualLinkDetails" class="manual-link-details">
+        <label>Yedek Bağlantı Kodu
           <input id="enrollmentCode" inputmode="text" autocomplete="one-time-code" maxlength="12" placeholder="ABCD2345" />
         </label>
-      </details>
-      <label id="passwordLabel">Mevcut KY ERP şifren
+        <small>KY ERP ekranında üretilen tek kullanımlık bağlantı kodunu gir.</small>
+      </div>
+      <label id="passwordLabel">Admin şifresi
         <input id="password" type="password" autocomplete="current-password" placeholder="Şifren" />
       </label>
       <label id="deviceLabelWrap">Cihaz adı
@@ -68,8 +75,8 @@
       <button id="connectButton" class="primary" type="button">Bağlantıyı Tamamla</button>
       <button id="cancelRelinkButton" class="hidden" type="button">Yenilemeyi İptal Et</button>
       <div class="note">
-        <b>Güvenilir cihaz korunur</b>
-        <span>Kararlar bu telefonun cihaz imzasıyla verilir. Destekleyen cihazlarda Face ID / Touch ID / parmak izi / PIN ek doğrulama olarak kullanılır.</span>
+        <b>Güvenilir cihaz + zorunlu telefon kilidi</b>
+        <span>Kayıt için Yedek Bağlantı Kodu + Admin şifresi gerekir. Onay verirken parmak izi / Face ID / PIN / ekran kilidi zorunlu doğrulanır.</span>
       </div>
     </section>
 

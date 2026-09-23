@@ -8,6 +8,9 @@ on:
       - APP/cloud/ky-erp-security-host/worker.js
       - APP/cloud/ky-erp-security-host/wrangler.jsonc
       - APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
+      - APP/app/ky-erp-frontend/public/guvenlik/**
+      - APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts
+      - APP/cloud/ky-erp-api/src/auth-push-cloud.ts
       - .github/workflows/security-canonical-final-deploy.yml
   workflow_dispatch:
 
@@ -22,7 +25,7 @@ jobs:
   deploy-security-host:
     name: Deploy and verify KY Security launch compatibility
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
@@ -35,6 +38,10 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install API dependencies
+        working-directory: APP/cloud/ky-erp-api
+        run: npm ci --ignore-scripts
+
       - name: Validate security source
         shell: bash
         run: |
@@ -43,6 +50,7 @@ jobs:
           node --check APP/cloud/ky-erp-security-host/worker.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/app.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-actions.js
+          node --check APP/app/ky-erp-frontend/public/guvenlik/sw.js
           node --check APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
           node --test APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
           grep -q 'const SOURCE_PREFIX="/guvenlik"' APP/cloud/ky-erp-security-host/worker.js
@@ -50,8 +58,30 @@ jobs:
           grep -q 'COMPAT_PREFIXES' APP/cloud/ky-erp-security-host/worker.js
           ! grep -q 'security-foreground-sync.js' APP/app/ky-erp-frontend/public/guvenlik/index.html
           ! grep -q 'MutationObserver' APP/app/ky-erp-frontend/public/guvenlik/security-control-center.js
+          grep -q 'id="bootPanel"' APP/app/ky-erp-frontend/public/guvenlik/index.html
+          grep -q 'Yedek Kod + Admin Şifresiyle Bağla' APP/app/ky-erp-frontend/public/guvenlik/app.js
+          grep -q 'Eşleştirme No:' APP/app/ky-erp-frontend/public/guvenlik/sw.js
+          grep -q 'env.ASSETS' APP/cloud/ky-erp-security-host/worker.js
+          grep -q '"binding": "ASSETS"' APP/cloud/ky-erp-security-host/wrangler.jsonc
 
-      - name: Deploy security.kyerp.net Worker only
+      - name: Dry-run API Worker bundle
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: npx wrangler@4.118.0 deploy --config wrangler.jsonc --dry-run --outdir /tmp/kyerp-api-dry
+
+      - name: Dry-run security host bundle with embedded assets
+        working-directory: APP/cloud/ky-erp-security-host
+        shell: bash
+        run: npx --yes wrangler@4.118.0 deploy --config wrangler.jsonc --dry-run --outdir /tmp/kyerp-security-dry
+
+      - name: Deploy KY ERP API security rules
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler@4.118.0 deploy --config wrangler.jsonc
+
+      - name: Deploy security.kyerp.net Worker with bundled security assets
         working-directory: APP/cloud/ky-erp-security-host
         shell: bash
         run: |
@@ -106,6 +136,18 @@ jobs:
 
           curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/sw.js -o /tmp/sw-primary.js
           grep -q 'const APP_URL="/ky-guvenlik/"' /tmp/sw-primary.js
+          grep -q 'Eşleştirme No:' /tmp/sw-primary.js
+
+          curl --fail --silent --show-error --max-time 20 https://security.kyerp.net/ky-guvenlik/app.js -o /tmp/security-app.js
+          grep -q 'Yedek Kod + Admin Şifresiyle Bağla' /tmp/security-app.js
+          grep -q 'approve.disabled=true' /tmp/security-app.js
+          grep -q 'createLocalUnlock' /tmp/security-app.js
+          grep -q 'id="bootPanel"' /tmp/security-primary.html
+
+          enrollment_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-enrollment/complete)"
+          printf '%s' "$enrollment_guard" | jq -e '.error.code == "SECURITY_ENROLLMENT_CODE_REQUIRED"' >/dev/null
+          relink_guard="$(curl -sS --max-time 20 -X POST -H 'Content-Type: application/json' --data '{}' https://api.kyerp.net/api/auth/push/security-relink/by-subscription)"
+          printf '%s' "$relink_guard" | jq -e '.error.code == "SECURITY_ENROLLMENT_CODE_REQUIRED"' >/dev/null
 
           legacy_asset_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -H 'Accept: application/javascript' https://security.kyerp.net/security/obsolete.js)"
           test "$legacy_asset_status" = "410"

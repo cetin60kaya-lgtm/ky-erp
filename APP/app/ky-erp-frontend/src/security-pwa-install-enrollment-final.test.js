@@ -49,6 +49,7 @@ test("security host keeps both installed PWA launch scopes alive",()=>{
   assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik-recover"\]/);
   assert.match(host,/proxyScoped/);
   assert.match(host,/Service-Worker-Allowed/);
+  assert.match(host,/env\.ASSETS/);
   assert.match(host,/return new Response\("Gone",\{status:410/);
 });
 
@@ -76,6 +77,18 @@ test("trusted-device enrollment requires 8 character backup code plus ERP passwo
   assert.match(actions,/stopImmediatePropagation/);
   assert.match(setup,/8 KARAKTER BAĞLANTI KODU · ZORUNLU/);
   assert.match(setup,/ADMIN \/ KY ERP şifresi/);
+  assert.doesNotMatch(app,/security-relink\/by-subscription/);
+  assert.match(app,/Yedek Kod \+ Admin Şifresiyle Bağla/);
+});
+
+test("mobile shell is single-stage and approval requires explicit confirm plus device unlock",()=>{
+  assert.match(html,/id="bootPanel"/);
+  assert.match(html,/id="installPanel" class="security-card hidden"/);
+  assert.match(app,/approve\.disabled=true/);
+  assert.match(app,/selectedMatch!==match/);
+  assert.match(app,/await confirmLocalUnlock\(device\)/);
+  assert.match(app,/const id=await createLocalUnlock\(\)/);
+  assert.doesNotMatch(app,/if\(!device\?\.localUnlockCredentialId\)return true/);
 });
 
 test("installer still clears every legacy worker before Android install",()=>{

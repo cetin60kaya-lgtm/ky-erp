@@ -196,41 +196,34 @@ function redirect(url,prefix=PRIMARY_PREFIX){
   target.search=preserved.toString();target.hash="";
   return new Response(null,{status:308,headers:headers(new Headers({Location:target.toString()}))});
 }
-function sourcePath(pathname,prefix){const suffix=pathname.slice(prefix.length);return `${SOURCE_PREFIX}${suffix||"/"}`}
+function sourcePath(pathname,prefix){const suffix=pathname.slice(prefix.length);return suffix&&suffix!=="/"?suffix:"/index.html"}
 function shouldRewrite(pathname,contentType){
   const type=String(contentType||"").toLowerCase();
-  return type.includes("text/")||type.includes("javascript")||type.includes("json")||pathname.endsWith(".webmanifest");
+  return type.includes("text/")||type.includes("javascript")||type.includes("json")||/\.(?:html|css|js|webmanifest)$/i.test(pathname);
 }
-async function proxyScoped(req,url,prefix){
+async function proxyScoped(req,url,prefix,env){
   const method=String(req.method||"GET").toUpperCase();
   if(url.pathname===`${prefix}/install-helper.js`){
     return new Response(method==="HEAD"?null:INSTALL_HELPER_HOTFIX,{status:200,headers:headers(new Headers({"Content-Type":"application/javascript; charset=UTF-8"}))});
   }
-  const upstream=new URL(sourcePath(url.pathname,prefix),SOURCE_ORIGIN);upstream.search=url.search;
+  if(!env?.ASSETS)return new Response("Security assets unavailable",{status:503,headers:headers()});
+  const assetUrl=new URL(req.url);assetUrl.pathname=sourcePath(url.pathname,prefix);assetUrl.search="";assetUrl.hash="";
   const requestHeaders=new Headers(req.headers);requestHeaders.delete("host");
-  const init={method,headers:requestHeaders,redirect:"manual"};
-  if(method!=="GET"&&method!=="HEAD")init.body=req.body;
-  const res=await fetch(new Request(upstream,init),{cache:"no-store"});
+  const assetRequest=new Request(assetUrl.toString(),{method,headers:requestHeaders,redirect:"manual"});
+  const res=await env.ASSETS.fetch(assetRequest);
   const out=headers(res.headers);
   if(url.pathname===`${prefix}/sw.js`)out.set("Service-Worker-Allowed",`${prefix}/`);
   if(method==="HEAD")return new Response(null,{status:res.status,statusText:res.statusText,headers:out});
   if(!shouldRewrite(url.pathname,res.headers.get("content-type")))return new Response(res.body,{status:res.status,statusText:res.statusText,headers:out});
   let body=await res.text();
   if(prefix!==SOURCE_PREFIX)body=body.replaceAll(`${SOURCE_PREFIX}/`,`${prefix}/`);
-
-  if(url.pathname===`${prefix}/sw.js`&&!body.includes('self.addEventListener("fetch"')){
-    body+='\nself.addEventListener("fetch",(event)=>{if(event.request.method==="GET")event.respondWith(fetch(event.request))});\n';
-  }
-  if((url.pathname===`${prefix}/`||url.pathname===`${prefix}/index.html`)&&String(res.headers.get("content-type")||"").toLowerCase().includes("text/html")&&!body.includes("kyerpEarlyInstallCapture")){
-    body=body.replace("<head>","<head>"+EARLY_INSTALL_CAPTURE);
-  }
-
+  if((url.pathname===`${prefix}/`||url.pathname===`${prefix}/index.html`)&&!body.includes("kyerpEarlyInstallCapture"))body=body.replace("<head>","<head>"+EARLY_INSTALL_CAPTURE);
   out.delete("content-length");out.delete("content-encoding");out.delete("etag");out.delete("last-modified");
   return new Response(body,{status:res.status,statusText:res.statusText,headers:out});
 }
 
 export default{
-  async fetch(request){
+  async fetch(request,env){
     const url=new URL(request.url);
     const method=String(request.method||"GET").toUpperCase();
     const readable=method==="GET"||method==="HEAD";
@@ -243,7 +236,7 @@ export default{
     const prefix=scopedPrefix(url.pathname);
     if(prefix){
       if(url.pathname===prefix&&navigation)return redirect(url,prefix);
-      return proxyScoped(request,url,prefix);
+      return proxyScoped(request,url,prefix,env);
     }
 
     const legacy=LEGACY_PREFIXES.some((p)=>url.pathname===p||url.pathname.startsWith(`${p}/`));
