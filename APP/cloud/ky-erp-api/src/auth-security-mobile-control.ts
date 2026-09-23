@@ -1,10 +1,11 @@
-import { AUTH_SECURITY_SCOPES, securityStoreList as storeList, tableExists } from "./auth-security-core";
+import { AUTH_SECURITY_SCOPES, securityStoreGet as storeGet, securityStoreList as storeList, tableExists } from "./auth-security-core";
 
 type AnyRow = Record<string, any>;
 type ActorResolver = (c: any) => Promise<AnyRow | null>;
 
 const TRUST_SCOPE = AUTH_SECURITY_SCOPES.SESSION_TRUST;
 const TRUSTED_DEVICE_SCOPE = AUTH_SECURITY_SCOPES.TRUSTED_LOGIN_DEVICE;
+const ENROLL_SCOPE = AUTH_SECURITY_SCOPES.SECURITY_ENROLLMENT;
 
 function text(value: unknown) { return value === undefined || value === null ? "" : String(value).trim(); }
 function upper(value: unknown) { return text(value).toUpperCase().replace(/İ/g, "I"); }
@@ -28,6 +29,42 @@ function base64UrlToBytes(value: unknown) {
   const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
   const binary = atob(padded);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function safeEqual(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return diff === 0;
+}
+async function enrollmentBody(c: any) {
+  try {
+    const body = await c.req.raw.clone().json();
+    return body && typeof body === "object" && !Array.isArray(body) ? body as AnyRow : {};
+  } catch {
+    return {};
+  }
+}
+async function verifyRequiredEnrollmentCode(c: any, body: AnyRow) {
+  const code = upper(body.enrollmentCode).replace(/[^A-Z0-9]/g, "");
+  if (!/^[A-Z0-9]{8}$/.test(code)) {
+    return { ok: false, status: 400, code: "SECURITY_ENROLLMENT_CODE_REQUIRED", message: "8 karakter KY Güvenlik yedek bağlantı kodu zorunludur." };
+  }
+  const enrollmentId = text(body.enrollmentId);
+  if (!enrollmentId) return { ok: true };
+  const enrollment = await storeGet(c, ENROLL_SCOPE, enrollmentId);
+  if (!enrollment || upper(enrollment.status) !== "PENDING" || text(enrollment.consumedAt)) {
+    return { ok: false, status: 401, code: "SECURITY_ENROLLMENT_INVALID", message: "KY Güvenlik bağlantı isteği geçersiz veya daha önce kullanılmış." };
+  }
+  const expected = text(enrollment.codeHash);
+  const actual = await sha256(code);
+  if (!expected || !safeEqual(expected, actual)) {
+    return { ok: false, status: 401, code: "SECURITY_ENROLLMENT_CODE_INVALID", message: "Yedek bağlantı kodu doğrulanamadı." };
+  }
+  return { ok: true };
 }
 async function verifyControlProof(actor: AnyRow, operation: string, targetId: string, timestampValue: unknown, signatureValue: unknown) {
   const jwk = objectOf(actor?.device?.decisionPublicKeyJwk);
@@ -123,6 +160,20 @@ async function writeAudit(c:any, actor:AnyRow, action:string, targetUserId:strin
   try { await c.env.DB.prepare(`INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),text(actor.userId)||null,targetUserId||null,companySlug||null,action,sessionId||null,clientIp(c)||null,JSON.stringify(detail||{}),nowIso()).run(); } catch {}
 }
 export function registerSecurityMobileControlRoutes(app:any, resolveActor:ActorResolver, serverVersion:string) {
+  app.use("/api/auth/push/security-enrollment/complete", async (c:any, next:any) => {
+    const body = await enrollmentBody(c);
+    const verified = await verifyRequiredEnrollmentCode(c, body);
+    if (!verified.ok) return c.json(jsonError(verified.code, verified.message), verified.status);
+    await next();
+  });
+
+  app.use("/api/auth/push/security-relink/by-subscription", async (c:any) => {
+    return c.json(jsonError(
+      "SECURITY_ENROLLMENT_CODE_REQUIRED",
+      "Güvenilir cihaz yeniden bağlantısı için KY ERP'de üretilen 8 karakter yedek bağlantı kodu ve mevcut ADMIN/KY ERP şifresi zorunludur.",
+    ), 409);
+  });
+
   app.get("/api/auth/push/device/control-center", async (c:any) => {
     const actor=await resolveActor(c); if(!actor) return c.json(jsonError("PUSH_DEVICE_UNAUTHORIZED","KY Güvenlik cihazı doğrulanamadı."),401);
     const companies=await listCompanies(c,actor); const companySlug=normalizeCompanyFilter(actor,c.req.query("companySlug"),companies);
