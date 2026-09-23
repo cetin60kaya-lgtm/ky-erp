@@ -91,6 +91,38 @@ function unwrap(payload) {
     : payload;
 }
 
+async function primeDailyRevisions({ companyId, startDate, endDate }) {
+  const start = dailyText(startDate).slice(0, 10);
+  const end = dailyText(endDate || startDate).slice(0, 10) || start;
+  if (!start) return [];
+  const canonicalCompanyId = canonicalDailyCompany(companyId || "mecit-hakan");
+  const result = unwrap(
+    await apiGet("/ik/daily-attendance", {
+      mainCompanyId: canonicalCompanyId,
+      startDate: start,
+      endDate: end,
+    }),
+  );
+  rememberDailyRevisions(result, canonicalCompanyId);
+  return result;
+}
+
+function dailyRangeFromRows(rows = [], fallback = {}) {
+  const dates = rows
+    .map((row) => dailyText(row?.workDate || row?.date).slice(0, 10))
+    .filter(Boolean)
+    .sort();
+  const startDate =
+    dailyText(fallback?.startDate || fallback?.start).slice(0, 10) ||
+    dates[0] ||
+    "";
+  const endDate =
+    dailyText(fallback?.endDate || fallback?.end).slice(0, 10) ||
+    dates.at(-1) ||
+    startDate;
+  return { startDate, endDate };
+}
+
 export async function getIkPersonel(params = {}) {
   return unwrap(await apiGet("/ik/personel", params));
 }
@@ -281,10 +313,15 @@ export async function getGunlukPuantaj(params = {}) {
 
 export async function saveGunlukPuantaj(payload = {}) {
   const companyId = dailyCompanyFrom(payload);
-  const nextPayload = Array.isArray(payload?.rows)
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  const range = dailyRangeFromRows(rows, payload);
+  if (range.startDate) {
+    await primeDailyRevisions({ companyId, ...range });
+  }
+  const nextPayload = rows.length
     ? {
         ...payload,
-        rows: payload.rows.map((row) => withDailyRowRevision(row, companyId)),
+        rows: rows.map((row) => withDailyRowRevision(row, companyId)),
       }
     : payload;
   const result = unwrap(await apiPost("/ik/daily-attendance/save-range", nextPayload));
@@ -313,6 +350,13 @@ export async function getGunlukPersonelOzet(params = {}) {
 export async function saveGunlukPersonelGunKayitlari(payload = {}) {
   const companyId = dailyCompanyFrom(payload);
   const workDate = dailyText(payload?.date || payload?.selectedDate).slice(0, 10);
+  if (workDate) {
+    await primeDailyRevisions({
+      companyId,
+      startDate: workDate,
+      endDate: workDate,
+    });
+  }
   const nextPayload = Array.isArray(payload?.personnelEntries)
     ? {
         ...payload,
@@ -352,10 +396,15 @@ export async function uploadGunlukPersonelGirisExcel(file, params = {}) {
 
 export async function applyGunlukPersonelGirisExcel(payload = {}) {
   const companyId = dailyCompanyFrom(payload);
-  const nextPayload = Array.isArray(payload?.rows)
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  const range = dailyRangeFromRows(rows, payload);
+  if (range.startDate) {
+    await primeDailyRevisions({ companyId, ...range });
+  }
+  const nextPayload = rows.length
     ? {
         ...payload,
-        rows: payload.rows.map((row) => withDailyRowRevision(row, companyId)),
+        rows: rows.map((row) => withDailyRowRevision(row, companyId)),
       }
     : payload;
   const result = unwrap(await apiPost("/ik/gunluk-personel/excel-apply", nextPayload));
