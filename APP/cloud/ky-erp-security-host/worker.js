@@ -8,16 +8,21 @@ const REDIRECT_QUERY_KEYS=["enrollmentId","enrollmentToken","mode","install","pl
 
 const RETIRE_SW=`const TARGET="/ky-guvenlik/";self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate(TARGET)}catch{}})()));self.addEventListener("fetch",e=>{if(e.request.mode==="navigate")e.respondWith(Response.redirect(new URL(TARGET,self.location.origin),308))});`;
 
+const EARLY_INSTALL_CAPTURE=`<script id="kyerpEarlyInstallCapture">(()=>{try{if(window.__KYERP_EARLY_INSTALL_CAPTURED)return;window.__KYERP_EARLY_INSTALL_CAPTURED=true;window.addEventListener("beforeinstallprompt",(event)=>{event.preventDefault();window.__KYERP_BIP_EVENT=event;window.dispatchEvent(new Event("kyerp:beforeinstallprompt-ready"))},{capture:true})}catch{}})();</script>`;
+
 const INSTALL_HELPER_HOTFIX=`(()=>{
   const ANDROID=/Android/i.test(String(navigator.userAgent||""));
   const ORIGIN="https://security.kyerp.net";
   const PATH="/guvenlik/";
   const PENDING_KEY="kyerp-security-fresh-enrollment-v3";
-  const REVISION="fresh-v3-20260923-anchor-handoff";
+  const REVISION="fresh-v3-20260923-installability-fix";
+  const PREPARE_TIMEOUT_MS=7000;
   const qs=(s)=>document.querySelector(s);
   const standalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
-  let deferredPrompt=null;
+  const withTimeout=(promise,ms)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),ms))]);
+  let deferredPrompt=window.__KYERP_BIP_EVENT||null;
   let installing=false;
+  let fallbackTimer=null;
 
   function setUi(text,buttonText,disabled=false){
     document.documentElement.classList.add("ky-install-only");
@@ -79,28 +84,51 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
         let p="";try{p=new URL(reg.scope).pathname}catch{}
         if(["/","/security/","/ky-guvenlik/","/ky-guvenlik-recover/"].includes(p)){try{await reg.unregister()}catch{}}
       }
-      const reg=await navigator.serviceWorker.register("/guvenlik/sw.js",{scope:"/guvenlik/",updateViaCache:"none"});
-      try{await reg.update()}catch{}
+      const reg=await withTimeout(navigator.serviceWorker.register("/guvenlik/sw.js",{scope:"/guvenlik/",updateViaCache:"none"}),PREPARE_TIMEOUT_MS);
+      try{await withTimeout(reg.update(),PREPARE_TIMEOUT_MS)}catch{}
       return reg;
     }catch(error){console.warn("KY Security prepare:",error);return null;}
   }
 
+  function syncPromptFromWindow(){
+    if(window.__KYERP_BIP_EVENT)deferredPrompt=window.__KYERP_BIP_EVENT;
+    return deferredPrompt;
+  }
+
   async function requestInstall(){
     if(installing||standalone())return;
+    syncPromptFromWindow();
+    if(!deferredPrompt){
+      setUi("Chrome henüz uygulama kurulum olayını vermedi. Sağ üst ⋮ menüsünde ‘Uygulamayı yükle’ varsa onu kullan; yoksa sayfayı bir kez yenile.","Kurulumu Yeniden Kontrol Et");
+      const retry=qs("#installButton");
+      if(retry)retry.onclick=(event)=>{event.preventDefault();location.reload()};
+      return;
+    }
+
     installing=true;
+    const prompt=deferredPrompt;
+    deferredPrompt=null;
+    window.__KYERP_BIP_EVENT=null;
+    setUi("Android kurulum penceresi açılıyor…","Açılıyor…",true);
     try{
-      await prepare();
-      if(!deferredPrompt)await new Promise((resolve)=>setTimeout(resolve,1000));
-      if(!deferredPrompt){
-        setUi("Android kurulum penceresi otomatik açılmadı. Chrome sağ üst ⋮ menüsünden ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç.","Tekrar Dene");
-        return;
-      }
-      const prompt=deferredPrompt;deferredPrompt=null;
+      // Prompt is invoked immediately from the user's click. No service-worker await happens before this call.
       await prompt.prompt();
       const choice=await prompt.userChoice.catch(()=>null);
       if(choice?.outcome==="accepted")setUi("Kurulum onaylandı. Android tamamladığında ana ekrandaki KY Güvenlik ikonunu aç.","Kurulum Tamamlanıyor",true);
       else setUi("Kurulum tamamlanmadı. Yeniden denemek için düğmeye dokun.","Tekrar Dene");
+    }catch(error){
+      console.warn("KY Security install prompt:",error);
+      setUi("Android kurulum penceresi açılamadı. Sağ üst ⋮ menüsünden ‘Uygulamayı yükle’ seçeneğini kullan.","Tekrar Dene");
     }finally{installing=false;}
+  }
+
+  function markPromptReady(){
+    syncPromptFromWindow();
+    if(!deferredPrompt)return;
+    if(fallbackTimer!==null){clearTimeout(fallbackTimer);fallbackTimer=null;}
+    setUi("Hazır. Android'in kendi kurulum penceresini açmak için düğmeye dokun.","KY Güvenlik'i Yükle");
+    const button=qs("#installButton");
+    if(button)button.onclick=(event)=>{event.preventDefault();event.stopPropagation();void requestInstall()};
   }
 
   window.KYSecurityInstaller={revision:REVISION,isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall:prepare,openFullChrome:()=>{location.href=chromeIntentUrl()}};
@@ -108,10 +136,12 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
   if(standalone()||!ANDROID)return;
 
   window.addEventListener("beforeinstallprompt",(event)=>{
-    event.preventDefault();deferredPrompt=event;
-    const chromeRequested=new URL(location.href).searchParams.get("chrome")==="1";
-    if(chromeRequested)setUi("Hazır. Android'in kendi kurulum penceresini açmak için düğmeye dokun.","KY Güvenlik'i Yükle");
+    event.preventDefault();
+    deferredPrompt=event;
+    window.__KYERP_BIP_EVENT=event;
+    markPromptReady();
   });
+  window.addEventListener("kyerp:beforeinstallprompt-ready",markPromptReady);
   window.addEventListener("appinstalled",()=>setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan aç.","Kurulum Tamamlandı",true));
 
   function attach(){
@@ -121,11 +151,28 @@ const INSTALL_HELPER_HOTFIX=`(()=>{
       installChromeAnchor();
       return;
     }
+
     const button=qs("#installButton");
     if(!button)return;
-    setUi("Chrome kurulum için hazır. Aşağıdaki düğmeye dokun.","KY Güvenlik'i Yükle");
-    button.onclick=(event)=>{event.preventDefault();event.stopPropagation();void requestInstall();};
-    void prepare();
+    if(syncPromptFromWindow()){
+      markPromptReady();
+    }else{
+      setUi("Chrome kurulum desteği hazırlanıyor…","Kurulum Hazırlanıyor",true);
+    }
+
+    void prepare().then(async()=>{
+      try{await withTimeout(navigator.serviceWorker.ready,PREPARE_TIMEOUT_MS)}catch{}
+      syncPromptFromWindow();
+      if(deferredPrompt){markPromptReady();return;}
+      if(fallbackTimer!==null)clearTimeout(fallbackTimer);
+      fallbackTimer=setTimeout(()=>{
+        fallbackTimer=null;
+        if(syncPromptFromWindow()){markPromptReady();return;}
+        setUi("Chrome kurulum olayını henüz vermedi. Sağ üst ⋮ menüsünde ‘Uygulamayı yükle’ varsa onu kullan; yoksa aşağıdaki düğmeyle bir kez yenile.","Kurulumu Yeniden Kontrol Et");
+        const retry=qs("#installButton");
+        if(retry)retry.onclick=(event)=>{event.preventDefault();location.reload()};
+      },1200);
+    });
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});else attach();
@@ -170,6 +217,14 @@ async function proxyScoped(req,url,prefix){
   if(!shouldRewrite(url.pathname,res.headers.get("content-type")))return new Response(res.body,{status:res.status,statusText:res.statusText,headers:out});
   let body=await res.text();
   if(prefix!==SOURCE_PREFIX)body=body.replaceAll(`${SOURCE_PREFIX}/`,`${prefix}/`);
+
+  if(url.pathname===`${prefix}/sw.js`&&!body.includes('self.addEventListener("fetch"')){
+    body+='\nself.addEventListener("fetch",(event)=>{if(event.request.method==="GET")event.respondWith(fetch(event.request))});\n';
+  }
+  if((url.pathname===`${prefix}/`||url.pathname===`${prefix}/index.html`)&&String(res.headers.get("content-type")||"").toLowerCase().includes("text/html")&&!body.includes("kyerpEarlyInstallCapture")){
+    body=body.replace("<head>","<head>"+EARLY_INSTALL_CAPTURE);
+  }
+
   out.delete("content-length");out.delete("content-encoding");out.delete("etag");out.delete("last-modified");
   return new Response(body,{status:res.status,statusText:res.statusText,headers:out});
 }
