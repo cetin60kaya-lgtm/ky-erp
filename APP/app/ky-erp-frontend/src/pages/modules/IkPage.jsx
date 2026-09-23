@@ -509,6 +509,7 @@ function normalizeDailyEntry(row = {}) {
   return {
     day: Boolean(row?.day ?? row?.dayShift),
     night: Boolean(row?.night ?? row?.nightShift),
+    updatedAt: row?.updatedAt || row?.updated_at || "",
   };
 }
 
@@ -5343,7 +5344,7 @@ function SafeDailyEntry({
         const before = Boolean((dailyEntries[key] || {})[shiftMode]);
         const after = Boolean((draftEntries[key] || {})[shiftMode]);
         if (before === after) return [];
-        return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE" }];
+        return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE", expectedUpdatedAt: dailyEntries[key]?.updatedAt || "" }];
       });
       if (personnelEntries.length) changes.push({ date, personnelEntries });
     });
@@ -5408,7 +5409,7 @@ function SafeDailyEntry({
       const before = Boolean((dailyEntries[key] || {})[shiftMode]);
       const after = Boolean((draftEntries[key] || {})[shiftMode]);
       if (before === after) return [];
-      return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE" }];
+      return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE", expectedUpdatedAt: dailyEntries[key]?.updatedAt || "" }];
     });
     if (!personnelEntries.length) {
       setDraftEntries(dailyEntries);
@@ -5550,6 +5551,7 @@ function SafeDailyEntry({
           personelId: person.id,
           note: notes[person.id] || "",
           status: nextActive ? "ACTIVE" : "REMOVE",
+          expectedUpdatedAt: dailyEntries[key]?.updatedAt || "",
         }],
       });
       await reloadDailyAfterSave();
@@ -5602,6 +5604,7 @@ function SafeDailyEntry({
           personelId: person.id,
           note: notes[person.id] || "",
           status: "ACTIVE",
+          expectedUpdatedAt: dailyEntries[entryKeyFor(person.id)]?.updatedAt || "",
         })),
       });
       await reloadDailyAfterSave();
@@ -5634,6 +5637,7 @@ function SafeDailyEntry({
           personelId: person.id,
           note: notes[person.id] || "",
           status: "REMOVE",
+          expectedUpdatedAt: dailyEntries[entryKeyFor(person.id)]?.updatedAt || "",
         })),
       });
       await reloadDailyAfterSave();
@@ -5664,6 +5668,7 @@ function SafeDailyEntry({
           personelId,
           note: notes[personelId] || "",
           status: entry[shiftMode] && selectedIds.has(personelId) ? "ACTIVE" : "REMOVE",
+          expectedUpdatedAt: dailyEntries[entryKeyFor(personelId)]?.updatedAt || "",
         };
       });
       await saveGunlukPersonelGunKayitlari({
@@ -6578,6 +6583,7 @@ function DailyEntry({
           nightShift: Boolean(entry.night),
           dayWage: person.dayRate,
           nightWage: person.nightRate,
+          expectedUpdatedAt: getEntry(person.id, date)?.updatedAt || "",
         };
       }),
     );
@@ -6594,6 +6600,7 @@ function DailyEntry({
       nightShift,
       dayWage: person.dayRate,
       nightWage: person.nightRate,
+      expectedUpdatedAt: currentEntry?.updatedAt || "",
     };
   };
   const persistIncludedPeople = async (peopleToPersist, successMessage) => {

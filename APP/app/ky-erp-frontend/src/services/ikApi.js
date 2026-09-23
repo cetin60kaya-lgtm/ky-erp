@@ -128,8 +128,8 @@ export async function deleteAylikIzin(id) {
   return unwrap(await apiDelete(`/ik/leaves/${encodeURIComponent(id)}`));
 }
 
-export async function getGunlukPersonel(params = {}) {
-  return unwrap(await apiGet("/ik/daily-employees", params));
+export async function getGunlukPersonel(params = {}, options = {}) {
+  return unwrap(await apiGet("/ik/daily-employees", params, options));
 }
 
 export async function createGunlukPersonel(payload = {}) {
@@ -173,24 +173,24 @@ export async function mergeIkSkills(payload = {}) {
   return unwrap(await apiPost("/ik/skills/merge", payload));
 }
 
-export async function getGunlukPuantaj(params = {}) {
-  return unwrap(await apiGet("/ik/daily-attendance", params));
+export async function getGunlukPuantaj(params = {}, options = {}) {
+  return unwrap(await apiGet("/ik/daily-attendance", params, options));
 }
 
 export async function saveGunlukPuantaj(payload = {}) {
   return unwrap(await apiPost("/ik/daily-attendance/save-range", payload));
 }
 
-export async function getGunlukDurum(params = {}) {
-  return getGunlukPuantaj(params);
+export async function getGunlukDurum(params = {}, options = {}) {
+  return getGunlukPuantaj(params, options);
 }
 
 export async function saveGunlukDurum(payload = {}) {
   return saveGunlukPuantaj(payload);
 }
 
-export async function getGunlukPersonelGunKayitlari(params = {}) {
-  return unwrap(await apiGet("/ik/gunluk-personel/gun-kayitlari", params));
+export async function getGunlukPersonelGunKayitlari(params = {}, options = {}) {
+  return unwrap(await apiGet("/ik/gunluk-personel/gun-kayitlari", params, options));
 }
 
 export async function getGunlukPersonelOzet(params = {}) {

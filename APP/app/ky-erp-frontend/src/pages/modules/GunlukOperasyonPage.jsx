@@ -32,6 +32,14 @@ function dateOnly(date = new Date()) {
   return [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join("-");
 }
 
+function businessToday(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function parseDate(value) {
   const [year, month, day] = String(value || "").slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return null;
@@ -255,7 +263,7 @@ function csvCell(value) {
 }
 
 function DailyOperationsOverview({ activeMainCompany, openModule }) {
-  const today = useMemo(() => dateOnly(new Date()), []);
+  const [today, setToday] = useState(() => businessToday());
   const currentMonth = today.slice(0, 7);
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => startOfWeek(today));
   const [selectedDay, setSelectedDay] = useState(today);
@@ -264,6 +272,8 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+  const [dataHealth, setDataHealth] = useState("loading");
+  const [lastSuccessfulAt, setLastSuccessfulAt] = useState("");
   const [query, setQuery] = useState("");
   const [shiftFilter, setShiftFilter] = useState("all");
 
@@ -292,37 +302,56 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
     [selectedMonthEnd, selectedWeekStart],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ forceFresh = true } = {}) => {
     setLoading(true);
     setNotice("");
     const [peopleResult, attendanceResult] = await Promise.allSettled([
-      getGunlukPersonel({ mainCompanyId: companyId }),
-      getGunlukDurum({ mainCompanyId: companyId, start: rangeStart, end: rangeEnd }),
+      getGunlukPersonel({ mainCompanyId: companyId }, { forceFresh }),
+      getGunlukDurum({ mainCompanyId: companyId, start: rangeStart, end: rangeEnd }, { forceFresh }),
     ]);
 
-    if (peopleResult.status === "fulfilled") {
-      setPeople(Array.isArray(peopleResult.value) ? peopleResult.value : []);
-    } else {
-      setPeople([]);
-    }
+    const nextPeople = peopleResult.status === "fulfilled"
+      ? (Array.isArray(peopleResult.value) ? peopleResult.value : [])
+      : null;
+    const nextAttendance = attendanceResult.status === "fulfilled"
+      ? (Array.isArray(attendanceResult.value) ? attendanceResult.value : [])
+      : null;
+    if (nextPeople !== null) setPeople(nextPeople);
+    if (nextAttendance !== null) setAttendance(nextAttendance);
 
-    if (attendanceResult.status === "fulfilled") {
-      setAttendance(Array.isArray(attendanceResult.value) ? attendanceResult.value : []);
+    const ok = nextPeople !== null && nextAttendance !== null;
+    if (ok) {
+      setDataHealth("healthy");
+      setLastSuccessfulAt(new Date().toISOString());
     } else {
-      setAttendance([]);
-    }
-
-    if (peopleResult.status === "rejected" || attendanceResult.status === "rejected") {
+      setDataHealth("degraded");
       const detail = attendanceResult.status === "rejected"
         ? attendanceResult.reason?.message
         : peopleResult.reason?.message;
-      setNotice(detail || "Günlük Operasyon verilerinin bir bölümü okunamadı.");
+      setNotice((detail || "Günlük Operasyon verilerinin bir bölümü okunamadı.") + " Son başarılı veri ekranda korunuyor.");
     }
     setLoading(false);
+    return { ok, people: nextPeople, attendance: nextAttendance };
   }, [companyId, rangeEnd, rangeStart]);
 
   useEffect(() => {
-    load();
+    load({ forceFresh: true });
+  }, [load]);
+
+  useEffect(() => {
+    const refreshVisible = () => {
+      const nextToday = businessToday();
+      setToday((current) => current === nextToday ? current : nextToday);
+      if (document.visibilityState === "visible") load({ forceFresh: true });
+    };
+    const intervalId = window.setInterval(refreshVisible, 30000);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, [load]);
 
   const activePeople = useMemo(
@@ -429,10 +458,17 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
     setSelectedWeekStart(startOfWeek(focus));
   }, [currentMonth, today]);
 
-  const downloadMonthlyCsv = useCallback(() => {
+  const downloadMonthlyCsv = useCallback(async () => {
+    const fresh = await load({ forceFresh: true });
+    if (!fresh?.ok) {
+      setNotice("CSV oluşturulmadı: canlı veri doğrulanamadı. Bağlantı düzeldikten sonra yeniden deneyin.");
+      return;
+    }
+    const freshPeopleById = new Map((fresh.people || []).map((row) => [String(row.id || row.employeeId || row.personId || ""), row]));
+    const freshDaily = summarize(fresh.attendance || [], freshPeopleById);
     const header = ["Tarih", "Gündüz", "Gece", "Kişi", "Tahmini Ödeme"];
     const rows = reportDays.map((date) => {
-      const row = daily.get(date);
+      const row = freshDaily.get(date);
       return [date, row?.dayCount || 0, row?.nightCount || 0, row?.peopleCount || 0, numberValue(row?.total || 0)];
     });
     const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
@@ -444,7 +480,7 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-  }, [daily, reportDays, selectedMonth]);
+  }, [load, reportDays, selectedMonth]);
 
   return (
     <div className={"gop-page " + (loading ? "is-loading" : "")}>
@@ -466,7 +502,7 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
           <button className="gop-period-button" type="button" onClick={() => changeWeek(1)} aria-label="Sonraki hafta">
             <ChevronRight size={17} />
           </button>
-          <button className="gop-refresh" type="button" onClick={load} disabled={loading}>
+          <button className="gop-refresh" type="button" onClick={() => load({ forceFresh: true })} disabled={loading}>
             <RefreshCw size={16} />
             {loading ? "Yenileniyor..." : "Yenile"}
           </button>
@@ -474,6 +510,7 @@ function DailyOperationsOverview({ activeMainCompany, openModule }) {
       </header>
 
       {notice ? <div className="gop-notice">{notice}</div> : null}
+      {dataHealth === "healthy" && lastSuccessfulAt ? <div className="gop-notice">Canlı veri doğrulandı · {new Date(lastSuccessfulAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })}</div> : null}
 
       <section className="gop-quick" aria-label="Günlük Operasyon hızlı işlemleri">
         <button type="button" onClick={() => openOperationTab("gunluk-giris")}>

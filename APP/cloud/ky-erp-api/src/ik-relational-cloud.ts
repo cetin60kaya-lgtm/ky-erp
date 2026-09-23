@@ -385,12 +385,12 @@ async function attendanceRows(c: Context<AppEnv>, companyId = companyIdOf(c)) {
        JOIN hr_daily_employees e ON e.id = a.employee_id
       WHERE e.main_company_id = ?
         AND (? = '' OR a.employee_id = ?)
+        AND (? = '' OR a.work_date >= ?)
+        AND (? = '' OR a.work_date <= ?)
       ORDER BY a.work_date DESC, a.id DESC`,
-    [companyId, employeeId, employeeId],
+    [companyId, employeeId, employeeId, start, start, end, end],
   );
-  return rows
-    .map(mapAttendance)
-    .filter((row) => (!start || text(row.workDate) >= start) && (!end || text(row.workDate) <= end));
+  return rows.map(mapAttendance);
 }
 
 async function focusedDailyRoster(c: Context<AppEnv>) {

@@ -379,11 +379,13 @@ export async function apiFetch(path, options = {}) {
 
 export async function apiGet(path, params, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 0) > 0 ? Number(options.timeoutMs) : undefined;
+  const forceFresh = options.forceFresh === true || options.cache === false;
   const url = buildApiUrl(path, params);
+  const inFlightKey = forceFresh ? `${url}::force-fresh` : url;
   const now = Date.now();
   const cached = apiGetCache.get(url);
-  if (cached && now - cached.timestamp < API_GET_CACHE_TTL_MS) return cached.payload;
-  if (apiGetInFlight.has(url)) return apiGetInFlight.get(url);
+  if (!forceFresh && cached && now - cached.timestamp < API_GET_CACHE_TTL_MS) return cached.payload;
+  if (apiGetInFlight.has(inFlightKey)) return apiGetInFlight.get(inFlightKey);
 
   const requestPromise = (async () => {
     let lastError;
@@ -407,11 +409,11 @@ export async function apiGet(path, params, options = {}) {
     throw lastError;
   })();
 
-  apiGetInFlight.set(url, requestPromise);
+  apiGetInFlight.set(inFlightKey, requestPromise);
   try {
     return await requestPromise;
   } finally {
-    apiGetInFlight.delete(url);
+    apiGetInFlight.delete(inFlightKey);
   }
 }
 
