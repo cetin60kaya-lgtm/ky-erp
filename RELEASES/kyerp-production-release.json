@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-23T17:40:00+03:00",
-  "attempt": 100,
+  "requestedAt": "2026-09-23T17:54:00+03:00",
+  "attempt": 101,
   "scope": [
     "storage-file-hub-direct-cloud-services",
     "google-drive-oauth",
@@ -56,6 +56,6 @@
     "daily-period-lock-role-limit-removed"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "5f64fc941575475194f5ac4de2f9404f55043c9b",
-  "note": "23.09.2026 attempt 100. Tek canonical production yayini: onayli release degisikligi ayni commit zincirinden Worker + Pages olarak otomatik canliya cikar. Muhasebe rolu icin goruntule/ekle/duzenle yazma yetkisi failsafe; Gunluk Operasyon ekle/duzenle/kaydet ve donem kilidi rol sinirsiz, tenant sinirli ve actor audit loglu. Worker typecheck bloklayan security store tipleri duzeltildi. D1 yedek, preflight, Worker ve Pages kontrolu zorunlu."
+  "sourceCommit": "3c1fc772790d8744945bcbc3fee5c8bd278c7012",
+  "note": "23.09.2026 attempt 101. Tek canonical production yolu: release manifesti degisince ayni production branch commitinden Worker + Pages otomatik yayinlanir. Ayrik production environment secret baglamı kaldirildi; repo seviyesindeki tek CLOUDFLARE_API_TOKEN kullanilir. Muhasebe yazma failsafe, Gunluk Operasyon actor audit ve rol-sinirsiz tenant-ici islemler dahildir. Worker typecheck temiz."
 }
