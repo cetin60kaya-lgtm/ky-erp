@@ -101,6 +101,7 @@ async function primeDailyRevisions({ companyId, startDate, endDate }) {
       mainCompanyId: canonicalCompanyId,
       startDate: start,
       endDate: end,
+      revisionCheck: Date.now(),
     }),
   );
   rememberDailyRevisions(result, canonicalCompanyId);
