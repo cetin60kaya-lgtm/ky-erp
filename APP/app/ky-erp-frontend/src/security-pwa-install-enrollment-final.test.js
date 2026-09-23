@@ -14,7 +14,10 @@ const app=read("public/guvenlik/app.js");
 const installer=read("public/guvenlik/install-helper.js");
 const sw=read("public/guvenlik/sw.js");
 const control=read("public/guvenlik/security-control-center.js");
+const actions=read("public/guvenlik/security-actions.js");
+const setup=read("src/components/shell/PhoneApprovalDeviceSetup.jsx");
 const host=readFileSync(resolve(repo,"APP/cloud/ky-erp-security-host/worker.js"),"utf8");
+const mobileControl=readFileSync(resolve(repo,"APP/cloud/ky-erp-api/src/auth-security-mobile-control.ts"),"utf8");
 
 test("fresh security app has a new immutable identity",()=>{
   assert.equal(manifest.id,"/guvenlik/");
@@ -61,6 +64,18 @@ test("enrollment no longer waits for platform biometric creation",()=>{
   assert.doesNotMatch(app,/localUnlockCredentialId=await createLocalUnlock/);
   assert.match(app,/let localUnlockCredentialId="";/);
   assert.match(app,/security-v3\.0/);
+});
+
+test("trusted-device enrollment requires 8 character backup code plus ERP password",()=>{
+  assert.match(mobileControl,/SECURITY_ENROLLMENT_CODE_REQUIRED/);
+  assert.match(mobileControl,/8 karakter KY Güvenlik yedek bağlantı kodu zorunludur/);
+  assert.match(mobileControl,/SECURITY_ENROLLMENT_CODE_INVALID/);
+  assert.match(mobileControl,/security-relink\/by-subscription/);
+  assert.match(actions,/8 karakter yedek bağlantı kodu · zorunlu/);
+  assert.match(actions,/Mevcut ADMIN \/ KY ERP şifresi/);
+  assert.match(actions,/stopImmediatePropagation/);
+  assert.match(setup,/8 KARAKTER BAĞLANTI KODU · ZORUNLU/);
+  assert.match(setup,/ADMIN \/ KY ERP şifresi/);
 });
 
 test("installer still clears every legacy worker before Android install",()=>{
