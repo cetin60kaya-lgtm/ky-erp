@@ -8,9 +8,10 @@ const text = (value: unknown) => value == null ? "" : String(value).trim();
 const canonical = (value: unknown) => text(value).toLowerCase();
 const upper = (value: unknown) => text(value).toUpperCase().replace(/İ/g, "I");
 const owner = (role: unknown) => ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
+const accountingRole = (role: unknown) => ["MUHASEBE", "ACCOUNTING"].includes(upper(role));
 
 function accountingPermission(user: Row) {
-  if (owner(user?.role)) return true;
+  if (owner(user?.role) || accountingRole(user?.role)) return true;
   const rows = Array.isArray(user?.permissions) ? user.permissions : [];
   const row = rows.find((item: Row) => upper(item?.moduleKey || item?.module_key) === "MUHASEBE");
   return Boolean(row?.canView ?? row?.can_view);
