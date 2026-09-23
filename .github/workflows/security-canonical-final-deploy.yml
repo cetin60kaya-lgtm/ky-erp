@@ -7,6 +7,7 @@ on:
     paths:
       - APP/cloud/ky-erp-security-host/worker.js
       - APP/cloud/ky-erp-security-host/wrangler.jsonc
+      - APP/app/ky-erp-frontend/src/security-pwa-install-enrollment-final.test.js
       - .github/workflows/security-canonical-final-deploy.yml
   workflow_dispatch:
 

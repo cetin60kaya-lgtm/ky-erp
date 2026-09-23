@@ -37,10 +37,13 @@ test("fresh worker is push-only",()=>{
   assert.doesNotMatch(sw,/self\.addEventListener\("fetch"/);
 });
 
-test("legacy host paths only retire or redirect",()=>{
-  assert.match(host,/const APP_PREFIX="\/guvenlik"/);
-  assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik","\/ky-guvenlik-recover"\]/);
-  assert.match(host,/RETIRE_SW/);
+test("security host keeps both installed PWA launch scopes alive",()=>{
+  assert.match(host,/const SOURCE_PREFIX="\/guvenlik"/);
+  assert.match(host,/const PRIMARY_PREFIX="\/ky-guvenlik"/);
+  assert.match(host,/const COMPAT_PREFIXES=\[PRIMARY_PREFIX,SOURCE_PREFIX\]/);
+  assert.match(host,/const LEGACY_PREFIXES=\["\/security","\/ky-guvenlik-recover"\]/);
+  assert.match(host,/proxyScoped/);
+  assert.match(host,/Service-Worker-Allowed/);
   assert.match(host,/return new Response\("Gone",\{status:410/);
 });
 
