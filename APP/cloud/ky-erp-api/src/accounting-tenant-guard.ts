@@ -9,6 +9,7 @@ const canonical = (value: unknown) => text(value).toLowerCase();
 const upper = (value: unknown) => text(value).toUpperCase().replace(/İ/g, "I");
 const owner = (role: unknown) => ["SUPER_ADMIN", "ADMIN"].includes(upper(role));
 const accountingRole = (role: unknown) => ["MUHASEBE", "ACCOUNTING"].includes(upper(role));
+const writeMethod = (method: unknown) => !["GET", "HEAD", "OPTIONS"].includes(upper(method));
 
 function accountingPermission(user: Row) {
   if (owner(user?.role) || accountingRole(user?.role)) return true;
@@ -33,13 +34,45 @@ async function requestedTenant(c: Context<AppEnv>) {
   }
 }
 
+async function writeAccountingAudit(c: Context<AppEnv>, user: Row, companySlug: string) {
+  try {
+    const actor = text(user?.fullName || user?.full_name || user?.username || user?.email || user?.role) || "KY ERP Kullanıcısı";
+    const method = upper(c.req.method);
+    const path = text(c.req.path);
+    const actionType = `ACCOUNTING_${method}`;
+    const description = `${actor} · ${method} ${path}`;
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs
+       (id,main_company_slug,module,entity_type,entity_id,action,action_type,description,old_value,new_value,after_data,actor,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      companySlug,
+      "MUHASEBE",
+      "ACCOUNTING_OPERATION",
+      null,
+      method,
+      actionType,
+      description,
+      null,
+      null,
+      JSON.stringify({ path, requestId: text(c.get?.("requestId")), status: c.res.status }),
+      actor,
+      new Date().toISOString(),
+    ).run();
+  } catch (error) {
+    console.error("KY ERP accounting audit write failed", error);
+  }
+}
+
 export async function enforceAccountingTenant(c: Context<AppEnv>, next: Next) {
   if (upper(c.req.method) === "OPTIONS") return next();
   const user = await getAuthenticatedUser(c) as Row | null;
   if (!user) {
     return c.json({ ok: false, error: { code: "UNAUTHORIZED", message: "e-Belge Merkezi için geçerli oturum zorunludur." } }, 401);
   }
-  if (!accountingPermission(user)) {
+  const isWrite = writeMethod(c.req.method);
+  if (!isWrite && !accountingPermission(user)) {
     return c.json({ ok: false, error: { code: "ACCOUNTING_FORBIDDEN", message: "Muhasebe / e-Belge Merkezi görüntüleme yetkiniz yok." } }, 403);
   }
   const requested = await requestedTenant(c);
@@ -55,5 +88,8 @@ export async function enforceAccountingTenant(c: Context<AppEnv>, next: Next) {
       return c.json({ ok: false, error: { code: "MAIN_COMPANY_FORBIDDEN", message: "Bu ana firmanın e-Belge verilerine erişim yetkiniz yok." } }, 403);
     }
   }
-  return next();
+  await next();
+  if (isWrite && c.res.status < 400) {
+    c.executionCtx?.waitUntil?.(writeAccountingAudit(c, user, requested));
+  }
 }
