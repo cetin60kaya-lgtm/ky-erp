@@ -8,6 +8,116 @@ const REDIRECT_QUERY_KEYS=["enrollmentId","enrollmentToken","mode","install","pl
 
 const RETIRE_SW=`const TARGET="/ky-guvenlik/";self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("activate",e=>e.waitUntil((async()=>{try{for(const k of await caches.keys())await caches.delete(k)}catch{}try{for(const n of await self.registration.getNotifications())n.close()}catch{}try{await self.registration.unregister()}catch{}try{for(const c of await self.clients.matchAll({type:"window",includeUncontrolled:true}))await c.navigate(TARGET)}catch{}})()));self.addEventListener("fetch",e=>{if(e.request.mode==="navigate")e.respondWith(Response.redirect(new URL(TARGET,self.location.origin),308))});`;
 
+const INSTALL_HELPER_HOTFIX=`(()=>{
+  const ANDROID=/Android/i.test(String(navigator.userAgent||""));
+  const ORIGIN="https://security.kyerp.net";
+  const PATH="/guvenlik/";
+  const PENDING_KEY="kyerp-security-fresh-enrollment-v3";
+  const REVISION="fresh-v3-20260923-install-handoff";
+  const qs=(s)=>document.querySelector(s);
+  const standalone=()=>Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches||navigator.standalone===true);
+  let deferredPrompt=null;
+  let installing=false;
+
+  function setUi(text,buttonText,disabled=false){
+    document.documentElement.classList.add("ky-install-only");
+    qs("#setupPanel")?.classList.add("hidden");
+    qs("#appPanel")?.classList.add("hidden");
+    qs("#installPanel")?.classList.remove("hidden");
+    qs("#androidInstallNote")?.classList.remove("hidden");
+    const state=qs("#installStateText");
+    const button=qs("#installButton");
+    if(state)state.textContent=text;
+    if(button){button.classList.remove("hidden");button.textContent=buttonText;button.disabled=disabled;}
+  }
+
+  function capturePendingEnrollment(){
+    try{
+      const u=new URL(location.href);
+      const id=String(u.searchParams.get("enrollmentId")||"").trim();
+      const token=String(u.searchParams.get("enrollmentToken")||"").trim();
+      const mode=String(u.searchParams.get("mode")||"").trim();
+      if(id&&token){localStorage.setItem(PENDING_KEY,JSON.stringify({id,token,mode,savedAt:Date.now()}));}
+    }catch{}
+  }
+
+  function canonicalInstallUrl(){
+    const u=new URL(PATH,ORIGIN);
+    u.searchParams.set("install","1");
+    u.searchParams.set("platform","android");
+    u.searchParams.set("chrome","1");
+    return u;
+  }
+
+  function openFullChrome(){
+    const u=canonicalInstallUrl();
+    const fallback=encodeURIComponent(u.href);
+    const intent="intent://"+u.host+u.pathname+u.search+"#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url="+fallback+";end";
+    location.href=intent;
+  }
+
+  async function prepare(){
+    if(!("serviceWorker" in navigator))return null;
+    try{
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const reg of regs){
+        let p="";try{p=new URL(reg.scope).pathname}catch{}
+        if(["/","/security/","/ky-guvenlik/","/ky-guvenlik-recover/"].includes(p)){try{await reg.unregister()}catch{}}
+      }
+      const reg=await navigator.serviceWorker.register("/guvenlik/sw.js",{scope:"/guvenlik/",updateViaCache:"none"});
+      try{await reg.update()}catch{}
+      return reg;
+    }catch(error){console.warn("KY Security prepare:",error);return null;}
+  }
+
+  async function requestInstall(){
+    if(installing||standalone())return;
+    installing=true;
+    try{
+      await prepare();
+      if(!deferredPrompt){
+        await new Promise((resolve)=>setTimeout(resolve,1000));
+      }
+      if(!deferredPrompt){
+        setUi("Android kurulum penceresi otomatik açılmadı. Chrome sağ üst ⋮ menüsünden ‘Uygulamayı yükle’ veya ‘Ana ekrana ekle’yi seç.","Tekrar Dene");
+        return;
+      }
+      const prompt=deferredPrompt;deferredPrompt=null;
+      await prompt.prompt();
+      const choice=await prompt.userChoice.catch(()=>null);
+      if(choice?.outcome==="accepted")setUi("Kurulum onaylandı. Android tamamladığında ana ekrandaki KY Güvenlik ikonunu aç.","Kurulum Tamamlanıyor",true);
+      else setUi("Kurulum tamamlanmadı. Yeniden denemek için düğmeye dokun.","Tekrar Dene");
+    }finally{installing=false;}
+  }
+
+  window.KYSecurityInstaller={revision:REVISION,isBrowserInstall:()=>ANDROID&&!standalone(),requestInstall,prepareInstall:prepare,openFullChrome};
+  capturePendingEnrollment();
+  if(standalone()||!ANDROID)return;
+
+  window.addEventListener("beforeinstallprompt",(event)=>{
+    event.preventDefault();deferredPrompt=event;
+    const chromeRequested=new URL(location.href).searchParams.get("chrome")==="1";
+    if(chromeRequested)setUi("Hazır. Android'in kendi kurulum penceresini açmak için düğmeye dokun.","KY Güvenlik'i Yükle");
+  });
+  window.addEventListener("appinstalled",()=>setUi("Kurulum tamamlandı. Ana ekrandaki KY Güvenlik ikonundan aç.","Kurulum Tamamlandı",true));
+
+  function attach(){
+    const button=qs("#installButton");
+    if(!button)return;
+    const chromeRequested=new URL(location.href).searchParams.get("chrome")==="1";
+    if(!chromeRequested){
+      setUi("Önce KY Güvenlik'i tam Google Chrome'da aç.","Chrome'da Aç");
+      button.onclick=(event)=>{event.preventDefault();event.stopPropagation();openFullChrome();};
+      return;
+    }
+    setUi("Chrome kurulum için hazır. Aşağıdaki düğmeye dokun.","KY Güvenlik'i Yükle");
+    button.onclick=(event)=>{event.preventDefault();event.stopPropagation();void requestInstall();};
+    void prepare();
+  }
+
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",attach,{once:true});else attach();
+})();`;
+
 function headers(base=new Headers()){
   const h=new Headers(base);
   h.set("Cache-Control","no-store, max-age=0, must-revalidate");
@@ -33,6 +143,9 @@ function shouldRewrite(pathname,contentType){
 }
 async function proxyScoped(req,url,prefix){
   const method=String(req.method||"GET").toUpperCase();
+  if(url.pathname===`${prefix}/install-helper.js`){
+    return new Response(method==="HEAD"?null:INSTALL_HELPER_HOTFIX,{status:200,headers:headers(new Headers({"Content-Type":"application/javascript; charset=UTF-8"}))});
+  }
   const upstream=new URL(sourcePath(url.pathname,prefix),SOURCE_ORIGIN);upstream.search=url.search;
   const requestHeaders=new Headers(req.headers);requestHeaders.delete("host");
   const init={method,headers:requestHeaders,redirect:"manual"};
