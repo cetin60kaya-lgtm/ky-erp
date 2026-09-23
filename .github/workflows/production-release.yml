@@ -19,7 +19,6 @@ jobs:
   release:
     name: Preflight, D1 yedek, guvenlik cutover, Worker ve Pages
     runs-on: ubuntu-latest
-    environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
