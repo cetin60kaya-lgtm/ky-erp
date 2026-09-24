@@ -1,4 +1,4 @@
-name: KY ERP Daily Safety Readonly Diagnostic 20260924
+name: KY ERP Daily Safety Live Tail 20260924
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  tail:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -21,21 +21,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Read-only live D1 daily safety schema inspection
+      - name: Canli Worker logunu 90 saniye dinle
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
-          set -euo pipefail
-          npx wrangler whoami
-          q() {
-            echo
-            echo "=== SQL ==="
-            echo "$1"
-            npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$1" --json
-          }
-          q "SELECT name,sql FROM sqlite_master WHERE type='table' AND name IN ('hr_daily_attendance','hr_daily_attendance_revision','hr_daily_operation_audit','hr_daily_attendance_notes');"
-          q "PRAGMA foreign_key_list(hr_daily_attendance_revision);"
-          q "PRAGMA foreign_key_list(hr_daily_operation_audit);"
-          q "PRAGMA foreign_key_list(hr_daily_attendance_notes);"
-          q "PRAGMA foreign_keys;"
-          q "SELECT a.work_date,e.full_name,a.id attendance_id,a.day_shift,a.night_shift,a.updated_at,(SELECT MAX(r.revision) FROM hr_daily_attendance_revision r WHERE r.attendance_id=a.id) max_revision FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id WHERE e.main_company_id='mecit-hakan' AND a.work_date IN ('2026-09-24','2026-09-25') ORDER BY a.work_date,e.full_name;"
+          set +e
+          echo "TAIL_READY $(date -u +%FT%TZ)"
+          timeout --signal=INT 90s npx wrangler tail ky-erp-api --format json
+          rc=$?
+          echo "TAIL_FINISHED rc=$rc $(date -u +%FT%TZ)"
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 130 ]; then
+            exit "$rc"
+          fi
+          exit 0
