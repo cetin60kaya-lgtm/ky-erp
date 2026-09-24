@@ -1,5 +1,3 @@
-import { installIsnetSourceIntakeBridge } from "./installIsnetSourceIntakeBridge";
-import { installIsnetSourceWorkbench } from "./installIsnetSourceWorkbench";
 
 const GEOMETRY_STORAGE_PREFIX = "ky-erp:modal-geometry:v4:";
 const MIN_WIDTH = 360;
@@ -335,8 +333,6 @@ export function installPersistentModalSizing() {
   if (window.__kyPersistentModalSizingInstalled) return;
   window.__kyPersistentModalSizingInstalled = true;
 
-  installIsnetSourceIntakeBridge();
-  installIsnetSourceWorkbench();
 
   const scan = (root) => collectPanels(root).forEach(makePersistent);
   scan(document);

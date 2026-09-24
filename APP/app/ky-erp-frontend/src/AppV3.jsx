@@ -20,15 +20,8 @@ const PdksPage = lazyWithRetry(() => import("./pages/modules/PdksPage"), "pdks-v
 const UretimPage = lazyWithRetry(() => import("./pages/modules/UretimPage"), "uretim-v3");
 const BoyahanePage = lazyWithRetry(() => import("./pages/modules/BoyahanePage"), "boyahane-v3");
 const DesenPage = lazyWithRetry(() => import("./pages/modules/DesenPage"), "desen-v3");
-const IsnetPage = lazyWithRetry(() => import("./pages/modules/IsnetPage"), "isnet-v3");
 const EBelgeCenterPage = lazyWithRetry(() => import("./pages/modules/muhasebe/EBelgeCenterPage"), "e-belge-center-v1");
 const MuhasebeSmartMatchPage = lazyWithRetry(() => import("./pages/modules/muhasebe/MuhasebeSmartMatchPage"), "muhasebe-smart-match-v1");
-const IsnetManagementCenterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetManagementCenterPage"), "isnet-management-center-v1");
-const IsnetDocumentCenterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetDocumentCenterPage"), "isnet-document-center-v1");
-const IsnetWorkflowFinalPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetWorkflowFinalPage"), "isnet-workflow-final-v1");
-const IsnetPreparedInvoicePage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetPreparedInvoicePage"), "isnet-prepared-invoice-v1");
-const IsnetArchiveDeliveryPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetArchiveDeliveryPage"), "isnet-archive-delivery-v1");
-const IsnetSettingsMasterPage = lazyWithRetry(() => import("./pages/modules/isnet/IsnetSettingsMasterPage"), "isnet-settings-master-v1");
 const AiAssistantPage = lazyWithRetry(() => import("./pages/modules/AiAssistantPage"), "asistan-v3");
 const CommunicationHubPage = lazyWithRetry(() => import("./pages/modules/CommunicationHubPage"), "communication-hub-v1");
 const ComplianceCenterPage = lazyWithRetry(() => import("./pages/modules/compliance/ComplianceCenterPage"), "compliance-center-v1");
@@ -48,16 +41,7 @@ const MODULE_LOADERS = {
   desen: () => import("./pages/modules/DesenPage"),
   uretim: () => import("./pages/modules/UretimPage"),
   boyahane: () => import("./pages/modules/BoyahanePage"),
-  isnet: () => Promise.all([
-    import("./pages/modules/muhasebe/EBelgeCenterPage"),
-    import("./pages/modules/IsnetPage"),
-    import("./pages/modules/isnet/IsnetManagementCenterPage"),
-    import("./pages/modules/isnet/IsnetDocumentCenterPage"),
-    import("./pages/modules/isnet/IsnetWorkflowFinalPage"),
-    import("./pages/modules/isnet/IsnetPreparedInvoicePage"),
-    import("./pages/modules/isnet/IsnetArchiveDeliveryPage"),
-    import("./pages/modules/isnet/IsnetSettingsMasterPage"),
-  ]),
+  "e-belge": () => import("./pages/modules/muhasebe/EBelgeCenterPage"),
   iletisim: () => import("./pages/modules/CommunicationHubPage"),
   asistan: () => import("./pages/modules/AiAssistantPage"),
   compliance: () => import("./pages/modules/compliance/ComplianceCenterPage"),
@@ -305,24 +289,17 @@ export default function AppV3() {
     if (activeModule?.key === "muhasebe") return <MuhasebePage activeTab={activeTab} {...sharedProps} />;
 
     const eBelgeView = {
-      "e-belge-ana-sayfa": "overview",
-      "e-belge-yukleme": "upload",
-      "e-belge-merkezi": "pool",
-      "e-belge-moduller": "modules",
+      "genel-bakis": "overview",
+      "gelen-belgeler": "incoming",
+      "giden-belgeler": "outgoing",
+      "belge-havuzu": "pool",
+      "eslestirmeler": "matching",
+      "onay-sorunlar": "issues",
+      "is-akislari": "workflow",
+      "arsiv-cikti": "archive",
+      "entegrasyonlar": "integrations",
     }[activeTab];
-    if (activeModule?.key === "isnet" && eBelgeView) return <EBelgeCenterPage {...sharedProps} initialView={eBelgeView} />;
-    if (activeModule?.key === "isnet" && activeTab === "yonetim-merkezi") return <IsnetManagementCenterPage {...sharedProps} />;
-    if (activeModule?.key === "isnet" && activeTab === "belge-akisi") return <IsnetDocumentCenterPage {...sharedProps} />;
-    if (activeModule?.key === "isnet" && activeTab === "irsaliyeden-faturaya" && moduleActionContext?.targetModule === "isnet" && moduleActionContext?.targetTab === "irsaliyeden-faturaya" && moduleActionContext?.invoiceDraft && moduleActionContext?.sourceId) {
-      return <IsnetPreparedInvoicePage {...sharedProps} />;
-    }
-    if (activeModule?.key === "isnet" && activeTab === "irsaliyeden-faturaya") return <IsnetWorkflowFinalPage {...sharedProps} />;
-    if (activeModule?.key === "isnet" && ["kesilen-belgeler", "cikti-kuyrugu", "mail-merkezi"].includes(activeTab)) {
-      const initialSection = activeTab === "cikti-kuyrugu" ? "selected-print" : activeTab === "mail-merkezi" ? "mail-merkezi" : "kesilen-belgeler";
-      return <IsnetArchiveDeliveryPage {...sharedProps} initialSection={initialSection} />;
-    }
-    if (activeModule?.key === "isnet" && activeTab === "ayarlar") return <IsnetSettingsMasterPage {...sharedProps} />;
-    if (activeModule?.key === "isnet") return <IsnetPage activeTab={activeTab} {...sharedProps} />;
+    if (activeModule?.key === "e-belge" && eBelgeView) return <EBelgeCenterPage {...sharedProps} initialView={eBelgeView} />;
 
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "boyahane") return <BoyahanePage activeTab={activeTab} {...sharedProps} />;

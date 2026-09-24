@@ -32,7 +32,7 @@ import {
   updateIsnetDepartment,
 } from "../../../services/isnetBusinessSettingsApi";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
-import "./IsnetSettingsMasterPage.css";
+import "./eBelgeIntegrationsWorkspace.css";
 
 const SECTIONS = [
   ["connection", "Bağlantı", ShieldCheck],
@@ -95,7 +95,7 @@ function Field({ label, children, wide = false }) {
   return <label className={wide ? "ism-field wide" : "ism-field"}><span>{label}</span>{children}</label>;
 }
 
-export default function IsnetSettingsMasterPage({
+export default function EBelgeIntegrationsWorkspace({
   activeMainCompany,
   openModule,
 }) {
@@ -132,7 +132,7 @@ export default function IsnetSettingsMasterPage({
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
       const result = await loadModuleData({
-        scope: `isnet:${tenant}:ayarlar`,
+        scope: `e-belge:${tenant}:entegrasyonlar`,
         sources: {
           connection: { critical: true, load: () => getIsnetSettings() },
           business: { critical: true, load: () => getIsnetBusinessSettings(activeMainCompany) },
@@ -327,7 +327,7 @@ export default function IsnetSettingsMasterPage({
     openModule?.("asistan", {
       tabKey: "sohbet",
       actionContext: {
-        sourceModule: "isnet",
+        sourceModule: "e-belge",
         sourceRoute: window.location.pathname,
         prompt:
           "İşNet bağlantı ve iş ayarlarını kontrol et. Eksik taşıyıcı bilgilerini, departmansız modelleri, sorumlusu veya mail alıcısı olmayan müşteri kayıtlarını, test numunesi muafiyet eksiklerini özetle.",

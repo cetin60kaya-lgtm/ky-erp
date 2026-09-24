@@ -32,7 +32,7 @@ test("tum ana moduller menu, ikon ve renk kimligiyle tek tek kapsanir", () => {
   const pdksRegistry = readFileSync(new URL("../app/pdksModuleRegistryPatch.js", import.meta.url), "utf8");
   const shellCss = readFileSync(new URL("./shell-v3-modern.css", import.meta.url), "utf8") + flowCss;
   const sources = registry + registryExt + pdksRegistry;
-  const modules = ["muhasebe", "desen", "boyahane", "gunluk-operasyon", "ik", "pdks", "uretim", "isnet", "iletisim", "compliance", "depolama", "sistem-merkezi", "admin", "asistan"];
+  const modules = ["muhasebe", "desen", "boyahane", "gunluk-operasyon", "ik", "pdks", "uretim", "e-belge", "iletisim", "compliance", "depolama", "sistem-merkezi", "admin", "asistan"];
   for (const key of modules) {
     assert.match(sources, new RegExp(`key:\\s*["']${key}["']`), `${key} menu kaydi eksik`);
     assert.ok(shell.includes(`${key}: { icon:`) || shell.includes(`"${key}": { icon:`), `${key} ikon kimligi eksik`);
@@ -48,7 +48,7 @@ test("workspace kirik beyaz taban ve gorunur alt bitis siniri tasir", () => {
   assert.match(flowCss, /color-mix\(in srgb, var\(--active-tab-soft\)/);
 });
 test("tum ana moduller preload ve render yoluna sahiptir", () => {
-  const modules = ["muhasebe", "desen", "boyahane", "gunluk-operasyon", "ik", "pdks", "uretim", "isnet", "iletisim", "compliance", "depolama", "sistem-merkezi", "admin", "asistan"];
+  const modules = ["muhasebe", "desen", "boyahane", "gunluk-operasyon", "ik", "pdks", "uretim", "e-belge", "iletisim", "compliance", "depolama", "sistem-merkezi", "admin", "asistan"];
   for (const key of modules) {
     const loaderKey = key.includes("-") ? `"${key}": () =>` : `${key}: () =>`;
     assert.ok(appV3.includes(loaderKey), `${key} preload yolu eksik`);

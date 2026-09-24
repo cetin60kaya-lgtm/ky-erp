@@ -108,33 +108,6 @@ export async function getFirmaContacts(firmaId, params = {}) {
   }
 }
 
-export async function getBelgeKontrol(params = {}) {
-  return unwrap(await apiGet("/muhasebe/belge-havuzu", withCompany(params)));
-}
-
-export async function getBelgeKontrolById(activeMainCompany, id) {
-  return unwrap(
-    await apiGet(
-      `/muhasebe/belge-havuzu/${encodeURIComponent(id)}`,
-      withCompany(activeMainCompany),
-    ),
-  );
-}
-
-export async function softDeleteBelgeHavuzu(
-  activeMainCompany,
-  id,
-  reason = "Yanlış yükleme",
-) {
-  return unwrap(
-    await apiPatch(`/muhasebe/belge-havuzu/${encodeURIComponent(id)}/sil`, {
-      ...withCompany(activeMainCompany),
-      reason,
-      softDelete: true,
-    }),
-  );
-}
-
 export async function getCariHareketler(params = {}) {
   return unwrap(await apiGet("/muhasebe/firmalar", withCompany(params)));
 }

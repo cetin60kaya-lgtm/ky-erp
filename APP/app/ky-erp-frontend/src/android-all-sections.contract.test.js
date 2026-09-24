@@ -41,18 +41,15 @@ test("all modules inherit Android touch targets, scrolling and software keyboard
   assert.match(main, /installAndroidRuntimeBridge\(\)/);
 });
 
-test("async İşNet PDF/XML and print buttons survive Android popup blocking", () => {
-  const fileApi = read("./services/isnetLocalFileApi.js");
-  const documentCenter = read("./pages/modules/isnet/IsnetDocumentCenterPage.jsx");
-  const printPage = read("./pages/modules/isnet/IsnetSelectedPrintPage.jsx");
+test("async e-Belge file preview survives Android popup blocking", () => {
+  const api = read("./services/eBelgeApi.js");
+  const center = read("./pages/modules/muhasebe/EBelgeCenterPage.jsx");
 
-  assert.match(fileApi, /reserveBlobTab/);
-  assert.match(fileApi, /preview\.opener = null/);
-  assert.match(fileApi, /window\.location\.assign\(url\)/);
-  assert.match(documentCenter, /const preview = reserveBlobTab\(\)/);
-  assert.match(documentCenter, /openBlobInNewTab\(blob, preview\)/);
-  assert.match(printPage, /const preview = reserveBlobTab\(\)/);
-  assert.match(printPage, /openBlobInNewTab\(blob, preview\)/);
+  assert.match(api, /reserveEBelgePreviewTab/);
+  assert.match(api, /preview\.opener = null/);
+  assert.match(api, /window\.location\.assign\(url\)/);
+  assert.match(center, /const reservedWindow = reserveEBelgePreviewTab\(\)/);
+  assert.match(center, /openEBelgeBlob\(await getEBelgeFilePreview\(file\.id\), reservedWindow\)/);
 });
 
 test("desktop double-click shortcuts keep a single-tap path on touch screens", () => {

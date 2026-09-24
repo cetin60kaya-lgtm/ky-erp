@@ -10,8 +10,8 @@ import {
   Settings,
   Trash2,
 } from "lucide-react";
-import { fetchMuhasebeModels } from "../../services/muhasebeService";
-import { getDesenHavuz } from "../../services/desenApi";
+import { getDesenSimpleModels } from "../../services/desenApi";
+import { getDesenHavuz, getDesenSimpleModels } from "../../services/desenApi";
 import {
   addUretimGirisi,
   createManuelIs,
@@ -154,7 +154,7 @@ export function DetailedProductionEntry({ activeMainCompany, initialMachineSetti
         const [rows, machineRows, modelRows, desenRows] = await Promise.all([
           getImalatGirisHavuzu(activeMainCompany),
           getMakineVardiya(activeMainCompany),
-          fetchMuhasebeModels(activeMainCompany),
+          getDesenSimpleModels(activeMainCompany, { limit: 5000, pageSize: 5000 }),
           getDesenHavuz(activeMainCompany, { limit: 5000, pageSize: 5000 }),
         ]);
         if (cancelled) return;

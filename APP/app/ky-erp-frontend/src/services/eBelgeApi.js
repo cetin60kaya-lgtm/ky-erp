@@ -1,4 +1,4 @@
-import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, apiUpload } from "../utils/api";
+import { apiFetch, apiGet, apiPatch, apiPost, apiUpload } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -81,8 +81,6 @@ export const reconcileAllEBelge = () =>
 export const updateEBelge = (id, payload) =>
   apiPatch(`/e-belge/documents/${encodeURIComponent(id)}`, payload).then(unwrap);
 
-export const deleteEBelge = (id) =>
-  apiDelete(`/e-belge/documents/${encodeURIComponent(id)}`).then(unwrap);
 
 export const finalizeEBelge = (id, payload = {}) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/finalize`, payload, { timeoutMs: 120_000 }).then(unwrap);
@@ -111,8 +109,27 @@ export const getEBelgeFilePreview = (fileId) =>
     timeoutMs: 60_000,
   });
 
-export function openEBelgeBlob(blob) {
+export function reserveEBelgePreviewTab() {
+  try {
+    const preview = window.open("", "_blank");
+    if (preview) {
+      try { preview.opener = null; } catch { /* Opener cleanup is best-effort. */ }
+      preview.document.title = "KY ERP belge hazırlanıyor";
+      preview.document.body.innerHTML = '<p style="font-family:system-ui,sans-serif;padding:20px">KY ERP belgesi hazırlanıyor...</p>';
+    }
+    return preview;
+  } catch { return null; }
+}
+
+export function openEBelgeBlob(blob, reservedWindow = null) {
   const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener,noreferrer");
+  let opened = false;
+  try {
+    if (reservedWindow && !reservedWindow.closed) {
+      reservedWindow.location.href = url;
+      opened = true;
+    } else opened = Boolean(window.open(url, "_blank", "noopener,noreferrer"));
+  } catch { opened = false; }
+  if (!opened) window.location.assign(url);
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

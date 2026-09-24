@@ -10,12 +10,10 @@ import {
   RefreshCw,
   Save,
   Search,
-  Trash2,
   Upload,
   X,
 } from "lucide-react";
 import {
-  deleteEBelge,
   finalizeEBelge,
   getEBelgeCompanySuggestions,
   getEBelgeDashboard,
@@ -24,6 +22,7 @@ import {
   getEBelgeIntegrations,
   getEBelgePool,
   openEBelgeBlob,
+  reserveEBelgePreviewTab,
   reconcileAllEBelge,
   reconcileEBelge,
   resolveEBelgeIssue,
@@ -31,6 +30,8 @@ import {
   uploadEBelge,
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
+import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
+import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import "./eBelgeCenter.css";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -273,15 +274,11 @@ function DetailDrawer({ id, onClose, onChanged }) {
     catch (e) { setError(e?.message || "İşlem tamamlanamadı."); }
     finally { setBusy(""); }
   };
-  const preview = async (file) => action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id)));
-  const saveDocument = async () => action("edit", async () => { await updateEBelge(id, editForm); setEditing(false); });
-  const removeDocument = async () => {
-    if (!window.confirm(`${detail?.document_no || "Bu belge"} kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?`)) return;
-    setBusy("delete"); setError("");
-    try { await deleteEBelge(id); onClose?.(); await onChanged?.(); }
-    catch (e) { setError(e?.message || "Belge tamamen silinemedi."); }
-    finally { setBusy(""); }
+  const preview = async (file) => {
+    const reservedWindow = reserveEBelgePreviewTab();
+    return action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id), reservedWindow));
   };
+  const saveDocument = async () => action("edit", async () => { await updateEBelge(id, editForm); setEditing(false); });
 
   if (!id) return null;
   const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
@@ -323,7 +320,6 @@ function DetailDrawer({ id, onClose, onChanged }) {
           {!detail.party_company_id && <button type="button" onClick={() => setCompanyOpen(true)}>Cari Eşleştir</button>}
           <button type="button" disabled={Boolean(busy)} onClick={() => action("match", () => reconcileEBelge(id))}>{busy === "match" ? <LoaderCircle className="eb-spin" size={16} /> : <Link2 size={16} />} Yeniden Kontrol</button>
           <button type="button" className="eb-primary" disabled={Boolean(busy) || detail.status === "POSTED"} onClick={() => action("final", async () => { const result = await finalizeEBelge(id); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } })); return result; })}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} Son Onay / Muhasebeleştir</button>
-          <button type="button" className="eb-danger" disabled={Boolean(busy) || detail.status === "POSTED" || detail.status === "APPROVED"} onClick={removeDocument}>{busy === "delete" ? <LoaderCircle className="eb-spin" size={16} /> : <Trash2 size={16} />} Tam Sil</button>
         </section>
         <div className="eb-document-body">
           <section className="eb-document-lines-section">
@@ -385,7 +381,9 @@ function DetailDrawer({ id, onClose, onChanged }) {
 }
 
 export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule }) {
-  const view = ["overview", "upload", "pool", "modules"].includes(initialView) ? initialView : "overview";
+  const allowedViews = ["overview", "incoming", "outgoing", "pool", "matching", "issues", "workflow", "archive", "integrations"];
+  const view = allowedViews.includes(initialView) ? initialView : "overview";
+  const poolViews = ["incoming", "outgoing", "pool", "matching", "issues", "archive"];
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
   const [dashboard, setDashboard] = useState({ summary: {}, recent: [] });
   const [integrations, setIntegrations] = useState({ providers: [], archive: [], fileHub: [] });
@@ -400,8 +398,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [notice, setNotice] = useState("");
   const [selectedId, setSelectedId] = useState("");
 
-  const params = useMemo(() => ({ filter, q: query, from, to, page: 1, pageSize: 100 }), [filter, from, query, to]);
-  const openEBelgeTab = useCallback((tabKey) => openModule?.("isnet", { tabKey }), [openModule]);
+  const effectiveFilter = view === "matching" ? "MATCHING_WAIT" : view === "issues" ? "ISSUE" : view === "archive" ? "HISTORY" : view === "pool" ? filter : "ALL";
+  const params = useMemo(() => ({ filter: effectiveFilter, q: query, from, to, page: 1, pageSize: 100 }), [effectiveFilter, from, query, to]);
+  const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
 
   const loadPool = useCallback(async () => {
     const data = await getEBelgePool(params);
@@ -413,25 +412,25 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setDashboard(data || { summary: {}, recent: [] });
   }, []);
 
-  const loadModules = useCallback(async () => {
+  const loadIntegrations = useCallback(async () => {
     const data = await getEBelgeIntegrations();
     setIntegrations(data || { providers: [], archive: [], fileHub: [] });
   }, []);
 
   const refreshCurrent = useCallback(async () => {
-    if (view === "upload") return;
+    if (view === "workflow") return;
     setBusy(true);
     setError("");
     try {
       if (view === "overview") await loadDashboard();
-      if (view === "pool") await loadPool();
-      if (view === "modules") await loadModules();
+      else if (poolViews.includes(view)) await loadPool();
+      else if (view === "integrations") await loadIntegrations();
     } catch (e) {
       setError(e?.message || "e-Belge verileri yüklenemedi.");
     } finally {
       setBusy(false);
     }
-  }, [loadDashboard, loadModules, loadPool, view]);
+  }, [loadDashboard, loadIntegrations, loadPool, view]);
 
   useEffect(() => { void refreshCurrent(); }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
 
@@ -442,7 +441,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setNotice("");
     try {
       await reconcileAllEBelge();
-      setNotice("Açık belgeler yeniden kontrol edildi. Uygun fatura–irsaliye bağlantıları güncellendi; gerçek kontrol gerektiren kayıtlar havuzda bırakıldı.");
+      setNotice("Açık belgeler yeniden kontrol edildi. Uygun fatura–irsaliye bağlantıları güncellendi; yalnız gerçek kontrol gerektiren kayıtlar açık bırakıldı.");
       await loadPool();
     } catch (e) {
       setError(e?.message || "Eşleştirme kontrolü tamamlanamadı.");
@@ -453,43 +452,52 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
   const handleUploaded = async (result) => {
     setLastUpload(result || {});
-    try { await loadDashboard(); } catch { /* Yükleme başarılıysa özet yenileme ikincil kalır. */ }
+    try { await loadPool(); } catch { /* Yükleme başarılıysa liste yenileme ikincil kalır. */ }
   };
 
-  const rows = pool.items || [];
-  const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Hakan Empirme";
+  const allRows = pool.items || [];
+  const rows = useMemo(() => {
+    if (view === "incoming") return allRows.filter((row) => String(row.direction || "INCOMING").toUpperCase() !== "OUTGOING");
+    if (view === "outgoing") return allRows.filter((row) => String(row.direction || "").toUpperCase() === "OUTGOING");
+    return allRows;
+  }, [allRows, view]);
+  const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Hakan Emprime";
   const summary = dashboard.summary || {};
-  const providers = [...(integrations.providers || [])].sort((a, b) => {
-    const rank = (row) => row?.key === "MANUAL" ? 0 : row?.key === "ISNET" ? 1 : 2;
-    return rank(a) - rank(b);
-  });
+  const providers = [...(integrations.providers || [])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
-    overview: ["e-Belge Ana Sayfa", "Bugün ve bu ay gelen-giden belgeleri, kontrol bekleyenleri ve son hareketleri tek bakışta görün."],
-    upload: ["Belge Yükle", "Fatura ve irsaliyeleri toplu yükleyin; sistem türü ve gelen-giden yönünü otomatik belirleyip havuza alsın."],
-    pool: ["Belge Havuzu", "Tüm belgeleri geniş tabloda filtreleyin, inceleyin, cari/ürün/LOT düzeltmelerini ve eşleştirmeleri yönetin."],
-    modules: ["Modüller", "Manuel belge motoru ve bağlı adaptörlerin durumunu görün. İşNet otomatik kullanım bu çalışma düzeninde kapalıdır."],
+    overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
+    incoming: ["Gelen Belgeler", "Tedarikçi faturaları ve müşteri/tedarikçi irsaliyelerini tek canonical havuzdan yönetin."],
+    outgoing: ["Giden Belgeler", "Bizim faturalarımızı ve irsaliyelerimizi kaynak sağlayıcıdan bağımsız tek listede izleyin."],
+    pool: ["Belge Havuzu", "XML, PDF ve görselleri yükleyin; belgeyi, firmayı, kalemleri ve dosyaları tek canonical kayıt üzerinden yönetin."],
+    matching: ["Eşleştirmeler", "Fatura–irsaliye, firma, ürün ve LOT eşleşmesi bekleyen kayıtları sonuçlandırın."],
+    issues: ["Onay & Sorunlar", "Gerçek hata, eksik eşleşme ve son onay bekleyen belgeleri tek yerde çözün."],
+    workflow: ["İş Akışları", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
+    archive: ["Arşiv & Çıktı", "Muhasebeleşen belgeleri, dosya eklerini ve arşiv durumunu tek kaynaktan inceleyin."],
+    integrations: ["Entegrasyonlar", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
   }[view];
+  const poolTitle = viewMeta[0];
+  const poolHint = viewMeta[1];
+  const showPool = poolViews.includes(view);
 
   return <section className="eb-page">
     <div className="eb-company-context"><span>Belge Sahibi</span><strong>{companyName}</strong></div>
 
     <div className="eb-hero">
       <div>
-        <span className="eb-kicker">e-Belge · {view === "modules" ? "Sistem Durumu" : "Manuel Çalışma"}</span>
+        <span className="eb-kicker">e-Belge · Tek Canonical Havuz</span>
         <h2>{viewMeta[0]}</h2>
         <p>{viewMeta[1]}</p>
       </div>
       <div className="eb-hero-actions">
         {view === "overview" && <>
-          <button type="button" onClick={() => openEBelgeTab("e-belge-yukleme")}><Upload size={17} /> Belge Yükle</button>
-          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("e-belge-merkezi")}><FileText size={17} /> Belge Havuzu</button>
+          <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
+          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Sorunları Aç</button>
         </>}
-        {view === "upload" && <button type="button" onClick={() => openEBelgeTab("e-belge-merkezi")}><FileText size={17} /> Belge Havuzunu Aç</button>}
-        {view === "pool" && <>
+        {showPool && <>
           <button type="button" onClick={loadPool} disabled={busy}><RefreshCw size={17} /> Güncelle</button>
-          <button type="button" className="eb-primary" onClick={runMatching} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>
+          {(view === "matching" || view === "pool") && <button type="button" className="eb-primary" onClick={runMatching} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>}
         </>}
-        {view === "modules" && <button type="button" onClick={loadModules} disabled={busy}><RefreshCw size={17} /> Durumu Yenile</button>}
+        {view === "integrations" && <button type="button" onClick={loadIntegrations} disabled={busy}><RefreshCw size={17} /> Durumu Yenile</button>}
       </div>
     </div>
 
@@ -499,65 +507,42 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "overview" && <>
       <div className="eb-stats eb-dashboard-stats">
         <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
-        <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Hakan Emprime alıcı" />
-        <StatCard label="Bugün Giden" value={summary.todayOutgoing} hint="Hakan Emprime düzenleyen" />
+        <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />
+        <StatCard label="Bugün Giden" value={summary.todayOutgoing} hint="Düzenlediğimiz belgeler" />
         <StatCard label="Kontrol Bekleyen" value={summary.attention} hint="Gerçek uyarı / hata" />
         <StatCard label="Eşleşme Bekleyen" value={summary.matchingWait} hint="Fatura – irsaliye" />
       </div>
-
       <section className="eb-dashboard-periods">
-        <article className="eb-period-card current">
-          <header><div><span>DÖNEM ÖZETİ</span><strong>Bu Ay</strong></div><b>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</b></header>
-          <div className="eb-period-flow">
-            <div><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></div>
-            <div><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></div>
-          </div>
-          <footer>{dateText(dashboard.monthStart || monthStart())} – Bugün</footer>
-        </article>
-        <article className="eb-period-card previous">
-          <header><div><span>KARŞILAŞTIRMA</span><strong>Geçen Ay</strong></div><b>{Number(summary.previousMonthTotal || 0).toLocaleString("tr-TR")} belge</b></header>
-          <div className="eb-period-flow">
-            <div><span>Gelen</span><strong>{Number(summary.previousMonthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthIncomingAmount)}</small></div>
-            <div><span>Giden</span><strong>{Number(summary.previousMonthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthOutgoingAmount)}</small></div>
-          </div>
-          <footer>{dateText(dashboard.previousMonthStart)} – {dateText(dashboard.previousMonthEnd)}</footer>
-        </article>
+        <article className="eb-period-card current"><header><div><span>DÖNEM ÖZETİ</span><strong>Bu Ay</strong></div><b>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.monthStart || monthStart())} – Bugün</footer></article>
+        <article className="eb-period-card previous"><header><div><span>KARŞILAŞTIRMA</span><strong>Geçen Ay</strong></div><b>{Number(summary.previousMonthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.previousMonthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.previousMonthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.previousMonthStart)} – {dateText(dashboard.previousMonthEnd)}</footer></article>
       </section>
-
       <section className="eb-pool eb-recent-pool eb-dashboard-recent">
-        <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("e-belge-merkezi")}>Belge Havuzunu Aç</button></div>
+        <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("belge-havuzu")}>Belge Havuzunu Aç</button></div>
         {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-pool-table-scroll eb-dashboard-table-scroll"><div className="eb-table">
           <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Durum</span></div>
-          {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}>
-            <span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span>
-            <span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span>
-            <span>{dateText(row.issue_date)}</span>
-            <span><small>{sourceLabel(row.source_type)}</small></span>
-            <span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span>
-            <span className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span>
-          </button>)}
-        </div></div> : <Empty title="Henüz belge yok" text="Belge Yükle ekranından ilk dosyaları havuza alın." />}
+          {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span><span>{dateText(row.issue_date)}</span><span><small>{sourceLabel(row.source_type)}</small></span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>)}
+        </div></div> : <Empty title="Henüz belge yok" text="Belge Havuzu'ndan ilk dosyaları yükleyin." />}
       </section>
-    </>}
-
-    {view === "upload" && <>
-      <UploadPanel onUploaded={handleUploaded} />
-      {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div><button type="button" onClick={() => openEBelgeTab("e-belge-merkezi")}>Havuzda İncele</button></div>}
     </>}
 
     {view === "pool" && <>
+      <UploadPanel onUploaded={handleUploaded} />
+      {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div></div>}
+    </>}
+
+    {showPool && <>
       <div className="eb-stats">
-        <StatCard label="Toplam Belge" value={pool.stats?.total} hint="Havuzdaki kayıt" />
+        <StatCard label="Toplam Belge" value={pool.stats?.total} hint="Canonical havuz" />
         <StatCard label="Gelen Fatura" value={pool.stats?.incomingInvoices} hint="Tedarikçi faturası" />
         <StatCard label="Giden Fatura" value={pool.stats?.outgoingInvoices} hint="Satış faturası" />
         <StatCard label="İrsaliye" value={pool.stats?.dispatches} hint="Gelen + giden" />
         <StatCard label="Muhasebeleşti" value={pool.stats?.posted} hint="Son onayı tamamlanan" />
       </div>
       <section className="eb-pool">
-        <div className="eb-section-title"><div><strong>Belge Havuzu</strong><span>Gelen/giden ve belge türleri sekme değil, filtre olarak kullanılır.</span></div><span>{pool.total || 0} kayıt</span></div>
+        <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint}</span></div><span>{rows.length} kayıt</span></div>
         <div className="eb-pool-toolbar">
           <div className="eb-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Belge no, firma veya VKN ara" /></div>
-          <label>Göster<select value={filter} onChange={(event) => setFilter(event.target.value)}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
+          {view === "pool" && <label>Göster<select value={filter} onChange={(event) => setFilter(event.target.value)}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>}
           <label>Başlangıç<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
           <label>Bitiş<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
         </div>
@@ -566,36 +551,29 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           {rows.map((row) => {
             const hasIssue = Number(row.issue_count || 0) > 0;
             const posted = String(row.status || "").toUpperCase() === "POSTED";
-            return <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}>
-              <span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span>
-              <span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span>
-              <span>{dateText(row.issue_date)}</span>
-              <span><small>{sourceLabel(row.source_type)}</small><em>{row.archive_status || "-"}</em></span>
-              <span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span>
-              <span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span>
-            </button>;
+            return <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span><span>{dateText(row.issue_date)}</span><span><small>{sourceLabel(row.source_type)}</small><em>{row.archive_status || "-"}</em></span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
           })}
-        </div></div> : <Empty title="Bu filtrede belge yok" text="Tarih / filtre alanlarını değiştirin veya Belge Yükle ekranından dosya ekleyin." />}
+        </div></div> : <Empty title="Bu görünümde belge yok" text="Tarih aralığını değiştirin veya yeni belge yükleyin." />}
       </section>
     </>}
 
-    {view === "modules" && <section className="eb-modules-panel">
-      <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Çalışma modu: Manuel havuz</strong><span>XML, PDF ve görsel yükleme ana kanaldır. İşNet otomatik senkronizasyonu bu ekrandan çalıştırılmaz.</span></div></div>
-      <div className="eb-module-grid">
-        {providers.map((provider) => {
-          const key = String(provider.key || "").toUpperCase();
-          const manual = key === "MANUAL";
-          const isnet = key === "ISNET";
-          return <article key={key || provider.label} className={`eb-module-card ${manual ? "active" : ""}`}>
-            <div><strong>{provider.label || key}</strong><span className={`eb-module-status ${manual ? "active" : isnet ? "paused" : "idle"}`}>{manual ? "AKTİF" : isnet ? "BEKLEMEDE" : "HAZIR"}</span></div>
-            <p>{manual ? "Dosya yükleme, otomatik tür/yön tespiti ve belge eşleştirme aktif." : isnet ? "Bağlantı bilgisi korunur; otomatik kullanım ve senkron bu çalışma düzeninde kapalıdır." : "Adaptör altyapısı mevcut; günlük iş akışında kullanılmıyor."}</p>
-            <small>Sistem durumu: {provider.status || "-"}</small>
-          </article>;
-        })}
-      </div>
-      <section className="eb-summary-panel"><div className="eb-section-title"><div><strong>Arşiv / File Hub</strong><span>Belge dosyalarının arka plan saklama durumu</span></div></div><div className="eb-module-mini-list">{(integrations.archive || []).length ? integrations.archive.map((row) => <span key={row.status}><strong>{row.status}</strong><small>{row.n} kayıt</small></span>) : <span><strong>Hazır</strong><small>Bekleyen arşiv özeti yok</small></span>}</div></section>
-    </section>}
+    {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} />}
 
-    <DetailDrawer id={selectedId} onClose={() => setSelectedId("")} onChanged={view === "pool" ? loadPool : loadDashboard} />
+    {view === "integrations" && <>
+      <section className="eb-modules-panel">
+        <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Provider bağımsız belge gerçeği</strong><span>İşNet yalnız bir e-Belge sağlayıcısıdır. İşNet, manuel XML/PDF ve diğer sağlayıcılar aynı canonical belge havuzuna kayıt üretir.</span></div></div>
+        <div className="eb-module-grid">
+          {providers.map((provider) => {
+            const key = String(provider.key || provider.label || "").toUpperCase();
+            const status = String(provider.status || "READY").toUpperCase();
+            const active = /ACTIVE|CONNECTED|READY|OK/.test(status);
+            return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{active ? "HAZIR" : status}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}</small></article>;
+          })}
+        </div>
+      </section>
+      <EBelgeIntegrationsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />
+    </>}
+
+    <DetailDrawer id={selectedId} onClose={() => setSelectedId("")} onChanged={showPool ? loadPool : loadDashboard} />
   </section>;
 }

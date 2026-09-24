@@ -10,7 +10,7 @@ const HOME_PATH = "/muhasebe/yonetim-ozeti";
 
 const MODULE_LABELS = {
   muhasebe: "Muhasebe",
-  isnet: "İşNet",
+  "e-belge": "e-Belge Merkezi",
   ik: "İK",
   desen: "Desen",
   uretim: "İmalat",
