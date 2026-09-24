@@ -3,8 +3,10 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-09-24",
+  "releaseDate": "2026-09-25",
   "scope": [
+    "gunluk-operasyon-log-current-rate-summary",
+    "gunluk-operasyon-log-page-total-parity",
     "gunluk-operasyon-log-readable-ui",
     "gunluk-operasyon-log-work-date",
     "gunluk-operasyon-log-range-summary",
@@ -14,5 +16,5 @@
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Gunluk Operasyon Log ekrani okunakli Log + Analiz yapisina gecirildi. Islem zamani ve kayit tarihi ayrildi; secili tarih araliginda personelin gunduz/gece gun ve ucret toplamlari her log satirinda gorunur. Gelismis Arama sekmesinde personel, vardiya ve islem filtreleri bulunur."
+  "note": "Gunluk Operasyon Log + Analiz para toplamlari ana sayfadaki Tarih Araligi Toplami ile ayni guncel personel ucret kaynagina baglandi. Attendance eski ucret degeri yalniz fallback olarak kalir; gun ve vardiya sayilari degismez."
 }
