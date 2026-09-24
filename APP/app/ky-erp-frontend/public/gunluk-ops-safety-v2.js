@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260924-2359-daily-log-inline-analysis-v4';
+  const VERSION = '20260925-0015-daily-log-current-rate-v5';
   const STYLE_ID = 'kyerp-daily-safety-v2-style';
   const ANALYSIS_BUTTON_ID = 'kyerp-gop-analysis-button';
   const ANALYSIS_OVERLAY_ID = 'kyerp-gop-analysis-overlay';
@@ -259,7 +259,7 @@
       const dayRows = [...days.values()].sort((a, b) => b.date.localeCompare(a.date));
       body.innerHTML = `
         <div class="kyerp-analysis-kpis">
-          <article><span>Dönem</span><strong>${esc(fmtDate(start))}</strong><small>${esc(fmtDate(end))} tarihine kadar</small></article>
+          <article><span>Dönem · Güncel ücret</span><strong>${esc(fmtDate(start))}</strong><small>${esc(fmtDate(end))} tarihine kadar</small></article>
           <article><span>Farklı Personel</span><strong>${unique.size}</strong><small>${rows.length} günlük kayıt</small></article>
           <article><span>Gündüz</span><strong>${dayCount}</strong><small>${money(dayTotal)}</small></article>
           <article><span>Gece</span><strong>${nightCount}</strong><small>${money(nightTotal)}</small></article>
@@ -395,8 +395,8 @@
         const name = String(person.name || person.fullName || row.personName || '').trim();
         const day = truthy(row.dayShift ?? row.day);
         const night = truthy(row.nightShift ?? row.night);
-        const dayAmount = day ? Number(row.dayWage || row.dayRate || 0) : 0;
-        const nightAmount = night ? Number(row.nightWage || row.nightRate || 0) : 0;
+        const dayAmount = day ? Number(person.dayRate || row.dayWage || row.dayRate || 0) : 0;
+        const nightAmount = night ? Number(person.nightRate || row.nightWage || row.nightRate || 0) : 0;
         const current = summaries.get(employeeId) || { day:0, night:0, dayAmount:0, nightAmount:0 };
         if (day) { current.day += 1; current.dayAmount += dayAmount; periodDay += 1; periodDayAmount += dayAmount; }
         if (night) { current.night += 1; current.nightAmount += nightAmount; periodNight += 1; periodNightAmount += nightAmount; }
@@ -409,7 +409,7 @@
       const uniquePeople = new Set(attendance.filter((row) => truthy(row.dayShift ?? row.day) || truthy(row.nightShift ?? row.night)).map((row) => String(row.employeeId || row.personId || '')));
       body.innerHTML = `
         <div class="kyerp-log-overview">
-          <article><span>Dönem</span><strong>${esc(fmtDate(start))}</strong><small>${esc(fmtDate(end))} tarihine kadar</small></article>
+          <article><span>Dönem · Güncel ücret</span><strong>${esc(fmtDate(start))}</strong><small>${esc(fmtDate(end))} tarihine kadar</small></article>
           <article><span>Personel</span><strong>${uniquePeople.size}</strong><small>Aktif kaydı olan</small></article>
           <article><span>Gündüz</span><strong>${periodDay}</strong><small>${money(periodDayAmount)}</small></article>
           <article><span>Gece</span><strong>${periodNight}</strong><small>${money(periodNightAmount)}</small></article>
