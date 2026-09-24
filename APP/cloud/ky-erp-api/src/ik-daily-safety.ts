@@ -446,6 +446,9 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
   }
 
   const employeeIds = [...new Set(rows.map((row) => row.employeeId))];
+  const workDates = [...new Set(rows.map((row) => row.workDate))].sort();
+  const minWorkDate = workDates[0];
+  const maxWorkDate = workDates[workDates.length - 1];
   const peopleResult = await c.env.DB.prepare(`SELECT id,full_name,day_wage,night_wage
       FROM hr_daily_employees
       WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`)
@@ -457,11 +460,18 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
   }
   const peopleById = new Map(people.map((row) => [text(row.id), row]));
 
-  const currentResult = await c.env.DB.prepare(`SELECT a.*
+  const currentResult = await c.env.DB.prepare(`SELECT a.*,
+        COALESCE((
+          SELECT MAX(r.revision)
+          FROM hr_daily_attendance_revision r
+          WHERE r.main_company_id=? AND r.attendance_id=a.id
+        ),0) AS current_revision
       FROM hr_daily_attendance a
       JOIN hr_daily_employees e ON e.id=a.employee_id
-      WHERE e.main_company_id=? AND a.employee_id IN (${employeeIds.map(() => "?").join(",")})`)
-    .bind(companyId, ...employeeIds)
+      WHERE e.main_company_id=?
+        AND a.employee_id IN (${employeeIds.map(() => "?").join(",")})
+        AND a.work_date>=? AND a.work_date<=?`)
+    .bind(companyId, companyId, ...employeeIds, minWorkDate, maxWorkDate)
     .all<Row>();
   const currentByKey = new Map(
     (currentResult.results || []).map((row) => [
@@ -500,20 +510,11 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
     }
   }
 
-  const attendanceIds = [
-    ...new Set((currentResult.results || []).map((row) => text(row.id)).filter(Boolean)),
-  ];
   const revisionByAttendanceId = new Map<string, number>();
-  if (attendanceIds.length) {
-    const revisionResult = await c.env.DB.prepare(`SELECT attendance_id,MAX(revision) revision
-        FROM hr_daily_attendance_revision
-        WHERE main_company_id=? AND attendance_id IN (${attendanceIds.map(() => "?").join(",")})
-        GROUP BY attendance_id`)
-      .bind(companyId, ...attendanceIds)
-      .all<Row>();
-    for (const row of revisionResult.results || []) {
-      revisionByAttendanceId.set(text(row.attendance_id), Number(row.revision) || 0);
-    }
+  for (const row of currentResult.results || []) {
+    const attendanceId = text(row.id);
+    if (!attendanceId) continue;
+    revisionByAttendanceId.set(attendanceId, Number(row.current_revision) || 0);
   }
 
   const actor = await actorOf(c);
