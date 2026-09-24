@@ -1,0 +1,107 @@
+name: KY ERP Frontend Canli Yayin
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - RELEASES/kyerp-frontend-production-release.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyerp-frontend-production-release
+  cancel-in-progress: false
+
+jobs:
+  release-frontend:
+    name: Frontend lint, hedefli test, build, Pages deploy ve canli dogrulama
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+      FRONTEND_DIR: APP/app/ky-erp-frontend
+      PAGES_PROJECT: ky-erp-frontend
+      PROD_BRANCH: codex/model-uretim-kontrol-merkezi-final
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/app/ky-erp-frontend/package-lock.json
+
+      - name: Frontend release kaydini dogrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "$PROD_BRANCH"
+          jq -e '.approved == true and .target == "production" and .component == "frontend" and .sourceBranch == "codex/model-uretim-kontrol-merkezi-final"' RELEASES/kyerp-frontend-production-release.json >/dev/null
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "CLOUDFLARE_API_TOKEN eksik" >&2; exit 1; }
+          echo "RELEASE_SHA=$GITHUB_SHA"
+
+      - name: Frontend paketleri, audit, lint, hedefli test ve build
+        working-directory: APP/app/ky-erp-frontend
+        env:
+          VITE_API_URL: https://api.kyerp.net
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run lint
+          node --test src/ik_daily_quick_modal_sync_contract.test.js
+          npm run build
+
+      - name: Cloudflare Pages production hedefini dogrula
+        id: pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          base="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          project="$(curl --fail --silent --show-error -H "$auth" "$base")"
+          jq -e --arg p "$PAGES_PROJECT" '.success == true and .result.name == $p' <<<"$project" >/dev/null
+          production_branch="$(jq -r '.result.production_branch // empty' <<<"$project")"
+          test "$production_branch" = "$PROD_BRANCH"
+          echo "Pages production hedefi: $PAGES_PROJECT / $production_branch"
+          npx --yes wrangler@4.118.0 whoami
+
+      - name: Frontendi Cloudflare Pages production ortamına dagit
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.118.0 pages deploy dist \
+            --project-name "$PAGES_PROJECT" \
+            --branch "$PROD_BRANCH" \
+            --commit-hash "$GITHUB_SHA"
+
+      - name: Canli uygulama bundle dogrulamasi
+        working-directory: APP/app/ky-erp-frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_asset="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -n1)"
+          test -n "$local_asset"
+          for attempt in 1 2 3 4 5 6; do
+            live_html="$(curl --fail --silent --show-error --max-time 20 https://app.kyerp.net/gunluk-operasyon/gunluk-giris || true)"
+            live_asset="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$live_html" | head -n1 || true)"
+            if [ "$live_asset" = "$local_asset" ]; then
+              echo "Canli bundle dogrulandi: $live_asset"
+              exit 0
+            fi
+            echo "Canli bundle henuz yeni surum degil; deneme $attempt/6 (local=$local_asset live=$live_asset)"
+            sleep 5
+          done
+          echo "Canli frontend bundle dogrulamasi basarisiz." >&2
+          exit 1

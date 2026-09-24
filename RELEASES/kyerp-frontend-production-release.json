@@ -1,0 +1,16 @@
+{
+  "approved": true,
+  "target": "production",
+  "component": "frontend",
+  "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
+  "releaseDate": "2026-09-24",
+  "scope": [
+    "gunluk-operasyon-hizli-giris-server-truth-sync",
+    "gunluk-operasyon-stale-draft-reset",
+    "gunluk-operasyon-no-false-unsaved-state",
+    "frontend-lint-targeted-test-build",
+    "cloudflare-pages-production",
+    "live-bundle-verification"
+  ],
+  "note": "Hizli Giris modali acilirken canli gunluk kayitlar yeniden okunur; eski draft state modalda kayitli personeli sifirlayamaz."
+}
