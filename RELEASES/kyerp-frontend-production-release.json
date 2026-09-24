@@ -5,12 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-24",
   "scope": [
-    "gunluk-operasyon-header-log-action",
-    "gunluk-operasyon-header-period-close-action",
-    "gunluk-operasyon-remove-bottom-log-bar",
+    "gunluk-operasyon-log-readable-ui",
+    "gunluk-operasyon-log-work-date",
+    "gunluk-operasyon-log-range-summary",
+    "gunluk-operasyon-log-person-day-night-total",
+    "gunluk-operasyon-log-advanced-search",
     "frontend-lint-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Gunluk Operasyon Log ve Donemi Kapat aksiyonlari secili gun etiketinin hemen yanina tasindi; eski sayfa altindaki dinamik log bari kaldirildi."
+  "note": "Gunluk Operasyon Log ekrani okunakli Log + Analiz yapisina gecirildi. Islem zamani ve kayit tarihi ayrildi; secili tarih araliginda personelin gunduz/gece gun ve ucret toplamlari her log satirinda gorunur. Gelismis Arama sekmesinde personel, vardiya ve islem filtreleri bulunur."
 }
