@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260919-1230-period-lock-ui-v3';
+  const VERSION = '20260924-2345-period-lock-ui-v4';
   const BUTTON_ID = 'kyerp-daily-period-lock-button';
   const OVERLAY_ID = 'kyerp-daily-period-lock-overlay';
   const API_BASE = 'https://api.kyerp.net/api';
@@ -129,7 +129,7 @@
     const button = document.createElement('button');
     button.id = BUTTON_ID;
     button.type = 'button';
-    button.textContent = 'Dönem Kilidi';
+    button.textContent = 'Dönemi Kapat';
     button.title = 'Geçmiş günlük kayıtları değiştirmeye kapat / yetkili olarak yeniden aç';
     button.addEventListener('click', open);
     bar.appendChild(button);

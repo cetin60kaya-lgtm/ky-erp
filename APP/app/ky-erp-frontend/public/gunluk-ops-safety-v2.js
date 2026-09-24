@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260919-0905-daily-safety-v2';
+  const VERSION = '20260924-2345-daily-header-actions-v3';
   const STYLE_ID = 'kyerp-daily-safety-v2-style';
   const ANALYSIS_BUTTON_ID = 'kyerp-gop-analysis-button';
   const ANALYSIS_OVERLAY_ID = 'kyerp-gop-analysis-overlay';
@@ -90,11 +90,9 @@
       .gop-month-card.kyerp-legacy-report-hidden{display:none!important}
       #${ANALYSIS_BUTTON_ID}{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 13px;border:1px solid #b9cce3;border-radius:9px;background:#fff;color:#17385f;font-weight:850;cursor:pointer;white-space:nowrap}
       #${ANALYSIS_BUTTON_ID}:hover{border-color:#3b82f6;background:#f4f8ff;color:#1d4ed8}
-      #${LOG_BAR_ID}{margin:9px 0 0;padding:8px 10px;border:1px solid #dbe6f2;border-radius:10px;background:#f9fbfd;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px}
-      #${LOG_BAR_ID}>div{min-width:0;display:flex;align-items:center;gap:9px;color:#607086;font-size:10px}
-      #${LOG_BAR_ID} b{color:#203a59;font-size:10px;white-space:nowrap}
-      #${LOG_BAR_ID} span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      #${LOG_BAR_ID} button{border:1px solid #c8d7e7;background:#fff;color:#26496f;border-radius:8px;min-height:29px;padding:0 10px;font-size:9px;font-weight:850;cursor:pointer;white-space:nowrap}
+      #${LOG_BAR_ID}{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+      #${LOG_BAR_ID} button{border:1px solid #c8d7e7;background:#fff;color:#26496f;border-radius:8px;min-height:34px;padding:0 11px;font-size:9px;font-weight:900;cursor:pointer;white-space:nowrap}
+      #${LOG_BAR_ID} button:hover{border-color:#7da8db;background:#f4f8ff;color:#1d5db7}
       .kyerp-fixed-overlay{position:fixed;inset:0;z-index:2147482000;background:rgba(11,25,45,.52);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:18px}
       .kyerp-fixed-overlay[hidden]{display:none!important}
       .kyerp-drawer{width:min(1180px,96vw);max-height:92vh;overflow:hidden;border-radius:16px;background:#f7f9fc;border:1px solid #cddaea;box-shadow:0 30px 80px rgba(15,35,64,.30);display:flex;flex-direction:column;color:#18314f}
@@ -269,12 +267,17 @@
 
   function ensureLogBar() {
     const daily = document.querySelector('.kyik-safe-daily');
-    if (!daily || document.getElementById(LOG_BAR_ID)) return;
-    const bar = document.createElement('div');
-    bar.id = LOG_BAR_ID;
-    bar.innerHTML = '<div><b>Günlük İşlem Geçmişi</b><span>Kim, ne zaman, hangi personelde ne yaptı; gerektiğinde açıp kontrol edin.</span></div><button type="button">Logu Aç</button>';
-    bar.querySelector('button').addEventListener('click', openLog);
-    daily.appendChild(bar);
+    const head = daily?.querySelector('.kyik-safe-entry-head');
+    const badge = head?.querySelector(':scope > b');
+    if (!daily || !head || !badge) return;
+    let bar = document.getElementById(LOG_BAR_ID);
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = LOG_BAR_ID;
+      bar.innerHTML = '<button type="button" data-open-log>Log</button>';
+      bar.querySelector('[data-open-log]').addEventListener('click', openLog);
+    }
+    if (bar.parentElement !== head || bar.nextElementSibling !== badge) head.insertBefore(bar, badge);
   }
 
   function ensureLogOverlay() {
