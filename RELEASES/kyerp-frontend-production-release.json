@@ -5,14 +5,12 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-24",
   "scope": [
-    "gunluk-operasyon-quick-entry-isolated-state",
-    "gunluk-operasyon-quick-entry-focused-server-truth",
-    "gunluk-operasyon-quick-entry-no-normal-draft-mutation",
-    "gunluk-operasyon-quick-entry-stale-check-prune",
-    "gunluk-operasyon-remove-obsolete-weekly-quick-matrix",
-    "frontend-lint-targeted-test-build",
+    "gunluk-operasyon-header-log-action",
+    "gunluk-operasyon-header-period-close-action",
+    "gunluk-operasyon-remove-bottom-log-bar",
+    "frontend-lint-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Hizli Giris normal gunluk draft stateinden tamamen ayrildi. Modal yalnız secili gun/vardiya canonical gun-kayitlari sonucundan kurulur; eski kontrol anahtarlari secili olmayan personelden temizlenir; normal ekran yalnız basarili hizli kayit sonrasinda server refresh ile guncellenir."
+  "note": "Gunluk Operasyon Log ve Donemi Kapat aksiyonlari secili gun etiketinin hemen yanina tasindi; eski sayfa altindaki dinamik log bari kaldirildi."
 }
