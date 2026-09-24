@@ -25,3 +25,14 @@ test("quick entry modal derives unsaved state from actual draft difference", () 
   assert.match(source, /disabled=\{quickDayDirty \|\| workDays\.indexOf\(selectedDate\) <= 0\}/);
   assert.match(source, /quickDayDirty \? "Kaydedilmemiş seçimler var\." : "Seçili gün kayıtları güncel\."/);
 });
+
+test("daily control state cannot stay active without a selected shift", () => {
+  assert.match(source, /const checked = active && fastCheckedKeys\.has\(fastCheckKeyFor\(person\.id\)\)/);
+  assert.match(source, /const persisted = active && Boolean\(\(dailyEntries\[entryKeyFor\(person\.id, selectedDate\)\] \|\| \{\}\)\[shiftMode\]\)/);
+  assert.match(source, /if \(!nextActive\)[\s\S]*nextKeys\.delete\(fastCheckKeyFor\(person\.id\)\)/);
+});
+
+test("quick modal reloads canonical daily records before switching date", () => {
+  assert.match(source, /const changeQuickDate = async \(date\) =>/);
+  assert.match(source, /changeQuickDate[\s\S]*await refreshDailyEntries\(range\)[\s\S]*setDraftEntries\(refreshed\)[\s\S]*setSelectedDate\(date\)/);
+});

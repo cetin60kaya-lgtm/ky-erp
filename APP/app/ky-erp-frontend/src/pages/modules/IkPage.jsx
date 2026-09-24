@@ -5405,15 +5405,26 @@ function SafeDailyEntry({
     setNotice("");
   };
 
-  const changeQuickDate = (date) => {
+  const changeQuickDate = async (date) => {
     if (!date || date === selectedDate) return;
     if (quickDayDirty) {
       setNotice("Yanlış güne kayıt gitmemesi için önce bu günün değişikliklerini kaydedin.");
       return;
     }
-    setSelectedDate(date);
-    writeStoredSelectedDailyDate(date);
-    setNotice("");
+    setSaveBusy(true);
+    try {
+      const refreshed = refreshDailyEntries ? await refreshDailyEntries(range) : dailyEntries;
+      setDailyEntries(refreshed);
+      setDraftEntries(refreshed);
+      setDirty(false);
+      setSelectedDate(date);
+      writeStoredSelectedDailyDate(date);
+      setNotice("");
+    } catch (error) {
+      setNotice(error?.message || "Seçili gün kayıtları yenilenemedi.");
+    } finally {
+      setSaveBusy(false);
+    }
   };
 
   const saveQuickDay = async (nextDate = "") => {
@@ -5556,6 +5567,14 @@ function SafeDailyEntry({
       else next.delete(person.id);
       return next;
     });
+    if (!nextActive) {
+      setFastCheckedKeys((currentKeys) => {
+        const nextKeys = new Set(currentKeys);
+        nextKeys.delete(fastCheckKeyFor(person.id));
+        writeFastCheckKeys(nextKeys);
+        return nextKeys;
+      });
+    }
     setSavingPersonIds((currentIds) => new Set([...currentIds, person.id]));
     try {
       await saveGunlukPersonelGunKayitlari({
@@ -5642,6 +5661,12 @@ function SafeDailyEntry({
       return next;
     });
     setSelectedIds(new Set());
+    setFastCheckedKeys((currentKeys) => {
+      const nextKeys = new Set(currentKeys);
+      includedPeople.forEach((person) => nextKeys.delete(fastCheckKeyFor(person.id)));
+      writeFastCheckKeys(nextKeys);
+      return nextKeys;
+    });
     setSaveBusy(true);
     try {
       await saveGunlukPersonelGunKayitlari({
@@ -5976,7 +6001,7 @@ function SafeDailyEntry({
         <div className="kyik-quick-head"><div><span>VASIF BAZLI HAFTALIK HIZLI GİRİŞ</span><h3>{modeLabel} Personel Girişi</h3><p>{shortDate(range.start)} – {shortDate(range.end)} aralığında gün gün seçim yapın. Bu ekranda yalnız {modeLabel.toLocaleLowerCase("tr-TR")} vardiyası değişir.</p></div><div className="kyik-quick-actions"><Button onClick={() => setQuickCells(includedPeople, workDays, true)}>Aralığın Tümünü Seç</Button><Button onClick={() => setQuickCells(includedPeople, workDays, false)}>Tüm Seçimi Kaldır</Button><Button icon={Save} tone="primary" disabled={saveBusy || !dirty} onClick={saveQuickMatrix}>{saveBusy ? "Kaydediliyor" : `${modeLabel} Hızlı Kaydet`}</Button></div></div>
         <div className="kyik-quick-stats"><div className="orange"><span>Seçilen Hücre</span><b>{quickSelectedCount}</b><small>Personel × gün</small></div><div className="blue"><span>Seçilen Personel</span><b>{quickPersonCount}</b><small>{includedPeople.length} kişiden</small></div><div className="green"><span>Kontrol Edildi</span><b>{quickCheckedCount}</b><small>Yeşil hücre</small></div><div className={quickPendingCount ? "red" : "green"}><span>Kontrol Bekleyen</span><b>{quickPendingCount}</b><small>{quickPendingCount ? "İşlem gerekli" : "Tamamlandı"}</small></div><div className="purple"><span>Tarih Aralığı</span><b>{workDays.length} gün</b><small>{modeLabel} ayrı kaydedilir</small></div></div>
         <div className="kyik-quick-legend"><span className="empty">Boş</span><span className="selected">1 · Seçildi</span><span className="checked">2 · Kontrol edildi</span><span className="saved">Kayıtlı seçim</span>{shiftMode === "night" ? <em>Gece ücreti olmayan personel seçilemez.</em> : null}</div>
-        <div className="kyik-quick-matrix-wrap"><table className="kyik-quick-matrix"><thead><tr><th className="person-col">Personel / Vasıf</th>{workDays.map((date) => { const eligible = includedPeople.filter((person) => shiftMode === "day" || toNumber(person.nightRate) > 0); const allActive = eligible.length > 0 && eligible.every((person) => Boolean(getDraftEntry(person.id, date)[shiftMode])); const selectedForDay = eligible.filter((person) => Boolean(getDraftEntry(person.id, date)[shiftMode])).length; const checkedForDay = eligible.filter((person) => Boolean(getDraftEntry(person.id, date)[shiftMode]) && fastCheckedKeys.has(quickCheckKeyFor(person.id, date))).length; return <th key={date}><button type="button" className={allActive ? "all-active" : ""} onClick={() => setQuickCells(eligible, [date], !allActive)}><small>{focusedDateParts(date, { weekday: "short" })}</small><b>{focusedDateParts(date, { day: "2-digit", month: "2-digit" })}</b><span>{selectedForDay} seçili · {checkedForDay} kontrol</span></button></th>; })}</tr></thead><tbody>{groupedIncludedPeople.map((group) => <React.Fragment key={`quick-${group.label}`}><tr className="quick-skill-row"><td colSpan={workDays.length + 1}><div><strong>{group.label}</strong><span>{group.people.length} personel</span><button type="button" onClick={() => setQuickCells(group.people, workDays, true)}>Vasıfı Tüm Günlere Seç</button><button type="button" onClick={() => setQuickCells(group.people, workDays, false)}>Temizle</button></div></td></tr>{group.people.map((person) => <tr key={`quick-person-${person.id}`}><td className="person-col"><strong>{person.name}</strong><span>{person.personnelNo || "Kod yok"} · {personSkillName(person, skills)}</span><small>G {formatTRY(person.dayRate)} · N {formatTRY(person.nightRate)}</small></td>{workDays.map((date) => { const entry = getDraftEntry(person.id, date); const active = Boolean(entry[shiftMode]); const persisted = Boolean((dailyEntries[entryKeyFor(person.id, date)] || {})[shiftMode]); const checked = active && fastCheckedKeys.has(quickCheckKeyFor(person.id, date)); const blocked = shiftMode === "night" && toNumber(person.nightRate) <= 0; return <td key={`${person.id}-${date}`}><div className={`quick-cell ${blocked ? "blocked" : checked ? "checked" : active ? "selected" : "empty"} ${persisted ? "persisted" : ""}`}><button type="button" className="quick-select" disabled={blocked} onClick={() => toggleQuickCell(person, date)}><b>{blocked ? "—" : modeCode}</b><span>{blocked ? "Ücret yok" : checked ? "Kontrol edildi" : active ? "Seçildi" : "Seç"}</span>{persisted && !checked ? <small>Kayıtlı</small> : null}</button><button type="button" className="quick-check" disabled={!active || blocked} onClick={() => toggleQuickChecked(person.id, date)} title="Kontrol durumunu değiştir">{checked ? <BadgeCheck size={15} /> : <CheckCircle2 size={15} />}</button></div></td>; })}</tr>)}</React.Fragment>)}</tbody></table></div>
+        <div className="kyik-quick-matrix-wrap"><table className="kyik-quick-matrix"><thead><tr><th className="person-col">Personel / Vasıf</th>{workDays.map((date) => { const eligible = includedPeople.filter((person) => shiftMode === "day" || toNumber(person.nightRate) > 0); const allActive = eligible.length > 0 && eligible.every((person) => Boolean(getDraftEntry(person.id, date)[shiftMode])); const selectedForDay = eligible.filter((person) => Boolean(getDraftEntry(person.id, date)[shiftMode])).length; const checkedForDay = eligible.filter((person) => Boolean(getDraftEntry(person.id, date)[shiftMode]) && fastCheckedKeys.has(quickCheckKeyFor(person.id, date))).length; return <th key={date}><button type="button" className={allActive ? "all-active" : ""} onClick={() => setQuickCells(eligible, [date], !allActive)}><small>{focusedDateParts(date, { weekday: "short" })}</small><b>{focusedDateParts(date, { day: "2-digit", month: "2-digit" })}</b><span>{selectedForDay} seçili · {checkedForDay} kontrol</span></button></th>; })}</tr></thead><tbody>{groupedIncludedPeople.map((group) => <React.Fragment key={`quick-${group.label}`}><tr className="quick-skill-row"><td colSpan={workDays.length + 1}><div><strong>{group.label}</strong><span>{group.people.length} personel</span><button type="button" onClick={() => setQuickCells(group.people, workDays, true)}>Vasıfı Tüm Günlere Seç</button><button type="button" onClick={() => setQuickCells(group.people, workDays, false)}>Temizle</button></div></td></tr>{group.people.map((person) => <tr key={`quick-person-${person.id}`}><td className="person-col"><strong>{person.name}</strong><span>{person.personnelNo || "Kod yok"} · {personSkillName(person, skills)}</span><small>G {formatTRY(person.dayRate)} · N {formatTRY(person.nightRate)}</small></td>{workDays.map((date) => { const entry = getDraftEntry(person.id, date); const active = Boolean(entry[shiftMode]); const persisted = active && Boolean((dailyEntries[entryKeyFor(person.id, date)] || {})[shiftMode]); const checked = active && fastCheckedKeys.has(quickCheckKeyFor(person.id, date)); const blocked = shiftMode === "night" && toNumber(person.nightRate) <= 0; return <td key={`${person.id}-${date}`}><div className={`quick-cell ${blocked ? "blocked" : checked ? "checked" : active ? "selected" : "empty"} ${persisted ? "persisted" : ""}`}><button type="button" className="quick-select" disabled={blocked} onClick={() => toggleQuickCell(person, date)}><b>{blocked ? "—" : modeCode}</b><span>{blocked ? "Ücret yok" : checked ? "Kontrol edildi" : active ? "Seçildi" : "Seç"}</span>{persisted && !checked ? <small>Kayıtlı</small> : null}</button><button type="button" className="quick-check" disabled={!active || blocked} onClick={() => toggleQuickChecked(person.id, date)} title="Kontrol durumunu değiştir">{checked ? <BadgeCheck size={15} /> : <CheckCircle2 size={15} />}</button></div></td>; })}</tr>)}</React.Fragment>)}</tbody></table></div>
         <div className="kyik-quick-footer"><div><b>{dirty ? "Kaydedilmemiş hızlı giriş değişiklikleri var." : "Hızlı giriş kayıtları veritabanıyla eşleşiyor."}</b><span>Turuncu seçimleri kaydedin; son gözden geçirmede hücreleri yeşil “Kontrol edildi” yapın.</span></div><Button icon={Save} tone="primary" disabled={saveBusy || !dirty} onClick={saveQuickMatrix}>{modeLabel} Değişikliklerini Kaydet</Button></div>
       </div> : null}
 
@@ -6066,7 +6091,7 @@ function SafeDailyEntry({
                   ...group.people.map((person) => {
                     const entry = getDraftEntry(person.id);
                     const active = Boolean(entry[shiftMode]);
-                    const checked = fastCheckedKeys.has(fastCheckKeyFor(person.id));
+                    const checked = active && fastCheckedKeys.has(fastCheckKeyFor(person.id));
                     const nightBlocked = shiftMode === "night" && toNumber(person.nightRate) <= 0;
                     const rowClass = `kyik-safe-row ${checked ? "checked" : "unchecked"} ${active ? "selected-entry" : "no-entry"}`;
                     const statusText = active ? (checked ? "Bu gün teslim" : "Bu gün seçildi") : "Bu gün yok";
@@ -6221,7 +6246,7 @@ function SafeDailyEntry({
                     <div className="kyik-quick-day-people">
                       {group.people.map((person) => {
                         const active = Boolean(getDraftEntry(person.id, selectedDate)[shiftMode]);
-                        const persisted = Boolean((dailyEntries[entryKeyFor(person.id, selectedDate)] || {})[shiftMode]);
+                        const persisted = active && Boolean((dailyEntries[entryKeyFor(person.id, selectedDate)] || {})[shiftMode]);
                         const checked = active && fastCheckedKeys.has(quickCheckKeyFor(person.id, selectedDate));
                         const blocked = shiftMode === "night" && toNumber(person.nightRate) <= 0;
                         return (
