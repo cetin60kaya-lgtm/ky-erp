@@ -445,21 +445,6 @@ export async function fetchRawMaterialLots(activeMainCompany) {
   );
 }
 
-export async function fetchMuhasebeModels(activeMainCompany) {
-  return normalizeList(
-    unwrap(
-      await apiGet(
-        "/model-takip/models/shared-list",
-        {
-          ...requireCompany(activeMainCompany),
-          pageSize: 5000,
-          limit: 5000,
-        },
-      ),
-    ),
-  );
-}
-
 export async function fetchCariRecords(activeMainCompany) {
   return unwrap(
     await apiGet("/muhasebe/cari-kasa", requireCompany(activeMainCompany)),

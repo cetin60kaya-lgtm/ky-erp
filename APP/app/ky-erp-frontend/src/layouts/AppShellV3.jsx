@@ -46,7 +46,7 @@ function getTabs(module, user) {
 
 const MODULE_VISUALS = {
   muhasebe: { icon: "muhasebe", hint: "Finans, cari ve mali kontrol" },
-  isnet: { icon: "e-belge", hint: "e-Belge ve entegrasyon" },
+  "e-belge": { icon: "e-belge", hint: "e-Belge ve entegrasyon" },
   desen: { icon: "desen", hint: "Desen, model ve yerleşim" },
   boyahane: { icon: "boyahane", hint: "Renk, reçete ve lot" },
   "gunluk-operasyon": { icon: "operasyon", hint: "Günlük operasyon" },

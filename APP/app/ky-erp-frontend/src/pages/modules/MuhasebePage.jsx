@@ -8,7 +8,6 @@ import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace"
 import QuickCompanyCreateDialog from "./muhasebe/QuickCompanyCreateDialog";
 import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
 import { useAccountingLiveSync } from "../../services/accountingLiveSync";
-import { MUHASEBE_ROUTE_ALIASES } from "../../app/moduleRegistry";
 import "./muhasebe/muhasebeModule.css";
 import "./muhasebe/supplierInventoryWorkspace.css";
 import "./muhasebe/accountingSafetyOverrides.css";
@@ -29,7 +28,7 @@ function ControlledEmptyState({ requestedTab, goTab }) {
 }
 
 export default function MuhasebePage({ activeTab, activeMainCompany, openModule }) {
-  const normalizedTab = MUHASEBE_ROUTE_ALIASES[activeTab] || activeTab || "yonetim-ozeti";
+  const normalizedTab = activeTab || "yonetim-ozeti";
   const current = useMemo(() => MUHASEBE_TABS.find((tab) => tab.key === normalizedTab), [normalizedTab]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -48,7 +47,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   }, [normalizedTab]);
 
   const goTab = (tabKey, query = "") => {
-    const target = MUHASEBE_ROUTE_ALIASES[tabKey] || tabKey;
+    const target = tabKey;
     openModule?.("muhasebe", { tabKey: target });
     if (query) {
       const suffix = String(query).startsWith("?") ? query : `?${query}`;
@@ -66,7 +65,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
 
   const openEBelgeUpload = () => {
     setQuickOpen(false);
-    openModule?.("isnet", { tabKey: "e-belge-yukleme" });
+    openModule?.("e-belge", { tabKey: "belge-havuzu" });
   };
 
   const openQuickCompany = () => {
@@ -79,8 +78,8 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   if (!current) content = <ControlledEmptyState requestedTab={activeTab} goTab={goTab} />;
   else if (current.key === "yonetim-ozeti") content = <ManagementOverviewWorkspace {...pageProps} />;
   else if (current.key === "firma-kartlari") content = <CompaniesCurrentWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} reloadAll={reloadAll} />;
-  else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} />;
-  else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} />;
+  else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openModule={openModule} />;
+  else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />;
   else if (current.key === "finans-islemleri") content = <FinanceOperationsWorkspace {...pageProps} />;
   else if (current.key === "mail-ekstre") content = <MailAccountingWorkspace {...pageProps} />;
   else if (current.key === "mali-kontrol") content = <FinancialControlWorkspace {...pageProps} />;

@@ -755,156 +755,6 @@ async function fetchSource(
   return rows.map((row) => normalizePortal(source, row)).filter((row) => row.sourceId && row.documentNo);
 }
 
-function xmlDecode(value: string) {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .trim();
-}
-
-function tag(xml: string, name: string) {
-  const match = xml.match(
-    new RegExp(
-      `<(?:[A-Za-z0-9_-]+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[A-Za-z0-9_-]+:)?${name}>`,
-      "i",
-    ),
-  );
-  return match ? xmlDecode(match[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")) : "";
-}
-
-function moneyTag(xml: string, name: string) {
-  const v = tag(xml, name).replace(/\./g, "").replace(",", ".");
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function parseUbl(xml: string, kind: string) {
-  const documentNo = tag(xml, "ID");
-  const issueDate = tag(xml, "IssueDate");
-  const taxNo = text(xml.match(/<(?:\w+:)?CompanyID[^>]*>([^<]+)<\/[^>]*CompanyID>/i)?.[1]);
-  const supplierName = tag(xml, "Name");
-  const taxTotal = moneyTag(xml, "TaxAmount");
-  const subtotal = moneyTag(xml, "TaxExclusiveAmount") || moneyTag(xml, "LineExtensionAmount");
-  const total = moneyTag(xml, "PayableAmount") || moneyTag(xml, "TaxInclusiveAmount");
-  let quantity = 0;
-  const qtyMatches = [...xml.matchAll(/<(?:\w+:)?(?:InvoicedQuantity|DeliveredQuantity)[^>]*>([^<]+)</gi)];
-  for (const match of qtyMatches) {
-    const n = Number(text(match[1]).replace(",", "."));
-    if (Number.isFinite(n)) quantity += n;
-  }
-  return { documentNo, issueDate, taxNo, supplierName, taxTotal, subtotal, total, quantity, kind };
-}
-
-async function findCompany(c: Context<AppEnv>, slug: string, name: string, taxNo: string) {
-  if (!(await tableExists(c, "companies"))) return null;
-  const cols = await columns(c, "companies");
-  const clauses: string[] = [];
-  const binds: any[] = [];
-  if (cols.has("main_company_slug")) {
-    clauses.push("main_company_slug=?");
-    binds.push(slug);
-  }
-  if (cols.has("deleted_at")) clauses.push("deleted_at IS NULL");
-  const result = await c.env.DB.prepare(
-    `SELECT * FROM companies${clauses.length ? ` WHERE ${clauses.join(" AND ")}` : ""}`,
-  )
-    .bind(...binds)
-    .all<Row>();
-  const tax = text(taxNo).replace(/\D/g, "");
-  if (tax) {
-    const match = (result.results || []).find((row) => text(row.tax_no).replace(/\D/g, "") === tax);
-    if (match) return match;
-  }
-  const n = normalize(name);
-  return (result.results || []).find(
-    (row) => normalize(row.name) === n || normalize(row.normalized_name) === n,
-  ) || null;
-}
-
-async function insertDynamic(c: Context<AppEnv>, table: string, values: Row) {
-  const cols = await columns(c, table);
-  const entries = Object.entries(values).filter(([key]) => cols.has(key));
-  if (!entries.length) return;
-  await c.env.DB.prepare(
-    `INSERT INTO ${table} (${entries.map(([key]) => `"${key}"`).join(",")}) VALUES (${entries.map(() => "?").join(",")})`,
-  )
-    .bind(...entries.map(([, value]) => (typeof value === "object" && value !== null ? JSON.stringify(value) : value)))
-    .run();
-}
-
-async function ensureAccountingDocument(c: Context<AppEnv>, slug: string, doc: Row, xmlText: string) {
-  if (!(await tableExists(c, "documents"))) return null;
-  if (
-    !(doc.direction === "incoming" && ["invoice", "dispatch"].includes(doc.kind)) &&
-    !(doc.direction === "outgoing" && doc.kind === "invoice")
-  ) return null;
-
-  if (doc.direction === "incoming" && doc.kind === "dispatch") {
-    const company = await findCompany(c, slug, doc.partnerName, doc.partnerTaxNo);
-    const role = normalize(company?.company_type || company?.type);
-    if (/SUPPLIER|TEDARIK|SATICI/.test(role)) return null;
-  }
-
-  const parsed = parseUbl(xmlText, doc.kind);
-  const existing = await c.env.DB.prepare(
-    "SELECT id FROM documents WHERE main_company_slug=? AND document_no=? LIMIT 1",
-  )
-    .bind(slug, doc.documentNo)
-    .first<Row>();
-  if (existing?.id) return text(existing.id);
-
-  const company = await findCompany(
-    c,
-    slug,
-    doc.partnerName || parsed.supplierName,
-    doc.partnerTaxNo || parsed.taxNo,
-  );
-  const id = crypto.randomUUID();
-  const documentType =
-    doc.direction === "outgoing"
-      ? "CUSTOMER_INVOICE"
-      : doc.kind === "invoice"
-        ? "SUPPLIER_INVOICE"
-        : "CUSTOMER_DISPATCH";
-  const raw = {
-    source: "ISNET_DIRECT",
-    direction: doc.direction,
-    kind: doc.kind,
-    companyName: doc.partnerName,
-    supplierName: doc.partnerName,
-    taxNo: doc.partnerTaxNo,
-    quantity: parsed.quantity,
-    portalSourceId: doc.sourceId,
-    automationKey: doc.automationKey,
-    pdfKey: doc.pdfKey,
-    xmlKey: doc.xmlKey,
-  };
-  await insertDynamic(c, "documents", {
-    id,
-    main_company_slug: slug,
-    company_id: company?.id || null,
-    document_type: documentType,
-    detected_type: documentType,
-    target_type: documentType,
-    document_no: doc.documentNo,
-    date: parsed.issueDate || doc.dateText || new Date().toISOString().slice(0, 10),
-    source_type: "ISNET_DIRECT",
-    status: doc.direction === "incoming" && doc.kind === "invoice" ? "CONTROL_WAITING" : "PROCESSED",
-    firm_match_status: company?.id ? "MATCHED" : "PENDING",
-    subtotal: parsed.subtotal,
-    vat_total: parsed.taxTotal,
-    grand_total: parsed.total || doc.amount,
-    metadata: raw,
-    raw,
-    created_at: nowIso(),
-    updated_at: nowIso(),
-  });
-  return id;
-}
-
 async function downloadFile(base: string, cookie: string, doc: Row, format: "pdf" | "xml") {
   const incoming = doc.direction === "incoming";
   const entity = doc.kind === "invoice" ? "Invoice" : "Despatch";
@@ -1184,9 +1034,6 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       const docs = groups.flat();
       let downloaded = 0;
       let failed = 0;
-      let accountingCreated = 0;
-      let legacyAccountingFailed = 0;
-      const legacyAccountingErrors: Row[] = [];
       let canonicalCreated = 0;
       let canonicalDuplicates = 0;
       let canonicalFailed = 0;
@@ -1248,17 +1095,6 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         );
         if (xmlText) {
           try {
-            const id = await ensureAccountingDocument(c, slug, portal, xmlText);
-            if (id) accountingCreated += 1;
-          } catch (error: any) {
-            legacyAccountingFailed += 1;
-            legacyAccountingErrors.push({
-              automationKey,
-              documentNo: baseDoc.documentNo,
-              message: text(error?.message) || "Legacy İşNet belge uyumluluk kaydı yazılamadı.",
-            });
-          }
-          try {
             const canonical = await ingestProviderEBelgeXml(c, slug, {
               providerType: "ISNET",
               providerDocumentId: automationKey,
@@ -1295,7 +1131,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         }
       }
 
-      const requiresReview = failed > 0 || canonicalFailed > 0 || legacyAccountingFailed > 0;
+      const requiresReview = failed > 0 || canonicalFailed > 0;
       const result = {
         id: runId,
         status: requiresReview ? "PARTIAL_REVIEW_REQUIRED" : "COMPLETED",
@@ -1311,12 +1147,6 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         portalCount: docs.length,
         downloaded,
         failed,
-        accountingCreated,
-        legacyAccounting: {
-          created: accountingCreated,
-          failed: legacyAccountingFailed,
-          errors: legacyAccountingErrors,
-        },
         canonical: {
           created: canonicalCreated,
           duplicates: canonicalDuplicates,
@@ -1331,7 +1161,6 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
           canonicalCreated,
           canonicalDuplicates,
           canonicalFailed,
-          legacyAccountingFailed,
         },
       };
       await storePut(c, SYNC_SCOPE, "latest", result, slug);

@@ -4,7 +4,6 @@ import {
   CirclePlus,
   RefreshCcw,
   Search,
-  Trash2,
   X,
 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
@@ -142,12 +141,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [aliasInput, setAliasInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
-  const [companyDeleting, setCompanyDeleting] = useState(false);
   const [notice, setNotice] = useState("");
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
   const [companySaving, setCompanySaving] = useState(false);
-  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
   const [financeOpen, setFinanceOpen] = useState(false);
   const [financeView, setFinanceView] = useState("checks");
 
@@ -253,20 +250,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     return { receivable, payable, balance: receivable - payable };
   }, [visibleFirms]);
 
-  const visibleFirmIds = useMemo(() => visibleFirms.map((firm) => String(firm.id)), [visibleFirms]);
-  const allVisibleSelected = visibleFirmIds.length > 0 && visibleFirmIds.every((id) => selectedCompanyIds.includes(id));
-
-  const toggleCompanySelection = (firmId) => {
-    const id = String(firmId);
-    setSelectedCompanyIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
-  };
-
-  const toggleAllVisible = () => {
-    setSelectedCompanyIds((current) => {
-      if (allVisibleSelected) return current.filter((id) => !visibleFirmIds.includes(id));
-      return Array.from(new Set([...current, ...visibleFirmIds]));
-    });
-  };
   const loadMovements = useCallback(
     async (firm) => {
       setSelected(firm);
@@ -441,90 +424,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     }
   };
 
-  const deleteCompany = async (targetCompany = selected) => {
-    if (!targetCompany?.id || companyDeleting) return;
-    const companyName = targetCompany.firmaAdi || targetCompany.companyName || targetCompany.name || "Firma";
-    const confirmed = window.confirm(
-      `${companyName} firma kartı KALICI olarak silinecek.\n\nBu işlem geri alınamaz. Geçmiş belge veya cari bağlantısı olsa da firma kartı silinecek.\n\nDevam edilsin mi?`,
-    );
-    if (!confirmed) return;
-    setCompanyDeleting(true);
-    setNotice("");
-    try {
-      await apiDelete(`/muhasebe/firmalar/${targetCompany.id}`, params);
-      const deletedSelected = String(selected?.id || "") === String(targetCompany.id);
-      if (deletedSelected) {
-        setSelected(null);
-        setMovements([]);
-        setAliases([]);
-        setTransactionOpen(false);
-        setSettingsOpen(false);
-      }
-      await loadFirms();
-    } catch (requestError) {
-      setNotice(requestError?.message || "Firma kartı kalıcı olarak silinemedi.");
-    } finally {
-      setCompanyDeleting(false);
-    }
-  };
-
-  const deleteSelectedCompanies = async () => {
-    if (!selectedCompanyIds.length || companyDeleting) return;
-    const selectedNames = firms
-      .filter((firm) => selectedCompanyIds.includes(String(firm.id)))
-      .map((firm) => firm.firmaAdi || firm.companyName || firm.name)
-      .filter(Boolean);
-    const confirmed = window.confirm(
-      `${selectedCompanyIds.length} firma kartı KALICI olarak silinecek.\n\n${selectedNames.slice(0, 8).join("\n")}${selectedNames.length > 8 ? "\n…" : ""}\n\nBu işlem geri alınamaz. Devam edilsin mi?`,
-    );
-    if (!confirmed) return;
-    setCompanyDeleting(true);
-    setNotice("");
-    try {
-      for (const id of selectedCompanyIds) {
-        await apiDelete(`/muhasebe/firmalar/${id}`, params);
-      }
-      if (selected && selectedCompanyIds.includes(String(selected.id))) {
-        setSelected(null);
-        setMovements([]);
-        setAliases([]);
-        setSettingsOpen(false);
-        setTransactionOpen(false);
-      }
-      setSelectedCompanyIds([]);
-      setNotice(`${selectedCompanyIds.length} firma kartı kalıcı olarak silindi.`);
-      await loadFirms();
-    } catch (requestError) {
-      setNotice(requestError?.message || "Seçili firmalar silinemedi.");
-    } finally {
-      setCompanyDeleting(false);
-    }
-  };
-  const deleteAllCompanies = async () => {
-    const ids = firms.map((firm) => String(firm.id)).filter(Boolean);
-    if (!ids.length || companyDeleting) return;
-    const confirmed = window.confirm(
-      `TÜM ${ids.length} firma kartı KALICI olarak silinecek.\n\nBu işlem geri alınamaz. Gerçekten tüm firmaları silmek istiyor musunuz?`,
-    );
-    if (!confirmed) return;
-    setCompanyDeleting(true);
-    setNotice("");
-    try {
-      for (const id of ids) await apiDelete(`/muhasebe/firmalar/${id}`, params);
-      setSelected(null);
-      setMovements([]);
-      setAliases([]);
-      setSettingsOpen(false);
-      setTransactionOpen(false);
-      setSelectedCompanyIds([]);
-      setNotice(`${ids.length} firma kartı kalıcı olarak silindi.`);
-      await loadFirms();
-    } catch (requestError) {
-      setNotice(requestError?.message || "Tüm firma kartları silinemedi.");
-    } finally {
-      setCompanyDeleting(false);
-    }
-  };
   const saveTransaction = async () => {
     if (!selected?.id || Number(transaction.amount || 0) <= 0) {
       setNotice("Sıfırdan büyük işlem tutarı zorunludur.");
@@ -595,10 +494,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="LAST_MOVEMENT_DESC">Son işleme göre</option>
         </select>
         <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
-        <span className="ccw-selection-count">Seçili: {selectedCompanyIds.length}</span>
-        <button type="button" onClick={toggleAllVisible}>{allVisibleSelected ? "Seçimi Kaldır" : "Tümünü Seç"}</button>
-        <button type="button" className="danger" disabled={!selectedCompanyIds.length || companyDeleting} onClick={deleteSelectedCompanies}><Trash2 size={15} /> Seçileni Sil</button>
-        <button type="button" className="danger" disabled={!firms.length || companyDeleting} onClick={deleteAllCompanies}><Trash2 size={15} /> Tümünü Sil</button>
         <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Çek / Ödeme</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
       </header>
@@ -647,7 +542,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <div className="ccw-table-wrap">
             <table>
               <thead><tr>
-                <th><label className="ccw-select-label"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} /> Firma</label></th>
+                <th>Firma</th>
                 <th>Bakiye</th><th>Son işlem</th>
               </tr></thead>
               <tbody>
@@ -655,7 +550,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => loadMovements(firm)} tabIndex={0}>
                     <td>
                       <div className="ccw-firm-row-main">
-                        <input type="checkbox" checked={selectedCompanyIds.includes(String(firm.id))} onClick={(event) => event.stopPropagation()} onChange={() => toggleCompanySelection(firm.id)} />
                         <div><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></div>
                       </div>
                     </td>
@@ -698,7 +592,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     <header className="ccw-settings-head">
                       <div><h3>Firma Düzenle</h3><p>Ana firma kartı, eşleşme ve FİBE ayarları. Kaydet ve kapat; günlük işlem ekranında tekrar görünmez.</p></div>
                       <div className="ccw-drawer-actions">
-                        <button type="button" disabled={companyDeleting} onClick={() => deleteCompany()} className="danger"><Trash2 size={16} /> {companyDeleting ? "Siliniyor…" : "Kalıcı Sil"}</button>
                         <button type="button" className="icon" onClick={() => setSettingsOpen(false)} aria-label="Kapat"><X size={20} /></button>
                       </div>
                     </header>

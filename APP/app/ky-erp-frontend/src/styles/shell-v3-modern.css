@@ -18,7 +18,7 @@
 }
 
 .shell-v3[data-active-module="muhasebe"] { --module-accent: #4f5fbf; --module-soft: #eef0ff; --module-line: #d7dcff; }
-.shell-v3[data-active-module="isnet"] { --module-accent: #197f72; --module-soft: #eaf8f4; --module-line: #c6eae1; }
+.shell-v3[data-active-module="e-belge"] { --module-accent: #197f72; --module-soft: #eaf8f4; --module-line: #c6eae1; }
 .shell-v3[data-active-module="desen"] { --module-accent: #8b5a9f; --module-soft: #f6eff9; --module-line: #e6d3ec; }
 .shell-v3[data-active-module="boyahane"] { --module-accent: #297e9f; --module-soft: #ebf7fb; --module-line: #c9e8f2; }
 .shell-v3[data-active-module="gunluk-operasyon"] { --module-accent: #b36f31; --module-soft: #fff5e9; --module-line: #f2dcc1; }
@@ -73,7 +73,7 @@
   border: 0;
 }
 .shell-v3-module[data-module="muhasebe"] { --mod: #4f5fbf; --mod-soft: #eef0ff; --mod-line: #d7dcff; }
-.shell-v3-module[data-module="isnet"] { --mod: #197f72; --mod-soft: #eaf8f4; --mod-line: #c6eae1; }
+.shell-v3-module[data-module="e-belge"] { --mod: #197f72; --mod-soft: #eaf8f4; --mod-line: #c6eae1; }
 .shell-v3-module[data-module="desen"] { --mod: #8b5a9f; --mod-soft: #f6eff9; --mod-line: #e6d3ec; }
 .shell-v3-module[data-module="boyahane"] { --mod: #297e9f; --mod-soft: #ebf7fb; --mod-line: #c9e8f2; }
 .shell-v3-module[data-module="gunluk-operasyon"] { --mod: #b36f31; --mod-soft: #fff5e9; --mod-line: #f2dcc1; }
@@ -683,7 +683,7 @@
 }
 
 .shell-v3-tabs > button[data-module="muhasebe"] { --tab-accent:#3568d4; --tab-soft:#eef4ff; --tab-line:#cfddfb; }
-.shell-v3-tabs > button[data-module="isnet"] { --tab-accent:#0f8a73; --tab-soft:#e9faf5; --tab-line:#c8eee4; }
+.shell-v3-tabs > button[data-module="e-belge"] { --tab-accent:#0f8a73; --tab-soft:#e9faf5; --tab-line:#c8eee4; }
 .shell-v3-tabs > button[data-module="desen"] { --tab-accent:#7a4bc4; --tab-soft:#f4efff; --tab-line:#dfd2f6; }
 .shell-v3-tabs > button[data-module="boyahane"] { --tab-accent:#1686a7; --tab-soft:#eaf9fd; --tab-line:#c9ebf4; }
 .shell-v3-tabs > button[data-module="gunluk-operasyon"] { --tab-accent:#c86b24; --tab-soft:#fff3e8; --tab-line:#f3d5bd; }
@@ -712,7 +712,7 @@
 }
 
 .shell-v3[data-active-module="muhasebe"] { --module-accent:#3568d4; --module-soft:#eef4ff; --module-line:#cfddfb; }
-.shell-v3[data-active-module="isnet"] { --module-accent:#0f8a73; --module-soft:#e9faf5; --module-line:#c8eee4; }
+.shell-v3[data-active-module="e-belge"] { --module-accent:#0f8a73; --module-soft:#e9faf5; --module-line:#c8eee4; }
 .shell-v3[data-active-module="desen"] { --module-accent:#7a4bc4; --module-soft:#f4efff; --module-line:#dfd2f6; }
 .shell-v3[data-active-module="boyahane"] { --module-accent:#1686a7; --module-soft:#eaf9fd; --module-line:#c9ebf4; }
 .shell-v3[data-active-module="gunluk-operasyon"] { --module-accent:#c86b24; --module-soft:#fff3e8; --module-line:#f3d5bd; }
@@ -726,7 +726,7 @@
 .shell-v3[data-active-module="asistan"] { --module-accent:#7252c7; --module-soft:#f4f0ff; --module-line:#ddd4f8; }
 
 .shell-v3-module[data-module="muhasebe"] { --mod:#3568d4; --mod-soft:#eef4ff; --mod-line:#cfddfb; }
-.shell-v3-module[data-module="isnet"] { --mod:#0f8a73; --mod-soft:#e9faf5; --mod-line:#c8eee4; }
+.shell-v3-module[data-module="e-belge"] { --mod:#0f8a73; --mod-soft:#e9faf5; --mod-line:#c8eee4; }
 .shell-v3-module[data-module="desen"] { --mod:#7a4bc4; --mod-soft:#f4efff; --mod-line:#dfd2f6; }
 .shell-v3-module[data-module="boyahane"] { --mod:#1686a7; --mod-soft:#eaf9fd; --mod-line:#c9ebf4; }
 .shell-v3-module[data-module="gunluk-operasyon"] { --mod:#c86b24; --mod-soft:#fff3e8; --mod-line:#f3d5bd; }

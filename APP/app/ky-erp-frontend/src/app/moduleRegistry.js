@@ -119,70 +119,12 @@ function withCompanyBilling(module) {
   return { ...module, groups };
 }
 
-function withAccountingNavigation(module) {
-  if (module.key !== "muhasebe") return module;
-  const tabs = [
-    ["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"],
-    ["firma-kartlari", "Firmalar & Cari", "firma-kartlari"],
-    ["tedarikci-faturalar", "Tedarikçi / Alış Belgeleri", "tedarikci-fatura"],
-    ["musteri-belgeleri", "Müşteri / Satış Belgeleri", "file-check"],
-    ["finans-islemleri", "Finans İşlemleri", "odemeler"],
-    ["mail-ekstre", "Ekstre ve Mail", "eposta"],
-    ["mali-kontrol", "Mali Kontrol & Raporlar", "raporlar"],
-  ];
-  const visibleKeys = new Set(tabs.map(([key]) => key));
-  const hiddenTabs = [
-    ...(module.groups || []).flatMap((group) => group.tabs || []),
-    ...(module.hiddenTabs || []),
-  ].filter(([key], index, rows) => !visibleKeys.has(key) && rows.findIndex(([otherKey]) => otherKey === key) === index);
-  return { ...module, groups: [{ label: "Muhasebe", tabs }], hiddenTabs };
-}
-
-function withEBelgeNavigation(module) {
-  if (module.key !== "isnet") return module;
-  const eBelgeKeys = new Set([
-    "e-belge-merkezi",
-    "e-belge-genel",
-    "e-belge-gelen-faturalar",
-    "e-belge-giden-faturalar",
-    "e-belge-gelen-irsaliyeler",
-    "e-belge-giden-irsaliyeler",
-    "e-belge-yukleme",
-    "e-belge-eslestirmeler",
-    "e-belge-onay-sorunlar",
-    "e-belge-entegrasyonlar",
-    "e-belge-gecmis",
-  ]);
-  const legacyTabs = [
-    ...(module.groups || []).flatMap((group) => group.tabs || []),
-    ...(module.hiddenTabs || []),
-  ]
-    .filter(([key]) => !eBelgeKeys.has(key))
-    .filter(([key], index, rows) => rows.findIndex(([otherKey]) => otherKey === key) === index);
-  return {
-    ...module,
-    label: "e-Belge Merkezi",
-    icon: "e-belge",
-    groups: [{
-      label: "e-Belge Çalışma Alanı",
-      tabs: [
-        ["e-belge-ana-sayfa", "Ana Sayfa", "dashboard"],
-        ["e-belge-yukleme", "Belge Yükle", "upload"],
-        ["e-belge-merkezi", "Belge Havuzu", "dosya"],
-        ["e-belge-moduller", "Modüller", "ayarlar"],
-      ],
-    }],
-    hiddenTabs: legacyTabs,
-  };
-}
 
 const baseModules = BASE_MODULES
-  .map(withAccountingNavigation)
   .map(withoutStorageDuplicates)
-  .map(withCompanyBilling)
-  .map(withEBelgeNavigation);
-const eBelgeModule = baseModules.find((module) => module.key === "isnet");
-const modulesWithoutEBelge = baseModules.filter((module) => module.key !== "isnet");
+  .map(withCompanyBilling);
+const eBelgeModule = baseModules.find((module) => module.key === "e-belge");
+const modulesWithoutEBelge = baseModules.filter((module) => module.key !== "e-belge");
 const adminIndex = modulesWithoutEBelge.findIndex((module) => module.key === "admin");
 export const MODULES = adminIndex >= 0
   ? [
@@ -198,40 +140,14 @@ export const MODULES = adminIndex >= 0
 
 export const MODULE_ROUTE_ALIASES = {
   ...BASE_ROUTE_ALIASES,
-  muhasebe: {
-    ...(BASE_ROUTE_ALIASES.muhasebe || {}),
-    "cek-odeme": "finans-islemleri",
-    "cek-kart": "finans-islemleri",
-    "odeme-tahsilat": "finans-islemleri",
-    odemeler: "finans-islemleri",
-    "odeme-nakit-akisi": "finans-islemleri",
-    "odeme-plani": "finans-islemleri",
-    defter: "finans-islemleri",
-    banka: "finans-islemleri",
-    kasa: "finans-islemleri",
-  },
+  muhasebe: {},
+  "e-belge": {},
   admin: {
     ...(BASE_ROUTE_ALIASES.admin || {}),
     "giris-onay": "admin-yonetim-ozeti",
     onaylar: "admin-yonetim-ozeti",
     "bekleyen-girisler": "admin-yonetim-ozeti",
     "giris-onaylari": "admin-yonetim-ozeti",
-  },
-  isnet: {
-    ...(BASE_ROUTE_ALIASES.isnet || {}),
-    "e-belge": "e-belge-ana-sayfa",
-    "belge-merkezi": "e-belge-merkezi",
-    "e-fatura": "e-belge-merkezi",
-    "e-irsaliye": "e-belge-merkezi",
-    "e-belge-genel": "e-belge-ana-sayfa",
-    "e-belge-gelen-faturalar": "e-belge-merkezi",
-    "e-belge-giden-faturalar": "e-belge-merkezi",
-    "e-belge-gelen-irsaliyeler": "e-belge-merkezi",
-    "e-belge-giden-irsaliyeler": "e-belge-merkezi",
-    "e-belge-eslestirmeler": "e-belge-merkezi",
-    "e-belge-onay-sorunlar": "e-belge-merkezi",
-    "e-belge-entegrasyonlar": "e-belge-moduller",
-    "e-belge-gecmis": "e-belge-merkezi",
   },
   iletisim: {
     mail: "mail-gelen",
