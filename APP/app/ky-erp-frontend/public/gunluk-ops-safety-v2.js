@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = '20260924-2345-daily-header-actions-v3';
+  const VERSION = '20260924-2359-daily-log-inline-analysis-v4';
   const STYLE_ID = 'kyerp-daily-safety-v2-style';
   const ANALYSIS_BUTTON_ID = 'kyerp-gop-analysis-button';
   const ANALYSIS_OVERLAY_ID = 'kyerp-gop-analysis-overlay';
@@ -91,7 +91,7 @@
       #${ANALYSIS_BUTTON_ID}{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 13px;border:1px solid #b9cce3;border-radius:9px;background:#fff;color:#17385f;font-weight:850;cursor:pointer;white-space:nowrap}
       #${ANALYSIS_BUTTON_ID}:hover{border-color:#3b82f6;background:#f4f8ff;color:#1d4ed8}
       #${LOG_BAR_ID}{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
-      #${LOG_BAR_ID} button{border:1px solid #c8d7e7;background:#fff;color:#26496f;border-radius:8px;min-height:34px;padding:0 11px;font-size:9px;font-weight:900;cursor:pointer;white-space:nowrap}
+      #${LOG_BAR_ID} button{border:1px solid #b9cce3;background:#fff;color:#26496f;border-radius:9px;min-height:38px;padding:0 13px;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap}
       #${LOG_BAR_ID} button:hover{border-color:#7da8db;background:#f4f8ff;color:#1d5db7}
       .kyerp-fixed-overlay{position:fixed;inset:0;z-index:2147482000;background:rgba(11,25,45,.52);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:18px}
       .kyerp-fixed-overlay[hidden]{display:none!important}
@@ -130,6 +130,15 @@
       .kyerp-log-detail{min-width:0;color:#354d68}
       .kyerp-log-detail b{color:#172f50}
       .kyerp-empty{padding:28px;text-align:center;color:#718197;background:#fff;border:1px dashed #cedbe8;border-radius:10px}
+      .kyerp-drawer.log{width:min(1240px,97vw)}
+      .kyerp-drawer.log .kyerp-drawer-head span{font-size:11px}.kyerp-drawer.log .kyerp-drawer-head h2{font-size:22px}.kyerp-drawer.log .kyerp-drawer-head p{font-size:12px}
+      .kyerp-log-tabs{display:flex;gap:7px;padding:9px 16px 0;background:#f7f9fc}.kyerp-log-tabs button{border:1px solid #c9d8e8;background:#fff;color:#365675;border-radius:9px;padding:8px 13px;font-size:11px;font-weight:900;cursor:pointer}.kyerp-log-tabs button.active{border-color:#2563c7;background:#eaf2ff;color:#174ea6}
+      .kyerp-log-advanced{display:none!important}#${LOG_OVERLAY_ID}[data-tab="advanced"] .kyerp-log-advanced{display:grid!important}
+      .kyerp-drawer.log .kyerp-drawer-toolbar label{font-size:11px}.kyerp-drawer.log .kyerp-drawer-toolbar input,.kyerp-drawer.log .kyerp-drawer-toolbar select{height:38px;font-size:12px}.kyerp-drawer.log .kyerp-drawer-toolbar button{height:38px;font-size:11px}
+      .kyerp-log-overview{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-bottom:12px}.kyerp-log-overview article{border:1px solid #dbe5f0;border-radius:11px;background:#fff;padding:10px 11px}.kyerp-log-overview span{display:block;color:#64748b;font-size:11px;font-weight:800}.kyerp-log-overview strong{display:block;margin-top:4px;color:#102f55;font-size:19px}.kyerp-log-overview small{display:block;margin-top:2px;color:#718197;font-size:10px}
+      .kyerp-drawer.log .kyerp-log-list{gap:8px}.kyerp-drawer.log .kyerp-log-item{grid-template-columns:155px minmax(180px,1fr) minmax(170px,.9fr) minmax(330px,1.7fr);padding:11px 12px;font-size:12px}.kyerp-drawer.log .kyerp-log-time b,.kyerp-drawer.log .kyerp-log-person b{font-size:12px}.kyerp-drawer.log .kyerp-log-time small,.kyerp-drawer.log .kyerp-log-person small,.kyerp-drawer.log .kyerp-log-detail small{font-size:10px}.kyerp-drawer.log .kyerp-log-action strong{font-size:10px}.kyerp-drawer.log .kyerp-log-action span{font-size:10px}
+      .kyerp-log-workdate{display:block;margin-top:5px;color:#1d4ed8;font-size:11px}.kyerp-log-current{margin-top:6px;padding:7px 9px;border-radius:7px;background:#eef5ff;color:#173f70;font-size:11px;font-weight:900;line-height:1.45}
+
       @media(max-width:900px){.kyerp-analysis-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kyerp-analysis-grid{grid-template-columns:1fr}.kyerp-log-item{grid-template-columns:1fr 1fr}.kyerp-drawer{max-height:95vh}}
       @media(max-width:600px){.kyerp-fixed-overlay{padding:6px}.kyerp-analysis-kpis{grid-template-columns:1fr 1fr}.kyerp-log-item{grid-template-columns:1fr}.kyerp-drawer-toolbar label{flex:1}.kyerp-drawer-toolbar select,.kyerp-drawer-toolbar input{min-width:0;width:100%}}
     `;
@@ -288,28 +297,48 @@
     overlay.id = LOG_OVERLAY_ID;
     overlay.className = 'kyerp-fixed-overlay';
     overlay.hidden = true;
+    overlay.dataset.tab = 'summary';
     overlay.innerHTML = `
-      <section class="kyerp-drawer log" role="dialog" aria-modal="true" aria-label="Günlük işlem geçmişi">
-        <header class="kyerp-drawer-head"><div><span>GÜNLÜK GİRİŞ / DEĞİŞMEZ LOG</span><h2>Günlük İşlem Geçmişi</h2><p>Kayıt ekleme, kaldırma, yeniden açma, not ve liste değişiklikleri zaman sırasıyla.</p></div><button class="kyerp-drawer-close" type="button" data-close>×</button></header>
+      <section class="kyerp-drawer log" role="dialog" aria-modal="true" aria-label="Günlük işlem geçmişi ve analiz">
+        <header class="kyerp-drawer-head"><div><span>GÜNLÜK GİRİŞ / LOG + ANALİZ</span><h2>Günlük İşlem Geçmişi</h2><p>İşlem tarihi ile birlikte, personelin seçili aralıktaki güncel gündüz/gece ve ücret toplamını tek ekranda teyit edin.</p></div><button class="kyerp-drawer-close" type="button" data-close>×</button></header>
+        <div class="kyerp-log-tabs"><button type="button" class="active" data-log-tab="summary">Log + Özet</button><button type="button" data-log-tab="advanced">Gelişmiş Arama</button></div>
         <div class="kyerp-drawer-toolbar">
-          <label>Tarih<input data-date type="date" value="${esc(selected)}"></label>
+          <label>Başlangıç<input data-start type="date" value="${esc(selected)}"></label>
+          <label>Bitiş<input data-end type="date" value="${esc(selected)}"></label>
           <label>İşlem<select data-action><option value="">Tüm İşlemler</option><option value="ATTENDANCE_CREATE">Kayıt oluşturuldu</option><option value="ATTENDANCE_REMOVE">Vardiya kaldırıldı</option><option value="ATTENDANCE_RESTORE">Kayıt yeniden açıldı</option><option value="ATTENDANCE_UPDATE">Kayıt güncellendi</option><option value="NOTE_UPDATE">Not değiştirildi</option><option value="ROSTER_ADD">Listeye eklendi</option><option value="ROSTER_REMOVE">Listeden çıkarıldı</option></select></label>
-          <button type="button" data-load>Logu Getir</button>
+          <label class="kyerp-log-advanced">Personel<input data-person-filter type="search" placeholder="Ad veya vasıf ara"></label>
+          <label class="kyerp-log-advanced">Vardiya<select data-shift-filter><option value="">Tümü</option><option value="day">Gündüz</option><option value="night">Gece</option><option value="general">Genel</option></select></label>
+          <button type="button" data-load>Log + Analiz Getir</button>
         </div>
-        <div class="kyerp-drawer-body" data-body><div class="kyerp-load-state">Tarih seçip logu açın.</div></div>
+        <div class="kyerp-drawer-body" data-body><div class="kyerp-load-state">Tarih aralığını seçip logu açın.</div></div>
       </section>`;
     document.body.appendChild(overlay);
     overlay.addEventListener('click', (event) => { if (event.target === overlay || event.target.closest('[data-close]')) closeOverlay(overlay); });
+    overlay.querySelectorAll('[data-log-tab]').forEach((button) => button.addEventListener('click', () => {
+      overlay.dataset.tab = button.dataset.logTab;
+      overlay.querySelectorAll('[data-log-tab]').forEach((item) => item.classList.toggle('active', item === button));
+      loadLog(overlay);
+    }));
     overlay.querySelector('[data-load]').addEventListener('click', () => loadLog(overlay));
-    overlay.querySelector('[data-date]').addEventListener('change', () => loadLog(overlay));
+    overlay.querySelector('[data-start]').addEventListener('change', () => loadLog(overlay));
+    overlay.querySelector('[data-end]').addEventListener('change', () => loadLog(overlay));
     overlay.querySelector('[data-action]').addEventListener('change', () => loadLog(overlay));
+    overlay.querySelector('[data-person-filter]').addEventListener('input', () => loadLog(overlay));
+    overlay.querySelector('[data-shift-filter]').addEventListener('change', () => loadLog(overlay));
     return overlay;
+  }
+
+  function currentLogRange() {
+    const inputs = [...document.querySelectorAll('.kyik-safe-daily input[type="date"]')];
+    const fallback = String(localStorage.getItem('ikDailySelectedDate.v2') || today()).slice(0, 10);
+    return { start: String(inputs[0]?.value || fallback).slice(0,10), end: String(inputs[1]?.value || fallback).slice(0,10) };
   }
 
   function openLog() {
     const overlay = ensureLogOverlay();
-    const active = String(localStorage.getItem('ikDailySelectedDate.v2') || '').slice(0, 10);
-    if (active) overlay.querySelector('[data-date]').value = active;
+    const range = currentLogRange();
+    overlay.querySelector('[data-start]').value = range.start;
+    overlay.querySelector('[data-end]').value = range.end;
     overlay.hidden = false;
     document.documentElement.style.overflow = 'hidden';
     loadLog(overlay);
@@ -335,27 +364,74 @@
 
   async function loadLog(overlay) {
     const body = overlay.querySelector('[data-body]');
-    const date = overlay.querySelector('[data-date]').value;
+    const start = overlay.querySelector('[data-start]').value;
+    const end = overlay.querySelector('[data-end]').value;
     const action = overlay.querySelector('[data-action]').value;
-    if (!date) { body.innerHTML = '<div class="kyerp-empty">Tarih seçin.</div>'; return; }
-    body.innerHTML = '<div class="kyerp-load-state">İşlem geçmişi okunuyor…</div>';
+    const advanced = overlay.dataset.tab === 'advanced';
+    const personFilter = advanced ? String(overlay.querySelector('[data-person-filter]').value || '').trim().toLocaleLowerCase('tr-TR') : '';
+    const shiftFilter = advanced ? String(overlay.querySelector('[data-shift-filter]').value || '') : '';
+    if (!start || !end || start > end) { body.innerHTML = '<div class="kyerp-empty">Geçerli bir tarih aralığı seçin.</div>'; return; }
+    const dates = [];
+    for (let cursor = start; cursor <= end && dates.length < 31; cursor = addDays(cursor, 1)) dates.push(cursor);
+    if (dates.length >= 31 && dates[dates.length - 1] < end) { body.innerHTML = '<div class="kyerp-empty">Log + analiz en fazla 31 günlük aralıkta açılır.</div>'; return; }
+    body.innerHTML = '<div class="kyerp-load-state">Log ve personel toplamları hazırlanıyor…</div>';
     try {
-      const rowsRaw = await apiGet('/ik/daily-operation-audit', { date, action, limit: 300 });
-      const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
-      if (!rows.length) { body.innerHTML = '<div class="kyerp-empty">Bu tarih için kayıtlı işlem logu yok.</div>'; return; }
-      body.innerHTML = `<div class="kyerp-log-list">${rows.map((row) => {
-        const shift = row.shift === 'day' ? 'Gündüz' : row.shift === 'night' ? 'Gece' : 'Genel';
-        const before = stateText(row.before);
-        const after = stateText(row.after);
-        return `<article class="kyerp-log-item">
-          <div class="kyerp-log-time"><b>${esc(fmtDateTime(row.createdAt))}</b><small>${esc(row.actorLabel || 'KY ERP Kullanıcısı')}</small></div>
-          <div class="kyerp-log-person"><b>${esc(row.personName || '-')}</b><small>${esc(row.qualification || '')}${row.workDate ? ` · ${esc(fmtDate(row.workDate))}` : ''}</small></div>
-          <div class="kyerp-log-action"><strong>${esc(actionLabel(row.action))}</strong><span>${esc(shift)} · ${esc(row.source || '')}</span></div>
-          <div class="kyerp-log-detail"><b>${esc(before)} → ${esc(after)}</b>${row.note ? `<small>Not: ${esc(row.note)}</small>` : ''}${row.requestId ? `<small>İşlem No: ${esc(String(row.requestId).slice(0, 18))}</small>` : ''}</div>
-        </article>`;
-      }).join('')}</div>`;
+      const [peopleRaw, attendanceRaw, ...auditDays] = await Promise.all([
+        apiGet('/ik/daily-employees'),
+        apiGet('/ik/daily-attendance', { startDate: start, endDate: end }),
+        ...dates.map((date) => apiGet('/ik/daily-operation-audit', { date, action, limit: 300 })),
+      ]);
+      const people = Array.isArray(peopleRaw) ? peopleRaw : [];
+      const attendance = Array.isArray(attendanceRaw) ? attendanceRaw : [];
+      let rows = auditDays.flatMap((item) => Array.isArray(item) ? item : []).sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      const truthy = (value) => value === true || value === 1 || value === '1';
+      const normalize = (value) => String(value || '').trim().toLocaleLowerCase('tr-TR');
+      const personMap = new Map(people.map((person) => [String(person.id || person.employeeId || person.personId || ''), person]));
+      const summaries = new Map();
+      let periodDay = 0, periodNight = 0, periodDayAmount = 0, periodNightAmount = 0;
+      attendance.forEach((row) => {
+        const employeeId = String(row.employeeId || row.personId || '');
+        const person = personMap.get(employeeId) || {};
+        const name = String(person.name || person.fullName || row.personName || '').trim();
+        const day = truthy(row.dayShift ?? row.day);
+        const night = truthy(row.nightShift ?? row.night);
+        const dayAmount = day ? Number(row.dayWage || row.dayRate || 0) : 0;
+        const nightAmount = night ? Number(row.nightWage || row.nightRate || 0) : 0;
+        const current = summaries.get(employeeId) || { day:0, night:0, dayAmount:0, nightAmount:0 };
+        if (day) { current.day += 1; current.dayAmount += dayAmount; periodDay += 1; periodDayAmount += dayAmount; }
+        if (night) { current.night += 1; current.nightAmount += nightAmount; periodNight += 1; periodNightAmount += nightAmount; }
+        summaries.set(employeeId, current);
+        if (name) summaries.set(`name:${normalize(name)}`, current);
+      });
+      if (personFilter) rows = rows.filter((row) => normalize(`${row.personName || ''} ${row.qualification || ''}`).includes(personFilter));
+      if (shiftFilter) rows = rows.filter((row) => (row.shift === shiftFilter) || (shiftFilter === 'general' && row.shift !== 'day' && row.shift !== 'night'));
+      if (!rows.length) { body.innerHTML = '<div class="kyerp-empty">Bu filtrelerle eşleşen işlem logu yok.</div>'; return; }
+      const uniquePeople = new Set(attendance.filter((row) => truthy(row.dayShift ?? row.day) || truthy(row.nightShift ?? row.night)).map((row) => String(row.employeeId || row.personId || '')));
+      body.innerHTML = `
+        <div class="kyerp-log-overview">
+          <article><span>Dönem</span><strong>${esc(fmtDate(start))}</strong><small>${esc(fmtDate(end))} tarihine kadar</small></article>
+          <article><span>Personel</span><strong>${uniquePeople.size}</strong><small>Aktif kaydı olan</small></article>
+          <article><span>Gündüz</span><strong>${periodDay}</strong><small>${money(periodDayAmount)}</small></article>
+          <article><span>Gece</span><strong>${periodNight}</strong><small>${money(periodNightAmount)}</small></article>
+          <article><span>Toplam</span><strong>${money(periodDayAmount + periodNightAmount)}</strong><small>Gündüz + gece</small></article>
+        </div>
+        <div class="kyerp-log-list">${rows.map((row) => {
+          const shift = row.shift === 'day' ? 'Gündüz' : row.shift === 'night' ? 'Gece' : 'Genel';
+          const before = stateText(row.before);
+          const after = stateText(row.after);
+          const employeeId = String(row.employeeId || row.personId || '');
+          const summary = summaries.get(employeeId) || summaries.get(`name:${normalize(row.personName)}`) || { day:0, night:0, dayAmount:0, nightAmount:0 };
+          const total = summary.dayAmount + summary.nightAmount;
+          const workDate = row.workDate ? fmtDate(row.workDate) : '-';
+          return `<article class="kyerp-log-item">
+            <div class="kyerp-log-time"><b>${esc(fmtDateTime(row.createdAt))}</b><small>İşlem zamanı · ${esc(row.actorLabel || 'KY ERP Kullanıcısı')}</small></div>
+            <div class="kyerp-log-person"><b>${esc(row.personName || '-')}</b><small>${esc(row.qualification || '')}</small><strong class="kyerp-log-workdate">Kayıt tarihi: ${esc(workDate)}</strong></div>
+            <div class="kyerp-log-action"><strong>${esc(actionLabel(row.action))}</strong><span>${esc(shift)} · ${esc(row.source || '')}</span></div>
+            <div class="kyerp-log-detail"><b>${esc(before)} → ${esc(after)}</b><div class="kyerp-log-current">Gündüz ${summary.day} gün · ${money(summary.dayAmount)} &nbsp; | &nbsp; Gece ${summary.night} gün · ${money(summary.nightAmount)} &nbsp; | &nbsp; Toplam ${money(total)}</div>${row.note ? `<small>Not: ${esc(row.note)}</small>` : ''}${row.requestId ? `<small>İşlem No: ${esc(String(row.requestId).slice(0, 18))}</small>` : ''}</div>
+          </article>`;
+        }).join('')}</div>`;
     } catch (error) {
-      body.innerHTML = `<div class="kyerp-empty">${esc(error?.message || 'İşlem geçmişi okunamadı.')}</div>`;
+      body.innerHTML = `<div class="kyerp-empty">${esc(error?.message || 'Log ve analiz yüklenemedi.')}</div>`;
     }
   }
 
