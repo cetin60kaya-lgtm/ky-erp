@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { mobileApiGet, normalizeList, normalizeObject, getField } from "./mobileApi";
 import { MobileLoading, MobileError, MobileEmpty } from "./MobileComponents";
 
@@ -26,14 +26,14 @@ export default function MobileMuhasebe() {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
-  async function loadWidget(companyId) {
+  const loadWidget = useCallback(async (companyId) => {
     if (!companyId) { setWidgetData(null); return; }
     const period = new Date().toISOString().slice(0, 7);
     const result = await mobileApiGet(`muhasebe/workspace/company-widget?companyId=${encodeURIComponent(companyId)}&period=${period}&_ts=${Date.now()}`);
     if (result.ok) setWidgetData(normalizeObject(result.data));
-  }
+  }, []);
 
-  async function loadData(background = false) {
+  const loadData = useCallback(async (background = false) => {
     if (!background) setLoading(true);
     setError("");
     const [resOzet, resBelge, resFirmalar] = await Promise.all([
@@ -52,21 +52,24 @@ export default function MobileMuhasebe() {
     setData(resOzet.ok ? normalizeObject(resOzet.data) : {});
     setBelgeler(resBelge.ok ? normalizeList(resBelge.data) : []);
     setFirmalar(nextFirms);
-    if (!widgetCompanyId && nextFirms.length) {
-      const saved = localStorage.getItem(WIDGET_COMPANY_KEY) || "";
-      const preferred = nextFirms.find((row) => String(row.id) === String(saved)) || nextFirms[0];
-      if (preferred?.id) setWidgetCompanyId(String(preferred.id));
+    if (nextFirms.length) {
+      setWidgetCompanyId((currentCompanyId) => {
+        if (currentCompanyId) return currentCompanyId;
+        const saved = localStorage.getItem(WIDGET_COMPANY_KEY) || "";
+        const preferred = nextFirms.find((row) => String(row.id) === String(saved)) || nextFirms[0];
+        return preferred?.id ? String(preferred.id) : currentCompanyId;
+      });
     }
     if (!background) setLoading(false);
-  }
+  }, []);
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   useEffect(() => {
     if (!widgetCompanyId) return;
     localStorage.setItem(WIDGET_COMPANY_KEY, widgetCompanyId);
     void loadWidget(widgetCompanyId);
-  }, [widgetCompanyId]);
+  }, [widgetCompanyId, loadWidget]);
 
   useEffect(() => {
     let stopped = false;
@@ -93,7 +96,7 @@ export default function MobileMuhasebe() {
     document.addEventListener("visibilitychange", onVisible);
     void check();
     return () => { stopped = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [widgetCompanyId]);
+  }, [widgetCompanyId, loadData, loadWidget]);
 
   if (loading) return <MobileLoading text="Yükleniyor..." />;
   if (error) return <MobileError message={error} onRetry={() => loadData()} />;
