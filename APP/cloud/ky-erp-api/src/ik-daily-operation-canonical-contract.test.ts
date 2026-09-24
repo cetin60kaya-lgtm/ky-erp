@@ -48,3 +48,15 @@ test("daily safety routes are registered before relational and admin fallbacks",
     "Canonical daily routes must be registered before legacy/admin fallback routes.",
   );
 });
+test("daily batch revision lookup is bounded to requested dates", () => {
+  assert.match(dailySafetySource, /a\.work_date>=\? AND a\.work_date<=\?/);
+  assert.match(
+    dailySafetySource,
+    /SELECT MAX\(r\.revision\)[\s\S]*r\.attendance_id=a\.id/,
+  );
+  assert.doesNotMatch(dailySafetySource, /const attendanceIds =/);
+  assert.doesNotMatch(
+    dailySafetySource,
+    /attendance_id IN \(\$\{attendanceIds\.map/,
+  );
+});
