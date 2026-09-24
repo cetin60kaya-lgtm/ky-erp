@@ -7,32 +7,56 @@ const source = readFileSync(
   "utf8",
 );
 
-test("quick entry modal opens from fresh server truth", () => {
-  assert.match(source, /const openQuickModal = async \(\) =>/);
-  assert.match(source, /await refreshDailyEntries\(range\)/);
-  assert.match(source, /setDraftEntries\(refreshed\)/);
-  assert.match(source, /setDailyEntries\(refreshed\)/);
-  assert.match(source, /setDirty\(false\)/);
-  assert.match(source, /setQuickModalOpen\(true\)/);
+function between(start, end) {
+  const from = source.indexOf(start);
+  const to = source.indexOf(end, from + start.length);
+  assert.ok(from >= 0, `start not found: ${start}`);
+  assert.ok(to > from, `end not found: ${end}`);
+  return source.slice(from, to);
+}
+
+test("quick entry owns isolated selection state", () => {
+  assert.match(source, /quickSelectedIds, setQuickSelectedIds/);
+  assert.match(source, /quickBaselineIds, setQuickBaselineIds/);
+  assert.match(source, /quickBaselineUpdatedAt, setQuickBaselineUpdatedAt/);
+  assert.match(source, /const quickDayDirty =\s*quickSelectedIds\.size !== quickBaselineIds\.size/);
 });
 
-test("quick entry modal discards stale draft state on close", () => {
-  assert.match(source, /const closeQuickModal = \(\) =>[\s\S]*setDraftEntries\(dailyEntries\)[\s\S]*setDirty\(false\)[\s\S]*setQuickModalOpen\(false\)/);
+test("quick entry loads focused canonical server truth", () => {
+  const block = between("const loadQuickDayTruth", "const setQuickCells");
+  assert.match(block, /getGunlukPersonelGunKayitlari/);
+  assert.match(block, /row\?\.selected === true/);
+  assert.match(block, /setQuickSelectedIds\(selected\)/);
+  assert.match(block, /setQuickBaselineIds\(new Set\(selected\)\)/);
 });
-test("quick entry modal derives unsaved state from actual draft difference", () => {
-  assert.match(source, /const quickDayDirty = includedPeople\.some/);
-  assert.match(source, /Boolean\(\(dailyEntries\[key\] \|\| \{\}\)\[shiftMode\]\) !== Boolean\(\(draftEntries\[key\] \|\| \{\}\)\[shiftMode\]\)/);
-  assert.match(source, /disabled=\{quickDayDirty \|\| workDays\.indexOf\(selectedDate\) <= 0\}/);
-  assert.match(source, /quickDayDirty \? "Kaydedilmemiş seçimler var\." : "Seçili gün kayıtları güncel\."/);
+test("quick selection cannot mutate normal draft state", () => {
+  const cellBlock = between("const setQuickCells", "const toggleQuickCell");
+  assert.doesNotMatch(cellBlock, /setDraftEntries/);
+  assert.doesNotMatch(cellBlock, /setDirty/);
+  assert.match(cellBlock, /setQuickSelectedIds/);
+
+  const openBlock = between("const openQuickModal", "const closeQuickModal");
+  assert.doesNotMatch(openBlock, /setDraftEntries/);
+  assert.doesNotMatch(openBlock, /setDailyEntries/);
+  assert.match(openBlock, /loadQuickDayTruth/);
 });
 
-test("daily control state cannot stay active without a selected shift", () => {
-  assert.match(source, /const checked = active && fastCheckedKeys\.has\(fastCheckKeyFor\(person\.id\)\)/);
-  assert.match(source, /const persisted = active && Boolean\(\(dailyEntries\[entryKeyFor\(person\.id, selectedDate\)\] \|\| \{\}\)\[shiftMode\]\)/);
-  assert.match(source, /if \(!nextActive\)[\s\S]*nextKeys\.delete\(fastCheckKeyFor\(person\.id\)\)/);
+test("unchecked or unselected people cannot retain quick control state", () => {
+  assert.match(source, /if \(!selectedIds\.has\(id\)\) next\.delete\(quickCheckKeyFor\(id, date, shift\)\)/);
+  assert.match(source, /if \(!quickSelectedIds\.has\(id\)\) return/);
+  assert.match(source, /const checked = active && fastCheckedKeys\.has\(quickCheckKeyFor\(person\.id, selectedDate\)\)/);
 });
 
-test("quick modal reloads canonical daily records before switching date", () => {
-  assert.match(source, /const changeQuickDate = async \(date\) =>/);
-  assert.match(source, /changeQuickDate[\s\S]*await refreshDailyEntries\(range\)[\s\S]*setDraftEntries\(refreshed\)[\s\S]*setSelectedDate\(date\)/);
+test("quick save refreshes normal daily state only after persistence", () => {
+  const saveBlock = between("const saveQuickDay", "const changeSelectedDate");
+  assert.match(saveBlock, /saveGunlukPersonelGunKayitlari/);
+  assert.match(saveBlock, /await refreshDailyEntries\(range\)/);
+  assert.match(saveBlock, /setDailyEntries\(refreshed\)/);
+  assert.match(saveBlock, /setDraftEntries\(refreshed\)/);
+  assert.match(saveBlock, /await loadQuickDayTruth\(targetDate, shiftMode\)/);
+});
+
+test("obsolete weekly quick matrix path is removed", () => {
+  assert.doesNotMatch(source, /entryView === "quick"/);
+  assert.doesNotMatch(source, /saveQuickMatrix/);
 });
