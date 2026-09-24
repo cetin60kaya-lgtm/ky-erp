@@ -2,8 +2,8 @@
   "approved": true,
   "target": "production",
   "mode": "production",
-  "requestedAt": "2026-09-23T17:54:00+03:00",
-  "attempt": 101,
+  "requestedAt": "2026-09-24T10:58:00+03:00",
+  "attempt": 102,
   "scope": [
     "storage-file-hub-direct-cloud-services",
     "google-drive-oauth",
@@ -53,9 +53,12 @@
     "accounting-role-write-failsafe",
     "accounting-tenant-write-access",
     "daily-operation-user-audit",
-    "daily-period-lock-role-limit-removed"
+    "daily-period-lock-role-limit-removed",
+    "daily-operation-canonical-read-write",
+    "daily-operation-false-unsaved-state-fix",
+    "daily-operation-accounting-role-day-switch-fix"
   ],
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "3c1fc772790d8744945bcbc3fee5c8bd278c7012",
-  "note": "23.09.2026 attempt 101. Tek canonical production yolu: release manifesti degisince ayni production branch commitinden Worker + Pages otomatik yayinlanir. Ayrik production environment secret baglamı kaldirildi; repo seviyesindeki tek CLOUDFLARE_API_TOKEN kullanilir. Muhasebe yazma failsafe, Gunluk Operasyon actor audit ve rol-sinirsiz tenant-ici islemler dahildir. Worker typecheck temiz."
+  "sourceCommit": "696c852a5541afeb5c30237e19c5521d39fe1e6e",
+  "note": "24.09.2026 attempt 102. Acil Gunluk Operasyon canonical duzeltmesi: GET+POST ayni ik-daily-safety/D1 kaynagina alindi; Muhasebe ve Sistem Yoneticisi ayni okuma-yazma sozlesmesini kullanir. Sahte kaydedilmemis durumu ve gun degistirme kilidi giderildi. 465/465 test, typecheck ve Wrangler dry-run temiz. Resmi production-release yolu ile D1 yedekli Worker+Pages yayinidir."
 }
