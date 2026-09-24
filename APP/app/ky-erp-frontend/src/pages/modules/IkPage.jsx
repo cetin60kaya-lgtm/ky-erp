@@ -5285,6 +5285,10 @@ function SafeDailyEntry({
     fastCheckedKeys.has(quickCheckKeyFor(person.id, selectedDate)),
   ).length;
   const quickDayPendingCount = Math.max(0, quickDayPeople.length - quickDayCheckedCount);
+  const quickDayDirty = includedPeople.some((person) => {
+    const key = entryKeyFor(person.id, selectedDate);
+    return Boolean((dailyEntries[key] || {})[shiftMode]) !== Boolean((draftEntries[key] || {})[shiftMode]);
+  });
   const quickModalGroups = useMemo(() => {
     const term = quickSearch.trim().toLocaleLowerCase("tr-TR");
     if (!term) return groupedIncludedPeople;
@@ -5394,7 +5398,7 @@ function SafeDailyEntry({
   };
 
   const closeQuickModal = () => {
-    if (dirty && !window.confirm("Kaydedilmemiş hızlı giriş seçimleri silinsin mi?")) return;
+    if (quickDayDirty && !window.confirm("Kaydedilmemiş hızlı giriş seçimleri silinsin mi?")) return;
     setDraftEntries(dailyEntries);
     setDirty(false);
     setQuickModalOpen(false);
@@ -5403,7 +5407,7 @@ function SafeDailyEntry({
 
   const changeQuickDate = (date) => {
     if (!date || date === selectedDate) return;
-    if (dirty) {
+    if (quickDayDirty) {
       setNotice("Yanlış güne kayıt gitmemesi için önce bu günün değişikliklerini kaydedin.");
       return;
     }
@@ -6157,23 +6161,23 @@ function SafeDailyEntry({
             <div className="kyik-quick-day-toolbar">
               <button
                 type="button"
-                disabled={dirty || workDays.indexOf(selectedDate) <= 0}
+                disabled={quickDayDirty || workDays.indexOf(selectedDate) <= 0}
                 onClick={() => changeQuickDate(workDays[workDays.indexOf(selectedDate) - 1])}
               >‹ Önceki Gün</button>
               <label>
                 <span>İşlem yapılacak gün</span>
-                <select value={selectedDate} disabled={dirty} onChange={(event) => changeQuickDate(event?.target.value)}>
+                <select value={selectedDate} disabled={quickDayDirty} onChange={(event) => changeQuickDate(event?.target.value)}>
                   {workDays.map((date) => <option key={date} value={date}>{focusedDateParts(date, { day: "numeric", month: "long", year: "numeric", weekday: "long" })}</option>)}
                 </select>
               </label>
               <button
                 type="button"
-                disabled={dirty || workDays.indexOf(selectedDate) >= workDays.length - 1}
+                disabled={quickDayDirty || workDays.indexOf(selectedDate) >= workDays.length - 1}
                 onClick={() => changeQuickDate(workDays[workDays.indexOf(selectedDate) + 1])}
               >Sonraki Gün ›</button>
               <div className="kyik-quick-day-shifts">
-                <button type="button" disabled={dirty} className={shiftMode === "day" ? "active day" : ""} onClick={() => setShift("day")}><Sun size={17} /> Gündüz</button>
-                <button type="button" disabled={dirty} className={shiftMode === "night" ? "active night" : ""} onClick={() => setShift("night")}><Moon size={17} /> Gece</button>
+                <button type="button" disabled={quickDayDirty} className={shiftMode === "day" ? "active day" : ""} onClick={() => setShift("day")}><Sun size={17} /> Gündüz</button>
+                <button type="button" disabled={quickDayDirty} className={shiftMode === "night" ? "active night" : ""} onClick={() => setShift("night")}><Moon size={17} /> Gece</button>
               </div>
             </div>
 
@@ -6243,11 +6247,11 @@ function SafeDailyEntry({
 
             <div className="kyik-quick-day-footer">
               <div>
-                <b>{dirty ? "Kaydedilmemiş seçimler var." : "Seçili gün kayıtları güncel."}</b>
-                <span>{dirty ? "Gün veya vardiya değiştirmek için önce kaydedin." : `${quickDayPeople.length} personel seçili, ${quickDayCheckedCount} personel kontrol edildi.`}</span>
+                <b>{quickDayDirty ? "Kaydedilmemiş seçimler var." : "Seçili gün kayıtları güncel."}</b>
+                <span>{quickDayDirty ? "Gün veya vardiya değiştirmek için önce kaydedin." : `${quickDayPeople.length} personel seçili, ${quickDayCheckedCount} personel kontrol edildi.`}</span>
               </div>
               <Button icon={X} onClick={closeQuickModal}>Kapat</Button>
-              <Button icon={Save} tone="primary" disabled={saveBusy || !dirty} onClick={() => saveQuickDay()}>{saveBusy ? "Kaydediliyor" : `${modeLabel} Kaydet`}</Button>
+              <Button icon={Save} tone="primary" disabled={saveBusy || !quickDayDirty} onClick={() => saveQuickDay()}>{saveBusy ? "Kaydediliyor" : `${modeLabel} Kaydet`}</Button>
               {workDays.indexOf(selectedDate) < workDays.length - 1 ? (
                 <Button icon={Save} tone="primary" disabled={saveBusy} onClick={() => saveQuickDay(workDays[workDays.indexOf(selectedDate) + 1])}>Kaydet ve Sonraki Gün</Button>
               ) : null}

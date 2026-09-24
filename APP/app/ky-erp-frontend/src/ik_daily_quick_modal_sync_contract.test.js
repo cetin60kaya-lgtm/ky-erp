@@ -19,3 +19,9 @@ test("quick entry modal opens from fresh server truth", () => {
 test("quick entry modal discards stale draft state on close", () => {
   assert.match(source, /const closeQuickModal = \(\) =>[\s\S]*setDraftEntries\(dailyEntries\)[\s\S]*setDirty\(false\)[\s\S]*setQuickModalOpen\(false\)/);
 });
+test("quick entry modal derives unsaved state from actual draft difference", () => {
+  assert.match(source, /const quickDayDirty = includedPeople\.some/);
+  assert.match(source, /Boolean\(\(dailyEntries\[key\] \|\| \{\}\)\[shiftMode\]\) !== Boolean\(\(draftEntries\[key\] \|\| \{\}\)\[shiftMode\]\)/);
+  assert.match(source, /disabled=\{quickDayDirty \|\| workDays\.indexOf\(selectedDate\) <= 0\}/);
+  assert.match(source, /quickDayDirty \? "Kaydedilmemiş seçimler var\." : "Seçili gün kayıtları güncel\."/);
+});

@@ -5,12 +5,12 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-24",
   "scope": [
-    "gunluk-operasyon-hizli-giris-server-truth-sync",
-    "gunluk-operasyon-stale-draft-reset",
+    "gunluk-operasyon-hizli-giris-server-truth-sync-v2",
+    "gunluk-operasyon-modal-dirty-from-real-diff",
     "gunluk-operasyon-no-false-unsaved-state",
     "frontend-lint-targeted-test-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Hizli Giris modali acilirken canli gunluk kayitlar yeniden okunur; eski draft state modalda kayitli personeli sifirlayamaz."
+  "note": "Hizli Giris kaydedilmemis durumu artik genel dirty bayragindan degil, kayitli dailyEntries ile draftEntries arasindaki gercek secim farkindan hesaplanir."
 }
