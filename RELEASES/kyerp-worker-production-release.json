@@ -1,0 +1,20 @@
+{
+  "approved": true,
+  "target": "production",
+  "component": "worker",
+  "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
+  "requestedAt": "2026-09-24T11:12:00+03:00",
+  "attempt": 1,
+  "scope": [
+    "daily-operation-canonical-read-write",
+    "daily-operation-false-unsaved-state-fix",
+    "daily-operation-accounting-role-day-switch-fix",
+    "worker-typecheck-test-build",
+    "d1-full-predeploy-backup",
+    "d1-no-migration",
+    "d1-no-reset",
+    "cloudflare-worker-production",
+    "live-api-health-check"
+  ],
+  "note": "Acil Gunluk Operasyon duzeltmesi. Worker-only canonical production release: frontend ve Pages degismez; D1 migration/reset yoktur. Worker testleri, typecheck ve dry-run sonrasi tam D1 yedegi alinir, Worker deploy edilir ve canli API sagligi dogrulanir."
+}
