@@ -1,0 +1,31 @@
+﻿name: KY ERP Personel Son 30 Gun Diagnostic
+
+on:
+  push:
+    branches:
+      - diag/personel-son30-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Son 30 gun calisan personel listesi
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL="SELECT e.main_company_id,e.id,COALESCE(m.personnel_no,'') AS hkn_code,e.full_name,e.qualification,e.day_wage,e.night_wage,SUM(CASE WHEN a.day_shift=1 THEN 1 ELSE 0 END) AS day_count,SUM(CASE WHEN a.night_shift=1 THEN 1 ELSE 0 END) AS night_count,MIN(a.work_date) AS first_work_date,MAX(a.work_date) AS last_work_date,ROUND(SUM(CASE WHEN a.day_shift=1 THEN COALESCE(e.day_wage,0) ELSE 0 END),2) AS day_total_current,ROUND(SUM(CASE WHEN a.night_shift=1 THEN COALESCE(e.night_wage,0) ELSE 0 END),2) AS night_total_current,ROUND(SUM(CASE WHEN a.day_shift=1 THEN COALESCE(e.day_wage,0) ELSE 0 END)+SUM(CASE WHEN a.night_shift=1 THEN COALESCE(e.night_wage,0) ELSE 0 END),2) AS grand_total_current FROM hr_daily_employees e JOIN hr_daily_attendance a ON a.employee_id=e.id LEFT JOIN hr_daily_employee_meta m ON m.employee_id=e.id WHERE a.work_date BETWEEN '2026-08-26' AND '2026-09-25' AND (COALESCE(a.day_shift,0)=1 OR COALESCE(a.night_shift,0)=1) GROUP BY e.main_company_id,e.id,m.personnel_no,e.full_name,e.qualification,e.day_wage,e.night_wage ORDER BY e.main_company_id,CASE WHEN COALESCE(m.personnel_no,'')='' THEN 1 ELSE 0 END,CAST(REPLACE(REPLACE(UPPER(COALESCE(m.personnel_no,'')),'HKN',''),'-','') AS INTEGER),e.full_name COLLATE NOCASE;"
+          echo '=== PERSONEL_SON30_JSON ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$SQL" --json
+          echo '=== COMPANY_COUNTS ==='
+          npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "SELECT main_company_id,COUNT(*) AS n FROM hr_daily_employees GROUP BY main_company_id ORDER BY n DESC;" --json
