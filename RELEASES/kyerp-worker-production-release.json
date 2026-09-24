@@ -3,12 +3,13 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "requestedAt": "2026-09-24T11:12:00+03:00",
-  "attempt": 1,
+  "requestedAt": "2026-09-24T23:20:00+03:00",
+  "attempt": 2,
   "scope": [
     "daily-operation-canonical-read-write",
-    "daily-operation-false-unsaved-state-fix",
-    "daily-operation-accounting-role-day-switch-fix",
+    "daily-operation-d1-variable-limit-fix",
+    "daily-operation-bounded-revision-query",
+    "daily-operation-quick-entry-batch-save",
     "worker-typecheck-test-build",
     "d1-full-predeploy-backup",
     "d1-no-migration",
@@ -16,5 +17,5 @@
     "cloudflare-worker-production",
     "live-api-health-check"
   ],
-  "note": "Acil Gunluk Operasyon duzeltmesi. Worker-only canonical production release: frontend ve Pages degismez; D1 migration/reset yoktur. Worker testleri, typecheck ve dry-run sonrasi tam D1 yedegi alinir, Worker deploy edilir ve canli API sagligi dogrulanir."
+  "note": "Gunluk Hızlı Giris toplu kayit hotfix. Canli Worker logunda dogrulanan D1 too many SQL variables hatasi icin revision sorgusu istek tarihleriyle sinirlandi ve unbounded attendance_id IN sorgusu kaldirildi. Worker-only production release; frontend/Pages degismez. D1 migration/reset yoktur; deploy oncesi tam D1 yedegi alinir."
 }
