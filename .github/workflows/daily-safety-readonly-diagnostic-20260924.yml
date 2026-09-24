@@ -1,0 +1,46 @@
+name: KY ERP Daily Safety Readonly Diagnostic 20260924
+
+on:
+  push:
+    branches:
+      - codex/model-uretim-kontrol-merkezi-final
+    paths:
+      - .github/workflows/daily-safety-readonly-diagnostic-20260924.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ab49b099fee10183fa65951e5077d14a
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read-only live D1 daily safety inspection
+        working-directory: APP/cloud/ky-erp-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler whoami
+          q() {
+            echo
+            echo "=== SQL ==="
+            echo "$1"
+            npx wrangler d1 execute ky-erp-db --remote --config wrangler.jsonc --command "$1" --json
+          }
+          q "SELECT e.main_company_id,a.work_date,e.id employee_id,e.full_name,a.id attendance_id,a.day_shift,a.night_shift,a.day_wage,a.night_wage,a.total_amount,a.payment_status,a.created_at,a.updated_at FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id WHERE a.work_date BETWEEN '2026-09-21' AND '2026-09-25' ORDER BY a.work_date,e.full_name,a.id;"
+          q "SELECT e.main_company_id,a.work_date,COUNT(*) rows_count,SUM(CASE WHEN a.day_shift=1 THEN 1 ELSE 0 END) day_count,SUM(CASE WHEN a.night_shift=1 THEN 1 ELSE 0 END) night_count FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id WHERE a.work_date BETWEEN '2026-09-21' AND '2026-09-25' GROUP BY e.main_company_id,a.work_date ORDER BY a.work_date;"
+          q "SELECT employee_id,work_date,COUNT(*) n,GROUP_CONCAT(id) ids FROM hr_daily_attendance WHERE work_date BETWEEN '2026-09-21' AND '2026-09-25' GROUP BY employee_id,work_date HAVING COUNT(*)>1;"
+          q "SELECT r.work_date,r.employee_id,r.attendance_id,COUNT(*) revision_rows,MAX(r.revision) max_revision FROM hr_daily_attendance_revision r WHERE r.work_date BETWEEN '2026-09-21' AND '2026-09-25' GROUP BY r.work_date,r.employee_id,r.attendance_id ORDER BY r.work_date,r.employee_id;"
+          q "SELECT attendance_id,revision,COUNT(*) n,GROUP_CONCAT(id) ids FROM hr_daily_attendance_revision GROUP BY attendance_id,revision HAVING COUNT(*)>1 LIMIT 100;"
+          q "SELECT main_company_id,employee_id,work_date,shift,COUNT(*) n,GROUP_CONCAT(id) ids FROM hr_daily_attendance_notes WHERE work_date BETWEEN '2026-09-21' AND '2026-09-25' GROUP BY main_company_id,employee_id,work_date,shift HAVING COUNT(*)>1;"
+          q "SELECT id,main_company_id,start_date,end_date,status,reason,updated_at FROM hr_daily_period_lock WHERE NOT(end_date<'2026-09-21' OR start_date>'2026-09-25') ORDER BY updated_at DESC;"
+          q "PRAGMA index_list(hr_daily_attendance);"
+          q "PRAGMA index_list(hr_daily_attendance_revision);"
+          q "PRAGMA index_list(hr_daily_attendance_notes);"
+          q "SELECT COUNT(*) n FROM hr_daily_attendance a JOIN hr_daily_employees e ON e.id=a.employee_id WHERE e.main_company_id='hakan-emprime' AND a.work_date>='2026-09-21' AND a.work_date<='2026-09-25';"
