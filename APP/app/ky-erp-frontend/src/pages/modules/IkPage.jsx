@@ -5367,7 +5367,7 @@ function SafeDailyEntry({
     }
   };
 
-  const openQuickModal = () => {
+  const openQuickModal = async () => {
     if (dirty) {
       setNotice("Hızlı girişi açmadan önce mevcut değişiklikleri kaydedin veya geri alın.");
       return;
@@ -5376,18 +5376,27 @@ function SafeDailyEntry({
       setNotice("Hızlı giriş için geçerli bir tarih aralığı seçin.");
       return;
     }
-    setQuickSearch("");
-    setQuickAddPersonId("");
-    setQuickModalOpen(true);
-    setNotice("");
+    setSaveBusy(true);
+    try {
+      const refreshed = refreshDailyEntries ? await refreshDailyEntries(range) : dailyEntries;
+      setDraftEntries(refreshed);
+      setDailyEntries(refreshed);
+      setDirty(false);
+      setQuickSearch("");
+      setQuickAddPersonId("");
+      setQuickModalOpen(true);
+      setNotice("");
+    } catch (error) {
+      setNotice(error?.message || "Hızlı giriş kayıtları yenilenemedi.");
+    } finally {
+      setSaveBusy(false);
+    }
   };
 
   const closeQuickModal = () => {
     if (dirty && !window.confirm("Kaydedilmemiş hızlı giriş seçimleri silinsin mi?")) return;
-    if (dirty) {
-      setDraftEntries(dailyEntries);
-      setDirty(false);
-    }
+    setDraftEntries(dailyEntries);
+    setDirty(false);
     setQuickModalOpen(false);
     setNotice("");
   };
@@ -5412,7 +5421,9 @@ function SafeDailyEntry({
       return [{ personelId: person.id, note: "", status: after ? "ACTIVE" : "REMOVE", expectedUpdatedAt: dailyEntries[key]?.updatedAt || "" }];
     });
     if (!personnelEntries.length) {
-      setDraftEntries(dailyEntries);
+      const refreshed = refreshDailyEntries ? await refreshDailyEntries(range) : dailyEntries;
+      setDraftEntries(refreshed);
+      setDailyEntries(refreshed);
       setDirty(false);
       setNotice("Bu gün için kaydedilecek değişiklik yok.");
       if (nextDate) {
