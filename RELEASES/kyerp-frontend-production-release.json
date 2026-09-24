@@ -5,13 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-24",
   "scope": [
-    "gunluk-operasyon-selection-check-consistency",
-    "gunluk-operasyon-no-check-without-selection",
-    "gunluk-operasyon-quick-date-server-refresh",
-    "gunluk-operasyon-persisted-style-active-only",
+    "gunluk-operasyon-quick-entry-isolated-state",
+    "gunluk-operasyon-quick-entry-focused-server-truth",
+    "gunluk-operasyon-quick-entry-no-normal-draft-mutation",
+    "gunluk-operasyon-quick-entry-stale-check-prune",
+    "gunluk-operasyon-remove-obsolete-weekly-quick-matrix",
     "frontend-lint-targeted-test-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Gunluk Operasyon ve Hizli Giris icin secim, kontrol ve kayitli durumlari tek kurala baglandi. Secim yoksa kontrol edildi gorunmez; secim kaldirilinca kontrol anahtari temizlenir; modal gun degisiminde canonical kayitlar yeniden okunur."
+  "note": "Hizli Giris normal gunluk draft stateinden tamamen ayrildi. Modal yalnız secili gun/vardiya canonical gun-kayitlari sonucundan kurulur; eski kontrol anahtarlari secili olmayan personelden temizlenir; normal ekran yalnız basarili hizli kayit sonrasinda server refresh ile guncellenir."
 }
