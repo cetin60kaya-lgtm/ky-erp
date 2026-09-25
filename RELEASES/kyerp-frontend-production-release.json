@@ -5,16 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-09-25",
   "scope": [
-    "gunluk-operasyon-log-current-rate-summary",
-    "gunluk-operasyon-log-page-total-parity",
-    "gunluk-operasyon-log-readable-ui",
-    "gunluk-operasyon-log-work-date",
-    "gunluk-operasyon-log-range-summary",
-    "gunluk-operasyon-log-person-day-night-total",
-    "gunluk-operasyon-log-advanced-search",
+    "gunluk-odeme-current-rate-print-parity",
+    "gunluk-odeme-persistent-paid-status",
+    "gunluk-operasyon-log-paid-green-state",
+    "gunluk-personel-pool-range-day-shift-detail",
+    "gunluk-personel-pool-paid-status",
     "frontend-lint-build",
     "cloudflare-pages-production",
     "live-bundle-verification"
   ],
-  "note": "Gunluk Operasyon Log + Analiz para toplamlari ana sayfadaki Tarih Araligi Toplami ile ayni guncel personel ucret kaynagina baglandi. Attendance eski ucret degeri yalniz fallback olarak kalir; gun ve vardiya sayilari degismez."
+  "note": "Gunluk Odeme fislerinde ekran ve cikti toplamlari guncel personel ucreti x vardiya adedi ile tek kaynaga alinmistir. Odendi Isaretle canonical attendance paymentStatus=PAID alanina revision/audit kontrollu kalici yazar. Log ekraninda odeme kayitlari yesil ODENDI olarak vurgulanir. Gunluk Giris Personel Havuzu kartina tiklaninca secili tarih araligindaki gun, vardiya, tutar ve Odendi/Hazir durumu listelenir. Hizli Giris kayit mantigina dokunulmaz."
 }
