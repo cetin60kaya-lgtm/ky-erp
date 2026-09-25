@@ -157,6 +157,9 @@ function InboxScanModal({ activeMainCompany, companies, inbox, initialGroup, sca
   const group = groups.find((item) => item.id === selectedGroupId) || groups[0];
   const file = group?.files[fileIndex] || group?.files[0];
   useEffect(() => { setFileIndex(0); }, [group?.id]);
+  useEffect(() => {
+    if (!companyId && companies.length) setCompanyId(String(companies[0].id || ""));
+  }, [companies, companyId]);
 
   const selectableFiles = groups.flatMap((item) => item.files.filter((fileItem) => ["READY", "DUPLICATE"].includes(fileItem.status)));
   const selectedGroups = inbox.groups.filter((item) => item.files.some((fileItem) => selectedIds.includes(fileItem.id)));

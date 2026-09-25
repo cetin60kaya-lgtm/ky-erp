@@ -338,8 +338,8 @@ export function ModelEditorModal({
   const [quickEntry, setQuickEntry] = useState(false);
   const [colorPicker, setColorPicker] = useState(null);
   const [draft, setDraft] = useState(() => ({
-    companyId: model?.companyId || "",
-    companyName: model?.companyName || "",
+    companyId: model?.companyId || companies?.[0]?.id || "",
+    companyName: model?.companyName || companies?.[0]?.name || "",
     modelCode: model?.modelCode || inboxGroup?.modelName || "",
     modelName: model?.modelName || inboxGroup?.modelName || "",
     designName: model?.designName || "",

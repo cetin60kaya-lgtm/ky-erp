@@ -764,10 +764,39 @@ async function moveObject(
   return true;
 }
 
+async function resolveInboxModelId(c: Context<AppEnv>, body: Row, slug: string) {
+  const requestedId = text(body.id || body.modelId);
+  if (requestedId) return requestedId;
+  const modelName = text(body.modelName || body.modelCode);
+  const companyId = text(body.companyId);
+  const orderNo = text(body.orderNo || body.siparisNo);
+  const matches = (await listWorkflowModels(c, slug)).filter((row) => {
+    if (["ARCHIVE", "PASSIVE", "INACTIVE"].includes(upper(row.status))) return false;
+    if (normalize(row.modelName) !== normalize(modelName)) return false;
+    if (companyId && text(row.companyId) !== companyId) return false;
+    if (orderNo && normalize(row.orderNo) !== normalize(orderNo)) return false;
+    return true;
+  });
+  if (matches.length === 1) return text(matches[0].id);
+  if (matches.length > 1) {
+    throw new Error(`${modelName} için birden fazla aktif model bulundu. Yeni kayıt açılmadı; önce model kartlarını birleştirin.`);
+  }
+  return crypto.randomUUID();
+}
+
+function mergeModelFiles(currentFiles: Row[], incomingFiles: Row[]) {
+  const map = new Map<string, Row>();
+  for (const file of [...currentFiles, ...incomingFiles]) {
+    const key = text(file.fileHash || file.hash || file.storageKey || `${file.fileName}:${file.role}:${file.printAreaCode}`);
+    if (!key) continue;
+    map.set(key, file);
+  }
+  return [...map.values()];
+}
 async function processInboxModel(c: Context<AppEnv>, body: Row, slug: string) {
   const modelName = text(body.modelName || body.modelCode);
   if (!modelName) throw new Error("Model adı zorunludur.");
-  const id = text(body.id || crypto.randomUUID());
+  const id = await resolveInboxModelId(c, body, slug);
   const queueIds = Array.isArray(body.queueIds) ? body.queueIds.map(text) : [];
   const inboxRows = await storeList(c, INBOX_SCOPE, slug);
   const selected = inboxRows.filter((row) => queueIds.includes(text(row.id)));
@@ -788,22 +817,25 @@ async function processInboxModel(c: Context<AppEnv>, body: Row, slug: string) {
           body.files?.find?.((file: Row) => text(file.queueId) === text(item.id))?.printAreaCode ||
           item.suggestedPrintAreaCode,
         contentType: item.metadata?.contentType || "",
+        fileHash: text(item.fileHash || item.hash),
         createdAt: nowIso(),
       }),
     );
     await storePut(c, INBOX_SCOPE, text(item.id), { ...item, status: "PROCESSED", modelId: id }, slug);
   }
+  const existingModel = await getModel(c, id, slug);
   const saved = await saveModel(
     c,
     id,
     {
       ...body,
+      operations: existingModel?.operations?.length ? existingModel.operations : body.operations,
       id,
       modelName,
       modelCode: text(body.modelCode || modelName),
       status: text(body.status || "CHANNEL_REVIEW_PENDING"),
       sourceType: text(body.sourceType || "FOLDER_SCAN"),
-      files,
+      files: mergeModelFiles(existingModel?.files || [], files),
       createdAt: nowIso(),
     },
     slug,
