@@ -124,17 +124,43 @@ function defaultModelDraft() {
   };
 }
 
-function defaultEntry(model, dictionaries, source = null) {
+function productionEntryPreferenceKey(activeMainCompany) {
+  return `kyerp.production.entry-preferences.${activeMainCompany?.slug || activeMainCompany?.id || "default"}`;
+}
+
+function readProductionEntryPreferences(activeMainCompany) {
+  try {
+    const raw = window.localStorage.getItem(productionEntryPreferenceKey(activeMainCompany));
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeProductionEntryPreferences(activeMainCompany, patch) {
+  try {
+    const current = readProductionEntryPreferences(activeMainCompany);
+    window.localStorage.setItem(
+      productionEntryPreferenceKey(activeMainCompany),
+      JSON.stringify({ ...current, ...patch }),
+    );
+  } catch {
+    // Yerel tercih kaydı başarısız olsa da üretim girişi çalışmaya devam eder.
+  }
+}
+function defaultEntry(model, dictionaries, source = null, preferences = {}) {
   const firstMachine = dictionaries?.machines?.[0];
   const region =
     source?.printArea ||
     model?.printRegions?.[0]?.regionName ||
     model?.operationRows?.[0]?.region ||
     "Ön";
-  const shift = source?.shift || "Gündüz";
+  const shift = source?.shift || preferences.shift || "G\u00fcnd\u00fcz";
+  const preferredMachineId = String(preferences.machineId || "");
   const selectedMachine = source
     ? dictionaries?.machines?.find((item) => machineId(item) === String(source.machineId || ""))
-    : firstMachine;
+    : dictionaries?.machines?.find((item) => machineId(item) === preferredMachineId) || firstMachine;
   return {
     id: source?.id || "",
     modelId: model?.id || source?.modelId || "",
@@ -172,6 +198,10 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
   const [entryOpen, setEntryOpen] = useState(false);
   const [entry, setEntry] = useState(defaultEntry(null, {}));
   const [saving, setSaving] = useState(false);
+  const entryModel = dictionaries.models.find((row) => String(row.id || row.modelId) === String(entry.modelId)) || null;
+  const entryPrintRegions = (entryModel?.printRegions || [])
+    .map((region) => typeof region === "string" ? region : region?.regionName || region?.name || region?.printAreaName || "")
+    .filter(Boolean);
 
   const load = useCallback(async () => {
     if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
@@ -241,7 +271,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       setMessage("Önce Makine ve Vardiya Ayarları ekranından en az bir aktif makine tanımlayın.");
       return;
     }
-    setEntry(defaultEntry(model, dictionaries, source));
+    setEntry(defaultEntry(model, dictionaries, source, readProductionEntryPreferences(activeMainCompany)));
     setEntryOpen(true);
   }
 
@@ -354,6 +384,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       machineName: machineName(machine),
       operatorName: operatorFor(machine, current.shift),
     }));
+    writeProductionEntryPreferences(activeMainCompany, { machineId: String(nextId) });
   }
 
   function changeShift(nextShift) {
@@ -363,6 +394,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
       shift: nextShift,
       operatorName: operatorFor(machine, nextShift) || current.operatorName,
     }));
+    writeProductionEntryPreferences(activeMainCompany, { shift: nextShift });
   }
 
   return (
@@ -471,14 +503,14 @@ export default function ProductionControlCenterPageV2({ activeMainCompany }) {
         footer={<><button type="button" onClick={() => setEntryOpen(false)}>Vazgeç</button><button className="primary" type="button" onClick={saveEntry} disabled={saving}><Save size={15} /> {saving ? "Kaydediliyor" : entry.id ? "Değişikliği Kaydet" : "Üretimi Kaydet"}</button></>}
       >
         <div className="pc2-form-grid two">
-          <label>Model<select value={entry.modelId} onChange={(event) => { const model = dictionaries.models.find((row) => row.id === event.target.value); setEntry(defaultEntry(model, dictionaries)); }}><option value="">Model seçin</option>{dictionaries.models.map((model) => <option key={model.id} value={model.id}>{model.modelName}</option>)}</select></label>
+          <label>Model<input value={entryModel?.modelName || entryModel?.name || ""} readOnly /></label>
           <label>Tarih<input type="date" value={entry.date} onChange={(event) => setEntry((current) => ({ ...current, date: event.target.value }))} /></label>
-          <label>Baskı bölgesi<input value={entry.printRegion} onChange={(event) => setEntry((current) => ({ ...current, printRegion: event.target.value }))} /></label>
+          <label>Baskı bölgesi{entryPrintRegions.length ? (<select value={entry.printRegion} onChange={(event) => setEntry((current) => ({ ...current, printRegion: event.target.value }))}>{entryPrintRegions.map((region) => <option key={region} value={region}>{region}</option>)}</select>) : (<input value={entry.printRegion} onChange={(event) => setEntry((current) => ({ ...current, printRegion: event.target.value }))} />)}</label>
           <label>Üretim adedi *<input type="number" min="0" value={entry.quantity} onChange={(event) => setEntry((current) => ({ ...current, quantity: event.target.value }))} autoFocus /></label>
           <label>Makine<select value={entry.machineId} onChange={(event) => changeEntryMachine(event.target.value)}><option value="">Makine seçin</option>{dictionaries.machines.map((machine) => <option key={machineId(machine)} value={machineId(machine)}>{machine.machineNo || machine.no} - {machineName(machine)}</option>)}</select></label>
           <label>Vardiya<select value={entry.shift} onChange={(event) => changeShift(event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
-          <label>Makinacı<input value={entry.operatorName} onChange={(event) => setEntry((current) => ({ ...current, operatorName: event.target.value }))} /></label>
-          <label>Parti / irsaliye<input value={entry.batchNo} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} /></label>
+          <label>Makinacı<input value={entry.operatorName} readOnly title="Makine ve vardiya ayarından otomatik gelir" /></label>
+          <label>Parti / irsaliye<input value={entry.batchNo} readOnly={Boolean(entry.dispatchNo)} onChange={(event) => setEntry((current) => ({ ...current, batchNo: event.target.value }))} title={entry.dispatchNo ? "Eşleşen irsaliyeden otomatik gelir" : "İrsaliye yoksa parti bilgisini girebilirsiniz"} /></label>
           <label>Baskı sakatı<input type="number" min="0" value={entry.printDefectQty} onChange={(event) => setEntry((current) => ({ ...current, printDefectQty: event.target.value }))} /></label>
           <label>Kumaş sakatı<input type="number" min="0" value={entry.fabricDefectQty} onChange={(event) => setEntry((current) => ({ ...current, fabricDefectQty: event.target.value }))} /></label>
           <label>Test<input type="number" min="0" value={entry.testQty} onChange={(event) => setEntry((current) => ({ ...current, testQty: event.target.value }))} /></label>
