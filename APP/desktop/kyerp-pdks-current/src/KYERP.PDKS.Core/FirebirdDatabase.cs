@@ -6,7 +6,7 @@ namespace KYERP.PDKS.Core;
 
 public sealed class FirebirdDatabase
 {
-    private readonly string connectionString;
+    private readonly PdksOptions options;
 
     static FirebirdDatabase()
     {
@@ -15,8 +15,13 @@ public sealed class FirebirdDatabase
 
     public FirebirdDatabase(PdksOptions options)
     {
+        this.options = options;
+    }
+
+    public FbConnection OpenConnection()
+    {
         options.ValidateDatabase();
-        connectionString = new FbConnectionStringBuilder
+        var connectionString = new FbConnectionStringBuilder
         {
             Database = options.DatabasePath,
             UserID = options.DatabaseUser,
@@ -27,10 +32,6 @@ public sealed class FirebirdDatabase
             Charset = options.DatabaseCharset,
             Pooling = false
         }.ToString();
-    }
-
-    public FbConnection OpenConnection()
-    {
         var connection = new FbConnection(connectionString);
         connection.Open();
         return connection;
