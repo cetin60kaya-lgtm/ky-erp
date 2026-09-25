@@ -22,6 +22,7 @@ public sealed class LiveAttendanceForm : Form
     bool busy;
     DateTime? recoveredLegacyDay;
     string legacyRecoveryText = "";
+    readonly List<(string Code,DateTime At,string Source)> unmatched = new();
 
     public LiveAttendanceForm()
     {
@@ -39,7 +40,7 @@ public sealed class LiveAttendanceForm : Form
         top.Controls.Add(new Label{Text="Denetim Tarihi",AutoSize=true,Padding=new Padding(0,8,5,0)});
         top.Controls.Add(date);top.Controls.Add(live);top.Controls.Add(refresh);top.Controls.Add(device);root.Controls.Add(top,0,0);
         root.Controls.Add(cards,0,1);
-        AddTab("Genel");AddTab("Kart Basmayan");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Tamamlanan");
+        AddTab("Genel");AddTab("Kart Basmayan");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
         root.Controls.Add(tabs,0,2);Controls.Add(root);
     }
 
@@ -54,7 +55,7 @@ public sealed class LiveAttendanceForm : Form
 
     Label Card(string title,int value,Color back)
     {
-        var label=new Label{Width=145,Height=62,Margin=new Padding(4),BorderStyle=BorderStyle.FixedSingle,
+        var label=new Label{Width=132,Height=62,Margin=new Padding(4),BorderStyle=BorderStyle.FixedSingle,
             TextAlign=ContentAlignment.MiddleCenter,Font=new Font(Font.FontFamily,10f,FontStyle.Bold),
             BackColor=back,Text=$"{title}\n{value}"};
         cards.Controls.Add(label);return label;
@@ -71,6 +72,7 @@ public sealed class LiveAttendanceForm : Form
                 snapshot=await TerminalDeviceClient.ReadAsync(true,closing.Token);
                 if(snapshot.Connected&&snapshot.Punches.Count>0)
                 {
+                    CaptureUnmatched(snapshot.Punches.Select(x=>(x.EmployeeCode,x.OccurredAt,"Canlı cihaz")),date.Value.Date);
                     var records=snapshot.Punches.Select(ToRecord).ToArray();
                     _=new AttendanceImportService(db).Import(records,5);
                 }
@@ -109,6 +111,7 @@ public sealed class LiveAttendanceForm : Form
             var profile=TerminalTransferProfile.CreateCanonicalTnf(options);
             var records=File.ReadAllLines(file).Where(x=>!string.IsNullOrWhiteSpace(x)).Select(x=>ProfiledTerminalParser.Parse(profile,x)).Where(x=>x.OccurredAt.Date==day).ToArray();
             if(records.Length==0)return;
+            CaptureUnmatched(records.Select(x=>(x.EmployeeCode,x.OccurredAt,"Legacy yedek")),day);
             var result=new AttendanceImportService(db).Import(records,5);
             legacyRecoveryText=$"   Yedek kurtarma +{result.Inserted}/{result.Updated}";
         }
@@ -158,12 +161,29 @@ public sealed class LiveAttendanceForm : Form
         grids["İçeride / Çıkış Bekleyen"].DataSource=Table(rows.Where(r=>r.Status is "İçeride" or "Çıkış Kartı Yok"));
         grids["İzinli"].DataSource=Table(rows.Where(r=>r.FullLeave));
         grids["Tamamlanan"].DataSource=Table(rows.Where(r=>r.HasEntry&&r.HasExit));
+        grids["Eşleşmeyen Kart"].DataSource=UnmatchedTable();
         cards.Controls.Clear();
         Card("Beklenen",rows.Count(r=>r.Expected),Color.AliceBlue);Card("Gelen",rows.Count(r=>r.Expected&&r.HasEntry),Color.Honeydew);
         Card("Kart Basmayan",rows.Count(r=>r.Status=="Kart Basmadı"),Color.MistyRose);Card("İzinli",rows.Count(r=>r.FullLeave),Color.LemonChiffon);
         Card("İçeride",rows.Count(r=>r.Status=="İçeride"),Color.Honeydew);Card("Çıkış Eksik",rows.Count(r=>r.Status=="Çıkış Kartı Yok"),Color.MistyRose);
-        Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),Color.WhiteSmoke);
+        Card("Tamamlanan",rows.Count(r=>r.HasEntry&&r.HasExit),Color.WhiteSmoke);Card("Eşleşmeyen",unmatched.Count,Color.LavenderBlush);
     }
+    void CaptureUnmatched(IEnumerable<(string Code,DateTime At,string Source)> punches,DateTime day)
+    {
+        var next=day.AddDays(1);
+        var active=db.Query("select PKNO from KIMLIK where (IGTARIH is null or IGTARIH<@B) and (ICTARIH is null or ICTARIH>=@A)",new FbParameter("@A",day),new FbParameter("@B",next))
+            .AsEnumerable().Select(r=>S(r,"PKNO")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach(var punch in punches.Where(x=>x.At.Date==day&&!active.Contains(x.Code)))
+            if(!unmatched.Any(x=>x.Code==punch.Code&&x.At==punch.At))unmatched.Add(punch);
+    }
+
+    DataTable UnmatchedTable()
+    {
+        var table=new DataTable();foreach(var name in new[]{"Kart No","Saat","Kaynak","Durum"})table.Columns.Add(name);
+        foreach(var x in unmatched.OrderBy(x=>x.At))table.Rows.Add(x.Code,x.At.ToString("HH:mm:ss"),x.Source,"Personel kartı eşleşmiyor");
+        return table;
+    }
+
     static DataTable Table(IEnumerable<DailyRow> source)
     {
         var table=new DataTable();foreach(var name in new[]{"Kart No","Ad Soyad","Grup","Gün Planı","Giriş","Çıkış","Durum","Uyarı"})table.Columns.Add(name);

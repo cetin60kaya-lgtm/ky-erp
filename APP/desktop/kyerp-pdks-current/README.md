@@ -78,7 +78,7 @@ Terminal aktarım profilleri FixedWidth, Delimited ve strict `KYERP TNF v1` form
 
 `KartNo,HH:mm,ddMMyy,1,001`
 
-Duplicate kayıt koruması ve transaction tabanlı aktarım çekirdekte bulunur. Fiziksel terminal üretici ActiveX arayüzü doğrulanmıştır; varsayılan cihaz `192.168.1.224:5005`, makine no `1` üzerinden `KYERP.TerminalBridge.exe` ile doğrudan okunur. Köprü `ReadMark=false` kullanır ve cihazdaki kayıtları silmez. Canlı Denetim ekranı 5 saniyede bir cihazı kontrol eder, yeni kart basımlarını mükerrer korumasıyla veritabanına eşler ve gelen/gelmeyen/izinli/içeride/çıkış kartı eksik durumlarını yeniler. Geçiş gününde legacy `backup\G&A&YYYY.txt` dosyası varsa yalnız seçili güne ait gerçek kayıtlar bir kez kurtarılır; işe girişten önce veya işten çıkıştan sonra gelen kartlar otomatik atlanır.
+Duplicate kayıt koruması ve transaction tabanlı aktarım çekirdekte bulunur. Fiziksel terminal üretici ActiveX arayüzü doğrulanmıştır; varsayılan cihaz `192.168.1.224:5005`, makine no `1` üzerinden `KYERP.TerminalBridge.exe` ile doğrudan okunur. Köprü `ReadMark=false` kullanır ve cihazdaki kayıtları silmez. Canlı Denetim ekranı 5 saniyede bir cihazı kontrol eder, yeni kart basımlarını mükerrer korumasıyla veritabanına eşler ve gelen/gelmeyen/izinli/içeride/çıkış kartı eksik durumlarını yeniler; aktif personel kartıyla eşleşmeyen basımlar ayrı `Eşleşmeyen Kart` alarmında görünür. Geçiş gününde legacy `backup\G&A&YYYY.txt` dosyası varsa yalnız seçili güne ait gerçek kayıtlar bir kez kurtarılır; işe girişten önce veya işten çıkıştan sonra gelen kartlar otomatik atlanır.
 
 Gerekirse cihaz adresi `KY_PDKS_TERMINAL_IP`, `KY_PDKS_TERMINAL_PORT` ve `KY_PDKS_TERMINAL_MACHINE` değişkenleriyle değiştirilebilir.
 
