@@ -36,7 +36,7 @@ public sealed class LegacyGirisCikisForm : Form
     void Build()
     {
         var tabs=new TabControl{Location=new Point(0,0),Size=new Size(689,121)};
-        var p=new TabPage("Giriş Çıkış Paremetreleri");
+        var p=new TabPage("Giriş Çıkış Parametreleri");
         p.Controls.AddRange([L("Kart No Başlangıç",8,16),L("Kart No Bitiş",8,40),L("Adı",8,72),L("Kart Basma",272,74),L("> Giriş Saati <",528,9),L("Tarih Bitiş",176,40),L("Tarih Başlangıç",176,16),L("> Çıkış Saati <",528,33),cardStart,cardEnd,name,punch,dateStart,dateEnd,inLast,outLast,inFirst,outFirst,manual]);
         var f=new TabPage("Filtreleme");
         f.Controls.AddRange([L("Firma",8,64),L("Grubu",8,16),L("Bölümü",8,40),L("Servis",408,16),L("Durum",408,40),L("Görev",408,64),company,group,department,service,status,duty]);

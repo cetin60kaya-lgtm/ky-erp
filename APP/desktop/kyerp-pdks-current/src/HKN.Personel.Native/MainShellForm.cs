@@ -56,7 +56,7 @@ public sealed class MainShellForm : Form
         ayarlar.DropDownItems.Add(PlainItem("Yazıcı Ayarları", OpenPrinterSettings));
         ayarlar.DropDownItems.Add(PlainItem("Windows Tarih Ve Saat Ayarları", () => Launch("timedate.cpl")));
         ayarlar.DropDownItems.Add(PlainItem("Windows Bölgesel Ayarlar", () => Launch("intl.cpl")));
-        ayarlar.DropDownItems.Add(PlainItem("Veri Tabanı Hizmet Sağlayacı (Interbase)", () => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }));
+        ayarlar.DropDownItems.Add(PlainItem("Veri Tabanı Hizmet Sağlayıcısı (Interbase)", () => { StartupConfiguration.EnsureReady(); UpdateDbStatus(); }));
         ayarlar.DropDownItems.Add(new ToolStripSeparator());
         ayarlar.DropDownItems.Add(MenuItem("Çalışma Tarihi", PdksModule.Donemler, OpenWorkingDate));
 
@@ -73,7 +73,7 @@ public sealed class MainShellForm : Form
         tanimlar.DropDownItems.Add(new ToolStripSeparator());
         tanimlar.DropDownItems.Add(MenuItem("Dönemler", PdksModule.Donemler, () => OpenDialogModule(PdksModule.Donemler)));
         tanimlar.DropDownItems.Add(MenuItem("Kesinti ve Kazanç Türleri", PdksModule.Tanimlar, () => OpenLegacyTable("Kesinti ve Kazanç Türleri","AVTUR",true,new Size(520,410))));
-        tanimlar.DropDownItems.Add(MenuItem("Genel Tatilller", PdksModule.Tanimlar, () => OpenLegacyTable("Genel Tatiller","TATIL",true,new Size(570,430))));
+        tanimlar.DropDownItems.Add(MenuItem("Genel Tatiller", PdksModule.Tanimlar, () => OpenLegacyTable("Genel Tatiller","TATIL",true,new Size(570,430))));
         tanimlar.DropDownItems.Add(MenuItem("Günlük Çalışma Saatleri", PdksModule.Tanimlar, () => OpenLegacyTable("Günlük Çalışma Saatleri","PUANBILGI",true,new Size(650,470))));
         tanimlar.DropDownItems.Add(MenuItem("Yıllık Çalışma Planı", PdksModule.Tanimlar, () => OpenLegacyTable("Yıllık Çalışma Planı","PLANA",true,new Size(760,520))));
         tanimlar.DropDownItems.Add(MenuItem("Ceza Kesintileri", PdksModule.Tanimlar, () => OpenLegacyTable("Ceza Kesintileri","GCEZA",true,new Size(620,450))));

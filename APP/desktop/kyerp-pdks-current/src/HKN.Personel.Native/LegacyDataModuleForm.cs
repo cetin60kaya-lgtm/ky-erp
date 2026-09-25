@@ -103,7 +103,7 @@ public sealed class LegacyDataModuleForm : Form
         var host=new Panel{Dock=DockStyle.Fill};Controls.Add(host);host.BringToFront();
 
         var pages=new TabControl{Location=new Point(0,0),Size=new Size(689,121)};
-        var parameters=new TabPage("Giriş Çıkış Paremetreleri");var filter=new TabPage("Filtreleme");var sort=new TabPage("Sıralama");pages.TabPages.AddRange(new[]{parameters,filter,sort});host.Controls.Add(pages);
+        var parameters=new TabPage("Giriş Çıkış Parametreleri");var filter=new TabPage("Filtreleme");var sort=new TabPage("Sıralama");pages.TabPages.AddRange(new[]{parameters,filter,sort});host.Controls.Add(pages);
 
         var kartBas=SmallText(100,8,40);var kartBit=SmallText(100,32,40);var name=SmallText(80,64,175);
         var dateStart=new DateTimePicker{Location=new Point(272,8),Size=new Size(176,21),Format=DateTimePickerFormat.Custom,CustomFormat="dd MMM yyyy"};

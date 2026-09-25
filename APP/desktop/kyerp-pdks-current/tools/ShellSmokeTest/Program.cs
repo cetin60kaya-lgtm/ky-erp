@@ -72,7 +72,7 @@ using (var personnel = new PersonelForm())
 using (var attendance = new LegacyGirisCikisForm())
 {
     var attendanceTabs = attendance.Controls.OfType<TabControl>().Single();
-    string[] expectedAttendanceTabs = ["Giriş Çıkış Paremetreleri", "Filtreleme", "Sıralama"];
+    string[] expectedAttendanceTabs = ["Giriş Çıkış Parametreleri", "Filtreleme", "Sıralama"];
     if (attendance.Size != new Size(777, 609) || attendance.StartPosition != FormStartPosition.CenterScreen)
         throw new InvalidOperationException("Giriş ve Çıkışlar legacy geometrisinden sapmış.");
     if (!attendanceTabs.TabPages.Cast<TabPage>().Select(x => x.Text).SequenceEqual(expectedAttendanceTabs))
@@ -104,7 +104,7 @@ using (var timesheet = new LegacyPuantajForm())
 using (var payroll = new LegacyBordroForm())
 {
     var payrollTabs = payroll.Controls.OfType<TabControl>().Single();
-    string[] expectedPayrollTabs = ["Filitreler", "Rapor Seçenekleri", "Kağıt Ayarları"];
+    string[] expectedPayrollTabs = ["Filtreler", "Rapor Seçenekleri", "Kağıt Ayarları"];
     var paper = payrollTabs.TabPages.Cast<TabPage>().Single(x => x.Text == "Kağıt Ayarları");
     var paperGroups = paper.Controls.OfType<GroupBox>().Select(x => x.Text).ToArray();
     var buttons = payroll.Controls.OfType<Button>().Select(x => x.Text).ToArray();
