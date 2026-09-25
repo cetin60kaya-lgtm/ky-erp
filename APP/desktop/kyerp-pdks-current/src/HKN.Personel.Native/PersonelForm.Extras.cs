@@ -1,6 +1,7 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Data;
 using System.Drawing.Printing;
+using KYERP.PDKS.Core.Payroll;
 
 namespace HKN.Personel.Native;
 
@@ -10,6 +11,7 @@ public partial class PersonelForm
     readonly DateTimePicker gFrom=new(){Width=105,Format=DateTimePickerFormat.Short}, gTo=new(){Width=105,Format=DateTimePickerFormat.Short}, iFrom=new(){Width=105,Format=DateTimePickerFormat.Short}, iTo=new(){Width=105,Format=DateTimePickerFormat.Short}, eFrom=new(){Width=105,Format=DateTimePickerFormat.Short}, eTo=new(){Width=105,Format=DateTimePickerFormat.Short};
     readonly DataGridView gGiris=Grid("GIRCIK"), gIzin=Grid("IZIN"), gEkk=Grid("AVANS"), gBilgi=Grid("BILGI"), gOdeme=Grid("ODEME");
     readonly Label payNormal=new(){AutoSize=true}, payEk=new(){AutoSize=true}, payKes=new(){AutoSize=true}, payNet=new(){AutoSize=true};
+    readonly ComboBox bilgiType=new(){Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};
     readonly System.Windows.Forms.Timer slider=new(){Interval=3000};
 
     static DataGridView Grid(string name)=>new(){Name=name,Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,BackgroundColor=Color.White};
@@ -24,11 +26,19 @@ public partial class PersonelForm
         rap.DropDownItems.Add(Item("Kişisel Giriş Çıkış Raporu",Keys.None,()=>PrintReportFinal("Kişisel Giriş Çıkış Raporu")));
         rap.DropDownItems.Add(Item("Kişisel İzin Kartı",Keys.None,()=>PrintReportFinal("Kişisel İzin Kartı")));
         rap.DropDownItems.Add(Item("Kişisel Ek Kazanç ve Kesinti Kartı",Keys.None,()=>PrintReportFinal("Kişisel Ek Kazanç ve Kesinti Kartı")));
+        rap.DropDownItems.Add(new ToolStripSeparator());
+        rap.DropDownItems.Add(Item("Aktif Tabloyu PDF Aktar",Keys.None,()=>ExportActiveGrid(false)));
+        rap.DropDownItems.Add(Item("Aktif Tabloyu Excel Aktar",Keys.None,()=>ExportActiveGrid(true)));
         var isl=new ToolStripMenuItem("İşlemler");
         isl.DropDownItems.Add(Item("Personel Listesi Filtreleme",Keys.F3,FilterDialog));
         isl.DropDownItems.Add(Item("Süreli Personel Kaydırma",Keys.F4,ToggleSlider));
         isl.DropDownItems.Add(Item("Hesapla",Keys.F5,RefreshFullTabs));
         isl.DropDownItems.Add(Item("Maaş Geçmişi",Keys.None,SalaryHistory));
+        isl.DropDownItems.Add(Item("Günlük Operasyon",Keys.None,ShowDailyOperations));
+        isl.DropDownItems.Add(new ToolStripSeparator());
+        isl.DropDownItems.Add(Item("Organizasyon Tanımları",Keys.None,ShowOrganizationDefinitions));
+        isl.DropDownItems.Add(Item("Dönem Tanımları",Keys.None,ShowPeriodDefinitions));
+        isl.DropDownItems.Add(Item("Terminal Aktarım Profilleri",Keys.None,ShowTerminalProfiles));
         m.Items.Add(rap); m.Items.Add(isl); MainMenuStrip=m; Controls.Add(m);
         slider.Tick += (_,_)=>{ if(list.Rows.Count==0)return; int i=list.CurrentRow?.Index??-1; i=(i+1)%list.Rows.Count; list.CurrentCell=list.Rows[i].Cells[0]; };
     }
@@ -86,7 +96,7 @@ public partial class PersonelForm
         {
             var p=new FbParameter("@PK",currentPk);DateTime a=gFrom.Value.Date,b=gTo.Value.Date.AddDays(1);
             gGiris.DataSource=Q("select SIRA,GTARIH as GIRIS_TARIHI,GSAAT as GIRIS_SAATI,CTARIH as CIKIS_TARIHI,CSAAT as CIKIS_SAATI,GTUR,CTUR from GIRCIK where PKNO=@PK and ((GTARIH>=@A and GTARIH<@B) or (CTARIH>=@A and CTARIH<@B)) order by coalesce(GTARIH,CTARIH)",p,new FbParameter("@A",a),new FbParameter("@B",b));
-            a=iFrom.Value.Date;b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
+            a=iFrom.Value.Date;b=iTo.Value.Date.AddDays(1);gIzin.DataSource=Q("select SIRA,TARIH,BASSAAT,BITSAAT,SURESAAT,SUREDAKIKA,EBALAN,TIP,MAZERET from OZELIZIN where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
             a=eFrom.Value.Date;b=eTo.Value.Date.AddDays(1);gEkk.DataSource=Q("select KOD,TARIH as ISLEM_TARIHI,VTARIH as VERILIS_TARIHI,TURKOD as TURU,MIKTAR,ACIKLAMA from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",a),new FbParameter("@B",b));
             LoadBilgiOdemeClassic();
         }catch(Exception ex){MessageBox.Show(ex.Message,"Personel Sekmeleri");}
@@ -103,10 +113,12 @@ public partial class PersonelForm
         gBilgi.DataSource=Q("select TARIH,GIRIS as NC,SAAT2 as M50,SAAT3 as M100,SAAT4 as UIZIN,SAAT5,SAAT6,SAAT7,SAAT8,SAAT9,DEVAMSIZLIKS as DEVAMSIZLIK,GECS as GEC_KALMA,EKSIKS as EKSIK_SURE from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b));
         gBilgi.DefaultCellStyle.BackColor=Color.Black;gBilgi.DefaultCellStyle.ForeColor=Color.White;gBilgi.ColumnHeadersDefaultCellStyle.BackColor=SystemColors.Control;gBilgi.ColumnHeadersDefaultCellStyle.ForeColor=Color.Black;gBilgi.EnableHeadersVisualStyles=false;
         d=PeriodDates(periodO);b=d.B.AddDays(1);var pu=Q("select coalesce(sum(GUN1),0) NG,coalesce(sum(DAKIKA1),0) ND,coalesce(sum(DEVAMSIZLIKG),0) DG,coalesce(sum(GECG),0) GG,coalesce(sum(ERKENG),0) EG,coalesce(sum(EKSIKG),0) XG from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b));
-        var kr=Q("select MAAS from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));decimal maas=kr.Rows.Count==0||kr.Rows[0][0]==DBNull.Value?0:Convert.ToDecimal(kr.Rows[0][0]);var r=pu.Rows[0];decimal ng=Convert.ToDecimal(r["NG"]),dg=Convert.ToDecimal(r["DG"]),normal=Math.Round(maas/30m*ng,2),kes=Math.Round(maas/30m*dg,2),net=normal-kes;
+        var kr=Q("select MAAS from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));decimal maas=kr.Rows.Count==0||kr.Rows[0][0]==DBNull.Value?0:Convert.ToDecimal(kr.Rows[0][0]);var r=pu.Rows[0];decimal ng=Convert.ToDecimal(r["NG"]),dg=Convert.ToDecimal(r["DG"]);
+        var finance=Q("select coalesce(sum(case when TURKOD=1 then MIKTAR else 0 end),0) EK,coalesce(sum(case when TURKOD=2 then MIKTAR else 0 end),0) KES from AVANS where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",b)).Rows[0];
+        decimal ek=Convert.ToDecimal(finance["EK"]),kesinti=Convert.ToDecimal(finance["KES"]);var payroll=PayrollCalculator.Calculate(new PayrollInput(maas,ng,0,0,ek,kesinti,0));decimal normal=payroll.NormalPay,kes=payroll.TotalDeductions,net=payroll.NetPay;
         var t=new DataTable();t.Columns.Add("Bordro Alanları");t.Columns.Add("Gün");t.Columns.Add("Saat");t.Columns.Add("Ücret");void Add(string n,object gun,object saat,decimal u)=>t.Rows.Add(n,gun,saat,u.ToString("N2"));
         Add("Normal Çalışma",ng,Minutes(Convert.ToDecimal(r["ND"])),normal);Add("% 50 Mesai",0,"",0);Add("% 100 Mesai",0,"",0);Add("Ücretsiz İzin",0,"",0);for(int i=5;i<=9;i++)Add(i.ToString(),0,"",0);Add("Devamsızlık",dg,"",-kes);Add("Geç Kalma",r["GG"],"",0);Add("Eksik Süre",r["XG"],"",0);Add("Erken Çıkma",r["EG"],"",0);gOdeme.DataSource=t;
-        payNormal.Text=$"{Minutes(Convert.ToDecimal(r["ND"]))}   {ng}   {normal:N2}";payKes.Text=kes.ToString("N2");payEk.Text="0,00";payNet.Text=net.ToString("N2");
+        payNormal.Text=$"{Minutes(Convert.ToDecimal(r["ND"]))}   {ng}   {normal:N2}";payKes.Text=kes.ToString("N2");payEk.Text=ek.ToString("N2");payNet.Text=net.ToString("N2");
     }
 
     string Minutes(decimal m)=>$"{(int)(m/60):00}:{(int)(m%60):00}";
@@ -123,7 +135,7 @@ public partial class PersonelForm
     }
 
     void ToggleSlider(){slider.Enabled=!slider.Enabled;MessageBox.Show(slider.Enabled?"Süreli personel kaydırma başladı.":"Süreli personel kaydırma durdu.","Personel");}
-    void SalaryHistory(){if(currentPk=="")return;string cur=f.GetValueOrDefault("MAAS")?.Text??"";string old=f.GetValueOrDefault("EMAAS")?.Text??"";MessageBox.Show($"Kart No: {currentPk}\nMevcut Maaş: {cur}\nEski Maaş: {old}","Maaş Geçmişi");}
+    void SalaryHistory(){if(currentPk=="")return;using var dialog=new Form{Text="Maaş Geçmişi",StartPosition=FormStartPosition.CenterParent,Size=new Size(720,430),MinimumSize=new Size(580,340),Font=Font};var grid=Grid("SALARY_HISTORY");grid.DataSource=Q("select BASTAR as DONEM_BASLANGIC,BITTAR as DONEM_BITIS,NODENEN as ODENEN_MAAS,NOTARIH as MAAS_ODEME_TARIHI,FMODENEN as ODENEN_MESAI,FMOTARIH as MESAI_ODEME_TARIHI from ODEME where PKNO=@PK order by BASTAR desc,BITTAR desc",new FbParameter("@PK",currentPk));var info=new Label{Text=$"Kart No: {currentPk}   Personel: {(f.GetValueOrDefault("AD")?.Text+" "+f.GetValueOrDefault("SOYAD")?.Text).Trim()}",Dock=DockStyle.Top,Height=38,Padding=new Padding(8),Font=new Font(Font,FontStyle.Bold)};dialog.Controls.Add(grid);dialog.Controls.Add(info);dialog.ShowDialog(this);}
     bool wired;
     IEnumerable<Control> All(Control c){foreach(Control x in c.Controls){yield return x;foreach(var y in All(x))yield return y;}}
     void WireAllButtons()

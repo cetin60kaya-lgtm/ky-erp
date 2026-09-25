@@ -1,20 +1,20 @@
 using FirebirdSql.Data.FirebirdClient;
 using System.Text;
+using KYERP.PDKS.Core;
+using KYERP.PDKS.Core.Payroll;
+using KYERP.PDKS.Core.Attendance;
+using KYERP.PDKS.Core.Terminal;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-const string Db = @"D:\Hedef500\Hedef500\Data\DATABASE.GDB";
-const string LogPath = @"D:\Hedef500\HKN_NATIVE_PERSONEL\FINAL_TEST_LOG.txt";
-var cs = new FbConnectionStringBuilder
-{
-    Database=Db, UserID="SYSDBA", Password=Environment.GetEnvironmentVariable("KY_PDKS_DB_PASSWORD") ?? "", DataSource="127.0.0.1",
-    Port=3050, Dialect=3, Charset="WIN1254", Pooling=false
-}.ToString();
+var options = PdksOptions.FromEnvironment();
+var database = new FirebirdDatabase(options);
+var logPath = Environment.GetEnvironmentVariable("KY_PDKS_SMOKE_LOG")
+    ?? Path.Combine(AppContext.BaseDirectory, "PDKS_SMOKE_TEST.log");
 var log = new StringBuilder();
 log.AppendLine($"HKN Personel final smoke test: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 
-using var c = new FbConnection(cs);
-c.Open();
+using var c = database.OpenConnection();
 int activeBefore = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK where ICTARIH is null"));
 int totalBefore = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK"));
 log.AppendLine($"BEFORE active={activeBefore} left={totalBefore-activeBefore} total={totalBefore}");
@@ -40,6 +40,17 @@ try
     Exec(c,tx,"update GIRCIK set GSAAT='08:31',GDAKIKA=511 where SIRA=@S and PKNO=@PK",new FbParameter("@S",gs),new FbParameter("@PK",testPk));
     Exec(c,tx,"delete from GIRCIK where SIRA=@S and PKNO=@PK",new FbParameter("@S",gs),new FbParameter("@PK",testPk));
     log.AppendLine("GIRCIK insert/update/delete OK");
+
+    var puantajDate=new DateTime(2099,1,2);var puantaj=DailyAttendanceCalculator.Calculate(new(puantajDate,510,1020,450,puantajDate.AddMinutes(520),puantajDate.AddMinutes(1030)));
+    Exec(c,tx,"insert into PUANTAJ (PKNO,TARIH,GIRIS,CIKIS,STATUS,BOLUM,SSKD,SAAT1,DAKIKA1,GUN1,SAAT2,DAKIKA2,GUN2,SAAT3,DAKIKA3,GUN3,SAAT4,DAKIKA4,GUN4,DEVAMSIZLIKS,DEVAMSIZLIKD,DEVAMSIZLIKG,GECS,GECD,GECG,ERKENS,ERKEND,ERKENG,EKSIKS,EKSIKD,EKSIKG,DEVCEZAS,DEVCEZAD,GECCEZAS,GECCEZAD,ERCEZAS,ERCEZAD,EKCEZAS,EKCEZAD) values (@P,@T,@GI,@CI,@ST,1,@SSK,@S1,@D1,@G1,@S2,@D2,@G2,'00:00',0,0,'00:00',0,0,@DS,@DD,@DG,@GS,@GD,@GG,@ES,@ED,@EG,@XS,@XD,@XG,'00:00',0,'00:00',0,'00:00',0,'00:00',0)",
+        new FbParameter("@P",testPk),new FbParameter("@T",puantajDate),new FbParameter("@GI",puantaj.Entry),new FbParameter("@CI",puantaj.Exit),new FbParameter("@ST",puantaj.Status),new FbParameter("@SSK",puantaj.NormalDay),new FbParameter("@S1",DailyAttendanceResult.AsTime(puantaj.NormalMinutes)),new FbParameter("@D1",puantaj.NormalMinutes),new FbParameter("@G1",puantaj.NormalDay),new FbParameter("@S2",DailyAttendanceResult.AsTime(puantaj.Overtime50Minutes)),new FbParameter("@D2",puantaj.Overtime50Minutes),new FbParameter("@G2",puantaj.Overtime50Day),new FbParameter("@DS",DailyAttendanceResult.AsTime(puantaj.AbsenceMinutes)),new FbParameter("@DD",puantaj.AbsenceMinutes),new FbParameter("@DG",puantaj.AbsenceDay),new FbParameter("@GS",DailyAttendanceResult.AsTime(puantaj.LateMinutes)),new FbParameter("@GD",puantaj.LateMinutes),new FbParameter("@GG",puantaj.LateDay),new FbParameter("@ES",DailyAttendanceResult.AsTime(puantaj.EarlyExitMinutes)),new FbParameter("@ED",puantaj.EarlyExitMinutes),new FbParameter("@EG",puantaj.EarlyExitDay),new FbParameter("@XS",DailyAttendanceResult.AsTime(puantaj.ShortfallMinutes)),new FbParameter("@XD",puantaj.ShortfallMinutes),new FbParameter("@XG",puantaj.ShortfallDay));
+    using(var payrollTotals=new FbCommand("select coalesce(sum(GUN1),0),coalesce(sum(DAKIKA2),0),coalesce(sum(DAKIKA3),0) from PUANTAJ where PKNO=@P and TARIH=@T",c,tx)){payrollTotals.Parameters.Add(new FbParameter("@P",testPk));payrollTotals.Parameters.Add(new FbParameter("@T",puantajDate));using var reader=payrollTotals.ExecuteReader();if(!reader.Read()||reader.GetInt16(0)!=1||reader.GetInt32(1)!=10||reader.GetInt32(2)!=0)throw new Exception("PUANTAJ bordro toplamları doğrulanamadı");}
+    log.AppendLine("PUANTAJ payroll totals OK");
+    Exec(c,tx,"update PUANTAJ set STATUS='SMOKE2' where PKNO=@P and TARIH=@T",new FbParameter("@P",testPk),new FbParameter("@T",puantajDate));
+    if(Convert.ToString(Scalar(c,tx,"select STATUS from PUANTAJ where PKNO=@P and TARIH=@T",new FbParameter("@P",testPk),new FbParameter("@T",puantajDate)))!="SMOKE2")throw new Exception("PUANTAJ update doğrulanamadı");
+    Exec(c,tx,"delete from PUANTAJ where PKNO=@P and TARIH=@T",new FbParameter("@P",testPk),new FbParameter("@T",puantajDate));
+    log.AppendLine("PUANTAJ insert/update/delete OK");
+
     int iz=Convert.ToInt32(Scalar(c,tx,"select coalesce(max(SIRA),0)+1 from OZELIZIN"));
     Exec(c,tx,"insert into OZELIZIN (PKNO,SURESAAT,SUREDAKIKA,EBALAN,TARIH,TIP,MAZERET,SIRA,OTOCIK) values (@PK,'07:30',450,4,@D,'TEST','SMOKE',@S,'0')",
         new FbParameter("@PK",testPk),new FbParameter("@D",new DateTime(2099,1,3)),new FbParameter("@S",iz));
@@ -63,7 +74,7 @@ catch(Exception ex)
 {
     try{tx.Rollback();}catch{}
     log.AppendLine("FAILED: "+ex);
-    File.WriteAllText(LogPath,log.ToString(),Encoding.UTF8);
+    File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);
     throw;
 }
 
@@ -73,8 +84,26 @@ int residue = Convert.ToInt32(Scalar(c,null,"select count(*) from KIMLIK where P
 log.AppendLine($"AFTER active={activeAfter} left={totalAfter-activeAfter} total={totalAfter} residue={residue}");
 if(activeBefore!=activeAfter || totalBefore!=totalAfter || residue!=0) throw new Exception("Rollback sonrası üretim DB sayıları değişti");
 log.AppendLine("PRODUCTION_DB_UNCHANGED OK");
+var terminalPk=Convert.ToString(Scalar(c,null,"select first 1 PKNO from KIMLIK where PKNO is not null order by PKNO"))??throw new Exception("Terminal smoke testi için personel bulunamadı");
+var terminalDate=new DateTime(2099,12,30);var terminalBefore=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
+var terminalResult=new AttendanceImportService(database).Import([new(terminalPk,terminalDate.AddHours(8),"1","SMOKE",TerminalDirection.Entry,"smoke-a"),new(terminalPk,terminalDate.AddHours(8).AddMinutes(4),"1","SMOKE",TerminalDirection.Entry,"smoke-b")],5,rollbackOnly:true);
+var terminalAfter=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
+if(terminalResult.Inserted!=1||terminalResult.Duplicates!=1||terminalBefore!=terminalAfter)throw new Exception("Terminal tolerans rollback testi başarısız");
+log.AppendLine("TERMINAL TOLERANCE ROLLBACK OK");
+var autoDate=new DateTime(2099,12,29);var autoBefore=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",autoDate)));
+var autoResult=new AttendanceImportService(database).Import([new(terminalPk,autoDate.AddHours(8).AddMinutes(30),"1","001",TerminalDirection.Unknown,"auto-in"),new(terminalPk,autoDate.AddHours(19),"1","001",TerminalDirection.Unknown,"auto-out")],5,rollbackOnly:true);
+var autoAfter=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",autoDate)));
+if(autoResult.Inserted!=1||autoResult.Updated!=1||autoBefore!=autoAfter)throw new Exception("Terminal otomatik giriş/çıkış eşleme rollback testi başarısız");
+log.AppendLine("TERMINAL AUTO PAIR ROLLBACK OK");
+var reportFrom=new DateTime(2000,1,1);var reportTo=new DateTime(2100,1,1);
+ValidateQuery(c,"select a.TARIH,a.PKNO,k.AD,k.SOYAD,v.TUR,v.ISARET,a.MIKTAR,a.ACIKLAMA from AVANS a left join KIMLIK k on k.PKNO=a.PKNO left join AVTUR v on v.KOD=a.TURKOD where a.TARIH>=@A and a.TARIH<@B",new FbParameter("@A",reportFrom),new FbParameter("@B",reportTo));
+ValidateQuery(c,"select o.TARIH,o.PKNO,k.AD,k.SOYAD,o.MAZERET,o.TIP,o.SURESAAT,o.BASSAAT,o.BITSAAT from OZELIZIN o left join KIMLIK k on k.PKNO=o.PKNO where o.TARIH>=@A and o.TARIH<@B",new FbParameter("@A",reportFrom),new FbParameter("@B",reportTo));
+ValidateQuery(c,"select k.PKNO,k.SICILNO,k.AD,k.SOYAD,k.IGTARIH,g.AD,b.AD,s.AD,d.AD from KIMLIK k left join GRUP g on g.KOD=k.GRUP left join BOLUM b on b.KOD=k.BOLUM left join SERVIS s on s.KOD=k.SERVIS left join DURUM d on d.KOD=k.DURUM");
+ValidateQuery(c,"select coalesce(g.AD,'Tanımsız'),count(*) from KIMLIK k left join GRUP g on g.KOD=k.GRUP where k.ICTARIH is null group by g.AD");
+ValidateQuery(c,"select k.PKNO,k.AD,k.SOYAD,k.IGTARIH,coalesce(k.KULIZIN,0) from KIMLIK k where k.ICTARIH is null");
+log.AppendLine("OPERATIONAL REPORT QUERIES OK");
 log.AppendLine("FINAL_RESULT=PASS");
-File.WriteAllText(LogPath,log.ToString(),Encoding.UTF8);
+File.WriteAllText(logPath,log.ToString(),Encoding.UTF8);
 Console.WriteLine(log.ToString());
 
 static object? Scalar(FbConnection c,FbTransaction? tx,string sql,params FbParameter[] ps)
@@ -89,4 +118,9 @@ static int Exec(FbConnection c,FbTransaction tx,string sql,params FbParameter[] 
     using var cmd=new FbCommand(sql,c,tx);
     if(ps.Length>0) cmd.Parameters.AddRange(ps);
     return cmd.ExecuteNonQuery();
+}
+
+static void ValidateQuery(FbConnection c,string sql,params FbParameter[] ps)
+{
+    using var cmd=new FbCommand(sql,c);if(ps.Length>0)cmd.Parameters.AddRange(ps);using var reader=cmd.ExecuteReader();
 }

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --test src/pdks-sync-contract.test.mjs",
     "build": "wrangler deploy --dry-run",
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",

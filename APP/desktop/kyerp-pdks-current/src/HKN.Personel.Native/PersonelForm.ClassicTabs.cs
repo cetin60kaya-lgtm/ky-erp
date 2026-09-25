@@ -36,7 +36,7 @@ public partial class PersonelForm
     {
         var page=new TabPage("Bilgi");var lay=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2};lay.RowStyles.Add(new RowStyle(SizeType.Absolute,66));lay.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var top=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=2,Padding=new Padding(6,5,6,2)};top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,70));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,205));top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,150));
-        top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);var type=new ComboBox{Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList};type.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});type.SelectedIndex=0;top.Controls.Add(type,3,0);
+        top.Controls.Add(new Label{Text="Dönem Adı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,0);periodB.Dock=DockStyle.Fill;top.Controls.Add(periodB,1,0);bilgiType.Items.AddRange(new object[]{"Tümü","Normal Çalışma","Mesai","Devamsızlık","Geç Kalma","Eksik Süre"});bilgiType.SelectedIndex=0;bilgiType.SelectedIndexChanged+=(_,_)=>ApplyTimesheetFilter();top.Controls.Add(bilgiType,3,0);
         top.Controls.Add(new Label{Text="Tarih Aralığı",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft},0,1);var dates=new Label{Text="",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft};top.Controls.Add(dates,1,1);top.SetColumnSpan(dates,2);void upd(){var d=PeriodDates(periodB);dates.Text=$"{d.A:dd.MM.yyyy}     ile     {d.B:dd.MM.yyyy}";}periodB.SelectedIndexChanged+=(_,_)=>upd();var show=new Button{Text="Seçili Tarihi Göster",Dock=DockStyle.Fill,ForeColor=Color.Navy,Font=new Font(Font,FontStyle.Bold),Image=ClassicGlyph("Göster"),ImageAlign=ContentAlignment.MiddleLeft};show.Click+=(_,_)=>RefreshFullTabs();top.Controls.Add(show,3,1);
         lay.Controls.Add(top,0,0);lay.Controls.Add(gBilgi,0,1);page.Controls.Add(lay);return page;
     }
@@ -67,6 +67,7 @@ public partial class PersonelForm
     {
         var d=PeriodDates(periodB);var end=d.B.AddDays(1);
         gBilgi.DataSource=Q("select TARIH,SAAT1 as NC,SAAT2 as M50,SAAT3 as M100,SAAT4 as UIZIN,SAAT5,SAAT6,SAAT7,SAAT8,SAAT9,DEVAMSIZLIKS as DEVAMSIZLIK,GECS as GEC_KALMA,EKSIKS as EKSIK_SURE from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B order by TARIH",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",end));
+        ApplyTimesheetFilter();
         d=PeriodDates(periodO);end=d.B.AddDays(1);
         var pu=Q("select coalesce(sum(GUN1),0) NG,coalesce(sum(DAKIKA1),0) ND,coalesce(sum(GUN2),0) G2,coalesce(sum(DAKIKA2),0) D2,coalesce(sum(GUN3),0) G3,coalesce(sum(DAKIKA3),0) D3,coalesce(sum(GUN4),0) G4,coalesce(sum(DAKIKA4),0) D4,coalesce(sum(DEVAMSIZLIKG),0) DG,coalesce(sum(GECG),0) GG,coalesce(sum(ERKENG),0) EG,coalesce(sum(EKSIKG),0) XG from PUANTAJ where PKNO=@PK and TARIH>=@A and TARIH<@B",new FbParameter("@PK",currentPk),new FbParameter("@A",d.A),new FbParameter("@B",end));
         var kr=Q("select MAAS,GYUCRET,GYEMUCRET from KIMLIK where PKNO=@PK",new FbParameter("@PK",currentPk));
@@ -86,4 +87,5 @@ public partial class PersonelForm
     }
     decimal Num(DataRow r,string c)=>r[c]==DBNull.Value?0:Convert.ToDecimal(r[c]);
     decimal Val(DataTable t,int row,string c)=>t.Rows.Count<=row||!t.Columns.Contains(c)||t.Rows[row][c]==DBNull.Value?0:Convert.ToDecimal(t.Rows[row][c]);
+    void ApplyTimesheetFilter(){if(gBilgi.DataSource is DataTable table)table.DefaultView.RowFilter=KYERP.PDKS.Core.Payroll.TimesheetViewFilter.Build(bilgiType.SelectedIndex);}
 }

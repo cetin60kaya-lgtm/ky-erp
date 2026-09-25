@@ -17,7 +17,6 @@ public partial class PersonelForm
     void BuildUiClassic()
     {
         AutoScaleMode=AutoScaleMode.None;
-        MinimumSize=new Size(961,572); Size=new Size(961,572);
         Font=new Font("Microsoft Sans Serif",8.25f,FontStyle.Regular,GraphicsUnit.Point);
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=3,Padding=new Padding(6,25,6,0),Margin=Padding.Empty};
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,390)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
@@ -92,9 +91,9 @@ public partial class PersonelForm
     }
     TabPage BuildKisiselClassic()
     {
-        var page=new TabPage("Kişisel Bilgiler");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=12,Padding=new Padding(4)};
+        var page=new TabPage("Kişisel Bilgileri");var t=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=4,RowCount=14,Padding=new Padding(4)};
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,42));t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,125));t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,58));
-        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","","","Adres","ADRES"};
+        string[] z={"Vergi Kimlik No","VKNO","SSK No","SSKNO","Askerlik Durumu","ASDURUM","Elbise Beden No","ELBNO","Eğitim Durumu","EGTDURUM","Ayakkabı No","AYNO","Yabancı Dil","YDIL","Kullandığı İzin","KULIZIN","Uzmanlık Alanı","UALAN","Çocuk Sayısı","CCKSAY","Ehliyetin Sınıfı","ESINIF","Ev Telefonu","EVTEL","Ehliyetin Verildiği İl/İlçe","EVILILCE","Cep Telefonu","GSM","Ehliyet Belge Numarası","EBELGENO","Fazla Mesai Ücreti","MSUCRET","Ehliyetin Verildiği Tarih","EVTAR","Günlük Yemek Ücreti","GYEMUCRET","Kullandığı Cihaz","EKC","Günlük Yol Ücreti","GYUCRET","Eski Maaşı","EMAAS","İşten Çıkış Sebebi","ICIKSEBEB","Saat Ücreti","NSUCRET","Adres","ADRES","Banka Hesap No","BHNO","SGK İşe Giriş Tarihi","SGKGIRTAR"};
         FillPairs(t,z);page.Controls.Add(t);return page;
     }
 
@@ -139,7 +138,7 @@ public partial class PersonelForm
     void StyleGrid(DataGridView g){g.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;g.RowHeadersWidth=18;g.RowTemplate.Height=20;g.ColumnHeadersHeight=20;g.BackgroundColor=SystemColors.Control;g.BorderStyle=BorderStyle.FixedSingle;g.GridColor=SystemColors.ControlDark;g.DefaultCellStyle.Font=Font;g.ColumnHeadersDefaultCellStyle.Font=Font;g.EnableHeadersVisualStyles=true;}
 
     void GirisBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gGiris,"SIRA",0,false);SetCol(gGiris,"GIRIS_TARIHI",104,true,"Giriş Tarihi");SetCol(gGiris,"GIRIS_SAATI",72,true,"Giriş Saati");SetCol(gGiris,"GTUR",34,true,"Tür");SetCol(gGiris,"CIKIS_TARIHI",104,true,"Çıkış Tarihi");SetCol(gGiris,"CIKIS_SAATI",72,true,"Çıkış Saati");SetCol(gGiris,"CTUR",34,true,"Tür");OrderGirisColumns();}
-    void IzinBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gIzin,"SIRA",0,false);SetCol(gIzin,"TARIH",120,true,"Tarih");SetCol(gIzin,"BASSAAT",62,true,"Baş. Saat");SetCol(gIzin,"BITSAAT",62,true,"Bit. Saat");SetCol(gIzin,"SURESAAT",62,true,"Süre");SetCol(gIzin,"TIP",90,true,"Tip");SetCol(gIzin,"MAZERET",210,true,"Mazeret");}
+    void IzinBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gIzin,"SIRA",0,false);SetCol(gIzin,"SUREDAKIKA",0,false);SetCol(gIzin,"EBALAN",0,false);SetCol(gIzin,"TARIH",120,true,"Tarih");SetCol(gIzin,"BASSAAT",62,true,"Baş. Saat");SetCol(gIzin,"BITSAAT",62,true,"Bit. Saat");SetCol(gIzin,"SURESAAT",62,true,"Süre");SetCol(gIzin,"TIP",90,true,"Tip");SetCol(gIzin,"MAZERET",210,true,"Mazeret");}
     void EkkBound(object? s,DataGridViewBindingCompleteEventArgs e){SetCol(gEkk,"KOD",0,false);SetCol(gEkk,"ISLEM_TARIHI",108,true,"İşlem Tar.");SetCol(gEkk,"VERILIS_TARIHI",108,true,"Ver. Tar.");SetCol(gEkk,"TURU",85,true,"Türü");SetCol(gEkk,"MIKTAR",85,true,"Miktar");SetCol(gEkk,"ACIKLAMA",175,true,"Açıklama");}
     void BilgiBound(object? s,DataGridViewBindingCompleteEventArgs e){string[] n={"TARIH","NC","M50","M100","UIZIN","SAAT5","SAAT6","SAAT7","SAAT8","SAAT9","DEVAMSIZLIK","GEC_KALMA","EKSIK_SURE"};string[] h={"TARİH","N.Ç.","% 50","%100","Üsz.İ","5","6","7","8","9","Dvms.","Geç K.","Eks."};int[] w={105,48,48,48,42,36,36,36,36,36,50,50,50};for(int i=0;i<n.Length;i++)SetCol(gBilgi,n[i],w[i],true,h[i]);}
     void SetCol(DataGridView g,string n,int w,bool vis,string? h=null){if(!g.Columns.Contains(n))return;var c=g.Columns[n];c.Visible=vis;if(vis)c.Width=w;if(h!=null)c.HeaderText=h;}

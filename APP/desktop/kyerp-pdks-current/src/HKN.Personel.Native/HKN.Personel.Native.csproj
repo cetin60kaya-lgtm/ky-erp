@@ -1,15 +1,24 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>KYERP.PDKS</AssemblyName>
+    <Product>KYERP PDKS</Product>
+    <Company>KY ERP</Company>
+    <Description>KYERP PDKS masaüstü personel devam kontrol sistemi</Description>
+    <Version>2.2.0</Version>
+    <FileVersion>2.2.0.0</FileVersion>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="FirebirdSql.Data.FirebirdClient" Version="10.3.4" />
+    <ProjectReference Include="..\KYERP.PDKS.Core\KYERP.PDKS.Core.csproj" />
   </ItemGroup>
-
+  <Target Name="BuildTerminalDeviceBridge" AfterTargets="Build" Condition="Exists('$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe')">
+    <Exec Command="&quot;$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe&quot; /nologo /platform:x86 /target:exe /out:&quot;$(TargetDir)KYERP.TerminalBridge.exe&quot; /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll &quot;$(MSBuildProjectDirectory)\..\..\tools\TerminalDeviceBridge\Program.cs&quot;" />
+  </Target>
+  <Target Name="PublishTerminalDeviceBridge" AfterTargets="Publish" Condition="Exists('$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe')">
+    <Exec Command="&quot;$(WINDIR)\Microsoft.NET\Framework\v4.0.30319\csc.exe&quot; /nologo /platform:x86 /target:exe /out:&quot;$(PublishDir)KYERP.TerminalBridge.exe&quot; /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll &quot;$(MSBuildProjectDirectory)\..\..\tools\TerminalDeviceBridge\Program.cs&quot;" />
+  </Target>
 </Project>
