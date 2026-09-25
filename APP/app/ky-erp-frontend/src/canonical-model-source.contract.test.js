@@ -37,3 +37,17 @@ test("Günlük Operasyon kodu korunurken ana modül kaydından geçici olarak ç
   assert.match(registry, /TEMPORARILY_DISABLED_MODULE_KEYS = new Set\(\["gunluk-operasyon"\]\)/);
   assert.match(registry, /\.filter\(\(module\) => !TEMPORARILY_DISABLED_MODULE_KEYS\.has\(module\.key\)\)/);
 });
+test("Desen workflow aynı model kimliğini canonical model_records ile paylaşır", () => {
+  const workflow = read("APP/cloud/ky-erp-api/src/desen-workflow.ts");
+  assert.match(workflow, /await upsertCanonicalModel\(c, id, view, slug\)/);
+  assert.match(workflow, /await listWorkflowModels\(c, slug\)/);
+  assert.match(workflow, /workflowModelId: id/);
+});
+
+test("Desenden İmalata geçiş yeni model kimliği üretmez", () => {
+  const production = read("APP/cloud/ky-erp-api/src/production-center.ts");
+  const frontend = read("APP/app/ky-erp-frontend/src/pages/imalat/ProductionControlCenterPageV2.jsx");
+  assert.match(frontend, /designModelId: design\.id/);
+  assert.match(production, /const id = text\(first\(body\.designModelId, body\.modelId, body\.id\)\) \|\| crypto\.randomUUID\(\)/);
+  assert.match(production, /designModelId: text\(body\.designModelId \|\| id\)/);
+});

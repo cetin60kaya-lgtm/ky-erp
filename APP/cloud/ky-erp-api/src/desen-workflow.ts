@@ -193,6 +193,178 @@ async function storeDelete(
     .run();
 }
 
+function quoteIdentifier(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function databaseValue(value: unknown) {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "object") return JSON.stringify(value);
+  return value;
+}
+
+async function modelRecordColumns(c: Context<AppEnv>) {
+  const result = await c.env.DB.prepare('PRAGMA table_info("model_records")').all<Row>();
+  return new Set((result.results || []).map((row) => text(row.name)).filter(Boolean));
+}
+
+function canonicalModelPayload(id: string, data: Row, slug: string): Row {
+  const view = modelView({ ...data, id });
+  const imageUrl = text(
+    data.imageUrl ||
+      view.mainImage?.thumbnailUrl ||
+      view.mainImage?.previewUrl ||
+      view.mainImage?.storageKey,
+  );
+  const printRegions = (view.operations || [])
+    .map((operation: Row) => text(operation.printAreaName))
+    .filter(Boolean);
+  const raw = {
+    ...objectOf(data.raw),
+    workflowModelId: id,
+    modelName: view.modelName,
+    modelCode: view.modelCode,
+    companyId: view.companyId,
+    companyName: view.companyName,
+    orderNo: text(data.orderNo),
+    groundColor: text(data.groundColor || data.zeminRenk || data.zemin),
+    imageUrl,
+    printRegions,
+    sourceType: view.sourceType,
+    workflowStatus: view.status,
+    plannedQuantity: num(data.plannedQuantity),
+    updatedAt: nowIso(),
+  };
+  return {
+    id,
+    main_company_slug: slug || null,
+    model_name: view.modelName,
+    model_code: view.modelCode,
+    company_id: view.companyId || null,
+    customer_id: view.companyId || null,
+    customer_name: view.companyName || null,
+    order_no: text(data.orderNo) || null,
+    ground_color: raw.groundColor || null,
+    image_url: imageUrl || null,
+    status: view.status || "ACTIVE",
+    raw,
+    created_at: text(data.createdAt) || nowIso(),
+    updated_at: nowIso(),
+  };
+}
+
+async function canonicalModelRow(c: Context<AppEnv>, id: string, slug: string): Promise<Row | null> {
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM model_records
+      WHERE id = ?
+        AND (main_company_slug = ? OR main_company_slug IS NULL)
+      LIMIT 1`,
+  ).bind(id, slug).first<Row>();
+  if (!row || text(row.deleted_at)) return null;
+  return row;
+}
+
+async function canonicalModelRows(c: Context<AppEnv>, slug: string): Promise<Row[]> {
+  const result = await c.env.DB.prepare(
+    `SELECT * FROM model_records
+      WHERE (main_company_slug = ? OR main_company_slug IS NULL)
+      ORDER BY updated_at DESC, created_at DESC, id DESC`,
+  ).bind(slug).all<Row>();
+  return (result.results || []).filter((row) => !text(row.deleted_at));
+}
+
+function canonicalRecordView(row: Row): Row {
+  const raw = objectOf(row.raw);
+  const imageUrl = text(row.image_url || raw.imageUrl || raw.thumbnailUrl);
+  return modelView({
+    ...raw,
+    id: text(row.id),
+    modelName: text(row.model_name || raw.modelName),
+    modelCode: text(row.model_code || raw.modelCode || row.model_name),
+    companyId: text(row.company_id || row.customer_id || raw.companyId),
+    companyName: text(row.customer_name || raw.companyName),
+    orderNo: text(row.order_no || raw.orderNo),
+    groundColor: text(row.ground_color || raw.groundColor),
+    status: text(row.status || raw.workflowStatus || "ACTIVE"),
+    imageUrl,
+    mainImage:
+      raw.mainImage ||
+      (imageUrl ? { role: "MODEL_IMAGE", previewUrl: imageUrl, thumbnailUrl: imageUrl } : null),
+    createdAt: text(row.created_at || raw.createdAt),
+    updatedAt: text(row.updated_at || raw.updatedAt),
+  });
+}
+
+async function upsertCanonicalModel(c: Context<AppEnv>, id: string, data: Row, slug: string) {
+  const columns = await modelRecordColumns(c);
+  if (!columns.size || !columns.has("id") || !columns.has("model_name")) {
+    throw new Error("Canonical model_records tablosu hazır değil.");
+  }
+  const payload = canonicalModelPayload(id, data, slug);
+  const existing = await canonicalModelRow(c, id, slug);
+  if (existing) {
+    const entries = Object.entries(payload).filter(
+      ([key, value]) => key !== "id" && key !== "created_at" && columns.has(key) && value !== undefined,
+    );
+    if (entries.length) {
+      await c.env.DB.prepare(
+        `UPDATE model_records SET ${entries.map(([key]) => `${quoteIdentifier(key)} = ?`).join(", ")}
+          WHERE id = ? AND (main_company_slug = ? OR main_company_slug IS NULL)`,
+      ).bind(...entries.map(([, value]) => databaseValue(value)), id, slug).run();
+    }
+    return canonicalModelRow(c, id, slug);
+  }
+  const entries = Object.entries(payload).filter(
+    ([key, value]) => columns.has(key) && value !== undefined,
+  );
+  await c.env.DB.prepare(
+    `INSERT INTO model_records (${entries.map(([key]) => quoteIdentifier(key)).join(", ")})
+     VALUES (${entries.map(() => "?").join(", ")})`,
+  ).bind(...entries.map(([, value]) => databaseValue(value))).run();
+  return canonicalModelRow(c, id, slug);
+}
+
+async function listWorkflowModels(c: Context<AppEnv>, slug: string): Promise<Row[]> {
+  const workflowModels = (await storeList(c, MODEL_SCOPE, slug)).map(modelView);
+  let canonicalRows: Row[] = [];
+  try {
+    canonicalRows = await canonicalModelRows(c, slug);
+  } catch {
+    canonicalRows = [];
+  }
+  const canonicalIds = new Set(canonicalRows.map((row) => text(row.id)).filter(Boolean));
+  for (const workflow of workflowModels) {
+    if (!canonicalIds.has(text(workflow.id))) {
+      await upsertCanonicalModel(c, text(workflow.id), workflow, slug);
+    }
+  }
+  if (workflowModels.some((row) => !canonicalIds.has(text(row.id)))) {
+    canonicalRows = await canonicalModelRows(c, slug);
+  }
+  const workflowById = new Map(workflowModels.map((row) => [text(row.id), row]));
+  const rows = canonicalRows.map((row) => {
+    const canonical = canonicalRecordView(row);
+    const workflow = workflowById.get(text(canonical.id));
+    if (!workflow) return canonical;
+    return modelView({
+      ...workflow,
+      ...canonical,
+      operations: workflow.operations,
+      files: workflow.files,
+      metadata: workflow.metadata,
+      mainImage: workflow.mainImage || canonical.mainImage,
+      status: workflow.status || canonical.status,
+      sourceType: workflow.sourceType || canonical.sourceType,
+    });
+  });
+  const included = new Set(rows.map((row) => text(row.id)));
+  for (const workflow of workflowModels) {
+    if (!included.has(text(workflow.id))) rows.push(workflow);
+  }
+  return rows;
+}
 function inferArea(fileName: string) {
   const value = normalize(fileName);
   if (/ARKA|BACK/.test(value)) return ["BACK", "Arka"];
@@ -367,8 +539,26 @@ async function getModel(
   id: string,
   slug: string,
 ): Promise<Row | null> {
-  const row = await storeGet(c, MODEL_SCOPE, id, slug);
-  return row ? modelView(row) : null;
+  const workflowRow = await storeGet(c, MODEL_SCOPE, id, slug);
+  const canonicalRow = await canonicalModelRow(c, id, slug).catch(() => null);
+  if (!workflowRow && !canonicalRow) return null;
+  if (!workflowRow && canonicalRow) return canonicalRecordView(canonicalRow);
+  const workflow = modelView(workflowRow || {});
+  if (!canonicalRow) {
+    await upsertCanonicalModel(c, id, workflow, slug);
+    return workflow;
+  }
+  const canonical = canonicalRecordView(canonicalRow);
+  return modelView({
+    ...workflow,
+    ...canonical,
+    operations: workflow.operations,
+    files: workflow.files,
+    metadata: workflow.metadata,
+    mainImage: workflow.mainImage || canonical.mainImage,
+    status: workflow.status || canonical.status,
+    sourceType: workflow.sourceType || canonical.sourceType,
+  });
 }
 
 async function saveModel(
@@ -399,7 +589,9 @@ async function saveModel(
     },
     slug,
   );
-  return modelView(saved);
+  const view = modelView(saved);
+  await upsertCanonicalModel(c, id, view, slug);
+  return view;
 }
 
 function parseChannelsText(value: unknown) {
@@ -1003,7 +1195,7 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     );
     const allRows = filterModelRows(
       c,
-      (await storeList(c, MODEL_SCOPE, slug)).map(modelView),
+      await listWorkflowModels(c, slug),
     );
     const rows = allRows.slice(0, limit);
     return c.json({
@@ -1024,7 +1216,7 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c, body);
     const modelName = text(body.modelName || body.modelCode);
     if (!modelName) return c.json(errorBody("MODEL_NAME_REQUIRED", "Model adı zorunludur."), 400);
-    const duplicate = (await storeList(c, MODEL_SCOPE, slug)).find(
+    const duplicate = (await listWorkflowModels(c, slug)).find(
       (row) =>
         normalize(row.modelName) === normalize(modelName) &&
         text(row.companyId) === text(body.companyId) &&
@@ -1365,7 +1557,7 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c);
     const rows = filterModelRows(
       c,
-      (await storeList(c, MODEL_SCOPE, slug)).map(modelView),
+      await listWorkflowModels(c, slug),
     );
     return c.json({
       ok: true,
@@ -1378,7 +1570,7 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c);
     const rows = filterModelRows(
       c,
-      (await storeList(c, MODEL_SCOPE, slug)).map(modelView),
+      await listWorkflowModels(c, slug),
     );
     const escape = (value: unknown) => `"${text(value).replace(/"/g, '""')}"`;
     const lines = [
