@@ -61,7 +61,7 @@ export function useAccountingLiveSync(activeMainCompany, onRefresh) {
           ...current,
           status: errorStatus(error),
           online: false,
-          error: error?.message || "Muhasebe canl? ba?lant?s? kurulamad?.",
+          error: error?.message || "Muhasebe canl\u0131 ba\u011flant\u0131s\u0131 kurulamad\u0131.",
         }));
       } finally {
         busyRef.current = false;

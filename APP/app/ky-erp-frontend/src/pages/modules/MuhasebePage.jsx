@@ -35,7 +35,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   const [quickCompanyOpen, setQuickCompanyOpen] = useState(false);
   const reloadAll = () => setRefreshKey((value) => value + 1);
   const live = useAccountingLiveSync(activeMainCompany);
-  const liveLabel = { live: "Canl?", connecting: "Ba?lan?yor?", offline: "?evrimd???", auth_error: "Yetki hatas?", api_error: "API hatas?" }[live.status] || "Ba?lant? durumu";
+  const liveLabel = { live: "Canl\u0131", connecting: "Ba\u011flan\u0131yor\u2026", offline: "\u00c7evrimd\u0131\u015f\u0131", auth_error: "Yetki hatas\u0131", api_error: "API hatas\u0131" }[live.status] || "Ba\u011flant\u0131 durumu";
 
   useEffect(() => {
     const refreshFromCanonicalDocument = () => setRefreshKey((value) => value + 1);
@@ -91,7 +91,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
         <header className="accounting-page-header compact">
           <div><span className="accounting-eyebrow">Muhasebe</span><h1>{current.title}</h1><p>{current.description}</p></div>
           <div className="accounting-header-actions">
-            <span className={`accounting-live-state ${live.online ? "" : "offline"}`}>{live.online ? "Canlı" : "Bağlantı bekleniyor"}</span>
+            <span className={`accounting-live-state ${live.status || "connecting"}`} title={live.error || undefined}>{liveLabel}</span>
             <div className="accounting-quick-wrap">
               <button type="button" className="accounting-primary" aria-expanded={quickOpen} onClick={() => setQuickOpen((value) => !value)}>+ Hızlı İşlem</button>
               {quickOpen ? (

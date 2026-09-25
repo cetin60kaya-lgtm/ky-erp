@@ -120,7 +120,10 @@ function withCompanyBilling(module) {
 }
 
 
+const TEMPORARILY_DISABLED_MODULE_KEYS = new Set(["gunluk-operasyon"]);
+
 const baseModules = BASE_MODULES
+  .filter((module) => !TEMPORARILY_DISABLED_MODULE_KEYS.has(module.key))
   .map(withoutStorageDuplicates)
   .map(withCompanyBilling);
 const eBelgeModule = baseModules.find((module) => module.key === "e-belge");
