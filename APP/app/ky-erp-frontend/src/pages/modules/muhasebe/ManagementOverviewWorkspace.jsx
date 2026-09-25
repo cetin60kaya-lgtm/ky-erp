@@ -81,7 +81,7 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
       <section className="management-ebelge-strip">
         <div className="management-ebelge-title">
           <div><span>CANONICAL AKIŞ</span><strong>e-Belge → Muhasebe Entegrasyonu</strong><small>Son onaylanan belge cari, muhasebe defteri, KDV ve uygun stok / LOT akışına tek belge kimliğiyle işlenir.</small></div>
-          <button type="button" onClick={() => openModule?.("isnet", { tabKey: "e-belge-merkezi" })}>Belge Havuzunu Aç</button>
+          <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}>Belge Havuzunu Aç</button>
         </div>
         <div className="management-ebelge-metrics">
           <Metric label="e-Belge toplam" value={String(eBelge.total || 0)} />

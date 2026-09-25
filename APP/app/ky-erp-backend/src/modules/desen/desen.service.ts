@@ -998,27 +998,6 @@ export class DesenService {
     return this.readRecords(slug).filter((row) => !row.deletedAt);
   }
 
-  async listSimpleModels(query: Record<string, any>) {
-    if (!this.storageService) return [];
-    const files = await this.storageService.listFiles({
-      ...query,
-      module: "DESEN",
-      documentType: "DESEN_GORSEL",
-      take: 5000,
-    });
-    return files.map((file: any) => ({
-      id: file.id,
-      modelAdi:
-        this.clean(file.ownerId) ||
-        this.clean(file.modelId) ||
-        path.parse(this.clean(file.originalFileName)).name,
-      imageUrl: file.publicUrl || "",
-      thumbnailUrl: file.thumbnailPath || file.publicUrl || "",
-      originalFileName: file.originalFileName,
-      sourcePath: file.sourcePath,
-      createdAt: file.createdAt,
-    }));
-  }
 
   async getModelImageByModelId(modelId: string, query: Record<string, any>) {
     if (this.modelService) {

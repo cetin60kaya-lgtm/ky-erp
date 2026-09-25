@@ -35,6 +35,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
   const [quickCompanyOpen, setQuickCompanyOpen] = useState(false);
   const reloadAll = () => setRefreshKey((value) => value + 1);
   const live = useAccountingLiveSync(activeMainCompany);
+  const liveLabel = { live: "Canl?", connecting: "Ba?lan?yor?", offline: "?evrimd???", auth_error: "Yetki hatas?", api_error: "API hatas?" }[live.status] || "Ba?lant? durumu";
 
   useEffect(() => {
     const refreshFromCanonicalDocument = () => setRefreshKey((value) => value + 1);

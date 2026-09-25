@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Field, InfoLine, Panel, Status, VisualBox, formatGr } from "./BoyahaneShared";
 import { approvedInventory, initialRecipeRows, modelPool, products } from "./boyahaneData";
-import { getDesenSimpleModels } from "../../services/desenApi";
+import { fetchSharedModels } from "../../services/desenService";
 import { activePrintRegions } from "../../services/modelPrintRegionService";
 
 function productByEntry(value) {
@@ -84,7 +84,7 @@ export default function RenkRecetePage({ activeMainCompany }) {
 
   useEffect(() => {
     let alive = true;
-    getDesenSimpleModels(activeMainCompany, { limit: 5000, pageSize: 5000 })
+    fetchSharedModels(activeMainCompany, { limit: 5000, pageSize: 5000 })
       .then((rows) => {
         if (alive) setSharedModels(Array.isArray(rows) ? rows : []);
       })

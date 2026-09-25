@@ -14,8 +14,8 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { getFirmaKartlari } from "../../../services/muhasebeApi";
-import { getDesenSimpleModels } from "../../../services/desenApi";
+import { fetchCompanies } from "../../../services/muhasebeService";
+import { fetchSharedModels } from "../../../services/desenService";
 import {
   getIsnetSettings,
   saveIsnetSettings,
@@ -136,8 +136,8 @@ export default function EBelgeIntegrationsWorkspace({
         sources: {
           connection: { critical: true, load: () => getIsnetSettings() },
           business: { critical: true, load: () => getIsnetBusinessSettings(activeMainCompany) },
-          companies: { fallback: [], load: () => getFirmaKartlari(activeMainCompany) },
-          models: { fallback: [], load: () => getDesenSimpleModels(activeMainCompany, { limit: 3000 }) },
+          companies: { fallback: [], load: () => fetchCompanies(activeMainCompany) },
+          models: { fallback: [], load: () => fetchSharedModels(activeMainCompany, { limit: 3000 }) },
         },
       });
       if (result.states.connection.status !== "error") {

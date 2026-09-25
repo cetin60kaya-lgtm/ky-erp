@@ -1880,32 +1880,212 @@ app.get("/api/muhasebe/customer-dispatches", async (c) => {
   return c.json({ ok: true, success: true, data });
 });
 
+function canonicalModelView(row: DatabaseRow) {
+  const raw = jsonObject(row.raw);
+  const modelName = databaseText(
+    row.model_name || raw.modelName || raw.modelAdi || raw.name,
+  ).trim();
+  const modelCode = databaseText(
+    row.model_code || raw.modelCode || raw.code || modelName,
+  ).trim();
+  const companyId = databaseText(
+    row.company_id || row.customer_id || raw.companyId || raw.customerId,
+  ).trim();
+  const companyName = databaseText(
+    row.customer_name || raw.companyName || raw.musteri || raw.musteriFirma,
+  ).trim();
+  const orderNo = databaseText(
+    row.order_no || raw.orderNo || raw.siparisNo,
+  ).trim();
+  const groundColor = databaseText(
+    row.ground_color || raw.groundColor || raw.zeminRenk || raw.zemin,
+  ).trim();
+  const imageUrl = databaseText(
+    row.image_url || raw.imageUrl || raw.thumbnailUrl || raw.desenImageThumb,
+  ).trim();
+  const status = databaseText(row.status || raw.status || raw.durum || "ACTIVE").trim();
+  const createdAt = databaseText(row.created_at || raw.createdAt).trim();
+  const updatedAt = databaseText(row.updated_at || raw.updatedAt || createdAt).trim();
+
+  return {
+    ...raw,
+    id: row.id,
+    modelId: row.id,
+    name: modelName,
+    modelName,
+    modelAdi: modelName,
+    modelCode,
+    code: modelCode,
+    companyId,
+    companyName,
+    musteri: companyName,
+    musteriFirma: companyName,
+    orderNo,
+    siparisNo: orderNo,
+    groundColor,
+    zeminRenk: groundColor,
+    zemin: groundColor,
+    imageUrl,
+    status,
+    durum: status,
+    createdAt,
+    updatedAt,
+    sonIslemTarihi: updatedAt,
+    raw,
+  };
+}
+
 app.get("/api/models", async (c) => {
-  const products = await scopedRows(c, "products", {
-    orderBy: "name COLLATE NOCASE ASC",
+  const page = Math.max(1, Number(c.req.query("page") || 1));
+  const pageSize = Math.max(
+    1,
+    Math.min(10000, Number(c.req.query("pageSize") || c.req.query("limit") || 5000)),
+  );
+  const q = databaseText(c.req.query("q")).trim();
+  const rows = await scopedRows(c, "model_records", {
+    search: q
+      ? { value: q, columns: ["model_name", "model_code", "order_no", "customer_name"] }
+      : undefined,
+    orderBy: "updated_at DESC, created_at DESC",
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  });
+  return c.json({
+    ok: true,
+    success: true,
+    data: rows.map(canonicalModelView),
+    meta: { page, pageSize, source: "model_records" },
+  });
+});
+
+app.get("/api/models/:id", async (c) => {
+  const id = databaseText(c.req.param("id")).trim();
+  const rows = await scopedRows(c, "model_records", {
+    filters: [{ column: "id", value: id }],
+    limit: 1,
+  });
+  const row = rows[0];
+  return row
+    ? c.json({ ok: true, success: true, data: canonicalModelView(row) })
+    : c.json(jsonError("NOT_FOUND", "Model bulunamadı."), 404);
+});
+
+app.post("/api/models", async (c) => {
+  const body = await requestBody(c);
+  const slug = slugOf(c, body);
+  const modelName = databaseText(
+    body.modelName || body.modelAdi || body.name || body.modelCode,
+  ).trim();
+  if (!modelName) {
+    return c.json(jsonError("MODEL_NAME_REQUIRED", "Model adı zorunludur."), 400);
+  }
+
+  const normalizedName = normalizeText(modelName);
+  const candidates = await scopedRows(c, "model_records", {
+    search: { value: modelName, columns: ["model_name", "model_code"] },
+    limit: 100,
+    slug,
+  });
+  const existing = candidates.find(
+    (row) => normalizeText(databaseText(row.model_name)) === normalizedName,
+  );
+  if (existing) {
+    return c.json({
+      ok: true,
+      success: true,
+      data: canonicalModelView(existing),
+      meta: { reused: true, source: "model_records" },
+    });
+  }
+
+  const id = databaseText(body.id || body.modelId || crypto.randomUUID()).trim();
+  const now = new Date().toISOString();
+  const modelCode = databaseText(body.modelCode || body.code || modelName).trim();
+  const companyId = databaseText(body.companyId || body.customerId).trim();
+  const companyName = databaseText(
+    body.companyName || body.musteri || body.musteriFirma,
+  ).trim();
+  const orderNo = databaseText(body.orderNo || body.siparisNo).trim();
+  const groundColor = databaseText(
+    body.groundColor || body.zeminRenk || body.zemin,
+  ).trim();
+  const imageUrl = databaseText(
+    body.imageUrl || body.thumbnailUrl || body.desenImageThumb,
+  ).trim();
+  const status = databaseText(body.status || body.durum || "ACTIVE").trim();
+
+  await insertDynamic(c, "model_records", {
+    id,
+    main_company_slug: slug,
+    model_name: modelName,
+    model_code: modelCode,
+    company_id: companyId || null,
+    customer_id: companyId || null,
+    customer_name: companyName || null,
+    order_no: orderNo || null,
+    ground_color: groundColor || null,
+    image_url: imageUrl || null,
+    status,
+    raw: JSON.stringify({
+      ...body,
+      id,
+      modelId: id,
+      modelName,
+      modelAdi: modelName,
+      modelCode,
+      companyId,
+      companyName,
+      orderNo,
+      groundColor,
+      imageUrl,
+      status,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    created_at: now,
+    updated_at: now,
+  });
+
+  const rows = await scopedRows(c, "model_records", {
+    filters: [{ column: "id", value: id }],
+    limit: 1,
+    slug,
+  });
+  return c.json(
+    {
+      ok: true,
+      success: true,
+      data: canonicalModelView(rows[0] || {
+        id,
+        model_name: modelName,
+        model_code: modelCode,
+        customer_name: companyName,
+        order_no: orderNo,
+        ground_color: groundColor,
+        image_url: imageUrl,
+        status,
+        created_at: now,
+        updated_at: now,
+        raw: JSON.stringify(body),
+      }),
+      meta: { created: true, source: "model_records" },
+    },
+    201,
+  );
+});
+
+app.get("/api/desen/modeller", async (c) => {
+  const rows = await scopedRows(c, "model_records", {
+    orderBy: "updated_at DESC, created_at DESC",
     limit: 10000,
   });
   return c.json({
     ok: true,
     success: true,
-    data: products.map((row) => ({
-      id: row.id,
-      name: row.name,
-      modelName: row.name,
-      code: row.code || row.legacy_id || "",
-      unit: row.unit || "",
-      raw: jsonObject(row.raw),
-    })),
+    data: rows.map(canonicalModelView),
+    meta: { source: "model_records", compatibilityAlias: true },
   });
 });
-app.get("/api/desen/modeller", async (c) => {
-  const products = await scopedRows(c, "products", {
-    orderBy: "name COLLATE NOCASE ASC",
-    limit: 10000,
-  });
-  return c.json({ ok: true, success: true, data: products });
-});
-
 app.post("/api/muhasebe/odeme/firma", async (c) => {
   const body = await requestBody(c);
   const slug = slugOf(c, body);

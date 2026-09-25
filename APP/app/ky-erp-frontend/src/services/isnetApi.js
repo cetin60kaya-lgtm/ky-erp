@@ -1,164 +1,18 @@
-import { apiFetch, apiGet, apiPost, apiPut, getApiActiveMainCompanySlug } from "../utils/api";
-
-const ACCOUNTING_CLEAN_START = "2026-08-01";
+import { apiGet, apiPost, apiPut } from "../utils/api";
 
 function unwrap(payload) {
-  return payload &&
-    payload.ok === true &&
-    Object.prototype.hasOwnProperty.call(payload, "data")
+  return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
     ? payload.data
     : payload;
 }
 
-function floorCleanStart(value) {
-  const requested = String(value || "").trim();
-  if (!requested || requested < ACCOUNTING_CLEAN_START) return ACCOUNTING_CLEAN_START;
-  return requested;
-}
-
-function resolveMainCompanySlug(payload = {}) {
-  const slug = String(
-    payload?.mainCompanySlug ||
-      payload?.main_company_slug ||
-      getApiActiveMainCompanySlug() ||
-      "",
-  ).trim();
-  if (!slug) {
-    const error = new Error("İşNet işlemi için ana firma seçimi zorunludur.");
-    error.code = "MAIN_COMPANY_REQUIRED";
-    throw error;
-  }
-  return slug;
-}
-
-function reviewRequired(value) {
-  const status = String(value?.status || "").trim().toUpperCase();
-  return value?.requiresReview === true ||
-    value?.partial === true ||
-    status === "PARTIAL_REVIEW_REQUIRED" ||
-    status.includes("PARTIAL") ||
-    status.includes("REVIEW_REQUIRED");
-}
-
-function appendWarning(warnings, value) {
-  const message = String(value || "").trim();
-  if (message && !warnings.includes(message)) warnings.push(message);
-}
-
-export const getIsnetDashboard = () => apiGet("/isnet/dashboard").then(unwrap);
-export const getIsnetConfiguration = () => apiGet("/isnet/configuration").then(unwrap);
-export const getIncomingDispatches = () => apiGet("/isnet/dispatches/incoming").then(unwrap);
-export const getIssuedDocuments = () => apiGet("/isnet/documents/issued").then(unwrap);
-export const getIssuedDocumentFile = (id, format = "pdf") => apiFetch(`/isnet/documents/issued/${encodeURIComponent(id)}/file?format=${encodeURIComponent(format)}&preview=1`, { responseType: "blob", timeoutMs: 60_000 });
-export const getIsnetPortalDocuments = ({ startDate, endDate }) => apiGet(`/isnet/documents/portal?startDate=${encodeURIComponent(floorCleanStart(startDate))}&endDate=${encodeURIComponent(endDate)}`).then(unwrap);
-export const getIsnetLocalDocuments = ({ startDate, endDate, page = 1, pageSize = 50 }) => apiGet(`/isnet/documents/local?startDate=${encodeURIComponent(floorCleanStart(startDate))}&endDate=${encodeURIComponent(endDate)}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`).then(unwrap);
-export const backfillIsnetPortalDocument = (document) => apiPost("/isnet/documents/backfill", { documentNo: document.documentNo, automationKey: document.automationKey }).then(unwrap);
-export const getIsnetPortalDocumentFile = (document, format) => apiFetch(`/isnet/documents/${encodeURIComponent(document.direction)}/${encodeURIComponent(document.kind)}/${encodeURIComponent(document.sourceId)}/file?format=${encodeURIComponent(format)}`, { responseType: "blob", timeoutMs: 60_000 });
-export const importIsnetIncomingDispatch = (document) => apiPost(`/isnet/documents/incoming/dispatch/${encodeURIComponent(document.sourceId)}/import`, { confirmed: true }).then(unwrap);
-export const createIsnetOutgoingDispatchDraft = (document) => apiPost(`/isnet/documents/incoming/dispatch/${encodeURIComponent(document.sourceId)}/create-outgoing-draft`, { confirmed: true }).then(unwrap);
-export const getIsnetIncomingDispatchDraft = (document) => apiGet(`/isnet/documents/incoming/dispatch/${encodeURIComponent(document.sourceId)}/outgoing-draft`).then(unwrap);
-export const searchIsnetRecipients = (kind, search) => apiGet(`/isnet/recipients?kind=${encodeURIComponent(kind)}&q=${encodeURIComponent(search)}`).then(unwrap);
-export const getIsnetRecipientContext = (localCompanyId) => apiGet(`/isnet/recipients/context?localCompanyId=${encodeURIComponent(localCompanyId || "")}`).then(unwrap);
-export const getIsnetInvoiceAssistantTemplate = () => apiGet("/isnet/invoice-assistant/template").then(unwrap);
-export const saveIsnetInvoiceAssistantTemplate = (payload) => apiPut("/isnet/invoice-assistant/template", payload).then(unwrap);
-export const createIsnetManualInvoiceDraft = (payload) => apiPost("/isnet/invoice-drafts", { ...payload, confirmed: true }).then(unwrap);
-export const createIsnetManualDispatchDraft = (payload) => apiPost("/isnet/dispatch-drafts", { ...payload, confirmed: true }).then(unwrap);
-export const getIsnetDispatchInvoiceDraft = (sourceId) => apiGet(`/isnet/dispatches/${encodeURIComponent(sourceId)}/invoice-draft`).then(unwrap);
-export const createIsnetInvoiceFromDispatch = (sourceId, payload) => apiPost(`/isnet/invoice-preparation/dispatches/${encodeURIComponent(sourceId)}/draft`, { ...payload, confirmed: true }, { timeoutMs: 300_000 }).then(unwrap);
-export const getIsnetInvoiceDraftStatus = (draftId) => apiGet(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}`).then(unwrap);
-export const verifyIsnetInvoiceDraft = (draftId) => apiPost(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}/verify`, {}).then(unwrap);
-export const finalApproveIsnetInvoiceDraft = (draftId, payload) => apiPost(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}/final-approval`, payload).then(unwrap);
-export const submitIsnetOfficialInvoice = (draftId) => apiPost(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}/submit`, {}, { timeoutMs: 300_000 }).then(unwrap);
-export const retryIsnetInvoiceClosure = (draftId) => apiPost(`/isnet/invoice-drafts/${encodeURIComponent(draftId)}/retry-closure`, {}, { timeoutMs: 300_000 }).then(unwrap);
-
-export const getIsnetModelSuggestions = (input, search = "") => {
-  if (input && typeof input === "object") {
-    return apiGet("/isnet/model-suggestions", { ...input, search: input.search || input.query || search }).then(unwrap);
-  }
-  return apiGet(`/isnet/intakes/${encodeURIComponent(input || "")}/model-suggestions?search=${encodeURIComponent(search)}`).then(unwrap);
-};
-
-export const getIsnetIntakeDetail = (intakeId) => apiGet(`/isnet/intakes/${encodeURIComponent(intakeId)}`).then(unwrap);
-export const assignIsnetIntakeModel = (intakeId, payload) => apiPut(`/isnet/intakes/${encodeURIComponent(intakeId)}/model`, payload).then(unwrap);
-export const createIsnetIntakeModel = (intakeId, payload) => apiPost(`/isnet/intakes/${encodeURIComponent(intakeId)}/model`, { ...payload, confirmed: true }).then(unwrap);
-export const getMailQueue = () => apiGet("/isnet/mail/queue").then(unwrap);
 export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
-export const testIsnetSettings = (payload) => apiPost("/isnet/settings/test", payload, { suppressUnauthorized: true, timeoutMs: 90_000 }).then(unwrap);
-export const saveIsnetSettings = (payload) => apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
-export const recoverIsnetOutgoingDocuments = (payload = {}) => {
-  const mainCompanySlug = resolveMainCompanySlug(payload);
-  return apiPost(
-    "/isnet/outgoing/recover",
-    { ...payload, mainCompanySlug, startDate: floorCleanStart(payload.startDate) },
-    { timeoutMs: 240_000 },
-  ).then(unwrap);
-};
-export const getIsnetOutgoingDiagnostics = () => apiGet("/isnet/outgoing/diagnostics").then(unwrap);
-export const startDailySync = async (payload = {}) => {
-  const mainCompanySlug = resolveMainCompanySlug(payload);
-  const request = { ...payload, mainCompanySlug, startDate: floorCleanStart(payload.startDate) };
-  const [portalSync, outgoingRecovery] = await Promise.allSettled([
-    apiPost("/isnet/full-sync", request, { timeoutMs: 900_000 }).then(unwrap),
-    recoverIsnetOutgoingDocuments(request),
-  ]);
 
-  if (portalSync.status === "rejected" && outgoingRecovery.status === "rejected") {
-    throw portalSync.reason || outgoingRecovery.reason || new Error("İşNet senkronizasyonu tamamlanamadı.");
-  }
+export const testIsnetSettings = (payload) =>
+  apiPost("/isnet/settings/test", payload, {
+    suppressUnauthorized: true,
+    timeoutMs: 90_000,
+  }).then(unwrap);
 
-  const primary = portalSync.status === "fulfilled" && portalSync.value && typeof portalSync.value === "object"
-    ? portalSync.value
-    : {};
-  const outgoing = outgoingRecovery.status === "fulfilled" && outgoingRecovery.value && typeof outgoingRecovery.value === "object"
-    ? outgoingRecovery.value
-    : null;
-  const outgoingCounts = outgoing?.counts || {};
-  const primaryCounts = primary?.counts || {};
-  const warnings = [];
-
-  if (portalSync.status === "rejected") {
-    appendWarning(warnings, `Portal senkronu: ${portalSync.reason?.message || "başarısız"}`);
-  }
-  if (outgoingRecovery.status === "rejected") {
-    appendWarning(warnings, `Giden belge doğrulaması: ${outgoingRecovery.reason?.message || "başarısız"}`);
-  }
-
-  const primaryReview = reviewRequired(primary);
-  const outgoingReview = reviewRequired(outgoing);
-  if (primaryReview) {
-    appendWarning(warnings, primary?.warning || "İşNet ana senkronu kontrol gerektiriyor.");
-  }
-  if (outgoingReview) {
-    appendWarning(warnings, outgoing?.warning || "Giden fatura/irsaliye kapsamı tam doğrulanamadı.");
-  }
-
-  const partial = warnings.length > 0 || primaryReview || outgoingReview;
-
-  return {
-    ...primary,
-    status: partial ? "PARTIAL_REVIEW_REQUIRED" : (primary.status || outgoing?.status || "COMPLETED"),
-    requiresReview: partial,
-    counts: {
-      ...primaryCounts,
-      outgoingInvoices: Number(outgoingCounts.outgoingInvoices ?? primaryCounts.outgoingInvoices ?? 0),
-      outgoingDispatches: Number(outgoingCounts.outgoingDispatches ?? primaryCounts.outgoingDispatches ?? 0),
-    },
-    outgoingRecovery: outgoing,
-    partial,
-    warning: warnings.join(" | "),
-  };
-};
-export const getIsnetFullSyncStatus = () => apiGet("/isnet/full-sync/status").then(unwrap);
-export const markIsnetDocumentRead = (key, read = true) => apiPost(`/isnet/documents/${encodeURIComponent(key)}/read`, { read }).then(unwrap);
-export const markIsnetDocumentsRead = (documentIds, isRead) => apiFetch("/isnet/documents/read-status", { method: "PATCH", body: { documentIds, isRead } }).then(unwrap);
-export const getIsnetAutomationStatus = () => apiGet("/isnet/automation/status").then(unwrap);
-export const getIsnetPrintQueue = () => apiGet("/isnet/print-queue").then(unwrap);
-export const getIsnetPrintPdf = (key) => apiFetch(`/isnet/print-queue/${encodeURIComponent(key)}/pdf`, { responseType: "blob", timeoutMs: 60_000 });
-export const getIsnetBulkPrintPdf = (keys = [], newOnly = false) => apiFetch("/isnet/print-queue/bulk/pdf", { method: "POST", body: { keys, newOnly }, responseType: "blob", timeoutMs: 120_000 });
-export const markIsnetPrinted = (key, printed = true) => apiPost(`/isnet/print-queue/${encodeURIComponent(key)}/printed`, { printed }).then(unwrap);
-export const markIsnetBulkPrinted = (keys) => apiPost("/isnet/print-queue/bulk/printed", { keys }).then(unwrap);
-export const validateInvoiceDraft = (payload) => apiPost("/isnet/invoices/validate", payload).then(unwrap);
-export const prepareInvoiceDraft = (payload) => apiPost("/isnet/invoices/prepare", payload).then(unwrap);
-export const completeInvoiceArchive = (payload) => apiPost("/isnet/invoices/archive", payload).then(unwrap);
-export const createOutlookDraft = (mailId, payload = {}) => apiPost(`/isnet/mail/${encodeURIComponent(mailId)}/outlook-draft`, payload).then(unwrap);
-export const markMailSent = (mailId, payload = {}) => apiPost(`/isnet/mail/${encodeURIComponent(mailId)}/sent`, payload).then(unwrap);
+export const saveIsnetSettings = (payload) =>
+  apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);

@@ -34,13 +34,15 @@ function requireCompanySlug(activeMainCompany) {
   return slug;
 }
 
-export async function fetchSharedModels(activeMainCompany) {
+export async function fetchSharedModels(activeMainCompany, params = {}) {
+  const pageSize = Number(params.pageSize || params.limit || 5000);
   return normalizeList(
     unwrapRows(
-      await apiGet("/model-takip/models/shared-list", {
+      await apiGet("/models", {
         mainCompanySlug: requireCompanySlug(activeMainCompany),
-        page: 1,
-        pageSize: 50,
+        page: Number(params.page || 1),
+        pageSize,
+        limit: pageSize,
       }),
     ),
   ).map((model) => {
@@ -52,7 +54,7 @@ export async function fetchSharedModels(activeMainCompany) {
 export async function fetchSelectedModel(activeMainCompany, modelId) {
   return unwrap(
     await apiGet(
-      `/model-takip/models/shared-list/${encodeURIComponent(modelId)}`,
+      `/models/${encodeURIComponent(modelId)}`,
       { mainCompanySlug: requireCompanySlug(activeMainCompany) },
     ),
   );
@@ -60,7 +62,7 @@ export async function fetchSelectedModel(activeMainCompany, modelId) {
 
 export async function createSharedModel(activeMainCompany, payload) {
   return unwrap(
-    await apiPost("/model-takip/models", {
+    await apiPost("/models", {
       ...payload,
       mainCompanySlug: requireCompanySlug(activeMainCompany),
     }),

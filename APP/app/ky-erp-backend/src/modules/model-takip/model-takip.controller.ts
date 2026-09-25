@@ -39,40 +39,6 @@ export class ModelTakipController {
     return { ...doc, type, belgeTuru };
   }
 
-  @Get("shared-list")
-  async sharedList(@Query() query: Record<string, any>) {
-    const result = await this.modelService.list(query);
-    return {
-      ok: true,
-      data: result,
-    };
-  }
-
-  @Post()
-  async create(@Body() body: Record<string, any>) {
-    return { ok: true, data: await this.modelService.create(body) };
-  }
-
-  @Post("bulk-create")
-  async bulkCreate(@Body() body: Record<string, any>) {
-    return { ok: true, data: await this.modelService.bulkCreate(body) };
-  }
-
-  @Get("shared-list/:id")
-  async sharedGet(
-    @Param("id") id: string,
-    @Query("mainCompanySlug") mainCompanySlug?: string,
-    @Query("mainCompanyId") mainCompanyId?: string,
-  ) {
-    const slug = this.resolveSlug(mainCompanySlug, mainCompanyId);
-    return { ok: true, data: await this.modelService.getById(id, slug) };
-  }
-
-  @Patch(":id")
-  async update(@Param("id") id: string, @Body() body: Record<string, any>) {
-    return { ok: true, data: await this.modelService.update(id, body) };
-  }
-
   @Get(":id/print-regions")
   async getPrintRegions(@Param("id") id: string, @Query() query: Record<string, any>) {
     return { ok: true, data: await this.modelService.getPrintRegions(id, query) };
@@ -110,11 +76,6 @@ export class ModelTakipController {
     @Query() query: Record<string, any>,
   ) {
     return { ok: true, data: await this.modelService.deactivatePrintRegion(id, regionId, query) };
-  }
-
-  @Delete(":id")
-  async delete(@Param("id") id: string, @Query() query: Record<string, any>) {
-    return { ok: true, data: await this.modelService.delete(id, query) };
   }
 
   @Post(":id/images")
@@ -465,4 +426,5 @@ export class ModelTakipSummaryController {
     if (!row) return { ok: true, data: null };
     return { ok: true, data: row };
   }
+
 }
