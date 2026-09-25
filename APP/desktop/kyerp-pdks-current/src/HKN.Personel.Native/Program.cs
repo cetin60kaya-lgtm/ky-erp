@@ -17,6 +17,8 @@ static class Program
                 MessageBox.Show(ex.Message,"KYERP PDKS",MessageBoxButtons.OK,MessageBoxIcon.Error);
         };
         ApplicationConfiguration.Initialize();
+        StartupConfiguration.LoadSavedSettingsIntoProcess();
+        PdksTheme.Install();
 
         if (!LocalAuthStore.HasUsers)
         {

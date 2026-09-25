@@ -16,6 +16,21 @@ internal static class StartupConfiguration
         ("KY_PDKS_PERSONEL_EXE", EnvironmentVariableTarget.User)
     ];
 
+    public static void LoadSavedSettingsIntoProcess()
+    {
+        foreach (var (key, _) in Targets)
+        {
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key))) continue;
+            try
+            {
+                var value = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+                if (!string.IsNullOrWhiteSpace(value))
+                    Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
+            }
+            catch { }
+        }
+    }
+
     public static bool IsReady() => CanOpen(PdksOptions.FromEnvironment());
 
     public static bool EnsureReady()

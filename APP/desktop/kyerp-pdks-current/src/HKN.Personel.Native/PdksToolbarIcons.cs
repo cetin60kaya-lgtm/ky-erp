@@ -4,7 +4,7 @@ namespace HKN.Personel.Native;
 
 internal enum PdksToolbarIcon
 {
-    Transfer, Live, Groups, Periods, Departments, EntryExit,
+    Home, Transfer, Live, Groups, Periods, Departments, EntryExit,
     Personnel, Advances, Timesheet, Results, Payroll, WorkDate
 }
 
@@ -19,6 +19,7 @@ internal static class PdksToolbarIcons
         g.Clear(Color.Transparent);
         switch (kind)
         {
+            case PdksToolbarIcon.Home: DrawHome(g); break;
             case PdksToolbarIcon.Transfer: DrawTransfer(g); break;
             case PdksToolbarIcon.Live: DrawLive(g); break;
             case PdksToolbarIcon.Groups: DrawGroups(g); break;
@@ -37,6 +38,14 @@ internal static class PdksToolbarIcons
 
     static Pen P(Color c, float w = 2f) => new(c, w) { StartCap = LineCap.Round, EndCap = LineCap.Round };
     static Brush B(Color c) => new SolidBrush(c);
+    static void DrawHome(Graphics g)
+    {
+        using var p=P(Color.FromArgb(30,105,205),2.6f); using var f=B(Color.FromArgb(226,240,255));
+        g.FillPolygon(f,new[]{new PointF(4,17),new PointF(18,5),new PointF(32,17),new PointF(29,17),new PointF(29,31),new PointF(8,31),new PointF(8,17)});
+        g.DrawLines(p,new[]{new PointF(4,17),new PointF(18,5),new PointF(32,17)}); g.DrawLine(p,8,17,8,31); g.DrawLine(p,29,17,29,31); g.DrawLine(p,8,31,29,31);
+        g.DrawRectangle(p,15,21,7,10);
+    }
+
     static void DrawTransfer(Graphics g)
     {
         using var blue = P(Color.FromArgb(38, 96, 170), 2.4f);

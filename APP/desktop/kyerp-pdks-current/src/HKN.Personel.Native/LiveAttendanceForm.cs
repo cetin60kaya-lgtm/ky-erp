@@ -7,7 +7,7 @@ using KYERP.PDKS.Core.Terminal;
 
 namespace HKN.Personel.Native;
 
-public sealed class LiveAttendanceForm : Form
+public sealed partial class LiveAttendanceForm : Form
 {
     readonly FirebirdDatabase db = new(PdksOptions.FromEnvironment());
     readonly DateTimePicker date = new(){Format=DateTimePickerFormat.Custom,CustomFormat="dd MMMM yyyy dddd",Width=225};
@@ -34,14 +34,14 @@ public sealed class LiveAttendanceForm : Form
     }
     void Build()
     {
-        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=3,Padding=new Padding(8)};
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,46));root.RowStyles.Add(new RowStyle(SizeType.Absolute,78));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var root=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=4,Padding=new Padding(8)};
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,46));root.RowStyles.Add(new RowStyle(SizeType.Absolute,78));root.RowStyles.Add(new RowStyle(SizeType.Absolute,150));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var top=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false};
         top.Controls.Add(new Label{Text="Denetim Tarihi",AutoSize=true,Padding=new Padding(0,8,5,0)});
         top.Controls.Add(date);top.Controls.Add(live);top.Controls.Add(refresh);top.Controls.Add(device);root.Controls.Add(top,0,0);
-        root.Controls.Add(cards,0,1);
+        root.Controls.Add(cards,0,1);root.Controls.Add(BuildAssistantPanel(),0,2);
         AddTab("Genel");AddTab("Kart Basmayan");AddTab("İçeride / Çıkış Bekleyen");AddTab("İzinli");AddTab("Tamamlanan");AddTab("Eşleşmeyen Kart");
-        root.Controls.Add(tabs,0,2);Controls.Add(root);
+        root.Controls.Add(tabs,0,3);Controls.Add(root);
     }
 
     void AddTab(string title)

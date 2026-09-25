@@ -11,18 +11,16 @@ var user = new LocalUser
 
 using var form = new MainShellForm(user);
 
-string[] expectedMenus = ["Ayarlar","Tanımlar","İşlemler","Raporlar","Araçlar","Transfer","Hakkında"];
+string[] expectedMenus = ["Ana Sayfa","Tanımlar","İşlemler","Raporlar","Araçlar","Transfer","Ayarlar","Hakkında"];
 var actualMenus = form.MainMenuStrip!.Items.Cast<ToolStripItem>().Select(x => x.Text).ToArray();
 if (!actualMenus.SequenceEqual(expectedMenus))
-    throw new InvalidOperationException("Ana menü Hedef düzeninden sapmış: " + string.Join(" | ", actualMenus));
+    throw new InvalidOperationException("Ana menü web PDKS düzeninden sapmış: " + string.Join(" | ", actualMenus));
 
 var toolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
-string[] expectedTools = ["Bilgi Aktar","Canlı Denetim","Gruplar","Dönemler","Bölümler","Giriş-Çıkışlar","Per. Bilgileri","Avanslar","Puantaj","Puantaj Son.","Bordro","Çalışma Tarihi","WC"];
+string[] expectedTools = ["Ana Sayfa","Bilgi Aktar","Canlı Denetim","Gruplar","Dönemler","Bölümler","Giriş-Çıkışlar","Per. Bilgileri","Avanslar","Puantaj","Puantaj Son.","Bordro","Çalışma Tarihi"];
 var actualTools = toolbar.Items.Cast<ToolStripItem>().Where(x => x is ToolStripButton).Select(x => x.Text).ToArray();
 if (!actualTools.SequenceEqual(expectedTools))
-    throw new InvalidOperationException("Araç çubuğu Hedef düzeninden sapmış: " + string.Join(" | ", actualTools));
-if (toolbar.Items.Cast<ToolStripItem>().Single(x => x.Text == "WC").Visible)
-    throw new InvalidOperationException("Legacy WC araç öğesi görünür olmamalı.");
+    throw new InvalidOperationException("Araç çubuğu web PDKS düzeninden sapmış: " + string.Join(" | ", actualTools));
 
 using (var groups = new LegacyGroupForm())
 {
