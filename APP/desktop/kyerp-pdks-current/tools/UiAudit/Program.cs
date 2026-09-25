@@ -29,7 +29,8 @@ var jobs = new List<(string Name, Func<Form> Factory)>
     ("07-Puantaj", () => new LegacyPuantajForm()),
     ("08-Bordro", () => new LegacyBordroForm()),
     ("09-TerminalAyarlari", () => new LegacyTerminalSettingsForm()),
-    ("10-Kullanicilar", () => new UserManagementForm())
+    ("10-Kullanicilar", () => new UserManagementForm()),
+    ("11-CanliDenetim", () => new LiveAttendanceForm())
 };
 
 foreach (var view in Enum.GetValues<LegacyDataView>())
@@ -102,7 +103,7 @@ static void CaptureForm(Form form, string name, string root, StringBuilder log)
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
     form.Show();
     Application.DoEvents();
-    Thread.Sleep(120);
+    Thread.Sleep(form is LiveAttendanceForm ? 1800 : 120);
     Application.DoEvents();
 
     log.AppendLine($"FORM|{name}|{form.Text}|{form.Width}x{form.Height}");

@@ -90,6 +90,11 @@ var terminalResult=new AttendanceImportService(database).Import([new(terminalPk,
 var terminalAfter=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",terminalDate)));
 if(terminalResult.Inserted!=1||terminalResult.Duplicates!=1||terminalBefore!=terminalAfter)throw new Exception("Terminal tolerans rollback testi başarısız");
 log.AppendLine("TERMINAL TOLERANCE ROLLBACK OK");
+var autoDate=new DateTime(2099,12,29);var autoBefore=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",autoDate)));
+var autoResult=new AttendanceImportService(database).Import([new(terminalPk,autoDate.AddHours(8).AddMinutes(30),"1","001",TerminalDirection.Unknown,"auto-in"),new(terminalPk,autoDate.AddHours(19),"1","001",TerminalDirection.Unknown,"auto-out")],5,rollbackOnly:true);
+var autoAfter=Convert.ToInt32(Scalar(c,null,"select count(*) from GIRCIK where PKNO=@P and GTARIH=@D",new FbParameter("@P",terminalPk),new FbParameter("@D",autoDate)));
+if(autoResult.Inserted!=1||autoResult.Updated!=1||autoBefore!=autoAfter)throw new Exception("Terminal otomatik giriş/çıkış eşleme rollback testi başarısız");
+log.AppendLine("TERMINAL AUTO PAIR ROLLBACK OK");
 var reportFrom=new DateTime(2000,1,1);var reportTo=new DateTime(2100,1,1);
 ValidateQuery(c,"select a.TARIH,a.PKNO,k.AD,k.SOYAD,v.TUR,v.ISARET,a.MIKTAR,a.ACIKLAMA from AVANS a left join KIMLIK k on k.PKNO=a.PKNO left join AVTUR v on v.KOD=a.TURKOD where a.TARIH>=@A and a.TARIH<@B",new FbParameter("@A",reportFrom),new FbParameter("@B",reportTo));
 ValidateQuery(c,"select o.TARIH,o.PKNO,k.AD,k.SOYAD,o.MAZERET,o.TIP,o.SURESAAT,o.BASSAAT,o.BITSAAT from OZELIZIN o left join KIMLIK k on k.PKNO=o.PKNO where o.TARIH>=@A and o.TARIH<@B",new FbParameter("@A",reportFrom),new FbParameter("@B",reportTo));

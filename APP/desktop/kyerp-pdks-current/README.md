@@ -12,8 +12,9 @@ Aktif ürün artık tek uygulamadır: `KYERP.PDKS.exe`.
 - `tools/ShellSmokeTest`: Firebird secretı olmadan ana KYERP PDKS kabuğunun açılıp kapanabildiğini doğrular.
 - `tools/SmokeTest`: açıkça sağlanan Firebird bağlantısıyla transaction/rollback veri testi.
 - `tools/SchemaDump`: Firebird şema kontrolü.
+- `tools/TerminalDeviceBridge`: 32-bit üretici ActiveX bileşeni ile fiziksel kart cihazını güvenli biçimde okuyan x86 yardımcı süreç.
 
-Eski `Hedef.exe` ana uygulama olarak çalıştırılmaz. Bridge/overlay/yama katmanı aktif solution, build, setup ve kısayol zincirinden tamamen çıkarılmıştır.
+Eski `Hedef.exe` ana uygulama olarak çalıştırılmaz. Eski uygulama launcher/overlay/yama katmanı aktif solution, setup ve kısayol zincirinden çıkarılmıştır. `KYERP.TerminalBridge.exe` yalnız 32-bit cihaz SDK uyumluluğu için KYERP PDKS tarafından arka planda çağrılır.
 
 ## Uygulama kabuğu
 
@@ -77,7 +78,9 @@ Terminal aktarım profilleri FixedWidth, Delimited ve strict `KYERP TNF v1` form
 
 `KartNo,HH:mm,ddMMyy,1,001`
 
-Duplicate kayıt koruması ve transaction tabanlı aktarım çekirdekte bulunur. Fiziksel terminalin üretici protokolü doğrulanmadan tahmine dayalı doğrudan cihaz protokolü eklenmez.
+Duplicate kayıt koruması ve transaction tabanlı aktarım çekirdekte bulunur. Fiziksel terminal üretici ActiveX arayüzü doğrulanmıştır; varsayılan cihaz `192.168.1.224:5005`, makine no `1` üzerinden `KYERP.TerminalBridge.exe` ile doğrudan okunur. Köprü `ReadMark=false` kullanır ve cihazdaki kayıtları silmez. Canlı Denetim ekranı 5 saniyede bir cihazı kontrol eder, yeni kart basımlarını mükerrer korumasıyla veritabanına eşler ve gelen/gelmeyen/izinli/içeride/çıkış kartı eksik durumlarını yeniler.
+
+Gerekirse cihaz adresi `KY_PDKS_TERMINAL_IP`, `KY_PDKS_TERMINAL_PORT` ve `KY_PDKS_TERMINAL_MACHINE` değişkenleriyle değiştirilebilir.
 
 ## Build
 

@@ -17,7 +17,7 @@ if (!actualMenus.SequenceEqual(expectedMenus))
     throw new InvalidOperationException("Ana menü Hedef düzeninden sapmış: " + string.Join(" | ", actualMenus));
 
 var toolbar = form.Controls.OfType<ToolStrip>().First(x => x is not MenuStrip && x is not StatusStrip);
-string[] expectedTools = ["Bilgi Aktar","Gruplar","Dönemler","Bölümler","Giriş-Çıkışlar","Per. Bilgileri","Avanslar","Puantaj","Puantaj Son.","Bordro","Çalışma Tarihi","WC"];
+string[] expectedTools = ["Bilgi Aktar","Canlı Denetim","Gruplar","Dönemler","Bölümler","Giriş-Çıkışlar","Per. Bilgileri","Avanslar","Puantaj","Puantaj Son.","Bordro","Çalışma Tarihi","WC"];
 var actualTools = toolbar.Items.Cast<ToolStripItem>().Where(x => x is ToolStripButton).Select(x => x.Text).ToArray();
 if (!actualTools.SequenceEqual(expectedTools))
     throw new InvalidOperationException("Araç çubuğu Hedef düzeninden sapmış: " + string.Join(" | ", actualTools));

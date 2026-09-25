@@ -49,7 +49,11 @@ Name: "{autodesktop}\KYERP PDKS"; Filename: "{app}\KYERP.PDKS.exe"; WorkingDir: 
 Name: "desktopicon"; Description: "Masaustunde KYERP PDKS kisayolu olustur"; GroupDescription: "Kisayollar:"; Flags: checkedonce
 
 [Run]
+Filename: "{syswow64}\regsvr32.exe"; Parameters: "/s ""{app}\TerminalSdk\FP_CLOCK.ocx"""; Flags: runhidden; Check: FileExists(ExpandConstant('{app}\TerminalSdk\FP_CLOCK.ocx'))
 Filename: "{app}\KYERP.PDKS.exe"; Description: "KYERP PDKS uygulamasini ac"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\TerminalSdk\FP_CLOCK.ocx"""; Flags: runhidden; RunOnceId: UnregisterTerminalSdk; Check: FileExists(ExpandConstant('{app}\TerminalSdk\FP_CLOCK.ocx'))
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\Logs"

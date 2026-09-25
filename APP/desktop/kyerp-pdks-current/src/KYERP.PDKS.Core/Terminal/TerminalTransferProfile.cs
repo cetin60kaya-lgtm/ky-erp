@@ -49,7 +49,9 @@ public sealed record TerminalTransferProfile
         WorkplaceId = options.WorkplaceId ?? "*", DeviceId = "TNF-001",
         FormatType = TerminalFormatType.Tnf, Separator = ",", Encoding = "utf-8",
         DateFormat = "ddMMyy", TimeFormat = "HH:mm", IsDefault = true, IsCanonical = true,
-        EntryCodeMapping = new() { ["1"] = "ENTRY" }
+        // Canonical TNF uses event code 1 for both morning and evening punches.
+        // Leave direction unknown so AttendanceImportService can pair first/last punch safely.
+        EntryCodeMapping = new(), ExitCodeMapping = new()
     };
 
     public TerminalTransferProfile Copy(string name) => this with

@@ -16,14 +16,21 @@ public sealed class AttendanceImportService(FirebirdDatabase database)
             {
                 if (!EmployeeExists(connection,transaction,record.EmployeeCode)) { skipped++; continue; }
                 var date=record.OccurredAt.Date;var minute=record.OccurredAt.Hour*60+record.OccurredAt.Minute;var time=record.OccurredAt.ToString("HH:mm");
-                if(record.Direction==TerminalDirection.Entry)
+                var direction=record.Direction;
+                if(direction==TerminalDirection.Unknown)
+                {
+                    if(Exists(connection,transaction,"GTARIH","GDAKIKA",record.EmployeeCode,date,minute,duplicateToleranceMinutes) ||
+                       Exists(connection,transaction,"CTARIH","CDAKIKA",record.EmployeeCode,date,minute,duplicateToleranceMinutes)){duplicates++;continue;}
+                    direction=HasOpenSameDay(connection,transaction,record.EmployeeCode,date)?TerminalDirection.Exit:TerminalDirection.Entry;
+                }
+                if(direction==TerminalDirection.Entry)
                 {
                     if(Exists(connection,transaction,"GTARIH","GDAKIKA",record.EmployeeCode,date,minute,duplicateToleranceMinutes)){duplicates++;continue;}
                     var sequence=NextSequence(connection,transaction);
                     Execute(connection,transaction,"insert into GIRCIK (SIRA,PKNO,GTARIH,GSAAT,GDAKIKA,GTUR,MKOD) values (@S,@PK,@D,@T,@M,@TYPE,@DEVICE)",
                         new FbParameter("@S",sequence),new FbParameter("@PK",record.EmployeeCode),new FbParameter("@D",date),new FbParameter("@T",time),new FbParameter("@M",minute),new FbParameter("@TYPE",record.EventCode),new FbParameter("@DEVICE",record.TerminalCode));inserted++;
                 }
-                else if(record.Direction==TerminalDirection.Exit)
+                else if(direction==TerminalDirection.Exit)
                 {
                     if(Exists(connection,transaction,"CTARIH","CDAKIKA",record.EmployeeCode,date,minute,duplicateToleranceMinutes)){duplicates++;continue;}
                     var open=Scalar(connection,transaction,"select first 1 SIRA from GIRCIK where PKNO=@PK and GTARIH<=@D and CTARIH is null order by GTARIH desc,GDAKIKA desc",new FbParameter("@PK",record.EmployeeCode),new FbParameter("@D",date));
@@ -37,6 +44,7 @@ public sealed class AttendanceImportService(FirebirdDatabase database)
         },rollbackOnly);
 
     static bool EmployeeExists(FbConnection c,FbTransaction tx,string employeeCode)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from KIMLIK where PKNO=@PK",new FbParameter("@PK",employeeCode)))>0;
+    static bool HasOpenSameDay(FbConnection c,FbTransaction tx,string employeeCode,DateTime date)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from GIRCIK where PKNO=@PK and GTARIH=@D and CTARIH is null",new FbParameter("@PK",employeeCode),new FbParameter("@D",date)))>0;
     static bool Exists(FbConnection c,FbTransaction tx,string dateColumn,string minuteColumn,string employeeCode,DateTime date,int minute,int tolerance)
     {
         var range=DuplicateMinuteRange(minute,tolerance);return Convert.ToInt32(Scalar(c,tx,$"select count(*) from GIRCIK where PKNO=@PK and {dateColumn}=@D and {minuteColumn} between @MIN and @MAX",new FbParameter("@PK",employeeCode),new FbParameter("@D",date),new FbParameter("@MIN",range.Min),new FbParameter("@MAX",range.Max)))>0;
