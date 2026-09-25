@@ -14,8 +14,9 @@ public sealed class AttendanceImportService(FirebirdDatabase database)
             var inserted=0;var updated=0;var duplicates=0;var skipped=0;
             foreach(var record in records.OrderBy(item=>item.OccurredAt))
             {
-                if (!EmployeeExists(connection,transaction,record.EmployeeCode)) { skipped++; continue; }
-                var date=record.OccurredAt.Date;var minute=record.OccurredAt.Hour*60+record.OccurredAt.Minute;var time=record.OccurredAt.ToString("HH:mm");
+                var date=record.OccurredAt.Date;
+                if (!EmployeeExists(connection,transaction,record.EmployeeCode,date)) { skipped++; continue; }
+                var minute=record.OccurredAt.Hour*60+record.OccurredAt.Minute;var time=record.OccurredAt.ToString("HH:mm");
                 var direction=record.Direction;
                 if(direction==TerminalDirection.Unknown)
                 {
@@ -43,7 +44,7 @@ public sealed class AttendanceImportService(FirebirdDatabase database)
             return new AttendanceImportResult(inserted,updated,duplicates,skipped);
         },rollbackOnly);
 
-    static bool EmployeeExists(FbConnection c,FbTransaction tx,string employeeCode)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from KIMLIK where PKNO=@PK",new FbParameter("@PK",employeeCode)))>0;
+    static bool EmployeeExists(FbConnection c,FbTransaction tx,string employeeCode,DateTime date)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from KIMLIK where PKNO=@PK and (IGTARIH is null or IGTARIH<=@D) and (ICTARIH is null or ICTARIH>=@D)",new FbParameter("@PK",employeeCode),new FbParameter("@D",date)))>0;
     static bool HasOpenSameDay(FbConnection c,FbTransaction tx,string employeeCode,DateTime date)=>Convert.ToInt32(Scalar(c,tx,"select count(*) from GIRCIK where PKNO=@PK and GTARIH=@D and CTARIH is null",new FbParameter("@PK",employeeCode),new FbParameter("@D",date)))>0;
     static bool Exists(FbConnection c,FbTransaction tx,string dateColumn,string minuteColumn,string employeeCode,DateTime date,int minute,int tolerance)
     {

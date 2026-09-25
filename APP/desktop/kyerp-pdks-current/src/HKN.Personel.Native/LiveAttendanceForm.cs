@@ -20,6 +20,8 @@ public sealed class LiveAttendanceForm : Form
     readonly System.Windows.Forms.Timer timer = new(){Interval=5000};
     readonly CancellationTokenSource closing = new();
     bool busy;
+    DateTime? recoveredLegacyDay;
+    string legacyRecoveryText = "";
 
     public LiveAttendanceForm()
     {
@@ -65,6 +67,7 @@ public sealed class LiveAttendanceForm : Form
             TerminalDeviceSnapshot? snapshot=null;
             if(syncDevice&&live.Checked&&date.Value.Date==DateTime.Today)
             {
+                RecoverLegacyBackup(date.Value.Date);
                 snapshot=await TerminalDeviceClient.ReadAsync(true,closing.Token);
                 if(snapshot.Connected&&snapshot.Punches.Count>0)
                 {
@@ -90,9 +93,28 @@ public sealed class LiveAttendanceForm : Form
     void ShowDevice(TerminalDeviceSnapshot s)
     {
         if(!s.Connected){device.Text="Kart cihazı: BAĞLI DEĞİL — "+s.Message;device.ForeColor=Color.DarkRed;return;}
-        device.Text=$"Kart cihazı: BAĞLI   Cihaz saati {s.DeviceTime:HH:mm:ss}   Yeni kayıt {Math.Max(0,s.NewLogCount)}   Kart {Math.Max(0,s.CardCount)}";
+        device.Text=$"Kart cihazı: BAĞLI   Cihaz saati {s.DeviceTime:HH:mm:ss}   Yeni kayıt {Math.Max(0,s.NewLogCount)}   Kart {Math.Max(0,s.CardCount)}{legacyRecoveryText}";
         device.ForeColor=Color.DarkGreen;
     }
+
+    void RecoverLegacyBackup(DateTime day)
+    {
+        if(recoveredLegacyDay==day)return;recoveredLegacyDay=day;
+        var options=PdksOptions.FromEnvironment();
+        var file=Path.Combine(options.RuntimeRoot,"Terminal Bilgi Aktar","backup",$"{day.Day}&{day.Month}&{day.Year}.txt");
+        if(!File.Exists(file))file=Path.Combine(@"D:\Hedef500\Hedef500","Terminal Bilgi Aktar","backup",$"{day.Day}&{day.Month}&{day.Year}.txt");
+        if(!File.Exists(file))return;
+        try
+        {
+            var profile=TerminalTransferProfile.CreateCanonicalTnf(options);
+            var records=File.ReadAllLines(file).Where(x=>!string.IsNullOrWhiteSpace(x)).Select(x=>ProfiledTerminalParser.Parse(profile,x)).Where(x=>x.OccurredAt.Date==day).ToArray();
+            if(records.Length==0)return;
+            var result=new AttendanceImportService(db).Import(records,5);
+            legacyRecoveryText=$"   Yedek kurtarma +{result.Inserted}/{result.Updated}";
+        }
+        catch(Exception ex){legacyRecoveryText="   Yedek kurtarma uyarısı: "+ex.Message;}
+    }
+
     void LoadDay(DateTime day)
     {
         var next=day.AddDays(1);
