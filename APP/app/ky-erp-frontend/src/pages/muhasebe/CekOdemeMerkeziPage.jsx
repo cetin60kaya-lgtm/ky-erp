@@ -259,6 +259,7 @@ export default function CekOdemeMerkeziPage({ activeMainCompany, refreshKey, rel
   useEffect(() => {
     const quick = new URLSearchParams(window.location.search).get("quick");
     if (quick === "cek") setModal({ type: "check", form: emptyCheckForm() });
+    if (quick === "transaction") setModal({ type: "transaction", form: emptyTransactionForm(selectedCompanyId || selectedFirmId) });
     if (quick === "cari") setModal({ type: "firm", form: emptyFirmForm() });
   }, []);
 

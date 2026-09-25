@@ -97,11 +97,12 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule 
               {quickOpen ? (
                 <div className="accounting-quick-menu" role="menu">
                   <button type="button" onClick={openQuickCompany}>Yeni Cari / Firma</button>
-                  <button type="button" onClick={() => goFinance("financeView=daily")}>Ödeme / Tahsilat</button>
-                  <button type="button" onClick={() => goFinance("financeView=daily")}>Çek / Senet</button>
+                  <button type="button" onClick={openEBelgeUpload}>Alış Belgesi</button>
+                  <button type="button" onClick={() => { setQuickOpen(false); goTab("musteri-belgeleri"); }}>Satış Belgesi</button>
+                  <button type="button" onClick={() => goFinance("financeView=daily&quick=transaction")}>Ödeme / Tahsilat</button>
+                  <button type="button" onClick={() => goFinance("financeView=daily&quick=cek")}>Çek / Senet</button>
                   <button type="button" onClick={() => goFinance("financeView=planner")}>Ödeme Planı</button>
                   <button type="button" onClick={() => goFinance("financeView=ledger")}>Banka / Kasa / Defter</button>
-                  <button type="button" onClick={openEBelgeUpload}>Belge Yükle</button>
                 </div>
               ) : null}
             </div>

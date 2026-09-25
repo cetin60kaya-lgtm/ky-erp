@@ -75,7 +75,7 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
         <Metric label={netVat > 0 ? "Ödenecek KDV" : "Devreden KDV"} value={money(Math.abs(netVat))} />
         <Metric label="Yaklaşan çek" value={money(data.yaklasanCekToplami ?? data.cekOzet?.yaklasanCekTutari)} />
         <Metric label="Vadesi geçen cari" value={money(data.vadesiGecenCari)} />
-        <Metric label="İşNet son senkronizasyon" value={data.isnetSonSenkronizasyon ? date(data.isnetSonSenkronizasyon) : "Henüz yok"} />
+        <Metric label="e-Belge son senkronizasyon" value={data.isnetSonSenkronizasyon ? date(data.isnetSonSenkronizasyon) : "Henüz yok"} />
         <Metric label="Kontrol bekleyen belge" value={String(data.kontrolBekleyenBelge ?? data.onayBekleyenBelge ?? 0)} />
       </section>
       <section className="management-ebelge-strip">
@@ -95,7 +95,7 @@ export default function ManagementOverviewWorkspace({ activeMainCompany, refresh
         <CompactList title="Bu ay en yüksek tedarikçiler" columns={["Firma", "Belge", "Toplam"]} rows={topSuppliers} emptyText="Bu ay tedarikçi faturası yok." renderRow={(row, index) => <tr key={row.id || row.firma || index}><td>{row.firma || row.companyName || "-"}</td><td>{row.belgeSayisi || row.count || 0}</td><td>{money(row.toplam || row.total)}</td></tr>} />
         <CompactList title="Bu ay en yüksek müşteriler" columns={["Firma", "Belge", "Toplam"]} rows={topCustomers} emptyText="Bu ay kesilen fatura yok." renderRow={(row, index) => <tr key={row.id || row.firma || index}><td>{row.firma || row.companyName || "-"}</td><td>{row.belgeSayisi || row.count || 0}</td><td>{money(row.toplam || row.total)}</td></tr>} />
         <CompactList title="Yaklaşan çekler" columns={["Vade", "Firma", "Çek no", "Tutar"]} rows={upcomingChecks} emptyText="Yaklaşan çek bulunmuyor." renderRow={(row, index) => <tr key={row.id || index}><td>{date(row.vadeTarihi || row.dueDate)}</td><td>{row.firma || row.companyName || "-"}</td><td>{row.cekNo || row.checkNo || "-"}</td><td>{money(row.tutar || row.amount)}</td></tr>} />
-        <CompactList title="Eksik / eşleşmeyen belgeler" columns={["Belge", "Firma", "Eksik", "İşlem"]} rows={missingDocuments} emptyText="Eksik veya eşleşmeyen belge yok." renderRow={(row, index) => <tr key={row.id || row.belge || index}><td>{row.belgeNo || row.belge || row.documentNo || "-"}</td><td>{row.firma || "-"}</td><td>{row.durum || row.eksik || "Kontrol"}</td><td><button type="button" onClick={() => goTab("tedarikci-faturalar")}>İncele</button></td></tr>} />
+        <CompactList title="Eksik / eşleşmeyen belgeler" columns={["Belge", "Firma", "Eksik", "İşlem"]} rows={missingDocuments} emptyText="Eksik veya eşleşmeyen belge yok." renderRow={(row, index) => <tr key={row.id || row.belge || index}><td>{row.belgeNo || row.belge || row.documentNo || "-"}</td><td>{row.firma || "-"}</td><td>{row.durum || row.eksik || "Kontrol"}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "onay-sorunlar" })}>İncele</button></td></tr>} />
       </div>
     </div>
   );

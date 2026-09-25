@@ -494,7 +494,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <option value="LAST_MOVEMENT_DESC">Son işleme göre</option>
         </select>
         <button type="button" onClick={() => setCompanyFormOpen((value) => !value)}><CirclePlus size={16} /> Yeni Firma</button>
-        <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Çek / Ödeme</button>
+        <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Finans Merkezi</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
       </header>
 
@@ -577,8 +577,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 <p>{roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p>
               </div>
               <div className="ccw-drawer-actions">
-                {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Ödeme / Tahsilat / Cari</button> : null}
-                <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Çek / Ödeme</button>
+                {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Yeni Cari Hareket</button> : null}
+                <button type="button" onClick={() => { setFinanceView("checks"); setFinanceOpen(true); }}>Finans Merkezi</button>
                 <button type="button" onClick={() => setSettingsOpen(true)}>Firma Düzenle</button>
                 <button type="button" className="icon" onClick={() => setSelected(null)} aria-label="Kapat"><X size={20} /></button>
               </div>
@@ -719,7 +719,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           <section className="ccw-finance-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
             <header className="ccw-finance-modal-head">
               <div>
-                <strong>{selected ? `${selected.firmaAdi || selected.companyName || selected.name} · Çek / Ödeme` : "Tüm Firmalar · Çek / Ödeme"}</strong>
+                <strong>{selected ? `${selected.firmaAdi || selected.companyName || selected.name} · Finans Merkezi` : "Tüm Firmalar · Finans Merkezi"}</strong>
                 <small>Çek, ödeme ve vade işlemleri ana firma ekranını kalabalıklaştırmadan burada yönetilir.</small>
               </div>
               <div className="ccw-finance-switch">
