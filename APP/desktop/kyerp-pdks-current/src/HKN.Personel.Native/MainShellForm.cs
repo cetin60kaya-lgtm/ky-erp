@@ -240,7 +240,7 @@ public sealed class MainShellForm : Form
 
     static void OpenErpSite()
     {
-        try { Process.Start(new ProcessStartInfo("https://app.kyerp.net/pdks/ana-ekran") { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo("https://kyerp.net") { UseShellExecute = true }); }
         catch (Exception ex) { MessageBox.Show(ex.Message, "KY ERP", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 

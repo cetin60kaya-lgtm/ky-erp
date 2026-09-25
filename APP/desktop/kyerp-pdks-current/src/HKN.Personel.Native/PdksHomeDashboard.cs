@@ -177,7 +177,7 @@ internal sealed class PdksHomeDashboard : UserControl
 
     static void OpenErp()
     {
-        try { Process.Start(new ProcessStartInfo("https://app.kyerp.net/pdks/ana-ekran") { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo("https://kyerp.net") { UseShellExecute = true }); }
         catch { }
     }
     sealed class HomeCard : Panel
